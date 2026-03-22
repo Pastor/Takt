@@ -1103,6 +1103,8 @@ pub struct FunctionDefine {
     pub return_type: Option<Type>,
     /// Тело функции (если есть).
     pub body: Option<Statement>,
+    /// Является ли функция внешней.
+    pub external: bool,
 }
 
 impl FunctionDefine {

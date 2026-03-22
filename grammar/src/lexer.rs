@@ -385,6 +385,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "cond"     => Token::Condition,
     "var"      => Token::Variable,
     "next"     => Token::Next,
+    "extern"   => Token::Extern,
 };
 
 impl<'input> Lexer<'input> {

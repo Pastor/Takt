@@ -3,4 +3,4 @@
 
 model state start ref cond var const port type
 fn return if else for while do break continue
-import as assembly formula true false
+import as assembly formula true false extern

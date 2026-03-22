@@ -70,10 +70,13 @@ mod grammar {
 ///
 /// ```
 /// use grammar::parse;
+/// use grammar::ast::ModelElement;
 ///
-/// // Успешный разбор минимальной программы
-/// let (model, _) = parse("model M { start S; }", 0).unwrap();
-/// assert!(model.name.is_some());
+/// // Успешный разбор минимальной программы.
+/// // parse() возвращает анонимную корневую модель; именованные модели — в elements.
+/// let (root, _) = parse("model M { start S; }", 0).unwrap();
+/// assert!(root.name.is_none(), "Корневая модель всегда анонимна");
+/// assert!(root.elements.iter().any(|e| matches!(e, ModelElement::Model(_))));
 ///
 /// // Разбор завершается ошибкой при синтаксических нарушениях
 /// let err = parse("model {", 0);
@@ -161,8 +164,8 @@ const MATRIX: u8 = { 0, 0, 0, 0, 0, 0, 0, 0 };
 const NUMB: u8 = 0xFF;
 cond  IsEmpty = it = 0;
 //Порт с указанием отображаемого адреса
-port  A : u8  = 00548835;
-port  B1: bit = 00648835:6;
+port  A : u8  = 0x00548835;
+port  B1: bit = 0x00648835:6;
 //Переменная
 var   it: [bit;64] = 0;
 

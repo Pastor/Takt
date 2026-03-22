@@ -2,7 +2,7 @@
 type u8 = [bit;8];
 
 // Объявление функции без тела (внешняя)
-fn debug(msg: u8);
+extern fn debug(msg: u8);
 
 // Функция с телом и возвращаемым значением
 fn add(a: u8, b: u8) -> u8 {
@@ -10,7 +10,7 @@ fn add(a: u8, b: u8) -> u8 {
 }
 
 // Функция без возвращаемого значения
-fn reset();
+extern fn reset();
 
 model M {
     var result: u8 = 0;

@@ -165,15 +165,16 @@ BlockStatementOrSemiColon: Option<Statement> = {
 }
 
 FunctionDefine: Box<FunctionDefine> = {
-    <l:@L> "fn" <nl:@L> <name:IdentifierOrError> <nr:@R> <params:ParameterList>
+    <l:@L> <e: ("extern")?> "fn" <nl:@L> <name:IdentifierOrError> <nr:@R> <params:ParameterList>
     <return_type:("-" ">" <Type>)?> <r:@R> <body:BlockStatementOrSemiColon> => {
-        Box::new(FunctionDefine{
+        Box::new(FunctionDefine {
             loc: Location::Source(file_no, l, r),
             name,
             name_loc: Location::Source(file_no, nl, nr),
             params,
             return_type,
             body,
+            external: e.is_some(),
         })
     },
 }
