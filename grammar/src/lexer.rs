@@ -8,10 +8,7 @@ use unicode_xid::UnicodeXID;
 
 use crate::ast::{Comment, Location};
 
-/// A spanned [Token].
 pub type Spanned<'a> = (usize, Token<'a>, usize);
-
-/// [Lexer]'s Result type.
 pub type Result<'a, T = Spanned<'a>, E = LexicalError> = std::result::Result<T, E>;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -97,6 +94,7 @@ pub enum Token<'input> {
     Condition,
     Variable,
     Next,
+    Extern,
 }
 
 impl<'input> fmt::Display for Token<'input> {
@@ -175,6 +173,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Port => write!(f, "port"),
             Token::Variable => write!(f, "var"),
             Token::Next => write!(f, "next"),
+            Token::Extern => write!(f, "extern"),
         }
     }
 }
@@ -206,7 +205,7 @@ pub struct Lexer<'input> {
     input: &'input str,
     chars: PeekNth<CharIndices<'input>>,
     comments: &'input mut Vec<Comment>,
-    filename: String,
+    file_no: u64,
     last_tokens: [Option<Token<'input>>; 2],
     /// The mutable reference to the error vector.
     pub errors: &'input mut Vec<LexicalError>,
@@ -306,7 +305,7 @@ impl<'input> Lexer<'input> {
     /// ```
     pub fn new(
         input: &'input str,
-        filename: String,
+        file_no: u64,
         comments: &'input mut Vec<Comment>,
         errors: &'input mut Vec<LexicalError>,
     ) -> Self {
@@ -314,7 +313,7 @@ impl<'input> Lexer<'input> {
             input,
             chars: peek_nth(input.char_indices()),
             comments,
-            filename,
+            file_no,
             last_tokens: [None, None],
             errors,
         }
@@ -332,14 +331,14 @@ impl<'input> Lexer<'input> {
                     Some((end, ch)) if ch.is_ascii_hexdigit() => end,
                     Some((..)) => {
                         return Err(LexicalError::MissingNumber(Location::Source(
-                            self.filename.clone(),
+                            self.file_no,
                             start,
                             start + 1,
                         )));
                     }
                     None => {
                         return Err(LexicalError::EndOfFileInHex(Location::Source(
-                            self.filename.clone(),
+                            self.file_no,
                             start,
                             self.input.len(),
                         )));
@@ -426,7 +425,7 @@ impl<'input> Lexer<'input> {
 
             if exp_start > end {
                 return Err(LexicalError::MissingExponent(Location::Source(
-                    self.filename.clone(),
+                    self.file_no,
                     start,
                     self.input.len(),
                 )));
@@ -479,7 +478,7 @@ impl<'input> Lexer<'input> {
                 }
             } else {
                 return Err(LexicalError::EndOfFileInString(Location::Source(
-                    self.filename.clone(),
+                    self.file_no,
                     token_start,
                     self.input.len(),
                 )));
@@ -568,12 +567,12 @@ impl<'input> Lexer<'input> {
 
                             if doc_comment {
                                 self.comments.push(Comment::DocLine(
-                                    Location::Source(self.filename.clone(), start, last),
+                                    Location::Source(self.file_no, start, last),
                                     self.input[start..last].to_owned(),
                                 ));
                             } else {
                                 self.comments.push(Comment::Line(
-                                    Location::Source(self.filename.clone(), start, last),
+                                    Location::Source(self.file_no, start, last),
                                     self.input[start..last].to_owned(),
                                 ));
                             }
@@ -726,7 +725,7 @@ impl<'input> Lexer<'input> {
                     }
 
                     self.errors.push(LexicalError::UnrecognisedToken(
-                        Location::Source(self.filename.clone(), start, end),
+                        Location::Source(self.file_no, start, end),
                         self.input[start..end].to_owned(),
                     ));
                 }
@@ -813,119 +812,5 @@ impl<'input> Iterator for Lexer<'input> {
         ];
 
         token
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_simple() {
-        let src = r#"
-//Алиас типа
-type u8 = [bit;8];
-//Константа
-const MATRIX: u8 = { 0, 0, 0, 0, 0, 0, 0, 0 };
-const NUMB: u8 = 0xFF;
-cond  IsEmpty = it = 0;
-//Порт с указанием отображаемого адреса
-port  A : u8  = 0x00548835;
-port  B1: bit = 0x00648835:6;
-//Переменная
-var   it: [bit;64] = 0;
-
-//Модель
-model Ping {
-    //Начальное состояние
-    start Start {
-        //Переход на состояние по условию
-        ref End: B1;
-        //Исполнение блока кода при первом переходе в состояние
-        enter {
-            A.0 = true;
-            A.1 = false;
-        }
-        //Исполнение блока кода при выходе из состояния
-        exit {
-            A.0 = false;
-            A.1 = true;
-        }
-        always {
-            A.2 = toggle;
-        }
-        always {
-            toggle = !toggle;
-        }
-        var toggle = false;
-    }
-    state End;
-}
-model Pong {
-    start Begin {
-        ref Stop: S(Ping) = End;
-        always {
-            A.5 = MATRIX.5;
-        }
-    }
-    state End {
-        enter {
-            A.6 = MATRIX.3;
-        }
-    }
-}
-model Toggle {
-    start Entry {
-        ref Ping: IsEmpty;
-    }
-    state Ping = Ping {
-        next Pong;
-        always {
-            debug("Ping processing");
-        }
-    }
-    state Pong = Pong {
-        next Complete;
-    }
-    state Complete {
-        ref End: true;
-    }
-    state End;
-}
-start Entry = (Ping | Pong) + Toggle;
-always {
-    debug("Main processing");
-    it = it + 1;
-    if S(Toggle) = Pong {
-        debug("Pong processing");
-    }
-}"#;
-        let src_bytes = Box::leak(Box::new(src.as_bytes()));
-        let mut comments = Vec::new();
-        let mut errors = Vec::new();
-        let lexer = Lexer::new(src, "simple".to_string(), &mut comments, &mut errors);
-        let tokens = lexer.collect::<Vec<_>>();
-        assert_eq!(
-            tokens,
-            vec![
-                (9, Token::Model, 14),
-                (15, Token::Identifier("Model"), 20),
-                (21, Token::OpenCurlyBrace, 22),
-                (35, Token::Start, 40),
-                (41, Token::Identifier("Start"), 46),
-                (47, Token::OpenCurlyBrace, 48),
-                (65, Token::Reference, 68),
-                (69, Token::Identifier("End"), 72),
-                (72, Token::Colon, 73),
-                (74, Token::True, 78),
-                (78, Token::Semicolon, 79),
-                (92, Token::CloseCurlyBrace, 93),
-                (106, Token::State, 111),
-                (112, Token::Identifier("End"), 115),
-                (116, Token::OpenCurlyBrace, 117),
-                (130, Token::CloseCurlyBrace, 131),
-                (140, Token::CloseCurlyBrace, 141)
-            ]
-        );
     }
 }

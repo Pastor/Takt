@@ -8,12 +8,12 @@ pub enum Location {
     CommandLine,
     Implicit,
     Codegen,
-    Source(String, usize, usize),
+    Source(u64, usize, usize),
 }
 
 impl Default for Location {
     fn default() -> Self {
-        Self::Source("<unknown>".to_string(), 0, 0)
+        Self::Source(0, 0, 0)
     }
 }
 
@@ -47,7 +47,7 @@ impl Location {
     #[inline]
     pub fn filename(&self) -> String {
         match self {
-            Location::Source(filename, _, _) => filename.clone(),
+            Location::Source(file_no, _, _) => format!("{}", file_no),
             _ => not_a_file(),
         }
     }
@@ -55,7 +55,7 @@ impl Location {
     #[inline]
     pub fn try_file_no(&self) -> Option<String> {
         match self {
-            Location::Source(filename, _, _) => Some(filename.clone()),
+            Location::Source(file_no, _, _) => Some(format!("{}", file_no)),
             _ => None,
         }
     }
@@ -227,7 +227,7 @@ pub type ParameterList = Vec<(Location, Option<Parameter>)>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-pub enum TypeDefine {
+pub enum Type {
     Address {
         address: u64,
         bit: Option<u64>,
@@ -251,8 +251,19 @@ pub enum TypeDefine {
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct VariableDefine {
     pub loc: Location,
+    pub ty: Option<Type>,
+    pub name: Option<Identifier>,
+    pub initializer: Option<Expression>,
+    pub mutability: bool,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct PortDefine {
+    pub loc: Location,
     pub ty: Type,
     pub name: Option<Identifier>,
+    pub initializer: Option<Expression>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -354,7 +365,7 @@ impl UserDefinedOperator {
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct Model {
     pub loc: Location,
-    pub name: String,
+    pub name: Option<Identifier>,
     pub elements: Vec<ModelElement>,
     pub implements: Option<Expression>,
 }
@@ -367,10 +378,12 @@ pub enum ModelElement {
     Formula(Box<FormulaDefine>),
     Condition(Box<ConditionDefine>),
     Variable(Box<VariableDefine>),
+    Port(Box<PortDefine>),
     Type(Box<TypeDefine>),
     State(Box<StateDefine>),
     Model(Box<Model>),
-    NamedCodeBlock(Box<NamedCodeBlockDefine>),
+    NamedBlockCode(Box<NamedBlockCodeDefine>),
+    StraySemicolon(Location),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -385,8 +398,8 @@ pub enum StateKind {
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct StateDefine {
     pub loc: Location,
-    pub name: String,
-    pub parts: Vec<StateElement>,
+    pub name: Option<Identifier>,
+    pub elements: Vec<StateElement>,
     pub implements: Option<Expression>,
     pub kind: Option<StateKind>,
 }
@@ -395,14 +408,16 @@ pub struct StateDefine {
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum StateElement {
     Import(ImportDefine),
+    Next(Identifier),
     Function(Box<FunctionDefine>),
     Formula(Box<FormulaDefine>),
     Condition(Box<ConditionDefine>),
     Variable(Box<VariableDefine>),
     Type(Box<TypeDefine>),
-    Reference(Location, String, Option<ConditionDefine>),
+    Reference(Location, Identifier, Option<Condition>),
     Model(Box<Model>),
-    NamedCodeBlock(Box<NamedCodeBlockDefine>),
+    NamedBlockCode(Box<NamedBlockCodeDefine>),
+    StraySemicolon(Location),
 }
 
 /// Both have the same semantics:
@@ -424,16 +439,16 @@ pub struct Base {
 pub struct Variable {
     pub loc: Location,
     pub ty: Box<TypeDefine>,
-    pub name: String,
+    pub name: Option<Identifier>,
     pub initializer: Option<Expression>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-pub struct Type {
+pub struct TypeDefine {
     pub loc: Location,
-    pub name: String,
-    pub ty: Box<TypeDefine>,
+    pub name: Identifier,
+    pub ty: Type,
 }
 
 /// An annotation.
@@ -470,48 +485,55 @@ pub struct StringLiteral {
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct NamedArgument {
     pub loc: Location,
-    pub name: String,
+    pub name: Option<Identifier>,
     pub expr: Expression,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-pub enum ConditionDefine {
+pub enum Condition {
     /// `<1>\[ [2] \]`
     ArraySubscript(Location, Identifier, i64),
     /// `(<1>)`
-    Parenthesis(Location, Box<ConditionDefine>),
+    Parenthesis(Location, Box<Condition>),
     /// `<1>.<2>`
-    BitAccess(Location, Box<ConditionDefine>, u64),
+    BitAccess(Location, Box<Condition>, Member),
     /// `<1>(<2>,*)`
-    Function(Location, Identifier, Vec<ConditionDefine>),
+    Function(Location, Identifier, Vec<Condition>),
     /// `!<1>`
-    Not(Location, Box<ConditionDefine>),
+    Not(Location, Box<Condition>),
     /// `<1> + <2>`
-    Add(Location, Box<ConditionDefine>, Box<ConditionDefine>),
+    Add(Location, Box<Condition>, Box<Condition>),
     /// `<1> - <2>`
-    Subtract(Location, Box<ConditionDefine>, Box<ConditionDefine>),
+    Subtract(Location, Box<Condition>, Box<Condition>),
     /// `<1> & <2>`
-    And(Location, Box<ConditionDefine>, Box<ConditionDefine>),
+    And(Location, Box<Condition>, Box<Condition>),
     /// `<1> | <2>`
-    Or(Location, Box<ConditionDefine>, Box<ConditionDefine>),
+    Or(Location, Box<Condition>, Box<Condition>),
     /// `<1> < <2>`
-    Less(Location, Box<ConditionDefine>, Box<ConditionDefine>),
+    Less(Location, Box<Condition>, Box<Condition>),
     /// `<1> > <2>`
-    More(Location, Box<ConditionDefine>, Box<ConditionDefine>),
+    More(Location, Box<Condition>, Box<Condition>),
     /// `<1> <= <2>`
-    LessEqual(Location, Box<ConditionDefine>, Box<ConditionDefine>),
+    LessEqual(Location, Box<Condition>, Box<Condition>),
     /// `<1> >= <2>`
-    MoreEqual(Location, Box<ConditionDefine>, Box<ConditionDefine>),
+    MoreEqual(Location, Box<Condition>, Box<Condition>),
     /// `<1> = <2>`
-    Equal(Location, Box<ConditionDefine>, Box<ConditionDefine>),
+    Equal(Location, Box<Condition>, Box<Condition>),
     /// `<1> != <2>`
-    NotEqual(Location, Box<ConditionDefine>, Box<ConditionDefine>),
+    NotEqual(Location, Box<Condition>, Box<Condition>),
     Number(Location, i64),
     Float(Location, String, bool),
     String(Vec<StringLiteral>),
     Bool(Location, bool),
     Variable(Identifier),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub enum Member {
+    Identifier(Identifier),
+    Number(i64),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -524,7 +546,7 @@ pub enum Expression {
     /// `(<1>)`
     Parenthesis(Location, Box<Expression>),
     /// `<1>.<2>`
-    BitAccess(Location, Box<Expression>, u64),
+    BitAccess(Location, Box<Expression>, Member),
     /// `<1>(<2>,*)`
     Function(Location, Identifier, Vec<Expression>),
     /// `<1><2>` where <2> is a block.
@@ -585,15 +607,15 @@ pub enum Expression {
     Assign(Location, Box<Expression>, Box<Expression>),
     Number(Location, i64),
     Float(Location, String, bool),
-    StringLiteral(Vec<StringLiteral>),
+    String(Vec<StringLiteral>),
     Type(Location, Type),
-    AddressLiteral(Location, u64, u64),
-    BoolLiteral(Location, bool),
+    Address(Location, i64, i64),
+    Bool(Location, bool),
     Variable(Identifier),
     /// `(<1>,*)`
     List(Location, ParameterList),
     /// `\[ <1>.* \]`
-    ArrayLiteral(Location, Vec<Expression>),
+    Array(Location, Vec<Expression>),
     Initializer(Location, Vec<Expression>),
     Cast(Location, Box<Expression>, Type),
 }
@@ -641,15 +663,15 @@ macro_rules! expr_components {
             | NamedFunction(..)
             | Number(..)
             | Float(..)
-            | StringLiteral(..)
+            | String(..)
             | Type(..)
-            | BoolLiteral(..)
-            | AddressLiteral(..)
+            | Bool(..)
+            | Address(..)
             | Variable(..)
             | List(..)
             | Cast(..)
             | Initializer(..)
-            | ArrayLiteral(..) => (None, None),
+            | Array(..) => (None, None),
         }
     };
 }
@@ -719,7 +741,7 @@ impl Expression {
         use Expression::*;
         matches!(
             self,
-            Number(..) | Float(..) | StringLiteral(..) | AddressLiteral(..) | Variable(..)
+            Number(..) | Float(..) | String(..) | Address(..) | Variable(..)
         )
     }
 
@@ -734,12 +756,60 @@ impl Expression {
     pub fn is_literal(&self) -> bool {
         matches!(
             self,
-            Expression::AddressLiteral(..)
+            Expression::Address(..)
                 | Expression::Number(..)
-                | Expression::ArrayLiteral(..)
+                | Expression::Array(..)
                 | Expression::Float(..)
-                | Expression::StringLiteral(..)
+                | Expression::String(..)
         )
+    }
+
+    pub fn loc(&self) -> Location {
+        match self {
+            Expression::ArraySubscript(loc, _, _) => loc.clone(),
+            Expression::ArraySlice(loc, _, _, _) => loc.clone(),
+            Expression::Parenthesis(loc, _) => loc.clone(),
+            Expression::BitAccess(loc, _, _) => loc.clone(),
+            Expression::Function(loc, _, _) => loc.clone(),
+            Expression::CodeBlock(loc, _, _) => loc.clone(),
+            Expression::NamedFunction(loc, _, _) => loc.clone(),
+            Expression::Not(loc, _) => loc.clone(),
+            Expression::BitwiseNot(loc, _) => loc.clone(),
+            Expression::UnaryPlus(loc, _) => loc.clone(),
+            Expression::Negate(loc, _) => loc.clone(),
+            Expression::Power(loc, _, _) => loc.clone(),
+            Expression::Multiply(loc, _, _) => loc.clone(),
+            Expression::Divide(loc, _, _) => loc.clone(),
+            Expression::Modulo(loc, _, _) => loc.clone(),
+            Expression::Add(loc, _, _) => loc.clone(),
+            Expression::Subtract(loc, _, _) => loc.clone(),
+            Expression::ShiftLeft(loc, _, _) => loc.clone(),
+            Expression::ShiftRight(loc, _, _) => loc.clone(),
+            Expression::BitwiseAnd(loc, _, _) => loc.clone(),
+            Expression::BitwiseXor(loc, _, _) => loc.clone(),
+            Expression::BitwiseOr(loc, _, _) => loc.clone(),
+            Expression::Less(loc, _, _) => loc.clone(),
+            Expression::More(loc, _, _) => loc.clone(),
+            Expression::LessEqual(loc, _, _) => loc.clone(),
+            Expression::MoreEqual(loc, _, _) => loc.clone(),
+            Expression::Equal(loc, _, _) => loc.clone(),
+            Expression::NotEqual(loc, _, _) => loc.clone(),
+            Expression::And(loc, _, _) => loc.clone(),
+            Expression::Or(loc, _, _) => loc.clone(),
+            Expression::ConditionalOperator(loc, _, _, _) => loc.clone(),
+            Expression::Assign(loc, _, _) => loc.clone(),
+            Expression::Number(loc, _) => loc.clone(),
+            Expression::Float(loc, _, _) => loc.clone(),
+            Expression::String(_) => Location::Builtin,
+            Expression::Type(loc, _) => loc.clone(),
+            Expression::Address(loc, _, _) => loc.clone(),
+            Expression::Bool(loc, _) => loc.clone(),
+            Expression::Variable(var) => var.loc.clone(),
+            Expression::List(loc, _) => loc.clone(),
+            Expression::Array(loc, _) => loc.clone(),
+            Expression::Initializer(loc, _) => loc.clone(),
+            Expression::Cast(loc, _, _) => loc.clone(),
+        }
     }
 }
 
@@ -748,7 +818,7 @@ impl Expression {
 pub struct Parameter {
     pub loc: Location,
     pub ty: Expression,
-    pub name: String,
+    pub name: Option<Identifier>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -760,25 +830,25 @@ pub struct FormulaDefine {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-pub struct Condition {
+pub struct ConditionDefine {
     pub loc: Location,
-    pub name: String,
-    pub value: ConditionDefine,
+    pub name: Option<Identifier>,
+    pub value: Condition,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-pub struct NamedCodeBlockDefine {
+pub struct NamedBlockCodeDefine {
     pub loc: Location,
-    pub name: String,
-    pub statements: Vec<Statement>,
+    pub name: Option<Identifier>,
+    pub statement: Statement,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct FunctionDefine {
     pub loc: Location,
-    pub name: String,
+    pub name: Option<Identifier>,
     /// The identifier's code location.
     pub name_loc: Location,
     pub params: ParameterList,
@@ -844,7 +914,7 @@ pub enum Statement {
     /// An [Expression].
     Expression(Location, Expression),
     /// `<1> [= <2>];`
-    Variable(Location, Variable, Option<Expression>),
+    Variable(Location, Box<VariableDefine>, Option<Expression>),
     /// `for ([1]; [2]; [3]) [4]`
     ///
     /// The `[4]` block statement is `None` when the `for` statement ends with a semicolon.
@@ -867,6 +937,7 @@ pub enum Statement {
     Return(Location, Option<Expression>),
     /// An error occurred during parsing.
     Error(Location),
+    StraySemicolon(Location),
 }
 
 impl Statement {
@@ -890,7 +961,7 @@ pub enum FormulaStatement {
     /// A [FormulaBlock] statement.
     Block(FormulaBlock),
     /// A [FormulaFunction] statement.
-    FunctionCall(Box<FormulaFunction>),
+    Function(Box<FormulaFunction>),
     /// An error occurred during parsing.
     Error(Location),
 }
