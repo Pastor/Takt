@@ -1,2 +1,0 @@
-// Локальная (переопределяющая) реализация platform.but.
-type LocalVersion = [8: bit];

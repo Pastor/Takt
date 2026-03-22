@@ -1,2 +1,0 @@
-// Вендорная реализация platform.but.
-type VendorVersion = [8: bit];

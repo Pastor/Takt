@@ -1,6 +1,0 @@
-model Empty {
-    state Template {
-    }
-    state None = Template {
-    }
-}

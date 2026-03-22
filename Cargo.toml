@@ -1,11 +1,5 @@
 [workspace]
 resolver = "1"
 members = [
-    "grammar/but",
-    "grammar/ltl",
-    "middleware",
-    "simulators",
-    "visual",
-    "codegen",
-    "cli",
+    "grammar"
 ]

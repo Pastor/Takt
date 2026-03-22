@@ -1,0 +1,29 @@
+[package]
+name = "grammar"
+version = "0.0.1"
+authors = ["Pastor <viruszold@gmail.com>"]
+description = "BuT"
+homepage = "https://but.ru"
+repository = "https://github.com/Pastor/BuT"
+readme = "../../README.md"
+keywords = ["BuT", "framework", "code", "generation"]
+license = "BSD"
+edition = "2021"
+rust-version = "1.71.0"
+exclude = ["src/grammar.lalrpop"]
+include = ["Cargo.toml", "src/**/*", "src/ast.rs", "README.md", "LICENSE*"]
+
+[build-dependencies]
+lalrpop = { git = "https://github.com/lalrpop/lalrpop.git", package = "lalrpop", version = "^0.23.1", features = ["lexer"] }
+
+[dependencies]
+lalrpop-util = { git = "https://github.com/lalrpop/lalrpop.git", package = "lalrpop-util", version = "^0.23.1" }
+thiserror = "2.0.18"
+phf = { version = "0.13.1", features = ["macros"] }
+unicode-xid = "0.2"
+itertools = "0.14.0"
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+[features]
+default = []
+ast-serde = ["serde"]

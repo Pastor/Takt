@@ -1,6 +1,0 @@
-// Модуль A — импортирует common.but.
-// Импортируется из main.but.
-
-import "common";
-
-const A_CONST: SharedType = 1;

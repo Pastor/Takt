@@ -1,0 +1,77 @@
+//Алиас типа
+type u8 = [bit;8];
+//Константа
+const MATRIX: u8 = { 0, 0, 0, 0, 0, 0, 0, 0 };
+const NUMB: u8 = 0xFF;
+cond  IsEmpty = it = 0;
+//Порт с указанием отображаемого адреса
+port  A : u8  = 0x00548835;
+port  B1: bit = 0x00648835:6;
+//Переменная
+var   it: [bit;64] = 0;
+
+//Модель
+model Ping {
+    //Начальное состояние
+    start Start {
+        //Переход на состояние по условию
+        ref End: B1;
+        //Исполнение блока кода при первом переходе в состояние
+        enter {
+            A.0 = true;
+            A.1 = false;
+        }
+        //Исполнение блока кода при выходе из состояния
+        exit {
+            A.0 = false;
+            A.1 = true;
+        }
+        always {
+            A.2 = toggle;
+        }
+        always {
+            toggle = !toggle;
+        }
+        var toggle = false;
+    }
+    state End;
+}
+model Pong {
+    start Begin {
+        ref Stop: S(Ping) = End;
+        always {
+            A.5 = MATRIX.5;
+        }
+    }
+    state End {
+        enter {
+            A.6 = MATRIX.3;
+        }
+    }
+}
+model Toggle {
+    start Entry {
+        ref Ping: IsEmpty;
+    }
+    state Ping = Ping {
+        next Pong;
+        always {
+            debug("Ping processing");
+        }
+    }
+    state Pong = Pong {
+        next Complete;
+    }
+    state Complete {
+        ref End: true;
+    }
+    state End;
+}
+start Entry = (Ping | Pong) + Toggle;
+always {
+    debug("Main processing");
+    it = it + 1;
+    if S(Toggle) = Pong {
+        debug("Pong processing");
+    }
+}
