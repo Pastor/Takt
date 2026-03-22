@@ -1,13 +1,22 @@
 #[cfg(feature = "ast-serde")]
 use serde::{Deserialize, Serialize};
 
+/// Местоположение узла АСД в исходном тексте.
+///
+/// Вариант [`Source`](Location::Source) хранит номер файла, байтовое смещение
+/// начала и байтовое смещение конца (не включительно).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Location {
+    /// Встроенный элемент (не относится к пользовательскому коду).
     Builtin,
+    /// Элемент, заданный через командную строку компилятора.
     CommandLine,
+    /// Неявно сгенерированный элемент.
     Implicit,
+    /// Элемент, сгенерированный кодогенератором.
     Codegen,
+    /// Элемент в исходном файле: `(файл, начало, конец)`.
     Source(u64, usize, usize),
 }
 
@@ -17,6 +26,7 @@ impl Default for Location {
     }
 }
 
+/// Вызывается при попытке получить позицию из не-файлового варианта [`Location`].
 #[inline(never)]
 #[cold]
 #[track_caller]
@@ -25,6 +35,7 @@ fn not_a_file() -> ! {
 }
 
 impl Location {
+    /// Возвращает [`Location`] нулевой длины, указывающий на начало данного диапазона.
     #[inline]
     pub fn begin_range(&self) -> Self {
         match self {
@@ -35,6 +46,7 @@ impl Location {
         }
     }
 
+    /// Возвращает [`Location`] нулевой длины, указывающий на конец данного диапазона.
     #[inline]
     pub fn end_range(&self) -> Self {
         match self {
@@ -43,6 +55,11 @@ impl Location {
         }
     }
 
+    /// Возвращает строковое представление номера файла.
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если `self` не является вариантом [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn filename(&self) -> String {
@@ -52,6 +69,8 @@ impl Location {
         }
     }
 
+    /// Возвращает `Some(номер_файла)` для варианта [`Source`](Location::Source),
+    /// или `None` для остальных вариантов.
     #[inline]
     pub fn try_file_no(&self) -> Option<String> {
         match self {
@@ -60,6 +79,11 @@ impl Location {
         }
     }
 
+    /// Возвращает байтовое смещение начала диапазона.
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если `self` не является вариантом [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn start(&self) -> usize {
@@ -69,6 +93,11 @@ impl Location {
         }
     }
 
+    /// Возвращает байтовое смещение конца диапазона (включительно).
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если `self` не является вариантом [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn end(&self) -> usize {
@@ -78,12 +107,22 @@ impl Location {
         }
     }
 
+    /// Возвращает байтовое смещение конца диапазона (не включительно, `end + 1`).
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если `self` не является вариантом [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn exclusive_end(&self) -> usize {
         self.end() + 1
     }
 
+    /// Устанавливает начало текущего диапазона равным началу `other`.
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если любой из операндов не является [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn use_start_from(&mut self, other: &Location) {
@@ -95,6 +134,11 @@ impl Location {
         }
     }
 
+    /// Устанавливает конец текущего диапазона равным концу `other`.
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если любой из операндов не является [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn use_end_from(&mut self, other: &Location) {
@@ -106,6 +150,11 @@ impl Location {
         }
     }
 
+    /// Возвращает копию с началом, взятым из `other`.
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если любой из операндов не является [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn with_start_from(mut self, other: &Self) -> Self {
@@ -113,6 +162,11 @@ impl Location {
         self
     }
 
+    /// Возвращает копию с концом, взятым из `other`.
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если любой из операндов не является [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn with_end_from(mut self, other: &Self) -> Self {
@@ -120,6 +174,11 @@ impl Location {
         self
     }
 
+    /// Возвращает копию с заменённым началом.
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если `self` не является [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn with_start(self, start: usize) -> Self {
@@ -129,6 +188,11 @@ impl Location {
         }
     }
 
+    /// Возвращает копию с заменённым концом.
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если `self` не является [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn with_end(self, end: usize) -> Self {
@@ -138,6 +202,11 @@ impl Location {
         }
     }
 
+    /// Преобразует [`Location`] в стандартный диапазон `start..end`.
+    ///
+    /// # Паника
+    ///
+    /// Паникует, если `self` не является [`Location::Source`].
     #[track_caller]
     #[inline]
     pub fn range(self) -> std::ops::Range<usize> {
@@ -148,14 +217,18 @@ impl Location {
     }
 }
 
+/// Идентификатор с местоположением в исходном тексте.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct Identifier {
+    /// Местоположение идентификатора.
     pub loc: Location,
+    /// Строковое имя идентификатора.
     pub name: String,
 }
 
 impl Identifier {
+    /// Создаёт идентификатор с местоположением по умолчанию.
     pub fn new(s: impl Into<String>) -> Self {
         Self {
             loc: Location::default(),
@@ -164,54 +237,72 @@ impl Identifier {
     }
 }
 
+/// Путь из идентификаторов, разделённых `::` (например, `a::b::c`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct IdentifierPath {
+    /// Местоположение всего пути.
     pub loc: Location,
+    /// Последовательность идентификаторов.
     pub identifiers: Vec<Identifier>,
 }
 
+/// Комментарий в исходном тексте.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Comment {
+    /// Обычный строчный комментарий `// ...`.
     Line(Location, String),
+    /// Документационный строчный комментарий `/// ...`.
     DocLine(Location, String),
 }
 
 impl Comment {
+    /// Возвращает текстовое содержимое комментария.
     #[inline]
     pub const fn value(&self) -> &String {
         match self {
             Self::Line(_, s) | Self::DocLine(_, s) => s,
         }
     }
+
+    /// Возвращает `true`, если комментарий является документационным (`///`).
     #[inline]
     pub const fn is_doc(&self) -> bool {
         matches!(self, Self::DocLine(..))
     }
 
+    /// Возвращает `true`, если комментарий является строчным (оба варианта).
     #[inline]
     pub const fn is_line(&self) -> bool {
         matches!(self, Self::Line(..) | Self::DocLine(..))
     }
 }
 
+/// Описание импорта.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum ImportDefine {
+    /// `import "путь";`
     Plain(ImportPath, Location),
+    /// `import "путь" as Имя;` или `import * as Имя from "путь";`
     GlobalSymbol(ImportPath, Identifier, Location),
+    /// `import { a, b as c } from "путь";`
     Rename(ImportPath, Vec<(Identifier, Option<Identifier>)>, Location),
 }
 
+/// Путь импорта.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum ImportPath {
+    /// Путь в виде строкового литерала.
     Filename(StringLiteral),
+    /// Путь в виде идентификаторного пути.
     Path(IdentifierPath),
 }
 
 impl ImportDefine {
+    /// Возвращает строковый литерал пути, если он есть.
     #[inline]
     pub const fn literal(&self) -> Option<&StringLiteral> {
         match self {
@@ -223,60 +314,88 @@ impl ImportDefine {
     }
 }
 
+/// Список параметров функции: `Vec<(позиция, параметр?)>`.
+///
+/// `None` используется при ошибке восстановления парсера.
 pub type ParameterList = Vec<(Location, Option<Parameter>)>;
 
+/// Тип данных в языке BuT.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Type {
+    /// Адресный тип `порт[:бит]`.
     Address {
+        /// Адрес порта.
         address: u64,
+        /// Опциональный номер бита.
         bit: Option<u64>,
     },
+    /// Примитивный тип `bit` (1 бит).
     Bit,
+    /// Булевый тип `bool`.
     Bool,
+    /// Тип с плавающей точкой `float`.
     Float,
+    /// Псевдоним типа (ссылка по имени).
     Alias(Identifier),
+    /// Массив битов: `[тип; N]`.
     Array {
+        /// Местоположение в исходном тексте.
         loc: Location,
+        /// Количество элементов.
         element_count: u16,
+        /// Тип элемента.
         element_type: Box<Type>,
     },
+    /// Функциональный тип `(параметры) -> возврат`.
     Function {
+        /// Список входных параметров.
         params: ParameterList,
+        /// Список возвращаемых значений.
         returns: Option<ParameterList>,
     },
 }
 
+/// Описание переменной (`var` или `const`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct VariableDefine {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Тип переменной (может быть не указан).
     pub ty: Option<Type>,
+    /// Имя переменной (может быть не указано при ошибке).
     pub name: Option<Identifier>,
+    /// Начальное значение (инициализатор).
     pub initializer: Option<Expression>,
+    /// `true` — изменяемая (`var`), `false` — константа (`const`).
     pub mutability: bool,
 }
 
+/// Описание порта (`port`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct PortDefine {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Тип порта.
     pub ty: Type,
+    /// Имя порта (может быть не указано при ошибке).
     pub name: Option<Identifier>,
+    /// Адрес или выражение инициализации.
     pub initializer: Option<Expression>,
 }
 
+/// Пользовательский оператор, который может быть перегружен.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum UserDefinedOperator {
     /// `&`
     BitwiseAnd,
     /// `~`
-    ///
     BitwiseNot,
-    /// `-`
-    ///
-    /// Note that this is the same as `Subtract`, and that it is currently not being parsed.
+    /// Унарный минус `-` (псевдоним [`Subtract`](UserDefinedOperator::Subtract),
+    /// в настоящее время не парсится).
     Negate,
     /// `|`
     BitwiseOr,
@@ -307,7 +426,9 @@ pub enum UserDefinedOperator {
 }
 
 impl UserDefinedOperator {
-    /// Returns the number of arguments needed for this operator's operation.
+    /// Возвращает количество аргументов оператора.
+    ///
+    /// Унарные операторы возвращают `1`, бинарные — `2`.
     #[inline]
     pub const fn args(&self) -> usize {
         match self {
@@ -316,19 +437,19 @@ impl UserDefinedOperator {
         }
     }
 
-    /// Returns whether `self` is a unary operator.
+    /// Возвращает `true`, если оператор унарный.
     #[inline]
     pub const fn is_unary(&self) -> bool {
         matches!(self, Self::BitwiseNot | Self::Negate)
     }
 
-    /// Returns whether `self` is a binary operator.
+    /// Возвращает `true`, если оператор бинарный.
     #[inline]
     pub const fn is_binary(&self) -> bool {
         !self.is_unary()
     }
 
-    /// Returns whether `self` is a bitwise operator.
+    /// Возвращает `true`, если оператор является побитовым.
     #[inline]
     pub const fn is_bitwise(&self) -> bool {
         matches!(
@@ -337,7 +458,7 @@ impl UserDefinedOperator {
         )
     }
 
-    /// Returns whether `self` is an arithmetic operator.
+    /// Возвращает `true`, если оператор является арифметическим.
     #[inline]
     pub const fn is_arithmetic(&self) -> bool {
         matches!(
@@ -346,7 +467,7 @@ impl UserDefinedOperator {
         )
     }
 
-    /// Returns whether this is a comparison operator.
+    /// Возвращает `true`, если оператор является оператором сравнения.
     #[inline]
     pub const fn is_comparison(&self) -> bool {
         matches!(
@@ -361,277 +482,374 @@ impl UserDefinedOperator {
     }
 }
 
+/// Корневой узел АСД — модель (автомат или компоновка автоматов).
+///
+/// При разборе всего файла без явного `model` блока корень является
+/// анонимной моделью (`name == None`), содержащей все элементы верхнего уровня.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct Model {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Имя модели (`None` для анонимной корневой модели).
     pub name: Option<Identifier>,
+    /// Элементы модели.
     pub elements: Vec<ModelElement>,
+    /// Выражение реализации/компоновки (`= выражение`).
     pub implements: Option<Expression>,
 }
 
+/// Элемент модели верхнего уровня.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum ModelElement {
+    /// Директива импорта.
     Import(ImportDefine),
+    /// Определение функции.
     Function(Box<FunctionDefine>),
+    /// Формула.
     Formula(Box<FormulaDefine>),
+    /// Определение условия.
     Condition(Box<ConditionDefine>),
+    /// Определение переменной.
     Variable(Box<VariableDefine>),
+    /// Определение порта.
     Port(Box<PortDefine>),
+    /// Определение псевдонима типа.
     Type(Box<TypeDefine>),
+    /// Определение состояния.
     State(Box<StateDefine>),
+    /// Вложенная модель.
     Model(Box<Model>),
+    /// Именованный блок кода (`enter`, `exit`, `always`, …).
     NamedBlockCode(Box<NamedBlockCodeDefine>),
+    /// Одиночная точка с запятой (допускается для совместимости).
     StraySemicolon(Location),
 }
 
+/// Вид состояния автомата.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum StateKind {
+    /// Начальное состояние (`start`).
     Start,
+    /// Конечное состояние.
     End,
+    /// Переходное состояние.
     Next,
 }
 
+/// Определение состояния (`state` или `start`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct StateDefine {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Имя состояния.
     pub name: Option<Identifier>,
+    /// Элементы состояния.
     pub elements: Vec<StateElement>,
+    /// Выражение реализации.
     pub implements: Option<Expression>,
+    /// Вид состояния.
     pub kind: Option<StateKind>,
 }
 
+/// Элемент состояния.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum StateElement {
+    /// Директива импорта.
     Import(ImportDefine),
+    /// Переход к следующему состоянию (`next Имя`).
     Next(Identifier),
+    /// Определение функции.
     Function(Box<FunctionDefine>),
+    /// Формула.
     Formula(Box<FormulaDefine>),
+    /// Определение условия.
     Condition(Box<ConditionDefine>),
+    /// Определение переменной.
     Variable(Box<VariableDefine>),
+    /// Определение псевдонима типа.
     Type(Box<TypeDefine>),
+    /// Ссылка на состояние с условием перехода: `ref Имя [: Условие]`.
     Reference(Location, Identifier, Option<Condition>),
+    /// Вложенная модель.
     Model(Box<Model>),
+    /// Именованный блок кода.
     NamedBlockCode(Box<NamedBlockCodeDefine>),
+    /// Одиночная точка с запятой.
     StraySemicolon(Location),
 }
 
-/// Both have the same semantics:
-///
-/// `<name>[(<args>,*)]`
+/// База наследования: `Имя[(аргументы,*)]`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct Base {
-    /// The code location.
+    /// Местоположение в исходном тексте.
     pub loc: Location,
-    /// The identifier path.
+    /// Путь идентификатора.
     pub name: IdentifierPath,
-    /// The optional arguments.
+    /// Аргументы (опционально).
     pub args: Option<Vec<Expression>>,
 }
 
+/// Переменная с типом и инициализатором.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct Variable {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Тип переменной.
     pub ty: Box<TypeDefine>,
+    /// Имя переменной.
     pub name: Option<Identifier>,
+    /// Начальное значение.
     pub initializer: Option<Expression>,
 }
 
+/// Определение псевдонима типа: `type Имя = Тип`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct TypeDefine {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Имя псевдонима.
     pub name: Identifier,
+    /// Исходный тип.
     pub ty: Type,
 }
 
-/// An annotation.
+/// Аннотация (метаданные, прикреплённые к объявлению).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Annotation {
+    /// Идентификаторный путь.
     Identifier(Location, IdentifierPath),
+    /// Вызов функции-аннотации.
     Function {
+        /// Местоположение.
         loc: Location,
+        /// Имя функции.
         name: Identifier,
+        /// Аргументы.
         args: Vec<Annotation>,
     },
+    /// Присваивание: `ключ = значение`.
     Assign {
+        /// Местоположение.
         loc: Location,
+        /// Левая часть.
         name: IdentifierPath,
+        /// Правая часть.
         value: Expression,
     },
+    /// Строковый аргумент.
     String(StringLiteral),
+    /// Числовой аргумент.
     Number(Location, i64),
+    /// Рациональный аргумент.
     Rational(Location, String, bool),
+    /// Булевый аргумент.
     Boolean(Location, bool),
+    /// Аргумент видимости.
     Visibility(Location, Expression),
 }
 
+/// Строковый литерал с признаком Unicode.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct StringLiteral {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// `true` — строка объявлена с префиксом `unicode`.
     pub unicode: bool,
+    /// Содержимое строки (без кавычек).
     pub string: String,
 }
 
+/// Именованный аргумент вызова функции: `имя: выражение`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct NamedArgument {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Имя аргумента (может отсутствовать при ошибке).
     pub name: Option<Identifier>,
+    /// Значение аргумента.
     pub expr: Expression,
 }
 
+/// Условие перехода между состояниями.
+///
+/// Является упрощённым подмножеством [`Expression`], допускаемым
+/// в позиции условия перехода `ref Имя: Условие`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Condition {
-    /// `<1>\[ [2] \]`
+    /// Доступ к элементу массива: `id[n]`.
     ArraySubscript(Location, Identifier, i64),
-    /// `(<1>)`
+    /// Скобки: `(условие)`.
     Parenthesis(Location, Box<Condition>),
-    /// `<1>.<2>`
+    /// Доступ к биту: `условие.член`.
     BitAccess(Location, Box<Condition>, Member),
-    /// `<1>(<2>,*)`
+    /// Вызов функции: `id(аргументы,*)`.
     Function(Location, Identifier, Vec<Condition>),
-    /// `!<1>`
+    /// Логическое НЕ: `!условие`.
     Not(Location, Box<Condition>),
-    /// `<1> + <2>`
+    /// Сложение: `левое + правое`.
     Add(Location, Box<Condition>, Box<Condition>),
-    /// `<1> - <2>`
+    /// Вычитание: `левое - правое`.
     Subtract(Location, Box<Condition>, Box<Condition>),
-    /// `<1> & <2>`
+    /// Побитовое И: `левое & правое`.
     And(Location, Box<Condition>, Box<Condition>),
-    /// `<1> | <2>`
+    /// Побитовое ИЛИ: `левое | правое`.
     Or(Location, Box<Condition>, Box<Condition>),
-    /// `<1> < <2>`
+    /// Меньше: `левое < правое`.
     Less(Location, Box<Condition>, Box<Condition>),
-    /// `<1> > <2>`
+    /// Больше: `левое > правое`.
     More(Location, Box<Condition>, Box<Condition>),
-    /// `<1> <= <2>`
+    /// Меньше или равно: `левое <= правое`.
     LessEqual(Location, Box<Condition>, Box<Condition>),
-    /// `<1> >= <2>`
+    /// Больше или равно: `левое >= правое`.
     MoreEqual(Location, Box<Condition>, Box<Condition>),
-    /// `<1> = <2>`
+    /// Равенство: `левое = правое`.
     Equal(Location, Box<Condition>, Box<Condition>),
-    /// `<1> != <2>`
+    /// Неравенство: `левое != правое`.
     NotEqual(Location, Box<Condition>, Box<Condition>),
+    /// Целочисленный литерал.
     Number(Location, i64),
+    /// Вещественный литерал: `(строка, отрицательный)`.
     Float(Location, String, bool),
+    /// Конкатенация строковых литералов.
     String(Vec<StringLiteral>),
+    /// Булевый литерал.
     Bool(Location, bool),
+    /// Переменная.
     Variable(Identifier),
 }
 
+/// Элемент доступа к члену (для оператора `.`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Member {
+    /// Доступ по имени: `.имя`.
     Identifier(Identifier),
+    /// Доступ по индексу: `.0`, `.1`, …
     Number(i64),
 }
 
+/// Выражение языка BuT.
+///
+/// Поддерживает полный спектр операций: арифметику, побитовые операции,
+/// сравнения, логику, обращение к массивам, вызовы функций и т.д.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Expression {
-    /// `<1>\[ [2] \]`
+    /// Доступ к элементу массива: `id[n]`.
     ArraySubscript(Location, Identifier, i64),
-    /// `<1>\[ [2] : [3] \]`
+    /// Срез массива: `id[начало:конец]`.
     ArraySlice(Location, Identifier, Option<i64>, Option<i64>),
-    /// `(<1>)`
+    /// Скобки: `(выражение)`.
     Parenthesis(Location, Box<Expression>),
-    /// `<1>.<2>`
+    /// Доступ к биту: `выражение.член`.
     BitAccess(Location, Box<Expression>, Member),
-    /// `<1>(<2>,*)`
+    /// Вызов функции: `id(аргументы,*)`.
     Function(Location, Identifier, Vec<Expression>),
-    /// `<1><2>` where <2> is a block.
+    /// Блок кода как выражение: `выражение { ... }`.
     CodeBlock(Location, Box<Expression>, Box<Statement>),
-    /// `<1>({ <2>,* })`
+    /// Вызов с именованными аргументами: `выражение({ ключ: значение, … })`.
     NamedFunction(Location, Box<Expression>, Vec<NamedArgument>),
-    /// `!<1>`
+    /// Логическое НЕ: `!выражение`.
     Not(Location, Box<Expression>),
-    /// `~<1>`
+    /// Побитовое НЕ: `~выражение`.
     BitwiseNot(Location, Box<Expression>),
+    /// Унарный плюс: `+выражение`.
     UnaryPlus(Location, Box<Expression>),
-    /// `-<1>`
+    /// Унарный минус: `-выражение`.
     Negate(Location, Box<Expression>),
 
-    /// `<1> ** <2>`
+    /// Возведение в степень: `левое ** правое`.
     Power(Location, Box<Expression>, Box<Expression>),
-    /// `<1> * <2>`
+    /// Умножение: `левое * правое`.
     Multiply(Location, Box<Expression>, Box<Expression>),
-    /// `<1> / <2>`
+    /// Деление: `левое / правое`.
     Divide(Location, Box<Expression>, Box<Expression>),
-    /// `<1> % <2>`
+    /// Остаток от деления: `левое % правое`.
     Modulo(Location, Box<Expression>, Box<Expression>),
-    /// `<1> + <2>`
+    /// Сложение: `левое + правое`.
     Add(Location, Box<Expression>, Box<Expression>),
-    /// `<1> - <2>`
+    /// Вычитание: `левое - правое`.
     Subtract(Location, Box<Expression>, Box<Expression>),
-    /// `<1> << <2>`
+    /// Сдвиг влево: `левое << правое`.
     ShiftLeft(Location, Box<Expression>, Box<Expression>),
-    /// `<1> >> <2>`
+    /// Сдвиг вправо: `левое >> правое`.
     ShiftRight(Location, Box<Expression>, Box<Expression>),
-    /// `<1> & <2>`
+    /// Побитовое И: `левое & правое`.
     BitwiseAnd(Location, Box<Expression>, Box<Expression>),
-    /// `<1> ^ <2>`
+    /// Побитовое исключающее ИЛИ: `левое ^ правое`.
     BitwiseXor(Location, Box<Expression>, Box<Expression>),
-    /// `<1> | <2>`
+    /// Побитовое ИЛИ: `левое | правое`.
     BitwiseOr(Location, Box<Expression>, Box<Expression>),
-    /// `<1> < <2>`
+    /// Меньше: `левое < правое`.
     Less(Location, Box<Expression>, Box<Expression>),
-    /// `<1> > <2>`
+    /// Больше: `левое > правое`.
     More(Location, Box<Expression>, Box<Expression>),
-    /// `<1> <= <2>`
+    /// Меньше или равно: `левое <= правое`.
     LessEqual(Location, Box<Expression>, Box<Expression>),
-    /// `<1> >= <2>`
+    /// Больше или равно: `левое >= правое`.
     MoreEqual(Location, Box<Expression>, Box<Expression>),
-    /// `<1> == <2>`
+    /// Равенство: `левое == правое`.
     Equal(Location, Box<Expression>, Box<Expression>),
-    /// `<1> != <2>`
+    /// Неравенство: `левое != правое`.
     NotEqual(Location, Box<Expression>, Box<Expression>),
-    /// `<1> && <2>`
+    /// Логическое И: `левое && правое`.
     And(Location, Box<Expression>, Box<Expression>),
-    /// `<1> || <2>`
+    /// Логическое ИЛИ: `левое || правое`.
     Or(Location, Box<Expression>, Box<Expression>),
-    /// `<1> ? <2> : <3>`
-    ///
-    /// AKA ternary operator.
+    /// Тернарный оператор: `условие ? тогда : иначе`.
     ConditionalOperator(Location, Box<Expression>, Box<Expression>, Box<Expression>),
-    /// `<1> = <2>`
+    /// Присваивание: `левое = правое`.
     Assign(Location, Box<Expression>, Box<Expression>),
+    /// Целочисленный литерал.
     Number(Location, i64),
+    /// Вещественный литерал: `(строка, отрицательный)`.
     Float(Location, String, bool),
+    /// Конкатенация строковых литералов.
     String(Vec<StringLiteral>),
+    /// Тип как выражение.
     Type(Location, Type),
+    /// Адресный литерал: `адрес:бит`.
     Address(Location, i64, i64),
+    /// Булевый литерал.
     Bool(Location, bool),
+    /// Ссылка на переменную.
     Variable(Identifier),
-    /// `(<1>,*)`
+    /// Список параметров: `(параметр,*)`.
     List(Location, ParameterList),
-    /// `\[ <1>.* \]`
+    /// Массивный литерал: `[элемент,*]`.
     Array(Location, Vec<Expression>),
+    /// Инициализатор структуры: `{ элемент,* }`.
     Initializer(Location, Vec<Expression>),
+    /// Приведение типа: `выражение as Тип`.
     Cast(Location, Box<Expression>, Type),
 }
 
-/// See `Expression::components`.
+/// Вспомогательный макрос для получения компонент выражения.
+///
+/// Используется в методах [`Expression::components`] и [`Expression::components_mut`].
 macro_rules! expr_components {
     ($s:ident) => {
         match $s {
-            // (None, Some)
+            // Унарные: (None, Some)
             Not(_, expr)
             | BitwiseNot(_, expr)
             | UnaryPlus(_, expr)
             | Negate(_, expr)
             | Parenthesis(_, expr) => (None, Some(expr)),
 
-            // (Some, Some)
+            // Бинарные: (Some, Some)
             Power(_, left, right)
             | Multiply(_, left, right)
             | Divide(_, left, right)
@@ -653,7 +871,7 @@ macro_rules! expr_components {
             | Or(_, left, right)
             | Assign(_, left, right) => (Some(left), Some(right)),
 
-            // (None, None)
+            // Листовые: (None, None)
             BitAccess(..)
             | ConditionalOperator(..)
             | ArraySubscript(..)
@@ -677,7 +895,10 @@ macro_rules! expr_components {
 }
 
 impl Expression {
-    /// Removes one layer of parentheses.
+    /// Убирает один уровень скобок.
+    ///
+    /// Если `self` является [`Parenthesis`](Expression::Parenthesis), возвращает
+    /// внутреннее выражение; иначе возвращает `self`.
     #[inline]
     pub fn remove_parenthesis(&self) -> &Expression {
         if let Expression::Parenthesis(_, expr) = self {
@@ -687,7 +908,7 @@ impl Expression {
         }
     }
 
-    /// Strips all parentheses recursively.
+    /// Рекурсивно убирает все уровни скобок.
     pub fn strip_parentheses(&self) -> &Expression {
         match self {
             Expression::Parenthesis(_, expr) => expr.strip_parentheses(),
@@ -695,30 +916,36 @@ impl Expression {
         }
     }
 
-    /// Returns shared references to the components of this expression.
+    /// Возвращает разделяемые ссылки на компоненты выражения.
     ///
-    /// `(left_component, right_component)`
+    /// Возвращает пару `(левая_часть, правая_часть)`:
+    /// - для унарных операторов — `(None, Some(операнд))`,
+    /// - для бинарных — `(Some(левый), Some(правый))`,
+    /// - для литералов и вызовов — `(None, None)`.
     ///
-    /// # Examples
+    /// # Примеры
     ///
     /// ```
-    /// use but_grammar::ast::{Expression, Identifier, Loc};
+    /// use grammar::ast::{Expression, Identifier, Location};
     ///
-    /// // `a++`
+    /// // Унарный: ~a
     /// let var = Expression::Variable(Identifier::new("a"));
-    /// let post_increment = Expression::PostIncrement(Loc::default(), Box::new(var.clone()));
-    /// assert_eq!(post_increment.components(), (Some(&var), None));
+    /// let bitwise_not = Expression::BitwiseNot(Location::default(), Box::new(var.clone()));
+    /// assert_eq!(bitwise_not.components(), (None, Some(&var)));
     ///
-    /// // `++a`
-    /// let var = Expression::Variable(Identifier::new("a"));
-    /// let pre_increment = Expression::PreIncrement(Loc::default(), Box::new(var.clone()));
-    /// assert_eq!(pre_increment.components(), (None, Some(&var)));
-    ///
-    /// // `a + b`
+    /// // Бинарный: a + b
     /// let var_a = Expression::Variable(Identifier::new("a"));
     /// let var_b = Expression::Variable(Identifier::new("b"));
-    /// let pre_increment = Expression::Add(Loc::default(), Box::new(var_a.clone()), Box::new(var_b.clone()));
-    /// assert_eq!(pre_increment.components(), (Some(&var_a), Some(&var_b)));
+    /// let add = Expression::Add(
+    ///     Location::default(),
+    ///     Box::new(var_a.clone()),
+    ///     Box::new(var_b.clone()),
+    /// );
+    /// assert_eq!(add.components(), (Some(&var_a), Some(&var_b)));
+    ///
+    /// // Литерал: 42
+    /// let num = Expression::Number(Location::default(), 42);
+    /// assert_eq!(num.components(), (None, None));
     /// ```
     #[inline]
     pub fn components(&self) -> (Option<&Self>, Option<&Self>) {
@@ -726,16 +953,16 @@ impl Expression {
         expr_components!(self)
     }
 
-    /// Returns mutable references to the components of this expression.
+    /// Возвращает изменяемые ссылки на компоненты выражения.
     ///
-    /// See also [`Expression::components`].
+    /// См. также [`Expression::components`].
     #[inline]
     pub fn components_mut(&mut self) -> (Option<&mut Self>, Option<&mut Self>) {
         use Expression::*;
         expr_components!(self)
     }
 
-    /// Returns whether this expression can be split across multiple lines.
+    /// Возвращает `true`, если выражение нельзя разбить на несколько строк.
     #[inline]
     pub const fn is_unsplittable(&self) -> bool {
         use Expression::*;
@@ -745,14 +972,14 @@ impl Expression {
         )
     }
 
-    /// Returns whether this expression has spaces around it.
+    /// Возвращает `true`, если вокруг оператора нужны пробелы.
     #[inline]
     pub const fn has_space_around(&self) -> bool {
         use Expression::*;
         !matches!(self, Not(..) | BitwiseNot(..) | UnaryPlus(..) | Negate(..))
     }
 
-    /// Returns if the expression is a literal
+    /// Возвращает `true`, если выражение является литералом.
     pub fn is_literal(&self) -> bool {
         matches!(
             self,
@@ -764,6 +991,7 @@ impl Expression {
         )
     }
 
+    /// Возвращает местоположение выражения в исходном тексте.
     pub fn loc(&self) -> Location {
         match self {
             Expression::ArraySubscript(loc, _, _) => loc.clone(),
@@ -813,111 +1041,131 @@ impl Expression {
     }
 }
 
+/// Параметр функции: опциональное имя и тип.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct Parameter {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Тип параметра (выражение).
     pub ty: Expression,
+    /// Имя параметра (может отсутствовать).
     pub name: Option<Identifier>,
 }
 
+/// Определение формулы (`formula`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct FormulaDefine {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Блок тела формулы.
     pub formula: FormulaBlock,
 }
 
+/// Определение условия перехода (`cond Имя = Условие`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct ConditionDefine {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Имя условия.
     pub name: Option<Identifier>,
+    /// Выражение условия.
     pub value: Condition,
 }
 
+/// Именованный блок кода (`enter`, `exit`, `always`, …).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct NamedBlockCodeDefine {
+    /// Местоположение в исходном тексте.
     pub loc: Location,
+    /// Имя блока.
     pub name: Option<Identifier>,
+    /// Тело блока (оператор).
     pub statement: Statement,
 }
 
+/// Определение функции (`fn Имя(параметры) [-> Тип] [{ тело }]`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct FunctionDefine {
+    /// Местоположение всего определения.
     pub loc: Location,
+    /// Имя функции.
     pub name: Option<Identifier>,
-    /// The identifier's code location.
+    /// Местоположение имени.
     pub name_loc: Location,
+    /// Список параметров.
     pub params: ParameterList,
+    /// Возвращаемый тип (если есть).
     pub return_type: Option<Type>,
+    /// Тело функции (если есть).
     pub body: Option<Statement>,
 }
 
 impl FunctionDefine {
-    /// Returns `true` if the function has no return parameters.
+    /// Возвращает `true`, если функция не возвращает значения.
     #[inline]
     pub fn is_void(&self) -> bool {
         self.return_type.is_none()
     }
 
-    /// Returns `true` if the function body is empty.
+    /// Возвращает `true`, если тело функции отсутствует или пусто.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.body.as_ref().map_or(true, Statement::is_empty)
     }
 }
 
-/// A statement.
+/// Оператор языка BuT.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 #[allow(clippy::large_enum_variant, clippy::type_complexity)]
 pub enum Statement {
+    /// Блок операторов: `{ операторы* }`.
     Block {
+        /// Местоположение блока.
         loc: Location,
+        /// Признак проверяемого блока (зарезервировано).
         unchecked: bool,
+        /// Список операторов.
         statements: Vec<Statement>,
     },
-    /// `assembly [dialect] [(<flags>,*)] <block>`
+    /// Блок ассемблерного кода: `assembly [диалект] { ... }`.
     Assembly {
-        /// The code location.
+        /// Местоположение.
         loc: Location,
-        /// The assembly dialect.
+        /// Диалект ассемблера.
         dialect: Option<StringLiteral>,
-        /// The assembly flags.
+        /// Флаги.
         flags: Option<Vec<StringLiteral>>,
-        /// The assembly block.
+        /// Блок тела.
         block: Box<Statement>,
     },
+    /// Блок формулы: `formula [диалект] { ... }`.
     Formula {
-        /// The code location.
+        /// Местоположение.
         loc: Location,
-        /// The assembly dialect.
+        /// Диалект.
         dialect: Option<StringLiteral>,
-        /// The assembly flags.
+        /// Флаги.
         flags: Option<Vec<StringLiteral>>,
-        /// The assembly block.
+        /// Блок тела.
         block: Box<FormulaBlock>,
     },
-    /// `{ <1>,* }`
+    /// Именованные аргументы: `{ ключ: значение, … }`.
     Args(Location, Vec<NamedArgument>),
-    /// `if ({1}) <2> [else <3>]`
-    ///
-    /// Note that the `<1>` expression does not contain the parentheses.
+    /// Оператор `if`: `if условие блок [else ветка]`.
     If(Location, Expression, Box<Statement>, Option<Box<Statement>>),
-    /// `while ({1}) <2>`
-    ///
-    /// Note that the `<1>` expression does not contain the parentheses.
+    /// Оператор `while`: `while (условие) тело`.
     While(Location, Expression, Box<Statement>),
-    /// An [Expression].
+    /// Оператор-выражение.
     Expression(Location, Expression),
-    /// `<1> [= <2>];`
+    /// Объявление переменной с опциональным инициализатором.
     Variable(Location, Box<VariableDefine>, Option<Expression>),
-    /// `for ([1]; [2]; [3]) [4]`
-    ///
-    /// The `[4]` block statement is `None` when the `for` statement ends with a semicolon.
+    /// Оператор `for`: `for (инит; условие; шаг) тело`.
     For(
         Location,
         Option<Box<Statement>>,
@@ -925,23 +1173,22 @@ pub enum Statement {
         Option<Box<Expression>>,
         Option<Box<Statement>>,
     ),
-    /// `do <1> while ({2});`
-    ///
-    /// Note that the `<2>` expression does not contain the parentheses.
+    /// Оператор `do ... while`: `do тело while (условие)`.
     DoWhile(Location, Box<Statement>, Expression),
-    /// `continue;`
+    /// Оператор `continue`.
     Continue(Location),
-    /// `break;`
+    /// Оператор `break`.
     Break(Location),
-    /// `return [1];`
+    /// Оператор `return [выражение]`.
     Return(Location, Option<Expression>),
-    /// An error occurred during parsing.
+    /// Ошибка (вставляется при восстановлении после сбоя парсера).
     Error(Location),
+    /// Одиночная точка с запятой.
     StraySemicolon(Location),
 }
 
 impl Statement {
-    /// Returns `true` if the block statement contains no elements.
+    /// Возвращает `true`, если блочный оператор не содержит элементов.
     #[inline]
     pub fn is_empty(&self) -> bool {
         match self {
@@ -953,68 +1200,66 @@ impl Statement {
     }
 }
 
-/// A Formula statement.
+/// Оператор в блоке формулы.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum FormulaStatement {
+    /// Выражение формулы.
     Expression(Location, FormulaExpression),
-    /// A [FormulaBlock] statement.
+    /// Вложенный блок формулы.
     Block(FormulaBlock),
-    /// A [FormulaFunction] statement.
+    /// Вызов функции формулы.
     Function(Box<FormulaFunction>),
-    /// An error occurred during parsing.
+    /// Ошибка при разборе.
     Error(Location),
 }
 
-/// A Formula block statement.
-///
-/// `{ <statements>* }`
+/// Блок формулы: `{ операторы* }`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct FormulaBlock {
-    /// The code location.
+    /// Местоположение блока.
     pub loc: Location,
-    /// The block statements.
+    /// Список операторов формулы.
     pub statements: Vec<FormulaStatement>,
 }
 
 impl FormulaBlock {
-    /// Returns `true` if the block contains no elements.
+    /// Возвращает `true`, если блок не содержит операторов.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.statements.is_empty()
     }
 }
 
-/// A Formula expression.
+/// Выражение в формуле.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum FormulaExpression {
-    /// `<1> [: <2>]`
+    /// Булевый литерал с опциональной аннотацией типа: `true[:тип]`.
     Bool(Location, bool, Option<Identifier>),
-    /// `<1>[e<2>] [: <2>]`
+    /// Числовой литерал с опциональной аннотацией: `42[:тип]`.
     Number(Location, i64, Option<Identifier>),
-    /// `<0> [: <1>]`
+    /// Строковый литерал с опциональной аннотацией: `"s"[:тип]`.
     String(StringLiteral, Option<Identifier>),
-    /// Any valid [Identifier].
+    /// Ссылка на переменную.
     Variable(Identifier),
-    /// [FormulaFunction].
+    /// Вызов функции.
     Function(Box<FormulaFunction>),
-    /// `<1>.<2>`
+    /// Доступ к члену: `выражение.имя`.
     SuffixAccess(Location, Box<FormulaExpression>, Identifier),
+    /// Скобки.
     Parenthesis(Location, Box<FormulaExpression>),
 }
 
-/// A Formula function call.
-///
-/// `<id>(<arguments>,*)`
+/// Вызов функции в формуле: `id(аргументы,*)`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct FormulaFunction {
-    /// The code location.
+    /// Местоположение в исходном тексте.
     pub loc: Location,
-    /// The identifier.
+    /// Имя функции.
     pub id: Identifier,
-    /// The function call arguments.
+    /// Аргументы вызова.
     pub arguments: Vec<FormulaExpression>,
 }

@@ -1,0 +1,9 @@
+// Строковые литералы (позитивный тест лексера)
+
+"hello"
+"мир"
+"with escape \n and \t"
+"empty"
+""
+'single quotes'
+unicode"unicode string"

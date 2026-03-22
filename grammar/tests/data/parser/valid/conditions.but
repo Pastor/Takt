@@ -1,0 +1,32 @@
+// Условия перехода (позитивный тест парсера)
+type u8 = [bit;8];
+
+var x: u8 = 0;
+var y: u8 = 0;
+
+// Простые условия
+cond IsZero    = x = 0;
+cond IsNonZero = x != 0;
+cond IsMax     = x = 255;
+
+// Составные условия (с операторами)
+cond IsRange   = x > 10;
+cond BothZero  = x = 0 | y = 0;
+
+// Условие с доступом к биту
+cond BitSet    = x.7;
+
+model M {
+    start S {
+        ref A: IsZero;
+        ref B: IsNonZero;
+        ref C: x > 0 & y = 0;
+        ref D: true;
+        ref E: false;
+    }
+    state A;
+    state B;
+    state C;
+    state D;
+    state E;
+}

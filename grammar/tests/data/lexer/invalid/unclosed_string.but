@@ -1,0 +1,3 @@
+// Контр-пример: незакрытый строковый литерал
+// Ожидаемая ошибка: EndOfFileInString
+"this string is never closed

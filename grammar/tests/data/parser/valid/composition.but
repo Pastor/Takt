@@ -1,0 +1,21 @@
+// Компоновка моделей (позитивный тест парсера)
+model A {
+    start S;
+    state E;
+}
+
+model B {
+    start S;
+    state E;
+}
+
+model C {
+    start S;
+    state E;
+}
+
+// Последовательное исполнение: A затем B затем C
+start Sequential = A + B + C;
+
+// Параллельное исполнение
+// start Parallel = A | B;

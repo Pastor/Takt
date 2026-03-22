@@ -8,92 +8,166 @@ use unicode_xid::UnicodeXID;
 
 use crate::ast::{Comment, Location};
 
+/// Тип «токен с позицией»: `(начало, токен, конец)`.
 pub type Spanned<'a> = (usize, Token<'a>, usize);
+
+/// Специализированный `Result` для операций лексера.
 pub type Result<'a, T = Spanned<'a>, E = LexicalError> = std::result::Result<T, E>;
 
+/// Все лексемы (токены) языка BuT.
+///
+/// Каждый вариант соответствует одному терминальному символу грамматики.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[allow(missing_docs)]
 pub enum Token<'input> {
+    /// Произвольный идентификатор, не являющийся ключевым словом.
     Identifier(&'input str),
+    /// Строковый литерал: `(unicode, содержимое)`.
     StringLiteral(bool, &'input str),
+    /// Адресный литерал (числовой адрес порта).
     AddressLiteral(&'input str),
+    /// Целочисленный литерал.
     Number(i64),
+    /// Рациональный (плавающий) литерал: `(строка, отрицательный)`.
     RationalNumber(&'input str, bool),
+    /// Оператор деления `/`.
     Divide,
+    /// Ключевое слово `fn`.
     Function,
+    /// Ключевое слово `pragma`.
     Pragma,
+    /// Ключевое слово `import`.
     Import,
+    /// Ключевое слово `type`.
     Type,
+    /// Ключевое слово `do`.
     Do,
+    /// Ключевое слово `continue`.
     Continue,
+    /// Ключевое слово `break`.
     Break,
+    /// Ключевое слово `return`.
     Return,
+    /// Ключевое слово `string`.
     String,
+    /// Символ `#`.
     Sharp,
+    /// Символ `;`.
     Semicolon,
+    /// Символ `,`.
     Comma,
+    /// Символ `(`.
     OpenParenthesis,
+    /// Символ `)`.
     CloseParenthesis,
+    /// Символ `{`.
     OpenCurlyBrace,
+    /// Символ `}`.
     CloseCurlyBrace,
 
+    /// Оператор побитового ИЛИ `|`.
     BitwiseOr,
+    /// Оператор побитового исключающего ИЛИ `^`.
     BitwiseXor,
+    /// Логический оператор ИЛИ `||`.
     Or,
 
+    /// Оператор побитового И `&`.
     BitwiseAnd,
+    /// Оператор побитового НЕ `~`.
     BitwiseNot,
+    /// Логический оператор И `&&`.
     And,
+    /// Оператор сложения `+`.
     Add,
+    /// Оператор вычитания `-`.
     Subtract,
+    /// Оператор умножения `*`.
     Mul,
+    /// Оператор возведения в степень `**`.
     Power,
+    /// Оператор взятия остатка `%`.
     Modulo,
 
+    /// Оператор равенства `==`.
     Equal,
+    /// Оператор присваивания `=`.
     Assign,
 
+    /// Оператор неравенства `!=`.
     NotEqual,
+    /// Логическое НЕ `!`.
     Not,
 
+    /// Логическое значение `true`.
     True,
+    /// Логическое значение `false`.
     False,
+    /// Ключевое слово `else`.
     Else,
+    /// Ключевое слово `for`.
     For,
+    /// Ключевое слово `while`.
     While,
+    /// Ключевое слово `if`.
     If,
 
+    /// Оператор сдвига вправо `>>`.
     ShiftRight,
+    /// Оператор «меньше» `<`.
     Less,
+    /// Оператор «меньше или равно» `<=`.
     LessEqual,
 
+    /// Оператор сдвига влево `<<`.
     ShiftLeft,
+    /// Оператор «больше» `>`.
     More,
+    /// Оператор «больше или равно» `>=`.
     MoreEqual,
 
+    /// Оператор доступа к члену `.`.
     Member,
+    /// Двоеточие `:`.
     Colon,
+    /// Символ `[`.
     OpenBracket,
+    /// Символ `]`.
     CloseBracket,
 
+    /// Ключевое слово `as` (приведение типов).
     As,
 
+    /// Ключевое слово `assembly`.
     Assembly,
+    /// Ключевое слово `formula`.
     Formula,
 
+    /// Ключевое слово `const`.
     Constant,
+    /// Ключевое слово `port`.
     Port,
 
+    /// Стрелка `-->` (не используется в текущей грамматике).
     PeirceArrow,
 
+    /// Ключевое слово `model`.
     Model,
+    /// Ключевое слово `state`.
     State,
+    /// Ключевое слово `start`.
     Start,
+    /// Ключевое слово `ref`.
     Reference,
+    /// Ключевое слово `template`.
     Template,
+    /// Ключевое слово `cond`.
     Condition,
+    /// Ключевое слово `var`.
     Variable,
+    /// Ключевое слово `next`.
     Next,
+    /// Ключевое слово `extern`.
     Extern,
 }
 
@@ -141,11 +215,11 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Colon => write!(f, ":"),
             Token::OpenBracket => write!(f, "["),
             Token::CloseBracket => write!(f, "]"),
-            Token::ShiftRight => write!(f, "<<"),
+            Token::ShiftRight => write!(f, ">>"),
             Token::Less => write!(f, "<"),
             Token::LessEqual => write!(f, "<="),
             Token::String => write!(f, "string"),
-            Token::Function => write!(f, "function"),
+            Token::Function => write!(f, "fn"),
             Token::Pragma => write!(f, "pragma"),
             Token::Import => write!(f, "import"),
             Token::Type => write!(f, "type"),
@@ -178,23 +252,29 @@ impl<'input> fmt::Display for Token<'input> {
     }
 }
 
-/// Custom Solidity lexer.
+/// Лексический анализатор языка BuT.
 ///
-/// # Examples
+/// Преобразует строку исходного кода в последовательность токенов ([`Token`]).
+/// Для опережающего просмотра используется [`PeekNth`].
+///
+/// Комментарии (строчные `//` и документационные `///`) собираются отдельно
+/// в вектор [`Comment`] и не включаются в поток токенов.
+///
+/// # Примеры
 ///
 /// ```
-/// use but_grammar::lexer::{Lexer, Token};
+/// use grammar::lexer::{Lexer, Token};
 ///
-/// let source = "int number = 0;";
+/// let source = "var x = 42;";
 /// let mut comments = Vec::new();
 /// let mut errors = Vec::new();
 /// let mut lexer = Lexer::new(source, 0, &mut comments, &mut errors);
 ///
 /// let mut next_token = || lexer.next().map(|(_, token, _)| token);
-/// assert_eq!(next_token(), Some(Token::Identifier("int")));
-/// assert_eq!(next_token(), Some(Token::Identifier("number")));
+/// assert_eq!(next_token(), Some(Token::Variable));
+/// assert_eq!(next_token(), Some(Token::Identifier("x")));
 /// assert_eq!(next_token(), Some(Token::Assign));
-/// assert_eq!(next_token(), Some(Token::Number(0i64)));
+/// assert_eq!(next_token(), Some(Token::Number(42i64)));
 /// assert_eq!(next_token(), Some(Token::Semicolon));
 /// assert_eq!(next_token(), None);
 /// assert!(errors.is_empty());
@@ -202,45 +282,59 @@ impl<'input> fmt::Display for Token<'input> {
 /// ```
 #[derive(Debug)]
 pub struct Lexer<'input> {
+    /// Полный исходный текст.
     input: &'input str,
+    /// Итератор по символам с позициями (поддерживает опережающий просмотр).
     chars: PeekNth<CharIndices<'input>>,
+    /// Вектор для сохранения найденных комментариев.
     comments: &'input mut Vec<Comment>,
+    /// Номер файла (используется в [`Location`]).
     file_no: u64,
+    /// Последние два токена (для обработки `pragma`).
     last_tokens: [Option<Token<'input>>; 2],
-    /// The mutable reference to the error vector.
+    /// Вектор лексических ошибок, обнаруженных в ходе анализа.
     pub errors: &'input mut Vec<LexicalError>,
 }
 
-/// An error thrown by [Lexer].
+/// Ошибка лексического анализатора.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[allow(missing_docs)]
 pub enum LexicalError {
+    /// Неожиданный конец файла внутри блочного комментария.
     #[error("end of file found in comment")]
     EndOfFileInComment(Location),
 
+    /// Неожиданный конец файла внутри строкового литерала.
     #[error("end of file found in string literal")]
     EndOfFileInString(Location),
 
+    /// Неожиданный конец файла внутри шестнадцатеричного литерала.
     #[error("end of file found in hex literal string")]
     EndOfFileInHex(Location),
 
+    /// Отсутствуют цифры после `0x`.
     #[error("missing number")]
     MissingNumber(Location),
 
+    /// Недопустимый символ в шестнадцатеричном литерале.
     #[error("invalid character '{1}' in hex literal string")]
     InvalidCharacterInHexLiteral(Location, char),
 
+    /// Неизвестный токен.
     #[error("unrecognised token '{1}'")]
     UnrecognisedToken(Location, String),
 
+    /// Отсутствует показатель степени после `e`/`E`.
     #[error("missing exponent")]
     MissingExponent(Location),
 
+    /// Ожидалось ключевое слово `from`, но встретилось другое слово.
     #[error("'{1}' found where 'from' expected")]
     ExpectedFrom(Location, String),
 }
 
 impl LexicalError {
+    /// Возвращает местоположение в исходном тексте, где возникла ошибка.
     pub fn loc(&self) -> Location {
         match self {
             LexicalError::EndOfFileInComment(loc) => loc.clone(),
@@ -255,53 +349,63 @@ impl LexicalError {
     }
 }
 
-/// Returns whether `word` is a keyword.
+/// Возвращает `true`, если переданная строка является ключевым словом BuT.
 pub fn is_keyword(word: &str) -> bool {
     KEYWORDS.contains_key(word)
 }
 
+/// Статическая таблица ключевых слов языка BuT.
+///
+/// Отображает строку ключевого слова на соответствующий [`Token`].
 static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
-    "break" => Token::Break,
-    "const" => Token::Constant,
+    "break"    => Token::Break,
+    "const"    => Token::Constant,
     "continue" => Token::Continue,
-    "do" => Token::Do,
-    "else" => Token::Else,
-    "false" => Token::False,
-    "for" => Token::For,
-    "fn" => Token::Function,
-    "if" => Token::If,
-    "import" => Token::Import,
-    "return" => Token::Return,
-    "string" => Token::String,
-    "true" => Token::True,
-    "type" => Token::Type,
-    "while" => Token::While,
-    "as" => Token::As,
+    "do"       => Token::Do,
+    "else"     => Token::Else,
+    "false"    => Token::False,
+    "for"      => Token::For,
+    "fn"       => Token::Function,
+    "if"       => Token::If,
+    "import"   => Token::Import,
+    "return"   => Token::Return,
+    "string"   => Token::String,
+    "true"     => Token::True,
+    "type"     => Token::Type,
+    "while"    => Token::While,
+    "as"       => Token::As,
     "assembly" => Token::Assembly,
-    "formula" => Token::Formula,
-    "port" => Token::Port,
-    "model" => Token::Model,
-    "state" => Token::State,
-    "start" => Token::Start,
-    "ref" => Token::Reference,
+    "formula"  => Token::Formula,
+    "port"     => Token::Port,
+    "model"    => Token::Model,
+    "state"    => Token::State,
+    "start"    => Token::Start,
+    "ref"      => Token::Reference,
     "template" => Token::Template,
-    "cond" => Token::Condition,
-    "var" => Token::Variable,
-    "next" => Token::Next,
+    "cond"     => Token::Condition,
+    "var"      => Token::Variable,
+    "next"     => Token::Next,
 };
 
 impl<'input> Lexer<'input> {
-    /// Instantiates a new Lexer.
+    /// Создаёт новый экземпляр лексического анализатора.
     ///
-    /// # Examples
+    /// # Параметры
+    ///
+    /// - `input` — строка исходного кода для анализа.
+    /// - `file_no` — числовой идентификатор файла (используется в [`Location`]).
+    /// - `comments` — вектор для сохранения найденных комментариев.
+    /// - `errors` — вектор для накопления лексических ошибок.
+    ///
+    /// # Примеры
     ///
     /// ```
-    /// use but_grammar::lexer::Lexer;
+    /// use grammar::lexer::Lexer;
     ///
-    /// let source = "let number: uint256 = 0;";
+    /// let source = "model M { start S; }";
     /// let mut comments = Vec::new();
     /// let mut errors = Vec::new();
-    /// let mut lexer = Lexer::new(source, 0, &mut comments, &mut errors);
+    /// let _lexer = Lexer::new(source, 0, &mut comments, &mut errors);
     /// ```
     pub fn new(
         input: &'input str,
@@ -319,12 +423,16 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    /// Читает числовой литерал начиная с символа `ch` в позиции `start`.
+    ///
+    /// Поддерживает десятичные, шестнадцатеричные (`0x`), рациональные
+    /// (`3.14`) и числа с показателем степени (`1e10`).
     fn parse_number(&mut self, mut start: usize, ch: char) -> Result<'input> {
         let mut is_rational = false;
         let mut is_minus = false;
         if ch == '0' {
             if let Some((_, 'x')) = self.chars.peek() {
-                // hex number
+                // Шестнадцатеричный литерал: 0x...
                 self.chars.next();
 
                 let mut end = match self.chars.next() {
@@ -353,16 +461,19 @@ impl<'input> Lexer<'input> {
                     self.chars.next();
                 }
 
-                let hex = &self.input[start + 2..=end];
+                // Удаляем разделители `_` перед разбором hex-числа
+                let hex_raw = &self.input[start + 2..=end];
+                let hex: String = hex_raw.chars().filter(|&c| c != '_').collect();
                 return Ok((
                     start,
-                    Token::Number(i64::from_str_radix(hex, 16).unwrap()),
+                    Token::Number(i64::from_str_radix(&hex, 16).unwrap()),
                     end + 1,
                 ));
             }
         }
 
         if ch == '.' {
+            // Начало дробной части (например, `.5`)
             is_rational = true;
             start -= 1;
         }
@@ -389,10 +500,11 @@ impl<'input> Lexer<'input> {
         if let Some((_, '.')) = self.chars.peek() {
             if let Some((i, ch)) = self.chars.peek_nth(1) {
                 if ch.is_ascii_digit() && !is_rational {
+                    // Дробная часть: 3.14
                     rational_start = *i;
                     rational_end = *i;
                     is_rational = true;
-                    self.chars.next(); // advance over '.'
+                    self.chars.next(); // пропускаем '.'
                     while let Some((i, ch)) = self.chars.peek() {
                         if !ch.is_ascii_digit() && *ch != '_' {
                             break;
@@ -409,9 +521,10 @@ impl<'input> Lexer<'input> {
         let mut exp_start = end + 1;
 
         if let Some((i, 'e' | 'E')) = self.chars.peek() {
+            // Показатель степени: 1e10, 2.5E-3
             exp_start = *i + 1;
             self.chars.next();
-            // Negative exponent
+            // Опциональный знак минус перед показателем
             while matches!(self.chars.peek(), Some((_, '-'))) {
                 self.chars.next();
             }
@@ -444,16 +557,23 @@ impl<'input> Lexer<'input> {
             ));
         }
 
-        let n = &self.input[start..=old_end];
+        // Удаляем разделители `_` перед разбором десятичного числа
+        let n_raw = &self.input[start..=old_end];
+        let n_clean: String = n_raw.chars().filter(|&c| c != '_').collect();
         let _exp = &self.input[exp_start..=end];
 
-        let mut n = i64::from_str(n).unwrap();
+        let mut n = i64::from_str(&n_clean).unwrap();
         if is_minus {
             n = -n;
         }
         Ok((start, Token::Number(n), end + 1))
     }
 
+    /// Читает строковый литерал, заключённый в кавычки `quote_char`.
+    ///
+    /// - `unicode` — признак Unicode-строки (`unicode"..."`)
+    /// - `token_start` — позиция начала токена (включая открывающую кавычку)
+    /// - `string_start` — позиция первого символа содержимого строки
     fn string(
         &mut self,
         unicode: bool,
@@ -492,12 +612,17 @@ impl<'input> Lexer<'input> {
         ))
     }
 
+    /// Основной цикл токенизации.
+    ///
+    /// Возвращает следующий токен или `None` при достижении конца файла.
     fn next(&mut self) -> Option<Spanned<'input>> {
-        'toplevel: loop {
+        loop {
             match self.chars.next() {
+                // Идентификатор или ключевое слово
                 Some((start, ch)) if ch == '_' || ch == '$' || UnicodeXID::is_xid_start(ch) => {
                     let (id, end) = self.match_identifier(start);
 
+                    // Специальная обработка Unicode-строк: unicode"..."
                     if id == "unicode" {
                         match self.chars.peek() {
                             Some((_, quote_char @ '"')) | Some((_, quote_char @ '\'')) => {
@@ -520,6 +645,7 @@ impl<'input> Lexer<'input> {
                         Some((start, Token::Identifier(id), end))
                     };
                 }
+                // Строковый литерал в одинарных или двойных кавычках
                 Some((start, quote_char @ '"')) | Some((start, quote_char @ '\'')) => {
                     let str_res = self.string(false, start, start + 1, quote_char);
                     match str_res {
@@ -527,17 +653,18 @@ impl<'input> Lexer<'input> {
                         Ok(val) => return Some(val),
                     }
                 }
+                // Слэш: деление `/` или начало комментария `//`
                 Some((start, '/')) => {
                     match self.chars.peek() {
                         Some((_, '/')) => {
-                            // line comment
+                            // Строчный комментарий
                             self.chars.next();
 
                             let mut newline = false;
 
                             let doc_comment = match self.chars.next() {
                                 Some((_, '/')) => {
-                                    // ///(/)+ is still a line comment
+                                    // `////` и далее — не документационный, а обычный
                                     !matches!(self.chars.peek(), Some((_, '/')))
                                 }
                                 Some((_, ch)) if ch == '\n' || ch == '\r' => {
@@ -566,11 +693,13 @@ impl<'input> Lexer<'input> {
                             }
 
                             if doc_comment {
+                                // Документационный комментарий `///`
                                 self.comments.push(Comment::DocLine(
                                     Location::Source(self.file_no, start, last),
                                     self.input[start..last].to_owned(),
                                 ));
                             } else {
+                                // Обычный строчный комментарий `//`
                                 self.comments.push(Comment::Line(
                                     Location::Source(self.file_no, start, last),
                                     self.input[start..last].to_owned(),
@@ -582,6 +711,7 @@ impl<'input> Lexer<'input> {
                         }
                     }
                 }
+                // Цифра — начало числового литерала
                 Some((start, ch)) if ch.is_ascii_digit() => {
                     let parse_result = self.parse_number(start, ch);
                     match parse_result {
@@ -649,6 +779,7 @@ impl<'input> Lexer<'input> {
                 Some((i, '-')) => {
                     return match self.chars.peek() {
                         Some((_, other)) if other.is_ascii_digit() => {
+                            // Отрицательный числовой литерал
                             return match self.parse_number(i + 1, '-') {
                                 Err(lex_error) => {
                                     self.errors.push(lex_error);
@@ -663,6 +794,7 @@ impl<'input> Lexer<'input> {
                 Some((i, '*')) => {
                     return match self.chars.peek() {
                         Some((_, '*')) => {
+                            // Оператор возведения в степень `**`
                             self.chars.next();
                             Some((i, Token::Power, i + 2))
                         }
@@ -707,7 +839,9 @@ impl<'input> Lexer<'input> {
                 Some((i, ']')) => return Some((i, Token::CloseBracket, i + 1)),
                 Some((i, ':')) => return Some((i, Token::Colon, i + 1)),
                 Some((i, '~')) => return Some((i, Token::BitwiseNot, i + 1)),
+                // Пробельные символы игнорируются
                 Some((_, ch)) if ch.is_whitespace() => (),
+                // Неизвестный символ — лексическая ошибка
                 Some((start, _)) => {
                     let mut end;
 
@@ -729,19 +863,19 @@ impl<'input> Lexer<'input> {
                         self.input[start..end].to_owned(),
                     ));
                 }
-                None => return None, // End of file
+                None => return None, // Конец файла
             }
         }
     }
 
-    /// Next token is pragma value. Return it
+    /// Читает значение после директивы `pragma` вплоть до `;`.
+    ///
+    /// Возвращает содержимое как строковый литерал, пробелы на концах обрезаются.
     fn pragma_value(&mut self) -> Option<Spanned<'input>> {
-        // special parser for pragma solidity >=0.4.22 <0.7.0;
+        // Аналог поведения solc: всё до следующей точки с запятой
         let mut start = None;
         let mut end = 0;
 
-        // solc will include anything upto the next semicolon, whitespace
-        // trimmed on left and right
         loop {
             match self.chars.peek() {
                 Some((_, ';')) | None => {
@@ -764,7 +898,7 @@ impl<'input> Lexer<'input> {
                     }
                     self.chars.next();
 
-                    // end should point to the byte _after_ the character
+                    // end указывает на байт после текущего символа
                     end = match self.chars.peek() {
                         Some((i, _)) => *i,
                         None => self.input.len(),
@@ -774,6 +908,9 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    /// Читает идентификатор начиная с позиции `start`.
+    ///
+    /// Возвращает срез строки идентификатора и позицию его конца.
     fn match_identifier(&mut self, start: usize) -> (&'input str, usize) {
         let end;
         loop {
@@ -797,6 +934,8 @@ impl<'input> Iterator for Lexer<'input> {
     type Item = Spanned<'input>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // Если предыдущие два токена были `pragma <идентификатор>`,
+        // следующий токен читается как значение pragma-директивы.
         let token = if let [Some(Token::Pragma), Some(Token::Identifier(_))] = self.last_tokens {
             self.pragma_value()
         } else {

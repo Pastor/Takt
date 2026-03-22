@@ -521,9 +521,9 @@ StringLiteral: StringLiteral = {
 
 FormulaIdentifier: Identifier = {
     <l:@L> <n:identifier> <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: n.to_string()},
-    <l:@L> "extern" <r:@L> => Identifier{loc: Location::Source(file_no, l, r), name: "extern".to_string()},
-    <l:@L> "import" <r:@L> => Identifier{loc: Location::Source(file_no, l, r), name: "import".to_string()},
-    <l:@L> "as" <r:@L> => Identifier{loc: Location::Source(file_no, l, r), name: "as".to_string()},
+    <l:@L> "extern" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "extern".to_string()},
+    <l:@L> "import" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "import".to_string()},
+    <l:@L> "as" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "as".to_string()},
 }
 
 FormulaStatement: FormulaStatement = {

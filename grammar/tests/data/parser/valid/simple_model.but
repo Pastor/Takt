@@ -1,0 +1,6 @@
+// Простейшая модель с начальным состоянием (позитивный тест парсера)
+model TrafficLight {
+    start Red;
+    state Green;
+    state Yellow;
+}

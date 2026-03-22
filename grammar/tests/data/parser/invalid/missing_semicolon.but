@@ -1,0 +1,9 @@
+// Контр-пример: отсутствует точка с запятой после var
+// Ожидаемая ошибка: UnrecognizedToken
+model M {
+    start S {
+        always {
+            var x: bit = true
+        }
+    }
+}

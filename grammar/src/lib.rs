@@ -1,4 +1,29 @@
-#![doc = include_str!("../../README.md")]
+//! Библиотека лексического и синтаксического анализаторов языка BuT.
+//!
+//! # Структура
+//!
+//! - [`ast`] — узлы абстрактного синтаксического дерева (АСД).
+//! - [`diagnostics`] — типы диагностических сообщений (ошибки, предупреждения).
+//! - [`lexer`] — лексический анализатор (токенизатор).
+//!
+//! # Использование
+//!
+//! ```
+//! use grammar::parse;
+//!
+//! let src = "model M { start S; }";
+//! match parse(src, 0) {
+//!     Ok((model, comments)) => {
+//!         // Успешный разбор: model — корневой узел АСД
+//!         assert!(!model.elements.is_empty());
+//!     }
+//!     Err(diagnostics) => {
+//!         for d in diagnostics {
+//!             eprintln!("[{}] {}", d.level, d.message);
+//!         }
+//!     }
+//! }
+//! ```
 #![warn(missing_debug_implementations, missing_docs)]
 
 extern crate core;
@@ -11,8 +36,13 @@ use crate::ast::Location;
 use crate::lexer::LexicalError;
 use crate::lexer::Token;
 
+/// Модуль абстрактного синтаксического дерева языка BuT.
 pub mod ast;
+
+/// Модуль диагностических сообщений компилятора.
 pub mod diagnostics;
+
+/// Модуль лексического анализатора BuT.
 pub mod lexer;
 
 #[allow(
@@ -26,6 +56,29 @@ mod grammar {
     include!(concat!(env!("OUT_DIR"), "/grammar.rs"));
 }
 
+/// Разбирает строку исходного кода BuT.
+///
+/// Возвращает пару `(корневая_модель, комментарии)` при успехе,
+/// или вектор диагностических сообщений при ошибке.
+///
+/// # Параметры
+///
+/// - `src` — строка исходного кода.
+/// - `file_no` — числовой идентификатор файла для сообщений об ошибках.
+///
+/// # Примеры
+///
+/// ```
+/// use grammar::parse;
+///
+/// // Успешный разбор минимальной программы
+/// let (model, _) = parse("model M { start S; }", 0).unwrap();
+/// assert!(model.name.is_some());
+///
+/// // Разбор завершается ошибкой при синтаксических нарушениях
+/// let err = parse("model {", 0);
+/// assert!(err.is_err());
+/// ```
 pub fn parse(src: &str, file_no: u64) -> Result<(ast::Model, Vec<ast::Comment>), Vec<Diagnostic>> {
     let mut comments = Vec::new();
     let mut lexer_errors = Vec::new();
@@ -56,7 +109,7 @@ pub fn parse(src: &str, file_no: u64) -> Result<(ast::Model, Vec<ast::Comment>),
     }
 }
 
-/// Convert lalrop parser error to a Diagnostic
+/// Преобразует ошибку LALRPOP-парсера в [`Diagnostic`].
 fn parser_error_to_diagnostic(
     error: &ParseError<usize, Token, LexicalError>,
     file_no: u64,
@@ -80,7 +133,7 @@ fn parser_error_to_diagnostic(
         ParseError::User { error } => Diagnostic::parser_error(error.loc(), error.to_string()),
         ParseError::ExtraToken { token } => Diagnostic::parser_error(
             Location::Source(file_no, token.0, token.2),
-            format!("extra token '{}' encountered", token.0),
+            format!("extra token '{}' encountered", token.1),
         ),
         ParseError::UnrecognizedEof { expected, location } => Diagnostic::parser_error(
             Location::Source(file_no, *location, *location),
@@ -93,6 +146,11 @@ fn parser_error_to_diagnostic(
 mod tests {
     use super::*;
 
+    /// Комплексный тест разбора BuT-программы с различными конструкциями.
+    ///
+    /// Проверяет, что все основные элементы языка (псевдонимы типов, константы,
+    /// условия, порты, переменные, модели, состояния, переходы, именованные блоки
+    /// и операторы компоновки) успешно разбираются.
     #[test]
     fn parse_simple() {
         let src = r#"
