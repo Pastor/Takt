@@ -1,0 +1,413 @@
+// ============================================================================
+//  BuT — язык описания конечных автоматов
+//  Синтаксическое описание в формате Grammar-Kit (JetBrains).
+//
+//  Источник:  grammar/src/grammar.lalrpop  ·  grammar/src/lexer.rs
+//             grammar/src/ast.rs           ·  BuT.ebnf
+// ============================================================================
+
+{
+  // --------------------------------------------------------------------------
+  // Метаданные генератора
+  // --------------------------------------------------------------------------
+  parserClass            = "com.example.but.parser.BuTParser"
+  extends                = "com.intellij.extapi.psi.ASTWrapperPsiElement"
+
+  psiClassPrefix         = "BuT"
+  psiImplClassSuffix     = "Impl"
+  psiPackage             = "com.example.but.psi"
+  psiImplPackage         = "com.example.but.psi.impl"
+
+  elementTypeHolderClass = "com.example.but.psi.BuTTypes"
+  elementTypeClass       = "com.example.but.psi.BuTElementType"
+  tokenTypeClass         = "com.example.but.psi.BuTTokenType"
+
+  // --------------------------------------------------------------------------
+  // Таблица токенов
+  // --------------------------------------------------------------------------
+  tokens = [
+    // Ключевые слова
+    KW_AS         = 'as'
+    KW_ASSEMBLY   = 'assembly'
+    KW_BREAK      = 'break'
+    KW_COND       = 'cond'
+    KW_CONST      = 'const'
+    KW_CONTINUE   = 'continue'
+    KW_DO         = 'do'
+    KW_ELSE       = 'else'
+    KW_EXTERN     = 'extern'
+    KW_FALSE      = 'false'
+    KW_FN         = 'fn'
+    KW_FOR        = 'for'
+    KW_FORMULA    = 'formula'
+    KW_IF         = 'if'
+    KW_IMPORT     = 'import'
+    KW_MODEL      = 'model'
+    KW_NEXT       = 'next'
+    KW_PORT       = 'port'
+    KW_REF        = 'ref'
+    KW_RETURN     = 'return'
+    KW_START      = 'start'
+    KW_STATE      = 'state'
+    KW_TRUE       = 'true'
+    KW_TYPE       = 'type'
+    KW_VAR        = 'var'
+    KW_WHILE      = 'while'
+
+    // Составные операторы (должны предшествовать однобуквенным)
+    EQ_EQ         = '=='
+    NEQ           = '!='
+    LT_EQ         = '<='
+    GT_EQ         = '>='
+    AND_AND       = '&&'
+    OR_OR         = '||'
+    SHL           = '<<'
+    SHR           = '>>'
+    STAR_STAR     = '**'
+    ARROW         = '-->'
+
+    // Операторы и пунктуация
+    EQ            = '='
+    LT            = '<'
+    GT            = '>'
+    AND           = '&'
+    OR            = '|'
+    XOR           = '^'
+    NOT           = '!'
+    TILDE         = '~'
+    PLUS          = '+'
+    MINUS         = '-'
+    STAR          = '*'
+    SLASH         = '/'
+    PERCENT       = '%'
+    SEMICOLON     = ';'
+    COLON         = ':'
+    COMMA         = ','
+    DOT           = '.'
+    SHARP         = '#'
+    LBRACE        = '{'
+    RBRACE        = '}'
+    LPAREN        = '('
+    RPAREN        = ')'
+    LBRACKET      = '['
+    RBRACKET      = ']'
+
+    // Лексические классы
+    IDENTIFIER    = 'regexp:[_$\p{XID_Start}][_$\p{XID_Continue}]*'
+    NUMBER        = 'regexp:-?(0x[0-9a-fA-F][0-9a-fA-F_]*|[0-9][0-9_]*)'
+    RATIONAL      = 'regexp:-?[0-9][0-9_]*(\.[0-9][0-9_]*)?([eE]-?[0-9]+)?'
+    STRING        = 'regexp:(unicode)?["\'][^"\'\\n\\\\]*(\\.([^"\'\\n\\\\])*)*["\']'
+    LINE_COMMENT  = 'regexp://[^\n]*'
+    DOC_COMMENT   = 'regexp:///[^\n]*'
+  ]
+}
+
+
+// ============================================================================
+//  ТОЧКА ВХОДА
+// ============================================================================
+
+// Программа BuT — последовательность элементов верхнего уровня.
+source_unit ::= model_element*
+
+
+// ============================================================================
+//  ЭЛЕМЕНТЫ ВЕРХНЕГО УРОВНЯ
+// ============================================================================
+
+model_element ::= import_define
+                | type_define
+                | variable_define
+                | port_define
+                | function_define
+                | model
+                | state_define
+                | formula_define
+                | condition_define
+                | named_block
+                | ';'                      // одиночная точка с запятой — допускается
+
+state_element ::= type_define
+                | variable_define
+                | function_define
+                | model
+                | formula_define
+                | condition_define
+                | named_block
+                | 'next' IDENTIFIER ';'                         // безусловный переход
+                | 'ref' IDENTIFIER (':' condition)? ';'         // переход по условию
+                | ';'
+
+
+// ============================================================================
+//  ИМПОРТ
+// ============================================================================
+
+import_define ::= 'import' import_path ';'
+                | 'import' import_path 'as' IDENTIFIER ';'
+                | 'import' '*' 'as' IDENTIFIER IDENTIFIER import_path ';'
+                | 'import' '{' import_rename (',' import_rename)* '}' IDENTIFIER import_path ';'
+                // Примечание: второй IDENTIFIER в вариантах 3 и 4 должен быть «from».
+                // Парсер принимает любой идентификатор и сообщает об ошибке, если это не «from».
+
+import_path ::= string_literal
+              | identifier_path
+
+import_rename ::= IDENTIFIER
+               | IDENTIFIER 'as' IDENTIFIER
+
+identifier_path ::= IDENTIFIER ('::' IDENTIFIER)*
+
+
+// ============================================================================
+//  ПСЕВДОНИМ ТИПА
+// ============================================================================
+
+type_define ::= 'type' IDENTIFIER '=' type ';'
+
+// Тип: именованный псевдоним или массив фиксированной длины.
+type ::= IDENTIFIER
+       | '[' type ';' NUMBER ']'
+
+
+// ============================================================================
+//  ПЕРЕМЕННАЯ И КОНСТАНТА
+// ============================================================================
+
+// «var» — изменяемая; «const» — неизменяемая.
+variable_define ::= 'var'   IDENTIFIER (':' type)? ('=' expression)? ';'
+                  | 'const' IDENTIFIER (':' type)? ('=' expression)? ';'
+
+
+// ============================================================================
+//  ПОРТ
+// Отображение в адресное пространство устройства.
+// ============================================================================
+
+port_define ::= 'port' IDENTIFIER ':' type ('=' expression)? ';'
+
+
+// ============================================================================
+//  ФУНКЦИЯ
+// ============================================================================
+
+// «extern fn» — объявление без тела; «fn» — определение с телом.
+// «->» передаётся в лексере как два токена: '-' и '>'.
+function_define ::= 'extern'? 'fn' IDENTIFIER parameter_list
+                    ('-' '>' type)?
+                    (';' | block_statement)
+
+parameter_list ::= '(' ')'
+                 | '(' parameter ')'
+                 | '(' parameter (',' parameter)+ ')'
+
+parameter ::= IDENTIFIER ':' expression    // именованный: name: Type
+            | expression                   // безымянный:  Type
+
+
+// ============================================================================
+//  МОДЕЛЬ
+// Описывает конечный автомат.
+// ============================================================================
+
+model ::= 'model' IDENTIFIER ('=' expression)? '{' model_element* '}'
+
+
+// ============================================================================
+//  СОСТОЯНИЕ
+// ============================================================================
+
+state_define ::= state_kind IDENTIFIER ('=' expression)?
+                 ('{' state_element* '}' | ';')
+
+state_kind ::= 'start'    // начальное состояние
+             | 'state'    // обычное состояние
+
+
+// ============================================================================
+//  УСЛОВИЕ ПЕРЕХОДА
+//  Семантика «=» внутри condition — проверка равенства, не присваивание.
+//
+//  Приоритет операторов (от низшего к высшему):
+//    |    — побитовое/логическое ИЛИ
+//    &    — побитовое/логическое И
+//    = != — равенство / неравенство
+//    < > <= >= — сравнение
+//    + -  — сложение / вычитание
+//    !    — унарное логическое НЕ
+// ============================================================================
+
+condition_define ::= 'cond' IDENTIFIER '=' condition ';'
+
+condition ::= condition '|'  condition
+            | condition '&'  condition
+            | condition '='  condition          // проверка равенства (не присваивание)
+            | condition '!=' condition
+            | condition '<'  condition
+            | condition '>'  condition
+            | condition '<=' condition
+            | condition '>=' condition
+            | condition '+'  condition
+            | condition '-'  condition
+            | '!' condition
+            | '(' condition ')'
+            | IDENTIFIER '(' (condition (',' condition)*)? ')'   // вызов функции
+            | condition '.' member                               // доступ к биту / члену
+            | IDENTIFIER '[' NUMBER ']'                         // индекс массива
+            | 'true'
+            | 'false'
+            | NUMBER
+            | RATIONAL
+            | IDENTIFIER
+
+member ::= IDENTIFIER     // символьный доступ: x.flag
+         | NUMBER         // числовой доступ к биту: x.0
+
+
+// ============================================================================
+//  ИМЕНОВАННЫЙ БЛОК КОДА
+//  Стандартные имена: enter, exit, always. Допустимо любое пользовательское.
+// ============================================================================
+
+named_block ::= IDENTIFIER block_statement
+
+
+// ============================================================================
+//  ФОРМУЛА
+//  Встроенный механизм для внешних DSL / ассемблерных вставок.
+// ============================================================================
+
+formula_define ::= 'formula' string_literal? formula_block
+
+formula_block ::= '{' formula_statement* '}'
+
+formula_statement ::= formula_block
+                    | formula_function
+
+formula_function ::= formula_identifier '(' (formula_expression (',' formula_expression)*)? ')'
+
+// «extern», «import», «as» разрешены как идентификаторы внутри формулы.
+formula_identifier ::= IDENTIFIER
+                     | 'extern'
+                     | 'import'
+                     | 'as'
+
+formula_expression ::= formula_path
+                     | formula_function
+                     | formula_literal
+
+formula_path ::= formula_identifier
+               | formula_path '.' formula_identifier
+
+formula_literal ::= 'true'         (':' formula_identifier)?
+                  | 'false'        (':' formula_identifier)?
+                  | NUMBER         (':' formula_identifier)?
+                  | string_literal (':' formula_identifier)?
+
+
+// ============================================================================
+//  ВЫРАЖЕНИЯ
+//
+//  Таблица приоритетов (от низшего к высшему):
+//    14  =              присваивание              (правоассоциативный)
+//    13  ||             логическое ИЛИ
+//    12  &&             логическое И
+//    11  ==  !=         равенство
+//    10  <  >  <=  >=  сравнение
+//     9  |              побитовое ИЛИ
+//     8  ^              побитовое XOR
+//     7  &   as         побитовое И; приведение типа
+//     6  <<  >>         сдвиги
+//     5  +  -           сложение, вычитание
+//     4  *  /  %        умножение, деление, остаток
+//     3  **             возведение в степень       (правоассоциативный)
+//     2  !  ~  +  -     унарные
+//     1                 адресный литерал: число:бит
+//     0                 первичные выражения
+// ============================================================================
+
+expression ::= expression '='   expression    // присваивание (prec 14)
+             | expression '||'  expression    // логическое ИЛИ (prec 13)
+             | expression '&&'  expression    // логическое И (prec 12)
+             | expression '=='  expression    // равенство (prec 11)
+             | expression '!='  expression
+             | expression '<'   expression    // сравнение (prec 10)
+             | expression '>'   expression
+             | expression '<='  expression
+             | expression '>='  expression
+             | expression '|'   expression    // побитовое ИЛИ (prec 9)
+             | expression '^'   expression    // XOR (prec 8)
+             | expression '&'   expression    // побитовое И (prec 7)
+             | expression 'as'  type          // приведение типа (prec 7)
+             | expression '<<'  expression    // сдвиг влево (prec 6)
+             | expression '>>'  expression    // сдвиг вправо (prec 6)
+             | expression '+'   expression    // сложение (prec 5)
+             | expression '-'   expression    // вычитание (prec 5)
+             | expression '*'   expression    // умножение (prec 4)
+             | expression '/'   expression    // деление (prec 4)
+             | expression '%'   expression    // остаток (prec 4)
+             | expression '**'  expression    // степень (prec 3)
+             | '!'  expression                // логическое НЕ (prec 2)
+             | '~'  expression                // побитовое НЕ (prec 2)
+             | '+'  expression                // унарный плюс (prec 2)
+             | '-'  expression                // унарный минус (prec 2)
+             | NUMBER ':' NUMBER              // адресный литерал port:bit (prec 1)
+             | '{' expression (',' expression)* '}'             // инициализатор
+             | IDENTIFIER '(' (expression (',' expression)*)? ')'   // вызов функции
+             | IDENTIFIER '[' NUMBER ']'                        // индекс массива
+             | IDENTIFIER '[' NUMBER? ':' NUMBER? ']'           // срез массива
+             | expression '.' member                            // доступ к биту / члену
+             | '(' expression ')'                               // скобки
+             | '(' parameter ',' parameter (',' parameter)* ')' // список параметров
+             | 'true'
+             | 'false'
+             | NUMBER
+             | RATIONAL
+             | string_literal+                                  // конкатенация строк
+             | IDENTIFIER
+
+
+// ============================================================================
+//  ОПЕРАТОРЫ
+//
+//  Примечание: «if» без «else» — «открытый» оператор (open statement).
+//  Все остальные — «закрытые» (closed statement).
+//  Это разрешает классическую неоднозначность dangling-else:
+//  «else» привязывается к ближайшему «if».
+// ============================================================================
+
+statement ::= open_statement | closed_statement
+
+private open_statement ::= 'if' expression block_statement
+                         | 'if' expression block_statement 'else' open_statement
+                         | 'while' '(' expression ')' open_statement
+                         | 'for' '(' simple_statement? ';' expression? ';' expression? ')' open_statement
+
+private closed_statement ::= non_if_statement
+                            | 'if' expression block_statement 'else' closed_statement
+                            | 'while' '(' expression ')' closed_statement
+                            | 'for' '(' simple_statement? ';' expression? ';' expression? ')' closed_statement
+                            | 'for' '(' simple_statement? ';' expression? ';' expression? ')' ';'
+
+private non_if_statement ::= block_statement
+                           | 'assembly' string_literal? block_statement        // ассемблерная вставка
+                           | 'formula'  string_literal? formula_block          // блок формулы
+                           | simple_statement ';'
+                           | 'do' statement 'while' '(' expression ')' ';'    // do-while
+                           | 'continue' ';'
+                           | 'break' ';'
+                           | 'return' ';'
+                           | 'return' expression ';'
+
+block_statement ::= '{' statement* '}'
+
+// Используется как инициализатор «for» и как самостоятельный оператор.
+simple_statement ::= variable_define    // var / const (уже включает «;»)
+                   | expression         // произвольное выражение
+
+
+// ============================================================================
+//  СТРОКОВЫЙ ЛИТЕРАЛ
+// ============================================================================
+
+string_literal ::= STRING

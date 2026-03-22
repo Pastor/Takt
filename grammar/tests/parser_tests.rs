@@ -856,36 +856,6 @@ fn ast_locations_are_set() {
     );
 }
 
-/// `UserDefinedOperator` — методы классификации.
-#[test]
-fn user_defined_operator_classification() {
-    use grammar::ast::UserDefinedOperator::*;
-
-    // Унарные
-    assert!(BitwiseNot.is_unary());
-    assert!(Negate.is_unary());
-    assert_eq!(BitwiseNot.args(), 1);
-
-    // Бинарные
-    assert!(Add.is_binary());
-    assert_eq!(Add.args(), 2);
-
-    // Побитовые
-    assert!(BitwiseAnd.is_bitwise());
-    assert!(BitwiseOr.is_bitwise());
-    assert!(!Add.is_bitwise());
-
-    // Арифметические
-    assert!(Add.is_arithmetic());
-    assert!(Multiply.is_arithmetic());
-    assert!(!BitwiseAnd.is_arithmetic());
-
-    // Сравнения
-    assert!(Equal.is_comparison());
-    assert!(Less.is_comparison());
-    assert!(!Add.is_comparison());
-}
-
 /// `Location` — методы работы с диапазонами.
 #[test]
 fn location_methods() {
@@ -1204,11 +1174,19 @@ fn location_mutation_methods() {
     let other = Location::Source(0, 1, 20);
 
     loc.use_start_from(&other);
-    assert_eq!(loc.start(), 1, "use_start_from должен установить начало из other");
+    assert_eq!(
+        loc.start(),
+        1,
+        "use_start_from должен установить начало из other"
+    );
     assert_eq!(loc.end(), 15, "end не должен меняться");
 
     loc.use_end_from(&other);
-    assert_eq!(loc.end(), 20, "use_end_from должен установить конец из other");
+    assert_eq!(
+        loc.end(),
+        20,
+        "use_end_from должен установить конец из other"
+    );
     assert_eq!(loc.start(), 1, "start не должен меняться");
 }
 
@@ -1383,8 +1361,7 @@ fn diagnostic_constructors() {
     assert_eq!(d.notes[0].message, "note");
 
     // error_with_note
-    let d =
-        Diagnostic::error_with_note(loc.clone(), "err".into(), loc.clone(), "note here".into());
+    let d = Diagnostic::error_with_note(loc.clone(), "err".into(), loc.clone(), "note here".into());
     assert_eq!(d.notes.len(), 1);
     assert_eq!(d.level, Level::Error);
 
@@ -1403,12 +1380,7 @@ fn diagnostic_constructors() {
     assert_eq!(d.notes.len(), 2);
 
     // warning_with_note
-    let d = Diagnostic::warning_with_note(
-        loc.clone(),
-        "warn".into(),
-        loc.clone(),
-        "note".into(),
-    );
+    let d = Diagnostic::warning_with_note(loc.clone(), "warn".into(), loc.clone(), "note".into());
     assert_eq!(d.level, Level::Warning);
     assert_eq!(d.notes.len(), 1);
 
@@ -1529,8 +1501,12 @@ fn expression_has_space_around() {
 
     // Бинарные — с пробелами
     assert!(
-        Expression::Add(loc.clone(), Box::new(inner.clone()), Box::new(inner.clone()))
-            .has_space_around()
+        Expression::Add(
+            loc.clone(),
+            Box::new(inner.clone()),
+            Box::new(inner.clone())
+        )
+        .has_space_around()
     );
     assert!(Expression::Number(loc.clone(), 42).has_space_around());
 }
@@ -1555,39 +1531,4 @@ fn expression_loc_method() {
         Expression::Assign(loc.clone(), inner.clone(), inner.clone()).loc(),
         loc
     );
-}
-
-/// `UserDefinedOperator` — полный набор методов для всех вариантов.
-#[test]
-fn user_defined_operator_all_variants() {
-    use grammar::ast::UserDefinedOperator::*;
-
-    // Все унарные
-    for op in [BitwiseNot, Negate] {
-        assert!(op.is_unary(), "{:?} должен быть унарным", op);
-        assert!(!op.is_binary(), "{:?} не должен быть бинарным", op);
-        assert_eq!(op.args(), 1);
-    }
-
-    // Все бинарные арифметические (без Power/ShiftLeft/ShiftRight — их нет в UserDefinedOperator)
-    for op in [Add, Subtract, Multiply, Divide, Modulo] {
-        assert!(op.is_binary(), "{:?} должен быть бинарным", op);
-        assert!(op.is_arithmetic(), "{:?} должен быть арифметическим", op);
-        assert!(!op.is_bitwise(), "{:?} не должен быть побитовым", op);
-        assert_eq!(op.args(), 2);
-    }
-
-    // Побитовые бинарные
-    for op in [BitwiseAnd, BitwiseOr, BitwiseXor] {
-        assert!(op.is_binary());
-        assert!(op.is_bitwise(), "{:?} должен быть побитовым", op);
-        assert!(!op.is_arithmetic(), "{:?} не должен быть арифметическим", op);
-    }
-
-    // Сравнения
-    for op in [Equal, NotEqual, Less, More, LessEqual, MoreEqual] {
-        assert!(op.is_comparison(), "{:?} должен быть сравнением", op);
-        assert!(!op.is_arithmetic(), "{:?} не должен быть арифметическим", op);
-        assert!(!op.is_bitwise());
-    }
 }

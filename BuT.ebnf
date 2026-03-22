@@ -1,0 +1,560 @@
+(* ===========================================================================
+   BuT — язык описания конечных автоматов (Finite-State Machine Description Language)
+   Синтаксическое описание в формате ISO EBNF (ISO/IEC 14977:1996).
+
+   Условные обозначения:
+     rule = ...  ;        — определение правила
+     a b                  — конкатенация (последовательность)
+     a | b                — альтернатива
+     [ a ]                — опциональная конструкция (0 или 1 раз)
+     { a }                — повторение (0 и более раз)
+     ( a | b )            — группировка
+     "текст"              — терминал (строковый литерал)
+     lowercase_name       — нетерминал
+     (* ... *)            — комментарий
+
+   Источник: grammar/src/grammar.lalrpop, grammar/src/lexer.rs
+   =========================================================================== *)
+
+
+(* ===========================================================================
+   ТОЧКА ВХОДА
+   =========================================================================== *)
+
+(* Программа BuT — последовательность элементов верхнего уровня. *)
+source_unit = { model_element } ;
+
+
+(* ===========================================================================
+   ЭЛЕМЕНТЫ ВЕРХНЕГО УРОВНЯ
+   Одни и те же элементы допустимы как на верхнем уровне, так и внутри
+   модели (model_element) или состояния (state_element).
+   =========================================================================== *)
+
+model_element
+    = import_define
+    | type_define
+    | variable_define
+    | port_define
+    | function_define
+    | model
+    | state_define
+    | formula_define
+    | condition_define
+    | named_block
+    | ";"                          (* одиночная точка с запятой — игнорируется *)
+    ;
+
+state_element
+    = type_define
+    | variable_define
+    | function_define
+    | model
+    | formula_define
+    | condition_define
+    | named_block
+    | "next" identifier ";"        (* безусловный переход к состоянию *)
+    | "ref" identifier [ ":" condition ] ";"   (* переход по условию *)
+    | ";"
+    ;
+
+
+(* ===========================================================================
+   ИМПОРТ
+   =========================================================================== *)
+
+import_define
+    = "import" import_path ";"
+    | "import" import_path "as" identifier ";"
+    | "import" "*" "as" identifier "from" import_path ";"
+    | "import" "{" import_rename { "," import_rename } "}" "from" import_path ";"
+    ;
+
+(* Примечание: «from» является обычным идентификатором, не ключевым словом.
+   Парсер принимает любой идентификатор, но генерирует ошибку, если это не "from". *)
+
+import_path
+    = string_literal        (* "путь/к/файлу.but" *)
+    | identifier_path       (* Module::SubModule *)
+    ;
+
+import_rename
+    = identifier                         (* import { Name } *)
+    | identifier "as" identifier         (* import { OldName as NewName } *)
+    ;
+
+identifier_path = identifier { "::" identifier } ;
+
+
+(* ===========================================================================
+   ПСЕВДОНИМ ТИПА
+   =========================================================================== *)
+
+type_define = "type" identifier "=" type ";" ;
+
+(* Тип: встроенный/пользовательский псевдоним или массив фиксированной длины *)
+type
+    = identifier                      (* например: bit, u8, MyType *)
+    | "[" type ";" integer "]"        (* массив: [bit;8], [u8;16] *)
+    ;
+
+
+(* ===========================================================================
+   ПЕРЕМЕННАЯ И КОНСТАНТА
+   =========================================================================== *)
+
+variable_define
+    = "var"   identifier_or_error [ ":" type ] [ "=" expression ] ";"
+    | "const" identifier_or_error [ ":" type ] [ "=" expression ] ";"
+    ;
+
+(* «var»   — изменяемая переменная.
+   «const» — неизменяемая константа. *)
+
+
+(* ===========================================================================
+   ПОРТ
+   Представляет отображение в адресное пространство устройства.
+   =========================================================================== *)
+
+port_define = "port" identifier_or_error ":" type [ "=" expression ] ";" ;
+
+
+(* ===========================================================================
+   ФУНКЦИЯ
+   =========================================================================== *)
+
+function_define
+    = [ "extern" ] "fn" identifier_or_error parameter_list
+      [ "->" type ]
+      ( ";" | block_statement )
+    ;
+
+(* «extern fn» — объявление без тела (внешняя реализация).
+   «fn»         — определение с телом.
+   «->»         — оператор возврата типа, записывается двумя токенами: "-" ">". *)
+
+parameter_list
+    = "(" ")"
+    | "(" parameter ")"
+    | "(" parameter "," parameter { "," parameter } ")"
+    ;
+
+parameter
+    = identifier ":" expression   (* именованный параметр: name: Type *)
+    | expression                  (* безымянный параметр: Type *)
+    ;
+
+
+(* ===========================================================================
+   МОДЕЛЬ
+   Описывает конечный автомат с набором состояний.
+   =========================================================================== *)
+
+model
+    = "model" identifier_or_error [ "=" expression ]
+      "{" { model_element } "}"
+    ;
+
+
+(* ===========================================================================
+   СОСТОЯНИЕ
+   =========================================================================== *)
+
+state_define
+    = state_kind identifier_or_error [ "=" expression ]
+      ( "{" { state_element } "}" | ";" )
+    ;
+
+state_kind
+    = "start"     (* начальное состояние модели *)
+    | "state"     (* обычное состояние *)
+    ;
+
+
+(* ===========================================================================
+   УСЛОВИЕ ПЕРЕХОДА
+   Используется в «ref» и в выражениях компоновки.
+   Семантика «=» внутри condition — проверка равенства (не присваивание).
+   =========================================================================== *)
+
+condition_define = "cond" identifier_or_error "=" condition ";" ;
+
+(* Приоритет операторов в condition (от низшего к высшему):
+     |    — побитовое/логическое ИЛИ
+     &    — побитовое/логическое И
+     = != — равенство / неравенство
+     < > <= >= — сравнение
+     + -  — сложение / вычитание
+     !    — унарное логическое НЕ *)
+
+condition
+    = condition "|"  condition
+    | condition "&"  condition
+    | condition "="  condition          (* проверка равенства *)
+    | condition "!=" condition
+    | condition "<"  condition
+    | condition ">"  condition
+    | condition "<=" condition
+    | condition ">=" condition
+    | condition "+"  condition
+    | condition "-"  condition
+    | "!" condition
+    | "(" condition ")"
+    | identifier "(" [ condition { "," condition } ] ")"   (* вызов функции *)
+    | condition "." member                                  (* доступ к биту *)
+    | identifier "[" integer "]"                           (* индекс массива *)
+    | "true"
+    | "false"
+    | integer
+    | rational
+    | identifier
+    ;
+
+
+(* ===========================================================================
+   ИМЕНОВАННЫЙ БЛОК КОДА
+   Стандартные имена: enter (вход), exit (выход), always (каждый такт).
+   Допускается любое пользовательское имя.
+   =========================================================================== *)
+
+named_block = identifier_or_error block_statement ;
+
+
+(* ===========================================================================
+   ФОРМУЛА
+   Встроенный механизм для внешних DSL / ассемблерных вставок.
+   =========================================================================== *)
+
+formula_define = "formula" [ string_literal ] formula_block ;
+
+formula_block = "{" { formula_statement } "}" ;
+
+formula_statement
+    = formula_block
+    | formula_function
+    ;
+
+formula_function
+    = formula_identifier "(" [ formula_expression { "," formula_expression } ] ")"
+    ;
+
+formula_identifier
+    = identifier
+    | "extern"     (* разрешён как идентификатор внутри формулы *)
+    | "import"
+    | "as"
+    ;
+
+formula_expression
+    = formula_path
+    | formula_function
+    | formula_literal
+    ;
+
+formula_path
+    = formula_identifier
+    | formula_path "." formula_identifier
+    ;
+
+formula_literal
+    = "true"        [ ":" formula_identifier ]
+    | "false"       [ ":" formula_identifier ]
+    | integer       [ ":" formula_identifier ]
+    | string_literal [ ":" formula_identifier ]
+    ;
+
+
+(* ===========================================================================
+   ВЫРАЖЕНИЯ
+   Таблица приоритетов (от низшего к высшему):
+     14  =              присваивание                   правоассоциативный
+     13  ||             логическое ИЛИ
+     12  &&             логическое И
+     11  ==  !=         равенство
+     10  <  >  <=  >=  сравнение
+      9  |              побитовое ИЛИ
+      8  ^              побитовое исключающее ИЛИ
+      7  &   as         побитовое И; приведение типа
+      6  <<  >>         сдвиги
+      5  +  -           сложение, вычитание
+      4  *  /  %        умножение, деление, остаток
+      3  **             возведение в степень           правоассоциативный
+      2  !  ~  +  -     унарные
+      1                 адресный литерал: число:бит
+      0                 первичные выражения
+   =========================================================================== *)
+
+expression
+    (* Присваивание *)
+    = expression "=" expression
+
+    (* Логические *)
+    | expression "||" expression
+    | expression "&&" expression
+
+    (* Сравнение *)
+    | expression "==" expression
+    | expression "!=" expression
+    | expression "<"  expression
+    | expression ">"  expression
+    | expression "<=" expression
+    | expression ">=" expression
+
+    (* Побитовые *)
+    | expression "|"  expression
+    | expression "^"  expression
+    | expression "&"  expression
+    | expression "<<" expression
+    | expression ">>" expression
+
+    (* Приведение типа *)
+    | expression "as" type
+
+    (* Арифметические *)
+    | expression "+"  expression
+    | expression "-"  expression
+    | expression "*"  expression
+    | expression "/"  expression
+    | expression "%"  expression
+    | expression "**" expression
+
+    (* Унарные *)
+    | "!" expression
+    | "~" expression
+    | "+" expression
+    | "-" expression
+
+    (* Адресный литерал: физический адрес порта с указанием бита *)
+    | integer ":" integer
+
+    (* Инициализатор: { 0, 1, 2, ... } *)
+    | "{" expression { "," expression } "}"
+
+    (* Первичные *)
+    | identifier "(" [ expression { "," expression } ] ")"   (* вызов функции *)
+    | identifier "[" integer "]"                             (* индекс массива *)
+    | identifier "[" [ integer ] ":" [ integer ] "]"         (* срез массива *)
+    | expression "." member                                  (* доступ к биту/члену *)
+    | "(" expression ")"                                     (* скобки *)
+    | "(" parameter "," parameter { "," parameter } ")"      (* список параметров *)
+    | "true"
+    | "false"
+    | integer
+    | rational
+    | string_literal { string_literal }                      (* конкатенация строк *)
+    | identifier
+    ;
+
+member
+    = identifier       (* символьный доступ: x.flag *)
+    | integer          (* числовой доступ к биту: x.0 *)
+    ;
+
+
+(* ===========================================================================
+   ОПЕРАТОРЫ
+   Примечание: «if» без «else» — "открытый" оператор (open statement);
+   все остальные — "закрытые" (closed statement). Это разрешает
+   классическую неоднозначность dangling-else: «else» привязывается
+   к ближайшему «if».
+   =========================================================================== *)
+
+statement
+    (* Условный оператор — условие БЕЗ скобок *)
+    = "if" expression block_statement
+    | "if" expression block_statement "else" statement
+
+    (* Цикл while — условие В скобках *)
+    | "while" "(" expression ")" statement
+
+    (* Цикл for — инициализатор, условие и шаг В скобках *)
+    | "for" "(" [ simple_statement ] ";" [ expression ] ";" [ expression ] ")"
+      ( statement | ";" )
+
+    (* Цикл do-while — условие В скобках *)
+    | "do" statement "while" "(" expression ")" ";"
+
+    (* Блок *)
+    | block_statement
+
+    (* Ассемблерная вставка *)
+    | "assembly" [ string_literal ] block_statement
+
+    (* Блок формулы *)
+    | "formula"  [ string_literal ] formula_block
+
+    (* Выражение-оператор или объявление переменной *)
+    | simple_statement ";"
+
+    (* Управление потоком *)
+    | "continue" ";"
+    | "break" ";"
+    | "return" ";"
+    | "return" expression ";"
+    ;
+
+block_statement = "{" { statement } "}" ;
+
+(* simple_statement используется как тело «for» и как самостоятельный оператор.
+   Важно: variable_define уже включает «;», поэтому в «for» тело первого поля
+   может содержать встроенную точку с запятой. *)
+simple_statement
+    = variable_define      (* var / const *)
+    | expression           (* любое выражение *)
+    ;
+
+
+(* ===========================================================================
+   ВСПОМОГАТЕЛЬНЫЕ НЕТЕРМИНАЛЫ
+   =========================================================================== *)
+
+(* identifier_or_error — при отсутствии допустимого идентификатора
+   парсер восстанавливается и продолжает разбор (ошибка диагностируется). *)
+identifier_or_error = identifier ;
+
+
+(* ===========================================================================
+   ЛЕКСИЧЕСКИЕ ЭЛЕМЕНТЫ
+   =========================================================================== *)
+
+(* ── Идентификаторы ──────────────────────────────────────────────────────── *)
+
+identifier = ( xid_start | "_" | "$" ) { xid_continue | "$" } ;
+
+(* xid_start   — символы с Unicode-свойством XID_Start (буквы и т.п.).
+   xid_continue — символы с Unicode-свойством XID_Continue (буквы, цифры, ...).
+   Зарезервированные ключевые слова не могут использоваться как идентификаторы. *)
+
+(* ── Ключевые слова ──────────────────────────────────────────────────────── *)
+(*
+   as        assembly  break    cond      const     continue
+   do        else      extern   false     fn        for
+   formula   if        import   model     next      port
+   ref       return    start    state     string    template
+   true      type      var      while
+*)
+
+(* ── Числовые литералы ───────────────────────────────────────────────────── *)
+
+integer
+    = decimal_integer
+    | hex_integer
+    | "-" decimal_integer    (* отрицательный целочисленный литерал *)
+    ;
+
+decimal_integer = digit { digit | "_" } ;
+
+hex_integer = "0x" hex_digit { hex_digit | "_" } ;
+
+rational
+    = decimal_integer "." decimal_integer [ exponent ]
+    | decimal_integer exponent
+    ;
+
+exponent = ( "e" | "E" ) [ "-" ] decimal_integer ;
+
+digit     = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+hex_digit = digit
+          | "a" | "b" | "c" | "d" | "e" | "f"
+          | "A" | "B" | "C" | "D" | "E" | "F" ;
+
+(* ── Строковые литералы ──────────────────────────────────────────────────── *)
+
+string_literal
+    = '"'       { string_char } '"'
+    | "'"       { string_char } "'"
+    | 'unicode' '"' { string_char } '"'
+    | 'unicode' "'" { string_char } "'"
+    ;
+
+(* string_char — любой символ, кроме соответствующей закрывающей кавычки
+   и перевода строки, либо escape-последовательность «\» + любой символ. *)
+string_char = escaped_char | ordinary_char ;
+escaped_char = "\" , any_char ;
+ordinary_char = (* любой символ, кроме закрывающей кавычки и \n *) ;
+
+(* ── Комментарии ─────────────────────────────────────────────────────────── *)
+
+line_comment = "//"  { any_char_except_newline } ( newline | eof ) ;
+doc_comment  = "///" { any_char_except_newline } ( newline | eof ) ;
+
+(* Примечание: «////» и более символов «/» — обычный строчный комментарий,
+   а не документационный. Блочные комментарии «/* ... */» не поддерживаются. *)
+
+(* Комментарии не являются токенами — они собираются отдельно
+   и не участвуют в синтаксическом разборе.  *)
+
+(* ── Пробельные символы ─────────────────────────────────────────────────── *)
+
+whitespace = space | tab | newline | carriage_return ;
+
+(* Пробельные символы между токенами игнорируются. *)
+
+
+(* ===========================================================================
+   СВОДКА ОПЕРАТОРОВ И ЗНАКОВ ПУНКТУАЦИИ
+   ===========================================================================
+   Арифметические : +  -  *  /  %  **
+   Побитовые      : &  |  ^  ~  <<  >>
+   Логические     : &&  ||  !
+   Сравнение      : ==  !=  <  <=  >  >=
+   Прочие         : =  .  :  ,  ;  (  )  {  }  [  ]  #  -->
+   =========================================================================== *)
+
+
+(* ===========================================================================
+   ПРИМЕРЫ ПРОГРАММ
+   ===========================================================================
+
+   Пример 1. Минимальная модель:
+
+       model TrafficLight {
+           start Red;
+           state Yellow;
+           state Green;
+       }
+
+   Пример 2. Модель с переходами, портами и условиями:
+
+       type u8 = [bit;8];
+       port LED : u8 = 0x00100000;
+       var  counter : u8 = 0;
+       cond IsMax = counter = 255;
+
+       model Blinker {
+           start On {
+               ref Off : IsMax;
+               enter  { LED = 0xFF; }
+               exit   { LED = 0x00; }
+               always { counter = counter + 1; }
+           }
+           state Off {
+               ref On : true;
+           }
+       }
+       start Main = Blinker;
+
+   Пример 3. Компоновка моделей:
+
+       model A { start S; state E; }
+       model B { start S; state E; }
+       start Sequential = A + B;      (* последовательно *)
+       start Parallel   = A | B;      (* параллельно     *)
+
+   Пример 4. Функции и внешние объявления:
+
+       type u8 = [bit;8];
+       extern fn debug(msg : u8);
+       fn add(a : u8, b : u8) -> u8 {
+           return a + b;
+       }
+
+   Контр-примеры (недопустимые конструкции):
+
+       model { start S; }         (* ошибка: отсутствует имя модели *)
+       model M { start S {        (* ошибка: незакрытая фигурная скобка *)
+       model M { start @ { } }    (* ошибка: недопустимый символ '@' *)
+       var x : bit = true         (* ошибка: отсутствует точка с запятой *)
+   =========================================================================== *)
