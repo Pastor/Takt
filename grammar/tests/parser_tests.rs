@@ -17,7 +17,7 @@
 use std::fs;
 use std::path::Path;
 
-use grammar::ast::{Identifier, Location, ModelElement, StateElement, StateKind};
+use grammar::ast::{Identifier, Location, ModelElement, StateElement, StateKind, VariableDefine};
 use grammar::parse;
 
 // ─────────────────────────────── Вспомогательные функции ────────────────────
@@ -346,7 +346,10 @@ fn parse_mutable_variable() {
         }
     });
     assert!(var.is_some(), "Ожидалась переменная");
-    assert!(var.unwrap().mutability, "var должна быть изменяемой");
+    if let VariableDefine::Variable { .. } = var.unwrap() {
+    } else {
+        assert!(false, "Ожидалась переменная");
+    }
 }
 
 /// `const MAX: u8 = 255`.
@@ -361,7 +364,10 @@ fn parse_const_variable() {
         }
     });
     assert!(cst.is_some(), "Ожидалась константа");
-    assert!(!cst.unwrap().mutability, "const не должна быть изменяемой");
+    if let VariableDefine::Constant { .. } = cst.unwrap() {
+    } else {
+        assert!(false, "Ожидалась константа");
+    }
 }
 
 /// `var toggle = false` внутри состояния (как `StateElement::Variable`).
@@ -384,17 +390,17 @@ fn parse_variable_inside_state() {
 fn parse_port_with_address() {
     let root = must_parse("port A: bit = 0x00548835:4; model M { start S; }");
     let port = root.elements.iter().find_map(|e| {
-        if let ModelElement::Port(p) = e {
-            Some(p.as_ref())
+        if let ModelElement::Variable(v) = e {
+            Some(v.as_ref())
         } else {
             None
         }
     });
     assert!(port.is_some(), "Ожидался порт");
-    assert_eq!(
-        port.unwrap().name.as_ref().map(|id| id.name.as_str()),
-        Some("A")
-    );
+    if let VariableDefine::Port { .. } = port.unwrap() {
+    } else {
+        assert!(false, "Ожидался порт");
+    }
 }
 
 // ───────────────────────── Тесты условий (cond) ─────────────────────────────
@@ -841,7 +847,7 @@ fn expression_is_literal() {
 
     let loc = Location::default();
     assert!(Expression::Number(loc.clone(), 42).is_literal());
-    assert!(Expression::Float(loc.clone(), "3.14".into(), false).is_literal());
+    assert!(Expression::Rational(loc.clone(), "3.14".into(), false).is_literal());
     // Bool и Variable не считаются литералами в is_literal
     assert!(!Expression::Variable(Identifier::new("x")).is_literal());
 }

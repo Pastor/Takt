@@ -57,7 +57,6 @@ ModelElement: ModelElement = {
     Import => <>,
     TypeDefine => ModelElement::Type(<>),
     VariableDefine => ModelElement::Variable(<>),
-    PortDefine => ModelElement::Port(<>),
     FunctionDefine => ModelElement::Function(<>),
     Model => ModelElement::Model(<>),
     StateDefine => ModelElement::State(<>),
@@ -125,22 +124,19 @@ ConditionDefine: ConditionDefine = {
 }
 
 VariableDefine: Box<VariableDefine> = {
-    <l:@L> "var" <name:IdentifierOrError> <ty:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
-        Box::new(VariableDefine{
-            loc: Location::Source(file_no, l, r), ty, name, initializer: e, mutability: true
+    <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
+        Box::new(VariableDefine::Variable {
+            loc: Location::Source(file_no, l, r), typ, name, initializer: e
         })
     },
-    <l:@L> "const" <name:IdentifierOrError> <ty:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
-        Box::new(VariableDefine{
-            loc: Location::Source(file_no, l, r), ty, name, initializer: e, mutability: false
+    <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> "=" <e:Expression> <r:@R> ";" => {
+        Box::new(VariableDefine::Constant {
+            loc: Location::Source(file_no, l, r), typ, name, initializer: e
         })
     },
-}
-
-PortDefine: Box<PortDefine> = {
-    <l:@L> "port" <name:IdentifierOrError> ":" <ty:Type> <e:("=" <Expression>)?> <r:@R> ";" => {
-        Box::new(PortDefine{
-            loc: Location::Source(file_no, l, r), ty, name, initializer: e
+    <l:@L> "port" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
+        Box::new(VariableDefine::Port {
+            loc: Location::Source(file_no, l, r), typ, name, initializer: e
         })
     },
 }
@@ -267,7 +263,7 @@ ConditionExpression: Condition = {
         Condition::Number(Location::Source(file_no, l, r), n)
     },
     <l:@L> <n:rational> <r:@R> => {
-        Condition::Float(Location::Source(file_no, l, r), n.0.to_string(), n.1)
+        Condition::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1)
     },
 }
 
@@ -365,7 +361,7 @@ Precedence1: Expression = {
         Expression::Number(Location::Source(file_no, l, r), n)
     },
     <l:@L> <n:rational> <r:@R> => {
-        Expression::Float(Location::Source(file_no, l, r), n.0.to_string(), n.1)
+        Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1)
     },
     <l:@L> "{" <v:CommaOne<Expression>> "}" <r:@R> => {
         Expression::Initializer(Location::Source(file_no, l, r), v)

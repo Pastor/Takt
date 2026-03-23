@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Вариант [`Source`](Location::Source) хранит номер файла, байтовое смещение
 /// начала и байтовое смещение конца (не включительно).
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Location {
     /// Встроенный элемент (не относится к пользовательскому коду).
@@ -356,35 +356,45 @@ pub enum Type {
     },
 }
 
-/// Описание переменной (`var` или `const`).
+/// Описание (`var` или `const` или `port`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-pub struct VariableDefine {
-    /// Местоположение в исходном тексте.
-    pub loc: Location,
-    /// Тип переменной (может быть не указан).
-    pub ty: Option<Type>,
-    /// Имя переменной (может быть не указано при ошибке).
-    pub name: Option<Identifier>,
-    /// Начальное значение (инициализатор).
-    pub initializer: Option<Expression>,
-    /// `true` — изменяемая (`var`), `false` — константа (`const`).
-    pub mutability: bool,
+pub enum VariableDefine {
+    /// Переменная (изменяемое значение)
+    Variable {
+        /// Местоположение в исходном тексте.
+        loc: Location,
+        /// Тип переменной
+        typ: Option<Type>,
+        /// Имя переменной
+        name: Option<Identifier>,
+        /// Инициализатор переменной
+        initializer: Option<Expression>,
+    },
+    /// Порт (неизменяемое значение), инициализируется адресом
+    Port {
+        /// Местоположение в исходном тексте.
+        loc: Location,
+        /// Тип порта
+        typ: Option<Type>,
+        /// Имя порта
+        name: Option<Identifier>,
+        /// Инициализатор порта
+        initializer: Option<Expression>,
+    },
+    /// Константа (неизменяемое значение)
+    Constant {
+        /// Местоположение в исходном тексте.
+        loc: Location,
+        /// Тип константы
+        typ: Option<Type>,
+        /// Имя константы
+        name: Option<Identifier>,
+        /// Инициализатор константы
+        initializer: Expression
+    }
 }
 
-/// Описание порта (`port`).
-#[derive(Debug, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-pub struct PortDefine {
-    /// Местоположение в исходном тексте.
-    pub loc: Location,
-    /// Тип порта.
-    pub ty: Type,
-    /// Имя порта (может быть не указано при ошибке).
-    pub name: Option<Identifier>,
-    /// Адрес или выражение инициализации.
-    pub initializer: Option<Expression>,
-}
 
 /// Корневой узел АСД — модель (автомат или компоновка автоматов).
 ///
@@ -417,8 +427,6 @@ pub enum ModelElement {
     Condition(Box<ConditionDefine>),
     /// Определение переменной.
     Variable(Box<VariableDefine>),
-    /// Определение порта.
-    Port(Box<PortDefine>),
     /// Определение псевдонима типа.
     Type(Box<TypeDefine>),
     /// Определение состояния.
@@ -525,42 +533,6 @@ pub struct TypeDefine {
     pub ty: Type,
 }
 
-/// Аннотация (метаданные, прикреплённые к объявлению).
-#[derive(Debug, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-pub enum Annotation {
-    /// Идентификаторный путь.
-    Identifier(Location, IdentifierPath),
-    /// Вызов функции-аннотации.
-    Function {
-        /// Местоположение.
-        loc: Location,
-        /// Имя функции.
-        name: Identifier,
-        /// Аргументы.
-        args: Vec<Annotation>,
-    },
-    /// Присваивание: `ключ = значение`.
-    Assign {
-        /// Местоположение.
-        loc: Location,
-        /// Левая часть.
-        name: IdentifierPath,
-        /// Правая часть.
-        value: Expression,
-    },
-    /// Строковый аргумент.
-    String(StringLiteral),
-    /// Числовой аргумент.
-    Number(Location, i64),
-    /// Рациональный аргумент.
-    Rational(Location, String, bool),
-    /// Булевый аргумент.
-    Boolean(Location, bool),
-    /// Аргумент видимости.
-    Visibility(Location, Expression),
-}
-
 /// Строковый литерал с признаком Unicode.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
@@ -625,7 +597,7 @@ pub enum Condition {
     /// Целочисленный литерал.
     Number(Location, i64),
     /// Вещественный литерал: `(строка, отрицательный)`.
-    Float(Location, String, bool),
+    Rational(Location, String, bool),
     /// Конкатенация строковых литералов.
     String(Vec<StringLiteral>),
     /// Булевый литерал.
@@ -719,7 +691,7 @@ pub enum Expression {
     /// Целочисленный литерал.
     Number(Location, i64),
     /// Вещественный литерал: `(строка, отрицательный)`.
-    Float(Location, String, bool),
+    Rational(Location, String, bool),
     /// Конкатенация строковых литералов.
     String(Vec<StringLiteral>),
     /// Тип как выражение.
@@ -784,7 +756,7 @@ macro_rules! expr_components {
             | CodeBlock(..)
             | NamedFunction(..)
             | Number(..)
-            | Float(..)
+            | Rational(..)
             | String(..)
             | Type(..)
             | Bool(..)
@@ -872,7 +844,7 @@ impl Expression {
         use Expression::*;
         matches!(
             self,
-            Number(..) | Float(..) | String(..) | Address(..) | Variable(..)
+            Number(..) | Rational(..) | String(..) | Address(..) | Variable(..)
         )
     }
 
@@ -890,7 +862,7 @@ impl Expression {
             Expression::Address(..)
                 | Expression::Number(..)
                 | Expression::Array(..)
-                | Expression::Float(..)
+                | Expression::Rational(..)
                 | Expression::String(..)
         )
     }
@@ -898,49 +870,49 @@ impl Expression {
     /// Возвращает местоположение выражения в исходном тексте.
     pub fn loc(&self) -> Location {
         match self {
-            Expression::ArraySubscript(loc, _, _) => loc.clone(),
-            Expression::ArraySlice(loc, _, _, _) => loc.clone(),
-            Expression::Parenthesis(loc, _) => loc.clone(),
-            Expression::BitAccess(loc, _, _) => loc.clone(),
-            Expression::Function(loc, _, _) => loc.clone(),
-            Expression::CodeBlock(loc, _, _) => loc.clone(),
-            Expression::NamedFunction(loc, _, _) => loc.clone(),
-            Expression::Not(loc, _) => loc.clone(),
-            Expression::BitwiseNot(loc, _) => loc.clone(),
-            Expression::UnaryPlus(loc, _) => loc.clone(),
-            Expression::Negate(loc, _) => loc.clone(),
-            Expression::Power(loc, _, _) => loc.clone(),
-            Expression::Multiply(loc, _, _) => loc.clone(),
-            Expression::Divide(loc, _, _) => loc.clone(),
-            Expression::Modulo(loc, _, _) => loc.clone(),
-            Expression::Add(loc, _, _) => loc.clone(),
-            Expression::Subtract(loc, _, _) => loc.clone(),
-            Expression::ShiftLeft(loc, _, _) => loc.clone(),
-            Expression::ShiftRight(loc, _, _) => loc.clone(),
-            Expression::BitwiseAnd(loc, _, _) => loc.clone(),
-            Expression::BitwiseXor(loc, _, _) => loc.clone(),
-            Expression::BitwiseOr(loc, _, _) => loc.clone(),
-            Expression::Less(loc, _, _) => loc.clone(),
-            Expression::More(loc, _, _) => loc.clone(),
-            Expression::LessEqual(loc, _, _) => loc.clone(),
-            Expression::MoreEqual(loc, _, _) => loc.clone(),
-            Expression::Equal(loc, _, _) => loc.clone(),
-            Expression::NotEqual(loc, _, _) => loc.clone(),
-            Expression::And(loc, _, _) => loc.clone(),
-            Expression::Or(loc, _, _) => loc.clone(),
-            Expression::ConditionalOperator(loc, _, _, _) => loc.clone(),
-            Expression::Assign(loc, _, _) => loc.clone(),
-            Expression::Number(loc, _) => loc.clone(),
-            Expression::Float(loc, _, _) => loc.clone(),
+            Expression::ArraySubscript(loc, _, _) => *loc,
+            Expression::ArraySlice(loc, _, _, _) => *loc,
+            Expression::Parenthesis(loc, _) => *loc,
+            Expression::BitAccess(loc, _, _) => *loc,
+            Expression::Function(loc, _, _) => *loc,
+            Expression::CodeBlock(loc, _, _) => *loc,
+            Expression::NamedFunction(loc, _, _) => *loc,
+            Expression::Not(loc, _) => *loc,
+            Expression::BitwiseNot(loc, _) => *loc,
+            Expression::UnaryPlus(loc, _) => *loc,
+            Expression::Negate(loc, _) => *loc,
+            Expression::Power(loc, _, _) => *loc,
+            Expression::Multiply(loc, _, _) => *loc,
+            Expression::Divide(loc, _, _) => *loc,
+            Expression::Modulo(loc, _, _) => *loc,
+            Expression::Add(loc, _, _) => *loc,
+            Expression::Subtract(loc, _, _) => *loc,
+            Expression::ShiftLeft(loc, _, _) => *loc,
+            Expression::ShiftRight(loc, _, _) => *loc,
+            Expression::BitwiseAnd(loc, _, _) => *loc,
+            Expression::BitwiseXor(loc, _, _) => *loc,
+            Expression::BitwiseOr(loc, _, _) => *loc,
+            Expression::Less(loc, _, _) => *loc,
+            Expression::More(loc, _, _) => *loc,
+            Expression::LessEqual(loc, _, _) => *loc,
+            Expression::MoreEqual(loc, _, _) => *loc,
+            Expression::Equal(loc, _, _) => *loc,
+            Expression::NotEqual(loc, _, _) => *loc,
+            Expression::And(loc, _, _) => *loc,
+            Expression::Or(loc, _, _) => *loc,
+            Expression::ConditionalOperator(loc, _, _, _) => *loc,
+            Expression::Assign(loc, _, _) => *loc,
+            Expression::Number(loc, _) => *loc,
+            Expression::Rational(loc, _, _) => *loc,
             Expression::String(_) => Location::Builtin,
-            Expression::Type(loc, _) => loc.clone(),
-            Expression::Address(loc, _, _) => loc.clone(),
-            Expression::Bool(loc, _) => loc.clone(),
-            Expression::Variable(var) => var.loc.clone(),
-            Expression::List(loc, _) => loc.clone(),
-            Expression::Array(loc, _) => loc.clone(),
-            Expression::Initializer(loc, _) => loc.clone(),
-            Expression::Cast(loc, _, _) => loc.clone(),
+            Expression::Type(loc, _) => *loc,
+            Expression::Address(loc, _, _) => *loc,
+            Expression::Bool(loc, _) => *loc,
+            Expression::Variable(var) => var.loc,
+            Expression::List(loc, _) => *loc,
+            Expression::Array(loc, _) => *loc,
+            Expression::Initializer(loc, _) => *loc,
+            Expression::Cast(loc, _, _) => *loc,
         }
     }
 }
