@@ -10,7 +10,7 @@
 use std::fs;
 use std::path::Path;
 
-use grammar::lexer::{Lexer, LexicalError, Token};
+use grammar::parser::lexer::{Lexer, LexicalError, Token};
 
 // ─────────────────────────────── Вспомогательные функции ─────────────────────
 
@@ -138,12 +138,12 @@ fn invalid_files_produce_lex_errors() {
 /// `is_keyword` возвращает `true` для всех ключевых слов BuT, включая `extern`.
 #[test]
 fn is_keyword_returns_true_for_keywords() {
-    use grammar::lexer::is_keyword;
+    use grammar::parser::lexer::is_keyword;
 
     let keywords = [
-        "break", "const", "continue", "do", "else", "false", "for", "fn", "if", "import",
-        "return", "string", "true", "type", "while", "as", "assembly", "formula", "port",
-        "model", "state", "start", "ref", "template", "cond", "var", "next", "extern",
+        "break", "const", "continue", "do", "else", "false", "for", "fn", "if", "import", "return",
+        "string", "true", "type", "while", "as", "assembly", "formula", "port", "model", "state",
+        "start", "ref", "template", "cond", "var", "next", "extern",
     ];
     for kw in keywords {
         assert!(is_keyword(kw), "'{}' должно быть ключевым словом", kw);
@@ -155,7 +155,7 @@ fn is_keyword_returns_true_for_keywords() {
 /// Контр-примеры: `extern` — ключевое слово, не должен быть в этом списке.
 #[test]
 fn is_keyword_returns_false_for_identifiers() {
-    use grammar::lexer::is_keyword;
+    use grammar::parser::lexer::is_keyword;
 
     let non_keywords = ["MyModel", "", "pragma", "foobar", "_x", "123"];
     for word in non_keywords {
@@ -639,7 +639,7 @@ fn token_display_literals() {
 /// `LexicalError::loc()` возвращает корректное местоположение для каждого варианта.
 #[test]
 fn lexical_error_loc_for_all_variants() {
-    use grammar::ast::Location;
+    use grammar::parser::ast::Location;
 
     let loc = Location::Source(0, 5, 10);
 
@@ -667,7 +667,7 @@ fn lexical_error_loc_for_all_variants() {
 /// Текстовые сообщения `LexicalError` содержат нужные подстроки.
 #[test]
 fn lexical_error_display_messages() {
-    use grammar::ast::Location;
+    use grammar::parser::ast::Location;
     let loc = Location::Source(0, 0, 1);
 
     let cases: Vec<(LexicalError, &str)> = vec![
@@ -692,7 +692,10 @@ fn lexical_error_display_messages() {
             LexicalError::UnrecognisedToken(loc.clone(), "@".into()),
             "unrecognised token '@'",
         ),
-        (LexicalError::MissingExponent(loc.clone()), "missing exponent"),
+        (
+            LexicalError::MissingExponent(loc.clone()),
+            "missing exponent",
+        ),
         (
             LexicalError::ExpectedFrom(loc.clone(), "bar".into()),
             "'bar' found where 'from' expected",

@@ -263,7 +263,7 @@ impl<'input> fmt::Display for Token<'input> {
 /// # Примеры
 ///
 /// ```
-/// use grammar::lexer::{Lexer, Token};
+/// use grammar::parser::lexer::{Lexer, Token};
 ///
 /// let source = "var x = 42;";
 /// let mut comments = Vec::new();
@@ -401,7 +401,7 @@ impl<'input> Lexer<'input> {
     /// # Примеры
     ///
     /// ```
-    /// use grammar::lexer::Lexer;
+    /// use grammar::parser::lexer::Lexer;
     ///
     /// let source = "model M { start S; }";
     /// let mut comments = Vec::new();

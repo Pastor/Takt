@@ -17,13 +17,13 @@
 use std::fs;
 use std::path::Path;
 
-use grammar::ast::{Identifier, Location, ModelElement, StateElement, StateKind, VariableDefine};
+use grammar::parser::ast::{Identifier, Location, ModelElement, StateElement, StateKind, VariableDefine};
 use grammar::parse;
 
 // ─────────────────────────────── Вспомогательные функции ────────────────────
 
 /// Разбирает строку `src` и возвращает корневую модель, либо паникует с описанием ошибок.
-fn must_parse(src: &str) -> grammar::ast::Model {
+fn must_parse(src: &str) -> grammar::parser::ast::Model {
     parse(src, 0)
         .unwrap_or_else(|diagnostics| {
             let msgs: Vec<_> = diagnostics.iter().map(|d| d.message.clone()).collect();
@@ -33,7 +33,7 @@ fn must_parse(src: &str) -> grammar::ast::Model {
 }
 
 /// Извлекает первую именованную модель из корневой модели.
-fn first_named_model(src: &str) -> grammar::ast::Model {
+fn first_named_model(src: &str) -> grammar::parser::ast::Model {
     let root = must_parse(src);
     root.elements
         .into_iter()
@@ -323,7 +323,7 @@ fn parse_type_alias_array() {
     assert!(
         matches!(
             alias.unwrap().ty,
-            grammar::ast::Type::Array {
+            grammar::parser::ast::Type::Array {
                 element_count: 8,
                 ..
             }
@@ -801,7 +801,7 @@ fn function_define_methods() {
 /// `Expression::components` для унарных, бинарных и листовых выражений.
 #[test]
 fn expression_components() {
-    use grammar::ast::Expression;
+    use grammar::parser::ast::Expression;
 
     let loc = Location::default();
     let var_a = Expression::Variable(Identifier::new("a"));
@@ -828,7 +828,7 @@ fn expression_components() {
 /// `Expression::strip_parentheses` убирает все уровни скобок.
 #[test]
 fn expression_strip_parentheses() {
-    use grammar::ast::Expression;
+    use grammar::parser::ast::Expression;
 
     let loc = Location::default();
     let inner = Expression::Number(loc.clone(), 7);
@@ -843,7 +843,7 @@ fn expression_strip_parentheses() {
 /// `Expression::is_literal` возвращает `true` только для литеральных выражений.
 #[test]
 fn expression_is_literal() {
-    use grammar::ast::Expression;
+    use grammar::parser::ast::Expression;
 
     let loc = Location::default();
     assert!(Expression::Number(loc.clone(), 42).is_literal());
@@ -885,7 +885,7 @@ fn location_methods() {
 /// `Comment` — методы `is_doc` и `is_line`.
 #[test]
 fn comment_methods() {
-    use grammar::ast::Comment;
+    use grammar::parser::ast::Comment;
 
     let line = Comment::Line(Location::default(), "// comment".into());
     let doc = Comment::DocLine(Location::default(), "/// doc".into());
@@ -1261,7 +1261,7 @@ fn location_non_source_variants() {
 /// `Statement::is_empty` для пустого блока — `true`.
 #[test]
 fn statement_is_empty_for_empty_block() {
-    use grammar::ast::Statement;
+    use grammar::parser::ast::Statement;
 
     let empty_block = Statement::Block {
         loc: Location::default(),
@@ -1274,7 +1274,7 @@ fn statement_is_empty_for_empty_block() {
 /// `Statement::is_empty` для непустого блока — `false`.
 #[test]
 fn statement_is_empty_for_nonempty_block() {
-    use grammar::ast::Statement;
+    use grammar::parser::ast::Statement;
 
     let inner = Statement::Continue(Location::default());
     let block = Statement::Block {
@@ -1288,7 +1288,7 @@ fn statement_is_empty_for_nonempty_block() {
 /// `Statement::is_empty` для не-блочных операторов — `false`.
 #[test]
 fn statement_is_empty_for_non_block_statements() {
-    use grammar::ast::Statement;
+    use grammar::parser::ast::Statement;
 
     let stmts = vec![
         Statement::Continue(Location::default()),
@@ -1310,7 +1310,7 @@ fn statement_is_empty_for_non_block_statements() {
 /// Конструкторы `Diagnostic` создают объекты с нужными полями.
 #[test]
 fn diagnostic_constructors() {
-    use grammar::diagnostics::{Diagnostic, ErrorType, Level, Note};
+    use grammar::parser::diagnostics::{Diagnostic, ErrorType, Level, Note};
 
     let loc = Location::Source(0, 0, 5);
 
@@ -1402,7 +1402,7 @@ fn diagnostic_constructors() {
 /// `Level` — методы `as_str` и Display.
 #[test]
 fn level_display_and_as_str() {
-    use grammar::diagnostics::Level;
+    use grammar::parser::diagnostics::Level;
 
     assert_eq!(Level::Debug.as_str(), "debug");
     assert_eq!(Level::Info.as_str(), "info");
@@ -1494,7 +1494,7 @@ fn parse_negative_number_as_initializer() {
 /// `Expression::has_space_around` для унарных операторов.
 #[test]
 fn expression_has_space_around() {
-    use grammar::ast::Expression;
+    use grammar::parser::ast::Expression;
 
     let loc = Location::default();
     let inner = Expression::Number(loc.clone(), 1);
@@ -1520,7 +1520,7 @@ fn expression_has_space_around() {
 /// `Expression::loc()` возвращает корректное местоположение для разных вариантов.
 #[test]
 fn expression_loc_method() {
-    use grammar::ast::Expression;
+    use grammar::parser::ast::Expression;
 
     let loc = Location::Source(0, 5, 10);
     let inner = Box::new(Expression::Number(loc.clone(), 0));

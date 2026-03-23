@@ -802,7 +802,7 @@ impl Expression {
     /// # Примеры
     ///
     /// ```
-    /// use grammar::ast::{Expression, Identifier, Location};
+    /// use grammar::parser::ast::{Expression, Identifier, Location};
     ///
     /// // Унарный: ~a
     /// let var = Expression::Variable(Identifier::new("a"));

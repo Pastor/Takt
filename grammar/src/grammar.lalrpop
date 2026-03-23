@@ -1,6 +1,6 @@
 use lalrpop_util::ParseError;
-use super::ast::*;
-use super::lexer::{Token, LexicalError};
+use super::parser::ast::*;
+use super::parser::lexer::{Token, LexicalError};
 use lalrpop_util::ErrorRecovery;
 grammar<'input, 'err>(input: &'input str, file_no: u64 , parser_errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, LexicalError>> );
 

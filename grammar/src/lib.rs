@@ -28,22 +28,16 @@
 
 extern crate core;
 
+use crate::parser::ast::Location;
+use crate::parser::diagnostics::Diagnostic;
+use crate::parser::lexer::{LexicalError, Token};
+use crate::parser::{ast, lexer};
 use lalrpop_util::ParseError;
 
-use diagnostics::Diagnostic;
-
-use crate::ast::Location;
-use crate::lexer::LexicalError;
-use crate::lexer::Token;
-
-/// Модуль абстрактного синтаксического дерева языка BuT.
-pub mod ast;
-
-/// Модуль диагностических сообщений компилятора.
-pub mod diagnostics;
-
-/// Модуль лексического анализатора BuT.
-pub mod lexer;
+/// Модуль парсера
+pub mod parser;
+/// Модуль семантического анализа и построение семантического дерева
+pub mod semantic;
 
 #[allow(
     clippy::needless_lifetimes,
@@ -70,7 +64,7 @@ mod grammar {
 ///
 /// ```
 /// use grammar::parse;
-/// use grammar::ast::ModelElement;
+/// use grammar::parser::ast::ModelElement;
 ///
 /// // Успешный разбор минимальной программы.
 /// // parse() возвращает анонимную корневую модель; именованные модели — в elements.
@@ -148,15 +142,11 @@ fn parser_error_to_diagnostic(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::semantic::tree::construct_model;
+    #[cfg(feature = "ast-serde")]
+    use serde_json;
 
-    /// Комплексный тест разбора BuT-программы с различными конструкциями.
-    ///
-    /// Проверяет, что все основные элементы языка (псевдонимы типов, константы,
-    /// условия, порты, переменные, модели, состояния, переходы, именованные блоки
-    /// и операторы компоновки) успешно разбираются.
-    #[test]
-    fn parse_simple() {
-        let src = r#"
+    const SRC: &str = r#"
 //Алиас типа
 type u8 = [bit;8];
 //Константа
@@ -202,7 +192,7 @@ model Pong {
             A.5 = MATRIX.5;
         }
     }
-    state End {
+    state Stop {
         enter {
             A.6 = MATRIX.3;
         }
@@ -234,11 +224,19 @@ always {
         debug("Pong processing");
     }
 }"#;
-        let result = parse(src, 0);
+
+    /// Комплексный тест разбора BuT-программы с различными конструкциями.
+    ///
+    /// Проверяет, что все основные элементы языка (псевдонимы типов, константы,
+    /// условия, порты, переменные, модели, состояния, переходы, именованные блоки
+    /// и операторы компоновки) успешно разбираются.
+    #[test]
+    fn parse_simple() {
+        let result = parse(SRC, 0);
         if let Err(diagnostics) = result {
             for diagnostic in diagnostics.iter() {
-                let source = &src[diagnostic.loc.start()..diagnostic.loc.end()];
-                let text = &src[diagnostic.loc.start() - 5..diagnostic.loc.end() + 5];
+                let source = &SRC[diagnostic.loc.start()..diagnostic.loc.end()];
+                let text = &SRC[diagnostic.loc.start() - 5..diagnostic.loc.end() + 5];
                 println!(
                     "[{}:{}] Source: {}, Text: {}, Message: {}",
                     diagnostic.loc.start(),
@@ -249,7 +247,20 @@ always {
                 );
             }
         } else {
-            assert!(!result.unwrap().0.elements.is_empty())
+            let (model, _) = result.unwrap();
+            assert!(!model.elements.is_empty());
+            #[cfg(feature = "ast-serde")]
+            {
+                let text = serde_json::to_string_pretty(&model).unwrap();
+                println!("{}", text);
+            }
         }
+    }
+
+    #[test]
+    fn syntax_simple() {
+        let (model, _) = parse(SRC, 0).unwrap();
+        let model = construct_model(&model).unwrap();
+        assert!(model.has_states());
     }
 }
