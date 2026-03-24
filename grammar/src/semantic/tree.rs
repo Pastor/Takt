@@ -9,11 +9,83 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
-use crate::parser::ast::{Model, ModelElement, StateDefine, StateElement};
-use crate::semantic::{Condition, ModelNode, NamedBlockNode, Reference, StateNode};
+use crate::parser::ast::{Expression, Model, ModelElement, StateDefine, StateElement};
+use crate::semantic::{Condition, Implement, ModelNode, NamedBlockNode, Reference, StateNode};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+
+fn construct_model0(
+    model: &Model,
+    upper: Option<Rc<RefCell<ModelNode>>>,
+) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    let name = model.name.clone();
+
+    let model_node = ModelNode {
+        upper: upper.map(|m| Rc::clone(&m)),
+        name: name.map(|i| i.name.clone()),
+        ..Default::default()
+    };
+    let model_node = Rc::new(RefCell::new(model_node));
+    let mut models = HashMap::new();
+    for element in model.elements.iter() {
+        if let ModelElement::Model(model) = element {
+            let model = construct_model0(model, Some(Rc::clone(&model_node)))?;
+            models.insert(model.clone().borrow().name.clone().unwrap(), model);
+        } else if let ModelElement::Import(def) = element {
+            todo!("Import model")
+        }
+    }
+    model_node.borrow_mut().models = models;
+    model_node.borrow_mut().states = construct_states(model)?;
+    Ok(Rc::clone(&model_node))
+}
+
+fn construct_model1(model: Rc<RefCell<ModelNode>>) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    let prepared_states = &mut HashMap::new();
+    let model = Rc::clone(&model);
+    let mut ref_mut = model.borrow_mut();
+    let states = ref_mut.states.clone();
+    for (name, state) in states.iter() {
+        if let StateNode::Implement {
+            implements: Implement::Unresolved,
+            expression,
+            named_blocks,
+            references,
+            next,
+            name,
+        } = state.clone()
+        {
+            if let Some(expression) = expression {
+                prepared_states.insert(
+                    name.clone(),
+                    StateNode::Implement {
+                        named_blocks,
+                        name: name.clone(),
+                        references,
+                        implements: construct_implement(expression.clone(), Rc::clone(&model))?,
+                        expression: Some(expression.clone()),
+                        next,
+                    },
+                );
+            } else {
+                return Err("Expression not defined".into());
+            }
+        } else {
+            prepared_states.insert(name.clone(), state.clone());
+        }
+    }
+    ref_mut.states = prepared_states.clone();
+    let mut models = HashMap::new();
+    for (_, model) in model.clone().borrow().models.iter() {
+        models.insert(
+            model.clone().borrow().name.clone().unwrap(),
+            construct_model1(Rc::clone(model))?,
+        );
+    }
+    ref_mut.models = models;
+    Ok(Rc::clone(&model))
+}
 
 /// Строит семантический узел модели из АСД-узла [`Model`].
 ///
@@ -30,26 +102,9 @@ pub fn construct_model(
     model: &Model,
     upper: Option<Rc<RefCell<ModelNode>>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    let name = model.name.clone();
-    let states = construct_states(model)?;
-    let model_node = ModelNode {
-        upper: upper.map(|m| Rc::clone(&m)),
-        name: name.map(|i| i.name.clone()),
-        states,
-        ..Default::default()
-    };
-    let model_node = Rc::new(RefCell::new(model_node));
-    let mut models = HashMap::new();
-    for element in model.elements.iter() {
-        if let ModelElement::Model(model) = element {
-            let model = construct_model(model, Some(Rc::clone(&model_node)))?;
-            models.insert(model.clone().borrow().name.clone().unwrap(), model);
-        } else if let ModelElement::Import(def) = element {
-            todo!("Import model")
-        }
-    }
-    model_node.borrow_mut().models = models;
-    Ok(model_node)
+    let model = construct_model0(model, upper)?;
+    let model = construct_model1(model)?;
+    Ok(model)
 }
 
 /// Извлекает все состояния из модели и разрешает ссылки между ними.
@@ -98,7 +153,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 }
             }
             // Определяем вид узла: Implement (есть `= Выражение`) или Simple
-            let state = if let Some(_implements_expr) = implements {
+            let state = if let Some(expr) = implements {
                 let next = next.map(|n| Reference {
                     name: n,
                     cond: Condition::None,
@@ -108,8 +163,9 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                     named_blocks: construct_named_blocks(def)?,
                     name: name.clone(),
                     references,
-                    implements: (),
+                    implements: Implement::Unresolved,
                     next,
+                    expression: Some(expr),
                 }
             } else {
                 StateNode::Simple {
@@ -160,6 +216,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
             references,
             implements,
             next,
+            expression,
         } = *state.clone()
         {
             let new_references: &mut Vec<Reference<StateNode>> = &mut Vec::new();
@@ -203,6 +260,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                     references: new_references.clone(),
                     implements: implements.clone(),
                     next: next.clone(),
+                    expression,
                 },
             );
         }
@@ -222,6 +280,36 @@ fn construct_named_blocks(
     _state: &StateDefine,
 ) -> Result<HashMap<String, NamedBlockNode>, Diagnostic> {
     Ok(HashMap::new())
+}
+
+fn construct_implement(
+    expression: Expression,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<Implement, Diagnostic> {
+    let model = Rc::clone(&model);
+    match expression {
+        Expression::Variable(id) => {
+            let model = model.as_ref().borrow();
+            let model = model
+                .search_model(&id.name)
+                .ok_or_else(|| format!("Model {} not found", &id.name).as_str().into())?;
+            Ok(Implement::Model(Rc::clone(&model)))
+        }
+        Expression::Parenthesis(_, expression) => {
+            Ok(construct_implement(*expression, model.clone())?)
+        }
+        Expression::Add(_, left, right) => {
+            let left = construct_implement(*left, model.clone())?;
+            let right = construct_implement(*right, model.clone())?;
+            Ok(Implement::Add(Box::new(left), Box::new(right)))
+        }
+        Expression::BitwiseOr(_, left, right) => {
+            let left = construct_implement(*left, model.clone())?;
+            let right = construct_implement(*right, model.clone())?;
+            Ok(Implement::Or(Box::new(left), Box::new(right)))
+        }
+        other => return Err(format!("Unknown expression {:?}", other).as_str().into()),
+    }
 }
 
 #[cfg(test)]

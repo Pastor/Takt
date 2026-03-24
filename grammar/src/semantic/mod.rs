@@ -11,6 +11,7 @@
 
 pub mod tree;
 
+use crate::parser::ast::Expression;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -41,7 +42,7 @@ pub struct ModelNode {
     /// Состояния модели: имя → узел состояния.
     pub states: HashMap<String, StateNode>,
     /// Информация о реализации (зарезервировано).
-    pub implements: (),
+    pub implements: Implement,
 }
 
 impl ModelNode {
@@ -65,6 +66,16 @@ impl ModelNode {
     /// ```
     pub fn has_states(&self) -> bool {
         !self.states.is_empty()
+    }
+
+    pub fn search_model(&self, name: &str) -> Option<Rc<RefCell<ModelNode>>> {
+        if let Some(model) = self.models.get(name) {
+            Some(Rc::clone(model))
+        } else if let Some(model) = self.upper.as_ref() {
+            return model.borrow().search_model(name);
+        } else {
+            None
+        }
     }
 }
 
@@ -128,10 +139,21 @@ pub enum StateNode {
         /// Ссылки-переходы.
         references: Vec<Reference<StateNode>>,
         /// Информация о реализации (зарезервировано).
-        implements: (),
+        implements: Implement,
+        expression: Option<Expression>,
         /// Единственный `next`-переход (если задан).
         next: Option<Reference<StateNode>>,
     },
+}
+
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
+pub enum Implement {
+    #[default]
+    Unresolved,
+    Model(Rc<RefCell<ModelNode>>),
+    Parentless(Box<Implement>),
+    Add(Box<Implement>, Box<Implement>),
+    Or(Box<Implement>, Box<Implement>),
 }
 
 /// Условие перехода между состояниями.
