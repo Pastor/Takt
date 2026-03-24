@@ -10,21 +10,28 @@
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::parser::ast::{
-    Expression, Identifier, Model, ModelElement, StateDefine, StateElement, Type, VariableDefine,
+    Expression, Identifier, ImportDefine, Model, ModelElement, StateDefine, StateElement, Type,
+    VariableDefine,
 };
+use crate::semantic::include::read_import_file;
 use crate::semantic::{
     Condition, Implement, ModelNode, NamedBlockNode, Reference, StateNode, TypeNode, VariableNode,
 };
+use crate::{normalize_model_name, parse};
+use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+/// Извлекает имя из опционального [`Identifier`].
+///
+/// Возвращает [`Diagnostic`]-ошибку, если идентификатор отсутствует.
 #[inline]
 fn extract_name(id: Option<Identifier>) -> Result<String, Diagnostic> {
     if let Some(id) = id {
         Ok(id.name.clone())
     } else {
-        Err("Identifier is None".into())
+        Err("Идентификатор не задан".into())
     }
 }
 
@@ -46,13 +53,55 @@ fn construct_model0(
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
             let model = construct_model0(model, Some(Rc::clone(&model_node)))?;
-            //TODO: Если есть такое имя кидаем ошибку
-            models.insert(model.clone().borrow().name.clone().unwrap(), model);
+            let model_name = model.borrow().name.clone().unwrap();
+            if models.contains_key(&model_name) {
+                return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
+                    .as_str()
+                    .into());
+            }
+            models.insert(model_name, model);
         } else if let ModelElement::Import(def) = element {
-            //TODO: Загружаем файл как модель и именуем ее: если as - то ставим это имя, если простой импорт то ставим имя файла в CamelCase
-            //TODO: Если такое имя есть, ошибка
+            match def {
+                ImportDefine::Plain(path, _) => {
+                    // TODO: Надо передавать пути поиска
+                    let (content, filename) = read_import_file(&[], path)?;
+                    let without_extension = &filename[0..filename.len() - 4];
+                    let model_name = normalize_model_name(without_extension);
+                    if models.contains_key(&model_name) {
+                        return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
+                            .as_str()
+                            .into());
+                    }
+                    match parse(&content, 0) {
+                        Ok((model, _)) => {
+                            models.insert(model_name, construct_model(&model, None)?);
+                        }
+                        Err(d) => return Err(d.first().unwrap().clone()),
+                    }
+                }
+                ImportDefine::GlobalSymbol(path, id, _) => {
+                    // TODO: Надо передавать пути поиска
+                    let (content, _) = read_import_file(&[], path)?;
+                    let model_name = id.name.clone();
+                    if models.contains_key(&model_name) {
+                        return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
+                            .as_str()
+                            .into());
+                    }
+                    match parse(&content, 0) {
+                        Ok((model, _)) => {
+                            models.insert(model_name, construct_model(&model, None)?);
+                        }
+                        Err(d) => return Err(d.first().unwrap().clone()),
+                    }
+                }
+                ImportDefine::Rename(..) => {
+                    todo!("Не реализовано")
+                }
+            }
         } else if let ModelElement::Variable(def) = element {
-            //TODO: Добавить вывод типа для переменных и констант
+            // TODO: Добавить вывод типа для переменных и констант (type inference).
+            // Пока тип определяется только из явной аннотации.
             match *def.clone() {
                 VariableDefine::Variable {
                     typ,
@@ -79,7 +128,7 @@ fn construct_model0(
                     let name = extract_name(name.clone())?;
                     let type_node = construct_type(typ, &types)?;
                     if type_node == TypeNode::Detecting {
-                        return Err("Port must have concrete type".into());
+                        return Err("Порт должен иметь конкретный тип".into());
                     }
                     variables.insert(
                         name.clone(),
@@ -88,15 +137,9 @@ fn construct_model0(
                             type_node,
                             initializer
                                 .filter(|i| {
-                                    if let Expression::Address(..) = i {
-                                        true
-                                    } else if let Expression::Number(..) = i {
-                                        true
-                                    } else {
-                                        false
-                                    }
+                                    matches!(i, Expression::Address(..) | Expression::Number(..))
                                 })
-                                .ok_or_else(|| "Port maybe initialized Address".into())?,
+                                .ok_or_else(|| "Порт должен быть инициализирован адресом".into())?,
                         ),
                     )
                 }
@@ -150,7 +193,7 @@ fn construct_type(
             local => Ok(map
                 .get(local)
                 .ok_or_else(|| {
-                    format!("Local type {} not found", &def.name)
+                    format!("Локальный тип '{}' не найден", &def.name)
                         .as_str()
                         .into()
                 })?
@@ -196,7 +239,7 @@ fn construct_model1(model: Rc<RefCell<ModelNode>>) -> Result<Rc<RefCell<ModelNod
                     },
                 );
             } else {
-                return Err("Expression not defined".into());
+                return Err("Выражение реализации не задано".into());
             }
         } else {
             prepared_states.insert(name.clone(), state.clone());
@@ -260,7 +303,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
             let name = def
                 .clone()
                 .name
-                .ok_or_else(|| "Model state not naming".into())?
+                .ok_or_else(|| "Имя состояния не задано".into())?
                 .name;
             let implements = def.implements.clone();
             let mut references = Vec::new();
@@ -281,7 +324,9 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 } else if let StateElement::Next(id) = element {
                     let name = id.name.clone();
                     if next.is_some() {
-                        return Err(format!("State '{}' already defined", &name).as_str().into());
+                        return Err(format!("Состояние '{}' уже содержит оператор next", &name)
+                            .as_str()
+                            .into());
                     }
                     next = Some(name);
                 }
@@ -323,7 +368,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
             for reference in references {
                 if let StateNode::Unresolved = *reference.object {
                     let state = states.get(&reference.name).ok_or_else(|| {
-                        format!("Reference '{}' not found", &reference.name)
+                        format!("Ссылка '{}' не найдена", &reference.name)
                             .as_str()
                             .into()
                     })?;
@@ -358,7 +403,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
             for reference in references {
                 if let StateNode::Unresolved = *reference.object {
                     let state = states.get(&reference.name).ok_or_else(|| {
-                        format!("Reference '{}' not found", &reference.name)
+                        format!("Ссылка '{}' не найдена", &reference.name)
                             .as_str()
                             .into()
                     })?;
@@ -375,7 +420,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 if let StateNode::Unresolved = *next_ref.object {
                     let target_name = next_ref.name.clone();
                     let state = states.get(&target_name).ok_or_else(|| {
-                        format!("Reference '{}' not found", &target_name)
+                        format!("Ссылка '{}' не найдена", &target_name)
                             .as_str()
                             .into()
                     })?;
@@ -427,7 +472,7 @@ fn construct_implement(
             let model = model.as_ref().borrow();
             let model = model
                 .search_model(&id.name)
-                .ok_or_else(|| format!("Model {} not found", &id.name).as_str().into())?;
+                .ok_or_else(|| format!("Модель '{}' не найдена", &id.name).as_str().into())?;
             Ok(Implement::Model(Rc::clone(&model)))
         }
         Expression::Parenthesis(_, expression) => {
@@ -443,7 +488,11 @@ fn construct_implement(
             let right = construct_implement(*right, model.clone())?;
             Ok(Implement::Or(Box::new(left), Box::new(right)))
         }
-        other => return Err(format!("Unknown expression {:?}", other).as_str().into()),
+        other => {
+            return Err(format!("Неизвестное выражение реализации: {:?}", other)
+                .as_str()
+                .into());
+        }
     }
 }
 

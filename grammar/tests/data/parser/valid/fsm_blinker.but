@@ -1,0 +1,37 @@
+// Пример: конечный автомат мигалки светодиода (позитивный тест)
+// Демонстрирует: псевдонимы типов, порты, условия, именованные блоки, переходы
+
+type u8 = [bit;8];
+
+port LED:     u8  = 0x00100000;
+port BUTTON:  bit = 0x00200000:0;
+
+var counter: u8 = 0;
+
+cond ButtonPressed = BUTTON = true;
+cond LimitReached  = counter = 100;
+
+model Blinker {
+    start On {
+        ref Off: LimitReached;
+        enter {
+            LED = 0xFF;
+            counter = 0;
+        }
+        exit {
+            LED = 0x00;
+        }
+        always {
+            counter = counter + 1;
+        }
+    }
+    state Off {
+        ref On: ButtonPressed;
+        enter {
+            LED = 0x00;
+            counter = 0;
+        }
+    }
+}
+
+start Main = Blinker;

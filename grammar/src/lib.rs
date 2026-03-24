@@ -51,6 +51,23 @@ mod grammar {
     include!(concat!(env!("OUT_DIR"), "/grammar.rs"));
 }
 
+pub fn normalize_model_name(name: &str) -> String {
+    let mut result = String::new();
+    let mut upper = true;
+    for ch in name.chars() {
+        if ch.is_alphabetic() && upper {
+            result.push(ch.to_ascii_uppercase());
+        } else if !ch.is_alphanumeric() {
+            upper = true;
+            continue;
+        } else {
+            result.push(ch);
+        }
+        upper = false;
+    }
+    result
+}
+
 /// Разбирает строку исходного кода BuT.
 ///
 /// Возвращает пару `(корневая_модель, комментарии)` при успехе,
@@ -115,7 +132,7 @@ fn parser_error_to_diagnostic(
     match error {
         ParseError::InvalidToken { location } => Diagnostic::parser_error(
             Location::Source(file_no, *location, *location),
-            "invalid token".to_string(),
+            "недопустимый токен".to_string(),
         ),
         ParseError::UnrecognizedToken {
             token: (l, token, r),
@@ -123,7 +140,7 @@ fn parser_error_to_diagnostic(
         } => Diagnostic::parser_error(
             Location::Source(file_no, *l, *r),
             format!(
-                "unrecognised token '{}', expected {}",
+                "нераспознанный токен '{}', ожидалось {}",
                 token,
                 expected.join(", ")
             ),
@@ -131,11 +148,11 @@ fn parser_error_to_diagnostic(
         ParseError::User { error } => Diagnostic::parser_error(error.loc(), error.to_string()),
         ParseError::ExtraToken { token } => Diagnostic::parser_error(
             Location::Source(file_no, token.0, token.2),
-            format!("extra token '{}' encountered", token.1),
+            format!("лишний токен '{}'", token.1),
         ),
         ParseError::UnrecognizedEof { expected, location } => Diagnostic::parser_error(
             Location::Source(file_no, *location, *location),
-            format!("unexpected end of file, expecting {}", expected.join(", ")),
+            format!("неожиданный конец файла, ожидалось {}", expected.join(", ")),
         ),
     }
 }
@@ -263,5 +280,22 @@ always {
         let (model, _) = parse(SRC, 0).unwrap();
         let model = construct_model(&model, None).unwrap();
         assert!(model.borrow().has_states());
+    }
+
+    const NAMES: &[(&str, &str)] = &[
+        ("mein_leib", "MeinLeib"),
+        ("mein-leib", "MeinLeib"),
+        ("Mein_Leib", "MeinLeib"),
+        ("mein_Leib", "MeinLeib"),
+        ("Mein#Leib", "MeinLeib"),
+    ];
+
+    #[test]
+    fn normalize_model_name() {
+        use super::normalize_model_name;
+        for (name, expected) in NAMES {
+            let normalized = normalize_model_name(name);
+            assert_eq!(&normalized, expected);
+        }
     }
 }

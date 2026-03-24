@@ -9,6 +9,7 @@
 //! - [`Reference`] — ссылка на другой узел с условием перехода.
 //! - [`Condition`] — условие перехода между состояниями.
 
+mod include;
 pub mod tree;
 
 use crate::parser::ast::Expression;
@@ -68,6 +69,24 @@ impl ModelNode {
         !self.states.is_empty()
     }
 
+    /// Ищет модель по имени в текущем контексте и во всех родительских.
+    ///
+    /// Обходит цепочку `upper`-ссылок вверх до тех пор, пока модель не найдена
+    /// или цепочка не исчерпана.
+    ///
+    /// # Примеры
+    ///
+    /// ```
+    /// use grammar::parse;
+    /// use grammar::semantic::tree::construct_model;
+    ///
+    /// let (ast, _) = parse("model Inner { start S; }", 0).unwrap();
+    /// let root = construct_model(&ast, None).unwrap();
+    /// // Вложенная модель «Inner» доступна из корня
+    /// assert!(root.borrow().search_model("Inner").is_some());
+    /// // Несуществующая модель возвращает None
+    /// assert!(root.borrow().search_model("Ghost").is_none());
+    /// ```
     pub fn search_model(&self, name: &str) -> Option<Rc<RefCell<ModelNode>>> {
         if let Some(model) = self.models.get(name) {
             Some(Rc::clone(model))
@@ -78,6 +97,22 @@ impl ModelNode {
         }
     }
 
+    /// Ищет переменную по имени в текущем контексте и во всех родительских.
+    ///
+    /// Аналогично [`search_model`](ModelNode::search_model), обходит цепочку
+    /// `upper`-ссылок вверх.
+    ///
+    /// # Примеры
+    ///
+    /// ```
+    /// use grammar::parse;
+    /// use grammar::semantic::tree::construct_model;
+    ///
+    /// let (ast, _) = parse("var x: bit = false;", 0).unwrap();
+    /// let root = construct_model(&ast, None).unwrap();
+    /// assert!(root.borrow().search_var("x").is_some());
+    /// assert!(root.borrow().search_var("y").is_none());
+    /// ```
     pub fn search_var(&self, name: &str) -> Option<VariableNode> {
         if let Some(var) = self.variables.get(name) {
             Some(var.clone())
@@ -103,27 +138,47 @@ pub struct FunctionNode {}
 
 /// Семантический узел переменной.
 ///
-/// В текущей реализации является заглушкой; будет расширен в будущих версиях.
+/// Варианты:
+/// - [`Unresolved`](VariableNode::Unresolved) — временная заглушка.
+/// - [`Simple`](VariableNode::Simple) — обычная изменяемая переменная `(имя, тип, инициализатор?)`.
+/// - [`Port`](VariableNode::Port) — порт, отображённый на адрес `(имя, тип, адрес)`.
+/// - [`Const`](VariableNode::Const) — константа `(имя, тип, значение)`.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum VariableNode {
+    /// Не разрешено (временная заглушка при построении дерева).
     #[default]
     Unresolved,
+    /// Изменяемая переменная: `(имя, тип, инициализатор?)`.
     Simple(String, TypeNode, Option<Expression>),
+    /// Порт, отображённый на аппаратный адрес: `(имя, тип, адрес)`.
     Port(String, TypeNode, Expression),
+    /// Константа: `(имя, тип, значение)`.
     Const(String, TypeNode, Expression),
 }
 
-/// Семантический узел псевдонима типа.
+/// Семантический узел типа данных.
 ///
-/// В текущей реализации является заглушкой; будет расширен в будущих версиях.
+/// Варианты:
+/// - [`Detecting`](TypeNode::Detecting) — тип выводится (временная заглушка).
+/// - [`Address`](TypeNode::Address) — адресный тип порта `(адрес, бит?)`.
+/// - [`Bit`](TypeNode::Bit) — 1-битный примитив (`bit`, `bool`).
+/// - [`Rational`](TypeNode::Rational) — вещественное число (`float`).
+/// - [`Array`](TypeNode::Array) — массив фиксированного размера `(N, элемент)`.
+/// - [`Unsupported`](TypeNode::Unsupported) — неподдерживаемый тип (например, функциональный).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum TypeNode {
+    /// Тип ещё не определён (вывод типа в процессе).
     #[default]
     Detecting,
+    /// Адресный тип порта: `(адрес, номер_бита?)`.
     Address(u64, Option<u64>),
+    /// 1-битный примитив (`bit`, `bool`).
     Bit,
+    /// Тип с плавающей точкой (`float`).
     Rational,
+    /// Массив фиксированного размера: `(количество_элементов, тип_элемента)`.
     Array(u16, Box<TypeNode>),
+    /// Неподдерживаемый тип (например, функциональный).
     Unsupported,
 }
 
@@ -164,19 +219,33 @@ pub enum StateNode {
         references: Vec<Reference<StateNode>>,
         /// Информация о реализации (зарезервировано).
         implements: Implement,
+        /// Исходное выражение реализации из АСД (сохраняется для диагностики).
         expression: Option<Expression>,
         /// Единственный `next`-переход (если задан).
         next: Option<Reference<StateNode>>,
     },
 }
 
+/// Реализация модели: описывает, как состояние или корневой автомат
+/// составлен из именованных моделей.
+///
+/// - [`Unresolved`](Implement::Unresolved) — временная заглушка до второго прохода.
+/// - [`Model`](Implement::Model) — ссылка на конкретную именованную модель.
+/// - [`Parentless`](Implement::Parentless) — обёртка без родителя (скобки).
+/// - [`Add`](Implement::Add) — последовательная компоновка `A + B`.
+/// - [`Or`](Implement::Or) — параллельная компоновка `A | B`.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum Implement {
+    /// Не разрешено (временная заглушка при построении дерева).
     #[default]
     Unresolved,
+    /// Ссылка на конкретную именованную модель.
     Model(Rc<RefCell<ModelNode>>),
+    /// Скобочная группировка: `(реализация)`.
     Parentless(Box<Implement>),
+    /// Последовательная компоновка: `левое + правое`.
     Add(Box<Implement>, Box<Implement>),
+    /// Параллельная компоновка: `левое | правое`.
     Or(Box<Implement>, Box<Implement>),
 }
 

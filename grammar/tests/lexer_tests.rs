@@ -670,32 +670,35 @@ fn lexical_error_display_messages() {
     let cases: Vec<(LexicalError, &str)> = vec![
         (
             LexicalError::EndOfFileInComment(loc.clone()),
-            "end of file found in comment",
+            "неожиданный конец файла внутри комментария",
         ),
         (
             LexicalError::EndOfFileInString(loc.clone()),
-            "end of file found in string literal",
+            "неожиданный конец файла внутри строкового литерала",
         ),
         (
             LexicalError::EndOfFileInHex(loc.clone()),
-            "end of file found in hex literal",
+            "неожиданный конец файла внутри шестнадцатеричного литерала",
         ),
-        (LexicalError::MissingNumber(loc.clone()), "missing number"),
+        (
+            LexicalError::MissingNumber(loc.clone()),
+            "отсутствует число после '0x'",
+        ),
         (
             LexicalError::InvalidCharacterInHexLiteral(loc.clone(), 'Z'),
-            "invalid character 'Z'",
+            "недопустимый символ 'Z'",
         ),
         (
             LexicalError::UnrecognisedToken(loc.clone(), "@".into()),
-            "unrecognised token '@'",
+            "нераспознанный токен '@'",
         ),
         (
             LexicalError::MissingExponent(loc.clone()),
-            "missing exponent",
+            "отсутствует показатель степени",
         ),
         (
             LexicalError::ExpectedFrom(loc.clone(), "bar".into()),
-            "'bar' found where 'from' expected",
+            "ожидалось ключевое слово 'from', но найдено 'bar'",
         ),
     ];
 

@@ -302,35 +302,35 @@ pub struct Lexer<'input> {
 #[allow(missing_docs)]
 pub enum LexicalError {
     /// Неожиданный конец файла внутри блочного комментария.
-    #[error("end of file found in comment")]
+    #[error("неожиданный конец файла внутри комментария")]
     EndOfFileInComment(Location),
 
     /// Неожиданный конец файла внутри строкового литерала.
-    #[error("end of file found in string literal")]
+    #[error("неожиданный конец файла внутри строкового литерала")]
     EndOfFileInString(Location),
 
     /// Неожиданный конец файла внутри шестнадцатеричного литерала.
-    #[error("end of file found in hex literal string")]
+    #[error("неожиданный конец файла внутри шестнадцатеричного литерала")]
     EndOfFileInHex(Location),
 
     /// Отсутствуют цифры после `0x`.
-    #[error("missing number")]
+    #[error("отсутствует число после '0x'")]
     MissingNumber(Location),
 
     /// Недопустимый символ в шестнадцатеричном литерале.
-    #[error("invalid character '{1}' in hex literal string")]
+    #[error("недопустимый символ '{1}' в шестнадцатеричном литерале")]
     InvalidCharacterInHexLiteral(Location, char),
 
     /// Неизвестный токен.
-    #[error("unrecognised token '{1}'")]
+    #[error("нераспознанный токен '{1}'")]
     UnrecognisedToken(Location, String),
 
     /// Отсутствует показатель степени после `e`/`E`.
-    #[error("missing exponent")]
+    #[error("отсутствует показатель степени")]
     MissingExponent(Location),
 
     /// Ожидалось ключевое слово `from`, но встретилось другое слово.
-    #[error("'{1}' found where 'from' expected")]
+    #[error("ожидалось ключевое слово 'from', но найдено '{1}'")]
     ExpectedFrom(Location, String),
 }
 
