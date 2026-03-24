@@ -572,7 +572,7 @@ fn expression_loc_all_variants() {
         Expression::List(l, vec![]),
         Expression::Array(l, vec![]),
         Expression::Initializer(l, vec![]),
-        Expression::Cast(l, Box::new(a.clone()), Type::Float),
+        Expression::Cast(l, Box::new(a.clone()), Type::Rational),
     ];
 
     for e in &variants {

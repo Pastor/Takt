@@ -77,6 +77,16 @@ impl ModelNode {
             None
         }
     }
+
+    pub fn search_var(&self, name: &str) -> Option<VariableNode> {
+        if let Some(var) = self.variables.get(name) {
+            Some(var.clone())
+        } else if let Some(model) = self.upper.as_ref() {
+            return model.borrow().search_var(name);
+        } else {
+            None
+        }
+    }
 }
 
 /// Семантический узел именованного блока кода (`enter`, `exit`, `always`, …).
@@ -95,13 +105,27 @@ pub struct FunctionNode {}
 ///
 /// В текущей реализации является заглушкой; будет расширен в будущих версиях.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct VariableNode {}
+pub enum VariableNode {
+    #[default]
+    Unresolved,
+    Simple(String, TypeNode, Option<Expression>),
+    Port(String, TypeNode, Expression),
+    Const(String, TypeNode, Expression),
+}
 
 /// Семантический узел псевдонима типа.
 ///
 /// В текущей реализации является заглушкой; будет расширен в будущих версиях.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct TypeNode {}
+pub enum TypeNode {
+    #[default]
+    Detecting,
+    Address(u64, Option<u64>),
+    Bit,
+    Rational,
+    Array(u16, Box<TypeNode>),
+    Unsupported,
+}
 
 /// Семантический узел условия перехода.
 ///

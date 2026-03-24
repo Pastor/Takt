@@ -120,7 +120,7 @@ pub enum Type {
     /// Булевый тип `bool`.
     Bool,
     /// Тип с плавающей точкой `float`.
-    Float,
+    Rational,
     /// Псевдоним типа (ссылка по имени).
     Alias(Identifier),
     /// Массив битов: `[тип; N]`.

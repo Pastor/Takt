@@ -9,11 +9,24 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
-use crate::parser::ast::{Expression, Model, ModelElement, StateDefine, StateElement};
-use crate::semantic::{Condition, Implement, ModelNode, NamedBlockNode, Reference, StateNode};
+use crate::parser::ast::{
+    Expression, Identifier, Model, ModelElement, StateDefine, StateElement, Type, VariableDefine,
+};
+use crate::semantic::{
+    Condition, Implement, ModelNode, NamedBlockNode, Reference, StateNode, TypeNode, VariableNode,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+
+#[inline]
+fn extract_name(id: Option<Identifier>) -> Result<String, Diagnostic> {
+    if let Some(id) = id {
+        Ok(id.name.clone())
+    } else {
+        Err("Identifier is None".into())
+    }
+}
 
 fn construct_model0(
     model: &Model,
@@ -28,24 +41,138 @@ fn construct_model0(
     };
     let model_node = Rc::new(RefCell::new(model_node));
     let mut models = HashMap::new();
+    let mut variables = HashMap::new();
+    let mut types = HashMap::new();
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
             let model = construct_model0(model, Some(Rc::clone(&model_node)))?;
+            //TODO: Если есть такое имя кидаем ошибку
             models.insert(model.clone().borrow().name.clone().unwrap(), model);
         } else if let ModelElement::Import(def) = element {
-            todo!("Import model")
+            //TODO: Загружаем файл как модель и именуем ее: если as - то ставим это имя, если простой импорт то ставим имя файла в CamelCase
+            //TODO: Если такое имя есть, ошибка
+        } else if let ModelElement::Variable(def) = element {
+            //TODO: Добавить вывод типа для переменных и констант
+            match *def.clone() {
+                VariableDefine::Variable {
+                    typ,
+                    name,
+                    initializer,
+                    ..
+                } => {
+                    let name = extract_name(name.clone())?;
+                    variables.insert(
+                        name.clone(),
+                        VariableNode::Simple(
+                            name.clone(),
+                            construct_type(typ, &types)?,
+                            initializer,
+                        ),
+                    )
+                }
+                VariableDefine::Port {
+                    typ,
+                    name,
+                    initializer,
+                    ..
+                } => {
+                    let name = extract_name(name.clone())?;
+                    let type_node = construct_type(typ, &types)?;
+                    if type_node == TypeNode::Detecting {
+                        return Err("Port must have concrete type".into());
+                    }
+                    variables.insert(
+                        name.clone(),
+                        VariableNode::Port(
+                            name.clone(),
+                            type_node,
+                            initializer
+                                .filter(|i| {
+                                    if let Expression::Address(..) = i {
+                                        true
+                                    } else if let Expression::Number(..) = i {
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                })
+                                .ok_or_else(|| "Port maybe initialized Address".into())?,
+                        ),
+                    )
+                }
+                VariableDefine::Constant {
+                    typ,
+                    name,
+                    initializer,
+                    ..
+                } => {
+                    let name = extract_name(name.clone())?;
+                    variables.insert(
+                        name.clone(),
+                        VariableNode::Const(
+                            name.clone(),
+                            construct_type(typ, &types)?,
+                            initializer,
+                        ),
+                    )
+                }
+            };
+        } else if let ModelElement::Type(def) = element {
+            let name = def.clone().name.name.clone();
+            let typ = def.ty.clone();
+            let types_clone = types.clone();
+            types.insert(name.clone(), construct_type(Some(typ), &types_clone)?);
         }
     }
     model_node.borrow_mut().models = models;
+    model_node.borrow_mut().variables = variables;
     model_node.borrow_mut().states = construct_states(model)?;
+    model_node.borrow_mut().types = types;
     Ok(Rc::clone(&model_node))
 }
 
+fn construct_type(
+    typ: Option<Type>,
+    map: &HashMap<String, TypeNode>,
+) -> Result<TypeNode, Diagnostic> {
+    if typ.is_none() {
+        return Ok(TypeNode::Detecting);
+    }
+    match typ.unwrap() {
+        Type::Address { address, bit } => Ok(TypeNode::Address(address, bit)),
+        Type::Bit => Ok(TypeNode::Bit),
+        Type::Bool => Ok(TypeNode::Bit),
+        Type::Rational => Ok(TypeNode::Rational),
+        Type::Alias(def) => match def.name.as_str() {
+            "bit" => Ok(TypeNode::Bit),
+            "bool" => Ok(TypeNode::Bit),
+            "float" => Ok(TypeNode::Rational),
+            local => Ok(map
+                .get(local)
+                .ok_or_else(|| {
+                    format!("Local type {} not found", &def.name)
+                        .as_str()
+                        .into()
+                })?
+                .clone()),
+        },
+        Type::Array {
+            element_type,
+            element_count,
+            ..
+        } => Ok(TypeNode::Array(
+            element_count,
+            Box::new(construct_type(Some(*element_type), map)?),
+        )),
+        Type::Function { .. } => Ok(TypeNode::Unsupported),
+    }
+}
+
 fn construct_model1(model: Rc<RefCell<ModelNode>>) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    let prepared_states = &mut HashMap::new();
-    let model = Rc::clone(&model);
-    let mut ref_mut = model.borrow_mut();
-    let states = ref_mut.states.clone();
+    // Клонируем состояния до мутабельного займа, чтобы construct_implement мог брать заём
+    let states = model.borrow().states.clone();
+
+    let mut prepared_states = HashMap::new();
     for (name, state) in states.iter() {
         if let StateNode::Implement {
             implements: Implement::Unresolved,
@@ -75,15 +202,22 @@ fn construct_model1(model: Rc<RefCell<ModelNode>>) -> Result<Rc<RefCell<ModelNod
             prepared_states.insert(name.clone(), state.clone());
         }
     }
-    ref_mut.states = prepared_states.clone();
+    model.borrow_mut().states = prepared_states;
+
+    // Клонируем список вложенных моделей до рекурсивного вызова
+    let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
+        .borrow()
+        .models
+        .iter()
+        .map(|(k, v)| (k.clone(), Rc::clone(v)))
+        .collect();
+
     let mut models = HashMap::new();
-    for (_, model) in model.clone().borrow().models.iter() {
-        models.insert(
-            model.clone().borrow().name.clone().unwrap(),
-            construct_model1(Rc::clone(model))?,
-        );
+    for (name, nested_model) in nested {
+        models.insert(name, construct_model1(Rc::clone(&nested_model))?);
     }
-    ref_mut.models = models;
+    model.borrow_mut().models = models;
+
     Ok(Rc::clone(&model))
 }
 
@@ -237,16 +371,17 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                     new_references.push(reference)
                 }
             }
-            if let Some(next) = next.as_mut() {
-                if let StateNode::Unresolved = *next.object {
-                    let state = states.get(&next.name).ok_or_else(|| {
-                        format!("Reference '{}' not found", &next.name)
+            if let Some(next_ref) = next.as_mut() {
+                if let StateNode::Unresolved = *next_ref.object {
+                    let target_name = next_ref.name.clone();
+                    let state = states.get(&target_name).ok_or_else(|| {
+                        format!("Reference '{}' not found", &target_name)
                             .as_str()
                             .into()
                     })?;
-                    *next = Reference {
-                        name: name.clone(),
-                        cond: next.cond.clone(),
+                    *next_ref = Reference {
+                        name: target_name,
+                        cond: next_ref.cond.clone(),
                         object: state.clone(),
                     }
                 }
