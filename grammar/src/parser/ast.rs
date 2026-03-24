@@ -1,221 +1,6 @@
+use crate::diagnostics::Location;
 #[cfg(feature = "ast-serde")]
 use serde::{Deserialize, Serialize};
-
-/// Местоположение узла АСД в исходном тексте.
-///
-/// Вариант [`Source`](Location::Source) хранит номер файла, байтовое смещение
-/// начала и байтовое смещение конца (не включительно).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-pub enum Location {
-    /// Встроенный элемент (не относится к пользовательскому коду).
-    Builtin,
-    /// Элемент, заданный через командную строку компилятора.
-    CommandLine,
-    /// Неявно сгенерированный элемент.
-    Implicit,
-    /// Элемент, сгенерированный кодогенератором.
-    Codegen,
-    /// Элемент в исходном файле: `(файл, начало, конец)`.
-    Source(u64, usize, usize),
-}
-
-impl Default for Location {
-    fn default() -> Self {
-        Self::Source(0, 0, 0)
-    }
-}
-
-/// Вызывается при попытке получить позицию из не-файлового варианта [`Location`].
-#[inline(never)]
-#[cold]
-#[track_caller]
-fn not_a_file() -> ! {
-    panic!("location is not a file")
-}
-
-impl Location {
-    /// Возвращает [`Location`] нулевой длины, указывающий на начало данного диапазона.
-    #[inline]
-    pub fn begin_range(&self) -> Self {
-        match self {
-            Location::Source(filename, start, _) => {
-                Location::Source(filename.clone(), *start, *start)
-            }
-            loc => loc.clone(),
-        }
-    }
-
-    /// Возвращает [`Location`] нулевой длины, указывающий на конец данного диапазона.
-    #[inline]
-    pub fn end_range(&self) -> Self {
-        match self {
-            Location::Source(filename, _, end) => Location::Source(filename.clone(), *end, *end),
-            loc => loc.clone(),
-        }
-    }
-
-    /// Возвращает строковое представление номера файла.
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если `self` не является вариантом [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn filename(&self) -> String {
-        match self {
-            Location::Source(file_no, _, _) => format!("{}", file_no),
-            _ => not_a_file(),
-        }
-    }
-
-    /// Возвращает `Some(номер_файла)` для варианта [`Source`](Location::Source),
-    /// или `None` для остальных вариантов.
-    #[inline]
-    pub fn try_file_no(&self) -> Option<String> {
-        match self {
-            Location::Source(file_no, _, _) => Some(format!("{}", file_no)),
-            _ => None,
-        }
-    }
-
-    /// Возвращает байтовое смещение начала диапазона.
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если `self` не является вариантом [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn start(&self) -> usize {
-        match self {
-            Location::Source(_, start, _) => *start,
-            _ => not_a_file(),
-        }
-    }
-
-    /// Возвращает байтовое смещение конца диапазона (включительно).
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если `self` не является вариантом [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn end(&self) -> usize {
-        match self {
-            Location::Source(_, _, end) => *end,
-            _ => not_a_file(),
-        }
-    }
-
-    /// Возвращает байтовое смещение конца диапазона (не включительно, `end + 1`).
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если `self` не является вариантом [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn exclusive_end(&self) -> usize {
-        self.end() + 1
-    }
-
-    /// Устанавливает начало текущего диапазона равным началу `other`.
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если любой из операндов не является [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn use_start_from(&mut self, other: &Location) {
-        match (self, other) {
-            (Location::Source(_, start, _), Location::Source(_, other_start, _)) => {
-                *start = *other_start;
-            }
-            _ => not_a_file(),
-        }
-    }
-
-    /// Устанавливает конец текущего диапазона равным концу `other`.
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если любой из операндов не является [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn use_end_from(&mut self, other: &Location) {
-        match (self, other) {
-            (Location::Source(_, _, end), Location::Source(_, _, other_end)) => {
-                *end = *other_end;
-            }
-            _ => not_a_file(),
-        }
-    }
-
-    /// Возвращает копию с началом, взятым из `other`.
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если любой из операндов не является [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn with_start_from(mut self, other: &Self) -> Self {
-        self.use_start_from(other);
-        self
-    }
-
-    /// Возвращает копию с концом, взятым из `other`.
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если любой из операндов не является [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn with_end_from(mut self, other: &Self) -> Self {
-        self.use_end_from(other);
-        self
-    }
-
-    /// Возвращает копию с заменённым началом.
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если `self` не является [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn with_start(self, start: usize) -> Self {
-        match self {
-            Self::Source(no, _, end) => Self::Source(no, start, end),
-            _ => not_a_file(),
-        }
-    }
-
-    /// Возвращает копию с заменённым концом.
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если `self` не является [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn with_end(self, end: usize) -> Self {
-        match self {
-            Self::Source(no, start, _) => Self::Source(no, start, end),
-            _ => not_a_file(),
-        }
-    }
-
-    /// Преобразует [`Location`] в стандартный диапазон `start..end`.
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если `self` не является [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn range(self) -> std::ops::Range<usize> {
-        match self {
-            Self::Source(_, start, end) => start..end,
-            _ => not_a_file(),
-        }
-    }
-}
 
 /// Идентификатор с местоположением в исходном тексте.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -391,10 +176,9 @@ pub enum VariableDefine {
         /// Имя константы
         name: Option<Identifier>,
         /// Инициализатор константы
-        initializer: Expression
-    }
+        initializer: Expression,
+    },
 }
-
 
 /// Корневой узел АСД — модель (автомат или компоновка автоматов).
 ///
@@ -471,24 +255,10 @@ pub struct StateDefine {
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum StateElement {
-    /// Директива импорта.
-    Import(ImportDefine),
     /// Переход к следующему состоянию (`next Имя`).
     Next(Identifier),
-    /// Определение функции.
-    Function(Box<FunctionDefine>),
-    /// Формула.
-    Formula(Box<FormulaDefine>),
-    /// Определение условия.
-    Condition(Box<ConditionDefine>),
-    /// Определение переменной.
-    Variable(Box<VariableDefine>),
-    /// Определение псевдонима типа.
-    Type(Box<TypeDefine>),
     /// Ссылка на состояние с условием перехода: `ref Имя [: Условие]`.
     Reference(Location, Identifier, Option<Condition>),
-    /// Вложенная модель.
-    Model(Box<Model>),
     /// Именованный блок кода.
     NamedBlockCode(Box<NamedBlockCodeDefine>),
     /// Одиночная точка с запятой.
@@ -802,7 +572,8 @@ impl Expression {
     /// # Примеры
     ///
     /// ```
-    /// use grammar::parser::ast::{Expression, Identifier, Location};
+    /// use grammar::parser::ast::{Expression, Identifier };
+    /// use grammar::diagnostics::Location;
     ///
     /// // Унарный: ~a
     /// let var = Expression::Variable(Identifier::new("a"));

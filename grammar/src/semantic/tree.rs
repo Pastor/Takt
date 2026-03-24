@@ -7,9 +7,11 @@
 //! - [`construct_context_state`] — строит контекст для состояния (заглушка).
 //! - [`construct_condition`] — преобразует условие АСД в семантическое условие.
 
+use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::parser::ast::{Model, ModelElement, StateDefine, StateElement};
-use crate::semantic::{Condition, ContextNode, Diagnostic, ModelNode, Reference, StateNode};
+use crate::semantic::{Condition, ModelNode, NamedBlockNode, Reference, StateNode};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -24,16 +26,30 @@ use std::rc::Rc;
 /// - у состояния нет имени,
 /// - ссылка `ref` указывает на несуществующее состояние,
 /// - `next` встречается в одном состоянии дважды.
-pub fn construct_model(model: &Model) -> Result<ModelNode, Diagnostic> {
+pub fn construct_model(
+    model: &Model,
+    upper: Option<Rc<RefCell<ModelNode>>>,
+) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     let name = model.name.clone();
-    let context = construct_context_model(model)?;
     let states = construct_states(model)?;
-    Ok(ModelNode {
-        context,
+    let model_node = ModelNode {
+        upper: upper.map(|m| Rc::clone(&m)),
         name: name.map(|i| i.name.clone()),
         states,
-        implements: (),
-    })
+        ..Default::default()
+    };
+    let model_node = Rc::new(RefCell::new(model_node));
+    let mut models = HashMap::new();
+    for element in model.elements.iter() {
+        if let ModelElement::Model(model) = element {
+            let model = construct_model(model, Some(Rc::clone(&model_node)))?;
+            models.insert(model.clone().borrow().name.clone().unwrap(), model);
+        } else if let ModelElement::Import(def) = element {
+            todo!("Import model")
+        }
+    }
+    model_node.borrow_mut().models = models;
+    Ok(model_node)
 }
 
 /// Извлекает все состояния из модели и разрешает ссылки между ними.
@@ -57,7 +73,6 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 .name
                 .ok_or_else(|| "Model state not naming".into())?
                 .name;
-            let context = construct_context_state(def)?;
             let implements = def.implements.clone();
             let mut references = Vec::new();
             let mut next = None;
@@ -90,7 +105,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                     object: Box::new(StateNode::Unresolved),
                 });
                 StateNode::Implement {
-                    context,
+                    named_blocks: construct_named_blocks(def)?,
                     name: name.clone(),
                     references,
                     implements: (),
@@ -98,7 +113,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 }
             } else {
                 StateNode::Simple {
-                    context,
+                    named_blocks: construct_named_blocks(def)?,
                     name: name.clone(),
                     references,
                 }
@@ -111,9 +126,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
     let new_states = &mut HashMap::new();
     for (_, state) in states.iter() {
         if let StateNode::Simple {
-            context,
-            name,
-            references,
+            name, references, ..
         } = *state.clone()
         {
             let new_references: &mut Vec<Reference<StateNode>> = &mut Vec::new();
@@ -136,13 +149,13 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
             new_states.insert(
                 name.clone(),
                 StateNode::Simple {
-                    context: context.clone(),
+                    named_blocks: Default::default(),
                     name: name.clone(),
                     references: new_references.clone(),
                 },
             );
         } else if let StateNode::Implement {
-            context,
+            named_blocks,
             name,
             references,
             implements,
@@ -185,7 +198,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
             new_states.insert(
                 name.clone(),
                 StateNode::Implement {
-                    context: context.clone(),
+                    named_blocks,
                     name: name.clone(),
                     references: new_references.clone(),
                     implements: implements.clone(),
@@ -197,37 +210,18 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
     Ok(new_states.clone())
 }
 
-/// Строит контекст модели: собирает вложенные именованные модели.
-///
-/// Вложенные модели доступны через [`ContextNode`].
-fn construct_context_model(model: &Model) -> Result<ContextNode, Diagnostic> {
-    let mut models = HashMap::new();
-    for element in model.elements.iter() {
-        if let ModelElement::Model(def) = element {
-            let model = construct_model(&def)?;
-            models.insert(def.clone().name.unwrap().name.clone(), Rc::new(model));
-        }
-    }
-    Ok(ContextNode {
-        models,
-        ..Default::default()
-    })
-}
-
-/// Строит контекст состояния.
-///
-/// В текущей реализации возвращает пустой контекст; расширение
-/// для локальных переменных, функций и условий — в будущих версиях.
-fn construct_context_state(_state: &StateDefine) -> Result<ContextNode, Diagnostic> {
-    Ok(Default::default())
-}
-
 /// Преобразует АСД-условие в семантическое условие [`Condition`].
 ///
 /// В текущей реализации всегда возвращает [`Condition::None`]; полная
 /// семантическая обработка условий — в будущих версиях.
 fn construct_condition(_cond: &ast::Condition) -> Result<Condition, Diagnostic> {
     Ok(Condition::None)
+}
+
+fn construct_named_blocks(
+    _state: &StateDefine,
+) -> Result<HashMap<String, NamedBlockNode>, Diagnostic> {
+    Ok(HashMap::new())
 }
 
 #[cfg(test)]
@@ -240,7 +234,7 @@ mod tests {
     /// Разбирает BuT-программу и строит семантическую модель.
     fn build(src: &str) -> Result<ModelNode, Diagnostic> {
         let (ast, _) = parse(src, 0).expect("parse error");
-        construct_model(&ast)
+        construct_model(&ast, None).map(|model| model.take())
     }
 
     // ─── construct_model ───────────────────────────────────────────────────
@@ -287,8 +281,8 @@ mod tests {
         let (ast, _) = parse("model Foo { start S; }", 0).unwrap();
         // Ищем вложенную модель в elements
         if let ModelElement::Model(m) = &ast.elements[0] {
-            let node = construct_model(m).unwrap();
-            assert_eq!(node.name, Some("Foo".to_string()));
+            let node = construct_model(m, None).unwrap();
+            assert_eq!(node.take().name, Some("Foo".to_string()));
         } else {
             panic!("ожидался ModelElement::Model");
         }
@@ -334,7 +328,8 @@ mod tests {
     #[test]
     fn double_next_in_state_is_error() {
         // Два next в одном Implement-состоянии
-        let result = build("start A = M { next B; next C; } state B; state C; model M { start S; }");
+        let result =
+            build("start A = M { next B; next C; } state B; state C; model M { start S; }");
         assert!(result.is_err(), "ожидалась ошибка при двойном next");
     }
 
@@ -385,17 +380,8 @@ mod tests {
     #[test]
     fn nested_model_in_context() {
         let (ast, _) = parse("model Outer { model Inner { start S; } start A; }", 0).unwrap();
-        let node = construct_model(&ast).unwrap();
+        let node = construct_model(&ast, None).unwrap();
         // Inner — вложен в Outer, который в корневом контексте
-        assert!(!node.has_states()); // корень не содержит состояний напрямую
-    }
-
-    /// Конструктор принимает модель без вложенных моделей.
-    #[test]
-    fn context_without_nested_models() {
-        let (ast, _) = parse("start S;", 0).unwrap();
-        let ctx = construct_context_model(&ast).unwrap();
-        // models пуст — нет вложенных model-блоков
-        assert!(ctx.models.is_empty());
+        assert!(!node.take().has_states()); // корень не содержит состояний напрямую
     }
 }

@@ -28,12 +28,13 @@
 
 extern crate core;
 
-use crate::parser::ast::Location;
-use crate::parser::diagnostics::Diagnostic;
 use crate::parser::lexer::{LexicalError, Token};
 use crate::parser::{ast, lexer};
+use diagnostics::{Diagnostic, Location};
 use lalrpop_util::ParseError;
 
+/// Модуль диагностических сообщений компилятора.
+pub mod diagnostics;
 /// Модуль парсера
 pub mod parser;
 /// Модуль семантического анализа и построение семантического дерева
@@ -181,9 +182,9 @@ model Ping {
         always {
             toggle = !toggle;
         }
-        var toggle = false;
     }
     state End;
+    var toggle = false;
 }
 model Pong {
     start Begin {
@@ -260,7 +261,7 @@ always {
     #[test]
     fn syntax_simple() {
         let (model, _) = parse(SRC, 0).unwrap();
-        let model = construct_model(&model).unwrap();
-        assert!(model.has_states());
+        let model = construct_model(&model, None).unwrap();
+        assert!(model.borrow().has_states());
     }
 }

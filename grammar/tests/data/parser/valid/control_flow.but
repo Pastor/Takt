@@ -8,8 +8,6 @@ model M {
     var i: u8 = 0;
     var j: u8 = 0;
     start S {
-        var i: u8 = 0;
-        var j: u8 = 0;
         always {
             // Условный оператор (без скобок в BuT)
             if i = 0 {

@@ -1,10 +1,9 @@
-//! Тесты для модуля [`grammar::parser::diagnostics`].
+//! Тесты для модуля [`grammar::diagnostics`].
 //!
 //! Проверяют все фабричные методы создания [`Diagnostic`], форматирование
 //! уровней серьёзности и сортировку типов ошибок.
 
-use grammar::parser::ast::Location;
-use grammar::parser::diagnostics::{Diagnostic, ErrorType, Level, Note};
+use grammar::diagnostics::{Diagnostic, ErrorType, Level, Location, Note};
 
 // ═══════════════════════════════════════════════════════════════════
 // Вспомогательная константа
@@ -159,8 +158,14 @@ fn diagnostic_warning_with_note_method() {
 #[test]
 fn diagnostic_warning_with_notes_method() {
     let notes = vec![
-        Note { loc: LOC, message: "первая заметка".to_string() },
-        Note { loc: LOC2, message: "вторая заметка".to_string() },
+        Note {
+            loc: LOC,
+            message: "первая заметка".to_string(),
+        },
+        Note {
+            loc: LOC2,
+            message: "вторая заметка".to_string(),
+        },
     ];
     let d = Diagnostic::warning_with_notes(LOC, "предупреждение".to_string(), notes);
     assert_eq!(d.level, Level::Warning);
@@ -185,8 +190,14 @@ fn diagnostic_error_with_note_method() {
 #[test]
 fn diagnostic_error_with_notes_method() {
     let notes = vec![
-        Note { loc: LOC, message: "заметка 1".to_string() },
-        Note { loc: LOC2, message: "заметка 2".to_string() },
+        Note {
+            loc: LOC,
+            message: "заметка 1".to_string(),
+        },
+        Note {
+            loc: LOC2,
+            message: "заметка 2".to_string(),
+        },
     ];
     let d = Diagnostic::error_with_notes(LOC, "ошибка".to_string(), notes);
     assert_eq!(d.level, Level::Error);

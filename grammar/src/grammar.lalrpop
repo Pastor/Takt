@@ -1,5 +1,6 @@
 use lalrpop_util::ParseError;
 use super::parser::ast::*;
+use super::diagnostics::Location;
 use super::parser::lexer::{Token, LexicalError};
 use lalrpop_util::ErrorRecovery;
 grammar<'input, 'err>(input: &'input str, file_no: u64 , parser_errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, LexicalError>> );
@@ -86,12 +87,6 @@ StateDefineEnd: Vec<StateElement> = {
 }
 
 StateElement: StateElement = {
-    TypeDefine => StateElement::Type(<>),
-    VariableDefine => StateElement::Variable(<>),
-    FunctionDefine => StateElement::Function(<>),
-    Model => StateElement::Model(<>),
-    FormulaDefine => StateElement::Formula(<>),
-    ConditionDefine => StateElement::Condition(Box::new(<>)),
     NamedBlockCodeDefine => StateElement::NamedBlockCode(<>),
     "next" <name:Identifier> ";" => StateElement::Next(name),
     <l:@L> "ref" <i:Identifier> <e: (":" <Condition>)?> ";" <r:@R> => StateElement::Reference(Location::Source(file_no, l, r), i, e),

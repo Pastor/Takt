@@ -7,10 +7,10 @@
 //!
 //! При добавлении нового `.but`-файла в директорию тест автоматически его подхватит.
 
+use grammar::diagnostics::Location;
+use grammar::parser::lexer::{Lexer, LexicalError, Token};
 use std::fs;
 use std::path::Path;
-
-use grammar::parser::lexer::{Lexer, LexicalError, Token};
 
 // ─────────────────────────────── Вспомогательные функции ─────────────────────
 
@@ -639,8 +639,6 @@ fn token_display_literals() {
 /// `LexicalError::loc()` возвращает корректное местоположение для каждого варианта.
 #[test]
 fn lexical_error_loc_for_all_variants() {
-    use grammar::parser::ast::Location;
-
     let loc = Location::Source(0, 5, 10);
 
     let cases = vec![
@@ -667,7 +665,6 @@ fn lexical_error_loc_for_all_variants() {
 /// Текстовые сообщения `LexicalError` содержат нужные подстроки.
 #[test]
 fn lexical_error_display_messages() {
-    use grammar::parser::ast::Location;
     let loc = Location::Source(0, 0, 1);
 
     let cases: Vec<(LexicalError, &str)> = vec![

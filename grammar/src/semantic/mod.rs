@@ -11,40 +11,23 @@
 
 pub mod tree;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 
-/// Диагностическое сообщение семантического анализатора.
+/// Семантический узел модели (конечного автомата).
 ///
-/// Содержит список строк с описанием ошибок.
-#[derive(Debug)]
-pub enum Diagnostic {
-    /// Одна или несколько ошибок.
-    Error(Vec<String>),
-}
-
-impl Into<Diagnostic> for &str {
-    fn into(self) -> Diagnostic {
-        Diagnostic::Error(vec![self.to_owned()])
-    }
-}
-
-/// Область видимости (контекст) в семантическом дереве.
-///
-/// Хранит все символы, объявленные в данной области: импорты, модели,
-/// именованные блоки, функции, переменные, типы и условия.
-///
-/// Поле `upper` указывает на объемлющий контекст (если есть),
-/// что позволяет реализовать поиск имён по цепочке областей видимости.
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct ContextNode {
-    /// Объемлющий контекст (родительская область видимости).
-    pub upper: Option<Rc<ContextNode>>,
-    /// Импортированные модели (`import ... as Имя`).
-    pub imports: HashMap<String, Rc<ModelNode>>,
+/// Содержит контекст модели, её имя, словарь состояний и
+/// информацию о реализации (`implements`).
+#[derive(Default, Debug, PartialEq, Eq)]
+pub struct ModelNode {
+    /// Имя модели (`None` для анонимной корневой модели).
+    pub name: Option<String>,
+    /// Модель уровнем выше.
+    pub upper: Option<Rc<RefCell<ModelNode>>>,
     /// Вложенные именованные модели.
-    pub models: HashMap<String, Rc<ModelNode>>,
+    pub models: HashMap<String, Rc<RefCell<ModelNode>>>,
     /// Именованные блоки кода (`enter`, `exit`, `always`, …).
     pub named_blocks: HashMap<String, NamedBlockNode>,
     /// Объявленные функции.
@@ -55,18 +38,6 @@ pub struct ContextNode {
     pub types: HashMap<String, TypeNode>,
     /// Объявленные условия переходов.
     pub conditions: HashMap<String, ConditionNode>,
-}
-
-/// Семантический узел модели (конечного автомата).
-///
-/// Содержит контекст модели, её имя, словарь состояний и
-/// информацию о реализации (`implements`).
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct ModelNode {
-    /// Контекст (область видимости) модели.
-    pub context: ContextNode,
-    /// Имя модели (`None` для анонимной корневой модели).
-    pub name: Option<String>,
     /// Состояния модели: имя → узел состояния.
     pub states: HashMap<String, StateNode>,
     /// Информация о реализации (зарезервировано).
@@ -84,13 +55,13 @@ impl ModelNode {
     ///
     /// // Модель без состояний
     /// let (ast, _) = parse("type u8 = [bit;8];", 0).unwrap();
-    /// let node = construct_model(&ast).unwrap();
-    /// assert!(!node.has_states());
+    /// let node = construct_model(&ast, None).unwrap();
+    /// assert!(!node.borrow().has_states());
     ///
     /// // Модель с состоянием
     /// let (ast, _) = parse("start S;", 0).unwrap();
-    /// let node = construct_model(&ast).unwrap();
-    /// assert!(node.has_states());
+    /// let node = construct_model(&ast, None).unwrap();
+    /// assert!(node.borrow().has_states());
     /// ```
     pub fn has_states(&self) -> bool {
         !self.states.is_empty()
@@ -141,8 +112,8 @@ pub enum StateNode {
     Unresolved,
     /// Обычное состояние: контекст, имя и список ссылок на переходы.
     Simple {
-        /// Контекст состояния.
-        context: ContextNode,
+        /// Именованные блоки кода (`enter`, `exit`, `always`, …).
+        named_blocks: HashMap<String, NamedBlockNode>,
         /// Имя состояния.
         name: String,
         /// Ссылки-переходы (`ref Имя [: Условие]`).
@@ -150,8 +121,8 @@ pub enum StateNode {
     },
     /// Состояние с реализацией (`= Модель`): может иметь `next`-переход.
     Implement {
-        /// Контекст состояния.
-        context: ContextNode,
+        /// Именованные блоки кода (`enter`, `exit`, `always`, …).
+        named_blocks: HashMap<String, NamedBlockNode>,
         /// Имя состояния.
         name: String,
         /// Ссылки-переходы.
@@ -190,6 +161,7 @@ pub struct Reference<T: Clone + PartialEq + Eq + Debug> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::Diagnostic;
 
     // ─── Diagnostic ──────────────────────────────────────────────────────
 
@@ -197,9 +169,9 @@ mod tests {
     #[test]
     fn diagnostic_from_str() {
         let d: Diagnostic = "что-то пошло не так".into();
-        let Diagnostic::Error(msgs) = d;
-        assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0], "что-то пошло не так");
+        let Diagnostic { message: msgs, .. } = d;
+        assert!(msgs.len() > 0);
+        assert_eq!(msgs, "что-то пошло не так");
     }
 
     /// Debug-вывод Diagnostic не паникует.
@@ -207,22 +179,6 @@ mod tests {
     fn diagnostic_debug() {
         let d: Diagnostic = "ошибка".into();
         let _ = format!("{:?}", d);
-    }
-
-    // ─── ContextNode ─────────────────────────────────────────────────────
-
-    /// Default-контекст пустой.
-    #[test]
-    fn context_node_default_is_empty() {
-        let ctx = ContextNode::default();
-        assert!(ctx.imports.is_empty());
-        assert!(ctx.models.is_empty());
-        assert!(ctx.named_blocks.is_empty());
-        assert!(ctx.functions.is_empty());
-        assert!(ctx.variables.is_empty());
-        assert!(ctx.types.is_empty());
-        assert!(ctx.conditions.is_empty());
-        assert!(ctx.upper.is_none());
     }
 
     // ─── ModelNode ───────────────────────────────────────────────────────
@@ -255,30 +211,6 @@ mod tests {
     #[test]
     fn state_node_default_is_unresolved() {
         assert_eq!(StateNode::default(), StateNode::Unresolved);
-    }
-
-    /// Debug-вывод StateNode::Simple не паникует.
-    #[test]
-    fn state_node_simple_debug() {
-        let s = StateNode::Simple {
-            context: ContextNode::default(),
-            name: "S".to_string(),
-            references: vec![],
-        };
-        let _ = format!("{:?}", s);
-    }
-
-    /// Debug-вывод StateNode::Implement не паникует.
-    #[test]
-    fn state_node_implement_debug() {
-        let s = StateNode::Implement {
-            context: ContextNode::default(),
-            name: "A".to_string(),
-            references: vec![],
-            implements: (),
-            next: None,
-        };
-        let _ = format!("{:?}", s);
     }
 
     // ─── Reference ──────────────────────────────────────────────────────

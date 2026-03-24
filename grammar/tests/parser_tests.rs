@@ -14,11 +14,13 @@
 //! - `if` НЕ требует скобок вокруг условия.
 //! - Условие в `cond` использует `=` (не `==`) для проверки равенства.
 
+#![allow(clippy::clone_on_copy)]
+
+use grammar::diagnostics::Location;
+use grammar::parse;
+use grammar::parser::ast::{Identifier, ModelElement, StateElement, StateKind, VariableDefine};
 use std::fs;
 use std::path::Path;
-
-use grammar::parser::ast::{Identifier, Location, ModelElement, StateElement, StateKind, VariableDefine};
-use grammar::parse;
 
 // ─────────────────────────────── Вспомогательные функции ────────────────────
 
@@ -370,19 +372,6 @@ fn parse_const_variable() {
     }
 }
 
-/// `var toggle = false` внутри состояния (как `StateElement::Variable`).
-#[test]
-fn parse_variable_inside_state() {
-    let m = first_named_model("model M { start S { var toggle = false; } }");
-    if let ModelElement::State(s) = &m.elements[0] {
-        let has_var = s
-            .elements
-            .iter()
-            .any(|e| matches!(e, StateElement::Variable(_)));
-        assert!(has_var, "Ожидалась переменная в состоянии");
-    }
-}
-
 // ─────────────────────────── Тесты портов ───────────────────────────────────
 
 /// `port A: bit = 0x00548835:4`.
@@ -503,7 +492,6 @@ fn parse_while_loop_with_parens() {
         model M {
             var i: [bit;8] = 0;
             start S {
-                var i: [bit;8] = 0;
                 always {
                     while (i < 10) {
                         i = i + 1;
@@ -524,7 +512,6 @@ fn parse_for_loop_with_parens() {
         model M {
             var i: [bit;8] = 0;
             start S {
-                var i: [bit;8] = 0;
                 always {
                     for (i = 0; i < 10; i = i + 1) { }
                 }
@@ -543,7 +530,6 @@ fn parse_do_while_loop_with_parens() {
         model M {
             var x: [bit;8] = 5;
             start S {
-                var x: [bit;8] = 5;
                 always {
                     do {
                         x = x - 1;
@@ -567,7 +553,6 @@ fn parse_arithmetic_expressions_in_always() {
         model M {
             var a: [bit;8] = 0;
             start S {
-                var a: [bit;8] = 0;
                 always {
                     a = 1 + 2;
                     a = 10 - 3;
@@ -591,7 +576,6 @@ fn parse_bitwise_expressions_in_always() {
         model M {
             var a: [bit;8] = 0;
             start S {
-                var a: [bit;8] = 0;
                 always {
                     a = 0xFF & 0x0F;
                     a = 0xF0 | 0x0F;
@@ -635,7 +619,6 @@ fn parse_bit_access() {
         model M {
             var x: u8 = 0;
             start S {
-                var x: u8 = 0;
                 always {
                     x.0 = true;
                     x.7 = false;
@@ -658,8 +641,6 @@ fn parse_cast_expression() {
             var x: u8  = 0;
             var y: u16 = 0;
             start S {
-                var x: u8  = 0;
-                var y: u16 = 0;
                 always {
                     y = x as u16;
                 }
@@ -1024,7 +1005,6 @@ fn parse_continue_in_loop() {
         model M {
             var i: [bit;8] = 0;
             start S {
-                var i: [bit;8] = 0;
                 always {
                     while (i < 10) {
                         i = i + 1;
@@ -1045,7 +1025,6 @@ fn parse_break_in_loop() {
         model M {
             var i: [bit;8] = 0;
             start S {
-                var i: [bit;8] = 0;
                 always {
                     while (i < 10) {
                         break;
@@ -1092,7 +1071,6 @@ fn parse_for_loop_without_body() {
         model M {
             var i: [bit;8] = 0;
             start S {
-                var i: [bit;8] = 0;
                 always {
                     for (i = 0; i < 10; i = i + 1);
                 }
@@ -1111,8 +1089,6 @@ fn parse_if_open_statement_in_for() {
             var i: [bit;8] = 0;
             var x: [bit;8] = 0;
             start S {
-                var i: [bit;8] = 0;
-                var x: [bit;8] = 0;
                 always {
                     for (i = 0; i < 10; i = i + 1)
                         if x > 5 { x = 0; }
@@ -1159,9 +1135,7 @@ fn parse_array_slice_expression() {
         type u8 = [bit;8];
         var arr: u8 = 0;
         model M {
-            var arr: u8 = 0;
             start S {
-                var arr: u8 = 0;
                 always {
                     arr[0:3] = 0;
                 }
@@ -1310,7 +1284,7 @@ fn statement_is_empty_for_non_block_statements() {
 /// Конструкторы `Diagnostic` создают объекты с нужными полями.
 #[test]
 fn diagnostic_constructors() {
-    use grammar::parser::diagnostics::{Diagnostic, ErrorType, Level, Note};
+    use grammar::diagnostics::{Diagnostic, ErrorType, Level, Note};
 
     let loc = Location::Source(0, 0, 5);
 
@@ -1402,7 +1376,7 @@ fn diagnostic_constructors() {
 /// `Level` — методы `as_str` и Display.
 #[test]
 fn level_display_and_as_str() {
-    use grammar::parser::diagnostics::Level;
+    use grammar::diagnostics::Level;
 
     assert_eq!(Level::Debug.as_str(), "debug");
     assert_eq!(Level::Info.as_str(), "info");
@@ -1447,7 +1421,6 @@ fn parse_nested_if_else() {
         model M {
             var x: [bit;8] = 0;
             start S {
-                var x: [bit;8] = 0;
                 always {
                     if x > 10 {
                         x = 10;

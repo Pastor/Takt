@@ -4,9 +4,10 @@
 //! [`Expression`], [`FunctionDefine`], [`Statement`], [`FormulaBlock`]
 //! и вспомогательных структур.
 
+use grammar::diagnostics::Location;
 use grammar::parser::ast::{
     Comment, Expression, FormulaBlock, FormulaStatement, FunctionDefine, Identifier, ImportDefine,
-    ImportPath, Location, Member, NamedArgument, Statement, StringLiteral, Type,
+    ImportPath, Member, NamedArgument, Statement, StringLiteral, Type,
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -222,7 +223,11 @@ fn comment_is_line() {
 // ═══════════════════════════════════════════════════════════════════
 
 fn str_literal(s: &str) -> StringLiteral {
-    StringLiteral { loc: loc(0, s.len()), unicode: false, string: s.to_string() }
+    StringLiteral {
+        loc: loc(0, s.len()),
+        unicode: false,
+        string: s.to_string(),
+    }
 }
 
 /// `ImportDefine::Plain` со строкой — literal() возвращает Some.
@@ -419,25 +424,101 @@ fn expression_components_all_binary() {
     let make_bin = |e: Expression| e.components() != (None, None);
 
     // Бинарные
-    assert!(make_bin(Expression::Power(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::Multiply(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::Divide(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::Modulo(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::Subtract(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::ShiftLeft(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::ShiftRight(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::BitwiseAnd(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::BitwiseXor(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::BitwiseOr(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::Less(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::More(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::LessEqual(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::MoreEqual(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::Equal(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::NotEqual(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::And(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::Or(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
-    assert!(make_bin(Expression::Assign(loc(0,0), Box::new(a.clone()), Box::new(b.clone()))));
+    assert!(make_bin(Expression::Power(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::Multiply(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::Divide(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::Modulo(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::Subtract(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::ShiftLeft(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::ShiftRight(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::BitwiseAnd(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::BitwiseXor(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::BitwiseOr(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::Less(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::More(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::LessEqual(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::MoreEqual(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::Equal(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::NotEqual(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::And(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::Or(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
+    assert!(make_bin(Expression::Assign(
+        loc(0, 0),
+        Box::new(a.clone()),
+        Box::new(b.clone())
+    )));
 }
 
 /// `loc()` для всех вариантов Expression (не паникует).
@@ -476,7 +557,12 @@ fn expression_loc_all_variants() {
         Expression::NotEqual(l, Box::new(a.clone()), Box::new(b.clone())),
         Expression::And(l, Box::new(a.clone()), Box::new(b.clone())),
         Expression::Or(l, Box::new(a.clone()), Box::new(b.clone())),
-        Expression::ConditionalOperator(l, Box::new(a.clone()), Box::new(b.clone()), Box::new(a.clone())),
+        Expression::ConditionalOperator(
+            l,
+            Box::new(a.clone()),
+            Box::new(b.clone()),
+            Box::new(a.clone()),
+        ),
         Expression::Assign(l, Box::new(a.clone()), Box::new(b.clone())),
         Expression::Number(l, 0),
         Expression::Rational(l, "1.0".to_string(), false),
@@ -562,7 +648,11 @@ fn function_define_is_empty_non_empty_body() {
 /// Пустой блок — `is_empty()` → true.
 #[test]
 fn statement_block_is_empty() {
-    let s = Statement::Block { loc: loc(0, 0), unchecked: false, statements: vec![] };
+    let s = Statement::Block {
+        loc: loc(0, 0),
+        unchecked: false,
+        statements: vec![],
+    };
     assert!(s.is_empty());
 }
 
@@ -612,7 +702,10 @@ fn statement_args_non_empty_is_not_empty() {
 /// Пустой блок формулы.
 #[test]
 fn formula_block_is_empty() {
-    let b = FormulaBlock { loc: loc(0, 0), statements: vec![] };
+    let b = FormulaBlock {
+        loc: loc(0, 0),
+        statements: vec![],
+    };
     assert!(b.is_empty());
 }
 

@@ -1,12 +1,13 @@
 use std::str::FromStr;
 use std::{fmt, str::CharIndices};
 
-use itertools::{peek_nth, PeekNth};
+use itertools::{PeekNth, peek_nth};
 use phf::phf_map;
 use thiserror::Error;
 use unicode_xid::UnicodeXID;
 
-use crate::ast::{Comment, Location};
+use crate::ast::Comment;
+use crate::diagnostics::Location;
 
 /// Тип «токен с позицией»: `(начало, токен, конец)`.
 pub type Spanned<'a> = (usize, Token<'a>, usize);
