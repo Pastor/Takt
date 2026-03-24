@@ -35,7 +35,7 @@ fn extract_name(id: Option<Identifier>) -> Result<String, Diagnostic> {
     }
 }
 
-fn construct_model0(
+fn construct_model_stage0(
     model: &Model,
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
@@ -53,7 +53,7 @@ fn construct_model0(
     let mut types = HashMap::new();
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
-            let model = construct_model0(model, Some(Rc::clone(&model_node)), search_paths)?;
+            let model = construct_model_stage0(model, Some(Rc::clone(&model_node)), search_paths)?;
             let model_name = model.borrow().name.clone().unwrap();
             if models.contains_key(&model_name) {
                 return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
@@ -181,7 +181,6 @@ fn construct_model0(
     model_node.borrow_mut().models = models;
     model_node.borrow_mut().states = construct_states(model)?;
     model_node.borrow_mut().types = types;
-    variables = type_inference(&mut variables, model_node.clone())?;
     model_node.borrow_mut().variables = variables;
     Ok(Rc::clone(&model_node))
 }
@@ -223,7 +222,9 @@ fn construct_type(
     }
 }
 
-fn construct_model1(model: Rc<RefCell<ModelNode>>) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+fn construct_model_stage1(
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     // Клонируем состояния до мутабельного займа, чтобы construct_implement мог брать заём
     let states = model.borrow().states.clone();
 
@@ -269,10 +270,19 @@ fn construct_model1(model: Rc<RefCell<ModelNode>>) -> Result<Rc<RefCell<ModelNod
 
     let mut models = HashMap::new();
     for (name, nested_model) in nested {
-        models.insert(name, construct_model1(Rc::clone(&nested_model))?);
+        models.insert(name, construct_model_stage1(Rc::clone(&nested_model))?);
     }
     model.borrow_mut().models = models;
 
+    Ok(Rc::clone(&model))
+}
+
+fn construct_model_stage2(
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    let mut variables = model.borrow().variables.clone();
+    variables = type_inference(&mut variables, model.clone())?;
+    model.borrow_mut().variables = variables;
     Ok(Rc::clone(&model))
 }
 
@@ -292,8 +302,9 @@ pub fn construct_model(
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    let model = construct_model0(model, upper, search_paths)?;
-    let model = construct_model1(model)?;
+    let model = construct_model_stage0(model, upper, search_paths)?;
+    let model = construct_model_stage1(model)?;
+    let model = construct_model_stage2(model)?;
     Ok(model)
 }
 

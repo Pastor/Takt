@@ -13,7 +13,7 @@ pub fn type_inference(
         match var {
             VariableNode::Simple(_, TypeNode::Inference, Some(expr)) => {
                 let expr_node = construct_expression(expr.clone(), model.clone())?;
-                let typ = extract_type(expr_node)?;
+                let typ = extract_type(expr_node, model.clone())?;
                 variables.insert(
                     name.clone(),
                     VariableNode::Simple(name.clone(), typ, Some(expr)),
@@ -21,7 +21,7 @@ pub fn type_inference(
             }
             VariableNode::Const(_, TypeNode::Inference, expr) => {
                 let expr_node = construct_expression(expr.clone(), model.clone())?;
-                let typ = extract_type(expr_node)?;
+                let typ = extract_type(expr_node, model.clone())?;
                 variables.insert(name.clone(), VariableNode::Const(name.clone(), typ, expr));
             }
             _ => {}
@@ -30,6 +30,10 @@ pub fn type_inference(
     Ok(variables.clone())
 }
 
-fn extract_type(expr: ExpressionNode) -> Result<TypeNode, Diagnostic> {
+fn extract_type(
+    expr: ExpressionNode,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<TypeNode, Diagnostic> {
+    //TODO: необходимо пройтись по всему выражению и разрезолвить типы если они не разрезолвлены и потом вывести тип выражения или ошибку
     Ok(TypeNode::Unsupported)
 }
