@@ -278,7 +278,7 @@ always {
     #[test]
     fn syntax_simple() {
         let (model, _) = parse(SRC, 0).unwrap();
-        let model = construct_model(&model, None).unwrap();
+        let model = construct_model(&model, None, &[]).unwrap();
         assert!(model.borrow().has_states());
     }
 

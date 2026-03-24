@@ -14,11 +14,11 @@ use crate::parser::ast::{
     VariableDefine,
 };
 use crate::semantic::include::read_import_file;
+use crate::semantic::type_inference::type_inference;
 use crate::semantic::{
     Condition, Implement, ModelNode, NamedBlockNode, Reference, StateNode, TypeNode, VariableNode,
 };
 use crate::{normalize_model_name, parse};
-use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -38,6 +38,7 @@ fn extract_name(id: Option<Identifier>) -> Result<String, Diagnostic> {
 fn construct_model0(
     model: &Model,
     upper: Option<Rc<RefCell<ModelNode>>>,
+    search_paths: &[String],
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     let name = model.name.clone();
 
@@ -52,7 +53,7 @@ fn construct_model0(
     let mut types = HashMap::new();
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
-            let model = construct_model0(model, Some(Rc::clone(&model_node)))?;
+            let model = construct_model0(model, Some(Rc::clone(&model_node)), search_paths)?;
             let model_name = model.borrow().name.clone().unwrap();
             if models.contains_key(&model_name) {
                 return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
@@ -63,10 +64,20 @@ fn construct_model0(
         } else if let ModelElement::Import(def) = element {
             match def {
                 ImportDefine::Plain(path, _) => {
-                    // TODO: Надо передавать пути поиска
-                    let (content, filename) = read_import_file(&[], path)?;
-                    let without_extension = &filename[0..filename.len() - 4];
-                    let model_name = normalize_model_name(without_extension);
+                    let (content, filename) = read_import_file(search_paths, path)?;
+                    // Извлекаем только имя файла (без директории и расширения),
+                    // затем нормализуем в CamelCase: "my_model.but" → "MyModel".
+                    // Прежде использовался срез filename[..len-4], что давало полный путь
+                    // и, как следствие, некорректное имя (например, "TmpMyModel").
+                    let stem = std::path::Path::new(&filename)
+                        .file_stem()
+                        .ok_or_else(|| {
+                            format!("Неверный путь к файлу импорта: «{}»", filename)
+                                .as_str()
+                                .into()
+                        })?
+                        .to_string_lossy();
+                    let model_name = normalize_model_name(&stem);
                     if models.contains_key(&model_name) {
                         return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
                             .as_str()
@@ -74,14 +85,14 @@ fn construct_model0(
                     }
                     match parse(&content, 0) {
                         Ok((model, _)) => {
-                            models.insert(model_name, construct_model(&model, None)?);
+                            models.insert(model_name, construct_model(&model, None, search_paths)?);
                         }
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
                 }
                 ImportDefine::GlobalSymbol(path, id, _) => {
                     // TODO: Надо передавать пути поиска
-                    let (content, _) = read_import_file(&[], path)?;
+                    let (content, _) = read_import_file(search_paths, path)?;
                     let model_name = id.name.clone();
                     if models.contains_key(&model_name) {
                         return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
@@ -90,7 +101,7 @@ fn construct_model0(
                     }
                     match parse(&content, 0) {
                         Ok((model, _)) => {
-                            models.insert(model_name, construct_model(&model, None)?);
+                            models.insert(model_name, construct_model(&model, None, search_paths)?);
                         }
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
@@ -127,7 +138,7 @@ fn construct_model0(
                 } => {
                     let name = extract_name(name.clone())?;
                     let type_node = construct_type(typ, &types)?;
-                    if type_node == TypeNode::Detecting {
+                    if type_node == TypeNode::Inference {
                         return Err("Порт должен иметь конкретный тип".into());
                     }
                     variables.insert(
@@ -168,9 +179,10 @@ fn construct_model0(
         }
     }
     model_node.borrow_mut().models = models;
-    model_node.borrow_mut().variables = variables;
     model_node.borrow_mut().states = construct_states(model)?;
     model_node.borrow_mut().types = types;
+    variables = type_inference(&mut variables, model_node.clone())?;
+    model_node.borrow_mut().variables = variables;
     Ok(Rc::clone(&model_node))
 }
 
@@ -179,7 +191,7 @@ fn construct_type(
     map: &HashMap<String, TypeNode>,
 ) -> Result<TypeNode, Diagnostic> {
     if typ.is_none() {
-        return Ok(TypeNode::Detecting);
+        return Ok(TypeNode::Inference);
     }
     match typ.unwrap() {
         Type::Address { address, bit } => Ok(TypeNode::Address(address, bit)),
@@ -278,8 +290,9 @@ fn construct_model1(model: Rc<RefCell<ModelNode>>) -> Result<Rc<RefCell<ModelNod
 pub fn construct_model(
     model: &Model,
     upper: Option<Rc<RefCell<ModelNode>>>,
+    search_paths: &[String],
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    let model = construct_model0(model, upper)?;
+    let model = construct_model0(model, upper, search_paths)?;
     let model = construct_model1(model)?;
     Ok(model)
 }
@@ -506,7 +519,7 @@ mod tests {
     /// Разбирает BuT-программу и строит семантическую модель.
     fn build(src: &str) -> Result<ModelNode, Diagnostic> {
         let (ast, _) = parse(src, 0).expect("parse error");
-        construct_model(&ast, None).map(|model| model.take())
+        construct_model(&ast, None, &[]).map(|model| model.take())
     }
 
     // ─── construct_model ───────────────────────────────────────────────────
@@ -553,7 +566,7 @@ mod tests {
         let (ast, _) = parse("model Foo { start S; }", 0).unwrap();
         // Ищем вложенную модель в elements
         if let ModelElement::Model(m) = &ast.elements[0] {
-            let node = construct_model(m, None).unwrap();
+            let node = construct_model(m, None, &[]).unwrap();
             assert_eq!(node.take().name, Some("Foo".to_string()));
         } else {
             panic!("ожидался ModelElement::Model");
@@ -652,7 +665,7 @@ mod tests {
     #[test]
     fn nested_model_in_context() {
         let (ast, _) = parse("model Outer { model Inner { start S; } start A; }", 0).unwrap();
-        let node = construct_model(&ast, None).unwrap();
+        let node = construct_model(&ast, None, &[]).unwrap();
         // Inner — вложен в Outer, который в корневом контексте
         assert!(!node.take().has_states()); // корень не содержит состояний напрямую
     }

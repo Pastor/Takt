@@ -9,8 +9,10 @@
 //! - [`Reference`] — ссылка на другой узел с условием перехода.
 //! - [`Condition`] — условие перехода между состояниями.
 
+mod expression;
 mod include;
 pub mod tree;
+mod type_inference;
 
 use crate::parser::ast::Expression;
 use std::cell::RefCell;
@@ -57,12 +59,12 @@ impl ModelNode {
     ///
     /// // Модель без состояний
     /// let (ast, _) = parse("type u8 = [bit;8];", 0).unwrap();
-    /// let node = construct_model(&ast, None).unwrap();
+    /// let node = construct_model(&ast, None, &[]).unwrap();
     /// assert!(!node.borrow().has_states());
     ///
     /// // Модель с состоянием
     /// let (ast, _) = parse("start S;", 0).unwrap();
-    /// let node = construct_model(&ast, None).unwrap();
+    /// let node = construct_model(&ast, None, &[]).unwrap();
     /// assert!(node.borrow().has_states());
     /// ```
     pub fn has_states(&self) -> bool {
@@ -81,7 +83,7 @@ impl ModelNode {
     /// use grammar::semantic::tree::construct_model;
     ///
     /// let (ast, _) = parse("model Inner { start S; }", 0).unwrap();
-    /// let root = construct_model(&ast, None).unwrap();
+    /// let root = construct_model(&ast, None, &[]).unwrap();
     /// // Вложенная модель «Inner» доступна из корня
     /// assert!(root.borrow().search_model("Inner").is_some());
     /// // Несуществующая модель возвращает None
@@ -109,7 +111,7 @@ impl ModelNode {
     /// use grammar::semantic::tree::construct_model;
     ///
     /// let (ast, _) = parse("var x: bit = false;", 0).unwrap();
-    /// let root = construct_model(&ast, None).unwrap();
+    /// let root = construct_model(&ast, None, &[]).unwrap();
     /// assert!(root.borrow().search_var("x").is_some());
     /// assert!(root.borrow().search_var("y").is_none());
     /// ```
@@ -159,7 +161,7 @@ pub enum VariableNode {
 /// Семантический узел типа данных.
 ///
 /// Варианты:
-/// - [`Detecting`](TypeNode::Detecting) — тип выводится (временная заглушка).
+/// - [`Detecting`](TypeNode::Inference) — тип выводится (временная заглушка).
 /// - [`Address`](TypeNode::Address) — адресный тип порта `(адрес, бит?)`.
 /// - [`Bit`](TypeNode::Bit) — 1-битный примитив (`bit`, `bool`).
 /// - [`Rational`](TypeNode::Rational) — вещественное число (`float`).
@@ -169,7 +171,7 @@ pub enum VariableNode {
 pub enum TypeNode {
     /// Тип ещё не определён (вывод типа в процессе).
     #[default]
-    Detecting,
+    Inference,
     /// Адресный тип порта: `(адрес, номер_бита?)`.
     Address(u64, Option<u64>),
     /// 1-битный примитив (`bit`, `bool`).
@@ -256,6 +258,12 @@ pub enum Implement {
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum Condition {
     /// Безусловный переход (условие не задано или не разрешено).
+    #[default]
+    None,
+}
+
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
+pub enum ExpressionNode {
     #[default]
     None,
 }
