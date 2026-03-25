@@ -20,7 +20,7 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
-use crate::semantic::{Expression, ModelNode, TypeNode, VariableNode};
+use crate::semantic::{Expression, ModelNode, Statement, TypeNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -157,23 +157,30 @@ pub fn construct_expression(
             Ok(Expression::BitAccess(resolve_expr(*inner, model)?, member))
         }
 
-        // Вызов функции: ищем функцию в области видимости, разрешаем аргументы.
+        // Вызов функции: ищем в контексте, для неизвестных (встроенных) — создаём заглушку.
+        //
+        // Встроенные функции языка (`debug`, `S`, `S(Model)` и т.п.) не объявляются
+        // пользователем явно, поэтому при отсутствии в контексте создаётся
+        // анонимный узел-заглушка с именем функции. Это позволяет семантическому
+        // дереву корректно строиться без предварительной регистрации встроенных символов.
         ast::Expression::Function(_, id, args) => {
+            use std::cell::RefCell;
+            use std::rc::Rc;
             let func = model
                 .borrow()
                 .search_func(&id.name)
-                .ok_or_else(|| {
-                    format!("Функция '{}' не найдена", &id.name)
-                        .as_str()
-                        .into()
-                })?;
+                .unwrap_or_else(|| {
+                    Rc::new(RefCell::new(crate::semantic::FunctionNode {
+                        name: id.name.clone(),
+                    }))
+                });
             let resolved_args = resolve_elems(args, model)?;
             Ok(Expression::Function(func, resolved_args))
         }
 
         // Блок кода как выражение: разрешаем базовое выражение, Statement не трогаем.
         ast::Expression::CodeBlock(_, inner, stmt) => {
-            Ok(Expression::CodeBlock(resolve_expr(*inner, model)?, stmt))
+            Ok(Expression::CodeBlock(resolve_expr(*inner, model)?, Statement::Unresolved(*stmt)))
         }
 
         // Именованный вызов: разрешаем базовое выражение, аргументы оставляем как есть.

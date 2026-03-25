@@ -18,12 +18,13 @@ use crate::semantic::include::read_import_file;
 use crate::semantic::type_inference::type_inference;
 use crate::semantic::{
     Condition, ConditionNode, Expression, Implement, ModelNode, NamedBlockNode, Reference,
-    StateNode, TypeNode, VariableNode,
+    StateNode, Statement, TypeNode, VariableNode,
 };
 use crate::{normalize_model_name, parse};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use crate::semantic::statement::resolve_statement;
 
 /// Извлекает имя из опционального [`Identifier`].
 ///
@@ -59,6 +60,7 @@ fn construct_model_stage0(
     let mut variables = HashMap::new();
     let mut types = HashMap::new();
     let mut conditions = HashMap::new();
+    let mut named_blocks = HashMap::new();
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
             let model = construct_model_stage0(model, Some(Rc::clone(&model_node)), search_paths)?;
@@ -123,9 +125,7 @@ fn construct_model_stage0(
                 ImportDefine::Rename(path, symbols, _) => {
                     let (content, _) = read_import_file(search_paths, path)?;
                     let imported = match parse(&content, 0) {
-                        Ok((ast_model, _)) => {
-                            construct_model(&ast_model, None, search_paths)?
-                        }
+                        Ok((ast_model, _)) => construct_model(&ast_model, None, search_paths)?,
                         Err(d) => return Err(d.first().unwrap().clone()),
                     };
                     let src = imported.borrow();
@@ -138,42 +138,30 @@ fn construct_model_stage0(
                         // Поиск в категориях: модель → тип → переменная → условие
                         if let Some(m) = src.models.get(orig) {
                             if models.contains_key(&alias) {
-                                return Err(format!(
-                                    "Модель с именем '{}' уже объявлена",
-                                    alias
-                                )
-                                .as_str()
-                                .into());
+                                return Err(format!("Модель с именем '{}' уже объявлена", alias)
+                                    .as_str()
+                                    .into());
                             }
                             models.insert(alias, Rc::clone(m));
                         } else if let Some(t) = src.types.get(orig) {
                             if types.contains_key(&alias) {
-                                return Err(format!(
-                                    "Тип '{}' уже объявлен",
-                                    alias
-                                )
-                                .as_str()
-                                .into());
+                                return Err(format!("Тип '{}' уже объявлен", alias)
+                                    .as_str()
+                                    .into());
                             }
                             types.insert(alias, t.clone());
                         } else if let Some(v) = src.variables.get(orig) {
                             if variables.contains_key(&alias) {
-                                return Err(format!(
-                                    "Переменная '{}' уже объявлена",
-                                    alias
-                                )
-                                .as_str()
-                                .into());
+                                return Err(format!("Переменная '{}' уже объявлена", alias)
+                                    .as_str()
+                                    .into());
                             }
                             variables.insert(alias, v.clone());
                         } else if let Some(c) = src.conditions.get(orig) {
                             if conditions.contains_key(&alias) {
-                                return Err(format!(
-                                    "Условие '{}' уже объявлено",
-                                    alias
-                                )
-                                .as_str()
-                                .into());
+                                return Err(format!("Условие '{}' уже объявлено", alias)
+                                    .as_str()
+                                    .into());
                             }
                             conditions.insert(alias, c.clone());
                         } else {
@@ -276,6 +264,20 @@ fn construct_model_stage0(
                     value: Condition::Unresolved(def.value.clone()),
                 },
             );
+        } else if let ModelElement::NamedBlockCode(def) = element {
+            let name = def
+                .clone()
+                .name
+                .ok_or_else(|| "Именованный блок кода при определении должен иметь имя".into())?
+                .name
+                .clone();
+            named_blocks.insert(
+                name.clone(),
+                NamedBlockNode {
+                    name: name.clone(),
+                    statement: Statement::Unresolved(def.statement.clone()),
+                },
+            );
         }
     }
     model_node.borrow_mut().models = models;
@@ -283,6 +285,7 @@ fn construct_model_stage0(
     model_node.borrow_mut().types = types;
     model_node.borrow_mut().variables = variables;
     model_node.borrow_mut().conditions = conditions;
+    model_node.borrow_mut().named_blocks = named_blocks;
     Ok(Rc::clone(&model_node))
 }
 
@@ -424,6 +427,18 @@ fn construct_model_stage2(
     let mut variables = model.borrow().variables.clone();
     variables = type_inference(&mut variables, model.clone())?;
     model.borrow_mut().variables = variables;
+    // Рекурсивно обрабатываем вложенные модели с их собственным контекстом
+    let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
+        .borrow()
+        .models
+        .iter()
+        .map(|(k, v)| (k.clone(), Rc::clone(v)))
+        .collect();
+    let mut models = HashMap::new();
+    for (name, nested_model) in nested {
+        models.insert(name, construct_model_stage2(nested_model)?);
+    }
+    model.borrow_mut().models = models;
     Ok(Rc::clone(&model))
 }
 
@@ -433,7 +448,130 @@ fn construct_model_stage3(
     let mut conditions = model.borrow().conditions.clone();
     conditions = extract_conditions(&conditions, model.clone())?;
     model.borrow_mut().conditions = conditions;
+    // Рекурсивно обрабатываем вложенные модели с их собственным контекстом
+    let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
+        .borrow()
+        .models
+        .iter()
+        .map(|(k, v)| (k.clone(), Rc::clone(v)))
+        .collect();
+    let mut models = HashMap::new();
+    for (name, nested_model) in nested {
+        models.insert(name, construct_model_stage3(nested_model)?);
+    }
+    model.borrow_mut().models = models;
     Ok(Rc::clone(&model))
+}
+
+/// Этап 4: разрешение операторов в именованных блоках кода.
+///
+/// Выполняет три задачи:
+/// 1. Разрешает блоки на уровне модели (`model.named_blocks`).
+/// 2. Разрешает блоки в состояниях модели (`state.named_blocks`).
+/// 3. Рекурсивно применяет этот же процесс ко всем вложенным моделям,
+///    передавая контекст вложенной модели (для корректного разрешения
+///    переменных во вложенных областях видимости).
+///
+/// При ошибке разрешения оператор сохраняется в виде [`Statement::Unresolved`]
+/// (ошибка не пробрасывается), что позволяет корректно обрабатывать
+/// встроенные функции (`debug`, `S`, …) без их явной регистрации.
+fn construct_model_stage4(
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    // Разрешаем блоки на уровне текущей модели
+    let mut named_blocks = HashMap::new();
+    for (_, nb) in model.borrow().named_blocks.clone() {
+        let stmt = resolve_statement(&nb.statement, model.clone())
+            .unwrap_or_else(|_| nb.statement.clone());
+        named_blocks.insert(
+            nb.name.clone(),
+            NamedBlockNode {
+                name: nb.name,
+                statement: stmt,
+            },
+        );
+    }
+    model.borrow_mut().named_blocks = named_blocks;
+
+    // Разрешаем блоки в состояниях текущей модели
+    let states = model.borrow().states.clone();
+    let mut resolved_states = HashMap::new();
+    for (state_name, state) in states {
+        let resolved = resolve_state_named_blocks(state, model.clone())?;
+        resolved_states.insert(state_name, resolved);
+    }
+    model.borrow_mut().states = resolved_states;
+
+    // Рекурсивно обрабатываем вложенные модели с их собственным контекстом
+    let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
+        .borrow()
+        .models
+        .iter()
+        .map(|(k, v)| (k.clone(), Rc::clone(v)))
+        .collect();
+    let mut models = HashMap::new();
+    for (name, nested_model) in nested {
+        models.insert(name, construct_model_stage4(nested_model)?);
+    }
+    model.borrow_mut().models = models;
+
+    Ok(Rc::clone(&model))
+}
+
+/// Разрешает именованные блоки кода внутри одного состояния.
+///
+/// Ошибки разрешения подавляются — оператор сохраняется как `Unresolved`.
+fn resolve_state_named_blocks(
+    state: StateNode,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<StateNode, Diagnostic> {
+    match state {
+        StateNode::Simple {
+            name,
+            references,
+            named_blocks,
+        } => Ok(StateNode::Simple {
+            name,
+            references,
+            named_blocks: resolve_named_blocks_map(named_blocks, model)?,
+        }),
+        StateNode::Implement {
+            name,
+            references,
+            implements,
+            next,
+            named_blocks,
+        } => Ok(StateNode::Implement {
+            name,
+            references,
+            implements,
+            next,
+            named_blocks: resolve_named_blocks_map(named_blocks, model)?,
+        }),
+        other => Ok(other),
+    }
+}
+
+/// Разрешает все именованные блоки в HashMap.
+///
+/// Ошибки при разрешении отдельных операторов подавляются.
+fn resolve_named_blocks_map(
+    named_blocks: HashMap<String, NamedBlockNode>,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<HashMap<String, NamedBlockNode>, Diagnostic> {
+    let mut result = HashMap::new();
+    for (key, nb) in named_blocks {
+        let stmt = resolve_statement(&nb.statement, model.clone())
+            .unwrap_or_else(|_| nb.statement.clone());
+        result.insert(
+            key,
+            NamedBlockNode {
+                name: nb.name,
+                statement: stmt,
+            },
+        );
+    }
+    Ok(result)
 }
 
 /// Строит семантический узел модели из АСД-узла [`Model`].
@@ -456,6 +594,7 @@ pub fn construct_model(
     let model = construct_model_stage1(model)?;
     let model = construct_model_stage2(model)?;
     let model = construct_model_stage3(model)?;
+    let model = construct_model_stage4(model)?;
     Ok(model)
 }
 
@@ -563,9 +702,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                     .map(|r| {
                         if let StateNode::Unresolved = *r.object {
                             let target = states.get(&r.name).ok_or_else(|| {
-                                format!("Ссылка '{}' не найдена", &r.name)
-                                    .as_str()
-                                    .into()
+                                format!("Ссылка '{}' не найдена", &r.name).as_str().into()
                             })?;
                             Ok(Reference {
                                 name: r.name,
@@ -608,11 +745,9 @@ fn resolve_references(
         .into_iter()
         .map(|r| {
             if let StateNode::Unresolved = *r.object {
-                let target = states.get(&r.name).ok_or_else(|| {
-                    format!("Ссылка '{}' не найдена", &r.name)
-                        .as_str()
-                        .into()
-                })?;
+                let target = states
+                    .get(&r.name)
+                    .ok_or_else(|| format!("Ссылка '{}' не найдена", &r.name).as_str().into())?;
                 Ok(Reference {
                     name: r.name,
                     cond: r.cond,
@@ -625,10 +760,39 @@ fn resolve_references(
         .collect()
 }
 
+/// Извлекает именованные блоки кода из определения состояния.
+///
+/// Обходит `StateElement::NamedBlockCode` в `state.elements` и создаёт
+/// `NamedBlockNode` с `Statement::Unresolved` для каждого блока.
+/// Разрешение операторов происходит позднее в [`construct_model_stage4`].
+///
+/// Если несколько блоков имеют одинаковое имя (например, два `always`),
+/// последний перезаписывает предыдущий — аналогично поведению HashMap.
 fn construct_named_blocks(
-    _state: &StateDefine,
+    state: &StateDefine,
 ) -> Result<HashMap<String, NamedBlockNode>, Diagnostic> {
-    Ok(HashMap::new())
+    let mut named_blocks = HashMap::new();
+    for element in state.elements.iter() {
+        if let StateElement::NamedBlockCode(def) = element {
+            let name = def
+                .name
+                .as_ref()
+                .ok_or_else(|| {
+                    "Именованный блок кода при определении должен иметь имя"
+                        .into()
+                })?
+                .name
+                .clone();
+            named_blocks.insert(
+                name.clone(),
+                NamedBlockNode {
+                    name,
+                    statement: Statement::Unresolved(def.statement.clone()),
+                },
+            );
+        }
+    }
+    Ok(named_blocks)
 }
 
 /// Строит [`Implement`] из семантического выражения [`Expression`].
@@ -653,9 +817,7 @@ fn construct_implement(
         // Ещё не разрешённое АСД-выражение: обходим напрямую без полного construct_expression
         Expression::Unresolved(expr) => construct_implement_ast(expr, model),
         // Разрешённая модель
-        Expression::Model(model) => {
-            Ok(Implement::Model(Rc::clone(&model)))
-        }
+        Expression::Model(model) => Ok(Implement::Model(Rc::clone(&model))),
         Expression::Parenthesis(expression) => construct_implement(*expression, model),
         Expression::Add(left, right) => {
             let left = construct_implement(*left, model.clone())?;
@@ -713,12 +875,11 @@ fn construct_implement_ast(
             let right = construct_implement_ast(*right, model.clone())?;
             Ok(Implement::Or(Box::new(left), Box::new(right)))
         }
-        other => Err(format!(
-            "Выражение реализации не поддерживается: {:?}",
-            other
-        )
-        .as_str()
-        .into()),
+        other => Err(
+            format!("Выражение реализации не поддерживается: {:?}", other)
+                .as_str()
+                .into(),
+        ),
     }
 }
 

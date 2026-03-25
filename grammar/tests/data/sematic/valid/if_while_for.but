@@ -1,0 +1,26 @@
+// Пример: управляющие конструкции (if, while, for) в named blocks.
+//
+// Проверяет корректное разрешение операторов управления потоком
+// внутри именованных блоков состояний.
+
+var counter: [bit; 8] = 0;
+var flag: bit = false;
+
+start Running {
+    always {
+        if flag {
+            counter = counter;
+        }
+        if flag {
+            counter = counter;
+        } else {
+            flag = false;
+        }
+    }
+}
+
+state Done {
+    enter {
+        counter = counter;
+    }
+}

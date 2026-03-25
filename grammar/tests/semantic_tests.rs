@@ -1086,3 +1086,206 @@ fn std_but_contains_u8_u16_types() {
         "std.but должен содержать тип bool"
     );
 }
+
+// ─── Тесты resolve_statement и named blocks ──────────────────────────────────
+
+use grammar::semantic::Statement;
+
+/// Model-level `always` block с известной переменной → блок разрешается.
+#[test]
+fn model_always_block_with_known_var_resolves() {
+    let node = build("var led: bit = false; always { led = led; } start S;");
+    let nb = node.named_blocks.get("always").expect("always должен быть");
+    assert!(
+        !matches!(nb.statement, Statement::Unresolved(_)),
+        "always должен быть разрешён: {:?}", nb.statement
+    );
+}
+
+/// State-level `enter` block → присутствует в state.named_blocks.
+#[test]
+fn state_enter_block_is_populated() {
+    let node = build("var x: bit = false; start S { enter { x = x; } }");
+    let state = node.states.get("S").unwrap();
+    let nbs = match state {
+        StateNode::Simple { named_blocks, .. } => named_blocks,
+        _ => panic!("неожиданный StateNode"),
+    };
+    assert!(nbs.contains_key("enter"), "enter должен быть в state.named_blocks");
+}
+
+/// State-level `enter` с известной переменной → разрешается (не Unresolved).
+#[test]
+fn state_enter_block_resolves() {
+    let node = build("var x: bit = false; start S { enter { x = x; } }");
+    let state = node.states.get("S").unwrap();
+    let nbs = match state {
+        StateNode::Simple { named_blocks, .. } => named_blocks,
+        _ => panic!("неожиданный StateNode"),
+    };
+    let enter = nbs.get("enter").expect("enter не найден");
+    assert!(
+        !matches!(enter.statement, Statement::Unresolved(_)),
+        "enter должен быть разрешён: {:?}", enter.statement
+    );
+}
+
+/// State-level `enter` + `exit` → оба присутствуют в named_blocks состояния.
+#[test]
+fn state_enter_exit_blocks_both_present() {
+    let node = build("var x: bit = false; start S { enter { x = x; } exit { x = x; } }");
+    let state = node.states.get("S").unwrap();
+    let nbs = match state {
+        StateNode::Simple { named_blocks, .. } => named_blocks,
+        _ => panic!("неожиданный StateNode"),
+    };
+    assert!(nbs.contains_key("enter"), "enter отсутствует");
+    assert!(nbs.contains_key("exit"),  "exit отсутствует");
+}
+
+/// `if cond { ... }` в named block разрешается через Statement::Block.
+#[test]
+fn state_named_block_if_resolves() {
+    let node = build("var f: bit = false; start S { always { if f { f = f; } } }");
+    let state = node.states.get("S").unwrap();
+    let nbs = match state {
+        StateNode::Simple { named_blocks, .. } => named_blocks,
+        _ => panic!("неожиданный StateNode"),
+    };
+    let always = nbs.get("always").expect("always не найден");
+    // Блок разрешён — не остаётся как Unresolved на верхнем уровне
+    assert!(
+        !matches!(always.statement, Statement::Unresolved(_)),
+        "always должен быть разрешён: {:?}", always.statement
+    );
+}
+
+/// Named blocks вложенной модели разрешаются в контексте вложенной модели.
+#[test]
+fn nested_model_named_blocks_resolve_with_own_context() {
+    let node = build(
+        "model Inner { var t: bit = false; start On { enter { t = t; } } state Off; } \
+         start Root = Inner { }",
+    );
+    // Находим вложенную модель Inner
+    let inner = node.search_model("Inner").expect("Inner не найдена");
+    let inner = inner.borrow();
+    let state = inner.states.get("On").expect("состояние On не найдено");
+    let nbs = match state {
+        StateNode::Simple { named_blocks, .. } => named_blocks,
+        _ => panic!("неожиданный StateNode"),
+    };
+    let enter = nbs.get("enter").expect("enter не найден в On");
+    assert!(
+        !matches!(enter.statement, Statement::Unresolved(_)),
+        "enter во Inner::On должен быть разрешён"
+    );
+}
+
+/// `return x;` в always block разрешается в Statement::Block([Return(...)]).
+#[test]
+fn return_statement_in_named_block_resolves() {
+    let node = build("var x: bit = false; always { return x; } start S;");
+    let nb = node.named_blocks.get("always").expect("always не найден");
+    assert!(
+        !matches!(nb.statement, Statement::Unresolved(_)),
+        "return должен быть разрешён: {:?}", nb.statement
+    );
+}
+
+/// `always { debug(\"msg\"); }` с вызовом необъявленной встроенной функции —
+/// строится без ошибок, блок разрешается (через заглушку FunctionNode).
+#[test]
+fn named_block_with_builtin_func_call_does_not_error() {
+    let node = build(r#"always { debug("msg"); } start S;"#);
+    let nb = node.named_blocks.get("always").expect("always не найден");
+    // С заглушкой FunctionNode разрешение успешно
+    assert!(
+        !matches!(nb.statement, Statement::Unresolved(_)),
+        "always с встроенной функцией должен быть разрешён: {:?}", nb.statement
+    );
+}
+
+/// `syntax_simple` регрессионный тест: сложный SRC со всеми конструкциями
+/// строится без паники (todo!() устранён).
+#[test]
+fn syntax_simple_does_not_panic() {
+    // Копия SRC из lib.rs — проверяем что construct_model успешен
+    let src = r#"
+type u8 = [bit;8];
+const MATRIX: u8 = { 0, 0, 0, 0, 0, 0, 0, 0 };
+const NUMB: u8 = 0xFF;
+cond IsEmpty = it = 0;
+port A : u8  = 0x00548835;
+port B1: bit = 0x00648835:6;
+var it: [bit;64] = 0;
+model Ping {
+    start Start {
+        ref End: B1;
+        enter { A.0 = true; }
+        exit  { A.0 = false; }
+        always { A.2 = toggle; }
+        always { toggle = !toggle; }
+    }
+    state End;
+    var toggle = false;
+}
+model Pong {
+    start Begin {
+        ref Stop: S(Ping) = End;
+        always { A.5 = MATRIX.5; }
+    }
+    state Stop {
+        enter { A.6 = MATRIX.3; }
+    }
+}
+start Entry = (Ping | Pong) + Ping;
+always {
+    it = it + 1;
+}
+"#;
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    construct_model(&ast, None, &[]).expect("construct_model не должен паниковать");
+}
+
+/// Файл named_blocks.but строится без ошибок, named_blocks заполнены.
+#[test]
+fn example_named_blocks_is_valid() {
+    let node = build_file("tests/data/sematic/valid/named_blocks.but").unwrap();
+    assert!(node.has_states(), "named_blocks.but должен иметь состояния");
+    let active = node.states.get("Active").expect("Active не найдено");
+    let nbs = match active {
+        StateNode::Simple { named_blocks, .. } => named_blocks,
+        _ => panic!("неожиданный тип Active"),
+    };
+    assert!(nbs.contains_key("enter"), "enter должен быть в Active");
+    assert!(nbs.contains_key("exit"),  "exit должен быть в Active");
+    assert!(nbs.contains_key("always"), "always должен быть в Active");
+}
+
+/// Файл if_while_for.but строится без ошибок.
+#[test]
+fn example_if_while_for_is_valid() {
+    build_file("tests/data/sematic/valid/if_while_for.but").unwrap();
+}
+
+/// Файл nested_model_blocks.but строится без ошибок, enter разрешён.
+#[test]
+fn example_nested_model_blocks_is_valid() {
+    let node = build_file("tests/data/sematic/valid/nested_model_blocks.but").unwrap();
+    let inner = node.search_model("Inner").expect("Inner не найдена");
+    let inner = inner.borrow();
+    let on = inner.states.get("On").expect("On не найдено");
+    let nbs = match on {
+        StateNode::Simple { named_blocks, .. } => named_blocks,
+        _ => panic!("неожиданный тип On"),
+    };
+    assert!(nbs.contains_key("enter"), "enter должен быть в On");
+}
+
+/// named_block_undeclared_var.but (порт без адреса) → ошибка семантики.
+#[test]
+fn example_named_block_invalid_port_is_error() {
+    let result = build_file("tests/data/sematic/invalid/named_block_undeclared_var.but");
+    assert!(result.is_err(), "файл с некорректным портом должен давать ошибку");
+}

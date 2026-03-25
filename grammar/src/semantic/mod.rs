@@ -12,11 +12,12 @@
 mod condition;
 mod expression;
 mod include;
+mod statement;
 pub mod tree;
 mod type_inference;
 
 use crate::parser::ast;
-use crate::parser::ast::{Member, NamedArgument, ParameterList, Statement, Type};
+use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -151,16 +152,79 @@ impl ModelNode {
 }
 
 /// Семантический узел именованного блока кода (`enter`, `exit`, `always`, …).
-///
-/// В текущей реализации является заглушкой; будет расширен в будущих версиях.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct NamedBlockNode {}
+pub struct NamedBlockNode {
+    /// Имя блока (`enter`, `exit`, `always`, …).
+    pub name: String,
+    /// Оператор блока.
+    pub statement: Statement,
+}
 
 /// Семантический узел функции.
-///
-/// В текущей реализации является заглушкой; будет расширен в будущих версиях.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct FunctionNode {}
+pub struct FunctionNode {
+    /// Имя функции.
+    pub name: String,
+}
+
+/// Семантический оператор языка BuT.
+///
+/// После семантического анализа (этап 4) все варианты `Unresolved` заменяются
+/// конкретными разрешёнными вариантами.
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
+pub enum Statement {
+    /// Оператор отсутствует (значение по умолчанию).
+    #[default]
+    None,
+    /// «Сырой» АСД-оператор, ещё не прошедший семантическое понижение.
+    Unresolved(ast::Statement),
+    /// Блок операторов: `{ операторы* }`.
+    Block(Vec<Statement>),
+    /// Оператор-выражение: присваивание, вызов функции и т.п.
+    Expression(Box<Expression>),
+    /// Условный оператор `if`.
+    If {
+        /// Условие.
+        cond: Box<Expression>,
+        /// Тело.
+        then_: Box<Statement>,
+        /// Ветка `else` (если задана).
+        else_: Option<Box<Statement>>,
+    },
+    /// Оператор цикла `while`.
+    While {
+        /// Условие продолжения.
+        cond: Box<Expression>,
+        /// Тело цикла.
+        body: Box<Statement>,
+    },
+    /// Оператор цикла `for`.
+    For {
+        /// Инициализация (опционально).
+        init: Option<Box<Statement>>,
+        /// Условие продолжения (опционально).
+        cond: Option<Box<Expression>>,
+        /// Выражение шага (опционально).
+        step: Option<Box<Expression>>,
+        /// Тело цикла.
+        body: Box<Statement>,
+    },
+    /// Оператор цикла `do ... while`.
+    DoWhile {
+        /// Тело.
+        body: Box<Statement>,
+        /// Условие продолжения.
+        cond: Box<Expression>,
+    },
+    /// Объявление локальной переменной: `(имя, тип, инициализатор?)`.
+    Variable(String, TypeNode, Option<Box<Expression>>),
+    /// Оператор `return [выражение]`.
+    Return(Option<Box<Expression>>),
+    /// Оператор `continue`.
+    Continue,
+    /// Оператор `break`.
+    Break,
+}
 
 /// Семантический узел переменной.
 ///
@@ -367,7 +431,7 @@ pub enum Expression {
     /// Вызов функции: `id(аргументы,*)`.
     Function(Rc<RefCell<FunctionNode>>, Vec<Expression>),
     /// Блок кода как выражение: `выражение { ... }`.
-    CodeBlock(Box<Expression>, Box<Statement>),
+    CodeBlock(Box<Expression>, Statement),
     /// Вызов с именованными аргументами: `выражение({ ключ: значение, … })`.
     NamedFunctionBox(Box<Expression>, Vec<NamedArgument>),
     /// Логическое НЕ: `!выражение`.

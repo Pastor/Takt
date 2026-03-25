@@ -1,0 +1,24 @@
+// Пример: named blocks во вложенных моделях.
+//
+// Проверяет, что именованные блоки в состояниях вложенной модели
+// корректно разрешаются с контекстом вложенной модели.
+// Переменная toggle объявлена внутри модели Inner (не в корне).
+
+model Inner {
+    var toggle: bit = false;
+
+    start On {
+        ref Off: toggle;
+        enter {
+            toggle = true;
+        }
+        exit {
+            toggle = false;
+        }
+    }
+    state Off {
+        ref On: true;
+    }
+}
+
+start Root = Inner { }

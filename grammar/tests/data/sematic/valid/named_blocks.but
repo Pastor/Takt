@@ -1,0 +1,28 @@
+// Пример: именованные блоки кода (enter, exit, always) в состояниях.
+//
+// Проверяет корректное построение семантического дерева при наличии:
+// - enter-блока: выполняется при первом входе в состояние
+// - exit-блока: выполняется при выходе из состояния
+// - always-блока: выполняется при каждом такте
+
+var led: bit = false;
+
+start Active {
+    ref Idle: led;
+    enter {
+        led = true;
+    }
+    exit {
+        led = false;
+    }
+    always {
+        led = led;
+    }
+}
+
+state Idle {
+    ref Active: true;
+    enter {
+        led = false;
+    }
+}
