@@ -20,7 +20,8 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
-use crate::semantic::{Expression, Function, ModelNode, Statement, TypeNode, VariableNode};
+use crate::semantic::builtin::builtin_function;
+use crate::semantic::{Expression, ModelNode, Statement, TypeNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -154,11 +155,11 @@ pub fn construct_expression(
         // анонимный узел-заглушка с именем функции. Это позволяет семантическому
         // дереву корректно строиться без предварительной регистрации встроенных символов.
         ast::Expression::Function(_, id, args) => {
-            use std::cell::RefCell;
-            use std::rc::Rc;
-            let func = model.borrow().search_func(&id.name).unwrap_or_else(|| {
-                Rc::new(RefCell::new(Function::Unresolved(id.name.clone(), vec![])))
-            });
+            let func = if let Some(func) = model.borrow().search_func(&id.name) {
+                func
+            } else {
+                Rc::new(RefCell::new(builtin_function(&id.name)?.clone()))
+            };
             let resolved_args = resolve_elems(args, model)?;
             Ok(Expression::Function(func, resolved_args))
         }

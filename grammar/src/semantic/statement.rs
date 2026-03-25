@@ -19,7 +19,7 @@
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::expression::construct_expression;
-use crate::semantic::tree::construct_type;
+use crate::semantic::type_::construct_type;
 use crate::semantic::{ModelNode, Statement};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -36,8 +36,7 @@ pub fn resolve_statement(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Statement, Diagnostic> {
     match statement {
-        Statement::Unresolved(stmt) => Ok(resolve_ast_statement(stmt, model)
-            .unwrap_or_else(|_| statement.clone())),
+        Statement::Unresolved(stmt) => Ok(resolve_ast_statement(stmt, model)?),
         Statement::None => Ok(Statement::None),
         Statement::Block(stmts) => {
             let resolved = stmts
@@ -61,14 +60,10 @@ fn resolve_ast_statement(
     match stmt {
         // ── Блок операторов ────────────────────────────────────────────────────
         ast::Statement::Block { statements, .. } => {
-            let resolved = statements
-                .iter()
-                .map(|s| {
-                    // Каждый вложенный оператор разрешается лучшим усилием
-                    resolve_ast_statement(s, model.clone())
-                        .unwrap_or_else(|_| Statement::Unresolved(s.clone()))
-                })
-                .collect();
+            let mut resolved = Vec::with_capacity(statements.len());
+            for s in statements {
+                resolved.push(resolve_ast_statement(s, model.clone())?);
+            }
             Ok(Statement::Block(resolved))
         }
 
@@ -211,7 +206,9 @@ mod tests {
     /// Строит модель и возвращает корневой ModelNode.
     fn build(src: &str) -> ModelNode {
         let (ast, _) = parse(src, 0).expect("ошибка разбора");
-        construct_model(&ast, None, &[]).map(|m| m.take()).expect("ошибка построения")
+        construct_model(&ast, None, &[])
+            .map(|m| m.take())
+            .expect("ошибка построения")
     }
 
     // ─── Тесты resolve_statement ────────────────────────────────────────────
@@ -239,7 +236,10 @@ mod tests {
         let m = Rc::new(RefCell::new(ModelNode::default()));
         let stmt = Statement::Block(vec![Statement::Continue, Statement::Break]);
         let result = resolve_statement(&stmt, m).unwrap();
-        assert_eq!(result, Statement::Block(vec![Statement::Continue, Statement::Break]));
+        assert_eq!(
+            result,
+            Statement::Block(vec![Statement::Continue, Statement::Break])
+        );
     }
 
     // ─── Интеграционные тесты через construct_model ──────────────────────────
@@ -248,12 +248,15 @@ mod tests {
     #[test]
     fn model_level_always_block_with_known_var_resolves() {
         let node = build("var it: bit = 0; always { it = it; } start S;");
-        let nb = node.get_named_block("always").expect("блок always должен быть");
+        let nb = node
+            .get_named_block("always")
+            .expect("блок always должен быть");
         let stmt = nb.statement().expect("оператор должен быть");
         // Должен быть разрешён (не Unresolved)
         assert!(
             !matches!(stmt, Statement::Unresolved(_)),
-            "блок always должен быть разрешён, получен: {:?}", stmt
+            "блок always должен быть разрешён, получен: {:?}",
+            stmt
         );
     }
 
@@ -263,7 +266,9 @@ mod tests {
         // `debug` не объявлена — после изменения expression.rs создаётся заглушка,
         // поэтому оператор может быть разрешён или нет, но паники быть не должно
         let node = build(r#"always { debug("msg"); } start S;"#);
-        let nb = node.get_named_block("always").expect("блок always должен быть");
+        let nb = node
+            .get_named_block("always")
+            .expect("блок always должен быть");
         let _ = nb.statement(); // просто доступ без паники
     }
 
@@ -272,7 +277,10 @@ mod tests {
     fn state_level_named_block_is_populated() {
         let node = build("var A: bit = false; start S { enter { A = A; } }");
         let state = node.states.get("S").expect("состояние S не найдено");
-        assert!(state.get_named_block("enter").is_some(), "enter должен быть в named_blocks состояния");
+        assert!(
+            state.get_named_block("enter").is_some(),
+            "enter должен быть в named_blocks состояния"
+        );
     }
 
     /// `enter { A = A; }` с известной переменной — разрешается.
@@ -293,7 +301,10 @@ mod tests {
     fn state_level_multiple_named_blocks() {
         let node = build("var A: bit = false; start S { enter { A = A; } exit { A = A; } }");
         let state = node.states.get("S").unwrap();
-        assert!(state.get_named_block("enter").is_some(), "enter должен быть");
+        assert!(
+            state.get_named_block("enter").is_some(),
+            "enter должен быть"
+        );
         assert!(state.get_named_block("exit").is_some(), "exit должен быть");
     }
 
@@ -304,8 +315,11 @@ mod tests {
         let state = node.states.get("S").unwrap();
         let always = state.get_named_block("always").expect("always не найден");
         let stmt = always.statement().expect("оператор должен быть");
-        assert!(matches!(stmt, Statement::Block(_) | Statement::If { .. }),
-            "оператор if должен быть разрешён: {:?}", stmt);
+        assert!(
+            matches!(stmt, Statement::Block(_) | Statement::If { .. }),
+            "оператор if должен быть разрешён: {:?}",
+            stmt
+        );
     }
 
     /// Оператор `return` в named block разрешается.
@@ -314,8 +328,11 @@ mod tests {
         let node = build("var x: bit = false; always { return x; } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
-        assert!(!matches!(stmt, Statement::Unresolved(_)),
-            "return должен быть разрешён: {:?}", stmt);
+        assert!(
+            !matches!(stmt, Statement::Unresolved(_)),
+            "return должен быть разрешён: {:?}",
+            stmt
+        );
     }
 
     /// `continue` и `break` разрешаются в соответствующие варианты.

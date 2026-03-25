@@ -9,12 +9,17 @@
 //! - [`Reference`] — ссылка на другой узел с условием перехода.
 //! - [`Condition`] — условие перехода между состояниями.
 
+mod builtin;
 mod condition;
 mod expression;
+mod function;
 mod include;
+mod named_block;
 mod statement;
 pub mod tree;
+mod type_;
 mod type_inference;
+mod validate;
 
 use crate::parser::ast;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
@@ -38,7 +43,7 @@ pub struct ModelNode {
     /// Именованные блоки кода (`enter`, `exit`, `always`, …).
     pub named_blocks: Vec<NamedCodeBlock>,
     /// Объявленные функции.
-    pub functions: HashMap<String, Function>,
+    pub functions: HashMap<String, FunctionNode>,
     /// Объявленные переменные.
     pub variables: HashMap<String, VariableNode>,
     /// Объявленные псевдонимы типов.
@@ -141,7 +146,10 @@ impl ModelNode {
 
     /// Возвращает список всех именованных блоков с заданным именем.
     pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlock> {
-        self.named_blocks.iter().filter(|b| b.name() == name).collect()
+        self.named_blocks
+            .iter()
+            .filter(|b| b.name() == name)
+            .collect()
     }
 
     /// Возвращает первый именованный блок с заданным именем, если он есть.
@@ -150,7 +158,7 @@ impl ModelNode {
     }
 
     /// Ищет объявление функции по `name`, обходя цепочку `upper`.
-    pub fn search_func(&self, name: &str) -> Option<Rc<RefCell<Function>>> {
+    pub fn search_func(&self, name: &str) -> Option<Rc<RefCell<FunctionNode>>> {
         if let Some(func) = self.functions.get(name) {
             Some(Rc::new(RefCell::new(func.clone())))
         } else if let Some(model) = self.upper.as_ref() {
@@ -195,7 +203,10 @@ impl NamedCodeBlock {
     /// Возвращает ссылку на семантический оператор блока, если он разрешён.
     pub fn statement(&self) -> Option<&Statement> {
         match self {
-            NamedCodeBlock::Enter(s) | NamedCodeBlock::Exit(s) | NamedCodeBlock::Always(s) | NamedCodeBlock::Unknown(_, s) => Some(s),
+            NamedCodeBlock::Enter(s)
+            | NamedCodeBlock::Exit(s)
+            | NamedCodeBlock::Always(s)
+            | NamedCodeBlock::Unknown(_, s) => Some(s),
             _ => None,
         }
     }
@@ -210,9 +221,10 @@ pub enum FunctionNode {
     /// Неразрешённое AST-определение.
     Unresolved(ast::FunctionDefine),
     /// Локальная функция: `(имя, параметры, возвращаемый_тип, тело)`.
-    Local(String, Vec<(String, Type)>, Type, Statement),
+    Local(String, Vec<(String, TypeNode)>, TypeNode, Statement),
     /// Внешняя функция (без тела).
-    External(String, Vec<(String, Type)>, Type),
+    External(String, Vec<(String, TypeNode)>, TypeNode),
+    Builtin(&'static str, &'static [(&'static str, TypeNode)], TypeNode),
 }
 
 /// Семантический узел вызова или ссылки на функцию.
@@ -334,6 +346,9 @@ pub enum TypeNode {
     Unsupported,
     /// Пустой тип.
     Unit,
+    BuiltinString,
+    BuiltinModel,
+    BuiltinState,
 }
 
 /// Семантический узел именованного условия.
@@ -370,6 +385,7 @@ pub enum StateNode {
         name: String,
         /// Ссылки-переходы (`ref Имя [: Условие]`).
         references: Vec<Reference<StateNode>>,
+        kind: StateNodeKind,
     },
     /// Состояние с реализацией (`= Модель`): может иметь `next`-переход.
     Implement {
@@ -383,7 +399,16 @@ pub enum StateNode {
         implements: Implement,
         /// Единственный `next`-переход (если задан).
         next: Option<Reference<StateNode>>,
+        kind: StateNodeKind,
     },
+}
+
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
+enum StateNodeKind {
+    #[default]
+    Simple,
+    Start,
+    End,
 }
 
 impl StateNode {
@@ -408,7 +433,10 @@ impl StateNode {
     /// Ищет именованный блок в состоянии по его имени.
     /// Возвращает список всех именованных блоков с заданным именем.
     pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlock> {
-        self.named_blocks().iter().filter(|b| b.name() == name).collect()
+        self.named_blocks()
+            .iter()
+            .filter(|b| b.name() == name)
+            .collect()
     }
 
     /// Возвращает первый именованный блок с заданным именем, если он есть.
@@ -460,7 +488,7 @@ pub enum Condition {
     /// Доступ к биту: `условие.член`.
     BitAccess(Box<Condition>, Member),
     /// Вызов функции: `id(аргументы,*)`.
-    Function(Rc<RefCell<Function>>, Vec<Box<Condition>>),
+    Function(Rc<RefCell<FunctionNode>>, Vec<Box<Condition>>),
     /// Логическое НЕ: `!условие`.
     Not(Box<Condition>),
     /// Сложение: `левое + правое`.
@@ -524,7 +552,7 @@ pub enum Expression {
     /// Доступ к биту: `выражение.член`.
     BitAccess(Box<Expression>, Member),
     /// Вызов функции: `id(аргументы,*)`.
-    Function(Rc<RefCell<Function>>, Vec<Expression>),
+    Function(Rc<RefCell<FunctionNode>>, Vec<Expression>),
     /// Блок кода как выражение: `выражение { ... }`.
     CodeBlock(Box<Expression>, Statement),
     /// Вызов с именованными аргументами: `выражение({ ключ: значение, … })`.
@@ -624,7 +652,6 @@ pub struct Reference<T: Clone + PartialEq + Eq + Debug> {
 mod tests {
     use super::*;
     use crate::diagnostics::Diagnostic;
-
     // ─── Diagnostic ──────────────────────────────────────────────────────
 
     /// Конвертация `&str` в `Diagnostic::Error`.
@@ -671,7 +698,8 @@ mod tests {
     #[test]
     fn model_node_get_named_block() {
         let mut node = ModelNode::default();
-        node.named_blocks.push(NamedCodeBlock::Always(Statement::None));
+        node.named_blocks
+            .push(NamedCodeBlock::Always(Statement::None));
         assert!(node.get_named_block("always").is_some());
         assert!(node.get_named_block("enter").is_none());
     }
@@ -691,6 +719,7 @@ mod tests {
             name: "S".to_string(),
             named_blocks: vec![NamedCodeBlock::Enter(Statement::None)],
             references: vec![],
+            kind: StateNodeKind::Simple,
         };
         assert!(state.get_named_block("enter").is_some());
         assert!(state.get_named_block("exit").is_none());
