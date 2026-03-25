@@ -160,12 +160,12 @@ fn type_alias_resolves_through_map() {
     }
 }
 
-/// Встроенный псевдоним `bool` разрешается в `TypeNode::Bit`.
+/// Встроенный псевдоним `bool` разрешается в `TypeNode::Bool`.
 #[test]
 fn type_alias_bool_resolves_to_bit() {
     let node = build("var flag: bool = false;");
     if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("flag") {
-        assert_eq!(ty, TypeNode::Bit);
+        assert_eq!(ty, TypeNode::Bool);
     } else {
         panic!("переменная flag не найдена");
     }
@@ -256,13 +256,23 @@ fn implement_unknown_model_is_error() {
 
 // ─── Тесты дублирования имён ─────────────────────────────────────────────────
 
-/// Два состояния с одинаковым именем — второе перезаписывает первое.
-/// (Семантика допускает, т.к. HashMap не хранит дубликаты.)
+/// Два состояния с одинаковым именем: второе (`state S`) перезаписывает
+/// первое (`start S`) в HashMap, после чего модель остаётся без start-состояния.
+/// Это корректно обнаруживается валидатором как ошибка.
+///
+/// # Контрпример (BuT)
+/// ```but
+/// start S;   // добавляется как Start
+/// state S;   // перезаписывает — Start исчезает → ошибка валидации
+/// ```
 #[test]
-fn duplicate_state_names_last_wins() {
-    // Парсер принимает — семантика оставляет последнее
-    let result = build("start S; state S;");
-    assert!(result.states.contains_key("S"));
+fn duplicate_state_names_overwrite_causes_validation_error() {
+    let (ast, _) = parse("start S; state S;", 0).unwrap();
+    let result = construct_model(&ast, None, &[]);
+    assert!(
+        result.is_err(),
+        "дублирующееся имя состояния удаляет start — должна быть ошибка валидации"
+    );
 }
 
 /// Два вложенных `model` с одинаковым именем — ошибка (реализация TODO).
@@ -1305,4 +1315,84 @@ fn example_multiple_named_blocks_is_valid() {
     assert_eq!(initial.get_named_blocks("enter").len(), 2, "Должно быть два enter в Initial");
     assert_eq!(initial.get_named_blocks("exit").len(), 2, "Должно быть два exit в Initial");
     assert_eq!(node.get_named_blocks("always").len(), 3, "Должно быть три always на уровне модели");
+}
+
+// ─── Тесты корректности значений типа bit ──────────────────────────────────────
+
+/// `tests/data/sematic/valid/bit_values.but` — допустимые значения bit строятся без ошибок.
+///
+/// Проверяет: 0, 1, true, false, ссылка на переменную, константы, массив [bit;N].
+#[test]
+fn example_bit_values_valid_is_valid() {
+    let node = build_file("tests/data/sematic/valid/bit_values.but").unwrap();
+    assert!(node.search_var("a").is_some(), "переменная a должна быть найдена");
+    assert!(node.search_var("b").is_some(), "переменная b должна быть найдена");
+    assert!(node.search_var("c").is_some(), "переменная c должна быть найдена");
+    assert!(node.search_var("d").is_some(), "переменная d должна быть найдена");
+}
+
+/// `tests/data/sematic/invalid/bit_out_of_range.but` — недопустимое bit-значение → ошибка.
+///
+/// Тип `bit` принимает только 0, 1, true, false. Значение 2 — ошибка.
+#[test]
+fn example_bit_out_of_range_is_error() {
+    let result = build_file("tests/data/sematic/invalid/bit_out_of_range.but");
+    assert!(result.is_err(), "bit_out_of_range.but должен давать ошибку семантики");
+    let err = result.unwrap_err();
+    assert!(
+        err.message.contains("bit"),
+        "сообщение об ошибке должно упоминать тип bit: {}",
+        err.message
+    );
+}
+
+/// `tests/data/sematic/valid/type_inference_numbers.but` — вывод целочисленных типов.
+///
+/// 0..=255 → `[bit;8]`, 256..=65535 → `[bit;16]`, 65536..= → `[bit;32]`.
+#[test]
+fn example_type_inference_numbers_is_valid() {
+    let node = build_file("tests/data/sematic/valid/type_inference_numbers.but").unwrap();
+    // 8-битные
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("a") {
+        assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)), "a=0 → [bit;8]");
+    }
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("c") {
+        assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)), "c=255 → [bit;8]");
+    }
+    // 16-битные
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("d") {
+        assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)), "d=256 → [bit;16]");
+    }
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("f") {
+        assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)), "f=65535 → [bit;16]");
+    }
+    // 32-битные
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("g") {
+        assert_eq!(ty, TypeNode::Array(32, Box::new(TypeNode::Bit)), "g=65536 → [bit;32]");
+    }
+}
+
+/// `tests/data/sematic/valid/type_inference_bool.but` — вывод типа bool из литерала.
+///
+/// `true`/`false` без аннотации → `TypeNode::Bool`.
+/// Явная аннотация `: bool` → `TypeNode::Bool`.
+/// Явная аннотация `: bit` → `TypeNode::Bit`.
+#[test]
+fn example_type_inference_bool_is_valid() {
+    let node = build_file("tests/data/sematic/valid/type_inference_bool.but").unwrap();
+    // Вывод из литерала
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("flag") {
+        assert_eq!(ty, TypeNode::Bool, "flag=true → Bool");
+    }
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("done") {
+        assert_eq!(ty, TypeNode::Bool, "done=false → Bool");
+    }
+    // Явная аннотация bool
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("ready") {
+        assert_eq!(ty, TypeNode::Bool, "ready: bool → Bool");
+    }
+    // Явная аннотация bit
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("signal") {
+        assert_eq!(ty, TypeNode::Bit, "signal: bit → Bit");
+    }
 }

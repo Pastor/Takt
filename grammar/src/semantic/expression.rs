@@ -608,11 +608,11 @@ mod tests {
 
     // ── Вывод типа (type_inference) через разрешённые выражения ──────────────
 
-    /// Переменная без аннотации типа с булевым литералом: выводится `TypeNode::Bit`.
+    /// Переменная без аннотации типа с булевым литералом: выводится `TypeNode::Bool`.
     ///
     /// # Пример (BuT)
     /// ```but
-    /// var flag = false;   // тип выводится как bit
+    /// var flag = false;   // тип выводится как bool
     /// ```
     #[test]
     fn type_inference_bool_literal() {
@@ -620,8 +620,8 @@ mod tests {
         if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("flag") {
             assert_eq!(
                 ty,
-                TypeNode::Bit,
-                "тип должен выводиться как Bit из булева литерала"
+                TypeNode::Bool,
+                "тип должен выводиться как Bool из булева литерала"
             );
         } else {
             panic!("переменная flag не найдена или не Simple");
@@ -643,12 +643,12 @@ mod tests {
         }
     }
 
-    /// Константа без аннотации типа с булевым литералом: → `TypeNode::Bit`.
+    /// Константа без аннотации типа с булевым литералом: → `TypeNode::Bool`.
     #[test]
     fn type_inference_const_bool() {
         let node = build("const C = false;").unwrap();
         if let Some(VariableNode::Const(_, ty, _)) = node.search_var("C") {
-            assert_eq!(ty, TypeNode::Bit, "тип константы должен выводиться как Bit");
+            assert_eq!(ty, TypeNode::Bool, "тип константы должен выводиться как Bool");
         } else {
             panic!("константа C не найдена");
         }
@@ -807,5 +807,20 @@ mod tests {
             ),
             "A должен быть Implement-состоянием"
         );
+    }
+
+    /// Переменная без аннотации с числовым литералом: `var x = 100;` → `Array(8, Bit)`.
+    #[test]
+    fn type_inference_number_literal() {
+        let node = build("var x = 100;").unwrap();
+        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+            assert_eq!(
+                ty,
+                TypeNode::Array(8, Box::new(TypeNode::Bit)),
+                "тип должен выводиться как [bit;8] из числового литерала 100"
+            );
+        } else {
+            panic!("переменная x не найдена");
+        }
     }
 }

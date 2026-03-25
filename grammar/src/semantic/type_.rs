@@ -17,11 +17,11 @@ pub(crate) fn construct_type(
     match typ.unwrap() {
         Type::Address { address, bit } => Ok(TypeNode::Address(address, bit)),
         Type::Bit => Ok(TypeNode::Bit),
-        Type::Bool => Ok(TypeNode::Bit),
+        Type::Bool => Ok(TypeNode::Bool),
         Type::Rational => Ok(TypeNode::Rational),
         Type::Alias(def) => match def.name.as_str() {
             "bit" => Ok(TypeNode::Bit),
-            "bool" => Ok(TypeNode::Bit),
+            "bool" => Ok(TypeNode::Bool),
             "float" => Ok(TypeNode::Rational),
             "unit" => Ok(TypeNode::Unit),
             local => Ok(map

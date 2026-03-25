@@ -338,7 +338,6 @@ mod tests {
     /// `continue` и `break` разрешаются в соответствующие варианты.
     #[test]
     fn continue_break_resolve() {
-        // Создаём Statement::Unresolved напрямую и вызываем resolve_statement
         let ast_continue = ast::Statement::Continue(crate::diagnostics::Location::default());
         let ast_break = ast::Statement::Break(crate::diagnostics::Location::default());
         let m = Rc::new(RefCell::new(ModelNode::default()));
@@ -346,5 +345,177 @@ mod tests {
         let r2 = resolve_statement(&Statement::Unresolved(ast_break), m).unwrap();
         assert_eq!(r1, Statement::Continue);
         assert_eq!(r2, Statement::Break);
+    }
+
+    // ─── Циклы ────────────────────────────────────────────────────────────────
+
+    // ── Вспомогательная функция ───────────────────────────────────────────────
+
+    /// Возвращает первый реальный оператор из блока (вложенного в always-блок).
+    ///
+    /// `always { <stmt> }` оборачивает оператор в `Block([<stmt>])`.
+    /// Эта функция раскрывает один уровень вложенности.
+    fn first_in_block(stmt: &Statement) -> &Statement {
+        match stmt {
+            Statement::Block(stmts) => stmts.first().expect("блок пуст"),
+            other => other,
+        }
+    }
+
+    // ── Циклы ─────────────────────────────────────────────────────────────────
+
+    /// `while` с известным условием разрешается.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// var flag: bit = false;
+    /// always {
+    ///     while (flag) { flag = flag; }
+    /// }
+    /// ```
+    #[test]
+    fn while_loop_resolves() {
+        let node = build("var flag: bit = false; always { while (flag) { flag = flag; } } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
+        assert!(
+            matches!(stmt, Statement::While { .. }),
+            "ожидался While, получен: {:?}",
+            stmt
+        );
+    }
+
+    /// `do...while` с известным условием разрешается.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// var x: bit = false;
+    /// always {
+    ///     do { x = x; } while (x);
+    /// }
+    /// ```
+    #[test]
+    fn do_while_loop_resolves() {
+        let node = build("var x: bit = false; always { do { x = x; } while (x); } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
+        assert!(
+            matches!(stmt, Statement::DoWhile { .. }),
+            "ожидался DoWhile, получен: {:?}",
+            stmt
+        );
+    }
+
+    /// `for` с инициализацией, условием и шагом разрешается.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// var i: bit = false;
+    /// always {
+    ///     for (i = false; i; i = false) { }
+    /// }
+    /// ```
+    #[test]
+    fn for_loop_resolves() {
+        let node = build(
+            "var i: bit = false; always { for (i = false; i; i = false) { } } start S;",
+        );
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
+        assert!(
+            matches!(stmt, Statement::For { .. }),
+            "ожидался For, получен: {:?}",
+            stmt
+        );
+    }
+
+    /// `for` без инициализации и шага разрешается.
+    #[test]
+    fn for_loop_empty_parts_resolves() {
+        let node = build("var i: bit = false; always { for (;;) { } } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
+        assert!(
+            matches!(stmt, Statement::For { init: None, cond: None, step: None, .. }),
+            "ожидался For{{None, None, None}}, получен: {:?}",
+            stmt
+        );
+    }
+
+    /// Оператор `return` без значения разрешается.
+    #[test]
+    fn return_without_value_resolves() {
+        let node = build("always { return; } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
+        assert!(
+            matches!(stmt, Statement::Return(None)),
+            "ожидался Return(None), получен: {:?}",
+            stmt
+        );
+    }
+
+    /// Оператор `if` с `else`-веткой разрешается.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// var x: bit = false;
+    /// always {
+    ///     if x { x = x; } else { x = false; }
+    /// }
+    /// ```
+    #[test]
+    fn if_else_resolves() {
+        let node =
+            build("var x: bit = false; always { if x { x = x; } else { x = false; } } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
+        assert!(
+            matches!(stmt, Statement::If { else_: Some(_), .. }),
+            "ожидался If{{else_: Some}}, получен: {:?}",
+            stmt
+        );
+    }
+
+    /// `if` без `else` имеет `else_ = None`.
+    #[test]
+    fn if_without_else_has_none_else() {
+        let node = build("var x: bit = false; always { if x { x = x; } } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
+        assert!(
+            matches!(stmt, Statement::If { else_: None, .. }),
+            "ожидался If{{else_: None}}, получен: {:?}",
+            stmt
+        );
+    }
+
+    /// Объявление переменной в операторе `var` — не поддерживается внутри блоков.
+    ///
+    /// # Контрпример (BuT)
+    /// `var` внутри `always {}` не поддерживается парсером (только на уровне model/state).
+    /// Вместо этого используется Statement::Variable. Тест проверяет напрямую.
+    #[test]
+    fn variable_statement_resolves() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::{Identifier, VariableDefine};
+        let loc = Location::default();
+        let def = Box::new(VariableDefine::Variable {
+            loc,
+            typ: Some(crate::parser::ast::Type::Bit),
+            name: Some(Identifier {
+                loc,
+                name: "tmp".into(),
+            }),
+            initializer: None,
+        });
+        let stmt = ast::Statement::Variable(loc, def, None);
+        let m = Rc::new(RefCell::new(ModelNode::default()));
+        let result = resolve_statement(&Statement::Unresolved(stmt), m).unwrap();
+        assert!(
+            matches!(result, Statement::Variable(ref n, _, None) if n == "tmp"),
+            "ожидался Variable(tmp, _, None), получен: {:?}",
+            result
+        );
     }
 }

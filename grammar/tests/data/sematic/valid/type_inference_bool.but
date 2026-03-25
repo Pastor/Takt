@@ -1,0 +1,17 @@
+// Пример: вывод типов для булевых литералов.
+//
+// Правило: булев литерал (true/false) без аннотации получает тип bool.
+// Явная аннотация :bool также даёт TypeNode::Bool.
+// Явная аннотация :bit даёт TypeNode::Bit.
+
+// Вывод типа bool из литерала
+var flag = true;
+var done = false;
+
+// Явная аннотация bool
+var ready: bool = true;
+var active: bool = false;
+
+// Явная аннотация bit (отличается от bool)
+var signal: bit = 1;
+var zero: bit = 0;

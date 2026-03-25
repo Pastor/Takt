@@ -325,7 +325,8 @@ pub enum VariableNode {
 /// Варианты:
 /// - [`Detecting`](TypeNode::Inference) — тип выводится (временная заглушка).
 /// - [`Address`](TypeNode::Address) — адресный тип порта `(адрес, бит?)`.
-/// - [`Bit`](TypeNode::Bit) — 1-битный примитив (`bit`, `bool`).
+/// - [`Bit`](TypeNode::Bit) — 1-битный примитив (`bit`).
+/// - [`Bool`](TypeNode::Bool) — булев тип (`bool`).
 /// - [`Rational`](TypeNode::Rational) — вещественное число (`float`).
 /// - [`Array`](TypeNode::Array) — массив фиксированного размера `(N, элемент)`.
 /// - [`Unsupported`](TypeNode::Unsupported) — неподдерживаемый тип (например, функциональный).
@@ -336,8 +337,10 @@ pub enum TypeNode {
     Inference,
     /// Адресный тип порта: `(адрес, номер_бита?)`.
     Address(u64, Option<u64>),
-    /// 1-битный примитив (`bit`, `bool`).
+    /// 1-битный примитив (`bit`).
     Bit,
+    /// Тип `bool` — булев тип (`true`/`false`).
+    Bool,
     /// Тип с плавающей точкой (`float`).
     Rational,
     /// Массив фиксированного размера: `(количество_элементов, тип_элемента)`.
