@@ -817,6 +817,243 @@ fn std_but_import_works() {
     );
 }
 
+// ─── Тесты выборочного импорта (ImportDefine::Rename) ────────────────────────
+
+/// Вспомогательная функция: строит модель из inline-кода с путём поиска shared.but.
+fn build_with_includes(src: &str) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    construct_model(&ast, None, &["tests/data/include".to_string()]).map(|m| m.take())
+}
+
+/// `import { SharedModel } from "shared.but"` — модель доступна под оригинальным именем.
+#[test]
+fn rename_import_model_no_alias() {
+    let node = build_with_includes(
+        r#"import { SharedModel } from "shared.but"; start E = SharedModel { }"#,
+    ).unwrap();
+    assert!(
+        node.search_model("SharedModel").is_some(),
+        "SharedModel должна быть доступна после импорта"
+    );
+}
+
+/// `import { SharedModel as M } from "shared.but"` — модель доступна под псевдонимом M.
+#[test]
+fn rename_import_model_with_alias() {
+    let node = build_with_includes(
+        r#"import { SharedModel as M } from "shared.but"; start E = M { }"#,
+    ).unwrap();
+    assert!(
+        node.search_model("M").is_some(),
+        "модель должна быть доступна под псевдонимом M"
+    );
+    assert!(
+        node.search_model("SharedModel").is_none(),
+        "оригинальное имя SharedModel не должно быть видно"
+    );
+}
+
+/// `import { SharedType } from "shared.but"` — тип-псевдоним импортируется в контекст.
+#[test]
+fn rename_import_type() {
+    let node = build_with_includes(
+        r#"import { SharedType } from "shared.but"; var x: SharedType = 0; start S;"#,
+    ).unwrap();
+    assert!(
+        node.types.contains_key("SharedType"),
+        "тип SharedType должен быть в контексте после импорта"
+    );
+    assert!(
+        node.search_var("x").is_some(),
+        "переменная x должна быть объявлена"
+    );
+}
+
+/// `import { SharedType as ST }` — тип импортируется под псевдонимом.
+#[test]
+fn rename_import_type_with_alias() {
+    let node = build_with_includes(
+        r#"import { SharedType as ST } from "shared.but"; var x: ST = 0; start S;"#,
+    ).unwrap();
+    assert!(
+        node.types.contains_key("ST"),
+        "псевдоним ST должен быть в контексте"
+    );
+    assert!(
+        !node.types.contains_key("SharedType"),
+        "оригинальное имя SharedType не должно быть видно"
+    );
+}
+
+/// `import { shared_var }` — переменная импортируется в контекст.
+#[test]
+fn rename_import_variable() {
+    let node = build_with_includes(
+        r#"import { shared_var } from "shared.but"; start S;"#,
+    ).unwrap();
+    assert!(
+        node.search_var("shared_var").is_some(),
+        "переменная shared_var должна быть в контексте после импорта"
+    );
+}
+
+/// `import { shared_var as sv }` — переменная импортируется под псевдонимом.
+#[test]
+fn rename_import_variable_with_alias() {
+    let node = build_with_includes(
+        r#"import { shared_var as sv } from "shared.but"; start S;"#,
+    ).unwrap();
+    assert!(
+        node.search_var("sv").is_some(),
+        "переменная должна быть видна под псевдонимом sv"
+    );
+    assert!(
+        node.search_var("shared_var").is_none(),
+        "оригинальное имя shared_var не должно быть видно"
+    );
+}
+
+/// `import { shared_cond }` — условие импортируется в контекст.
+#[test]
+fn rename_import_condition() {
+    let node = build_with_includes(
+        r#"import { shared_cond } from "shared.but"; start S { ref E: shared_cond; } state E;"#,
+    ).unwrap();
+    assert!(
+        node.conditions.contains_key("shared_cond"),
+        "условие shared_cond должно быть в контексте"
+    );
+}
+
+/// Импорт нескольких символов в одном выражении.
+#[test]
+fn rename_import_multiple_symbols() {
+    let node = build_with_includes(
+        r#"import { SharedModel as M, SharedType as ST, shared_var as sv } from "shared.but"; start E = M { }"#,
+    ).unwrap();
+    assert!(node.search_model("M").is_some(), "M должна быть видна");
+    assert!(node.types.contains_key("ST"), "ST должен быть виден");
+    assert!(node.search_var("sv").is_some(), "sv должна быть видна");
+}
+
+/// Импорт несуществующего символа — ошибка.
+#[test]
+fn rename_import_missing_symbol_is_error() {
+    let result = build_with_includes(
+        r#"import { NonExistent } from "shared.but"; start S;"#,
+    );
+    assert!(result.is_err(), "импорт несуществующего символа должен давать ошибку");
+    let err = result.unwrap_err();
+    assert!(
+        err.message.contains("NonExistent"),
+        "сообщение должно содержать имя символа: {}",
+        err.message
+    );
+}
+
+/// Дублирующееся имя при импорте с псевдонимом — ошибка.
+#[test]
+fn rename_import_duplicate_alias_is_error() {
+    // Объявляем модель M локально, затем пробуем импортировать SharedModel as M
+    let result = build_with_includes(
+        r#"model M { start S; } import { SharedModel as M } from "shared.but"; start E = M { }"#,
+    );
+    assert!(result.is_err(), "дублирующееся имя M должно давать ошибку");
+}
+
+/// `example_rename_import.but` — файл-пример строится без ошибок.
+#[test]
+fn example_rename_import_is_valid() {
+    let src = std::fs::read_to_string("tests/data/sematic/valid/rename_import.but")
+        .expect("файл rename_import.but не найден");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
+    let node = construct_model(&ast, None, &["tests/data/include".to_string()])
+        .map(|m| m.take())
+        .unwrap();
+    // ST — псевдоним SharedType, M — псевдоним SharedModel
+    assert!(node.types.contains_key("ST"), "тип ST должен быть импортирован");
+    assert!(node.search_model("M").is_some(), "модель M должна быть импортирована");
+}
+
+// ─── Тесты проверки типа и границ массива ─────────────────────────────────────
+
+/// ArraySubscript на переменной с корректным индексом — строится без ошибок.
+#[test]
+fn array_subscript_valid_index() {
+    let node = build("var buf: [bit;8] = 0; var x: bit = buf[0];");
+    assert!(node.search_var("x").is_some());
+}
+
+/// ArraySubscript: последний допустимый индекс (size-1) — ок.
+#[test]
+fn array_subscript_last_valid_index() {
+    let node = build("var buf: [bit;8] = 0; var x: bit = buf[7];");
+    assert!(node.search_var("x").is_some());
+}
+
+/// ArraySubscript: индекс равный размеру массива — ошибка (out of bounds).
+#[test]
+fn array_subscript_out_of_bounds_is_error() {
+    let (ast, _) = parse("var buf: [bit;8] = 0; var x: bit = buf[8]; start S;", 0).unwrap();
+    let result = construct_model(&ast, None, &[]);
+    assert!(result.is_err(), "индекс buf[8] должен давать ошибку для массива размером 8");
+}
+
+/// ArraySubscript: отрицательный индекс — ошибка.
+#[test]
+fn array_subscript_negative_index_is_error() {
+    // Отрицательные индексы не поддерживаются
+    let (ast, _) = parse("var buf: [bit;8] = 0; var x: bit = buf[-1]; start S;", 0).unwrap();
+    let result = construct_model(&ast, None, &[]);
+    assert!(result.is_err(), "отрицательный индекс должен давать ошибку");
+}
+
+/// ArraySubscript на переменной с типом Bit — ошибка (не массив).
+#[test]
+fn array_subscript_on_bit_is_error() {
+    let (ast, _) = parse("var flag: bit = false; var x: bit = flag[0]; start S;", 0).unwrap();
+    let result = construct_model(&ast, None, &[]);
+    assert!(result.is_err(), "индексирование Bit-переменной должно давать ошибку");
+    let err = result.unwrap_err();
+    assert!(
+        err.message.contains("flag"),
+        "сообщение должно содержать имя переменной: {}",
+        err.message
+    );
+}
+
+/// `example_array_access.but` — файл с корректными операциями над массивом строится без ошибок.
+#[test]
+fn example_array_access_is_valid() {
+    let result = build_file("tests/data/sematic/valid/array_access.but").unwrap();
+    assert!(result.search_var("bit0").is_some());
+    assert!(result.search_var("bit7").is_some());
+}
+
+/// `example_array_out_of_bounds.but` — должна возникнуть ошибка.
+#[test]
+fn example_array_out_of_bounds_is_error() {
+    let result = build_file("tests/data/sematic/invalid/array_out_of_bounds.but");
+    assert!(result.is_err(), "array_out_of_bounds.but должен давать ошибку");
+}
+
+/// `example_non_array_subscript.but` — должна возникнуть ошибка.
+#[test]
+fn example_non_array_subscript_is_error() {
+    let result = build_file("tests/data/sematic/invalid/non_array_subscript.but");
+    assert!(result.is_err(), "non_array_subscript.but должен давать ошибку");
+}
+
+/// `example_rename_import_missing.but` — должна возникнуть ошибка.
+#[test]
+fn example_rename_import_missing_is_error() {
+    let src = std::fs::read_to_string("tests/data/sematic/invalid/rename_import_missing.but")
+        .expect("файл не найден");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &["tests/data/include".to_string()]).map(|m| m.take());
+    assert!(result.is_err(), "импорт несуществующего символа должен давать ошибку");
+}
+
 /// После импорта `std.but` типы u8, u16, … доступны внутри импортированной модели.
 #[test]
 fn std_but_contains_u8_u16_types() {

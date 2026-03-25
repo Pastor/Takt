@@ -1,0 +1,17 @@
+// Общая библиотека для тестов выборочного импорта.
+//
+// Содержит по одному объекту каждой категории:
+// - модель SharedModel
+// - псевдоним типа SharedType
+// - переменная shared_var
+// - условие shared_cond
+
+type SharedType = [bit; 4];
+
+var shared_var: bit = false;
+
+cond shared_cond = true;
+
+model SharedModel {
+    start S;
+}

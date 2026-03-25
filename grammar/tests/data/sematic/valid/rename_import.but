@@ -1,0 +1,14 @@
+// Пример: выборочный импорт символов из внешнего файла.
+//
+// Синтаксис: import { A, B as C } from "файл.but";
+//
+// Проверяет импорт:
+// - модели: SharedModel под именем M
+// - псевдонима типа: SharedType под именем ST
+//
+// (Пути файлов задаются через search_paths при вызове construct_model)
+import { SharedModel as M, SharedType as ST } from "shared.but";
+
+var x: ST = 0;
+
+start Entry = M { }

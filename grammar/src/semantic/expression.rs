@@ -20,7 +20,7 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
-use crate::semantic::{Expression, ModelNode};
+use crate::semantic::{Expression, ModelNode, TypeNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -77,31 +77,71 @@ pub fn construct_expression(
         }
 
         // ── Обращение к массиву ────────────────────────────────────────────────
+        //
+        // Для операций ArraySubscript и ArraySlice:
+        //   1. Переменная должна существовать в области видимости.
+        //   2. Тип переменной должен быть массивом (`TypeNode::Array`).
+        //   3. Индексы/границы должны находиться в допустимом диапазоне.
+        //
+        // Если тип переменной ещё не выведен (`TypeNode::Inference`), структурная
+        // проверка пропускается — она будет повторно вычислена после вывода типов.
         ast::Expression::ArraySubscript(_, id, n) => {
             let var = model
                 .borrow()
                 .search_var(&id.name)
                 .ok_or_else(|| {
-                    format!("Массив '{}' не найден", &id.name)
+                    format!("Переменная '{}' не найдена", &id.name)
                         .as_str()
                         .into()
                 })?;
-            //FIXME: надо проверить что переменная имеет тип - массив и проверить границы
-            Ok(Expression::ArraySubscript(
-                Rc::new(RefCell::new(var)),
-                n,
-            ))
+            // Проверяем тип и границы (если тип известен)
+            match var_type(&var) {
+                TypeNode::Array(size, _) => {
+                    if n < 0 || n >= size as i64 {
+                        return Err(format!(
+                            "Индекс {} выходит за границы массива '{}' (размер {})",
+                            n, &id.name, size
+                        )
+                        .as_str()
+                        .into());
+                    }
+                }
+                TypeNode::Inference => {} // тип ещё не выведен — пропускаем проверку
+                _ => {
+                    return Err(format!(
+                        "Переменная '{}' не является массивом",
+                        &id.name
+                    )
+                    .as_str()
+                    .into())
+                }
+            }
+            Ok(Expression::ArraySubscript(Rc::new(RefCell::new(var)), n))
         }
         ast::Expression::ArraySlice(_, id, start, end) => {
             let var = model
                 .borrow()
                 .search_var(&id.name)
                 .ok_or_else(|| {
-                    format!("Массив '{}' не найден", &id.name)
+                    format!("Переменная '{}' не найдена", &id.name)
                         .as_str()
                         .into()
                 })?;
-            //FIXME: надо проверить что переменная имеет тип - массив и проверить границы
+            // Проверяем тип и границы среза (если тип известен)
+            match var_type(&var) {
+                TypeNode::Array(size, _) => {
+                    check_slice_bounds(&id.name, size, start, end)?;
+                }
+                TypeNode::Inference => {} // тип ещё не выведен — пропускаем
+                _ => {
+                    return Err(format!(
+                        "Переменная '{}' не является массивом",
+                        &id.name
+                    )
+                    .as_str()
+                    .into())
+                }
+            }
             Ok(Expression::ArraySlice(
                 Rc::new(RefCell::new(var)),
                 start,
@@ -282,6 +322,70 @@ fn resolve_bin(
     let l = construct_expression(left, model.clone()).map(Box::new)?;
     let r = construct_expression(right, model).map(Box::new)?;
     Ok((l, r))
+}
+
+/// Возвращает [`TypeNode`] переменной из её [`VariableNode`].
+///
+/// Если переменная не разрешена ([`VariableNode::Unresolved`]),
+/// возвращает [`TypeNode::Inference`].
+#[inline]
+fn var_type(var: &VariableNode) -> TypeNode {
+    match var {
+        VariableNode::Simple(_, ty, _)
+        | VariableNode::Port(_, ty, _)
+        | VariableNode::Const(_, ty, _) => ty.clone(),
+        VariableNode::Unresolved => TypeNode::Inference,
+    }
+}
+
+/// Проверяет допустимость границ среза массива.
+///
+/// # Правила проверки
+///
+/// - `start` (если задан): `0 ≤ start < size`
+/// - `end` (если задан): `0 ≤ end ≤ size`
+/// - Если заданы оба: `start ≤ end`
+///
+/// # Ошибки
+///
+/// Возвращает [`Diagnostic`], если любое условие нарушено.
+fn check_slice_bounds(
+    name: &str,
+    size: u16,
+    start: Option<i64>,
+    end: Option<i64>,
+) -> Result<(), Diagnostic> {
+    if let Some(s) = start {
+        if s < 0 || s >= size as i64 {
+            return Err(format!(
+                "Начало среза {} выходит за границы массива '{}' (размер {})",
+                s, name, size
+            )
+            .as_str()
+            .into());
+        }
+    }
+    if let Some(e) = end {
+        if e < 0 || e > size as i64 {
+            return Err(format!(
+                "Конец среза {} выходит за границы массива '{}' (размер {})",
+                e, name, size
+            )
+            .as_str()
+            .into());
+        }
+    }
+    if let (Some(s), Some(e)) = (start, end) {
+        if s > e {
+            return Err(format!(
+                "Начало среза {} больше конца {} для массива '{}'",
+                s, e, name
+            )
+            .as_str()
+            .into());
+        }
+    }
+    Ok(())
 }
 
 /// Разрешает все элементы вектора выражений.
@@ -588,6 +692,100 @@ mod tests {
     fn array_subscript_unknown_var_is_error() {
         let result = build("var x: bit = ghost[0];");
         assert!(result.is_err(), "индексирование несуществующего массива — ошибка");
+    }
+
+    // ── Проверка типа и границ массива ────────────────────────────────────────
+
+    /// Корректный индекс в пределах массива — строится без ошибок.
+    #[test]
+    fn array_subscript_valid_index() {
+        let node = build("var buf: [bit;8] = 0; var x: bit = buf[0];").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::ArraySubscript(_, 0)),
+            "x должен быть ArraySubscript(buf, 0)"
+        );
+    }
+
+    /// Последний допустимый индекс (size - 1) — строится без ошибок.
+    #[test]
+    fn array_subscript_last_valid_index() {
+        let node = build("var buf: [bit;8] = 0; var x: bit = buf[7];").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::ArraySubscript(_, 7)),
+            "x должен быть ArraySubscript(buf, 7)"
+        );
+    }
+
+    /// Индекс равный размеру массива (out of bounds) — ошибка.
+    #[test]
+    fn array_subscript_out_of_bounds_is_error() {
+        let result = build("var buf: [bit;8] = 0; var x: bit = buf[8];");
+        assert!(result.is_err(), "индекс 8 >= size 8 должен давать ошибку");
+    }
+
+    /// Отрицательный индекс — ошибка.
+    #[test]
+    fn array_subscript_negative_index_is_error() {
+        let result = build("var buf: [bit;8] = 0; var x: bit = buf[-1];");
+        assert!(result.is_err(), "отрицательный индекс должен давать ошибку");
+    }
+
+    /// Индексирование переменной с типом Bit — ошибка (не массив).
+    #[test]
+    fn array_subscript_on_non_array_is_error() {
+        let result = build("var flag: bit = false; var x: bit = flag[0];");
+        assert!(result.is_err(), "индексирование Bit-переменной должно давать ошибку");
+        let err = result.unwrap_err();
+        assert!(
+            err.message.contains("flag"),
+            "сообщение должно упоминать имя переменной: {}",
+            err.message
+        );
+    }
+
+    /// `var_type` для Simple-переменной возвращает правильный тип.
+    #[test]
+    fn var_type_simple() {
+        use crate::semantic::VariableNode;
+        let v = VariableNode::Simple("x".into(), TypeNode::Bit, Expression::None);
+        assert_eq!(var_type(&v), TypeNode::Bit);
+    }
+
+    /// `var_type` для Unresolved-переменной возвращает Inference.
+    #[test]
+    fn var_type_unresolved() {
+        use crate::semantic::VariableNode;
+        assert_eq!(var_type(&VariableNode::Unresolved), TypeNode::Inference);
+    }
+
+    /// `check_slice_bounds`: допустимый срез [1:6] для массива size=8 — ок.
+    #[test]
+    fn check_slice_bounds_valid() {
+        check_slice_bounds("buf", 8, Some(1), Some(6)).unwrap();
+    }
+
+    /// `check_slice_bounds`: срез с end > size — ошибка.
+    #[test]
+    fn check_slice_bounds_end_out_of_range_is_error() {
+        assert!(check_slice_bounds("buf", 8, None, Some(9)).is_err());
+    }
+
+    /// `check_slice_bounds`: срез с start >= size — ошибка.
+    #[test]
+    fn check_slice_bounds_start_out_of_range_is_error() {
+        assert!(check_slice_bounds("buf", 8, Some(8), None).is_err());
+    }
+
+    /// `check_slice_bounds`: start > end — ошибка.
+    #[test]
+    fn check_slice_bounds_start_greater_than_end_is_error() {
+        assert!(check_slice_bounds("buf", 8, Some(5), Some(3)).is_err());
+    }
+
+    /// `check_slice_bounds`: None, None — всегда ок (срез без границ).
+    #[test]
+    fn check_slice_bounds_both_none_is_ok() {
+        check_slice_bounds("buf", 8, None, None).unwrap();
     }
 
     // ── Implement-состояния и construct_expression ─────────────────────────────

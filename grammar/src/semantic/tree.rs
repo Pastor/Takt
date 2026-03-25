@@ -113,10 +113,78 @@ fn construct_model_stage0(
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
                 }
-                ImportDefine::Rename(..) => {
-                    // TODO:  необходимо реализовать экспорт объектов из модели
-                    //        это типы, переменные, модели, условия, формулы, функции, блоки кода и т.д.
-                    todo!("Не реализовано")
+                // `import { A, B as C } from "file.but";`
+                //
+                // Загружает файл, строит его семантическую модель, затем
+                // выборочно экспортирует указанные имена в текущий контекст.
+                //
+                // Поддерживаемые категории: модели, псевдонимы типов, переменные, условия.
+                // Приоритет поиска: модель → тип → переменная → условие.
+                ImportDefine::Rename(path, symbols, _) => {
+                    let (content, _) = read_import_file(search_paths, path)?;
+                    let imported = match parse(&content, 0) {
+                        Ok((ast_model, _)) => {
+                            construct_model(&ast_model, None, search_paths)?
+                        }
+                        Err(d) => return Err(d.first().unwrap().clone()),
+                    };
+                    let src = imported.borrow();
+                    for (orig_id, alias_id) in symbols {
+                        let orig = &orig_id.name;
+                        // Целевое имя: alias если задан, иначе оригинальное
+                        let alias = alias_id
+                            .as_ref()
+                            .map_or_else(|| orig.clone(), |a| a.name.clone());
+                        // Поиск в категориях: модель → тип → переменная → условие
+                        if let Some(m) = src.models.get(orig) {
+                            if models.contains_key(&alias) {
+                                return Err(format!(
+                                    "Модель с именем '{}' уже объявлена",
+                                    alias
+                                )
+                                .as_str()
+                                .into());
+                            }
+                            models.insert(alias, Rc::clone(m));
+                        } else if let Some(t) = src.types.get(orig) {
+                            if types.contains_key(&alias) {
+                                return Err(format!(
+                                    "Тип '{}' уже объявлен",
+                                    alias
+                                )
+                                .as_str()
+                                .into());
+                            }
+                            types.insert(alias, t.clone());
+                        } else if let Some(v) = src.variables.get(orig) {
+                            if variables.contains_key(&alias) {
+                                return Err(format!(
+                                    "Переменная '{}' уже объявлена",
+                                    alias
+                                )
+                                .as_str()
+                                .into());
+                            }
+                            variables.insert(alias, v.clone());
+                        } else if let Some(c) = src.conditions.get(orig) {
+                            if conditions.contains_key(&alias) {
+                                return Err(format!(
+                                    "Условие '{}' уже объявлено",
+                                    alias
+                                )
+                                .as_str()
+                                .into());
+                            }
+                            conditions.insert(alias, c.clone());
+                        } else {
+                            return Err(format!(
+                                "Идентификатор '{}' не найден в импортируемом файле",
+                                orig
+                            )
+                            .as_str()
+                            .into());
+                        }
+                    }
                 }
             }
         } else if let ModelElement::Variable(def) = element {
@@ -565,21 +633,24 @@ fn construct_named_blocks(
 
 /// Строит [`Implement`] из семантического выражения [`Expression`].
 ///
+/// Обрабатывает разрешённые семантические выражения: `Model`, `Add`, `BitwiseOr`,
+/// `Parenthesis`. Для ещё не разрешённых АСД-выражений (`Unresolved`) делегирует
+/// в [`construct_implement_ast`], который напрямую обходит структуру АСД,
+/// минуя полный цикл `construct_expression`. Это оптимизация: выражения реализации
+/// (`A + B`, `A | B`) используют лишь ограниченное подмножество языка,
+/// и специализированный обход работает быстрее и без лишних аллокаций.
+///
 /// # Ошибки
 ///
-/// - `Expression::Unresolved` — передаётся в [`construct_implement_ast`],
-///   который напрямую обходит АСД без использования заглушки `construct_expression`.
-///   Это предотвращает бесконечную рекурсию: `construct_expression` является TODO-заглушкой
-///   и всегда возвращает `Expression::Unresolved`, что при обычном делегировании
-///   приводило к переполнению стека.
+/// Возвращает [`Diagnostic`], если встречается неподдерживаемое выражение
+/// (например, числовой литерал там, где ожидается имя модели).
 fn construct_implement(
     expression: Expression,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Implement, Diagnostic> {
     let model = Rc::clone(&model);
     match expression {
-        // ВАЖНО: нельзя вызывать construct_expression здесь, потому что это заглушка,
-        // возвращающая Expression::Unresolved — рекурсия была бы бесконечной.
+        // Ещё не разрешённое АСД-выражение: обходим напрямую без полного construct_expression
         Expression::Unresolved(expr) => construct_implement_ast(expr, model),
         // Разрешённая модель
         Expression::Model(model) => {
@@ -604,8 +675,10 @@ fn construct_implement(
 
 /// Строит [`Implement`] непосредственно из АСД-выражения [`ast::Expression`].
 ///
-/// Используется только из [`construct_implement`] для обработки варианта
-/// [`Expression::Unresolved`], минуя заглушку `construct_expression`.
+/// Используется из [`construct_implement`] для обработки варианта
+/// [`Expression::Unresolved`]. Напрямую обходит АСД, не вызывая полный
+/// [`construct_expression`], что является оптимизацией для ограниченного
+/// подмножества выражений реализации.
 ///
 /// Поддерживаемые варианты:
 /// - `Variable(id)` → именованная модель `id`;
