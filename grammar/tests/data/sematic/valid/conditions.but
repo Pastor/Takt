@@ -1,0 +1,20 @@
+// Пример: именованные условия переходов.
+//
+// Проверяет разрешение всех базовых форм условий:
+// - always_true / always_false — константы
+// - is_flag_set — ссылка на переменную
+// - negated — логическое НЕ
+// - grouped — скобочная группировка
+
+var flag: bit = false;
+
+cond always_true  = true;
+cond always_false = false;
+cond is_flag_set  = flag;
+cond negated      = !flag;
+cond grouped      = (flag);
+
+start Active {
+    ref Done: always_true;
+}
+state Done;

@@ -1,0 +1,22 @@
+// Пример: компоновка моделей (последовательная, параллельная, комбинированная).
+//
+// Проверяет:
+// - Implement-состояние Sequential = Step1 + Step2  (последовательная)
+// - Implement-состояние Parallel   = Step1 | Step2  (параллельная)
+// - Implement-состояние Combined   = (Step1 + Step2) | Step3 (комбинированная)
+
+model Step1 {
+    start S;
+}
+
+model Step2 {
+    start S;
+}
+
+model Step3 {
+    start S;
+}
+
+start Sequential = Step1 + Step2 { }
+state Parallel   = Step1 | Step2 { }
+state Combined   = (Step1 + Step2) | Step3 { }
