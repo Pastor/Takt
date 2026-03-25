@@ -139,6 +139,11 @@ impl ModelNode {
         }
     }
 
+    /// Возвращает именованный блок по его имени.
+    pub fn get_named_block(&self, name: &str) -> Option<&NamedCodeBlock> {
+        self.named_blocks.iter().find(|b| b.name() == name)
+    }
+
     /// Ищет объявление функции по `name`, обходя цепочку `upper`.
     pub fn search_func(&self, name: &str) -> Option<Rc<RefCell<Function>>> {
         if let Some(func) = self.functions.get(name) {
@@ -154,31 +159,68 @@ impl ModelNode {
 /// Семантический узел именованного блока кода (`enter`, `exit`, `always`, …).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum NamedCodeBlock {
+    /// Блок не задан.
     #[default]
     None,
+    /// Неразрешённый блок кода: `(имя, AST-оператор)`.
     Unresolved(String, ast::Statement),
+    /// Блок `enter` с разрешённым оператором.
     Enter(Statement),
+    /// Блок `exit` с разрешённым оператором.
     Exit(Statement),
+    /// Блок `always` с разрешённым оператором.
     Always(Statement),
+    /// Пользовательский именованный блок: `(имя, разрешённый_оператор)`.
     Unknown(String, Statement),
 }
 
+impl NamedCodeBlock {
+    /// Возвращает имя блока.
+    pub fn name(&self) -> &str {
+        match self {
+            NamedCodeBlock::None => "",
+            NamedCodeBlock::Unresolved(name, _) => name,
+            NamedCodeBlock::Enter(_) => "enter",
+            NamedCodeBlock::Exit(_) => "exit",
+            NamedCodeBlock::Always(_) => "always",
+            NamedCodeBlock::Unknown(name, _) => name,
+        }
+    }
+
+    /// Возвращает ссылку на семантический оператор блока, если он разрешён.
+    pub fn statement(&self) -> Option<&Statement> {
+        match self {
+            NamedCodeBlock::Enter(s) | NamedCodeBlock::Exit(s) | NamedCodeBlock::Always(s) | NamedCodeBlock::Unknown(_, s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
+/// Семантическое определение функции.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum FunctionNode {
+    /// Определение отсутствует.
     #[default]
     None,
+    /// Неразрешённое AST-определение.
     Unresolved(ast::FunctionDefine),
+    /// Локальная функция: `(имя, параметры, возвращаемый_тип, тело)`.
     Local(String, Vec<(String, Type)>, Type, Statement),
+    /// Внешняя функция (без тела).
     External(String, Vec<(String, Type)>, Type),
 }
 
-/// Семантический узел функции.
+/// Семантический узел вызова или ссылки на функцию.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum Function {
+    /// Функция не задана.
     #[default]
     None,
+    /// Неразрешённый вызов: `(имя, аргументы)`.
     Unresolved(String, Vec<Expression>),
+    /// Вызов локальной функции.
     Local(Rc<RefCell<FunctionNode>>, Vec<Expression>),
+    /// Вызов внешней функции.
     External(Rc<RefCell<FunctionNode>>, Vec<Expression>),
 }
 
@@ -285,6 +327,7 @@ pub enum TypeNode {
     Array(u16, Box<TypeNode>),
     /// Неподдерживаемый тип (например, функциональный).
     Unsupported,
+    /// Пустой тип.
     Unit,
 }
 
@@ -336,6 +379,31 @@ pub enum StateNode {
         /// Единственный `next`-переход (если задан).
         next: Option<Reference<StateNode>>,
     },
+}
+
+impl StateNode {
+    /// Возвращает имя состояния.
+    pub fn name(&self) -> &str {
+        match self {
+            StateNode::Unresolved => "",
+            StateNode::Simple { name, .. } => name,
+            StateNode::Implement { name, .. } => name,
+        }
+    }
+
+    /// Возвращает список именованных блоков состояния.
+    pub fn named_blocks(&self) -> &[NamedCodeBlock] {
+        match self {
+            StateNode::Unresolved => &[],
+            StateNode::Simple { named_blocks, .. } => named_blocks,
+            StateNode::Implement { named_blocks, .. } => named_blocks,
+        }
+    }
+
+    /// Ищет именованный блок в состоянии по его имени.
+    pub fn get_named_block(&self, name: &str) -> Option<&NamedCodeBlock> {
+        self.named_blocks().iter().find(|b| b.name() == name)
+    }
 }
 
 /// Реализация модели: описывает, как состояние или корневой автомат
@@ -588,12 +656,34 @@ mod tests {
         let _ = format!("{:?}", node);
     }
 
+    /// Поиск именованного блока в ModelNode.
+    #[test]
+    fn model_node_get_named_block() {
+        let mut node = ModelNode::default();
+        node.named_blocks.push(NamedCodeBlock::Always(Statement::None));
+        assert!(node.get_named_block("always").is_some());
+        assert!(node.get_named_block("enter").is_none());
+    }
+
     // ─── StateNode ───────────────────────────────────────────────────────
 
     /// StateNode::default() равен Unresolved.
     #[test]
     fn state_node_default_is_unresolved() {
         assert_eq!(StateNode::default(), StateNode::Unresolved);
+    }
+
+    /// Поиск именованного блока в StateNode.
+    #[test]
+    fn state_node_get_named_block() {
+        let state = StateNode::Simple {
+            name: "S".to_string(),
+            named_blocks: vec![NamedCodeBlock::Enter(Statement::None)],
+            references: vec![],
+        };
+        assert!(state.get_named_block("enter").is_some());
+        assert!(state.get_named_block("exit").is_none());
+        assert_eq!(state.name(), "S");
     }
 
     // ─── Reference ──────────────────────────────────────────────────────
@@ -634,5 +724,17 @@ mod tests {
         let _ = VariableNode::default();
         let _ = TypeNode::default();
         let _ = ConditionNode::default();
+    }
+
+    /// NamedCodeBlock методы name() и statement().
+    #[test]
+    fn named_code_block_methods() {
+        let nb = NamedCodeBlock::Always(Statement::Continue);
+        assert_eq!(nb.name(), "always");
+        assert_eq!(nb.statement(), Some(&Statement::Continue));
+
+        let nb_none = NamedCodeBlock::None;
+        assert_eq!(nb_none.name(), "");
+        assert_eq!(nb_none.statement(), None);
     }
 }

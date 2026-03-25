@@ -472,8 +472,8 @@ fn resolve_named_blocks(
     named_blocks: Vec<NamedCodeBlock>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Vec<NamedCodeBlock>, Diagnostic> {
-    let mut blocks = Vec::new();
-    for nb in named_blocks.clone() {
+    let mut blocks = Vec::with_capacity(named_blocks.len());
+    for nb in named_blocks {
         let block = match nb {
             NamedCodeBlock::None => return Err("Statement должен быть определен".into()),
             NamedCodeBlock::Unresolved(name, stmt) => {
@@ -519,12 +519,12 @@ fn construct_model_stage4(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     // Разрешаем блоки на уровне текущей модели
-    let named_blocks = model.borrow().named_blocks.clone();
+    let named_blocks = std::mem::take(&mut model.borrow_mut().named_blocks);
     model.borrow_mut().named_blocks = resolve_named_blocks(named_blocks, model.clone())?;
 
     // Разрешаем блоки в состояниях текущей модели
-    let states = model.borrow().states.clone();
-    let mut resolved_states = HashMap::new();
+    let states = std::mem::take(&mut model.borrow_mut().states);
+    let mut resolved_states = HashMap::with_capacity(states.len());
     for (state_name, state) in states {
         let resolved = resolve_state_named_blocks(state, model.clone())?;
         resolved_states.insert(state_name, resolved);

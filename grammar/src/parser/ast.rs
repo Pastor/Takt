@@ -139,6 +139,7 @@ pub enum Type {
         /// Список возвращаемых значений.
         returns: Option<ParameterList>,
     },
+    /// Пустой тип (отсутствие значения).
     #[default]
     Unit,
 }

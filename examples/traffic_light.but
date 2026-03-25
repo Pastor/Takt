@@ -1,0 +1,23 @@
+// Пример: Управление светофором
+model TrafficLight {
+    var timer: u8 = 0;
+    
+    start Red {
+        enter { timer = 0; }
+        always { timer = timer + 1; }
+        ref Yellow: timer > 10;
+    }
+    
+    state Yellow {
+        enter { timer = 0; }
+        always { timer = timer + 1; }
+        ref Green: timer > 3;
+    }
+    
+    state Green {
+        enter { timer = 0; }
+        always { timer = timer + 1; }
+        ref Red: timer > 15;
+    }
+}
+start Entry = TrafficLight;

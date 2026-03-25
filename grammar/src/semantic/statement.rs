@@ -248,11 +248,12 @@ mod tests {
     #[test]
     fn model_level_always_block_with_known_var_resolves() {
         let node = build("var it: bit = 0; always { it = it; } start S;");
-        let nb = node.named_blocks.get("always").expect("блок always должен быть");
+        let nb = node.get_named_block("always").expect("блок always должен быть");
+        let stmt = nb.statement().expect("оператор должен быть");
         // Должен быть разрешён (не Unresolved)
         assert!(
-            !matches!(nb.statement, Statement::Unresolved(_)),
-            "блок always должен быть разрешён, получен: {:?}", nb.statement
+            !matches!(stmt, Statement::Unresolved(_)),
+            "блок always должен быть разрешён, получен: {:?}", stmt
         );
     }
 
@@ -262,8 +263,8 @@ mod tests {
         // `debug` не объявлена — после изменения expression.rs создаётся заглушка,
         // поэтому оператор может быть разрешён или нет, но паники быть не должно
         let node = build(r#"always { debug("msg"); } start S;"#);
-        let nb = node.named_blocks.get("always").expect("блок always должен быть");
-        let _ = &nb.statement; // просто доступ без паники
+        let nb = node.get_named_block("always").expect("блок always должен быть");
+        let _ = nb.statement(); // просто доступ без паники
     }
 
     /// `enter { A = 0; }` внутри состояния — блок хранится в state.named_blocks.
@@ -271,12 +272,7 @@ mod tests {
     fn state_level_named_block_is_populated() {
         let node = build("var A: bit = false; start S { enter { A = A; } }");
         let state = node.states.get("S").expect("состояние S не найдено");
-        let nbs = match state {
-            crate::semantic::StateNode::Simple { named_blocks, .. } => named_blocks,
-            crate::semantic::StateNode::Implement { named_blocks, .. } => named_blocks,
-            _ => panic!("неожиданный вид состояния"),
-        };
-        assert!(nbs.contains_key("enter"), "enter должен быть в named_blocks состояния");
+        assert!(state.get_named_block("enter").is_some(), "enter должен быть в named_blocks состояния");
     }
 
     /// `enter { A = A; }` с известной переменной — разрешается.
@@ -284,14 +280,10 @@ mod tests {
     fn state_level_named_block_resolves_known_var() {
         let node = build("var A: bit = false; start S { enter { A = A; } }");
         let state = node.states.get("S").expect("состояние S не найдено");
-        let nbs = match state {
-            crate::semantic::StateNode::Simple { named_blocks, .. } => named_blocks,
-            crate::semantic::StateNode::Implement { named_blocks, .. } => named_blocks,
-            _ => panic!("неожиданный вид состояния"),
-        };
-        let enter = nbs.get("enter").expect("enter не найден");
+        let enter = state.get_named_block("enter").expect("enter не найден");
+        let stmt = enter.statement().expect("оператор должен быть");
         assert!(
-            !matches!(enter.statement, Statement::Unresolved(_)),
+            !matches!(stmt, Statement::Unresolved(_)),
             "enter должен быть разрешён"
         );
     }
@@ -301,12 +293,8 @@ mod tests {
     fn state_level_multiple_named_blocks() {
         let node = build("var A: bit = false; start S { enter { A = A; } exit { A = A; } }");
         let state = node.states.get("S").unwrap();
-        let nbs = match state {
-            crate::semantic::StateNode::Simple { named_blocks, .. } => named_blocks,
-            _ => panic!("неожиданный вид состояния"),
-        };
-        assert!(nbs.contains_key("enter"), "enter должен быть");
-        assert!(nbs.contains_key("exit"), "exit должен быть");
+        assert!(state.get_named_block("enter").is_some(), "enter должен быть");
+        assert!(state.get_named_block("exit").is_some(), "exit должен быть");
     }
 
     /// Разрешение оператора `if` в блоке состояния.
@@ -314,22 +302,20 @@ mod tests {
     fn state_named_block_if_statement_resolves() {
         let node = build("var x: bit = false; start S { always { if x { x = x; } } }");
         let state = node.states.get("S").unwrap();
-        let nbs = match state {
-            crate::semantic::StateNode::Simple { named_blocks, .. } => named_blocks,
-            _ => panic!("неожиданный вид состояния"),
-        };
-        let always = nbs.get("always").expect("always не найден");
-        assert!(matches!(always.statement, Statement::Block(_) | Statement::If { .. }),
-            "оператор if должен быть разрешён: {:?}", always.statement);
+        let always = state.get_named_block("always").expect("always не найден");
+        let stmt = always.statement().expect("оператор должен быть");
+        assert!(matches!(stmt, Statement::Block(_) | Statement::If { .. }),
+            "оператор if должен быть разрешён: {:?}", stmt);
     }
 
     /// Оператор `return` в named block разрешается.
     #[test]
     fn return_statement_resolves() {
         let node = build("var x: bit = false; always { return x; } start S;");
-        let nb = node.named_blocks.get("always").expect("always не найден");
-        assert!(!matches!(nb.statement, Statement::Unresolved(_)),
-            "return должен быть разрешён: {:?}", nb.statement);
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = nb.statement().expect("оператор должен быть");
+        assert!(!matches!(stmt, Statement::Unresolved(_)),
+            "return должен быть разрешён: {:?}", stmt);
     }
 
     /// `continue` и `break` разрешаются в соответствующие варианты.
