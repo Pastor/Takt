@@ -1396,3 +1396,90 @@ fn example_type_inference_bool_is_valid() {
         assert_eq!(ty, TypeNode::Bit, "signal: bit → Bit");
     }
 }
+
+// ─── Тесты новых файлов-примеров ─────────────────────────────────────────────
+
+/// `tests/data/sematic/valid/functions.but` — локальные и внешние функции.
+#[test]
+fn example_functions_is_valid() {
+    let node = build_file("tests/data/sematic/valid/functions.but").unwrap();
+    assert!(node.functions.contains_key("send"), "внешняя функция send");
+    assert!(node.functions.contains_key("recv"), "внешняя функция recv");
+    assert!(node.functions.contains_key("noop"), "внешняя функция noop");
+    assert!(node.functions.contains_key("identity"), "локальная функция identity");
+    assert!(node.functions.contains_key("init"), "локальная функция init");
+}
+
+/// `tests/data/sematic/valid/bool_type.but` — переменные типа bool.
+#[test]
+fn example_bool_type_is_valid() {
+    let node = build_file("tests/data/sematic/valid/bool_type.but").unwrap();
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("ready") {
+        assert_eq!(ty, TypeNode::Bool, "ready: bool → TypeNode::Bool");
+    } else {
+        panic!("переменная ready не найдена");
+    }
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("inferred_true") {
+        assert_eq!(ty, TypeNode::Bool, "inferred_true = true → TypeNode::Bool");
+    } else {
+        panic!("переменная inferred_true не найдена");
+    }
+}
+
+/// `tests/data/sematic/valid/integer_types.but` — числовые псевдонимы типов.
+#[test]
+fn example_integer_types_is_valid() {
+    let node = build_file("tests/data/sematic/valid/integer_types.but").unwrap();
+    assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
+    assert!(node.types.contains_key("u16"), "тип u16 должен быть объявлен");
+    assert!(node.types.contains_key("u32"), "тип u32 должен быть объявлен");
+    // Проверяем вывод типа из числовых литералов
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("small") {
+        assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)), "small=42 → [bit;8]");
+    }
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("medium") {
+        assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)), "medium=300 → [bit;16]");
+    }
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("large") {
+        assert_eq!(ty, TypeNode::Array(32, Box::new(TypeNode::Bit)), "large=70000 → [bit;32]");
+    }
+}
+
+/// `tests/data/sematic/valid/state_machine_full.but` — полный автомат светофора.
+#[test]
+fn example_state_machine_full_is_valid() {
+    let node = build_file("tests/data/sematic/valid/state_machine_full.but").unwrap();
+    let tl = node.search_model("TrafficLight").expect("модель TrafficLight не найдена");
+    let tl = tl.borrow();
+    assert!(tl.states.contains_key("Red"), "состояние Red");
+    assert!(tl.states.contains_key("Green"), "состояние Green");
+    assert!(tl.states.contains_key("Yellow"), "состояние Yellow");
+}
+
+/// `tests/data/sematic/invalid/duplicate_model.but` — дублирующееся имя модели → ошибка.
+#[test]
+fn example_duplicate_model_is_error() {
+    let result = build_file("tests/data/sematic/invalid/duplicate_model.but");
+    assert!(result.is_err(), "дублирующееся имя модели должно давать ошибку");
+}
+
+/// `tests/data/sematic/invalid/bit_value_in_const.but` — бит-константа с недопустимым значением → ошибка.
+#[test]
+fn example_bit_value_in_const_is_error() {
+    let result = build_file("tests/data/sematic/invalid/bit_value_in_const.but");
+    assert!(result.is_err(), "bit = 5 должно давать ошибку");
+}
+
+/// `tests/data/sematic/invalid/no_start_state.but` — модель без start → ошибка.
+#[test]
+fn example_no_start_state_is_error() {
+    let result = build_file("tests/data/sematic/invalid/no_start_state.but");
+    assert!(result.is_err(), "модель без start должна давать ошибку");
+}
+
+/// `tests/data/sematic/invalid/unknown_type_in_function.but` — неизвестный тип параметра → ошибка.
+#[test]
+fn example_unknown_type_in_function_is_error() {
+    let result = build_file("tests/data/sematic/invalid/unknown_type_in_function.but");
+    assert!(result.is_err(), "неизвестный тип параметра должен давать ошибку");
+}

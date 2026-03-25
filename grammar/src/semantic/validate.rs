@@ -96,36 +96,24 @@ fn check_bit_variable_value(
 
 /// Проверяет все переменные модели на корректность начальных значений для типа `bit`.
 ///
-/// Обходит `Simple`-, `Const`- и `Port`-переменные. Рекурсивно проверяет
-/// вложенные модели.
+/// Обходит `Simple`-, `Const`- и `Port`-переменные текущего уровня.
+/// Рекурсия по вложенным моделям не нужна — [`validate_model`] уже обходит
+/// их самостоятельно, вызывая `validate_bit_values` для каждой вложенной модели.
 ///
 /// # Ошибки
 ///
 /// Пробрасывает [`Diagnostic`] из [`check_bit_variable_value`].
 fn validate_bit_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
-    {
-        let borrowed = model.borrow();
-        for var in borrowed.variables.values() {
-            match var {
-                VariableNode::Simple(name, ty, expr)
-                | VariableNode::Const(name, ty, expr)
-                | VariableNode::Port(name, ty, expr) => {
-                    check_bit_variable_value(name, ty, expr)?;
-                }
-                VariableNode::Unresolved => {}
+    let borrowed = model.borrow();
+    for var in borrowed.variables.values() {
+        match var {
+            VariableNode::Simple(name, ty, expr)
+            | VariableNode::Const(name, ty, expr)
+            | VariableNode::Port(name, ty, expr) => {
+                check_bit_variable_value(name, ty, expr)?;
             }
+            VariableNode::Unresolved => {}
         }
-    }
-    // TODO: проверить что данный проход необходим т.к. вызывающая сторона уже рекурсивно обрабатывает вложенные модели
-    // Рекурсивно проверяем вложенные модели
-    let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
-        .borrow()
-        .models
-        .iter()
-        .map(|(k, v)| (k.clone(), Rc::clone(v)))
-        .collect();
-    for (_, nested_model) in nested {
-        validate_bit_values(nested_model)?;
     }
     Ok(())
 }

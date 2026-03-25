@@ -643,7 +643,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 Some(kind) => match kind {
                     StateKind::Start => StateNodeKind::Start,
                     StateKind::End => StateNodeKind::End,
-                    StateKind::Next => return Err("Next state definition unsupported".into()),
+                    StateKind::Next => return Err("Состояние с типом next не поддерживается в качестве определения".into()),
                 },
             };
             // Определяем вид узла: Implement (есть `= Выражение`) или Simple.

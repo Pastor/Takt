@@ -1,0 +1,35 @@
+// Пример: полный конечный автомат с переходами, условиями и именованными блоками.
+//
+// Автомат Traffic Light (светофор):
+//   Red → Green → Yellow → Red → ...
+
+var timer: [bit;8] = 0;
+
+cond timeout = timer = 255;
+
+model TrafficLight {
+    start Red {
+        ref Green: timeout;
+        enter {
+            timer = 0;
+        }
+        always {
+            timer = timer + 1;
+        }
+    }
+    state Green {
+        ref Yellow: timeout;
+        enter {
+            timer = 0;
+        }
+        always {
+            timer = timer + 1;
+        }
+    }
+    state Yellow {
+        ref Red: timeout;
+        enter {
+            timer = 0;
+        }
+    }
+}

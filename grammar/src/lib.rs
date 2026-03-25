@@ -302,4 +302,82 @@ always {
             assert_eq!(&normalized, expected);
         }
     }
+
+    // ── Дополнительные тесты нормализации имён ────────────────────────────────
+
+    /// Пустая строка остаётся пустой.
+    #[test]
+    fn normalize_model_name_empty() {
+        use super::normalize_model_name;
+        assert_eq!(normalize_model_name(""), "");
+    }
+
+    /// Строка из одних цифр не изменяется.
+    #[test]
+    fn normalize_model_name_digits_only() {
+        use super::normalize_model_name;
+        assert_eq!(normalize_model_name("123"), "123");
+    }
+
+    /// Одно слово: первая буква становится заглавной.
+    #[test]
+    fn normalize_model_name_single_word() {
+        use super::normalize_model_name;
+        assert_eq!(normalize_model_name("hello"), "Hello");
+    }
+
+    // ── Тесты ошибок парсера ──────────────────────────────────────────────────
+
+    /// Недопустимый токен: строка с управляющим символом вызывает ошибку парсера.
+    #[test]
+    fn parse_invalid_token_error() {
+        // Управляющие символы не являются допустимыми токенами языка BuT
+        let result = parse("\x00abc", 0);
+        assert!(
+            result.is_err(),
+            "строка с управляющим символом должна давать ошибку"
+        );
+    }
+
+    /// Неожиданный конец файла: незакрытая фигурная скобка.
+    #[test]
+    fn parse_unrecognized_eof_error() {
+        let result = parse("model M {", 0);
+        assert!(
+            result.is_err(),
+            "незакрытый блок модели должен давать ошибку EOF"
+        );
+        let diagnostics = result.unwrap_err();
+        assert!(!diagnostics.is_empty(), "должна быть хотя бы одна диагностика");
+    }
+
+    /// Нераспознанный токен: объявление переменной с неверным синтаксисом.
+    #[test]
+    fn parse_unrecognized_token_error() {
+        // «var» без имени переменной — нераспознанный токен
+        let result = parse("var = 0;", 0);
+        assert!(
+            result.is_err(),
+            "неверный синтаксис переменной должен давать ошибку"
+        );
+    }
+
+    /// Разбор корректной программы не должен паниковать.
+    #[test]
+    fn syntax_simple_does_not_panic() {
+        let result = parse("model M { start S; }", 0);
+        assert!(result.is_ok(), "корректная программа должна разбираться без ошибок");
+    }
+
+    /// Ошибка парсера содержит непустой диагностический список.
+    #[test]
+    fn parse_error_produces_diagnostics() {
+        let result = parse("model { }", 0);
+        assert!(result.is_err(), "модель без имени должна давать ошибку");
+        let diags = result.unwrap_err();
+        assert!(
+            !diags.is_empty(),
+            "список диагностик не должен быть пустым при ошибке"
+        );
+    }
 }

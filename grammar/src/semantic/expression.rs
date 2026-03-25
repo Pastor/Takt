@@ -823,4 +823,401 @@ mod tests {
             panic!("переменная x не найдена");
         }
     }
+
+    // ── Дополнительные арифметические операции ────────────────────────────────
+
+    /// Умножение: `var x: [bit;8] = 2 * 3;` → `Multiply`.
+    #[test]
+    fn multiply_in_var_initializer() {
+        let node = build("var x: [bit;8] = 2 * 3;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::Multiply(_, _)),
+            "инициализатор должен быть Multiply"
+        );
+    }
+
+    /// Деление: `var x: [bit;8] = 6 / 2;` → `Divide`.
+    #[test]
+    fn divide_in_var_initializer() {
+        let node = build("var x: [bit;8] = 6 / 2;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::Divide(_, _)),
+            "инициализатор должен быть Divide"
+        );
+    }
+
+    /// Остаток от деления: `var x: [bit;8] = 7 % 3;` → `Modulo`.
+    #[test]
+    fn modulo_in_var_initializer() {
+        let node = build("var x: [bit;8] = 7 % 3;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::Modulo(_, _)),
+            "инициализатор должен быть Modulo"
+        );
+    }
+
+    /// Возведение в степень: `var x: [bit;8] = 2 ** 3;` → `Power`.
+    #[test]
+    fn power_in_var_initializer() {
+        let node = build("var x: [bit;8] = 2 ** 3;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::Power(_, _)),
+            "инициализатор должен быть Power"
+        );
+    }
+
+    /// Сдвиг влево: `var x: [bit;8] = 1 << 2;` → `ShiftLeft`.
+    #[test]
+    fn shift_left_in_var_initializer() {
+        let node = build("var x: [bit;8] = 1 << 2;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::ShiftLeft(_, _)),
+            "инициализатор должен быть ShiftLeft"
+        );
+    }
+
+    /// Сдвиг вправо: `var x: [bit;8] = 4 >> 1;` → `ShiftRight`.
+    #[test]
+    fn shift_right_in_var_initializer() {
+        let node = build("var x: [bit;8] = 4 >> 1;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::ShiftRight(_, _)),
+            "инициализатор должен быть ShiftRight"
+        );
+    }
+
+    /// Побитовое XOR: `var x: [bit;8] = 3 ^ 1;` → `BitwiseXor`.
+    #[test]
+    fn bitwise_xor_in_var_initializer() {
+        let node = build("var x: [bit;8] = 3 ^ 1;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::BitwiseXor(_, _)),
+            "инициализатор должен быть BitwiseXor"
+        );
+    }
+
+    // ── Операции сравнения ────────────────────────────────────────────────────
+
+    /// Меньше или равно: `var x: bit = 1 <= 2;` → `LessEqual`.
+    #[test]
+    fn less_equal_in_var_initializer() {
+        let node = build("var x: bit = 1 <= 2;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::LessEqual(_, _)),
+            "инициализатор должен быть LessEqual"
+        );
+    }
+
+    /// Больше или равно: `var x: bit = 2 >= 1;` → `MoreEqual`.
+    #[test]
+    fn more_equal_in_var_initializer() {
+        let node = build("var x: bit = 2 >= 1;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::MoreEqual(_, _)),
+            "инициализатор должен быть MoreEqual"
+        );
+    }
+
+    // ── Логические операции ───────────────────────────────────────────────────
+
+    /// Логическое И: `var x: bit = true && false;` → `And`.
+    #[test]
+    fn and_in_var_initializer() {
+        let node = build("var x: bit = true && false;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::And(_, _)),
+            "инициализатор должен быть And"
+        );
+    }
+
+    /// Логическое ИЛИ: `var x: bit = true || false;` → `Or`.
+    #[test]
+    fn or_in_var_initializer() {
+        let node = build("var x: bit = true || false;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::Or(_, _)),
+            "инициализатор должен быть Or"
+        );
+    }
+
+    // ── Унарные операции ──────────────────────────────────────────────────────
+
+    /// Унарный плюс: `var x: [bit;8] = +5;` → `UnaryPlus`.
+    #[test]
+    fn unary_plus_in_var_initializer() {
+        let node = build("var x: [bit;8] = +5;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::UnaryPlus(_)),
+            "инициализатор должен быть UnaryPlus"
+        );
+    }
+
+    /// Побитовое НЕ: `var x: [bit;8] = ~0;` → `BitwiseNot`.
+    #[test]
+    fn bitwise_not_in_var_initializer() {
+        let node = build("var x: [bit;8] = ~0;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::BitwiseNot(_)),
+            "инициализатор должен быть BitwiseNot"
+        );
+    }
+
+    /// Вещественный литерал: `var r = 3.14;` → `Rational`.
+    #[test]
+    fn rational_literal_in_var_initializer() {
+        let node = build("var r = 3.14;").unwrap();
+        assert!(
+            matches!(var_expr(&node, "r"), Expression::Rational(_, _)),
+            "инициализатор должен быть Rational"
+        );
+    }
+
+    /// Отрицание вещественного числа: `var r = -3.14;` → `Rational` с флагом отрицания.
+    #[test]
+    fn negate_rational_in_var_initializer() {
+        // Парсер может представить -3.14 как Rational(_, true) или Negate(Rational)
+        let node = build("var r = -3.14;").unwrap();
+        let expr = var_expr(&node, "r");
+        assert!(
+            matches!(expr, Expression::Rational(_, _) | Expression::Negate(_)),
+            "инициализатор должен быть Rational или Negate"
+        );
+    }
+
+    // ── Тернарный оператор ────────────────────────────────────────────────────
+
+    /// Тернарный оператор через `construct_expression` → `ConditionalOperator`.
+    ///
+    /// Синтаксис `? :` не поддерживается парсером BuT, поэтому
+    /// тестируем напрямую через `construct_expression`.
+    #[test]
+    fn conditional_operator_via_construct_expression() {
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        let loc = crate::diagnostics::Location::default();
+        // false ? 0 : 1
+        let cond_expr = Box::new(crate::parser::ast::Expression::Bool(loc, false));
+        let then_expr = Box::new(crate::parser::ast::Expression::Number(loc, 0));
+        let else_expr = Box::new(crate::parser::ast::Expression::Number(loc, 1));
+        let expr = crate::parser::ast::Expression::ConditionalOperator(
+            loc,
+            cond_expr,
+            then_expr,
+            else_expr,
+        );
+        let result = construct_expression(expr, model).unwrap();
+        assert!(
+            matches!(result, Expression::ConditionalOperator(_, _, _)),
+            "должен получиться ConditionalOperator"
+        );
+    }
+
+    // ── Срез массива ──────────────────────────────────────────────────────────
+
+    /// Срез массива: `var y: [bit;4] = buf[1:5];` → `ArraySlice`.
+    #[test]
+    fn array_slice_in_var_initializer() {
+        let node = build("var buf: [bit;8] = 0; var y: [bit;4] = buf[1:5];").unwrap();
+        assert!(
+            matches!(var_expr(&node, "y"), Expression::ArraySlice(_, _, _)),
+            "инициализатор y должен быть ArraySlice"
+        );
+    }
+
+    /// Срез несуществующего массива — ошибка.
+    #[test]
+    fn array_slice_unknown_var_is_error() {
+        let result = build("var y: [bit;4] = ghost[0:4];");
+        assert!(
+            result.is_err(),
+            "срез несуществующего массива должен давать ошибку"
+        );
+    }
+
+    /// Срез переменной с типом Bit — ошибка (не массив).
+    #[test]
+    fn array_slice_on_non_array_is_error() {
+        let result = build("var flag: bit = false; var y: [bit;4] = flag[0:4];");
+        assert!(
+            result.is_err(),
+            "срез Bit-переменной должен давать ошибку"
+        );
+    }
+
+    // ── Строковый литерал ─────────────────────────────────────────────────────
+
+    /// Строковый литерал в вызове debug() — разрешается без ошибок.
+    #[test]
+    fn string_literal_in_debug_call() {
+        let node = build(r#"always { debug("hello"); } start S;"#).unwrap();
+        assert!(node.has_states(), "модель должна содержать состояние S");
+    }
+
+    // ── Вызов функции ─────────────────────────────────────────────────────────
+
+    /// Вызов внешней функции в блоке `always` → разрешается без ошибок.
+    #[test]
+    fn extern_function_call_in_always_block() {
+        let node =
+            build("extern fn foo(); always { foo(); } start S;").unwrap();
+        assert!(node.has_states(), "модель должна содержать состояние S");
+    }
+
+    // ── Приведение типа ───────────────────────────────────────────────────────
+
+    /// Приведение типа: `var x: [bit;8] = 42 as [bit;8];` → `Cast`.
+    #[test]
+    fn cast_in_var_initializer() {
+        let node = build("var x: [bit;8] = 42 as [bit;8];").unwrap();
+        assert!(
+            matches!(var_expr(&node, "x"), Expression::Cast(_, _)),
+            "инициализатор должен быть Cast"
+        );
+    }
+
+    // ── Массивный литерал ─────────────────────────────────────────────────────
+
+    /// Массивный литерал через `construct_expression` → `Expression::Array`.
+    ///
+    /// Синтаксис `[a, b]` не поддерживается парсером как инициализатор переменной,
+    /// поэтому тестируем через `construct_expression` напрямую.
+    #[test]
+    fn array_literal_via_construct_expression() {
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        let loc = crate::diagnostics::Location::default();
+        let items = vec![
+            crate::parser::ast::Expression::Number(loc, 0),
+            crate::parser::ast::Expression::Number(loc, 1),
+        ];
+        let expr = crate::parser::ast::Expression::Array(loc, items);
+        let result = construct_expression(expr, model).unwrap();
+        assert!(
+            matches!(result, Expression::Array(_)),
+            "должен получиться Expression::Array"
+        );
+    }
+
+    // ── Прямое использование construct_expression ─────────────────────────────
+
+    /// `ast::Expression::Type` → `Expression::Type(Type::Bit)`.
+    #[test]
+    fn construct_expression_type_variant() {
+        use crate::parser::ast::Type;
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        let expr = crate::parser::ast::Expression::Type(
+            crate::diagnostics::Location::default(),
+            Type::Bit,
+        );
+        let result = construct_expression(expr, model).unwrap();
+        assert!(
+            matches!(result, Expression::Type(Type::Bit)),
+            "должен получиться Expression::Type(Type::Bit)"
+        );
+    }
+
+    /// `ast::Expression::Address` → `Expression::Address(addr, bit)`.
+    #[test]
+    fn construct_expression_address_variant() {
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        let expr = crate::parser::ast::Expression::Address(
+            crate::diagnostics::Location::default(),
+            0x1234,
+            5,
+        );
+        let result = construct_expression(expr, model).unwrap();
+        assert!(
+            matches!(result, Expression::Address(0x1234, 5)),
+            "должен получиться Expression::Address(0x1234, 5)"
+        );
+    }
+
+    /// `ast::Expression::List` с пустым списком → `Expression::List([])`.
+    #[test]
+    fn construct_expression_list_variant() {
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        let expr = crate::parser::ast::Expression::List(
+            crate::diagnostics::Location::default(),
+            vec![],
+        );
+        let result = construct_expression(expr, model).unwrap();
+        assert!(
+            matches!(result, Expression::List(_)),
+            "должен получиться Expression::List"
+        );
+    }
+
+    /// Неизвестный идентификатор в `construct_expression` → ошибка.
+    #[test]
+    fn construct_expression_unknown_variable_is_error() {
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        let expr = crate::parser::ast::Expression::Variable(
+            crate::parser::ast::Identifier::new("ghost"),
+        );
+        let result = construct_expression(expr, model);
+        assert!(result.is_err(), "неизвестный идентификатор должен давать ошибку");
+    }
+
+    /// `ast::Expression::ArraySubscript` для несуществующей переменной → ошибка.
+    #[test]
+    fn construct_expression_array_subscript_unknown_var() {
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        let expr = crate::parser::ast::Expression::ArraySubscript(
+            crate::diagnostics::Location::default(),
+            crate::parser::ast::Identifier::new("no_such_var"),
+            0,
+        );
+        let result = construct_expression(expr, model);
+        assert!(result.is_err(), "несуществующая переменная должна давать ошибку");
+    }
+
+    /// `ast::Expression::ArraySlice` для несуществующей переменной → ошибка.
+    #[test]
+    fn construct_expression_array_slice_unknown_var() {
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        let expr = crate::parser::ast::Expression::ArraySlice(
+            crate::diagnostics::Location::default(),
+            crate::parser::ast::Identifier::new("no_such_var"),
+            Some(0),
+            Some(4),
+        );
+        let result = construct_expression(expr, model);
+        assert!(result.is_err(), "несуществующая переменная должна давать ошибку");
+    }
+
+    /// `var_type` для Port-переменной возвращает правильный тип.
+    #[test]
+    fn var_type_port() {
+        let v = VariableNode::Port("p".into(), TypeNode::Bit, Expression::None);
+        assert_eq!(var_type(&v), TypeNode::Bit);
+    }
+
+    /// `var_type` для Const-переменной возвращает правильный тип.
+    #[test]
+    fn var_type_const() {
+        let v = VariableNode::Const("c".into(), TypeNode::Bool, Expression::None);
+        assert_eq!(var_type(&v), TypeNode::Bool);
+    }
+
+    /// `check_slice_bounds`: отрицательный start — ошибка.
+    #[test]
+    fn check_slice_bounds_negative_start_is_error() {
+        assert!(check_slice_bounds("buf", 8, Some(-1), None).is_err());
+    }
+
+    /// `check_slice_bounds`: отрицательный end — ошибка.
+    #[test]
+    fn check_slice_bounds_negative_end_is_error() {
+        assert!(check_slice_bounds("buf", 8, None, Some(-1)).is_err());
+    }
+
+    /// `check_slice_bounds`: срез без начала [..end] — ок.
+    #[test]
+    fn check_slice_bounds_only_end_is_ok() {
+        check_slice_bounds("buf", 8, None, Some(8)).unwrap();
+    }
+
+    /// `check_slice_bounds`: срез без конца [start..] — ок.
+    #[test]
+    fn check_slice_bounds_only_start_is_ok() {
+        check_slice_bounds("buf", 8, Some(0), None).unwrap();
+    }
 }
