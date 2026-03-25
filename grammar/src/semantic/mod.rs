@@ -36,9 +36,9 @@ pub struct ModelNode {
     /// Вложенные именованные модели.
     pub models: HashMap<String, Rc<RefCell<ModelNode>>>,
     /// Именованные блоки кода (`enter`, `exit`, `always`, …).
-    pub named_blocks: HashMap<String, NamedBlockNode>,
+    pub named_blocks: Vec<NamedCodeBlock>,
     /// Объявленные функции.
-    pub functions: HashMap<String, FunctionNode>,
+    pub functions: HashMap<String, Function>,
     /// Объявленные переменные.
     pub variables: HashMap<String, VariableNode>,
     /// Объявленные псевдонимы типов.
@@ -140,7 +140,7 @@ impl ModelNode {
     }
 
     /// Ищет объявление функции по `name`, обходя цепочку `upper`.
-    pub fn search_func(&self, name: &str) -> Option<Rc<RefCell<FunctionNode>>> {
+    pub fn search_func(&self, name: &str) -> Option<Rc<RefCell<Function>>> {
         if let Some(func) = self.functions.get(name) {
             Some(Rc::new(RefCell::new(func.clone())))
         } else if let Some(model) = self.upper.as_ref() {
@@ -153,18 +153,33 @@ impl ModelNode {
 
 /// Семантический узел именованного блока кода (`enter`, `exit`, `always`, …).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct NamedBlockNode {
-    /// Имя блока (`enter`, `exit`, `always`, …).
-    pub name: String,
-    /// Оператор блока.
-    pub statement: Statement,
+pub enum NamedCodeBlock {
+    #[default]
+    None,
+    Unresolved(String, ast::Statement),
+    Enter(Statement),
+    Exit(Statement),
+    Always(Statement),
+    Unknown(String, Statement),
+}
+
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
+pub enum FunctionNode {
+    #[default]
+    None,
+    Unresolved(ast::FunctionDefine),
+    Local(String, Vec<(String, Type)>, Type, Statement),
+    External(String, Vec<(String, Type)>, Type),
 }
 
 /// Семантический узел функции.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct FunctionNode {
-    /// Имя функции.
-    pub name: String,
+pub enum Function {
+    #[default]
+    None,
+    Unresolved(String, Vec<Expression>),
+    Local(Rc<RefCell<FunctionNode>>, Vec<Expression>),
+    External(Rc<RefCell<FunctionNode>>, Vec<Expression>),
 }
 
 /// Семантический оператор языка BuT.
@@ -270,6 +285,7 @@ pub enum TypeNode {
     Array(u16, Box<TypeNode>),
     /// Неподдерживаемый тип (например, функциональный).
     Unsupported,
+    Unit,
 }
 
 /// Семантический узел именованного условия.
@@ -301,7 +317,7 @@ pub enum StateNode {
     /// Обычное состояние: контекст, имя и список ссылок на переходы.
     Simple {
         /// Именованные блоки кода (`enter`, `exit`, `always`, …).
-        named_blocks: HashMap<String, NamedBlockNode>,
+        named_blocks: Vec<NamedCodeBlock>,
         /// Имя состояния.
         name: String,
         /// Ссылки-переходы (`ref Имя [: Условие]`).
@@ -310,7 +326,7 @@ pub enum StateNode {
     /// Состояние с реализацией (`= Модель`): может иметь `next`-переход.
     Implement {
         /// Именованные блоки кода (`enter`, `exit`, `always`, …).
-        named_blocks: HashMap<String, NamedBlockNode>,
+        named_blocks: Vec<NamedCodeBlock>,
         /// Имя состояния.
         name: String,
         /// Ссылки-переходы.
@@ -365,7 +381,7 @@ pub enum Condition {
     /// Доступ к биту: `условие.член`.
     BitAccess(Box<Condition>, Member),
     /// Вызов функции: `id(аргументы,*)`.
-    Function(Rc<RefCell<FunctionNode>>, Vec<Box<Condition>>),
+    Function(Rc<RefCell<Function>>, Vec<Box<Condition>>),
     /// Логическое НЕ: `!условие`.
     Not(Box<Condition>),
     /// Сложение: `левое + правое`.
@@ -429,7 +445,7 @@ pub enum Expression {
     /// Доступ к биту: `выражение.член`.
     BitAccess(Box<Expression>, Member),
     /// Вызов функции: `id(аргументы,*)`.
-    Function(Rc<RefCell<FunctionNode>>, Vec<Expression>),
+    Function(Rc<RefCell<Function>>, Vec<Expression>),
     /// Блок кода как выражение: `выражение { ... }`.
     CodeBlock(Box<Expression>, Statement),
     /// Вызов с именованными аргументами: `выражение({ ключ: значение, … })`.
@@ -613,8 +629,8 @@ mod tests {
     /// Заглушки-узлы реализуют Default.
     #[test]
     fn stub_nodes_default() {
-        let _ = NamedBlockNode::default();
-        let _ = FunctionNode::default();
+        let _ = NamedCodeBlock::default();
+        let _ = Function::default();
         let _ = VariableNode::default();
         let _ = TypeNode::default();
         let _ = ConditionNode::default();

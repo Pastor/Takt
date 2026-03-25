@@ -209,7 +209,7 @@ mod tests {
     use crate::semantic::tree::construct_model;
 
     /// Строит модель и возвращает корневой ModelNode.
-    fn build(src: &str) -> crate::semantic::ModelNode {
+    fn build(src: &str) -> ModelNode {
         let (ast, _) = parse(src, 0).expect("ошибка разбора");
         construct_model(&ast, None, &[]).map(|m| m.take()).expect("ошибка построения")
     }

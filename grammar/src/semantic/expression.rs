@@ -20,7 +20,7 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
-use crate::semantic::{Expression, ModelNode, Statement, TypeNode, VariableNode};
+use crate::semantic::{Expression, Function, ModelNode, Statement, TypeNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -45,9 +45,9 @@ pub fn construct_expression(
         ast::Expression::Rational(_, s, neg) => Ok(Expression::Rational(s, neg)),
         ast::Expression::Bool(_, v) => Ok(Expression::Bool(v)),
         // Строки: извлекаем текст из Vec<StringLiteral>
-        ast::Expression::String(lits) => {
-            Ok(Expression::String(lits.into_iter().map(|l| l.string).collect()))
-        }
+        ast::Expression::String(lits) => Ok(Expression::String(
+            lits.into_iter().map(|l| l.string).collect(),
+        )),
         ast::Expression::Type(_, t) => Ok(Expression::Type(t)),
         ast::Expression::Address(_, addr, bit) => Ok(Expression::Address(addr, bit)),
         ast::Expression::List(_, pl) => Ok(Expression::List(pl)),
@@ -71,9 +71,11 @@ pub fn construct_expression(
             if let Some(cond) = model.borrow().search_cond(name) {
                 return Ok(Expression::Condition(Rc::new(RefCell::new(cond))));
             }
-            Err(format!("Идентификатор '{}' не найден в области видимости", name)
-                .as_str()
-                .into())
+            Err(
+                format!("Идентификатор '{}' не найден в области видимости", name)
+                    .as_str()
+                    .into(),
+            )
         }
 
         // ── Обращение к массиву ────────────────────────────────────────────────
@@ -86,14 +88,11 @@ pub fn construct_expression(
         // Если тип переменной ещё не выведен (`TypeNode::Inference`), структурная
         // проверка пропускается — она будет повторно вычислена после вывода типов.
         ast::Expression::ArraySubscript(_, id, n) => {
-            let var = model
-                .borrow()
-                .search_var(&id.name)
-                .ok_or_else(|| {
-                    format!("Переменная '{}' не найдена", &id.name)
-                        .as_str()
-                        .into()
-                })?;
+            let var = model.borrow().search_var(&id.name).ok_or_else(|| {
+                format!("Переменная '{}' не найдена", &id.name)
+                    .as_str()
+                    .into()
+            })?;
             // Проверяем тип и границы (если тип известен)
             match var_type(&var) {
                 TypeNode::Array(size, _) => {
@@ -108,25 +107,19 @@ pub fn construct_expression(
                 }
                 TypeNode::Inference => {} // тип ещё не выведен — пропускаем проверку
                 _ => {
-                    return Err(format!(
-                        "Переменная '{}' не является массивом",
-                        &id.name
-                    )
-                    .as_str()
-                    .into())
+                    return Err(format!("Переменная '{}' не является массивом", &id.name)
+                        .as_str()
+                        .into());
                 }
             }
             Ok(Expression::ArraySubscript(Rc::new(RefCell::new(var)), n))
         }
         ast::Expression::ArraySlice(_, id, start, end) => {
-            let var = model
-                .borrow()
-                .search_var(&id.name)
-                .ok_or_else(|| {
-                    format!("Переменная '{}' не найдена", &id.name)
-                        .as_str()
-                        .into()
-                })?;
+            let var = model.borrow().search_var(&id.name).ok_or_else(|| {
+                format!("Переменная '{}' не найдена", &id.name)
+                    .as_str()
+                    .into()
+            })?;
             // Проверяем тип и границы среза (если тип известен)
             match var_type(&var) {
                 TypeNode::Array(size, _) => {
@@ -134,12 +127,9 @@ pub fn construct_expression(
                 }
                 TypeNode::Inference => {} // тип ещё не выведен — пропускаем
                 _ => {
-                    return Err(format!(
-                        "Переменная '{}' не является массивом",
-                        &id.name
-                    )
-                    .as_str()
-                    .into())
+                    return Err(format!("Переменная '{}' не является массивом", &id.name)
+                        .as_str()
+                        .into());
                 }
             }
             Ok(Expression::ArraySlice(
@@ -166,22 +156,18 @@ pub fn construct_expression(
         ast::Expression::Function(_, id, args) => {
             use std::cell::RefCell;
             use std::rc::Rc;
-            let func = model
-                .borrow()
-                .search_func(&id.name)
-                .unwrap_or_else(|| {
-                    Rc::new(RefCell::new(crate::semantic::FunctionNode {
-                        name: id.name.clone(),
-                    }))
-                });
+            let func = model.borrow().search_func(&id.name).unwrap_or_else(|| {
+                Rc::new(RefCell::new(Function::Unresolved(id.name.clone(), vec![])))
+            });
             let resolved_args = resolve_elems(args, model)?;
             Ok(Expression::Function(func, resolved_args))
         }
 
         // Блок кода как выражение: разрешаем базовое выражение, Statement не трогаем.
-        ast::Expression::CodeBlock(_, inner, stmt) => {
-            Ok(Expression::CodeBlock(resolve_expr(*inner, model)?, Statement::Unresolved(*stmt)))
-        }
+        ast::Expression::CodeBlock(_, inner, stmt) => Ok(Expression::CodeBlock(
+            resolve_expr(*inner, model)?,
+            Statement::Unresolved(*stmt),
+        )),
 
         // Именованный вызов: разрешаем базовое выражение, аргументы оставляем как есть.
         ast::Expression::NamedFunction(_, inner, named_args) => Ok(Expression::NamedFunctionBox(
@@ -196,12 +182,8 @@ pub fn construct_expression(
 
         // ── Унарные операции ──────────────────────────────────────────────────
         ast::Expression::Not(_, e) => Ok(Expression::Not(resolve_expr(*e, model)?)),
-        ast::Expression::BitwiseNot(_, e) => {
-            Ok(Expression::BitwiseNot(resolve_expr(*e, model)?))
-        }
-        ast::Expression::UnaryPlus(_, e) => {
-            Ok(Expression::UnaryPlus(resolve_expr(*e, model)?))
-        }
+        ast::Expression::BitwiseNot(_, e) => Ok(Expression::BitwiseNot(resolve_expr(*e, model)?)),
+        ast::Expression::UnaryPlus(_, e) => Ok(Expression::UnaryPlus(resolve_expr(*e, model)?)),
         ast::Expression::Negate(_, e) => Ok(Expression::Negate(resolve_expr(*e, model)?)),
 
         // ── Бинарные операции ─────────────────────────────────────────────────
@@ -297,9 +279,7 @@ pub fn construct_expression(
                 Box::new(else_e),
             ))
         }
-        ast::Expression::Array(_, items) => {
-            Ok(Expression::Array(resolve_elems(items, model)?))
-        }
+        ast::Expression::Array(_, items) => Ok(Expression::Array(resolve_elems(items, model)?)),
         ast::Expression::Initializer(_, items) => {
             Ok(Expression::Initializer(resolve_elems(items, model)?))
         }
@@ -637,7 +617,11 @@ mod tests {
     fn type_inference_bool_literal() {
         let node = build("var flag = false;").unwrap();
         if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("flag") {
-            assert_eq!(ty, TypeNode::Bit, "тип должен выводиться как Bit из булева литерала");
+            assert_eq!(
+                ty,
+                TypeNode::Bit,
+                "тип должен выводиться как Bit из булева литерала"
+            );
         } else {
             panic!("переменная flag не найдена или не Simple");
         }
@@ -648,7 +632,11 @@ mod tests {
     fn type_inference_rational_literal() {
         let node = build("var r = 3.14;").unwrap();
         if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("r") {
-            assert_eq!(ty, TypeNode::Rational, "тип должен выводиться как Rational из вещественного литерала");
+            assert_eq!(
+                ty,
+                TypeNode::Rational,
+                "тип должен выводиться как Rational из вещественного литерала"
+            );
         } else {
             panic!("переменная r не найдена");
         }
@@ -698,7 +686,10 @@ mod tests {
     #[test]
     fn array_subscript_unknown_var_is_error() {
         let result = build("var x: bit = ghost[0];");
-        assert!(result.is_err(), "индексирование несуществующего массива — ошибка");
+        assert!(
+            result.is_err(),
+            "индексирование несуществующего массива — ошибка"
+        );
     }
 
     // ── Проверка типа и границ массива ────────────────────────────────────────
@@ -741,7 +732,10 @@ mod tests {
     #[test]
     fn array_subscript_on_non_array_is_error() {
         let result = build("var flag: bit = false; var x: bit = flag[0];");
-        assert!(result.is_err(), "индексирование Bit-переменной должно давать ошибку");
+        assert!(
+            result.is_err(),
+            "индексирование Bit-переменной должно давать ошибку"
+        );
         let err = result.unwrap_err();
         assert!(
             err.message.contains("flag"),

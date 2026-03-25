@@ -105,7 +105,7 @@ impl ImportDefine {
 pub type ParameterList = Vec<(Location, Option<Parameter>)>;
 
 /// Тип данных в языке BuT.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Type {
     /// Адресный тип `порт[:бит]`.
@@ -139,6 +139,8 @@ pub enum Type {
         /// Список возвращаемых значений.
         returns: Option<ParameterList>,
     },
+    #[default]
+    Unit,
 }
 
 /// Описание (`var` или `const` или `port`).

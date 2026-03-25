@@ -15,16 +15,16 @@ use crate::parser::ast::{
 use crate::semantic::condition::extract_conditions;
 use crate::semantic::expression::construct_expression;
 use crate::semantic::include::read_import_file;
+use crate::semantic::statement::resolve_statement;
 use crate::semantic::type_inference::type_inference;
 use crate::semantic::{
-    Condition, ConditionNode, Expression, Implement, ModelNode, NamedBlockNode, Reference,
+    Condition, ConditionNode, Expression, Implement, ModelNode, NamedCodeBlock, Reference,
     StateNode, Statement, TypeNode, VariableNode,
 };
 use crate::{normalize_model_name, parse};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::semantic::statement::resolve_statement;
 
 /// Извлекает имя из опционального [`Identifier`].
 ///
@@ -60,7 +60,7 @@ fn construct_model_stage0(
     let mut variables = HashMap::new();
     let mut types = HashMap::new();
     let mut conditions = HashMap::new();
-    let mut named_blocks = HashMap::new();
+    let mut named_blocks = Vec::new();
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
             let model = construct_model_stage0(model, Some(Rc::clone(&model_node)), search_paths)?;
@@ -271,13 +271,16 @@ fn construct_model_stage0(
                 .ok_or_else(|| "Именованный блок кода при определении должен иметь имя".into())?
                 .name
                 .clone();
-            named_blocks.insert(
-                name.clone(),
-                NamedBlockNode {
-                    name: name.clone(),
-                    statement: Statement::Unresolved(def.statement.clone()),
-                },
-            );
+            let block = match name.as_str() {
+                "enter" => NamedCodeBlock::Enter(Statement::Unresolved(def.statement.clone())),
+                "exit" => NamedCodeBlock::Exit(Statement::Unresolved(def.statement.clone())),
+                "always" => NamedCodeBlock::Always(Statement::Unresolved(def.statement.clone())),
+                name => NamedCodeBlock::Unknown(
+                    name.to_string(),
+                    Statement::Unresolved(def.statement.clone()),
+                ),
+            };
+            named_blocks.push(block);
         }
     }
     model_node.borrow_mut().models = models;
@@ -309,6 +312,7 @@ pub(crate) fn construct_type(
             "bit" => Ok(TypeNode::Bit),
             "bool" => Ok(TypeNode::Bit),
             "float" => Ok(TypeNode::Rational),
+            "unit" => Ok(TypeNode::Unit),
             local => Ok(map
                 .get(local)
                 .ok_or_else(|| {
@@ -327,6 +331,7 @@ pub(crate) fn construct_type(
             Box::new(construct_type(Some(*element_type), map)?),
         )),
         Type::Function { .. } => Ok(TypeNode::Unsupported),
+        Type::Unit => Ok(TypeNode::Unit),
     }
 }
 
@@ -463,6 +468,41 @@ fn construct_model_stage3(
     Ok(Rc::clone(&model))
 }
 
+fn resolve_named_blocks(
+    named_blocks: Vec<NamedCodeBlock>,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<Vec<NamedCodeBlock>, Diagnostic> {
+    let mut blocks = Vec::new();
+    for nb in named_blocks.clone() {
+        let block = match nb {
+            NamedCodeBlock::None => return Err("Statement должен быть определен".into()),
+            NamedCodeBlock::Unresolved(name, stmt) => {
+                let stmt = resolve_statement(&Statement::Unresolved(stmt), model.clone())?;
+                match name.as_str() {
+                    "enter" => NamedCodeBlock::Enter(stmt),
+                    "exit" => NamedCodeBlock::Exit(stmt),
+                    "always" => NamedCodeBlock::Always(stmt),
+                    name => NamedCodeBlock::Unknown(name.to_string(), stmt),
+                }
+            }
+            NamedCodeBlock::Enter(stmt) => {
+                NamedCodeBlock::Enter(resolve_statement(&stmt, model.clone())?)
+            }
+            NamedCodeBlock::Exit(stmt) => {
+                NamedCodeBlock::Exit(resolve_statement(&stmt, model.clone())?)
+            }
+            NamedCodeBlock::Always(stmt) => {
+                NamedCodeBlock::Always(resolve_statement(&stmt, model.clone())?)
+            }
+            NamedCodeBlock::Unknown(name, stmt) => {
+                NamedCodeBlock::Unknown(name.clone(), resolve_statement(&stmt, model.clone())?)
+            }
+        };
+        blocks.push(block);
+    }
+    Ok(blocks)
+}
+
 /// Этап 4: разрешение операторов в именованных блоках кода.
 ///
 /// Выполняет три задачи:
@@ -479,19 +519,8 @@ fn construct_model_stage4(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     // Разрешаем блоки на уровне текущей модели
-    let mut named_blocks = HashMap::new();
-    for (_, nb) in model.borrow().named_blocks.clone() {
-        let stmt = resolve_statement(&nb.statement, model.clone())
-            .unwrap_or_else(|_| nb.statement.clone());
-        named_blocks.insert(
-            nb.name.clone(),
-            NamedBlockNode {
-                name: nb.name,
-                statement: stmt,
-            },
-        );
-    }
-    model.borrow_mut().named_blocks = named_blocks;
+    let named_blocks = model.borrow().named_blocks.clone();
+    model.borrow_mut().named_blocks = resolve_named_blocks(named_blocks, model.clone())?;
 
     // Разрешаем блоки в состояниях текущей модели
     let states = model.borrow().states.clone();
@@ -533,7 +562,7 @@ fn resolve_state_named_blocks(
         } => Ok(StateNode::Simple {
             name,
             references,
-            named_blocks: resolve_named_blocks_map(named_blocks, model)?,
+            named_blocks: resolve_named_blocks(named_blocks, model)?,
         }),
         StateNode::Implement {
             name,
@@ -546,32 +575,10 @@ fn resolve_state_named_blocks(
             references,
             implements,
             next,
-            named_blocks: resolve_named_blocks_map(named_blocks, model)?,
+            named_blocks: resolve_named_blocks(named_blocks, model)?,
         }),
         other => Ok(other),
     }
-}
-
-/// Разрешает все именованные блоки в HashMap.
-///
-/// Ошибки при разрешении отдельных операторов подавляются.
-fn resolve_named_blocks_map(
-    named_blocks: HashMap<String, NamedBlockNode>,
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<HashMap<String, NamedBlockNode>, Diagnostic> {
-    let mut result = HashMap::new();
-    for (key, nb) in named_blocks {
-        let stmt = resolve_statement(&nb.statement, model.clone())
-            .unwrap_or_else(|_| nb.statement.clone());
-        result.insert(
-            key,
-            NamedBlockNode {
-                name: nb.name,
-                statement: stmt,
-            },
-        );
-    }
-    Ok(result)
 }
 
 /// Строит семантический узел модели из АСД-узла [`Model`].
@@ -768,28 +775,26 @@ fn resolve_references(
 ///
 /// Если несколько блоков имеют одинаковое имя (например, два `always`),
 /// последний перезаписывает предыдущий — аналогично поведению HashMap.
-fn construct_named_blocks(
-    state: &StateDefine,
-) -> Result<HashMap<String, NamedBlockNode>, Diagnostic> {
-    let mut named_blocks = HashMap::new();
+fn construct_named_blocks(state: &StateDefine) -> Result<Vec<NamedCodeBlock>, Diagnostic> {
+    let mut named_blocks = Vec::new();
     for element in state.elements.iter() {
         if let StateElement::NamedBlockCode(def) = element {
             let name = def
                 .name
                 .as_ref()
-                .ok_or_else(|| {
-                    "Именованный блок кода при определении должен иметь имя"
-                        .into()
-                })?
+                .ok_or_else(|| "Именованный блок кода при определении должен иметь имя".into())?
                 .name
                 .clone();
-            named_blocks.insert(
-                name.clone(),
-                NamedBlockNode {
-                    name,
-                    statement: Statement::Unresolved(def.statement.clone()),
-                },
-            );
+            let block = match name.as_str() {
+                "enter" => NamedCodeBlock::Enter(Statement::Unresolved(def.statement.clone())),
+                "exit" => NamedCodeBlock::Exit(Statement::Unresolved(def.statement.clone())),
+                "always" => NamedCodeBlock::Always(Statement::Unresolved(def.statement.clone())),
+                name => NamedCodeBlock::Unknown(
+                    name.to_string(),
+                    Statement::Unresolved(def.statement.clone()),
+                ),
+            };
+            named_blocks.push(block);
         }
     }
     Ok(named_blocks)
