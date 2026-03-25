@@ -6,7 +6,8 @@
 //! - компоновку реализаций (`+`, `|`, скобки);
 //! - обнаружение дублирующихся имён моделей;
 //! - ошибочные пути: некорректный тип порта, несуществующий псевдоним и др.;
-//! - импорт моделей из файлов (`import "file.but"`, `import "file.but" as Name`).
+//! - импорт моделей из файлов (`import "file.but"`, `import "file.but" as Name`);
+//! - файлы-примеры из `tests/data/sematic/`.
 
 use grammar::parse;
 use grammar::semantic::tree::construct_model;
@@ -380,17 +381,6 @@ fn type_definition_not_in_variables() {
     );
 }
 
-/// Инициализатор переменной сохраняется в семантическом узле.
-#[test]
-fn variable_initializer_preserved() {
-    let node = build("var x: bit = true;");
-    if let Some(VariableNode::Simple(_, _, init)) = node.search_var("x") {
-        assert!(init.is_some(), "Инициализатор должен присутствовать");
-    } else {
-        panic!("переменная x не найдена");
-    }
-}
-
 // ─── Интеграционные тесты импорта ────────────────────────────────────────────
 
 /// Вспомогательная функция: создаёт временную директорию с .but-файлом.
@@ -552,5 +542,310 @@ fn global_symbol_import_only_alias_registered() {
     assert!(
         root.borrow().search_model("Engine").is_none(),
         "Нормализованное имя файла не должно регистрироваться при использовании as"
+    );
+}
+
+// ─── Тесты search_func и search_cond ─────────────────────────────────────────
+
+/// `search_cond` находит именованное условие по имени.
+#[test]
+fn search_cond_finds_named_condition() {
+    let node = build("cond done = true;");
+    assert!(
+        node.search_cond("done").is_some(),
+        "условие 'done' должно быть найдено"
+    );
+}
+
+/// `search_cond` возвращает `None` для несуществующего условия.
+#[test]
+fn search_cond_returns_none_for_unknown() {
+    let node = build("cond done = true;");
+    assert!(
+        node.search_cond("missing").is_none(),
+        "несуществующее условие должно давать None"
+    );
+}
+
+/// `search_func` возвращает `None` когда функций нет.
+#[test]
+fn search_func_returns_none_when_no_functions() {
+    let node = build("var x: bit = false;");
+    assert!(
+        node.search_func("any_func").is_none(),
+        "search_func должен вернуть None, если функций нет"
+    );
+}
+
+// ─── Тесты construct_implement (исправление переполнения стека) ───────────────
+
+/// Implement-состояние без `next` успешно строится без переполнения стека.
+///
+/// **Регрессионный тест**: ранее приводил к бесконечной рекурсии в
+/// `construct_implement` из-за заглушки `construct_expression`, которая
+/// всегда возвращала `Expression::Unresolved`.
+#[test]
+fn implement_without_next_no_stack_overflow() {
+    let node = build("start A = M { } state B; model M { start S; }");
+    if let StateNode::Implement { next, implements, .. } = &node.states["A"] {
+        assert!(next.is_none(), "next должен быть None");
+        assert!(
+            matches!(implements, grammar::semantic::Implement::Model(_)),
+            "реализация должна разрешиться в Implement::Model"
+        );
+    } else {
+        panic!("ожидался StateNode::Implement для A");
+    }
+}
+
+/// Скобочная компоновка `(M1 + M2)` разрешается корректно.
+///
+/// Проверяет ветку `ast::Expression::Parenthesis` в `construct_implement_ast`.
+#[test]
+fn implement_parenthesized_add_resolves() {
+    let node = build("start E = (M1 + M2) { } model M1 { start S; } model M2 { start T; }");
+    if let StateNode::Implement { implements, .. } = &node.states["E"] {
+        assert!(
+            matches!(implements, Implement::Add(_, _)),
+            "скобочная компоновка должна давать Implement::Add"
+        );
+    } else {
+        panic!("ожидался StateNode::Implement для E");
+    }
+}
+
+// ─── Тесты поиска переменных в цепочке upper ─────────────────────────────────
+
+/// Переменная из родительской области видимости видна во вложенной модели.
+#[test]
+fn nested_model_sees_parent_variable() {
+    let (ast, _) = parse(
+        "var global_flag: bit = false; model Inner { start S; }",
+        0,
+    )
+    .unwrap();
+    let root = construct_model(&ast, None, &[]).unwrap();
+    let inner = root.borrow().search_model("Inner").unwrap();
+    // Inner должна видеть переменную из родительского контекста через upper
+    assert!(
+        inner.borrow().search_var("global_flag").is_some(),
+        "вложенная модель должна видеть переменную родителя"
+    );
+}
+
+/// Переменная из вложенной модели недоступна в родительской (область видимости строга).
+#[test]
+fn parent_does_not_see_nested_variable() {
+    let node = build("model Inner { var local: bit = false; start S; } start Root;");
+    // Корневая модель не знает о переменной Inner
+    assert!(
+        node.search_var("local").is_none(),
+        "родитель не должен видеть переменные вложенной модели"
+    );
+}
+
+// ─── Тесты типов: вложенные массивы и массивы массивов ───────────────────────
+
+/// Тип `[[bit;4];2]` разрешается в `Array(2, Array(4, Bit))`.
+#[test]
+fn type_nested_array_resolves() {
+    let node = build("var x: [[bit;4];2] = 0;");
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+        assert_eq!(
+            ty,
+            TypeNode::Array(2, Box::new(TypeNode::Array(4, Box::new(TypeNode::Bit)))),
+            "вложенный массив должен разрешаться рекурсивно"
+        );
+    } else {
+        panic!("переменная x не найдена");
+    }
+}
+
+/// Псевдоним, используемый внутри типа массива, раскрывается правильно.
+#[test]
+fn type_alias_inside_array_resolves() {
+    // u4 = [bit;4], затем var x: [u4; 3]
+    let node = build("type u4 = [bit;4]; var x: [u4;3] = 0;");
+    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+        assert_eq!(
+            ty,
+            TypeNode::Array(3, Box::new(TypeNode::Array(4, Box::new(TypeNode::Bit)))),
+            "псевдоним внутри массива должен раскрываться"
+        );
+    } else {
+        panic!("переменная x не найдена");
+    }
+}
+
+// ─── Тесты сообщений об ошибках ───────────────────────────────────────────────
+
+/// Сообщение об ошибке для неизвестной модели содержит её имя.
+#[test]
+fn error_message_contains_missing_model_name() {
+    let err = build_err("start A = Phantom { }");
+    assert!(
+        err.message.contains("Phantom"),
+        "сообщение об ошибке должно содержать 'Phantom': {}",
+        err.message
+    );
+}
+
+/// Сообщение об ошибке для неизвестного псевдонима типа содержит его имя.
+#[test]
+fn error_message_contains_missing_type_name() {
+    let (ast, _) = parse("var x: NoSuchType = 0;", 0).unwrap();
+    let err = construct_model(&ast, None, &[]).unwrap_err();
+    assert!(
+        err.message.contains("NoSuchType"),
+        "сообщение должно содержать 'NoSuchType': {}",
+        err.message
+    );
+}
+
+/// Сообщение об ошибке для неизвестной ссылки ref содержит имя состояния.
+#[test]
+fn error_message_contains_missing_ref_name() {
+    let (ast, _) = parse("start A { ref Xyz; }", 0).unwrap();
+    let err = construct_model(&ast, None, &[]).unwrap_err();
+    assert!(
+        err.message.contains("Xyz"),
+        "сообщение должно содержать 'Xyz': {}",
+        err.message
+    );
+}
+
+// ─── Тесты файлов-примеров из tests/data/sematic/ ────────────────────────────
+
+/// Вспомогательная функция: читает .but-файл и строит семантическое дерево.
+fn build_file(path: &str) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
+    let src = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("не могу прочитать {}: {}", path, e));
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
+    construct_model(&ast, None, &[]).map(|m| m.take())
+}
+
+/// `tests/data/sematic/valid/simple_fsm.but` — строится без ошибок.
+#[test]
+fn example_simple_fsm_is_valid() {
+    let node = build_file("tests/data/sematic/valid/simple_fsm.but").unwrap();
+    assert!(node.has_states(), "FSM должен иметь состояния");
+    assert!(node.states.contains_key("Start"), "состояние Start должно присутствовать");
+    assert!(node.states.contains_key("Finish"), "состояние Finish должно присутствовать");
+}
+
+/// `tests/data/sematic/valid/type_aliases.but` — псевдонимы типов разрешаются.
+#[test]
+fn example_type_aliases_is_valid() {
+    let node = build_file("tests/data/sematic/valid/type_aliases.but").unwrap();
+    assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
+    assert!(node.types.contains_key("u16"), "тип u16 должен быть объявлен");
+    assert!(node.search_var("counter").is_some(), "переменная counter должна быть найдена");
+    assert!(node.search_var("STATUS").is_some(), "порт STATUS должен быть найден");
+}
+
+/// `tests/data/sematic/valid/conditions.but` — все условия разрешаются.
+#[test]
+fn example_conditions_is_valid() {
+    let node = build_file("tests/data/sematic/valid/conditions.but").unwrap();
+    assert!(node.conditions.contains_key("always_true"), "условие always_true должно быть");
+    assert!(node.conditions.contains_key("always_false"), "условие always_false должно быть");
+    assert!(node.conditions.contains_key("is_flag_set"), "условие is_flag_set должно быть");
+    assert!(node.conditions.contains_key("negated"), "условие negated должно быть");
+    assert!(node.conditions.contains_key("grouped"), "условие grouped должно быть");
+}
+
+/// `tests/data/sematic/valid/composition.but` — компоновка моделей корректна.
+#[test]
+fn example_composition_is_valid() {
+    let node = build_file("tests/data/sematic/valid/composition.but").unwrap();
+    // Модели Step1, Step2, Step3 должны быть в контексте
+    assert!(node.search_model("Step1").is_some(), "Step1 должна быть найдена");
+    assert!(node.search_model("Step2").is_some(), "Step2 должна быть найдена");
+    assert!(node.search_model("Step3").is_some(), "Step3 должна быть найдена");
+    // Состояния Sequential, Parallel, Combined должны быть Implement-узлами
+    assert!(node.states.contains_key("Sequential"), "состояние Sequential должно быть");
+    assert!(node.states.contains_key("Parallel"), "состояние Parallel должно быть");
+    assert!(node.states.contains_key("Combined"), "состояние Combined должно быть");
+}
+
+/// `tests/data/sematic/invalid/missing_var.but` — должна возникнуть ошибка.
+#[test]
+fn example_missing_var_is_error() {
+    let result = build_file("tests/data/sematic/invalid/missing_var.but");
+    assert!(result.is_err(), "missing_var.but должен давать ошибку семантики");
+}
+
+/// `tests/data/sematic/invalid/unknown_model.but` — должна возникнуть ошибка.
+#[test]
+fn example_unknown_model_is_error() {
+    let result = build_file("tests/data/sematic/invalid/unknown_model.but");
+    assert!(result.is_err(), "unknown_model.but должен давать ошибку семантики");
+}
+
+/// `tests/data/sematic/invalid/double_next.but` — должна возникнуть ошибка.
+#[test]
+fn example_double_next_is_error() {
+    let result = build_file("tests/data/sematic/invalid/double_next.but");
+    assert!(result.is_err(), "double_next.but должен давать ошибку семантики");
+}
+
+/// `tests/data/sematic/invalid/dangling_ref.but` — должна возникнуть ошибка.
+#[test]
+fn example_dangling_ref_is_error() {
+    let result = build_file("tests/data/sematic/invalid/dangling_ref.but");
+    assert!(result.is_err(), "dangling_ref.but должен давать ошибку семантики");
+}
+
+// ─── Тесты импорта std.but ────────────────────────────────────────────────────
+
+/// `import "std.but"` из стандартной библиотеки подключается без ошибок.
+#[test]
+fn std_but_import_works() {
+    let src = r#"import "std.but";"#;
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(
+        &ast,
+        None,
+        &["tests/data/include".to_string()],
+    );
+    assert!(root.is_ok(), "импорт std.but должен завершаться без ошибок");
+    let root = root.unwrap();
+    // Нормализованное имя файла std.but → Std
+    assert!(
+        root.borrow().search_model("Std").is_some(),
+        "модель Std должна быть зарегистрирована после импорта std.but"
+    );
+}
+
+/// После импорта `std.but` типы u8, u16, … доступны внутри импортированной модели.
+#[test]
+fn std_but_contains_u8_u16_types() {
+    let src = r#"import "std.but";"#;
+    let (ast, _) = parse(src, 0).unwrap();
+    let root = construct_model(&ast, None, &["tests/data/include".to_string()]).unwrap();
+    let std_model = root.borrow().search_model("Std").unwrap();
+    assert!(
+        std_model.borrow().types.contains_key("u8"),
+        "std.but должен содержать тип u8"
+    );
+    assert!(
+        std_model.borrow().types.contains_key("u16"),
+        "std.but должен содержать тип u16"
+    );
+    assert!(
+        std_model.borrow().types.contains_key("u32"),
+        "std.but должен содержать тип u32"
+    );
+    assert!(
+        std_model.borrow().types.contains_key("u64"),
+        "std.but должен содержать тип u64"
+    );
+    assert!(
+        std_model.borrow().types.contains_key("u128"),
+        "std.but должен содержать тип u128"
+    );
+    assert!(
+        std_model.borrow().types.contains_key("bool"),
+        "std.but должен содержать тип bool"
     );
 }

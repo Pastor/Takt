@@ -9,12 +9,14 @@
 //! - [`Reference`] — ссылка на другой узел с условием перехода.
 //! - [`Condition`] — условие перехода между состояниями.
 
+mod condition;
 mod expression;
 mod include;
 pub mod tree;
 mod type_inference;
 
-use crate::parser::ast::Expression;
+use crate::parser::ast;
+use crate::parser::ast::{Member, NamedArgument, ParameterList, Statement, Type};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -124,6 +126,28 @@ impl ModelNode {
             None
         }
     }
+
+    /// Ищет именованное условие по `name`, обходя цепочку `upper`.
+    pub fn search_cond(&self, name: &str) -> Option<ConditionNode> {
+        if let Some(cond) = self.conditions.get(name) {
+            Some(cond.clone())
+        } else if let Some(model) = self.upper.as_ref() {
+            return model.borrow().search_cond(name);
+        } else {
+            None
+        }
+    }
+
+    /// Ищет объявление функции по `name`, обходя цепочку `upper`.
+    pub fn search_func(&self, name: &str) -> Option<Rc<RefCell<FunctionNode>>> {
+        if let Some(func) = self.functions.get(name) {
+            Some(Rc::new(RefCell::new(func.clone())))
+        } else if let Some(model) = self.upper.as_ref() {
+            return model.borrow().search_func(name);
+        } else {
+            None
+        }
+    }
 }
 
 /// Семантический узел именованного блока кода (`enter`, `exit`, `always`, …).
@@ -151,7 +175,7 @@ pub enum VariableNode {
     #[default]
     Unresolved,
     /// Изменяемая переменная: `(имя, тип, инициализатор?)`.
-    Simple(String, TypeNode, Option<Expression>),
+    Simple(String, TypeNode, Expression),
     /// Порт, отображённый на аппаратный адрес: `(имя, тип, адрес)`.
     Port(String, TypeNode, Expression),
     /// Константа: `(имя, тип, значение)`.
@@ -184,11 +208,19 @@ pub enum TypeNode {
     Unsupported,
 }
 
-/// Семантический узел условия перехода.
+/// Семантический узел именованного условия.
 ///
-/// В текущей реализации является заглушкой; будет расширен в будущих версиях.
+/// Хранит имя условия и его разрешённое значение.
+/// Заполняется в ходе третьего прохода построения модели ([`extract_conditions`]).
+///
+/// [`extract_conditions`]: crate::semantic::condition::extract_conditions
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct ConditionNode {}
+pub struct ConditionNode {
+    /// Имя условия, как объявлено в источнике (`cond имя = …`).
+    pub name: String,
+    /// Разрешённое значение условия.
+    pub value: Condition,
+}
 
 /// Состояние конечного автомата.
 ///
@@ -221,8 +253,6 @@ pub enum StateNode {
         references: Vec<Reference<StateNode>>,
         /// Информация о реализации (зарезервировано).
         implements: Implement,
-        /// Исходное выражение реализации из АСД (сохраняется для диагностики).
-        expression: Option<Expression>,
         /// Единственный `next`-переход (если задан).
         next: Option<Reference<StateNode>>,
     },
@@ -238,9 +268,11 @@ pub enum StateNode {
 /// - [`Or`](Implement::Or) — параллельная компоновка `A | B`.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum Implement {
-    /// Не разрешено (временная заглушка при построении дерева).
+    /// Реализация не задана (значение по умолчанию для безымянной корневой модели).
     #[default]
-    Unresolved,
+    None,
+    /// «Сырое» АСД-выражение реализации, ожидающее разрешения на этапе stage1.
+    Unresolved(ast::Expression),
     /// Ссылка на конкретную именованную модель.
     Model(Rc<RefCell<ModelNode>>),
     /// Скобочная группировка: `(реализация)`.
@@ -260,12 +292,160 @@ pub enum Condition {
     /// Безусловный переход (условие не задано или не разрешено).
     #[default]
     None,
+    /// Заглушка для условия, которое ещё не было разрешено.
+    Unresolved(ast::Condition),
+    /// Доступ к элементу массива: `id[n]`.
+    ArraySubscript(Rc<RefCell<VariableNode>>, i64),
+    /// Скобки: `(условие)`.
+    Parenthesis(Box<Condition>),
+    /// Доступ к биту: `условие.член`.
+    BitAccess(Box<Condition>, Member),
+    /// Вызов функции: `id(аргументы,*)`.
+    Function(Rc<RefCell<FunctionNode>>, Vec<Box<Condition>>),
+    /// Логическое НЕ: `!условие`.
+    Not(Box<Condition>),
+    /// Сложение: `левое + правое`.
+    Add(Box<Condition>, Box<Condition>),
+    /// Вычитание: `левое - правое`.
+    Subtract(Box<Condition>, Box<Condition>),
+    /// Побитовое И: `левое & правое`.
+    And(Box<Condition>, Box<Condition>),
+    /// Побитовое ИЛИ: `левое | правое`.
+    Or(Box<Condition>, Box<Condition>),
+    /// Меньше: `левое < правое`.
+    Less(Box<Condition>, Box<Condition>),
+    /// Больше: `левое > правое`.
+    More(Box<Condition>, Box<Condition>),
+    /// Меньше или равно: `левое <= правое`.
+    LessEqual(Box<Condition>, Box<Condition>),
+    /// Больше или равно: `левое >= правое`.
+    MoreEqual(Box<Condition>, Box<Condition>),
+    /// Равенство: `левое = правое`.
+    Equal(Box<Condition>, Box<Condition>),
+    /// Неравенство: `левое != правое`.
+    NotEqual(Box<Condition>, Box<Condition>),
+    /// Целочисленный литерал.
+    Number(i64),
+    /// Вещественный литерал: `(строка, отрицательный)`.
+    Rational(String, bool),
+    /// Конкатенация строковых литералов.
+    String(Vec<String>),
+    /// Булевый литерал.
+    Bool(bool),
+    /// Переменная.
+    Variable(Rc<RefCell<VariableNode>>),
 }
 
+/// Разрешённый семантический узел выражения (заглушка — будет расширено).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum ExpressionNode {
+    /// Узел выражения ещё не разрешён (значение по умолчанию).
     #[default]
     None,
+}
+
+/// Полностью типизированный семантический узел выражения.
+///
+/// Большинство вариантов повторяют соответствующие варианты АСД, но работают
+/// с уже разрешёнными семантическими подвыражениями. [`Unresolved`](Expression::Unresolved) —
+/// временная обёртка вокруг «сырого» АСД-выражения, ещё не прошедшего семантическое понижение.
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
+pub enum Expression {
+    /// Выражение отсутствует (значение по умолчанию).
+    #[default]
+    None,
+    /// «Сырое» АСД-выражение, ожидающее семантического понижения.
+    Unresolved(ast::Expression),
+    /// Доступ к элементу массива: `id[n]`.
+    ArraySubscript(Rc<RefCell<VariableNode>>, i64),
+    /// Срез массива: `id[начало:конец]`.
+    ArraySlice(Rc<RefCell<VariableNode>>, Option<i64>, Option<i64>),
+    /// Скобки: `(выражение)`.
+    Parenthesis(Box<Expression>),
+    /// Доступ к биту: `выражение.член`.
+    BitAccess(Box<Expression>, Member),
+    /// Вызов функции: `id(аргументы,*)`.
+    Function(Rc<RefCell<FunctionNode>>, Vec<Expression>),
+    /// Блок кода как выражение: `выражение { ... }`.
+    CodeBlock(Box<Expression>, Box<Statement>),
+    /// Вызов с именованными аргументами: `выражение({ ключ: значение, … })`.
+    NamedFunctionBox(Box<Expression>, Vec<NamedArgument>),
+    /// Логическое НЕ: `!выражение`.
+    Not(Box<Expression>),
+    /// Побитовое НЕ: `~выражение`.
+    BitwiseNot(Box<Expression>),
+    /// Унарный плюс: `+выражение`.
+    UnaryPlus(Box<Expression>),
+    /// Унарный минус: `-выражение`.
+    Negate(Box<Expression>),
+    /// Возведение в степень: `левое ** правое`.
+    Power(Box<Expression>, Box<Expression>),
+    /// Умножение: `левое * правое`.
+    Multiply(Box<Expression>, Box<Expression>),
+    /// Деление: `левое / правое`.
+    Divide(Box<Expression>, Box<Expression>),
+    /// Остаток от деления: `левое % правое`.
+    Modulo(Box<Expression>, Box<Expression>),
+    /// Сложение: `левое + правое`.
+    Add(Box<Expression>, Box<Expression>),
+    /// Вычитание: `левое - правое`.
+    Subtract(Box<Expression>, Box<Expression>),
+    /// Сдвиг влево: `левое << правое`.
+    ShiftLeft(Box<Expression>, Box<Expression>),
+    /// Сдвиг вправо: `левое >> правое`.
+    ShiftRight(Box<Expression>, Box<Expression>),
+    /// Побитовое И: `левое & правое`.
+    BitwiseAnd(Box<Expression>, Box<Expression>),
+    /// Побитовое исключающее ИЛИ: `левое ^ правое`.
+    BitwiseXor(Box<Expression>, Box<Expression>),
+    /// Побитовое ИЛИ: `левое | правое`.
+    BitwiseOr(Box<Expression>, Box<Expression>),
+    /// Меньше: `левое < правое`.
+    Less(Box<Expression>, Box<Expression>),
+    /// Больше: `левое > правое`.
+    More(Box<Expression>, Box<Expression>),
+    /// Меньше или равно: `левое <= правое`.
+    LessEqual(Box<Expression>, Box<Expression>),
+    /// Больше или равно: `левое >= правое`.
+    MoreEqual(Box<Expression>, Box<Expression>),
+    /// Равенство: `левое == правое`.
+    Equal(Box<Expression>, Box<Expression>),
+    /// Неравенство: `левое != правое`.
+    NotEqual(Box<Expression>, Box<Expression>),
+    /// Логическое И: `левое && правое`.
+    And(Box<Expression>, Box<Expression>),
+    /// Логическое ИЛИ: `левое || правое`.
+    Or(Box<Expression>, Box<Expression>),
+    /// Тернарный оператор: `условие ? тогда : иначе`.
+    ConditionalOperator(Box<Expression>, Box<Expression>, Box<Expression>),
+    /// Присваивание: `левое = правое`.
+    Assign(Box<Expression>, Box<Expression>),
+    /// Целочисленный литерал.
+    Number(i64),
+    /// Вещественный литерал: `(строка, отрицательный)`.
+    Rational(String, bool),
+    /// Конкатенация строковых литералов.
+    String(Vec<String>),
+    /// Тип как выражение.
+    Type(Type),
+    /// Адресный литерал: `адрес:бит`.
+    Address(i64, i64),
+    /// Булевый литерал.
+    Bool(bool),
+    /// Ссылка на разрешённую переменную.
+    Variable(Rc<RefCell<VariableNode>>),
+    /// Ссылка на разрешённую модель.
+    Model(Rc<RefCell<ModelNode>>),
+    /// Ссылка на разрешённое именованное условие.
+    Condition(Rc<RefCell<ConditionNode>>),
+    /// Список параметров: `(параметр,*)`.
+    List(ParameterList),
+    /// Массивный литерал: `[элемент,*]`.
+    Array(Vec<Expression>),
+    /// Инициализатор структуры: `{ элемент,* }`.
+    Initializer(Vec<Expression>),
+    /// Приведение типа: `выражение as Тип`.
+    Cast(Box<Expression>, Type),
 }
 
 /// Ссылка на узел семантического дерева с условием перехода.

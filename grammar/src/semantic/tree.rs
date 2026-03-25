@@ -10,13 +10,14 @@
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::parser::ast::{
-    Expression, Identifier, ImportDefine, Model, ModelElement, StateDefine, StateElement, Type,
-    VariableDefine,
+    Identifier, ImportDefine, Model, ModelElement, StateDefine, StateElement, Type, VariableDefine,
 };
+use crate::semantic::condition::extract_conditions;
 use crate::semantic::include::read_import_file;
 use crate::semantic::type_inference::type_inference;
 use crate::semantic::{
-    Condition, Implement, ModelNode, NamedBlockNode, Reference, StateNode, TypeNode, VariableNode,
+    Condition, ConditionNode, Expression, Implement, ModelNode, NamedBlockNode, Reference,
+    StateNode, TypeNode, VariableNode,
 };
 use crate::{normalize_model_name, parse};
 use std::cell::RefCell;
@@ -45,12 +46,18 @@ fn construct_model_stage0(
     let model_node = ModelNode {
         upper: upper.map(|m| Rc::clone(&m)),
         name: name.map(|i| i.name.clone()),
+        implements: model
+            .implements
+            .clone()
+            .map(|i| Implement::Unresolved(i))
+            .unwrap_or(Implement::None),
         ..Default::default()
     };
     let model_node = Rc::new(RefCell::new(model_node));
     let mut models = HashMap::new();
     let mut variables = HashMap::new();
     let mut types = HashMap::new();
+    let mut conditions = HashMap::new();
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
             let model = construct_model_stage0(model, Some(Rc::clone(&model_node)), search_paths)?;
@@ -126,7 +133,9 @@ fn construct_model_stage0(
                         VariableNode::Simple(
                             name.clone(),
                             construct_type(typ, &types)?,
-                            initializer,
+                            initializer
+                                .map(|e| Expression::Unresolved(e))
+                                .unwrap_or(Expression::None),
                         ),
                     )
                 }
@@ -146,11 +155,19 @@ fn construct_model_stage0(
                         VariableNode::Port(
                             name.clone(),
                             type_node,
-                            initializer
-                                .filter(|i| {
-                                    matches!(i, Expression::Address(..) | Expression::Number(..))
-                                })
-                                .ok_or_else(|| "Порт должен быть инициализирован адресом".into())?,
+                            Expression::Unresolved(
+                                initializer
+                                    .filter(|i| {
+                                        matches!(
+                                            i,
+                                            ast::Expression::Address(..)
+                                                | ast::Expression::Number(..)
+                                        )
+                                    })
+                                    .ok_or_else(|| {
+                                        "Порт должен быть инициализирован адресом".into()
+                                    })?,
+                            ),
                         ),
                     )
                 }
@@ -166,7 +183,7 @@ fn construct_model_stage0(
                         VariableNode::Const(
                             name.clone(),
                             construct_type(typ, &types)?,
-                            initializer,
+                            Expression::Unresolved(initializer),
                         ),
                     )
                 }
@@ -176,12 +193,27 @@ fn construct_model_stage0(
             let typ = def.ty.clone();
             let types_clone = types.clone();
             types.insert(name.clone(), construct_type(Some(typ), &types_clone)?);
+        } else if let ModelElement::Condition(def) = element {
+            let name = def
+                .clone()
+                .name
+                .ok_or_else(|| "Условие при определении должно иметь имя".into())?
+                .name
+                .clone();
+            conditions.insert(
+                name.clone(),
+                ConditionNode {
+                    name: name.clone(),
+                    value: Condition::Unresolved(def.value.clone()),
+                },
+            );
         }
     }
     model_node.borrow_mut().models = models;
     model_node.borrow_mut().states = construct_states(model)?;
     model_node.borrow_mut().types = types;
     model_node.borrow_mut().variables = variables;
+    model_node.borrow_mut().conditions = conditions;
     Ok(Rc::clone(&model_node))
 }
 
@@ -231,29 +263,26 @@ fn construct_model_stage1(
     let mut prepared_states = HashMap::new();
     for (name, state) in states.iter() {
         if let StateNode::Implement {
-            implements: Implement::Unresolved,
-            expression,
+            implements: Implement::Unresolved(implement_expression),
             named_blocks,
             references,
             next,
             name,
         } = state.clone()
         {
-            if let Some(expression) = expression {
-                prepared_states.insert(
-                    name.clone(),
-                    StateNode::Implement {
-                        named_blocks,
-                        name: name.clone(),
-                        references,
-                        implements: construct_implement(expression.clone(), Rc::clone(&model))?,
-                        expression: Some(expression.clone()),
-                        next,
-                    },
-                );
-            } else {
-                return Err("Выражение реализации не задано".into());
-            }
+            prepared_states.insert(
+                name.clone(),
+                StateNode::Implement {
+                    named_blocks,
+                    name: name.clone(),
+                    references,
+                    implements: construct_implement(
+                        Expression::Unresolved(implement_expression),
+                        Rc::clone(&model),
+                    )?,
+                    next,
+                },
+            );
         } else {
             prepared_states.insert(name.clone(), state.clone());
         }
@@ -286,6 +315,15 @@ fn construct_model_stage2(
     Ok(Rc::clone(&model))
 }
 
+fn construct_model_stage3(
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    let mut conditions = model.borrow().conditions.clone();
+    conditions = extract_conditions(&conditions, model.clone())?;
+    model.borrow_mut().conditions = conditions;
+    Ok(Rc::clone(&model))
+}
+
 /// Строит семантический узел модели из АСД-узла [`Model`].
 ///
 /// Собирает контекст верхнего уровня (вложенные модели), а также
@@ -305,6 +343,7 @@ pub fn construct_model(
     let model = construct_model_stage0(model, upper, search_paths)?;
     let model = construct_model_stage1(model)?;
     let model = construct_model_stage2(model)?;
+    let model = construct_model_stage3(model)?;
     Ok(model)
 }
 
@@ -320,8 +359,8 @@ pub fn construct_model(
 /// Возвращает [`Diagnostic`], если состояние без имени, ссылка не найдена,
 /// или `next` объявлен дважды в одном состоянии.
 pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Diagnostic> {
-    // Первый проход: создаём узлы с незаполненными ссылками
-    let states: &mut HashMap<String, Box<StateNode>> = &mut HashMap::new();
+    // Первый проход: создаём узлы с незаполненными ссылками (заглушки Unresolved).
+    let mut states: HashMap<String, Box<StateNode>> = HashMap::new();
     for element in model.elements.iter() {
         if let ModelElement::State(def) = element {
             let name = def
@@ -331,31 +370,31 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 .name;
             let implements = def.implements.clone();
             let mut references = Vec::new();
-            let mut next = None;
+            let mut next: Option<String> = None;
             for element in def.elements.iter() {
                 if let StateElement::Reference(_, id, cond) = element {
-                    let name = id.name.clone();
                     let cond = if let Some(cond) = cond {
-                        construct_condition(cond)?
+                        Condition::Unresolved(cond.clone())
                     } else {
                         Condition::None
                     };
                     references.push(Reference {
-                        name,
+                        name: id.name.clone(),
                         cond,
                         object: Box::new(StateNode::Unresolved),
                     });
                 } else if let StateElement::Next(id) = element {
-                    let name = id.name.clone();
                     if next.is_some() {
-                        return Err(format!("Состояние '{}' уже содержит оператор next", &name)
-                            .as_str()
-                            .into());
+                        return Err(
+                            format!("Состояние '{}' уже содержит оператор next", &id.name)
+                                .as_str()
+                                .into(),
+                        );
                     }
-                    next = Some(name);
+                    next = Some(id.name.clone());
                 }
             }
-            // Определяем вид узла: Implement (есть `= Выражение`) или Simple
+            // Определяем вид узла: Implement (есть `= Выражение`) или Simple.
             let state = if let Some(expr) = implements {
                 let next = next.map(|n| Reference {
                     name: n,
@@ -366,9 +405,8 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                     named_blocks: construct_named_blocks(def)?,
                     name: name.clone(),
                     references,
-                    implements: Implement::Unresolved,
+                    implements: Implement::Unresolved(expr),
                     next,
-                    expression: Some(expr),
                 }
             } else {
                 StateNode::Simple {
@@ -381,103 +419,98 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
         }
     }
 
-    // Второй проход: заменяем Unresolved-заглушки реальными узлами
-    let new_states = &mut HashMap::new();
+    // Второй проход: заменяем Unresolved-заглушки реальными узлами.
+    let mut new_states: HashMap<String, StateNode> = HashMap::new();
     for (_, state) in states.iter() {
-        if let StateNode::Simple {
-            name, references, ..
-        } = *state.clone()
-        {
-            let new_references: &mut Vec<Reference<StateNode>> = &mut Vec::new();
-            for reference in references {
-                if let StateNode::Unresolved = *reference.object {
-                    let state = states.get(&reference.name).ok_or_else(|| {
-                        format!("Ссылка '{}' не найдена", &reference.name)
-                            .as_str()
-                            .into()
-                    })?;
-                    new_references.push(Reference {
-                        name: reference.name,
-                        cond: reference.cond,
-                        object: state.clone(),
-                    });
-                } else {
-                    new_references.push(reference)
-                }
+        match *state.clone() {
+            StateNode::Simple {
+                name,
+                references,
+                named_blocks,
+            } => {
+                let resolved = resolve_references(references, &states)?;
+                new_states.insert(
+                    name.clone(),
+                    StateNode::Simple {
+                        named_blocks,
+                        name,
+                        references: resolved,
+                    },
+                );
             }
-            new_states.insert(
-                name.clone(),
-                StateNode::Simple {
-                    named_blocks: Default::default(),
-                    name: name.clone(),
-                    references: new_references.clone(),
-                },
-            );
-        } else if let StateNode::Implement {
-            named_blocks,
-            name,
-            references,
-            implements,
-            next,
-            expression,
-        } = *state.clone()
-        {
-            let new_references: &mut Vec<Reference<StateNode>> = &mut Vec::new();
-            let mut next = next.clone();
-            for reference in references {
-                if let StateNode::Unresolved = *reference.object {
-                    let state = states.get(&reference.name).ok_or_else(|| {
-                        format!("Ссылка '{}' не найдена", &reference.name)
-                            .as_str()
-                            .into()
-                    })?;
-                    new_references.push(Reference {
-                        name: reference.name,
-                        cond: reference.cond,
-                        object: state.clone(),
-                    });
-                } else {
-                    new_references.push(reference)
-                }
+            StateNode::Implement {
+                named_blocks,
+                name,
+                references,
+                implements,
+                next,
+            } => {
+                let resolved = resolve_references(references, &states)?;
+                // Разрешаем next-ссылку отдельно (это одиночный Reference, не список).
+                let next = next
+                    .map(|r| {
+                        if let StateNode::Unresolved = *r.object {
+                            let target = states.get(&r.name).ok_or_else(|| {
+                                format!("Ссылка '{}' не найдена", &r.name)
+                                    .as_str()
+                                    .into()
+                            })?;
+                            Ok(Reference {
+                                name: r.name,
+                                cond: r.cond,
+                                object: target.clone(),
+                            })
+                        } else {
+                            Ok(r)
+                        }
+                    })
+                    .transpose()?;
+                new_states.insert(
+                    name.clone(),
+                    StateNode::Implement {
+                        named_blocks,
+                        name,
+                        references: resolved,
+                        implements,
+                        next,
+                    },
+                );
             }
-            if let Some(next_ref) = next.as_mut() {
-                if let StateNode::Unresolved = *next_ref.object {
-                    let target_name = next_ref.name.clone();
-                    let state = states.get(&target_name).ok_or_else(|| {
-                        format!("Ссылка '{}' не найдена", &target_name)
-                            .as_str()
-                            .into()
-                    })?;
-                    *next_ref = Reference {
-                        name: target_name,
-                        cond: next_ref.cond.clone(),
-                        object: state.clone(),
-                    }
-                }
-            }
-
-            new_states.insert(
-                name.clone(),
-                StateNode::Implement {
-                    named_blocks,
-                    name: name.clone(),
-                    references: new_references.clone(),
-                    implements: implements.clone(),
-                    next: next.clone(),
-                    expression,
-                },
-            );
+            _ => {} // StateNode::Unresolved пропускаем
         }
     }
-    Ok(new_states.clone())
+    Ok(new_states)
 }
 
-/// Преобразует АСД-условие в семантическое условие [`Condition`].
+/// Разрешает список `ref`-ссылок, заменяя [`StateNode::Unresolved`]-заглушки
+/// реальными узлами из таблицы первого прохода `states`.
 ///
-/// В текущей реализации всегда возвращает [`Condition::None`]; полная
-/// семантическая обработка условий — в будущих версиях.
-fn construct_condition(_cond: &ast::Condition) -> Result<Condition, Diagnostic> {
-    Ok(Condition::None)
+/// # Ошибки
+///
+/// Возвращает [`Diagnostic`], если ссылка указывает на несуществующее состояние.
+fn resolve_references(
+    references: Vec<Reference<StateNode>>,
+    states: &HashMap<String, Box<StateNode>>,
+) -> Result<Vec<Reference<StateNode>>, Diagnostic> {
+    references
+        .into_iter()
+        .map(|r| {
+            if let StateNode::Unresolved = *r.object {
+                let target = states.get(&r.name).ok_or_else(|| {
+                    format!("Ссылка '{}' не найдена", &r.name)
+                        .as_str()
+                        .into()
+                })?;
+                Ok(Reference {
+                    name: r.name,
+                    cond: r.cond,
+                    object: target.clone(),
+                })
+            } else {
+                Ok(r)
+            }
+        })
+        .collect()
 }
 
 fn construct_named_blocks(
@@ -486,37 +519,89 @@ fn construct_named_blocks(
     Ok(HashMap::new())
 }
 
+/// Строит [`Implement`] из семантического выражения [`Expression`].
+///
+/// # Ошибки
+///
+/// - `Expression::Unresolved` — передаётся в [`construct_implement_ast`],
+///   который напрямую обходит АСД без использования заглушки `construct_expression`.
+///   Это предотвращает бесконечную рекурсию: `construct_expression` является TODO-заглушкой
+///   и всегда возвращает `Expression::Unresolved`, что при обычном делегировании
+///   приводило к переполнению стека.
 fn construct_implement(
     expression: Expression,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Implement, Diagnostic> {
     let model = Rc::clone(&model);
     match expression {
-        Expression::Variable(id) => {
-            let model = model.as_ref().borrow();
-            let model = model
-                .search_model(&id.name)
-                .ok_or_else(|| format!("Модель '{}' не найдена", &id.name).as_str().into())?;
+        // ВАЖНО: нельзя вызывать construct_expression здесь, потому что это заглушка,
+        // возвращающая Expression::Unresolved — рекурсия была бы бесконечной.
+        Expression::Unresolved(expr) => construct_implement_ast(expr, model),
+        // Разрешённая модель
+        Expression::Model(model) => {
             Ok(Implement::Model(Rc::clone(&model)))
         }
-        Expression::Parenthesis(_, expression) => {
-            Ok(construct_implement(*expression, model.clone())?)
-        }
-        Expression::Add(_, left, right) => {
+        Expression::Parenthesis(expression) => construct_implement(*expression, model),
+        Expression::Add(left, right) => {
             let left = construct_implement(*left, model.clone())?;
             let right = construct_implement(*right, model.clone())?;
             Ok(Implement::Add(Box::new(left), Box::new(right)))
         }
-        Expression::BitwiseOr(_, left, right) => {
+        Expression::BitwiseOr(left, right) => {
             let left = construct_implement(*left, model.clone())?;
             let right = construct_implement(*right, model.clone())?;
             Ok(Implement::Or(Box::new(left), Box::new(right)))
         }
-        other => {
-            return Err(format!("Неизвестное выражение реализации: {:?}", other)
-                .as_str()
-                .into());
+        other => Err(format!("Неизвестное выражение реализации: {:?}", other)
+            .as_str()
+            .into()),
+    }
+}
+
+/// Строит [`Implement`] непосредственно из АСД-выражения [`ast::Expression`].
+///
+/// Используется только из [`construct_implement`] для обработки варианта
+/// [`Expression::Unresolved`], минуя заглушку `construct_expression`.
+///
+/// Поддерживаемые варианты:
+/// - `Variable(id)` → именованная модель `id`;
+/// - `Add(left, right)` → последовательная компоновка `left + right`;
+/// - `BitwiseOr(left, right)` → параллельная компоновка `left | right`;
+/// - `Parenthesis(inner)` → группировка `(inner)`.
+///
+/// # Ошибки
+///
+/// Возвращает [`Diagnostic`], если модель не найдена или встречается
+/// неподдерживаемый вид выражения (например, числовой литерал).
+fn construct_implement_ast(
+    expr: ast::Expression,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<Implement, Diagnostic> {
+    match expr {
+        ast::Expression::Variable(id) => {
+            let borrowed = model.as_ref().borrow();
+            let found = borrowed
+                .search_model(&id.name)
+                .ok_or_else(|| format!("Модель '{}' не найдена", &id.name).as_str().into())?;
+            Ok(Implement::Model(Rc::clone(&found)))
         }
+        ast::Expression::Parenthesis(_, inner) => construct_implement_ast(*inner, model),
+        ast::Expression::Add(_, left, right) => {
+            let left = construct_implement_ast(*left, model.clone())?;
+            let right = construct_implement_ast(*right, model.clone())?;
+            Ok(Implement::Add(Box::new(left), Box::new(right)))
+        }
+        ast::Expression::BitwiseOr(_, left, right) => {
+            let left = construct_implement_ast(*left, model.clone())?;
+            let right = construct_implement_ast(*right, model.clone())?;
+            Ok(Implement::Or(Box::new(left), Box::new(right)))
+        }
+        other => Err(format!(
+            "Выражение реализации не поддерживается: {:?}",
+            other
+        )
+        .as_str()
+        .into()),
     }
 }
 

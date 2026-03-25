@@ -51,6 +51,10 @@ mod grammar {
     include!(concat!(env!("OUT_DIR"), "/grammar.rs"));
 }
 
+/// Нормализует имя файла или идентификатора в CamelCase.
+///
+/// Преобразует `my_model`, `mein-leib`, `Mein_Leib` → `MyModel`, `MeinLeib`.
+/// Небуквенно-цифровые символы (`_`, `-`, `#` и т.д.) используются как разделители слов.
 pub fn normalize_model_name(name: &str) -> String {
     let mut result = String::new();
     let mut upper = true;

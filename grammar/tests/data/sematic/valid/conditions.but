@@ -1,0 +1,44 @@
+// Пример: именованные условия (семантически корректный).
+//
+// Показывает объявление и использование именованных условий (`cond`),
+// включая числовые, булевы, арифметические и сравнительные выражения.
+
+var flag: bit    = false;
+var count: [bit; 8] = 0;
+
+// Булевы константы
+cond always_true  = true;
+cond always_false = false;
+
+// Числовые условия
+cond zero         = 0;
+cond threshold    = 100;
+
+// Условие на основе переменной
+cond is_flag_set  = flag;
+
+// Арифметика
+cond incremented  = 1 + 2;
+cond decremented  = 10 - 3;
+
+// Сравнения
+cond is_less      = 1 < 2;
+cond is_more      = 5 > 3;
+cond is_equal     = 1 = 1;
+cond is_not_equal = 1 != 2;
+cond le           = 3 <= 3;
+cond ge           = 4 >= 4;
+
+// Логические операции
+cond both         = true & false;
+cond either       = true | false;
+cond negated      = !true;
+
+// Скобки
+cond grouped      = (true);
+
+// Автомат, использующий условия в переходах
+start Waiting {
+    ref Done: is_flag_set;
+}
+state Done;
