@@ -774,7 +774,7 @@ fn resolve_references(
 /// Разрешение операторов происходит позднее в [`construct_model_stage4`].
 ///
 /// Если несколько блоков имеют одинаковое имя (например, два `always`),
-/// последний перезаписывает предыдущий — аналогично поведению HashMap.
+/// они все сохраняются в списке и могут быть получены через `get_named_blocks`.
 fn construct_named_blocks(state: &StateDefine) -> Result<Vec<NamedCodeBlock>, Diagnostic> {
     let mut named_blocks = Vec::new();
     for element in state.elements.iter() {

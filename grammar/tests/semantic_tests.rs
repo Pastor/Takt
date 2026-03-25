@@ -1267,3 +1267,42 @@ fn example_named_block_invalid_port_is_error() {
     let result = build_file("tests/data/sematic/invalid/named_block_undeclared_var.but");
     assert!(result.is_err(), "файл с некорректным портом должен давать ошибку");
 }
+
+/// Несколько именованных блоков с одним и тем же именем (например, два `enter`)
+/// корректно сохраняются и разрешаются.
+#[test]
+fn multiple_named_blocks_with_same_name_resolve() {
+    let node = build("var a: bit = 0; var b: bit = 0; start S { enter { a = 1; } enter { b = 1; } }");
+    let state = node.states.get("S").expect("S не найден");
+    let blocks = state.get_named_blocks("enter");
+    assert_eq!(blocks.len(), 2, "Должно быть два блока enter");
+
+    // Проверяем, что оба разрешены
+    for block in blocks {
+        let stmt = block.statement().expect("оператор должен быть");
+        assert!(!matches!(stmt, Statement::Unresolved(_)), "блок должен быть разрешён");
+    }
+}
+
+/// Несколько `always` блоков на уровне модели.
+#[test]
+fn multiple_model_level_always_blocks() {
+    let node = build("var a: bit = 0; var b: bit = 0; always { a = 1; } always { b = 1; } start S;");
+    let blocks = node.get_named_blocks("always");
+    assert_eq!(blocks.len(), 2, "Должно быть два блока always");
+
+    for block in blocks {
+        let stmt = block.statement().expect("оператор должен быть");
+        assert!(!matches!(stmt, Statement::Unresolved(_)), "блок должен быть разрешён");
+    }
+}
+
+/// Файл multiple_named_blocks.but строится без ошибок, блоки извлекаются.
+#[test]
+fn example_multiple_named_blocks_is_valid() {
+    let node = build_file("tests/data/sematic/valid/multiple_named_blocks.but").unwrap();
+    let initial = node.states.get("Initial").expect("Initial не найдено");
+    assert_eq!(initial.get_named_blocks("enter").len(), 2, "Должно быть два enter в Initial");
+    assert_eq!(initial.get_named_blocks("exit").len(), 2, "Должно быть два exit в Initial");
+    assert_eq!(node.get_named_blocks("always").len(), 3, "Должно быть три always на уровне модели");
+}

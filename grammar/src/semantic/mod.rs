@@ -139,7 +139,12 @@ impl ModelNode {
         }
     }
 
-    /// Возвращает именованный блок по его имени.
+    /// Возвращает список всех именованных блоков с заданным именем.
+    pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlock> {
+        self.named_blocks.iter().filter(|b| b.name() == name).collect()
+    }
+
+    /// Возвращает первый именованный блок с заданным именем, если он есть.
     pub fn get_named_block(&self, name: &str) -> Option<&NamedCodeBlock> {
         self.named_blocks.iter().find(|b| b.name() == name)
     }
@@ -401,6 +406,12 @@ impl StateNode {
     }
 
     /// Ищет именованный блок в состоянии по его имени.
+    /// Возвращает список всех именованных блоков с заданным именем.
+    pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlock> {
+        self.named_blocks().iter().filter(|b| b.name() == name).collect()
+    }
+
+    /// Возвращает первый именованный блок с заданным именем, если он есть.
     pub fn get_named_block(&self, name: &str) -> Option<&NamedCodeBlock> {
         self.named_blocks().iter().find(|b| b.name() == name)
     }

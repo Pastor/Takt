@@ -1,0 +1,54 @@
+// Демонстрация использования нескольких именованных блоков с одним именем.
+// Это полезно для декомпозиции сложной логики в состояниях.
+
+var a: bit = false;
+var b: bit = false;
+var total_cycles: [bit; 16] = 0;
+
+model MainModel {
+    start Idle {
+        // Первый блок enter
+        enter {
+            a = false;
+        }
+        // Второй блок enter в том же состоянии
+        enter {
+            b = false;
+        }
+
+        // Логика, выполняемая постоянно
+        always {
+            a = !a;
+        }
+        // Другая логика, выполняемая постоянно
+        always {
+            b = !b;
+        }
+        // Подсчёт циклов
+        always {
+            total_cycles = total_cycles + 1;
+        }
+
+        ref Running: a & b;
+    }
+
+    state Running {
+        enter {
+            a = true;
+        }
+        exit {
+            total_cycles = 0;
+        }
+    }
+}
+
+// Глобальные блоки always также могут быть множественными
+always {
+    // Внешняя логика
+}
+
+always {
+    // Еще одна внешняя логика
+}
+
+start Entry = MainModel;
