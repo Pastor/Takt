@@ -7,7 +7,7 @@
 //! - обнаружение дублирующихся имён моделей;
 //! - ошибочные пути: некорректный тип порта, несуществующий псевдоним и др.;
 //! - импорт моделей из файлов (`import "file.but"`, `import "file.but" as Name`);
-//! - файлы-примеры из `tests/data/sematic/`.
+//! - файлы-примеры из `tests/data/semantic/`.
 
 use grammar::parse;
 use grammar::semantic::tree::construct_model;

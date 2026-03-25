@@ -13,6 +13,7 @@ use crate::parser::ast::{
     Identifier, ImportDefine, Model, ModelElement, StateDefine, StateElement, Type, VariableDefine,
 };
 use crate::semantic::condition::extract_conditions;
+use crate::semantic::expression::construct_expression;
 use crate::semantic::include::read_import_file;
 use crate::semantic::type_inference::type_inference;
 use crate::semantic::{
@@ -98,7 +99,6 @@ fn construct_model_stage0(
                     }
                 }
                 ImportDefine::GlobalSymbol(path, id, _) => {
-                    // TODO: Надо передавать пути поиска
                     let (content, _) = read_import_file(search_paths, path)?;
                     let model_name = id.name.clone();
                     if models.contains_key(&model_name) {
@@ -114,11 +114,12 @@ fn construct_model_stage0(
                     }
                 }
                 ImportDefine::Rename(..) => {
+                    // TODO:  необходимо реализовать экспорт объектов из модели
+                    //        это типы, переменные, модели, условия, формулы, функции, блоки кода и т.д.
                     todo!("Не реализовано")
                 }
             }
         } else if let ModelElement::Variable(def) = element {
-            // TODO: Добавить вывод типа для переменных и констант (type inference).
             // Пока тип определяется только из явной аннотации.
             match *def.clone() {
                 VariableDefine::Variable {
@@ -217,7 +218,11 @@ fn construct_model_stage0(
     Ok(Rc::clone(&model_node))
 }
 
-fn construct_type(
+/// Строит [`TypeNode`] из опционального АСД-типа [`Type`].
+///
+/// Используется как в построении модели, так и в выводе типов
+/// (например, для выражения `as T`).
+pub(crate) fn construct_type(
     typ: Option<Type>,
     map: &HashMap<String, TypeNode>,
 ) -> Result<TypeNode, Diagnostic> {
@@ -306,9 +311,48 @@ fn construct_model_stage1(
     Ok(Rc::clone(&model))
 }
 
+/// Разрешает инициализаторы переменных, заменяя [`Expression::Unresolved`]
+/// полностью разрешёнными семантическими выражениями.
+///
+/// Вызывается до [`type_inference`], чтобы вывод типа работал с разрешёнными,
+/// а не «сырыми» АСД-выражениями.
+///
+/// # Ошибки
+///
+/// Пробрасывает [`Diagnostic`] из [`construct_expression`], если идентификатор
+/// в инициализаторе не найден в области видимости.
+fn resolve_variable_expressions(
+    variables: &HashMap<String, VariableNode>,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<HashMap<String, VariableNode>, Diagnostic> {
+    let mut result = HashMap::new();
+    for (name, var) in variables {
+        let resolved = match var.clone() {
+            VariableNode::Simple(n, ty, Expression::Unresolved(expr)) => {
+                VariableNode::Simple(n, ty, construct_expression(expr, model.clone())?)
+            }
+            VariableNode::Const(n, ty, Expression::Unresolved(expr)) => {
+                VariableNode::Const(n, ty, construct_expression(expr, model.clone())?)
+            }
+            VariableNode::Port(n, ty, Expression::Unresolved(expr)) => {
+                VariableNode::Port(n, ty, construct_expression(expr, model.clone())?)
+            }
+            other => other,
+        };
+        result.insert(name.clone(), resolved);
+    }
+    Ok(result)
+}
+
 fn construct_model_stage2(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    // Шаг 2а: разрешаем инициализаторы переменных (Unresolved → полноценное Expression)
+    let variables = model.borrow().variables.clone();
+    let variables = resolve_variable_expressions(&variables, model.clone())?;
+    model.borrow_mut().variables = variables;
+
+    // Шаг 2б: выводим типы переменных, у которых тип не задан явно
     let mut variables = model.borrow().variables.clone();
     variables = type_inference(&mut variables, model.clone())?;
     model.borrow_mut().variables = variables;
