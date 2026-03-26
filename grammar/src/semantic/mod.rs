@@ -11,6 +11,7 @@
 
 mod builtin;
 mod condition;
+pub(crate) mod docs;
 mod expression;
 mod function;
 mod include;
@@ -32,6 +33,10 @@ use std::rc::Rc;
 ///
 /// Содержит контекст модели, её имя, словарь состояний и
 /// информацию о реализации (`implements`).
+///
+/// Поля [`doc`](ModelNode::doc) и [`docs`](ModelNode::docs) заполняются
+/// отдельным вызовом [`construct_model_with_docs`](tree::construct_model_with_docs)
+/// и содержат строки из `///`-комментариев исходного текста.
 #[derive(Default, Debug, PartialEq, Eq)]
 pub struct ModelNode {
     /// Имя модели (`None` для анонимной корневой модели).
@@ -54,6 +59,18 @@ pub struct ModelNode {
     pub states: HashMap<String, StateNode>,
     /// Информация о реализации (зарезервировано).
     pub implements: Implement,
+    /// Документация самой модели (строки из `///`-комментариев перед `model`).
+    ///
+    /// Заполняется [`construct_model_with_docs`](tree::construct_model_with_docs).
+    /// Пусто у анонимной корневой модели и при использовании [`construct_model`](tree::construct_model).
+    pub doc: Vec<String>,
+    /// Документация именованных элементов модели.
+    ///
+    /// Ключ — имя элемента (переменной, состояния, функции, типа, условия).
+    /// Значение — список строк из `///`-комментариев, предшествующих объявлению.
+    ///
+    /// Заполняется [`construct_model_with_docs`](tree::construct_model_with_docs).
+    pub docs: HashMap<String, Vec<String>>,
 }
 
 impl ModelNode {
@@ -166,6 +183,43 @@ impl ModelNode {
         } else {
             None
         }
+    }
+
+    /// Возвращает документацию самой модели.
+    ///
+    /// Заполняется только при использовании
+    /// [`construct_model_with_docs`](tree::construct_model_with_docs).
+    /// Возвращает пустой срез для анонимной корневой модели или при
+    /// использовании [`construct_model`](tree::construct_model).
+    ///
+    /// # Примеры
+    ///
+    /// ```rust,ignore
+    /// let (ast, comments) = parse("/// Тест\nmodel M { start S; }", 0)?;
+    /// let root = construct_model_with_docs(&ast, None, &[], &comments)?;
+    /// let m = root.borrow().search_model("M").unwrap();
+    /// assert_eq!(m.borrow().own_doc(), ["Тест"]);
+    /// ```
+    pub fn own_doc(&self) -> &[String] {
+        &self.doc
+    }
+
+    /// Возвращает документацию именованного элемента (состояния, переменной,
+    /// функции, типа, условия).
+    ///
+    /// Заполняется только при использовании
+    /// [`construct_model_with_docs`](tree::construct_model_with_docs).
+    /// Возвращает пустой срез, если документация отсутствует или не загружена.
+    ///
+    /// # Примеры
+    ///
+    /// ```rust,ignore
+    /// let (ast, comments) = parse("/// Состояние.\nstart S;", 0)?;
+    /// let root = construct_model_with_docs(&ast, None, &[], &comments)?;
+    /// assert_eq!(root.borrow().element_doc("S"), ["Состояние."]);
+    /// ```
+    pub fn element_doc(&self, name: &str) -> &[String] {
+        self.docs.get(name).map(|v| v.as_slice()).unwrap_or(&[])
     }
 }
 

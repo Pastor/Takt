@@ -10,7 +10,7 @@
 //! - файлы-примеры из `tests/data/semantic/`.
 
 use grammar::parse;
-use grammar::semantic::tree::construct_model;
+use grammar::semantic::tree::{construct_model, construct_model_with_docs};
 use grammar::semantic::{Implement, StateNode, TypeNode, VariableNode};
 
 // ─── Вспомогательная функция ──────────────────────────────────────────────────
@@ -1693,4 +1693,234 @@ fn linear_import_chain_is_valid() {
     let result = construct_model(&ast, None, &[dir_str]);
 
     assert!(result.is_ok(), "линейная цепочка импортов должна успешно строиться: {:?}", result.err());
+}
+
+// ─── Тесты Се12: документационные комментарии в семантическом дереве ──────────
+//
+// Реализация Се12: `///`-комментарии включаются в семантическое дерево через
+// `construct_model_with_docs`. Доступ:
+//   - `model_node.own_doc()`                → документация самой модели
+//   - `model_node.element_doc("Имя")`       → документация именованного элемента
+//   - `model_node.docs["Имя"]`              → то же через HashMap
+
+/// `construct_model_with_docs` — состояние получает свой doc-комментарий.
+#[test]
+fn doc_comment_for_state() {
+    let src = "/// Начальное состояние.\nstart S;";
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    assert_eq!(
+        root.borrow().element_doc("S"),
+        ["Начальное состояние."],
+        "doc-комментарий должен быть привязан к состоянию S"
+    );
+}
+
+/// Переменная получает свой doc-комментарий.
+#[test]
+fn doc_comment_for_variable() {
+    let src = "/// Счётчик.\nvar counter: bit = false;";
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    assert_eq!(
+        root.borrow().element_doc("counter"),
+        ["Счётчик."],
+        "doc-комментарий должен быть привязан к переменной counter"
+    );
+}
+
+/// Тип (`type`) получает свой doc-комментарий.
+#[test]
+fn doc_comment_for_type() {
+    let src = "/// Байт.\ntype u8 = [bit;8];";
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    assert_eq!(
+        root.borrow().element_doc("u8"),
+        ["Байт."],
+        "doc-комментарий должен быть привязан к типу u8"
+    );
+}
+
+/// Условие (`cond`) получает свой doc-комментарий.
+#[test]
+fn doc_comment_for_condition() {
+    let src = "/// Истинно всегда.\ncond always_true = true;";
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    assert_eq!(
+        root.borrow().element_doc("always_true"),
+        ["Истинно всегда."],
+        "doc-комментарий должен быть привязан к условию always_true"
+    );
+}
+
+/// Вложенная модель получает doc-комментарий через `root.element_doc("M")`.
+#[test]
+fn doc_comment_for_nested_model_from_parent() {
+    let src = "/// Вложенная модель.\nmodel M { start S; }";
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    assert_eq!(
+        root.borrow().element_doc("M"),
+        ["Вложенная модель."],
+        "doc-комментарий должен быть доступен через родительскую модель"
+    );
+}
+
+/// Собственный `doc`-поле вложенной модели содержит тот же текст.
+#[test]
+fn doc_comment_for_nested_model_own_doc() {
+    let src = "/// Своя документация.\nmodel Inner { start S; }";
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    let inner = root.borrow().search_model("Inner").unwrap();
+    assert_eq!(
+        inner.borrow().own_doc(),
+        ["Своя документация."],
+        "дочерний узел должен хранить свою документацию в поле doc"
+    );
+}
+
+/// Многострочный doc-блок из нескольких `///` привязывается как список строк.
+#[test]
+fn multi_line_doc_comment_for_state() {
+    let src = "/// Строка 1.\n/// Строка 2.\n/// Строка 3.\nstart S;";
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    let doc = root.borrow().element_doc("S").to_vec();
+    assert_eq!(doc.len(), 3, "должно быть три строки документации");
+    assert_eq!(doc[0], "Строка 1.");
+    assert_eq!(doc[1], "Строка 2.");
+    assert_eq!(doc[2], "Строка 3.");
+}
+
+/// Обычный `//`-комментарий НЕ попадает в документацию.
+#[test]
+fn regular_comment_not_in_docs() {
+    let src = "// Обычный комментарий.\nstart S;";
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    assert!(
+        root.borrow().element_doc("S").is_empty(),
+        "обычный // комментарий не должен попасть в документацию"
+    );
+}
+
+/// Без комментариев — `element_doc` возвращает пустой срез.
+#[test]
+fn no_doc_comment_returns_empty() {
+    let src = "start S; state Done;";
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    assert!(root.borrow().element_doc("S").is_empty());
+    assert!(root.borrow().element_doc("Done").is_empty());
+    assert!(root.borrow().own_doc().is_empty());
+}
+
+/// Каждый элемент получает свой doc-комментарий — не чужой.
+#[test]
+fn each_element_gets_its_own_doc() {
+    let src = concat!(
+        "/// Состояние A.\n",
+        "start A;\n",
+        "/// Состояние B.\n",
+        "state B;\n",
+    );
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    assert_eq!(root.borrow().element_doc("A"), ["Состояние A."]);
+    assert_eq!(root.borrow().element_doc("B"), ["Состояние B."]);
+}
+
+/// `construct_model` (без docs) → поля doc и docs остаются пустыми.
+#[test]
+fn construct_model_without_docs_leaves_fields_empty() {
+    let src = "/// Документация.\nstart S;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения семантики");
+    assert!(
+        root.borrow().element_doc("S").is_empty(),
+        "construct_model без docs должен оставить поле docs пустым"
+    );
+    assert!(root.borrow().own_doc().is_empty());
+}
+
+/// Документация вложенного состояния в модели (`model M { /// doc\n state S... }`).
+#[test]
+fn doc_comment_for_state_inside_model() {
+    let src = concat!(
+        "model M {\n",
+        "    /// Документация состояния внутри модели.\n",
+        "    start S;\n",
+        "    state Done;\n",
+        "}\n",
+    );
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    let m = root.borrow().search_model("M").unwrap();
+    assert_eq!(
+        m.borrow().element_doc("S"),
+        ["Документация состояния внутри модели."],
+    );
+    assert!(
+        m.borrow().element_doc("Done").is_empty(),
+        "Done не имеет doc-комментария"
+    );
+}
+
+/// `tests/data/sematic/valid/doc_comments.but` — файл с doc-комментариями строится корректно.
+#[test]
+fn example_doc_comments_file_is_valid() {
+    let src = std::fs::read_to_string("tests/data/sematic/valid/doc_comments.but")
+        .expect("не могу прочитать doc_comments.but");
+    let (ast, comments) = parse(&src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+
+    // Проверяем документацию на верхнем уровне
+    let rb = root.borrow();
+    assert!(!rb.element_doc("u8").is_empty(), "тип u8 должен иметь doc");
+    assert!(!rb.element_doc("counter").is_empty(), "переменная counter должна иметь doc");
+    assert!(!rb.element_doc("MaxReached").is_empty(), "условие MaxReached должно иметь doc");
+    assert!(!rb.element_doc("TrafficLight").is_empty(), "модель TrafficLight должна иметь doc");
+
+    // Проверяем документацию состояний внутри TrafficLight
+    let tl = rb.search_model("TrafficLight").expect("TrafficLight не найдена");
+    let tl = tl.borrow();
+    assert!(!tl.own_doc().is_empty(), "TrafficLight должна иметь собственную документацию");
+    assert!(!tl.element_doc("timer").is_empty(), "переменная timer должна иметь doc");
+    assert!(!tl.element_doc("Red").is_empty(), "состояние Red должно иметь doc");
+    assert!(!tl.element_doc("Green").is_empty(), "состояние Green должно иметь doc");
+    assert!(!tl.element_doc("Yellow").is_empty(), "состояние Yellow должно иметь doc");
+}
+
+/// Документация модели содержит несколько строк из многострочного `///`-блока.
+#[test]
+fn multi_line_doc_for_model() {
+    let src = concat!(
+        "/// Первая строка.\n",
+        "/// Вторая строка.\n",
+        "model M { start S; }\n",
+    );
+    let (ast, comments) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model_with_docs(&ast, None, &[], &comments)
+        .expect("ошибка построения семантики");
+    let doc = root.borrow().element_doc("M").to_vec();
+    assert_eq!(doc.len(), 2, "должно быть две строки документации для M");
+    assert_eq!(doc[0], "Первая строка.");
+    assert_eq!(doc[1], "Вторая строка.");
+    let m = root.borrow().search_model("M").unwrap();
+    assert_eq!(m.borrow().own_doc().len(), 2, "M.doc тоже должен содержать обе строки");
 }

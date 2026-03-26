@@ -655,6 +655,49 @@ pub fn construct_model(
     Ok(model)
 }
 
+/// Строит семантическое дерево модели и привязывает `///`-комментарии.
+///
+/// Расширенный вариант [`construct_model`]: после построения дерева заполняет
+/// поля [`ModelNode::doc`](crate::semantic::ModelNode::doc) и
+/// [`ModelNode::docs`](crate::semantic::ModelNode::docs) на основе `///`-комментариев
+/// из исходного текста.
+///
+/// # Параметры
+///
+/// - `model` — корневой узел АСД, результат [`parse`](crate::parse).
+/// - `upper` — родительская модель (`None` для корня).
+/// - `search_paths` — пути поиска для файлов импорта.
+/// - `comments` — комментарии из [`parse`](crate::parse) (второй элемент кортежа).
+///
+/// # Алгоритм привязки
+///
+/// Для каждого именованного объявления (состояния, переменной, функции и т.д.)
+/// ищутся `///`-комментарии, ближайшим следующим элементом которых является
+/// данное объявление. Подробнее — в [`crate::semantic::docs`].
+///
+/// # Примеры
+///
+/// ```
+/// use grammar::{parse, semantic::tree::construct_model_with_docs};
+///
+/// let src = "/// Документация состояния.\nstart S;";
+/// let (ast, comments) = parse(src, 0).unwrap();
+/// let root = construct_model_with_docs(&ast, None, &[], &comments).unwrap();
+/// assert_eq!(root.borrow().element_doc("S"), ["Документация состояния."]);
+/// ```
+pub fn construct_model_with_docs(
+    model: &Model,
+    upper: Option<Rc<RefCell<ModelNode>>>,
+    search_paths: &[String],
+    comments: &[ast::Comment],
+) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    // Строим семантическое дерево (без документации)
+    let root = construct_model(model, upper, search_paths)?;
+    // Привязываем doc-комментарии к узлам дерева
+    crate::semantic::docs::attach_docs(&root, model, comments);
+    Ok(root)
+}
+
 /// Извлекает все состояния из модели и разрешает ссылки между ними.
 ///
 /// Алгоритм:
