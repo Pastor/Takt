@@ -63,8 +63,8 @@ pub enum Token<'input> {
     Import,
     /// Ключевое слово `type`.
     Type,
-    /// Ключевое слово `do`.
-    Do,
+    /// Ключевое слово `loop`.
+    Loop,
     /// Ключевое слово `continue`.
     Continue,
     /// Ключевое слово `break`.
@@ -130,8 +130,6 @@ pub enum Token<'input> {
     Else,
     /// Ключевое слово `for`.
     For,
-    /// Ключевое слово `while`.
-    While,
     /// Ключевое слово `if`.
     If,
 
@@ -247,7 +245,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Import => write!(f, "import"),
             Token::Type => write!(f, "type"),
             Token::Constant => write!(f, "const"),
-            Token::Do => write!(f, "do"),
+            Token::Loop => write!(f, "loop"),
             Token::Continue => write!(f, "continue"),
             Token::Break => write!(f, "break"),
             Token::Return => write!(f, "return"),
@@ -255,7 +253,6 @@ impl<'input> fmt::Display for Token<'input> {
             Token::False => write!(f, "false"),
             Token::Else => write!(f, "else"),
             Token::For => write!(f, "for"),
-            Token::While => write!(f, "while"),
             Token::If => write!(f, "if"),
             Token::As => write!(f, "as"),
             Token::Assembly => write!(f, "assembly"),
@@ -384,18 +381,17 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "break"    => Token::Break,
     "const"    => Token::Constant,
     "continue" => Token::Continue,
-    "do"       => Token::Do,
     "else"     => Token::Else,
     "false"    => Token::False,
     "for"      => Token::For,
     "fn"       => Token::Function,
     "if"       => Token::If,
     "import"   => Token::Import,
+    "loop"     => Token::Loop,
     "return"   => Token::Return,
     "string"   => Token::String,
     "true"     => Token::True,
     "type"     => Token::Type,
-    "while"    => Token::While,
     "as"       => Token::As,
     "assembly" => Token::Assembly,
     "formula"  => Token::Formula,

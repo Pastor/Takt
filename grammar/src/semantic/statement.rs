@@ -92,13 +92,19 @@ fn resolve_ast_statement(
             })
         }
 
-        // ── Цикл while ────────────────────────────────────────────────────────
-        ast::Statement::While(_, cond, body) => {
-            let cond = construct_expression(cond.clone(), model.clone())?;
+        // ── Цикл loop ────────────────────────────────────────────────────────
+        // `loop { тело }` — бесконечный цикл (cond = None)
+        // `loop условие { тело }` — продолжается, пока условие истинно
+        ast::Statement::Loop(_, cond, body) => {
+            let cond = cond
+                .as_ref()
+                .map(|c| construct_expression(c.clone(), model.clone()))
+                .transpose()?
+                .map(Box::new);
             let body = resolve_ast_statement(body, model)
                 .unwrap_or_else(|_| Statement::Unresolved(body.as_ref().clone()));
-            Ok(Statement::While {
-                cond: Box::new(cond),
+            Ok(Statement::Loop {
+                cond,
                 body: Box::new(body),
             })
         }
@@ -135,17 +141,6 @@ fn resolve_ast_statement(
                 cond,
                 step,
                 body,
-            })
-        }
-
-        // ── Цикл do...while ───────────────────────────────────────────────────
-        ast::Statement::DoWhile(_, body, cond) => {
-            let body = resolve_ast_statement(body, model.clone())
-                .unwrap_or_else(|_| Statement::Unresolved(body.as_ref().clone()));
-            let cond = construct_expression(cond.clone(), model)?;
-            Ok(Statement::DoWhile {
-                body: Box::new(body),
-                cond: Box::new(cond),
             })
         }
 
@@ -364,44 +359,49 @@ mod tests {
 
     // ── Циклы ─────────────────────────────────────────────────────────────────
 
-    /// `while` с известным условием разрешается.
+    /// `loop условие { }` разрешается в `Statement::Loop` с условием.
     ///
     /// # Пример (BuT)
     /// ```but
     /// var flag: bit = false;
     /// always {
-    ///     while (flag) { flag = flag; }
+    ///     loop flag { flag = flag; }
     /// }
     /// ```
     #[test]
-    fn while_loop_resolves() {
-        let node = build("var flag: bit = false; always { while (flag) { flag = flag; } } start S;");
+    fn loop_with_condition_resolves() {
+        let node = build(
+            // loop с условием — аналог while
+            "var flag: bit = false; always { loop flag { flag = flag; } } start S;",
+        );
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
-            matches!(stmt, Statement::While { .. }),
-            "ожидался While, получен: {:?}",
+            matches!(stmt, Statement::Loop { cond: Some(_), .. }),
+            "ожидался Loop с условием, получен: {:?}",
             stmt
         );
     }
 
-    /// `do...while` с известным условием разрешается.
+    /// `loop { }` без условия разрешается в `Statement::Loop` с `cond = None`.
     ///
     /// # Пример (BuT)
     /// ```but
-    /// var x: bit = false;
     /// always {
-    ///     do { x = x; } while (x);
+    ///     loop { break; }
     /// }
     /// ```
     #[test]
-    fn do_while_loop_resolves() {
-        let node = build("var x: bit = false; always { do { x = x; } while (x); } start S;");
+    fn loop_without_condition_resolves() {
+        let node = build(
+            // loop без условия — бесконечный цикл
+            "always { loop { break; } } start S;",
+        );
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
-            matches!(stmt, Statement::DoWhile { .. }),
-            "ожидался DoWhile, получен: {:?}",
+            matches!(stmt, Statement::Loop { cond: None, .. }),
+            "ожидался Loop без условия, получен: {:?}",
             stmt
         );
     }

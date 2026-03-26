@@ -365,15 +365,16 @@ statement
     = "if" expression block_statement
     | "if" expression block_statement "else" statement
 
-    (* Цикл while — условие БЕЗ скобок, тело — обязательный блок (С1, вариант A) *)
-    | "while" expression block_statement
+    (* Цикл loop — тело всегда в блоке {}.
+       Без условия — бесконечный; с условием — продолжается, пока оно истинно.
+       Условие не может начинаться с '{' (используйте скобки: loop ({1,2}) { }).
+       do-while удалён из языка. *)
+    | "loop" block_statement
+    | "loop" expression block_statement
 
-    (* Цикл for — заголовок БЕЗ скобок, тело — блок или ";" (С1, вариант A) *)
+    (* Цикл for — заголовок БЕЗ скобок, тело — блок или ";" *)
     | "for" [ simple_statement ] ";" [ expression ] ";" [ expression ]
       ( block_statement | ";" )
-
-    (* Цикл do-while — условие БЕЗ скобок (С1, вариант A) *)
-    | "do" statement "while" expression ";"
 
     (* Блок *)
     | block_statement
@@ -429,10 +430,10 @@ identifier = ( xid_start | "_" | "$" ) { xid_continue | "$" } ;
 (* ── Ключевые слова ──────────────────────────────────────────────────────── *)
 (*
    as        assembly  break    cond      const     continue
-   do        else      extern   false     fn        for
-   formula   if        import   model     next      port
+   else      extern    false    fn        for
+   formula   if        import   loop      model     next      port
    ref       return    start    state     string    template
-   true      type      var      while
+   true      type      var
 *)
 
 (* ── Числовые литералы ───────────────────────────────────────────────────── *)

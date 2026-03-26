@@ -829,8 +829,9 @@ pub enum Statement {
     Args(Location, Vec<NamedArgument>),
     /// Оператор `if`: `if условие блок [else ветка]`.
     If(Location, Expression, Box<Statement>, Option<Box<Statement>>),
-    /// Оператор `while`: `while (условие) тело`.
-    While(Location, Expression, Box<Statement>),
+    /// Цикл `loop [условие] { тело }`.
+    /// Без условия — бесконечный цикл; с условием — продолжается, пока условие истинно.
+    Loop(Location, Option<Expression>, Box<Statement>),
     /// Оператор-выражение.
     Expression(Location, Expression),
     /// Объявление переменной с опциональным инициализатором.
@@ -843,8 +844,6 @@ pub enum Statement {
         Option<Box<Expression>>,
         Option<Box<Statement>>,
     ),
-    /// Оператор `do ... while`: `do тело while (условие)`.
-    DoWhile(Location, Box<Statement>, Expression),
     /// Оператор `continue`.
     Continue(Location),
     /// Оператор `break`.

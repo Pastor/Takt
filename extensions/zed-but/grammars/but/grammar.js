@@ -238,8 +238,7 @@ module.exports = grammar({
       $.block,
       $.variable_declaration,
       $.if_statement,
-      $.while_statement,
-      $.do_while_statement,
+      $.loop_statement,
       $.for_statement,
       $.return_statement,
       $.break_statement,
@@ -250,29 +249,28 @@ module.exports = grammar({
       $.stray_semicolon,
     ),
 
-    // NOTE: BuT `if` does NOT use parentheses around condition
+    // NOTE: BuT `if` использует условие без скобок
     if_statement: $ => prec.right(seq(
       'if', field('condition', $._expression),
       field('consequence', $.block),
       optional(seq('else', field('alternative', choice($.block, $.if_statement))))
     )),
 
-    while_statement: $ => seq(
-      'while', '(', field('condition', $._expression), ')',
-      field('body', $.block)
-    ),
-
-    do_while_statement: $ => seq(
-      'do', field('body', $.block),
-      'while', '(', field('condition', $._expression), ')', ';'
+    // loop без условия — бесконечный цикл; loop условие { } — условный цикл.
+    // do-while удалён из языка.
+    loop_statement: $ => choice(
+      // Бесконечный цикл: loop { тело }
+      seq('loop', field('body', $.block)),
+      // Цикл с условием: loop условие { тело }
+      seq('loop', field('condition', $._expression), field('body', $.block)),
     ),
 
     for_statement: $ => seq(
-      'for', '(',
+      'for',
       optional(field('init', $.simple_statement)), ';',
       optional(field('condition', $._expression)), ';',
       optional(field('update', $._expression)),
-      ')', field('body', $.block)
+      field('body', $.block)
     ),
 
     // SimpleStatement inside for-init: variable or expression

@@ -141,8 +141,8 @@ fn is_keyword_returns_true_for_keywords() {
     use grammar::parser::lexer::is_keyword;
 
     let keywords = [
-        "break", "const", "continue", "do", "else", "false", "for", "fn", "if", "import", "return",
-        "string", "true", "type", "while", "as", "assembly", "formula", "port", "model", "state",
+        "break", "const", "continue", "else", "false", "for", "fn", "if", "import", "loop", "return",
+        "string", "true", "type", "as", "assembly", "formula", "port", "model", "state",
         "start", "ref", "template", "cond", "var", "next", "extern",
     ];
     for kw in keywords {
@@ -190,7 +190,7 @@ fn keywords_produce_correct_token_count() {
         ("state", 1),
         ("start", 1),
         ("ref cond var", 3),
-        ("fn if else while for do break continue return", 9),
+        ("fn if else loop for break continue return", 8),
         ("extern fn", 2),
     ];
 
@@ -531,14 +531,13 @@ fn token_display_keywords() {
         ("extern", Token::Extern),
         ("import", Token::Import),
         ("type", Token::Type),
-        ("do", Token::Do),
+        ("loop", Token::Loop),
         ("continue", Token::Continue),
         ("break", Token::Break),
         ("return", Token::Return),
         ("string", Token::String),
         ("else", Token::Else),
         ("for", Token::For),
-        ("while", Token::While),
         ("if", Token::If),
         ("as", Token::As),
         ("assembly", Token::Assembly),

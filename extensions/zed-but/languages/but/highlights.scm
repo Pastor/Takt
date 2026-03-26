@@ -30,8 +30,7 @@
 ; ── Keywords: control flow ───────────────────────────────────────────────────
 "if"       @keyword.control
 "else"     @keyword.control
-"while"    @keyword.control
-"do"       @keyword.control
+"loop"     @keyword.control
 "for"      @keyword.control
 "return"   @keyword.control.return
 "break"    @keyword.control

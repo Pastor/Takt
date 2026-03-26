@@ -265,10 +265,11 @@ pub enum Statement {
         /// Ветка `else` (если задана).
         else_: Option<Box<Statement>>,
     },
-    /// Оператор цикла `while`.
-    While {
-        /// Условие продолжения.
-        cond: Box<Expression>,
+    /// Цикл `loop [условие] { тело }`.
+    /// Условие `None` означает бесконечный цикл.
+    Loop {
+        /// Условие продолжения (`None` — бесконечный цикл).
+        cond: Option<Box<Expression>>,
         /// Тело цикла.
         body: Box<Statement>,
     },
@@ -282,13 +283,6 @@ pub enum Statement {
         step: Option<Box<Expression>>,
         /// Тело цикла.
         body: Box<Statement>,
-    },
-    /// Оператор цикла `do ... while`.
-    DoWhile {
-        /// Тело.
-        body: Box<Statement>,
-        /// Условие продолжения.
-        cond: Box<Expression>,
     },
     /// Объявление локальной переменной: `(имя, тип, инициализатор?)`.
     Variable(String, TypeNode, Option<Box<Expression>>),

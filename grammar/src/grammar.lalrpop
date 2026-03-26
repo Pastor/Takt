@@ -267,6 +267,109 @@ Member: Member = {
     <number> => Member::Number(<>)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LoopCond: условие цикла loop.
+//
+// Аналогично Expression, но не может начинаться с '{', чтобы устранить
+// LR(1)-неоднозначность между `loop { body }` (бесконечный цикл) и
+// `loop {expr,...} { body }` (инициализатор массива как условие).
+//
+// Для инициализатора массива в условии используйте скобки:
+//   loop ({1, 2}) { body }
+//
+// В двоичных операторах правая часть использует полный `PrecedenceN`,
+// поскольку только первый токен условия создаёт неоднозначность.
+// ─────────────────────────────────────────────────────────────────────────────
+
+LoopCond: Expression = { LoopCondP14 }
+
+LoopCondP14: Expression = {
+    <a:@L> <l:LoopCondP13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP13,
+}
+
+LoopCondP13: Expression = {
+    <a:@L> <l:LoopCondP13> "||" <r:Precedence12> <b:@R> => Expression::Or(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP12,
+}
+
+LoopCondP12: Expression = {
+    <a:@L> <l:LoopCondP12> "&&" <r:Precedence11> <b:@R> => Expression::And(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP11,
+}
+
+LoopCondP11: Expression = {
+    <a:@L> <l:LoopCondP11> "==" <r:Precedence10> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:LoopCondP11> "!=" <r:Precedence10> <b:@R> => Expression::NotEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP10,
+}
+
+LoopCondP10: Expression = {
+    <a:@L> <l:LoopCondP10> "<"  <r:Precedence9> <b:@R> => Expression::Less(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:LoopCondP10> ">"  <r:Precedence9> <b:@R> => Expression::More(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:LoopCondP10> "<=" <r:Precedence9> <b:@R> => Expression::LessEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:LoopCondP10> ">=" <r:Precedence9> <b:@R> => Expression::MoreEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP9,
+}
+
+LoopCondP9: Expression = {
+    <a:@L> <l:LoopCondP9> "|" <r:Precedence8> <b:@R> => Expression::BitwiseOr(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP8,
+}
+
+LoopCondP8: Expression = {
+    <a:@L> <l:LoopCondP8> "^" <r:Precedence7> <b:@R> => Expression::BitwiseXor(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP7,
+}
+
+LoopCondP7: Expression = {
+    <a:@L> <l:LoopCondP7> "&"    <r:Precedence6> <b:@R> => Expression::BitwiseAnd(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <e:LoopCondP7> "as"   <ty:Type>        <b:@R> => Expression::Cast(Location::Source(file_no, a, b), Box::new(e), ty),
+    LoopCondP6,
+}
+
+LoopCondP6: Expression = {
+    <a:@L> <l:LoopCondP6> "<<" <r:Precedence5> <b:@R> => Expression::ShiftLeft(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:LoopCondP6> ">>" <r:Precedence5> <b:@R> => Expression::ShiftRight(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP5,
+}
+
+LoopCondP5: Expression = {
+    <a:@L> <l:LoopCondP5> "+" <r:Precedence4> <b:@R> => Expression::Add(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:LoopCondP5> "-" <r:Precedence4> <b:@R> => Expression::Subtract(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP4,
+}
+
+LoopCondP4: Expression = {
+    <a:@L> <l:LoopCondP4> "*" <r:Precedence3> <b:@R> => Expression::Multiply(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:LoopCondP4> "/" <r:Precedence3> <b:@R> => Expression::Divide(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:LoopCondP4> "%" <r:Precedence3> <b:@R> => Expression::Modulo(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP3,
+}
+
+LoopCondP3: Expression = {
+    <a:@L> <l:LoopCondP2> "**" <r:Precedence3> <b:@R> => Expression::Power(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    LoopCondP2,
+}
+
+LoopCondP2: Expression = {
+    <a:@L> "!" <e:LoopCondP2> <b:@R> => Expression::Not(Location::Source(file_no, a, b), Box::new(e)),
+    <a:@L> "~" <e:LoopCondP2> <b:@R> => Expression::BitwiseNot(Location::Source(file_no, a, b), Box::new(e)),
+    <a:@L> "+" <e:LoopCondP2> <b:@R> => Expression::UnaryPlus(Location::Source(file_no, a, b), Box::new(e)),
+    <a:@L> "-" <e:LoopCondP2> <b:@R> => Expression::Negate(Location::Source(file_no, a, b), Box::new(e)),
+    LoopCondP1,
+}
+
+// LoopCondP1: как Precedence1, но БЕЗ инициализатора массива `{ expr, ... }`.
+// Именно это устраняет конфликт LR(1): '{' всегда начинает тело цикла, а не условие.
+LoopCondP1: Expression = {
+    <l:@L> <n:number> ":" <bit:number> <r:@R> => Expression::Address(Location::Source(file_no, l, r), n, bit),
+    <l:@L> <n:number>                  <r:@R> => Expression::Number(Location::Source(file_no, l, r), n),
+    <l:@L> <n:rational>                <r:@R> => Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1),
+    // инициализатор массива '{...}' здесь намеренно отсутствует
+    Precedence0
+}
+
 Expression: Expression = {
     Precedence14
 }
@@ -435,11 +538,15 @@ ClosedStatement: Statement = {
     <l:@L> "if" <cond:Expression> <body:BlockStatement> "else" <o:ClosedStatement> <r:@R> => {
         Statement::If(Location::Source(file_no, l, r), cond, Box::new(body), Some(Box::new(o)))
     },
-    // С1 (вариант A): while без скобок вокруг условия; тело — обязательный блок в {}.
-    // Только BlockStatement после условия устраняет неоднозначность LR(1):
-    // парсер знает, что '{' начинает тело, а не является частью выражения.
-    <l:@L> "while" <e:Expression> <b:BlockStatement> <r:@R> => {
-        Statement::While(Location::Source(file_no, l, r), e, Box::new(b))
+    // Цикл loop без условия (бесконечный): loop { тело }
+    // '{' безусловно начинает тело — неоднозначности нет
+    <l:@L> "loop" <b:BlockStatement> <r:@R> => {
+        Statement::Loop(Location::Source(file_no, l, r), None, Box::new(b))
+    },
+    // Цикл loop с условием: loop условие { тело }
+    // LoopCond не начинается с '{', что устраняет LR(1)-конфликт с BlockStatement
+    <l:@L> "loop" <e:LoopCond> <b:BlockStatement> <r:@R> => {
+        Statement::Loop(Location::Source(file_no, l, r), Some(e), Box::new(b))
     },
     // С1 (вариант A): for без скобок вокруг заголовка; тело — обязательный блок в {}.
     <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> <block:BlockStatement> <r:@R> => {
@@ -488,10 +595,6 @@ NonIfStatement: Statement = {
         }
     },
     <SimpleStatement> ";" => <>,
-    // С1 (вариант A): do-while без скобок вокруг условия
-    <l:@L> "do" <b:Statement> "while" <e:Expression> <r:@R> ";" => {
-        Statement::DoWhile(Location::Source(file_no, l, r), Box::new(b), e)
-    },
     <l:@L> "continue" <r:@R> ";" => {
         Statement::Continue(Location::Source(file_no, l, r))
     },
@@ -639,9 +742,8 @@ extern {
         "return" => Token::Return,
         "if" => Token::If,
         "for" => Token::For,
-        "while" => Token::While,
+        "loop" => Token::Loop,
         "else" => Token::Else,
-        "do" => Token::Do,
         "continue" => Token::Continue,
         "break" => Token::Break,
         "as" => Token::As,

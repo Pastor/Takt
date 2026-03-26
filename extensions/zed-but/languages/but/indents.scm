@@ -20,10 +20,9 @@
 (named_block
   (block "}" @end)) @indent
 
-; if/else/while/for/do-while
+; if/else/loop/for (do-while удалён из языка)
 [
   (if_statement (block "}" @end))
-  (while_statement (block "}" @end))
-  (do_while_statement (block "}" @end))
+  (loop_statement (block "}" @end))
   (for_statement (block "}" @end))
 ] @indent

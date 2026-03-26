@@ -1,6 +1,6 @@
-// Пример: управляющие конструкции (if, while, for, do-while) в named blocks.
-// С1 (вариант A): все циклы без скобок вокруг условия/заголовка,
-// тело while/for — обязательный блок в {}.
+// Пример: управляющие конструкции (if, loop, for) в named blocks.
+// loop без условия — бесконечный цикл; loop условие { } — условный.
+// do-while удалён из языка.
 //
 // Проверяет корректное разрешение операторов управления потоком
 // внутри именованных блоков состояний.
@@ -21,20 +21,21 @@ start Running {
             flag = false;
         }
 
-        // while без скобок, тело в {}
-        while counter < 10 {
+        // loop с условием (аналог while)
+        loop counter < 10 {
             counter = counter;
+        }
+
+        // бесконечный loop с break
+        loop {
+            counter = counter;
+            break;
         }
 
         // for без скобок, тело в {}
         for i = 0; i < 5; i = i + 1 {
             counter = counter;
         }
-
-        // do-while без скобок
-        do {
-            counter = counter;
-        } while counter > 0;
     }
 }
 

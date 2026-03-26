@@ -2,5 +2,5 @@
 // Каждое слово должно быть распознано как соответствующий токен
 
 model state start ref cond var const port type
-fn return if else for while do break continue
+fn return if else for loop break continue
 import as assembly formula true false extern
