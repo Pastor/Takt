@@ -1,0 +1,25 @@
+// Пример для Се11: именованное условие в переходе.
+// Именованные условия (`cond имя = выражение;`) являются булевыми по природе,
+// поэтому предупреждений Се11 быть не должно.
+
+var counter: [bit;8] = 0;
+
+// Именованные условия — результатом всегда является булево значение
+cond MaxReached   = counter = 255;
+cond NotZero      = counter != 0;
+cond HalfFull     = counter > 127;
+
+start Counting {
+    always { counter = counter + 1; }
+    ref Done: MaxReached;   // ok — именованное условие
+    ref Half: HalfFull;     // ok — именованное условие
+}
+
+state Done {
+    next Counting;
+}
+
+state Half {
+    ref Done: MaxReached;   // ok — именованное условие
+    ref Counting: NotZero;  // ok — именованное условие
+}

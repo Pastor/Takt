@@ -10,7 +10,7 @@
 //! - файлы-примеры из `tests/data/semantic/`.
 
 use grammar::parse;
-use grammar::semantic::tree::{construct_model, construct_model_with_docs};
+use grammar::semantic::tree::{construct_model, construct_model_with_docs, implicit_bool_warnings};
 use grammar::semantic::{Implement, StateNode, TypeNode, VariableNode};
 
 // ─── Вспомогательная функция ──────────────────────────────────────────────────
@@ -1923,4 +1923,294 @@ fn multi_line_doc_for_model() {
     assert_eq!(doc[1], "Вторая строка.");
     let m = root.borrow().search_model("M").unwrap();
     assert_eq!(m.borrow().own_doc().len(), 2, "M.doc тоже должен содержать обе строки");
+}
+
+// ─── Се11: строгая проверка булевости условий переходов ──────────────────────
+
+/// Явное сравнение в условии перехода — нет предупреждений.
+///
+/// # BuT
+/// ```but
+/// var timer: [bit;8] = 0;
+/// start S { ref T: timer != 0; }
+/// state T;
+/// ```
+#[test]
+fn se11_explicit_comparison_no_warnings() {
+    let src = "var timer: [bit;8] = 0; start S { ref T: timer != 0; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(warnings.is_empty(), "явное сравнение не должно давать предупреждений");
+}
+
+/// Числовая переменная без сравнения — предупреждение Се11.
+///
+/// # BuT
+/// ```but
+/// var timer: [bit;8] = 0;
+/// start S { ref T: timer; }   // ← Предупреждение
+/// state T;
+/// ```
+#[test]
+fn se11_numeric_var_in_ref_gives_warning() {
+    let src = "var timer: [bit;8] = 0; start S { ref T: timer; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(warnings.len(), 1, "числовая переменная в условии должна давать предупреждение");
+    assert!(
+        warnings[0].message.contains("timer"),
+        "предупреждение должно упоминать имя переменной"
+    );
+}
+
+/// Числовой литерал в условии перехода — предупреждение Се11.
+#[test]
+fn se11_number_literal_in_ref_gives_warning() {
+    let src = "start S { ref T: 5; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(warnings.len(), 1, "числовой литерал в условии должен давать предупреждение");
+}
+
+/// Переменная типа `bool` в условии — нет предупреждений.
+#[test]
+fn se11_bool_var_in_ref_no_warnings() {
+    let src = "var flag: bool = false; start S { ref T: flag; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(warnings.is_empty(), "переменная bool не должна давать предупреждений");
+}
+
+/// Переменная типа `bit` (1 бит) в условии — нет предупреждений.
+#[test]
+fn se11_bit_var_in_ref_no_warnings() {
+    let src = "var flag: bit = 0; start S { ref T: flag; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(warnings.is_empty(), "переменная bit не должна давать предупреждений");
+}
+
+/// Булев литерал в условии — нет предупреждений.
+#[test]
+fn se11_bool_literal_in_ref_no_warnings() {
+    let src = "start S { ref T: true; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(warnings.is_empty(), "булев литерал не должен давать предупреждений");
+}
+
+/// Безусловный переход (без условия) — нет предупреждений.
+#[test]
+fn se11_unconditional_ref_no_warnings() {
+    let src = "start S { ref T; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(warnings.is_empty(), "безусловный переход не должен давать предупреждений");
+}
+
+/// Несколько переходов: один числовой, один явный — одно предупреждение.
+#[test]
+fn se11_one_numeric_one_explicit_ref() {
+    let src = concat!(
+        "var timer: [bit;8] = 0;\n",
+        "var flag: bool = false;\n",
+        "start S { ref T: timer; ref U: flag; }\n",
+        "state T;\n",
+        "state U;\n",
+    );
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(warnings.len(), 1, "должно быть ровно одно предупреждение");
+}
+
+/// Вложенная модель с числовым условием — предупреждение включает имя модели.
+#[test]
+fn se11_nested_model_numeric_ref_warning() {
+    let src = concat!(
+        "model M {\n",
+        "    var timer: [bit;8] = 0;\n",
+        "    start S { ref T: timer; }\n",
+        "    state T;\n",
+        "}\n",
+    );
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(warnings.len(), 1, "предупреждение из вложенной модели");
+    assert!(
+        warnings[0].message.contains("M"),
+        "предупреждение должно упоминать имя вложенной модели"
+    );
+}
+
+/// Файл `implicit_bool_warn.but` из тестовых данных — без предупреждений.
+///
+/// Все переходы в файле используют явные сравнения или булевы переменные.
+#[test]
+fn se11_valid_file_no_warnings() {
+    let src = std::fs::read_to_string(
+        "tests/data/sematic/valid/implicit_bool_warn.but",
+    )
+    .expect("не удалось прочитать файл");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(
+        warnings.is_empty(),
+        "файл с явными сравнениями не должен давать предупреждений: {:?}",
+        warnings
+    );
+}
+
+/// Файл `implicit_bool_numeric.but` — одно предупреждение о числовом условии.
+#[test]
+fn se11_numeric_file_gives_one_warning() {
+    let src = std::fs::read_to_string(
+        "tests/data/sematic/valid/implicit_bool_numeric.but",
+    )
+    .expect("не удалось прочитать файл");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "файл с числовым условием должен давать ровно одно предупреждение"
+    );
+    assert!(
+        warnings[0].message.contains("timer"),
+        "предупреждение должно упоминать переменную timer"
+    );
+}
+
+/// Условие сравнения `<` — нет предупреждений Се11.
+#[test]
+fn se11_less_comparison_no_warnings() {
+    let src = "var timer: [bit;8] = 0; start S { ref T: timer < 100; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(warnings.is_empty(), "условие '<' не должно давать предупреждений");
+}
+
+/// Условия `>`, `<=`, `>=` — нет предупреждений Се11.
+#[test]
+fn se11_other_comparisons_no_warnings() {
+    let src = concat!(
+        "var a: [bit;8] = 0;\n",
+        "var b: [bit;8] = 0;\n",
+        "start S { ref T: a > 0; ref U: a <= b; ref V: a >= b; }\n",
+        "state T; state U; state V;\n",
+    );
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(
+        warnings.is_empty(),
+        "условия >, <=, >= не должны давать предупреждений"
+    );
+}
+
+/// Логическое НЕ в условии — нет предупреждений Се11.
+#[test]
+fn se11_not_condition_no_warnings() {
+    let src = "var flag: bool = false; start S { ref T: !flag; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(warnings.is_empty(), "условие '!' не должно давать предупреждений");
+}
+
+/// Именованное условие в ref — нет предупреждений Се11.
+#[test]
+fn se11_named_cond_in_ref_no_warnings() {
+    let src = concat!(
+        "var counter: [bit;8] = 0;\n",
+        "cond Full = counter = 255;\n",
+        "start S { ref T: Full; }\n",
+        "state T;\n",
+    );
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(
+        warnings.is_empty(),
+        "именованное условие не должно давать предупреждений"
+    );
+}
+
+/// Арифметическое выражение в условии — предупреждение Се11.
+#[test]
+fn se11_arithmetic_in_ref_gives_warning() {
+    let src = "var timer: [bit;8] = 0; start S { ref T: timer + 1; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "арифметическое выражение в условии должно давать предупреждение"
+    );
+    assert!(
+        warnings[0].message.contains("сложение"),
+        "предупреждение должно упоминать тип выражения: {}",
+        warnings[0].message
+    );
+}
+
+/// Файл с арифметическим условием — одно предупреждение.
+#[test]
+fn se11_arithmetic_file_gives_one_warning() {
+    let src = std::fs::read_to_string(
+        "tests/data/sematic/valid/implicit_bool_arithmetic.but",
+    )
+    .expect("не удалось прочитать файл");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "файл с арифметическим условием должен давать ровно одно предупреждение"
+    );
+}
+
+/// Файл с именованными условиями — нет предупреждений Се11.
+#[test]
+fn se11_named_cond_file_no_warnings() {
+    let src = std::fs::read_to_string(
+        "tests/data/sematic/valid/implicit_bool_named_cond.but",
+    )
+    .expect("не удалось прочитать файл");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(
+        warnings.is_empty(),
+        "файл с именованными условиями не должен давать предупреждений: {:?}",
+        warnings
+    );
+}
+
+/// Предупреждение Се11 содержит имя исходного состояния.
+#[test]
+fn se11_warning_contains_source_state_name() {
+    let src = "var x: [bit;8] = 0; start SourceState { ref T: x; } state T;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(warnings.len(), 1);
+    assert!(
+        warnings[0].message.contains("SourceState"),
+        "предупреждение должно упоминать состояние-источник: {}",
+        warnings[0].message
+    );
 }

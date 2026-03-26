@@ -20,7 +20,7 @@ use crate::semantic::include::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
 use crate::semantic::type_::construct_type;
 use crate::semantic::type_inference::type_inference;
-use crate::semantic::validate::validate_model;
+use crate::semantic::validate::{check_implicit_bool_conditions, validate_model};
 use crate::semantic::{
     Condition, ConditionNode, Expression, FunctionNode, Implement, ModelNode, NamedCodeBlock,
     Reference, StateNode, StateNodeKind, Statement, TypeNode, VariableNode,
@@ -58,11 +58,9 @@ fn check_import_cycle(import_stack: &[String], new_file: &str) -> Result<(), Dia
         // Строим цепочку начиная с точки входа цикла
         let mut chain: Vec<&str> = import_stack[pos..].iter().map(|s| s.as_str()).collect();
         chain.push(new_file);
-        return Err(
-            format!("Циклический импорт: {}", chain.join(" → "))
-                .as_str()
-                .into(),
-        );
+        return Err(format!("Циклический импорт: {}", chain.join(" → "))
+            .as_str()
+            .into());
     }
     Ok(())
 }
@@ -94,7 +92,12 @@ fn construct_model_stage0(
     let mut functions = HashMap::new();
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
-            let model = construct_model_stage0(model, Some(Rc::clone(&model_node)), search_paths, import_stack)?;
+            let model = construct_model_stage0(
+                model,
+                Some(Rc::clone(&model_node)),
+                search_paths,
+                import_stack,
+            )?;
             let model_name = model.borrow().name.clone().unwrap();
             if models.contains_key(&model_name) {
                 return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
@@ -130,7 +133,8 @@ fn construct_model_stage0(
                         Ok((model, _)) => {
                             // Добавляем файл в стек, обрабатываем, убираем
                             import_stack.push(filename.clone());
-                            let result = construct_model_impl(&model, None, search_paths, import_stack);
+                            let result =
+                                construct_model_impl(&model, None, search_paths, import_stack);
                             import_stack.pop();
                             models.insert(model_name, result?);
                         }
@@ -151,7 +155,8 @@ fn construct_model_stage0(
                         Ok((model, _)) => {
                             // Добавляем файл в стек, обрабатываем, убираем
                             import_stack.push(filename.clone());
-                            let result = construct_model_impl(&model, None, search_paths, import_stack);
+                            let result =
+                                construct_model_impl(&model, None, search_paths, import_stack);
                             import_stack.pop();
                             models.insert(model_name, result?);
                         }
@@ -171,8 +176,13 @@ fn construct_model_stage0(
                     check_import_cycle(import_stack, &filename)?;
                     import_stack.push(filename.clone());
                     let result = match parse(&content, 0) {
-                        Ok((ast_model, _)) => construct_model_impl(&ast_model, None, search_paths, import_stack),
-                        Err(d) => { import_stack.pop(); return Err(d.first().unwrap().clone()); }
+                        Ok((ast_model, _)) => {
+                            construct_model_impl(&ast_model, None, search_paths, import_stack)
+                        }
+                        Err(d) => {
+                            import_stack.pop();
+                            return Err(d.first().unwrap().clone());
+                        }
                     };
                     import_stack.pop();
                     let imported = result?;
@@ -698,6 +708,35 @@ pub fn construct_model_with_docs(
     Ok(root)
 }
 
+/// Проверяет условия переходов в семантическом дереве и возвращает
+/// предупреждения о неявном приведении числового типа к булевому.
+///
+/// Функция обходит все состояния модели (рекурсивно) и проверяет, содержат
+/// ли условия переходов (`ref`/`next`) выражения числового типа (например,
+/// переменная типа `[bit;8]`, числовой литерал, арифметика), используемые
+/// как булевые без явного сравнения.
+///
+/// # Примеры
+///
+/// ```rust,ignore
+/// // BuT-код с числовым условием → предупреждение
+/// let src = "var timer: [bit;8] = 0; start S { ref T: timer; } state T;";
+/// let (ast, _) = parse(src, 0)?;
+/// let root = construct_model(&ast, None, &[])?;
+/// let warnings = implicit_bool_warnings(&root);
+/// assert!(!warnings.is_empty());
+///
+/// // BuT-код с явным сравнением → без предупреждений
+/// let src = "var timer: [bit;8] = 0; start S { ref T: timer != 0; } state T;";
+/// let (ast, _) = parse(src, 0)?;
+/// let root = construct_model(&ast, None, &[])?;
+/// let warnings = implicit_bool_warnings(&root);
+/// assert!(warnings.is_empty());
+/// ```
+pub fn implicit_bool_warnings(model: &Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+    check_implicit_bool_conditions(model)
+}
+
 /// Извлекает все состояния из модели и разрешает ссылки между ними.
 ///
 /// Алгоритм:
@@ -757,7 +796,12 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 Some(kind) => match kind {
                     StateKind::Start => StateNodeKind::Start,
                     StateKind::End => StateNodeKind::End,
-                    StateKind::Next => return Err("Состояние с типом next не поддерживается в качестве определения".into()),
+                    StateKind::Next => {
+                        return Err(
+                            "Состояние с типом next не поддерживается в качестве определения"
+                                .into(),
+                        );
+                    }
                 },
             };
             // Определяем вид узла: Implement (есть `= Выражение`) или Simple.

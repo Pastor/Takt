@@ -1,7 +1,7 @@
 //! Построение семантических условий языка BuT.
 //!
 //! Модуль предоставляет две функции:
-//! - [`construct_cond`] — преобразует АСД-условие [`ast::Condition`] в разрешённое
+//! - [`resolve_condition`] — преобразует АСД-условие [`ast::Condition`] в разрешённое
 //!   семантическое [`Condition`].
 //! - [`extract_conditions`] — разрешает все неразрешённые именованные условия
 //!   в [`HashMap`].
@@ -26,7 +26,7 @@ use std::rc::Rc;
 /// - вызов функции ссылается на функцию, не находящуюся в области видимости;
 /// - любой аргумент вызова функции не разрешился (ошибка пробрасывается, а не проглатывается);
 /// - ссылка на переменную указывает на необъявленную переменную или условие.
-pub fn construct_cond(
+pub fn resolve_condition(
     cond: &ast::Condition,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Condition, Diagnostic> {
@@ -43,10 +43,10 @@ pub fn construct_cond(
             Err(format!("Массив '{}' не найден", &name).as_str().into())
         }
         ast::Condition::Parenthesis(_, cond) => Ok(Condition::Parenthesis(Box::new(
-            construct_cond(cond, model.clone())?,
+            resolve_condition(cond, model.clone())?,
         ))),
         ast::Condition::BitAccess(_, cond, member) => {
-            let cond = construct_cond(cond, model.clone())?;
+            let cond = resolve_condition(cond, model.clone())?;
             Ok(Condition::BitAccess(Box::new(cond), member.clone()))
         }
         ast::Condition::Function(_, id, args) => {
@@ -55,7 +55,7 @@ pub fn construct_cond(
             // паники через `.unwrap()`.
             let args: Vec<Box<Condition>> = args
                 .iter()
-                .map(|c| construct_cond(c, model.clone()).map(Box::new))
+                .map(|c| resolve_condition(c, model.clone()).map(Box::new))
                 .collect::<Result<Vec<_>, _>>()?;
             let function = model
                 .borrow()
@@ -63,58 +63,58 @@ pub fn construct_cond(
                 .ok_or_else(|| format!("Функция '{}' не найдена", &name).as_str().into())?;
             Ok(Condition::Function(function, args))
         }
-        ast::Condition::Not(_, cond) => Ok(Condition::Not(Box::new(construct_cond(
+        ast::Condition::Not(_, cond) => Ok(Condition::Not(Box::new(resolve_condition(
             cond,
             model.clone(),
         )?))),
         ast::Condition::Add(_, left, right) => {
-            let left = construct_cond(left, model.clone())?;
-            let right = construct_cond(right, model.clone())?;
+            let left = resolve_condition(left, model.clone())?;
+            let right = resolve_condition(right, model.clone())?;
             Ok(Condition::Add(Box::new(left), Box::new(right)))
         }
         ast::Condition::Subtract(_, left, right) => {
-            let left = construct_cond(left, model.clone())?;
-            let right = construct_cond(right, model.clone())?;
+            let left = resolve_condition(left, model.clone())?;
+            let right = resolve_condition(right, model.clone())?;
             Ok(Condition::Subtract(Box::new(left), Box::new(right)))
         }
         ast::Condition::And(_, left, right) => {
-            let left = construct_cond(left, model.clone())?;
-            let right = construct_cond(right, model.clone())?;
+            let left = resolve_condition(left, model.clone())?;
+            let right = resolve_condition(right, model.clone())?;
             Ok(Condition::And(Box::new(left), Box::new(right)))
         }
         ast::Condition::Or(_, left, right) => {
-            let left = construct_cond(left, model.clone())?;
-            let right = construct_cond(right, model.clone())?;
+            let left = resolve_condition(left, model.clone())?;
+            let right = resolve_condition(right, model.clone())?;
             Ok(Condition::Or(Box::new(left), Box::new(right)))
         }
         ast::Condition::Less(_, left, right) => {
-            let left = construct_cond(left, model.clone())?;
-            let right = construct_cond(right, model.clone())?;
+            let left = resolve_condition(left, model.clone())?;
+            let right = resolve_condition(right, model.clone())?;
             Ok(Condition::Less(Box::new(left), Box::new(right)))
         }
         ast::Condition::More(_, left, right) => {
-            let left = construct_cond(left, model.clone())?;
-            let right = construct_cond(right, model.clone())?;
+            let left = resolve_condition(left, model.clone())?;
+            let right = resolve_condition(right, model.clone())?;
             Ok(Condition::More(Box::new(left), Box::new(right)))
         }
         ast::Condition::LessEqual(_, left, right) => {
-            let left = construct_cond(left, model.clone())?;
-            let right = construct_cond(right, model.clone())?;
+            let left = resolve_condition(left, model.clone())?;
+            let right = resolve_condition(right, model.clone())?;
             Ok(Condition::LessEqual(Box::new(left), Box::new(right)))
         }
         ast::Condition::MoreEqual(_, left, right) => {
-            let left = construct_cond(left, model.clone())?;
-            let right = construct_cond(right, model.clone())?;
+            let left = resolve_condition(left, model.clone())?;
+            let right = resolve_condition(right, model.clone())?;
             Ok(Condition::MoreEqual(Box::new(left), Box::new(right)))
         }
         ast::Condition::Equal(_, left, right) => {
-            let left = construct_cond(left, model.clone())?;
-            let right = construct_cond(right, model.clone())?;
+            let left = resolve_condition(left, model.clone())?;
+            let right = resolve_condition(right, model.clone())?;
             Ok(Condition::Equal(Box::new(left), Box::new(right)))
         }
         ast::Condition::NotEqual(_, left, right) => {
-            let left = construct_cond(left, model.clone())?;
-            let right = construct_cond(right, model.clone())?;
+            let left = resolve_condition(left, model.clone())?;
+            let right = resolve_condition(right, model.clone())?;
             Ok(Condition::NotEqual(Box::new(left), Box::new(right)))
         }
         ast::Condition::Number(_, n) => Ok(Condition::Number(*n)),
@@ -149,13 +149,13 @@ pub fn construct_cond(
 /// Разрешает все неразрешённые именованные условия в `conditions`.
 ///
 /// Перебирает `conditions` и для каждой записи, значение которой равно
-/// [`Condition::Unresolved`], вызывает [`construct_cond`], заменяя заглушку
+/// [`Condition::Unresolved`], вызывает [`resolve_condition`], заменяя заглушку
 /// полностью разрешённым семантическим условием. Уже разрешённые записи
 /// передаются без изменений.
 ///
 /// # Ошибки
 ///
-/// Пробрасывает любой [`Diagnostic`], возвращённый из [`construct_cond`].
+/// Пробрасывает любой [`Diagnostic`], возвращённый из [`resolve_condition`].
 pub fn extract_conditions(
     conditions: &HashMap<String, ConditionNode>,
     model: Rc<RefCell<ModelNode>>,
@@ -163,7 +163,7 @@ pub fn extract_conditions(
     let mut result = HashMap::new();
     for (name, cond) in conditions {
         if let Condition::Unresolved(cond) = &cond.value {
-            let cond = construct_cond(cond, model.clone())?;
+            let cond = resolve_condition(cond, model.clone())?;
             result.insert(
                 name.clone(),
                 ConditionNode {
