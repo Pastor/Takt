@@ -16,6 +16,7 @@ mod expression;
 mod function;
 mod include;
 mod named_block;
+mod reference;
 mod statement;
 pub mod tree;
 mod type_;
@@ -180,6 +181,16 @@ impl ModelNode {
             Some(Rc::new(RefCell::new(func.clone())))
         } else if let Some(model) = self.upper.as_ref() {
             return model.borrow().search_func(name);
+        } else {
+            None
+        }
+    }
+
+    pub fn search_state(&self, name: &str) -> Option<Rc<RefCell<StateNode>>> {
+        if let Some(state) = self.states.get(name) {
+            Some(Rc::new(RefCell::new(state.clone())))
+        } else if let Some(model) = self.upper.as_ref() {
+            return model.borrow().search_state(name);
         } else {
             None
         }
@@ -572,6 +583,8 @@ pub enum Condition {
     Bool(bool),
     /// Переменная.
     Variable(Rc<RefCell<VariableNode>>),
+    Model(Rc<RefCell<ModelNode>>),
+    State(Rc<RefCell<StateNode>>),
 }
 
 /// Разрешённый семантический узел выражения (заглушка — будет расширено).

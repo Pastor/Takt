@@ -18,6 +18,7 @@ use crate::semantic::expression::construct_expression;
 use crate::semantic::function::construct_function;
 use crate::semantic::include::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
+use crate::semantic::reference::resolve_state_references;
 use crate::semantic::type_::construct_type;
 use crate::semantic::type_inference::type_inference;
 use crate::semantic::validate::{check_implicit_bool_conditions, validate_model};
@@ -561,6 +562,37 @@ fn construct_model_stage5(
     Ok(Rc::clone(&model))
 }
 
+fn construct_model_stage6(
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    let states = model.borrow().states.clone();
+
+    let mut prepared_states = HashMap::new();
+    for (name, state) in states.iter() {
+        prepared_states.insert(
+            name.clone(),
+            resolve_state_references(state, model.clone())?,
+        );
+    }
+    model.borrow_mut().states = prepared_states;
+
+    // Клонируем список вложенных моделей до рекурсивного вызова
+    let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
+        .borrow()
+        .models
+        .iter()
+        .map(|(k, v)| (k.clone(), Rc::clone(v)))
+        .collect();
+
+    let mut models = HashMap::new();
+    for (name, nested_model) in nested {
+        models.insert(name, construct_model_stage6(Rc::clone(&nested_model))?);
+    }
+    model.borrow_mut().models = models;
+
+    Ok(Rc::clone(&model))
+}
+
 fn resolve_functions(
     functions: HashMap<String, FunctionNode>,
     model: Rc<RefCell<ModelNode>>,
@@ -627,6 +659,7 @@ fn construct_model_impl(
     let model = construct_model_stage3(model)?;
     let model = construct_model_stage4(model)?;
     let model = construct_model_stage5(model)?;
+    let model = construct_model_stage6(model)?;
     validate_model(model.clone())?;
     Ok(model)
 }
@@ -661,6 +694,7 @@ pub fn construct_model(
     let model = construct_model_stage3(model)?;
     let model = construct_model_stage4(model)?;
     let model = construct_model_stage5(model)?;
+    let model = construct_model_stage6(model)?;
     validate_model(model.clone())?;
     Ok(model)
 }

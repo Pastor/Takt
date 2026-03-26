@@ -8,6 +8,7 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
+use crate::semantic::builtin::builtin_function;
 use crate::semantic::{Condition, ConditionNode, ModelNode, TypeNode, VariableNode};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -57,10 +58,12 @@ pub fn resolve_condition(
                 .iter()
                 .map(|c| resolve_condition(c, model.clone()).map(Box::new))
                 .collect::<Result<Vec<_>, _>>()?;
-            let function = model
-                .borrow()
-                .search_func(&name)
-                .ok_or_else(|| format!("Функция '{}' не найдена", &name).as_str().into())?;
+            let function = model.borrow().search_func(&name);
+            let function = if function.clone().is_none() {
+                Rc::new(RefCell::new(builtin_function(&id.name)?.clone()))
+            } else {
+                function.unwrap()
+            };
             Ok(Condition::Function(function, args))
         }
         ast::Condition::Not(_, cond) => Ok(Condition::Not(Box::new(resolve_condition(
@@ -134,14 +137,14 @@ pub fn resolve_condition(
             // Сначала ищем объявление переменной в области видимости.
             if let Some(var) = model.borrow().search_var(&name) {
                 return Ok(Condition::Variable(Rc::new(RefCell::new(var))));
-            }
-            // Запасной вариант — именованный псевдоним условия.
-            if let Some(cond) = model.borrow().search_cond(&name) {
+            } else if let Some(cond) = model.borrow().search_cond(&name) {
                 return Ok(cond.value);
+            } else if let Some(model) = model.borrow().search_model(&name) {
+                return Ok(Condition::Model(model.clone()));
+            } else if let Some(state) = model.borrow().search_state(&name) {
+                return Ok(Condition::State(state.clone()));
             }
-            Err(format!("Переменная или условие '{}' не найдены", &name)
-                .as_str()
-                .into())
+            Ok(Condition::Unresolved(ast::Condition::Variable(id.clone())))
         }
     }
 }
