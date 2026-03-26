@@ -10,8 +10,7 @@
 //!
 //! - `var`-объявления поддерживаются только на уровне модели/состояния (`ModelElement::Variable`,
 //!   `StateElement::Variable`), но НЕ внутри блоков операторов (`always {}`, `fn {}`).
-//! - Управляющие конструкции `while`, `for`, `do-while` требуют скобки вокруг условия.
-//! - `if` НЕ требует скобок вокруг условия.
+//! - Все управляющие конструкции (`if`, `while`, `for`, `do-while`) — без скобок вокруг условия (С1, вариант A).
 //! - Условие в `cond` использует `=` (не `==`) для проверки равенства.
 
 #![allow(clippy::clone_on_copy)]
@@ -464,8 +463,8 @@ fn parse_named_blocks_in_state() {
 }
 
 // ─────────────────── Тесты управляющих конструкций ──────────────────────────
-// Примечание: в BuT условие `if` не требует скобок,
-// а условия `while`, `for`, `do-while` — требуют.
+// С1 (вариант A): все управляющие конструкции (`if`, `while`, `for`, `do-while`)
+// используют одинаковый стиль — без скобок вокруг условия.
 
 /// `if cond { }` — без скобок вокруг условия.
 #[test]
@@ -484,16 +483,16 @@ fn parse_if_else() {
     must_parse(r#"model M { start S { always { if true { } else { } } } }"#);
 }
 
-/// `while (cond) { }` — условие В скобках.
+/// `while cond { }` — условие без скобок (С1, вариант A).
 #[test]
-fn parse_while_loop_with_parens() {
+fn parse_while_loop_without_parens() {
     let m = first_named_model(
         r#"
         model M {
             var i: [bit;8] = 0;
             start S {
                 always {
-                    while (i < 10) {
+                    while i < 10 {
                         i = i + 1;
                     }
                 }
@@ -504,16 +503,16 @@ fn parse_while_loop_with_parens() {
     assert!(!m.elements.is_empty());
 }
 
-/// `for (; cond; step) { }` — условие В скобках, init — выражение.
+/// `for init; cond; step { }` — заголовок без скобок (С1, вариант A).
 #[test]
-fn parse_for_loop_with_parens() {
+fn parse_for_loop_without_parens() {
     let m = first_named_model(
         r#"
         model M {
             var i: [bit;8] = 0;
             start S {
                 always {
-                    for (i = 0; i < 10; i = i + 1) { }
+                    for i = 0; i < 10; i = i + 1 { }
                 }
             }
         }
@@ -522,9 +521,9 @@ fn parse_for_loop_with_parens() {
     assert!(!m.elements.is_empty());
 }
 
-/// `do { } while (cond);` — условие В скобках.
+/// `do { } while cond;` — условие без скобок (С1, вариант A).
 #[test]
-fn parse_do_while_loop_with_parens() {
+fn parse_do_while_loop_without_parens() {
     let m = first_named_model(
         r#"
         model M {
@@ -533,13 +532,96 @@ fn parse_do_while_loop_with_parens() {
                 always {
                     do {
                         x = x - 1;
-                    } while (x > 0);
+                    } while x > 0;
                 }
             }
         }
     "#,
     );
     assert!(!m.elements.is_empty());
+}
+
+/// `while cond { ... } ` — вложенные циклы без скобок (С1, вариант A).
+#[test]
+fn parse_nested_while_without_parens() {
+    must_parse(
+        r#"
+        model M {
+            var i: [bit;8] = 0;
+            var j: [bit;8] = 0;
+            start S {
+                always {
+                    while i < 5 {
+                        while j < 3 {
+                            j = j + 1;
+                        }
+                        i = i + 1;
+                    }
+                }
+            }
+        }
+    "#,
+    );
+}
+
+/// `while` с составным условием (&&, ||) без скобок.
+#[test]
+fn parse_while_complex_condition_without_parens() {
+    must_parse(
+        r#"
+        model M {
+            var a: [bit;8] = 0;
+            var b: [bit;8] = 0;
+            start S {
+                always {
+                    while a > 0 && b < 10 {
+                        a = a - 1;
+                    }
+                }
+            }
+        }
+    "#,
+    );
+}
+
+/// `for` без инициализатора и без шага — только условие.
+#[test]
+fn parse_for_only_condition_without_parens() {
+    must_parse(
+        r#"
+        model M {
+            var i: [bit;8] = 0;
+            start S {
+                always {
+                    for ; i < 10; {
+                        i = i + 1;
+                    }
+                }
+            }
+        }
+    "#,
+    );
+}
+
+/// `do { ... } while cond;` — do-while с составным условием.
+#[test]
+fn parse_do_while_complex_condition_without_parens() {
+    must_parse(
+        r#"
+        model M {
+            var x: [bit;8] = 10;
+            var y: [bit;8] = 0;
+            start S {
+                always {
+                    do {
+                        x = x - 1;
+                        y = y + 1;
+                    } while x > 0 && y < 5;
+                }
+            }
+        }
+    "#,
+    );
 }
 
 // ──────────────────────── Тесты выражений ───────────────────────────────────
@@ -1006,7 +1088,7 @@ fn parse_continue_in_loop() {
             var i: [bit;8] = 0;
             start S {
                 always {
-                    while (i < 10) {
+                    while i < 10 {
                         i = i + 1;
                         continue;
                     }
@@ -1026,7 +1108,7 @@ fn parse_break_in_loop() {
             var i: [bit;8] = 0;
             start S {
                 always {
-                    while (i < 10) {
+                    while i < 10 {
                         break;
                     }
                 }
@@ -1063,7 +1145,7 @@ fn parse_return_with_value() {
     );
 }
 
-/// Цикл `for` без тела (с точкой с запятой).
+/// `for init; cond; step;` — цикл без тела, заголовок без скобок (С1, вариант A).
 #[test]
 fn parse_for_loop_without_body() {
     must_parse(
@@ -1072,7 +1154,7 @@ fn parse_for_loop_without_body() {
             var i: [bit;8] = 0;
             start S {
                 always {
-                    for (i = 0; i < 10; i = i + 1);
+                    for i = 0; i < 10; i = i + 1;
                 }
             }
         }
@@ -1080,9 +1162,9 @@ fn parse_for_loop_without_body() {
     );
 }
 
-/// `if` без `else` внутри `for` (open statement).
+/// `if` внутри `for` с явными скобками тела (С1, вариант A — тело цикла в `{}`).
 #[test]
-fn parse_if_open_statement_in_for() {
+fn parse_if_in_for_with_braces() {
     must_parse(
         r#"
         model M {
@@ -1090,8 +1172,9 @@ fn parse_if_open_statement_in_for() {
             var x: [bit;8] = 0;
             start S {
                 always {
-                    for (i = 0; i < 10; i = i + 1)
+                    for i = 0; i < 10; i = i + 1 {
                         if x > 5 { x = 0; }
+                    }
                 }
             }
         }

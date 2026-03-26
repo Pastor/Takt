@@ -426,12 +426,8 @@ OpenStatement: Statement = {
     <l:@L> "if" <cond:Expression> <body:BlockStatement> "else" <o:OpenStatement> <r:@R> => {
         Statement::If(Location::Source(file_no, l, r), cond, Box::new(body), Some(Box::new(o)))
     },
-    <l:@L> "for" "(" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> ")" <block:OpenStatement> <r:@R> => {
-        Statement::For(Location::Source(file_no, l, r), b.map(Box::new), c.map(Box::new), n.map(Box::new), Some(Box::new(block)))
-    },
-    <l:@L> "while" "(" <e:Expression> ")" <b:OpenStatement> <r:@R> => {
-        Statement::While(Location::Source(file_no, l, r), e, Box::new(b))
-    }
+    // С1 (вариант A): while/for не могут быть OpenStatement, так как их тело — всегда
+    // BlockStatement (закрытый). OpenStatement содержит только незакрытые if-цепочки.
 }
 
 ClosedStatement: Statement = {
@@ -439,13 +435,18 @@ ClosedStatement: Statement = {
     <l:@L> "if" <cond:Expression> <body:BlockStatement> "else" <o:ClosedStatement> <r:@R> => {
         Statement::If(Location::Source(file_no, l, r), cond, Box::new(body), Some(Box::new(o)))
     },
-    <l:@L> "while" "(" <e:Expression> ")" <b:ClosedStatement> <r:@R> => {
+    // С1 (вариант A): while без скобок вокруг условия; тело — обязательный блок в {}.
+    // Только BlockStatement после условия устраняет неоднозначность LR(1):
+    // парсер знает, что '{' начинает тело, а не является частью выражения.
+    <l:@L> "while" <e:Expression> <b:BlockStatement> <r:@R> => {
         Statement::While(Location::Source(file_no, l, r), e, Box::new(b))
     },
-    <l:@L> "for" "(" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> ")" <block:ClosedStatement> <r:@R> => {
+    // С1 (вариант A): for без скобок вокруг заголовка; тело — обязательный блок в {}.
+    <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> <block:BlockStatement> <r:@R> => {
         Statement::For(Location::Source(file_no, l, r), b.map(Box::new), c.map(Box::new), n.map(Box::new), Some(Box::new(block)))
     },
-    <l:@L> "for" "(" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> ")" <r:@R> ";" => {
+    // С1 (вариант A): for без тела (пустой цикл с завершающей ';')
+    <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> <r:@R> ";" => {
         Statement::For(Location::Source(file_no, l, r), b.map(Box::new), c.map(Box::new), n.map(Box::new), None)
     }
 }
@@ -487,7 +488,8 @@ NonIfStatement: Statement = {
         }
     },
     <SimpleStatement> ";" => <>,
-    <l:@L> "do" <b:Statement> "while" "(" <e:Expression> ")" <r:@R> ";" => {
+    // С1 (вариант A): do-while без скобок вокруг условия
+    <l:@L> "do" <b:Statement> "while" <e:Expression> <r:@R> ";" => {
         Statement::DoWhile(Location::Source(file_no, l, r), Box::new(b), e)
     },
     <l:@L> "continue" <r:@R> ";" => {

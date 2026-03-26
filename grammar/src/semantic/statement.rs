@@ -412,13 +412,15 @@ mod tests {
     /// ```but
     /// var i: bit = false;
     /// always {
-    ///     for (i = false; i; i = false) { }
+    ///     // С1 (вариант A): for без скобок вокруг заголовка
+    ///     for i = false; i; i = false { }
     /// }
     /// ```
     #[test]
     fn for_loop_resolves() {
         let node = build(
-            "var i: bit = false; always { for (i = false; i; i = false) { } } start S;",
+            // С1 (вариант A): for без скобок вокруг заголовка
+            "var i: bit = false; always { for i = false; i; i = false { } } start S;",
         );
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
@@ -430,9 +432,16 @@ mod tests {
     }
 
     /// `for` без инициализации и шага разрешается.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// // С1 (вариант A): for без скобок, все части пусты
+    /// for ;; { }
+    /// ```
     #[test]
     fn for_loop_empty_parts_resolves() {
-        let node = build("var i: bit = false; always { for (;;) { } } start S;");
+        // С1 (вариант A): for без скобок вокруг заголовка
+        let node = build("var i: bit = false; always { for ;; { } } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(

@@ -365,15 +365,15 @@ statement
     = "if" expression block_statement
     | "if" expression block_statement "else" statement
 
-    (* Цикл while — условие В скобках *)
-    | "while" "(" expression ")" statement
+    (* Цикл while — условие БЕЗ скобок, тело — обязательный блок (С1, вариант A) *)
+    | "while" expression block_statement
 
-    (* Цикл for — инициализатор, условие и шаг В скобках *)
-    | "for" "(" [ simple_statement ] ";" [ expression ] ";" [ expression ] ")"
-      ( statement | ";" )
+    (* Цикл for — заголовок БЕЗ скобок, тело — блок или ";" (С1, вариант A) *)
+    | "for" [ simple_statement ] ";" [ expression ] ";" [ expression ]
+      ( block_statement | ";" )
 
-    (* Цикл do-while — условие В скобках *)
-    | "do" statement "while" "(" expression ")" ";"
+    (* Цикл do-while — условие БЕЗ скобок (С1, вариант A) *)
+    | "do" statement "while" expression ";"
 
     (* Блок *)
     | block_statement

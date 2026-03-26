@@ -1,13 +1,17 @@
-// Пример: управляющие конструкции (if, while, for) в named blocks.
+// Пример: управляющие конструкции (if, while, for, do-while) в named blocks.
+// С1 (вариант A): все циклы без скобок вокруг условия/заголовка,
+// тело while/for — обязательный блок в {}.
 //
 // Проверяет корректное разрешение операторов управления потоком
 // внутри именованных блоков состояний.
 
 var counter: [bit; 8] = 0;
 var flag: bit = false;
+var i: [bit; 8] = 0;
 
 start Running {
     always {
+        // if без скобок
         if flag {
             counter = counter;
         }
@@ -16,6 +20,21 @@ start Running {
         } else {
             flag = false;
         }
+
+        // while без скобок, тело в {}
+        while counter < 10 {
+            counter = counter;
+        }
+
+        // for без скобок, тело в {}
+        for i = 0; i < 5; i = i + 1 {
+            counter = counter;
+        }
+
+        // do-while без скобок
+        do {
+            counter = counter;
+        } while counter > 0;
     }
 }
 
