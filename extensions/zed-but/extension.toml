@@ -1,0 +1,18 @@
+id = "but"
+name = "BuT"
+version = "0.1.0"
+schema_version = 1
+authors = ["BuT Team"]
+description = "BuT FSM language support for Zed: syntax highlighting and code navigation for .but files"
+repository = "https://github.com/Pastor/BuT"
+
+# Language directories (relative to this file)
+languages = ["languages/but"]
+
+# Compiled Tree-sitter grammar.
+# When publishing to the marketplace, set repository + rev to point to a
+# public git repository containing the grammar source.
+# For local builds the install.sh script places the pre-compiled WASM directly.
+[grammars.but]
+repository = "https://github.com/Pastor/tree-sitter-but"
+rev = "0000000000000000000000000000000000000000"
