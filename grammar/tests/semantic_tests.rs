@@ -1483,3 +1483,214 @@ fn example_unknown_type_in_function_is_error() {
     let result = build_file("tests/data/sematic/invalid/unknown_type_in_function.but");
     assert!(result.is_err(), "неизвестный тип параметра должен давать ошибку");
 }
+
+// ─── Тесты Се1: обнаружение циклических импортов ──────────────────────────────
+//
+// Реализация Се1: семантический анализатор обнаруживает циклические зависимости
+// между файлами импорта. При обнаружении цикла возвращается ошибка вида:
+//   «Циклический импорт: /path/a.but → /path/b.but → /path/a.but»
+//
+// Поддерживаемые сценарии:
+//   - прямой цикл между двумя файлами: a → b → a
+//   - длинная цепочка: a → b → c → a
+//   - самоссылающийся файл: a → a
+
+/// Вспомогательная функция: создаёт временный `.but`-файл в директории `dir`.
+fn write_tmp_in_dir(dir: &tempfile::TempDir, name: &str, content: &str) -> String {
+    let path = dir.path().join(name);
+    std::fs::write(&path, content).unwrap();
+    dir.path().to_string_lossy().into_owned()
+}
+
+/// Прямой цикл между двумя файлами: `a.but` импортирует `b.but`, `b.but` — `a.but`.
+///
+/// Ожидается ошибка «Циклический импорт» с упоминанием обоих файлов в цепочке.
+#[test]
+fn circular_import_two_files_is_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir_str = dir.path().to_string_lossy().into_owned();
+
+    // a.but → b.but
+    write_tmp_in_dir(&dir, "a.but", r#"import "b.but"; start Entry = B { } state Done;"#);
+    // b.but → a.but  (замыкает цикл)
+    write_tmp_in_dir(&dir, "b.but", r#"import "a.but"; model B { start S; }"#);
+
+    let src = r#"import "a.but";"#;
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[dir_str]);
+
+    assert!(result.is_err(), "циклический импорт должен давать ошибку");
+    let err = result.unwrap_err();
+    assert!(
+        err.message.contains("циклический") || err.message.to_lowercase().contains("цикл"),
+        "сообщение должно содержать слово о цикле: {}",
+        err.message
+    );
+    assert!(
+        err.message.contains("a.but"),
+        "сообщение должно упоминать файл a.but: {}",
+        err.message
+    );
+    assert!(
+        err.message.contains("b.but"),
+        "сообщение должно упоминать файл b.but: {}",
+        err.message
+    );
+}
+
+/// Длинная цепочка циклического импорта: `a → b → c → a`.
+///
+/// Ожидается ошибка с цепочкой из трёх файлов.
+#[test]
+fn circular_import_three_files_is_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir_str = dir.path().to_string_lossy().into_owned();
+
+    write_tmp_in_dir(&dir, "ca.but", r#"import "cb.but"; start Entry = Cb { } state Done;"#);
+    write_tmp_in_dir(&dir, "cb.but", r#"import "cc.but"; model Cb { start S; }"#);
+    // cc.but → ca.but  (замыкает цикл длиной 3)
+    write_tmp_in_dir(&dir, "cc.but", r#"import "ca.but"; model Cc { start S; }"#);
+
+    let src = r#"import "ca.but";"#;
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[dir_str]);
+
+    assert!(result.is_err(), "трёхзвенный циклический импорт должен давать ошибку");
+    let err = result.unwrap_err();
+    assert!(
+        err.message.contains("циклический") || err.message.to_lowercase().contains("цикл"),
+        "сообщение должно содержать слово о цикле: {}",
+        err.message
+    );
+}
+
+/// Самоссылающийся файл: `self.but` импортирует самого себя.
+///
+/// Это частный случай прямого цикла длиной 1.
+#[test]
+fn circular_import_self_reference_is_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir_str = dir.path().to_string_lossy().into_owned();
+
+    // self.but импортирует себя же
+    write_tmp_in_dir(&dir, "self_ref.but", r#"import "self_ref.but"; start S;"#);
+
+    let src = r#"import "self_ref.but";"#;
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[dir_str]);
+
+    assert!(result.is_err(), "самоссылающийся импорт должен давать ошибку");
+    let err = result.unwrap_err();
+    assert!(
+        err.message.contains("циклический") || err.message.to_lowercase().contains("цикл"),
+        "сообщение должно содержать слово о цикле: {}",
+        err.message
+    );
+    assert!(
+        err.message.contains("self_ref.but"),
+        "сообщение должно упоминать файл self_ref.but: {}",
+        err.message
+    );
+}
+
+/// Алмазная зависимость (diamond): `a` импортирует `b` и `c`, оба — `d`.
+///
+/// Это НЕ цикл: `d` дважды импортируется по разным путям,
+/// но каждая ветвь не формирует петлю. Ожидается ошибка
+/// «уже объявлена» (повторный импорт), а НЕ ошибка цикла.
+#[test]
+fn diamond_import_is_not_cycle_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir_str = dir.path().to_string_lossy().into_owned();
+
+    // d.but — общая зависимость
+    write_tmp_in_dir(&dir, "d.but", r#"model D { start S; }"#);
+    // b.but и c.but оба импортируют d.but
+    write_tmp_in_dir(&dir, "db.but", r#"import "d.but"; model Db { start S; }"#);
+    write_tmp_in_dir(&dir, "dc.but", r#"import "d.but"; model Dc { start S; }"#);
+    // a.but импортирует оба
+    write_tmp_in_dir(&dir, "da.but", r#"import "db.but"; import "dc.but"; start S;"#);
+
+    let src = r#"import "da.but";"#;
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[dir_str]);
+
+    // Ожидаем ошибку (повторный импорт D), но НЕ «циклический»
+    if let Err(err) = &result {
+        assert!(
+            !err.message.contains("циклический") && !err.message.to_lowercase().contains("цикл"),
+            "алмазная зависимость не является циклом: {}",
+            err.message
+        );
+    }
+    // Результат может быть как Ok, так и Err (в зависимости от реализации dedup),
+    // но НЕ должен быть ошибкой цикла.
+}
+
+/// Цикл через `import "..." as Alias` — GlobalSymbol вариант импорта.
+///
+/// Обнаружение цикла должно работать для всех форм импорта.
+#[test]
+fn circular_import_via_global_symbol_is_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir_str = dir.path().to_string_lossy().into_owned();
+
+    write_tmp_in_dir(&dir, "ga.but", r#"import "gb.but" as Gb; start Entry = Gb { } state Done;"#);
+    write_tmp_in_dir(&dir, "gb.but", r#"import "ga.but" as Ga; model Gb { start S; }"#);
+
+    let src = r#"import "ga.but" as Ga;"#;
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[dir_str]);
+
+    assert!(result.is_err(), "циклический as-импорт должен давать ошибку");
+    let err = result.unwrap_err();
+    assert!(
+        err.message.contains("циклический") || err.message.to_lowercase().contains("цикл"),
+        "сообщение должно содержать слово о цикле: {}",
+        err.message
+    );
+}
+
+/// Цикл через `import {{ A }} from "..."` — Rename вариант импорта.
+///
+/// Обнаружение цикла должно работать для всех форм импорта.
+#[test]
+fn circular_import_via_rename_is_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir_str = dir.path().to_string_lossy().into_owned();
+
+    write_tmp_in_dir(&dir, "ra.but", r#"import { Rb } from "rb.but"; start Entry = Rb { } state Done;"#);
+    write_tmp_in_dir(&dir, "rb.but", r#"import { Ra } from "ra.but"; model Ra { start S; } model Rb { start S; }"#);
+
+    // Инициируем цикл через Plain-импорт (ra.but содержит rename-импорт rb.but, который замкнёт цикл)
+    let src = r#"import "ra.but";"#;
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[dir_str]);
+
+    assert!(result.is_err(), "циклический rename-импорт должен давать ошибку");
+    let err = result.unwrap_err();
+    assert!(
+        err.message.contains("циклический") || err.message.to_lowercase().contains("цикл"),
+        "сообщение должно содержать слово о цикле: {}",
+        err.message
+    );
+}
+
+/// Нециклический линейный импорт `a → b → c` (без петли) — должен успешно строиться.
+///
+/// Проверяет, что детектор не ложно срабатывает на корректные цепочки.
+#[test]
+fn linear_import_chain_is_valid() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir_str = dir.path().to_string_lossy().into_owned();
+
+    write_tmp_in_dir(&dir, "lc.but", r#"model Lc { start S; }"#);
+    write_tmp_in_dir(&dir, "lb.but", r#"import "lc.but"; model Lb { start S; }"#);
+    write_tmp_in_dir(&dir, "la.but", r#"import "lb.but"; model La { start S; }"#);
+
+    let src = r#"import "la.but";"#;
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[dir_str]);
+
+    assert!(result.is_ok(), "линейная цепочка импортов должна успешно строиться: {:?}", result.err());
+}

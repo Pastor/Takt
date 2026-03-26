@@ -42,10 +42,36 @@ fn extract_name(id: Option<Identifier>) -> Result<String, Diagnostic> {
     }
 }
 
+/// Проверяет, не создаёт ли импорт файла `new_file` цикл в текущем стеке обработки.
+///
+/// Если `new_file` уже присутствует в `import_stack`, значит мы столкнулись
+/// с циклической зависимостью. В этом случае возвращается [`Diagnostic`]-ошибка
+/// с цепочкой вида `a.but → b.but → a.but`.
+///
+/// # Примеры цикла
+///
+/// ```text
+/// Циклический импорт: /src/a.but → /src/b.but → /src/a.but
+/// ```
+fn check_import_cycle(import_stack: &[String], new_file: &str) -> Result<(), Diagnostic> {
+    if let Some(pos) = import_stack.iter().position(|f| f == new_file) {
+        // Строим цепочку начиная с точки входа цикла
+        let mut chain: Vec<&str> = import_stack[pos..].iter().map(|s| s.as_str()).collect();
+        chain.push(new_file);
+        return Err(
+            format!("Циклический импорт: {}", chain.join(" → "))
+                .as_str()
+                .into(),
+        );
+    }
+    Ok(())
+}
+
 fn construct_model_stage0(
     model: &Model,
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
+    import_stack: &mut Vec<String>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     let name = model.name.clone();
 
@@ -68,7 +94,7 @@ fn construct_model_stage0(
     let mut functions = HashMap::new();
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
-            let model = construct_model_stage0(model, Some(Rc::clone(&model_node)), search_paths)?;
+            let model = construct_model_stage0(model, Some(Rc::clone(&model_node)), search_paths, import_stack)?;
             let model_name = model.borrow().name.clone().unwrap();
             if models.contains_key(&model_name) {
                 return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
@@ -80,6 +106,8 @@ fn construct_model_stage0(
             match def {
                 ImportDefine::Plain(path, _) => {
                     let (content, filename) = read_import_file(search_paths, path)?;
+                    // Проверяем цикл ДО рекурсивной обработки файла
+                    check_import_cycle(import_stack, &filename)?;
                     // Извлекаем только имя файла (без директории и расширения),
                     // затем нормализуем в CamelCase: "my_model.but" → "MyModel".
                     // Прежде использовался срез filename[..len-4], что давало полный путь
@@ -100,13 +128,19 @@ fn construct_model_stage0(
                     }
                     match parse(&content, 0) {
                         Ok((model, _)) => {
-                            models.insert(model_name, construct_model(&model, None, search_paths)?);
+                            // Добавляем файл в стек, обрабатываем, убираем
+                            import_stack.push(filename.clone());
+                            let result = construct_model_impl(&model, None, search_paths, import_stack);
+                            import_stack.pop();
+                            models.insert(model_name, result?);
                         }
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
                 }
                 ImportDefine::GlobalSymbol(path, id, _) => {
-                    let (content, _) = read_import_file(search_paths, path)?;
+                    let (content, filename) = read_import_file(search_paths, path)?;
+                    // Проверяем цикл ДО рекурсивной обработки файла
+                    check_import_cycle(import_stack, &filename)?;
                     let model_name = id.name.clone();
                     if models.contains_key(&model_name) {
                         return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
@@ -115,7 +149,11 @@ fn construct_model_stage0(
                     }
                     match parse(&content, 0) {
                         Ok((model, _)) => {
-                            models.insert(model_name, construct_model(&model, None, search_paths)?);
+                            // Добавляем файл в стек, обрабатываем, убираем
+                            import_stack.push(filename.clone());
+                            let result = construct_model_impl(&model, None, search_paths, import_stack);
+                            import_stack.pop();
+                            models.insert(model_name, result?);
                         }
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
@@ -128,11 +166,16 @@ fn construct_model_stage0(
                 // Поддерживаемые категории: модели, псевдонимы типов, переменные, условия.
                 // Приоритет поиска: модель → тип → переменная → условие.
                 ImportDefine::Rename(path, symbols, _) => {
-                    let (content, _) = read_import_file(search_paths, path)?;
-                    let imported = match parse(&content, 0) {
-                        Ok((ast_model, _)) => construct_model(&ast_model, None, search_paths)?,
-                        Err(d) => return Err(d.first().unwrap().clone()),
+                    let (content, filename) = read_import_file(search_paths, path)?;
+                    // Проверяем цикл ДО рекурсивной обработки файла
+                    check_import_cycle(import_stack, &filename)?;
+                    import_stack.push(filename.clone());
+                    let result = match parse(&content, 0) {
+                        Ok((ast_model, _)) => construct_model_impl(&ast_model, None, search_paths, import_stack),
+                        Err(d) => { import_stack.pop(); return Err(d.first().unwrap().clone()); }
                     };
+                    import_stack.pop();
+                    let imported = result?;
                     let src = imported.borrow();
                     for (orig_id, alias_id) in symbols {
                         let orig = &orig_id.name;
@@ -558,23 +601,51 @@ fn resolve_state_named_blocks(
     }
 }
 
+/// Внутренняя реализация построения семантического дерева.
+///
+/// Принимает `import_stack` — стек путей файлов, чьи импорты сейчас обрабатываются.
+/// Используется для обнаружения циклических зависимостей между файлами.
+fn construct_model_impl(
+    model: &Model,
+    upper: Option<Rc<RefCell<ModelNode>>>,
+    search_paths: &[String],
+    import_stack: &mut Vec<String>,
+) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    let model = construct_model_stage0(model, upper, search_paths, import_stack)?;
+    let model = construct_model_stage1(model)?;
+    let model = construct_model_stage2(model)?;
+    let model = construct_model_stage3(model)?;
+    let model = construct_model_stage4(model)?;
+    let model = construct_model_stage5(model)?;
+    validate_model(model.clone())?;
+    Ok(model)
+}
+
 /// Строит семантический узел модели из АСД-узла [`Model`].
 ///
 /// Собирает контекст верхнего уровня (вложенные модели), а также
 /// словарь состояний с разрешёнными ссылками между ними.
+///
+/// Обнаруживает циклические зависимости между файлами импорта:
+/// при наличии цикла `a.but → b.but → a.but` возвращает [`Diagnostic`]-ошибку
+/// с полным описанием цепочки.
 ///
 /// # Ошибки
 ///
 /// Возвращает [`Diagnostic`], если:
 /// - у состояния нет имени,
 /// - ссылка `ref` указывает на несуществующее состояние,
-/// - `next` встречается в одном состоянии дважды.
+/// - `next` встречается в одном состоянии дважды,
+/// - обнаружен циклический импорт.
 pub fn construct_model(
     model: &Model,
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    let model = construct_model_stage0(model, upper, search_paths)?;
+    // Стек путей файлов, чьи импорты сейчас обрабатываются.
+    // Пустой на входе: текущая (корневая) единица компиляции не имеет пути.
+    let mut import_stack: Vec<String> = Vec::new();
+    let model = construct_model_stage0(model, upper, search_paths, &mut import_stack)?;
     let model = construct_model_stage1(model)?;
     let model = construct_model_stage2(model)?;
     let model = construct_model_stage3(model)?;

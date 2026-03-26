@@ -1,0 +1,9 @@
+// Файл b.but для проверки обнаружения циклических импортов.
+//
+// Замыкает цикл: b.but импортирует a.but, создавая a.but → b.but → a.but.
+
+import "cycle_a.but";
+
+model CycleB {
+    start S;
+}
