@@ -14,7 +14,7 @@ mod condition;
 pub(crate) mod docs;
 mod expression;
 mod function;
-mod include;
+mod import;
 mod named_block;
 mod reference;
 mod statement;

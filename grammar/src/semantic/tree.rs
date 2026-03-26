@@ -16,7 +16,7 @@ use crate::parser::ast::{
 use crate::semantic::condition::extract_conditions;
 use crate::semantic::expression::construct_expression;
 use crate::semantic::function::construct_function;
-use crate::semantic::include::read_import_file;
+use crate::semantic::import::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
 use crate::semantic::reference::resolve_state_references;
 use crate::semantic::type_::construct_type;

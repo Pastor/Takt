@@ -18,9 +18,11 @@
 //!   [`check_implicit_bool_conditions`].
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::parser::ast as ast_types;
+use crate::parser::{ast as ast_types, ast};
+use crate::semantic::condition::resolve_condition;
 use crate::semantic::{
-    Condition, Expression, ModelNode, StateNode, StateNodeKind, TypeNode, VariableNode,
+    Condition, Expression, FunctionNode, ModelNode, Reference, StateNode, StateNodeKind, TypeNode,
+    VariableNode,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -122,6 +124,229 @@ fn validate_bit_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> 
             }
             VariableNode::Unresolved => {}
         }
+    }
+    Ok(())
+}
+
+fn validate_cond(
+    context: Option<Condition>,
+    cond: &Condition,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<(), Diagnostic> {
+    let borrowed = model.borrow();
+    match cond.clone() {
+        Condition::None => {}
+        Condition::Unresolved(cond) => {
+            #[allow(clippy::collapsible_if)]
+            if let Some(context) = context
+                && let ast::Condition::Variable(id) = cond.clone()
+            {
+                if let Condition::Function(func, args) = context
+                    && let FunctionNode::Builtin(name, ..) = *func.borrow()
+                    && name == "S"
+                    && args.len() == 1
+                    && let Some(cond) = args.get(0)
+                    && let Condition::Model(model) = *cond.clone()
+                {
+                    let model = model.borrow();
+                    let model_name = model.name.clone().unwrap();
+                    model.search_state(&id.name).ok_or_else(|| {
+                        format!(
+                            "Состояние '{}' не найдено в моделе '{}'",
+                            &id.name, &model_name
+                        )
+                        .as_str()
+                        .into()
+                    })?;
+                    return Ok(());
+                }
+            }
+
+            if let Condition::Unresolved(_) = resolve_condition(&cond, model.clone())? {
+                return Err(format!("Unresolved condition: {:?}", cond).as_str().into());
+            }
+        }
+        Condition::ArraySubscript(_, _) => {}
+        Condition::Parenthesis(cond) => {
+            validate_cond(None, &cond, model.clone())?;
+        }
+        Condition::BitAccess(cond, _) => {
+            validate_cond(None, &cond, model.clone())?;
+        }
+        Condition::Function(_, conds) => {
+            for cond in conds {
+                validate_cond(None, &cond, model.clone())?;
+            }
+        }
+        Condition::Not(cond) => {
+            validate_cond(None, &cond, model.clone())?;
+        }
+        Condition::Add(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        Condition::Subtract(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        Condition::And(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        Condition::Or(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        Condition::Less(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        Condition::More(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        Condition::LessEqual(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        Condition::MoreEqual(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        Condition::Equal(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(Some(*left.clone()), &right, model.clone())?;
+        }
+        Condition::NotEqual(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        Condition::Number(_) => {}
+        Condition::Rational(_, _) => {}
+        Condition::String(_) => {}
+        Condition::Bool(_) => {}
+        Condition::Variable(var) => {}
+        Condition::Model(model) => {}
+        Condition::State(state) => {}
+    }
+    Ok(())
+}
+
+fn validate_state_references(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let borrowed = model.borrow();
+    for state in borrowed.states.values() {
+        match state {
+            StateNode::Simple { references, .. } | StateNode::Implement { references, .. } => {
+                for reference in references {
+                    validate_reference(reference, model.clone())?;
+                }
+            }
+            StateNode::Unresolved => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_expression(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let borrowed = model.borrow();
+    match expr {
+        Expression::None => {}
+        Expression::Unresolved(_) => {}
+        Expression::ArraySubscript(_, _) => {}
+        Expression::ArraySlice(_, _, _) => {}
+        Expression::Parenthesis(expr)
+        | Expression::BitAccess(expr, _)
+        | Expression::CodeBlock(expr, _)
+        | Expression::NamedFunctionBox(expr, _)
+        | Expression::Not(expr)
+        | Expression::UnaryPlus(expr)
+        | Expression::Negate(expr)
+        | Expression::Cast(expr, _)
+        | Expression::BitwiseNot(expr) => {
+            validate_expression(expr, model.clone())?;
+        }
+        Expression::Power(left, right)
+        | Expression::Multiply(left, right)
+        | Expression::Divide(left, right)
+        | Expression::Modulo(left, right)
+        | Expression::Add(left, right)
+        | Expression::Subtract(left, right)
+        | Expression::ShiftLeft(left, right)
+        | Expression::ShiftRight(left, right)
+        | Expression::BitwiseAnd(left, right)
+        | Expression::BitwiseXor(left, right)
+        | Expression::BitwiseOr(left, right)
+        | Expression::Less(left, right)
+        | Expression::More(left, right)
+        | Expression::LessEqual(left, right)
+        | Expression::MoreEqual(left, right)
+        | Expression::Equal(left, right)
+        | Expression::NotEqual(left, right)
+        | Expression::And(left, right)
+        | Expression::Or(left, right)
+        | Expression::Assign(left, right) => {
+            validate_expression(left, model.clone())?;
+            validate_expression(right, model.clone())?;
+        }
+        Expression::ConditionalOperator(left, right, other) => {
+            validate_expression(left, model.clone())?;
+            validate_expression(right, model.clone())?;
+            validate_expression(other, model.clone())?;
+        }
+        Expression::Number(_) => {}
+        Expression::Rational(_, _) => {}
+        Expression::String(_) => {}
+        Expression::Type(_) => {}
+        Expression::Address(_, _) => {}
+        Expression::Bool(_) => {}
+        Expression::Variable(var) => {}
+        Expression::Model(model) => {}
+        Expression::Condition(cond) => {
+            validate_cond(None, &cond.borrow().value, model.clone())?;
+        }
+        Expression::List(_) => {}
+        Expression::Array(exprs)
+        | Expression::Initializer(exprs)
+        | Expression::Function(_, exprs) => {
+            for expr in exprs {
+                validate_expression(expr, model.clone())?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_reference(
+    reference: &Reference<StateNode>,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<(), Diagnostic> {
+    validate_cond(None, &reference.cond, model.clone())?;
+    Ok(())
+}
+
+fn validate_variables(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let borrowed = model.borrow();
+    for variable in borrowed.variables.values() {
+        match variable {
+            VariableNode::Unresolved => {}
+            VariableNode::Simple(_, _, expr) => {
+                validate_expression(expr, model.clone())?;
+            }
+            VariableNode::Port(_, _, expr) => {
+                validate_expression(expr, model.clone())?;
+            }
+            VariableNode::Const(_, _, expr) => {
+                validate_expression(expr, model.clone())?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_conditions(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let borrowed = model.borrow();
+    for cond in borrowed.conditions.values() {
+        validate_cond(None, &cond.value, model.clone())?;
     }
     Ok(())
 }
@@ -393,8 +618,7 @@ fn collect_implicit_bool_warnings(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<
     }
 
     // Рекурсивный спуск во вложенные модели
-    let nested: Vec<Rc<RefCell<ModelNode>>> =
-        borrowed.models.values().map(Rc::clone).collect();
+    let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
     drop(borrowed); // освобождаем заимствование перед рекурсией
 
     for nested_model in nested {
@@ -436,6 +660,9 @@ pub fn check_implicit_bool_conditions(model: &Rc<RefCell<ModelNode>>) -> Vec<Dia
 pub fn validate_model(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     model_only_one_start_state(model.clone())?;
     validate_bit_values(model.clone())?;
+    validate_state_references(model.clone())?;
+    validate_variables(model.clone())?;
+    validate_conditions(model.clone())?;
 
     let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
         .borrow()
@@ -680,54 +907,84 @@ mod tests {
     /// `Bool(true)` → булево.
     #[test]
     fn ast_cond_bool_literal_is_true() {
-        assert!(is_boolean_ast_condition(&AC::Bool(loc(), true), &empty_model()));
+        assert!(is_boolean_ast_condition(
+            &AC::Bool(loc(), true),
+            &empty_model()
+        ));
     }
 
     /// `Bool(false)` → булево.
     #[test]
     fn ast_cond_bool_false_literal_is_true() {
-        assert!(is_boolean_ast_condition(&AC::Bool(loc(), false), &empty_model()));
+        assert!(is_boolean_ast_condition(
+            &AC::Bool(loc(), false),
+            &empty_model()
+        ));
     }
 
     /// `Equal` → булево.
     #[test]
     fn ast_cond_equal_is_true() {
-        let cond = AC::Equal(loc(), Box::new(AC::Number(loc(), 0)), Box::new(AC::Number(loc(), 0)));
+        let cond = AC::Equal(
+            loc(),
+            Box::new(AC::Number(loc(), 0)),
+            Box::new(AC::Number(loc(), 0)),
+        );
         assert!(is_boolean_ast_condition(&cond, &empty_model()));
     }
 
     /// `NotEqual` → булево.
     #[test]
     fn ast_cond_not_equal_is_true() {
-        let cond = AC::NotEqual(loc(), Box::new(AC::Number(loc(), 0)), Box::new(AC::Number(loc(), 1)));
+        let cond = AC::NotEqual(
+            loc(),
+            Box::new(AC::Number(loc(), 0)),
+            Box::new(AC::Number(loc(), 1)),
+        );
         assert!(is_boolean_ast_condition(&cond, &empty_model()));
     }
 
     /// `Less` → булево.
     #[test]
     fn ast_cond_less_is_true() {
-        let cond = AC::Less(loc(), Box::new(AC::Number(loc(), 0)), Box::new(AC::Number(loc(), 1)));
+        let cond = AC::Less(
+            loc(),
+            Box::new(AC::Number(loc(), 0)),
+            Box::new(AC::Number(loc(), 1)),
+        );
         assert!(is_boolean_ast_condition(&cond, &empty_model()));
     }
 
     /// `More` → булево.
     #[test]
     fn ast_cond_more_is_true() {
-        let cond = AC::More(loc(), Box::new(AC::Number(loc(), 5)), Box::new(AC::Number(loc(), 1)));
+        let cond = AC::More(
+            loc(),
+            Box::new(AC::Number(loc(), 5)),
+            Box::new(AC::Number(loc(), 1)),
+        );
         assert!(is_boolean_ast_condition(&cond, &empty_model()));
     }
 
     /// `LessEqual` → булево.
     #[test]
     fn ast_cond_less_equal_is_true() {
-        let cond = AC::LessEqual(loc(), Box::new(AC::Number(loc(), 0)), Box::new(AC::Number(loc(), 0)));
+        let cond = AC::LessEqual(
+            loc(),
+            Box::new(AC::Number(loc(), 0)),
+            Box::new(AC::Number(loc(), 0)),
+        );
         assert!(is_boolean_ast_condition(&cond, &empty_model()));
     }
 
     /// `MoreEqual` → булево.
     #[test]
     fn ast_cond_more_equal_is_true() {
-        let cond = AC::MoreEqual(loc(), Box::new(AC::Number(loc(), 5)), Box::new(AC::Number(loc(), 5)));
+        let cond = AC::MoreEqual(
+            loc(),
+            Box::new(AC::Number(loc(), 5)),
+            Box::new(AC::Number(loc(), 5)),
+        );
         assert!(is_boolean_ast_condition(&cond, &empty_model()));
     }
 
@@ -756,7 +1013,11 @@ mod tests {
     /// `Parenthesis(Equal)` → булево.
     #[test]
     fn ast_cond_paren_cmp_is_true() {
-        let inner = AC::Equal(loc(), Box::new(AC::Number(loc(), 0)), Box::new(AC::Number(loc(), 1)));
+        let inner = AC::Equal(
+            loc(),
+            Box::new(AC::Number(loc(), 0)),
+            Box::new(AC::Number(loc(), 1)),
+        );
         let cond = AC::Parenthesis(loc(), Box::new(inner));
         assert!(is_boolean_ast_condition(&cond, &empty_model()));
     }
@@ -785,7 +1046,10 @@ mod tests {
     /// `Variable("unknown")` — неизвестное имя → не предупреждаем (булево).
     #[test]
     fn ast_cond_unknown_var_is_true() {
-        assert!(is_boolean_ast_condition(&AC::Variable(id("unknown")), &empty_model()));
+        assert!(is_boolean_ast_condition(
+            &AC::Variable(id("unknown")),
+            &empty_model()
+        ));
     }
 
     // ── Явно числовые условия ───────────────────────────────────────────────
@@ -793,13 +1057,19 @@ mod tests {
     /// `Number(5)` → числовое.
     #[test]
     fn ast_cond_number_is_false() {
-        assert!(!is_boolean_ast_condition(&AC::Number(loc(), 5), &empty_model()));
+        assert!(!is_boolean_ast_condition(
+            &AC::Number(loc(), 5),
+            &empty_model()
+        ));
     }
 
     /// `Number(0)` → числовое (даже 0).
     #[test]
     fn ast_cond_zero_number_is_false() {
-        assert!(!is_boolean_ast_condition(&AC::Number(loc(), 0), &empty_model()));
+        assert!(!is_boolean_ast_condition(
+            &AC::Number(loc(), 0),
+            &empty_model()
+        ));
     }
 
     /// `Rational` → числовое.
@@ -819,28 +1089,44 @@ mod tests {
     /// `Add` → числовое.
     #[test]
     fn ast_cond_add_is_false() {
-        let cond = AC::Add(loc(), Box::new(AC::Number(loc(), 1)), Box::new(AC::Number(loc(), 2)));
+        let cond = AC::Add(
+            loc(),
+            Box::new(AC::Number(loc(), 1)),
+            Box::new(AC::Number(loc(), 2)),
+        );
         assert!(!is_boolean_ast_condition(&cond, &empty_model()));
     }
 
     /// `Subtract` → числовое.
     #[test]
     fn ast_cond_subtract_is_false() {
-        let cond = AC::Subtract(loc(), Box::new(AC::Number(loc(), 5)), Box::new(AC::Number(loc(), 1)));
+        let cond = AC::Subtract(
+            loc(),
+            Box::new(AC::Number(loc(), 5)),
+            Box::new(AC::Number(loc(), 1)),
+        );
         assert!(!is_boolean_ast_condition(&cond, &empty_model()));
     }
 
     /// `And` (побитовое И) → числовое.
     #[test]
     fn ast_cond_and_is_false() {
-        let cond = AC::And(loc(), Box::new(AC::Number(loc(), 3)), Box::new(AC::Number(loc(), 1)));
+        let cond = AC::And(
+            loc(),
+            Box::new(AC::Number(loc(), 3)),
+            Box::new(AC::Number(loc(), 1)),
+        );
         assert!(!is_boolean_ast_condition(&cond, &empty_model()));
     }
 
     /// `Or` (побитовое ИЛИ) → числовое.
     #[test]
     fn ast_cond_or_is_false() {
-        let cond = AC::Or(loc(), Box::new(AC::Number(loc(), 3)), Box::new(AC::Number(loc(), 1)));
+        let cond = AC::Or(
+            loc(),
+            Box::new(AC::Number(loc(), 3)),
+            Box::new(AC::Number(loc(), 1)),
+        );
         assert!(!is_boolean_ast_condition(&cond, &empty_model()));
     }
 
@@ -863,7 +1149,10 @@ mod tests {
     #[test]
     fn ast_cond_array_var_is_false() {
         let model = model_with_vars();
-        assert!(!is_boolean_ast_condition(&AC::Variable(id("timer")), &model));
+        assert!(!is_boolean_ast_condition(
+            &AC::Variable(id("timer")),
+            &model
+        ));
     }
 
     /// `Parenthesis(Number)` → числовое.
@@ -924,7 +1213,11 @@ mod tests {
     /// Summary для сложения.
     #[test]
     fn ast_summary_add() {
-        let cond = AC::Add(loc(), Box::new(AC::Number(loc(), 1)), Box::new(AC::Number(loc(), 2)));
+        let cond = AC::Add(
+            loc(),
+            Box::new(AC::Number(loc(), 1)),
+            Box::new(AC::Number(loc(), 2)),
+        );
         let s = ast_condition_summary(&cond, &empty_model());
         assert!(s.contains("сложение"), "summary для Add: '{}'", s);
     }
@@ -932,7 +1225,11 @@ mod tests {
     /// Summary для вычитания.
     #[test]
     fn ast_summary_subtract() {
-        let cond = AC::Subtract(loc(), Box::new(AC::Number(loc(), 5)), Box::new(AC::Number(loc(), 1)));
+        let cond = AC::Subtract(
+            loc(),
+            Box::new(AC::Number(loc(), 5)),
+            Box::new(AC::Number(loc(), 1)),
+        );
         let s = ast_condition_summary(&cond, &empty_model());
         assert!(s.contains("вычитание"), "summary для Subtract: '{}'", s);
     }
@@ -940,7 +1237,11 @@ mod tests {
     /// Summary для побитового И.
     #[test]
     fn ast_summary_and() {
-        let cond = AC::And(loc(), Box::new(AC::Number(loc(), 1)), Box::new(AC::Number(loc(), 1)));
+        let cond = AC::And(
+            loc(),
+            Box::new(AC::Number(loc(), 1)),
+            Box::new(AC::Number(loc(), 1)),
+        );
         let s = ast_condition_summary(&cond, &empty_model());
         assert!(s.contains('И'), "summary для And: '{}'", s);
     }
@@ -948,7 +1249,11 @@ mod tests {
     /// Summary для побитового ИЛИ.
     #[test]
     fn ast_summary_or() {
-        let cond = AC::Or(loc(), Box::new(AC::Number(loc(), 1)), Box::new(AC::Number(loc(), 1)));
+        let cond = AC::Or(
+            loc(),
+            Box::new(AC::Number(loc(), 1)),
+            Box::new(AC::Number(loc(), 1)),
+        );
         let s = ast_condition_summary(&cond, &empty_model());
         assert!(s.contains('И'), "summary для Or: '{}'", s);
     }
@@ -1022,7 +1327,10 @@ mod tests {
     fn explicit_ne_comparison_no_warning() {
         let model = build_rc("var timer: [bit;8] = 0; start S { ref T: timer != 0; } state T;");
         let warnings = check_implicit_bool_conditions(&model);
-        assert!(warnings.is_empty(), "явное != не должно давать предупреждений");
+        assert!(
+            warnings.is_empty(),
+            "явное != не должно давать предупреждений"
+        );
     }
 
     /// Явное сравнение `= 100` — нет предупреждений.
@@ -1030,7 +1338,10 @@ mod tests {
     fn explicit_eq_comparison_no_warning() {
         let model = build_rc("var timer: [bit;8] = 0; start S { ref T: timer = 100; } state T;");
         let warnings = check_implicit_bool_conditions(&model);
-        assert!(warnings.is_empty(), "явное = не должно давать предупреждений");
+        assert!(
+            warnings.is_empty(),
+            "явное = не должно давать предупреждений"
+        );
     }
 
     /// Именованное условие в ref — нет предупреждений.
@@ -1053,8 +1364,15 @@ mod tests {
     fn array_var_cond_gives_warning() {
         let model = build_rc("var timer: [bit;8] = 0; start S { ref T: timer; } state T;");
         let warnings = check_implicit_bool_conditions(&model);
-        assert_eq!(warnings.len(), 1, "переменная [bit;8] должна давать предупреждение");
-        assert!(warnings[0].message.contains("timer"), "сообщение должно упоминать 'timer'");
+        assert_eq!(
+            warnings.len(),
+            1,
+            "переменная [bit;8] должна давать предупреждение"
+        );
+        assert!(
+            warnings[0].message.contains("timer"),
+            "сообщение должно упоминать 'timer'"
+        );
     }
 
     /// Числовой литерал в условии — предупреждение.
@@ -1062,8 +1380,15 @@ mod tests {
     fn number_literal_cond_gives_warning() {
         let model = build_rc("start S { ref T: 5; } state T;");
         let warnings = check_implicit_bool_conditions(&model);
-        assert_eq!(warnings.len(), 1, "числовой литерал должен давать предупреждение");
-        assert!(warnings[0].message.contains('5'), "сообщение должно упоминать значение 5");
+        assert_eq!(
+            warnings.len(),
+            1,
+            "числовой литерал должен давать предупреждение"
+        );
+        assert!(
+            warnings[0].message.contains('5'),
+            "сообщение должно упоминать значение 5"
+        );
     }
 
     /// Предупреждение содержит имя целевого состояния.
@@ -1098,18 +1423,28 @@ mod tests {
              start S { ref T: a; ref U: b; } state T; state U;",
         );
         let warnings = check_implicit_bool_conditions(&model);
-        assert_eq!(warnings.len(), 2, "два числовых условия — два предупреждения");
+        assert_eq!(
+            warnings.len(),
+            2,
+            "два числовых условия — два предупреждения"
+        );
     }
 
     /// Вложенная модель с числовым условием — предупреждение упоминает имя модели.
     #[test]
     fn nested_model_implicit_bool_gives_warning() {
-        let model = build_rc(
-            "model M { var timer: [bit;8] = 0; start S { ref T: timer; } state T; }",
-        );
+        let model =
+            build_rc("model M { var timer: [bit;8] = 0; start S { ref T: timer; } state T; }");
         let warnings = check_implicit_bool_conditions(&model);
-        assert_eq!(warnings.len(), 1, "вложенная модель должна давать предупреждение");
-        assert!(warnings[0].message.contains('M'), "сообщение должно упоминать 'M'");
+        assert_eq!(
+            warnings.len(),
+            1,
+            "вложенная модель должна давать предупреждение"
+        );
+        assert!(
+            warnings[0].message.contains('M'),
+            "сообщение должно упоминать 'M'"
+        );
     }
 
     /// Модель без состояний — нет предупреждений.
@@ -1117,7 +1452,10 @@ mod tests {
     fn model_without_states_no_warnings() {
         let model = build_rc("var timer: [bit;8] = 0;");
         let warnings = check_implicit_bool_conditions(&model);
-        assert!(warnings.is_empty(), "модель без состояний не должна давать предупреждений");
+        assert!(
+            warnings.is_empty(),
+            "модель без состояний не должна давать предупреждений"
+        );
     }
 
     /// Предупреждение Се11 имеет уровень Warning.
@@ -1127,6 +1465,10 @@ mod tests {
         let model = build_rc("start S { ref T: 5; } state T;");
         let warnings = check_implicit_bool_conditions(&model);
         assert_eq!(warnings.len(), 1);
-        assert_eq!(warnings[0].level, Level::Warning, "уровень должен быть Warning");
+        assert_eq!(
+            warnings[0].level,
+            Level::Warning,
+            "уровень должен быть Warning"
+        );
     }
 }
