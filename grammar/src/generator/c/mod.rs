@@ -30,6 +30,7 @@ impl Generator {
             .map(|rc| Self::get_upper_name(&rc.borrow()) + "_")
             .unwrap_or_default()
             + &*normalize_lowercase_snakecase(model.name.clone().unwrap_or("unknown".to_string()))
+                .to_uppercase()
     }
 
     #[inline]
@@ -63,10 +64,14 @@ impl Generator {
 
     fn generate_model_enum(mut printer: &mut Printer, model: &ModelNode) -> Result<(), Diagnostic> {
         printer.ident("enum {").nl().up();
+        let upper = Self::get_upper_name(model);
+        printer.ident(&upper).print("_INIT");
         for name in model.states.keys().clone() {
             let name = normalize_lowercase_snakecase(name.clone()).to_uppercase();
+            let name = format!("{}_{}", &upper, name);
+            printer.print(",").nl().ident(&name);
         }
-        printer.down().ident("} state;").nl();
+        printer.down().nl().ident("} state;").nl();
         Ok(())
     }
 
@@ -141,6 +146,28 @@ impl Generator {
         printer.print("#include <stdint.h>").nl();
         printer.nl();
         Self::generate_model_struct(&mut printer, model, true)?;
+        let struct_name = Self::get_model_name_struct(model);
+        printer
+            .print("void ")
+            .print(&struct_name)
+            .print("_init(struct ")
+            .print(&struct_name)
+            .print(" *main);")
+            .nl();
+        printer
+            .print("void ")
+            .print(&struct_name)
+            .print("_tick(struct ")
+            .print(&struct_name)
+            .print(" *main);")
+            .nl();
+        printer
+            .print("void ")
+            .print(&struct_name)
+            .print("_reset(struct ")
+            .print(&struct_name)
+            .print(" *main);")
+            .nl();
         printer.print("#endif").nl();
         Ok(header)
     }
