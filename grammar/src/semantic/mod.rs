@@ -58,6 +58,8 @@ pub struct ModelNode {
     pub types: HashMap<String, TypeNode>,
     /// Объявленные условия переходов.
     pub conditions: HashMap<String, ConditionNode>,
+    /// Объявленные перечисления (Ce4).
+    pub enums: HashMap<String, EnumNode>,
     /// Состояния модели: имя → узел состояния.
     pub states: HashMap<String, StateNode>,
     /// Информация о реализации (зарезервировано).
@@ -86,6 +88,7 @@ impl PartialEq for ModelNode {
             && self.variables == other.variables
             && self.types == other.types
             && self.conditions == other.conditions
+            && self.enums == other.enums
             && self.states == other.states
             && self.implements == other.implements
     }
@@ -176,6 +179,32 @@ impl ModelNode {
             Some(cond.clone())
         } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
             return model.borrow().search_cond(name);
+        } else {
+            None
+        }
+    }
+
+    /// Ищет объявление перечисления по `name`, обходя цепочку `upper` (Ce4).
+    ///
+    /// Возвращает клон [`EnumNode`], если перечисление найдено в текущем
+    /// или родительском контексте.
+    ///
+    /// # Пример
+    ///
+    /// ```
+    /// use grammar::semantic::{ModelNode, EnumNode};
+    ///
+    /// let mut model = ModelNode::default();
+    /// let e = EnumNode::new("Color", &[("Red", None), ("Green", None)]);
+    /// model.enums.insert("Color".to_string(), e);
+    /// assert!(model.search_enum("Color").is_some());
+    /// assert!(model.search_enum("Size").is_none());
+    /// ```
+    pub fn search_enum(&self, name: &str) -> Option<EnumNode> {
+        if let Some(e) = self.enums.get(name) {
+            Some(e.clone())
+        } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
+            return model.borrow().search_enum(name);
         } else {
             None
         }
@@ -641,6 +670,7 @@ impl VariableNode {
 /// - [`Bool`](TypeNode::Bool) — булев тип (`bool`).
 /// - [`Rational`](TypeNode::Rational) — вещественное число (`float`).
 /// - [`Array`](TypeNode::Array) — массив фиксированного размера `(N, элемент)`.
+/// - [`Enum`](TypeNode::Enum) — перечисление (Ce4).
 /// - [`Unsupported`](TypeNode::Unsupported) — неподдерживаемый тип (например, функциональный).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum TypeNode {
@@ -657,6 +687,10 @@ pub enum TypeNode {
     Rational,
     /// Массив фиксированного размера: `(количество_элементов, тип_элемента)`.
     Array(u16, Box<TypeNode>),
+    /// Перечисление (Ce4): именованный тип с фиксированным набором значений.
+    ///
+    /// Хранит имя перечисления.
+    Enum(String),
     /// Неподдерживаемый тип (например, функциональный).
     Unsupported,
     /// Пустой тип.
@@ -664,6 +698,84 @@ pub enum TypeNode {
     BuiltinString,
     BuiltinModel,
     BuiltinState,
+}
+
+// ─── Ce4: Перечисления ────────────────────────────────────────────────────────
+
+/// Семантический узел перечисления (Ce4).
+///
+/// Описывает именованное перечисление: набор вариантов с опциональными числовыми
+/// значениями. Если значение не задано, предполагается автоинкремент от 0.
+///
+/// # Пример BuT (концептуально, поддержка на семантическом уровне)
+///
+/// ```text
+/// // enum Color { Red = 0, Green = 1, Blue = 2 }
+/// ```
+///
+/// Фактически перечисления сейчас не имеют синтаксиса в грамматике BuT,
+/// поэтому `EnumNode` создаётся программно через API.
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct EnumNode {
+    /// Имя перечисления.
+    pub name: String,
+    /// Варианты перечисления: `(имя_варианта, числовое_значение)`.
+    /// Если значение не задано при создании, оно равно индексу варианта.
+    pub variants: Vec<(String, i64)>,
+}
+
+impl EnumNode {
+    /// Создаёт новый `EnumNode` с именем и именованными вариантами.
+    ///
+    /// Если значение варианта задано явно через `(имя, Some(значение))`,
+    /// используется это значение. Иначе вариант получает порядковый индекс.
+    ///
+    /// # Пример
+    ///
+    /// ```
+    /// use grammar::semantic::EnumNode;
+    ///
+    /// let e = EnumNode::new("Color", &[("Red", None), ("Green", None), ("Blue", Some(5))]);
+    /// assert_eq!(e.variants[0], ("Red".to_string(), 0));
+    /// assert_eq!(e.variants[1], ("Green".to_string(), 1));
+    /// assert_eq!(e.variants[2], ("Blue".to_string(), 5));
+    /// ```
+    pub fn new(name: &str, variants: &[(&str, Option<i64>)]) -> Self {
+        let resolved: Vec<(String, i64)> = variants
+            .iter()
+            .enumerate()
+            .map(|(i, (vname, val))| (vname.to_string(), val.unwrap_or(i as i64)))
+            .collect();
+        EnumNode {
+            name: name.to_string(),
+            variants: resolved,
+        }
+    }
+
+    /// Ищет числовое значение варианта по имени.
+    ///
+    /// Возвращает `Some(значение)`, если вариант найден.
+    ///
+    /// # Пример
+    ///
+    /// ```
+    /// use grammar::semantic::EnumNode;
+    ///
+    /// let e = EnumNode::new("Color", &[("Red", None), ("Green", None)]);
+    /// assert_eq!(e.find_variant("Red"), Some(0));
+    /// assert_eq!(e.find_variant("Blue"), None);
+    /// ```
+    pub fn find_variant(&self, variant_name: &str) -> Option<i64> {
+        self.variants
+            .iter()
+            .find(|(name, _)| name == variant_name)
+            .map(|(_, val)| *val)
+    }
+
+    /// Возвращает `true`, если вариант с данным именем существует.
+    pub fn has_variant(&self, variant_name: &str) -> bool {
+        self.find_variant(variant_name).is_some()
+    }
 }
 
 /// Семантический узел именованного условия.

@@ -10,7 +10,10 @@
 //! - файлы-примеры из `tests/data/semantic/`.
 
 use grammar::parse;
-use grammar::semantic::tree::{construct_model, construct_model_with_docs, implicit_bool_warnings};
+use grammar::semantic::tree::{
+    construct_model, construct_model_with_docs, implicit_bool_warnings,
+    transition_completeness_warnings,
+};
 use grammar::semantic::{Implement, StateNode, TypeNode, VariableNode};
 
 // ─── Вспомогательная функция ──────────────────────────────────────────────────
@@ -2649,4 +2652,419 @@ fn no_strong_cycle_with_named_blocks() {
     let (ast, _) = parse("var x: bit = false; start S { always { x = x; } }", 0).unwrap();
     let root = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
     assert_eq!(Rc::strong_count(&root), 1, "модель с блоками: счётчик Rc должен быть 1");
+}
+
+// ─── Ce5: Проверка достижимости и полноты переходов ──────────────────────────
+
+/// Вспомогательная функция: строит модель как Rc и возвращает корень.
+fn build_rc(src: &str) -> std::rc::Rc<std::cell::RefCell<grammar::semantic::ModelNode>> {
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    construct_model(&ast, None, &[]).expect("ошибка построения")
+}
+
+/// Вспомогательная функция: строит модель из файла как Rc.
+fn build_file_rc(
+    path: &str,
+) -> Result<
+    std::rc::Rc<std::cell::RefCell<grammar::semantic::ModelNode>>,
+    grammar::diagnostics::Diagnostic,
+> {
+    let src = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("не могу прочитать {}: {}", path, e));
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
+    construct_model(&ast, None, &[])
+}
+
+/// Вспомогательная функция: строит модель и возвращает предупреждения Ce5.
+fn ce5_warnings(src: &str) -> Vec<grammar::diagnostics::Diagnostic> {
+    let root = build_rc(src);
+    transition_completeness_warnings(&root)
+}
+
+/// Модель с одним терминальным состоянием — нет предупреждений Ce5.
+#[test]
+fn ce5_single_terminal_no_warning() {
+    // Finish — терминальное (нет переходов)
+    let warns = ce5_warnings("start Start { ref Finish: true; } state Finish;");
+    assert!(
+        warns.is_empty(),
+        "состояние без переходов терминально, предупреждений быть не должно: {:?}",
+        warns
+    );
+}
+
+/// Цепочка состояний с терминальным в конце — нет предупреждений.
+#[test]
+fn ce5_chain_with_terminal_no_warning() {
+    let warns = ce5_warnings(
+        "start A { ref B: true; } state B { ref C: true; } state C;",
+    );
+    assert!(
+        warns.is_empty(),
+        "цепочка с терминальным в конце: предупреждений не должно быть"
+    );
+}
+
+/// Цикл без терминального — предупреждение Ce5.2 (нет терминальных).
+#[test]
+fn ce5_cycle_no_terminal_gives_warning() {
+    let warns =
+        ce5_warnings("start A { ref B: true; } state B { ref A: true; }");
+    assert!(
+        !warns.is_empty(),
+        "цикл без терминального состояния должен давать предупреждение"
+    );
+    let msg = &warns[0].message;
+    assert!(
+        msg.contains("терминальн"),
+        "сообщение должно упоминать терминальные состояния: {}",
+        msg
+    );
+}
+
+/// Предупреждение Ce5.2 имеет уровень Warning.
+#[test]
+fn ce5_no_terminal_warning_level() {
+    use grammar::diagnostics::Level;
+    let warns =
+        ce5_warnings("start A { ref B: true; } state B { ref A: true; }");
+    assert!(!warns.is_empty());
+    assert_eq!(warns[0].level, Level::Warning);
+}
+
+/// Состояние без пути к терминальному — предупреждение Ce5.1.
+#[test]
+fn ce5_state_no_path_to_terminal_warning() {
+    // C -> D -> C (цикл), A -> B -> C; B — терминальный, C/D не имеют пути
+    let warns = ce5_warnings(
+        "start A { ref B: true; ref C: true; } state B; \
+         state C { ref D: true; } state D { ref C: true; }",
+    );
+    // Должны быть предупреждения о C и D
+    let has_cd = warns.iter().any(|w| w.message.contains('C') || w.message.contains('D'));
+    assert!(has_cd, "состояния C и D не имеют пути к терминальному: {:?}", warns);
+}
+
+/// Модель без состояний — нет предупреждений Ce5.
+#[test]
+fn ce5_no_states_no_warning() {
+    let warns = ce5_warnings("var x: bit = false;");
+    assert!(
+        warns.is_empty(),
+        "модель без состояний не должна давать предупреждений Ce5"
+    );
+}
+
+/// Предупреждение Ce5.3: ref + next в одном состоянии.
+#[test]
+fn ce5_ref_and_next_together_warning() {
+    let warns = ce5_warnings(
+        "model M { start S; } \
+         start A = M { ref B: true; next C; } \
+         state B; state C;",
+    );
+    let has_warn = warns
+        .iter()
+        .any(|w| w.message.contains("ref") && w.message.contains("next"));
+    assert!(
+        has_warn,
+        "ref + next вместе должны давать предупреждение Ce5.3: {:?}",
+        warns
+    );
+}
+
+/// Только next без ref — нет предупреждения Ce5.3.
+#[test]
+fn ce5_only_next_no_ref_no_warn() {
+    let warns = ce5_warnings(
+        "model M { start S; } \
+         start A = M { next B; } \
+         state B;",
+    );
+    // Не должно быть предупреждения о ref+next
+    let has_ref_next = warns
+        .iter()
+        .any(|w| w.message.contains("ref") && w.message.contains("next"));
+    assert!(
+        !has_ref_next,
+        "только next без ref не должен давать предупреждение Ce5.3"
+    );
+}
+
+/// Файл ce5_terminal_states.but — нет предупреждений.
+#[test]
+fn example_ce5_terminal_states_valid() {
+    let root = build_file_rc("tests/data/semantic/valid/ce5_terminal_states.but")
+        .expect("ошибка построения");
+    let warns = transition_completeness_warnings(&root);
+    assert!(
+        warns.is_empty(),
+        "ce5_terminal_states.but не должен давать предупреждений: {:?}",
+        warns
+    );
+}
+
+/// Файл ce5_no_warn_terminal.but — нет предупреждений.
+#[test]
+fn example_ce5_no_warn_terminal_valid() {
+    let root = build_file_rc("tests/data/semantic/valid/ce5_no_warn_terminal.but")
+        .expect("ошибка построения");
+    let warns = transition_completeness_warnings(&root);
+    assert!(
+        warns.is_empty(),
+        "ce5_no_warn_terminal.but не должен давать предупреждений: {:?}",
+        warns
+    );
+}
+
+/// Файл ce5_no_terminal.but — предупреждение о нет терминальных.
+#[test]
+fn example_ce5_no_terminal_warns() {
+    let root = build_file_rc("tests/data/semantic/invalid/ce5_no_terminal.but")
+        .expect("ошибка построения");
+    let warns = transition_completeness_warnings(&root);
+    assert!(
+        !warns.is_empty(),
+        "ce5_no_terminal.but должен давать предупреждение"
+    );
+}
+
+/// Файл ce5_double_next.but — ошибка семантики (два next).
+#[test]
+fn example_ce5_double_next_error() {
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/ce5_double_next.but")
+        .expect("файл не найден");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[]);
+    assert!(
+        result.is_err(),
+        "ce5_double_next.but должен давать ошибку семантики"
+    );
+}
+
+/// Файл ce5_next_with_ref.but — предупреждение Ce5.3.
+#[test]
+fn example_ce5_next_with_ref_warns() {
+    let root = build_file_rc("tests/data/semantic/invalid/ce5_next_with_ref.but")
+        .expect("ошибка построения");
+    let warns = transition_completeness_warnings(&root);
+    let has_warn = warns
+        .iter()
+        .any(|w| w.message.contains("ref") && w.message.contains("next"));
+    assert!(
+        has_warn,
+        "ce5_next_with_ref.but должен давать предупреждение Ce5.3: {:?}",
+        warns
+    );
+}
+
+// ─── Ce4: Перечисления ────────────────────────────────────────────────────────
+
+/// EnumNode::new создаёт варианты с автоинкрементом значений.
+#[test]
+fn ce4_enum_node_auto_increment() {
+    use grammar::semantic::EnumNode;
+    let e = EnumNode::new("Status", &[("Idle", None), ("Active", None), ("Done", None)]);
+    assert_eq!(e.name, "Status");
+    assert_eq!(e.variants[0], ("Idle".to_string(), 0));
+    assert_eq!(e.variants[1], ("Active".to_string(), 1));
+    assert_eq!(e.variants[2], ("Done".to_string(), 2));
+}
+
+/// EnumNode::new принимает явные значения для вариантов.
+#[test]
+fn ce4_enum_node_explicit_values() {
+    use grammar::semantic::EnumNode;
+    let e = EnumNode::new("Color", &[("Red", Some(10)), ("Green", Some(20)), ("Blue", Some(30))]);
+    assert_eq!(e.find_variant("Red"), Some(10));
+    assert_eq!(e.find_variant("Green"), Some(20));
+    assert_eq!(e.find_variant("Blue"), Some(30));
+}
+
+/// EnumNode::find_variant возвращает None для несуществующего варианта.
+#[test]
+fn ce4_enum_find_variant_missing() {
+    use grammar::semantic::EnumNode;
+    let e = EnumNode::new("Dir", &[("North", None), ("South", None)]);
+    assert_eq!(e.find_variant("East"), None);
+    assert_eq!(e.find_variant("West"), None);
+}
+
+/// EnumNode::has_variant возвращает true/false корректно.
+#[test]
+fn ce4_enum_has_variant() {
+    use grammar::semantic::EnumNode;
+    let e = EnumNode::new("Speed", &[("Slow", None), ("Fast", None)]);
+    assert!(e.has_variant("Slow"));
+    assert!(e.has_variant("Fast"));
+    assert!(!e.has_variant("Medium"));
+}
+
+/// ModelNode::search_enum находит перечисление по имени.
+#[test]
+fn ce4_search_enum_finds_enum() {
+    use grammar::semantic::{EnumNode, ModelNode};
+    let mut model = ModelNode::default();
+    let e = EnumNode::new("Color", &[("Red", None), ("Green", None)]);
+    model.enums.insert("Color".to_string(), e.clone());
+    let found = model.search_enum("Color");
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().name, "Color");
+}
+
+/// ModelNode::search_enum возвращает None для несуществующего перечисления.
+#[test]
+fn ce4_search_enum_returns_none() {
+    use grammar::semantic::ModelNode;
+    let model = ModelNode::default();
+    assert!(model.search_enum("NonExistent").is_none());
+}
+
+/// TypeNode::Enum хранит имя перечисления.
+#[test]
+fn ce4_type_node_enum_variant() {
+    use grammar::semantic::TypeNode;
+    let ty = TypeNode::Enum("Status".to_string());
+    if let TypeNode::Enum(name) = &ty {
+        assert_eq!(name, "Status");
+    } else {
+        panic!("TypeNode::Enum не создан корректно");
+    }
+}
+
+/// Два разных EnumNode не равны.
+#[test]
+fn ce4_enum_nodes_not_equal() {
+    use grammar::semantic::EnumNode;
+    let a = EnumNode::new("A", &[("X", None)]);
+    let b = EnumNode::new("B", &[("Y", None)]);
+    assert_ne!(a, b);
+}
+
+/// EnumNode с одинаковым содержимым равны.
+#[test]
+fn ce4_enum_nodes_equal() {
+    use grammar::semantic::EnumNode;
+    let a = EnumNode::new("Status", &[("Ok", Some(0)), ("Err", Some(1))]);
+    let b = EnumNode::new("Status", &[("Ok", Some(0)), ("Err", Some(1))]);
+    assert_eq!(a, b);
+}
+
+/// Файл ce4_enum_basic.but разбирается без ошибок.
+#[test]
+fn example_ce4_enum_basic_valid() {
+    build_file("tests/data/semantic/valid/ce4_enum_basic.but")
+        .expect("ce4_enum_basic.but должен разбираться без ошибок");
+}
+
+/// ModelNode с enums корректно сравнивается (PartialEq включает enums).
+#[test]
+fn ce4_model_eq_with_enums() {
+    use grammar::semantic::{EnumNode, ModelNode};
+    let mut m1 = ModelNode::default();
+    let mut m2 = ModelNode::default();
+    let e = EnumNode::new("Dir", &[("North", None)]);
+    m1.enums.insert("Dir".to_string(), e.clone());
+    m2.enums.insert("Dir".to_string(), e.clone());
+    assert_eq!(m1, m2);
+}
+
+// ─── Ce6: Расширенный двунаправленный вывод типов ────────────────────────────
+
+/// Ce6: Тип переменной выводится из возвращаемого типа функции (bool).
+///
+/// `fn getbool() -> bool { return true; }`
+/// `var result = getbool();` → тип `result` = `Bool`
+#[test]
+fn ce6_type_inferred_from_function_return() {
+    use grammar::semantic::TypeNode;
+    let node = build(
+        "fn getbool() -> bool { return true; } \
+         var result = getbool(); start S;",
+    );
+    let var_result = node.search_var("result").expect("переменная result не найдена");
+    let ty = var_result.ty().clone();
+    assert_eq!(
+        ty,
+        TypeNode::Bool,
+        "тип result должен быть Bool (из возвращаемого типа getbool)"
+    );
+}
+
+/// Ce6: Тип переменной выводится из другой переменной (цепочка вывода).
+///
+/// `var x: bit = false; var y = x;` → тип `y` = тип `x` = `Bit`
+#[test]
+fn ce6_type_chain_from_variable() {
+    use grammar::semantic::TypeNode;
+    // Явно задаём тип x, чтобы избежать зависимости от порядка обработки HashMap
+    let node = build("var x: bit = false; var y = x; start S;");
+    let var_y = node.search_var("y").expect("переменная y не найдена");
+    let ty = var_y.ty().clone();
+    assert_eq!(
+        ty,
+        TypeNode::Bit,
+        "тип y должен быть Bit (через x: bit)"
+    );
+}
+
+/// Ce6: Вывод типа булевой переменной из функции, возвращающей bool.
+#[test]
+fn ce6_bool_return_type_inferred() {
+    use grammar::semantic::TypeNode;
+    let node = build(
+        "fn check() -> bool { return true; } \
+         var flag = check(); start S;",
+    );
+    let var_flag = node.search_var("flag").expect("переменная flag не найдена");
+    let ty = var_flag.ty().clone();
+    assert_eq!(ty, TypeNode::Bool, "тип flag должен быть Bool");
+}
+
+/// Ce6: Функция с типом [bit;32] — тип переменной = [bit;32].
+#[test]
+fn ce6_array32_return_type_inferred() {
+    use grammar::semantic::TypeNode;
+    let node = build(
+        "fn get32() -> [bit;32] { return 0; } \
+         var val = get32(); start S;",
+    );
+    let var_val = node.search_var("val").expect("переменная val не найдена");
+    let ty = var_val.ty().clone();
+    assert_eq!(
+        ty,
+        TypeNode::Array(32, Box::new(TypeNode::Bit)),
+        "тип val должен быть [bit;32]"
+    );
+}
+
+/// Ce6: Переменная с явным типом не перезаписывается выводом Ce6.
+#[test]
+fn ce6_explicit_type_not_overwritten_by_function() {
+    use grammar::semantic::TypeNode;
+    let node = build(
+        "fn getbool() -> bool { return true; } \
+         var result: bit = getbool(); start S;",
+    );
+    let var_result = node.search_var("result").expect("переменная result не найдена");
+    let ty = var_result.ty().clone();
+    assert_eq!(
+        ty,
+        TypeNode::Bit,
+        "явный тип bit не должен быть перезаписан"
+    );
+}
+
+/// Ce6: Файл ce6_type_from_func.but разбирается без ошибок.
+#[test]
+fn example_ce6_type_from_func_valid() {
+    build_file("tests/data/semantic/valid/ce6_type_from_func.but")
+        .expect("ce6_type_from_func.but должен разбираться без ошибок");
+}
+
+/// Ce6: Файл ce6_type_inference_chain.but разбирается без ошибок.
+#[test]
+fn example_ce6_type_inference_chain_valid() {
+    build_file("tests/data/semantic/valid/ce6_type_inference_chain.but")
+        .expect("ce6_type_inference_chain.but должен разбираться без ошибок");
 }

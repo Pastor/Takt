@@ -131,8 +131,11 @@ fn infer_int_type(n: i64) -> TypeNode {
 
 /// Преобразует АСД-тип [`Type`] в семантический [`TypeNode`].
 ///
-/// Используется при выводе типа для выражений `as T` (приведение типа).
-/// Псевдонимы типов (`Alias`) и функциональные типы возвращают `Unsupported`.
+/// Используется при выводе типа для выражений `as T` (приведение типа)
+/// и при Ce6-выводе из возвращаемого типа функции.
+///
+/// Псевдонимы встроенных типов (`bool`, `bit`, `float`, `unit`) разрешаются.
+/// Пользовательские псевдонимы и функциональные типы возвращают `Unsupported`.
 fn ast_type_to_node(ty: &Type) -> TypeNode {
     match ty {
         Type::Bit => TypeNode::Bit,
@@ -144,7 +147,16 @@ fn ast_type_to_node(ty: &Type) -> TypeNode {
             element_type,
             ..
         } => TypeNode::Array(*element_count, Box::new(ast_type_to_node(element_type))),
-        // Type::Alias, Type::Function, Type::Address — не поддерживаются при выводе типа
+        // Ce6: разрешаем встроенные псевдонимы типов без контекста модели
+        Type::Alias(id) => match id.name.as_str() {
+            "bit" => TypeNode::Bit,
+            "bool" => TypeNode::Bool,
+            "float" => TypeNode::Rational,
+            "unit" => TypeNode::Unit,
+            // Пользовательский псевдоним — не поддерживается без контекста
+            _ => TypeNode::Unsupported,
+        },
+        // Type::Function, Type::Address — не поддерживаются при выводе типа
         _ => TypeNode::Unsupported,
     }
 }
@@ -261,9 +273,36 @@ fn extract_type(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<Type
         Expression::Cast(_, ty) => Ok(ast_type_to_node(ty)),
         Expression::Type(ty) => Ok(ast_type_to_node(ty)),
 
+        // ── Ce6: Вывод типа из возвращаемого типа функции ────────────────────
+        //
+        // Если инициализирующее выражение — вызов известной функции,
+        // тип переменной выводится из возвращаемого типа функции.
+        // Это реализует двунаправленный вывод: `var result = add(1, 2);` →
+        // тип `result` = возвращаемый тип `add`.
+        //
+        // Поддерживаются разрешённые функции (Local, External, Builtin)
+        // и неразрешённые (Unresolved), для которых тип берётся из AST-определения.
+        Expression::Function(func_rc, _args) => {
+            let func = func_rc.borrow();
+            let ret_type = match &*func {
+                crate::semantic::FunctionNode::Local { ret, .. } => ret.clone(),
+                crate::semantic::FunctionNode::External { ret, .. } => ret.clone(),
+                crate::semantic::FunctionNode::Builtin(_, _, ret) => ret.clone(),
+                // Ce6: функция ещё не разрешена — читаем return_type из AST
+                crate::semantic::FunctionNode::Unresolved(def) => {
+                    if let Some(ret_ast) = &def.return_type {
+                        ast_type_to_node(ret_ast)
+                    } else {
+                        TypeNode::Unit // функция без return_type → void/Unit
+                    }
+                }
+                crate::semantic::FunctionNode::None => TypeNode::Unsupported,
+            };
+            Ok(ret_type)
+        }
+
         // ── Выражения без выводимого типа ────────────────────────────────────
         Expression::BitAccess(_, _)
-        | Expression::Function(_, _)
         | Expression::CodeBlock(_, _)
         | Expression::NamedFunctionBox(_, _)
         | Expression::List(_)
@@ -908,3 +947,4 @@ mod tests {
         }
     }
 }
+

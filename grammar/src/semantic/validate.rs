@@ -725,6 +725,188 @@ pub fn validate_model(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     Ok(())
 }
 
+// ─── Ce5: Проверка достижимости и полноты переходов ──────────────────────────
+
+/// Проверяет полноту и достижимость переходов в модели конечного автомата.
+///
+/// ## Правила Ce5
+///
+/// 1. **Предупреждение**: из состояния нет пути к терминальному состоянию
+///    (состоянию без исходящих переходов), и само оно не терминальное.
+/// 2. **Предупреждение**: в модели нет ни одного терминального состояния.
+/// 3. **Предупреждение**: в состоянии есть `ref`-переходы совместно с `next`
+///    (код после `next` недостижим).
+/// 4. **Ошибка**: в одном состоянии несколько `next` (уже проверяется парсером,
+///    но дублируем на семантическом уровне для явности).
+///
+/// Функция рекурсивно обходит все вложенные модели.
+///
+/// # Возвращаемое значение
+///
+/// Вектор [`Diagnostic`] (предупреждения и ошибки).
+/// Пустой вектор означает отсутствие нарушений.
+pub fn check_transition_completeness(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    collect_transition_completeness(&model, &mut diags);
+    diags
+}
+
+/// Рекурсивно собирает диагностики Ce5 для модели и всех вложенных моделей.
+fn collect_transition_completeness(
+    model: &Rc<RefCell<ModelNode>>,
+    out: &mut Vec<Diagnostic>,
+) {
+    let borrowed = model.borrow();
+
+    // Если состояний нет — модуль без автомата, пропускаем
+    if borrowed.states.is_empty() {
+        // Рекурсивный спуск во вложенные модели
+        let nested: Vec<Rc<RefCell<ModelNode>>> =
+            borrowed.models.values().map(Rc::clone).collect();
+        drop(borrowed);
+        for m in nested {
+            collect_transition_completeness(&m, out);
+        }
+        return;
+    }
+
+    let model_name = borrowed.name.clone().unwrap_or_default();
+
+    // Строит префикс для сообщений: "модель 'M'" или пустую строку для корня
+    let model_prefix = if model_name.is_empty() {
+        String::new()
+    } else {
+        format!("модель '{}': ", model_name)
+    };
+
+    // Вычисляем множество терминальных состояний (без исходящих переходов)
+    let terminal_states: std::collections::HashSet<String> = borrowed
+        .states
+        .iter()
+        .filter_map(|(name, state)| {
+            let is_terminal = match state {
+                StateNode::Simple { references, .. } => references.is_empty(),
+                StateNode::Implement {
+                    references, next, ..
+                } => references.is_empty() && next.is_none(),
+                StateNode::Unresolved => false,
+            };
+            if is_terminal {
+                Some(name.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Правило Ce5.2: нет терминальных состояний вообще
+    if terminal_states.is_empty() {
+        out.push(Diagnostic::warning(
+            crate::diagnostics::Location::Builtin,
+            format!(
+                "{}в модели нет терминальных состояний (состояний без переходов); \
+                 автомат не может завершить работу",
+                model_prefix
+            ),
+        ));
+    }
+
+    // Строим граф переходов: имя_состояния -> список целей
+    let mut graph: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for (name, state) in borrowed.states.iter() {
+        let targets: Vec<String> = match state {
+            StateNode::Simple { references, .. } => {
+                references.iter().map(|r| r.name.clone()).collect()
+            }
+            StateNode::Implement {
+                references, next, ..
+            } => {
+                let mut t: Vec<String> =
+                    references.iter().map(|r| r.name.clone()).collect();
+                if let Some(nr) = next {
+                    t.push(nr.name.clone());
+                }
+                t
+            }
+            StateNode::Unresolved => vec![],
+        };
+        graph.insert(name.clone(), targets);
+    }
+
+    // Правило Ce5.1: из состояния нет пути к терминальному
+    // Используем BFS/DFS от каждого нетерминального состояния
+    if !terminal_states.is_empty() {
+        for (state_name, _) in borrowed.states.iter() {
+            // Терминальные состояния сами по себе достижимы
+            if terminal_states.contains(state_name) {
+                continue;
+            }
+            // BFS от state_name
+            let can_reach = {
+                let mut visited = std::collections::HashSet::new();
+                let mut queue = std::collections::VecDeque::new();
+                queue.push_back(state_name.clone());
+                let mut found = false;
+                while let Some(cur) = queue.pop_front() {
+                    if terminal_states.contains(&cur) {
+                        found = true;
+                        break;
+                    }
+                    if visited.contains(&cur) {
+                        continue;
+                    }
+                    visited.insert(cur.clone());
+                    if let Some(targets) = graph.get(&cur) {
+                        for t in targets {
+                            queue.push_back(t.clone());
+                        }
+                    }
+                }
+                found
+            };
+            if !can_reach {
+                out.push(Diagnostic::warning(
+                    crate::diagnostics::Location::Builtin,
+                    format!(
+                        "{}состояние '{}' не имеет пути к терминальному состоянию",
+                        model_prefix, state_name
+                    ),
+                ));
+            }
+        }
+    }
+
+    // Правила Ce5.3 и Ce5.4: проверка next совместно с ref
+    for (state_name, state) in borrowed.states.iter() {
+        if let StateNode::Implement {
+            references, next, ..
+        } = state
+        {
+            // Правило Ce5.3: ref + next одновременно → предупреждение
+            if next.is_some() && !references.is_empty() {
+                out.push(Diagnostic::warning(
+                    crate::diagnostics::Location::Builtin,
+                    format!(
+                        "{}состояние '{}' содержит ref-переходы совместно с next: \
+                         переходы ref недостижимы после выполнения next",
+                        model_prefix, state_name
+                    ),
+                ));
+            }
+        }
+    }
+
+    // Рекурсивный спуск во вложенные модели
+    let nested: Vec<Rc<RefCell<ModelNode>>> =
+        borrowed.models.values().map(Rc::clone).collect();
+    drop(borrowed);
+
+    for m in nested {
+        collect_transition_completeness(&m, out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

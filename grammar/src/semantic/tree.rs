@@ -23,7 +23,9 @@ use crate::semantic::naming::normalize_model_name;
 use crate::semantic::reference::resolve_state_references;
 use crate::semantic::type_::construct_type;
 use crate::semantic::type_inference::type_inference;
-use crate::semantic::validate::{check_implicit_bool_conditions, validate_model};
+use crate::semantic::validate::{
+    check_implicit_bool_conditions, check_transition_completeness, validate_model,
+};
 use crate::semantic::{
     Condition, ConditionNode, Expression, FunctionNode, Implement, ModelNode, NamedCodeBlock,
     Reference, StateNode, StateNodeKind, Statement, TypeNode, VariableNode,
@@ -812,6 +814,31 @@ pub fn construct_model_with_docs(
 /// ```
 pub fn implicit_bool_warnings(model: &Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     check_implicit_bool_conditions(model)
+}
+
+/// Проверяет полноту и достижимость переходов в семантическом дереве.
+///
+/// Возвращает предупреждения и ошибки Ce5:
+/// - отсутствие терминальных состояний в модели;
+/// - состояния без пути к терминальному;
+/// - совместное использование `ref` и `next` в одном состоянии.
+///
+/// Функция обходит всё дерево моделей рекурсивно.
+///
+/// # Примеры
+///
+/// ```rust,ignore
+/// use grammar::{parse, semantic::tree::{construct_model, transition_completeness_warnings}};
+///
+/// let src = "start A { ref B: true; } state B { ref A: true; }";
+/// let (ast, _) = parse(src, 0).unwrap();
+/// let root = construct_model(&ast, None, &[]).unwrap();
+/// let warnings = transition_completeness_warnings(&root);
+/// // Предупреждение: нет терминальных состояний
+/// assert!(!warnings.is_empty());
+/// ```
+pub fn transition_completeness_warnings(model: &Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+    check_transition_completeness(Rc::clone(model))
 }
 
 /// Извлекает все состояния из модели и разрешает ссылки между ними.

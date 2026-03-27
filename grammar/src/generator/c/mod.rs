@@ -52,6 +52,10 @@ impl Generator {
             }
             TypeNode::Unit => "void".to_string(),
             TypeNode::BuiltinString => "char *".to_string(),
+            // Ce4: перечисление представляется как uint32_t в C
+            TypeNode::Enum(enum_name) => {
+                format!("uint32_t /*enum {}*/ {}", enum_name, name.clone().unwrap_or_default())
+            }
             TypeNode::BuiltinModel
             | TypeNode::BuiltinState
             | TypeNode::Unsupported
