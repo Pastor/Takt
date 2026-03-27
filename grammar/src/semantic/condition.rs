@@ -36,8 +36,8 @@ pub fn resolve_condition(
             let name = id.name.clone();
             let var = model.borrow().search_var(&name);
             if let Some(var) = var
-                && let VariableNode::Simple(_, typ, ..) = var.clone()
-                && let TypeNode::Array(..) = typ
+                && let VariableNode::Simple { ty, .. } = var.clone()
+                && let TypeNode::Array(..) = ty
             {
                 return Ok(Condition::ArraySubscript(Rc::new(RefCell::new(var)), *num));
             }
@@ -165,13 +165,14 @@ pub fn extract_conditions(
 ) -> Result<HashMap<String, ConditionNode>, Diagnostic> {
     let mut result = HashMap::new();
     for (name, cond) in conditions {
-        if let Condition::Unresolved(cond) = &cond.value {
-            let cond = resolve_condition(cond, model.clone())?;
+        if let Condition::Unresolved(ast_cond) = &cond.value {
+            let resolved = resolve_condition(ast_cond, model.clone())?;
             result.insert(
                 name.clone(),
                 ConditionNode {
                     name: name.clone(),
-                    value: cond,
+                    value: resolved,
+                    upper: cond.upper.clone(),
                 },
             );
         } else {
@@ -189,11 +190,11 @@ mod tests {
 
     // ─── вспомогательные функции ──────────────────────────────────────────
     //
-    // ПРИМЕЧАНИЕ: Условия переходов на рёбрах `ref` хранятся как
-    // `Condition::Unresolved` и НЕ разрешаются текущим конвейером
-    // (только `model.conditions` — именованные объявления `cond` — проходят
-    // через `extract_conditions`). Поэтому все тесты проверяют разрешённые
-    // условия через именованные условия (`cond имя = выражение;`).
+    // Условия именованных объявлений (`cond имя = …`) разрешаются на этапе 3
+    // через `extract_conditions`. Условия переходов на рёбрах `ref` разрешаются
+    // на этапе 6 конвейера через `resolve_references` (модуль `reference`).
+    // Тесты ниже проверяют именованные условия через `cond имя = выражение;`
+    // как наиболее прямой способ проверить результат разрешения.
 
     fn build(src: &str) -> Result<ModelNode, Diagnostic> {
         let (ast, _) = parse(src, 0).expect("ошибка разбора");

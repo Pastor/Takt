@@ -79,14 +79,25 @@ pub fn construct_function(
                 None => TypeNode::Unit,
             };
             if def.external {
-                Ok(FunctionNode::External(name.clone(), params, rett))
+                Ok(FunctionNode::External {
+                    upper: Some(Rc::clone(&model)),
+                    name: name.clone(),
+                    params,
+                    ret: rett,
+                })
             } else {
                 let statement = if let Some(body) = def.body {
                     resolve_statement(&Statement::Unresolved(body), model.clone())?
                 } else {
                     return Err("Локальная функция должна иметь тело".into());
                 };
-                Ok(FunctionNode::Local(name.clone(), params, rett, statement))
+                Ok(FunctionNode::Local {
+                    upper: Some(Rc::clone(&model)),
+                    name: name.clone(),
+                    params,
+                    ret: rett,
+                    body: statement,
+                })
             }
         }
     } else if let FunctionNode::None = func {
@@ -122,7 +133,7 @@ mod tests {
     fn extern_fn_no_params_resolves_to_external() {
         let node = build("extern fn foo(x: bit);").unwrap();
         match node.functions.get("foo").expect("функция foo не найдена") {
-            FunctionNode::External(name, params, ret) => {
+            FunctionNode::External { name, params, ret, .. } => {
                 assert_eq!(name, "foo");
                 assert_eq!(params.len(), 1);
                 assert_eq!(params[0].0, "x");
@@ -138,7 +149,7 @@ mod tests {
     fn extern_fn_with_return_type() {
         let node = build("extern fn status() -> bit;").unwrap();
         match node.functions.get("status").expect("status не найдена") {
-            FunctionNode::External(_, _, ret) => assert_eq!(*ret, TypeNode::Bit),
+            FunctionNode::External { ret, .. } => assert_eq!(*ret, TypeNode::Bit),
             other => panic!("ожидался External, получен {:?}", other),
         }
     }
@@ -148,7 +159,7 @@ mod tests {
     fn extern_fn_no_return_type_defaults_to_unit() {
         let node = build("extern fn noop();").unwrap();
         match node.functions.get("noop").expect("noop не найдена") {
-            FunctionNode::External(_, params, ret) => {
+            FunctionNode::External { params, ret, .. } => {
                 assert!(params.is_empty(), "параметров быть не должно");
                 assert_eq!(*ret, TypeNode::Unit);
             }
@@ -173,7 +184,7 @@ mod tests {
     fn local_fn_resolves_to_local() {
         let node = build("fn id(x: bit) -> bit { return true; }").unwrap();
         match node.functions.get("id").expect("id не найдена") {
-            FunctionNode::Local(name, params, ret, _body) => {
+            FunctionNode::Local { name, params, ret, .. } => {
                 assert_eq!(name, "id");
                 assert_eq!(params.len(), 1);
                 assert_eq!(params[0].0, "x");
@@ -189,7 +200,7 @@ mod tests {
     fn local_fn_no_params_no_return() {
         let node = build("fn noop() { }").unwrap();
         match node.functions.get("noop").expect("noop не найдена") {
-            FunctionNode::Local(_, params, ret, _) => {
+            FunctionNode::Local { params, ret, .. } => {
                 assert!(params.is_empty());
                 assert_eq!(*ret, TypeNode::Unit);
             }
@@ -204,7 +215,7 @@ mod tests {
     fn local_fn_multiple_params() {
         let node = build("fn add(a: bit, b: bit) -> bit { return true; }").unwrap();
         match node.functions.get("add").expect("add не найдена") {
-            FunctionNode::Local(_, params, _, _) => {
+            FunctionNode::Local { params, .. } => {
                 assert_eq!(params.len(), 2);
                 assert_eq!(params[0].0, "a");
                 assert_eq!(params[0].1, TypeNode::Bit);
@@ -220,7 +231,7 @@ mod tests {
     fn extern_fn_alias_param_resolves() {
         let node = build("type u8 = [bit;8]; extern fn foo(x: u8);").unwrap();
         match node.functions.get("foo").expect("foo не найдена") {
-            FunctionNode::External(_, params, _) => {
+            FunctionNode::External { params, .. } => {
                 assert_eq!(params.len(), 1);
                 assert_eq!(params[0].1, TypeNode::Array(8, Box::new(TypeNode::Bit)));
             }
@@ -251,12 +262,13 @@ mod tests {
         use crate::semantic::Statement;
         use std::cell::RefCell;
         use std::rc::Rc;
-        let local = FunctionNode::Local(
-            "f".into(),
-            vec![],
-            TypeNode::Unit,
-            Statement::None,
-        );
+        let local = FunctionNode::Local {
+            upper: None,
+            name: "f".into(),
+            params: vec![],
+            ret: TypeNode::Unit,
+            body: Statement::None,
+        };
         let model = Rc::new(RefCell::new(crate::semantic::ModelNode::default()));
         let result = construct_function(local.clone(), model).unwrap();
         assert_eq!(result, local);

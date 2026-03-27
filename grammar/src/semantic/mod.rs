@@ -235,7 +235,7 @@ impl ModelNode {
 }
 
 /// Семантический узел именованного блока кода (`enter`, `exit`, `always`, …).
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
+#[derive(Default, Debug, Clone)]
 pub enum NamedCodeBlock {
     /// Блок не задан.
     #[default]
@@ -243,14 +243,59 @@ pub enum NamedCodeBlock {
     /// Неразрешённый блок кода: `(имя, AST-оператор)`.
     Unresolved(String, ast::Statement),
     /// Блок `enter` с разрешённым оператором.
-    Enter(Statement),
+    Enter {
+        /// Родительская модель.
+        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Тело блока.
+        body: Statement,
+    },
     /// Блок `exit` с разрешённым оператором.
-    Exit(Statement),
+    Exit {
+        /// Родительская модель.
+        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Тело блока.
+        body: Statement,
+    },
     /// Блок `always` с разрешённым оператором.
-    Always(Statement),
-    /// Пользовательский именованный блок: `(имя, разрешённый_оператор)`.
-    Unknown(String, Statement),
+    Always {
+        /// Родительская модель.
+        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Тело блока.
+        body: Statement,
+    },
+    /// Пользовательский именованный блок.
+    Unknown {
+        /// Родительская модель.
+        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Имя блока.
+        name: String,
+        /// Тело блока.
+        body: Statement,
+    },
 }
+
+impl PartialEq for NamedCodeBlock {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::None, Self::None) => true,
+            (Self::Unresolved(n1, s1), Self::Unresolved(n2, s2)) => n1 == n2 && s1 == s2,
+            (Self::Enter { body: b1, .. }, Self::Enter { body: b2, .. }) => b1 == b2,
+            (Self::Exit { body: b1, .. }, Self::Exit { body: b2, .. }) => b1 == b2,
+            (Self::Always { body: b1, .. }, Self::Always { body: b2, .. }) => b1 == b2,
+            (
+                Self::Unknown {
+                    name: n1, body: b1, ..
+                },
+                Self::Unknown {
+                    name: n2, body: b2, ..
+                },
+            ) => n1 == n2 && b1 == b2,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for NamedCodeBlock {}
 
 impl NamedCodeBlock {
     /// Возвращает имя блока.
@@ -258,39 +303,116 @@ impl NamedCodeBlock {
         match self {
             NamedCodeBlock::None => "",
             NamedCodeBlock::Unresolved(name, _) => name,
-            NamedCodeBlock::Enter(_) => "enter",
-            NamedCodeBlock::Exit(_) => "exit",
-            NamedCodeBlock::Always(_) => "always",
-            NamedCodeBlock::Unknown(name, _) => name,
+            NamedCodeBlock::Enter { .. } => "enter",
+            NamedCodeBlock::Exit { .. } => "exit",
+            NamedCodeBlock::Always { .. } => "always",
+            NamedCodeBlock::Unknown { name, .. } => name,
         }
     }
 
     /// Возвращает ссылку на семантический оператор блока, если он разрешён.
     pub fn statement(&self) -> Option<&Statement> {
         match self {
-            NamedCodeBlock::Enter(s)
-            | NamedCodeBlock::Exit(s)
-            | NamedCodeBlock::Always(s)
-            | NamedCodeBlock::Unknown(_, s) => Some(s),
+            NamedCodeBlock::Enter { body, .. }
+            | NamedCodeBlock::Exit { body, .. }
+            | NamedCodeBlock::Always { body, .. }
+            | NamedCodeBlock::Unknown { body, .. } => Some(body),
+            _ => None,
+        }
+    }
+
+    /// Возвращает ссылку на родительскую модель блока.
+    pub fn upper(&self) -> Option<Rc<RefCell<ModelNode>>> {
+        match self {
+            NamedCodeBlock::Enter { upper, .. }
+            | NamedCodeBlock::Exit { upper, .. }
+            | NamedCodeBlock::Always { upper, .. }
+            | NamedCodeBlock::Unknown { upper, .. } => upper.clone(),
             _ => None,
         }
     }
 }
 
 /// Семантическое определение функции.
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
+#[derive(Default, Debug, Clone)]
 pub enum FunctionNode {
     /// Определение отсутствует.
     #[default]
     None,
     /// Неразрешённое AST-определение.
     Unresolved(ast::FunctionDefine),
-    /// Локальная функция: `(имя, параметры, возвращаемый_тип, тело)`.
-    Local(String, Vec<(String, TypeNode)>, TypeNode, Statement),
+    /// Локальная функция с телом.
+    Local {
+        /// Родительская модель.
+        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Имя функции.
+        name: String,
+        /// Список параметров: `(имя, тип)`.
+        params: Vec<(String, TypeNode)>,
+        /// Возвращаемый тип.
+        ret: TypeNode,
+        /// Тело функции.
+        body: Statement,
+    },
     /// Внешняя функция (без тела).
-    External(String, Vec<(String, TypeNode)>, TypeNode),
+    External {
+        /// Родительская модель.
+        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Имя функции.
+        name: String,
+        /// Список параметров: `(имя, тип)`.
+        params: Vec<(String, TypeNode)>,
+        /// Возвращаемый тип.
+        ret: TypeNode,
+    },
+    /// Встроенная функция языка.
     Builtin(&'static str, &'static [(&'static str, TypeNode)], TypeNode),
 }
+
+impl PartialEq for FunctionNode {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::None, Self::None) => true,
+            (Self::Unresolved(a), Self::Unresolved(b)) => a == b,
+            (
+                Self::Local {
+                    name: n1,
+                    params: p1,
+                    ret: r1,
+                    body: b1,
+                    ..
+                },
+                Self::Local {
+                    name: n2,
+                    params: p2,
+                    ret: r2,
+                    body: b2,
+                    ..
+                },
+            ) => n1 == n2 && p1 == p2 && r1 == r2 && b1 == b2,
+            (
+                Self::External {
+                    name: n1,
+                    params: p1,
+                    ret: r1,
+                    ..
+                },
+                Self::External {
+                    name: n2,
+                    params: p2,
+                    ret: r2,
+                    ..
+                },
+            ) => n1 == n2 && p1 == p2 && r1 == r2,
+            (Self::Builtin(n1, p1, r1), Self::Builtin(n2, p2, r2)) => {
+                n1 == n2 && p1 == p2 && r1 == r2
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Eq for FunctionNode {}
 
 /// Семантический узел вызова или ссылки на функцию.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
@@ -363,20 +485,132 @@ pub enum Statement {
 ///
 /// Варианты:
 /// - [`Unresolved`](VariableNode::Unresolved) — временная заглушка.
-/// - [`Simple`](VariableNode::Simple) — обычная изменяемая переменная `(имя, тип, инициализатор?)`.
-/// - [`Port`](VariableNode::Port) — порт, отображённый на адрес `(имя, тип, адрес)`.
-/// - [`Const`](VariableNode::Const) — константа `(имя, тип, значение)`.
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
+/// - [`Simple`](VariableNode::Simple) — обычная изменяемая переменная.
+/// - [`Port`](VariableNode::Port) — порт, отображённый на адрес.
+/// - [`Const`](VariableNode::Const) — константа.
+#[derive(Default, Debug, Clone)]
 pub enum VariableNode {
     /// Не разрешено (временная заглушка при построении дерева).
     #[default]
     Unresolved,
-    /// Изменяемая переменная: `(имя, тип, инициализатор?)`.
-    Simple(String, TypeNode, Expression),
-    /// Порт, отображённый на аппаратный адрес: `(имя, тип, адрес)`.
-    Port(String, TypeNode, Expression),
-    /// Константа: `(имя, тип, значение)`.
-    Const(String, TypeNode, Expression),
+    /// Изменяемая переменная.
+    Simple {
+        /// Родительская модель.
+        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Имя переменной.
+        name: String,
+        /// Тип переменной.
+        ty: TypeNode,
+        /// Инициализирующее выражение.
+        expr: Expression,
+    },
+    /// Порт, отображённый на аппаратный адрес.
+    Port {
+        /// Родительская модель.
+        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Имя переменной.
+        name: String,
+        /// Тип переменной.
+        ty: TypeNode,
+        /// Адрес порта.
+        expr: Expression,
+    },
+    /// Константа.
+    Const {
+        /// Родительская модель.
+        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Имя константы.
+        name: String,
+        /// Тип константы.
+        ty: TypeNode,
+        /// Значение константы.
+        expr: Expression,
+    },
+}
+
+impl PartialEq for VariableNode {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Unresolved, Self::Unresolved) => true,
+            (
+                Self::Simple {
+                    name: n1,
+                    ty: t1,
+                    expr: e1,
+                    ..
+                },
+                Self::Simple {
+                    name: n2,
+                    ty: t2,
+                    expr: e2,
+                    ..
+                },
+            ) => n1 == n2 && t1 == t2 && e1 == e2,
+            (
+                Self::Port {
+                    name: n1,
+                    ty: t1,
+                    expr: e1,
+                    ..
+                },
+                Self::Port {
+                    name: n2,
+                    ty: t2,
+                    expr: e2,
+                    ..
+                },
+            ) => n1 == n2 && t1 == t2 && e1 == e2,
+            (
+                Self::Const {
+                    name: n1,
+                    ty: t1,
+                    expr: e1,
+                    ..
+                },
+                Self::Const {
+                    name: n2,
+                    ty: t2,
+                    expr: e2,
+                    ..
+                },
+            ) => n1 == n2 && t1 == t2 && e1 == e2,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for VariableNode {}
+
+impl VariableNode {
+    /// Возвращает имя переменной (пустая строка для `Unresolved`).
+    pub fn name(&self) -> &str {
+        match self {
+            VariableNode::Simple { name, .. }
+            | VariableNode::Port { name, .. }
+            | VariableNode::Const { name, .. } => name,
+            VariableNode::Unresolved => "",
+        }
+    }
+
+    /// Возвращает тип переменной (`Inference` для `Unresolved`).
+    pub fn ty(&self) -> &TypeNode {
+        match self {
+            VariableNode::Simple { ty, .. }
+            | VariableNode::Port { ty, .. }
+            | VariableNode::Const { ty, .. } => ty,
+            VariableNode::Unresolved => &TypeNode::Inference,
+        }
+    }
+
+    /// Возвращает ссылку на родительскую модель.
+    pub fn upper(&self) -> Option<Rc<RefCell<ModelNode>>> {
+        match self {
+            VariableNode::Simple { upper, .. }
+            | VariableNode::Port { upper, .. }
+            | VariableNode::Const { upper, .. } => upper.clone(),
+            VariableNode::Unresolved => None,
+        }
+    }
 }
 
 /// Семантический узел типа данных.
@@ -425,6 +659,8 @@ pub struct ConditionNode {
     pub name: String,
     /// Разрешённое значение условия.
     pub value: Condition,
+    /// Родительская модель.
+    pub upper: Option<Rc<RefCell<ModelNode>>>,
 }
 
 /// Состояние конечного автомата.
@@ -441,6 +677,7 @@ pub enum StateNode {
     Unresolved,
     /// Обычное состояние: контекст, имя и список ссылок на переходы.
     Simple {
+        upper: Option<Rc<RefCell<ModelNode>>>,
         /// Именованные блоки кода (`enter`, `exit`, `always`, …).
         named_blocks: Vec<NamedCodeBlock>,
         /// Имя состояния.
@@ -451,6 +688,7 @@ pub enum StateNode {
     },
     /// Состояние с реализацией (`= Модель`): может иметь `next`-переход.
     Implement {
+        upper: Option<Rc<RefCell<ModelNode>>>,
         /// Именованные блоки кода (`enter`, `exit`, `always`, …).
         named_blocks: Vec<NamedCodeBlock>,
         /// Имя состояния.
@@ -480,6 +718,14 @@ impl StateNode {
             StateNode::Unresolved => "",
             StateNode::Simple { name, .. } => name,
             StateNode::Implement { name, .. } => name,
+        }
+    }
+
+    /// Возвращает ссылку на родительскую модель состояния.
+    pub fn upper(&self) -> Option<Rc<RefCell<ModelNode>>> {
+        match self {
+            StateNode::Simple { upper, .. } | StateNode::Implement { upper, .. } => upper.clone(),
+            StateNode::Unresolved => None,
         }
     }
 
@@ -762,8 +1008,10 @@ mod tests {
     #[test]
     fn model_node_get_named_block() {
         let mut node = ModelNode::default();
-        node.named_blocks
-            .push(NamedCodeBlock::Always(Statement::None));
+        node.named_blocks.push(NamedCodeBlock::Always {
+            upper: None,
+            body: Statement::None,
+        });
         assert!(node.get_named_block("always").is_some());
         assert!(node.get_named_block("enter").is_none());
     }
@@ -780,8 +1028,12 @@ mod tests {
     #[test]
     fn state_node_get_named_block() {
         let state = StateNode::Simple {
+            upper: None,
             name: "S".to_string(),
-            named_blocks: vec![NamedCodeBlock::Enter(Statement::None)],
+            named_blocks: vec![NamedCodeBlock::Enter {
+                upper: None,
+                body: Statement::None,
+            }],
             references: vec![],
             kind: StateNodeKind::Simple,
         };
@@ -833,7 +1085,10 @@ mod tests {
     /// NamedCodeBlock методы name() и statement().
     #[test]
     fn named_code_block_methods() {
-        let nb = NamedCodeBlock::Always(Statement::Continue);
+        let nb = NamedCodeBlock::Always {
+            upper: None,
+            body: Statement::Continue,
+        };
         assert_eq!(nb.name(), "always");
         assert_eq!(nb.statement(), Some(&Statement::Continue));
 

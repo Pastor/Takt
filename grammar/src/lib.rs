@@ -35,6 +35,7 @@ use lalrpop_util::ParseError;
 
 /// Модуль диагностических сообщений компилятора.
 pub mod diagnostics;
+pub mod generator;
 /// Модуль парсера
 pub mod parser;
 /// Модуль семантического анализа и построение семантического дерева
@@ -348,7 +349,10 @@ always {
             "незакрытый блок модели должен давать ошибку EOF"
         );
         let diagnostics = result.unwrap_err();
-        assert!(!diagnostics.is_empty(), "должна быть хотя бы одна диагностика");
+        assert!(
+            !diagnostics.is_empty(),
+            "должна быть хотя бы одна диагностика"
+        );
     }
 
     /// Нераспознанный токен: объявление переменной с неверным синтаксисом.
@@ -366,7 +370,10 @@ always {
     #[test]
     fn syntax_simple_does_not_panic() {
         let result = parse("model M { start S; }", 0);
-        assert!(result.is_ok(), "корректная программа должна разбираться без ошибок");
+        assert!(
+            result.is_ok(),
+            "корректная программа должна разбираться без ошибок"
+        );
     }
 
     /// Ошибка парсера содержит непустой диагностический список.

@@ -246,13 +246,14 @@ fn construct_model_stage0(
                     let name = extract_name(name.clone())?;
                     variables.insert(
                         name.clone(),
-                        VariableNode::Simple(
-                            name.clone(),
-                            construct_type(typ, &types)?,
-                            initializer
+                        VariableNode::Simple {
+                            upper: Some(Rc::clone(&model_node)),
+                            name: name.clone(),
+                            ty: construct_type(typ, &types)?,
+                            expr: initializer
                                 .map(|e| Expression::Unresolved(e))
                                 .unwrap_or(Expression::None),
-                        ),
+                        },
                     )
                 }
                 VariableDefine::Port {
@@ -268,10 +269,11 @@ fn construct_model_stage0(
                     }
                     variables.insert(
                         name.clone(),
-                        VariableNode::Port(
-                            name.clone(),
-                            type_node,
-                            Expression::Unresolved(
+                        VariableNode::Port {
+                            upper: Some(Rc::clone(&model_node)),
+                            name: name.clone(),
+                            ty: type_node,
+                            expr: Expression::Unresolved(
                                 initializer
                                     .filter(|i| {
                                         matches!(
@@ -284,7 +286,7 @@ fn construct_model_stage0(
                                         "Порт должен быть инициализирован адресом".into()
                                     })?,
                             ),
-                        ),
+                        },
                     )
                 }
                 VariableDefine::Constant {
@@ -296,11 +298,12 @@ fn construct_model_stage0(
                     let name = extract_name(name.clone())?;
                     variables.insert(
                         name.clone(),
-                        VariableNode::Const(
-                            name.clone(),
-                            construct_type(typ, &types)?,
-                            Expression::Unresolved(initializer),
-                        ),
+                        VariableNode::Const {
+                            upper: Some(Rc::clone(&model_node)),
+                            name: name.clone(),
+                            ty: construct_type(typ, &types)?,
+                            expr: Expression::Unresolved(initializer),
+                        },
                     )
                 }
             };
@@ -321,6 +324,7 @@ fn construct_model_stage0(
                 ConditionNode {
                     name: name.clone(),
                     value: Condition::Unresolved(def.value.clone()),
+                    upper: Some(Rc::clone(&model_node)),
                 },
             );
         } else if let ModelElement::NamedBlockCode(def) = element {
@@ -331,13 +335,23 @@ fn construct_model_stage0(
                 .name
                 .clone();
             let block = match name.as_str() {
-                "enter" => NamedCodeBlock::Enter(Statement::Unresolved(def.statement.clone())),
-                "exit" => NamedCodeBlock::Exit(Statement::Unresolved(def.statement.clone())),
-                "always" => NamedCodeBlock::Always(Statement::Unresolved(def.statement.clone())),
-                name => NamedCodeBlock::Unknown(
-                    name.to_string(),
-                    Statement::Unresolved(def.statement.clone()),
-                ),
+                "enter" => NamedCodeBlock::Enter {
+                    upper: Some(Rc::clone(&model_node)),
+                    body: Statement::Unresolved(def.statement.clone()),
+                },
+                "exit" => NamedCodeBlock::Exit {
+                    upper: Some(Rc::clone(&model_node)),
+                    body: Statement::Unresolved(def.statement.clone()),
+                },
+                "always" => NamedCodeBlock::Always {
+                    upper: Some(Rc::clone(&model_node)),
+                    body: Statement::Unresolved(def.statement.clone()),
+                },
+                name => NamedCodeBlock::Unknown {
+                    upper: Some(Rc::clone(&model_node)),
+                    name: name.to_string(),
+                    body: Statement::Unresolved(def.statement.clone()),
+                },
             };
             named_blocks.push(block);
         } else if let ModelElement::Function(def) = element {
@@ -351,7 +365,7 @@ fn construct_model_stage0(
         }
     }
     model_node.borrow_mut().models = models;
-    model_node.borrow_mut().states = construct_states(model)?;
+    model_node.borrow_mut().states = construct_states(model, model_node.clone())?;
     model_node.borrow_mut().types = types;
     model_node.borrow_mut().variables = variables;
     model_node.borrow_mut().conditions = conditions;
@@ -369,6 +383,7 @@ fn construct_model_stage1(
     let mut prepared_states = HashMap::new();
     for (name, state) in states.iter() {
         if let StateNode::Implement {
+            upper,
             implements: Implement::Unresolved(implement_expression),
             named_blocks,
             references,
@@ -380,6 +395,7 @@ fn construct_model_stage1(
             prepared_states.insert(
                 name.clone(),
                 StateNode::Implement {
+                    upper: upper.clone(),
                     named_blocks,
                     name: name.clone(),
                     references,
@@ -431,14 +447,14 @@ fn resolve_variable_expressions(
     let mut result = HashMap::new();
     for (name, var) in variables {
         let resolved = match var.clone() {
-            VariableNode::Simple(n, ty, Expression::Unresolved(expr)) => {
-                VariableNode::Simple(n, ty, construct_expression(expr, model.clone())?)
+            VariableNode::Simple { upper, name: n, ty, expr: Expression::Unresolved(expr) } => {
+                VariableNode::Simple { upper, name: n, ty, expr: construct_expression(expr, model.clone())? }
             }
-            VariableNode::Const(n, ty, Expression::Unresolved(expr)) => {
-                VariableNode::Const(n, ty, construct_expression(expr, model.clone())?)
+            VariableNode::Const { upper, name: n, ty, expr: Expression::Unresolved(expr) } => {
+                VariableNode::Const { upper, name: n, ty, expr: construct_expression(expr, model.clone())? }
             }
-            VariableNode::Port(n, ty, Expression::Unresolved(expr)) => {
-                VariableNode::Port(n, ty, construct_expression(expr, model.clone())?)
+            VariableNode::Port { upper, name: n, ty, expr: Expression::Unresolved(expr) } => {
+                VariableNode::Port { upper, name: n, ty, expr: construct_expression(expr, model.clone())? }
             }
             other => other,
         };
@@ -571,7 +587,7 @@ fn construct_model_stage6(
     for (name, state) in states.iter() {
         prepared_states.insert(
             name.clone(),
-            resolve_state_references(state, model.clone())?,
+            resolve_state_references(state)?,
         );
     }
     model.borrow_mut().states = prepared_states;
@@ -614,17 +630,20 @@ fn resolve_state_named_blocks(
 ) -> Result<StateNode, Diagnostic> {
     match state {
         StateNode::Simple {
+            upper,
             name,
             references,
             named_blocks,
             kind,
         } => Ok(StateNode::Simple {
+            upper: upper.clone(),
             name,
             references,
             kind,
             named_blocks: resolve_named_blocks(named_blocks, model)?,
         }),
         StateNode::Implement {
+            upper,
             name,
             references,
             implements,
@@ -632,6 +651,7 @@ fn resolve_state_named_blocks(
             named_blocks,
             kind,
         } => Ok(StateNode::Implement {
+            upper: upper.clone(),
             name,
             references,
             implements,
@@ -782,7 +802,10 @@ pub fn implicit_bool_warnings(model: &Rc<RefCell<ModelNode>>) -> Vec<Diagnostic>
 ///
 /// Возвращает [`Diagnostic`], если состояние без имени, ссылка не найдена,
 /// или `next` объявлен дважды в одном состоянии.
-pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Diagnostic> {
+pub fn construct_states(
+    model: &Model,
+    upper: Rc<RefCell<ModelNode>>,
+) -> Result<HashMap<String, StateNode>, Diagnostic> {
     // Первый проход: создаём узлы с незаполненными ссылками (заглушки Unresolved).
     let mut states: HashMap<String, Box<StateNode>> = HashMap::new();
     for element in model.elements.iter() {
@@ -846,7 +869,8 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                     object: Box::new(StateNode::Unresolved),
                 });
                 StateNode::Implement {
-                    named_blocks: construct_named_blocks(def)?,
+                    upper: Some(upper.clone()),
+                    named_blocks: construct_named_blocks(def, Some(Rc::clone(&upper)))?,
                     name: name.clone(),
                     references,
                     implements: Implement::Unresolved(expr),
@@ -855,7 +879,8 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 }
             } else {
                 StateNode::Simple {
-                    named_blocks: construct_named_blocks(def)?,
+                    upper: Some(upper.clone()),
+                    named_blocks: construct_named_blocks(def, Some(Rc::clone(&upper)))?,
                     name: name.clone(),
                     references,
                     kind,
@@ -870,6 +895,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
     for (_, state) in states.iter() {
         match *state.clone() {
             StateNode::Simple {
+                upper,
                 name,
                 references,
                 named_blocks,
@@ -879,6 +905,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 new_states.insert(
                     name.clone(),
                     StateNode::Simple {
+                        upper: upper.clone(),
                         named_blocks,
                         name,
                         references: resolved,
@@ -887,6 +914,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 );
             }
             StateNode::Implement {
+                upper,
                 named_blocks,
                 name,
                 references,
@@ -915,6 +943,7 @@ pub fn construct_states(model: &Model) -> Result<HashMap<String, StateNode>, Dia
                 new_states.insert(
                     name.clone(),
                     StateNode::Implement {
+                        upper: upper.clone(),
                         named_blocks,
                         name,
                         references: resolved,
@@ -967,7 +996,10 @@ fn resolve_references(
 ///
 /// Если несколько блоков имеют одинаковое имя (например, два `always`),
 /// они все сохраняются в списке и могут быть получены через `get_named_blocks`.
-fn construct_named_blocks(state: &StateDefine) -> Result<Vec<NamedCodeBlock>, Diagnostic> {
+fn construct_named_blocks(
+    state: &StateDefine,
+    upper: Option<Rc<RefCell<ModelNode>>>,
+) -> Result<Vec<NamedCodeBlock>, Diagnostic> {
     let mut named_blocks = Vec::new();
     for element in state.elements.iter() {
         if let StateElement::NamedBlockCode(def) = element {
@@ -978,13 +1010,23 @@ fn construct_named_blocks(state: &StateDefine) -> Result<Vec<NamedCodeBlock>, Di
                 .name
                 .clone();
             let block = match name.as_str() {
-                "enter" => NamedCodeBlock::Enter(Statement::Unresolved(def.statement.clone())),
-                "exit" => NamedCodeBlock::Exit(Statement::Unresolved(def.statement.clone())),
-                "always" => NamedCodeBlock::Always(Statement::Unresolved(def.statement.clone())),
-                name => NamedCodeBlock::Unknown(
-                    name.to_string(),
-                    Statement::Unresolved(def.statement.clone()),
-                ),
+                "enter" => NamedCodeBlock::Enter {
+                    upper: upper.clone(),
+                    body: Statement::Unresolved(def.statement.clone()),
+                },
+                "exit" => NamedCodeBlock::Exit {
+                    upper: upper.clone(),
+                    body: Statement::Unresolved(def.statement.clone()),
+                },
+                "always" => NamedCodeBlock::Always {
+                    upper: upper.clone(),
+                    body: Statement::Unresolved(def.statement.clone()),
+                },
+                name => NamedCodeBlock::Unknown {
+                    upper: upper.clone(),
+                    name: name.to_string(),
+                    body: Statement::Unresolved(def.statement.clone()),
+                },
             };
             named_blocks.push(block);
         }

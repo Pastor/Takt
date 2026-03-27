@@ -1,13 +1,38 @@
+//! Разрешение условий на рёбрах `ref` семантического дерева BuT.
+//!
+//! Функция [`resolve_state_references`] выполняет дополнительный проход
+//! разрешения условий для всех `ref`-переходов состояния: заменяет
+//! [`Condition::Unresolved`] полностью разрешёнными семантическими условиями
+//! с помощью [`resolve_condition`].
+//!
+//! Родительская модель берётся непосредственно из узла состояния (`state.upper()`),
+//! поэтому явная передача `model` в параметрах не требуется.
+
 use crate::diagnostics::Diagnostic;
 use crate::semantic::condition::resolve_condition;
-use crate::semantic::{Condition, ModelNode, Reference, StateNode};
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::semantic::{Condition, Reference, StateNode};
 
+/// Разрешает список условий `ref`-ссылок, заменяя [`Condition::Unresolved`]
+/// полностью разрешёнными семантическими условиями.
+///
+/// Контекст для разрешения берётся из [`StateNode::upper`] — ссылки на
+/// родительскую модель, которая уже содержит переменные, условия и функции.
+///
+/// # Ошибки
+///
+/// Пробрасывает [`Diagnostic`] из [`resolve_condition`], если условие не
+/// удаётся разрешить (например, неизвестная переменная или функция).
 fn resolve_references(
-    references: &Vec<Reference<StateNode>>,
-    model: Rc<RefCell<ModelNode>>,
+    references: &[Reference<StateNode>],
+    state: &StateNode,
 ) -> Result<Vec<Reference<StateNode>>, Diagnostic> {
+    // Берём родительскую модель из узла состояния
+    let model = match state.upper() {
+        Some(m) => m,
+        // Состояние без родителя: условия разрешить невозможно, возвращаем как есть
+        None => return Ok(references.to_vec()),
+    };
+
     let mut new_references = Vec::with_capacity(references.len());
     for reference in references {
         if let Condition::Unresolved(cond) = reference.cond.clone() {
@@ -24,41 +49,46 @@ fn resolve_references(
     Ok(new_references)
 }
 
-pub fn resolve_state_references(
-    state: &StateNode,
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<StateNode, Diagnostic> {
-    if let StateNode::Simple {
-        references,
-        name,
-        named_blocks,
-        kind,
-    } = state
-    {
-        Ok(StateNode::Simple {
+/// Разрешает условия всех `ref`-переходов состояния.
+///
+/// Использует [`StateNode::upper`] для получения контекста модели,
+/// что позволяет не передавать `model` как отдельный параметр.
+///
+/// Обрабатывает как [`StateNode::Simple`], так и [`StateNode::Implement`]
+/// (включая поле `next`). Для [`StateNode::Unresolved`] возвращает состояние
+/// без изменений.
+pub fn resolve_state_references(state: &StateNode) -> Result<StateNode, Diagnostic> {
+    match state {
+        StateNode::Simple {
+            upper,
+            references,
+            name,
+            named_blocks,
+            kind,
+        } => Ok(StateNode::Simple {
+            upper: upper.clone(),
             named_blocks: named_blocks.clone(),
             name: name.clone(),
-            references: resolve_references(references, model.clone())?,
+            references: resolve_references(references, state)?,
             kind: kind.clone(),
-        })
-    } else if let StateNode::Implement {
-        references,
-        name,
-        named_blocks,
-        implements,
-        next,
-        kind,
-    } = state
-    {
-        Ok(StateNode::Implement {
+        }),
+        StateNode::Implement {
+            upper,
+            references,
+            name,
+            named_blocks,
+            implements,
+            next,
+            kind,
+        } => Ok(StateNode::Implement {
+            upper: upper.clone(),
             named_blocks: named_blocks.clone(),
             name: name.clone(),
-            references: resolve_references(references, model.clone())?,
+            references: resolve_references(references, state)?,
             implements: implements.clone(),
             next: next.clone(),
             kind: kind.clone(),
-        })
-    } else {
-        Ok(state.clone())
+        }),
+        other => Ok(other.clone()),
     }
 }

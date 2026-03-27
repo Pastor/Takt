@@ -23,23 +23,23 @@ pub fn resolve_named_blocks(
             NamedCodeBlock::Unresolved(name, stmt) => {
                 let stmt = resolve_statement(&Statement::Unresolved(stmt), model.clone())?;
                 match name.as_str() {
-                    "enter" => NamedCodeBlock::Enter(stmt),
-                    "exit" => NamedCodeBlock::Exit(stmt),
-                    "always" => NamedCodeBlock::Always(stmt),
-                    name => NamedCodeBlock::Unknown(name.to_string(), stmt),
+                    "enter" => NamedCodeBlock::Enter { upper: None, body: stmt },
+                    "exit" => NamedCodeBlock::Exit { upper: None, body: stmt },
+                    "always" => NamedCodeBlock::Always { upper: None, body: stmt },
+                    name => NamedCodeBlock::Unknown { upper: None, name: name.to_string(), body: stmt },
                 }
             }
-            NamedCodeBlock::Enter(stmt) => {
-                NamedCodeBlock::Enter(resolve_statement(&stmt, model.clone())?)
+            NamedCodeBlock::Enter { upper, body } => {
+                NamedCodeBlock::Enter { upper, body: resolve_statement(&body, model.clone())? }
             }
-            NamedCodeBlock::Exit(stmt) => {
-                NamedCodeBlock::Exit(resolve_statement(&stmt, model.clone())?)
+            NamedCodeBlock::Exit { upper, body } => {
+                NamedCodeBlock::Exit { upper, body: resolve_statement(&body, model.clone())? }
             }
-            NamedCodeBlock::Always(stmt) => {
-                NamedCodeBlock::Always(resolve_statement(&stmt, model.clone())?)
+            NamedCodeBlock::Always { upper, body } => {
+                NamedCodeBlock::Always { upper, body: resolve_statement(&body, model.clone())? }
             }
-            NamedCodeBlock::Unknown(name, stmt) => {
-                NamedCodeBlock::Unknown(name.clone(), resolve_statement(&stmt, model.clone())?)
+            NamedCodeBlock::Unknown { upper, name, body } => {
+                NamedCodeBlock::Unknown { upper, name: name.clone(), body: resolve_statement(&body, model.clone())? }
             }
         };
         blocks.push(block);
@@ -84,14 +84,14 @@ mod tests {
     ///
     /// # Пример
     /// ```text
-    /// NamedCodeBlock::Unresolved("enter", stmt) → Enter(resolved_stmt)
+    /// NamedCodeBlock::Unresolved("enter", stmt) → Enter { body: resolved_stmt, .. }
     /// ```
     #[test]
     fn unresolved_enter_resolves_to_enter() {
         let nb = NamedCodeBlock::Unresolved("enter".into(), noop_stmt());
         let result = resolve_named_blocks(vec![nb], empty_model()).unwrap();
         assert!(
-            matches!(result[0], NamedCodeBlock::Enter(_)),
+            matches!(result[0], NamedCodeBlock::Enter { .. }),
             "ожидался Enter, получен {:?}",
             result[0]
         );
@@ -102,7 +102,7 @@ mod tests {
     fn unresolved_exit_resolves_to_exit() {
         let nb = NamedCodeBlock::Unresolved("exit".into(), noop_stmt());
         let result = resolve_named_blocks(vec![nb], empty_model()).unwrap();
-        assert!(matches!(result[0], NamedCodeBlock::Exit(_)));
+        assert!(matches!(result[0], NamedCodeBlock::Exit { .. }));
     }
 
     /// `Unresolved("always", ...)` → `NamedCodeBlock::Always`.
@@ -110,10 +110,10 @@ mod tests {
     fn unresolved_always_resolves_to_always() {
         let nb = NamedCodeBlock::Unresolved("always".into(), noop_stmt());
         let result = resolve_named_blocks(vec![nb], empty_model()).unwrap();
-        assert!(matches!(result[0], NamedCodeBlock::Always(_)));
+        assert!(matches!(result[0], NamedCodeBlock::Always { .. }));
     }
 
-    /// `Unresolved("custom", ...)` → `NamedCodeBlock::Unknown("custom", ...)`.
+    /// `Unresolved("custom", ...)` → `NamedCodeBlock::Unknown { name: "custom", .. }`.
     ///
     /// Пользовательские именованные блоки сохраняются как `Unknown`.
     #[test]
@@ -121,46 +121,50 @@ mod tests {
         let nb = NamedCodeBlock::Unresolved("custom".into(), noop_stmt());
         let result = resolve_named_blocks(vec![nb], empty_model()).unwrap();
         assert!(
-            matches!(&result[0], NamedCodeBlock::Unknown(n, _) if n == "custom"),
-            "ожидался Unknown(custom), получен {:?}",
+            matches!(&result[0], NamedCodeBlock::Unknown { name, .. } if name == "custom"),
+            "ожидался Unknown {{ custom }}, получен {:?}",
             result[0]
         );
     }
 
     // ── Уже разрешённые блоки ─────────────────────────────────────────────────
 
-    /// Уже разрешённый `Enter(Unresolved(...))` ещё раз разрешается.
+    /// Уже разрешённый `Enter { body: Unresolved(..) }` ещё раз разрешается.
     #[test]
     fn already_enter_re_resolves() {
         let stmt = Statement::Unresolved(noop_stmt());
-        let nb = NamedCodeBlock::Enter(stmt);
+        let nb = NamedCodeBlock::Enter { upper: None, body: stmt };
         let result = resolve_named_blocks(vec![nb], empty_model()).unwrap();
-        assert!(matches!(result[0], NamedCodeBlock::Enter(_)));
+        assert!(matches!(result[0], NamedCodeBlock::Enter { .. }));
     }
 
     /// Уже разрешённый `Exit` ещё раз разрешается.
     #[test]
     fn already_exit_re_resolves() {
-        let nb = NamedCodeBlock::Exit(Statement::Unresolved(noop_stmt()));
+        let nb = NamedCodeBlock::Exit { upper: None, body: Statement::Unresolved(noop_stmt()) };
         let result = resolve_named_blocks(vec![nb], empty_model()).unwrap();
-        assert!(matches!(result[0], NamedCodeBlock::Exit(_)));
+        assert!(matches!(result[0], NamedCodeBlock::Exit { .. }));
     }
 
     /// Уже разрешённый `Always` ещё раз разрешается.
     #[test]
     fn already_always_re_resolves() {
-        let nb = NamedCodeBlock::Always(Statement::Unresolved(noop_stmt()));
+        let nb = NamedCodeBlock::Always { upper: None, body: Statement::Unresolved(noop_stmt()) };
         let result = resolve_named_blocks(vec![nb], empty_model()).unwrap();
-        assert!(matches!(result[0], NamedCodeBlock::Always(_)));
+        assert!(matches!(result[0], NamedCodeBlock::Always { .. }));
     }
 
     /// Уже разрешённый `Unknown` ещё раз разрешается, имя сохраняется.
     #[test]
     fn already_unknown_re_resolves() {
-        let nb = NamedCodeBlock::Unknown("tick".into(), Statement::Unresolved(noop_stmt()));
+        let nb = NamedCodeBlock::Unknown {
+            upper: None,
+            name: "tick".into(),
+            body: Statement::Unresolved(noop_stmt()),
+        };
         let result = resolve_named_blocks(vec![nb], empty_model()).unwrap();
         assert!(
-            matches!(&result[0], NamedCodeBlock::Unknown(n, _) if n == "tick"),
+            matches!(&result[0], NamedCodeBlock::Unknown { name, .. } if name == "tick"),
             "ожидался Unknown(tick)"
         );
     }
@@ -175,8 +179,8 @@ mod tests {
         ];
         let result = resolve_named_blocks(blocks, empty_model()).unwrap();
         assert_eq!(result.len(), 3);
-        assert!(matches!(result[0], NamedCodeBlock::Enter(_)));
-        assert!(matches!(result[1], NamedCodeBlock::Exit(_)));
-        assert!(matches!(result[2], NamedCodeBlock::Always(_)));
+        assert!(matches!(result[0], NamedCodeBlock::Enter { .. }));
+        assert!(matches!(result[1], NamedCodeBlock::Exit { .. }));
+        assert!(matches!(result[2], NamedCodeBlock::Always { .. }));
     }
 }

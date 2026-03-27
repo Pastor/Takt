@@ -101,7 +101,7 @@ fn search_var_finds_const() {
         "Константа C должна быть найдена"
     );
     assert!(
-        matches!(node.search_var("C").unwrap(), VariableNode::Const(..)),
+        matches!(node.search_var("C").unwrap(), VariableNode::Const { .. }),
         "C должна быть VariableNode::Const"
     );
 }
@@ -112,7 +112,7 @@ fn search_var_finds_port() {
     let node = build("type u8 = [bit;8]; port P: u8 = 0x00100000;");
     assert!(node.search_var("P").is_some(), "Порт P должен быть найден");
     assert!(
-        matches!(node.search_var("P").unwrap(), VariableNode::Port(..)),
+        matches!(node.search_var("P").unwrap(), VariableNode::Port { .. }),
         "P должна быть VariableNode::Port"
     );
 }
@@ -123,7 +123,7 @@ fn search_var_finds_port() {
 #[test]
 fn type_bit_resolves_to_type_node_bit() {
     let node = build("var x: bit = false;");
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(ty, TypeNode::Bit, "bit должен разрешаться в TypeNode::Bit");
     } else {
         panic!("переменная x не найдена или не является Simple");
@@ -134,7 +134,7 @@ fn type_bit_resolves_to_type_node_bit() {
 #[test]
 fn type_array_resolves_correctly() {
     let node = build("var x: [bit;8] = 0;");
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
             TypeNode::Array(8, Box::new(TypeNode::Bit)),
@@ -149,7 +149,7 @@ fn type_array_resolves_correctly() {
 #[test]
 fn type_alias_resolves_through_map() {
     let node = build("type u8 = [bit;8]; var x: u8 = 0;");
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
             TypeNode::Array(8, Box::new(TypeNode::Bit)),
@@ -164,7 +164,7 @@ fn type_alias_resolves_through_map() {
 #[test]
 fn type_alias_bool_resolves_to_bit() {
     let node = build("var flag: bool = false;");
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("flag") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("flag") {
         assert_eq!(ty, TypeNode::Bool);
     } else {
         panic!("переменная flag не найдена");
@@ -175,7 +175,7 @@ fn type_alias_bool_resolves_to_bit() {
 #[test]
 fn type_alias_float_resolves_to_rational() {
     let node = build("var r: float = 0;");
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("r") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("r") {
         assert_eq!(ty, TypeNode::Rational);
     } else {
         panic!("переменная r не найдена");
@@ -660,7 +660,7 @@ fn parent_does_not_see_nested_variable() {
 #[test]
 fn type_nested_array_resolves() {
     let node = build("var x: [[bit;4];2] = 0;");
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
             TypeNode::Array(2, Box::new(TypeNode::Array(4, Box::new(TypeNode::Bit)))),
@@ -676,7 +676,7 @@ fn type_nested_array_resolves() {
 fn type_alias_inside_array_resolves() {
     // u4 = [bit;4], затем var x: [u4; 3]
     let node = build("type u4 = [bit;4]; var x: [u4;3] = 0;");
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
             TypeNode::Array(3, Box::new(TypeNode::Array(4, Box::new(TypeNode::Bit)))),
@@ -1353,21 +1353,21 @@ fn example_bit_out_of_range_is_error() {
 fn example_type_inference_numbers_is_valid() {
     let node = build_file("tests/data/sematic/valid/type_inference_numbers.but").unwrap();
     // 8-битные
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("a") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("a") {
         assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)), "a=0 → [bit;8]");
     }
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("c") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("c") {
         assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)), "c=255 → [bit;8]");
     }
     // 16-битные
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("d") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("d") {
         assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)), "d=256 → [bit;16]");
     }
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("f") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("f") {
         assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)), "f=65535 → [bit;16]");
     }
     // 32-битные
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("g") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("g") {
         assert_eq!(ty, TypeNode::Array(32, Box::new(TypeNode::Bit)), "g=65536 → [bit;32]");
     }
 }
@@ -1381,18 +1381,18 @@ fn example_type_inference_numbers_is_valid() {
 fn example_type_inference_bool_is_valid() {
     let node = build_file("tests/data/sematic/valid/type_inference_bool.but").unwrap();
     // Вывод из литерала
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("flag") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("flag") {
         assert_eq!(ty, TypeNode::Bool, "flag=true → Bool");
     }
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("done") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("done") {
         assert_eq!(ty, TypeNode::Bool, "done=false → Bool");
     }
     // Явная аннотация bool
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("ready") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("ready") {
         assert_eq!(ty, TypeNode::Bool, "ready: bool → Bool");
     }
     // Явная аннотация bit
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("signal") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("signal") {
         assert_eq!(ty, TypeNode::Bit, "signal: bit → Bit");
     }
 }
@@ -1414,12 +1414,12 @@ fn example_functions_is_valid() {
 #[test]
 fn example_bool_type_is_valid() {
     let node = build_file("tests/data/sematic/valid/bool_type.but").unwrap();
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("ready") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("ready") {
         assert_eq!(ty, TypeNode::Bool, "ready: bool → TypeNode::Bool");
     } else {
         panic!("переменная ready не найдена");
     }
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("inferred_true") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("inferred_true") {
         assert_eq!(ty, TypeNode::Bool, "inferred_true = true → TypeNode::Bool");
     } else {
         panic!("переменная inferred_true не найдена");
@@ -1434,13 +1434,13 @@ fn example_integer_types_is_valid() {
     assert!(node.types.contains_key("u16"), "тип u16 должен быть объявлен");
     assert!(node.types.contains_key("u32"), "тип u32 должен быть объявлен");
     // Проверяем вывод типа из числовых литералов
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("small") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("small") {
         assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)), "small=42 → [bit;8]");
     }
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("medium") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("medium") {
         assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)), "medium=300 → [bit;16]");
     }
-    if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("large") {
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("large") {
         assert_eq!(ty, TypeNode::Array(32, Box::new(TypeNode::Bit)), "large=70000 → [bit;32]");
     }
 }
@@ -2212,5 +2212,362 @@ fn se11_warning_contains_source_state_name() {
         warnings[0].message.contains("SourceState"),
         "предупреждение должно упоминать состояние-источник: {}",
         warnings[0].message
+    );
+}
+
+// ─── Тесты разыменования condition в ref-переходах (этап 6 конвейера) ───────
+
+/// Условие ref с bit-переменной разрешается в `Condition::Variable`, не в `Condition::Unresolved`.
+///
+/// # Пример (BuT)
+/// ```but
+/// var flag: bit = false;
+/// start A { ref B: flag; }
+/// state B;
+/// ```
+#[test]
+fn ref_cond_bit_var_is_resolved() {
+    use grammar::semantic::Condition;
+    let src = "var flag: bit = false; start A { ref B: flag; } state B;";
+    let node = build(src);
+    let state_a = &node.states["A"];
+    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+        assert_eq!(references.len(), 1);
+        assert!(
+            matches!(references[0].cond, Condition::Variable(_)),
+            "условие должно быть разрешено в Variable, получено: {:?}",
+            references[0].cond
+        );
+    } else {
+        panic!("ожидался StateNode::Simple для A");
+    }
+}
+
+/// Условие ref с bool-переменной разрешается в `Condition::Variable`.
+///
+/// # Пример (BuT)
+/// ```but
+/// var done: bool = false;
+/// start A { ref B: done; }
+/// state B;
+/// ```
+#[test]
+fn ref_cond_bool_var_is_resolved() {
+    use grammar::semantic::Condition;
+    let src = "var done: bool = false; start A { ref B: done; } state B;";
+    let node = build(src);
+    let state_a = &node.states["A"];
+    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+        assert!(
+            matches!(references[0].cond, Condition::Variable(_)),
+            "условие должно быть разрешено в Variable"
+        );
+    } else {
+        panic!("ожидался StateNode::Simple для A");
+    }
+}
+
+/// Именованное условие (`cond`) в ref разрешается до его значения (не `Unresolved`).
+///
+/// # Пример (BuT)
+/// ```but
+/// var x: [bit;8] = 0;
+/// cond full = x = 255;
+/// start A { ref B: full; }
+/// state B;
+/// ```
+#[test]
+fn ref_cond_named_cond_is_resolved() {
+    use grammar::semantic::Condition;
+    let src = "var x: [bit;8] = 0; cond full = x = 255; start A { ref B: full; } state B;";
+    let node = build(src);
+    let state_a = &node.states["A"];
+    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+        assert_eq!(references.len(), 1);
+        // Именованное условие раскрывается до значения (Equal или аналог)
+        assert!(
+            !matches!(references[0].cond, Condition::Unresolved(_)),
+            "условие не должно оставаться Unresolved после этапа 6"
+        );
+    } else {
+        panic!("ожидался StateNode::Simple для A");
+    }
+}
+
+/// Безусловный переход (`ref B`) оставляет `Condition::None`.
+///
+/// # Пример (BuT)
+/// ```but
+/// start A { ref B; }
+/// state B;
+/// ```
+#[test]
+fn ref_no_cond_is_none() {
+    use grammar::semantic::Condition;
+    let src = "start A { ref B; } state B;";
+    let node = build(src);
+    let state_a = &node.states["A"];
+    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+        assert_eq!(references.len(), 1);
+        assert_eq!(references[0].cond, Condition::None);
+    } else {
+        panic!("ожидался StateNode::Simple для A");
+    }
+}
+
+/// Булев литерал `true` в ref разрешается в `Condition::Bool(true)`.
+///
+/// # Пример (BuT)
+/// ```but
+/// start A { ref B: true; }
+/// state B;
+/// ```
+#[test]
+fn ref_cond_bool_literal_is_resolved() {
+    use grammar::semantic::Condition;
+    let src = "start A { ref B: true; } state B;";
+    let node = build(src);
+    let state_a = &node.states["A"];
+    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+        assert_eq!(references[0].cond, Condition::Bool(true));
+    } else {
+        panic!("ожидался StateNode::Simple для A");
+    }
+}
+
+/// Сравнение в ref разрешается в `Condition::Equal`.
+///
+/// # Пример (BuT)
+/// ```but
+/// var x: [bit;8] = 0;
+/// start A { ref B: x = 255; }
+/// state B;
+/// ```
+#[test]
+fn ref_cond_comparison_is_resolved() {
+    use grammar::semantic::Condition;
+    let src = "var x: [bit;8] = 0; start A { ref B: x = 255; } state B;";
+    let node = build(src);
+    let state_a = &node.states["A"];
+    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+        assert!(
+            matches!(references[0].cond, Condition::Equal(_, _)),
+            "ожидалось Condition::Equal, получено {:?}",
+            references[0].cond
+        );
+    } else {
+        panic!("ожидался StateNode::Simple");
+    }
+}
+
+/// Контрпример: арифметика в ref-условии даёт предупреждение «арифметическое вычитание».
+///
+/// # Контрпример (BuT)
+/// ```but
+/// var x: [bit;8] = 0;
+/// start A { ref B: x - 1; }
+/// state B;
+/// ```
+#[test]
+fn se11_subtract_in_ref_gives_warning() {
+    let src = "var x: [bit;8] = 0; start A { ref B: x - 1; } state B;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(warnings.len(), 1, "вычитание должно давать предупреждение");
+    assert!(
+        warnings[0].message.contains("вычитание"),
+        "сообщение должно упоминать вычитание: {}",
+        warnings[0].message
+    );
+}
+
+/// Контрпример: побитовое И в ref-условии даёт предупреждение «побитовое И».
+///
+/// # Контрпример (BuT)
+/// ```but
+/// var x: [bit;8] = 0;
+/// start A { ref B: x & 1; }
+/// state B;
+/// ```
+#[test]
+fn se11_bitwise_and_in_ref_gives_warning() {
+    let src = "var x: [bit;8] = 0; start A { ref B: x & 1; } state B;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(warnings.len(), 1, "побитовое И должно давать предупреждение");
+    assert!(
+        warnings[0].message.contains("побитовое И"),
+        "сообщение должно упоминать тип операции: {}",
+        warnings[0].message
+    );
+}
+
+/// Контрпример: числовой литерал в ref-условии даёт предупреждение с указанием числа.
+///
+/// # Контрпример (BuT)
+/// ```but
+/// start A { ref B: 42; }
+/// state B;
+/// ```
+#[test]
+fn se11_resolved_number_literal_in_ref_has_value_in_message() {
+    let src = "start A { ref B: 42; } state B;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(warnings.len(), 1, "числовой литерал должен давать предупреждение");
+    assert!(
+        warnings[0].message.contains("42"),
+        "сообщение должно упоминать значение: {}",
+        warnings[0].message
+    );
+}
+
+/// Пример файла с разрешёнными условиями — без ошибок и предупреждений.
+#[test]
+fn ref_cond_resolved_file_is_valid() {
+    let src = std::fs::read_to_string(
+        "tests/data/sematic/valid/ref_cond_resolved.but",
+    )
+    .expect("не удалось прочитать файл");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения семантики");
+    let warnings = implicit_bool_warnings(&root);
+    assert!(
+        warnings.is_empty(),
+        "файл с разрешёнными условиями не должен давать предупреждений: {:?}",
+        warnings
+    );
+}
+
+/// Контрпример файла с арифметическим условием — одно предупреждение Се11.
+#[test]
+fn ref_cond_arithmetic_file_gives_warning() {
+    let src = std::fs::read_to_string(
+        "tests/data/sematic/valid/ref_cond_arithmetic.but",
+    )
+    .expect("не удалось прочитать файл");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения семантики");
+    let warnings = implicit_bool_warnings(&root);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "арифметический файл должен давать ровно одно предупреждение"
+    );
+    assert!(
+        warnings[0].message.contains("сложение"),
+        "сообщение должно упоминать тип операции: {}",
+        warnings[0].message
+    );
+}
+
+// ─── Тесты родительских ссылок (требование 3) ────────────────────────────────
+
+/// Переменная хранит ссылку на родительскую модель (`upper`).
+///
+/// # Пример (BuT)
+/// ```but
+/// var flag: bit = false;
+/// ```
+#[test]
+fn variable_node_has_parent_upper() {
+    use grammar::semantic::VariableNode;
+    let node = build("var flag: bit = false;");
+    let var = node.search_var("flag").expect("переменная flag не найдена");
+    let upper = var.upper();
+    assert!(
+        upper.is_some(),
+        "переменная должна иметь ссылку на родительскую модель"
+    );
+}
+
+/// Константа хранит ссылку на родительскую модель.
+#[test]
+fn const_node_has_parent_upper() {
+    use grammar::semantic::VariableNode;
+    let node = build("type u8 = [bit;8]; const C: u8 = 0;");
+    let var = node.search_var("C").expect("константа C не найдена");
+    assert!(
+        var.upper().is_some(),
+        "константа должна иметь ссылку на родительскую модель"
+    );
+}
+
+/// Именованное условие хранит ссылку на родительскую модель.
+///
+/// # Пример (BuT)
+/// ```but
+/// cond done = true;
+/// ```
+#[test]
+fn condition_node_has_parent_upper() {
+    let node = build("cond done = true;");
+    let cond = node.conditions.get("done").expect("условие done не найдено");
+    assert!(
+        cond.upper.is_some(),
+        "именованное условие должно иметь ссылку на родительскую модель"
+    );
+}
+
+/// Вложенная переменная ссылается на свою (вложенную) модель, не на корень.
+///
+/// # Пример (BuT)
+/// ```but
+/// model Inner { var x: bit = false; start S; }
+/// ```
+#[test]
+fn nested_variable_upper_points_to_inner_model() {
+    use grammar::semantic::VariableNode;
+    let (ast, _) = parse("model Inner { var x: bit = false; start S; }", 0).unwrap();
+    let root = construct_model(&ast, None, &[]).unwrap();
+    let inner = root.borrow().search_model("Inner").expect("Inner не найдена");
+    let var = inner.borrow().search_var("x").expect("переменная x не найдена");
+    let upper = var.upper().expect("переменная должна иметь upper");
+    // upper должен ссылаться на Inner, а не на корневую модель
+    assert_eq!(
+        upper.borrow().name,
+        Some("Inner".to_string()),
+        "upper переменной должен указывать на модель Inner"
+    );
+}
+
+/// Метод `upper()` у VariableNode::Unresolved возвращает None.
+#[test]
+fn unresolved_variable_upper_is_none() {
+    use grammar::semantic::VariableNode;
+    let unresolved = VariableNode::Unresolved;
+    assert!(unresolved.upper().is_none());
+}
+
+/// Вспомогательные методы `name()` и `ty()` у VariableNode работают корректно.
+#[test]
+fn variable_node_name_and_ty_methods() {
+    use grammar::semantic::{TypeNode, VariableNode};
+    let node = build("var flag: bit = false;");
+    let var = node.search_var("flag").expect("flag не найдена");
+    assert_eq!(var.name(), "flag");
+    assert_eq!(*var.ty(), TypeNode::Bit);
+}
+
+/// Переменная через `upper()` позволяет найти другие переменные той же модели.
+///
+/// Демонстрирует, что `upper` действительно предоставляет доступ к контексту.
+/// Используем `Rc<RefCell<ModelNode>>` напрямую (без `.take()`), чтобы `upper`
+/// внутри переменных ссылался на живой узел модели.
+#[test]
+fn variable_upper_gives_access_to_sibling_vars() {
+    use grammar::semantic::VariableNode;
+    let (ast, _) = parse("var a: bit = false; var b: bit = false;", 0)
+        .expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let var_a = root.borrow().search_var("a").expect("a не найдена");
+    let upper = var_a.upper().expect("upper должен быть Some");
+    // Через upper можно найти переменную b
+    assert!(
+        upper.borrow().search_var("b").is_some(),
+        "через upper переменной a должна быть доступна переменная b"
     );
 }

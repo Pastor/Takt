@@ -1,0 +1,27 @@
+/// Пример: условия в ref-переходах разрешаются до семантических узлов.
+///
+/// После этапа 6 конвейера все условия `Condition::Unresolved` заменяются
+/// разрешёнными аналогами (Variable, Bool, Equal и т.д.).
+///
+/// Проверяет:
+/// 1. Переменная типа `bit` в ref-условии → `Condition::Variable`.
+/// 2. Именованное условие (`cond`) → разрешённое значение.
+/// 3. Булев литерал → `Condition::Bool`.
+/// 4. Сравнение → `Condition::Equal`.
+
+var flag: bit = false;
+var counter: [bit;8] = 0;
+cond done = counter = 255;
+
+start Idle {
+    /// Переход по переменной-флагу (bit).
+    ref Active: flag;
+}
+
+state Active {
+    /// Переход по именованному условию.
+    ref Done: done;
+}
+
+/// Конечное состояние (нет исходящих ref).
+state Done;

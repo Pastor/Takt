@@ -39,18 +39,28 @@ pub fn type_inference(
 ) -> Result<HashMap<String, VariableNode>, Diagnostic> {
     for (name, var) in variables.clone() {
         match var {
-            VariableNode::Simple(_, TypeNode::Inference, ref expr) => {
+            VariableNode::Simple { upper, ty: TypeNode::Inference, ref expr, .. } => {
                 let typ = extract_type(expr, model.clone())?;
                 variables.insert(
                     name.clone(),
-                    VariableNode::Simple(name.clone(), typ, expr.clone()),
+                    VariableNode::Simple {
+                        upper,
+                        name: name.clone(),
+                        ty: typ,
+                        expr: expr.clone(),
+                    },
                 );
             }
-            VariableNode::Const(_, TypeNode::Inference, ref expr) => {
+            VariableNode::Const { upper, ty: TypeNode::Inference, ref expr, .. } => {
                 let typ = extract_type(expr, model.clone())?;
                 variables.insert(
                     name.clone(),
-                    VariableNode::Const(name.clone(), typ, expr.clone()),
+                    VariableNode::Const {
+                        upper,
+                        name: name.clone(),
+                        ty: typ,
+                        expr: expr.clone(),
+                    },
                 );
             }
             _ => {}
@@ -65,9 +75,9 @@ pub fn type_inference(
 #[inline]
 fn type_of_var(var: &VariableNode) -> TypeNode {
     match var {
-        VariableNode::Simple(_, ty, _) => ty.clone(),
-        VariableNode::Port(_, ty, _) => ty.clone(),
-        VariableNode::Const(_, ty, _) => ty.clone(),
+        VariableNode::Simple { ty, .. }
+        | VariableNode::Port { ty, .. }
+        | VariableNode::Const { ty, .. } => ty.clone(),
         VariableNode::Unresolved => TypeNode::Inference,
     }
 }
@@ -435,7 +445,7 @@ mod tests {
     #[test]
     fn infer_bool_initializer() {
         let node = build("var x = false;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Bool);
         } else {
             panic!("переменная x не найдена");
@@ -446,7 +456,7 @@ mod tests {
     #[test]
     fn infer_rational_initializer() {
         let node = build("var x = 3.14;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Rational);
         } else {
             panic!("переменная x не найдена");
@@ -457,7 +467,7 @@ mod tests {
     #[test]
     fn infer_const_bool() {
         let node = build("const C = false;").unwrap();
-        if let Some(VariableNode::Const(_, ty, _)) = node.search_var("C") {
+        if let Some(VariableNode::Const { ty, .. }) = node.search_var("C") {
             assert_eq!(ty, TypeNode::Bool);
         } else {
             panic!("константа C не найдена");
@@ -468,7 +478,7 @@ mod tests {
     #[test]
     fn explicit_type_not_overwritten() {
         let node = build("var x: [bit;8] = false;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)));
         } else {
             panic!("переменная x не найдена");
@@ -479,7 +489,7 @@ mod tests {
     #[test]
     fn infer_type_from_variable() {
         let node = build("var b: bit = false; var a = b;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("a") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("a") {
             assert_eq!(ty, TypeNode::Bit);
         } else {
             panic!("переменная a не найдена");
@@ -490,7 +500,7 @@ mod tests {
     #[test]
     fn infer_type_from_add_numbers() {
         let node = build("var x = 1 + 2;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)));
         } else {
             panic!("переменная x не найдена");
@@ -738,7 +748,7 @@ mod tests {
     #[test]
     fn infer_type_from_add_rational() {
         let node = build("var x = 1 + 3.14;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Rational);
         } else {
             panic!("переменная x не найдена");
@@ -749,7 +759,7 @@ mod tests {
     #[test]
     fn infer_const_number() {
         let node = build("const C = 1;").unwrap();
-        if let Some(VariableNode::Const(_, ty, _)) = node.search_var("C") {
+        if let Some(VariableNode::Const { ty, .. }) = node.search_var("C") {
             assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)));
         } else {
             panic!("константа C не найдена");
@@ -760,7 +770,7 @@ mod tests {
     #[test]
     fn infer_const_number_42_is_array8() {
         let node = build("const C = 42;").unwrap();
-        if let Some(VariableNode::Const(_, ty, _)) = node.search_var("C") {
+        if let Some(VariableNode::Const { ty, .. }) = node.search_var("C") {
             assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)));
         } else {
             panic!("константа C не найдена");
@@ -880,7 +890,7 @@ mod tests {
     #[test]
     fn infer_number_256_is_array16() {
         let node = build("var x = 256;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)));
         } else {
             panic!("переменная x не найдена");
@@ -891,7 +901,7 @@ mod tests {
     #[test]
     fn infer_number_65536_is_array32() {
         let node = build("var x = 65536;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Array(32, Box::new(TypeNode::Bit)));
         } else {
             panic!("переменная x не найдена");

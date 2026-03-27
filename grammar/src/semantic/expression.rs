@@ -319,9 +319,9 @@ fn resolve_bin(
 #[inline]
 fn var_type(var: &VariableNode) -> TypeNode {
     match var {
-        VariableNode::Simple(_, ty, _)
-        | VariableNode::Port(_, ty, _)
-        | VariableNode::Const(_, ty, _) => ty.clone(),
+        VariableNode::Simple { ty, .. }
+        | VariableNode::Port { ty, .. }
+        | VariableNode::Const { ty, .. } => ty.clone(),
         VariableNode::Unresolved => TypeNode::Inference,
     }
 }
@@ -410,9 +410,9 @@ mod tests {
     /// Возвращает разрешённый инициализатор переменной `name`.
     fn var_expr(node: &ModelNode, name: &str) -> Expression {
         match node.search_var(name).expect("переменная не найдена") {
-            VariableNode::Simple(_, _, expr)
-            | VariableNode::Const(_, _, expr)
-            | VariableNode::Port(_, _, expr) => expr,
+            VariableNode::Simple { expr, .. }
+            | VariableNode::Const { expr, .. }
+            | VariableNode::Port { expr, .. } => expr,
             VariableNode::Unresolved => panic!("переменная неразрешена"),
         }
     }
@@ -617,7 +617,7 @@ mod tests {
     #[test]
     fn type_inference_bool_literal() {
         let node = build("var flag = false;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("flag") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("flag") {
             assert_eq!(
                 ty,
                 TypeNode::Bool,
@@ -632,7 +632,7 @@ mod tests {
     #[test]
     fn type_inference_rational_literal() {
         let node = build("var r = 3.14;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("r") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("r") {
             assert_eq!(
                 ty,
                 TypeNode::Rational,
@@ -647,7 +647,7 @@ mod tests {
     #[test]
     fn type_inference_const_bool() {
         let node = build("const C = false;").unwrap();
-        if let Some(VariableNode::Const(_, ty, _)) = node.search_var("C") {
+        if let Some(VariableNode::Const { ty, .. }) = node.search_var("C") {
             assert_eq!(ty, TypeNode::Bool, "тип константы должен выводиться как Bool");
         } else {
             panic!("константа C не найдена");
@@ -658,7 +658,7 @@ mod tests {
     #[test]
     fn type_inference_from_variable() {
         let node = build("var b: bit = false; var a = b;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("a") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("a") {
             assert_eq!(ty, TypeNode::Bit, "тип a должен выводиться из типа b = Bit");
         } else {
             panic!("переменная a не найдена");
@@ -749,7 +749,12 @@ mod tests {
     #[test]
     fn var_type_simple() {
         use crate::semantic::VariableNode;
-        let v = VariableNode::Simple("x".into(), TypeNode::Bit, Expression::None);
+        let v = VariableNode::Simple {
+            upper: None,
+            name: "x".into(),
+            ty: TypeNode::Bit,
+            expr: Expression::None,
+        };
         assert_eq!(var_type(&v), TypeNode::Bit);
     }
 
@@ -813,7 +818,7 @@ mod tests {
     #[test]
     fn type_inference_number_literal() {
         let node = build("var x = 100;").unwrap();
-        if let Some(VariableNode::Simple(_, ty, _)) = node.search_var("x") {
+        if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(
                 ty,
                 TypeNode::Array(8, Box::new(TypeNode::Bit)),
@@ -1186,14 +1191,24 @@ mod tests {
     /// `var_type` для Port-переменной возвращает правильный тип.
     #[test]
     fn var_type_port() {
-        let v = VariableNode::Port("p".into(), TypeNode::Bit, Expression::None);
+        let v = VariableNode::Port {
+            upper: None,
+            name: "p".into(),
+            ty: TypeNode::Bit,
+            expr: Expression::None,
+        };
         assert_eq!(var_type(&v), TypeNode::Bit);
     }
 
     /// `var_type` для Const-переменной возвращает правильный тип.
     #[test]
     fn var_type_const() {
-        let v = VariableNode::Const("c".into(), TypeNode::Bool, Expression::None);
+        let v = VariableNode::Const {
+            upper: None,
+            name: "c".into(),
+            ty: TypeNode::Bool,
+            expr: Expression::None,
+        };
         assert_eq!(var_type(&v), TypeNode::Bool);
     }
 

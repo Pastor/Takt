@@ -117,9 +117,9 @@ fn validate_bit_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> 
     let borrowed = model.borrow();
     for var in borrowed.variables.values() {
         match var {
-            VariableNode::Simple(name, ty, expr)
-            | VariableNode::Const(name, ty, expr)
-            | VariableNode::Port(name, ty, expr) => {
+            VariableNode::Simple { name, ty, expr, .. }
+            | VariableNode::Const { name, ty, expr, .. }
+            | VariableNode::Port { name, ty, expr, .. } => {
                 check_bit_variable_value(name, ty, expr)?;
             }
             VariableNode::Unresolved => {}
@@ -329,13 +329,9 @@ fn validate_variables(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     for variable in borrowed.variables.values() {
         match variable {
             VariableNode::Unresolved => {}
-            VariableNode::Simple(_, _, expr) => {
-                validate_expression(expr, model.clone())?;
-            }
-            VariableNode::Port(_, _, expr) => {
-                validate_expression(expr, model.clone())?;
-            }
-            VariableNode::Const(_, _, expr) => {
+            VariableNode::Simple { expr, .. }
+            | VariableNode::Port { expr, .. }
+            | VariableNode::Const { expr, .. } => {
                 validate_expression(expr, model.clone())?;
             }
         }
@@ -406,9 +402,9 @@ pub(crate) fn is_boolean_ast_condition(
             // Переменная типа bool или bit — допустимо
             if let Some(var) = borrowed.search_var(&id.name) {
                 return match &var {
-                    VariableNode::Simple(_, ty, _)
-                    | VariableNode::Port(_, ty, _)
-                    | VariableNode::Const(_, ty, _) => matches!(ty, TypeNode::Bool | TypeNode::Bit),
+                    VariableNode::Simple { ty, .. }
+                    | VariableNode::Port { ty, .. }
+                    | VariableNode::Const { ty, .. } => matches!(ty, TypeNode::Bool | TypeNode::Bit),
                     // Тип не разрешён — не предупреждаем
                     VariableNode::Unresolved => true,
                 };
@@ -459,9 +455,9 @@ pub(crate) fn ast_condition_summary(
                 .borrow()
                 .search_var(&id.name)
                 .map(|var| match var {
-                    VariableNode::Simple(_, ty, _)
-                    | VariableNode::Port(_, ty, _)
-                    | VariableNode::Const(_, ty, _) => format!("{:?}", ty),
+                    VariableNode::Simple { ty, .. }
+                    | VariableNode::Port { ty, .. }
+                    | VariableNode::Const { ty, .. } => format!("{:?}", ty),
                     VariableNode::Unresolved => "?".to_string(),
                 })
                 .unwrap_or_else(|| "?".to_string());
@@ -500,14 +496,102 @@ fn emit_implicit_bool_warning(
     ));
 }
 
-/// Проверяет условие одного перехода и при необходимости добавляет предупреждение.
+/// Проверяет, является ли разрешённое семантическое условие гарантированно булевым.
 ///
-/// Обрабатывает как полностью разрешённые семантические условия (маловероятно
-/// для рёбер `ref` в текущем конвейере), так и неразрешённые
-/// ([`Condition::Unresolved`]), содержащие «сырой» [`ast_types::Condition`].
+/// Применяется для условий на рёбрах `ref`, разрешённых на этапе 6 конвейера.
+///
+/// ## Правила классификации
+///
+/// | Условие                                          | Результат  |
+/// |--------------------------------------------------|------------|
+/// | Безусловный переход (`None`)                     | булево     |
+/// | Булев литерал (`true`, `false`)                  | булево     |
+/// | Операции сравнения (`=`, `!=`, `<`, `>`, …)     | булево     |
+/// | Логическое НЕ (`!x`)                             | булево     |
+/// | Скобки (`(…)`)                                   | рекурсия   |
+/// | Вызов функции — тип возврата неизвестен          | булево     |
+/// | Переменная типа `bool` или `bit`                 | булево     |
+/// | Переменная числового типа (`[bit;N]`)            | числовое   |
+/// | Числовой / вещественный / строковый литерал      | числовое   |
+/// | Арифметика (`+`, `-`)                            | числовое   |
+/// | Побитовые операции (`&`, `\|`)                   | числовое   |
+/// | Элемент массива (`arr[n]`)                       | числовое   |
+/// | Доступ к битовому полю (`.n`)                    | числовое   |
+fn is_boolean_semantic_condition(cond: &Condition) -> bool {
+    match cond {
+        Condition::None => true,
+        Condition::Bool(_) => true,
+        Condition::Equal(_, _)
+        | Condition::NotEqual(_, _)
+        | Condition::Less(_, _)
+        | Condition::More(_, _)
+        | Condition::LessEqual(_, _)
+        | Condition::MoreEqual(_, _) => true,
+        Condition::Not(_) => true,
+        Condition::Parenthesis(inner) => is_boolean_semantic_condition(inner),
+        // Тип возврата функции неизвестен — не предупреждаем
+        Condition::Function(_, _) => true,
+        Condition::Variable(v) => {
+            let borrowed = v.borrow();
+            match &*borrowed {
+                VariableNode::Simple { ty, .. }
+                | VariableNode::Port { ty, .. }
+                | VariableNode::Const { ty, .. } => matches!(ty, TypeNode::Bool | TypeNode::Bit),
+                VariableNode::Unresolved => true, // тип неизвестен — не предупреждаем
+            }
+        }
+        _ => false,
+    }
+}
+
+/// Возвращает краткое описание небулевого разрешённого семантического условия.
+///
+/// Вызывается только когда [`is_boolean_semantic_condition`] вернул `false`,
+/// поэтому покрывает только «числовые» ветви.
+fn semantic_condition_summary(cond: &Condition) -> String {
+    match cond {
+        Condition::Number(n) => format!("числовой литерал {}", n),
+        Condition::Rational(s, neg) => {
+            format!("вещественный литерал {}{}", if *neg { "-" } else { "" }, s)
+        }
+        Condition::String(_) => "строковый литерал".to_string(),
+        Condition::Variable(v) => {
+            let borrowed = v.borrow();
+            let (name_str, ty) = match &*borrowed {
+                VariableNode::Simple { name, ty, .. }
+                | VariableNode::Port { name, ty, .. }
+                | VariableNode::Const { name, ty, .. } => (name.clone(), ty.clone()),
+                VariableNode::Unresolved => return "переменная (неизвестный тип)".to_string(),
+            };
+            format!("переменная '{}' типа {:?}", name_str, ty)
+        }
+        Condition::Add(_, _) => "арифметическое сложение".to_string(),
+        Condition::Subtract(_, _) => "арифметическое вычитание".to_string(),
+        Condition::And(_, _) => "побитовое И".to_string(),
+        Condition::Or(_, _) => "побитовое ИЛИ".to_string(),
+        Condition::ArraySubscript(var, idx) => {
+            let name = match &*var.borrow() {
+                VariableNode::Simple { name, .. }
+                | VariableNode::Port { name, .. }
+                | VariableNode::Const { name, .. } => name.clone(),
+                VariableNode::Unresolved => "?".to_string(),
+            };
+            format!("элемент массива '{}[{}]'", name, idx)
+        }
+        Condition::BitAccess(_, _) => "доступ к битовому полю".to_string(),
+        _ => "числовое выражение".to_string(),
+    }
+}
+
+/// Проверяет условие одного перехода и при необходимости добавляет предупреждение Се11.
+///
+/// Основной путь — условие уже разрешено на этапе 6 конвейера
+/// ([`crate::semantic::tree`]). Неразрешённый вариант [`Condition::Unresolved`]
+/// используется только как запасной (для паттернов вида `S(Model).StateName`,
+/// которые не могут быть разрешены в текущем контексте).
 ///
 /// Описание условия для сообщения вычисляется **лениво** — только при наличии
-/// реального нарушения, чтобы не расходовать ресурсы в нормальном пути.
+/// реального нарушения.
 fn check_one_ref(
     prefix: &str,
     target_name: &str,
@@ -517,57 +601,21 @@ fn check_one_ref(
     out: &mut Vec<Diagnostic>,
 ) {
     match cond {
-        // ── Главный путь: условие хранится как Unresolved (нормальный конвейер) ──
+        // ── Основной путь: разрешённое семантическое условие ──────────────────
+        cond if !matches!(cond, Condition::Unresolved(_)) => {
+            if !is_boolean_semantic_condition(cond) {
+                let summary = semantic_condition_summary(cond);
+                emit_implicit_bool_warning(prefix, target_name, &summary, is_next, out);
+            }
+        }
+        // ── Запасной путь: условие не разрешено (например, S(Model).StateName) ──
         Condition::Unresolved(ast_cond) => {
-            // Ленивое вычисление: summary вычисляется только если условие не булево
             if !is_boolean_ast_condition(ast_cond, model) {
                 let summary = ast_condition_summary(ast_cond, model);
                 emit_implicit_bool_warning(prefix, target_name, &summary, is_next, out);
             }
         }
-        // ── Разрешённые булевые условия (ранний выход) ───────────────────────
-        Condition::None   // безусловный переход
-        | Condition::Bool(_)
-        | Condition::Equal(_, _)
-        | Condition::NotEqual(_, _)
-        | Condition::Less(_, _)
-        | Condition::More(_, _)
-        | Condition::LessEqual(_, _)
-        | Condition::MoreEqual(_, _)
-        | Condition::Not(_)
-        | Condition::Function(_, _) => { /* ok — явно булево */ }
-        // Скобки прозрачны — рекурсивно проверяем вложенное условие
-        Condition::Parenthesis(inner) => {
-            check_one_ref(prefix, target_name, inner, model, is_next, out);
-        }
-        // ── Разрешённая переменная (возможный путь при будущем разрешении ref) ──
-        Condition::Variable(v) => {
-            let borrowed = v.borrow();
-            let (name_str, ty) = match &*borrowed {
-                VariableNode::Simple(n, ty, _)
-                | VariableNode::Port(n, ty, _)
-                | VariableNode::Const(n, ty, _) => (n.clone(), ty.clone()),
-                VariableNode::Unresolved => return, // тип неизвестен — не предупреждаем
-            };
-            if !matches!(ty, TypeNode::Bool | TypeNode::Bit) {
-                let summary = format!("переменная '{}' типа {:?}", name_str, ty);
-                emit_implicit_bool_warning(prefix, target_name, &summary, is_next, out);
-            }
-        }
-        // ── Разрешённые числовые условия ─────────────────────────────────────
-        Condition::Number(n) => {
-            emit_implicit_bool_warning(
-                prefix,
-                target_name,
-                &format!("числовой литерал {}", n),
-                is_next,
-                out,
-            );
-        }
-        // Прочие числовые/неизвестные разрешённые варианты
-        _ => {
-            emit_implicit_bool_warning(prefix, target_name, "числовое выражение", is_next, out);
-        }
+        _ => {}
     }
 }
 
