@@ -16,6 +16,7 @@ mod expression;
 mod function;
 mod import;
 mod named_block;
+pub(crate) mod naming;
 mod reference;
 mod statement;
 pub mod tree;
@@ -737,12 +738,40 @@ impl PartialEq for StateNode {
         match (self, other) {
             (StateNode::Unresolved, StateNode::Unresolved) => true,
             (
-                StateNode::Simple { name: n1, named_blocks: nb1, references: r1, kind: k1, .. },
-                StateNode::Simple { name: n2, named_blocks: nb2, references: r2, kind: k2, .. },
+                StateNode::Simple {
+                    name: n1,
+                    named_blocks: nb1,
+                    references: r1,
+                    kind: k1,
+                    ..
+                },
+                StateNode::Simple {
+                    name: n2,
+                    named_blocks: nb2,
+                    references: r2,
+                    kind: k2,
+                    ..
+                },
             ) => n1 == n2 && nb1 == nb2 && r1 == r2 && k1 == k2,
             (
-                StateNode::Implement { name: n1, named_blocks: nb1, references: r1, implements: i1, next: nx1, kind: k1, .. },
-                StateNode::Implement { name: n2, named_blocks: nb2, references: r2, implements: i2, next: nx2, kind: k2, .. },
+                StateNode::Implement {
+                    name: n1,
+                    named_blocks: nb1,
+                    references: r1,
+                    implements: i1,
+                    next: nx1,
+                    kind: k1,
+                    ..
+                },
+                StateNode::Implement {
+                    name: n2,
+                    named_blocks: nb2,
+                    references: r2,
+                    implements: i2,
+                    next: nx2,
+                    kind: k2,
+                    ..
+                },
             ) => n1 == n2 && nb1 == nb2 && r1 == r2 && i1 == i2 && nx1 == nx2 && k1 == k2,
             _ => false,
         }
@@ -1056,7 +1085,10 @@ mod tests {
         let (ast, _) = parse("var x: bit = false; start S;", 0).unwrap();
         let root = construct_model(&ast, None, &[]).unwrap();
         // Получаем переменную и сохраняем Weak через upper
-        let var_x = root.borrow().search_var("x").expect("x должна быть найдена");
+        let var_x = root
+            .borrow()
+            .search_var("x")
+            .expect("x должна быть найдена");
         let weak_upper = match var_x {
             VariableNode::Simple { ref upper, .. } => upper.clone(),
             _ => panic!("ожидался Simple"),
@@ -1079,7 +1111,10 @@ mod tests {
     fn variable_upper_returns_some_while_model_alive() {
         let (ast, _) = parse("var x: bit = false;", 0).unwrap();
         let root = construct_model(&ast, None, &[]).unwrap();
-        let var_x = root.borrow().search_var("x").expect("x должна быть найдена");
+        let var_x = root
+            .borrow()
+            .search_var("x")
+            .expect("x должна быть найдена");
         assert!(
             var_x.upper().is_some(),
             "upper() переменной должен возвращать Some пока модель жива"
@@ -1091,9 +1126,15 @@ mod tests {
     fn nested_model_upper_points_to_parent() {
         let (ast, _) = parse("model Inner { start S; } start Main = Inner;", 0).unwrap();
         let root = construct_model(&ast, None, &[]).unwrap();
-        let inner = root.borrow().search_model("Inner").expect("Inner не найдена");
+        let inner = root
+            .borrow()
+            .search_model("Inner")
+            .expect("Inner не найдена");
         let parent = inner.borrow().upper.as_ref().and_then(|w| w.upgrade());
-        assert!(parent.is_some(), "Inner должна иметь upper → родительскую модель");
+        assert!(
+            parent.is_some(),
+            "Inner должна иметь upper → родительскую модель"
+        );
         // Родитель — анонимная корневая модель (name = None)
         assert_eq!(
             parent.unwrap().borrow().name,

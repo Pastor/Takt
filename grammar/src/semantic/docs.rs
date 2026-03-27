@@ -43,14 +43,13 @@
 //! [`ModelNode::docs`]: crate::semantic::ModelNode::docs
 
 use crate::diagnostics::Location;
-use crate::normalize_model_name;
 use crate::parser::ast;
 use crate::parser::ast::ModelElement;
 use crate::semantic::ModelNode;
+use crate::semantic::naming::normalize_model_name;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-
 // ─── Вспомогательные функции ─────────────────────────────────────────────────
 
 /// Убирает префикс `///` из строки документационного комментария.
@@ -162,7 +161,7 @@ fn collect_docs_for(
                     .filter(|&&s| s > *c_end)
                     .min()
                     .copied()
-                == Some(elem_start)
+                    == Some(elem_start)
         })
         .map(|(_, _, text)| text.clone())
         .collect()
@@ -267,7 +266,9 @@ pub(crate) fn attach_docs(
         .iter()
         .filter_map(|e| {
             if let ModelElement::Model(m) = e {
-                m.name.as_ref().map(|id| (normalize_model_name(&id.name), m.as_ref()))
+                m.name
+                    .as_ref()
+                    .map(|id| (normalize_model_name(&id.name), m.as_ref()))
             } else {
                 None
             }

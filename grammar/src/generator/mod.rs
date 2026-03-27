@@ -11,14 +11,14 @@ pub enum Language {
 }
 
 pub trait Generator {
-    fn generate(&self, model: &ModelNode) -> Result<Source, Diagnostic>;
+    fn generate(&self, model: &ModelNode, output_path: &str) -> Result<(), Diagnostic>;
 }
 
-pub fn generate(l: Language, model: &ModelNode) -> Result<Source, Diagnostic> {
+pub fn generate(l: Language, model: &ModelNode, output_path: &str) -> Result<(), Diagnostic> {
     match l {
         Language::C => {
             let generator = c::Generator {};
-            generator.generate(model)
+            generator.generate(model, output_path)
         }
     }
 }

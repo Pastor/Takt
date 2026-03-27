@@ -8,6 +8,7 @@
 //! - [`construct_condition`] — преобразует условие АСД в семантическое условие.
 
 use crate::diagnostics::Diagnostic;
+use crate::parse;
 use crate::parser::ast;
 use crate::parser::ast::{
     Identifier, ImportDefine, Model, ModelElement, StateDefine, StateElement, StateKind,
@@ -18,6 +19,7 @@ use crate::semantic::expression::construct_expression;
 use crate::semantic::function::construct_function;
 use crate::semantic::import::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
+use crate::semantic::naming::normalize_model_name;
 use crate::semantic::reference::resolve_state_references;
 use crate::semantic::type_::construct_type;
 use crate::semantic::type_inference::type_inference;
@@ -26,7 +28,6 @@ use crate::semantic::{
     Condition, ConditionNode, Expression, FunctionNode, Implement, ModelNode, NamedCodeBlock,
     Reference, StateNode, StateNodeKind, Statement, TypeNode, VariableNode,
 };
-use crate::{normalize_model_name, parse};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -448,15 +449,39 @@ fn resolve_variable_expressions(
     let mut result = HashMap::new();
     for (name, var) in variables {
         let resolved = match var.clone() {
-            VariableNode::Simple { upper, name: n, ty, expr: Expression::Unresolved(expr) } => {
-                VariableNode::Simple { upper, name: n, ty, expr: construct_expression(expr, model.clone())? }
-            }
-            VariableNode::Const { upper, name: n, ty, expr: Expression::Unresolved(expr) } => {
-                VariableNode::Const { upper, name: n, ty, expr: construct_expression(expr, model.clone())? }
-            }
-            VariableNode::Port { upper, name: n, ty, expr: Expression::Unresolved(expr) } => {
-                VariableNode::Port { upper, name: n, ty, expr: construct_expression(expr, model.clone())? }
-            }
+            VariableNode::Simple {
+                upper,
+                name: n,
+                ty,
+                expr: Expression::Unresolved(expr),
+            } => VariableNode::Simple {
+                upper,
+                name: n,
+                ty,
+                expr: construct_expression(expr, model.clone())?,
+            },
+            VariableNode::Const {
+                upper,
+                name: n,
+                ty,
+                expr: Expression::Unresolved(expr),
+            } => VariableNode::Const {
+                upper,
+                name: n,
+                ty,
+                expr: construct_expression(expr, model.clone())?,
+            },
+            VariableNode::Port {
+                upper,
+                name: n,
+                ty,
+                expr: Expression::Unresolved(expr),
+            } => VariableNode::Port {
+                upper,
+                name: n,
+                ty,
+                expr: construct_expression(expr, model.clone())?,
+            },
             other => other,
         };
         result.insert(name.clone(), resolved);
@@ -586,10 +611,7 @@ fn construct_model_stage6(
 
     let mut prepared_states = HashMap::new();
     for (name, state) in states.iter() {
-        prepared_states.insert(
-            name.clone(),
-            resolve_state_references(state)?,
-        );
+        prepared_states.insert(name.clone(), resolve_state_references(state)?);
     }
     model.borrow_mut().states = prepared_states;
 
