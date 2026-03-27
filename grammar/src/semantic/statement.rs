@@ -10,6 +10,15 @@
 //! 2. Выражения преобразуются через [`construct_expression`].
 //! 3. Типы переменных разрешаются через [`construct_type`].
 //!
+//! ## Локальные переменные в блоках (С4)
+//!
+//! Объявления `var`/`const` внутри блоков (`if`, `loop`, `for`, `always` и др.)
+//! разрешаются в [`Statement::Variable`] и временно регистрируются в
+//! `model.variables` через [`register_local_var`]. Это позволяет последующим
+//! операторам того же блока ссылаться на локальную переменную через обычный
+//! механизм [`construct_expression`]. При выходе из блока [`unregister_local_vars`]
+//! восстанавливает исходное состояние модели (с поддержкой затенения).
+//!
 //! Если выражение в операторе не может быть разрешено (например, ссылка
 //! на необъявленную встроенную функцию), весь оператор сохраняется в виде
 //! [`Statement::Unresolved`] — ошибка не пробрасывается наверх.
@@ -20,7 +29,7 @@ use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::expression::construct_expression;
 use crate::semantic::type_::construct_type;
-use crate::semantic::{ModelNode, Statement};
+use crate::semantic::{Expression, ModelNode, Statement, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -39,10 +48,16 @@ pub fn resolve_statement(
         Statement::Unresolved(stmt) => Ok(resolve_ast_statement(stmt, model)?),
         Statement::None => Ok(Statement::None),
         Statement::Block(stmts) => {
-            let resolved = stmts
-                .iter()
-                .map(|s| resolve_statement(s, model.clone()))
-                .collect::<Result<Vec<_>, _>>()?;
+            let mut resolved = Vec::with_capacity(stmts.len());
+            let mut locals: Vec<(String, Option<VariableNode>)> = Vec::new();
+            for s in stmts {
+                let r = resolve_statement(s, model.clone())?;
+                if let Some(entry) = register_local_var(&r, &model) {
+                    locals.push(entry);
+                }
+                resolved.push(r);
+            }
+            unregister_local_vars(locals, &model);
             Ok(Statement::Block(resolved))
         }
         other => Ok(other.clone()),
@@ -59,11 +74,22 @@ fn resolve_ast_statement(
 ) -> Result<Statement, Diagnostic> {
     match stmt {
         // ── Блок операторов ────────────────────────────────────────────────────
+        //
+        // С4: после разрешения каждого оператора, если он объявляет локальную
+        // переменную, та временно регистрируется в модели, чтобы последующие
+        // операторы блока могли её использовать. При выходе из блока
+        // все локальные переменные удаляются (затенённые — восстанавливаются).
         ast::Statement::Block { statements, .. } => {
             let mut resolved = Vec::with_capacity(statements.len());
+            let mut locals: Vec<(String, Option<VariableNode>)> = Vec::new();
             for s in statements {
-                resolved.push(resolve_ast_statement(s, model.clone())?);
+                let r = resolve_ast_statement(s, model.clone())?;
+                if let Some(entry) = register_local_var(&r, &model) {
+                    locals.push(entry);
+                }
+                resolved.push(r);
             }
+            unregister_local_vars(locals, &model);
             Ok(Statement::Block(resolved))
         }
 
@@ -110,14 +136,28 @@ fn resolve_ast_statement(
         }
 
         // ── Цикл for ──────────────────────────────────────────────────────────
+        //
+        // С4: если инициализация объявляет переменную (`for var i: bit = 0; ...`),
+        // та регистрируется в модели до разрешения условия, шага и тела цикла,
+        // чтобы они могли на неё ссылаться. После разрешения всей конструкции
+        // переменная удаляется из модели.
         ast::Statement::For(_, init, cond, step, body) => {
-            let init = init
+            let init_resolved = init
                 .as_ref()
                 .map(|s| {
                     resolve_ast_statement(s, model.clone())
                         .unwrap_or_else(|_| Statement::Unresolved(s.as_ref().clone()))
                 })
                 .map(Box::new);
+
+            // Регистрируем переменную из init для cond/step/body
+            let mut for_locals: Vec<(String, Option<VariableNode>)> = Vec::new();
+            if let Some(init_stmt) = &init_resolved {
+                if let Some(entry) = register_local_var(init_stmt, &model) {
+                    for_locals.push(entry);
+                }
+            }
+
             let cond = cond
                 .as_ref()
                 .map(|e| construct_expression(*e.clone(), model.clone()))
@@ -136,8 +176,11 @@ fn resolve_ast_statement(
                 })
                 .map(Box::new)
                 .unwrap_or_else(|| Box::new(Statement::None));
+
+            unregister_local_vars(for_locals, &model);
+
             Ok(Statement::For {
-                init,
+                init: init_resolved,
                 cond,
                 step,
                 body,
@@ -145,24 +188,31 @@ fn resolve_ast_statement(
         }
 
         // ── Объявление локальной переменной ────────────────────────────────────
-        ast::Statement::Variable(_, def, init) => {
+        //
+        // С4: инициализатор берётся из def.initializer (поле внутри VariableDefine),
+        // поскольку после исправления грамматики LocalVariableDefine передаёт
+        // инициализатор именно туда, а третье поле Statement::Variable всегда None.
+        ast::Statement::Variable(_, def, _extra_init) => {
             let types = model.borrow().types.clone();
-            let (name, ty) = match def.as_ref() {
-                ast::VariableDefine::Variable { name, typ, .. }
-                | ast::VariableDefine::Constant { name, typ, .. } => {
+            let (name, ty, def_init) = match def.as_ref() {
+                ast::VariableDefine::Variable { name, typ, initializer, .. } => {
                     let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
                     let t = construct_type(typ.clone(), &types)?;
-                    (n, t)
+                    (n, t, initializer.clone())
                 }
-                ast::VariableDefine::Port { name, typ, .. } => {
+                ast::VariableDefine::Constant { name, typ, initializer, .. } => {
                     let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
                     let t = construct_type(typ.clone(), &types)?;
-                    (n, t)
+                    (n, t, Some(initializer.clone()))
+                }
+                ast::VariableDefine::Port { name, typ, initializer, .. } => {
+                    let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
+                    let t = construct_type(typ.clone(), &types)?;
+                    (n, t, initializer.clone())
                 }
             };
-            let init = init
-                .as_ref()
-                .map(|e| construct_expression(e.clone(), model))
+            let init = def_init
+                .map(|e| construct_expression(e, model))
                 .transpose()?
                 .map(Box::new);
             Ok(Statement::Variable(name, ty, init))
@@ -187,6 +237,66 @@ fn resolve_ast_statement(
         // Assembly и Formula — встроенные низкоуровневые блоки, пропускаются.
         // Args, Error, StraySemicolon — служебные варианты, не требуют разрешения.
         _ => Ok(Statement::Unresolved(stmt.clone())),
+    }
+}
+
+// ── Вспомогательные функции для управления областью видимости (С4) ────────────
+
+/// Временно регистрирует локальную переменную из разрешённого оператора в модели.
+///
+/// Если оператор — [`Statement::Variable`], вставляет [`VariableNode::Simple`]
+/// в `model.variables` и возвращает имя вместе с предыдущим значением (если имя
+/// уже было занято — для поддержки затенения). Для остальных операторов
+/// возвращает `None`.
+///
+/// Регистрация происходит ПОСЛЕ разрешения оператора, поэтому самоссылающийся
+/// инициализатор (`var x = x`) корректно завершится ошибкой поиска переменной
+/// при разрешении выражения.
+fn register_local_var(
+    stmt: &Statement,
+    model: &Rc<RefCell<ModelNode>>,
+) -> Option<(String, Option<VariableNode>)> {
+    if let Statement::Variable(name, ty, _) = stmt {
+        if name.is_empty() {
+            return None;
+        }
+        // Сохраняем предыдущее значение для восстановления при выходе из блока
+        let prev = model.borrow().variables.get(name).cloned();
+        let node = VariableNode::Simple {
+            upper: None,
+            name: name.clone(),
+            ty: ty.clone(),
+            // Expression::None — заглушка; инициализатор уже сохранён в
+            // Statement::Variable и не нужен в узле переменной для разрешения выражений
+            expr: Expression::None,
+        };
+        model.borrow_mut().variables.insert(name.clone(), node);
+        Some((name.clone(), prev))
+    } else {
+        None
+    }
+}
+
+/// Восстанавливает состояние модели после выхода из блока.
+///
+/// Для каждой записи из `locals`:
+/// - Если до регистрации была переменная с тем же именем — восстанавливает её.
+/// - Если не было — удаляет имя из `model.variables`.
+///
+/// Порядок восстановления не важен, поскольку имена уникальны внутри одного блока.
+fn unregister_local_vars(
+    locals: Vec<(String, Option<VariableNode>)>,
+    model: &Rc<RefCell<ModelNode>>,
+) {
+    for (name, prev) in locals {
+        match prev {
+            Some(node) => {
+                model.borrow_mut().variables.insert(name, node);
+            }
+            None => {
+                model.borrow_mut().variables.remove(&name);
+            }
+        }
     }
 }
 
@@ -499,11 +609,197 @@ mod tests {
         );
     }
 
-    /// Объявление переменной в операторе `var` — не поддерживается внутри блоков.
+    // ─── С4: локальные переменные в блоках ────────────────────────────────────
+
+    /// `always { var x: bit = false; x = true; }` — локальная переменная
+    /// объявляется и используется в том же блоке.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// always { var x: bit = false; x = true; }
+    /// start S;
+    /// ```
+    #[test]
+    fn local_var_in_block_resolves() {
+        let node = build("always { var x: bit = false; x = true; } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = nb.statement().expect("оператор должен быть");
+        // Блок должен быть разрешён
+        assert!(
+            !matches!(stmt, Statement::Unresolved(_)),
+            "блок с локальной var должен быть разрешён: {:?}",
+            stmt
+        );
+        // Первый оператор — Statement::Variable(x, ...)
+        if let Statement::Block(stmts) = stmt {
+            assert!(
+                matches!(stmts.first(), Some(Statement::Variable(n, _, _)) if n == "x"),
+                "первый оператор должен быть Variable(x): {:?}",
+                stmts.first()
+            );
+        } else {
+            panic!("ожидался Statement::Block, получен: {:?}", stmt);
+        }
+    }
+
+    /// `always { var x: bit = false; x = true; }` — инициализатор `false`
+    /// сохраняется в `Statement::Variable`.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// always { var x: bit = false; x = true; }
+    /// start S;
+    /// ```
+    #[test]
+    fn local_var_initializer_is_preserved() {
+        let node = build("always { var x: bit = false; x = true; } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = nb.statement().expect("оператор должен быть");
+        if let Statement::Block(stmts) = stmt {
+            // Инициализатор должен быть Some(Bool(false))
+            assert!(
+                matches!(
+                    stmts.first(),
+                    Some(Statement::Variable(_, _, Some(_)))
+                ),
+                "у переменной x должен быть инициализатор: {:?}",
+                stmts.first()
+            );
+        }
+    }
+
+    /// `always { const C: bit = true; C; }` — константа внутри блока разрешается.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// always { const C: bit = true; C; }
+    /// start S;
+    /// ```
+    #[test]
+    fn local_const_in_block_resolves() {
+        let node = build("always { const C: bit = true; C; } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = nb.statement().expect("оператор должен быть");
+        assert!(
+            !matches!(stmt, Statement::Unresolved(_)),
+            "блок с локальной const должен быть разрешён: {:?}",
+            stmt
+        );
+        if let Statement::Block(stmts) = stmt {
+            assert!(
+                matches!(stmts.first(), Some(Statement::Variable(n, _, _)) if n == "C"),
+                "первый оператор должен быть Variable(C): {:?}",
+                stmts.first()
+            );
+        }
+    }
+
+    /// Локальная переменная затеняет переменную уровня модели.
+    ///
+    /// Внутри блока `x` ссылается на локальную переменную, после выхода — на model-level.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// var x: bit = true;
+    /// always { var x: bit = false; x = false; }
+    /// start S;
+    /// ```
+    #[test]
+    fn local_var_shadows_model_var() {
+        let node =
+            build("var x: bit = true; always { var x: bit = false; x = false; } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = nb.statement().expect("оператор должен быть");
+        // Блок разрешается (затенение работает)
+        assert!(
+            !matches!(stmt, Statement::Unresolved(_)),
+            "блок с затенённой переменной должен быть разрешён: {:?}",
+            stmt
+        );
+        // После выхода из блока model-level x должна остаться в модели
+        assert!(
+            node.search_var("x").is_some(),
+            "model-level переменная x должна сохраниться после выхода из блока"
+        );
+    }
+
+    /// После выхода из блока локальная переменная удаляется из модели.
+    ///
+    /// Проверяет механизм [`unregister_local_vars`] напрямую: после разрешения
+    /// `{ var inner: bit = false; }` переменная `inner` не должна находиться
+    /// в `model.variables`.
     ///
     /// # Контрпример (BuT)
-    /// `var` внутри `always {}` не поддерживается парсером (только на уровне model/state).
-    /// Вместо этого используется Statement::Variable. Тест проверяет напрямую.
+    /// ```but
+    /// { var inner: bit = false; }
+    /// inner = true;   // ошибка: inner вне области видимости
+    /// ```
+    #[test]
+    fn local_var_scope_exits_block() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::{Identifier, VariableDefine};
+
+        let loc = Location::default();
+        let def = Box::new(VariableDefine::Variable {
+            loc,
+            typ: Some(crate::parser::ast::Type::Bit),
+            name: Some(Identifier { loc, name: "inner".into() }),
+            initializer: None,
+        });
+        let var_stmt = ast::Statement::Variable(loc, def, None);
+        let block = ast::Statement::Block { loc, unchecked: false, statements: vec![var_stmt] };
+
+        let m = Rc::new(RefCell::new(ModelNode::default()));
+        let resolved = resolve_ast_statement(&block, m.clone()).unwrap();
+
+        // После разрешения блока `inner` не должна оставаться в модели
+        assert!(
+            m.borrow().variables.get("inner").is_none(),
+            "inner не должна быть в модели после выхода из блока"
+        );
+        // Но Statement::Variable(inner) должен быть внутри блока
+        if let Statement::Block(stmts) = resolved {
+            assert!(
+                matches!(stmts.first(), Some(Statement::Variable(n, _, _)) if n == "inner"),
+                "разрешённый блок должен содержать Variable(inner): {:?}",
+                stmts.first()
+            );
+        } else {
+            panic!("ожидался Statement::Block");
+        }
+    }
+
+    /// `for var i: bit = false; i; i = false { }` — переменная из init for
+    /// видна в условии и шаге цикла.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// always { for var i: bit = false; i; i = false { } }
+    /// start S;
+    /// ```
+    #[test]
+    fn local_var_in_for_init_resolves() {
+        let node =
+            build("always { for var i: bit = false; i; i = false { } } start S;");
+        let nb = node.get_named_block("always").expect("always не найден");
+        let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
+        assert!(
+            matches!(stmt, Statement::For { init: Some(_), cond: Some(_), .. }),
+            "ожидался For{{init: Some, cond: Some}}: {:?}",
+            stmt
+        );
+        if let Statement::For { init: Some(init_box), .. } = stmt {
+            assert!(
+                matches!(init_box.as_ref(), Statement::Variable(n, _, _) if n == "i"),
+                "init for должен быть Variable(i): {:?}",
+                init_box
+            );
+        }
+    }
+
+    /// Объявление переменной в операторе `var` разрешается в `Statement::Variable`.
+    ///
+    /// Тест проверяет семантический уровень напрямую (через `ast::Statement::Variable`).
     #[test]
     fn variable_statement_resolves() {
         use crate::diagnostics::Location;

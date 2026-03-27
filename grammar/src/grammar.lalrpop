@@ -136,6 +136,25 @@ VariableDefine: Box<VariableDefine> = {
     },
 }
 
+// Объявление переменной/константы ВНУТРИ блока оператора.
+//
+// В отличие от VariableDefine, НЕ включает завершающий ";": он поставляется
+// правилом NonIfStatement через <SimpleStatement> ";".
+// port не поддерживается внутри блоков — порты являются аппаратными маппингами
+// и объявляются только на уровне модели.
+LocalVariableDefine: Box<VariableDefine> = {
+    <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> => {
+        Box::new(VariableDefine::Variable {
+            loc: Location::Source(file_no, l, r), typ, name, initializer: e
+        })
+    },
+    <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> "=" <e:Expression> <r:@R> => {
+        Box::new(VariableDefine::Constant {
+            loc: Location::Source(file_no, l, r), typ, name, initializer: e
+        })
+    },
+}
+
 FunctionCall: Expression = {
     <a:@L> <i:Identifier> "(" <v:Comma<Expression>> ")" <b:@R> => {
         Expression::Function(Location::Source(file_no, a, b), i, v)
@@ -568,8 +587,10 @@ Statement: Statement = {
 }
 
 SimpleStatement: Statement = {
-    <l:@L> <v:VariableDefine> <e:("=" <Expression>)?> <r:@R> => {
-        Statement::Variable(Location::Source(file_no, l, r), v, e)
+    // С4: var/const внутри блока — LocalVariableDefine не включает ";",
+    // который добавляет NonIfStatement через <SimpleStatement> ";".
+    <l:@L> <v:LocalVariableDefine> <r:@R> => {
+        Statement::Variable(Location::Source(file_no, l, r), v, None)
     },
     <l:@L> <e:Expression> <r:@R> => {
         Statement::Expression(Location::Source(file_no, l, r), e)

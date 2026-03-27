@@ -2552,6 +2552,59 @@ fn variable_node_name_and_ty_methods() {
     assert_eq!(*var.ty(), TypeNode::Bit);
 }
 
+// ─── С4: интеграционные тесты локальных переменных в блоках ──────────────────
+
+/// `tests/data/sematic/valid/local_var_in_block.but` — var внутри always — без ошибок.
+///
+/// # Пример (BuT)
+/// ```but
+/// var flag: bit = false;
+/// start Running {
+///     always {
+///         var x: bit = false;
+///         x = true;
+///         flag = x;
+///     }
+/// }
+/// ```
+#[test]
+fn example_local_var_in_block_is_valid() {
+    build_file("tests/data/sematic/valid/local_var_in_block.but").unwrap();
+}
+
+/// `tests/data/sematic/valid/local_var_in_for.but` — var в инициализаторе for — без ошибок.
+///
+/// # Пример (BuT)
+/// ```but
+/// var result: bit = false;
+/// start S {
+///     always {
+///         for var i: bit = false; i; i = false { result = i; }
+///     }
+/// }
+/// ```
+#[test]
+fn example_local_var_in_for_is_valid() {
+    build_file("tests/data/sematic/valid/local_var_in_for.but").unwrap();
+}
+
+/// `tests/data/sematic/valid/local_var_nested.but` — вложенные блоки с затенением — без ошибок.
+///
+/// # Пример (BuT)
+/// ```but
+/// var x: bit = true;
+/// start S {
+///     always {
+///         { var x: bit = false; x = false; }
+///         x = true;   // ← model-level x, не локальная
+///     }
+/// }
+/// ```
+#[test]
+fn example_local_var_nested_is_valid() {
+    build_file("tests/data/sematic/valid/local_var_nested.but").unwrap();
+}
+
 /// Переменная через `upper()` позволяет найти другие переменные той же модели.
 ///
 /// Демонстрирует, что `upper` действительно предоставляет доступ к контексту.
