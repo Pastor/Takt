@@ -724,7 +724,7 @@ fn error_message_contains_missing_ref_name() {
     );
 }
 
-// ─── Тесты файлов-примеров из tests/data/sematic/ ────────────────────────────
+// ─── Тесты файлов-примеров из tests/data/semantic/ ────────────────────────────
 
 /// Вспомогательная функция: читает .but-файл и строит семантическое дерево.
 fn build_file(path: &str) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
@@ -734,29 +734,29 @@ fn build_file(path: &str) -> Result<grammar::semantic::ModelNode, grammar::diagn
     construct_model(&ast, None, &[]).map(|m| m.take())
 }
 
-/// `tests/data/sematic/valid/simple_fsm.but` — строится без ошибок.
+/// `tests/data/semantic/valid/simple_fsm.but` — строится без ошибок.
 #[test]
 fn example_simple_fsm_is_valid() {
-    let node = build_file("tests/data/sematic/valid/simple_fsm.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/simple_fsm.but").unwrap();
     assert!(node.has_states(), "FSM должен иметь состояния");
     assert!(node.states.contains_key("Start"), "состояние Start должно присутствовать");
     assert!(node.states.contains_key("Finish"), "состояние Finish должно присутствовать");
 }
 
-/// `tests/data/sematic/valid/type_aliases.but` — псевдонимы типов разрешаются.
+/// `tests/data/semantic/valid/type_aliases.but` — псевдонимы типов разрешаются.
 #[test]
 fn example_type_aliases_is_valid() {
-    let node = build_file("tests/data/sematic/valid/type_aliases.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/type_aliases.but").unwrap();
     assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
     assert!(node.types.contains_key("u16"), "тип u16 должен быть объявлен");
     assert!(node.search_var("counter").is_some(), "переменная counter должна быть найдена");
     assert!(node.search_var("STATUS").is_some(), "порт STATUS должен быть найден");
 }
 
-/// `tests/data/sematic/valid/conditions.but` — все условия разрешаются.
+/// `tests/data/semantic/valid/conditions.but` — все условия разрешаются.
 #[test]
 fn example_conditions_is_valid() {
-    let node = build_file("tests/data/sematic/valid/conditions.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/conditions.but").unwrap();
     assert!(node.conditions.contains_key("always_true"), "условие always_true должно быть");
     assert!(node.conditions.contains_key("always_false"), "условие always_false должно быть");
     assert!(node.conditions.contains_key("is_flag_set"), "условие is_flag_set должно быть");
@@ -764,10 +764,10 @@ fn example_conditions_is_valid() {
     assert!(node.conditions.contains_key("grouped"), "условие grouped должно быть");
 }
 
-/// `tests/data/sematic/valid/composition.but` — компоновка моделей корректна.
+/// `tests/data/semantic/valid/composition.but` — компоновка моделей корректна.
 #[test]
 fn example_composition_is_valid() {
-    let node = build_file("tests/data/sematic/valid/composition.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/composition.but").unwrap();
     // Модели Step1, Step2, Step3 должны быть в контексте
     assert!(node.search_model("Step1").is_some(), "Step1 должна быть найдена");
     assert!(node.search_model("Step2").is_some(), "Step2 должна быть найдена");
@@ -778,31 +778,31 @@ fn example_composition_is_valid() {
     assert!(node.states.contains_key("Combined"), "состояние Combined должно быть");
 }
 
-/// `tests/data/sematic/invalid/missing_var.but` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/missing_var.but` — должна возникнуть ошибка.
 #[test]
 fn example_missing_var_is_error() {
-    let result = build_file("tests/data/sematic/invalid/missing_var.but");
+    let result = build_file("tests/data/semantic/invalid/missing_var.but");
     assert!(result.is_err(), "missing_var.but должен давать ошибку семантики");
 }
 
-/// `tests/data/sematic/invalid/unknown_model.but` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/unknown_model.but` — должна возникнуть ошибка.
 #[test]
 fn example_unknown_model_is_error() {
-    let result = build_file("tests/data/sematic/invalid/unknown_model.but");
+    let result = build_file("tests/data/semantic/invalid/unknown_model.but");
     assert!(result.is_err(), "unknown_model.but должен давать ошибку семантики");
 }
 
-/// `tests/data/sematic/invalid/double_next.but` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/double_next.but` — должна возникнуть ошибка.
 #[test]
 fn example_double_next_is_error() {
-    let result = build_file("tests/data/sematic/invalid/double_next.but");
+    let result = build_file("tests/data/semantic/invalid/double_next.but");
     assert!(result.is_err(), "double_next.but должен давать ошибку семантики");
 }
 
-/// `tests/data/sematic/invalid/dangling_ref.but` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/dangling_ref.but` — должна возникнуть ошибка.
 #[test]
 fn example_dangling_ref_is_error() {
-    let result = build_file("tests/data/sematic/invalid/dangling_ref.but");
+    let result = build_file("tests/data/semantic/invalid/dangling_ref.but");
     assert!(result.is_err(), "dangling_ref.but должен давать ошибку семантики");
 }
 
@@ -974,7 +974,7 @@ fn rename_import_duplicate_alias_is_error() {
 /// `example_rename_import.but` — файл-пример строится без ошибок.
 #[test]
 fn example_rename_import_is_valid() {
-    let src = std::fs::read_to_string("tests/data/sematic/valid/rename_import.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/rename_import.but")
         .expect("файл rename_import.but не найден");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
     let node = construct_model(&ast, None, &["tests/data/include".to_string()])
@@ -1035,7 +1035,7 @@ fn array_subscript_on_bit_is_error() {
 /// `example_array_access.but` — файл с корректными операциями над массивом строится без ошибок.
 #[test]
 fn example_array_access_is_valid() {
-    let result = build_file("tests/data/sematic/valid/array_access.but").unwrap();
+    let result = build_file("tests/data/semantic/valid/array_access.but").unwrap();
     assert!(result.search_var("bit0").is_some());
     assert!(result.search_var("bit7").is_some());
 }
@@ -1043,21 +1043,21 @@ fn example_array_access_is_valid() {
 /// `example_array_out_of_bounds.but` — должна возникнуть ошибка.
 #[test]
 fn example_array_out_of_bounds_is_error() {
-    let result = build_file("tests/data/sematic/invalid/array_out_of_bounds.but");
+    let result = build_file("tests/data/semantic/invalid/array_out_of_bounds.but");
     assert!(result.is_err(), "array_out_of_bounds.but должен давать ошибку");
 }
 
 /// `example_non_array_subscript.but` — должна возникнуть ошибка.
 #[test]
 fn example_non_array_subscript_is_error() {
-    let result = build_file("tests/data/sematic/invalid/non_array_subscript.but");
+    let result = build_file("tests/data/semantic/invalid/non_array_subscript.but");
     assert!(result.is_err(), "non_array_subscript.but должен давать ошибку");
 }
 
 /// `example_rename_import_missing.but` — должна возникнуть ошибка.
 #[test]
 fn example_rename_import_missing_is_error() {
-    let src = std::fs::read_to_string("tests/data/sematic/invalid/rename_import_missing.but")
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/rename_import_missing.but")
         .expect("файл не найден");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &["tests/data/include".to_string()]).map(|m| m.take());
@@ -1247,7 +1247,7 @@ always {
 /// Файл named_blocks.but строится без ошибок, named_blocks заполнены.
 #[test]
 fn example_named_blocks_is_valid() {
-    let node = build_file("tests/data/sematic/valid/named_blocks.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/named_blocks.but").unwrap();
     assert!(node.has_states(), "named_blocks.but должен иметь состояния");
     let active = node.states.get("Active").expect("Active не найдено");
     assert!(active.get_named_block("enter").is_some(), "enter должен быть в Active");
@@ -1258,13 +1258,13 @@ fn example_named_blocks_is_valid() {
 /// Файл if_while_for.but строится без ошибок.
 #[test]
 fn example_if_while_for_is_valid() {
-    build_file("tests/data/sematic/valid/if_while_for.but").unwrap();
+    build_file("tests/data/semantic/valid/if_while_for.but").unwrap();
 }
 
 /// Файл nested_model_blocks.but строится без ошибок, enter разрешён.
 #[test]
 fn example_nested_model_blocks_is_valid() {
-    let node = build_file("tests/data/sematic/valid/nested_model_blocks.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/nested_model_blocks.but").unwrap();
     let inner = node.search_model("Inner").expect("Inner не найдена");
     let inner = inner.borrow();
     let on = inner.states.get("On").expect("On не найдено");
@@ -1274,7 +1274,7 @@ fn example_nested_model_blocks_is_valid() {
 /// named_block_undeclared_var.but (порт без адреса) → ошибка семантики.
 #[test]
 fn example_named_block_invalid_port_is_error() {
-    let result = build_file("tests/data/sematic/invalid/named_block_undeclared_var.but");
+    let result = build_file("tests/data/semantic/invalid/named_block_undeclared_var.but");
     assert!(result.is_err(), "файл с некорректным портом должен давать ошибку");
 }
 
@@ -1310,7 +1310,7 @@ fn multiple_model_level_always_blocks() {
 /// Файл multiple_named_blocks.but строится без ошибок, блоки извлекаются.
 #[test]
 fn example_multiple_named_blocks_is_valid() {
-    let node = build_file("tests/data/sematic/valid/multiple_named_blocks.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/multiple_named_blocks.but").unwrap();
     let initial = node.states.get("Initial").expect("Initial не найдено");
     assert_eq!(initial.get_named_blocks("enter").len(), 2, "Должно быть два enter в Initial");
     assert_eq!(initial.get_named_blocks("exit").len(), 2, "Должно быть два exit в Initial");
@@ -1319,24 +1319,24 @@ fn example_multiple_named_blocks_is_valid() {
 
 // ─── Тесты корректности значений типа bit ──────────────────────────────────────
 
-/// `tests/data/sematic/valid/bit_values.but` — допустимые значения bit строятся без ошибок.
+/// `tests/data/semantic/valid/bit_values.but` — допустимые значения bit строятся без ошибок.
 ///
 /// Проверяет: 0, 1, true, false, ссылка на переменную, константы, массив [bit;N].
 #[test]
 fn example_bit_values_valid_is_valid() {
-    let node = build_file("tests/data/sematic/valid/bit_values.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/bit_values.but").unwrap();
     assert!(node.search_var("a").is_some(), "переменная a должна быть найдена");
     assert!(node.search_var("b").is_some(), "переменная b должна быть найдена");
     assert!(node.search_var("c").is_some(), "переменная c должна быть найдена");
     assert!(node.search_var("d").is_some(), "переменная d должна быть найдена");
 }
 
-/// `tests/data/sematic/invalid/bit_out_of_range.but` — недопустимое bit-значение → ошибка.
+/// `tests/data/semantic/invalid/bit_out_of_range.but` — недопустимое bit-значение → ошибка.
 ///
 /// Тип `bit` принимает только 0, 1, true, false. Значение 2 — ошибка.
 #[test]
 fn example_bit_out_of_range_is_error() {
-    let result = build_file("tests/data/sematic/invalid/bit_out_of_range.but");
+    let result = build_file("tests/data/semantic/invalid/bit_out_of_range.but");
     assert!(result.is_err(), "bit_out_of_range.but должен давать ошибку семантики");
     let err = result.unwrap_err();
     assert!(
@@ -1346,12 +1346,12 @@ fn example_bit_out_of_range_is_error() {
     );
 }
 
-/// `tests/data/sematic/valid/type_inference_numbers.but` — вывод целочисленных типов.
+/// `tests/data/semantic/valid/type_inference_numbers.but` — вывод целочисленных типов.
 ///
 /// 0..=255 → `[bit;8]`, 256..=65535 → `[bit;16]`, 65536..= → `[bit;32]`.
 #[test]
 fn example_type_inference_numbers_is_valid() {
-    let node = build_file("tests/data/sematic/valid/type_inference_numbers.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/type_inference_numbers.but").unwrap();
     // 8-битные
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("a") {
         assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)), "a=0 → [bit;8]");
@@ -1372,14 +1372,14 @@ fn example_type_inference_numbers_is_valid() {
     }
 }
 
-/// `tests/data/sematic/valid/type_inference_bool.but` — вывод типа bool из литерала.
+/// `tests/data/semantic/valid/type_inference_bool.but` — вывод типа bool из литерала.
 ///
 /// `true`/`false` без аннотации → `TypeNode::Bool`.
 /// Явная аннотация `: bool` → `TypeNode::Bool`.
 /// Явная аннотация `: bit` → `TypeNode::Bit`.
 #[test]
 fn example_type_inference_bool_is_valid() {
-    let node = build_file("tests/data/sematic/valid/type_inference_bool.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/type_inference_bool.but").unwrap();
     // Вывод из литерала
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("flag") {
         assert_eq!(ty, TypeNode::Bool, "flag=true → Bool");
@@ -1399,10 +1399,10 @@ fn example_type_inference_bool_is_valid() {
 
 // ─── Тесты новых файлов-примеров ─────────────────────────────────────────────
 
-/// `tests/data/sematic/valid/functions.but` — локальные и внешние функции.
+/// `tests/data/semantic/valid/functions.but` — локальные и внешние функции.
 #[test]
 fn example_functions_is_valid() {
-    let node = build_file("tests/data/sematic/valid/functions.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/functions.but").unwrap();
     assert!(node.functions.contains_key("send"), "внешняя функция send");
     assert!(node.functions.contains_key("recv"), "внешняя функция recv");
     assert!(node.functions.contains_key("noop"), "внешняя функция noop");
@@ -1410,10 +1410,10 @@ fn example_functions_is_valid() {
     assert!(node.functions.contains_key("init"), "локальная функция init");
 }
 
-/// `tests/data/sematic/valid/bool_type.but` — переменные типа bool.
+/// `tests/data/semantic/valid/bool_type.but` — переменные типа bool.
 #[test]
 fn example_bool_type_is_valid() {
-    let node = build_file("tests/data/sematic/valid/bool_type.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/bool_type.but").unwrap();
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("ready") {
         assert_eq!(ty, TypeNode::Bool, "ready: bool → TypeNode::Bool");
     } else {
@@ -1426,10 +1426,10 @@ fn example_bool_type_is_valid() {
     }
 }
 
-/// `tests/data/sematic/valid/integer_types.but` — числовые псевдонимы типов.
+/// `tests/data/semantic/valid/integer_types.but` — числовые псевдонимы типов.
 #[test]
 fn example_integer_types_is_valid() {
-    let node = build_file("tests/data/sematic/valid/integer_types.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/integer_types.but").unwrap();
     assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
     assert!(node.types.contains_key("u16"), "тип u16 должен быть объявлен");
     assert!(node.types.contains_key("u32"), "тип u32 должен быть объявлен");
@@ -1445,10 +1445,10 @@ fn example_integer_types_is_valid() {
     }
 }
 
-/// `tests/data/sematic/valid/state_machine_full.but` — полный автомат светофора.
+/// `tests/data/semantic/valid/state_machine_full.but` — полный автомат светофора.
 #[test]
 fn example_state_machine_full_is_valid() {
-    let node = build_file("tests/data/sematic/valid/state_machine_full.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/state_machine_full.but").unwrap();
     let tl = node.search_model("TrafficLight").expect("модель TrafficLight не найдена");
     let tl = tl.borrow();
     assert!(tl.states.contains_key("Red"), "состояние Red");
@@ -1456,31 +1456,31 @@ fn example_state_machine_full_is_valid() {
     assert!(tl.states.contains_key("Yellow"), "состояние Yellow");
 }
 
-/// `tests/data/sematic/invalid/duplicate_model.but` — дублирующееся имя модели → ошибка.
+/// `tests/data/semantic/invalid/duplicate_model.but` — дублирующееся имя модели → ошибка.
 #[test]
 fn example_duplicate_model_is_error() {
-    let result = build_file("tests/data/sematic/invalid/duplicate_model.but");
+    let result = build_file("tests/data/semantic/invalid/duplicate_model.but");
     assert!(result.is_err(), "дублирующееся имя модели должно давать ошибку");
 }
 
-/// `tests/data/sematic/invalid/bit_value_in_const.but` — бит-константа с недопустимым значением → ошибка.
+/// `tests/data/semantic/invalid/bit_value_in_const.but` — бит-константа с недопустимым значением → ошибка.
 #[test]
 fn example_bit_value_in_const_is_error() {
-    let result = build_file("tests/data/sematic/invalid/bit_value_in_const.but");
+    let result = build_file("tests/data/semantic/invalid/bit_value_in_const.but");
     assert!(result.is_err(), "bit = 5 должно давать ошибку");
 }
 
-/// `tests/data/sematic/invalid/no_start_state.but` — модель без start → ошибка.
+/// `tests/data/semantic/invalid/no_start_state.but` — модель без start → ошибка.
 #[test]
 fn example_no_start_state_is_error() {
-    let result = build_file("tests/data/sematic/invalid/no_start_state.but");
+    let result = build_file("tests/data/semantic/invalid/no_start_state.but");
     assert!(result.is_err(), "модель без start должна давать ошибку");
 }
 
-/// `tests/data/sematic/invalid/unknown_type_in_function.but` — неизвестный тип параметра → ошибка.
+/// `tests/data/semantic/invalid/unknown_type_in_function.but` — неизвестный тип параметра → ошибка.
 #[test]
 fn example_unknown_type_in_function_is_error() {
-    let result = build_file("tests/data/sematic/invalid/unknown_type_in_function.but");
+    let result = build_file("tests/data/semantic/invalid/unknown_type_in_function.but");
     assert!(result.is_err(), "неизвестный тип параметра должен давать ошибку");
 }
 
@@ -1880,10 +1880,10 @@ fn doc_comment_for_state_inside_model() {
     );
 }
 
-/// `tests/data/sematic/valid/doc_comments.but` — файл с doc-комментариями строится корректно.
+/// `tests/data/semantic/valid/doc_comments.but` — файл с doc-комментариями строится корректно.
 #[test]
 fn example_doc_comments_file_is_valid() {
-    let src = std::fs::read_to_string("tests/data/sematic/valid/doc_comments.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/doc_comments.but")
         .expect("не могу прочитать doc_comments.but");
     let (ast, comments) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model_with_docs(&ast, None, &[], &comments)
@@ -2057,7 +2057,7 @@ fn se11_nested_model_numeric_ref_warning() {
 #[test]
 fn se11_valid_file_no_warnings() {
     let src = std::fs::read_to_string(
-        "tests/data/sematic/valid/implicit_bool_warn.but",
+        "tests/data/semantic/valid/implicit_bool_warn.but",
     )
     .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
@@ -2074,7 +2074,7 @@ fn se11_valid_file_no_warnings() {
 #[test]
 fn se11_numeric_file_gives_one_warning() {
     let src = std::fs::read_to_string(
-        "tests/data/sematic/valid/implicit_bool_numeric.but",
+        "tests/data/semantic/valid/implicit_bool_numeric.but",
     )
     .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
@@ -2170,7 +2170,7 @@ fn se11_arithmetic_in_ref_gives_warning() {
 #[test]
 fn se11_arithmetic_file_gives_one_warning() {
     let src = std::fs::read_to_string(
-        "tests/data/sematic/valid/implicit_bool_arithmetic.but",
+        "tests/data/semantic/valid/implicit_bool_arithmetic.but",
     )
     .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
@@ -2187,7 +2187,7 @@ fn se11_arithmetic_file_gives_one_warning() {
 #[test]
 fn se11_named_cond_file_no_warnings() {
     let src = std::fs::read_to_string(
-        "tests/data/sematic/valid/implicit_bool_named_cond.but",
+        "tests/data/semantic/valid/implicit_bool_named_cond.but",
     )
     .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
@@ -2429,7 +2429,7 @@ fn se11_resolved_number_literal_in_ref_has_value_in_message() {
 #[test]
 fn ref_cond_resolved_file_is_valid() {
     let src = std::fs::read_to_string(
-        "tests/data/sematic/valid/ref_cond_resolved.but",
+        "tests/data/semantic/valid/ref_cond_resolved.but",
     )
     .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
@@ -2446,7 +2446,7 @@ fn ref_cond_resolved_file_is_valid() {
 #[test]
 fn ref_cond_arithmetic_file_gives_warning() {
     let src = std::fs::read_to_string(
-        "tests/data/sematic/valid/ref_cond_arithmetic.but",
+        "tests/data/semantic/valid/ref_cond_arithmetic.but",
     )
     .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
@@ -2554,7 +2554,7 @@ fn variable_node_name_and_ty_methods() {
 
 // ─── С4: интеграционные тесты локальных переменных в блоках ──────────────────
 
-/// `tests/data/sematic/valid/local_var_in_block.but` — var внутри always — без ошибок.
+/// `tests/data/semantic/valid/local_var_in_block.but` — var внутри always — без ошибок.
 ///
 /// # Пример (BuT)
 /// ```but
@@ -2569,10 +2569,10 @@ fn variable_node_name_and_ty_methods() {
 /// ```
 #[test]
 fn example_local_var_in_block_is_valid() {
-    build_file("tests/data/sematic/valid/local_var_in_block.but").unwrap();
+    build_file("tests/data/semantic/valid/local_var_in_block.but").unwrap();
 }
 
-/// `tests/data/sematic/valid/local_var_in_for.but` — var в инициализаторе for — без ошибок.
+/// `tests/data/semantic/valid/local_var_in_for.but` — var в инициализаторе for — без ошибок.
 ///
 /// # Пример (BuT)
 /// ```but
@@ -2585,10 +2585,10 @@ fn example_local_var_in_block_is_valid() {
 /// ```
 #[test]
 fn example_local_var_in_for_is_valid() {
-    build_file("tests/data/sematic/valid/local_var_in_for.but").unwrap();
+    build_file("tests/data/semantic/valid/local_var_in_for.but").unwrap();
 }
 
-/// `tests/data/sematic/valid/local_var_nested.but` — вложенные блоки с затенением — без ошибок.
+/// `tests/data/semantic/valid/local_var_nested.but` — вложенные блоки с затенением — без ошибок.
 ///
 /// # Пример (BuT)
 /// ```but
@@ -2602,7 +2602,7 @@ fn example_local_var_in_for_is_valid() {
 /// ```
 #[test]
 fn example_local_var_nested_is_valid() {
-    build_file("tests/data/sematic/valid/local_var_nested.but").unwrap();
+    build_file("tests/data/semantic/valid/local_var_nested.but").unwrap();
 }
 
 /// Переменная через `upper()` позволяет найти другие переменные той же модели.
