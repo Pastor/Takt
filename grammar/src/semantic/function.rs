@@ -80,7 +80,7 @@ pub fn construct_function(
             };
             if def.external {
                 Ok(FunctionNode::External {
-                    upper: Some(Rc::clone(&model)),
+                    upper: Some(Rc::downgrade(&model)),
                     name: name.clone(),
                     params,
                     ret: rett,
@@ -92,7 +92,7 @@ pub fn construct_function(
                     return Err("Локальная функция должна иметь тело".into());
                 };
                 Ok(FunctionNode::Local {
-                    upper: Some(Rc::clone(&model)),
+                    upper: Some(Rc::downgrade(&model)),
                     name: name.clone(),
                     params,
                     ret: rett,

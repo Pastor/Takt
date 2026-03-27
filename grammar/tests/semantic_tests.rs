@@ -2468,15 +2468,18 @@ fn ref_cond_arithmetic_file_gives_warning() {
 
 /// Переменная хранит ссылку на родительскую модель (`upper`).
 ///
+/// Тест использует `Rc` напрямую (не `.take()`), чтобы родительская
+/// модель оставалась живой и Weak-ссылка могла быть разыменована.
+///
 /// # Пример (BuT)
 /// ```but
 /// var flag: bit = false;
 /// ```
 #[test]
 fn variable_node_has_parent_upper() {
-    use grammar::semantic::VariableNode;
-    let node = build("var flag: bit = false;");
-    let var = node.search_var("flag").expect("переменная flag не найдена");
+    let (ast, _) = parse("var flag: bit = false;", 0).unwrap();
+    let root = construct_model(&ast, None, &[]).unwrap();
+    let var = root.borrow().search_var("flag").expect("переменная flag не найдена");
     let upper = var.upper();
     assert!(
         upper.is_some(),
@@ -2485,11 +2488,14 @@ fn variable_node_has_parent_upper() {
 }
 
 /// Константа хранит ссылку на родительскую модель.
+///
+/// Тест использует `Rc` напрямую (не `.take()`), чтобы родительская
+/// модель оставалась живой и Weak-ссылка могла быть разыменована.
 #[test]
 fn const_node_has_parent_upper() {
-    use grammar::semantic::VariableNode;
-    let node = build("type u8 = [bit;8]; const C: u8 = 0;");
-    let var = node.search_var("C").expect("константа C не найдена");
+    let (ast, _) = parse("type u8 = [bit;8]; const C: u8 = 0;", 0).unwrap();
+    let root = construct_model(&ast, None, &[]).unwrap();
+    let var = root.borrow().search_var("C").expect("константа C не найдена");
     assert!(
         var.upper().is_some(),
         "константа должна иметь ссылку на родительскую модель"
@@ -2623,4 +2629,24 @@ fn variable_upper_gives_access_to_sibling_vars() {
         upper.borrow().search_var("b").is_some(),
         "через upper переменной a должна быть доступна переменная b"
     );
+}
+
+// ─── SA8: тесты отсутствия циклических сильных Rc-ссылок ──────────────────
+
+/// Модель с условиями не создаёт сильных циклов (SA8).
+#[test]
+fn no_strong_cycle_with_conditions() {
+    use std::rc::Rc;
+    let (ast, _) = parse("var x: bit = false; cond done = x = false; start S;", 0).unwrap();
+    let root = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    assert_eq!(Rc::strong_count(&root), 1, "модель с условиями: счётчик Rc должен быть 1");
+}
+
+/// Модель с именованными блоками не создаёт сильных циклов (SA8).
+#[test]
+fn no_strong_cycle_with_named_blocks() {
+    use std::rc::Rc;
+    let (ast, _) = parse("var x: bit = false; start S { always { x = x; } }", 0).unwrap();
+    let root = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    assert_eq!(Rc::strong_count(&root), 1, "модель с блоками: счётчик Rc должен быть 1");
 }

@@ -263,7 +263,7 @@ fn register_local_var(
         // Сохраняем предыдущее значение для восстановления при выходе из блока
         let prev = model.borrow().variables.get(name).cloned();
         let node = VariableNode::Simple {
-            upper: None,
+            upper: Some(Rc::downgrade(model)),
             name: name.clone(),
             ty: ty.clone(),
             // Expression::None — заглушка; инициализатор уже сохранён в

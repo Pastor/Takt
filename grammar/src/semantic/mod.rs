@@ -29,6 +29,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::rc::Weak;
 
 /// Семантический узел модели (конечного автомата).
 ///
@@ -38,12 +39,12 @@ use std::rc::Rc;
 /// Поля [`doc`](ModelNode::doc) и [`docs`](ModelNode::docs) заполняются
 /// отдельным вызовом [`construct_model_with_docs`](tree::construct_model_with_docs)
 /// и содержат строки из `///`-комментариев исходного текста.
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Default, Debug)]
 pub struct ModelNode {
     /// Имя модели (`None` для анонимной корневой модели).
     pub name: Option<String>,
-    /// Модель уровнем выше.
-    pub upper: Option<Rc<RefCell<ModelNode>>>,
+    /// Модель уровнем выше (слабая ссылка для предотвращения циклов Rc).
+    pub upper: Option<Weak<RefCell<ModelNode>>>,
     /// Вложенные именованные модели.
     pub models: HashMap<String, Rc<RefCell<ModelNode>>>,
     /// Именованные блоки кода (`enter`, `exit`, `always`, …).
@@ -73,6 +74,23 @@ pub struct ModelNode {
     /// Заполняется [`construct_model_with_docs`](tree::construct_model_with_docs).
     pub docs: HashMap<String, Vec<String>>,
 }
+
+impl PartialEq for ModelNode {
+    fn eq(&self, other: &Self) -> bool {
+        // upper игнорируется: родительская ссылка не является частью идентичности модели
+        self.name == other.name
+            && self.models == other.models
+            && self.named_blocks == other.named_blocks
+            && self.functions == other.functions
+            && self.variables == other.variables
+            && self.types == other.types
+            && self.conditions == other.conditions
+            && self.states == other.states
+            && self.implements == other.implements
+    }
+}
+
+impl Eq for ModelNode {}
 
 impl ModelNode {
     /// Возвращает `true`, если модель содержит хотя бы одно состояние.
@@ -118,7 +136,7 @@ impl ModelNode {
     pub fn search_model(&self, name: &str) -> Option<Rc<RefCell<ModelNode>>> {
         if let Some(model) = self.models.get(name) {
             Some(Rc::clone(model))
-        } else if let Some(model) = self.upper.as_ref() {
+        } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
             return model.borrow().search_model(name);
         } else {
             None
@@ -144,7 +162,7 @@ impl ModelNode {
     pub fn search_var(&self, name: &str) -> Option<VariableNode> {
         if let Some(var) = self.variables.get(name) {
             Some(var.clone())
-        } else if let Some(model) = self.upper.as_ref() {
+        } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
             return model.borrow().search_var(name);
         } else {
             None
@@ -155,7 +173,7 @@ impl ModelNode {
     pub fn search_cond(&self, name: &str) -> Option<ConditionNode> {
         if let Some(cond) = self.conditions.get(name) {
             Some(cond.clone())
-        } else if let Some(model) = self.upper.as_ref() {
+        } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
             return model.borrow().search_cond(name);
         } else {
             None
@@ -179,7 +197,7 @@ impl ModelNode {
     pub fn search_func(&self, name: &str) -> Option<Rc<RefCell<FunctionNode>>> {
         if let Some(func) = self.functions.get(name) {
             Some(Rc::new(RefCell::new(func.clone())))
-        } else if let Some(model) = self.upper.as_ref() {
+        } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
             return model.borrow().search_func(name);
         } else {
             None
@@ -189,7 +207,7 @@ impl ModelNode {
     pub fn search_state(&self, name: &str) -> Option<Rc<RefCell<StateNode>>> {
         if let Some(state) = self.states.get(name) {
             Some(Rc::new(RefCell::new(state.clone())))
-        } else if let Some(model) = self.upper.as_ref() {
+        } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
             return model.borrow().search_state(name);
         } else {
             None
@@ -244,29 +262,29 @@ pub enum NamedCodeBlock {
     Unresolved(String, ast::Statement),
     /// Блок `enter` с разрешённым оператором.
     Enter {
-        /// Родительская модель.
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Тело блока.
         body: Statement,
     },
     /// Блок `exit` с разрешённым оператором.
     Exit {
-        /// Родительская модель.
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Тело блока.
         body: Statement,
     },
     /// Блок `always` с разрешённым оператором.
     Always {
-        /// Родительская модель.
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Тело блока.
         body: Statement,
     },
     /// Пользовательский именованный блок.
     Unknown {
-        /// Родительская модель.
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Имя блока.
         name: String,
         /// Тело блока.
@@ -327,7 +345,7 @@ impl NamedCodeBlock {
             NamedCodeBlock::Enter { upper, .. }
             | NamedCodeBlock::Exit { upper, .. }
             | NamedCodeBlock::Always { upper, .. }
-            | NamedCodeBlock::Unknown { upper, .. } => upper.clone(),
+            | NamedCodeBlock::Unknown { upper, .. } => upper.as_ref().and_then(|w| w.upgrade()),
             _ => None,
         }
     }
@@ -343,8 +361,8 @@ pub enum FunctionNode {
     Unresolved(ast::FunctionDefine),
     /// Локальная функция с телом.
     Local {
-        /// Родительская модель.
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Имя функции.
         name: String,
         /// Список параметров: `(имя, тип)`.
@@ -356,8 +374,8 @@ pub enum FunctionNode {
     },
     /// Внешняя функция (без тела).
     External {
-        /// Родительская модель.
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Имя функции.
         name: String,
         /// Список параметров: `(имя, тип)`.
@@ -495,8 +513,8 @@ pub enum VariableNode {
     Unresolved,
     /// Изменяемая переменная.
     Simple {
-        /// Родительская модель.
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Имя переменной.
         name: String,
         /// Тип переменной.
@@ -506,8 +524,8 @@ pub enum VariableNode {
     },
     /// Порт, отображённый на аппаратный адрес.
     Port {
-        /// Родительская модель.
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Имя переменной.
         name: String,
         /// Тип переменной.
@@ -517,8 +535,8 @@ pub enum VariableNode {
     },
     /// Константа.
     Const {
-        /// Родительская модель.
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Имя константы.
         name: String,
         /// Тип константы.
@@ -607,7 +625,7 @@ impl VariableNode {
         match self {
             VariableNode::Simple { upper, .. }
             | VariableNode::Port { upper, .. }
-            | VariableNode::Const { upper, .. } => upper.clone(),
+            | VariableNode::Const { upper, .. } => upper.as_ref().and_then(|w| w.upgrade()),
             VariableNode::Unresolved => None,
         }
     }
@@ -653,15 +671,24 @@ pub enum TypeNode {
 /// Заполняется в ходе третьего прохода построения модели ([`extract_conditions`]).
 ///
 /// [`extract_conditions`]: crate::semantic::condition::extract_conditions
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct ConditionNode {
     /// Имя условия, как объявлено в источнике (`cond имя = …`).
     pub name: String,
     /// Разрешённое значение условия.
     pub value: Condition,
-    /// Родительская модель.
-    pub upper: Option<Rc<RefCell<ModelNode>>>,
+    /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+    pub upper: Option<Weak<RefCell<ModelNode>>>,
 }
+
+impl PartialEq for ConditionNode {
+    fn eq(&self, other: &Self) -> bool {
+        // upper игнорируется: родительская ссылка не является частью идентичности узла
+        self.name == other.name && self.value == other.value
+    }
+}
+
+impl Eq for ConditionNode {}
 
 /// Состояние конечного автомата.
 ///
@@ -670,14 +697,15 @@ pub struct ConditionNode {
 /// - [`Simple`](StateNode::Simple) — обычное состояние без реализации.
 /// - [`Implement`](StateNode::Implement) — состояние с реализацией (`= Модель`),
 ///   может иметь оператор `next`.
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
+#[derive(Default, Debug, Clone)]
 pub enum StateNode {
     /// Состояние не разрешено (временная заглушка при построении дерева).
     #[default]
     Unresolved,
     /// Обычное состояние: контекст, имя и список ссылок на переходы.
     Simple {
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Именованные блоки кода (`enter`, `exit`, `always`, …).
         named_blocks: Vec<NamedCodeBlock>,
         /// Имя состояния.
@@ -688,7 +716,8 @@ pub enum StateNode {
     },
     /// Состояние с реализацией (`= Модель`): может иметь `next`-переход.
     Implement {
-        upper: Option<Rc<RefCell<ModelNode>>>,
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
         /// Именованные блоки кода (`enter`, `exit`, `always`, …).
         named_blocks: Vec<NamedCodeBlock>,
         /// Имя состояния.
@@ -702,6 +731,25 @@ pub enum StateNode {
         kind: StateNodeKind,
     },
 }
+
+impl PartialEq for StateNode {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (StateNode::Unresolved, StateNode::Unresolved) => true,
+            (
+                StateNode::Simple { name: n1, named_blocks: nb1, references: r1, kind: k1, .. },
+                StateNode::Simple { name: n2, named_blocks: nb2, references: r2, kind: k2, .. },
+            ) => n1 == n2 && nb1 == nb2 && r1 == r2 && k1 == k2,
+            (
+                StateNode::Implement { name: n1, named_blocks: nb1, references: r1, implements: i1, next: nx1, kind: k1, .. },
+                StateNode::Implement { name: n2, named_blocks: nb2, references: r2, implements: i2, next: nx2, kind: k2, .. },
+            ) => n1 == n2 && nb1 == nb2 && r1 == r2 && i1 == i2 && nx1 == nx2 && k1 == k2,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for StateNode {}
 
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 enum StateNodeKind {
@@ -724,7 +772,9 @@ impl StateNode {
     /// Возвращает ссылку на родительскую модель состояния.
     pub fn upper(&self) -> Option<Rc<RefCell<ModelNode>>> {
         match self {
-            StateNode::Simple { upper, .. } | StateNode::Implement { upper, .. } => upper.clone(),
+            StateNode::Simple { upper, .. } | StateNode::Implement { upper, .. } => {
+                upper.as_ref().and_then(|w| w.upgrade())
+            }
             StateNode::Unresolved => None,
         }
     }
@@ -962,6 +1012,96 @@ pub struct Reference<T: Clone + PartialEq + Eq + Debug> {
 mod tests {
     use super::*;
     use crate::diagnostics::Diagnostic;
+    use crate::parse;
+    use crate::semantic::tree::construct_model;
+
+    // ─── Тесты: отсутствие циклических сильных ссылок (SA8) ──────────────────
+
+    /// Корневая модель с переменными не создаёт сильных циклов.
+    ///
+    /// После построения модели счётчик сильных ссылок на корневой Rc должен
+    /// быть равен 1 — только наш handle. Если бы `upper` переменных был Rc,
+    /// он увеличил бы счётчик до 1 + N (по количеству переменных).
+    #[test]
+    fn model_with_vars_has_no_strong_cycle() {
+        let (ast, _) = parse("var a: bit = false; var b: bit = false; start S;", 0).unwrap();
+        let root = construct_model(&ast, None, &[]).unwrap();
+        // Единственный сильный владелец — наша переменная `root`
+        assert_eq!(
+            Rc::strong_count(&root),
+            1,
+            "корневой Rc должен иметь счётчик 1 (нет циклических Rc-ссылок)"
+        );
+    }
+
+    /// Вложенная модель не создаёт сильных циклов через upper.
+    ///
+    /// Модель M имеет `upper` → корень через Weak. Счётчик корня = 1.
+    #[test]
+    fn nested_model_has_no_strong_cycle() {
+        let (ast, _) = parse("model M { start S; } start Main = M;", 0).unwrap();
+        let root = construct_model(&ast, None, &[]).unwrap();
+        assert_eq!(
+            Rc::strong_count(&root),
+            1,
+            "корень с вложенной моделью должен иметь счётчик 1"
+        );
+    }
+
+    /// При удалении корневой Rc все Weak-ссылки из переменных становятся недействительными.
+    ///
+    /// Это доказывает, что циклов нет: дерево освобождается корректно.
+    #[test]
+    fn upper_weak_invalidated_after_drop() {
+        let (ast, _) = parse("var x: bit = false; start S;", 0).unwrap();
+        let root = construct_model(&ast, None, &[]).unwrap();
+        // Получаем переменную и сохраняем Weak через upper
+        let var_x = root.borrow().search_var("x").expect("x должна быть найдена");
+        let weak_upper = match var_x {
+            VariableNode::Simple { ref upper, .. } => upper.clone(),
+            _ => panic!("ожидался Simple"),
+        };
+        // Пока root жив — upgrade() работает
+        assert!(
+            weak_upper.as_ref().and_then(|w| w.upgrade()).is_some(),
+            "upper должен быть жив, пока root существует"
+        );
+        // Удаляем root — Weak должен стать недействительным
+        drop(root);
+        assert!(
+            weak_upper.as_ref().and_then(|w| w.upgrade()).is_none(),
+            "upper должен стать недействительным после drop(root)"
+        );
+    }
+
+    /// `upper()` метод переменной возвращает Some, если модель жива.
+    #[test]
+    fn variable_upper_returns_some_while_model_alive() {
+        let (ast, _) = parse("var x: bit = false;", 0).unwrap();
+        let root = construct_model(&ast, None, &[]).unwrap();
+        let var_x = root.borrow().search_var("x").expect("x должна быть найдена");
+        assert!(
+            var_x.upper().is_some(),
+            "upper() переменной должен возвращать Some пока модель жива"
+        );
+    }
+
+    /// Вложенная модель имеет upper() указывающий на родителя.
+    #[test]
+    fn nested_model_upper_points_to_parent() {
+        let (ast, _) = parse("model Inner { start S; } start Main = Inner;", 0).unwrap();
+        let root = construct_model(&ast, None, &[]).unwrap();
+        let inner = root.borrow().search_model("Inner").expect("Inner не найдена");
+        let parent = inner.borrow().upper.as_ref().and_then(|w| w.upgrade());
+        assert!(parent.is_some(), "Inner должна иметь upper → родительскую модель");
+        // Родитель — анонимная корневая модель (name = None)
+        assert_eq!(
+            parent.unwrap().borrow().name,
+            None,
+            "родитель Inner должен быть анонимной корневой моделью"
+        );
+    }
+
     // ─── Diagnostic ──────────────────────────────────────────────────────
 
     /// Конвертация `&str` в `Diagnostic::Error`.

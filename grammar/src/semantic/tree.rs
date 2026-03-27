@@ -30,6 +30,7 @@ use crate::{normalize_model_name, parse};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::rc::Weak;
 
 /// Извлекает имя из опционального [`Identifier`].
 ///
@@ -75,7 +76,7 @@ fn construct_model_stage0(
     let name = model.name.clone();
 
     let model_node = ModelNode {
-        upper: upper.map(|m| Rc::clone(&m)),
+        upper: upper.as_ref().map(|m| Rc::downgrade(m)),
         name: name.map(|i| i.name.clone()),
         implements: model
             .implements
@@ -247,7 +248,7 @@ fn construct_model_stage0(
                     variables.insert(
                         name.clone(),
                         VariableNode::Simple {
-                            upper: Some(Rc::clone(&model_node)),
+                            upper: Some(Rc::downgrade(&model_node)),
                             name: name.clone(),
                             ty: construct_type(typ, &types)?,
                             expr: initializer
@@ -270,7 +271,7 @@ fn construct_model_stage0(
                     variables.insert(
                         name.clone(),
                         VariableNode::Port {
-                            upper: Some(Rc::clone(&model_node)),
+                            upper: Some(Rc::downgrade(&model_node)),
                             name: name.clone(),
                             ty: type_node,
                             expr: Expression::Unresolved(
@@ -299,7 +300,7 @@ fn construct_model_stage0(
                     variables.insert(
                         name.clone(),
                         VariableNode::Const {
-                            upper: Some(Rc::clone(&model_node)),
+                            upper: Some(Rc::downgrade(&model_node)),
                             name: name.clone(),
                             ty: construct_type(typ, &types)?,
                             expr: Expression::Unresolved(initializer),
@@ -324,7 +325,7 @@ fn construct_model_stage0(
                 ConditionNode {
                     name: name.clone(),
                     value: Condition::Unresolved(def.value.clone()),
-                    upper: Some(Rc::clone(&model_node)),
+                    upper: Some(Rc::downgrade(&model_node)),
                 },
             );
         } else if let ModelElement::NamedBlockCode(def) = element {
@@ -336,19 +337,19 @@ fn construct_model_stage0(
                 .clone();
             let block = match name.as_str() {
                 "enter" => NamedCodeBlock::Enter {
-                    upper: Some(Rc::clone(&model_node)),
+                    upper: Some(Rc::downgrade(&model_node)),
                     body: Statement::Unresolved(def.statement.clone()),
                 },
                 "exit" => NamedCodeBlock::Exit {
-                    upper: Some(Rc::clone(&model_node)),
+                    upper: Some(Rc::downgrade(&model_node)),
                     body: Statement::Unresolved(def.statement.clone()),
                 },
                 "always" => NamedCodeBlock::Always {
-                    upper: Some(Rc::clone(&model_node)),
+                    upper: Some(Rc::downgrade(&model_node)),
                     body: Statement::Unresolved(def.statement.clone()),
                 },
                 name => NamedCodeBlock::Unknown {
-                    upper: Some(Rc::clone(&model_node)),
+                    upper: Some(Rc::downgrade(&model_node)),
                     name: name.to_string(),
                     body: Statement::Unresolved(def.statement.clone()),
                 },
@@ -869,8 +870,8 @@ pub fn construct_states(
                     object: Box::new(StateNode::Unresolved),
                 });
                 StateNode::Implement {
-                    upper: Some(upper.clone()),
-                    named_blocks: construct_named_blocks(def, Some(Rc::clone(&upper)))?,
+                    upper: Some(Rc::downgrade(&upper)),
+                    named_blocks: construct_named_blocks(def, Some(Rc::downgrade(&upper)))?,
                     name: name.clone(),
                     references,
                     implements: Implement::Unresolved(expr),
@@ -879,8 +880,8 @@ pub fn construct_states(
                 }
             } else {
                 StateNode::Simple {
-                    upper: Some(upper.clone()),
-                    named_blocks: construct_named_blocks(def, Some(Rc::clone(&upper)))?,
+                    upper: Some(Rc::downgrade(&upper)),
+                    named_blocks: construct_named_blocks(def, Some(Rc::downgrade(&upper)))?,
                     name: name.clone(),
                     references,
                     kind,
@@ -998,7 +999,7 @@ fn resolve_references(
 /// они все сохраняются в списке и могут быть получены через `get_named_blocks`.
 fn construct_named_blocks(
     state: &StateDefine,
-    upper: Option<Rc<RefCell<ModelNode>>>,
+    upper: Option<Weak<RefCell<ModelNode>>>,
 ) -> Result<Vec<NamedCodeBlock>, Diagnostic> {
     let mut named_blocks = Vec::new();
     for element in state.elements.iter() {

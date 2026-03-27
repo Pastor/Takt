@@ -23,10 +23,10 @@ pub fn resolve_named_blocks(
             NamedCodeBlock::Unresolved(name, stmt) => {
                 let stmt = resolve_statement(&Statement::Unresolved(stmt), model.clone())?;
                 match name.as_str() {
-                    "enter" => NamedCodeBlock::Enter { upper: None, body: stmt },
-                    "exit" => NamedCodeBlock::Exit { upper: None, body: stmt },
-                    "always" => NamedCodeBlock::Always { upper: None, body: stmt },
-                    name => NamedCodeBlock::Unknown { upper: None, name: name.to_string(), body: stmt },
+                    "enter" => NamedCodeBlock::Enter { upper: Some(Rc::downgrade(&model)), body: stmt },
+                    "exit" => NamedCodeBlock::Exit { upper: Some(Rc::downgrade(&model)), body: stmt },
+                    "always" => NamedCodeBlock::Always { upper: Some(Rc::downgrade(&model)), body: stmt },
+                    name => NamedCodeBlock::Unknown { upper: Some(Rc::downgrade(&model)), name: name.to_string(), body: stmt },
                 }
             }
             NamedCodeBlock::Enter { upper, body } => {
