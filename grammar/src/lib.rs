@@ -150,22 +150,42 @@ fn parser_error_to_diagnostic(
 ///
 /// - `source` — исходный код на языке BuT
 /// - `output_path` — путь к выходному каталогу (генератор C создаёт `.h`-файл)
+/// - `search_paths` — директории для поиска файлов `import` (пустой слайс — только текущая директория)
 ///
 /// # Ошибки
 ///
-/// Возвращает [`Diagnostic`] при синтаксической или семантической ошибке.
+/// Возвращает [`Diagnostic`] при синтаксической или семантической ошибке,
+/// а также если файл импорта не найден ни в одном из `search_paths`.
 ///
-/// # Пример
+/// # Примеры
 ///
 /// ```no_run
-/// grammar::compile_to_c("start S;", ".output").unwrap();
+/// // Без импортов — пустой список путей
+/// grammar::compile_to_c("start S;", ".output", &[]).unwrap();
+///
+/// // С импортами — указываем директорию поиска
+/// grammar::compile_to_c(
+///     r#"import "std.but"; start S;"#,
+///     ".output",
+///     &["/usr/lib/but".to_string()],
+/// ).unwrap();
 /// ```
-pub fn compile_to_c(source: &str, output_path: &str) -> Result<(), diagnostics::Diagnostic> {
+pub fn compile_to_c(
+    source: &str,
+    output_path: &str,
+    search_paths: &[String],
+) -> Result<(), diagnostics::Diagnostic> {
     // Шаг 1: Синтаксический анализ
     let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
 
-    // Шаг 2: Семантический анализ
-    let model = semantic::tree::construct_model(&model_ast, None, &[])?;
+    // Шаг 2: Семантический анализ (с путями поиска для разрешения импортов)
+    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+
+    // Генератор C требует именованной модели.
+    // Корневая (файловая) модель всегда анонимна — задаём имя «Root» по умолчанию.
+    if model.borrow().name.is_none() {
+        model.borrow_mut().name = Some("Root".to_string());
+    }
 
     // Шаг 3: Генерация C-кода
     generator::generate(generator::Language::C, &model.borrow(), output_path)?;

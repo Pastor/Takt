@@ -3,9 +3,26 @@
 //! # Использование
 //!
 //! ```text
-//! butc compile --target c input.but -o output_dir
+//! butc compile [--target c] [-I dir1:dir2] <input.but> [-o output_dir]
 //! butc compile input.but           # вывод в ./output
 //! butc --help                      # справка
+//! ```
+//!
+//! # Поиск файлов импорта
+//!
+//! Флаг `-I` (или `--include-dirs`) задаёт директории, в которых ищутся
+//! файлы, указанные в `import`-выражениях. Директории разделяются двоеточием
+//! на Unix или точкой с запятой на Windows. Флаг можно указывать несколько раз.
+//!
+//! ```text
+//! # Unix: два пути через двоеточие
+//! butc compile -I /usr/lib/but:/home/user/but main.but -o out
+//!
+//! # Несколько флагов -I
+//! butc compile -I /usr/lib/but -I /home/user/but main.but
+//!
+//! # Слитная форма без пробела
+//! butc compile -I/usr/lib/but main.but
 //! ```
 //!
 //! # Целевые платформы
@@ -16,13 +33,173 @@ use std::env;
 use std::fs;
 use std::process;
 
-/// Выводит справку по использованию утилиты.
+/// Параметры компиляции, разобранные из аргументов командной строки.
+#[derive(Debug, PartialEq)]
+pub struct CompileOptions {
+    /// Целевой язык генерации (по умолчанию `"c"`).
+    pub target: String,
+    /// Путь к входному `.but`-файлу.
+    pub input_file: String,
+    /// Путь к выходному файлу или директории.
+    pub output_path: String,
+    /// Список директорий для поиска файлов `import`.
+    ///
+    /// Заполняется через флаги `-I` / `--include-dirs`.
+    /// Порядок элементов соответствует порядку указания флагов —
+    /// первый найденный файл используется (приоритет первого пути).
+    pub include_dirs: Vec<String>,
+}
+
+/// Разбивает строку путей на отдельные директории.
+///
+/// Платформо-зависимые разделители:
+/// - `:`  — на Unix/macOS (стандарт POSIX, аналогично `PATH`).
+/// - `;`  — на Windows (стандарт Windows, аналогично `%PATH%`).
+///
+/// На Unix `:`  всегда является разделителем.
+/// На Windows `;` всегда является разделителем.
+/// Пустые сегменты и пробелы по краям отбрасываются.
+///
+/// Для кросс-платформенных сценариев предпочтительнее использовать
+/// несколько флагов `-I`: `-I /a -I /b`.
+///
+/// # Примеры
+///
+/// ```text
+/// # Unix
+/// split_include_dirs("/a:/b:/c")  →  ["/a", "/b", "/c"]
+/// split_include_dirs("/a::/b")    →  ["/a", "/b"]
+/// split_include_dirs("")          →  []
+///
+/// # Windows
+/// split_include_dirs("C:\\a;C:\\b")  →  ["C:\\a", "C:\\b"]
+/// ```
+pub fn split_include_dirs(s: &str) -> Vec<String> {
+    // На Windows путь может начинаться с буквы диска «X:», поэтому разделителем
+    // служит точка с запятой. На Unix используется двоеточие (стандарт POSIX).
+    #[cfg(windows)]
+    let sep = ';';
+    #[cfg(not(windows))]
+    let sep = ':';
+
+    s.split(sep)
+        .map(str::trim)
+        .filter(|seg| !seg.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+/// Разбирает аргументы подкоманды `compile` в [`CompileOptions`].
+///
+/// Принимает слайс без имени программы и без `"compile"` в начале
+/// (т.е. аргументы, следующие сразу после `"compile"`).
+///
+/// # Поддерживаемые флаги
+///
+/// | Флаг                   | Описание                                  |
+/// |------------------------|-------------------------------------------|
+/// | `--target`, `-t`       | Целевой язык (`c`, по умолчанию)          |
+/// | `--output`, `-o`       | Путь к выходному файлу/директории         |
+/// | `--include-dirs`, `-I` | Пути поиска импортов (`:` или `;`)        |
+/// | `-I<путь>`             | Слитная форма без пробела                 |
+///
+/// Флаг `-I` можно повторять; все пути объединяются в один список.
+///
+/// # Ошибки
+///
+/// Возвращает строку с описанием ошибки при:
+/// - отсутствии входного файла,
+/// - флаге без обязательного аргумента,
+/// - неизвестном флаге.
+///
+/// # Примеры
+///
+/// ```
+/// # use grammar_bin::{parse_compile_args, CompileOptions};
+/// let args = vec![
+///     "-I".to_string(), "/lib/but:/usr/but".to_string(),
+///     "main.but".to_string(),
+/// ];
+/// let opts = parse_compile_args(&args).unwrap();
+/// assert_eq!(opts.include_dirs, vec!["/lib/but", "/usr/but"]);
+/// assert_eq!(opts.input_file, "main.but");
+/// assert_eq!(opts.target, "c");
+/// ```
+pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
+    let mut target = "c".to_string();
+    let mut input_file: Option<String> = None;
+    let mut output_path: Option<String> = None;
+    let mut include_dirs: Vec<String> = Vec::new();
+
+    let mut i = 0;
+    while i < args.len() {
+        let arg = args[i].as_str();
+        match arg {
+            "--target" | "-t" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => target = v.clone(),
+                    None => return Err(format!("{} требует аргумент", arg)),
+                }
+            }
+            "-o" | "--output" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => output_path = Some(v.clone()),
+                    None => return Err(format!("{} требует аргумент", arg)),
+                }
+            }
+            "-I" | "--include-dirs" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => include_dirs.extend(split_include_dirs(v)),
+                    None => return Err(format!("{} требует аргумент", arg)),
+                }
+            }
+            // Слитная форма: -I/path или -I/a:/b
+            s if s.starts_with("-I") && s.len() > 2 => {
+                include_dirs.extend(split_include_dirs(&s[2..]));
+            }
+            // Позиционный аргумент — входной файл
+            a if !a.starts_with('-') => {
+                input_file = Some(a.to_string());
+            }
+            unknown => {
+                return Err(format!("неизвестный флаг '{}'", unknown));
+            }
+        }
+        i += 1;
+    }
+
+    let input_file = input_file.ok_or_else(|| "не указан входной файл".to_string())?;
+    let output_path = output_path.unwrap_or_else(|| "output".to_string());
+
+    Ok(CompileOptions {
+        target,
+        input_file,
+        output_path,
+        include_dirs,
+    })
+}
+
+/// Выводит справку по использованию утилиты в stderr.
 fn print_usage() {
-    eprintln!("Использование: butc compile [--target <c>] <input.but> [-o <output_dir>]");
+    eprintln!("Использование: butc compile [флаги] <input.but> [-o <output>]");
     eprintln!("               butc --help");
     eprintln!();
+    eprintln!("Флаги:");
+    eprintln!("  --target, -t <c>       Целевой язык (по умолчанию: c)");
+    eprintln!("  --output, -o <путь>    Путь к выходному файлу");
+    eprintln!("  --include-dirs, -I <dirs>  Пути поиска файлов import, разделённые ':' или ';'");
+    eprintln!("                             Можно повторять: -I /a -I /b  или  -I /a:/b");
+    eprintln!();
     eprintln!("Целевые платформы:");
-    eprintln!("  c    Генерация C-заголовочного файла (по умолчанию)");
+    eprintln!("  c    Генерация C-заголовочного файла");
+    eprintln!();
+    eprintln!("Примеры:");
+    eprintln!("  butc compile main.but");
+    eprintln!("  butc compile -I /lib/but:/home/user/but main.but -o build/");
+    eprintln!("  butc compile -I /lib/but -I /home/user/but --target c main.but");
 }
 
 fn main() {
@@ -39,74 +216,316 @@ fn main() {
         process::exit(1);
     }
 
-    // Разбираем аргументы
-    let mut target = "c".to_string();
-    let mut input_file: Option<String> = None;
-    let mut output_dir: Option<String> = None;
-
-    let mut i = 2;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--target" | "-t" => {
-                i += 1;
-                if i < args.len() {
-                    target = args[i].clone();
-                } else {
-                    eprintln!("Ошибка: --target требует аргумент");
-                    process::exit(1);
-                }
-            }
-            "-o" | "--output" => {
-                i += 1;
-                if i < args.len() {
-                    output_dir = Some(args[i].clone());
-                } else {
-                    eprintln!("Ошибка: -o требует аргумент");
-                    process::exit(1);
-                }
-            }
-            arg if !arg.starts_with('-') => {
-                input_file = Some(arg.to_string());
-            }
-            arg => {
-                eprintln!("Ошибка: неизвестный флаг '{}'", arg);
-                print_usage();
-                process::exit(1);
-            }
-        }
-        i += 1;
-    }
-
-    let input_path = match input_file {
-        Some(p) => p,
-        None => {
-            eprintln!("Ошибка: не указан входной файл");
+    // Разбираем аргументы подкоманды (всё после "compile")
+    let compile_args = &args[2..];
+    let options = match parse_compile_args(compile_args) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("Ошибка разбора аргументов: {}", e);
             print_usage();
             process::exit(1);
         }
     };
 
-    let source = match fs::read_to_string(&input_path) {
+    // Читаем исходный файл
+    let source = match fs::read_to_string(&options.input_file) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Ошибка чтения файла '{}': {}", input_path, e);
+            eprintln!("Ошибка чтения файла '{}': {}", options.input_file, e);
             process::exit(1);
         }
     };
 
-    let out_path = output_dir.as_deref().unwrap_or("output");
-
-    match target.as_str() {
+    match options.target.as_str() {
         "c" => {
-            if let Err(diag) = grammar::compile_to_c(&source, out_path) {
+            if let Err(diag) = grammar::compile_to_c(&source, &options.output_path, &options.include_dirs) {
                 eprintln!("Ошибка компиляции: {}", diag.message);
                 process::exit(1);
             }
-            eprintln!("Скомпилировано: {} → {}/", input_path, out_path);
+            eprintln!(
+                "Скомпилировано: {} → {}/ (путей поиска: {})",
+                options.input_file,
+                options.output_path,
+                options.include_dirs.len()
+            );
         }
         t => {
             eprintln!("Ошибка: неизвестная цель '{}'. Поддерживается: c", t);
             process::exit(1);
         }
+    }
+}
+
+// ─── Тесты ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── split_include_dirs ────────────────────────────────────────────────────
+
+    /// На Unix: разделитель `:` (POSIX-стиль аналогично PATH).
+    #[cfg(not(windows))]
+    #[test]
+    fn split_colon_unix() {
+        assert_eq!(
+            split_include_dirs("/a:/b:/c"),
+            vec!["/a", "/b", "/c"]
+        );
+    }
+
+    /// На Windows: разделитель `;` (пути вида `C:\dir`).
+    #[cfg(windows)]
+    #[test]
+    fn split_semicolon_windows() {
+        assert_eq!(
+            split_include_dirs("C:\\lib;C:\\usr"),
+            vec!["C:\\lib", "C:\\usr"]
+        );
+    }
+
+    /// Пустые сегменты пропускаются.
+    #[cfg(not(windows))]
+    #[test]
+    fn split_empty_segments_skipped() {
+        assert_eq!(split_include_dirs("/a::/b"), vec!["/a", "/b"]);
+    }
+
+    /// Ведущие и завершающие пробелы обрезаются (Unix).
+    #[cfg(not(windows))]
+    #[test]
+    fn split_trims_whitespace() {
+        assert_eq!(
+            split_include_dirs("  /x  :  /y  "),
+            vec!["/x", "/y"]
+        );
+    }
+
+    /// Ведущие и завершающие пробелы обрезаются (Windows).
+    #[cfg(windows)]
+    #[test]
+    fn split_trims_whitespace_windows() {
+        assert_eq!(
+            split_include_dirs("  C:\\x  ;  C:\\y  "),
+            vec!["C:\\x", "C:\\y"]
+        );
+    }
+
+    /// Пустая строка → пустой вектор (работает на всех платформах).
+    #[test]
+    fn split_empty_string() {
+        let result: Vec<String> = split_include_dirs("");
+        assert!(result.is_empty());
+    }
+
+    /// Один путь без разделителей (работает на всех платформах).
+    #[test]
+    fn split_single_path() {
+        assert_eq!(split_include_dirs("/only/one"), vec!["/only/one"]);
+    }
+
+    /// Только пробелы → пустой вектор (работает на всех платформах).
+    #[test]
+    fn split_only_whitespace() {
+        let result: Vec<String> = split_include_dirs("   ");
+        assert!(result.is_empty());
+    }
+
+    /// На Unix: два пути через `;` не разделяются (`;` не является разделителем на Unix).
+    #[cfg(not(windows))]
+    #[test]
+    fn split_semicolon_is_not_unix_separator() {
+        // На Unix ';' не является разделителем — весь путь воспринимается как один
+        let result = split_include_dirs("/a;/b");
+        assert_eq!(result, vec!["/a;/b"], "на Unix ';' не разделяет пути");
+    }
+
+    // ── parse_compile_args: позитивные случаи ────────────────────────────────
+
+    /// Минимальный вызов: только входной файл.
+    #[test]
+    fn parse_minimal() {
+        let args = vec!["main.but".to_string()];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.input_file, "main.but");
+        assert_eq!(opts.target, "c");
+        assert_eq!(opts.output_path, "output");
+        assert!(opts.include_dirs.is_empty());
+    }
+
+    /// Флаг `-I` с единственным путём.
+    #[test]
+    fn parse_single_include_dir() {
+        let args = vec!["-I".to_string(), "/lib/but".to_string(), "main.but".to_string()];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.include_dirs, vec!["/lib/but"]);
+    }
+
+    /// Флаг `-I` с двоеточием — два пути.
+    #[test]
+    fn parse_include_dirs_colon() {
+        let args = vec![
+            "-I".to_string(), "/lib/but:/usr/but".to_string(),
+            "main.but".to_string(),
+        ];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.include_dirs, vec!["/lib/but", "/usr/but"]);
+    }
+
+    /// Флаг `-I` повторяется дважды — пути объединяются.
+    #[test]
+    fn parse_multiple_include_flags() {
+        let args = vec![
+            "-I".to_string(), "/a".to_string(),
+            "-I".to_string(), "/b".to_string(),
+            "main.but".to_string(),
+        ];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.include_dirs, vec!["/a", "/b"]);
+    }
+
+    /// Длинный флаг `--include-dirs`.
+    #[test]
+    fn parse_include_dirs_long_flag() {
+        let args = vec![
+            "--include-dirs".to_string(), "/lib:/usr".to_string(),
+            "main.but".to_string(),
+        ];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.include_dirs, vec!["/lib", "/usr"]);
+    }
+
+    /// Слитная форма: `-I/path` без пробела.
+    #[test]
+    fn parse_include_dir_glued() {
+        let args = vec!["-I/lib/but".to_string(), "main.but".to_string()];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.include_dirs, vec!["/lib/but"]);
+    }
+
+    /// Слитная форма с двоеточием: `-I/a:/b`.
+    #[test]
+    fn parse_include_dir_glued_colon() {
+        let args = vec!["-I/a:/b".to_string(), "main.but".to_string()];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.include_dirs, vec!["/a", "/b"]);
+    }
+
+    /// Флаги `-t`, `-o` и `-I` все вместе.
+    #[test]
+    fn parse_full_args() {
+        let args = vec![
+            "--target".to_string(), "c".to_string(),
+            "-I".to_string(), "/lib/but:/usr/but".to_string(),
+            "-I".to_string(), "/local/but".to_string(),
+            "main.but".to_string(),
+            "-o".to_string(), "build/".to_string(),
+        ];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.target, "c");
+        assert_eq!(opts.input_file, "main.but");
+        assert_eq!(opts.output_path, "build/");
+        assert_eq!(opts.include_dirs, vec!["/lib/but", "/usr/but", "/local/but"]);
+    }
+
+    /// Флаг `-o` задаёт выходной путь.
+    #[test]
+    fn parse_output_flag() {
+        let args = vec!["main.but".to_string(), "-o".to_string(), "dist/".to_string()];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.output_path, "dist/");
+    }
+
+    /// Длинная форма флага `--output`.
+    #[test]
+    fn parse_output_long_flag() {
+        let args = vec!["--output".to_string(), "out/".to_string(), "main.but".to_string()];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.output_path, "out/");
+    }
+
+    /// Короткий флаг целевой платформы `-t`.
+    #[test]
+    fn parse_target_short_flag() {
+        let args = vec!["-t".to_string(), "c".to_string(), "main.but".to_string()];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.target, "c");
+    }
+
+    // ── parse_compile_args: контр-примеры (ошибки) ───────────────────────────
+
+    /// Нет входного файла → ошибка.
+    #[test]
+    fn parse_missing_input_file_is_error() {
+        let args: Vec<String> = vec![];
+        assert!(parse_compile_args(&args).is_err());
+    }
+
+    /// Нет аргумента после `--target` → ошибка.
+    #[test]
+    fn parse_target_missing_value_is_error() {
+        let args = vec!["--target".to_string()];
+        let err = parse_compile_args(&args).unwrap_err();
+        assert!(err.contains("--target"), "сообщение должно упоминать флаг: {}", err);
+    }
+
+    /// Нет аргумента после `-o` → ошибка.
+    #[test]
+    fn parse_output_missing_value_is_error() {
+        let args = vec!["main.but".to_string(), "-o".to_string()];
+        let err = parse_compile_args(&args).unwrap_err();
+        assert!(err.contains("-o"), "сообщение должно упоминать флаг: {}", err);
+    }
+
+    /// Нет аргумента после `-I` → ошибка.
+    #[test]
+    fn parse_include_missing_value_is_error() {
+        let args = vec!["main.but".to_string(), "-I".to_string()];
+        let err = parse_compile_args(&args).unwrap_err();
+        assert!(err.contains("-I"), "сообщение должно упоминать флаг: {}", err);
+    }
+
+    /// Нет аргумента после `--include-dirs` → ошибка.
+    #[test]
+    fn parse_include_dirs_missing_value_is_error() {
+        let args = vec!["main.but".to_string(), "--include-dirs".to_string()];
+        let err = parse_compile_args(&args).unwrap_err();
+        assert!(err.contains("--include-dirs"), "сообщение должно упоминать флаг: {}", err);
+    }
+
+    /// Неизвестный флаг → ошибка с его именем.
+    #[test]
+    fn parse_unknown_flag_is_error() {
+        let args = vec!["main.but".to_string(), "--unknown-flag".to_string()];
+        let err = parse_compile_args(&args).unwrap_err();
+        assert!(
+            err.contains("--unknown-flag"),
+            "сообщение должно упоминать неизвестный флаг: {}",
+            err
+        );
+    }
+
+    /// Несколько флагов `-I` с пустыми сегментами — итоговый список без пустышек.
+    #[test]
+    fn parse_include_filters_empty_segments() {
+        let args = vec![
+            "-I".to_string(), "/a::/b".to_string(),
+            "main.but".to_string(),
+        ];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.include_dirs, vec!["/a", "/b"]);
+    }
+
+    /// Порядок путей поиска сохраняется (первый победитель).
+    #[test]
+    fn parse_include_dirs_order_preserved() {
+        let args = vec![
+            "-I".to_string(), "/first".to_string(),
+            "-I".to_string(), "/second".to_string(),
+            "-I".to_string(), "/third".to_string(),
+            "main.but".to_string(),
+        ];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.include_dirs, vec!["/first", "/second", "/third"]);
     }
 }

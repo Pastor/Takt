@@ -1,0 +1,18 @@
+// Пример: использование флага -I для поиска импортов.
+//
+// Этот файл использует `import "std.but"` — стандартную библиотеку типов BuT.
+// Для успешной компиляции необходимо указать путь к директории с std.but через -I:
+//
+//   butc compile -I grammar/tests/data/include cli_import_with_search_path.but -o out/
+//
+// Без флага -I компиляция завершится ошибкой «файл импорта не найден».
+
+import "std.but";
+
+/// Простой счётчик: стартует в Idle, переходит в Running.
+model Counter {
+    start Idle;
+    state Running;
+}
+
+start Counter;
