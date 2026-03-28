@@ -1,0 +1,604 @@
+diff --git a/grammar/src/lib.rs b/grammar/src/lib.rs
+index a9855fa..e4fb263 100644
+--- a/grammar/src/lib.rs
++++ b/grammar/src/lib.rs
+@@ -141,6 +141,51 @@ fn parser_error_to_diagnostic(
+     }
+ }
+ 
++/// Ce13: возвращает предупреждения о неиспользуемых переменных в модели.
++///
++/// Обходит все выражения, операторы и условия модели и её вложенных моделей,
++/// возвращая предупреждения для каждой `var`-переменной, не упомянутой нигде.
++/// Порты и константы не проверяются.
++///
++/// # Пример
++///
++/// ```
++/// use grammar::parse;
++/// use grammar::semantic::tree::construct_model;
++///
++/// let (ast, _) = parse("var unused: bit = 0; start S;", 0).unwrap();
++/// let model = construct_model(&ast, None, &[]).unwrap();
++/// let warnings = grammar::unused_variable_warnings(model);
++/// assert_eq!(warnings.len(), 1);
++/// ```
++pub fn unused_variable_warnings(
++    model: std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
++) -> Vec<crate::diagnostics::Diagnostic> {
++    crate::semantic::unused::check_unused_variables(model)
++}
++
++/// Ce14: возвращает предупреждения о недетерминированных переходах в модели.
++///
++/// Предупреждает, если несколько `ref`-переходов из одного состояния
++/// не имеют условий (безусловные переходы), что является явной недетерминированностью.
++///
++/// # Пример
++///
++/// ```
++/// use grammar::parse;
++/// use grammar::semantic::tree::construct_model;
++///
++/// let (ast, _) = parse("start A { ref B; ref C; } state B; state C;", 0).unwrap();
++/// let model = construct_model(&ast, None, &[]).unwrap();
++/// let warnings = grammar::nondeterministic_transition_warnings(model);
++/// assert_eq!(warnings.len(), 1);
++/// ```
++pub fn nondeterministic_transition_warnings(
++    model: std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
++) -> Vec<crate::diagnostics::Diagnostic> {
++    crate::semantic::validate::check_nondeterministic_transitions(model)
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+diff --git a/grammar/src/semantic/mod.rs b/grammar/src/semantic/mod.rs
+index 3c7d732..aec593f 100644
+--- a/grammar/src/semantic/mod.rs
++++ b/grammar/src/semantic/mod.rs
+@@ -22,7 +22,8 @@ mod statement;
+ pub mod tree;
+ mod type_;
+ mod type_inference;
+-mod validate;
++pub(crate) mod validate;
++pub mod unused;
+ 
+ use crate::parser::ast;
+ use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
+diff --git a/grammar/src/semantic/unused.rs b/grammar/src/semantic/unused.rs
+new file mode 100644
+index 0000000..f08e79a
+--- /dev/null
++++ b/grammar/src/semantic/unused.rs
+@@ -0,0 +1,290 @@
++//! Диагностика Ce13: обнаружение неиспользуемых переменных.
++//!
++//! Функция [`check_unused_variables`] обходит все выражения, операторы
++//! и условия модели, собирает множество используемых переменных и
++//! возвращает предупреждения для каждой объявленной, но неиспользуемой.
++
++use crate::diagnostics::{Diagnostic, Location};
++use crate::semantic::{
++    Condition, ConditionNode, Expression, FunctionNode, ModelNode, NamedCodeBlock, Statement,
++    VariableNode,
++};
++use std::cell::RefCell;
++use std::collections::HashSet;
++use std::rc::Rc;
++
++/// Проверяет наличие неиспользуемых переменных в модели.
++///
++/// Возвращает список [`Diagnostic`] уровня Warning для каждой переменной,
++/// объявленной через `var`, но ни разу не упомянутой в выражениях, условиях
++/// или именованных блоках модели.
++/// Порты и константы не проверяются — они могут быть внешним интерфейсом.
++pub fn check_unused_variables(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
++    let mut warnings = Vec::new();
++    check_model_unused(model, &mut warnings);
++    warnings
++}
++
++fn check_model_unused(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnostic>) {
++    let borrowed = model.borrow();
++    let mut used: HashSet<String> = HashSet::new();
++
++    // Собираем использования из инициализаторов переменных
++    for var in borrowed.variables.values() {
++        collect_from_var(var, &mut used);
++    }
++
++    // Собираем использования из тел функций
++    for func in borrowed.functions.values() {
++        collect_from_func(func, &mut used);
++    }
++
++    // Собираем использования из именованных условий
++    for cond in borrowed.conditions.values() {
++        collect_from_condition_node(cond, &mut used);
++    }
++
++    // Собираем использования из именованных блоков модели
++    for block in &borrowed.named_blocks {
++        collect_from_named_block(block, &mut used);
++    }
++
++    // Собираем использования из состояний
++    let states: Vec<_> = borrowed.states.values().cloned().collect();
++    drop(borrowed);
++
++    for state in &states {
++        collect_from_state(state, &mut used);
++    }
++
++    // Проверяем каждую простую переменную (var)
++    let borrowed = model.borrow();
++    for (name, var) in &borrowed.variables {
++        // Порты и константы не предупреждаем — они могут быть внешним интерфейсом
++        if matches!(var, VariableNode::Port { .. } | VariableNode::Const { .. }) {
++            continue;
++        }
++        if !used.contains(name.as_str()) {
++            warnings.push(Diagnostic::warning(
++                Location::Builtin,
++                format!(
++                    "Ce13: переменная '{}' объявлена, но нигде не используется",
++                    name
++                ),
++            ));
++        }
++    }
++
++    // Рекурсивно для вложенных моделей
++    let nested: Vec<Rc<RefCell<ModelNode>>> =
++        borrowed.models.values().map(Rc::clone).collect();
++    drop(borrowed);
++
++    for nested_model in nested {
++        check_model_unused(nested_model, warnings);
++    }
++}
++
++fn collect_from_var(var: &VariableNode, used: &mut HashSet<String>) {
++    match var {
++        VariableNode::Simple { expr, .. }
++        | VariableNode::Port { expr, .. }
++        | VariableNode::Const { expr, .. } => collect_from_expr(expr, used),
++        VariableNode::Unresolved => {}
++    }
++}
++
++fn collect_from_expr(expr: &Expression, used: &mut HashSet<String>) {
++    match expr {
++        Expression::Variable(var_rc) => {
++            let borrowed = var_rc.borrow();
++            if let VariableNode::Simple { name, .. }
++            | VariableNode::Port { name, .. }
++            | VariableNode::Const { name, .. } = &*borrowed
++            {
++                used.insert(name.clone());
++            }
++        }
++        Expression::ArraySubscript(var_rc, _) | Expression::ArraySlice(var_rc, _, _) => {
++            let borrowed = var_rc.borrow();
++            if let VariableNode::Simple { name, .. }
++            | VariableNode::Port { name, .. }
++            | VariableNode::Const { name, .. } = &*borrowed
++            {
++                used.insert(name.clone());
++            }
++        }
++        Expression::Not(e)
++        | Expression::BitwiseNot(e)
++        | Expression::UnaryPlus(e)
++        | Expression::Negate(e)
++        | Expression::Parenthesis(e)
++        | Expression::BitAccess(e, _)
++        | Expression::Cast(e, _) => collect_from_expr(e, used),
++        Expression::Add(l, r)
++        | Expression::Subtract(l, r)
++        | Expression::Multiply(l, r)
++        | Expression::Divide(l, r)
++        | Expression::Modulo(l, r)
++        | Expression::Power(l, r)
++        | Expression::BitwiseAnd(l, r)
++        | Expression::BitwiseXor(l, r)
++        | Expression::BitwiseOr(l, r)
++        | Expression::ShiftLeft(l, r)
++        | Expression::ShiftRight(l, r)
++        | Expression::And(l, r)
++        | Expression::Or(l, r)
++        | Expression::Equal(l, r)
++        | Expression::NotEqual(l, r)
++        | Expression::Less(l, r)
++        | Expression::More(l, r)
++        | Expression::LessEqual(l, r)
++        | Expression::MoreEqual(l, r)
++        | Expression::Assign(l, r) => {
++            collect_from_expr(l, used);
++            collect_from_expr(r, used);
++        }
++        Expression::ConditionalOperator(cond, then_e, else_e) => {
++            collect_from_expr(cond, used);
++            collect_from_expr(then_e, used);
++            collect_from_expr(else_e, used);
++        }
++        Expression::Function(_, args) => {
++            for arg in args {
++                collect_from_expr(arg, used);
++            }
++        }
++        Expression::Array(items) | Expression::Initializer(items) => {
++            for item in items {
++                collect_from_expr(item, used);
++            }
++        }
++        _ => {}
++    }
++}
++
++fn collect_from_stmt(stmt: &Statement, used: &mut HashSet<String>) {
++    match stmt {
++        Statement::Block(stmts) => {
++            for s in stmts {
++                collect_from_stmt(s, used);
++            }
++        }
++        Statement::Expression(e) => collect_from_expr(e, used),
++        Statement::If { cond, then_, else_ } => {
++            collect_from_expr(cond, used);
++            collect_from_stmt(then_, used);
++            if let Some(e) = else_ {
++                collect_from_stmt(e, used);
++            }
++        }
++        Statement::Loop { cond, body } => {
++            if let Some(c) = cond {
++                collect_from_expr(c, used);
++            }
++            collect_from_stmt(body, used);
++        }
++        Statement::For { init, cond, step, body } => {
++            if let Some(s) = init {
++                collect_from_stmt(s, used);
++            }
++            if let Some(c) = cond {
++                collect_from_expr(c, used);
++            }
++            if let Some(s) = step {
++                collect_from_expr(s, used);
++            }
++            collect_from_stmt(body, used);
++        }
++        Statement::Variable(_, _, Some(e)) => collect_from_expr(e, used),
++        Statement::Return(Some(e)) => collect_from_expr(e, used),
++        _ => {}
++    }
++}
++
++fn collect_from_condition(cond: &Condition, used: &mut HashSet<String>) {
++    match cond {
++        Condition::Variable(var_rc) => {
++            let borrowed = var_rc.borrow();
++            if let VariableNode::Simple { name, .. }
++            | VariableNode::Port { name, .. }
++            | VariableNode::Const { name, .. } = &*borrowed
++            {
++                used.insert(name.clone());
++            }
++        }
++        Condition::Not(c) | Condition::Parenthesis(c) => collect_from_condition(c, used),
++        Condition::And(l, r)
++        | Condition::Or(l, r)
++        | Condition::Equal(l, r)
++        | Condition::NotEqual(l, r)
++        | Condition::Less(l, r)
++        | Condition::More(l, r)
++        | Condition::LessEqual(l, r)
++        | Condition::MoreEqual(l, r)
++        | Condition::Add(l, r)
++        | Condition::Subtract(l, r) => {
++            collect_from_condition(l, used);
++            collect_from_condition(r, used);
++        }
++        Condition::Function(_, args) => {
++            for arg in args {
++                collect_from_condition(arg, used);
++            }
++        }
++        Condition::ArraySubscript(var_rc, _) => {
++            let borrowed = var_rc.borrow();
++            if let VariableNode::Simple { name, .. }
++            | VariableNode::Port { name, .. }
++            | VariableNode::Const { name, .. } = &*borrowed
++            {
++                used.insert(name.clone());
++            }
++        }
++        Condition::BitAccess(_, _) => {}
++        _ => {}
++    }
++}
++
++fn collect_from_condition_node(cond_node: &ConditionNode, used: &mut HashSet<String>) {
++    collect_from_condition(&cond_node.value, used);
++}
++
++fn collect_from_named_block(block: &NamedCodeBlock, used: &mut HashSet<String>) {
++    if let Some(stmt) = block.statement() {
++        collect_from_stmt(stmt, used);
++    }
++}
++
++fn collect_from_func(func: &FunctionNode, used: &mut HashSet<String>) {
++    if let FunctionNode::Local { body, .. } = func {
++        collect_from_stmt(body, used);
++    }
++}
++
++fn collect_from_state(
++    state: &crate::semantic::StateNode,
++    used: &mut HashSet<String>,
++) {
++    use crate::semantic::{Reference, StateNode};
++    match state {
++        StateNode::Simple {
++            named_blocks,
++            references,
++            ..
++        }
++        | StateNode::Implement {
++            named_blocks,
++            references,
++            ..
++        } => {
++            for block in named_blocks {
++                collect_from_named_block(block, used);
++            }
++            for reference in references {
++                collect_from_condition(&reference.cond, used);
++            }
++        }
++        StateNode::Unresolved => {}
++    }
++}
+diff --git a/grammar/src/semantic/validate.rs b/grammar/src/semantic/validate.rs
+index 80ae83d..0508967 100644
+--- a/grammar/src/semantic/validate.rs
++++ b/grammar/src/semantic/validate.rs
+@@ -1702,3 +1702,67 @@ mod tests {
+         );
+     }
+ }
++
++// ─── Ce14: Проверка детерминированности переходов ────────────────────────────
++
++/// Проверяет детерминированность переходов в состояниях модели.
++///
++/// Предупреждает если несколько `ref`-переходов из одного состояния
++/// не имеют условий (безусловные переходы — `Condition::None`) —
++/// это явная недетерминированность: непонятно, в какое состояние перейти.
++///
++/// # Возвращаемое значение
++///
++/// Вектор [`Diagnostic`] уровня Warning для каждого состояния
++/// с более чем одним безусловным переходом.
++pub fn check_nondeterministic_transitions(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
++    let mut warnings = Vec::new();
++    check_nondeterministic_model(model, &mut warnings);
++    warnings
++}
++
++fn check_nondeterministic_model(
++    model: Rc<RefCell<ModelNode>>,
++    warnings: &mut Vec<Diagnostic>,
++) {
++    let borrowed = model.borrow();
++    let model_name = borrowed.name.clone().unwrap_or_default();
++
++    for (state_name, state) in &borrowed.states {
++        let references: &[Reference<StateNode>] = match state {
++            StateNode::Simple { references, .. } => references,
++            StateNode::Implement { references, .. } => references,
++            StateNode::Unresolved => continue,
++        };
++
++        // Подсчёт безусловных переходов (Condition::None)
++        let unconditional_count = references
++            .iter()
++            .filter(|r| matches!(r.cond, Condition::None))
++            .count();
++
++        if unconditional_count > 1 {
++            let prefix = if model_name.is_empty() {
++                format!("состояние '{}'", state_name)
++            } else {
++                format!("модель '{}', состояние '{}'", model_name, state_name)
++            };
++            warnings.push(Diagnostic::warning(
++                Location::Builtin,
++                format!(
++                    "Ce14: {}: {} безусловных перехода(ов) — недетерминированное поведение",
++                    prefix, unconditional_count
++                ),
++            ));
++        }
++    }
++
++    // Рекурсивно для вложенных моделей
++    let nested: Vec<Rc<RefCell<ModelNode>>> =
++        borrowed.models.values().map(Rc::clone).collect();
++    drop(borrowed);
++
++    for nested_model in nested {
++        check_nondeterministic_model(nested_model, warnings);
++    }
++}
+diff --git a/grammar/tests/data/semantic/valid/all_vars_used.but b/grammar/tests/data/semantic/valid/all_vars_used.but
+new file mode 100644
+index 0000000..32fbeeb
+--- /dev/null
++++ b/grammar/tests/data/semantic/valid/all_vars_used.but
+@@ -0,0 +1,8 @@
++// FE3: Все переменные используются — предупреждений Ce13 нет.
++
++var counter: [bit;8] = 0;
++cond IsZero = counter = 0;
++start S {
++    ref Done: IsZero;
++}
++state Done {}
+diff --git a/grammar/tests/data/semantic/valid/deterministic_transitions.but b/grammar/tests/data/semantic/valid/deterministic_transitions.but
+new file mode 100644
+index 0000000..5b78eef
+--- /dev/null
++++ b/grammar/tests/data/semantic/valid/deterministic_transitions.but
+@@ -0,0 +1,9 @@
++// FE4: Детерминированные переходы — у каждого ref есть условие.
++
++var flag: bit = 0;
++start S {
++    ref A: flag;
++    ref B: !flag;
++}
++state A {}
++state B {}
+diff --git a/grammar/tests/data/semantic/valid/nondeterministic_warn.but b/grammar/tests/data/semantic/valid/nondeterministic_warn.but
+new file mode 100644
+index 0000000..a267685
+--- /dev/null
++++ b/grammar/tests/data/semantic/valid/nondeterministic_warn.but
+@@ -0,0 +1,9 @@
++// FE4: Два безусловных перехода из одного состояния.
++// Ожидается предупреждение Ce14.
++
++start S {
++    ref A;
++    ref B;
++}
++state A {}
++state B {}
+diff --git a/grammar/tests/data/semantic/valid/unused_variable.but b/grammar/tests/data/semantic/valid/unused_variable.but
+new file mode 100644
+index 0000000..ed41ee2
+--- /dev/null
++++ b/grammar/tests/data/semantic/valid/unused_variable.but
+@@ -0,0 +1,5 @@
++// FE3: Переменная, объявленная но нигде не используемая.
++// Ожидается предупреждение Ce13 для переменной 'unused'.
++
++var unused: [bit;8] = 0;
++start S {}
+diff --git a/grammar/tests/semantic_tests.rs b/grammar/tests/semantic_tests.rs
+index 0aee548..14f5c3c 100644
+--- a/grammar/tests/semantic_tests.rs
++++ b/grammar/tests/semantic_tests.rs
+@@ -3069,6 +3069,106 @@ fn example_ce6_type_inference_chain_valid() {
+         .expect("ce6_type_inference_chain.but должен разбираться без ошибок");
+ }
+ 
++// ─── Тесты FE3: Диагностика неиспользуемых переменных (Ce13) ─────────────────
++
++/// FE3: Переменная без использования даёт ровно одно предупреждение Ce13.
++#[test]
++fn test_unused_variable_warning() {
++    use grammar::diagnostics::Level;
++    let node = build_file("tests/data/semantic/valid/unused_variable.but")
++        .expect("unused_variable.but должен разбираться без ошибок");
++    let model_rc = {
++        let (ast, _) = grammar::parse(
++            &std::fs::read_to_string("tests/data/semantic/valid/unused_variable.but").unwrap(),
++            0,
++        )
++        .unwrap();
++        grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap()
++    };
++    let warnings = grammar::unused_variable_warnings(model_rc);
++    assert_eq!(
++        warnings.len(),
++        1,
++        "должно быть ровно одно предупреждение Ce13, получено: {:?}",
++        warnings
++    );
++    assert_eq!(warnings[0].level, Level::Warning, "уровень должен быть Warning");
++    assert!(
++        warnings[0].message.contains("Ce13"),
++        "сообщение должно содержать Ce13: {}",
++        warnings[0].message
++    );
++    assert!(
++        warnings[0].message.contains("unused"),
++        "сообщение должно содержать имя переменной 'unused': {}",
++        warnings[0].message
++    );
++}
++
++/// FE3: Если все переменные используются — предупреждений Ce13 нет.
++#[test]
++fn test_all_vars_used_no_warning() {
++    let (ast, _) = grammar::parse(
++        &std::fs::read_to_string("tests/data/semantic/valid/all_vars_used.but").unwrap(),
++        0,
++    )
++    .unwrap();
++    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
++    let warnings = grammar::unused_variable_warnings(model_rc);
++    assert!(
++        warnings.is_empty(),
++        "не должно быть предупреждений Ce13, получено: {:?}",
++        warnings
++    );
++}
++
++// ─── Тесты FE4: Проверка детерминированности переходов (Ce14) ─────────────────
++
++/// FE4: Два безусловных перехода из одного состояния — предупреждение Ce14.
++#[test]
++fn test_nondeterministic_transitions() {
++    use grammar::diagnostics::Level;
++    let (ast, _) = grammar::parse(
++        &std::fs::read_to_string("tests/data/semantic/valid/nondeterministic_warn.but").unwrap(),
++        0,
++    )
++    .unwrap();
++    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
++    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
++    assert_eq!(
++        warnings.len(),
++        1,
++        "должно быть одно предупреждение Ce14, получено: {:?}",
++        warnings
++    );
++    assert_eq!(warnings[0].level, Level::Warning);
++    assert!(
++        warnings[0].message.contains("Ce14"),
++        "сообщение должно содержать Ce14: {}",
++        warnings[0].message
++    );
++}
++
++/// FE4: Переходы с условиями — предупреждений Ce14 нет.
++#[test]
++fn test_deterministic_no_warning() {
++    let (ast, _) = grammar::parse(
++        &std::fs::read_to_string(
++            "tests/data/semantic/valid/deterministic_transitions.but",
++        )
++        .unwrap(),
++        0,
++    )
++    .unwrap();
++    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
++    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
++    assert!(
++        warnings.is_empty(),
++        "детерминированные переходы не должны давать предупреждений Ce14: {:?}",
++        warnings
++    );
++}
++
+ // ─── Тесты FE1: Перечисления ──────────────────────────────────────────────────
+ 
+ /// FE1: Базовое перечисление — разбирается без ошибок, варианты присутствуют в EnumNode.

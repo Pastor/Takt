@@ -1,0 +1,256 @@
+diff --git a/grammar/src/grammar.lalrpop b/grammar/src/grammar.lalrpop
+index 3dc83e1..bfa2c4a 100644
+--- a/grammar/src/grammar.lalrpop
++++ b/grammar/src/grammar.lalrpop
+@@ -64,6 +64,7 @@ ModelElement: ModelElement = {
+     FormulaDefine=> ModelElement::Formula(<>),
+     ConditionDefine => ModelElement::Condition(Box::new(<>)),
+     NamedBlockCodeDefine => ModelElement::NamedBlockCode(<>),
++    <e:EnumDefine> => ModelElement::Enum(e),
+     <l:@L> ";" <r:@R> => ModelElement::StraySemicolon(Location::Source(file_no, l, r)),
+ }
+ 
+@@ -169,6 +170,37 @@ TypeDefine: Box<TypeDefine> = {
+     },
+ }
+ 
++EnumVariant: EnumVariant = {
++    <l:@L> <name:Identifier> "=" <value:number> <r:@R> => EnumVariant {
++        loc: Location::Source(file_no, l, r),
++        name,
++        value: Some(value),
++    },
++    <l:@L> <name:Identifier> <r:@R> => EnumVariant {
++        loc: Location::Source(file_no, l, r),
++        name,
++        value: None,
++    },
++}
++
++EnumDefine: Box<EnumDefine> = {
++    <l:@L> "enum" <name:IdentifierOrError> "{" <variants:CommaOne<EnumVariant>> "}" <r:@R> => {
++        Box::new(EnumDefine {
++            loc: Location::Source(file_no, l, r),
++            name,
++            variants,
++        })
++    },
++    <l:@L> "enum" <name:IdentifierOrError> "{" <false_token:!> "}" <r:@R> => {
++        parser_errors.push(false_token);
++        Box::new(EnumDefine {
++            loc: Location::Source(file_no, l, r),
++            name,
++            variants: Vec::new(),
++        })
++    },
++}
++
+ BlockStatementOrSemiColon: Option<Statement> = {
+     <@L> <@R> ";" => None,
+     BlockStatement => Some(<>),
+@@ -776,5 +808,6 @@ extern {
+         "ref" => Token::Reference,
+         "next" => Token::Next,
+         "var" => Token::Variable,
++        "enum" => Token::Enum,
+     }
+ }
+diff --git a/grammar/src/parser/ast.rs b/grammar/src/parser/ast.rs
+index 2fa8cfc..3c2e9ad 100644
+--- a/grammar/src/parser/ast.rs
++++ b/grammar/src/parser/ast.rs
+@@ -242,6 +242,8 @@ pub enum ModelElement {
+     NamedBlockCode(Box<NamedBlockCodeDefine>),
+     /// Одиночная точка с запятой (допускается для совместимости).
+     StraySemicolon(Location),
++    /// Перечисление.
++    Enum(Box<EnumDefine>),
+ }
+ 
+ /// Вид состояния автомата.
+@@ -312,6 +314,34 @@ pub struct Variable {
+     pub initializer: Option<Expression>,
+ }
+ 
++/// Вариант перечисления.
++#[derive(Debug, PartialEq, Clone)]
++#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
++pub struct EnumVariant {
++    /// Местоположение в исходном коде.
++    pub loc: Location,
++    /// Имя варианта.
++    pub name: Identifier,
++    /// Явное числовое значение, если задано.
++    pub value: Option<i64>,
++}
++
++impl Eq for EnumVariant {}
++
++/// Определение перечисления `enum Name { Variant1, Variant2 = 5, ... }`.
++#[derive(Debug, PartialEq, Clone)]
++#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
++pub struct EnumDefine {
++    /// Местоположение в исходном коде.
++    pub loc: Location,
++    /// Имя перечисления.
++    pub name: Option<Identifier>,
++    /// Варианты перечисления.
++    pub variants: Vec<EnumVariant>,
++}
++
++impl Eq for EnumDefine {}
++
+ /// Определение псевдонима типа: `type Имя = Тип`.
+ #[derive(Debug, PartialEq, Eq, Clone)]
+ #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+diff --git a/grammar/src/parser/lexer.rs b/grammar/src/parser/lexer.rs
+index 3f65fe3..de3ff2f 100644
+--- a/grammar/src/parser/lexer.rs
++++ b/grammar/src/parser/lexer.rs
+@@ -190,6 +190,8 @@ pub enum Token<'input> {
+     Next,
+     /// Ключевое слово `extern`.
+     Extern,
++    /// Ключевое слово `enum`.
++    Enum,
+ }
+ 
+ impl<'input> fmt::Display for Token<'input> {
+@@ -268,6 +270,7 @@ impl<'input> fmt::Display for Token<'input> {
+             Token::Variable => write!(f, "var"),
+             Token::Next => write!(f, "next"),
+             Token::Extern => write!(f, "extern"),
++            Token::Enum => write!(f, "enum"),
+         }
+     }
+ }
+@@ -405,6 +408,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
+     "var"      => Token::Variable,
+     "next"     => Token::Next,
+     "extern"   => Token::Extern,
++    "enum"     => Token::Enum,
+ };
+ 
+ impl<'input> Lexer<'input> {
+diff --git a/grammar/src/semantic/docs.rs b/grammar/src/semantic/docs.rs
+index e07c568..de9d3fa 100644
+--- a/grammar/src/semantic/docs.rs
++++ b/grammar/src/semantic/docs.rs
+@@ -91,6 +91,7 @@ fn element_start(element: &ModelElement) -> Option<usize> {
+         ModelElement::NamedBlockCode(nb) => Some(nb.loc.start()),
+         ModelElement::Formula(f) => Some(f.loc.start()),
+         ModelElement::StraySemicolon(loc) => Some(loc.start()),
++        ModelElement::Enum(e) => Some(e.loc.start()),
+     }
+ }
+ 
+diff --git a/grammar/src/semantic/tree.rs b/grammar/src/semantic/tree.rs
+index b268f12..c79b628 100644
+--- a/grammar/src/semantic/tree.rs
++++ b/grammar/src/semantic/tree.rs
+@@ -366,6 +366,31 @@ fn construct_model_stage0(
+                 .name
+                 .clone();
+             functions.insert(name.clone(), FunctionNode::Unresolved(*def.clone()));
++        } else if let ModelElement::Enum(e) = element {
++            // FE1: Обработка перечислений. Присваиваем последовательные значения
++            // вариантам без явных значений (автоинкремент от 0).
++            let enum_name = e
++                .name
++                .as_ref()
++                .map(|id| id.name.clone())
++                .unwrap_or_default();
++            let mut next_val: i64 = 0;
++            let mut variant_pairs = Vec::new();
++            for variant in &e.variants {
++                let val = variant.value.unwrap_or(next_val);
++                next_val = val + 1;
++                variant_pairs.push((variant.name.name.clone(), val));
++            }
++            let enum_node = crate::semantic::EnumNode::new(
++                &enum_name,
++                &variant_pairs
++                    .iter()
++                    .map(|(n, v)| (n.as_str(), Some(*v)))
++                    .collect::<Vec<_>>(),
++            );
++            // Добавляем перечисление в enums модели после завершения построения
++            // Временно сохраняем в карту enums через model_node
++            model_node.borrow_mut().enums.insert(enum_name, enum_node);
+         }
+     }
+     model_node.borrow_mut().models = models;
+diff --git a/grammar/tests/data/semantic/valid/enum_basic.but b/grammar/tests/data/semantic/valid/enum_basic.but
+new file mode 100644
+index 0000000..15f5728
+--- /dev/null
++++ b/grammar/tests/data/semantic/valid/enum_basic.but
+@@ -0,0 +1,8 @@
++// FE1: Базовый пример перечисления без явных значений.
++// Значения вариантов: North=0, South=1, East=2, West=3
++
++model M {
++    enum Direction { North, South, East, West }
++    var dir: [bit;8] = 0;
++    start S {}
++}
+diff --git a/grammar/tests/data/semantic/valid/enum_with_values.but b/grammar/tests/data/semantic/valid/enum_with_values.but
+new file mode 100644
+index 0000000..e69ca94
+--- /dev/null
++++ b/grammar/tests/data/semantic/valid/enum_with_values.but
+@@ -0,0 +1,7 @@
++// FE1: Перечисление с явными числовыми значениями.
++// Варианты: Low=0, Medium=5, High=10
++
++model M {
++    enum Priority { Low = 0, Medium = 5, High = 10 }
++    start S {}
++}
+diff --git a/grammar/tests/semantic_tests.rs b/grammar/tests/semantic_tests.rs
+index 4deb9cd..dccc06c 100644
+--- a/grammar/tests/semantic_tests.rs
++++ b/grammar/tests/semantic_tests.rs
+@@ -3068,3 +3068,42 @@ fn example_ce6_type_inference_chain_valid() {
+     build_file("tests/data/semantic/valid/ce6_type_inference_chain.but")
+         .expect("ce6_type_inference_chain.but должен разбираться без ошибок");
+ }
++
++// ─── Тесты FE1: Перечисления ──────────────────────────────────────────────────
++
++/// FE1: Базовое перечисление — разбирается без ошибок, варианты присутствуют в EnumNode.
++#[test]
++fn test_enum_basic() {
++    use grammar::semantic::EnumNode;
++    let node = build_file("tests/data/semantic/valid/enum_basic.but")
++        .expect("enum_basic.but должен разбираться без ошибок");
++    // Перечисление находится во вложенной модели M
++    let m = node.search_model("M").expect("модель M должна быть найдена");
++    let borrowed = m.borrow();
++    assert!(
++        borrowed.enums.contains_key("Direction"),
++        "перечисление Direction должно быть в модели M"
++    );
++    let dir_enum = borrowed.enums.get("Direction").unwrap();
++    assert_eq!(dir_enum.find_variant("North"), Some(0), "North = 0");
++    assert_eq!(dir_enum.find_variant("South"), Some(1), "South = 1");
++    assert_eq!(dir_enum.find_variant("East"), Some(2), "East = 2");
++    assert_eq!(dir_enum.find_variant("West"), Some(3), "West = 3");
++}
++
++/// FE1: Перечисление с явными значениями — значения соответствуют объявлению.
++#[test]
++fn test_enum_with_values() {
++    let node = build_file("tests/data/semantic/valid/enum_with_values.but")
++        .expect("enum_with_values.but должен разбираться без ошибок");
++    let m = node.search_model("M").expect("модель M должна быть найдена");
++    let borrowed = m.borrow();
++    assert!(
++        borrowed.enums.contains_key("Priority"),
++        "перечисление Priority должно быть в модели M"
++    );
++    let prio = borrowed.enums.get("Priority").unwrap();
++    assert_eq!(prio.find_variant("Low"), Some(0), "Low = 0");
++    assert_eq!(prio.find_variant("Medium"), Some(5), "Medium = 5");
++    assert_eq!(prio.find_variant("High"), Some(10), "High = 10");
++}

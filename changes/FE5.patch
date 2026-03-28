@@ -1,0 +1,251 @@
+diff --git a/grammar/Cargo.toml b/grammar/Cargo.toml
+index 9f63642..f9e43c8 100644
+--- a/grammar/Cargo.toml
++++ b/grammar/Cargo.toml
+@@ -12,6 +12,10 @@ edition = "2024"
+ exclude = ["src/grammar.lalrpop"]
+ include = ["Cargo.toml", "src/**/*", "src/ast.rs", "README.md", "LICENSE*"]
+ 
++[[bin]]
++name = "butc"
++path = "src/bin/butc.rs"
++
+ [build-dependencies]
+ lalrpop = { git = "https://github.com/lalrpop/lalrpop.git", package = "lalrpop", version = "^0.23.1", features = ["lexer"] }
+ 
+diff --git a/grammar/src/bin/butc.rs b/grammar/src/bin/butc.rs
+new file mode 100644
+index 0000000..65a2b0d
+--- /dev/null
++++ b/grammar/src/bin/butc.rs
+@@ -0,0 +1,112 @@
++//! Компилятор BuT — утилита командной строки.
++//!
++//! # Использование
++//!
++//! ```text
++//! butc compile --target c input.but -o output_dir
++//! butc compile input.but           # вывод в ./output
++//! butc --help                      # справка
++//! ```
++//!
++//! # Целевые платформы
++//!
++//! - `c` — генерация C-заголовочного файла (по умолчанию)
++
++use std::env;
++use std::fs;
++use std::process;
++
++/// Выводит справку по использованию утилиты.
++fn print_usage() {
++    eprintln!("Использование: butc compile [--target <c>] <input.but> [-o <output_dir>]");
++    eprintln!("               butc --help");
++    eprintln!();
++    eprintln!("Целевые платформы:");
++    eprintln!("  c    Генерация C-заголовочного файла (по умолчанию)");
++}
++
++fn main() {
++    let args: Vec<String> = env::args().collect();
++
++    if args.len() < 2 || args.iter().any(|a| a == "--help" || a == "-h") {
++        print_usage();
++        process::exit(0);
++    }
++
++    if args[1] != "compile" {
++        eprintln!("Ошибка: неизвестная команда '{}'. Используйте 'compile'.", args[1]);
++        print_usage();
++        process::exit(1);
++    }
++
++    // Разбираем аргументы
++    let mut target = "c".to_string();
++    let mut input_file: Option<String> = None;
++    let mut output_dir: Option<String> = None;
++
++    let mut i = 2;
++    while i < args.len() {
++        match args[i].as_str() {
++            "--target" | "-t" => {
++                i += 1;
++                if i < args.len() {
++                    target = args[i].clone();
++                } else {
++                    eprintln!("Ошибка: --target требует аргумент");
++                    process::exit(1);
++                }
++            }
++            "-o" | "--output" => {
++                i += 1;
++                if i < args.len() {
++                    output_dir = Some(args[i].clone());
++                } else {
++                    eprintln!("Ошибка: -o требует аргумент");
++                    process::exit(1);
++                }
++            }
++            arg if !arg.starts_with('-') => {
++                input_file = Some(arg.to_string());
++            }
++            arg => {
++                eprintln!("Ошибка: неизвестный флаг '{}'", arg);
++                print_usage();
++                process::exit(1);
++            }
++        }
++        i += 1;
++    }
++
++    let input_path = match input_file {
++        Some(p) => p,
++        None => {
++            eprintln!("Ошибка: не указан входной файл");
++            print_usage();
++            process::exit(1);
++        }
++    };
++
++    let source = match fs::read_to_string(&input_path) {
++        Ok(s) => s,
++        Err(e) => {
++            eprintln!("Ошибка чтения файла '{}': {}", input_path, e);
++            process::exit(1);
++        }
++    };
++
++    let out_path = output_dir.as_deref().unwrap_or("output");
++
++    match target.as_str() {
++        "c" => {
++            if let Err(diag) = grammar::compile_to_c(&source, out_path) {
++                eprintln!("Ошибка компиляции: {}", diag.message);
++                process::exit(1);
++            }
++            eprintln!("Скомпилировано: {} → {}/", input_path, out_path);
++        }
++        t => {
++            eprintln!("Ошибка: неизвестная цель '{}'. Поддерживается: c", t);
++            process::exit(1);
++        }
++    }
++}
+diff --git a/grammar/src/lib.rs b/grammar/src/lib.rs
+index e4fb263..f81877f 100644
+--- a/grammar/src/lib.rs
++++ b/grammar/src/lib.rs
+@@ -141,6 +141,37 @@ fn parser_error_to_diagnostic(
+     }
+ }
+ 
++/// Компилирует исходный код BuT в C-код.
++///
++/// Выполняет полный конвейер: лексический анализ → синтаксический → семантический → генерация C.
++///
++/// # Параметры
++///
++/// - `source` — исходный код на языке BuT
++/// - `output_path` — путь к выходному каталогу (генератор C создаёт `.h`-файл)
++///
++/// # Ошибки
++///
++/// Возвращает [`Diagnostic`] при синтаксической или семантической ошибке.
++///
++/// # Пример
++///
++/// ```no_run
++/// grammar::compile_to_c("start S;", ".output").unwrap();
++/// ```
++pub fn compile_to_c(source: &str, output_path: &str) -> Result<(), diagnostics::Diagnostic> {
++    // Шаг 1: Синтаксический анализ
++    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
++
++    // Шаг 2: Семантический анализ
++    let model = semantic::tree::construct_model(&model_ast, None, &[])?;
++
++    // Шаг 3: Генерация C-кода
++    generator::generate(generator::Language::C, &model.borrow(), output_path)?;
++
++    Ok(())
++}
++
+ /// Ce13: возвращает предупреждения о неиспользуемых переменных в модели.
+ ///
+ /// Обходит все выражения, операторы и условия модели и её вложенных моделей,
+diff --git a/grammar/tests/codegen_tests.rs b/grammar/tests/codegen_tests.rs
+new file mode 100644
+index 0000000..b769b7d
+--- /dev/null
++++ b/grammar/tests/codegen_tests.rs
+@@ -0,0 +1,70 @@
++//! Интеграционные тесты кодогенерации (FE5).
++//!
++//! Проверяют конвейер компиляции BuT → C через [`grammar::compile_to_c`].
++
++use tempfile::tempdir;
++
++/// FE5: Простая FSM компилируется в C без ошибок.
++#[test]
++fn test_compile_simple_fsm_to_c() {
++    use grammar::{parse, semantic::tree::construct_model, generator::{Language, generate}};
++
++    let src = r#"
++model Traffic {
++    start Red {}
++    state Green {}
++    state Yellow {}
++}
++    "#;
++
++    let tmp = tempdir().expect("не удалось создать временный каталог");
++    let out_path = tmp.path().to_str().unwrap();
++
++    // Разбираем и строим семантическое дерево
++    let (ast, _) = parse(src, 0).expect("синтаксический анализ должен быть успешен");
++    let root = construct_model(&ast, None, &[]).expect("семантический анализ должен быть успешен");
++
++    // Генерируем C-код для именованной модели Traffic
++    let traffic = root.borrow().search_model("Traffic")
++        .expect("модель Traffic должна быть найдена");
++    let result = generate(Language::C, &traffic.borrow(), out_path);
++    assert!(
++        result.is_ok(),
++        "компиляция простой FSM должна быть успешной, ошибка: {:?}",
++        result
++    );
++
++    // Проверяем что файл был создан
++    let entries: Vec<_> = std::fs::read_dir(out_path)
++        .unwrap()
++        .filter_map(|e| e.ok())
++        .collect();
++    assert!(
++        !entries.is_empty(),
++        "генератор C должен создать хотя бы один файл"
++    );
++}
++
++/// FE5: Синтаксически неверный код возвращает ошибку.
++#[test]
++fn test_compile_invalid_syntax_returns_error() {
++    let src = "model { }";  // нет имени модели
++    let tmp = tempdir().unwrap();
++    let result = grammar::compile_to_c(src, tmp.path().to_str().unwrap());
++    assert!(
++        result.is_err(),
++        "неверный код должен возвращать Err"
++    );
++}
++
++/// FE5: Семантически неверный код (нет start-состояния) возвращает ошибку.
++#[test]
++fn test_compile_no_start_state_returns_error() {
++    let src = "model M { state S {} }";  // нет start-состояния
++    let tmp = tempdir().unwrap();
++    let result = grammar::compile_to_c(src, tmp.path().to_str().unwrap());
++    assert!(
++        result.is_err(),
++        "модель без start-состояния должна возвращать Err"
++    );
++}

@@ -1,0 +1,131 @@
+diff --git a/grammar/src/semantic/type_inference.rs b/grammar/src/semantic/type_inference.rs
+index 5f9b1c2..f0bcf87 100644
+--- a/grammar/src/semantic/type_inference.rs
++++ b/grammar/src/semantic/type_inference.rs
+@@ -136,7 +136,7 @@ fn infer_int_type(n: i64) -> TypeNode {
+ ///
+ /// Псевдонимы встроенных типов (`bool`, `bit`, `float`, `unit`) разрешаются.
+ /// Пользовательские псевдонимы и функциональные типы возвращают `Unsupported`.
+-fn ast_type_to_node(ty: &Type) -> TypeNode {
++pub(crate) fn ast_type_to_node(ty: &Type) -> TypeNode {
+     match ty {
+         Type::Bit => TypeNode::Bit,
+         Type::Bool => TypeNode::Bool,
+@@ -161,6 +161,45 @@ fn ast_type_to_node(ty: &Type) -> TypeNode {
+     }
+ }
+ 
++/// Преобразует АСД-тип в семантический с разрешением пользовательских псевдонимов
++/// через контекст модели.
++///
++/// FE2/Ce6: В отличие от [`ast_type_to_node`], эта функция ищет псевдоним
++/// в таблице `types` модели, что позволяет разрешать `type u8 = [bit;8]`
++/// при выводе возвращаемого типа функции или при приведении типа.
++pub(crate) fn ast_type_to_node_ctx(ty: &Type, model: Rc<RefCell<ModelNode>>) -> TypeNode {
++    match ty {
++        Type::Bit => TypeNode::Bit,
++        Type::Bool => TypeNode::Bool,
++        Type::Rational => TypeNode::Rational,
++        Type::Unit => TypeNode::Unit,
++        Type::Array {
++            element_count,
++            element_type,
++            ..
++        } => TypeNode::Array(
++            *element_count,
++            Box::new(ast_type_to_node_ctx(element_type, model)),
++        ),
++        Type::Alias(id) => match id.name.as_str() {
++            "bit" => TypeNode::Bit,
++            "bool" => TypeNode::Bool,
++            "float" => TypeNode::Rational,
++            "unit" => TypeNode::Unit,
++            name => {
++                // FE2: ищем пользовательский псевдоним типа в модели
++                let borrowed = model.borrow();
++                if let Some(alias_type) = borrowed.types.get(name) {
++                    alias_type.clone()
++                } else {
++                    TypeNode::Unsupported
++                }
++            }
++        },
++        _ => TypeNode::Unsupported,
++    }
++}
++
+ /// Выводит тип семантического выражения.
+ ///
+ /// Рекурсивно обходит выражение и возвращает [`TypeNode`] в соответствии
+@@ -269,8 +308,8 @@ fn extract_type(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<Type
+             Ok(TypeNode::Array(n, Box::new(elem_type)))
+         }
+ 
+-        // ── Приведение типа → результирующий тип ─────────────────────────────
+-        Expression::Cast(_, ty) => Ok(ast_type_to_node(ty)),
++        // ── Приведение типа → результирующий тип (FE2: с разрешением псевдонимов) ──
++        Expression::Cast(_, ty) => Ok(ast_type_to_node_ctx(ty, model)),
+         Expression::Type(ty) => Ok(ast_type_to_node(ty)),
+ 
+         // ── Ce6: Вывод типа из возвращаемого типа функции ────────────────────
+@@ -288,10 +327,11 @@ fn extract_type(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<Type
+                 crate::semantic::FunctionNode::Local { ret, .. } => ret.clone(),
+                 crate::semantic::FunctionNode::External { ret, .. } => ret.clone(),
+                 crate::semantic::FunctionNode::Builtin(_, _, ret) => ret.clone(),
+-                // Ce6: функция ещё не разрешена — читаем return_type из AST
++                // Ce6+FE2: функция ещё не разрешена — читаем return_type из AST,
++                // с разрешением пользовательских псевдонимов через контекст модели
+                 crate::semantic::FunctionNode::Unresolved(def) => {
+                     if let Some(ret_ast) = &def.return_type {
+-                        ast_type_to_node(ret_ast)
++                        ast_type_to_node_ctx(ret_ast, model.clone())
+                     } else {
+                         TypeNode::Unit // функция без return_type → void/Unit
+                     }
+diff --git a/grammar/tests/data/semantic/valid/type_alias_inference.but b/grammar/tests/data/semantic/valid/type_alias_inference.but
+new file mode 100644
+index 0000000..878b996
+--- /dev/null
++++ b/grammar/tests/data/semantic/valid/type_alias_inference.but
+@@ -0,0 +1,10 @@
++// FE2: Вывод типа из пользовательских псевдонимов.
++// Функция get() возвращает u8 (псевдоним [bit;8]).
++// Тип переменной x должен выводиться как Array(8, Bit).
++
++model M {
++    type u8 = [bit;8];
++    fn get() -> u8 { return 0; }
++    var x = get();
++    start S {}
++}
+diff --git a/grammar/tests/semantic_tests.rs b/grammar/tests/semantic_tests.rs
+index dccc06c..0aee548 100644
+--- a/grammar/tests/semantic_tests.rs
++++ b/grammar/tests/semantic_tests.rs
+@@ -3091,6 +3091,26 @@ fn test_enum_basic() {
+     assert_eq!(dir_enum.find_variant("West"), Some(3), "West = 3");
+ }
+ 
++// ─── Тесты FE2: Вывод типа из пользовательских псевдонимов ───────────────────
++
++/// FE2: Переменная, инициализированная результатом функции с псевдонимом типа —
++/// тип выводится как Array(8, Bit) через разрешение псевдонима u8 = [bit;8].
++#[test]
++fn test_type_alias_inference() {
++    use grammar::semantic::TypeNode;
++    let node = build_file("tests/data/semantic/valid/type_alias_inference.but")
++        .expect("type_alias_inference.but должен разбираться без ошибок");
++    let m = node.search_model("M").expect("модель M должна быть найдена");
++    let borrowed = m.borrow();
++    let x_var = borrowed.search_var("x").expect("переменная x должна быть найдена");
++    let ty = x_var.ty().clone();
++    assert_eq!(
++        ty,
++        TypeNode::Array(8, Box::new(TypeNode::Bit)),
++        "тип x должен быть [bit;8] через псевдоним u8"
++    );
++}
++
+ /// FE1: Перечисление с явными значениями — значения соответствуют объявлению.
+ #[test]
+ fn test_enum_with_values() {
