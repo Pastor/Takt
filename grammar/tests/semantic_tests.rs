@@ -3091,6 +3091,26 @@ fn test_enum_basic() {
     assert_eq!(dir_enum.find_variant("West"), Some(3), "West = 3");
 }
 
+// ─── Тесты FE2: Вывод типа из пользовательских псевдонимов ───────────────────
+
+/// FE2: Переменная, инициализированная результатом функции с псевдонимом типа —
+/// тип выводится как Array(8, Bit) через разрешение псевдонима u8 = [bit;8].
+#[test]
+fn test_type_alias_inference() {
+    use grammar::semantic::TypeNode;
+    let node = build_file("tests/data/semantic/valid/type_alias_inference.but")
+        .expect("type_alias_inference.but должен разбираться без ошибок");
+    let m = node.search_model("M").expect("модель M должна быть найдена");
+    let borrowed = m.borrow();
+    let x_var = borrowed.search_var("x").expect("переменная x должна быть найдена");
+    let ty = x_var.ty().clone();
+    assert_eq!(
+        ty,
+        TypeNode::Array(8, Box::new(TypeNode::Bit)),
+        "тип x должен быть [bit;8] через псевдоним u8"
+    );
+}
+
 /// FE1: Перечисление с явными значениями — значения соответствуют объявлению.
 #[test]
 fn test_enum_with_values() {

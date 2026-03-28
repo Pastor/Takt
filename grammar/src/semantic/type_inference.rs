@@ -136,7 +136,7 @@ fn infer_int_type(n: i64) -> TypeNode {
 ///
 /// Псевдонимы встроенных типов (`bool`, `bit`, `float`, `unit`) разрешаются.
 /// Пользовательские псевдонимы и функциональные типы возвращают `Unsupported`.
-fn ast_type_to_node(ty: &Type) -> TypeNode {
+pub(crate) fn ast_type_to_node(ty: &Type) -> TypeNode {
     match ty {
         Type::Bit => TypeNode::Bit,
         Type::Bool => TypeNode::Bool,
@@ -157,6 +157,45 @@ fn ast_type_to_node(ty: &Type) -> TypeNode {
             _ => TypeNode::Unsupported,
         },
         // Type::Function, Type::Address — не поддерживаются при выводе типа
+        _ => TypeNode::Unsupported,
+    }
+}
+
+/// Преобразует АСД-тип в семантический с разрешением пользовательских псевдонимов
+/// через контекст модели.
+///
+/// FE2/Ce6: В отличие от [`ast_type_to_node`], эта функция ищет псевдоним
+/// в таблице `types` модели, что позволяет разрешать `type u8 = [bit;8]`
+/// при выводе возвращаемого типа функции или при приведении типа.
+pub(crate) fn ast_type_to_node_ctx(ty: &Type, model: Rc<RefCell<ModelNode>>) -> TypeNode {
+    match ty {
+        Type::Bit => TypeNode::Bit,
+        Type::Bool => TypeNode::Bool,
+        Type::Rational => TypeNode::Rational,
+        Type::Unit => TypeNode::Unit,
+        Type::Array {
+            element_count,
+            element_type,
+            ..
+        } => TypeNode::Array(
+            *element_count,
+            Box::new(ast_type_to_node_ctx(element_type, model)),
+        ),
+        Type::Alias(id) => match id.name.as_str() {
+            "bit" => TypeNode::Bit,
+            "bool" => TypeNode::Bool,
+            "float" => TypeNode::Rational,
+            "unit" => TypeNode::Unit,
+            name => {
+                // FE2: ищем пользовательский псевдоним типа в модели
+                let borrowed = model.borrow();
+                if let Some(alias_type) = borrowed.types.get(name) {
+                    alias_type.clone()
+                } else {
+                    TypeNode::Unsupported
+                }
+            }
+        },
         _ => TypeNode::Unsupported,
     }
 }
@@ -269,8 +308,8 @@ fn extract_type(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<Type
             Ok(TypeNode::Array(n, Box::new(elem_type)))
         }
 
-        // ── Приведение типа → результирующий тип ─────────────────────────────
-        Expression::Cast(_, ty) => Ok(ast_type_to_node(ty)),
+        // ── Приведение типа → результирующий тип (FE2: с разрешением псевдонимов) ──
+        Expression::Cast(_, ty) => Ok(ast_type_to_node_ctx(ty, model)),
         Expression::Type(ty) => Ok(ast_type_to_node(ty)),
 
         // ── Ce6: Вывод типа из возвращаемого типа функции ────────────────────
@@ -288,10 +327,11 @@ fn extract_type(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<Type
                 crate::semantic::FunctionNode::Local { ret, .. } => ret.clone(),
                 crate::semantic::FunctionNode::External { ret, .. } => ret.clone(),
                 crate::semantic::FunctionNode::Builtin(_, _, ret) => ret.clone(),
-                // Ce6: функция ещё не разрешена — читаем return_type из AST
+                // Ce6+FE2: функция ещё не разрешена — читаем return_type из AST,
+                // с разрешением пользовательских псевдонимов через контекст модели
                 crate::semantic::FunctionNode::Unresolved(def) => {
                     if let Some(ret_ast) = &def.return_type {
-                        ast_type_to_node(ret_ast)
+                        ast_type_to_node_ctx(ret_ast, model.clone())
                     } else {
                         TypeNode::Unit // функция без return_type → void/Unit
                     }
