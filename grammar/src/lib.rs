@@ -37,6 +37,9 @@ use lalrpop_util::ParseError;
 pub mod diagnostics;
 /// Модуль генерации кода (C и другие целевые платформы).
 pub mod generator;
+/// Вспомогательные функции LSP-сервера (только при флаге `lsp`).
+#[cfg(feature = "lsp")]
+pub mod lsp;
 /// Модуль парсера
 pub mod parser;
 /// Модуль семантического анализа и построение семантического дерева

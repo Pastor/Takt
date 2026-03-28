@@ -16,6 +16,11 @@ include = ["Cargo.toml", "src/**/*", "src/ast.rs", "README.md", "LICENSE*"]
 name = "butc"
 path = "src/bin/butc.rs"
 
+[[bin]]
+name = "but-lsp"
+path = "src/bin/but_lsp.rs"
+required-features = ["lsp"]
+
 [build-dependencies]
 lalrpop = { git = "https://github.com/lalrpop/lalrpop.git", package = "lalrpop", version = "^0.23.1", features = ["lexer"] }
 
@@ -27,6 +32,9 @@ unicode-xid = "0.2"
 itertools = "0.14.0"
 serde = { version = "^1.0", features = ["derive"], optional = true }
 log = "0.4.29"
+serde_json = { version = "1", optional = true }
+lsp-server = { version = "0.7", optional = true }
+lsp-types = { version = "0.97", optional = true }
 
 [dev-dependencies]
 serde_json = "1.0.149"
@@ -35,3 +43,4 @@ tempfile = "3"
 [features]
 default = []
 ast-serde = ["serde"]
+lsp = ["dep:serde_json", "dep:lsp-server", "dep:lsp-types"]

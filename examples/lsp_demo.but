@@ -1,0 +1,42 @@
+// Пример для демонстрации возможностей LSP-сервера BuT.
+//
+// При открытии этого файла в редакторе с поддержкой LSP (например, Zed с but-lsp):
+// - Ошибки и предупреждения подсвечиваются сразу
+// - При наведении на идентификатор отображается его тип
+// - Автодополнение предлагает ключевые слова и имена из модели
+
+type u8 = [bit;8];
+
+/// Перечисление направлений движения робота.
+enum Direction { North, South, East, West }
+
+/// Перечисление приоритетов задачи.
+enum Priority { Low = 0, Medium = 5, High = 10 }
+
+extern fn log(msg: u8);
+
+/// Переменная состояния направления.
+var heading: Direction = 0;
+
+/// Модель управления роботом.
+model Robot {
+    var speed: u8 = 0;
+    var active: bit = false;
+
+    start Idle {
+        enter {
+            speed = 0;
+            active = false;
+        }
+        ref Moving: active;
+    }
+
+    state Moving {
+        always {
+            speed = 100;
+        }
+        ref Idle: true;
+    }
+}
+
+start Main = Robot;

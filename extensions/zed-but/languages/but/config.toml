@@ -6,6 +6,12 @@ autoclose_before = ";:.,=}])"
 tab_size = 4
 hard_tabs = false
 
+# LSP-сервер для языка BuT.
+# Для активации автодополнения и навигации установите `but-lsp` в PATH:
+#   cargo install --path grammar --features lsp --bin but-lsp
+[language_servers]
+# language_server = { name = "but-lsp", binary = { path = "but-lsp" } }
+
 brackets = [
     { start = "{", end = "}", close = true, newline = true },
     { start = "(", end = ")", close = true, newline = false },
