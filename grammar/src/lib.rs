@@ -141,6 +141,37 @@ fn parser_error_to_diagnostic(
     }
 }
 
+/// Компилирует исходный код BuT в C-код.
+///
+/// Выполняет полный конвейер: лексический анализ → синтаксический → семантический → генерация C.
+///
+/// # Параметры
+///
+/// - `source` — исходный код на языке BuT
+/// - `output_path` — путь к выходному каталогу (генератор C создаёт `.h`-файл)
+///
+/// # Ошибки
+///
+/// Возвращает [`Diagnostic`] при синтаксической или семантической ошибке.
+///
+/// # Пример
+///
+/// ```no_run
+/// grammar::compile_to_c("start S;", ".output").unwrap();
+/// ```
+pub fn compile_to_c(source: &str, output_path: &str) -> Result<(), diagnostics::Diagnostic> {
+    // Шаг 1: Синтаксический анализ
+    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
+
+    // Шаг 2: Семантический анализ
+    let model = semantic::tree::construct_model(&model_ast, None, &[])?;
+
+    // Шаг 3: Генерация C-кода
+    generator::generate(generator::Language::C, &model.borrow(), output_path)?;
+
+    Ok(())
+}
+
 /// Ce13: возвращает предупреждения о неиспользуемых переменных в модели.
 ///
 /// Обходит все выражения, операторы и условия модели и её вложенных моделей,

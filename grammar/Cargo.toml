@@ -12,6 +12,10 @@ edition = "2024"
 exclude = ["src/grammar.lalrpop"]
 include = ["Cargo.toml", "src/**/*", "src/ast.rs", "README.md", "LICENSE*"]
 
+[[bin]]
+name = "butc"
+path = "src/bin/butc.rs"
+
 [build-dependencies]
 lalrpop = { git = "https://github.com/lalrpop/lalrpop.git", package = "lalrpop", version = "^0.23.1", features = ["lexer"] }
 
