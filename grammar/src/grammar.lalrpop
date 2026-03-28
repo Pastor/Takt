@@ -537,12 +537,31 @@ Precedence0: Expression = {
   LiteralExpression,
 }
 
+/// Выражение типа для использования в позиции параметра функции.
+///
+/// FE6: Позволяет использовать составные типы `[bit;N]` в позиции
+/// параметра функции: `fn process(data: [bit;8])`.
+ParameterTypeExpr: Expression = {
+    // Составной тип [тип;N] → Expression::Type(loc, Type::Array)
+    <l:@L> "[" <ty:Type> ";" <n:number> "]" <r:@R> => {
+        Expression::Type(
+            Location::Source(file_no, l, r),
+            Type::Array {
+                loc: Location::Source(file_no, l, r),
+                element_count: n as u16,
+                element_type: Box::new(ty),
+            }
+        )
+    },
+    Expression => <>,
+}
+
 Parameter: Parameter = {
-    <l:@L> <name:Identifier> ":" <ty:Expression> <r:@R> => {
+    <l:@L> <name:Identifier> ":" <ty:ParameterTypeExpr> <r:@R> => {
         let loc = Location::Source(file_no, l, r);
         Parameter{loc, ty, name: Some(name)}
     },
-    <l:@L> <ty:Expression> <r:@R> => {
+    <l:@L> <ty:ParameterTypeExpr> <r:@R> => {
         let loc = Location::Source(file_no, l, r);
         Parameter{loc, ty: ty, name: None}
     }

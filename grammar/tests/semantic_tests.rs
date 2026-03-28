@@ -3069,6 +3069,39 @@ fn example_ce6_type_inference_chain_valid() {
         .expect("ce6_type_inference_chain.but должен разбираться без ошибок");
 }
 
+// ─── Тесты FE6: Составные типы в параметрах функций ──────────────────────────
+
+/// FE6: Функция с параметром типа [bit;8] — разбирается без ошибок.
+#[test]
+fn test_fn_array_param() {
+    use grammar::semantic::TypeNode;
+    let node = build_file("tests/data/semantic/valid/fn_array_param.but")
+        .expect("fn_array_param.but должен разбираться без ошибок");
+    let m = node.search_model("M").expect("модель M должна быть найдена");
+    let borrowed = m.borrow();
+    // Функция process должна присутствовать
+    assert!(
+        borrowed.functions.contains_key("process"),
+        "функция process должна быть объявлена"
+    );
+}
+
+/// FE6: Функция с псевдонимом типа в параметре — разбирается без ошибок.
+#[test]
+fn test_fn_alias_param() {
+    use grammar::semantic::TypeNode;
+    let node = build(
+        "type u8 = [bit;8]; \
+         fn process(data: u8) -> bit { return 0; } \
+         start S {}",
+    );
+    // Функция process должна присутствовать
+    assert!(
+        node.functions.contains_key("process"),
+        "функция process должна быть объявлена"
+    );
+}
+
 // ─── Тесты FE3: Диагностика неиспользуемых переменных (Ce13) ─────────────────
 
 /// FE3: Переменная без использования даёт ровно одно предупреждение Ce13.

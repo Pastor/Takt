@@ -1,0 +1,8 @@
+// FE6: Функция с параметром массивного типа [bit;8].
+
+model M {
+    fn process(data: [bit;8]) -> bit {
+        return 0;
+    }
+    start S {}
+}
