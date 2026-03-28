@@ -1,0 +1,7 @@
+// FE1: Перечисление с явными числовыми значениями.
+// Варианты: Low=0, Medium=5, High=10
+
+model M {
+    enum Priority { Low = 0, Medium = 5, High = 10 }
+    start S {}
+}

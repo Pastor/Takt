@@ -366,6 +366,31 @@ fn construct_model_stage0(
                 .name
                 .clone();
             functions.insert(name.clone(), FunctionNode::Unresolved(*def.clone()));
+        } else if let ModelElement::Enum(e) = element {
+            // FE1: Обработка перечислений. Присваиваем последовательные значения
+            // вариантам без явных значений (автоинкремент от 0).
+            let enum_name = e
+                .name
+                .as_ref()
+                .map(|id| id.name.clone())
+                .unwrap_or_default();
+            let mut next_val: i64 = 0;
+            let mut variant_pairs = Vec::new();
+            for variant in &e.variants {
+                let val = variant.value.unwrap_or(next_val);
+                next_val = val + 1;
+                variant_pairs.push((variant.name.name.clone(), val));
+            }
+            let enum_node = crate::semantic::EnumNode::new(
+                &enum_name,
+                &variant_pairs
+                    .iter()
+                    .map(|(n, v)| (n.as_str(), Some(*v)))
+                    .collect::<Vec<_>>(),
+            );
+            // Добавляем перечисление в enums модели после завершения построения
+            // Временно сохраняем в карту enums через model_node
+            model_node.borrow_mut().enums.insert(enum_name, enum_node);
         }
     }
     model_node.borrow_mut().models = models;

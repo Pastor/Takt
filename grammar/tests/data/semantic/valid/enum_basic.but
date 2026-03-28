@@ -1,0 +1,8 @@
+// FE1: Базовый пример перечисления без явных значений.
+// Значения вариантов: North=0, South=1, East=2, West=3
+
+model M {
+    enum Direction { North, South, East, West }
+    var dir: [bit;8] = 0;
+    start S {}
+}

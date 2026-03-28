@@ -190,6 +190,8 @@ pub enum Token<'input> {
     Next,
     /// Ключевое слово `extern`.
     Extern,
+    /// Ключевое слово `enum`.
+    Enum,
 }
 
 impl<'input> fmt::Display for Token<'input> {
@@ -268,6 +270,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Variable => write!(f, "var"),
             Token::Next => write!(f, "next"),
             Token::Extern => write!(f, "extern"),
+            Token::Enum => write!(f, "enum"),
         }
     }
 }
@@ -405,6 +408,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "var"      => Token::Variable,
     "next"     => Token::Next,
     "extern"   => Token::Extern,
+    "enum"     => Token::Enum,
 };
 
 impl<'input> Lexer<'input> {

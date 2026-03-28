@@ -3068,3 +3068,42 @@ fn example_ce6_type_inference_chain_valid() {
     build_file("tests/data/semantic/valid/ce6_type_inference_chain.but")
         .expect("ce6_type_inference_chain.but должен разбираться без ошибок");
 }
+
+// ─── Тесты FE1: Перечисления ──────────────────────────────────────────────────
+
+/// FE1: Базовое перечисление — разбирается без ошибок, варианты присутствуют в EnumNode.
+#[test]
+fn test_enum_basic() {
+    use grammar::semantic::EnumNode;
+    let node = build_file("tests/data/semantic/valid/enum_basic.but")
+        .expect("enum_basic.but должен разбираться без ошибок");
+    // Перечисление находится во вложенной модели M
+    let m = node.search_model("M").expect("модель M должна быть найдена");
+    let borrowed = m.borrow();
+    assert!(
+        borrowed.enums.contains_key("Direction"),
+        "перечисление Direction должно быть в модели M"
+    );
+    let dir_enum = borrowed.enums.get("Direction").unwrap();
+    assert_eq!(dir_enum.find_variant("North"), Some(0), "North = 0");
+    assert_eq!(dir_enum.find_variant("South"), Some(1), "South = 1");
+    assert_eq!(dir_enum.find_variant("East"), Some(2), "East = 2");
+    assert_eq!(dir_enum.find_variant("West"), Some(3), "West = 3");
+}
+
+/// FE1: Перечисление с явными значениями — значения соответствуют объявлению.
+#[test]
+fn test_enum_with_values() {
+    let node = build_file("tests/data/semantic/valid/enum_with_values.but")
+        .expect("enum_with_values.but должен разбираться без ошибок");
+    let m = node.search_model("M").expect("модель M должна быть найдена");
+    let borrowed = m.borrow();
+    assert!(
+        borrowed.enums.contains_key("Priority"),
+        "перечисление Priority должно быть в модели M"
+    );
+    let prio = borrowed.enums.get("Priority").unwrap();
+    assert_eq!(prio.find_variant("Low"), Some(0), "Low = 0");
+    assert_eq!(prio.find_variant("Medium"), Some(5), "Medium = 5");
+    assert_eq!(prio.find_variant("High"), Some(10), "High = 10");
+}

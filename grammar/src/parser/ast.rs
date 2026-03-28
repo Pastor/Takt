@@ -242,6 +242,8 @@ pub enum ModelElement {
     NamedBlockCode(Box<NamedBlockCodeDefine>),
     /// Одиночная точка с запятой (допускается для совместимости).
     StraySemicolon(Location),
+    /// Перечисление.
+    Enum(Box<EnumDefine>),
 }
 
 /// Вид состояния автомата.
@@ -311,6 +313,34 @@ pub struct Variable {
     /// Начальное значение.
     pub initializer: Option<Expression>,
 }
+
+/// Вариант перечисления.
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct EnumVariant {
+    /// Местоположение в исходном коде.
+    pub loc: Location,
+    /// Имя варианта.
+    pub name: Identifier,
+    /// Явное числовое значение, если задано.
+    pub value: Option<i64>,
+}
+
+impl Eq for EnumVariant {}
+
+/// Определение перечисления `enum Name { Variant1, Variant2 = 5, ... }`.
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct EnumDefine {
+    /// Местоположение в исходном коде.
+    pub loc: Location,
+    /// Имя перечисления.
+    pub name: Option<Identifier>,
+    /// Варианты перечисления.
+    pub variants: Vec<EnumVariant>,
+}
+
+impl Eq for EnumDefine {}
 
 /// Определение псевдонима типа: `type Имя = Тип`.
 #[derive(Debug, PartialEq, Eq, Clone)]

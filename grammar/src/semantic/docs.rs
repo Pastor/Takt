@@ -91,6 +91,7 @@ fn element_start(element: &ModelElement) -> Option<usize> {
         ModelElement::NamedBlockCode(nb) => Some(nb.loc.start()),
         ModelElement::Formula(f) => Some(f.loc.start()),
         ModelElement::StraySemicolon(loc) => Some(loc.start()),
+        ModelElement::Enum(e) => Some(e.loc.start()),
     }
 }
 
