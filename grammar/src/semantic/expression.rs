@@ -72,6 +72,10 @@ pub fn construct_expression(
             if let Some(cond) = model.borrow().search_cond(name) {
                 return Ok(Expression::Condition(Rc::new(RefCell::new(cond))));
             }
+            // 4. Вариант перечисления (NI6): имя является вариантом доступного перечисления
+            if let Some((_enum_name, value)) = model.borrow().search_enum_variant(name) {
+                return Ok(Expression::Number(value));
+            }
             Err(
                 format!("Идентификатор '{}' не найден в области видимости", name)
                     .as_str()
@@ -648,7 +652,11 @@ mod tests {
     fn type_inference_const_bool() {
         let node = build("const C = false;").unwrap();
         if let Some(VariableNode::Const { ty, .. }) = node.search_var("C") {
-            assert_eq!(ty, TypeNode::Bool, "тип константы должен выводиться как Bool");
+            assert_eq!(
+                ty,
+                TypeNode::Bool,
+                "тип константы должен выводиться как Bool"
+            );
         } else {
             panic!("константа C не найдена");
         }
@@ -1000,15 +1008,10 @@ mod tests {
         let model = Rc::new(RefCell::new(ModelNode::default()));
         let loc = crate::diagnostics::Location::default();
         // false ? 0 : 1
-        let cond_expr = Box::new(crate::parser::ast::Expression::Bool(loc, false));
-        let then_expr = Box::new(crate::parser::ast::Expression::Number(loc, 0));
-        let else_expr = Box::new(crate::parser::ast::Expression::Number(loc, 1));
-        let expr = crate::parser::ast::Expression::ConditionalOperator(
-            loc,
-            cond_expr,
-            then_expr,
-            else_expr,
-        );
+        let cond_expr = Box::new(ast::Expression::Bool(loc, false));
+        let then_expr = Box::new(ast::Expression::Number(loc, 0));
+        let else_expr = Box::new(ast::Expression::Number(loc, 1));
+        let expr = ast::Expression::ConditionalOperator(loc, cond_expr, then_expr, else_expr);
         let result = construct_expression(expr, model).unwrap();
         assert!(
             matches!(result, Expression::ConditionalOperator(_, _, _)),
@@ -1042,10 +1045,7 @@ mod tests {
     #[test]
     fn array_slice_on_non_array_is_error() {
         let result = build("var flag: bit = false; var y: [bit;4] = flag[0:4];");
-        assert!(
-            result.is_err(),
-            "срез Bit-переменной должен давать ошибку"
-        );
+        assert!(result.is_err(), "срез Bit-переменной должен давать ошибку");
     }
 
     // ── Строковый литерал ─────────────────────────────────────────────────────
@@ -1062,8 +1062,7 @@ mod tests {
     /// Вызов внешней функции в блоке `always` → разрешается без ошибок.
     #[test]
     fn extern_function_call_in_always_block() {
-        let node =
-            build("extern fn foo(); always { foo(); } start S;").unwrap();
+        let node = build("extern fn foo(); always { foo(); } start S;").unwrap();
         assert!(node.has_states(), "модель должна содержать состояние S");
     }
 
@@ -1090,10 +1089,10 @@ mod tests {
         let model = Rc::new(RefCell::new(ModelNode::default()));
         let loc = crate::diagnostics::Location::default();
         let items = vec![
-            crate::parser::ast::Expression::Number(loc, 0),
-            crate::parser::ast::Expression::Number(loc, 1),
+            ast::Expression::Number(loc, 0),
+            ast::Expression::Number(loc, 1),
         ];
-        let expr = crate::parser::ast::Expression::Array(loc, items);
+        let expr = ast::Expression::Array(loc, items);
         let result = construct_expression(expr, model).unwrap();
         assert!(
             matches!(result, Expression::Array(_)),
@@ -1108,10 +1107,7 @@ mod tests {
     fn construct_expression_type_variant() {
         use crate::parser::ast::Type;
         let model = Rc::new(RefCell::new(ModelNode::default()));
-        let expr = crate::parser::ast::Expression::Type(
-            crate::diagnostics::Location::default(),
-            Type::Bit,
-        );
+        let expr = ast::Expression::Type(crate::diagnostics::Location::default(), Type::Bit);
         let result = construct_expression(expr, model).unwrap();
         assert!(
             matches!(result, Expression::Type(Type::Bit)),
@@ -1123,11 +1119,7 @@ mod tests {
     #[test]
     fn construct_expression_address_variant() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
-        let expr = crate::parser::ast::Expression::Address(
-            crate::diagnostics::Location::default(),
-            0x1234,
-            5,
-        );
+        let expr = ast::Expression::Address(crate::diagnostics::Location::default(), 0x1234, 5);
         let result = construct_expression(expr, model).unwrap();
         assert!(
             matches!(result, Expression::Address(0x1234, 5)),
@@ -1139,10 +1131,7 @@ mod tests {
     #[test]
     fn construct_expression_list_variant() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
-        let expr = crate::parser::ast::Expression::List(
-            crate::diagnostics::Location::default(),
-            vec![],
-        );
+        let expr = ast::Expression::List(crate::diagnostics::Location::default(), vec![]);
         let result = construct_expression(expr, model).unwrap();
         assert!(
             matches!(result, Expression::List(_)),
@@ -1154,38 +1143,45 @@ mod tests {
     #[test]
     fn construct_expression_unknown_variable_is_error() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
-        let expr = crate::parser::ast::Expression::Variable(
-            crate::parser::ast::Identifier::new("ghost"),
-        );
+        let expr = ast::Expression::Variable(ast::Identifier::new("ghost"));
         let result = construct_expression(expr, model);
-        assert!(result.is_err(), "неизвестный идентификатор должен давать ошибку");
+        assert!(
+            result.is_err(),
+            "неизвестный идентификатор должен давать ошибку"
+        );
     }
 
     /// `ast::Expression::ArraySubscript` для несуществующей переменной → ошибка.
     #[test]
     fn construct_expression_array_subscript_unknown_var() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
-        let expr = crate::parser::ast::Expression::ArraySubscript(
+        let expr = ast::Expression::ArraySubscript(
             crate::diagnostics::Location::default(),
-            crate::parser::ast::Identifier::new("no_such_var"),
+            ast::Identifier::new("no_such_var"),
             0,
         );
         let result = construct_expression(expr, model);
-        assert!(result.is_err(), "несуществующая переменная должна давать ошибку");
+        assert!(
+            result.is_err(),
+            "несуществующая переменная должна давать ошибку"
+        );
     }
 
     /// `ast::Expression::ArraySlice` для несуществующей переменной → ошибка.
     #[test]
     fn construct_expression_array_slice_unknown_var() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
-        let expr = crate::parser::ast::Expression::ArraySlice(
+        let expr = ast::Expression::ArraySlice(
             crate::diagnostics::Location::default(),
-            crate::parser::ast::Identifier::new("no_such_var"),
+            ast::Identifier::new("no_such_var"),
             Some(0),
             Some(4),
         );
         let result = construct_expression(expr, model);
-        assert!(result.is_err(), "несуществующая переменная должна давать ошибку");
+        assert!(
+            result.is_err(),
+            "несуществующая переменная должна давать ошибку"
+        );
     }
 
     /// `var_type` для Port-переменной возвращает правильный тип.

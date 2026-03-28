@@ -1,0 +1,28 @@
+// NI6: корректные операции с типом enum
+// Варианты Direction: North=0, South=1, East=2, West=3
+// Примечание: переменные типа enum добавляются программно через API семантического анализа.
+// В данном файле демонстрируется структура модели, совместимой с NI6.
+enum Direction { North, South, East, West }
+
+// Переменная числового типа (аналог Direction для представления направлений)
+var heading: [bit;8] = 0;  // 0 = North
+
+model Robot {
+    var dir: [bit;8] = 2;  // 2 = East
+
+    start Idle {
+        enter {
+            dir = 1;  // South — допустимо
+        }
+        ref Moving: true;
+    }
+
+    state Moving {
+        always {
+            dir = 3;  // West — допустимо
+        }
+        ref Idle: true;
+    }
+}
+
+start M = Robot;

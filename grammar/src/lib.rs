@@ -238,6 +238,35 @@ pub fn nondeterministic_transition_warnings(
     crate::semantic::validate::check_nondeterministic_transitions(model)
 }
 
+/// NI6: возвращает ошибки типобезопасных операций с перечислениями в модели.
+///
+/// Проверяет, что при присваивании переменной типа enum значение является
+/// одним из допустимых вариантов перечисления.
+///
+/// # Пример
+///
+/// ```
+/// use grammar::parse;
+/// use grammar::semantic::tree::construct_model;
+/// use grammar::semantic::EnumNode;
+///
+/// // Создаём модель с перечислением программно
+/// let (ast, _) = parse("start S;", 0).unwrap();
+/// let model = construct_model(&ast, None, &[]).unwrap();
+/// {
+///     let mut m = model.borrow_mut();
+///     let e = EnumNode::new("Dir", &[("North", Some(0)), ("South", Some(1))]);
+///     m.enums.insert("Dir".to_string(), e);
+/// }
+/// let errors = grammar::enum_type_safety_errors(model);
+/// assert!(errors.is_empty());
+/// ```
+pub fn enum_type_safety_errors(
+    model: std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
+) -> Vec<crate::diagnostics::Diagnostic> {
+    crate::semantic::validate::check_enum_type_safety(model)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -211,6 +211,34 @@ impl ModelNode {
         }
     }
 
+    /// Ищет вариант перечисления по имени варианта среди всех доступных перечислений (NI6).
+    ///
+    /// Обходит все перечисления текущего контекста и родительских.
+    /// Возвращает `(имя_перечисления, числовое_значение)` при нахождении.
+    ///
+    /// # Пример
+    ///
+    /// ```
+    /// use grammar::semantic::{ModelNode, EnumNode};
+    ///
+    /// let mut model = ModelNode::default();
+    /// let e = EnumNode::new("Direction", &[("North", None), ("South", Some(180))]);
+    /// model.enums.insert("Direction".to_string(), e);
+    /// assert_eq!(model.search_enum_variant("North"), Some(("Direction".to_string(), 0)));
+    /// assert_eq!(model.search_enum_variant("East"), None);
+    /// ```
+    pub fn search_enum_variant(&self, variant_name: &str) -> Option<(String, i64)> {
+        for (enum_name, enum_node) in &self.enums {
+            if let Some(val) = enum_node.find_variant(variant_name) {
+                return Some((enum_name.clone(), val));
+            }
+        }
+        if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
+            return model.borrow().search_enum_variant(variant_name);
+        }
+        None
+    }
+
     /// Возвращает список всех именованных блоков с заданным именем.
     pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlock> {
         self.named_blocks

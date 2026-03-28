@@ -23,7 +23,7 @@ pub fn normalize_lowercase_snakecase(name: String) -> String {
     let mut result = String::new();
     for ch in name.chars() {
         if ch.is_alphabetic() && ch.is_uppercase() {
-            if result.len() > 0 {
+            if !result.is_empty() {
                 result.push('_');
             }
             result.push(ch.to_ascii_lowercase());

@@ -57,10 +57,7 @@ pub fn construct_function(
                         }
                         ast::Expression::Variable(id) => {
                             // Преобразуем идентификатор в псевдоним типа и разрешаем.
-                            construct_type(
-                                Some(ast::Type::Alias(id)),
-                                &model.borrow().types,
-                            )?
+                            construct_type(Some(ast::Type::Alias(id)), &model.borrow().types)?
                         }
                         _ => {
                             return Err("Параметр функции должен иметь тип".into());
@@ -133,7 +130,9 @@ mod tests {
     fn extern_fn_no_params_resolves_to_external() {
         let node = build("extern fn foo(x: bit);").unwrap();
         match node.functions.get("foo").expect("функция foo не найдена") {
-            FunctionNode::External { name, params, ret, .. } => {
+            FunctionNode::External {
+                name, params, ret, ..
+            } => {
                 assert_eq!(name, "foo");
                 assert_eq!(params.len(), 1);
                 assert_eq!(params[0].0, "x");
@@ -184,7 +183,9 @@ mod tests {
     fn local_fn_resolves_to_local() {
         let node = build("fn id(x: bit) -> bit { return true; }").unwrap();
         match node.functions.get("id").expect("id не найдена") {
-            FunctionNode::Local { name, params, ret, .. } => {
+            FunctionNode::Local {
+                name, params, ret, ..
+            } => {
                 assert_eq!(name, "id");
                 assert_eq!(params.len(), 1);
                 assert_eq!(params[0].0, "x");
@@ -250,7 +251,7 @@ mod tests {
         use super::*;
         use std::cell::RefCell;
         use std::rc::Rc;
-        let model = Rc::new(RefCell::new(crate::semantic::ModelNode::default()));
+        let model = Rc::new(RefCell::new(ModelNode::default()));
         let result = construct_function(FunctionNode::None, model);
         assert!(result.is_err(), "FunctionNode::None должен давать ошибку");
     }
@@ -269,7 +270,7 @@ mod tests {
             ret: TypeNode::Unit,
             body: Statement::None,
         };
-        let model = Rc::new(RefCell::new(crate::semantic::ModelNode::default()));
+        let model = Rc::new(RefCell::new(ModelNode::default()));
         let result = construct_function(local.clone(), model).unwrap();
         assert_eq!(result, local);
     }
