@@ -2529,7 +2529,7 @@ fn condition_node_has_parent_upper() {
 /// ```
 #[test]
 fn nested_variable_upper_points_to_inner_model() {
-    use grammar::semantic::VariableNode;
+    
     let (ast, _) = parse("model Inner { var x: bit = false; start S; }", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
     let inner = root.borrow().search_model("Inner").expect("Inner не найдена");
@@ -2554,7 +2554,7 @@ fn unresolved_variable_upper_is_none() {
 /// Вспомогательные методы `name()` и `ty()` у VariableNode работают корректно.
 #[test]
 fn variable_node_name_and_ty_methods() {
-    use grammar::semantic::{TypeNode, VariableNode};
+    use grammar::semantic::TypeNode;
     let node = build("var flag: bit = false;");
     let var = node.search_var("flag").expect("flag не найдена");
     assert_eq!(var.name(), "flag");
@@ -2621,7 +2621,7 @@ fn example_local_var_nested_is_valid() {
 /// внутри переменных ссылался на живой узел модели.
 #[test]
 fn variable_upper_gives_access_to_sibling_vars() {
-    use grammar::semantic::VariableNode;
+    
     let (ast, _) = parse("var a: bit = false; var b: bit = false;", 0)
         .expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
@@ -3074,7 +3074,7 @@ fn example_ce6_type_inference_chain_valid() {
 /// FE6: Функция с параметром типа [bit;8] — разбирается без ошибок.
 #[test]
 fn test_fn_array_param() {
-    use grammar::semantic::TypeNode;
+    
     let node = build_file("tests/data/semantic/valid/fn_array_param.but")
         .expect("fn_array_param.but должен разбираться без ошибок");
     let m = node.search_model("M").expect("модель M должна быть найдена");
@@ -3089,7 +3089,7 @@ fn test_fn_array_param() {
 /// FE6: Функция с псевдонимом типа в параметре — разбирается без ошибок.
 #[test]
 fn test_fn_alias_param() {
-    use grammar::semantic::TypeNode;
+    
     let node = build(
         "type u8 = [bit;8]; \
          fn process(data: u8) -> bit { return 0; } \
@@ -3108,7 +3108,7 @@ fn test_fn_alias_param() {
 #[test]
 fn test_unused_variable_warning() {
     use grammar::diagnostics::Level;
-    let node = build_file("tests/data/semantic/valid/unused_variable.but")
+    let _node = build_file("tests/data/semantic/valid/unused_variable.but")
         .expect("unused_variable.but должен разбираться без ошибок");
     let model_rc = {
         let (ast, _) = grammar::parse(
@@ -3207,7 +3207,7 @@ fn test_deterministic_no_warning() {
 /// FE1: Базовое перечисление — разбирается без ошибок, варианты присутствуют в EnumNode.
 #[test]
 fn test_enum_basic() {
-    use grammar::semantic::EnumNode;
+    
     let node = build_file("tests/data/semantic/valid/enum_basic.but")
         .expect("enum_basic.but должен разбираться без ошибок");
     // Перечисление находится во вложенной модели M

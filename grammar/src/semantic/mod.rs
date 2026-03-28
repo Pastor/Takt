@@ -235,6 +235,7 @@ impl ModelNode {
         }
     }
 
+    /// Ищет состояние по имени в текущей модели, затем рекурсивно в родительской.
     pub fn search_state(&self, name: &str) -> Option<Rc<RefCell<StateNode>>> {
         if let Some(state) = self.states.get(name) {
             Some(Rc::new(RefCell::new(state.clone())))
@@ -696,8 +697,11 @@ pub enum TypeNode {
     Unsupported,
     /// Пустой тип.
     Unit,
+    /// Встроенный строковый тип (внутренний, для встроенных функций).
     BuiltinString,
+    /// Встроенный тип модели (внутренний, для встроенных функций).
     BuiltinModel,
+    /// Встроенный тип состояния (внутренний, для встроенных функций).
     BuiltinState,
 }
 
@@ -826,6 +830,7 @@ pub enum StateNode {
         name: String,
         /// Ссылки-переходы (`ref Имя [: Условие]`).
         references: Vec<Reference<StateNode>>,
+        /// Разновидность состояния (обычное, начальное, конечное).
         kind: StateNodeKind,
     },
     /// Состояние с реализацией (`= Модель`): может иметь `next`-переход.
@@ -842,6 +847,7 @@ pub enum StateNode {
         implements: Implement,
         /// Единственный `next`-переход (если задан).
         next: Option<Reference<StateNode>>,
+        /// Разновидность состояния (обычное, начальное, конечное).
         kind: StateNodeKind,
     },
 }
@@ -893,11 +899,15 @@ impl PartialEq for StateNode {
 
 impl Eq for StateNode {}
 
+/// Разновидность состояния FSM.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-enum StateNodeKind {
+pub enum StateNodeKind {
+    /// Обычное состояние.
     #[default]
     Simple,
+    /// Начальное состояние (`start`).
     Start,
+    /// Конечное состояние (`end`).
     End,
 }
 
@@ -1021,7 +1031,9 @@ pub enum Condition {
     Bool(bool),
     /// Переменная.
     Variable(Rc<RefCell<VariableNode>>),
+    /// Ссылка на модель.
     Model(Rc<RefCell<ModelNode>>),
+    /// Ссылка на состояние.
     State(Rc<RefCell<StateNode>>),
 }
 

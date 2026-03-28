@@ -66,7 +66,7 @@ impl Generator {
         }
     }
 
-    fn generate_model_enum(mut printer: &mut Printer, model: &ModelNode) -> Result<(), Diagnostic> {
+    fn generate_model_enum(#[allow(unused_mut)] mut printer: &mut Printer, model: &ModelNode) -> Result<(), Diagnostic> {
         printer.ident("enum {").nl().up();
         let upper = Self::get_upper_name(model);
         printer.ident(&upper).print("_INIT");
@@ -80,7 +80,7 @@ impl Generator {
     }
 
     fn generate_model_struct(
-        mut printer: &mut Printer,
+        #[allow(unused_mut)] mut printer: &mut Printer,
         model: &ModelNode,
         first_model: bool,
     ) -> Result<(), Diagnostic> {
@@ -99,7 +99,7 @@ impl Generator {
         }
         //States
         {
-            Self::generate_model_enum(&mut printer, &*model);
+            let _ = Self::generate_model_enum(&mut printer, &*model);
         }
         //Variables
         {
@@ -141,7 +141,7 @@ impl Generator {
     fn generate_header(&self, model: &ModelNode) -> Result<String, Diagnostic> {
         let mut header = String::new();
         let mut printer = Printer::new(4, &mut header);
-        let mut id =
+        let id =
             normalize_lowercase_snakecase(model.name.clone().unwrap_or("unknown".to_string()))
                 .to_uppercase()
                 + "__";

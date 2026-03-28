@@ -266,7 +266,7 @@ fn collect_from_state(
     state: &crate::semantic::StateNode,
     used: &mut HashSet<String>,
 ) {
-    use crate::semantic::{Reference, StateNode};
+    use crate::semantic::StateNode;
     match state {
         StateNode::Simple {
             named_blocks,

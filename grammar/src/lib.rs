@@ -35,6 +35,7 @@ use lalrpop_util::ParseError;
 
 /// Модуль диагностических сообщений компилятора.
 pub mod diagnostics;
+/// Модуль генерации кода (C и другие целевые платформы).
 pub mod generator;
 /// Модуль парсера
 pub mod parser;

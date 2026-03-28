@@ -4,16 +4,25 @@ mod indent;
 use crate::diagnostics::Diagnostic;
 use crate::semantic::ModelNode;
 
+/// Пара (заголовочный файл, исходный файл) для генераторов, производящих несколько артефактов.
 pub type Source = (Option<String>, Option<String>);
 
+/// Поддерживаемые языки генерации кода.
+#[derive(Debug)]
 pub enum Language {
+    /// Генерация C-кода.
     C,
 }
 
+/// Интерфейс генератора кода для языка BuT.
 pub trait Generator {
+    /// Генерирует код из семантического дерева модели и записывает результат в файл.
     fn generate(&self, model: &ModelNode, output_path: &str) -> Result<(), Diagnostic>;
 }
 
+/// Запускает генератор кода для заданного языка.
+///
+/// Выбирает нужный генератор по значению [`Language`] и вызывает его.
 pub fn generate(l: Language, model: &ModelNode, output_path: &str) -> Result<(), Diagnostic> {
     match l {
         Language::C => {

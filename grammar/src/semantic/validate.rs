@@ -133,7 +133,7 @@ fn validate_cond(
     cond: &Condition,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<(), Diagnostic> {
-    let borrowed = model.borrow();
+    let _borrowed = model.borrow();
     match cond.clone() {
         Condition::None => {}
         Condition::Unresolved(cond) => {
@@ -225,9 +225,9 @@ fn validate_cond(
         Condition::Rational(_, _) => {}
         Condition::String(_) => {}
         Condition::Bool(_) => {}
-        Condition::Variable(var) => {}
-        Condition::Model(model) => {}
-        Condition::State(state) => {}
+        Condition::Variable(_var) => {}
+        Condition::Model(_model) => {}
+        Condition::State(_state) => {}
     }
     Ok(())
 }
@@ -248,7 +248,7 @@ fn validate_state_references(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagno
 }
 
 fn validate_expression(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
-    let borrowed = model.borrow();
+    let _borrowed = model.borrow();
     match expr {
         Expression::None => {}
         Expression::Unresolved(_) => {}
@@ -299,8 +299,8 @@ fn validate_expression(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Resu
         Expression::Type(_) => {}
         Expression::Address(_, _) => {}
         Expression::Bool(_) => {}
-        Expression::Variable(var) => {}
-        Expression::Model(model) => {}
+        Expression::Variable(_var) => {}
+        Expression::Model(_model) => {}
         Expression::Condition(cond) => {
             validate_cond(None, &cond.borrow().value, model.clone())?;
         }
