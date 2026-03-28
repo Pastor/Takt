@@ -1,0 +1,8 @@
+// FE3: Все переменные используются — предупреждений Ce13 нет.
+
+var counter: [bit;8] = 0;
+cond IsZero = counter = 0;
+start S {
+    ref Done: IsZero;
+}
+state Done {}

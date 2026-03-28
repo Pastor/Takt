@@ -141,6 +141,51 @@ fn parser_error_to_diagnostic(
     }
 }
 
+/// Ce13: возвращает предупреждения о неиспользуемых переменных в модели.
+///
+/// Обходит все выражения, операторы и условия модели и её вложенных моделей,
+/// возвращая предупреждения для каждой `var`-переменной, не упомянутой нигде.
+/// Порты и константы не проверяются.
+///
+/// # Пример
+///
+/// ```
+/// use grammar::parse;
+/// use grammar::semantic::tree::construct_model;
+///
+/// let (ast, _) = parse("var unused: bit = 0; start S;", 0).unwrap();
+/// let model = construct_model(&ast, None, &[]).unwrap();
+/// let warnings = grammar::unused_variable_warnings(model);
+/// assert_eq!(warnings.len(), 1);
+/// ```
+pub fn unused_variable_warnings(
+    model: std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
+) -> Vec<crate::diagnostics::Diagnostic> {
+    crate::semantic::unused::check_unused_variables(model)
+}
+
+/// Ce14: возвращает предупреждения о недетерминированных переходах в модели.
+///
+/// Предупреждает, если несколько `ref`-переходов из одного состояния
+/// не имеют условий (безусловные переходы), что является явной недетерминированностью.
+///
+/// # Пример
+///
+/// ```
+/// use grammar::parse;
+/// use grammar::semantic::tree::construct_model;
+///
+/// let (ast, _) = parse("start A { ref B; ref C; } state B; state C;", 0).unwrap();
+/// let model = construct_model(&ast, None, &[]).unwrap();
+/// let warnings = grammar::nondeterministic_transition_warnings(model);
+/// assert_eq!(warnings.len(), 1);
+/// ```
+pub fn nondeterministic_transition_warnings(
+    model: std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
+) -> Vec<crate::diagnostics::Diagnostic> {
+    crate::semantic::validate::check_nondeterministic_transitions(model)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

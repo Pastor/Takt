@@ -1702,3 +1702,67 @@ mod tests {
         );
     }
 }
+
+// ─── Ce14: Проверка детерминированности переходов ────────────────────────────
+
+/// Проверяет детерминированность переходов в состояниях модели.
+///
+/// Предупреждает если несколько `ref`-переходов из одного состояния
+/// не имеют условий (безусловные переходы — `Condition::None`) —
+/// это явная недетерминированность: непонятно, в какое состояние перейти.
+///
+/// # Возвращаемое значение
+///
+/// Вектор [`Diagnostic`] уровня Warning для каждого состояния
+/// с более чем одним безусловным переходом.
+pub fn check_nondeterministic_transitions(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+    let mut warnings = Vec::new();
+    check_nondeterministic_model(model, &mut warnings);
+    warnings
+}
+
+fn check_nondeterministic_model(
+    model: Rc<RefCell<ModelNode>>,
+    warnings: &mut Vec<Diagnostic>,
+) {
+    let borrowed = model.borrow();
+    let model_name = borrowed.name.clone().unwrap_or_default();
+
+    for (state_name, state) in &borrowed.states {
+        let references: &[Reference<StateNode>] = match state {
+            StateNode::Simple { references, .. } => references,
+            StateNode::Implement { references, .. } => references,
+            StateNode::Unresolved => continue,
+        };
+
+        // Подсчёт безусловных переходов (Condition::None)
+        let unconditional_count = references
+            .iter()
+            .filter(|r| matches!(r.cond, Condition::None))
+            .count();
+
+        if unconditional_count > 1 {
+            let prefix = if model_name.is_empty() {
+                format!("состояние '{}'", state_name)
+            } else {
+                format!("модель '{}', состояние '{}'", model_name, state_name)
+            };
+            warnings.push(Diagnostic::warning(
+                Location::Builtin,
+                format!(
+                    "Ce14: {}: {} безусловных перехода(ов) — недетерминированное поведение",
+                    prefix, unconditional_count
+                ),
+            ));
+        }
+    }
+
+    // Рекурсивно для вложенных моделей
+    let nested: Vec<Rc<RefCell<ModelNode>>> =
+        borrowed.models.values().map(Rc::clone).collect();
+    drop(borrowed);
+
+    for nested_model in nested {
+        check_nondeterministic_model(nested_model, warnings);
+    }
+}

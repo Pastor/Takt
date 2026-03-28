@@ -22,7 +22,8 @@ mod statement;
 pub mod tree;
 mod type_;
 mod type_inference;
-mod validate;
+pub(crate) mod validate;
+pub mod unused;
 
 use crate::parser::ast;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};

@@ -3069,6 +3069,106 @@ fn example_ce6_type_inference_chain_valid() {
         .expect("ce6_type_inference_chain.but должен разбираться без ошибок");
 }
 
+// ─── Тесты FE3: Диагностика неиспользуемых переменных (Ce13) ─────────────────
+
+/// FE3: Переменная без использования даёт ровно одно предупреждение Ce13.
+#[test]
+fn test_unused_variable_warning() {
+    use grammar::diagnostics::Level;
+    let node = build_file("tests/data/semantic/valid/unused_variable.but")
+        .expect("unused_variable.but должен разбираться без ошибок");
+    let model_rc = {
+        let (ast, _) = grammar::parse(
+            &std::fs::read_to_string("tests/data/semantic/valid/unused_variable.but").unwrap(),
+            0,
+        )
+        .unwrap();
+        grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap()
+    };
+    let warnings = grammar::unused_variable_warnings(model_rc);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "должно быть ровно одно предупреждение Ce13, получено: {:?}",
+        warnings
+    );
+    assert_eq!(warnings[0].level, Level::Warning, "уровень должен быть Warning");
+    assert!(
+        warnings[0].message.contains("Ce13"),
+        "сообщение должно содержать Ce13: {}",
+        warnings[0].message
+    );
+    assert!(
+        warnings[0].message.contains("unused"),
+        "сообщение должно содержать имя переменной 'unused': {}",
+        warnings[0].message
+    );
+}
+
+/// FE3: Если все переменные используются — предупреждений Ce13 нет.
+#[test]
+fn test_all_vars_used_no_warning() {
+    let (ast, _) = grammar::parse(
+        &std::fs::read_to_string("tests/data/semantic/valid/all_vars_used.but").unwrap(),
+        0,
+    )
+    .unwrap();
+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let warnings = grammar::unused_variable_warnings(model_rc);
+    assert!(
+        warnings.is_empty(),
+        "не должно быть предупреждений Ce13, получено: {:?}",
+        warnings
+    );
+}
+
+// ─── Тесты FE4: Проверка детерминированности переходов (Ce14) ─────────────────
+
+/// FE4: Два безусловных перехода из одного состояния — предупреждение Ce14.
+#[test]
+fn test_nondeterministic_transitions() {
+    use grammar::diagnostics::Level;
+    let (ast, _) = grammar::parse(
+        &std::fs::read_to_string("tests/data/semantic/valid/nondeterministic_warn.but").unwrap(),
+        0,
+    )
+    .unwrap();
+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "должно быть одно предупреждение Ce14, получено: {:?}",
+        warnings
+    );
+    assert_eq!(warnings[0].level, Level::Warning);
+    assert!(
+        warnings[0].message.contains("Ce14"),
+        "сообщение должно содержать Ce14: {}",
+        warnings[0].message
+    );
+}
+
+/// FE4: Переходы с условиями — предупреждений Ce14 нет.
+#[test]
+fn test_deterministic_no_warning() {
+    let (ast, _) = grammar::parse(
+        &std::fs::read_to_string(
+            "tests/data/semantic/valid/deterministic_transitions.but",
+        )
+        .unwrap(),
+        0,
+    )
+    .unwrap();
+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+    assert!(
+        warnings.is_empty(),
+        "детерминированные переходы не должны давать предупреждений Ce14: {:?}",
+        warnings
+    );
+}
+
 // ─── Тесты FE1: Перечисления ──────────────────────────────────────────────────
 
 /// FE1: Базовое перечисление — разбирается без ошибок, варианты присутствуют в EnumNode.
