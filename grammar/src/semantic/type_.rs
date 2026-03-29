@@ -3,6 +3,9 @@
 //! Основная функция [`construct_type`] преобразует АСД-тип [`Type`]
 //! в семантический [`TypeNode`].
 //!
+//! Вместо `&HashMap<String, TypeNode>` функция принимает `Rc<RefCell<ModelNode>>`,
+//! что позволяет искать типы через цепочку родительских моделей.
+//!
 //! ## Поддерживаемые типы
 //!
 //! | АСД (`ast::Type`)              | Семантический узел             |
@@ -18,7 +21,7 @@
 //! | `Type::Alias("bool")`         | `TypeNode::Bool`               |
 //! | `Type::Alias("float")`        | `TypeNode::Rational`           |
 //! | `Type::Alias("unit")`         | `TypeNode::Unit`               |
-//! | `Type::Alias(local)`          | значение из таблицы типов      |
+//! | `Type::Alias(local)`          | значение из таблицы типов модели |
 //! | `Type::Function { .. }`       | `TypeNode::Unsupported`        |
 //! | `None`                        | `TypeNode::Inference`          |
 //!
@@ -27,10 +30,11 @@
 //! `validate_enum_type_declarations`. Данное разделение позволяет обрабатывать
 //! взаимные ссылки между перечислениями и переменными.
 
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast::Type;
-use crate::semantic::TypeNode;
-use std::collections::HashMap;
+use crate::semantic::{ModelNode, TypeNode};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Строит [`TypeNode`] из опционального АСД-типа [`Type`].
 ///
@@ -43,7 +47,7 @@ use std::collections::HashMap;
 /// нет в таблице типов `map`.
 pub(crate) fn construct_type(
     typ: Option<Type>,
-    map: &HashMap<String, TypeNode>,
+    model: Rc<RefCell<ModelNode>>,
 ) -> Result<TypeNode, Diagnostic> {
     if typ.is_none() {
         return Ok(TypeNode::Inference);
@@ -58,14 +62,16 @@ pub(crate) fn construct_type(
             "bool" => Ok(TypeNode::Bool),
             "float" => Ok(TypeNode::Rational),
             "unit" => Ok(TypeNode::Unit),
-            local => Ok(map
-                .get(local)
-                .ok_or_else(|| {
-                    format!("Локальный тип '{}' не найден", &def.name)
-                        .as_str()
-                        .into()
-                })?
-                .clone()),
+            local => {
+                let rc = model
+                    .borrow()
+                    .search_type(local)
+                    .ok_or_else(|| Diagnostic::declaration_error(
+                        def.loc,
+                        format!("Локальный тип '{}' не найден", local),
+                    ))?;
+                Ok(rc.borrow().clone())
+            }
         },
         Type::Array {
             element_type,
@@ -73,7 +79,7 @@ pub(crate) fn construct_type(
             ..
         } => Ok(TypeNode::Array(
             element_count,
-            Box::new(construct_type(Some(*element_type), map)?),
+            Box::new(construct_type(Some(*element_type), model)?),
         )),
         Type::Function { .. } => Ok(TypeNode::Unsupported),
         Type::Unit => Ok(TypeNode::Unit),
@@ -90,9 +96,14 @@ mod tests {
     use super::*;
     use crate::diagnostics::Location;
     use crate::parser::ast::{Identifier, Type};
+    use crate::semantic::ModelNode;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::rc::Rc;
 
-    fn empty_map() -> HashMap<String, TypeNode> {
-        HashMap::new()
+    /// Вспомогательная функция: создаёт пустую модель.
+    fn empty_model() -> Rc<RefCell<ModelNode>> {
+        Rc::new(RefCell::new(ModelNode::default()))
     }
 
     // ── Примитивные типы ──────────────────────────────────────────────────────
@@ -101,7 +112,7 @@ mod tests {
     #[test]
     fn none_gives_inference() {
         assert_eq!(
-            construct_type(None, &empty_map()).unwrap(),
+            construct_type(None, empty_model()).unwrap(),
             TypeNode::Inference
         );
     }
@@ -110,7 +121,7 @@ mod tests {
     #[test]
     fn bit_gives_bit() {
         assert_eq!(
-            construct_type(Some(Type::Bit), &empty_map()).unwrap(),
+            construct_type(Some(Type::Bit), empty_model()).unwrap(),
             TypeNode::Bit
         );
     }
@@ -119,7 +130,7 @@ mod tests {
     #[test]
     fn bool_gives_bool() {
         assert_eq!(
-            construct_type(Some(Type::Bool), &empty_map()).unwrap(),
+            construct_type(Some(Type::Bool), empty_model()).unwrap(),
             TypeNode::Bool
         );
     }
@@ -128,7 +139,7 @@ mod tests {
     #[test]
     fn rational_gives_rational() {
         assert_eq!(
-            construct_type(Some(Type::Rational), &empty_map()).unwrap(),
+            construct_type(Some(Type::Rational), empty_model()).unwrap(),
             TypeNode::Rational
         );
     }
@@ -137,7 +148,7 @@ mod tests {
     #[test]
     fn unit_gives_unit() {
         assert_eq!(
-            construct_type(Some(Type::Unit), &empty_map()).unwrap(),
+            construct_type(Some(Type::Unit), empty_model()).unwrap(),
             TypeNode::Unit
         );
     }
@@ -150,7 +161,7 @@ mod tests {
             bit: Some(3),
         };
         assert_eq!(
-            construct_type(Some(ty), &empty_map()).unwrap(),
+            construct_type(Some(ty), empty_model()).unwrap(),
             TypeNode::Address(0x1234, Some(3))
         );
     }
@@ -163,7 +174,7 @@ mod tests {
             bit: None,
         };
         assert_eq!(
-            construct_type(Some(ty), &empty_map()).unwrap(),
+            construct_type(Some(ty), empty_model()).unwrap(),
             TypeNode::Address(0xFF, None)
         );
     }
@@ -178,7 +189,7 @@ mod tests {
     #[test]
     fn alias_bit_gives_bit() {
         assert_eq!(
-            construct_type(Some(alias("bit")), &empty_map()).unwrap(),
+            construct_type(Some(alias("bit")), empty_model()).unwrap(),
             TypeNode::Bit
         );
     }
@@ -187,7 +198,7 @@ mod tests {
     #[test]
     fn alias_bool_gives_bool() {
         assert_eq!(
-            construct_type(Some(alias("bool")), &empty_map()).unwrap(),
+            construct_type(Some(alias("bool")), empty_model()).unwrap(),
             TypeNode::Bool
         );
     }
@@ -196,7 +207,7 @@ mod tests {
     #[test]
     fn alias_float_gives_rational() {
         assert_eq!(
-            construct_type(Some(alias("float")), &empty_map()).unwrap(),
+            construct_type(Some(alias("float")), empty_model()).unwrap(),
             TypeNode::Rational
         );
     }
@@ -205,14 +216,14 @@ mod tests {
     #[test]
     fn alias_unit_gives_unit() {
         assert_eq!(
-            construct_type(Some(alias("unit")), &empty_map()).unwrap(),
+            construct_type(Some(alias("unit")), empty_model()).unwrap(),
             TypeNode::Unit
         );
     }
 
     // ── Пользовательские псевдонимы ───────────────────────────────────────────
 
-    /// Псевдоним из таблицы типов разрешается в соответствующий `TypeNode`.
+    /// Псевдоним из таблицы типов модели разрешается в соответствующий `TypeNode`.
     ///
     /// # Пример (BuT)
     /// ```but
@@ -226,8 +237,9 @@ mod tests {
             "u8".to_string(),
             TypeNode::Array(8, Box::new(TypeNode::Bit)),
         );
+        let model = Rc::new(RefCell::new(ModelNode { types: map, ..Default::default() }));
         assert_eq!(
-            construct_type(Some(alias("u8")), &map).unwrap(),
+            construct_type(Some(alias("u8")), model).unwrap(),
             TypeNode::Array(8, Box::new(TypeNode::Bit))
         );
     }
@@ -240,7 +252,7 @@ mod tests {
     /// ```
     #[test]
     fn unknown_alias_is_error() {
-        let result = construct_type(Some(alias("Unknown")), &empty_map());
+        let result = construct_type(Some(alias("Unknown")), empty_model());
         assert!(
             result.is_err(),
             "неизвестный псевдоним должен давать ошибку"
@@ -264,7 +276,7 @@ mod tests {
             element_count: 8,
         };
         assert_eq!(
-            construct_type(Some(ty), &empty_map()).unwrap(),
+            construct_type(Some(ty), empty_model()).unwrap(),
             TypeNode::Array(8, Box::new(TypeNode::Bit))
         );
     }
@@ -283,7 +295,7 @@ mod tests {
             element_count: 2,
         };
         assert_eq!(
-            construct_type(Some(outer), &empty_map()).unwrap(),
+            construct_type(Some(outer), empty_model()).unwrap(),
             TypeNode::Array(2, Box::new(TypeNode::Array(4, Box::new(TypeNode::Bit))))
         );
     }
@@ -297,7 +309,7 @@ mod tests {
             returns: None,
         };
         assert_eq!(
-            construct_type(Some(ty), &empty_map()).unwrap(),
+            construct_type(Some(ty), empty_model()).unwrap(),
             TypeNode::Unsupported
         );
     }
@@ -314,7 +326,7 @@ mod tests {
     #[test]
     fn enum_type_gives_enum_node() {
         assert_eq!(
-            construct_type(Some(Type::Enum("Color".to_string())), &empty_map()).unwrap(),
+            construct_type(Some(Type::Enum("Color".to_string())), empty_model()).unwrap(),
             TypeNode::Enum("Color".to_string())
         );
     }
@@ -325,7 +337,7 @@ mod tests {
     #[test]
     fn enum_type_empty_name() {
         assert_eq!(
-            construct_type(Some(Type::Enum(String::new())), &empty_map()).unwrap(),
+            construct_type(Some(Type::Enum(String::new())), empty_model()).unwrap(),
             TypeNode::Enum(String::new())
         );
     }
@@ -343,9 +355,10 @@ mod tests {
             "Color".to_string(),
             TypeNode::Array(8, Box::new(TypeNode::Bit)),
         );
+        let model = Rc::new(RefCell::new(ModelNode { types: map, ..Default::default() }));
         // Type::Enum("Color") всё равно → TypeNode::Enum("Color"), не Array
         assert_eq!(
-            construct_type(Some(Type::Enum("Color".to_string())), &map).unwrap(),
+            construct_type(Some(Type::Enum("Color".to_string())), model).unwrap(),
             TypeNode::Enum("Color".to_string())
         );
     }

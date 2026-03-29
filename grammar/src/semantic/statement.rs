@@ -193,21 +193,20 @@ fn resolve_ast_statement(
         // поскольку после исправления грамматики LocalVariableDefine передаёт
         // инициализатор именно туда, а третье поле Statement::Variable всегда None.
         ast::Statement::Variable(_, def, _extra_init) => {
-            let types = model.borrow().types.clone();
             let (name, ty, def_init) = match def.as_ref() {
                 ast::VariableDefine::Variable { name, typ, initializer, .. } => {
                     let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
-                    let t = construct_type(typ.clone(), &types)?;
+                    let t = construct_type(typ.clone(), model.clone())?;
                     (n, t, initializer.clone())
                 }
                 ast::VariableDefine::Constant { name, typ, initializer, .. } => {
                     let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
-                    let t = construct_type(typ.clone(), &types)?;
+                    let t = construct_type(typ.clone(), model.clone())?;
                     (n, t, Some(initializer.clone()))
                 }
                 ast::VariableDefine::Port { name, typ, initializer, .. } => {
                     let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
-                    let t = construct_type(typ.clone(), &types)?;
+                    let t = construct_type(typ.clone(), model.clone())?;
                     (n, t, initializer.clone())
                 }
             };

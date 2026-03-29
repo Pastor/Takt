@@ -53,11 +53,11 @@ pub fn construct_function(
                     //   - `Expression::Array(_, items)` — массивный тип (не поддерживается как параметр).
                     let param_type = match param.clone().ty {
                         ast::Expression::Type(_, typ) => {
-                            construct_type(Some(typ), &model.borrow().types)?
+                            construct_type(Some(typ), model.clone())?
                         }
                         ast::Expression::Variable(id) => {
                             // Преобразуем идентификатор в псевдоним типа и разрешаем.
-                            construct_type(Some(ast::Type::Alias(id)), &model.borrow().types)?
+                            construct_type(Some(ast::Type::Alias(id)), model.clone())?
                         }
                         _ => {
                             return Err("Параметр функции должен иметь тип".into());
@@ -72,7 +72,7 @@ pub fn construct_function(
                 }
             }
             let rett = match def.return_type {
-                Some(t) => construct_type(Some(t), &model.borrow().types).map_err(|e| e)?,
+                Some(t) => construct_type(Some(t), model.clone()).map_err(|e| e)?,
                 None => TypeNode::Unit,
             };
             if def.external {

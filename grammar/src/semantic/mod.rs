@@ -22,8 +22,8 @@ mod statement;
 pub mod tree;
 mod type_;
 mod type_inference;
-pub(crate) mod validate;
 pub mod unused;
+pub(crate) mod validate;
 
 use crate::parser::ast;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
@@ -269,6 +269,16 @@ impl ModelNode {
             Some(Rc::new(RefCell::new(state.clone())))
         } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
             return model.borrow().search_state(name);
+        } else {
+            None
+        }
+    }
+
+    pub fn search_type(&self, name: &str) -> Option<Rc<RefCell<TypeNode>>> {
+        if let Some(type_) = self.types.get(name) {
+            Some(Rc::new(RefCell::new(type_.clone())))
+        } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
+            return model.borrow().search_type(name);
         } else {
             None
         }

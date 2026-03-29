@@ -91,7 +91,6 @@ fn construct_model_stage0(
     let model_node = Rc::new(RefCell::new(model_node));
     let mut models = HashMap::new();
     let mut variables = HashMap::new();
-    let mut types = HashMap::new();
     let mut conditions = HashMap::new();
     let mut named_blocks = Vec::new();
     let mut functions = HashMap::new();
@@ -207,12 +206,12 @@ fn construct_model_stage0(
                             }
                             models.insert(alias, Rc::clone(m));
                         } else if let Some(t) = src.types.get(orig) {
-                            if types.contains_key(&alias) {
+                            if model_node.borrow().types.contains_key(&alias) {
                                 return Err(format!("Тип '{}' уже объявлен", alias)
                                     .as_str()
                                     .into());
                             }
-                            types.insert(alias, t.clone());
+                            model_node.borrow_mut().types.insert(alias, t.clone());
                         } else if let Some(v) = src.variables.get(orig) {
                             if variables.contains_key(&alias) {
                                 return Err(format!("Переменная '{}' уже объявлена", alias)
@@ -253,7 +252,7 @@ fn construct_model_stage0(
                         VariableNode::Simple {
                             upper: Some(Rc::downgrade(&model_node)),
                             name: name.clone(),
-                            ty: construct_type(typ, &types)?,
+                            ty: construct_type(typ, model_node.clone())?,
                             expr: initializer
                                 .map(|e| Expression::Unresolved(e))
                                 .unwrap_or(Expression::None),
@@ -267,7 +266,7 @@ fn construct_model_stage0(
                     ..
                 } => {
                     let name = extract_name(name.clone())?;
-                    let type_node = construct_type(typ, &types)?;
+                    let type_node = construct_type(typ, model_node.clone())?;
                     if type_node == TypeNode::Inference {
                         return Err("Порт должен иметь конкретный тип".into());
                     }
@@ -305,7 +304,7 @@ fn construct_model_stage0(
                         VariableNode::Const {
                             upper: Some(Rc::downgrade(&model_node)),
                             name: name.clone(),
-                            ty: construct_type(typ, &types)?,
+                            ty: construct_type(typ, model_node.clone())?,
                             expr: Expression::Unresolved(initializer),
                         },
                     )
@@ -314,8 +313,7 @@ fn construct_model_stage0(
         } else if let ModelElement::Type(def) = element {
             let name = def.clone().name.name.clone();
             let typ = def.ty.clone();
-            let types_clone = types.clone();
-            types.insert(name.clone(), construct_type(Some(typ), &types_clone)?);
+            model_node.borrow_mut().types.insert(name.clone(), construct_type(Some(typ), model_node.clone())?);
         } else if let ModelElement::Condition(def) = element {
             let name = def
                 .clone()
@@ -402,13 +400,12 @@ fn construct_model_stage0(
             //    `TypeNode::Unsupported`; это считается ошибкой пользователя.
             model_node.borrow_mut().enums.insert(enum_name.clone(), enum_node);
             if !enum_name.is_empty() {
-                types.insert(enum_name.clone(), TypeNode::Enum(enum_name.clone()));
+                model_node.borrow_mut().types.insert(enum_name.clone(), TypeNode::Enum(enum_name.clone()));
             }
         }
     }
     model_node.borrow_mut().models = models;
     model_node.borrow_mut().states = construct_states(model, model_node.clone())?;
-    model_node.borrow_mut().types = types;
     model_node.borrow_mut().variables = variables;
     model_node.borrow_mut().conditions = conditions;
     model_node.borrow_mut().named_blocks = named_blocks;
