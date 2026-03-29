@@ -7,3 +7,6 @@
 .syntx.json
 output.txt
 /grammar/.output
+extensions/zed-but/target
+extensions/zed-but/Cargo.lock
+extensions/zed-but/extension.wasm

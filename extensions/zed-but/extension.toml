@@ -16,3 +16,6 @@ languages = ["languages/but"]
 [grammars.but]
 repository = "https://github.com/Pastor/tree-sitter-but"
 rev = "0000000000000000000000000000000000000000"
+
+[language_servers.but-lsp]
+name = "but-lsp"
