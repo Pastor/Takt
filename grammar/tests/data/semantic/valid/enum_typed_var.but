@@ -1,0 +1,22 @@
+// Ce4: переменная с явной аннотацией типа-перечисления.
+//
+// Корректный пример: перечисление Direction объявлено до использования.
+// Переменная dir имеет тип Direction и инициализируется допустимым вариантом.
+//
+// Ожидаемое поведение: разбирается без ошибок;
+// тип переменной dir → TypeNode::Enum("Direction").
+
+enum Direction { North = 0, South = 1, East = 2, West = 3 }
+
+/// Текущее направление движения.
+var dir: Direction = 0;
+
+/// Следующее направление (следующий вариант).
+var next_dir: Direction = 1;
+
+start Idle {
+    ref Moving: dir != next_dir;
+}
+state Moving {
+    next Idle;
+}

@@ -15,7 +15,21 @@
 //! 7. Логика/сравнение → `Bit`
 //! 8. Скобки → тип внутреннего выражения
 //! 9. Приведение типа (`as T`) → `T`
-//! 10. Прочее → `Unsupported`
+//! 10. Перечисление (`Type::Enum(name)`) → `TypeNode::Enum(name)`
+//! 11. Прочее → `Unsupported`
+//!
+//! ## Расширение типов (`wider_type`)
+//!
+//! При выводе типа бинарных выражений выбирается «более широкий» тип:
+//!
+//! | Операнды                        | Результат              |
+//! |---------------------------------|------------------------|
+//! | `Enum("X")` + `Enum("X")`       | `Enum("X")`            |
+//! | `Enum("X")` + `Enum("Y")`       | `Unsupported`          |
+//! | `Enum(_)` + любой не-Enum       | `Unsupported`          |
+//! | `Rational` + любой              | `Rational`             |
+//! | `Array(N)` + `Array(M)`         | `Array(max(N,M), ...)`  |
+//! | `Bool` + `Bit`                  | `Bit`                  |
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast::Type;
@@ -84,13 +98,34 @@ fn type_of_var(var: &VariableNode) -> TypeNode {
 
 /// Возвращает наиболее «широкий» тип из двух.
 ///
-/// Порядок расширения: `Bit`/`Bool` < `Array` < `Rational`.
-/// Если один из типов — `Rational`, результат — `Rational`.
-/// Из двух массивов выбирается наибольший по размеру.
-/// `Bool` + `Bit` → `Bit`. Иначе — `Unsupported`.
+/// ## Правила расширения
+///
+/// | Пара типов                          | Результат                  |
+/// |-------------------------------------|----------------------------|
+/// | `Enum("X")` + `Enum("X")`           | `Enum("X")` (одинаковые)   |
+/// | `Enum("X")` + `Enum("Y")`           | `Unsupported` (разные)     |
+/// | `Enum(_)` + любой не-Enum           | `Unsupported`              |
+/// | `Rational` + любой                  | `Rational`                 |
+/// | `Array(N, T)` + `Array(M, T)`       | `Array(max(N,M), T)`       |
+/// | `Array(N, T)` + скаляр              | `Array(N, T)`              |
+/// | `Bool` + `Bit`                      | `Bit`                      |
+/// | `Bool` + `Bool`                     | `Bool`                     |
+/// | `Bit` + `Bit`                       | `Bit`                      |
+/// | иначе                               | `Unsupported`              |
+///
+/// # Примеры
+///
+/// ```rust,ignore
+/// // wider_type — pub(crate), вызывается только внутри пакета.
+/// // Полные тесты смотрите в модуле tests ниже.
+/// ```
 #[inline]
-fn wider_type(a: TypeNode, b: TypeNode) -> TypeNode {
+pub(crate) fn wider_type(a: TypeNode, b: TypeNode) -> TypeNode {
     match (&a, &b) {
+        // Ce4: два одинаковых перечисления → сохраняем тип перечисления
+        (TypeNode::Enum(na), TypeNode::Enum(nb)) if na == nb => TypeNode::Enum(na.clone()),
+        // Ce4: разные перечисления или перечисление с не-перечислением → несовместимо
+        (TypeNode::Enum(_), _) | (_, TypeNode::Enum(_)) => TypeNode::Unsupported,
         (TypeNode::Rational, _) | (_, TypeNode::Rational) => TypeNode::Rational,
         // Из двух массивов выбирается наибольший по размеру
         (TypeNode::Array(n, t), TypeNode::Array(m, s)) => {
@@ -129,13 +164,23 @@ fn infer_int_type(n: i64) -> TypeNode {
     }
 }
 
-/// Преобразует АСД-тип [`Type`] в семантический [`TypeNode`].
+/// Преобразует АСД-тип [`Type`] в семантический [`TypeNode`] без контекста модели.
 ///
 /// Используется при выводе типа для выражений `as T` (приведение типа)
 /// и при Ce6-выводе из возвращаемого типа функции.
 ///
 /// Псевдонимы встроенных типов (`bool`, `bit`, `float`, `unit`) разрешаются.
-/// Пользовательские псевдонимы и функциональные типы возвращают `Unsupported`.
+/// Пользовательские псевдонимы (`Type::Alias`) возвращают `Unsupported` — для их
+/// разрешения используйте [`ast_type_to_node_ctx`].
+/// Перечисления (`Type::Enum`) возвращают `TypeNode::Enum(name)` — факт того,
+/// что перечисление объявлено, проверяется в `validate_model`.
+///
+/// | АСД-тип              | Результат                     |
+/// |----------------------|-------------------------------|
+/// | `Type::Enum("X")`    | `TypeNode::Enum("X")`         |
+/// | `Type::Alias(local)` | `TypeNode::Unsupported`       |
+/// | `Type::Function`     | `TypeNode::Unsupported`       |
+/// | `Type::Address`      | `TypeNode::Unsupported`       |
 pub(crate) fn ast_type_to_node(ty: &Type) -> TypeNode {
     match ty {
         Type::Bit => TypeNode::Bit,
@@ -147,6 +192,8 @@ pub(crate) fn ast_type_to_node(ty: &Type) -> TypeNode {
             element_type,
             ..
         } => TypeNode::Array(*element_count, Box::new(ast_type_to_node(element_type))),
+        // Ce4: перечисление по имени — без проверки существования (нет контекста)
+        Type::Enum(name) => TypeNode::Enum(name.clone()),
         // Ce6: разрешаем встроенные псевдонимы типов без контекста модели
         Type::Alias(id) => match id.name.as_str() {
             "bit" => TypeNode::Bit,
@@ -162,11 +209,20 @@ pub(crate) fn ast_type_to_node(ty: &Type) -> TypeNode {
 }
 
 /// Преобразует АСД-тип в семантический с разрешением пользовательских псевдонимов
-/// через контекст модели.
+/// и перечислений через контекст модели.
 ///
-/// FE2/Ce6: В отличие от [`ast_type_to_node`], эта функция ищет псевдоним
-/// в таблице `types` модели, что позволяет разрешать `type u8 = [bit;8]`
-/// при выводе возвращаемого типа функции или при приведении типа.
+/// FE2/Ce6/Ce4: В отличие от [`ast_type_to_node`], эта функция ищет:
+/// - псевдонимы типов в `ModelNode::types` (`type u8 = [bit;8]` → `Array(8, Bit)`)
+/// - перечисления в `ModelNode::enums` (`Color` → `Enum("Color")` если объявлено)
+///
+/// Если перечисление не найдено — возвращает `TypeNode::Unsupported`; ошибка
+/// будет диагностирована при `validate_model`.
+///
+/// | АСД-тип              | Результат                                         |
+/// |----------------------|---------------------------------------------------|
+/// | `Type::Enum("X")`    | `TypeNode::Enum("X")` если X объявлен             |
+/// | `Type::Enum("X")`    | `TypeNode::Unsupported` если X не найден          |
+/// | `Type::Alias(local)` | из `types` или `TypeNode::Unsupported`            |
 pub(crate) fn ast_type_to_node_ctx(ty: &Type, model: Rc<RefCell<ModelNode>>) -> TypeNode {
     match ty {
         Type::Bit => TypeNode::Bit,
@@ -181,6 +237,16 @@ pub(crate) fn ast_type_to_node_ctx(ty: &Type, model: Rc<RefCell<ModelNode>>) -> 
             *element_count,
             Box::new(ast_type_to_node_ctx(element_type, model)),
         ),
+        // Ce4: перечисление по имени — проверяем наличие в контексте модели
+        Type::Enum(name) => {
+            let borrowed = model.borrow();
+            if borrowed.search_enum(name).is_some() {
+                TypeNode::Enum(name.clone())
+            } else {
+                // Перечисление не найдено; validate_model сообщит об ошибке
+                TypeNode::Unsupported
+            }
+        }
         Type::Alias(id) => match id.name.as_str() {
             "bit" => TypeNode::Bit,
             "bool" => TypeNode::Bool,
@@ -918,6 +984,98 @@ mod tests {
         assert_eq!(
             infer_int_type(-1),
             TypeNode::Array(64, Box::new(TypeNode::Bit))
+        );
+    }
+
+    // ── Ce4: Тесты wider_type для перечислений ────────────────────────────────
+
+    /// Ce4: два одинаковых перечисления → сохраняют тип.
+    ///
+    /// # Пример
+    /// Выражение `color1 + color2`, оба типа `Color` → тип результата `Color`.
+    #[test]
+    fn wider_type_same_enum_returns_enum() {
+        let a = TypeNode::Enum("Color".to_string());
+        let b = TypeNode::Enum("Color".to_string());
+        assert_eq!(wider_type(a, b), TypeNode::Enum("Color".to_string()));
+    }
+
+    /// Ce4: два разных перечисления несовместимы → `Unsupported`.
+    ///
+    /// # Контр-пример
+    /// `Color` и `Size` — разные типы, смешение недопустимо.
+    #[test]
+    fn wider_type_different_enums_is_unsupported() {
+        let a = TypeNode::Enum("Color".to_string());
+        let b = TypeNode::Enum("Size".to_string());
+        assert_eq!(wider_type(a, b), TypeNode::Unsupported);
+    }
+
+    /// Ce4: перечисление с числовым типом несовместимо → `Unsupported`.
+    ///
+    /// # Контр-пример
+    /// `Color` + `Bit` — нельзя расширить enum до Bit.
+    #[test]
+    fn wider_type_enum_and_bit_is_unsupported() {
+        let a = TypeNode::Enum("Color".to_string());
+        assert_eq!(wider_type(a.clone(), TypeNode::Bit), TypeNode::Unsupported);
+        assert_eq!(wider_type(TypeNode::Bit, a), TypeNode::Unsupported);
+    }
+
+    /// Ce4: перечисление с Rational несовместимо → `Unsupported`.
+    ///
+    /// # Контр-пример
+    /// Enum не расширяется до Rational — это нарушение типовой безопасности.
+    #[test]
+    fn wider_type_enum_and_rational_is_unsupported() {
+        let a = TypeNode::Enum("Dir".to_string());
+        assert_eq!(wider_type(a.clone(), TypeNode::Rational), TypeNode::Unsupported);
+        assert_eq!(wider_type(TypeNode::Rational, a), TypeNode::Unsupported);
+    }
+
+    // ── Ce4: Тесты ast_type_to_node для перечислений ──────────────────────────
+
+    /// Ce4: `ast_type_to_node(Type::Enum("Color"))` → `TypeNode::Enum("Color")`.
+    #[test]
+    fn ast_type_enum_to_node() {
+        use crate::parser::ast::Type;
+        assert_eq!(
+            ast_type_to_node(&Type::Enum("Color".to_string())),
+            TypeNode::Enum("Color".to_string())
+        );
+    }
+
+    /// Ce4: `ast_type_to_node_ctx` при наличии enum в модели → `TypeNode::Enum`.
+    ///
+    /// # Пример
+    /// Объявлен `enum Dir { ... }`, тип `Dir` разрешается в `TypeNode::Enum("Dir")`.
+    #[test]
+    fn ast_type_to_node_ctx_with_enum_in_model() {
+        use crate::parser::ast::Type;
+        use crate::semantic::EnumNode;
+
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        let e = EnumNode::new("Dir", &[("North", None), ("South", None)]);
+        model.borrow_mut().enums.insert("Dir".to_string(), e);
+
+        assert_eq!(
+            ast_type_to_node_ctx(&Type::Enum("Dir".to_string()), model),
+            TypeNode::Enum("Dir".to_string())
+        );
+    }
+
+    /// Ce4: `ast_type_to_node_ctx` при отсутствии enum в модели → `TypeNode::Unsupported`.
+    ///
+    /// # Контр-пример
+    /// Тип `UnknownEnum` не объявлен → `Unsupported` (ошибка диагностируется в validate_model).
+    #[test]
+    fn ast_type_to_node_ctx_unknown_enum_is_unsupported() {
+        use crate::parser::ast::Type;
+
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        assert_eq!(
+            ast_type_to_node_ctx(&Type::Enum("UnknownEnum".to_string()), model),
+            TypeNode::Unsupported
         );
     }
 

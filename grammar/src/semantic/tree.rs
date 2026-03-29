@@ -388,9 +388,22 @@ fn construct_model_stage0(
                     .map(|(n, v)| (n.as_str(), Some(*v)))
                     .collect::<Vec<_>>(),
             );
-            // Добавляем перечисление в enums модели после завершения построения
-            // Временно сохраняем в карту enums через model_node
-            model_node.borrow_mut().enums.insert(enum_name, enum_node);
+            // Ce4: Регистрируем перечисление в двух местах:
+            //
+            // 1. `model_node.enums` — для поиска через `search_enum` / `search_enum_variant`.
+            //
+            // 2. `types` — для разрешения аннотаций типа `var x: Color = 0;`.
+            //    Парсер создаёт `Type::Alias("Color")` для таких аннотаций; `construct_type`
+            //    ищет псевдоним в таблице `types`. Добавляем `TypeNode::Enum("Color")`,
+            //    чтобы переменная получила корректный тип.
+            //
+            //    Ограничение: enum должен быть объявлен ДО переменных, использующих его как
+            //    тип (аналогично псевдонимам `type`). Если enum объявлен после — тип будет
+            //    `TypeNode::Unsupported`; это считается ошибкой пользователя.
+            model_node.borrow_mut().enums.insert(enum_name.clone(), enum_node);
+            if !enum_name.is_empty() {
+                types.insert(enum_name.clone(), TypeNode::Enum(enum_name.clone()));
+            }
         }
     }
     model_node.borrow_mut().models = models;

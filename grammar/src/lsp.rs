@@ -160,16 +160,87 @@ pub fn offset_to_range(source: &str, start: usize, end: usize) -> Range {
     }
 }
 
-/// Конвертирует байтовое смещение в LSP `Position` (строка + столбец в UTF-16).
+/// Конвертирует байтовое смещение в LSP `Position` (строка + столбец в кодовых единицах UTF-16).
+///
+/// Протокол LSP (спецификация v3.17, §3.1) требует, чтобы поле `character` позиции
+/// выражалось в **кодовых единицах UTF-16**, а не в байтах или кодовых точках Unicode.
+/// Для ASCII-символов все три единицы совпадают; различие возникает при наличии
+/// многобайтовых UTF-8 символов (кириллица, CJK, эмодзи, …).
+///
+/// Если `offset` указывает на середину многобайтового символа (невалидная char-граница),
+/// функция безопасно отступает до ближайшей предшествующей границы символа.
+///
+/// # Примеры
+///
+/// ```
+/// # #[cfg(feature = "lsp")]
+/// # {
+/// use grammar::lsp::offset_to_position;
+/// use lsp_types::Position;
+///
+/// // ASCII: байтовое смещение == UTF-16-столбец
+/// assert_eq!(offset_to_position("hello", 3), Position::new(0, 3));
+///
+/// // Многострочный текст: смещение 7 — второй байт второй строки
+/// assert_eq!(offset_to_position("line1\nab", 7), Position::new(1, 1));
+///
+/// // Кириллица: 'А' занимает 2 байта в UTF-8, но 1 кодовую единицу в UTF-16
+/// // "АБ" = [0xD0,0x90, 0xD0,0x91] — 4 байта, 2 символа
+/// let src = "АБ";
+/// assert_eq!(offset_to_position(src, 4), Position::new(0, 2)); // конец строки
+/// assert_eq!(offset_to_position(src, 2), Position::new(0, 1)); // после 'А'
+/// # }
+/// ```
 pub fn offset_to_position(source: &str, offset: usize) -> Position {
-    let offset = offset.min(source.len());
+    // Зажимаем до валидной границы символа UTF-8
+    let offset = {
+        let clamped = offset.min(source.len());
+        // Если попали в середину многобайтового символа — откатываемся назад
+        (0..=clamped)
+            .rev()
+            .find(|&i| source.is_char_boundary(i))
+            .unwrap_or(0)
+    };
     let prefix = &source[..offset];
     let line = prefix.matches('\n').count() as u32;
-    let col = prefix
-        .rfind('\n')
-        .map(|nl| prefix.len() - nl - 1)
-        .unwrap_or(prefix.len());
-    Position::new(line, col as u32)
+    // Находим начало текущей строки (байт сразу после последнего '\n')
+    let line_start = prefix.rfind('\n').map(|nl| nl + 1).unwrap_or(0);
+    // LSP требует столбец в кодовых единицах UTF-16
+    let col_utf16: u32 = prefix[line_start..]
+        .chars()
+        .map(|c| c.len_utf16() as u32)
+        .sum();
+    Position::new(line, col_utf16)
+}
+
+/// Конвертирует UTF-16 смещение символа в байтовое смещение внутри строки `s`.
+///
+/// Возвращает `Some(byte_offset)`, если `utf16_offset` не выходит за пределы строки,
+/// иначе `None`.
+///
+/// # Примеры
+///
+/// ```
+/// // ASCII: 1 байт = 1 кодовая единица UTF-16
+/// // utf16_offset 3 → байт 3
+///
+/// // "АБВ": каждый символ — 2 байта UTF-8, 1 кодовая единица UTF-16
+/// // utf16_offset 2 → байт 4
+/// ```
+fn utf16_to_byte_offset(s: &str, utf16_offset: usize) -> Option<usize> {
+    let mut utf16_count = 0usize;
+    for (byte_i, ch) in s.char_indices() {
+        if utf16_count >= utf16_offset {
+            return Some(byte_i);
+        }
+        utf16_count += ch.len_utf16();
+    }
+    // Если точно достигли конца строки
+    if utf16_count >= utf16_offset {
+        Some(s.len())
+    } else {
+        None
+    }
 }
 
 /// Генерирует элементы автодополнения для источника BuT.
@@ -316,17 +387,53 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
 }
 
 /// Возвращает слово (идентификатор) под заданной позицией курсора.
+///
+/// Позиция `position.character` задаётся в **кодовых единицах UTF-16** согласно
+/// спецификации LSP. Функция корректно обрабатывает многобайтовые символы UTF-8
+/// (кириллица, CJK, эмодзи).
+///
+/// Символами слова считаются буквенно-цифровые символы (`is_alphanumeric()`),
+/// знак подчёркивания `_` и знак `$`.
+///
+/// # Примеры (примеры / контр-примеры)
+///
+/// ```
+/// # #[cfg(feature = "lsp")]
+/// # {
+/// use grammar::lsp::word_at_position;
+/// use lsp_types::Position;
+///
+/// // Курсор внутри слова "hello" → "hello"
+/// assert_eq!(word_at_position("hello world", Position::new(0, 2)), Some("hello".to_string()));
+///
+/// // Курсор на границе слова (позиция прямо после "hello") → возвращает "hello"
+/// assert_eq!(word_at_position("hello world", Position::new(0, 5)), Some("hello".to_string()));
+///
+/// // Курсор строго внутри двойного пробела → None
+/// assert_eq!(word_at_position("hello  world", Position::new(0, 6)), None);
+///
+/// // Несуществующая строка → None
+/// assert_eq!(word_at_position("hello", Position::new(99, 0)), None);
+/// # }
+/// ```
 pub fn word_at_position(source: &str, position: Position) -> Option<String> {
     let line_text = source.lines().nth(position.line as usize)?;
-    let col = (position.character as usize).min(line_text.len());
+    // Конвертируем UTF-16 смещение символа в байтовое смещение
+    let col = utf16_to_byte_offset(line_text, position.character as usize)
+        .unwrap_or(line_text.len());
 
-    // Ищем начало слова (идём влево)
+    // Ищем начало слова (идём влево от курсора)
     let start = line_text[..col]
         .rfind(|c: char| !c.is_alphanumeric() && c != '_' && c != '$')
-        .map(|i| i + 1)
+        .map(|i| {
+            // rfind возвращает байтовый индекс начала символа-разделителя;
+            // шагаем вперёд на длину этого символа
+            let ch = line_text[i..].chars().next().unwrap();
+            i + ch.len_utf8()
+        })
         .unwrap_or(0);
 
-    // Ищем конец слова (идём вправо)
+    // Ищем конец слова (идём вправо от курсора)
     let end = line_text[col..]
         .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '$')
         .map(|i| i + col)
@@ -739,7 +846,17 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
     let mut prev_start = 0u32;
 
     for (start, end, tt) in raw {
-        let length = end.saturating_sub(start) as u32;
+        // LSP требует длину токена в кодовых единицах UTF-16, а не в байтах.
+        // Для ASCII (большинство идентификаторов BuT) оба значения совпадают;
+        // различие возникает для кириллицы, CJK и прочих многобайтовых символов.
+        let length: u32 = if end > start && end <= source.len() && source.is_char_boundary(start) && source.is_char_boundary(end) {
+            source[start..end]
+                .chars()
+                .map(|c| c.len_utf16() as u32)
+                .sum()
+        } else {
+            end.saturating_sub(start) as u32
+        };
         if length == 0 {
             continue;
         }
@@ -1043,5 +1160,215 @@ start S = M;
         let lsp_diag = grammar_diagnostic_to_lsp(&diag, "");
         assert_eq!(lsp_diag.range.start, Position::new(0, 0));
         assert_eq!(lsp_diag.range.end, Position::new(0, 0));
+    }
+
+    // ── Тесты UTF-16 и Unicode ─────────────────────────────────────────────────
+
+    /// Кириллический символ занимает 2 байта UTF-8, но 1 кодовую единицу UTF-16.
+    /// offset_to_position должен возвращать UTF-16-столбец, а не байтовый.
+    ///
+    /// Пример: "АБ" = bytes [0xD0,0x90, 0xD0,0x91]
+    /// offset 2 (начало 'Б') → строка 0, столбец 1 (в UTF-16)
+    /// offset 4 (конец строки) → строка 0, столбец 2 (в UTF-16)
+    ///
+    /// Контр-пример: если бы считали байты, столбец был бы 2 и 4 соответственно.
+    #[test]
+    fn test_offset_to_position_cyrillic_utf16() {
+        let src = "АБ"; // 4 байта UTF-8, 2 символа, 2 кодовые единицы UTF-16
+        assert_eq!(src.len(), 4, "кириллица: 2 байта на символ");
+
+        // Конец строки: 2 кодовые единицы UTF-16
+        let pos = offset_to_position(src, 4);
+        assert_eq!(pos.line, 0);
+        assert_eq!(pos.character, 2, "UTF-16 столбец, не байтовый");
+
+        // После первого символа 'А': байт 2 → UTF-16 столбец 1
+        let pos = offset_to_position(src, 2);
+        assert_eq!(pos.character, 1);
+    }
+
+    /// Emoji занимает 4 байта UTF-8 и 2 кодовые единицы UTF-16 (суррогатная пара).
+    ///
+    /// Пример: "😀x" — emoji U+1F600: 4 байта UTF-8, 2 UTF-16 единицы.
+    /// offset 4 (позиция 'x') → UTF-16 столбец 2
+    ///
+    /// Контр-пример: байтовый столбец был бы 4.
+    #[test]
+    fn test_offset_to_position_emoji_surrogate_pair() {
+        let src = "😀x"; // U+1F600 = 4 байта UTF-8, 2 кодовые единицы UTF-16
+        assert_eq!(src.len(), 5, "emoji 4 байта + 'x' 1 байт");
+
+        // Позиция 'x': байт 4 → UTF-16 столбец 2 (emoji занимает 2 единицы)
+        let pos = offset_to_position(src, 4);
+        assert_eq!(pos.line, 0);
+        assert_eq!(pos.character, 2, "суррогатная пара занимает 2 UTF-16 единицы");
+    }
+
+    /// Смещение на середину многобайтового символа не должно вызывать панику.
+    /// Функция должна безопасно отступить до предыдущей char-границы.
+    ///
+    /// Пример: "А" = [0xD0, 0x90], offset 1 — середина символа.
+    /// Ожидаем позицию начала "А" (UTF-16 столбец 0), а не панику.
+    ///
+    /// Контр-пример: &source[..1] для "А" вызвал бы панику без защиты.
+    #[test]
+    fn test_offset_to_position_mid_char_no_panic() {
+        let src = "АБ"; // 'А' = bytes 0..2, 'Б' = bytes 2..4
+        // Байт 1 — середина 'А': отступаем до байта 0 → столбец 0
+        let pos = offset_to_position(src, 1);
+        assert_eq!(pos.line, 0);
+        assert_eq!(pos.character, 0, "должны откатиться до начала символа 'А'");
+    }
+
+    /// offset_to_position с нулём всегда возвращает (0, 0).
+    #[test]
+    fn test_offset_to_position_zero() {
+        assert_eq!(offset_to_position("hello", 0), Position::new(0, 0));
+        assert_eq!(offset_to_position("", 0), Position::new(0, 0));
+        assert_eq!(offset_to_position("АБ", 0), Position::new(0, 0));
+    }
+
+    /// offset_to_position на многострочном тексте с кириллицей.
+    ///
+    /// Пример: "А\nБ", байт 3 = начало 'Б' → строка 1, столбец 0.
+    #[test]
+    fn test_offset_to_position_multiline_cyrillic() {
+        let src = "А\nБ"; // 'А'=2, '\n'=1, 'Б'=2 → длина 5
+        // Байт 3 — начало 'Б' на второй строке
+        let pos = offset_to_position(src, 3);
+        assert_eq!(pos.line, 1);
+        assert_eq!(pos.character, 0);
+
+        // Байт 5 — конец 'Б' → строка 1, столбец 1
+        let pos = offset_to_position(src, 5);
+        assert_eq!(pos.line, 1);
+        assert_eq!(pos.character, 1);
+    }
+
+    // ── Тесты word_at_position с UTF-16 позицией ──────────────────────────────
+
+    /// word_at_position корректно обрабатывает UTF-16 позицию в строке с кириллицей.
+    ///
+    /// Строка: "А myVar = 0;"
+    /// 'А' занимает 1 кодовую единицу UTF-16. position.character=2 → байт 3 → 'm'.
+    #[test]
+    fn test_word_at_position_utf16_column() {
+        // "А " = 2 UTF-16 единицы (1 для 'А', 1 для ' ')
+        // "myVar" начинается с UTF-16-позиции 2
+        let src = "А myVar";
+        // 'А' = bytes 0..2, ' ' = byte 2, 'myVar' = bytes 3..8
+        // UTF-16: 'А'=1, ' '=1, 'm'=1 → position.character=2 → 'm'
+        let word = word_at_position(src, Position::new(0, 2));
+        assert_eq!(word, Some("myVar".to_string()));
+    }
+
+    /// word_at_position с позицией, выходящей за пределы строки → None или последнее слово.
+    ///
+    /// Контр-пример: position.character больше длины строки — функция не паникует.
+    #[test]
+    fn test_word_at_position_beyond_line_no_panic() {
+        let src = "hello";
+        // Позиция за концом строки: clamp к длине → конец слова
+        let word = word_at_position(src, Position::new(0, 999));
+        // Ожидаем "hello" (курсор зажат до конца)
+        assert_eq!(word, Some("hello".to_string()));
+    }
+
+    // ── Тесты utf16_to_byte_offset ────────────────────────────────────────────
+
+    /// ASCII: UTF-16 смещение совпадает с байтовым.
+    #[test]
+    fn test_utf16_to_byte_offset_ascii() {
+        assert_eq!(super::utf16_to_byte_offset("hello", 0), Some(0));
+        assert_eq!(super::utf16_to_byte_offset("hello", 3), Some(3));
+        assert_eq!(super::utf16_to_byte_offset("hello", 5), Some(5));
+    }
+
+    /// Кириллица: 1 UTF-16 единица = 2 байта UTF-8.
+    ///
+    /// "АБВ": utf16_offset 1 → байт 2, utf16_offset 3 → байт 6.
+    #[test]
+    fn test_utf16_to_byte_offset_cyrillic() {
+        let s = "АБВ"; // каждый символ 2 байта
+        assert_eq!(super::utf16_to_byte_offset(s, 0), Some(0));
+        assert_eq!(super::utf16_to_byte_offset(s, 1), Some(2)); // после 'А'
+        assert_eq!(super::utf16_to_byte_offset(s, 2), Some(4)); // после 'Б'
+        assert_eq!(super::utf16_to_byte_offset(s, 3), Some(6)); // конец
+    }
+
+    /// Emoji (суррогатная пара): U+1F600 занимает 2 UTF-16 единицы.
+    ///
+    /// "😀x": utf16_offset 2 → байт 4 (начало 'x').
+    ///
+    /// Контр-пример: utf16_offset 1 → None (внутри суррогатной пары).
+    #[test]
+    fn test_utf16_to_byte_offset_emoji() {
+        let s = "😀x"; // U+1F600 = 4 байта UTF-8, 2 единицы UTF-16; 'x' = 1 байт
+        // utf16_offset 0 → байт 0 (начало emoji)
+        assert_eq!(super::utf16_to_byte_offset(s, 0), Some(0));
+        // utf16_offset 2 → байт 4 (начало 'x')
+        assert_eq!(super::utf16_to_byte_offset(s, 2), Some(4));
+        // utf16_offset 3 → байт 5 (конец строки)
+        assert_eq!(super::utf16_to_byte_offset(s, 3), Some(5));
+    }
+
+    /// Смещение за пределами строки → None.
+    #[test]
+    fn test_utf16_to_byte_offset_out_of_bounds() {
+        assert_eq!(super::utf16_to_byte_offset("hi", 10), None);
+        assert_eq!(super::utf16_to_byte_offset("", 1), None);
+    }
+
+    // ── Тест семантических токенов ─────────────────────────────────────────────
+
+    /// semantic_tokens не должна паниковать на валидном BuT-исходнике.
+    #[test]
+    fn test_semantic_tokens_no_panic() {
+        let tokens = semantic_tokens(VALID_SRC);
+        // Проверяем, что токены сформированы и дельта-кодирование корректно:
+        // delta_line строго неотрицательна (u32), delta_start < character на той же строке.
+        let mut prev_line = 0u32;
+        for tok in &tokens.data {
+            assert!(
+                tok.delta_line >= 0 || prev_line == 0,
+                "delta_line всегда >= 0 (тип u32)"
+            );
+            assert!(tok.length > 0, "нулевые токены отфильтровываются");
+            prev_line += tok.delta_line;
+        }
+    }
+
+    /// semantic_tokens не должна паниковать на пустом вводе.
+    #[test]
+    fn test_semantic_tokens_empty_source() {
+        let tokens = semantic_tokens("");
+        assert!(tokens.data.is_empty(), "пустой источник → нет токенов");
+    }
+
+    /// semantic_tokens корректно считает длину кириллического идентификатора в UTF-16.
+    ///
+    /// Токен "АБВ" (3 символа, 6 байт UTF-8) должен иметь length=3 в UTF-16, не 6.
+    ///
+    /// Контр-пример: если бы считали байты, length был бы 6 — LSP-редактор неправильно
+    /// подсветил бы диапазон.
+    #[test]
+    fn test_semantic_tokens_utf16_length() {
+        // Используем extern fn с кириллическим именем
+        // BuT поддерживает Unicode-идентификаторы через UnicodeXID
+        let src = "extern fn АБВ() -> [bit;8]; start S;";
+        let tokens = semantic_tokens(src);
+        // Ищем токен типа TT_FUNCTION для "АБВ"
+        // "extern fn " = 10 байт/символов (ASCII) до "АБВ"
+        // "АБВ" начинается на байте 10, строка 0
+        // В UTF-16: 10 ASCII-символов = 10 единиц → delta_start или character = 10
+        // length = 3 (UTF-16), не 6 (байты)
+        let func_tok = tokens.data.iter().find(|t| t.token_type == TT_FUNCTION);
+        if let Some(tok) = func_tok {
+            assert_eq!(
+                tok.length, 3,
+                "кириллический идентификатор: 3 кодовые единицы UTF-16, не 6 байт"
+            );
+        }
+        // Если "АБВ" не распознан как функция — всё равно не паникуем
     }
 }

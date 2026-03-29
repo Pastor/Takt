@@ -737,6 +737,14 @@ fn build_file(path: &str) -> Result<grammar::semantic::ModelNode, grammar::diagn
     construct_model(&ast, None, &[]).map(|m| m.take())
 }
 
+/// Разбирает BuT-файл и ожидает семантическую ошибку.
+fn build_file_err(path: &str) -> grammar::diagnostics::Diagnostic {
+    let src = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("не могу прочитать {}: {}", path, e));
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
+    construct_model(&ast, None, &[]).expect_err("ожидалась ошибка семантического анализа")
+}
+
 /// `tests/data/semantic/valid/simple_fsm.but` — строится без ошибок.
 #[test]
 fn example_simple_fsm_is_valid() {
@@ -3259,4 +3267,183 @@ fn test_enum_with_values() {
     assert_eq!(prio.find_variant("Low"), Some(0), "Low = 0");
     assert_eq!(prio.find_variant("Medium"), Some(5), "Medium = 5");
     assert_eq!(prio.find_variant("High"), Some(10), "High = 10");
+}
+
+
+// ─── Ce4: Интеграционные тесты enum-типизированных переменных ─────────────────
+
+/// Ce4: переменная с явным типом-перечислением разбирается без ошибок.
+///
+/// # Пример (BuT)
+/// ```text
+/// enum Direction { North = 0, South = 1, East = 2, West = 3 }
+/// var dir: Direction = 0;
+/// ```
+#[test]
+fn ce4_enum_typed_var_valid() {
+    let node = build_file("tests/data/semantic/valid/enum_typed_var.but")
+        .expect("enum_typed_var.but должен разбираться без ошибок");
+    // Тип переменной dir должен быть TypeNode::Enum("Direction")
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("dir") {
+        assert_eq!(
+            ty,
+            TypeNode::Enum("Direction".to_string()),
+            "тип переменной dir должен быть TypeNode::Enum(\"Direction\")"
+        );
+    } else {
+        panic!("переменная dir не найдена");
+    }
+}
+
+/// Ce4: переменная с типом необъявленного перечисления → ошибка Ce4.
+///
+/// # Контр-пример (BuT)
+/// ```text
+/// var current: Status = 0;   // Status не объявлен → ошибка Ce4
+/// start S;
+/// ```
+#[test]
+fn ce4_undeclared_enum_type_gives_error() {
+    let err = build_file_err("tests/data/semantic/invalid/ce4_undeclared_enum_type.but");
+    assert!(
+        err.message.contains("Ce4") || err.message.contains("Status"),
+        "ошибка должна упоминать Ce4 или имя перечисления: {}",
+        err.message
+    );
+}
+
+/// Ce4: переменная с enum-типом и недопустимым значением → ошибка NI6.
+///
+/// # Контр-пример (BuT)
+/// ```text
+/// enum Color { Red = 0, Green = 1, Blue = 2 }
+/// var c: Color = 99;   // 99 не является вариантом Color → NI6
+/// ```
+#[test]
+fn ce4_enum_typed_var_invalid_value() {
+    let err = build_file_err("tests/data/semantic/invalid/ce4_enum_type_wrong_value.but");
+    assert!(
+        err.message.contains("NI6") || err.message.contains("99") || err.message.contains("Color"),
+        "ошибка должна упоминать NI6, значение или имя enum: {}",
+        err.message
+    );
+}
+
+/// Ce4: переменная с типом enum инициализируется вариантом через имя (Expression::Number).
+///
+/// Вариант `North` (значение 0) разрешается в `Number(0)`.
+/// Тип переменной остаётся `TypeNode::Enum("Direction")`.
+#[test]
+fn ce4_enum_variant_used_as_initializer() {
+    // North — вариант enum Direction, разрешается в Number(0)
+    let src = "enum Direction { North = 0, South = 1 } var dir: Direction = North; start S;";
+    let node = build(src);
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("dir") {
+        assert_eq!(
+            ty,
+            TypeNode::Enum("Direction".to_string()),
+            "явная аннотация типа сохраняется даже при инициализации через вариант"
+        );
+    } else {
+        panic!("переменная dir не найдена");
+    }
+}
+
+/// Ce4: два перечисления в одной модели — оба доступны независимо.
+///
+/// # Пример (BuT)
+/// ```text
+/// enum Color { Red = 0, Green = 1 }
+/// enum Priority { Low = 0, High = 1 }
+/// var c: Color = 0;
+/// var p: Priority = 1;
+/// start S;
+/// ```
+#[test]
+fn ce4_two_enums_in_model() {
+    let src = "enum Color { Red = 0, Green = 1 } \
+               enum Priority { Low = 0, High = 1 } \
+               var c: Color = 0; \
+               var p: Priority = 1; \
+               start S;";
+    let node = build(src);
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("c") {
+        assert_eq!(ty, TypeNode::Enum("Color".to_string()));
+    } else {
+        panic!("переменная c не найдена");
+    }
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("p") {
+        assert_eq!(ty, TypeNode::Enum("Priority".to_string()));
+    } else {
+        panic!("переменная p не найдена");
+    }
+}
+
+/// Ce4: варианты перечисления из родительской области видимости доступны через поиск.
+///
+/// Аннотации типов (`var d: Dir`) работают только в той же области видимости,
+/// где объявлен enum (аналогично псевдонимам `type`). Но `search_enum_variant`
+/// поднимается по цепочке `upper` и находит вариант из внешней модели.
+///
+/// # Пример (BuT)
+/// ```text
+/// enum Dir { N = 0, S = 1 }
+/// model Inner {
+///     var d: [bit;8] = N;  // N разрешается в 0 через search_enum_variant
+///     start S;
+/// }
+/// start Root = Inner;
+/// ```
+#[test]
+fn ce4_enum_variant_accessible_from_nested_model() {
+    // Вариант N (=0) из Dir должен быть доступен в Inner через search_enum_variant.
+    // Используем Rc напрямую, чтобы не потерять upper-ссылку через .take().
+    let src = "enum Dir { N = 0, S = 1 } \
+               model Inner { var d: [bit;8] = N; start S; } \
+               start Root = Inner;";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let root = construct_model(&ast, None, &[]).expect("ошибка построения дерева");
+    let inner = root
+        .borrow()
+        .search_model("Inner")
+        .expect("модель Inner должна быть найдена");
+    // Вариант должен быть найден через цепочку upper → root
+    assert!(
+        inner.borrow().search_enum_variant("N").is_some(),
+        "вариант N из родительского enum Dir должен быть доступен в Inner"
+    );
+    assert_eq!(
+        inner.borrow().search_enum_variant("N"),
+        Some(("Dir".to_string(), 0)),
+        "N должен иметь значение 0 из Dir"
+    );
+}
+
+/// Ce4: enum, объявленный внутри модели, доступен только в ней (не в родителе).
+///
+/// # Контр-пример
+/// Enum из вложенной модели не виден в родительской через аннотации типов.
+#[test]
+fn ce4_enum_declared_inside_model_local_to_it() {
+    let src = "model Inner { enum Status { Ok = 0, Err = 1 } var s: Status = 0; start S; } \
+               start Root = Inner;";
+    let node = build(src);
+    // В Inner: enum Status и переменная s: Status должны работать
+    let inner = node.search_model("Inner").expect("модель Inner должна быть найдена");
+    let borrowed = inner.borrow();
+    assert!(
+        borrowed.enums.contains_key("Status"),
+        "enum Status должен быть объявлен в Inner"
+    );
+    if let Some(VariableNode::Simple { ty, .. }) = borrowed.search_var("s") {
+        assert_eq!(ty, TypeNode::Enum("Status".to_string()));
+    } else {
+        panic!("переменная s не найдена в Inner");
+    }
+    // В корневой модели enum Status недоступен
+    assert!(
+        node.search_enum("Status").is_none()
+            || node.enums.get("Status").is_none(),
+        "enum Status не должен быть виден в корневой модели напрямую"
+    );
 }

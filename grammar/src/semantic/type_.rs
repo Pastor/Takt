@@ -13,6 +13,7 @@
 //! | `Type::Unit`                  | `TypeNode::Unit`               |
 //! | `Type::Array { N, T }`        | `TypeNode::Array(N, T)`        |
 //! | `Type::Address { addr, bit }` | `TypeNode::Address(addr, bit)` |
+//! | `Type::Enum("Color")`         | `TypeNode::Enum("Color")`      |
 //! | `Type::Alias("bit")`          | `TypeNode::Bit`                |
 //! | `Type::Alias("bool")`         | `TypeNode::Bool`               |
 //! | `Type::Alias("float")`        | `TypeNode::Rational`           |
@@ -20,6 +21,11 @@
 //! | `Type::Alias(local)`          | значение из таблицы типов      |
 //! | `Type::Function { .. }`       | `TypeNode::Unsupported`        |
 //! | `None`                        | `TypeNode::Inference`          |
+//!
+//! **Примечание о `Type::Enum`:** `construct_type` не проверяет, объявлено ли
+//! перечисление; эта проверка выполняется в `validate_model` через
+//! `validate_enum_type_declarations`. Данное разделение позволяет обрабатывать
+//! взаимные ссылки между перечислениями и переменными.
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast::Type;
@@ -71,6 +77,9 @@ pub(crate) fn construct_type(
         )),
         Type::Function { .. } => Ok(TypeNode::Unsupported),
         Type::Unit => Ok(TypeNode::Unit),
+        // Type::Enum используется только в парсере как узел грамматики;
+        // в качестве типа переменной не поддерживается на уровне семантики.
+        Type::Enum(name) => Ok(TypeNode::Enum(name.clone())),
     }
 }
 
@@ -91,19 +100,28 @@ mod tests {
     /// `None` → `TypeNode::Inference`.
     #[test]
     fn none_gives_inference() {
-        assert_eq!(construct_type(None, &empty_map()).unwrap(), TypeNode::Inference);
+        assert_eq!(
+            construct_type(None, &empty_map()).unwrap(),
+            TypeNode::Inference
+        );
     }
 
     /// `Type::Bit` → `TypeNode::Bit`.
     #[test]
     fn bit_gives_bit() {
-        assert_eq!(construct_type(Some(Type::Bit), &empty_map()).unwrap(), TypeNode::Bit);
+        assert_eq!(
+            construct_type(Some(Type::Bit), &empty_map()).unwrap(),
+            TypeNode::Bit
+        );
     }
 
     /// `Type::Bool` → `TypeNode::Bool`.
     #[test]
     fn bool_gives_bool() {
-        assert_eq!(construct_type(Some(Type::Bool), &empty_map()).unwrap(), TypeNode::Bool);
+        assert_eq!(
+            construct_type(Some(Type::Bool), &empty_map()).unwrap(),
+            TypeNode::Bool
+        );
     }
 
     /// `Type::Rational` → `TypeNode::Rational`.
@@ -159,13 +177,19 @@ mod tests {
     /// `Alias("bit")` → `TypeNode::Bit`.
     #[test]
     fn alias_bit_gives_bit() {
-        assert_eq!(construct_type(Some(alias("bit")), &empty_map()).unwrap(), TypeNode::Bit);
+        assert_eq!(
+            construct_type(Some(alias("bit")), &empty_map()).unwrap(),
+            TypeNode::Bit
+        );
     }
 
     /// `Alias("bool")` → `TypeNode::Bool`.
     #[test]
     fn alias_bool_gives_bool() {
-        assert_eq!(construct_type(Some(alias("bool")), &empty_map()).unwrap(), TypeNode::Bool);
+        assert_eq!(
+            construct_type(Some(alias("bool")), &empty_map()).unwrap(),
+            TypeNode::Bool
+        );
     }
 
     /// `Alias("float")` → `TypeNode::Rational`.
@@ -198,7 +222,10 @@ mod tests {
     #[test]
     fn local_alias_resolves_from_map() {
         let mut map = HashMap::new();
-        map.insert("u8".to_string(), TypeNode::Array(8, Box::new(TypeNode::Bit)));
+        map.insert(
+            "u8".to_string(),
+            TypeNode::Array(8, Box::new(TypeNode::Bit)),
+        );
         assert_eq!(
             construct_type(Some(alias("u8")), &map).unwrap(),
             TypeNode::Array(8, Box::new(TypeNode::Bit))
@@ -214,7 +241,10 @@ mod tests {
     #[test]
     fn unknown_alias_is_error() {
         let result = construct_type(Some(alias("Unknown")), &empty_map());
-        assert!(result.is_err(), "неизвестный псевдоним должен давать ошибку");
+        assert!(
+            result.is_err(),
+            "неизвестный псевдоним должен давать ошибку"
+        );
         let err = result.unwrap_err();
         assert!(
             err.message.contains("Unknown"),
@@ -269,6 +299,54 @@ mod tests {
         assert_eq!(
             construct_type(Some(ty), &empty_map()).unwrap(),
             TypeNode::Unsupported
+        );
+    }
+
+    // ── Ce4: перечисления ─────────────────────────────────────────────────────
+
+    /// `Type::Enum("Color")` → `TypeNode::Enum("Color")`.
+    ///
+    /// # Пример (BuT)
+    /// ```text
+    /// enum Color { Red = 0, Green = 1 }
+    /// var c: Color = 0;   // тип аннотации → TypeNode::Enum("Color")
+    /// ```
+    #[test]
+    fn enum_type_gives_enum_node() {
+        assert_eq!(
+            construct_type(Some(Type::Enum("Color".to_string())), &empty_map()).unwrap(),
+            TypeNode::Enum("Color".to_string())
+        );
+    }
+
+    /// `Type::Enum` с пустым именем → `TypeNode::Enum("")`.
+    ///
+    /// Имя не проверяется в `construct_type` — валидация в `validate_model`.
+    #[test]
+    fn enum_type_empty_name() {
+        assert_eq!(
+            construct_type(Some(Type::Enum(String::new())), &empty_map()).unwrap(),
+            TypeNode::Enum(String::new())
+        );
+    }
+
+    /// `Type::Enum` не зависит от таблицы типов (псевдонимов).
+    ///
+    /// # Контр-пример
+    /// Наличие псевдонима "Color" в таблице не влияет на `Type::Enum("Color")` —
+    /// они обрабатываются независимо.
+    #[test]
+    fn enum_type_ignores_type_alias_table() {
+        let mut map = HashMap::new();
+        // В таблице типов есть "Color" как псевдоним — но Type::Enum идёт своим путём
+        map.insert(
+            "Color".to_string(),
+            TypeNode::Array(8, Box::new(TypeNode::Bit)),
+        );
+        // Type::Enum("Color") всё равно → TypeNode::Enum("Color"), не Array
+        assert_eq!(
+            construct_type(Some(Type::Enum("Color".to_string())), &map).unwrap(),
+            TypeNode::Enum("Color".to_string())
         );
     }
 }
