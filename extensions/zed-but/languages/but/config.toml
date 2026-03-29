@@ -1,5 +1,4 @@
 name = "BuT"
-grammar = "but"
 path_suffixes = ["but"]
 line_comments = ["// ", "/// "]
 autoclose_before = ";:.,=}])"

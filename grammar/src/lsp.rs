@@ -8,6 +8,31 @@
 
 use lsp_types::*;
 
+/// Типы семантических токенов (порядок важен — индекс используется как тип в легенде).
+pub const SEMANTIC_TOKEN_TYPES: &[SemanticTokenType] = &[
+    SemanticTokenType::KEYWORD,     // 0
+    SemanticTokenType::VARIABLE,    // 1
+    SemanticTokenType::FUNCTION,    // 2
+    SemanticTokenType::TYPE,        // 3
+    SemanticTokenType::ENUM_MEMBER, // 4
+    SemanticTokenType::STRING,      // 5
+    SemanticTokenType::NUMBER,      // 6
+    SemanticTokenType::COMMENT,     // 7
+    SemanticTokenType::OPERATOR,    // 8
+    SemanticTokenType::CLASS,       // 9  (состояния и модели)
+];
+
+const TT_KEYWORD: u32 = 0;
+const TT_VARIABLE: u32 = 1;
+const TT_FUNCTION: u32 = 2;
+const TT_TYPE: u32 = 3;
+const TT_ENUM_MEMBER: u32 = 4;
+const TT_STRING: u32 = 5;
+const TT_NUMBER: u32 = 6;
+const TT_COMMENT: u32 = 7;
+const TT_OPERATOR: u32 = 8;
+const TT_CLASS: u32 = 9;
+
 /// Ключевые слова языка BuT для автодополнения.
 const BUT_KEYWORDS: &[(&str, &str)] = &[
     ("model", "объявление модели конечного автомата"),
@@ -414,6 +439,332 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
         }),
         range: None,
     })
+}
+
+/// Возвращает символы документа (outline) для отображения в панели структуры.
+///
+/// Заменяет функциональность `outline.scm` без использования tree-sitter.
+/// Обходит AST и формирует иерархию символов: модели, состояния, функции,
+/// типы, условия, перечисления и переменные.
+pub fn document_symbols(source: &str) -> Vec<DocumentSymbol> {
+    use crate::parser::ast::Model;
+    let ast: Model = match crate::parse(source, 0) {
+        Ok((ast, _)) => ast,
+        Err(_) => return vec![],
+    };
+    symbols_from_model(&ast, source)
+}
+
+fn loc_to_range(loc: &crate::diagnostics::Location, source: &str) -> Range {
+    match loc {
+        crate::diagnostics::Location::Source(_, start, end) => offset_to_range(source, *start, *end),
+        _ => Range {
+            start: Position::new(0, 0),
+            end: Position::new(0, 0),
+        },
+    }
+}
+
+#[allow(deprecated)]
+fn make_sym(
+    name: String,
+    kind: SymbolKind,
+    range: Range,
+    selection_range: Range,
+    children: Option<Vec<DocumentSymbol>>,
+) -> DocumentSymbol {
+    DocumentSymbol {
+        name,
+        detail: None,
+        kind,
+        tags: None,
+        deprecated: None,
+        range,
+        selection_range,
+        children,
+    }
+}
+
+fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<DocumentSymbol> {
+    use crate::parser::ast::{ModelElement, StateElement, VariableDefine};
+
+    let mut out: Vec<DocumentSymbol> = Vec::new();
+
+    for elem in &model.elements {
+        match elem {
+            ModelElement::Model(m) => {
+                let id = match m.name.as_ref() { Some(id) => id, None => continue };
+                let children = symbols_from_model(m, source);
+                out.push(make_sym(
+                    id.name.clone(),
+                    SymbolKind::MODULE,
+                    loc_to_range(&m.loc, source),
+                    loc_to_range(&id.loc, source),
+                    if children.is_empty() { None } else { Some(children) },
+                ));
+            }
+            ModelElement::State(s) => {
+                let id = match s.name.as_ref() { Some(id) => id, None => continue };
+                let children: Vec<DocumentSymbol> = s
+                    .elements
+                    .iter()
+                    .filter_map(|e| match e {
+                        StateElement::NamedBlockCode(nb) => {
+                            let nb_id = nb.name.as_ref()?;
+                            Some(make_sym(
+                                nb_id.name.clone(),
+                                SymbolKind::EVENT,
+                                loc_to_range(&nb.loc, source),
+                                loc_to_range(&nb_id.loc, source),
+                                None,
+                            ))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                out.push(make_sym(
+                    id.name.clone(),
+                    SymbolKind::CLASS,
+                    loc_to_range(&s.loc, source),
+                    loc_to_range(&id.loc, source),
+                    if children.is_empty() { None } else { Some(children) },
+                ));
+            }
+            ModelElement::Function(f) => {
+                let id = match f.name.as_ref() { Some(id) => id, None => continue };
+                out.push(make_sym(
+                    id.name.clone(),
+                    SymbolKind::FUNCTION,
+                    loc_to_range(&f.loc, source),
+                    loc_to_range(&id.loc, source),
+                    None,
+                ));
+            }
+            ModelElement::Type(t) => {
+                out.push(make_sym(
+                    t.name.name.clone(),
+                    SymbolKind::TYPE_PARAMETER,
+                    loc_to_range(&t.loc, source),
+                    loc_to_range(&t.name.loc, source),
+                    None,
+                ));
+            }
+            ModelElement::Condition(c) => {
+                let id = match c.name.as_ref() { Some(id) => id, None => continue };
+                out.push(make_sym(
+                    id.name.clone(),
+                    SymbolKind::CONSTANT,
+                    loc_to_range(&c.loc, source),
+                    loc_to_range(&id.loc, source),
+                    None,
+                ));
+            }
+            ModelElement::Enum(e) => {
+                let id = match e.name.as_ref() { Some(id) => id, None => continue };
+                let children: Vec<DocumentSymbol> = e
+                    .variants
+                    .iter()
+                    .map(|v| {
+                        make_sym(
+                            v.name.name.clone(),
+                            SymbolKind::ENUM_MEMBER,
+                            loc_to_range(&v.loc, source),
+                            loc_to_range(&v.name.loc, source),
+                            None,
+                        )
+                    })
+                    .collect();
+                out.push(make_sym(
+                    id.name.clone(),
+                    SymbolKind::ENUM,
+                    loc_to_range(&e.loc, source),
+                    loc_to_range(&id.loc, source),
+                    if children.is_empty() { None } else { Some(children) },
+                ));
+            }
+            ModelElement::Variable(v) => {
+                let (loc, name_opt, kind) = match v.as_ref() {
+                    VariableDefine::Variable { loc, name, .. } => (loc, name, SymbolKind::VARIABLE),
+                    VariableDefine::Port { loc, name, .. } => (loc, name, SymbolKind::PROPERTY),
+                    VariableDefine::Constant { loc, name, .. } => {
+                        (loc, name, SymbolKind::CONSTANT)
+                    }
+                };
+                let id = match name_opt { Some(id) => id, None => continue };
+                out.push(make_sym(
+                    id.name.clone(),
+                    kind,
+                    loc_to_range(loc, source),
+                    loc_to_range(&id.loc, source),
+                    None,
+                ));
+            }
+            ModelElement::NamedBlockCode(nb) => {
+                let id = match nb.name.as_ref() { Some(id) => id, None => continue };
+                out.push(make_sym(
+                    id.name.clone(),
+                    SymbolKind::EVENT,
+                    loc_to_range(&nb.loc, source),
+                    loc_to_range(&id.loc, source),
+                    None,
+                ));
+            }
+            ModelElement::Import(_) | ModelElement::Formula(_) | ModelElement::StraySemicolon(_) => {}
+        }
+    }
+
+    out
+}
+
+/// Генерирует семантические токены для подсветки синтаксиса документа.
+///
+/// Использует лексер BuT для токенизации и семантическую модель для уточнения
+/// типов идентификаторов (функции, типы, состояния, варианты перечислений и т.д.).
+/// Результат передаётся редактору в ответ на `textDocument/semanticTokens/full`.
+pub fn semantic_tokens(source: &str) -> SemanticTokens {
+    use crate::ast::Comment;
+    use crate::diagnostics::Location;
+    use crate::parser::lexer::{Lexer, Token};
+
+    // Строим семантическую модель для обогащения идентификаторов
+    let model_opt = crate::parse(source, 0)
+        .ok()
+        .and_then(|(ast, _)| crate::semantic::tree::construct_model(&ast, None, &[]).ok());
+    let borrowed_model = model_opt.as_ref().map(|m| m.borrow());
+
+    // Собираем токены и комментарии через лексер
+    let mut comments: Vec<Comment> = Vec::new();
+    let mut lex_errors = Vec::new();
+    let token_results: Vec<_> =
+        Lexer::new(source, 0, &mut comments, &mut lex_errors).collect();
+
+    let mut raw: Vec<(usize, usize, u32)> = Vec::new();
+
+    for (start, token, end) in token_results {
+        let tt = match token {
+            Token::Identifier(name) => {
+                if let Some(ref b) = borrowed_model {
+                    if b.search_func(name).is_some() {
+                        TT_FUNCTION
+                    } else if b.types.contains_key(name) || b.enums.contains_key(name) {
+                        TT_TYPE
+                    } else if b.search_enum_variant(name).is_some() {
+                        TT_ENUM_MEMBER
+                    } else if b.search_state(name).is_some() || b.models.contains_key(name) {
+                        TT_CLASS
+                    } else {
+                        TT_VARIABLE
+                    }
+                } else {
+                    TT_VARIABLE
+                }
+            }
+            Token::Model
+            | Token::State
+            | Token::Start
+            | Token::Variable
+            | Token::Constant
+            | Token::Port
+            | Token::Function
+            | Token::Extern
+            | Token::Enum
+            | Token::Type
+            | Token::Loop
+            | Token::Continue
+            | Token::Break
+            | Token::Return
+            | Token::If
+            | Token::Else
+            | Token::For
+            | Token::Import
+            | Token::As
+            | Token::Assembly
+            | Token::Formula
+            | Token::Condition
+            | Token::Next
+            | Token::Reference
+            | Token::Template
+            | Token::Pragma
+            | Token::True
+            | Token::False
+            | Token::String => TT_KEYWORD,
+            Token::Number(_) | Token::RationalNumber(..) | Token::AddressLiteral(_) => TT_NUMBER,
+            Token::StringLiteral(..) => TT_STRING,
+            Token::Equal
+            | Token::NotEqual
+            | Token::Assign
+            | Token::Add
+            | Token::Subtract
+            | Token::Mul
+            | Token::Divide
+            | Token::Modulo
+            | Token::Power
+            | Token::And
+            | Token::Or
+            | Token::Not
+            | Token::BitwiseAnd
+            | Token::BitwiseOr
+            | Token::BitwiseXor
+            | Token::BitwiseNot
+            | Token::ShiftLeft
+            | Token::ShiftRight
+            | Token::Less
+            | Token::LessEqual
+            | Token::More
+            | Token::MoreEqual
+            | Token::PeirceArrow
+            | Token::Member => TT_OPERATOR,
+            // Пунктуация и прочее — не подсвечиваем
+            _ => continue,
+        };
+        raw.push((start, end, tt));
+    }
+
+    // Добавляем комментарии (лексер накапливает их отдельно, не как токены)
+    for comment in &comments {
+        let loc = match comment {
+            Comment::Line(loc, _) | Comment::DocLine(loc, _) => loc,
+        };
+        if let Location::Source(_, start, end) = loc {
+            raw.push((*start, *end, TT_COMMENT));
+        }
+    }
+
+    // Сортируем по байтовому смещению
+    raw.sort_unstable_by_key(|&(s, _, _)| s);
+
+    // Кодируем в дельта-формат LSP SemanticTokens
+    let mut data = Vec::with_capacity(raw.len());
+    let mut prev_line = 0u32;
+    let mut prev_start = 0u32;
+
+    for (start, end, tt) in raw {
+        let length = end.saturating_sub(start) as u32;
+        if length == 0 {
+            continue;
+        }
+        let pos = offset_to_position(source, start);
+        let delta_line = pos.line - prev_line;
+        let delta_start = if delta_line == 0 {
+            pos.character.saturating_sub(prev_start)
+        } else {
+            pos.character
+        };
+        data.push(SemanticToken {
+            delta_line,
+            delta_start,
+            length,
+            token_type: tt,
+            token_modifiers_bitset: 0,
+        });
+        prev_line = pos.line;
+        prev_start = pos.character;
+    }
+
+    SemanticTokens {
+        result_id: None,
+        data,
+    }
 }
 
 #[cfg(test)]

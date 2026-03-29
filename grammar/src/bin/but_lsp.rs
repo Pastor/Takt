@@ -44,6 +44,18 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
             ..Default::default()
         }),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
+        document_symbol_provider: Some(OneOf::Left(true)),
+        semantic_tokens_provider: Some(
+            SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
+                legend: SemanticTokensLegend {
+                    token_types: grammar::lsp::SEMANTIC_TOKEN_TYPES.to_vec(),
+                    token_modifiers: vec![],
+                },
+                full: Some(SemanticTokensFullOptions::Bool(true)),
+                range: None,
+                work_done_progress_options: Default::default(),
+            }),
+        ),
         ..Default::default()
     })?;
 
@@ -135,6 +147,26 @@ fn handle_request(
             connection.sender.send(Message::Response(Response::new_ok(
                 req.id,
                 serde_json::to_value(hover)?,
+            )))?;
+        }
+        "textDocument/documentSymbol" => {
+            let params: DocumentSymbolParams = serde_json::from_value(req.params)?;
+            let uri = &params.text_document.uri;
+            let text = state.get_text(uri).unwrap_or("");
+            let symbols = grammar::lsp::document_symbols(text);
+            connection.sender.send(Message::Response(Response::new_ok(
+                req.id,
+                serde_json::to_value(symbols)?,
+            )))?;
+        }
+        "textDocument/semanticTokens/full" => {
+            let params: SemanticTokensParams = serde_json::from_value(req.params)?;
+            let uri = &params.text_document.uri;
+            let text = state.get_text(uri).unwrap_or("");
+            let tokens = grammar::lsp::semantic_tokens(text);
+            connection.sender.send(Message::Response(Response::new_ok(
+                req.id,
+                serde_json::to_value(tokens)?,
             )))?;
         }
         _ => {

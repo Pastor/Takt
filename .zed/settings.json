@@ -1,26 +1,4 @@
 {
   "project_name": "BuT",
   "semantic_tokens": "combined",
-  "language_servers": ["but-lsp"],
-  "lsp": {
-    "but-lsp": {
-      "binary": {
-        "ignore_system_version": false,
-        "arguments": ["--option", "disable-LLM"],
-        "env": {
-          "LLM": "false",
-        },
-      },
-      "initialization_options": {
-        "checkOnSave": false,
-      },
-    },
-  },
-  "languages": {
-    "BuT": {
-      "formatter": "language_server",
-      "language_servers": ["but-lsp"],
-      "enable_language_server": true,
-    },
-  },
 }
