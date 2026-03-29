@@ -19,3 +19,4 @@ languages = ["languages/but"]
 
 [language_servers.but-lsp]
 name = "but-lsp"
+language = "BuT"

@@ -13,7 +13,7 @@ impl zed::Extension for BuTExtension {
         _worktree: &zed::Worktree,
     ) -> Result<zed::Command> {
         Ok(zed::Command {
-            command: "but-lsp".to_string(),
+            command: "/Users/pastor/.cargo/bin/but-lsp".to_string(),
             args: vec![],
             env: vec![],
         })
