@@ -7,7 +7,7 @@ enum Direction { North, South, East, West }
 /// Переменная числового типа (аналог Direction для представления направлений)
 var heading: [bit;8] = 0;  // 0 = North
 
-/// Robot
+/// модель робота
 model Robot {
     var dir: [bit;8] = 2;  // 2 = East
 

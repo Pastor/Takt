@@ -134,9 +134,7 @@ pub fn grammar_diagnostic_to_lsp(
 
     // Конвертируем байтовое смещение в позицию строка:столбец
     let range = match diag.loc {
-        crate::diagnostics::Location::Source(_, start, end) => {
-            offset_to_range(source, start, end)
-        }
+        crate::diagnostics::Location::Source(_, start, end) => offset_to_range(source, start, end),
         _ => Range {
             start: Position::new(0, 0),
             end: Position::new(0, 0),
@@ -278,9 +276,7 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             // Имена переменных и их типы
             for (name, var) in &borrowed.variables {
                 let detail = match var {
-                    crate::semantic::VariableNode::Simple { ty, .. } => {
-                        Some(format!("{:?}", ty))
-                    }
+                    crate::semantic::VariableNode::Simple { ty, .. } => Some(format!("{:?}", ty)),
                     crate::semantic::VariableNode::Const { ty, .. } => {
                         Some(format!("const: {:?}", ty))
                     }
@@ -351,10 +347,7 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
                     items.push(CompletionItem {
                         label: variant_name.clone(),
                         kind: Some(CompletionItemKind::ENUM_MEMBER),
-                        detail: Some(format!(
-                            "{}::{} = {}",
-                            enum_name, variant_name, variant_val
-                        )),
+                        detail: Some(format!("{}::{} = {}", enum_name, variant_name, variant_val)),
                         ..Default::default()
                     });
                 }
@@ -419,8 +412,8 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
 pub fn word_at_position(source: &str, position: Position) -> Option<String> {
     let line_text = source.lines().nth(position.line as usize)?;
     // Конвертируем UTF-16 смещение символа в байтовое смещение
-    let col = utf16_to_byte_offset(line_text, position.character as usize)
-        .unwrap_or(line_text.len());
+    let col =
+        utf16_to_byte_offset(line_text, position.character as usize).unwrap_or(line_text.len());
 
     // Ищем начало слова (идём влево от курсора)
     let start = line_text[..col]
@@ -458,7 +451,8 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
 
     // Строим семантическую модель с привязкой doc-комментариев
     let (ast, comments) = crate::parse(source, 0).ok()?;
-    let model = crate::semantic::tree::construct_model_with_docs(&ast, None, &[], &comments).ok()?;
+    let model =
+        crate::semantic::tree::construct_model_with_docs(&ast, None, &[], &comments).ok()?;
     let borrowed = model.borrow();
 
     let mut hover_text = String::new();
@@ -466,15 +460,9 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     // Ищем переменную
     if let Some(var) = borrowed.search_var(&word) {
         let (type_str, kind_str) = match &var {
-            crate::semantic::VariableNode::Simple { ty, .. } => {
-                (format!("{:?}", ty), "var")
-            }
-            crate::semantic::VariableNode::Const { ty, .. } => {
-                (format!("{:?}", ty), "const")
-            }
-            crate::semantic::VariableNode::Port { ty, .. } => {
-                (format!("{:?}", ty), "port")
-            }
+            crate::semantic::VariableNode::Simple { ty, .. } => (format!("{:?}", ty), "var"),
+            crate::semantic::VariableNode::Const { ty, .. } => (format!("{:?}", ty), "const"),
+            crate::semantic::VariableNode::Port { ty, .. } => (format!("{:?}", ty), "port"),
             crate::semantic::VariableNode::Unresolved => ("?".to_string(), "var"),
         };
         hover_text = format!("```but\n{} {}: {}\n```", kind_str, word, type_str);
@@ -569,6 +557,16 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     else if let Some((enum_name, value)) = borrowed.search_enum_variant(&word) {
         hover_text = format!("```but\n{}::{} = {}\n```", enum_name, word, value);
     }
+    // Ищем модель
+    else if let Some(_) = borrowed.search_model(&word) {
+        hover_text = format!("```but\nmodel {}\n```", &word);
+        // Добавляем документацию, если есть
+        let doc = borrowed.element_doc(&word);
+        if !doc.is_empty() {
+            hover_text.push_str("\n\n");
+            hover_text.push_str(&doc.join("\n"));
+        }
+    }
 
     if hover_text.is_empty() {
         return None;
@@ -599,7 +597,9 @@ pub fn document_symbols(source: &str) -> Vec<DocumentSymbol> {
 
 fn loc_to_range(loc: &crate::diagnostics::Location, source: &str) -> Range {
     match loc {
-        crate::diagnostics::Location::Source(_, start, end) => offset_to_range(source, *start, *end),
+        crate::diagnostics::Location::Source(_, start, end) => {
+            offset_to_range(source, *start, *end)
+        }
         _ => Range {
             start: Position::new(0, 0),
             end: Position::new(0, 0),
@@ -635,18 +635,28 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
     for elem in &model.elements {
         match elem {
             ModelElement::Model(m) => {
-                let id = match m.name.as_ref() { Some(id) => id, None => continue };
+                let id = match m.name.as_ref() {
+                    Some(id) => id,
+                    None => continue,
+                };
                 let children = symbols_from_model(m, source);
                 out.push(make_sym(
                     id.name.clone(),
                     SymbolKind::MODULE,
                     loc_to_range(&m.loc, source),
                     loc_to_range(&id.loc, source),
-                    if children.is_empty() { None } else { Some(children) },
+                    if children.is_empty() {
+                        None
+                    } else {
+                        Some(children)
+                    },
                 ));
             }
             ModelElement::State(s) => {
-                let id = match s.name.as_ref() { Some(id) => id, None => continue };
+                let id = match s.name.as_ref() {
+                    Some(id) => id,
+                    None => continue,
+                };
                 let children: Vec<DocumentSymbol> = s
                     .elements
                     .iter()
@@ -669,11 +679,18 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                     SymbolKind::CLASS,
                     loc_to_range(&s.loc, source),
                     loc_to_range(&id.loc, source),
-                    if children.is_empty() { None } else { Some(children) },
+                    if children.is_empty() {
+                        None
+                    } else {
+                        Some(children)
+                    },
                 ));
             }
             ModelElement::Function(f) => {
-                let id = match f.name.as_ref() { Some(id) => id, None => continue };
+                let id = match f.name.as_ref() {
+                    Some(id) => id,
+                    None => continue,
+                };
                 out.push(make_sym(
                     id.name.clone(),
                     SymbolKind::FUNCTION,
@@ -692,7 +709,10 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                 ));
             }
             ModelElement::Condition(c) => {
-                let id = match c.name.as_ref() { Some(id) => id, None => continue };
+                let id = match c.name.as_ref() {
+                    Some(id) => id,
+                    None => continue,
+                };
                 out.push(make_sym(
                     id.name.clone(),
                     SymbolKind::CONSTANT,
@@ -702,7 +722,10 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                 ));
             }
             ModelElement::Enum(e) => {
-                let id = match e.name.as_ref() { Some(id) => id, None => continue };
+                let id = match e.name.as_ref() {
+                    Some(id) => id,
+                    None => continue,
+                };
                 let children: Vec<DocumentSymbol> = e
                     .variants
                     .iter()
@@ -721,18 +744,23 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                     SymbolKind::ENUM,
                     loc_to_range(&e.loc, source),
                     loc_to_range(&id.loc, source),
-                    if children.is_empty() { None } else { Some(children) },
+                    if children.is_empty() {
+                        None
+                    } else {
+                        Some(children)
+                    },
                 ));
             }
             ModelElement::Variable(v) => {
                 let (loc, name_opt, kind) = match v.as_ref() {
                     VariableDefine::Variable { loc, name, .. } => (loc, name, SymbolKind::VARIABLE),
                     VariableDefine::Port { loc, name, .. } => (loc, name, SymbolKind::PROPERTY),
-                    VariableDefine::Constant { loc, name, .. } => {
-                        (loc, name, SymbolKind::CONSTANT)
-                    }
+                    VariableDefine::Constant { loc, name, .. } => (loc, name, SymbolKind::CONSTANT),
                 };
-                let id = match name_opt { Some(id) => id, None => continue };
+                let id = match name_opt {
+                    Some(id) => id,
+                    None => continue,
+                };
                 out.push(make_sym(
                     id.name.clone(),
                     kind,
@@ -742,7 +770,10 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                 ));
             }
             ModelElement::NamedBlockCode(nb) => {
-                let id = match nb.name.as_ref() { Some(id) => id, None => continue };
+                let id = match nb.name.as_ref() {
+                    Some(id) => id,
+                    None => continue,
+                };
                 out.push(make_sym(
                     id.name.clone(),
                     SymbolKind::EVENT,
@@ -751,7 +782,9 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                     None,
                 ));
             }
-            ModelElement::Import(_) | ModelElement::Formula(_) | ModelElement::StraySemicolon(_) => {}
+            ModelElement::Import(_)
+            | ModelElement::Formula(_)
+            | ModelElement::StraySemicolon(_) => {}
         }
     }
 
@@ -777,8 +810,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
     // Собираем токены и комментарии через лексер
     let mut comments: Vec<Comment> = Vec::new();
     let mut lex_errors = Vec::new();
-    let token_results: Vec<_> =
-        Lexer::new(source, 0, &mut comments, &mut lex_errors).collect();
+    let token_results: Vec<_> = Lexer::new(source, 0, &mut comments, &mut lex_errors).collect();
 
     let mut raw: Vec<(usize, usize, u32)> = Vec::new();
 
@@ -884,7 +916,11 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
         // LSP требует длину токена в кодовых единицах UTF-16, а не в байтах.
         // Для ASCII (большинство идентификаторов BuT) оба значения совпадают;
         // различие возникает для кириллицы, CJK и прочих многобайтовых символов.
-        let length: u32 = if end > start && end <= source.len() && source.is_char_boundary(start) && source.is_char_boundary(end) {
+        let length: u32 = if end > start
+            && end <= source.len()
+            && source.is_char_boundary(start)
+            && source.is_char_boundary(end)
+        {
             source[start..end]
                 .chars()
                 .map(|c| c.len_utf16() as u32)
@@ -1099,7 +1135,10 @@ start S = M;
     fn test_hover_variable() {
         let src = "var counter: [bit;8] = 0; start S;";
         let hover = hover_info(src, Position::new(0, 5));
-        assert!(hover.is_some(), "hover над переменной должен возвращать данные");
+        assert!(
+            hover.is_some(),
+            "hover над переменной должен возвращать данные"
+        );
         if let Some(h) = hover {
             if let HoverContents::Markup(mc) = h.contents {
                 assert!(
@@ -1144,7 +1183,10 @@ start S = M;
     #[test]
     fn test_hover_empty_position() {
         let hover = hover_info("", Position::new(0, 0));
-        assert!(hover.is_none(), "hover в пустом файле должен возвращать None");
+        assert!(
+            hover.is_none(),
+            "hover в пустом файле должен возвращать None"
+        );
     }
 
     // ── Тесты hover с документацией (C6) ──────────────────────────────────────
@@ -1321,7 +1363,10 @@ start S = M;
         // Позиция 'x': байт 4 → UTF-16 столбец 2 (emoji занимает 2 единицы)
         let pos = offset_to_position(src, 4);
         assert_eq!(pos.line, 0);
-        assert_eq!(pos.character, 2, "суррогатная пара занимает 2 UTF-16 единицы");
+        assert_eq!(
+            pos.character, 2,
+            "суррогатная пара занимает 2 UTF-16 единицы"
+        );
     }
 
     /// Смещение на середину многобайтового символа не должно вызывать панику.
