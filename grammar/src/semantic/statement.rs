@@ -263,6 +263,7 @@ fn register_local_var(
         let prev = model.borrow().variables.get(name).cloned();
         let node = VariableNode::Simple {
             upper: Some(Rc::downgrade(model)),
+            loc: crate::diagnostics::Location::Implicit,
             name: name.clone(),
             ty: ty.clone(),
             // Expression::None — заглушка; инициализатор уже сохранён в

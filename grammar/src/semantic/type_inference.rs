@@ -53,24 +53,26 @@ pub fn type_inference(
 ) -> Result<HashMap<String, VariableNode>, Diagnostic> {
     for (name, var) in variables.clone() {
         match var {
-            VariableNode::Simple { upper, ty: TypeNode::Inference, ref expr, .. } => {
+            VariableNode::Simple { upper, loc, ty: TypeNode::Inference, ref expr, .. } => {
                 let typ = extract_type(expr, model.clone())?;
                 variables.insert(
                     name.clone(),
                     VariableNode::Simple {
                         upper,
+                        loc,
                         name: name.clone(),
                         ty: typ,
                         expr: expr.clone(),
                     },
                 );
             }
-            VariableNode::Const { upper, ty: TypeNode::Inference, ref expr, .. } => {
+            VariableNode::Const { upper, loc, ty: TypeNode::Inference, ref expr, .. } => {
                 let typ = extract_type(expr, model.clone())?;
                 variables.insert(
                     name.clone(),
                     VariableNode::Const {
                         upper,
+                        loc,
                         name: name.clone(),
                         ty: typ,
                         expr: expr.clone(),

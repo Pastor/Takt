@@ -30,7 +30,7 @@
 //! `validate_enum_type_declarations`. Данное разделение позволяет обрабатывать
 //! взаимные ссылки между перечислениями и переменными.
 
-use crate::diagnostics::{Diagnostic, Location};
+use crate::diagnostics::Diagnostic;
 use crate::parser::ast::Type;
 use crate::semantic::{ModelNode, TypeNode};
 use std::cell::RefCell;

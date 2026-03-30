@@ -25,6 +25,7 @@ mod type_inference;
 pub mod unused;
 pub(crate) mod validate;
 
+use crate::diagnostics::Location;
 use crate::parser::ast;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
 use std::cell::RefCell;
@@ -274,6 +275,7 @@ impl ModelNode {
         }
     }
 
+    /// Ищет псевдоним типа по имени, поднимаясь по цепочке родительских моделей.
     pub fn search_type(&self, name: &str) -> Option<Rc<RefCell<TypeNode>>> {
         if let Some(type_) = self.types.get(name) {
             Some(Rc::new(RefCell::new(type_.clone())))
@@ -576,6 +578,10 @@ pub enum Statement {
 /// - [`Simple`](VariableNode::Simple) — обычная изменяемая переменная.
 /// - [`Port`](VariableNode::Port) — порт, отображённый на адрес.
 /// - [`Const`](VariableNode::Const) — константа.
+///
+/// Каждый разрешённый вариант хранит [`Location`] из исходного текста —
+/// позицию объявления переменной. Это поле используется при формировании
+/// диагностических сообщений, чтобы указывать конкретное место ошибки.
 #[derive(Default, Debug, Clone)]
 pub enum VariableNode {
     /// Не разрешено (временная заглушка при построении дерева).
@@ -585,6 +591,8 @@ pub enum VariableNode {
     Simple {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
+        /// Позиция объявления переменной в исходном тексте.
+        loc: Location,
         /// Имя переменной.
         name: String,
         /// Тип переменной.
@@ -596,6 +604,8 @@ pub enum VariableNode {
     Port {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
+        /// Позиция объявления порта в исходном тексте.
+        loc: Location,
         /// Имя переменной.
         name: String,
         /// Тип переменной.
@@ -607,6 +617,8 @@ pub enum VariableNode {
     Const {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
+        /// Позиция объявления константы в исходном тексте.
+        loc: Location,
         /// Имя константы.
         name: String,
         /// Тип константы.
@@ -670,6 +682,19 @@ impl PartialEq for VariableNode {
 impl Eq for VariableNode {}
 
 impl VariableNode {
+    /// Возвращает позицию объявления переменной в исходном тексте.
+    ///
+    /// Для [`Unresolved`](VariableNode::Unresolved) возвращает [`Location::Implicit`],
+    /// так как заглушка не привязана к конкретному месту в коде.
+    pub fn loc(&self) -> Location {
+        match self {
+            VariableNode::Simple { loc, .. }
+            | VariableNode::Port { loc, .. }
+            | VariableNode::Const { loc, .. } => *loc,
+            VariableNode::Unresolved => Location::Implicit,
+        }
+    }
+
     /// Возвращает имя переменной (пустая строка для `Unresolved`).
     pub fn name(&self) -> &str {
         match self {

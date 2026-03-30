@@ -7,7 +7,7 @@
 //! - [`construct_context_state`] — строит контекст для состояния (заглушка).
 //! - [`construct_condition`] — преобразует условие АСД в семантическое условие.
 
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::parse;
 use crate::parser::ast;
 use crate::parser::ast::{
@@ -43,7 +43,7 @@ fn extract_name(id: Option<Identifier>) -> Result<String, Diagnostic> {
     if let Some(id) = id {
         Ok(id.name.clone())
     } else {
-        Err("Идентификатор не задан".into())
+        Err(Diagnostic::error(Location::Implicit, "Идентификатор не задан".to_string()))
     }
 }
 
@@ -63,9 +63,10 @@ fn check_import_cycle(import_stack: &[String], new_file: &str) -> Result<(), Dia
         // Строим цепочку начиная с точки входа цикла
         let mut chain: Vec<&str> = import_stack[pos..].iter().map(|s| s.as_str()).collect();
         chain.push(new_file);
-        return Err(format!("Циклический импорт: {}", chain.join(" → "))
-            .as_str()
-            .into());
+        return Err(Diagnostic::error(
+            Location::Implicit,
+            format!("Циклический импорт: {}", chain.join(" → ")),
+        ));
     }
     Ok(())
 }
@@ -104,14 +105,15 @@ fn construct_model_stage0(
             )?;
             let model_name = model.borrow().name.clone().unwrap();
             if models.contains_key(&model_name) {
-                return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
-                    .as_str()
-                    .into());
+                return Err(Diagnostic::declaration_error(
+                    Location::Implicit,
+                    format!("Модель с именем '{}' уже объявлена", &model_name),
+                ));
             }
             models.insert(model_name, model);
         } else if let ModelElement::Import(def) = element {
             match def {
-                ImportDefine::Plain(path, _) => {
+                ImportDefine::Plain(path, import_loc) => {
                     let (content, filename) = read_import_file(search_paths, path)?;
                     // Проверяем цикл ДО рекурсивной обработки файла
                     check_import_cycle(import_stack, &filename)?;
@@ -121,17 +123,17 @@ fn construct_model_stage0(
                     // и, как следствие, некорректное имя (например, "TmpMyModel").
                     let stem = std::path::Path::new(&filename)
                         .file_stem()
-                        .ok_or_else(|| {
-                            format!("Неверный путь к файлу импорта: «{}»", filename)
-                                .as_str()
-                                .into()
-                        })?
+                        .ok_or_else(|| Diagnostic::error(
+                            *import_loc,
+                            format!("Неверный путь к файлу импорта: «{}»", filename),
+                        ))?
                         .to_string_lossy();
                     let model_name = normalize_model_name(&stem);
                     if models.contains_key(&model_name) {
-                        return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
-                            .as_str()
-                            .into());
+                        return Err(Diagnostic::declaration_error(
+                            *import_loc,
+                            format!("Модель с именем '{}' уже объявлена", &model_name),
+                        ));
                     }
                     match parse(&content, 0) {
                         Ok((model, _)) => {
@@ -145,15 +147,16 @@ fn construct_model_stage0(
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
                 }
-                ImportDefine::GlobalSymbol(path, id, _) => {
+                ImportDefine::GlobalSymbol(path, id, import_loc) => {
                     let (content, filename) = read_import_file(search_paths, path)?;
                     // Проверяем цикл ДО рекурсивной обработки файла
                     check_import_cycle(import_stack, &filename)?;
                     let model_name = id.name.clone();
                     if models.contains_key(&model_name) {
-                        return Err(format!("Модель с именем '{}' уже объявлена", &model_name)
-                            .as_str()
-                            .into());
+                        return Err(Diagnostic::declaration_error(
+                            id.loc,
+                            format!("Модель с именем '{}' уже объявлена", &model_name),
+                        ));
                     }
                     match parse(&content, 0) {
                         Ok((model, _)) => {
@@ -166,6 +169,7 @@ fn construct_model_stage0(
                         }
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
+                    let _ = import_loc; // loc доступен, но дублирует id.loc
                 }
                 // `import { A, B as C } from "file.but";`
                 //
@@ -174,7 +178,7 @@ fn construct_model_stage0(
                 //
                 // Поддерживаемые категории: модели, псевдонимы типов, переменные, условия.
                 // Приоритет поиска: модель → тип → переменная → условие.
-                ImportDefine::Rename(path, symbols, _) => {
+                ImportDefine::Rename(path, symbols, _import_loc) => {
                     let (content, filename) = read_import_file(search_paths, path)?;
                     // Проверяем цикл ДО рекурсивной обработки файла
                     check_import_cycle(import_stack, &filename)?;
@@ -197,42 +201,45 @@ fn construct_model_stage0(
                         let alias = alias_id
                             .as_ref()
                             .map_or_else(|| orig.clone(), |a| a.name.clone());
+                        let sym_loc = alias_id.as_ref().map(|a| a.loc).unwrap_or(orig_id.loc);
                         // Поиск в категориях: модель → тип → переменная → условие
                         if let Some(m) = src.models.get(orig) {
                             if models.contains_key(&alias) {
-                                return Err(format!("Модель с именем '{}' уже объявлена", alias)
-                                    .as_str()
-                                    .into());
+                                return Err(Diagnostic::declaration_error(
+                                    sym_loc,
+                                    format!("Модель с именем '{}' уже объявлена", alias),
+                                ));
                             }
                             models.insert(alias, Rc::clone(m));
                         } else if let Some(t) = src.types.get(orig) {
                             if model_node.borrow().types.contains_key(&alias) {
-                                return Err(format!("Тип '{}' уже объявлен", alias)
-                                    .as_str()
-                                    .into());
+                                return Err(Diagnostic::declaration_error(
+                                    sym_loc,
+                                    format!("Тип '{}' уже объявлен", alias),
+                                ));
                             }
                             model_node.borrow_mut().types.insert(alias, t.clone());
                         } else if let Some(v) = src.variables.get(orig) {
                             if variables.contains_key(&alias) {
-                                return Err(format!("Переменная '{}' уже объявлена", alias)
-                                    .as_str()
-                                    .into());
+                                return Err(Diagnostic::declaration_error(
+                                    sym_loc,
+                                    format!("Переменная '{}' уже объявлена", alias),
+                                ));
                             }
                             variables.insert(alias, v.clone());
                         } else if let Some(c) = src.conditions.get(orig) {
                             if conditions.contains_key(&alias) {
-                                return Err(format!("Условие '{}' уже объявлено", alias)
-                                    .as_str()
-                                    .into());
+                                return Err(Diagnostic::declaration_error(
+                                    sym_loc,
+                                    format!("Условие '{}' уже объявлено", alias),
+                                ));
                             }
                             conditions.insert(alias, c.clone());
                         } else {
-                            return Err(format!(
-                                "Идентификатор '{}' не найден в импортируемом файле",
-                                orig
-                            )
-                            .as_str()
-                            .into());
+                            return Err(Diagnostic::declaration_error(
+                                orig_id.loc,
+                                format!("Идентификатор '{}' не найден в импортируемом файле", orig),
+                            ));
                         }
                     }
                 }
@@ -241,16 +248,17 @@ fn construct_model_stage0(
             // Пока тип определяется только из явной аннотации.
             match *def.clone() {
                 VariableDefine::Variable {
+                    loc,
                     typ,
                     name,
                     initializer,
-                    ..
                 } => {
                     let name = extract_name(name.clone())?;
                     variables.insert(
                         name.clone(),
                         VariableNode::Simple {
                             upper: Some(Rc::downgrade(&model_node)),
+                            loc,
                             name: name.clone(),
                             ty: construct_type(typ, model_node.clone())?,
                             expr: initializer
@@ -260,20 +268,24 @@ fn construct_model_stage0(
                     )
                 }
                 VariableDefine::Port {
+                    loc,
                     typ,
                     name,
                     initializer,
-                    ..
                 } => {
                     let name = extract_name(name.clone())?;
                     let type_node = construct_type(typ, model_node.clone())?;
                     if type_node == TypeNode::Inference {
-                        return Err("Порт должен иметь конкретный тип".into());
+                        return Err(Diagnostic::error(
+                            loc,
+                            "Порт должен иметь конкретный тип".to_string(),
+                        ));
                     }
                     variables.insert(
                         name.clone(),
                         VariableNode::Port {
                             upper: Some(Rc::downgrade(&model_node)),
+                            loc,
                             name: name.clone(),
                             ty: type_node,
                             expr: Expression::Unresolved(
@@ -285,24 +297,26 @@ fn construct_model_stage0(
                                                 | ast::Expression::Number(..)
                                         )
                                     })
-                                    .ok_or_else(|| {
-                                        "Порт должен быть инициализирован адресом".into()
-                                    })?,
+                                    .ok_or_else(|| Diagnostic::error(
+                                        loc,
+                                        "Порт должен быть инициализирован адресом".to_string(),
+                                    ))?,
                             ),
                         },
                     )
                 }
                 VariableDefine::Constant {
+                    loc,
                     typ,
                     name,
                     initializer,
-                    ..
                 } => {
                     let name = extract_name(name.clone())?;
                     variables.insert(
                         name.clone(),
                         VariableNode::Const {
                             upper: Some(Rc::downgrade(&model_node)),
+                            loc,
                             name: name.clone(),
                             ty: construct_type(typ, model_node.clone())?,
                             expr: Expression::Unresolved(initializer),
@@ -315,10 +329,14 @@ fn construct_model_stage0(
             let typ = def.ty.clone();
             model_node.borrow_mut().types.insert(name.clone(), construct_type(Some(typ), model_node.clone())?);
         } else if let ModelElement::Condition(def) = element {
+            let def_loc = def.as_ref().name.as_ref().map(|id| id.loc).unwrap_or(Location::Implicit);
             let name = def
                 .clone()
                 .name
-                .ok_or_else(|| "Условие при определении должно иметь имя".into())?
+                .ok_or_else(|| Diagnostic::error(
+                    def_loc,
+                    "Условие при определении должно иметь имя".to_string(),
+                ))?
                 .name
                 .clone();
             conditions.insert(
@@ -333,7 +351,10 @@ fn construct_model_stage0(
             let name = def
                 .clone()
                 .name
-                .ok_or_else(|| "Именованный блок кода при определении должен иметь имя".into())?
+                .ok_or_else(|| Diagnostic::error(
+                    def.loc,
+                    "Именованный блок кода при определении должен иметь имя".to_string(),
+                ))?
                 .name
                 .clone();
             let block = match name.as_str() {
@@ -360,7 +381,10 @@ fn construct_model_stage0(
             let name = def
                 .clone()
                 .name
-                .ok_or_else(|| "При определении функция должна иметь имя".into())?
+                .ok_or_else(|| Diagnostic::error(
+                    def.loc,
+                    "При определении функция должна иметь имя".to_string(),
+                ))?
                 .name
                 .clone();
             functions.insert(name.clone(), FunctionNode::Unresolved(*def.clone()));
@@ -488,33 +512,39 @@ fn resolve_variable_expressions(
         let resolved = match var.clone() {
             VariableNode::Simple {
                 upper,
+                loc,
                 name: n,
                 ty,
                 expr: Expression::Unresolved(expr),
             } => VariableNode::Simple {
                 upper,
+                loc,
                 name: n,
                 ty,
                 expr: construct_expression(expr, model.clone())?,
             },
             VariableNode::Const {
                 upper,
+                loc,
                 name: n,
                 ty,
                 expr: Expression::Unresolved(expr),
             } => VariableNode::Const {
                 upper,
+                loc,
                 name: n,
                 ty,
                 expr: construct_expression(expr, model.clone())?,
             },
             VariableNode::Port {
                 upper,
+                loc,
                 name: n,
                 ty,
                 expr: Expression::Unresolved(expr),
             } => VariableNode::Port {
                 upper,
+                loc,
                 name: n,
                 ty,
                 expr: construct_expression(expr, model.clone())?,
@@ -898,7 +928,10 @@ pub fn construct_states(
             let name = def
                 .clone()
                 .name
-                .ok_or_else(|| "Имя состояния не задано".into())?
+                .ok_or_else(|| Diagnostic::error(
+                    def.loc,
+                    "Имя состояния не задано".to_string(),
+                ))?
                 .name;
             let implements = def.implements.clone();
             let kind = def.kind.clone();
@@ -918,11 +951,10 @@ pub fn construct_states(
                     });
                 } else if let StateElement::Next(id) = element {
                     if next.is_some() {
-                        return Err(
-                            format!("Состояние '{}' уже содержит оператор next", &id.name)
-                                .as_str()
-                                .into(),
-                        );
+                        return Err(Diagnostic::error(
+                            id.loc,
+                            format!("Состояние '{}' уже содержит оператор next", &id.name),
+                        ));
                     }
                     next = Some(id.name.clone());
                 }
@@ -939,10 +971,11 @@ pub fn construct_states(
                     StateKind::Start => StateNodeKind::Start,
                     StateKind::End => StateNodeKind::End,
                     StateKind::Next => {
-                        return Err(
+                        return Err(Diagnostic::error(
+                            def.loc,
                             "Состояние с типом next не поддерживается в качестве определения"
-                                .into(),
-                        );
+                                .to_string(),
+                        ));
                     }
                 },
             };
@@ -1013,7 +1046,10 @@ pub fn construct_states(
                     .map(|r| {
                         if let StateNode::Unresolved = *r.object {
                             let target = states.get(&r.name).ok_or_else(|| {
-                                format!("Ссылка '{}' не найдена", &r.name).as_str().into()
+                                Diagnostic::error(
+                                    Location::Implicit,
+                                    format!("Ссылка '{}' не найдена", &r.name),
+                                )
                             })?;
                             Ok(Reference {
                                 name: r.name,
@@ -1060,7 +1096,10 @@ fn resolve_references(
             if let StateNode::Unresolved = *r.object {
                 let target = states
                     .get(&r.name)
-                    .ok_or_else(|| format!("Ссылка '{}' не найдена", &r.name).as_str().into())?;
+                    .ok_or_else(|| Diagnostic::error(
+                        Location::Implicit,
+                        format!("Ссылка '{}' не найдена", &r.name),
+                    ))?;
                 Ok(Reference {
                     name: r.name,
                     cond: r.cond,
@@ -1091,7 +1130,10 @@ fn construct_named_blocks(
             let name = def
                 .name
                 .as_ref()
-                .ok_or_else(|| "Именованный блок кода при определении должен иметь имя".into())?
+                .ok_or_else(|| Diagnostic::error(
+                    def.loc,
+                    "Именованный блок кода при определении должен иметь имя".to_string(),
+                ))?
                 .name
                 .clone();
             let block = match name.as_str() {
@@ -1185,7 +1227,10 @@ fn construct_implement_ast(
             let borrowed = model.as_ref().borrow();
             let found = borrowed
                 .search_model(&id.name)
-                .ok_or_else(|| format!("Модель '{}' не найдена", &id.name).as_str().into())?;
+                .ok_or_else(|| Diagnostic::error(
+                    id.loc,
+                    format!("Модель '{}' не найдена", &id.name),
+                ))?;
             Ok(Implement::Model(Rc::clone(&found)))
         }
         ast::Expression::Parenthesis(_, inner) => construct_implement_ast(*inner, model),

@@ -759,6 +759,7 @@ mod tests {
         use crate::semantic::VariableNode;
         let v = VariableNode::Simple {
             upper: None,
+            loc: crate::diagnostics::Location::Implicit,
             name: "x".into(),
             ty: TypeNode::Bit,
             expr: Expression::None,
@@ -1189,6 +1190,7 @@ mod tests {
     fn var_type_port() {
         let v = VariableNode::Port {
             upper: None,
+            loc: crate::diagnostics::Location::Implicit,
             name: "p".into(),
             ty: TypeNode::Bit,
             expr: Expression::None,
@@ -1201,6 +1203,7 @@ mod tests {
     fn var_type_const() {
         let v = VariableNode::Const {
             upper: None,
+            loc: crate::diagnostics::Location::Implicit,
             name: "c".into(),
             ty: TypeNode::Bool,
             expr: Expression::None,

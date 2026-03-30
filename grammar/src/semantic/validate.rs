@@ -63,12 +63,13 @@ fn model_only_one_start_state(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagn
         .count();
 
     if start_count != 1 {
-        return Err(format!(
-            "В модели '{}' должно быть только одно начальное состояние (найдено: {})",
-            name, start_count
-        )
-        .as_str()
-        .into());
+        return Err(Diagnostic::error(
+            Location::Implicit,
+            format!(
+                "В модели '{}' должно быть только одно начальное состояние (найдено: {})",
+                name, start_count
+            ),
+        ));
     }
     Ok(())
 }
@@ -87,17 +88,19 @@ fn check_bit_variable_value(
     name: &str,
     ty: &TypeNode,
     expr: &Expression,
+    loc: Location,
 ) -> Result<(), Diagnostic> {
     if *ty == TypeNode::Bit {
         if let Expression::Number(n) = expr {
             if *n != 0 && *n != 1 {
-                return Err(format!(
-                    "Переменная '{}' имеет тип bit, но инициализирована значением {} \
-                     (допустимые числовые значения: 0 или 1)",
-                    name, n
-                )
-                .as_str()
-                .into());
+                return Err(Diagnostic::error(
+                    loc,
+                    format!(
+                        "Переменная '{}' имеет тип bit, но инициализирована значением {} \
+                         (допустимые числовые значения: 0 или 1)",
+                        name, n
+                    ),
+                ));
             }
         }
     }
@@ -120,7 +123,7 @@ fn validate_bit_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> 
             VariableNode::Simple { name, ty, expr, .. }
             | VariableNode::Const { name, ty, expr, .. }
             | VariableNode::Port { name, ty, expr, .. } => {
-                check_bit_variable_value(name, ty, expr)?;
+                check_bit_variable_value(name, ty, expr, var.loc())?;
             }
             VariableNode::Unresolved => {}
         }
@@ -151,19 +154,23 @@ fn validate_cond(
                     let model = model.borrow();
                     let model_name = model.name.clone().unwrap();
                     model.search_state(&id.name).ok_or_else(|| {
-                        format!(
-                            "Состояние '{}' не найдено в моделе '{}'",
-                            &id.name, &model_name
+                        Diagnostic::error(
+                            id.loc,
+                            format!(
+                                "Состояние '{}' не найдено в моделе '{}'",
+                                &id.name, &model_name
+                            ),
                         )
-                        .as_str()
-                        .into()
                     })?;
                     return Ok(());
                 }
             }
 
             if let Condition::Unresolved(_) = resolve_condition(&cond, model.clone())? {
-                return Err(format!("Unresolved condition: {:?}", cond).as_str().into());
+                return Err(Diagnostic::error(
+                    Location::Implicit,
+                    format!("Unresolved condition: {:?}", cond),
+                ));
             }
         }
         Condition::ArraySubscript(_, _) => {}
@@ -727,29 +734,30 @@ pub fn check_implicit_bool_conditions(model: &Rc<RefCell<ModelNode>>) -> Vec<Dia
 ///
 /// Возвращает [`Diagnostic`]-ошибку при первой переменной с необъявленным типом enum.
 fn validate_enum_type_declarations(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
-    // Собираем (имя переменной, тип) без удержания заимствования
-    let vars: Vec<(String, TypeNode)> = model
+    // Собираем (имя переменной, тип, loc) без удержания заимствования
+    let vars: Vec<(String, TypeNode, Location)> = model
         .borrow()
         .variables
         .values()
         .filter_map(|var| match var {
             VariableNode::Simple { name, ty, .. }
             | VariableNode::Const { name, ty, .. }
-            | VariableNode::Port { name, ty, .. } => Some((name.clone(), ty.clone())),
+            | VariableNode::Port { name, ty, .. } => Some((name.clone(), ty.clone(), var.loc())),
             VariableNode::Unresolved => None,
         })
         .collect();
 
-    for (var_name, ty) in vars {
+    for (var_name, ty, loc) in vars {
         if let TypeNode::Enum(enum_name) = &ty {
             if model.borrow().search_enum(enum_name).is_none() {
-                return Err(format!(
-                    "Ce4: переменная '{}' объявлена с типом '{}', \
-                     но перечисление '{}' не найдено в области видимости",
-                    var_name, enum_name, enum_name
-                )
-                .as_str()
-                .into());
+                return Err(Diagnostic::declaration_error(
+                    loc,
+                    format!(
+                        "Ce4: переменная '{}' объявлена с типом '{}', \
+                         но перечисление '{}' не найдено в области видимости",
+                        var_name, enum_name, enum_name
+                    ),
+                ));
             }
         }
     }
@@ -1782,6 +1790,7 @@ mod tests {
             m.borrow_mut().enums.insert("Direction".to_string(), e);
             let dir_var = crate::semantic::VariableNode::Simple {
                 upper: None,
+                loc: crate::diagnostics::Location::Implicit,
                 name: "dir".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Direction".to_string()),
                 expr: crate::semantic::Expression::Number(0),
@@ -1813,6 +1822,7 @@ mod tests {
             // Добавляем переменную с некорректным значением enum программно
             let dir_var = crate::semantic::VariableNode::Simple {
                 upper: None,
+                loc: crate::diagnostics::Location::Implicit,
                 name: "dir".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Direction".to_string()),
                 expr: crate::semantic::Expression::Number(99),
@@ -1838,6 +1848,7 @@ mod tests {
             let m = crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             let prio_var = crate::semantic::VariableNode::Simple {
                 upper: None,
+                loc: crate::diagnostics::Location::Implicit,
                 name: "prio".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Priority".to_string()),
                 expr: crate::semantic::Expression::Number(5),
@@ -1861,12 +1872,14 @@ mod tests {
             let m = crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             let v1 = crate::semantic::VariableNode::Simple {
                 upper: None,
+                loc: crate::diagnostics::Location::Implicit,
                 name: "a".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Dir".to_string()),
                 expr: crate::semantic::Expression::Number(42),
             };
             let v2 = crate::semantic::VariableNode::Simple {
                 upper: None,
+                loc: crate::diagnostics::Location::Implicit,
                 name: "b".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Dir".to_string()),
                 expr: crate::semantic::Expression::Number(99),
@@ -1895,6 +1908,7 @@ mod tests {
             let m = crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             let var = crate::semantic::VariableNode::Simple {
                 upper: None,
+                loc: crate::diagnostics::Location::Implicit,
                 name: "x".to_string(),
                 ty: crate::semantic::TypeNode::Enum("UnknownEnum".to_string()),
                 expr: crate::semantic::Expression::Number(99),
@@ -1940,6 +1954,7 @@ mod tests_ce4_declarations {
             // Переменная типа Color — Color объявлен в AST
             let var = crate::semantic::VariableNode::Simple {
                 upper: None,
+                loc: crate::diagnostics::Location::Implicit,
                 name: "c".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Color".to_string()),
                 expr: crate::semantic::Expression::Number(0),
@@ -1976,6 +1991,7 @@ mod tests_ce4_declarations {
         // Добавляем переменную с типом Inference
         let var = crate::semantic::VariableNode::Simple {
             upper: None,
+            loc: crate::diagnostics::Location::Implicit,
             name: "y".to_string(),
             ty: crate::semantic::TypeNode::Inference,
             expr: crate::semantic::Expression::Number(0),
@@ -2003,6 +2019,7 @@ mod tests_ce4_declarations {
             // Переменная типа Size — Size НЕ объявлен
             let var = crate::semantic::VariableNode::Simple {
                 upper: None,
+                loc: crate::diagnostics::Location::Implicit,
                 name: "s".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Size".to_string()),
                 expr: crate::semantic::Expression::Number(0),
@@ -2040,6 +2057,7 @@ mod tests_ce4_declarations {
                 .expect("ошибка семантики");
             let var = crate::semantic::VariableNode::Const {
                 upper: None,
+                loc: crate::diagnostics::Location::Implicit,
                 name: "C".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Status".to_string()),
                 expr: crate::semantic::Expression::Number(0),
@@ -2060,6 +2078,7 @@ mod tests_ce4_declarations {
                 .expect("ошибка семантики");
             let var = crate::semantic::VariableNode::Port {
                 upper: None,
+                loc: crate::diagnostics::Location::Implicit,
                 name: "p".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Dir".to_string()),
                 expr: crate::semantic::Expression::Number(0),
@@ -2318,6 +2337,7 @@ fn check_enum_variable_value(
     name: &str,
     ty: &TypeNode,
     expr: &Expression,
+    loc: Location,
     model: &Rc<RefCell<ModelNode>>,
 ) -> Result<(), Diagnostic> {
     if let TypeNode::Enum(enum_name) = ty {
@@ -2333,16 +2353,17 @@ fn check_enum_variable_value(
                             .collect()
                     })
                     .unwrap_or_default();
-                return Err(format!(
-                    "NI6: переменная '{}' имеет тип '{}', но инициализирована значением {} \
-                     — не является вариантом перечисления (допустимые варианты: {})",
-                    name,
-                    enum_name,
-                    n,
-                    valid_values.join(", ")
-                )
-                .as_str()
-                .into());
+                return Err(Diagnostic::error(
+                    loc,
+                    format!(
+                        "NI6: переменная '{}' имеет тип '{}', но инициализирована значением {} \
+                         — не является вариантом перечисления (допустимые варианты: {})",
+                        name,
+                        enum_name,
+                        n,
+                        valid_values.join(", ")
+                    ),
+                ));
             }
         }
     }
@@ -2359,20 +2380,20 @@ fn check_enum_variable_value(
 /// Пробрасывает [`Diagnostic`] из [`check_enum_variable_value`].
 fn validate_enum_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     // Собираем данные без удержания заимствования
-    let vars: Vec<(String, TypeNode, Expression)> = model
+    let vars: Vec<(String, TypeNode, Expression, Location)> = model
         .borrow()
         .variables
         .iter()
         .filter_map(|(_, var)| match var {
             VariableNode::Simple { name, ty, expr, .. }
             | VariableNode::Const { name, ty, expr, .. } => {
-                Some((name.clone(), ty.clone(), expr.clone()))
+                Some((name.clone(), ty.clone(), expr.clone(), var.loc()))
             }
             _ => None,
         })
         .collect();
-    for (name, ty, expr) in &vars {
-        check_enum_variable_value(name, ty, expr, &model)?;
+    for (name, ty, expr, loc) in &vars {
+        check_enum_variable_value(name, ty, expr, *loc, &model)?;
     }
     Ok(())
 }
