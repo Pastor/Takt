@@ -1,0 +1,143 @@
+diff --git a/grammar/src/semantic/expression.rs b/grammar/src/semantic/expression.rs
+index c8ba0e0..b9e33dd 100644
+--- a/grammar/src/semantic/expression.rs
++++ b/grammar/src/semantic/expression.rs
+@@ -1020,6 +1020,61 @@ mod tests {
+         );
+     }
+ 
++    /// Тернарный оператор: подвыражения разрешаются корректно.
++    ///
++    /// Проверяем, что все три ветви (условие, then, else) разрешаются
++    /// внутри конкретного контекста модели (с переменной).
++    ///
++    /// # Пример (псевдокод BuT):
++    /// ```text
++    /// var flag: bit = true;
++    /// // flag ? 10 : 20  →  ConditionalOperator(Variable("flag"), Number(10), Number(20))
++    /// ```
++    #[test]
++    fn conditional_operator_with_variable_condition() {
++        use crate::semantic::tree::construct_model;
++        // Строим модель с переменной flag
++        let (ast, _) = crate::parse("var flag: bit = true;", 0).expect("ошибка разбора");
++        let model = construct_model(&ast, None, &[]).expect("ошибка семантики");
++        let loc = crate::diagnostics::Location::default();
++        // flag ? 10 : 20
++        let cond_expr = Box::new(ast::Expression::Variable(crate::parser::ast::Identifier {
++            loc,
++            name: "flag".to_string(),
++        }));
++        let then_expr = Box::new(ast::Expression::Number(loc, 10));
++        let else_expr = Box::new(ast::Expression::Number(loc, 20));
++        let expr = ast::Expression::ConditionalOperator(loc, cond_expr, then_expr, else_expr);
++        let result = construct_expression(expr, model).unwrap();
++        assert!(
++            matches!(result, Expression::ConditionalOperator(_, _, _)),
++            "ConditionalOperator с переменной-условием должен разрешиться"
++        );
++    }
++
++    /// Контрпример: тернарный оператор с несуществующей переменной в условии — ошибка.
++    ///
++    /// Если условие ссылается на неизвестный идентификатор, `construct_expression`
++    /// должен вернуть ошибку диагностики.
++    #[test]
++    fn conditional_operator_unknown_condition_is_error() {
++        let model = Rc::new(RefCell::new(ModelNode::default()));
++        let loc = crate::diagnostics::Location::default();
++        // ghost ? 0 : 1  —  ghost не объявлен
++        let cond_expr = Box::new(ast::Expression::Variable(crate::parser::ast::Identifier {
++            loc,
++            name: "ghost".to_string(),
++        }));
++        let then_expr = Box::new(ast::Expression::Number(loc, 0));
++        let else_expr = Box::new(ast::Expression::Number(loc, 1));
++        let expr = ast::Expression::ConditionalOperator(loc, cond_expr, then_expr, else_expr);
++        let result = construct_expression(expr, model);
++        assert!(
++            result.is_err(),
++            "тернарный оператор с неизвестным условием должен давать ошибку"
++        );
++    }
++
+     // ── Срез массива ──────────────────────────────────────────────────────────
+ 
+     /// Срез массива: `var y: [bit;4] = buf[1:5];` → `ArraySlice`.
+diff --git a/grammar/tests/data/parser/valid/ternary_operator.but b/grammar/tests/data/parser/valid/ternary_operator.but
+new file mode 100644
+index 0000000..12c1590
+--- /dev/null
++++ b/grammar/tests/data/parser/valid/ternary_operator.but
+@@ -0,0 +1,26 @@
++// Примеры корректного использования тернарного оператора в языке BuT.
++//
++// ВАЖНО: Синтаксис `? :` в текущей грамматике BuT не поддерживается
++// через парсер — узел Expression::ConditionalOperator создаётся напрямую
++// в AST (например, через formula-блоки или внутренние преобразования).
++//
++// Данный файл демонстрирует семантически корректный BuT-код рядом
++// с псевдокодом тернарного оператора для документирования намерения.
++
++// Пример 1: переменная с булевым условием
++// Эквивалент: var result = flag ? 1 : 0;
++var flag: bit = true;
++var result: bit = flag;      // пока — прямое присваивание
++
++// Пример 2: переменная с числовым сравнением как условием
++// Эквивалент: var y = x > 5 ? x : 5;
++var x: [bit;8] = 10;
++var y: [bit;8] = x;          // пока — прямое присваивание
++
++// Пример 3: вложенный тернарный оператор
++// Эквивалент: var z = a ? b ? 1 : 2 : 3;
++var a: bit = true;
++var b: bit = false;
++var z: bit = a;              // пока — прямое присваивание
++
++start S;
+diff --git a/grammar/tests/data/semantic/valid/ternary_operator.but b/grammar/tests/data/semantic/valid/ternary_operator.but
+new file mode 100644
+index 0000000..842c0f3
+--- /dev/null
++++ b/grammar/tests/data/semantic/valid/ternary_operator.but
+@@ -0,0 +1,39 @@
++// Семантически корректный пример тернарного оператора в BuT.
++//
++// Expression::ConditionalOperator(cond, then, else) представляет
++// тернарный оператор condition ? then_expr : else_expr.
++//
++// В генераторе C данный узел транслируется как: (cond ? then : else)
++//
++// Условие:      булево или числовое выражение
++// then-ветвь:   произвольное выражение
++// else-ветвь:   произвольное выражение
++//
++// Пример 1: выбор значения по флагу
++// var result: bit = flag ? 1 : 0;
++//
++// Пример 2: выбор из двух переменных
++// var max_val: [bit;8] = a > b ? a : b;
++//
++// Пример 3: использование в состоянии
++// start Active {
++//     always {
++//         var out: bit = enabled ? data : 0;
++//     }
++// }
++//
++// Поскольку синтаксис ? : не реализован в лексере,
++// используем эквивалентный if-else код для демонстрации:
++
++var flag: bit = true;
++var data: [bit;8] = 42;
++var enabled: bit = true;
++
++start Active {
++    always {
++        var out: [bit;8] = 0;
++        if enabled {
++            out = data;
++        }
++    }
++}

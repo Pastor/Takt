@@ -1,0 +1,39 @@
+// Семантически корректный пример тернарного оператора в BuT.
+//
+// Expression::ConditionalOperator(cond, then, else) представляет
+// тернарный оператор condition ? then_expr : else_expr.
+//
+// В генераторе C данный узел транслируется как: (cond ? then : else)
+//
+// Условие:      булево или числовое выражение
+// then-ветвь:   произвольное выражение
+// else-ветвь:   произвольное выражение
+//
+// Пример 1: выбор значения по флагу
+// var result: bit = flag ? 1 : 0;
+//
+// Пример 2: выбор из двух переменных
+// var max_val: [bit;8] = a > b ? a : b;
+//
+// Пример 3: использование в состоянии
+// start Active {
+//     always {
+//         var out: bit = enabled ? data : 0;
+//     }
+// }
+//
+// Поскольку синтаксис ? : не реализован в лексере,
+// используем эквивалентный if-else код для демонстрации:
+
+var flag: bit = true;
+var data: [bit;8] = 42;
+var enabled: bit = true;
+
+start Active {
+    always {
+        var out: [bit;8] = 0;
+        if enabled {
+            out = data;
+        }
+    }
+}

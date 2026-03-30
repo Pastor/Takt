@@ -1,0 +1,223 @@
+diff --git a/grammar/src/lsp.rs b/grammar/src/lsp.rs
+index 2876787..e6b1b5f 100644
+--- a/grammar/src/lsp.rs
++++ b/grammar/src/lsp.rs
+@@ -456,9 +456,9 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
+         return None;
+     }
+ 
+-    // Пробуем построить семантическую модель
+-    let (ast, _) = crate::parse(source, 0).ok()?;
+-    let model = crate::semantic::tree::construct_model(&ast, None, &[]).ok()?;
++    // Строим семантическую модель с привязкой doc-комментариев
++    let (ast, comments) = crate::parse(source, 0).ok()?;
++    let model = crate::semantic::tree::construct_model_with_docs(&ast, None, &[], &comments).ok()?;
+     let borrowed = model.borrow();
+ 
+     let mut hover_text = String::new();
+@@ -478,12 +478,17 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
+             crate::semantic::VariableNode::Unresolved => ("?".to_string(), "var"),
+         };
+         hover_text = format!("```but\n{} {}: {}\n```", kind_str, word, type_str);
++        // Добавляем документацию, если есть
++        let doc = borrowed.element_doc(&word);
++        if !doc.is_empty() {
++            hover_text.push_str("\n\n");
++            hover_text.push_str(&doc.join("\n"));
++        }
+     }
+     // Ищем функцию
+     else if let Some(func_rc) = borrowed.search_func(&word) {
+         let func = func_rc.borrow();
+         let sig = match &*func {
+-
+             crate::semantic::FunctionNode::Local { params, ret, .. } => {
+                 let params_str: Vec<String> = params
+                     .iter()
+@@ -504,14 +509,32 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
+             _ => format!("fn {}", word),
+         };
+         hover_text = format!("```but\n{}\n```", sig);
++        // Добавляем документацию, если есть
++        let doc = borrowed.element_doc(&word);
++        if !doc.is_empty() {
++            hover_text.push_str("\n\n");
++            hover_text.push_str(&doc.join("\n"));
++        }
+     }
+     // Ищем псевдоним типа
+     else if let Some(ty) = borrowed.types.get(&word) {
+         hover_text = format!("```but\ntype {} = {:?}\n```", word, ty);
++        // Добавляем документацию, если есть
++        let doc = borrowed.element_doc(&word);
++        if !doc.is_empty() {
++            hover_text.push_str("\n\n");
++            hover_text.push_str(&doc.join("\n"));
++        }
+     }
+     // Ищем именованное условие
+     else if let Some(cond) = borrowed.search_cond(&word) {
+         hover_text = format!("```but\ncond {} = {:?}\n```", word, cond.value);
++        // Добавляем документацию, если есть
++        let doc = borrowed.element_doc(&word);
++        if !doc.is_empty() {
++            hover_text.push_str("\n\n");
++            hover_text.push_str(&doc.join("\n"));
++        }
+     }
+     // Ищем перечисление
+     else if let Some(enum_node) = borrowed.search_enum(&word) {
+@@ -525,10 +548,22 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
+             word,
+             variants.join(",\n")
+         );
++        // Добавляем документацию, если есть
++        let doc = borrowed.element_doc(&word);
++        if !doc.is_empty() {
++            hover_text.push_str("\n\n");
++            hover_text.push_str(&doc.join("\n"));
++        }
+     }
+     // Ищем состояние
+     else if borrowed.search_state(&word).is_some() {
+         hover_text = format!("```but\nstate {}\n```", word);
++        // Добавляем документацию, если есть
++        let doc = borrowed.element_doc(&word);
++        if !doc.is_empty() {
++            hover_text.push_str("\n\n");
++            hover_text.push_str(&doc.join("\n"));
++        }
+     }
+     // Ищем вариант перечисления
+     else if let Some((enum_name, value)) = borrowed.search_enum_variant(&word) {
+@@ -1112,6 +1147,91 @@ start S = M;
+         assert!(hover.is_none(), "hover в пустом файле должен возвращать None");
+     }
+ 
++    // ── Тесты hover с документацией (C6) ──────────────────────────────────────
++
++    /// Hover над функцией с doc-комментарием отображает и сигнатуру, и документацию.
++    ///
++    /// `///`-комментарии перед `fn process` должны появляться в hover-ответе
++    /// вместе с сигнатурой функции.
++    #[test]
++    fn test_hover_function_with_docs() {
++        let src = "/// Обработка данных.\n/// data — входные данные.\nextern fn process(data: [bit;8]) -> bit; start S;";
++        // "process" начинается на строке 2 (0-indexed), символ 10 ("extern fn " = 10)
++        let hover = hover_info(src, Position::new(2, 10));
++        assert!(
++            hover.is_some(),
++            "hover над функцией с документацией должен возвращать данные"
++        );
++        if let Some(h) = hover {
++            if let HoverContents::Markup(mc) = h.contents {
++                assert!(
++                    mc.value.contains("process"),
++                    "hover должен содержать имя функции"
++                );
++                assert!(
++                    mc.value.contains("Обработка данных"),
++                    "hover должен содержать документацию функции: {}",
++                    mc.value
++                );
++            }
++        }
++    }
++
++    /// Hover над переменной с doc-комментарием отображает и тип, и документацию.
++    ///
++    /// `///`-комментарии перед `var counter` должны появляться в hover-ответе
++    /// вместе с типом переменной.
++    #[test]
++    fn test_hover_variable_with_docs() {
++        let src = "/// Счётчик тактов.\nvar counter: [bit;8] = 0; start S;";
++        // "counter" находится на строке 1 (0-indexed), символ 4 ("var " = 4)
++        let hover = hover_info(src, Position::new(1, 4));
++        assert!(
++            hover.is_some(),
++            "hover над переменной с документацией должен возвращать данные"
++        );
++        if let Some(h) = hover {
++            if let HoverContents::Markup(mc) = h.contents {
++                assert!(
++                    mc.value.contains("counter"),
++                    "hover должен содержать имя переменной"
++                );
++                assert!(
++                    mc.value.contains("Счётчик тактов"),
++                    "hover должен содержать документацию переменной: {}",
++                    mc.value
++                );
++            }
++        }
++    }
++
++    /// Hover над переменной БЕЗ документации отображает только сигнатуру.
++    ///
++    /// Если `///`-комментарии отсутствуют, hover возвращает только тип переменной.
++    #[test]
++    fn test_hover_variable_without_docs() {
++        let src = "var counter: [bit;8] = 0; start S;";
++        let hover = hover_info(src, Position::new(0, 5));
++        assert!(
++            hover.is_some(),
++            "hover без документации должен возвращать данные"
++        );
++        if let Some(h) = hover {
++            if let HoverContents::Markup(mc) = h.contents {
++                assert!(
++                    mc.value.contains("counter"),
++                    "hover должен содержать имя переменной"
++                );
++                // Без документации не должно быть двойного переноса строки + текста
++                // Достаточно убедиться, что нет лишнего текста за пределами code-блока
++                assert!(
++                    mc.value.starts_with("```but"),
++                    "hover без документации должен начинаться с блока кода"
++                );
++            }
++        }
++    }
++
+     // ── Тесты конвертации диагностик ──────────────────────────────────────────
+ 
+     /// Ошибка парсера конвертируется в LSP DiagnosticSeverity::ERROR.
+diff --git a/grammar/tests/data/semantic/valid/lsp_hover_docs.but b/grammar/tests/data/semantic/valid/lsp_hover_docs.but
+new file mode 100644
+index 0000000..2d93a6e
+--- /dev/null
++++ b/grammar/tests/data/semantic/valid/lsp_hover_docs.but
+@@ -0,0 +1,33 @@
++// Пример документирования объектов BuT с помощью /// комментариев.
++//
++// LSP hover (C6) при наведении курсора на идентификатор должен
++// отображать как сигнатуру, так и документацию.
++//
++// Формат hover-ответа:
++//   ```but
++//   <сигнатура>
++//   ```
++//
++//   <документация>
++
++/// Счётчик количества обработанных пакетов.
++var packet_count: [bit;16] = 0;
++
++/// Флаг готовности системы к работе.
++var ready: bit = false;
++
++/// Порог срабатывания таймера (в тактах).
++const TIMEOUT: [bit;8] = 100;
++
++/// Основное рабочее состояние автомата.
++start Active {
++    always {
++        packet_count = packet_count + 1;
++    }
++    ref Idle: packet_count == 0;
++}
++
++/// Состояние ожидания (бездействия).
++state Idle {
++    ref Active: ready;
++}

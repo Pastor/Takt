@@ -1020,6 +1020,61 @@ mod tests {
         );
     }
 
+    /// Тернарный оператор: подвыражения разрешаются корректно.
+    ///
+    /// Проверяем, что все три ветви (условие, then, else) разрешаются
+    /// внутри конкретного контекста модели (с переменной).
+    ///
+    /// # Пример (псевдокод BuT):
+    /// ```text
+    /// var flag: bit = true;
+    /// // flag ? 10 : 20  →  ConditionalOperator(Variable("flag"), Number(10), Number(20))
+    /// ```
+    #[test]
+    fn conditional_operator_with_variable_condition() {
+        use crate::semantic::tree::construct_model;
+        // Строим модель с переменной flag
+        let (ast, _) = crate::parse("var flag: bit = true;", 0).expect("ошибка разбора");
+        let model = construct_model(&ast, None, &[]).expect("ошибка семантики");
+        let loc = crate::diagnostics::Location::default();
+        // flag ? 10 : 20
+        let cond_expr = Box::new(ast::Expression::Variable(crate::parser::ast::Identifier {
+            loc,
+            name: "flag".to_string(),
+        }));
+        let then_expr = Box::new(ast::Expression::Number(loc, 10));
+        let else_expr = Box::new(ast::Expression::Number(loc, 20));
+        let expr = ast::Expression::ConditionalOperator(loc, cond_expr, then_expr, else_expr);
+        let result = construct_expression(expr, model).unwrap();
+        assert!(
+            matches!(result, Expression::ConditionalOperator(_, _, _)),
+            "ConditionalOperator с переменной-условием должен разрешиться"
+        );
+    }
+
+    /// Контрпример: тернарный оператор с несуществующей переменной в условии — ошибка.
+    ///
+    /// Если условие ссылается на неизвестный идентификатор, `construct_expression`
+    /// должен вернуть ошибку диагностики.
+    #[test]
+    fn conditional_operator_unknown_condition_is_error() {
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        let loc = crate::diagnostics::Location::default();
+        // ghost ? 0 : 1  —  ghost не объявлен
+        let cond_expr = Box::new(ast::Expression::Variable(crate::parser::ast::Identifier {
+            loc,
+            name: "ghost".to_string(),
+        }));
+        let then_expr = Box::new(ast::Expression::Number(loc, 0));
+        let else_expr = Box::new(ast::Expression::Number(loc, 1));
+        let expr = ast::Expression::ConditionalOperator(loc, cond_expr, then_expr, else_expr);
+        let result = construct_expression(expr, model);
+        assert!(
+            result.is_err(),
+            "тернарный оператор с неизвестным условием должен давать ошибку"
+        );
+    }
+
     // ── Срез массива ──────────────────────────────────────────────────────────
 
     /// Срез массива: `var y: [bit;4] = buf[1:5];` → `ArraySlice`.
