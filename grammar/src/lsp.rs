@@ -6,7 +6,12 @@
 //!
 //! Модуль включается только при наличии флага `lsp`.
 
+use cell::RefCell;
+use std::cell;
 use lsp_types::*;
+use semantic::index::SemanticNodeRef;
+use semantic::{FunctionNode, ModelNode, VariableNode};
+use crate::semantic;
 
 /// Типы семантических токенов (порядок важен — индекс используется как тип в легенде).
 pub const SEMANTIC_TOKEN_TYPES: &[SemanticTokenType] = &[
@@ -91,7 +96,7 @@ pub fn collect_diagnostics(source: &str) -> Vec<Diagnostic> {
     };
 
     // Шаг 2: Семантический анализ
-    let model = match crate::semantic::tree::construct_model(&ast, None, &[]) {
+    let model = match semantic::tree::construct_model(&ast, None, &[]) {
         Ok(m) => m,
         Err(err) => {
             lsp_diags.push(grammar_diagnostic_to_lsp(&err, source));
@@ -298,7 +303,7 @@ pub fn position_to_offset(source: &str, position: Position) -> Option<usize> {
 
 /// Возвращает семантический узел по LSP-позиции курсора.
 ///
-/// Строит [`SemanticIndex`](crate::semantic::index::SemanticIndex) из переданной
+/// Строит [`SemanticIndex`](semantic::index::SemanticIndex) из переданной
 /// семантической модели и выполняет поиск наиболее конкретного узла, объявление
 /// которого покрывает позицию курсора. Более точен, чем поиск по имени слова под
 /// курсором: учитывает точные диапазоны объявлений и избегает неоднозначностей
@@ -336,8 +341,8 @@ pub fn position_to_offset(source: &str, position: Position) -> Option<usize> {
 pub fn node_at_position(
     source: &str,
     position: Position,
-    model: &std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
-) -> Option<crate::semantic::index::SemanticNodeRef> {
+    model: &std::rc::Rc<RefCell<ModelNode>>,
+) -> Option<SemanticNodeRef> {
     use crate::semantic::index::SemanticIndex;
     let offset = position_to_offset(source, position)?;
     let index = SemanticIndex::build(model);
@@ -363,7 +368,7 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
 
     // Добавляем идентификаторы из семантической модели
     if let Ok((ast, _)) = crate::parse(source, 0) {
-        if let Ok(model) = crate::semantic::tree::construct_model(&ast, None, &[]) {
+        if let Ok(model) = semantic::tree::construct_model(&ast, None, &[]) {
             let borrowed = model.borrow();
 
             // Имена вложенных моделей
@@ -379,14 +384,14 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             // Имена переменных и их типы
             for (name, var) in &borrowed.variables {
                 let detail = match var {
-                    crate::semantic::VariableNode::Simple { ty, .. } => Some(format!("{:?}", ty)),
-                    crate::semantic::VariableNode::Const { ty, .. } => {
+                    VariableNode::Simple { ty, .. } => Some(format!("{:?}", ty)),
+                    VariableNode::Const { ty, .. } => {
                         Some(format!("const: {:?}", ty))
                     }
-                    crate::semantic::VariableNode::Port { ty, .. } => {
+                    VariableNode::Port { ty, .. } => {
                         Some(format!("port: {:?}", ty))
                     }
-                    crate::semantic::VariableNode::Unresolved => None,
+                    VariableNode::Unresolved => None,
                 };
                 items.push(CompletionItem {
                     label: name.clone(),
@@ -399,13 +404,13 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             // Имена функций
             for (name, func) in &borrowed.functions {
                 let detail = match func {
-                    crate::semantic::FunctionNode::Local { ret, .. } => {
+                    FunctionNode::Local { ret, .. } => {
                         Some(format!("fn -> {:?}", ret))
                     }
-                    crate::semantic::FunctionNode::External { ret, .. } => {
+                    FunctionNode::External { ret, .. } => {
                         Some(format!("extern fn -> {:?}", ret))
                     }
-                    crate::semantic::FunctionNode::Builtin(_, _, ret) => {
+                    FunctionNode::Builtin(_, _, ret) => {
                         Some(format!("builtin fn -> {:?}", ret))
                     }
                     _ => None,
@@ -459,15 +464,15 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             // Имена состояний
             for (state_name, state) in &borrowed.states {
                 let kind_str = match state {
-                    crate::semantic::StateNode::Simple { kind, .. }
-                    | crate::semantic::StateNode::Implement { kind, .. } => {
+                    semantic::StateNode::Simple { kind, .. }
+                    | semantic::StateNode::Implement { kind, .. } => {
                         if matches!(kind, crate::semantic::StateNodeKind::Start) {
                             "start state"
                         } else {
                             "state"
                         }
                     }
-                    crate::semantic::StateNode::Unresolved => "state",
+                    semantic::StateNode::Unresolved => "state",
                 };
                 items.push(CompletionItem {
                     label: state_name.clone(),
@@ -558,7 +563,7 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     // Строим семантическую модель с привязкой doc-комментариев
     let (ast, comments) = crate::parse(source, 0).ok()?;
     let model =
-        crate::semantic::tree::construct_model_with_docs(&ast, None, &[], &comments).ok()?;
+        semantic::tree::construct_model_with_docs(&ast, None, &[], &comments).ok()?;
     let borrowed = model.borrow();
 
     // Шаг 1: пытаемся найти узел по точной позиции в объявлении
@@ -574,12 +579,12 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     }
 
     // Вспомогательные функции для формирования hover-текста
-    let make_var_hover = |var: &crate::semantic::VariableNode, word: &str, doc: &[String]| {
+    let make_var_hover = |var: &VariableNode, word: &str, doc: &[String]| {
         let (type_str, kind_str) = match var {
-            crate::semantic::VariableNode::Simple { ty, .. } => (format!("{:?}", ty), "var"),
-            crate::semantic::VariableNode::Const { ty, .. } => (format!("{:?}", ty), "const"),
-            crate::semantic::VariableNode::Port { ty, .. } => (format!("{:?}", ty), "port"),
-            crate::semantic::VariableNode::Unresolved => ("?".to_string(), "var"),
+            VariableNode::Simple { ty, .. } => (format!("{:?}", ty), "var"),
+            VariableNode::Const { ty, .. } => (format!("{:?}", ty), "const"),
+            VariableNode::Port { ty, .. } => (format!("{:?}", ty), "port"),
+            VariableNode::Unresolved => ("?".to_string(), "var"),
         };
         let mut text = format!("```but\n{} {}: {}\n```", kind_str, word, type_str);
         if !doc.is_empty() {
@@ -590,23 +595,23 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     };
 
     let make_func_hover =
-        |func: &crate::semantic::FunctionNode, word: &str, doc: &[String]| {
+        |func: &FunctionNode, word: &str, doc: &[String]| {
             let sig = match func {
-                crate::semantic::FunctionNode::Local { params, ret, .. } => {
+                FunctionNode::Local { params, ret, .. } => {
                     let ps: Vec<String> = params
                         .iter()
                         .map(|(n, t)| format!("{}: {:?}", n, t))
                         .collect();
                     format!("fn {}({}) -> {:?}", word, ps.join(", "), ret)
                 }
-                crate::semantic::FunctionNode::External { params, ret, .. } => {
+                FunctionNode::External { params, ret, .. } => {
                     let ps: Vec<String> = params
                         .iter()
                         .map(|(n, t)| format!("{}: {:?}", n, t))
                         .collect();
                     format!("extern fn {}({}) -> {:?}", word, ps.join(", "), ret)
                 }
-                crate::semantic::FunctionNode::Builtin(name, params, ret) => {
+                FunctionNode::Builtin(name, params, ret) => {
                     format!("builtin fn {}({} params) -> {:?}", name, params.len(), ret)
                 }
                 _ => format!("fn {}", word),
@@ -623,23 +628,35 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
 
     // Шаг 1 (направленный поиск): если известен вид узла — ищем только в нужной категории.
     // Это устраняет ложные совпадения при одинаковых именах в разных категориях.
+    //
+    // Ключевое правило: клон Rc должен храниться в именованном биндинге ДО вызова borrow(),
+    // иначе временная переменная освобождается раньше, чем завершается заимствование.
     use crate::semantic::index::SemanticNodeKind;
     if let Some(ref node_ref) = position_node {
-        let doc = borrowed.element_doc(&word);
+        // Клонируем Rc в именованный биндинг, чтобы продлить его жизнь на весь блок
+        let node_model_rc = node_ref
+            .model
+            .clone()
+            .unwrap_or_else(|| model.clone());
+        let node_model = node_model_rc.borrow();
+        // Документация берётся из модели, содержащей элемент (не из корневой)
+        let doc = node_model.element_doc(&word);
+
         match node_ref.kind {
             SemanticNodeKind::Variable | SemanticNodeKind::Const | SemanticNodeKind::Port => {
-                if let Some(var) = borrowed.search_var(&word) {
+                if let Some(var) = node_model.search_var(&word) {
                     hover_text = make_var_hover(&var, &word, &doc);
                 }
             }
             SemanticNodeKind::Function | SemanticNodeKind::ExternFunction => {
-                if let Some(func_rc) = borrowed.search_func(&word) {
+                if let Some(func_rc) = node_model.search_func(&word) {
                     let func = func_rc.borrow();
                     hover_text = make_func_hover(&func, &word, &doc);
                 }
             }
             SemanticNodeKind::TypeAlias => {
-                if let Some(ty) = borrowed.types.get(&word) {
+                // types.get() возвращает &TypeNode напрямую, что правильно для форматирования
+                if let Some(ty) = node_model.types.get(&word) {
                     let mut text = format!("```but\ntype {} = {:?}\n```", word, ty);
                     if !doc.is_empty() {
                         text.push_str("\n\n");
@@ -649,9 +666,8 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
                 }
             }
             SemanticNodeKind::Condition => {
-                if let Some(cond) = borrowed.search_cond(&word) {
-                    let mut text =
-                        format!("```but\ncond {} = {:?}\n```", word, cond.value);
+                if let Some(cond) = node_model.search_cond(&word) {
+                    let mut text = format!("```but\ncond {} = {:?}\n```", word, cond.value);
                     if !doc.is_empty() {
                         text.push_str("\n\n");
                         text.push_str(&doc.join("\n"));
@@ -660,7 +676,7 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
                 }
             }
             SemanticNodeKind::Enum => {
-                if let Some(enum_node) = borrowed.search_enum(&word) {
+                if let Some(enum_node) = node_model.search_enum(&word) {
                     let variants: Vec<String> = enum_node
                         .variants
                         .iter()
@@ -1014,7 +1030,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
     // Строим семантическую модель для обогащения идентификаторов
     let model_opt = crate::parse(source, 0)
         .ok()
-        .and_then(|(ast, _)| crate::semantic::tree::construct_model(&ast, None, &[]).ok());
+        .and_then(|(ast, _)| semantic::tree::construct_model(&ast, None, &[]).ok());
     let borrowed_model = model_opt.as_ref().map(|m| m.borrow());
 
     // Собираем токены и комментарии через лексер

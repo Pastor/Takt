@@ -86,6 +86,8 @@ pub struct SemanticNodeRef {
     pub kind: SemanticNodeKind,
     /// Позиция объявления в исходном тексте.
     pub loc: Location,
+    /// Модель, в которой объявлен элемент (для поиска в правильном контексте области видимости).
+    pub model: Option<Rc<RefCell<ModelNode>>>,
 }
 
 /// Внутренняя запись индекса.
@@ -228,6 +230,7 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
                     name: name.clone(),
                     kind: SemanticNodeKind::Model,
                     loc: borrowed.loc,
+                    model: Some(model.clone()),
                 },
             });
         }
@@ -249,6 +252,7 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
                     name: name.clone(),
                     kind,
                     loc,
+                    model: Some(model.clone()),
                 },
             });
         }
@@ -269,6 +273,7 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
                     name: name.clone(),
                     kind,
                     loc,
+                    model: Some(model.clone()),
                 },
             });
         }
@@ -294,6 +299,7 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
                     name: name.clone(),
                     kind,
                     loc,
+                    model: Some(model.clone()),
                 },
             });
         }
@@ -315,6 +321,7 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
                     name: name.clone(),
                     kind: SemanticNodeKind::TypeAlias,
                     loc: *loc,
+                    model: Some(model.clone()),
                 },
             });
         }
@@ -330,6 +337,7 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
                     name: name.clone(),
                     kind: SemanticNodeKind::Condition,
                     loc: cond.loc,
+                    model: Some(model.clone()),
                 },
             });
         }
@@ -345,6 +353,7 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
                     name: name.clone(),
                     kind: SemanticNodeKind::Enum,
                     loc: enum_node.loc,
+                    model: Some(model.clone()),
                 },
             });
         }
