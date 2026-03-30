@@ -241,6 +241,109 @@ fn utf16_to_byte_offset(s: &str, utf16_offset: usize) -> Option<usize> {
     }
 }
 
+/// Конвертирует LSP-позицию (строка + UTF-16 символ) в байтовое смещение в исходном тексте.
+///
+/// Протокол LSP использует `Position { line, character }`, где `character` — смещение в
+/// кодовых единицах UTF-16 от начала строки. Функция переводит эту позицию в байтовое
+/// смещение от начала файла, пригодное для работы с [`Location::Source`].
+///
+/// Возвращает `None`, если строка с номером `position.line` не существует в `source`.
+///
+/// # Примеры
+///
+/// ```
+/// # #[cfg(feature = "lsp")]
+/// # {
+/// use grammar::lsp::position_to_offset;
+/// use lsp_types::Position;
+///
+/// let src = "hello\nworld";
+/// // Строка 0, символ 3 → байт 3
+/// assert_eq!(position_to_offset(src, Position::new(0, 3)), Some(3));
+/// // Строка 1 начинается с байта 6 ("hello\n"), символ 2 → байт 8
+/// assert_eq!(position_to_offset(src, Position::new(1, 2)), Some(8));
+/// // Несуществующая строка → None
+/// assert_eq!(position_to_offset(src, Position::new(99, 0)), None);
+/// # }
+/// ```
+pub fn position_to_offset(source: &str, position: Position) -> Option<usize> {
+    let target_line = position.line as usize;
+    let mut line_start = 0usize;
+    let mut current_line = 0usize;
+
+    for (i, c) in source.char_indices() {
+        if current_line == target_line {
+            // Нашли начало нужной строки — определяем столбец
+            let line_text = source[line_start..].lines().next().unwrap_or("");
+            let col_byte = utf16_to_byte_offset(line_text, position.character as usize)
+                .unwrap_or(line_text.len());
+            return Some(line_start + col_byte);
+        }
+        if c == '\n' {
+            current_line += 1;
+            line_start = i + 1;
+        }
+    }
+
+    // Обрабатываем последнюю строку (без завершающего '\n')
+    if current_line == target_line {
+        let line_text = source[line_start..].lines().next().unwrap_or("");
+        let col_byte = utf16_to_byte_offset(line_text, position.character as usize)
+            .unwrap_or(line_text.len());
+        return Some(line_start + col_byte);
+    }
+
+    None
+}
+
+/// Возвращает семантический узел по LSP-позиции курсора.
+///
+/// Строит [`SemanticIndex`](crate::semantic::index::SemanticIndex) из переданной
+/// семантической модели и выполняет поиск наиболее конкретного узла, объявление
+/// которого покрывает позицию курсора. Более точен, чем поиск по имени слова под
+/// курсором: учитывает точные диапазоны объявлений и избегает неоднозначностей
+/// при совпадении имён разных элементов (например, переменная и состояние с одним
+/// именем в разных областях видимости).
+///
+/// Возвращает `None`, если:
+/// - `position` выходит за пределы исходного текста.
+/// - Ни один семантический узел не покрывает данную позицию (например, курсор
+///   стоит на ключевом слове или пробеле).
+///
+/// # Пример
+///
+/// ```
+/// # #[cfg(feature = "lsp")]
+/// # {
+/// use grammar::parse;
+/// use grammar::semantic::tree::construct_model;
+/// use grammar::lsp::node_at_position;
+/// use grammar::semantic::index::SemanticNodeKind;
+/// use lsp_types::Position;
+///
+/// let src = "var counter: bit = false; start S;";
+/// let (ast, _) = parse(src, 0).unwrap();
+/// let model = construct_model(&ast, None, &[]).unwrap();
+///
+/// // Позиция 4 — символ 'c' в "counter"
+/// let node = node_at_position(src, Position::new(0, 4), &model);
+/// assert!(node.is_some());
+/// let node = node.unwrap();
+/// assert_eq!(node.name, "counter");
+/// assert_eq!(node.kind, SemanticNodeKind::Variable);
+/// # }
+/// ```
+pub fn node_at_position(
+    source: &str,
+    position: Position,
+    model: &std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
+) -> Option<crate::semantic::index::SemanticNodeRef> {
+    use crate::semantic::index::SemanticIndex;
+    let offset = position_to_offset(source, position)?;
+    let index = SemanticIndex::build(model);
+    index.node_at_offset(offset).cloned()
+}
+
 /// Генерирует элементы автодополнения для источника BuT.
 ///
 /// Возвращает ключевые слова языка, а также идентификаторы из семантической
@@ -441,130 +544,237 @@ pub fn word_at_position(source: &str, position: Position) -> Option<String> {
 
 /// Возвращает информацию о типе идентификатора под курсором.
 ///
-/// Ищет идентификатор в семантической модели документа и возвращает
-/// информацию о типе/назначении найденного элемента.
+/// Алгоритм поиска работает в два этапа:
+///
+/// 1. **Поиск по позиции** (через [`node_at_position`]): находит семантический узел,
+///    объявление которого точно покрывает позицию курсора. Устраняет неоднозначность
+///    между элементами с одинаковым именем в разных областях видимости.
+///
+/// 2. **Поиск по имени** (через [`word_at_position`]): резервный метод — извлекает
+///    идентификатор под курсором и ищет его в семантической модели. Применяется,
+///    если курсор находится на *использовании* элемента (не на объявлении), или
+///    если поиск по позиции не дал результата.
 pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
-    let word = word_at_position(source, position)?;
-    if word.is_empty() {
-        return None;
-    }
-
     // Строим семантическую модель с привязкой doc-комментариев
     let (ast, comments) = crate::parse(source, 0).ok()?;
     let model =
         crate::semantic::tree::construct_model_with_docs(&ast, None, &[], &comments).ok()?;
     let borrowed = model.borrow();
 
-    let mut hover_text = String::new();
+    // Шаг 1: пытаемся найти узел по точной позиции в объявлении
+    let position_node = node_at_position(source, position, &model);
 
-    // Ищем переменную
-    if let Some(var) = borrowed.search_var(&word) {
-        let (type_str, kind_str) = match &var {
+    // Шаг 2: извлекаем слово под курсором для резервного поиска
+    let word = match position_node.as_ref() {
+        Some(node_ref) => node_ref.name.clone(),
+        None => word_at_position(source, position)?,
+    };
+    if word.is_empty() {
+        return None;
+    }
+
+    // Вспомогательные функции для формирования hover-текста
+    let make_var_hover = |var: &crate::semantic::VariableNode, word: &str, doc: &[String]| {
+        let (type_str, kind_str) = match var {
             crate::semantic::VariableNode::Simple { ty, .. } => (format!("{:?}", ty), "var"),
             crate::semantic::VariableNode::Const { ty, .. } => (format!("{:?}", ty), "const"),
             crate::semantic::VariableNode::Port { ty, .. } => (format!("{:?}", ty), "port"),
             crate::semantic::VariableNode::Unresolved => ("?".to_string(), "var"),
         };
-        hover_text = format!("```but\n{} {}: {}\n```", kind_str, word, type_str);
-        // Добавляем документацию, если есть
-        let doc = borrowed.element_doc(&word);
+        let mut text = format!("```but\n{} {}: {}\n```", kind_str, word, type_str);
         if !doc.is_empty() {
-            hover_text.push_str("\n\n");
-            hover_text.push_str(&doc.join("\n"));
+            text.push_str("\n\n");
+            text.push_str(&doc.join("\n"));
         }
-    }
-    // Ищем функцию
-    else if let Some(func_rc) = borrowed.search_func(&word) {
-        let func = func_rc.borrow();
-        let sig = match &*func {
-            crate::semantic::FunctionNode::Local { params, ret, .. } => {
-                let params_str: Vec<String> = params
-                    .iter()
-                    .map(|(n, t)| format!("{}: {:?}", n, t))
-                    .collect();
-                format!("fn {}({}) -> {:?}", word, params_str.join(", "), ret)
+        text
+    };
+
+    let make_func_hover =
+        |func: &crate::semantic::FunctionNode, word: &str, doc: &[String]| {
+            let sig = match func {
+                crate::semantic::FunctionNode::Local { params, ret, .. } => {
+                    let ps: Vec<String> = params
+                        .iter()
+                        .map(|(n, t)| format!("{}: {:?}", n, t))
+                        .collect();
+                    format!("fn {}({}) -> {:?}", word, ps.join(", "), ret)
+                }
+                crate::semantic::FunctionNode::External { params, ret, .. } => {
+                    let ps: Vec<String> = params
+                        .iter()
+                        .map(|(n, t)| format!("{}: {:?}", n, t))
+                        .collect();
+                    format!("extern fn {}({}) -> {:?}", word, ps.join(", "), ret)
+                }
+                crate::semantic::FunctionNode::Builtin(name, params, ret) => {
+                    format!("builtin fn {}({} params) -> {:?}", name, params.len(), ret)
+                }
+                _ => format!("fn {}", word),
+            };
+            let mut text = format!("```but\n{}\n```", sig);
+            if !doc.is_empty() {
+                text.push_str("\n\n");
+                text.push_str(&doc.join("\n"));
             }
-            crate::semantic::FunctionNode::External { params, ret, .. } => {
-                let params_str: Vec<String> = params
-                    .iter()
-                    .map(|(n, t)| format!("{}: {:?}", n, t))
-                    .collect();
-                format!("extern fn {}({}) -> {:?}", word, params_str.join(", "), ret)
-            }
-            crate::semantic::FunctionNode::Builtin(name, params, ret) => {
-                format!("builtin fn {}({} params) -> {:?}", name, params.len(), ret)
-            }
-            _ => format!("fn {}", word),
+            text
         };
-        hover_text = format!("```but\n{}\n```", sig);
-        // Добавляем документацию, если есть
+
+    let mut hover_text = String::new();
+
+    // Шаг 1 (направленный поиск): если известен вид узла — ищем только в нужной категории.
+    // Это устраняет ложные совпадения при одинаковых именах в разных категориях.
+    use crate::semantic::index::SemanticNodeKind;
+    if let Some(ref node_ref) = position_node {
         let doc = borrowed.element_doc(&word);
-        if !doc.is_empty() {
-            hover_text.push_str("\n\n");
-            hover_text.push_str(&doc.join("\n"));
+        match node_ref.kind {
+            SemanticNodeKind::Variable | SemanticNodeKind::Const | SemanticNodeKind::Port => {
+                if let Some(var) = borrowed.search_var(&word) {
+                    hover_text = make_var_hover(&var, &word, &doc);
+                }
+            }
+            SemanticNodeKind::Function | SemanticNodeKind::ExternFunction => {
+                if let Some(func_rc) = borrowed.search_func(&word) {
+                    let func = func_rc.borrow();
+                    hover_text = make_func_hover(&func, &word, &doc);
+                }
+            }
+            SemanticNodeKind::TypeAlias => {
+                if let Some(ty) = borrowed.types.get(&word) {
+                    let mut text = format!("```but\ntype {} = {:?}\n```", word, ty);
+                    if !doc.is_empty() {
+                        text.push_str("\n\n");
+                        text.push_str(&doc.join("\n"));
+                    }
+                    hover_text = text;
+                }
+            }
+            SemanticNodeKind::Condition => {
+                if let Some(cond) = borrowed.search_cond(&word) {
+                    let mut text =
+                        format!("```but\ncond {} = {:?}\n```", word, cond.value);
+                    if !doc.is_empty() {
+                        text.push_str("\n\n");
+                        text.push_str(&doc.join("\n"));
+                    }
+                    hover_text = text;
+                }
+            }
+            SemanticNodeKind::Enum => {
+                if let Some(enum_node) = borrowed.search_enum(&word) {
+                    let variants: Vec<String> = enum_node
+                        .variants
+                        .iter()
+                        .map(|(n, v)| format!("  {} = {}", n, v))
+                        .collect();
+                    let mut text = format!(
+                        "```but\nenum {} {{\n{}\n}}\n```",
+                        word,
+                        variants.join(",\n")
+                    );
+                    if !doc.is_empty() {
+                        text.push_str("\n\n");
+                        text.push_str(&doc.join("\n"));
+                    }
+                    hover_text = text;
+                }
+            }
+            SemanticNodeKind::State
+            | SemanticNodeKind::StartState
+            | SemanticNodeKind::EndState => {
+                let kind_label = match node_ref.kind {
+                    SemanticNodeKind::StartState => "start state",
+                    SemanticNodeKind::EndState => "end state",
+                    _ => "state",
+                };
+                let mut text = format!("```but\n{} {}\n```", kind_label, word);
+                if !doc.is_empty() {
+                    text.push_str("\n\n");
+                    text.push_str(&doc.join("\n"));
+                }
+                hover_text = text;
+            }
+            SemanticNodeKind::Model => {
+                let mut text = format!("```but\nmodel {}\n```", word);
+                if !doc.is_empty() {
+                    text.push_str("\n\n");
+                    text.push_str(&doc.join("\n"));
+                }
+                hover_text = text;
+            }
         }
     }
-    // Ищем псевдоним типа
-    else if let Some(ty) = borrowed.types.get(&word) {
-        hover_text = format!("```but\ntype {} = {:?}\n```", word, ty);
-        // Добавляем документацию, если есть
+
+    // Шаг 2 (резервный поиск по имени): применяется если:
+    // - курсор на использовании, а не на объявлении (position_node = None)
+    // - направленный поиск не дал результата (hover_text пустой)
+    if hover_text.is_empty() {
         let doc = borrowed.element_doc(&word);
-        if !doc.is_empty() {
-            hover_text.push_str("\n\n");
-            hover_text.push_str(&doc.join("\n"));
+        // Ищем переменную
+        if let Some(var) = borrowed.search_var(&word) {
+            hover_text = make_var_hover(&var, &word, &doc);
         }
-    }
-    // Ищем именованное условие
-    else if let Some(cond) = borrowed.search_cond(&word) {
-        hover_text = format!("```but\ncond {} = {:?}\n```", word, cond.value);
-        // Добавляем документацию, если есть
-        let doc = borrowed.element_doc(&word);
-        if !doc.is_empty() {
-            hover_text.push_str("\n\n");
-            hover_text.push_str(&doc.join("\n"));
+        // Ищем функцию
+        else if let Some(func_rc) = borrowed.search_func(&word) {
+            let func = func_rc.borrow();
+            hover_text = make_func_hover(&func, &word, &doc);
         }
-    }
-    // Ищем перечисление
-    else if let Some(enum_node) = borrowed.search_enum(&word) {
-        let variants: Vec<String> = enum_node
-            .variants
-            .iter()
-            .map(|(n, v)| format!("  {} = {}", n, v))
-            .collect();
-        hover_text = format!(
-            "```but\nenum {} {{\n{}\n}}\n```",
-            word,
-            variants.join(",\n")
-        );
-        // Добавляем документацию, если есть
-        let doc = borrowed.element_doc(&word);
-        if !doc.is_empty() {
-            hover_text.push_str("\n\n");
-            hover_text.push_str(&doc.join("\n"));
+        // Ищем псевдоним типа
+        else if let Some(ty) = borrowed.types.get(&word) {
+            let mut text = format!("```but\ntype {} = {:?}\n```", word, ty);
+            if !doc.is_empty() {
+                text.push_str("\n\n");
+                text.push_str(&doc.join("\n"));
+            }
+            hover_text = text;
         }
-    }
-    // Ищем состояние
-    else if borrowed.search_state(&word).is_some() {
-        hover_text = format!("```but\nstate {}\n```", word);
-        // Добавляем документацию, если есть
-        let doc = borrowed.element_doc(&word);
-        if !doc.is_empty() {
-            hover_text.push_str("\n\n");
-            hover_text.push_str(&doc.join("\n"));
+        // Ищем именованное условие
+        else if let Some(cond) = borrowed.search_cond(&word) {
+            let mut text = format!("```but\ncond {} = {:?}\n```", word, cond.value);
+            if !doc.is_empty() {
+                text.push_str("\n\n");
+                text.push_str(&doc.join("\n"));
+            }
+            hover_text = text;
         }
-    }
-    // Ищем вариант перечисления
-    else if let Some((enum_name, value)) = borrowed.search_enum_variant(&word) {
-        hover_text = format!("```but\n{}::{} = {}\n```", enum_name, word, value);
-    }
-    // Ищем модель
-    else if let Some(_) = borrowed.search_model(&word) {
-        hover_text = format!("```but\nmodel {}\n```", &word);
-        // Добавляем документацию, если есть
-        let doc = borrowed.element_doc(&word);
-        if !doc.is_empty() {
-            hover_text.push_str("\n\n");
-            hover_text.push_str(&doc.join("\n"));
+        // Ищем перечисление
+        else if let Some(enum_node) = borrowed.search_enum(&word) {
+            let variants: Vec<String> = enum_node
+                .variants
+                .iter()
+                .map(|(n, v)| format!("  {} = {}", n, v))
+                .collect();
+            let mut text = format!(
+                "```but\nenum {} {{\n{}\n}}\n```",
+                word,
+                variants.join(",\n")
+            );
+            if !doc.is_empty() {
+                text.push_str("\n\n");
+                text.push_str(&doc.join("\n"));
+            }
+            hover_text = text;
+        }
+        // Ищем состояние
+        else if borrowed.search_state(&word).is_some() {
+            let mut text = format!("```but\nstate {}\n```", word);
+            if !doc.is_empty() {
+                text.push_str("\n\n");
+                text.push_str(&doc.join("\n"));
+            }
+            hover_text = text;
+        }
+        // Ищем вариант перечисления
+        else if let Some((enum_name, value)) = borrowed.search_enum_variant(&word) {
+            hover_text = format!("```but\n{}::{} = {}\n```", enum_name, word, value);
+        }
+        // Ищем модель
+        else if borrowed.search_model(&word).is_some() {
+            let mut text = format!("```but\nmodel {}\n```", &word);
+            if !doc.is_empty() {
+                text.push_str("\n\n");
+                text.push_str(&doc.join("\n"));
+            }
+            hover_text = text;
         }
     }
 

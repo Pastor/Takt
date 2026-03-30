@@ -14,6 +14,7 @@ mod condition;
 pub(crate) mod docs;
 mod expression;
 mod function;
+pub mod index;
 mod import;
 mod named_block;
 pub(crate) mod naming;

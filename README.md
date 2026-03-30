@@ -58,11 +58,14 @@ BuT/
 │   │       ├── builtin.rs          — реестр встроенных функций
 │   │       ├── unused.rs           — Ce13: диагностика неиспользуемых переменных (FE3)
 │   │       ├── docs.rs             — Ce12: привязка документационных комментариев
+│   │       ├── index.rs            — SemanticIndex: поиск узлов по байтовому смещению (LSP)
 │   │       └── validate.rs         — семантическая валидация (Ce14: детерминированность, FE4)
 │   └── tests/
 │       ├── data/lexer/             — тестовые файлы лексера
 │       ├── data/parser/            — тестовые файлы парсера
-│       └── data/semantic/          — тестовые файлы семантики
+│       ├── data/semantic/          — тестовые файлы семантики
+│       ├── data/lsp/               — тестовые файлы LSP (index_simple.but, index_complex.but)
+│       └── lsp_tests.rs            — интеграционные тесты LSP (SemanticIndex, hover, position)
 ├── changes/                        — патч-файлы для каждой реализованной фичи
 ├── examples/                       — примеры программ
 ├── extensions/                     — расширения IDE (Zed)
@@ -586,7 +589,7 @@ model Main {
 | Парсер    | ~30    | синтаксические конструкции, ошибки восстановления                           |
 | Семантика | ~80    | вывод типов, области видимости, переходы, импорты, разрешение условий `ref` |
 
-Итого: более 735 тестов (lib) + integration-тесты в `tests/`.
+Итого: более 430 тестов (lib) + 25 интеграционных тестов LSP в `tests/lsp_tests.rs` + прочие integration-тесты в `tests/`.
 
 ### Стратегия тестирования
 
@@ -805,6 +808,58 @@ var x = condition ? value_true : value_false;
 
 - 3 unit-теста в `semantic/expression.rs`: создание через `construct_expression`, переменная в условии, контрпример с несуществующим идентификатором
 - 2 файла примеров: `tests/data/parser/valid/ternary_operator.but`, `tests/data/semantic/valid/ternary_operator.but`
+
+#### С6.5. Поиск семантических узлов по позиции курсора (LSP) — **Реализовано**
+
+Новый модуль `semantic/index.rs` реализует `SemanticIndex` — индекс семантических узлов,
+позволяющий LSP-сервису находить точный узел дерева по координатам курсора (строка, символ)
+без неоднозначного поиска по имени идентификатора.
+
+**Принцип работы:**
+
+1. `SemanticIndex::build(model)` обходит семантическое дерево и собирает записи
+   `(start_byte, end_byte, SemanticNodeRef)` для всех объявлений.
+2. Записи сортируются по `start_byte`.
+3. `node_at_offset(offset)` перебирает записи и возвращает наиболее конкретный
+   (с наименьшим диапазоном) узел, покрывающий смещение.
+
+**Новые публичные функции в `lsp.rs`:**
+
+- `position_to_offset(source, position)` — конвертирует LSP `Position` (строка + UTF-16
+  символ) в байтовое смещение.
+- `node_at_position(source, position, model)` — возвращает `SemanticNodeRef` (имя, вид,
+  позиция) по LSP-позиции.
+
+**Обновлённый `hover_info`:**
+
+Работает в два этапа:
+1. Направленный поиск через `node_at_position` — если курсор на объявлении, точно
+   определяет вид элемента (`Variable`/`Const`/`Function`/`State`/`Enum`/…) и делает
+   прямой lookup без перебора всех категорий.
+2. Резервный поиск по имени — используется для hover на *использовании* элемента
+   (а не на его объявлении).
+
+```rust
+// Поиск узла по LSP-позиции
+use grammar::lsp::{node_at_position, position_to_offset};
+use grammar::semantic::index::SemanticNodeKind;
+
+let src = "var counter: bit = false; start S;";
+let (ast, _) = parse(src, 0)?;
+let model = construct_model(&ast, None, &[])?;
+
+// Позиция (строка 0, символ 4) — 'c' в "counter"
+let node = node_at_position(src, Position::new(0, 4), &model);
+assert_eq!(node.unwrap().kind, SemanticNodeKind::Variable);
+```
+
+**Тесты:**
+
+- 15 unit-тестов в `semantic/index.rs`: переменная, константа, порт, функция, extern fn,
+  состояние, тип, условие, перечисление, модель, поиск за пределами, множественные элементы
+- 25 интеграционных тестов в `tests/lsp_tests.rs`: `position_to_offset`, `node_at_position`,
+  hover с направленным поиском
+- 3 тестовых файла в `tests/data/lsp/`
 
 #### С6. LSP сервер должен отображать документацию — **Реализовано**
 
@@ -1098,6 +1153,7 @@ var dir3: Direction = 99;    // NI6-ошибка: 99 не является ва�
 | PR7 | LSP-сервер `but-lsp` (диагностика, дополнение, hover)       | PR7.patch | ✅ Реализовано |
 | C5  | Тернарный оператор (семантика, вывод типов, тесты)          | C5.patch  | ✅ Реализовано (частично: без парсерного синтаксиса `? :`) |
 | C6  | LSP hover отображает `///`-документацию                     | C6.patch  | ✅ Реализовано |
+| LSP1 | SemanticIndex: поиск узла по LSP-позиции (строка, символ) | —         | ✅ Реализовано |
 
 #### FE1. Грамматический синтаксис для перечислений — **Реализовано**
 

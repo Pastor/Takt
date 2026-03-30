@@ -1,0 +1,13 @@
+// Простой пример для тестирования SemanticIndex
+// Все объявляемые элементы должны быть найдены по их позициям
+
+var counter: bit = false;
+const LIMIT: bit = true;
+type Flag = bit;
+cond IsActive = counter = true;
+extern fn reset(x: bit);
+start Idle {
+    ref Active: IsActive;
+}
+state Active;
+
