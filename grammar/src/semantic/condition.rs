@@ -64,7 +64,7 @@ pub fn resolve_condition(
             } else {
                 function.unwrap()
             };
-            Ok(Condition::Function(function, args))
+            Ok(Condition::Function(function, args, id.loc))
         }
         ast::Condition::Not(_, cond) => Ok(Condition::Not(Box::new(resolve_condition(
             cond,
@@ -136,7 +136,7 @@ pub fn resolve_condition(
             let name = id.name.clone();
             // Сначала ищем объявление переменной в области видимости.
             if let Some(var) = model.borrow().search_var(&name) {
-                return Ok(Condition::Variable(Rc::new(RefCell::new(var))));
+                return Ok(Condition::Variable(Rc::new(RefCell::new(var)), id.loc));
             } else if let Some(cond) = model.borrow().search_cond(&name) {
                 return Ok(cond.value);
             } else if let Some(model) = model.borrow().search_model(&name) {
@@ -267,7 +267,7 @@ mod tests {
     fn variable_in_scope_resolves() {
         let node = build("var flag: bit = false; cond c = flag;").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), Condition::Variable(_)),
+            matches!(cond_val(&node, "c"), Condition::Variable(_, _)),
             "ожидалось Condition::Variable, получено {:?}",
             cond_val(&node, "c")
         );
@@ -499,7 +499,7 @@ mod tests {
     fn extract_variable_condition() {
         let node = build("var x: bit = false; cond c = x;").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), Condition::Variable(_)),
+            matches!(cond_val(&node, "c"), Condition::Variable(_, _)),
             "ожидалось условие Variable"
         );
     }

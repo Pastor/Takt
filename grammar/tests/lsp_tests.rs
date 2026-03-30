@@ -87,9 +87,7 @@ mod lsp_integration {
     // ── Тесты node_at_position ────────────────────────────────────────────────
 
     /// Вспомогательная функция: парсит, строит модель, возвращает её.
-    fn make_model(
-        src: &str,
-    ) -> std::rc::Rc<std::cell::RefCell<grammar::semantic::ModelNode>> {
+    fn make_model(src: &str) -> std::rc::Rc<std::cell::RefCell<grammar::semantic::ModelNode>> {
         let (ast, _) = parse(src, 0).expect("ошибка парсинга");
         construct_model(&ast, None, &[]).expect("ошибка семантики")
     }
@@ -385,5 +383,67 @@ mod lsp_integration {
     fn hover_empty_file_returns_none() {
         let h = hover_info("", Position::new(0, 0));
         assert!(h.is_none(), "hover в пустом файле → None");
+    }
+
+    #[test]
+    fn hover_big() {
+        const src: &str = r#"// Пример для демонстрации возможностей LSP-сервера BuT.
+//
+// При открытии этого файла в редакторе с поддержкой LSP (например, Zed с but-lsp):
+// - Ошибки и предупреждения подсвечиваются сразу
+// - При наведении на идентификатор отображается его тип
+// - Автодополнение предлагает ключевые слова и имена из модели
+
+type u8 = [bit;8];
+
+/// Перечисление направлений движения робота.
+enum Direction { North, South, East, West }
+
+/// Перечисление приоритетов задачи.
+enum Priority { Low = 0, Medium = 5, High = 10 }
+
+extern fn log(msg: u8);
+
+/// Переменная состояния направления.
+var heading: Direction = 0;
+
+/// Модель управления роботом.
+model Robot {
+    var speed: u8 = 0;
+    var active: bit = false;
+
+    start Idle {
+        enter {
+            speed = 0;
+            active = false;
+        }
+        ref Moving: active;
+    }
+
+    state Moving {
+        always {
+            speed = 100;
+        }
+        ref Idle: true;
+    }
+}
+
+start Main = Robot;
+        "#;
+        let h = hover_info(src, Position::new(421 - 391, 23));
+        assert!(h.is_some(), "hover должен найти переменную условия active");
+        let h = h.unwrap();
+        if let lsp_types::HoverContents::Markup(mc) = h.contents {
+            assert!(
+                mc.value.contains("active"),
+                "hover должен содержать имя элемента условия: {}",
+                mc.value
+            );
+            assert!(
+                mc.value.contains("var"),
+                "hover должен указывать 'var': {}",
+                mc.value
+            );
+        }
     }
 }

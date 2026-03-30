@@ -43,7 +43,10 @@ fn extract_name(id: Option<Identifier>) -> Result<String, Diagnostic> {
     if let Some(id) = id {
         Ok(id.name.clone())
     } else {
-        Err(Diagnostic::error(Location::Implicit, "Идентификатор не задан".to_string()))
+        Err(Diagnostic::error(
+            Location::Implicit,
+            "Идентификатор не задан".to_string(),
+        ))
     }
 }
 
@@ -124,10 +127,12 @@ fn construct_model_stage0(
                     // и, как следствие, некорректное имя (например, "TmpMyModel").
                     let stem = std::path::Path::new(&filename)
                         .file_stem()
-                        .ok_or_else(|| Diagnostic::error(
-                            *import_loc,
-                            format!("Неверный путь к файлу импорта: «{}»", filename),
-                        ))?
+                        .ok_or_else(|| {
+                            Diagnostic::error(
+                                *import_loc,
+                                format!("Неверный путь к файлу импорта: «{}»", filename),
+                            )
+                        })?
                         .to_string_lossy();
                     let model_name = normalize_model_name(&stem);
                     if models.contains_key(&model_name) {
@@ -298,10 +303,12 @@ fn construct_model_stage0(
                                                 | ast::Expression::Number(..)
                                         )
                                     })
-                                    .ok_or_else(|| Diagnostic::error(
-                                        loc,
-                                        "Порт должен быть инициализирован адресом".to_string(),
-                                    ))?,
+                                    .ok_or_else(|| {
+                                        Diagnostic::error(
+                                            loc,
+                                            "Порт должен быть инициализирован адресом".to_string(),
+                                        )
+                                    })?,
                             ),
                         },
                     )
@@ -328,17 +335,30 @@ fn construct_model_stage0(
         } else if let ModelElement::Type(def) = element {
             let name = def.clone().name.name.clone();
             let typ = def.ty.clone();
-            model_node.borrow_mut().types.insert(name.clone(), construct_type(Some(typ), model_node.clone())?);
-            model_node.borrow_mut().type_locs.insert(name.clone(), def.name.loc);
+            model_node
+                .borrow_mut()
+                .types
+                .insert(name.clone(), construct_type(Some(typ), model_node.clone())?);
+            model_node
+                .borrow_mut()
+                .type_locs
+                .insert(name.clone(), def.name.loc);
         } else if let ModelElement::Condition(def) = element {
-            let def_loc = def.as_ref().name.as_ref().map(|id| id.loc).unwrap_or(Location::Implicit);
+            let def_loc = def
+                .as_ref()
+                .name
+                .as_ref()
+                .map(|id| id.loc)
+                .unwrap_or(Location::Implicit);
             let name = def
                 .clone()
                 .name
-                .ok_or_else(|| Diagnostic::error(
-                    def_loc,
-                    "Условие при определении должно иметь имя".to_string(),
-                ))?
+                .ok_or_else(|| {
+                    Diagnostic::error(
+                        def_loc,
+                        "Условие при определении должно иметь имя".to_string(),
+                    )
+                })?
                 .name
                 .clone();
             conditions.insert(
@@ -354,10 +374,12 @@ fn construct_model_stage0(
             let name = def
                 .clone()
                 .name
-                .ok_or_else(|| Diagnostic::error(
-                    def.loc,
-                    "Именованный блок кода при определении должен иметь имя".to_string(),
-                ))?
+                .ok_or_else(|| {
+                    Diagnostic::error(
+                        def.loc,
+                        "Именованный блок кода при определении должен иметь имя".to_string(),
+                    )
+                })?
                 .name
                 .clone();
             let block = match name.as_str() {
@@ -384,10 +406,12 @@ fn construct_model_stage0(
             let name = def
                 .clone()
                 .name
-                .ok_or_else(|| Diagnostic::error(
-                    def.loc,
-                    "При определении функция должна иметь имя".to_string(),
-                ))?
+                .ok_or_else(|| {
+                    Diagnostic::error(
+                        def.loc,
+                        "При определении функция должна иметь имя".to_string(),
+                    )
+                })?
                 .name
                 .clone();
             functions.insert(name.clone(), FunctionNode::Unresolved(*def.clone()));
@@ -427,10 +451,19 @@ fn construct_model_stage0(
             //    Ограничение: enum должен быть объявлен ДО переменных, использующих его как
             //    тип (аналогично псевдонимам `type`). Если enum объявлен после — тип будет
             //    `TypeNode::Unsupported`; это считается ошибкой пользователя.
-            model_node.borrow_mut().enums.insert(enum_name.clone(), enum_node);
+            model_node
+                .borrow_mut()
+                .enums
+                .insert(enum_name.clone(), enum_node);
             if !enum_name.is_empty() {
-                model_node.borrow_mut().types.insert(enum_name.clone(), TypeNode::Enum(enum_name.clone()));
-                model_node.borrow_mut().type_locs.insert(enum_name.clone(), enum_loc);
+                model_node
+                    .borrow_mut()
+                    .types
+                    .insert(enum_name.clone(), TypeNode::Enum(enum_name.clone()));
+                model_node
+                    .borrow_mut()
+                    .type_locs
+                    .insert(enum_name.clone(), enum_loc);
             }
         }
     }
@@ -940,10 +973,7 @@ pub fn construct_states(
             let name = def
                 .clone()
                 .name
-                .ok_or_else(|| Diagnostic::error(
-                    def.loc,
-                    "Имя состояния не задано".to_string(),
-                ))?
+                .ok_or_else(|| Diagnostic::error(def.loc, "Имя состояния не задано".to_string()))?
                 .name;
             let implements = def.implements.clone();
             let kind = def.kind.clone();
@@ -957,6 +987,7 @@ pub fn construct_states(
                         Condition::None
                     };
                     references.push(Reference {
+                        location: id.loc,
                         name: id.name.clone(),
                         cond,
                         object: Box::new(StateNode::Unresolved),
@@ -973,7 +1004,7 @@ pub fn construct_states(
             }
             let kind = match kind {
                 None => {
-                    if references.len() == 0 {
+                    if references.is_empty() {
                         StateNodeKind::End
                     } else {
                         StateNodeKind::Simple
@@ -995,6 +1026,7 @@ pub fn construct_states(
             let state_loc = def.loc;
             let state = if let Some(expr) = implements {
                 let next = next.map(|n| Reference {
+                    location: state_loc,
                     name: n,
                     cond: Condition::None,
                     object: Box::new(StateNode::Unresolved),
@@ -1070,6 +1102,7 @@ pub fn construct_states(
                                 )
                             })?;
                             Ok(Reference {
+                                location: r.location,
                                 name: r.name,
                                 cond: r.cond,
                                 object: target.clone(),
@@ -1113,13 +1146,14 @@ fn resolve_references(
         .into_iter()
         .map(|r| {
             if let StateNode::Unresolved = *r.object {
-                let target = states
-                    .get(&r.name)
-                    .ok_or_else(|| Diagnostic::error(
+                let target = states.get(&r.name).ok_or_else(|| {
+                    Diagnostic::error(
                         Location::Implicit,
                         format!("Ссылка '{}' не найдена", &r.name),
-                    ))?;
+                    )
+                })?;
                 Ok(Reference {
+                    location: r.location,
                     name: r.name,
                     cond: r.cond,
                     object: target.clone(),
@@ -1149,10 +1183,12 @@ fn construct_named_blocks(
             let name = def
                 .name
                 .as_ref()
-                .ok_or_else(|| Diagnostic::error(
-                    def.loc,
-                    "Именованный блок кода при определении должен иметь имя".to_string(),
-                ))?
+                .ok_or_else(|| {
+                    Diagnostic::error(
+                        def.loc,
+                        "Именованный блок кода при определении должен иметь имя".to_string(),
+                    )
+                })?
                 .name
                 .clone();
             let block = match name.as_str() {
@@ -1244,12 +1280,9 @@ fn construct_implement_ast(
     match expr {
         ast::Expression::Variable(id) => {
             let borrowed = model.as_ref().borrow();
-            let found = borrowed
-                .search_model(&id.name)
-                .ok_or_else(|| Diagnostic::error(
-                    id.loc,
-                    format!("Модель '{}' не найдена", &id.name),
-                ))?;
+            let found = borrowed.search_model(&id.name).ok_or_else(|| {
+                Diagnostic::error(id.loc, format!("Модель '{}' не найдена", &id.name))
+            })?;
             Ok(Implement::Model(Rc::clone(&found)))
         }
         ast::Expression::Parenthesis(_, inner) => construct_implement_ast(*inner, model),

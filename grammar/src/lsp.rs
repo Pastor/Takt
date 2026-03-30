@@ -6,12 +6,12 @@
 //!
 //! Модуль включается только при наличии флага `lsp`.
 
+use crate::semantic;
 use cell::RefCell;
-use std::cell;
 use lsp_types::*;
 use semantic::index::SemanticNodeRef;
 use semantic::{FunctionNode, ModelNode, VariableNode};
-use crate::semantic;
+use std::cell;
 
 /// Типы семантических токенов (порядок важен — индекс используется как тип в легенде).
 pub const SEMANTIC_TOKEN_TYPES: &[SemanticTokenType] = &[
@@ -293,8 +293,8 @@ pub fn position_to_offset(source: &str, position: Position) -> Option<usize> {
     // Обрабатываем последнюю строку (без завершающего '\n')
     if current_line == target_line {
         let line_text = source[line_start..].lines().next().unwrap_or("");
-        let col_byte = utf16_to_byte_offset(line_text, position.character as usize)
-            .unwrap_or(line_text.len());
+        let col_byte =
+            utf16_to_byte_offset(line_text, position.character as usize).unwrap_or(line_text.len());
         return Some(line_start + col_byte);
     }
 
@@ -385,12 +385,8 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             for (name, var) in &borrowed.variables {
                 let detail = match var {
                     VariableNode::Simple { ty, .. } => Some(format!("{:?}", ty)),
-                    VariableNode::Const { ty, .. } => {
-                        Some(format!("const: {:?}", ty))
-                    }
-                    VariableNode::Port { ty, .. } => {
-                        Some(format!("port: {:?}", ty))
-                    }
+                    VariableNode::Const { ty, .. } => Some(format!("const: {:?}", ty)),
+                    VariableNode::Port { ty, .. } => Some(format!("port: {:?}", ty)),
                     VariableNode::Unresolved => None,
                 };
                 items.push(CompletionItem {
@@ -404,15 +400,9 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             // Имена функций
             for (name, func) in &borrowed.functions {
                 let detail = match func {
-                    FunctionNode::Local { ret, .. } => {
-                        Some(format!("fn -> {:?}", ret))
-                    }
-                    FunctionNode::External { ret, .. } => {
-                        Some(format!("extern fn -> {:?}", ret))
-                    }
-                    FunctionNode::Builtin(_, _, ret) => {
-                        Some(format!("builtin fn -> {:?}", ret))
-                    }
+                    FunctionNode::Local { ret, .. } => Some(format!("fn -> {:?}", ret)),
+                    FunctionNode::External { ret, .. } => Some(format!("extern fn -> {:?}", ret)),
+                    FunctionNode::Builtin(_, _, ret) => Some(format!("builtin fn -> {:?}", ret)),
                     _ => None,
                 };
                 items.push(CompletionItem {
@@ -562,8 +552,7 @@ pub fn word_at_position(source: &str, position: Position) -> Option<String> {
 pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     // Строим семантическую модель с привязкой doc-комментариев
     let (ast, comments) = crate::parse(source, 0).ok()?;
-    let model =
-        semantic::tree::construct_model_with_docs(&ast, None, &[], &comments).ok()?;
+    let model = semantic::tree::construct_model_with_docs(&ast, None, &[], &comments).ok()?;
     let borrowed = model.borrow();
 
     // Шаг 1: пытаемся найти узел по точной позиции в объявлении
@@ -594,35 +583,34 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
         text
     };
 
-    let make_func_hover =
-        |func: &FunctionNode, word: &str, doc: &[String]| {
-            let sig = match func {
-                FunctionNode::Local { params, ret, .. } => {
-                    let ps: Vec<String> = params
-                        .iter()
-                        .map(|(n, t)| format!("{}: {:?}", n, t))
-                        .collect();
-                    format!("fn {}({}) -> {:?}", word, ps.join(", "), ret)
-                }
-                FunctionNode::External { params, ret, .. } => {
-                    let ps: Vec<String> = params
-                        .iter()
-                        .map(|(n, t)| format!("{}: {:?}", n, t))
-                        .collect();
-                    format!("extern fn {}({}) -> {:?}", word, ps.join(", "), ret)
-                }
-                FunctionNode::Builtin(name, params, ret) => {
-                    format!("builtin fn {}({} params) -> {:?}", name, params.len(), ret)
-                }
-                _ => format!("fn {}", word),
-            };
-            let mut text = format!("```but\n{}\n```", sig);
-            if !doc.is_empty() {
-                text.push_str("\n\n");
-                text.push_str(&doc.join("\n"));
+    let make_func_hover = |func: &FunctionNode, word: &str, doc: &[String]| {
+        let sig = match func {
+            FunctionNode::Local { params, ret, .. } => {
+                let ps: Vec<String> = params
+                    .iter()
+                    .map(|(n, t)| format!("{}: {:?}", n, t))
+                    .collect();
+                format!("fn {}({}) -> {:?}", word, ps.join(", "), ret)
             }
-            text
+            FunctionNode::External { params, ret, .. } => {
+                let ps: Vec<String> = params
+                    .iter()
+                    .map(|(n, t)| format!("{}: {:?}", n, t))
+                    .collect();
+                format!("extern fn {}({}) -> {:?}", word, ps.join(", "), ret)
+            }
+            FunctionNode::Builtin(name, params, ret) => {
+                format!("builtin fn {}({} params) -> {:?}", name, params.len(), ret)
+            }
+            _ => format!("fn {}", word),
         };
+        let mut text = format!("```but\n{}\n```", sig);
+        if !doc.is_empty() {
+            text.push_str("\n\n");
+            text.push_str(&doc.join("\n"));
+        }
+        text
+    };
 
     let mut hover_text = String::new();
 
@@ -634,10 +622,7 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     use crate::semantic::index::SemanticNodeKind;
     if let Some(ref node_ref) = position_node {
         // Клонируем Rc в именованный биндинг, чтобы продлить его жизнь на весь блок
-        let node_model_rc = node_ref
-            .model
-            .clone()
-            .unwrap_or_else(|| model.clone());
+        let node_model_rc = node_ref.model.clone().unwrap_or_else(|| model.clone());
         let node_model = node_model_rc.borrow();
         // Документация берётся из модели, содержащей элемент (не из корневой)
         let doc = node_model.element_doc(&word);
@@ -694,9 +679,7 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
                     hover_text = text;
                 }
             }
-            SemanticNodeKind::State
-            | SemanticNodeKind::StartState
-            | SemanticNodeKind::EndState => {
+            SemanticNodeKind::State | SemanticNodeKind::StartState | SemanticNodeKind::EndState => {
                 let kind_label = match node_ref.kind {
                     SemanticNodeKind::StartState => "start state",
                     SemanticNodeKind::EndState => "end state",
@@ -716,6 +699,26 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
                     text.push_str(&doc.join("\n"));
                 }
                 hover_text = text;
+            }
+            SemanticNodeKind::Reference => {
+                let mut text = format!("```but\nstate {}\n```", word);
+                if !doc.is_empty() {
+                    text.push_str("\n\n");
+                    text.push_str(&doc.join("\n"));
+                }
+                hover_text = text;
+            }
+            SemanticNodeKind::ReferenceCondition => {
+                // Ищем переменную или функцию в модели, содержащей условие
+                if let Some(var) = node_model.search_var(&word) {
+                    hover_text = make_var_hover(&var, &word, &doc);
+                } else if let Some(func_rc) = node_model.search_func(&word) {
+                    let func = func_rc.borrow();
+                    hover_text = make_func_hover(&func, &word, &doc);
+                } else {
+                    // Запасной вариант: показываем имя как есть
+                    hover_text = format!("```but\n{}\n```", word);
+                }
             }
         }
     }
@@ -1718,14 +1721,10 @@ start S = M;
         let tokens = semantic_tokens(VALID_SRC);
         // Проверяем, что токены сформированы и дельта-кодирование корректно:
         // delta_line строго неотрицательна (u32), delta_start < character на той же строке.
-        let mut prev_line = 0u32;
         for tok in &tokens.data {
-            assert!(
-                tok.delta_line >= 0 || prev_line == 0,
-                "delta_line всегда >= 0 (тип u32)"
-            );
+            // delta_line — u32, поэтому неотрицательность гарантирована типом.
+            // Дополнительно проверяем, что нулевые токены отфильтрованы.
             assert!(tok.length > 0, "нулевые токены отфильтровываются");
-            prev_line += tok.delta_line;
         }
     }
 

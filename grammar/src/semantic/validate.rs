@@ -144,7 +144,7 @@ fn validate_cond(
             if let Some(context) = context
                 && let ast::Condition::Variable(id) = cond.clone()
             {
-                if let Condition::Function(func, args) = context
+                if let Condition::Function(func, args, _) = context
                     && let FunctionNode::Builtin(name, ..) = *func.borrow()
                     && name == "S"
                     && args.len() == 1
@@ -180,7 +180,7 @@ fn validate_cond(
         Condition::BitAccess(cond, _) => {
             validate_cond(None, &cond, model.clone())?;
         }
-        Condition::Function(_, conds) => {
+        Condition::Function(_, conds, _) => {
             for cond in conds {
                 validate_cond(None, &cond, model.clone())?;
             }
@@ -232,7 +232,7 @@ fn validate_cond(
         Condition::Rational(_, _) => {}
         Condition::String(_) => {}
         Condition::Bool(_) => {}
-        Condition::Variable(_var) => {}
+        Condition::Variable(_var, _) => {}
         Condition::Model(_model) => {}
         Condition::State(_state) => {}
     }
@@ -537,8 +537,8 @@ fn is_boolean_semantic_condition(cond: &Condition) -> bool {
         Condition::Not(_) => true,
         Condition::Parenthesis(inner) => is_boolean_semantic_condition(inner),
         // Тип возврата функции неизвестен — не предупреждаем
-        Condition::Function(_, _) => true,
-        Condition::Variable(v) => {
+        Condition::Function(_, _, _) => true,
+        Condition::Variable(v, _) => {
             let borrowed = v.borrow();
             match &*borrowed {
                 VariableNode::Simple { ty, .. }
@@ -562,7 +562,7 @@ fn semantic_condition_summary(cond: &Condition) -> String {
             format!("вещественный литерал {}{}", if *neg { "-" } else { "" }, s)
         }
         Condition::String(_) => "строковый литерал".to_string(),
-        Condition::Variable(v) => {
+        Condition::Variable(v, _) => {
             let borrowed = v.borrow();
             let (name_str, ty) = match &*borrowed {
                 VariableNode::Simple { name, ty, .. }

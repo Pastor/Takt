@@ -34,7 +34,11 @@
 //! ```
 
 use crate::diagnostics::Location;
-use crate::semantic::{FunctionNode, ModelNode, StateNodeKind, VariableNode};
+use crate::parser::ast;
+use crate::semantic::{
+    Condition, Expression, FunctionNode, ModelNode, NamedCodeBlock, StateNode, StateNodeKind,
+    Statement, VariableNode,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -57,6 +61,10 @@ pub enum SemanticNodeKind {
     ExternFunction,
     /// Обычное состояние автомата (`state`).
     State,
+    /// Ссылка-переход на другое состояние (`ref Имя [: условие]`).
+    Reference,
+    /// Ссылка на идентификатор внутри условия перехода (переменная или функция).
+    ReferenceCondition,
     /// Начальное состояние автомата (`start`).
     StartState,
     /// Конечное состояние автомата (`end`).
@@ -283,13 +291,12 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
     for (name, state) in &borrowed.states {
         let loc = state.loc();
         let kind = match state {
-            crate::semantic::StateNode::Simple { kind, .. }
-            | crate::semantic::StateNode::Implement { kind, .. } => match kind {
+            StateNode::Simple { kind, .. } | StateNode::Implement { kind, .. } => match kind {
                 StateNodeKind::Start => SemanticNodeKind::StartState,
                 StateNodeKind::End => SemanticNodeKind::EndState,
                 StateNodeKind::Simple => SemanticNodeKind::State,
             },
-            crate::semantic::StateNode::Unresolved => continue,
+            StateNode::Unresolved => continue,
         };
         if let Location::Source(_, start, end) = loc {
             entries.push(IndexEntry {
@@ -302,6 +309,31 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
                     model: Some(model.clone()),
                 },
             });
+        }
+
+        for reference in state.references() {
+            let loc = reference.location;
+            if let Location::Source(_, start, end) = loc {
+                entries.push(IndexEntry {
+                    start,
+                    end,
+                    node_ref: SemanticNodeRef {
+                        name: reference.name.clone(),
+                        kind: SemanticNodeKind::Reference,
+                        loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+            // Добавляем записи для идентификаторов, встретившихся в условии перехода.
+            // Для разрешённых условий позиции использования теряются при семантическом
+            // понижении; функция добавляет записи только для Condition::Unresolved
+            // (ситуация неудавшегося разрешения ссылки).
+            collect_condition_entries(&reference.cond, model, entries);
+        }
+        // Именованные блоки состояния (enter, exit, always, …)
+        for nb in state.named_blocks() {
+            collect_named_block_entries(nb, model, entries);
         }
     }
 
@@ -359,13 +391,524 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
         }
     }
 
+    // Именованные блоки модели (always, enter, exit, …)
     for nb in &borrowed.named_blocks {
-        //TODO: Реализовать
+        collect_named_block_entries(nb, model, entries);
     }
 
     // Рекурсивно обходим вложенные именованные модели
     for nested in borrowed.models.values() {
         collect_model_entries(nested, entries);
+    }
+}
+
+// ─── Вспомогательные функции: условия переходов ──────────────────────────────
+
+/// Рекурсивно обходит семантическое условие перехода и собирает записи
+/// для идентификаторов, позиция которых ещё сохранена в дереве.
+///
+/// Добавляет записи только для [`Condition::Unresolved`], когда АСД-узел
+/// сохраняет исходные байтовые позиции. Разрешённые варианты
+/// (`Variable`, `Function`, …) не несут позиции *использования*:
+/// в них хранится ссылка на узел *объявления*, а не на место употребления,
+/// поэтому добавлять их в индекс по позиции объявления было бы ошибкой.
+///
+/// ## Когда имеет эффект
+///
+/// Функция добавляет записи, только если условие не было разрешено
+/// в ходе семантического анализа — например, при ссылке на несуществующий
+/// идентификатор. В успешно построенной модели условия разрешены, и функция
+/// не добавляет ни одной записи (но рекурсивно обходит составные условия).
+///
+/// ## Пример
+///
+/// ```text
+/// // Условие разрешено → записей нет
+/// Condition::Variable(var_rc)  →  (нет записей)
+///
+/// // Условие не разрешено → запись добавляется
+/// Condition::Unresolved(ast::Variable(id@"x", loc=5..6))  →  IndexEntry("x", 5, 6)
+/// ```
+fn collect_condition_entries(
+    cond: &Condition,
+    model: &Rc<RefCell<ModelNode>>,
+    entries: &mut Vec<IndexEntry>,
+) {
+    match cond {
+        // Единственный случай, когда позиция использования сохранена — АСД-форма
+        Condition::Unresolved(ast_cond) => {
+            collect_ast_condition_entries(ast_cond, model, entries);
+        }
+        // Бинарные операторы: обходим оба операнда
+        Condition::And(l, r)
+        | Condition::Or(l, r)
+        | Condition::Add(l, r)
+        | Condition::Subtract(l, r)
+        | Condition::Less(l, r)
+        | Condition::More(l, r)
+        | Condition::LessEqual(l, r)
+        | Condition::MoreEqual(l, r)
+        | Condition::Equal(l, r)
+        | Condition::NotEqual(l, r) => {
+            collect_condition_entries(l, model, entries);
+            collect_condition_entries(r, model, entries);
+        }
+        // Унарные операторы
+        Condition::Not(c) | Condition::Parenthesis(c) => {
+            collect_condition_entries(c, model, entries);
+        }
+        Condition::BitAccess(c, _) => {
+            collect_condition_entries(c, model, entries);
+        }
+        Condition::Function(func_rc, args, loc) => {
+            // Позиция имени функции сохранена — добавляем запись
+            if let Location::Source(_, start, end) = loc {
+                let name = func_rc.borrow().name().to_string();
+                entries.push(IndexEntry {
+                    start: *start,
+                    end: *end,
+                    node_ref: SemanticNodeRef {
+                        name,
+                        kind: SemanticNodeKind::ReferenceCondition,
+                        loc: *loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+            for arg in args {
+                collect_condition_entries(arg, model, entries);
+            }
+        }
+        // Позиция использования переменной сохранена — добавляем запись
+        Condition::Variable(var_rc, loc) => {
+            if let Location::Source(_, start, end) = loc {
+                let name = var_rc.borrow().name().to_string();
+                entries.push(IndexEntry {
+                    start: *start,
+                    end: *end,
+                    node_ref: SemanticNodeRef {
+                        name,
+                        kind: SemanticNodeKind::ReferenceCondition,
+                        loc: *loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+        }
+        // Прочие терминальные варианты (None, Number, Bool, Rational, …) — не индексируются
+        _ => {}
+    }
+}
+
+/// Рекурсивно извлекает записи [`SemanticNodeKind::ReferenceCondition`] из АСД-условия.
+///
+/// Находит [`ast::Condition::Variable`] и [`ast::Condition::Function`]
+/// с [`Location::Source`] и добавляет `IndexEntry` для каждого.
+///
+/// ## Примеры
+///
+/// ```text
+/// // Переменная в условии → запись с именем и позицией
+/// ast::Condition::Variable(id@"flag", loc=Source(0, 10, 14))
+///     → IndexEntry { start:10, end:14, name:"flag", kind:ReferenceCondition }
+///
+/// // Вызов функции → запись для имени функции + рекурсивно по аргументам
+/// ast::Condition::Function(_, id@"check", [Variable("x")])
+///     → IndexEntry("check"), IndexEntry("x")
+/// ```
+///
+/// ## Контрпримеры
+///
+/// ```text
+/// // Переменная с Builtin-позицией → запись НЕ добавляется
+/// ast::Condition::Variable(Identifier { loc: Builtin, name: "built_in" })
+///     → (нет записей)
+///
+/// // Числовой литерал → запись НЕ добавляется
+/// ast::Condition::Number(_, 42)  →  (нет записей)
+/// ```
+fn collect_ast_condition_entries(
+    cond: &ast::Condition,
+    model: &Rc<RefCell<ModelNode>>,
+    entries: &mut Vec<IndexEntry>,
+) {
+    match cond {
+        ast::Condition::Variable(id) => {
+            if let Location::Source(_, start, end) = id.loc {
+                entries.push(IndexEntry {
+                    start,
+                    end,
+                    node_ref: SemanticNodeRef {
+                        name: id.name.clone(),
+                        kind: SemanticNodeKind::ReferenceCondition,
+                        loc: id.loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+        }
+        ast::Condition::Function(_, id, args) => {
+            if let Location::Source(_, start, end) = id.loc {
+                entries.push(IndexEntry {
+                    start,
+                    end,
+                    node_ref: SemanticNodeRef {
+                        name: id.name.clone(),
+                        kind: SemanticNodeKind::ReferenceCondition,
+                        loc: id.loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+            for arg in args {
+                collect_ast_condition_entries(arg, model, entries);
+            }
+        }
+        ast::Condition::ArraySubscript(_, id, _) => {
+            if let Location::Source(_, start, end) = id.loc {
+                entries.push(IndexEntry {
+                    start,
+                    end,
+                    node_ref: SemanticNodeRef {
+                        name: id.name.clone(),
+                        kind: SemanticNodeKind::ReferenceCondition,
+                        loc: id.loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+        }
+        // Бинарные операторы — рекурсивный обход
+        ast::Condition::And(_, l, r)
+        | ast::Condition::Or(_, l, r)
+        | ast::Condition::Add(_, l, r)
+        | ast::Condition::Subtract(_, l, r)
+        | ast::Condition::Less(_, l, r)
+        | ast::Condition::More(_, l, r)
+        | ast::Condition::LessEqual(_, l, r)
+        | ast::Condition::MoreEqual(_, l, r)
+        | ast::Condition::Equal(_, l, r)
+        | ast::Condition::NotEqual(_, l, r) => {
+            collect_ast_condition_entries(l, model, entries);
+            collect_ast_condition_entries(r, model, entries);
+        }
+        // Унарные операторы
+        ast::Condition::Not(_, c) | ast::Condition::Parenthesis(_, c) => {
+            collect_ast_condition_entries(c, model, entries);
+        }
+        ast::Condition::BitAccess(_, c, _) => {
+            collect_ast_condition_entries(c, model, entries);
+        }
+        // Литералы (Number, Rational, String, Bool) — не индексируются
+        _ => {}
+    }
+}
+
+// ─── Вспомогательные функции: именованные блоки кода ─────────────────────────
+
+/// Обходит тело именованного блока кода и добавляет записи для идентификаторов,
+/// чьи позиции сохранились в семантическом дереве.
+///
+/// ## Ограничение
+///
+/// Семантический [`NamedCodeBlock`] **не хранит позицию объявления блока** (`loc`):
+/// ключевые слова `enter`, `exit`, `always`, `<custom>` не могут быть
+/// найдены через индекс. Для устранения ограничения необходимо добавить поле
+/// `loc: Location` в [`NamedCodeBlock`].
+///
+/// В успешно построенных моделях тело полностью разрешено и позиции
+/// использования переменных/функций не сохраняются; функция добавляет записи
+/// только для неразрешённых подвыражений (`Statement::Unresolved` /
+/// `Expression::Unresolved`).
+fn collect_named_block_entries(
+    nb: &NamedCodeBlock,
+    model: &Rc<RefCell<ModelNode>>,
+    entries: &mut Vec<IndexEntry>,
+) {
+    let body = match nb {
+        NamedCodeBlock::Enter { body, .. }
+        | NamedCodeBlock::Exit { body, .. }
+        | NamedCodeBlock::Always { body, .. }
+        | NamedCodeBlock::Unknown { body, .. } => body,
+        // None/Unresolved — тело отсутствует или ещё не прикреплено
+        NamedCodeBlock::None | NamedCodeBlock::Unresolved(..) => return,
+    };
+    collect_statement_entries(body, model, entries);
+}
+
+/// Рекурсивно обходит семантический оператор, собирая записи из неразрешённых
+/// подвыражений.
+///
+/// Для разрешённых операторов рекурсивно обходит вложенные блоки
+/// (`Block`, `If`, `Loop`, `For`), чтобы добраться до возможных
+/// `Statement::Unresolved` или `Expression::Unresolved` вглубь дерева.
+fn collect_statement_entries(
+    stmt: &Statement,
+    model: &Rc<RefCell<ModelNode>>,
+    entries: &mut Vec<IndexEntry>,
+) {
+    match stmt {
+        // АСД-оператор, ещё не прошедший семантическое понижение
+        Statement::Unresolved(ast_stmt) => {
+            collect_ast_statement_entries(ast_stmt, model, entries);
+        }
+        Statement::Block(stmts) => {
+            for s in stmts {
+                collect_statement_entries(s, model, entries);
+            }
+        }
+        Statement::Expression(expr) => {
+            collect_semantic_expression_entries(expr, model, entries);
+        }
+        Statement::If { then_, else_, .. } => {
+            collect_statement_entries(then_, model, entries);
+            if let Some(e) = else_ {
+                collect_statement_entries(e, model, entries);
+            }
+        }
+        Statement::Loop { body, .. } => {
+            collect_statement_entries(body, model, entries);
+        }
+        Statement::For { init, body, .. } => {
+            if let Some(i) = init {
+                collect_statement_entries(i, model, entries);
+            }
+            collect_statement_entries(body, model, entries);
+        }
+        // Return, Variable, Continue, Break, None — нет вложенных подвыражений
+        // с отслеживаемыми позициями
+        _ => {}
+    }
+}
+
+/// Обрабатывает семантическое выражение: добавляет записи только для
+/// [`Expression::Unresolved`], где АСД-форма сохраняет позиции идентификаторов.
+///
+/// Для всех разрешённых вариантов позиция использования потеряна в ходе
+/// семантического понижения — они пропускаются.
+fn collect_semantic_expression_entries(
+    expr: &Expression,
+    model: &Rc<RefCell<ModelNode>>,
+    entries: &mut Vec<IndexEntry>,
+) {
+    if let Expression::Unresolved(ast_expr) = expr {
+        collect_ast_expression_entries(ast_expr, model, entries);
+    }
+}
+
+/// Рекурсивно обходит АСД-оператор и добавляет записи для переменных и функций.
+///
+/// Используется, когда оператор не был разрешён в ходе семантического анализа
+/// (например, при частичном построении модели или ошибке разрешения).
+///
+/// ## Примеры
+///
+/// ```text
+/// // Блок с присваиванием → рекурсивный обход
+/// Block { stmts: [Expression(_, Assign(_, Variable("x"), Number(1)))] }
+///     → IndexEntry("x", …)
+///
+/// // Оператор Return с выражением → рекурсивный обход
+/// Return(_, Some(Variable("result")))
+///     → IndexEntry("result", …)
+/// ```
+fn collect_ast_statement_entries(
+    stmt: &ast::Statement,
+    model: &Rc<RefCell<ModelNode>>,
+    entries: &mut Vec<IndexEntry>,
+) {
+    match stmt {
+        ast::Statement::Block { statements, .. } => {
+            for s in statements {
+                collect_ast_statement_entries(s, model, entries);
+            }
+        }
+        ast::Statement::Expression(_, expr) => {
+            collect_ast_expression_entries(expr, model, entries);
+        }
+        ast::Statement::If(_, cond, then, else_opt) => {
+            collect_ast_expression_entries(cond, model, entries);
+            collect_ast_statement_entries(then, model, entries);
+            if let Some(e) = else_opt {
+                collect_ast_statement_entries(e, model, entries);
+            }
+        }
+        ast::Statement::Loop(_, cond_opt, body) => {
+            if let Some(c) = cond_opt {
+                collect_ast_expression_entries(c, model, entries);
+            }
+            collect_ast_statement_entries(body, model, entries);
+        }
+        ast::Statement::For(_, init_opt, cond_opt, step_opt, body_opt) => {
+            if let Some(i) = init_opt {
+                collect_ast_statement_entries(i, model, entries);
+            }
+            if let Some(c) = cond_opt {
+                collect_ast_expression_entries(c, model, entries);
+            }
+            if let Some(s) = step_opt {
+                collect_ast_expression_entries(s, model, entries);
+            }
+            if let Some(b) = body_opt {
+                collect_ast_statement_entries(b, model, entries);
+            }
+        }
+        ast::Statement::Return(_, Some(expr)) => {
+            collect_ast_expression_entries(expr, model, entries);
+        }
+        // Continue, Break, Return(None), Variable(нет loc), StraySemicolon, Error,
+        // Assembly, Formula, Args — либо нет идентификаторов, либо не применимы
+        _ => {}
+    }
+}
+
+/// Рекурсивно обходит АСД-выражение и добавляет записи [`SemanticNodeKind::ReferenceCondition`]
+/// для переменных и функций с байтовыми позициями из исходного текста.
+///
+/// ## Примеры
+///
+/// ```text
+/// // Переменная
+/// ast::Expression::Variable(Identifier { loc: Source(0, 8, 12), name: "flag" })
+///     → IndexEntry { start:8, end:12, name:"flag", kind:ReferenceCondition }
+///
+/// // Присваивание: рекурсивно обходим левую и правую части
+/// Assign(_, Variable("x"), Variable("y"))
+///     → IndexEntry("x", …), IndexEntry("y", …)
+///
+/// // Вызов функции: запись для имени + рекурсивно по аргументам
+/// Function(_, id@"log", [Variable("msg")])
+///     → IndexEntry("log", …), IndexEntry("msg", …)
+/// ```
+///
+/// ## Контрпримеры
+///
+/// ```text
+/// // Литерал → запись НЕ добавляется
+/// ast::Expression::Number(_, 42)  →  (нет записей)
+///
+/// // Переменная с Implicit/Builtin-позицией → запись НЕ добавляется
+/// ast::Expression::Variable(Identifier { loc: Implicit, name: "x" })  →  (нет записей)
+/// ```
+fn collect_ast_expression_entries(
+    expr: &ast::Expression,
+    model: &Rc<RefCell<ModelNode>>,
+    entries: &mut Vec<IndexEntry>,
+) {
+    match expr {
+        ast::Expression::Variable(id) => {
+            if let Location::Source(_, start, end) = id.loc {
+                entries.push(IndexEntry {
+                    start,
+                    end,
+                    node_ref: SemanticNodeRef {
+                        name: id.name.clone(),
+                        kind: SemanticNodeKind::ReferenceCondition,
+                        loc: id.loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+        }
+        ast::Expression::Function(_, id, args) => {
+            if let Location::Source(_, start, end) = id.loc {
+                entries.push(IndexEntry {
+                    start,
+                    end,
+                    node_ref: SemanticNodeRef {
+                        name: id.name.clone(),
+                        kind: SemanticNodeKind::ReferenceCondition,
+                        loc: id.loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+            for arg in args {
+                collect_ast_expression_entries(arg, model, entries);
+            }
+        }
+        ast::Expression::ArraySubscript(_, id, _) => {
+            if let Location::Source(_, start, end) = id.loc {
+                entries.push(IndexEntry {
+                    start,
+                    end,
+                    node_ref: SemanticNodeRef {
+                        name: id.name.clone(),
+                        kind: SemanticNodeKind::ReferenceCondition,
+                        loc: id.loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+        }
+        ast::Expression::ArraySlice(_, id, _, _) => {
+            if let Location::Source(_, start, end) = id.loc {
+                entries.push(IndexEntry {
+                    start,
+                    end,
+                    node_ref: SemanticNodeRef {
+                        name: id.name.clone(),
+                        kind: SemanticNodeKind::ReferenceCondition,
+                        loc: id.loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+        }
+        // Бинарные операторы
+        ast::Expression::Power(_, l, r)
+        | ast::Expression::Multiply(_, l, r)
+        | ast::Expression::Divide(_, l, r)
+        | ast::Expression::Modulo(_, l, r)
+        | ast::Expression::Add(_, l, r)
+        | ast::Expression::Subtract(_, l, r)
+        | ast::Expression::ShiftLeft(_, l, r)
+        | ast::Expression::ShiftRight(_, l, r)
+        | ast::Expression::BitwiseAnd(_, l, r)
+        | ast::Expression::BitwiseXor(_, l, r)
+        | ast::Expression::BitwiseOr(_, l, r)
+        | ast::Expression::Less(_, l, r)
+        | ast::Expression::More(_, l, r)
+        | ast::Expression::LessEqual(_, l, r)
+        | ast::Expression::MoreEqual(_, l, r)
+        | ast::Expression::Equal(_, l, r)
+        | ast::Expression::NotEqual(_, l, r)
+        | ast::Expression::And(_, l, r)
+        | ast::Expression::Or(_, l, r)
+        | ast::Expression::Assign(_, l, r) => {
+            collect_ast_expression_entries(l, model, entries);
+            collect_ast_expression_entries(r, model, entries);
+        }
+        // Унарные операторы
+        ast::Expression::Not(_, c)
+        | ast::Expression::BitwiseNot(_, c)
+        | ast::Expression::UnaryPlus(_, c)
+        | ast::Expression::Negate(_, c)
+        | ast::Expression::Parenthesis(_, c) => {
+            collect_ast_expression_entries(c, model, entries);
+        }
+        ast::Expression::BitAccess(_, c, _) | ast::Expression::Cast(_, c, _) => {
+            collect_ast_expression_entries(c, model, entries);
+        }
+        ast::Expression::Array(_, items) | ast::Expression::Initializer(_, items) => {
+            for item in items {
+                collect_ast_expression_entries(item, model, entries);
+            }
+        }
+        ast::Expression::ConditionalOperator(_, cond, then, else_) => {
+            collect_ast_expression_entries(cond, model, entries);
+            collect_ast_expression_entries(then, model, entries);
+            collect_ast_expression_entries(else_, model, entries);
+        }
+        ast::Expression::CodeBlock(_, expr, stmt) => {
+            collect_ast_expression_entries(expr, model, entries);
+            collect_ast_statement_entries(stmt, model, entries);
+        }
+        ast::Expression::NamedFunction(_, expr, _) => {
+            collect_ast_expression_entries(expr, model, entries);
+        }
+        // Литералы (Number, Rational, String, Bool, Type, Address, List) — не индексируются
+        _ => {}
     }
 }
 
@@ -549,5 +1092,402 @@ mod tests {
         let node = node.unwrap();
         assert_eq!(node.name, "send");
         assert_eq!(node.kind, SemanticNodeKind::ExternFunction);
+    }
+
+    // ── Тесты collect_ast_condition_entries ───────────────────────────────────
+
+    /// Переменная с Source-позицией добавляет ReferenceCondition-запись.
+    ///
+    /// # Пример
+    /// `ast::Condition::Variable(id@"flag", loc=Source(0,5,9))` →
+    /// `IndexEntry { start:5, end:9, name:"flag", kind:ReferenceCondition }`
+    #[test]
+    fn ast_condition_variable_adds_reference_condition() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::Identifier;
+
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        let id = Identifier {
+            loc: Location::Source(0, 5, 9),
+            name: "flag".into(),
+        };
+        let cond = crate::parser::ast::Condition::Variable(id);
+        collect_ast_condition_entries(&cond, &model, &mut entries);
+
+        assert_eq!(entries.len(), 1, "ожидается одна запись");
+        assert_eq!(entries[0].node_ref.name, "flag");
+        assert_eq!(
+            entries[0].node_ref.kind,
+            SemanticNodeKind::ReferenceCondition
+        );
+        assert_eq!(entries[0].start, 5);
+        assert_eq!(entries[0].end, 9);
+    }
+
+    /// Переменная с Builtin-позицией не добавляет записей.
+    ///
+    /// # Контрпример
+    /// `ast::Condition::Variable(id@"built", loc=Builtin)` → `(нет записей)`
+    #[test]
+    fn ast_condition_variable_builtin_loc_no_entry() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::Identifier;
+
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        let id = Identifier {
+            loc: Location::Builtin,
+            name: "built".into(),
+        };
+        let cond = crate::parser::ast::Condition::Variable(id);
+        collect_ast_condition_entries(&cond, &model, &mut entries);
+
+        assert!(
+            entries.is_empty(),
+            "Builtin-позиция не должна давать запись"
+        );
+    }
+
+    /// Бинарный оператор (AND) рекурсивно обходит оба операнда.
+    ///
+    /// # Пример
+    /// `And(loc, Variable("a",1..2), Variable("b",5..6))` →
+    /// `IndexEntry("a",1,2), IndexEntry("b",5,6)`
+    #[test]
+    fn ast_condition_and_recurses_both_operands() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::{Condition as AstCond, Identifier};
+
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        let loc = Location::Source(0, 0, 10);
+        let a = AstCond::Variable(Identifier {
+            loc: Location::Source(0, 1, 2),
+            name: "a".into(),
+        });
+        let b = AstCond::Variable(Identifier {
+            loc: Location::Source(0, 5, 6),
+            name: "b".into(),
+        });
+        let cond = AstCond::And(loc, Box::new(a), Box::new(b));
+        collect_ast_condition_entries(&cond, &model, &mut entries);
+
+        assert_eq!(entries.len(), 2, "должны добавиться обе переменные");
+        let names: Vec<&str> = entries.iter().map(|e| e.node_ref.name.as_str()).collect();
+        assert!(names.contains(&"a"), "ожидается переменная 'a'");
+        assert!(names.contains(&"b"), "ожидается переменная 'b'");
+    }
+
+    /// Функция в условии добавляет запись для имени функции.
+    ///
+    /// # Пример
+    /// `Function(loc, id@"check", [Variable("x")])` →
+    /// `IndexEntry("check"), IndexEntry("x")`
+    #[test]
+    fn ast_condition_function_adds_function_entry() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::{Condition as AstCond, Identifier};
+
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        let fn_id = Identifier {
+            loc: Location::Source(0, 0, 5),
+            name: "check".into(),
+        };
+        let arg = AstCond::Variable(Identifier {
+            loc: Location::Source(0, 6, 7),
+            name: "x".into(),
+        });
+        let cond = AstCond::Function(Location::Source(0, 0, 8), fn_id, vec![arg]);
+        collect_ast_condition_entries(&cond, &model, &mut entries);
+
+        assert_eq!(
+            entries.len(),
+            2,
+            "ожидается запись для функции и для аргумента"
+        );
+        assert_eq!(entries[0].node_ref.name, "check");
+        assert_eq!(entries[1].node_ref.name, "x");
+    }
+
+    /// Числовой литерал в условии не добавляет записей.
+    ///
+    /// # Контрпример
+    /// `ast::Condition::Number(loc, 42)` → `(нет записей)`
+    #[test]
+    fn ast_condition_number_literal_no_entry() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::Condition as AstCond;
+
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        let cond = AstCond::Number(Location::Source(0, 0, 2), 42);
+        collect_ast_condition_entries(&cond, &model, &mut entries);
+
+        assert!(
+            entries.is_empty(),
+            "числовой литерал не должен давать запись"
+        );
+    }
+
+    /// NOT-оператор рекурсивно обходит вложенное условие.
+    ///
+    /// # Пример
+    /// `Not(loc, Variable("ready", 4..9))` → `IndexEntry("ready", 4, 9)`
+    #[test]
+    fn ast_condition_not_recurses_into_operand() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::{Condition as AstCond, Identifier};
+
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        let inner = AstCond::Variable(Identifier {
+            loc: Location::Source(0, 4, 9),
+            name: "ready".into(),
+        });
+        let cond = AstCond::Not(Location::Source(0, 3, 9), Box::new(inner));
+        collect_ast_condition_entries(&cond, &model, &mut entries);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].node_ref.name, "ready");
+    }
+
+    // ── Тесты collect_condition_entries (семантическое условие) ──────────────
+
+    /// Разрешённое условие с переменной добавляет ReferenceCondition-запись с позицией использования.
+    ///
+    /// # Пример
+    /// `ref T: flag;` — `flag` разрешена в `Condition::Variable(var, loc_use)` →
+    /// в индексе есть запись `ReferenceCondition` для `flag` по позиции её имени в условии.
+    #[test]
+    fn collect_condition_entries_resolved_variable_adds_entry() {
+        //      0         1         2         3         4         5
+        //      012345678901234567890123456789012345678901234567890123456789
+        let src = "var flag: bit = false; start S { ref T: flag; } state T;";
+        let index = build_index(src);
+        let rc_entries: Vec<_> = index
+            .entries
+            .iter()
+            .filter(|e| e.node_ref.kind == SemanticNodeKind::ReferenceCondition)
+            .collect();
+        // Ожидается ровно одна запись — для "flag" в условии перехода
+        assert_eq!(
+            rc_entries.len(),
+            1,
+            "ожидается одна ReferenceCondition-запись для 'flag': {:?}",
+            rc_entries
+        );
+        assert_eq!(rc_entries[0].node_ref.name, "flag");
+    }
+
+    /// Condition::None не добавляет записей.
+    #[test]
+    fn collect_condition_entries_none_no_entry() {
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        collect_condition_entries(&Condition::None, &model, &mut entries);
+        assert!(
+            entries.is_empty(),
+            "Condition::None не должен давать записей"
+        );
+    }
+
+    /// Condition::Bool не добавляет записей (нет идентификатора).
+    #[test]
+    fn collect_condition_entries_bool_no_entry() {
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        collect_condition_entries(&Condition::Bool(true), &model, &mut entries);
+        assert!(
+            entries.is_empty(),
+            "Condition::Bool не должен давать записей"
+        );
+    }
+
+    // ── Тесты collect_ast_expression_entries ─────────────────────────────────
+
+    /// Переменная в выражении добавляет ReferenceCondition-запись.
+    ///
+    /// # Пример
+    /// `ast::Expression::Variable(id@"speed", loc=Source(0,0,5))` →
+    /// `IndexEntry { start:0, end:5, name:"speed", kind:ReferenceCondition }`
+    #[test]
+    fn ast_expression_variable_adds_entry() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::{Expression as AstExpr, Identifier};
+
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        let id = Identifier {
+            loc: Location::Source(0, 0, 5),
+            name: "speed".into(),
+        };
+        let expr = AstExpr::Variable(id);
+        collect_ast_expression_entries(&expr, &model, &mut entries);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].node_ref.name, "speed");
+        assert_eq!(
+            entries[0].node_ref.kind,
+            SemanticNodeKind::ReferenceCondition
+        );
+    }
+
+    /// Присваивание рекурсивно обходит левую и правую части.
+    ///
+    /// # Пример
+    /// `Assign(_, Variable("x"), Variable("y"))` →
+    /// `IndexEntry("x"), IndexEntry("y")`
+    #[test]
+    fn ast_expression_assign_recurses_both_sides() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::{Expression as AstExpr, Identifier};
+
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        let x = AstExpr::Variable(Identifier {
+            loc: Location::Source(0, 0, 1),
+            name: "x".into(),
+        });
+        let y = AstExpr::Variable(Identifier {
+            loc: Location::Source(0, 4, 5),
+            name: "y".into(),
+        });
+        let expr = AstExpr::Assign(Location::Source(0, 0, 5), Box::new(x), Box::new(y));
+        collect_ast_expression_entries(&expr, &model, &mut entries);
+
+        assert_eq!(entries.len(), 2);
+        let names: Vec<&str> = entries.iter().map(|e| e.node_ref.name.as_str()).collect();
+        assert!(names.contains(&"x"));
+        assert!(names.contains(&"y"));
+    }
+
+    /// Числовой литерал в выражении не добавляет записей.
+    ///
+    /// # Контрпример
+    /// `ast::Expression::Number(loc, 7)` → `(нет записей)`
+    #[test]
+    fn ast_expression_number_literal_no_entry() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::Expression as AstExpr;
+
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        let expr = AstExpr::Number(Location::Source(0, 0, 1), 7);
+        collect_ast_expression_entries(&expr, &model, &mut entries);
+
+        assert!(
+            entries.is_empty(),
+            "числовой литерал не должен давать запись"
+        );
+    }
+
+    // ── Тесты collect_named_block_entries ────────────────────────────────────
+
+    /// Условие `true` (Bool) не создаёт ReferenceCondition-записей.
+    ///
+    /// # Контрпример
+    /// `ref T: true;` — литерал, не переменная → нет ReferenceCondition.
+    #[test]
+    fn named_block_bool_condition_no_reference_condition() {
+        let src = "var x: bit = false; start S { always { x = true; } ref T: true; } state T;";
+        let index = build_index(src);
+        let rc_entries: Vec<_> = index
+            .entries
+            .iter()
+            .filter(|e| e.node_ref.kind == SemanticNodeKind::ReferenceCondition)
+            .collect();
+        // `true` — литерал, не переменная → нет записей ReferenceCondition
+        assert!(
+            rc_entries.is_empty(),
+            "bool-литерал в условии не должен давать ReferenceCondition: {:?}",
+            rc_entries
+        );
+    }
+
+    /// Переменная в условии перехода индексируется по позиции использования.
+    ///
+    /// # Пример
+    /// `ref T: flag;` — `flag` появляется в индексе как `ReferenceCondition`
+    /// по позиции имени `flag` в исходном тексте (use-site), а не по позиции объявления.
+    #[test]
+    fn condition_variable_use_site_is_indexed() {
+        //      0         1         2         3
+        //      0123456789012345678901234567890123456789012345678901234567
+        let src = "var flag: bit = false; start S { ref T: flag; } state T;";
+        //                                            ^^^^ позиция "flag" = 40..44
+        let index = build_index(src);
+        // Находим запись ReferenceCondition по use-site позиции (offset внутри "flag")
+        let node = index.node_at_offset(41); // 'l' в "flag"
+        assert!(node.is_some(), "должна найтись запись для 'flag' в условии");
+        let node = node.unwrap();
+        assert_eq!(node.name, "flag");
+        assert_eq!(node.kind, SemanticNodeKind::ReferenceCondition);
+    }
+
+    /// Переменная в условии AND-перехода: обе стороны индексируются.
+    ///
+    /// # Пример
+    /// `ref T: a & b;` → записи для `a` и `b` по их позициям в условии.
+    #[test]
+    fn condition_and_both_variables_indexed() {
+        let src = "var a: bit = false; var b: bit = true; start S { ref T: a & b; } state T;";
+        let index = build_index(src);
+        let rc: Vec<_> = index
+            .entries
+            .iter()
+            .filter(|e| e.node_ref.kind == SemanticNodeKind::ReferenceCondition)
+            .collect();
+        assert_eq!(rc.len(), 2, "ожидается по одной записи для 'a' и 'b'");
+        let names: Vec<&str> = rc.iter().map(|e| e.node_ref.name.as_str()).collect();
+        assert!(names.contains(&"a"), "ожидается 'a'");
+        assert!(names.contains(&"b"), "ожидается 'b'");
+    }
+
+    /// NamedCodeBlock::None не вызывает паники.
+    #[test]
+    fn named_block_none_does_not_panic() {
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        collect_named_block_entries(&NamedCodeBlock::None, &model, &mut entries);
+        assert!(entries.is_empty());
+    }
+
+    /// collect_statement_entries на Statement::None не вызывает паники.
+    #[test]
+    fn statement_entries_none_does_not_panic() {
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        collect_statement_entries(&Statement::None, &model, &mut entries);
+        assert!(entries.is_empty());
+    }
+
+    /// collect_ast_statement_entries рекурсивно обходит Block.
+    ///
+    /// # Пример
+    /// `Block { stmts: [Expression(_, Variable("v"))] }` → `IndexEntry("v")`
+    #[test]
+    fn ast_statement_block_recurses_into_expressions() {
+        use crate::diagnostics::Location;
+        use crate::parser::ast::{Expression as AstExpr, Identifier, Statement as AstStmt};
+
+        let mut entries = Vec::new();
+        let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
+        let id = Identifier {
+            loc: Location::Source(0, 5, 6),
+            name: "v".into(),
+        };
+        let inner_expr = AstExpr::Variable(id);
+        let inner_stmt = AstStmt::Expression(Location::Source(0, 5, 7), inner_expr);
+        let block = AstStmt::Block {
+            loc: Location::Source(0, 0, 10),
+            unchecked: false,
+            statements: vec![inner_stmt],
+        };
+        collect_ast_statement_entries(&block, &model, &mut entries);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].node_ref.name, "v");
     }
 }

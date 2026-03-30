@@ -14,8 +14,8 @@ mod condition;
 pub(crate) mod docs;
 mod expression;
 mod function;
-pub mod index;
 mod import;
+pub mod index;
 mod named_block;
 pub(crate) mod naming;
 mod reference;
@@ -523,6 +523,15 @@ impl FunctionNode {
         match self {
             FunctionNode::Local { loc, .. } | FunctionNode::External { loc, .. } => *loc,
             _ => Location::Implicit,
+        }
+    }
+
+    /// Возвращает имя функции (пустая строка для `None` и `Unresolved`).
+    pub fn name(&self) -> &str {
+        match self {
+            FunctionNode::Local { name, .. } | FunctionNode::External { name, .. } => name,
+            FunctionNode::Builtin(name, ..) => name,
+            _ => "",
         }
     }
 }
@@ -1055,6 +1064,14 @@ impl StateNode {
         }
     }
 
+    pub fn references(&self) -> &[Reference<StateNode>] {
+        match self {
+            StateNode::Unresolved => &[],
+            StateNode::Simple { references, .. } => references,
+            StateNode::Implement { references, .. } => references,
+        }
+    }
+
     /// Ищет именованный блок в состоянии по его имени.
     /// Возвращает список всех именованных блоков с заданным именем.
     pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlock> {
@@ -1099,7 +1116,11 @@ pub enum Implement {
 ///
 /// В текущей реализации поддерживается только вариант [`None`](Condition::None),
 /// означающий безусловный переход. Полный набор условий — в будущих версиях.
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
+///
+/// `PartialEq` реализован вручную: поле `Location` в вариантах `Variable` и
+/// `Function` не участвует в сравнении — оно несёт позицию использования
+/// (use-site), а не часть семантической идентичности условия.
+#[derive(Default, Debug, Clone)]
 pub enum Condition {
     /// Безусловный переход (условие не задано или не разрешено).
     #[default]
@@ -1113,7 +1134,9 @@ pub enum Condition {
     /// Доступ к биту: `условие.член`.
     BitAccess(Box<Condition>, Member),
     /// Вызов функции: `id(аргументы,*)`.
-    Function(Rc<RefCell<FunctionNode>>, Vec<Box<Condition>>),
+    ///
+    /// Третье поле — позиция имени функции в исходном тексте (use-site).
+    Function(Rc<RefCell<FunctionNode>>, Vec<Box<Condition>>, Location),
     /// Логическое НЕ: `!условие`.
     Not(Box<Condition>),
     /// Сложение: `левое + правое`.
@@ -1145,12 +1168,55 @@ pub enum Condition {
     /// Булевый литерал.
     Bool(bool),
     /// Переменная.
-    Variable(Rc<RefCell<VariableNode>>),
+    ///
+    /// Второе поле — позиция использования переменной в исходном тексте (use-site),
+    /// а не позиция объявления. Позволяет индексу LSP найти узел по курсору.
+    Variable(Rc<RefCell<VariableNode>>, Location),
     /// Ссылка на модель.
     Model(Rc<RefCell<ModelNode>>),
     /// Ссылка на состояние.
     State(Rc<RefCell<StateNode>>),
 }
+
+impl PartialEq for Condition {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::None, Self::None) => true,
+            (Self::Unresolved(a), Self::Unresolved(b)) => a == b,
+            (Self::ArraySubscript(v1, n1), Self::ArraySubscript(v2, n2)) => {
+                v1 == v2 && n1 == n2
+            }
+            (Self::Parenthesis(a), Self::Parenthesis(b)) => a == b,
+            (Self::BitAccess(a, ma), Self::BitAccess(b, mb)) => a == b && ma == mb,
+            // Location (use-site) намеренно игнорируется: идентичность — семантическая
+            (Self::Function(f1, args1, _), Self::Function(f2, args2, _)) => {
+                f1 == f2 && args1 == args2
+            }
+            (Self::Not(a), Self::Not(b)) => a == b,
+            (Self::Add(l1, r1), Self::Add(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::Subtract(l1, r1), Self::Subtract(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::And(l1, r1), Self::And(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::Or(l1, r1), Self::Or(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::Less(l1, r1), Self::Less(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::More(l1, r1), Self::More(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::LessEqual(l1, r1), Self::LessEqual(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::MoreEqual(l1, r1), Self::MoreEqual(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::Equal(l1, r1), Self::Equal(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::NotEqual(l1, r1), Self::NotEqual(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::Number(a), Self::Number(b)) => a == b,
+            (Self::Rational(s1, n1), Self::Rational(s2, n2)) => s1 == s2 && n1 == n2,
+            (Self::String(a), Self::String(b)) => a == b,
+            (Self::Bool(a), Self::Bool(b)) => a == b,
+            // Location (use-site) намеренно игнорируется
+            (Self::Variable(v1, _), Self::Variable(v2, _)) => v1 == v2,
+            (Self::Model(a), Self::Model(b)) => a == b,
+            (Self::State(a), Self::State(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Condition {}
 
 /// Разрешённый семантический узел выражения (заглушка — будет расширено).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
@@ -1269,6 +1335,7 @@ pub enum Expression {
 /// Параметр `T` — тип целевого узла (обычно [`StateNode`]).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub struct Reference<T: Clone + PartialEq + Eq + Debug> {
+    pub location: Location,
     /// Имя целевого состояния.
     pub name: String,
     /// Условие перехода.
@@ -1470,6 +1537,7 @@ mod tests {
     #[test]
     fn reference_unresolved() {
         let r: Reference<StateNode> = Reference {
+            location: Default::default(),
             name: "X".to_string(),
             cond: Condition::None,
             object: Box::new(StateNode::Unresolved),

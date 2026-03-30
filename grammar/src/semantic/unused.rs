@@ -204,7 +204,7 @@ fn collect_from_stmt(stmt: &Statement, used: &mut HashSet<String>) {
 
 fn collect_from_condition(cond: &Condition, used: &mut HashSet<String>) {
     match cond {
-        Condition::Variable(var_rc) => {
+        Condition::Variable(var_rc, _) => {
             let borrowed = var_rc.borrow();
             if let VariableNode::Simple { name, .. }
             | VariableNode::Port { name, .. }
@@ -227,7 +227,7 @@ fn collect_from_condition(cond: &Condition, used: &mut HashSet<String>) {
             collect_from_condition(l, used);
             collect_from_condition(r, used);
         }
-        Condition::Function(_, args) => {
+        Condition::Function(_, args, _) => {
             for arg in args {
                 collect_from_condition(arg, used);
             }

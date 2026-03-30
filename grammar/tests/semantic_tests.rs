@@ -2245,7 +2245,7 @@ fn ref_cond_bit_var_is_resolved() {
     if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
         assert_eq!(references.len(), 1);
         assert!(
-            matches!(references[0].cond, Condition::Variable(_)),
+            matches!(references[0].cond, Condition::Variable(_, _)),
             "условие должно быть разрешено в Variable, получено: {:?}",
             references[0].cond
         );
@@ -2270,7 +2270,7 @@ fn ref_cond_bool_var_is_resolved() {
     let state_a = &node.states["A"];
     if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
         assert!(
-            matches!(references[0].cond, Condition::Variable(_)),
+            matches!(references[0].cond, Condition::Variable(_, _)),
             "условие должно быть разрешено в Variable"
         );
     } else {
