@@ -52,9 +52,7 @@ pub fn construct_function(
                     //   - `Expression::Variable(id)`  — идентификатор типа (`bit`, `u8`, …).
                     //   - `Expression::Array(_, items)` — массивный тип (не поддерживается как параметр).
                     let param_type = match param.clone().ty {
-                        ast::Expression::Type(_, typ) => {
-                            construct_type(Some(typ), model.clone())?
-                        }
+                        ast::Expression::Type(_, typ) => construct_type(Some(typ), model.clone())?,
                         ast::Expression::Variable(id) => {
                             // Преобразуем идентификатор в псевдоним типа и разрешаем.
                             construct_type(Some(ast::Type::Alias(id)), model.clone())?
@@ -78,6 +76,7 @@ pub fn construct_function(
             if def.external {
                 Ok(FunctionNode::External {
                     upper: Some(Rc::downgrade(&model)),
+                    loc: def.loc,
                     name: name.clone(),
                     params,
                     ret: rett,
@@ -90,6 +89,7 @@ pub fn construct_function(
                 };
                 Ok(FunctionNode::Local {
                     upper: Some(Rc::downgrade(&model)),
+                    loc: def.loc,
                     name: name.clone(),
                     params,
                     ret: rett,
@@ -265,6 +265,7 @@ mod tests {
         use std::rc::Rc;
         let local = FunctionNode::Local {
             upper: None,
+            loc: Default::default(),
             name: "f".into(),
             params: vec![],
             ret: TypeNode::Unit,

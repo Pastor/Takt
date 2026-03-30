@@ -171,6 +171,7 @@ pub fn extract_conditions(
                 name.clone(),
                 ConditionNode {
                     name: name.clone(),
+                    loc: cond.loc,
                     value: resolved,
                     upper: cond.upper.clone(),
                 },

@@ -46,6 +46,8 @@ use std::rc::Weak;
 pub struct ModelNode {
     /// Имя модели (`None` для анонимной корневой модели).
     pub name: Option<String>,
+    /// Позиция объявления модели в исходном тексте.
+    pub loc: Location,
     /// Модель уровнем выше (слабая ссылка для предотвращения циклов Rc).
     pub upper: Option<Weak<RefCell<ModelNode>>>,
     /// Вложенные именованные модели.
@@ -58,6 +60,8 @@ pub struct ModelNode {
     pub variables: HashMap<String, VariableNode>,
     /// Объявленные псевдонимы типов.
     pub types: HashMap<String, TypeNode>,
+    /// Позиции объявлений псевдонимов типов: имя → позиция в исходном тексте.
+    pub type_locs: HashMap<String, Location>,
     /// Объявленные условия переходов.
     pub conditions: HashMap<String, ConditionNode>,
     /// Объявленные перечисления (Ce4).
@@ -82,7 +86,7 @@ pub struct ModelNode {
 
 impl PartialEq for ModelNode {
     fn eq(&self, other: &Self) -> bool {
-        // upper игнорируется: родительская ссылка не является частью идентичности модели
+        // upper, loc, type_locs игнорируются: не являются частью идентичности модели
         self.name == other.name
             && self.models == other.models
             && self.named_blocks == other.named_blocks
@@ -435,6 +439,8 @@ pub enum FunctionNode {
     Local {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
+        /// Позиция объявления функции в исходном тексте.
+        loc: Location,
         /// Имя функции.
         name: String,
         /// Список параметров: `(имя, тип)`.
@@ -448,6 +454,8 @@ pub enum FunctionNode {
     External {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
+        /// Позиция объявления функции в исходном тексте.
+        loc: Location,
         /// Имя функции.
         name: String,
         /// Список параметров: `(имя, тип)`.
@@ -461,6 +469,7 @@ pub enum FunctionNode {
 
 impl PartialEq for FunctionNode {
     fn eq(&self, other: &Self) -> bool {
+        // upper и loc игнорируются: не являются частью семантической идентичности функции
         match (self, other) {
             (Self::None, Self::None) => true,
             (Self::Unresolved(a), Self::Unresolved(b)) => a == b,
@@ -503,6 +512,19 @@ impl PartialEq for FunctionNode {
 }
 
 impl Eq for FunctionNode {}
+
+impl FunctionNode {
+    /// Возвращает позицию объявления функции в исходном тексте.
+    ///
+    /// Для [`None`](FunctionNode::None), [`Unresolved`](FunctionNode::Unresolved) и
+    /// [`Builtin`](FunctionNode::Builtin) возвращает [`Location::Implicit`].
+    pub fn loc(&self) -> Location {
+        match self {
+            FunctionNode::Local { loc, .. } | FunctionNode::External { loc, .. } => *loc,
+            _ => Location::Implicit,
+        }
+    }
+}
 
 /// Семантический узел вызова или ссылки на функцию.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
@@ -783,14 +805,25 @@ pub enum TypeNode {
 ///
 /// Фактически перечисления сейчас не имеют синтаксиса в грамматике BuT,
 /// поэтому `EnumNode` создаётся программно через API.
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone)]
 pub struct EnumNode {
     /// Имя перечисления.
     pub name: String,
     /// Варианты перечисления: `(имя_варианта, числовое_значение)`.
     /// Если значение не задано при создании, оно равно индексу варианта.
     pub variants: Vec<(String, i64)>,
+    /// Позиция объявления перечисления в исходном тексте.
+    pub loc: Location,
 }
+
+impl PartialEq for EnumNode {
+    fn eq(&self, other: &Self) -> bool {
+        // loc игнорируется: не является частью семантической идентичности перечисления
+        self.name == other.name && self.variants == other.variants
+    }
+}
+
+impl Eq for EnumNode {}
 
 impl EnumNode {
     /// Создаёт новый `EnumNode` с именем и именованными вариантами.
@@ -817,6 +850,7 @@ impl EnumNode {
         EnumNode {
             name: name.to_string(),
             variants: resolved,
+            loc: Location::Implicit,
         }
     }
 
@@ -856,6 +890,8 @@ impl EnumNode {
 pub struct ConditionNode {
     /// Имя условия, как объявлено в источнике (`cond имя = …`).
     pub name: String,
+    /// Позиция объявления условия в исходном тексте.
+    pub loc: Location,
     /// Разрешённое значение условия.
     pub value: Condition,
     /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
@@ -864,7 +900,7 @@ pub struct ConditionNode {
 
 impl PartialEq for ConditionNode {
     fn eq(&self, other: &Self) -> bool {
-        // upper игнорируется: родительская ссылка не является частью идентичности узла
+        // upper и loc игнорируются: не являются частью идентичности узла
         self.name == other.name && self.value == other.value
     }
 }
@@ -887,6 +923,8 @@ pub enum StateNode {
     Simple {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
+        /// Позиция объявления состояния в исходном тексте.
+        loc: Location,
         /// Именованные блоки кода (`enter`, `exit`, `always`, …).
         named_blocks: Vec<NamedCodeBlock>,
         /// Имя состояния.
@@ -900,6 +938,8 @@ pub enum StateNode {
     Implement {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
+        /// Позиция объявления состояния в исходном тексте.
+        loc: Location,
         /// Именованные блоки кода (`enter`, `exit`, `always`, …).
         named_blocks: Vec<NamedCodeBlock>,
         /// Имя состояния.
@@ -917,6 +957,7 @@ pub enum StateNode {
 
 impl PartialEq for StateNode {
     fn eq(&self, other: &Self) -> bool {
+        // upper и loc игнорируются: не являются частью семантической идентичности состояния
         match (self, other) {
             (StateNode::Unresolved, StateNode::Unresolved) => true,
             (
@@ -975,6 +1016,16 @@ pub enum StateNodeKind {
 }
 
 impl StateNode {
+    /// Возвращает позицию объявления состояния в исходном тексте.
+    ///
+    /// Для [`Unresolved`](StateNode::Unresolved) возвращает [`Location::Implicit`].
+    pub fn loc(&self) -> Location {
+        match self {
+            StateNode::Simple { loc, .. } | StateNode::Implement { loc, .. } => *loc,
+            StateNode::Unresolved => Location::Implicit,
+        }
+    }
+
     /// Возвращает имя состояния.
     pub fn name(&self) -> &str {
         match self {
@@ -1405,6 +1456,7 @@ mod tests {
             }],
             references: vec![],
             kind: StateNodeKind::Simple,
+            loc: Default::default(),
         };
         assert!(state.get_named_block("enter").is_some());
         assert!(state.get_named_block("exit").is_none());

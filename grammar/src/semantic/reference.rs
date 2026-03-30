@@ -61,12 +61,14 @@ pub fn resolve_state_references(state: &StateNode) -> Result<StateNode, Diagnost
     match state {
         StateNode::Simple {
             upper,
+            loc,
             references,
             name,
             named_blocks,
             kind,
         } => Ok(StateNode::Simple {
             upper: upper.clone(),
+            loc: *loc,
             named_blocks: named_blocks.clone(),
             name: name.clone(),
             references: resolve_references(references, state)?,
@@ -74,6 +76,7 @@ pub fn resolve_state_references(state: &StateNode) -> Result<StateNode, Diagnost
         }),
         StateNode::Implement {
             upper,
+            loc,
             references,
             name,
             named_blocks,
@@ -82,6 +85,7 @@ pub fn resolve_state_references(state: &StateNode) -> Result<StateNode, Diagnost
             kind,
         } => Ok(StateNode::Implement {
             upper: upper.clone(),
+            loc: *loc,
             named_blocks: named_blocks.clone(),
             name: name.clone(),
             references: resolve_references(references, state)?,

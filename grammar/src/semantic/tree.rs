@@ -81,6 +81,7 @@ fn construct_model_stage0(
 
     let model_node = ModelNode {
         upper: upper.as_ref().map(|m| Rc::downgrade(m)),
+        loc: model.loc,
         name: name.map(|i| i.name.clone()),
         implements: model
             .implements
@@ -328,6 +329,7 @@ fn construct_model_stage0(
             let name = def.clone().name.name.clone();
             let typ = def.ty.clone();
             model_node.borrow_mut().types.insert(name.clone(), construct_type(Some(typ), model_node.clone())?);
+            model_node.borrow_mut().type_locs.insert(name.clone(), def.name.loc);
         } else if let ModelElement::Condition(def) = element {
             let def_loc = def.as_ref().name.as_ref().map(|id| id.loc).unwrap_or(Location::Implicit);
             let name = def
@@ -343,6 +345,7 @@ fn construct_model_stage0(
                 name.clone(),
                 ConditionNode {
                     name: name.clone(),
+                    loc: def_loc,
                     value: Condition::Unresolved(def.value.clone()),
                     upper: Some(Rc::downgrade(&model_node)),
                 },
@@ -403,13 +406,15 @@ fn construct_model_stage0(
                 next_val = val + 1;
                 variant_pairs.push((variant.name.name.clone(), val));
             }
-            let enum_node = crate::semantic::EnumNode::new(
+            let enum_loc = e.name.as_ref().map(|id| id.loc).unwrap_or(e.loc);
+            let mut enum_node = crate::semantic::EnumNode::new(
                 &enum_name,
                 &variant_pairs
                     .iter()
                     .map(|(n, v)| (n.as_str(), Some(*v)))
                     .collect::<Vec<_>>(),
             );
+            enum_node.loc = enum_loc;
             // Ce4: Регистрируем перечисление в двух местах:
             //
             // 1. `model_node.enums` — для поиска через `search_enum` / `search_enum_variant`.
@@ -425,6 +430,7 @@ fn construct_model_stage0(
             model_node.borrow_mut().enums.insert(enum_name.clone(), enum_node);
             if !enum_name.is_empty() {
                 model_node.borrow_mut().types.insert(enum_name.clone(), TypeNode::Enum(enum_name.clone()));
+                model_node.borrow_mut().type_locs.insert(enum_name.clone(), enum_loc);
             }
         }
     }
@@ -447,6 +453,7 @@ fn construct_model_stage1(
     for (name, state) in states.iter() {
         if let StateNode::Implement {
             upper,
+            loc,
             implements: Implement::Unresolved(implement_expression),
             named_blocks,
             references,
@@ -459,6 +466,7 @@ fn construct_model_stage1(
                 name.clone(),
                 StateNode::Implement {
                     upper: upper.clone(),
+                    loc,
                     named_blocks,
                     name: name.clone(),
                     references,
@@ -721,12 +729,14 @@ fn resolve_state_named_blocks(
     match state {
         StateNode::Simple {
             upper,
+            loc,
             name,
             references,
             named_blocks,
             kind,
         } => Ok(StateNode::Simple {
             upper: upper.clone(),
+            loc,
             name,
             references,
             kind,
@@ -734,6 +744,7 @@ fn resolve_state_named_blocks(
         }),
         StateNode::Implement {
             upper,
+            loc,
             name,
             references,
             implements,
@@ -742,6 +753,7 @@ fn resolve_state_named_blocks(
             kind,
         } => Ok(StateNode::Implement {
             upper: upper.clone(),
+            loc,
             name,
             references,
             implements,
@@ -980,6 +992,7 @@ pub fn construct_states(
                 },
             };
             // Определяем вид узла: Implement (есть `= Выражение`) или Simple.
+            let state_loc = def.loc;
             let state = if let Some(expr) = implements {
                 let next = next.map(|n| Reference {
                     name: n,
@@ -988,6 +1001,7 @@ pub fn construct_states(
                 });
                 StateNode::Implement {
                     upper: Some(Rc::downgrade(&upper)),
+                    loc: state_loc,
                     named_blocks: construct_named_blocks(def, Some(Rc::downgrade(&upper)))?,
                     name: name.clone(),
                     references,
@@ -998,6 +1012,7 @@ pub fn construct_states(
             } else {
                 StateNode::Simple {
                     upper: Some(Rc::downgrade(&upper)),
+                    loc: state_loc,
                     named_blocks: construct_named_blocks(def, Some(Rc::downgrade(&upper)))?,
                     name: name.clone(),
                     references,
@@ -1014,6 +1029,7 @@ pub fn construct_states(
         match *state.clone() {
             StateNode::Simple {
                 upper,
+                loc,
                 name,
                 references,
                 named_blocks,
@@ -1024,6 +1040,7 @@ pub fn construct_states(
                     name.clone(),
                     StateNode::Simple {
                         upper: upper.clone(),
+                        loc,
                         named_blocks,
                         name,
                         references: resolved,
@@ -1033,6 +1050,7 @@ pub fn construct_states(
             }
             StateNode::Implement {
                 upper,
+                loc,
                 named_blocks,
                 name,
                 references,
@@ -1065,6 +1083,7 @@ pub fn construct_states(
                     name.clone(),
                     StateNode::Implement {
                         upper: upper.clone(),
+                        loc,
                         named_blocks,
                         name,
                         references: resolved,
