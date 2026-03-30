@@ -359,6 +359,10 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
         }
     }
 
+    for nb in &borrowed.named_blocks {
+        //TODO: Реализовать
+    }
+
     // Рекурсивно обходим вложенные именованные модели
     for nested in borrowed.models.values() {
         collect_model_entries(nested, entries);
