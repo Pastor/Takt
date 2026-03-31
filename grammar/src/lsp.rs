@@ -349,6 +349,79 @@ pub fn node_at_position(
     index.node_at_offset(offset).cloned()
 }
 
+/// Разрешает позицию декларации элемента под курсором.
+///
+/// Строит семантическую модель из исходного текста и возвращает [`Range`]
+/// объявления идентификатора, на котором стоит курсор.
+///
+/// Возвращает `None` если:
+/// - исходный текст не компилируется
+/// - курсор вне идентификатора
+/// - декларация не может быть разрешена
+///
+/// ## Ограничения
+///
+/// - Использования переменных внутри тел функций и блоков (`enter`, `exit`, `always`)
+///   не индексируются: переход к декларации из таких контекстов недоступен.
+/// - Кросс-файловые декларации (импортированные элементы) не поддерживаются.
+pub fn goto_declaration(source: &str, position: Position) -> Option<Range> {
+    let (ast, _) = crate::parse(source, 0).ok()?;
+    let model = semantic::tree::construct_model(&ast, None, &[]).ok()?;
+    let node = node_at_position(source, position, &model)?;
+    declaration_range_of(&node, source)
+}
+
+/// Возвращает LSP-диапазон декларации для семантического узла.
+///
+/// Для декларационных видов узла `loc` уже указывает на объявление.
+/// Для использований (`Reference`, `ReferenceCondition`) выполняет поиск
+/// целевого элемента в модели по имени.
+fn declaration_range_of(node: &SemanticNodeRef, source: &str) -> Option<Range> {
+    use crate::diagnostics::Location;
+    use crate::semantic::index::SemanticNodeKind::*;
+
+    match node.kind {
+        // Декларационные виды: loc уже указывает на объявление
+        Variable | Const | Port | Function | ExternFunction
+        | State | StartState | EndState | TypeAlias | Condition | Enum | Model => {
+            if let Location::Source(_, start, end) = node.loc {
+                Some(offset_to_range(source, start, end))
+            } else {
+                None
+            }
+        }
+        // Ссылка-переход: ищем декларацию целевого состояния
+        Reference => {
+            let model_rc = node.model.as_ref()?.clone();
+            let state_rc = model_rc.borrow().search_state(&node.name)?;
+            let loc = state_rc.borrow().loc();
+            if let Location::Source(_, start, end) = loc {
+                Some(offset_to_range(source, start, end))
+            } else {
+                None
+            }
+        }
+        // Использование в условии перехода: ищем переменную или функцию
+        ReferenceCondition => {
+            let model_rc = node.model.as_ref()?.clone();
+            let model = model_rc.borrow();
+            if let Some(var) = model.search_var(&node.name) {
+                let loc = var.loc();
+                if let Location::Source(_, start, end) = loc {
+                    return Some(offset_to_range(source, start, end));
+                }
+            }
+            if let Some(func_rc) = model.search_func(&node.name) {
+                let loc = func_rc.borrow().loc();
+                if let Location::Source(_, start, end) = loc {
+                    return Some(offset_to_range(source, start, end));
+                }
+            }
+            None
+        }
+    }
+}
+
 /// Генерирует элементы автодополнения для источника BuT.
 ///
 /// Возвращает ключевые слова языка, а также идентификаторы из семантической

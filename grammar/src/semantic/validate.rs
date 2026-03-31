@@ -870,7 +870,7 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
     // Правило Ce5.2: нет терминальных состояний вообще
     if terminal_states.is_empty() {
         out.push(Diagnostic::warning(
-            crate::diagnostics::Location::Builtin,
+            Location::Builtin,
             format!(
                 "{}в модели нет терминальных состояний (состояний без переходов); \
                  автомат не может завершить работу",
@@ -934,7 +934,7 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
             };
             if !can_reach {
                 out.push(Diagnostic::warning(
-                    crate::diagnostics::Location::Builtin,
+                    Location::Builtin,
                     format!(
                         "{}состояние '{}' не имеет пути к терминальному состоянию",
                         model_prefix, state_name
@@ -953,7 +953,7 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
             // Правило Ce5.3: ref + next одновременно → предупреждение
             if next.is_some() && !references.is_empty() {
                 out.push(Diagnostic::warning(
-                    crate::diagnostics::Location::Builtin,
+                    Location::Builtin,
                     format!(
                         "{}состояние '{}' содержит ref-переходы совместно с next: \
                          переходы ref недостижимы после выполнения next",
@@ -979,7 +979,7 @@ mod tests {
     use crate::parse;
     use crate::semantic::tree::construct_model;
 
-    fn build(src: &str) -> Result<crate::semantic::ModelNode, Diagnostic> {
+    fn build(src: &str) -> Result<ModelNode, Diagnostic> {
         let (ast, _) = parse(src, 0).expect("ошибка разбора");
         construct_model(&ast, None, &[]).map(|m| m.take())
     }
@@ -1158,9 +1158,9 @@ mod tests {
 
     // ── Се11: строгая проверка булевости условий переходов ─────────────────────
 
-    fn build_rc(src: &str) -> Rc<RefCell<crate::semantic::ModelNode>> {
-        let (ast, _) = crate::parse(src, 0).expect("ошибка разбора");
-        crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики")
+    fn build_rc(src: &str) -> Rc<RefCell<ModelNode>> {
+        let (ast, _) = parse(src, 0).expect("ошибка разбора");
+        construct_model(&ast, None, &[]).expect("ошибка семантики")
     }
 
     // ── Юнит-тесты is_boolean_ast_condition и ast_condition_summary ────────────
@@ -1168,12 +1168,12 @@ mod tests {
     // Вспомогательные функции для построения моделей и AST-условий.
 
     /// Строит пустую семантическую модель (без переменных и состояний).
-    fn empty_model() -> Rc<RefCell<crate::semantic::ModelNode>> {
+    fn empty_model() -> Rc<RefCell<ModelNode>> {
         build_rc("")
     }
 
     /// Строит модель с переменными: `flag: bool`, `bit1: bit`, `timer: [bit;8]`.
-    fn model_with_vars() -> Rc<RefCell<crate::semantic::ModelNode>> {
+    fn model_with_vars() -> Rc<RefCell<ModelNode>> {
         build_rc(
             "var flag: bool = false; \
              var bit1: bit = 0; \
@@ -1182,7 +1182,7 @@ mod tests {
     }
 
     /// Строит модель с именованным условием `cond Full = timer = 255;`.
-    fn model_with_named_cond() -> Rc<RefCell<crate::semantic::ModelNode>> {
+    fn model_with_named_cond() -> Rc<RefCell<ModelNode>> {
         build_rc("var timer: [bit;8] = 0; cond Full = timer = 255;")
     }
 
@@ -1780,9 +1780,8 @@ mod tests {
     #[test]
     fn ni6_valid_enum_initializer_no_errors() {
         let model_rc = {
-            let (ast, _) = crate::parse("start S;", 0).expect("ошибка разбора");
-            let m =
-                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
+            let (ast, _) = parse("start S;", 0).expect("ошибка разбора");
+            let m = construct_model(&ast, None, &[]).expect("ошибка семантики");
             // Добавляем перечисление и переменную с корректным значением программно
             let e = crate::semantic::EnumDefinitionNode::new(
                 "Direction",
@@ -1794,12 +1793,12 @@ mod tests {
                 ],
             );
             m.borrow_mut().enums.insert("Direction".to_string(), e);
-            let dir_var = crate::semantic::VariableNode::Simple {
+            let dir_var = VariableNode::Simple {
                 upper: None,
-                loc: crate::diagnostics::Location::Implicit,
+                loc: Location::Implicit,
                 name: "dir".to_string(),
-                ty: crate::semantic::TypeNode::Enum("Direction".to_string()),
-                expr: crate::semantic::ExpressionNode::Number(0),
+                ty: TypeNode::Enum("Direction".to_string()),
+                expr: ExpressionNode::Number(0),
             };
             m.borrow_mut().variables.insert("dir".to_string(), dir_var);
             m
@@ -1821,21 +1820,20 @@ mod tests {
     #[test]
     fn ni6_invalid_enum_initializer_is_error() {
         let model_rc = {
-            let (ast, _) = crate::parse(
+            let (ast, _) = parse(
                 "enum Direction { North, South, East, West } \
                  start S;",
                 0,
             )
             .expect("ошибка разбора");
-            let m =
-                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
+            let m = construct_model(&ast, None, &[]).expect("ошибка семантики");
             // Добавляем переменную с некорректным значением enum программно
-            let dir_var = crate::semantic::VariableNode::Simple {
+            let dir_var = VariableNode::Simple {
                 upper: None,
-                loc: crate::diagnostics::Location::Implicit,
+                loc: Location::Implicit,
                 name: "dir".to_string(),
-                ty: crate::semantic::TypeNode::Enum("Direction".to_string()),
-                expr: crate::semantic::ExpressionNode::Number(99),
+                ty: TypeNode::Enum("Direction".to_string()),
+                expr: ExpressionNode::Number(99),
             };
             m.borrow_mut().variables.insert("dir".to_string(), dir_var);
             m
@@ -1850,19 +1848,18 @@ mod tests {
     #[test]
     fn ni6_valid_explicit_value_no_errors() {
         let model_rc = {
-            let (ast, _) = crate::parse(
+            let (ast, _) = parse(
                 "enum Priority { Low = 0, Medium = 5, High = 10 } start S;",
                 0,
             )
             .expect("ошибка разбора");
-            let m =
-                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
-            let prio_var = crate::semantic::VariableNode::Simple {
+            let m = construct_model(&ast, None, &[]).expect("ошибка семантики");
+            let prio_var = VariableNode::Simple {
                 upper: None,
-                loc: crate::diagnostics::Location::Implicit,
+                loc: Location::Implicit,
                 name: "prio".to_string(),
-                ty: crate::semantic::TypeNode::Enum("Priority".to_string()),
-                expr: crate::semantic::ExpressionNode::Number(5),
+                ty: TypeNode::Enum("Priority".to_string()),
+                expr: ExpressionNode::Number(5),
             };
             m.borrow_mut()
                 .variables
@@ -1880,23 +1877,22 @@ mod tests {
     #[test]
     fn ni6_multiple_invalid_enum_vars_gives_multiple_errors() {
         let model_rc = {
-            let (ast, _) = crate::parse("enum Dir { North = 0, South = 1 } start S;", 0)
-                .expect("ошибка разбора");
-            let m =
-                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
-            let v1 = crate::semantic::VariableNode::Simple {
+            let (ast, _) =
+                parse("enum Dir { North = 0, South = 1 } start S;", 0).expect("ошибка разбора");
+            let m = construct_model(&ast, None, &[]).expect("ошибка семантики");
+            let v1 = VariableNode::Simple {
                 upper: None,
-                loc: crate::diagnostics::Location::Implicit,
+                loc: Location::Implicit,
                 name: "a".to_string(),
-                ty: crate::semantic::TypeNode::Enum("Dir".to_string()),
-                expr: crate::semantic::ExpressionNode::Number(42),
+                ty: TypeNode::Enum("Dir".to_string()),
+                expr: ExpressionNode::Number(42),
             };
-            let v2 = crate::semantic::VariableNode::Simple {
+            let v2 = VariableNode::Simple {
                 upper: None,
-                loc: crate::diagnostics::Location::Implicit,
+                loc: Location::Implicit,
                 name: "b".to_string(),
-                ty: crate::semantic::TypeNode::Enum("Dir".to_string()),
-                expr: crate::semantic::ExpressionNode::Number(99),
+                ty: TypeNode::Enum("Dir".to_string()),
+                expr: ExpressionNode::Number(99),
             };
             m.borrow_mut().variables.insert("a".to_string(), v1);
             m.borrow_mut().variables.insert("b".to_string(), v2);
@@ -1925,15 +1921,14 @@ mod tests {
     #[test]
     fn ni6_unknown_enum_type_no_error() {
         let model_rc = {
-            let (ast, _) = crate::parse("start S;", 0).expect("ошибка разбора");
-            let m =
-                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
-            let var = crate::semantic::VariableNode::Simple {
+            let (ast, _) = parse("start S;", 0).expect("ошибка разбора");
+            let m = construct_model(&ast, None, &[]).expect("ошибка семантики");
+            let var = VariableNode::Simple {
                 upper: None,
-                loc: crate::diagnostics::Location::Implicit,
+                loc: Location::Implicit,
                 name: "x".to_string(),
-                ty: crate::semantic::TypeNode::Enum("UnknownEnum".to_string()),
-                expr: crate::semantic::ExpressionNode::Number(99),
+                ty: TypeNode::Enum("UnknownEnum".to_string()),
+                expr: ExpressionNode::Number(99),
             };
             m.borrow_mut().variables.insert("x".to_string(), var);
             m
@@ -1977,12 +1972,12 @@ mod tests_ce4_declarations {
             let m =
                 crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             // Переменная типа Color — Color объявлен в AST
-            let var = crate::semantic::VariableNode::Simple {
+            let var = VariableNode::Simple {
                 upper: None,
-                loc: crate::diagnostics::Location::Implicit,
+                loc: Location::Implicit,
                 name: "c".to_string(),
-                ty: crate::semantic::TypeNode::Enum("Color".to_string()),
-                expr: crate::semantic::ExpressionNode::Number(0),
+                ty: TypeNode::Enum("Color".to_string()),
+                expr: ExpressionNode::Number(0),
             };
             m.borrow_mut().variables.insert("c".to_string(), var);
             m
@@ -2014,12 +2009,12 @@ mod tests_ce4_declarations {
     fn ce4_inference_type_not_checked() {
         let model_rc = build_rc("start S;");
         // Добавляем переменную с типом Inference
-        let var = crate::semantic::VariableNode::Simple {
+        let var = VariableNode::Simple {
             upper: None,
-            loc: crate::diagnostics::Location::Implicit,
+            loc: Location::Implicit,
             name: "y".to_string(),
-            ty: crate::semantic::TypeNode::Inference,
-            expr: crate::semantic::ExpressionNode::Number(0),
+            ty: TypeNode::Inference,
+            expr: ExpressionNode::Number(0),
         };
         model_rc.borrow_mut().variables.insert("y".to_string(), var);
         let result = validate_enum_type_declarations(model_rc);
@@ -2042,12 +2037,12 @@ mod tests_ce4_declarations {
             let m =
                 crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             // Переменная типа Size — Size НЕ объявлен
-            let var = crate::semantic::VariableNode::Simple {
+            let var = VariableNode::Simple {
                 upper: None,
-                loc: crate::diagnostics::Location::Implicit,
+                loc: Location::Implicit,
                 name: "s".to_string(),
-                ty: crate::semantic::TypeNode::Enum("Size".to_string()),
-                expr: crate::semantic::ExpressionNode::Number(0),
+                ty: TypeNode::Enum("Size".to_string()),
+                expr: ExpressionNode::Number(0),
             };
             m.borrow_mut().variables.insert("s".to_string(), var);
             m
@@ -2083,12 +2078,12 @@ mod tests_ce4_declarations {
             let (ast, _) = crate::parse("start S;", 0).expect("ошибка разбора");
             let m =
                 crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
-            let var = crate::semantic::VariableNode::Const {
+            let var = VariableNode::Const {
                 upper: None,
-                loc: crate::diagnostics::Location::Implicit,
+                loc: Location::Implicit,
                 name: "C".to_string(),
-                ty: crate::semantic::TypeNode::Enum("Status".to_string()),
-                expr: crate::semantic::ExpressionNode::Number(0),
+                ty: TypeNode::Enum("Status".to_string()),
+                expr: ExpressionNode::Number(0),
             };
             m.borrow_mut().variables.insert("C".to_string(), var);
             m
@@ -2107,12 +2102,12 @@ mod tests_ce4_declarations {
             let (ast, _) = crate::parse("start S;", 0).expect("ошибка разбора");
             let m =
                 crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
-            let var = crate::semantic::VariableNode::Port {
+            let var = VariableNode::Port {
                 upper: None,
-                loc: crate::diagnostics::Location::Implicit,
+                loc: Location::Implicit,
                 name: "p".to_string(),
-                ty: crate::semantic::TypeNode::Enum("Dir".to_string()),
-                expr: crate::semantic::ExpressionNode::Number(0),
+                ty: TypeNode::Enum("Dir".to_string()),
+                expr: ExpressionNode::Number(0),
             };
             m.borrow_mut().variables.insert("p".to_string(), var);
             m

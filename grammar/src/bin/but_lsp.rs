@@ -17,7 +17,10 @@ use lsp_types::notification::{
     DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Notification as _,
     PublishDiagnostics,
 };
-use lsp_types::request::{Completion, HoverRequest, Request as _};
+use lsp_types::request::{
+    Completion, GotoDeclaration, GotoDeclarationParams, GotoDeclarationResponse, HoverRequest,
+    Request as _,
+};
 use lsp_types::*;
 
 fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
@@ -44,6 +47,7 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
             ..Default::default()
         }),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
+        declaration_provider: Some(DeclarationCapability::Simple(true)),
         document_symbol_provider: Some(OneOf::Left(true)),
         semantic_tokens_provider: Some(
             SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
@@ -147,6 +151,18 @@ fn handle_request(
             connection.sender.send(Message::Response(Response::new_ok(
                 req.id,
                 serde_json::to_value(hover)?,
+            )))?;
+        }
+        GotoDeclaration::METHOD => {
+            let params: GotoDeclarationParams = serde_json::from_value(req.params)?;
+            let uri = &params.text_document_position_params.text_document.uri;
+            let position = params.text_document_position_params.position;
+            let text = state.get_text(uri).unwrap_or("");
+            let result = grammar::lsp::goto_declaration(text, position)
+                .map(|range| GotoDeclarationResponse::Scalar(Location { uri: uri.clone(), range }));
+            connection.sender.send(Message::Response(Response::new_ok(
+                req.id,
+                serde_json::to_value(result)?,
             )))?;
         }
         "textDocument/documentSymbol" => {

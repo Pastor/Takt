@@ -1,13 +1,14 @@
-//! Интеграционные тесты LSP-функций: SemanticIndex, position_to_offset, node_at_position, hover_info.
+//! Интеграционные тесты LSP-функций: SemanticIndex, position_to_offset, node_at_position, hover_info, goto_declaration.
 //!
 //! Тесты разделены на группы:
 //! - `position_to_offset_*` — конвертация LSP-позиции в байтовое смещение
 //! - `node_at_position_*` — поиск семантического узла по LSP-позиции
 //! - `hover_*` — генерация hover-текста с использованием нового алгоритма
+//! - `goto_declaration_*` — переход к декларации элемента
 
 #[cfg(feature = "lsp")]
 mod lsp_integration {
-    use grammar::lsp::{hover_info, node_at_position, position_to_offset};
+    use grammar::lsp::{goto_declaration, hover_info, node_at_position, position_to_offset};
     use grammar::parse;
     use grammar::semantic::index::SemanticNodeKind;
     use grammar::semantic::tree::construct_model;
@@ -387,7 +388,7 @@ mod lsp_integration {
 
     #[test]
     fn hover_big() {
-        const src: &str = r#"// Пример для демонстрации возможностей LSP-сервера BuT.
+        const SRC: &str = r#"// Пример для демонстрации возможностей LSP-сервера BuT.
 //
 // При открытии этого файла в редакторе с поддержкой LSP (например, Zed с but-lsp):
 // - Ошибки и предупреждения подсвечиваются сразу
@@ -430,7 +431,7 @@ model Robot {
 
 start Main = Robot;
         "#;
-        let h = hover_info(src, Position::new(421 - 391, 23));
+        let h = hover_info(SRC, Position::new(421 - 391, 23));
         assert!(h.is_some(), "hover должен найти переменную условия active");
         let h = h.unwrap();
         if let lsp_types::HoverContents::Markup(mc) = h.contents {
@@ -445,5 +446,112 @@ start Main = Robot;
                 mc.value
             );
         }
+    }
+
+    // ── Тесты goto_declaration ────────────────────────────────────────────────
+
+    /// Курсор на объявлении переменной → возвращает тот же диапазон (самоссылка).
+    #[test]
+    fn goto_declaration_variable_self() {
+        //           0         1         2
+        //           0123456789012345678901234
+        let src = "var counter: bit = false;";
+        // Позиция 4 — символ 'c' в "counter"
+        let range = goto_declaration(src, Position::new(0, 4));
+        assert!(range.is_some(), "goto_declaration на объявлении переменной должен вернуть диапазон");
+        let range = range.unwrap();
+        assert_eq!(range.start.line, 0, "декларация переменной на строке 0");
+    }
+
+    /// Курсор на объявлении функции → возвращает диапазон этой же функции.
+    #[test]
+    fn goto_declaration_function_self() {
+        let src = "extern fn send(data: bit); start S;";
+        // Позиция 10 — символ 's' в "send"
+        let range = goto_declaration(src, Position::new(0, 10));
+        assert!(range.is_some(), "goto_declaration на объявлении функции должен вернуть диапазон");
+        let range = range.unwrap();
+        assert_eq!(range.start.line, 0, "декларация функции на строке 0");
+    }
+
+    /// Курсор на объявлении состояния → возвращает диапазон этого же состояния.
+    #[test]
+    fn goto_declaration_state_self() {
+        let src = "start Idle; state Moving;";
+        // Позиция 6 — символ 'I' в "Idle"
+        let range = goto_declaration(src, Position::new(0, 6));
+        assert!(range.is_some(), "goto_declaration на объявлении состояния должен вернуть диапазон");
+        let range = range.unwrap();
+        assert_eq!(range.start.line, 0, "декларация состояния на строке 0");
+    }
+
+    /// Курсор на ref-переходе → возвращает диапазон объявления целевого состояния.
+    ///
+    /// Пример: `ref Moving;` внутри состояния → декларация `state Moving;`.
+    #[test]
+    fn goto_declaration_reference_resolves_to_state() {
+        // Строка 0: "start Idle { ref Moving; }"
+        // Строка 1: "state Moving;"
+        let src = "start Idle { ref Moving; }\nstate Moving;";
+        // Позиция (0, 17) — символ 'M' в "ref Moving"
+        let range = goto_declaration(src, Position::new(0, 17));
+        assert!(
+            range.is_some(),
+            "goto_declaration на ref-переходе должен вернуть декларацию состояния"
+        );
+        let range = range.unwrap();
+        assert_eq!(
+            range.start.line, 1,
+            "декларация состояния Moving на строке 1: {:?}",
+            range
+        );
+    }
+
+    /// Курсор на переменной в условии перехода → декларация этой переменной.
+    ///
+    /// Пример: `ref Run: flag;` где `flag` — ReferenceCondition → декларация `var flag`.
+    #[test]
+    fn goto_declaration_reference_condition_resolves_to_variable() {
+        // Строка 0: "var flag: bit = false;"
+        // Строка 1: "start Idle;"
+        // Строка 2: "state Run;"
+        // Строка 3: "start Idle { ref Run: flag; }"
+        let src = "var flag: bit = false;\nstart Idle;\nstate Run;\nstart Idle { ref Run: flag; }";
+        // Строка 3: "start Idle { ref Run: flag; }"
+        //            0         1         2
+        //            0123456789012345678901234567890
+        // "flag" начинается с позиции 22 на строке 3
+        let range = goto_declaration(src, Position::new(3, 22));
+        assert!(
+            range.is_some(),
+            "goto_declaration на переменной условия должен вернуть декларацию переменной"
+        );
+        let range = range.unwrap();
+        assert_eq!(
+            range.start.line, 0,
+            "декларация var flag на строке 0: {:?}",
+            range
+        );
+    }
+
+    /// Курсор вне идентификаторов → None.
+    #[test]
+    fn goto_declaration_outside_node_returns_none() {
+        let src = "var x: bit = false;\nstart S;";
+        // Позиция (0, 0) — символ 'v' в "var" (ключевое слово, не идентификатор объявления)
+        // Может вернуть Some (если Location включает всё объявление) или None.
+        // Главное — не паниковать.
+        let _ = goto_declaration(src, Position::new(0, 0));
+
+        // Позиция за пределами файла → точно None
+        let range = goto_declaration(src, Position::new(99, 0));
+        assert!(range.is_none(), "позиция за пределами файла → None");
+    }
+
+    /// Пустой файл → None.
+    #[test]
+    fn goto_declaration_empty_file_returns_none() {
+        let range = goto_declaration("", Position::new(0, 0));
+        assert!(range.is_none(), "пустой файл → None");
     }
 }

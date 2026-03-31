@@ -30,7 +30,7 @@ pub(crate) mod validate;
 use crate::diagnostics::Location;
 use crate::parser::ast;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
-use crate::semantic::enum_node::EnumDefinitionNode;
+pub use crate::semantic::enum_node::EnumDefinitionNode;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -941,6 +941,7 @@ impl StateNode {
         }
     }
 
+    /// Возвращает список ссылок-переходов состояния (`ref`-рёбер).
     pub fn references(&self) -> &[ReferenceNode<StateNode>] {
         match self {
             StateNode::Unresolved => &[],
@@ -1218,6 +1219,7 @@ pub enum ExpressionNode {
 /// Параметр `T` — тип целевого узла (обычно [`StateNode`]).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub struct ReferenceNode<T: Clone + PartialEq + Eq + Debug> {
+    /// Позиция ссылки в исходном тексте.
     pub location: Location,
     /// Имя целевого состояния.
     pub name: String,
