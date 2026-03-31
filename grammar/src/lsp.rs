@@ -382,8 +382,8 @@ fn declaration_range_of(node: &SemanticNodeRef, source: &str) -> Option<Range> {
 
     match node.kind {
         // Декларационные виды: loc уже указывает на объявление
-        Variable | Const | Port | Function | ExternFunction
-        | State | StartState | EndState | TypeAlias | Condition | Enum | Model => {
+        Variable | Const | Port | Function | ExternFunction | State | StartState | EndState
+        | TypeAlias | Condition | Enum | Model => {
             if let Location::Source(_, start, end) = node.loc {
                 Some(offset_to_range(source, start, end))
             } else {
@@ -1203,7 +1203,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
     // Добавляем комментарии (лексер накапливает их отдельно, не как токены)
     for comment in &comments {
         let loc = match comment {
-            Comment::Line(loc, _) | Comment::DocLine(loc, _) => loc,
+            Comment::Line(loc, _) | Comment::DocLine(loc, _) | Comment::Block(loc, _) => loc,
         };
         if let Location::Source(_, start, end) = loc {
             raw.push((*start, *end, TT_COMMENT));
