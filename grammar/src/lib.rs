@@ -31,7 +31,9 @@ extern crate core;
 use crate::parser::lexer::{LexicalError, Token};
 use crate::parser::{ast, lexer};
 use diagnostics::{Diagnostic, Location};
+use itertools::Itertools;
 use lalrpop_util::ParseError;
+use std::path::Path;
 
 /// Модуль диагностических сообщений компилятора.
 pub mod diagnostics;
@@ -174,6 +176,7 @@ fn parser_error_to_diagnostic(
 /// ).unwrap();
 /// ```
 pub fn compile_to_c(
+    filename: &str,
     source: &str,
     output_path: &str,
     search_paths: &[String],
@@ -185,9 +188,16 @@ pub fn compile_to_c(
     let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
 
     // Генератор C требует именованной модели.
-    // Корневая (файловая) модель всегда анонимна — задаём имя «Root» по умолчанию.
+    // Корневая (файловая) модель всегда анонимна — задаём имя «Unknown» по умолчанию.
     if model.borrow().name.is_none() {
-        model.borrow_mut().name = Some("Root".to_string());
+        let filename = Path::new(filename)
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let filename = filename.split(".").get(0..1).collect::<Vec<&str>>()[0];
+        model.borrow_mut().name = Some(filename.to_string());
     }
 
     // Шаг 3: Генерация C-кода

@@ -22,7 +22,11 @@ fn tmp_but_file(name: &str, content: &str) -> (tempfile::TempDir, String) {
 /// FE5: Простая FSM компилируется в C без ошибок.
 #[test]
 fn test_compile_simple_fsm_to_c() {
-    use grammar::{generator::{Language, generate}, parse, semantic::tree::construct_model};
+    use grammar::{
+        generator::{Language, generate},
+        parse,
+        semantic::tree::construct_model,
+    };
 
     let src = r#"
 model Traffic {
@@ -38,7 +42,9 @@ model Traffic {
     let (ast, _) = parse(src, 0).expect("синтаксический анализ должен быть успешен");
     let root = construct_model(&ast, None, &[]).expect("семантический анализ должен быть успешен");
 
-    let traffic = root.borrow().search_model("Traffic")
+    let traffic = root
+        .borrow()
+        .search_model("Traffic")
         .expect("модель Traffic должна быть найдена");
     let result = generate(Language::C, &traffic.borrow(), out_path);
     assert!(
@@ -51,15 +57,20 @@ model Traffic {
         .unwrap()
         .filter_map(|e| e.ok())
         .collect();
-    assert!(!entries.is_empty(), "генератор C должен создать хотя бы один файл");
+    assert!(
+        !entries.is_empty(),
+        "генератор C должен создать хотя бы один файл"
+    );
 }
+
+const MODEL_FILENAME: &str = "model.but";
 
 /// FE5: Синтаксически неверный код возвращает ошибку.
 #[test]
 fn test_compile_invalid_syntax_returns_error() {
     let src = "model { }"; // нет имени модели
     let tmp = tempdir().unwrap();
-    let result = grammar::compile_to_c(src, tmp.path().to_str().unwrap(), &[]);
+    let result = grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[]);
     assert!(result.is_err(), "неверный код должен возвращать Err");
 }
 
@@ -68,7 +79,7 @@ fn test_compile_invalid_syntax_returns_error() {
 fn test_compile_no_start_state_returns_error() {
     let src = "model M { state S {} }"; // нет start-состояния
     let tmp = tempdir().unwrap();
-    let result = grammar::compile_to_c(src, tmp.path().to_str().unwrap(), &[]);
+    let result = grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[]);
     assert!(
         result.is_err(),
         "модель без start-состояния должна возвращать Err"
@@ -80,7 +91,7 @@ fn test_compile_no_start_state_returns_error() {
 fn test_compile_no_imports_empty_search_paths() {
     let src = "start S;";
     let tmp = tempdir().unwrap();
-    let result = grammar::compile_to_c(src, tmp.path().to_str().unwrap(), &[]);
+    let result = grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[]);
     assert!(
         result.is_ok(),
         "программа без импортов должна компилироваться без путей поиска: {:?}",
@@ -119,6 +130,7 @@ start Main = Timer;
     let search_paths = vec![lib_dir.path().to_string_lossy().into_owned()];
 
     let result = grammar::compile_to_c(
+        MODEL_FILENAME,
         main_src,
         out_dir.path().to_str().unwrap(),
         &search_paths,
@@ -140,7 +152,12 @@ fn test_compile_missing_import_without_search_path_is_error() {
     let out_dir = tempdir().unwrap();
 
     // Пустые пути поиска → импорт не найдёт файл
-    let result = grammar::compile_to_c(main_src, out_dir.path().to_str().unwrap(), &[]);
+    let result = grammar::compile_to_c(
+        MODEL_FILENAME,
+        main_src,
+        out_dir.path().to_str().unwrap(),
+        &[],
+    );
     assert!(
         result.is_err(),
         "импорт без пути поиска должен завершаться ошибкой"
@@ -172,6 +189,7 @@ fn test_compile_second_search_path_wins() {
     ];
 
     let result = grammar::compile_to_c(
+        MODEL_FILENAME,
         main_src,
         out_dir.path().to_str().unwrap(),
         &search_paths,
@@ -191,14 +209,12 @@ fn test_compile_wrong_search_path_is_error() {
     let search_paths = vec!["/nonexistent_path_xyz_abc".to_string()];
 
     let result = grammar::compile_to_c(
+        MODEL_FILENAME,
         main_src,
         out_dir.path().to_str().unwrap(),
         &search_paths,
     );
-    assert!(
-        result.is_err(),
-        "файл в несуществующей директории → ошибка"
-    );
+    assert!(result.is_err(), "файл в несуществующей директории → ошибка");
 }
 
 /// Импорт через идентификаторный путь (`import a::b;`) разрешается по поддиректории.
@@ -207,7 +223,11 @@ fn test_compile_identifier_import_with_search_path() {
     let lib_root = tempdir().unwrap();
     let subdir = lib_root.path().join("sensors");
     fs::create_dir(&subdir).unwrap();
-    fs::write(subdir.join("light.but"), "model Light { start Off; state On; }").unwrap();
+    fs::write(
+        subdir.join("light.but"),
+        "model Light { start Off; state On; }",
+    )
+    .unwrap();
 
     // import sensors::light;  →  ищем sensors/light.but в search_paths
     let main_src = r#"import sensors::light; start Main = Light;"#;
@@ -215,6 +235,7 @@ fn test_compile_identifier_import_with_search_path() {
     let search_paths = vec![lib_root.path().to_string_lossy().into_owned()];
 
     let result = grammar::compile_to_c(
+        MODEL_FILENAME,
         main_src,
         out_dir.path().to_str().unwrap(),
         &search_paths,
@@ -241,8 +262,12 @@ start Root = A;
     let out_dir = tempdir().unwrap();
     let search_paths = vec![lib_dir.path().to_string_lossy().into_owned()];
 
-    let result =
-        grammar::compile_to_c(main_src, out_dir.path().to_str().unwrap(), &search_paths);
+    let result = grammar::compile_to_c(
+        MODEL_FILENAME,
+        main_src,
+        out_dir.path().to_str().unwrap(),
+        &search_paths,
+    );
     assert!(
         result.is_ok(),
         "несколько импортов должны разрешаться через один путь: {:?}",
@@ -270,7 +295,12 @@ fn test_compile_example_file_with_include_path() {
 
     let out_dir = tempdir().unwrap();
     let search_paths = vec![include_dir];
-    let result = grammar::compile_to_c(&src, out_dir.path().to_str().unwrap(), &search_paths);
+    let result = grammar::compile_to_c(
+        MODEL_FILENAME,
+        &src,
+        out_dir.path().to_str().unwrap(),
+        &search_paths,
+    );
     assert!(
         result.is_ok(),
         "пример с import и путём поиска должен компилироваться: {:?}",
@@ -313,6 +343,7 @@ fn test_include_dirs_end_to_end_integration() {
     let out_dir = tempdir().unwrap();
     let search_paths = vec![lib_path];
     let result = grammar::compile_to_c(
+        MODEL_FILENAME,
         src_content,
         out_dir.path().to_str().unwrap(),
         &search_paths,

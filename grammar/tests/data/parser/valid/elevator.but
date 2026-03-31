@@ -194,3 +194,4 @@ model Elevator {
         }
     }
 }
+start Main = Elevator;

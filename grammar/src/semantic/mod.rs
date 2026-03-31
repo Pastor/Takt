@@ -13,7 +13,6 @@ mod builtin;
 mod condition;
 pub(crate) mod docs;
 pub mod enum_node;
-pub mod struct_node;
 mod expression;
 mod function;
 mod import;
@@ -22,6 +21,7 @@ mod named_block;
 pub(crate) mod naming;
 mod reference;
 mod statement;
+pub mod struct_node;
 pub mod tree;
 mod type_inference;
 pub mod type_node;
@@ -90,6 +90,22 @@ pub struct ModelNode {
     ///
     /// Заполняется [`construct_model_with_docs`](tree::construct_model_with_docs).
     pub docs: HashMap<String, Vec<String>>,
+}
+
+impl ModelNode {
+    pub(crate) fn get_start_state(&self) -> Option<StateNode> {
+        match self
+            .states
+            .clone()
+            .into_values()
+            .filter(|state| state.kind() == StateNodeKind::Start)
+            .collect::<Vec<StateNode>>()
+            .first()
+        {
+            Some(state) => Some(state.clone()),
+            None => None,
+        }
+    }
 }
 
 impl PartialEq for ModelNode {
@@ -809,6 +825,12 @@ impl PartialEq for ConditionDefinitionNode {
 
 impl Eq for ConditionDefinitionNode {}
 
+impl ConditionDefinitionNode {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
 /// Состояние конечного автомата.
 ///
 /// Три варианта:
@@ -855,6 +877,15 @@ pub enum StateNode {
         /// Разновидность состояния (обычное, начальное, конечное).
         kind: StateNodeKind,
     },
+}
+
+impl StateNode {
+    pub(crate) fn kind(&self) -> StateNodeKind {
+        match self {
+            StateNode::Unresolved => StateNodeKind::Simple,
+            StateNode::Simple { kind, .. } | StateNode::Implement { kind, .. } => *kind,
+        }
+    }
 }
 
 impl PartialEq for StateNode {
@@ -906,7 +937,7 @@ impl PartialEq for StateNode {
 impl Eq for StateNode {}
 
 /// Разновидность состояния FSM.
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum StateNodeKind {
     /// Обычное состояние.
     #[default]
