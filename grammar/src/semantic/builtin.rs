@@ -12,19 +12,20 @@
 //! | `S`     | `model: BuiltinModel`          | `BuiltinState`    | Получение начального состояния модели |
 
 use crate::diagnostics::Diagnostic;
-use crate::semantic::{FunctionNode, TypeNode};
+use crate::semantic::FunctionDefinitionNode;
+use crate::semantic::type_node::TypeNode;
 use phf::phf_map;
 use std::convert::Into;
 
 /// Статическая таблица встроенных функций языка BuT.
 ///
-/// Ключ — имя функции, значение — [`FunctionNode::Builtin`].
-const BUILTIN_FUNCTIONS: phf::Map<&'static str, FunctionNode> = phf_map! {
-    "debug" => FunctionNode::Builtin("debug", &[("text", TypeNode::BuiltinString)], TypeNode::Unit),
-    "S" => FunctionNode::Builtin("S", &[("model", TypeNode::BuiltinModel)], TypeNode::BuiltinState),
+/// Ключ — имя функции, значение — [`FunctionDefinitionNode::Builtin`].
+const BUILTIN_FUNCTIONS: phf::Map<&'static str, FunctionDefinitionNode> = phf_map! {
+    "debug" => FunctionDefinitionNode::Builtin("debug", &[("text", TypeNode::BuiltinString)], TypeNode::Unit),
+    "S" => FunctionDefinitionNode::Builtin("S", &[("model", TypeNode::BuiltinModel)], TypeNode::BuiltinState),
 };
 
-/// Возвращает [`FunctionNode`] встроенной функции по имени.
+/// Возвращает [`FunctionDefinitionNode`] встроенной функции по имени.
 ///
 /// # Ошибки
 ///
@@ -37,7 +38,7 @@ const BUILTIN_FUNCTIONS: phf::Map<&'static str, FunctionNode> = phf_map! {
 /// debug("значение x");   // встроенная функция debug
 /// start A = S(M) { }    // встроенная функция S
 /// ```
-pub fn builtin_function(name: &str) -> Result<&FunctionNode, Diagnostic> {
+pub fn builtin_function(name: &str) -> Result<&FunctionDefinitionNode, Diagnostic> {
     Ok(BUILTIN_FUNCTIONS
         .get(name)
         .ok_or_else(|| format!("Неизвестная функция '{}'", name).as_str().into())?)
@@ -48,14 +49,17 @@ pub fn builtin_function(name: &str) -> Result<&FunctionNode, Diagnostic> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::TypeNode;
+    use crate::semantic::type_node::TypeNode;
 
     /// `builtin_function("debug")` возвращает корректный узел.
     #[test]
     fn builtin_debug_exists() {
         let func = builtin_function("debug").unwrap();
         assert!(
-            matches!(func, FunctionNode::Builtin("debug", _, TypeNode::Unit)),
+            matches!(
+                func,
+                FunctionDefinitionNode::Builtin("debug", _, TypeNode::Unit)
+            ),
             "debug должна быть Builtin с возвратом Unit"
         );
     }
@@ -65,7 +69,10 @@ mod tests {
     fn builtin_s_exists() {
         let func = builtin_function("S").unwrap();
         assert!(
-            matches!(func, FunctionNode::Builtin("S", _, TypeNode::BuiltinState)),
+            matches!(
+                func,
+                FunctionDefinitionNode::Builtin("S", _, TypeNode::BuiltinState)
+            ),
             "S должна быть Builtin с возвратом BuiltinState"
         );
     }
@@ -91,7 +98,7 @@ mod tests {
     /// Параметры `debug`: один параметр `text: BuiltinString`.
     #[test]
     fn builtin_debug_has_correct_params() {
-        if let FunctionNode::Builtin(_, params, _) = builtin_function("debug").unwrap() {
+        if let FunctionDefinitionNode::Builtin(_, params, _) = builtin_function("debug").unwrap() {
             assert_eq!(params.len(), 1);
             assert_eq!(params[0].0, "text");
             assert_eq!(params[0].1, TypeNode::BuiltinString);
@@ -103,7 +110,7 @@ mod tests {
     /// Параметры `S`: один параметр `model: BuiltinModel`.
     #[test]
     fn builtin_s_has_correct_params() {
-        if let FunctionNode::Builtin(_, params, ret) = builtin_function("S").unwrap() {
+        if let FunctionDefinitionNode::Builtin(_, params, ret) = builtin_function("S").unwrap() {
             assert_eq!(params.len(), 1);
             assert_eq!(params[0].0, "model");
             assert_eq!(params[0].1, TypeNode::BuiltinModel);

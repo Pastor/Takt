@@ -2,19 +2,20 @@
 //!
 //! Модуль предоставляет две функции:
 //! - [`resolve_condition`] — преобразует АСД-условие [`ast::Condition`] в разрешённое
-//!   семантическое [`Condition`].
+//!   семантическое [`ConditionNode`].
 //! - [`extract_conditions`] — разрешает все неразрешённые именованные условия
 //!   в [`HashMap`].
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::builtin::builtin_function;
-use crate::semantic::{Condition, ConditionNode, ModelNode, TypeNode, VariableNode};
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ConditionDefinitionNode, ConditionNode, ModelNode, VariableNode};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-/// Строит разрешённое семантическое [`Condition`] из АСД-условия [`ast::Condition`].
+/// Строит разрешённое семантическое [`ConditionNode`] из АСД-условия [`ast::Condition`].
 ///
 /// Рекурсивно обходит дерево условий, разрешая имена переменных и функций
 /// в контексте переданного [`ModelNode`] (включая все родительские области
@@ -30,7 +31,7 @@ use std::rc::Rc;
 pub fn resolve_condition(
     cond: &ast::Condition,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<Condition, Diagnostic> {
+) -> Result<ConditionNode, Diagnostic> {
     match cond {
         ast::Condition::ArraySubscript(_, id, num) => {
             let name = id.name.clone();
@@ -39,22 +40,25 @@ pub fn resolve_condition(
                 && let VariableNode::Simple { ty, .. } = var.clone()
                 && let TypeNode::Array(..) = ty
             {
-                return Ok(Condition::ArraySubscript(Rc::new(RefCell::new(var)), *num));
+                return Ok(ConditionNode::ArraySubscript(
+                    Rc::new(RefCell::new(var)),
+                    *num,
+                ));
             }
             Err(format!("Массив '{}' не найден", &name).as_str().into())
         }
-        ast::Condition::Parenthesis(_, cond) => Ok(Condition::Parenthesis(Box::new(
+        ast::Condition::Parenthesis(_, cond) => Ok(ConditionNode::Parenthesis(Box::new(
             resolve_condition(cond, model.clone())?,
         ))),
         ast::Condition::BitAccess(_, cond, member) => {
             let cond = resolve_condition(cond, model.clone())?;
-            Ok(Condition::BitAccess(Box::new(cond), member.clone()))
+            Ok(ConditionNode::BitAccess(Box::new(cond), member.clone()))
         }
         ast::Condition::Function(_, id, args) => {
             let name = id.name.clone();
             // Собираем условия аргументов, немедленно пробрасывая ошибку вместо
             // паники через `.unwrap()`.
-            let args: Vec<Box<Condition>> = args
+            let args: Vec<Box<ConditionNode>> = args
                 .iter()
                 .map(|c| resolve_condition(c, model.clone()).map(Box::new))
                 .collect::<Result<Vec<_>, _>>()?;
@@ -64,87 +68,89 @@ pub fn resolve_condition(
             } else {
                 function.unwrap()
             };
-            Ok(Condition::Function(function, args, id.loc))
+            Ok(ConditionNode::Function(function, args, id.loc))
         }
-        ast::Condition::Not(_, cond) => Ok(Condition::Not(Box::new(resolve_condition(
+        ast::Condition::Not(_, cond) => Ok(ConditionNode::Not(Box::new(resolve_condition(
             cond,
             model.clone(),
         )?))),
         ast::Condition::Add(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
             let right = resolve_condition(right, model.clone())?;
-            Ok(Condition::Add(Box::new(left), Box::new(right)))
+            Ok(ConditionNode::Add(Box::new(left), Box::new(right)))
         }
         ast::Condition::Subtract(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
             let right = resolve_condition(right, model.clone())?;
-            Ok(Condition::Subtract(Box::new(left), Box::new(right)))
+            Ok(ConditionNode::Subtract(Box::new(left), Box::new(right)))
         }
         ast::Condition::And(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
             let right = resolve_condition(right, model.clone())?;
-            Ok(Condition::And(Box::new(left), Box::new(right)))
+            Ok(ConditionNode::And(Box::new(left), Box::new(right)))
         }
         ast::Condition::Or(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
             let right = resolve_condition(right, model.clone())?;
-            Ok(Condition::Or(Box::new(left), Box::new(right)))
+            Ok(ConditionNode::Or(Box::new(left), Box::new(right)))
         }
         ast::Condition::Less(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
             let right = resolve_condition(right, model.clone())?;
-            Ok(Condition::Less(Box::new(left), Box::new(right)))
+            Ok(ConditionNode::Less(Box::new(left), Box::new(right)))
         }
         ast::Condition::More(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
             let right = resolve_condition(right, model.clone())?;
-            Ok(Condition::More(Box::new(left), Box::new(right)))
+            Ok(ConditionNode::More(Box::new(left), Box::new(right)))
         }
         ast::Condition::LessEqual(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
             let right = resolve_condition(right, model.clone())?;
-            Ok(Condition::LessEqual(Box::new(left), Box::new(right)))
+            Ok(ConditionNode::LessEqual(Box::new(left), Box::new(right)))
         }
         ast::Condition::MoreEqual(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
             let right = resolve_condition(right, model.clone())?;
-            Ok(Condition::MoreEqual(Box::new(left), Box::new(right)))
+            Ok(ConditionNode::MoreEqual(Box::new(left), Box::new(right)))
         }
         ast::Condition::Equal(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
             let right = resolve_condition(right, model.clone())?;
-            Ok(Condition::Equal(Box::new(left), Box::new(right)))
+            Ok(ConditionNode::Equal(Box::new(left), Box::new(right)))
         }
         ast::Condition::NotEqual(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
             let right = resolve_condition(right, model.clone())?;
-            Ok(Condition::NotEqual(Box::new(left), Box::new(right)))
+            Ok(ConditionNode::NotEqual(Box::new(left), Box::new(right)))
         }
-        ast::Condition::Number(_, n) => Ok(Condition::Number(*n)),
+        ast::Condition::Number(_, n) => Ok(ConditionNode::Number(*n)),
         // Вещественный литерал: сохраняем строковое представление и знак.
         // Ранее эта ветка была заглушкой, что приводило к молчаливой потере данных:
         // условие становилось `Condition::None`.
-        ast::Condition::Rational(_, s, neg) => Ok(Condition::Rational(s.clone(), *neg)),
+        ast::Condition::Rational(_, s, neg) => Ok(ConditionNode::Rational(s.clone(), *neg)),
         // Строковый литерал: собираем строковые значения из каждого сегмента.
         // Ранее эта ветка была заглушкой с той же ошибкой потери данных.
         ast::Condition::String(lits) => {
             let strings = lits.iter().map(|l| l.string.clone()).collect();
-            Ok(Condition::String(strings))
+            Ok(ConditionNode::String(strings))
         }
-        ast::Condition::Bool(_, v) => Ok(Condition::Bool(*v)),
+        ast::Condition::Bool(_, v) => Ok(ConditionNode::Bool(*v)),
         ast::Condition::Variable(id) => {
             let name = id.name.clone();
             // Сначала ищем объявление переменной в области видимости.
             if let Some(var) = model.borrow().search_var(&name) {
-                return Ok(Condition::Variable(Rc::new(RefCell::new(var)), id.loc));
+                return Ok(ConditionNode::Variable(Rc::new(RefCell::new(var)), id.loc));
             } else if let Some(cond) = model.borrow().search_cond(&name) {
                 return Ok(cond.value);
             } else if let Some(model) = model.borrow().search_model(&name) {
-                return Ok(Condition::Model(model.clone()));
+                return Ok(ConditionNode::Model(model.clone()));
             } else if let Some(state) = model.borrow().search_state(&name) {
-                return Ok(Condition::State(state.clone()));
+                return Ok(ConditionNode::State(state.clone()));
             }
-            Ok(Condition::Unresolved(ast::Condition::Variable(id.clone())))
+            Ok(ConditionNode::Unresolved(ast::Condition::Variable(
+                id.clone(),
+            )))
         }
     }
 }
@@ -152,7 +158,7 @@ pub fn resolve_condition(
 /// Разрешает все неразрешённые именованные условия в `conditions`.
 ///
 /// Перебирает `conditions` и для каждой записи, значение которой равно
-/// [`Condition::Unresolved`], вызывает [`resolve_condition`], заменяя заглушку
+/// [`ConditionNode::Unresolved`], вызывает [`resolve_condition`], заменяя заглушку
 /// полностью разрешённым семантическим условием. Уже разрешённые записи
 /// передаются без изменений.
 ///
@@ -160,16 +166,16 @@ pub fn resolve_condition(
 ///
 /// Пробрасывает любой [`Diagnostic`], возвращённый из [`resolve_condition`].
 pub fn extract_conditions(
-    conditions: &HashMap<String, ConditionNode>,
+    conditions: &HashMap<String, ConditionDefinitionNode>,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<HashMap<String, ConditionNode>, Diagnostic> {
+) -> Result<HashMap<String, ConditionDefinitionNode>, Diagnostic> {
     let mut result = HashMap::new();
     for (name, cond) in conditions {
-        if let Condition::Unresolved(ast_cond) = &cond.value {
+        if let ConditionNode::Unresolved(ast_cond) = &cond.value {
             let resolved = resolve_condition(ast_cond, model.clone())?;
             result.insert(
                 name.clone(),
-                ConditionNode {
+                ConditionDefinitionNode {
                     name: name.clone(),
                     loc: cond.loc,
                     value: resolved,
@@ -203,7 +209,7 @@ mod tests {
     }
 
     /// Возвращает разрешённое значение именованного условия `name`.
-    fn cond_val(node: &ModelNode, name: &str) -> Condition {
+    fn cond_val(node: &ModelNode, name: &str) -> ConditionNode {
         node.conditions[name].value.clone()
     }
 
@@ -218,21 +224,21 @@ mod tests {
     #[test]
     fn bool_true_literal() {
         let node = build("cond c = true;").unwrap();
-        assert_eq!(cond_val(&node, "c"), Condition::Bool(true));
+        assert_eq!(cond_val(&node, "c"), ConditionNode::Bool(true));
     }
 
     /// Литерал `false`: `cond c = false;` → `Bool(false)`.
     #[test]
     fn bool_false_literal() {
         let node = build("cond c = false;").unwrap();
-        assert_eq!(cond_val(&node, "c"), Condition::Bool(false));
+        assert_eq!(cond_val(&node, "c"), ConditionNode::Bool(false));
     }
 
     /// Целочисленный литерал: `cond c = 42;` → `Number(42)`.
     #[test]
     fn number_literal() {
         let node = build("cond c = 42;").unwrap();
-        assert_eq!(cond_val(&node, "c"), Condition::Number(42));
+        assert_eq!(cond_val(&node, "c"), ConditionNode::Number(42));
     }
 
     /// Вещественный литерал: `cond c = 3.14;` → `Rational("3.14", false)`.
@@ -248,7 +254,7 @@ mod tests {
     fn rational_literal() {
         let node = build("cond c = 3.14;").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), Condition::Rational(ref s, false) if s == "3.14"),
+            matches!(cond_val(&node, "c"), ConditionNode::Rational(ref s, false) if s == "3.14"),
             "ожидалось Rational(\"3.14\", false), получено {:?}",
             cond_val(&node, "c")
         );
@@ -267,7 +273,7 @@ mod tests {
     fn variable_in_scope_resolves() {
         let node = build("var flag: bit = false; cond c = flag;").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), Condition::Variable(_, _)),
+            matches!(cond_val(&node, "c"), ConditionNode::Variable(_, _)),
             "ожидалось Condition::Variable, получено {:?}",
             cond_val(&node, "c")
         );
@@ -301,7 +307,7 @@ mod tests {
     fn not_operator() {
         let node = build("cond c = !true;").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), Condition::Not(_)),
+            matches!(cond_val(&node, "c"), ConditionNode::Not(_)),
             "ожидалось Condition::Not"
         );
     }
@@ -310,63 +316,72 @@ mod tests {
     #[test]
     fn and_operator() {
         let node = build("cond c = true & false;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), Condition::And(_, _)));
+        assert!(matches!(cond_val(&node, "c"), ConditionNode::And(_, _)));
     }
 
     /// Побитовое ИЛИ: `cond c = true | false;` → `Or(Bool(true), Bool(false))`.
     #[test]
     fn or_operator() {
         let node = build("cond c = true | false;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), Condition::Or(_, _)));
+        assert!(matches!(cond_val(&node, "c"), ConditionNode::Or(_, _)));
     }
 
     /// Сложение: `cond c = 1 + 2;` → `Add(Number(1), Number(2))`.
     #[test]
     fn add_operator() {
         let node = build("cond c = 1 + 2;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), Condition::Add(_, _)));
+        assert!(matches!(cond_val(&node, "c"), ConditionNode::Add(_, _)));
     }
 
     /// Вычитание: `cond c = 3 - 1;` → `Subtract(Number(3), Number(1))`.
     #[test]
     fn subtract_operator() {
         let node = build("cond c = 3 - 1;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), Condition::Subtract(_, _)));
+        assert!(matches!(
+            cond_val(&node, "c"),
+            ConditionNode::Subtract(_, _)
+        ));
     }
 
     /// Сравнение `<`: `cond c = 1 < 2;` → `Less(Number(1), Number(2))`.
     #[test]
     fn less_comparison() {
         let node = build("cond c = 1 < 2;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), Condition::Less(_, _)));
+        assert!(matches!(cond_val(&node, "c"), ConditionNode::Less(_, _)));
     }
 
     /// Сравнение `>`: `cond c = 2 > 1;` → `More(Number(2), Number(1))`.
     #[test]
     fn more_comparison() {
         let node = build("cond c = 2 > 1;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), Condition::More(_, _)));
+        assert!(matches!(cond_val(&node, "c"), ConditionNode::More(_, _)));
     }
 
     /// Равенство `=`: `cond c = 1 = 1;` → `Equal`.
     #[test]
     fn equal_operator() {
         let node = build("cond c = 1 = 1;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), Condition::Equal(_, _)));
+        assert!(matches!(cond_val(&node, "c"), ConditionNode::Equal(_, _)));
     }
 
     /// Неравенство `!=`: `cond c = 1 != 2;` → `NotEqual`.
     #[test]
     fn not_equal_operator() {
         let node = build("cond c = 1 != 2;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), Condition::NotEqual(_, _)));
+        assert!(matches!(
+            cond_val(&node, "c"),
+            ConditionNode::NotEqual(_, _)
+        ));
     }
 
     /// Скобки: `cond c = (true);` → `Parenthesis(Bool(true))`.
     #[test]
     fn parenthesised_condition() {
         let node = build("cond c = (true);").unwrap();
-        assert!(matches!(cond_val(&node, "c"), Condition::Parenthesis(_)));
+        assert!(matches!(
+            cond_val(&node, "c"),
+            ConditionNode::Parenthesis(_)
+        ));
     }
 
     // ─── контрпримеры для операторов сравнения ────────────────────────────
@@ -382,10 +397,13 @@ mod tests {
         let node = build("cond c = 1 <= 2;").unwrap();
         let c = cond_val(&node, "c");
         assert!(
-            matches!(c, Condition::LessEqual(_, _)),
+            matches!(c, ConditionNode::LessEqual(_, _)),
             "ожидалось LessEqual"
         );
-        assert!(!matches!(c, Condition::Less(_, _)), "НЕ должно быть Less");
+        assert!(
+            !matches!(c, ConditionNode::Less(_, _)),
+            "НЕ должно быть Less"
+        );
     }
 
     /// Контрпример: `>=` должен давать `MoreEqual`, а НЕ `More`.
@@ -394,10 +412,13 @@ mod tests {
         let node = build("cond c = 2 >= 1;").unwrap();
         let c = cond_val(&node, "c");
         assert!(
-            matches!(c, Condition::MoreEqual(_, _)),
+            matches!(c, ConditionNode::MoreEqual(_, _)),
             "ожидалось MoreEqual"
         );
-        assert!(!matches!(c, Condition::More(_, _)), "НЕ должно быть More");
+        assert!(
+            !matches!(c, ConditionNode::More(_, _)),
+            "НЕ должно быть More"
+        );
     }
 
     // ─── construct_cond: индексация массива ───────────────────────────────
@@ -413,7 +434,7 @@ mod tests {
     fn array_subscript_on_array_resolves() {
         let node = build("var buf: [bit; 8]; cond c = buf[3];").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), Condition::ArraySubscript(_, 3)),
+            matches!(cond_val(&node, "c"), ConditionNode::ArraySubscript(_, 3)),
             "ожидалось ArraySubscript(_, 3)"
         );
     }
@@ -459,14 +480,14 @@ mod tests {
             node.conditions.contains_key("done"),
             "условие 'done' должно присутствовать"
         );
-        assert_eq!(cond_val(&node, "done"), Condition::Bool(true));
+        assert_eq!(cond_val(&node, "done"), ConditionNode::Bool(true));
     }
 
     /// Разрешённое значение именованного числового условия сохраняется корректно.
     #[test]
     fn extract_number_named_condition() {
         let node = build("cond threshold = 7;").unwrap();
-        assert_eq!(cond_val(&node, "threshold"), Condition::Number(7));
+        assert_eq!(cond_val(&node, "threshold"), ConditionNode::Number(7));
     }
 
     /// Несколько именованных условий разрешаются независимо друг от друга.
@@ -481,8 +502,8 @@ mod tests {
         let node = build("cond a = true; cond b = false;").unwrap();
         assert!(node.conditions.contains_key("a"));
         assert!(node.conditions.contains_key("b"));
-        assert_eq!(cond_val(&node, "a"), Condition::Bool(true));
-        assert_eq!(cond_val(&node, "b"), Condition::Bool(false));
+        assert_eq!(cond_val(&node, "a"), ConditionNode::Bool(true));
+        assert_eq!(cond_val(&node, "b"), ConditionNode::Bool(false));
     }
 
     /// Контрпример: именованное условие, ссылающееся на необъявленный идентификатор,
@@ -499,7 +520,7 @@ mod tests {
     fn extract_variable_condition() {
         let node = build("var x: bit = false; cond c = x;").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), Condition::Variable(_, _)),
+            matches!(cond_val(&node, "c"), ConditionNode::Variable(_, _)),
             "ожидалось условие Variable"
         );
     }

@@ -6,12 +6,13 @@
 //! - [`ContextNode`] — область видимости с импортами, моделями, переменными и т.д.
 //! - [`ModelNode`] — семантическая модель (конечный автомат или компоновка).
 //! - [`StateNode`] — состояние автомата (неразрешённое, простое или с реализацией).
-//! - [`Reference`] — ссылка на другой узел с условием перехода.
-//! - [`Condition`] — условие перехода между состояниями.
+//! - [`ReferenceNode`] — ссылка на другой узел с условием перехода.
+//! - [`ConditionNode`] — условие перехода между состояниями.
 
 mod builtin;
 mod condition;
 pub(crate) mod docs;
+pub mod enum_node;
 mod expression;
 mod function;
 mod import;
@@ -21,19 +22,21 @@ pub(crate) mod naming;
 mod reference;
 mod statement;
 pub mod tree;
-mod type_;
 mod type_inference;
+pub mod type_node;
 pub mod unused;
 pub(crate) mod validate;
 
 use crate::diagnostics::Location;
 use crate::parser::ast;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
+use crate::semantic::enum_node::EnumDefinitionNode;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::rc::Weak;
+use type_node::TypeNode;
 
 /// Семантический узел модели (конечного автомата).
 ///
@@ -54,9 +57,9 @@ pub struct ModelNode {
     /// Вложенные именованные модели.
     pub models: HashMap<String, Rc<RefCell<ModelNode>>>,
     /// Именованные блоки кода (`enter`, `exit`, `always`, …).
-    pub named_blocks: Vec<NamedCodeBlock>,
+    pub named_blocks: Vec<NamedCodeBlockDefinitionNode>,
     /// Объявленные функции.
-    pub functions: HashMap<String, FunctionNode>,
+    pub functions: HashMap<String, FunctionDefinitionNode>,
     /// Объявленные переменные.
     pub variables: HashMap<String, VariableNode>,
     /// Объявленные псевдонимы типов.
@@ -64,9 +67,9 @@ pub struct ModelNode {
     /// Позиции объявлений псевдонимов типов: имя → позиция в исходном тексте.
     pub type_locs: HashMap<String, Location>,
     /// Объявленные условия переходов.
-    pub conditions: HashMap<String, ConditionNode>,
+    pub conditions: HashMap<String, ConditionDefinitionNode>,
     /// Объявленные перечисления (Ce4).
-    pub enums: HashMap<String, EnumNode>,
+    pub enums: HashMap<String, EnumDefinitionNode>,
     /// Состояния модели: имя → узел состояния.
     pub states: HashMap<String, StateNode>,
     /// Информация о реализации (зарезервировано).
@@ -181,7 +184,7 @@ impl ModelNode {
     }
 
     /// Ищет именованное условие по `name`, обходя цепочку `upper`.
-    pub fn search_cond(&self, name: &str) -> Option<ConditionNode> {
+    pub fn search_cond(&self, name: &str) -> Option<ConditionDefinitionNode> {
         if let Some(cond) = self.conditions.get(name) {
             Some(cond.clone())
         } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
@@ -193,21 +196,21 @@ impl ModelNode {
 
     /// Ищет объявление перечисления по `name`, обходя цепочку `upper` (Ce4).
     ///
-    /// Возвращает клон [`EnumNode`], если перечисление найдено в текущем
+    /// Возвращает клон [`EnumDefinitionNode`], если перечисление найдено в текущем
     /// или родительском контексте.
     ///
     /// # Пример
     ///
     /// ```
-    /// use grammar::semantic::{ModelNode, EnumNode};
+    /// use grammar::semantic::{ModelNode, EnumDefinitionNode};
     ///
     /// let mut model = ModelNode::default();
-    /// let e = EnumNode::new("Color", &[("Red", None), ("Green", None)]);
+    /// let e = EnumDefinitionNode::new("Color", &[("Red", None), ("Green", None)]);
     /// model.enums.insert("Color".to_string(), e);
     /// assert!(model.search_enum("Color").is_some());
     /// assert!(model.search_enum("Size").is_none());
     /// ```
-    pub fn search_enum(&self, name: &str) -> Option<EnumNode> {
+    pub fn search_enum(&self, name: &str) -> Option<EnumDefinitionNode> {
         if let Some(e) = self.enums.get(name) {
             Some(e.clone())
         } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
@@ -225,10 +228,10 @@ impl ModelNode {
     /// # Пример
     ///
     /// ```
-    /// use grammar::semantic::{ModelNode, EnumNode};
+    /// use grammar::semantic::{ModelNode, EnumDefinitionNode};
     ///
     /// let mut model = ModelNode::default();
-    /// let e = EnumNode::new("Direction", &[("North", None), ("South", Some(180))]);
+    /// let e = EnumDefinitionNode::new("Direction", &[("North", None), ("South", Some(180))]);
     /// model.enums.insert("Direction".to_string(), e);
     /// assert_eq!(model.search_enum_variant("North"), Some(("Direction".to_string(), 0)));
     /// assert_eq!(model.search_enum_variant("East"), None);
@@ -246,7 +249,7 @@ impl ModelNode {
     }
 
     /// Возвращает список всех именованных блоков с заданным именем.
-    pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlock> {
+    pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlockDefinitionNode> {
         self.named_blocks
             .iter()
             .filter(|b| b.name() == name)
@@ -254,12 +257,12 @@ impl ModelNode {
     }
 
     /// Возвращает первый именованный блок с заданным именем, если он есть.
-    pub fn get_named_block(&self, name: &str) -> Option<&NamedCodeBlock> {
+    pub fn get_named_block(&self, name: &str) -> Option<&NamedCodeBlockDefinitionNode> {
         self.named_blocks.iter().find(|b| b.name() == name)
     }
 
     /// Ищет объявление функции по `name`, обходя цепочку `upper`.
-    pub fn search_func(&self, name: &str) -> Option<Rc<RefCell<FunctionNode>>> {
+    pub fn search_func(&self, name: &str) -> Option<Rc<RefCell<FunctionDefinitionNode>>> {
         if let Some(func) = self.functions.get(name) {
             Some(Rc::new(RefCell::new(func.clone())))
         } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
@@ -331,7 +334,7 @@ impl ModelNode {
 
 /// Семантический узел именованного блока кода (`enter`, `exit`, `always`, …).
 #[derive(Default, Debug, Clone)]
-pub enum NamedCodeBlock {
+pub enum NamedCodeBlockDefinitionNode {
     /// Блок не задан.
     #[default]
     None,
@@ -342,21 +345,21 @@ pub enum NamedCodeBlock {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
         /// Тело блока.
-        body: Statement,
+        body: StatementNode,
     },
     /// Блок `exit` с разрешённым оператором.
     Exit {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
         /// Тело блока.
-        body: Statement,
+        body: StatementNode,
     },
     /// Блок `always` с разрешённым оператором.
     Always {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
         /// Тело блока.
-        body: Statement,
+        body: StatementNode,
     },
     /// Пользовательский именованный блок.
     Unknown {
@@ -365,11 +368,11 @@ pub enum NamedCodeBlock {
         /// Имя блока.
         name: String,
         /// Тело блока.
-        body: Statement,
+        body: StatementNode,
     },
 }
 
-impl PartialEq for NamedCodeBlock {
+impl PartialEq for NamedCodeBlockDefinitionNode {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::None, Self::None) => true,
@@ -390,28 +393,28 @@ impl PartialEq for NamedCodeBlock {
     }
 }
 
-impl Eq for NamedCodeBlock {}
+impl Eq for NamedCodeBlockDefinitionNode {}
 
-impl NamedCodeBlock {
+impl NamedCodeBlockDefinitionNode {
     /// Возвращает имя блока.
     pub fn name(&self) -> &str {
         match self {
-            NamedCodeBlock::None => "",
-            NamedCodeBlock::Unresolved(name, _) => name,
-            NamedCodeBlock::Enter { .. } => "enter",
-            NamedCodeBlock::Exit { .. } => "exit",
-            NamedCodeBlock::Always { .. } => "always",
-            NamedCodeBlock::Unknown { name, .. } => name,
+            NamedCodeBlockDefinitionNode::None => "",
+            NamedCodeBlockDefinitionNode::Unresolved(name, _) => name,
+            NamedCodeBlockDefinitionNode::Enter { .. } => "enter",
+            NamedCodeBlockDefinitionNode::Exit { .. } => "exit",
+            NamedCodeBlockDefinitionNode::Always { .. } => "always",
+            NamedCodeBlockDefinitionNode::Unknown { name, .. } => name,
         }
     }
 
     /// Возвращает ссылку на семантический оператор блока, если он разрешён.
-    pub fn statement(&self) -> Option<&Statement> {
+    pub fn statement(&self) -> Option<&StatementNode> {
         match self {
-            NamedCodeBlock::Enter { body, .. }
-            | NamedCodeBlock::Exit { body, .. }
-            | NamedCodeBlock::Always { body, .. }
-            | NamedCodeBlock::Unknown { body, .. } => Some(body),
+            NamedCodeBlockDefinitionNode::Enter { body, .. }
+            | NamedCodeBlockDefinitionNode::Exit { body, .. }
+            | NamedCodeBlockDefinitionNode::Always { body, .. }
+            | NamedCodeBlockDefinitionNode::Unknown { body, .. } => Some(body),
             _ => None,
         }
     }
@@ -419,10 +422,12 @@ impl NamedCodeBlock {
     /// Возвращает ссылку на родительскую модель блока.
     pub fn upper(&self) -> Option<Rc<RefCell<ModelNode>>> {
         match self {
-            NamedCodeBlock::Enter { upper, .. }
-            | NamedCodeBlock::Exit { upper, .. }
-            | NamedCodeBlock::Always { upper, .. }
-            | NamedCodeBlock::Unknown { upper, .. } => upper.as_ref().and_then(|w| w.upgrade()),
+            NamedCodeBlockDefinitionNode::Enter { upper, .. }
+            | NamedCodeBlockDefinitionNode::Exit { upper, .. }
+            | NamedCodeBlockDefinitionNode::Always { upper, .. }
+            | NamedCodeBlockDefinitionNode::Unknown { upper, .. } => {
+                upper.as_ref().and_then(|w| w.upgrade())
+            }
             _ => None,
         }
     }
@@ -430,7 +435,7 @@ impl NamedCodeBlock {
 
 /// Семантическое определение функции.
 #[derive(Default, Debug, Clone)]
-pub enum FunctionNode {
+pub enum FunctionDefinitionNode {
     /// Определение отсутствует.
     #[default]
     None,
@@ -449,7 +454,7 @@ pub enum FunctionNode {
         /// Возвращаемый тип.
         ret: TypeNode,
         /// Тело функции.
-        body: Statement,
+        body: StatementNode,
     },
     /// Внешняя функция (без тела).
     External {
@@ -468,7 +473,7 @@ pub enum FunctionNode {
     Builtin(&'static str, &'static [(&'static str, TypeNode)], TypeNode),
 }
 
-impl PartialEq for FunctionNode {
+impl PartialEq for FunctionDefinitionNode {
     fn eq(&self, other: &Self) -> bool {
         // upper и loc игнорируются: не являются частью семантической идентичности функции
         match (self, other) {
@@ -512,16 +517,17 @@ impl PartialEq for FunctionNode {
     }
 }
 
-impl Eq for FunctionNode {}
+impl Eq for FunctionDefinitionNode {}
 
-impl FunctionNode {
+impl FunctionDefinitionNode {
     /// Возвращает позицию объявления функции в исходном тексте.
     ///
-    /// Для [`None`](FunctionNode::None), [`Unresolved`](FunctionNode::Unresolved) и
-    /// [`Builtin`](FunctionNode::Builtin) возвращает [`Location::Implicit`].
+    /// Для [`None`](FunctionDefinitionNode::None), [`Unresolved`](FunctionDefinitionNode::Unresolved) и
+    /// [`Builtin`](FunctionDefinitionNode::Builtin) возвращает [`Location::Implicit`].
     pub fn loc(&self) -> Location {
         match self {
-            FunctionNode::Local { loc, .. } | FunctionNode::External { loc, .. } => *loc,
+            FunctionDefinitionNode::Local { loc, .. }
+            | FunctionDefinitionNode::External { loc, .. } => *loc,
             _ => Location::Implicit,
         }
     }
@@ -529,8 +535,9 @@ impl FunctionNode {
     /// Возвращает имя функции (пустая строка для `None` и `Unresolved`).
     pub fn name(&self) -> &str {
         match self {
-            FunctionNode::Local { name, .. } | FunctionNode::External { name, .. } => name,
-            FunctionNode::Builtin(name, ..) => name,
+            FunctionDefinitionNode::Local { name, .. }
+            | FunctionDefinitionNode::External { name, .. } => name,
+            FunctionDefinitionNode::Builtin(name, ..) => name,
             _ => "",
         }
     }
@@ -538,16 +545,16 @@ impl FunctionNode {
 
 /// Семантический узел вызова или ссылки на функцию.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub enum Function {
+pub enum FunctionNode {
     /// Функция не задана.
     #[default]
     None,
     /// Неразрешённый вызов: `(имя, аргументы)`.
-    Unresolved(String, Vec<Expression>),
+    Unresolved(String, Vec<ExpressionNode>),
     /// Вызов локальной функции.
-    Local(Rc<RefCell<FunctionNode>>, Vec<Expression>),
+    Local(Rc<RefCell<FunctionDefinitionNode>>, Vec<ExpressionNode>),
     /// Вызов внешней функции.
-    External(Rc<RefCell<FunctionNode>>, Vec<Expression>),
+    External(Rc<RefCell<FunctionDefinitionNode>>, Vec<ExpressionNode>),
 }
 
 /// Семантический оператор языка BuT.
@@ -555,48 +562,48 @@ pub enum Function {
 /// После семантического анализа (этап 4) все варианты `Unresolved` заменяются
 /// конкретными разрешёнными вариантами.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub enum Statement {
+pub enum StatementNode {
     /// Оператор отсутствует (значение по умолчанию).
     #[default]
     None,
     /// «Сырой» АСД-оператор, ещё не прошедший семантическое понижение.
     Unresolved(ast::Statement),
     /// Блок операторов: `{ операторы* }`.
-    Block(Vec<Statement>),
+    Block(Vec<StatementNode>),
     /// Оператор-выражение: присваивание, вызов функции и т.п.
-    Expression(Box<Expression>),
+    Expression(Box<ExpressionNode>),
     /// Условный оператор `if`.
     If {
         /// Условие.
-        cond: Box<Expression>,
+        cond: Box<ExpressionNode>,
         /// Тело.
-        then_: Box<Statement>,
+        then_: Box<StatementNode>,
         /// Ветка `else` (если задана).
-        else_: Option<Box<Statement>>,
+        else_: Option<Box<StatementNode>>,
     },
     /// Цикл `loop [условие] { тело }`.
     /// Условие `None` означает бесконечный цикл.
     Loop {
         /// Условие продолжения (`None` — бесконечный цикл).
-        cond: Option<Box<Expression>>,
+        cond: Option<Box<ExpressionNode>>,
         /// Тело цикла.
-        body: Box<Statement>,
+        body: Box<StatementNode>,
     },
     /// Оператор цикла `for`.
     For {
         /// Инициализация (опционально).
-        init: Option<Box<Statement>>,
+        init: Option<Box<StatementNode>>,
         /// Условие продолжения (опционально).
-        cond: Option<Box<Expression>>,
+        cond: Option<Box<ExpressionNode>>,
         /// Выражение шага (опционально).
-        step: Option<Box<Expression>>,
+        step: Option<Box<ExpressionNode>>,
         /// Тело цикла.
-        body: Box<Statement>,
+        body: Box<StatementNode>,
     },
     /// Объявление локальной переменной: `(имя, тип, инициализатор?)`.
-    Variable(String, TypeNode, Option<Box<Expression>>),
+    Variable(String, TypeNode, Option<Box<ExpressionNode>>),
     /// Оператор `return [выражение]`.
-    Return(Option<Box<Expression>>),
+    Return(Option<Box<ExpressionNode>>),
     /// Оператор `continue`.
     Continue,
     /// Оператор `break`.
@@ -630,7 +637,7 @@ pub enum VariableNode {
         /// Тип переменной.
         ty: TypeNode,
         /// Инициализирующее выражение.
-        expr: Expression,
+        expr: ExpressionNode,
     },
     /// Порт, отображённый на аппаратный адрес.
     Port {
@@ -643,7 +650,7 @@ pub enum VariableNode {
         /// Тип переменной.
         ty: TypeNode,
         /// Адрес порта.
-        expr: Expression,
+        expr: ExpressionNode,
     },
     /// Константа.
     Const {
@@ -656,7 +663,7 @@ pub enum VariableNode {
         /// Тип константы.
         ty: TypeNode,
         /// Значение константы.
-        expr: Expression,
+        expr: ExpressionNode,
     },
 }
 
@@ -758,137 +765,7 @@ impl VariableNode {
     }
 }
 
-/// Семантический узел типа данных.
-///
-/// Варианты:
-/// - [`Detecting`](TypeNode::Inference) — тип выводится (временная заглушка).
-/// - [`Address`](TypeNode::Address) — адресный тип порта `(адрес, бит?)`.
-/// - [`Bit`](TypeNode::Bit) — 1-битный примитив (`bit`).
-/// - [`Bool`](TypeNode::Bool) — булев тип (`bool`).
-/// - [`Rational`](TypeNode::Rational) — вещественное число (`float`).
-/// - [`Array`](TypeNode::Array) — массив фиксированного размера `(N, элемент)`.
-/// - [`Enum`](TypeNode::Enum) — перечисление (Ce4).
-/// - [`Unsupported`](TypeNode::Unsupported) — неподдерживаемый тип (например, функциональный).
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub enum TypeNode {
-    /// Тип ещё не определён (вывод типа в процессе).
-    #[default]
-    Inference,
-    /// Адресный тип порта: `(адрес, номер_бита?)`.
-    Address(u64, Option<u64>),
-    /// 1-битный примитив (`bit`).
-    Bit,
-    /// Тип `bool` — булев тип (`true`/`false`).
-    Bool,
-    /// Тип с плавающей точкой (`float`).
-    Rational,
-    /// Массив фиксированного размера: `(количество_элементов, тип_элемента)`.
-    Array(u16, Box<TypeNode>),
-    /// Перечисление (Ce4): именованный тип с фиксированным набором значений.
-    ///
-    /// Хранит имя перечисления.
-    Enum(String),
-    /// Неподдерживаемый тип (например, функциональный).
-    Unsupported,
-    /// Пустой тип.
-    Unit,
-    /// Встроенный строковый тип (внутренний, для встроенных функций).
-    BuiltinString,
-    /// Встроенный тип модели (внутренний, для встроенных функций).
-    BuiltinModel,
-    /// Встроенный тип состояния (внутренний, для встроенных функций).
-    BuiltinState,
-}
-
 // ─── Ce4: Перечисления ────────────────────────────────────────────────────────
-
-/// Семантический узел перечисления (Ce4).
-///
-/// Описывает именованное перечисление: набор вариантов с опциональными числовыми
-/// значениями. Если значение не задано, предполагается автоинкремент от 0.
-///
-/// # Пример BuT (концептуально, поддержка на семантическом уровне)
-///
-/// ```text
-/// // enum Color { Red = 0, Green = 1, Blue = 2 }
-/// ```
-///
-/// Фактически перечисления сейчас не имеют синтаксиса в грамматике BuT,
-/// поэтому `EnumNode` создаётся программно через API.
-#[derive(Default, Debug, Clone)]
-pub struct EnumNode {
-    /// Имя перечисления.
-    pub name: String,
-    /// Варианты перечисления: `(имя_варианта, числовое_значение)`.
-    /// Если значение не задано при создании, оно равно индексу варианта.
-    pub variants: Vec<(String, i64)>,
-    /// Позиция объявления перечисления в исходном тексте.
-    pub loc: Location,
-}
-
-impl PartialEq for EnumNode {
-    fn eq(&self, other: &Self) -> bool {
-        // loc игнорируется: не является частью семантической идентичности перечисления
-        self.name == other.name && self.variants == other.variants
-    }
-}
-
-impl Eq for EnumNode {}
-
-impl EnumNode {
-    /// Создаёт новый `EnumNode` с именем и именованными вариантами.
-    ///
-    /// Если значение варианта задано явно через `(имя, Some(значение))`,
-    /// используется это значение. Иначе вариант получает порядковый индекс.
-    ///
-    /// # Пример
-    ///
-    /// ```
-    /// use grammar::semantic::EnumNode;
-    ///
-    /// let e = EnumNode::new("Color", &[("Red", None), ("Green", None), ("Blue", Some(5))]);
-    /// assert_eq!(e.variants[0], ("Red".to_string(), 0));
-    /// assert_eq!(e.variants[1], ("Green".to_string(), 1));
-    /// assert_eq!(e.variants[2], ("Blue".to_string(), 5));
-    /// ```
-    pub fn new(name: &str, variants: &[(&str, Option<i64>)]) -> Self {
-        let resolved: Vec<(String, i64)> = variants
-            .iter()
-            .enumerate()
-            .map(|(i, (vname, val))| (vname.to_string(), val.unwrap_or(i as i64)))
-            .collect();
-        EnumNode {
-            name: name.to_string(),
-            variants: resolved,
-            loc: Location::Implicit,
-        }
-    }
-
-    /// Ищет числовое значение варианта по имени.
-    ///
-    /// Возвращает `Some(значение)`, если вариант найден.
-    ///
-    /// # Пример
-    ///
-    /// ```
-    /// use grammar::semantic::EnumNode;
-    ///
-    /// let e = EnumNode::new("Color", &[("Red", None), ("Green", None)]);
-    /// assert_eq!(e.find_variant("Red"), Some(0));
-    /// assert_eq!(e.find_variant("Blue"), None);
-    /// ```
-    pub fn find_variant(&self, variant_name: &str) -> Option<i64> {
-        self.variants
-            .iter()
-            .find(|(name, _)| name == variant_name)
-            .map(|(_, val)| *val)
-    }
-
-    /// Возвращает `true`, если вариант с данным именем существует.
-    pub fn has_variant(&self, variant_name: &str) -> bool {
-        self.find_variant(variant_name).is_some()
-    }
-}
 
 /// Семантический узел именованного условия.
 ///
@@ -897,25 +774,25 @@ impl EnumNode {
 ///
 /// [`extract_conditions`]: crate::semantic::condition::extract_conditions
 #[derive(Default, Debug, Clone)]
-pub struct ConditionNode {
+pub struct ConditionDefinitionNode {
     /// Имя условия, как объявлено в источнике (`cond имя = …`).
     pub name: String,
     /// Позиция объявления условия в исходном тексте.
     pub loc: Location,
     /// Разрешённое значение условия.
-    pub value: Condition,
+    pub value: ConditionNode,
     /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
     pub upper: Option<Weak<RefCell<ModelNode>>>,
 }
 
-impl PartialEq for ConditionNode {
+impl PartialEq for ConditionDefinitionNode {
     fn eq(&self, other: &Self) -> bool {
         // upper и loc игнорируются: не являются частью идентичности узла
         self.name == other.name && self.value == other.value
     }
 }
 
-impl Eq for ConditionNode {}
+impl Eq for ConditionDefinitionNode {}
 
 /// Состояние конечного автомата.
 ///
@@ -936,11 +813,11 @@ pub enum StateNode {
         /// Позиция объявления состояния в исходном тексте.
         loc: Location,
         /// Именованные блоки кода (`enter`, `exit`, `always`, …).
-        named_blocks: Vec<NamedCodeBlock>,
+        named_blocks: Vec<NamedCodeBlockDefinitionNode>,
         /// Имя состояния.
         name: String,
         /// Ссылки-переходы (`ref Имя [: Условие]`).
-        references: Vec<Reference<StateNode>>,
+        references: Vec<ReferenceNode<StateNode>>,
         /// Разновидность состояния (обычное, начальное, конечное).
         kind: StateNodeKind,
     },
@@ -951,15 +828,15 @@ pub enum StateNode {
         /// Позиция объявления состояния в исходном тексте.
         loc: Location,
         /// Именованные блоки кода (`enter`, `exit`, `always`, …).
-        named_blocks: Vec<NamedCodeBlock>,
+        named_blocks: Vec<NamedCodeBlockDefinitionNode>,
         /// Имя состояния.
         name: String,
         /// Ссылки-переходы.
-        references: Vec<Reference<StateNode>>,
+        references: Vec<ReferenceNode<StateNode>>,
         /// Информация о реализации (зарезервировано).
         implements: Implement,
         /// Единственный `next`-переход (если задан).
-        next: Option<Reference<StateNode>>,
+        next: Option<ReferenceNode<StateNode>>,
         /// Разновидность состояния (обычное, начальное, конечное).
         kind: StateNodeKind,
     },
@@ -1056,7 +933,7 @@ impl StateNode {
     }
 
     /// Возвращает список именованных блоков состояния.
-    pub fn named_blocks(&self) -> &[NamedCodeBlock] {
+    pub fn named_blocks(&self) -> &[NamedCodeBlockDefinitionNode] {
         match self {
             StateNode::Unresolved => &[],
             StateNode::Simple { named_blocks, .. } => named_blocks,
@@ -1064,7 +941,7 @@ impl StateNode {
         }
     }
 
-    pub fn references(&self) -> &[Reference<StateNode>] {
+    pub fn references(&self) -> &[ReferenceNode<StateNode>] {
         match self {
             StateNode::Unresolved => &[],
             StateNode::Simple { references, .. } => references,
@@ -1074,7 +951,7 @@ impl StateNode {
 
     /// Ищет именованный блок в состоянии по его имени.
     /// Возвращает список всех именованных блоков с заданным именем.
-    pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlock> {
+    pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlockDefinitionNode> {
         self.named_blocks()
             .iter()
             .filter(|b| b.name() == name)
@@ -1082,7 +959,7 @@ impl StateNode {
     }
 
     /// Возвращает первый именованный блок с заданным именем, если он есть.
-    pub fn get_named_block(&self, name: &str) -> Option<&NamedCodeBlock> {
+    pub fn get_named_block(&self, name: &str) -> Option<&NamedCodeBlockDefinitionNode> {
         self.named_blocks().iter().find(|b| b.name() == name)
     }
 }
@@ -1114,14 +991,14 @@ pub enum Implement {
 
 /// Условие перехода между состояниями.
 ///
-/// В текущей реализации поддерживается только вариант [`None`](Condition::None),
+/// В текущей реализации поддерживается только вариант [`None`](ConditionNode::None),
 /// означающий безусловный переход. Полный набор условий — в будущих версиях.
 ///
 /// `PartialEq` реализован вручную: поле `Location` в вариантах `Variable` и
 /// `Function` не участвует в сравнении — оно несёт позицию использования
 /// (use-site), а не часть семантической идентичности условия.
 #[derive(Default, Debug, Clone)]
-pub enum Condition {
+pub enum ConditionNode {
     /// Безусловный переход (условие не задано или не разрешено).
     #[default]
     None,
@@ -1130,35 +1007,39 @@ pub enum Condition {
     /// Доступ к элементу массива: `id[n]`.
     ArraySubscript(Rc<RefCell<VariableNode>>, i64),
     /// Скобки: `(условие)`.
-    Parenthesis(Box<Condition>),
+    Parenthesis(Box<ConditionNode>),
     /// Доступ к биту: `условие.член`.
-    BitAccess(Box<Condition>, Member),
+    BitAccess(Box<ConditionNode>, Member),
     /// Вызов функции: `id(аргументы,*)`.
     ///
     /// Третье поле — позиция имени функции в исходном тексте (use-site).
-    Function(Rc<RefCell<FunctionNode>>, Vec<Box<Condition>>, Location),
+    Function(
+        Rc<RefCell<FunctionDefinitionNode>>,
+        Vec<Box<ConditionNode>>,
+        Location,
+    ),
     /// Логическое НЕ: `!условие`.
-    Not(Box<Condition>),
+    Not(Box<ConditionNode>),
     /// Сложение: `левое + правое`.
-    Add(Box<Condition>, Box<Condition>),
+    Add(Box<ConditionNode>, Box<ConditionNode>),
     /// Вычитание: `левое - правое`.
-    Subtract(Box<Condition>, Box<Condition>),
+    Subtract(Box<ConditionNode>, Box<ConditionNode>),
     /// Побитовое И: `левое & правое`.
-    And(Box<Condition>, Box<Condition>),
+    And(Box<ConditionNode>, Box<ConditionNode>),
     /// Побитовое ИЛИ: `левое | правое`.
-    Or(Box<Condition>, Box<Condition>),
+    Or(Box<ConditionNode>, Box<ConditionNode>),
     /// Меньше: `левое < правое`.
-    Less(Box<Condition>, Box<Condition>),
+    Less(Box<ConditionNode>, Box<ConditionNode>),
     /// Больше: `левое > правое`.
-    More(Box<Condition>, Box<Condition>),
+    More(Box<ConditionNode>, Box<ConditionNode>),
     /// Меньше или равно: `левое <= правое`.
-    LessEqual(Box<Condition>, Box<Condition>),
+    LessEqual(Box<ConditionNode>, Box<ConditionNode>),
     /// Больше или равно: `левое >= правое`.
-    MoreEqual(Box<Condition>, Box<Condition>),
+    MoreEqual(Box<ConditionNode>, Box<ConditionNode>),
     /// Равенство: `левое = правое`.
-    Equal(Box<Condition>, Box<Condition>),
+    Equal(Box<ConditionNode>, Box<ConditionNode>),
     /// Неравенство: `левое != правое`.
-    NotEqual(Box<Condition>, Box<Condition>),
+    NotEqual(Box<ConditionNode>, Box<ConditionNode>),
     /// Целочисленный литерал.
     Number(i64),
     /// Вещественный литерал: `(строка, отрицательный)`.
@@ -1178,14 +1059,12 @@ pub enum Condition {
     State(Rc<RefCell<StateNode>>),
 }
 
-impl PartialEq for Condition {
+impl PartialEq for ConditionNode {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::None, Self::None) => true,
             (Self::Unresolved(a), Self::Unresolved(b)) => a == b,
-            (Self::ArraySubscript(v1, n1), Self::ArraySubscript(v2, n2)) => {
-                v1 == v2 && n1 == n2
-            }
+            (Self::ArraySubscript(v1, n1), Self::ArraySubscript(v2, n2)) => v1 == v2 && n1 == n2,
             (Self::Parenthesis(a), Self::Parenthesis(b)) => a == b,
             (Self::BitAccess(a, ma), Self::BitAccess(b, mb)) => a == b && ma == mb,
             // Location (use-site) намеренно игнорируется: идентичность — семантическая
@@ -1216,11 +1095,11 @@ impl PartialEq for Condition {
     }
 }
 
-impl Eq for Condition {}
+impl Eq for ConditionNode {}
 
 /// Разрешённый семантический узел выражения (заглушка — будет расширено).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub enum ExpressionNode {
+pub enum ExpressionDefinitionNode {
     /// Узел выражения ещё не разрешён (значение по умолчанию).
     #[default]
     None,
@@ -1229,10 +1108,10 @@ pub enum ExpressionNode {
 /// Полностью типизированный семантический узел выражения.
 ///
 /// Большинство вариантов повторяют соответствующие варианты АСД, но работают
-/// с уже разрешёнными семантическими подвыражениями. [`Unresolved`](Expression::Unresolved) —
+/// с уже разрешёнными семантическими подвыражениями. [`Unresolved`](ExpressionNode::Unresolved) —
 /// временная обёртка вокруг «сырого» АСД-выражения, ещё не прошедшего семантическое понижение.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub enum Expression {
+pub enum ExpressionNode {
     /// Выражение отсутствует (значение по умолчанию).
     #[default]
     None,
@@ -1243,65 +1122,69 @@ pub enum Expression {
     /// Срез массива: `id[начало:конец]`.
     ArraySlice(Rc<RefCell<VariableNode>>, Option<i64>, Option<i64>),
     /// Скобки: `(выражение)`.
-    Parenthesis(Box<Expression>),
+    Parenthesis(Box<ExpressionNode>),
     /// Доступ к биту: `выражение.член`.
-    BitAccess(Box<Expression>, Member),
+    BitAccess(Box<ExpressionNode>, Member),
     /// Вызов функции: `id(аргументы,*)`.
-    Function(Rc<RefCell<FunctionNode>>, Vec<Expression>),
+    Function(Rc<RefCell<FunctionDefinitionNode>>, Vec<ExpressionNode>),
     /// Блок кода как выражение: `выражение { ... }`.
-    CodeBlock(Box<Expression>, Statement),
+    CodeBlock(Box<ExpressionNode>, StatementNode),
     /// Вызов с именованными аргументами: `выражение({ ключ: значение, … })`.
-    NamedFunctionBox(Box<Expression>, Vec<NamedArgument>),
+    NamedFunctionBox(Box<ExpressionNode>, Vec<NamedArgument>),
     /// Логическое НЕ: `!выражение`.
-    Not(Box<Expression>),
+    Not(Box<ExpressionNode>),
     /// Побитовое НЕ: `~выражение`.
-    BitwiseNot(Box<Expression>),
+    BitwiseNot(Box<ExpressionNode>),
     /// Унарный плюс: `+выражение`.
-    UnaryPlus(Box<Expression>),
+    UnaryPlus(Box<ExpressionNode>),
     /// Унарный минус: `-выражение`.
-    Negate(Box<Expression>),
+    Negate(Box<ExpressionNode>),
     /// Возведение в степень: `левое ** правое`.
-    Power(Box<Expression>, Box<Expression>),
+    Power(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Умножение: `левое * правое`.
-    Multiply(Box<Expression>, Box<Expression>),
+    Multiply(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Деление: `левое / правое`.
-    Divide(Box<Expression>, Box<Expression>),
+    Divide(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Остаток от деления: `левое % правое`.
-    Modulo(Box<Expression>, Box<Expression>),
+    Modulo(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Сложение: `левое + правое`.
-    Add(Box<Expression>, Box<Expression>),
+    Add(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Вычитание: `левое - правое`.
-    Subtract(Box<Expression>, Box<Expression>),
+    Subtract(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Сдвиг влево: `левое << правое`.
-    ShiftLeft(Box<Expression>, Box<Expression>),
+    ShiftLeft(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Сдвиг вправо: `левое >> правое`.
-    ShiftRight(Box<Expression>, Box<Expression>),
+    ShiftRight(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Побитовое И: `левое & правое`.
-    BitwiseAnd(Box<Expression>, Box<Expression>),
+    BitwiseAnd(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Побитовое исключающее ИЛИ: `левое ^ правое`.
-    BitwiseXor(Box<Expression>, Box<Expression>),
+    BitwiseXor(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Побитовое ИЛИ: `левое | правое`.
-    BitwiseOr(Box<Expression>, Box<Expression>),
+    BitwiseOr(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Меньше: `левое < правое`.
-    Less(Box<Expression>, Box<Expression>),
+    Less(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Больше: `левое > правое`.
-    More(Box<Expression>, Box<Expression>),
+    More(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Меньше или равно: `левое <= правое`.
-    LessEqual(Box<Expression>, Box<Expression>),
+    LessEqual(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Больше или равно: `левое >= правое`.
-    MoreEqual(Box<Expression>, Box<Expression>),
+    MoreEqual(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Равенство: `левое == правое`.
-    Equal(Box<Expression>, Box<Expression>),
+    Equal(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Неравенство: `левое != правое`.
-    NotEqual(Box<Expression>, Box<Expression>),
+    NotEqual(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Логическое И: `левое && правое`.
-    And(Box<Expression>, Box<Expression>),
+    And(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Логическое ИЛИ: `левое || правое`.
-    Or(Box<Expression>, Box<Expression>),
+    Or(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Тернарный оператор: `условие ? тогда : иначе`.
-    ConditionalOperator(Box<Expression>, Box<Expression>, Box<Expression>),
+    ConditionalOperator(
+        Box<ExpressionNode>,
+        Box<ExpressionNode>,
+        Box<ExpressionNode>,
+    ),
     /// Присваивание: `левое = правое`.
-    Assign(Box<Expression>, Box<Expression>),
+    Assign(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Целочисленный литерал.
     Number(i64),
     /// Вещественный литерал: `(строка, отрицательный)`.
@@ -1319,27 +1202,27 @@ pub enum Expression {
     /// Ссылка на разрешённую модель.
     Model(Rc<RefCell<ModelNode>>),
     /// Ссылка на разрешённое именованное условие.
-    Condition(Rc<RefCell<ConditionNode>>),
+    Condition(Rc<RefCell<ConditionDefinitionNode>>),
     /// Список параметров: `(параметр,*)`.
     List(ParameterList),
     /// Массивный литерал: `[элемент,*]`.
-    Array(Vec<Expression>),
+    Array(Vec<ExpressionNode>),
     /// Инициализатор структуры: `{ элемент,* }`.
-    Initializer(Vec<Expression>),
+    Initializer(Vec<ExpressionNode>),
     /// Приведение типа: `выражение as Тип`.
-    Cast(Box<Expression>, Type),
+    Cast(Box<ExpressionNode>, Type),
 }
 
 /// Ссылка на узел семантического дерева с условием перехода.
 ///
 /// Параметр `T` — тип целевого узла (обычно [`StateNode`]).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct Reference<T: Clone + PartialEq + Eq + Debug> {
+pub struct ReferenceNode<T: Clone + PartialEq + Eq + Debug> {
     pub location: Location,
     /// Имя целевого состояния.
     pub name: String,
     /// Условие перехода.
-    pub cond: Condition,
+    pub cond: ConditionNode,
     /// Целевой узел (может быть [`StateNode::Unresolved`] до второго прохода).
     pub object: Box<T>,
 }
@@ -1496,10 +1379,11 @@ mod tests {
     #[test]
     fn model_node_get_named_block() {
         let mut node = ModelNode::default();
-        node.named_blocks.push(NamedCodeBlock::Always {
-            upper: None,
-            body: Statement::None,
-        });
+        node.named_blocks
+            .push(NamedCodeBlockDefinitionNode::Always {
+                upper: None,
+                body: StatementNode::None,
+            });
         assert!(node.get_named_block("always").is_some());
         assert!(node.get_named_block("enter").is_none());
     }
@@ -1518,9 +1402,9 @@ mod tests {
         let state = StateNode::Simple {
             upper: None,
             name: "S".to_string(),
-            named_blocks: vec![NamedCodeBlock::Enter {
+            named_blocks: vec![NamedCodeBlockDefinitionNode::Enter {
                 upper: None,
-                body: Statement::None,
+                body: StatementNode::None,
             }],
             references: vec![],
             kind: StateNodeKind::Simple,
@@ -1536,21 +1420,21 @@ mod tests {
     /// Создание Reference<StateNode> с Unresolved-объектом.
     #[test]
     fn reference_unresolved() {
-        let r: Reference<StateNode> = Reference {
+        let r: ReferenceNode<StateNode> = ReferenceNode {
             location: Default::default(),
             name: "X".to_string(),
-            cond: Condition::None,
+            cond: ConditionNode::None,
             object: Box::new(StateNode::Unresolved),
         };
         assert_eq!(r.name, "X");
-        assert_eq!(r.cond, Condition::None);
+        assert_eq!(r.cond, ConditionNode::None);
         assert_eq!(*r.object, StateNode::Unresolved);
     }
 
     /// Reference по умолчанию (Default).
     #[test]
     fn reference_default() {
-        let r: Reference<StateNode> = Reference::default();
+        let r: ReferenceNode<StateNode> = ReferenceNode::default();
         assert!(r.name.is_empty());
     }
 
@@ -1559,30 +1443,30 @@ mod tests {
     /// Condition::default() равен None.
     #[test]
     fn condition_default_is_none() {
-        assert_eq!(Condition::default(), Condition::None);
+        assert_eq!(ConditionNode::default(), ConditionNode::None);
     }
 
     /// Заглушки-узлы реализуют Default.
     #[test]
     fn stub_nodes_default() {
-        let _ = NamedCodeBlock::default();
-        let _ = Function::default();
+        let _ = NamedCodeBlockDefinitionNode::default();
+        let _ = FunctionNode::default();
         let _ = VariableNode::default();
         let _ = TypeNode::default();
-        let _ = ConditionNode::default();
+        let _ = ConditionDefinitionNode::default();
     }
 
     /// NamedCodeBlock методы name() и statement().
     #[test]
     fn named_code_block_methods() {
-        let nb = NamedCodeBlock::Always {
+        let nb = NamedCodeBlockDefinitionNode::Always {
             upper: None,
-            body: Statement::Continue,
+            body: StatementNode::Continue,
         };
         assert_eq!(nb.name(), "always");
-        assert_eq!(nb.statement(), Some(&Statement::Continue));
+        assert_eq!(nb.statement(), Some(&StatementNode::Continue));
 
-        let nb_none = NamedCodeBlock::None;
+        let nb_none = NamedCodeBlockDefinitionNode::None;
         assert_eq!(nb_none.name(), "");
         assert_eq!(nb_none.statement(), None);
     }

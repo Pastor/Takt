@@ -13,7 +13,7 @@
 //! ## Локальные переменные в блоках (С4)
 //!
 //! Объявления `var`/`const` внутри блоков (`if`, `loop`, `for`, `always` и др.)
-//! разрешаются в [`Statement::Variable`] и временно регистрируются в
+//! разрешаются в [`StatementNode::Variable`] и временно регистрируются в
 //! `model.variables` через [`register_local_var`]. Это позволяет последующим
 //! операторам того же блока ссылаться на локальную переменную через обычный
 //! механизм [`construct_expression`]. При выходе из блока [`unregister_local_vars`]
@@ -21,19 +21,19 @@
 //!
 //! Если выражение в операторе не может быть разрешено (например, ссылка
 //! на необъявленную встроенную функцию), весь оператор сохраняется в виде
-//! [`Statement::Unresolved`] — ошибка не пробрасывается наверх.
+//! [`StatementNode::Unresolved`] — ошибка не пробрасывается наверх.
 //! Это позволяет обрабатывать код с встроенными функциями (`debug`, `S` и т.п.)
 //! без предварительной регистрации встроенных символов.
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::expression::construct_expression;
-use crate::semantic::type_::construct_type;
-use crate::semantic::{Expression, ModelNode, Statement, VariableNode};
+use crate::semantic::type_node::construct_type;
+use crate::semantic::{ExpressionNode, ModelNode, StatementNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Разрешает семантический оператор [`Statement`].
+/// Разрешает семантический оператор [`StatementNode`].
 ///
 /// Для `Unresolved` вызывает [`resolve_ast_statement`].
 /// Для `Block` рекурсивно разрешает каждый вложенный оператор.
@@ -41,13 +41,13 @@ use std::rc::Rc;
 ///
 /// При ошибке разрешения выражения оператор сохраняется как `Unresolved`.
 pub fn resolve_statement(
-    statement: &Statement,
+    statement: &StatementNode,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<Statement, Diagnostic> {
+) -> Result<StatementNode, Diagnostic> {
     match statement {
-        Statement::Unresolved(stmt) => Ok(resolve_ast_statement(stmt, model)?),
-        Statement::None => Ok(Statement::None),
-        Statement::Block(stmts) => {
+        StatementNode::Unresolved(stmt) => Ok(resolve_ast_statement(stmt, model)?),
+        StatementNode::None => Ok(StatementNode::None),
+        StatementNode::Block(stmts) => {
             let mut resolved = Vec::with_capacity(stmts.len());
             let mut locals: Vec<(String, Option<VariableNode>)> = Vec::new();
             for s in stmts {
@@ -58,20 +58,20 @@ pub fn resolve_statement(
                 resolved.push(r);
             }
             unregister_local_vars(locals, &model);
-            Ok(Statement::Block(resolved))
+            Ok(StatementNode::Block(resolved))
         }
         other => Ok(other.clone()),
     }
 }
 
-/// Преобразует `ast::Statement` в разрешённый [`Statement`].
+/// Преобразует `ast::Statement` в разрешённый [`StatementNode`].
 ///
 /// При ошибке разрешения выражения возвращает `Err` (вызывающий код может
 /// обернуть в `Unresolved`).
 fn resolve_ast_statement(
     stmt: &ast::Statement,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<Statement, Diagnostic> {
+) -> Result<StatementNode, Diagnostic> {
     match stmt {
         // ── Блок операторов ────────────────────────────────────────────────────
         //
@@ -90,28 +90,28 @@ fn resolve_ast_statement(
                 resolved.push(r);
             }
             unregister_local_vars(locals, &model);
-            Ok(Statement::Block(resolved))
+            Ok(StatementNode::Block(resolved))
         }
 
         // ── Оператор-выражение (присваивание, вызов функции и т.п.) ───────────
         ast::Statement::Expression(_, expr) => {
             let resolved = construct_expression(expr.clone(), model)?;
-            Ok(Statement::Expression(Box::new(resolved)))
+            Ok(StatementNode::Expression(Box::new(resolved)))
         }
 
         // ── Условный оператор if ───────────────────────────────────────────────
         ast::Statement::If(_, cond, then_, else_) => {
             let cond = construct_expression(cond.clone(), model.clone())?;
             let then_ = resolve_ast_statement(then_, model.clone())
-                .unwrap_or_else(|_| Statement::Unresolved(then_.as_ref().clone()));
+                .unwrap_or_else(|_| StatementNode::Unresolved(then_.as_ref().clone()));
             let else_ = else_
                 .as_ref()
                 .map(|e| {
                     resolve_ast_statement(e, model.clone())
-                        .unwrap_or_else(|_| Statement::Unresolved(e.as_ref().clone()))
+                        .unwrap_or_else(|_| StatementNode::Unresolved(e.as_ref().clone()))
                 })
                 .map(Box::new);
-            Ok(Statement::If {
+            Ok(StatementNode::If {
                 cond: Box::new(cond),
                 then_: Box::new(then_),
                 else_,
@@ -128,8 +128,8 @@ fn resolve_ast_statement(
                 .transpose()?
                 .map(Box::new);
             let body = resolve_ast_statement(body, model)
-                .unwrap_or_else(|_| Statement::Unresolved(body.as_ref().clone()));
-            Ok(Statement::Loop {
+                .unwrap_or_else(|_| StatementNode::Unresolved(body.as_ref().clone()));
+            Ok(StatementNode::Loop {
                 cond,
                 body: Box::new(body),
             })
@@ -146,7 +146,7 @@ fn resolve_ast_statement(
                 .as_ref()
                 .map(|s| {
                     resolve_ast_statement(s, model.clone())
-                        .unwrap_or_else(|_| Statement::Unresolved(s.as_ref().clone()))
+                        .unwrap_or_else(|_| StatementNode::Unresolved(s.as_ref().clone()))
                 })
                 .map(Box::new);
 
@@ -172,14 +172,14 @@ fn resolve_ast_statement(
                 .as_ref()
                 .map(|s| {
                     resolve_ast_statement(s, model.clone())
-                        .unwrap_or_else(|_| Statement::Unresolved(s.as_ref().clone()))
+                        .unwrap_or_else(|_| StatementNode::Unresolved(s.as_ref().clone()))
                 })
                 .map(Box::new)
-                .unwrap_or_else(|| Box::new(Statement::None));
+                .unwrap_or_else(|| Box::new(StatementNode::None));
 
             unregister_local_vars(for_locals, &model);
 
-            Ok(Statement::For {
+            Ok(StatementNode::For {
                 init: init_resolved,
                 cond,
                 step,
@@ -194,17 +194,32 @@ fn resolve_ast_statement(
         // инициализатор именно туда, а третье поле Statement::Variable всегда None.
         ast::Statement::Variable(_, def, _extra_init) => {
             let (name, ty, def_init) = match def.as_ref() {
-                ast::VariableDefine::Variable { name, typ, initializer, .. } => {
+                ast::VariableDefine::Variable {
+                    name,
+                    typ,
+                    initializer,
+                    ..
+                } => {
                     let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
                     let t = construct_type(typ.clone(), model.clone())?;
                     (n, t, initializer.clone())
                 }
-                ast::VariableDefine::Constant { name, typ, initializer, .. } => {
+                ast::VariableDefine::Constant {
+                    name,
+                    typ,
+                    initializer,
+                    ..
+                } => {
                     let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
                     let t = construct_type(typ.clone(), model.clone())?;
                     (n, t, Some(initializer.clone()))
                 }
-                ast::VariableDefine::Port { name, typ, initializer, .. } => {
+                ast::VariableDefine::Port {
+                    name,
+                    typ,
+                    initializer,
+                    ..
+                } => {
                     let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
                     let t = construct_type(typ.clone(), model.clone())?;
                     (n, t, initializer.clone())
@@ -214,7 +229,7 @@ fn resolve_ast_statement(
                 .map(|e| construct_expression(e, model))
                 .transpose()?
                 .map(Box::new);
-            Ok(Statement::Variable(name, ty, init))
+            Ok(StatementNode::Variable(name, ty, init))
         }
 
         // ── Оператор return ────────────────────────────────────────────────────
@@ -224,18 +239,18 @@ fn resolve_ast_statement(
                 .map(|e| construct_expression(e.clone(), model))
                 .transpose()?
                 .map(Box::new);
-            Ok(Statement::Return(expr))
+            Ok(StatementNode::Return(expr))
         }
 
         // ── Простые операторы без выражений ───────────────────────────────────
-        ast::Statement::Continue(_) => Ok(Statement::Continue),
-        ast::Statement::Break(_) => Ok(Statement::Break),
+        ast::Statement::Continue(_) => Ok(StatementNode::Continue),
+        ast::Statement::Break(_) => Ok(StatementNode::Break),
 
         // ── Прочие варианты: оставляем как Unresolved ─────────────────────────
         //
         // Assembly и Formula — встроенные низкоуровневые блоки, пропускаются.
         // Args, Error, StraySemicolon — служебные варианты, не требуют разрешения.
-        _ => Ok(Statement::Unresolved(stmt.clone())),
+        _ => Ok(StatementNode::Unresolved(stmt.clone())),
     }
 }
 
@@ -243,7 +258,7 @@ fn resolve_ast_statement(
 
 /// Временно регистрирует локальную переменную из разрешённого оператора в модели.
 ///
-/// Если оператор — [`Statement::Variable`], вставляет [`VariableNode::Simple`]
+/// Если оператор — [`StatementNode::Variable`], вставляет [`VariableNode::Simple`]
 /// в `model.variables` и возвращает имя вместе с предыдущим значением (если имя
 /// уже было занято — для поддержки затенения). Для остальных операторов
 /// возвращает `None`.
@@ -252,10 +267,10 @@ fn resolve_ast_statement(
 /// инициализатор (`var x = x`) корректно завершится ошибкой поиска переменной
 /// при разрешении выражения.
 fn register_local_var(
-    stmt: &Statement,
+    stmt: &StatementNode,
     model: &Rc<RefCell<ModelNode>>,
 ) -> Option<(String, Option<VariableNode>)> {
-    if let Statement::Variable(name, ty, _) = stmt {
+    if let StatementNode::Variable(name, ty, _) = stmt {
         if name.is_empty() {
             return None;
         }
@@ -268,7 +283,7 @@ fn register_local_var(
             ty: ty.clone(),
             // Expression::None — заглушка; инициализатор уже сохранён в
             // Statement::Variable и не нужен в узле переменной для разрешения выражений
-            expr: Expression::None,
+            expr: ExpressionNode::None,
         };
         model.borrow_mut().variables.insert(name.clone(), node);
         Some((name.clone(), prev))
@@ -322,28 +337,28 @@ mod tests {
     #[test]
     fn resolve_none_returns_none() {
         let m = Rc::new(RefCell::new(ModelNode::default()));
-        let result = resolve_statement(&Statement::None, m).unwrap();
-        assert_eq!(result, Statement::None);
+        let result = resolve_statement(&StatementNode::None, m).unwrap();
+        assert_eq!(result, StatementNode::None);
     }
 
     /// Уже разрешённый `Statement::Continue` → возвращается без изменений.
     #[test]
     fn resolve_already_resolved_passthrough() {
         let m = Rc::new(RefCell::new(ModelNode::default()));
-        let stmt = Statement::Continue;
+        let stmt = StatementNode::Continue;
         let result = resolve_statement(&stmt, m).unwrap();
-        assert_eq!(result, Statement::Continue);
+        assert_eq!(result, StatementNode::Continue);
     }
 
     /// `Statement::Block([Continue, Break])` рекурсивно разрешается.
     #[test]
     fn resolve_block_recursively() {
         let m = Rc::new(RefCell::new(ModelNode::default()));
-        let stmt = Statement::Block(vec![Statement::Continue, Statement::Break]);
+        let stmt = StatementNode::Block(vec![StatementNode::Continue, StatementNode::Break]);
         let result = resolve_statement(&stmt, m).unwrap();
         assert_eq!(
             result,
-            Statement::Block(vec![Statement::Continue, Statement::Break])
+            StatementNode::Block(vec![StatementNode::Continue, StatementNode::Break])
         );
     }
 
@@ -359,7 +374,7 @@ mod tests {
         let stmt = nb.statement().expect("оператор должен быть");
         // Должен быть разрешён (не Unresolved)
         assert!(
-            !matches!(stmt, Statement::Unresolved(_)),
+            !matches!(stmt, StatementNode::Unresolved(_)),
             "блок always должен быть разрешён, получен: {:?}",
             stmt
         );
@@ -396,7 +411,7 @@ mod tests {
         let enter = state.get_named_block("enter").expect("enter не найден");
         let stmt = enter.statement().expect("оператор должен быть");
         assert!(
-            !matches!(stmt, Statement::Unresolved(_)),
+            !matches!(stmt, StatementNode::Unresolved(_)),
             "enter должен быть разрешён"
         );
     }
@@ -421,7 +436,7 @@ mod tests {
         let always = state.get_named_block("always").expect("always не найден");
         let stmt = always.statement().expect("оператор должен быть");
         assert!(
-            matches!(stmt, Statement::Block(_) | Statement::If { .. }),
+            matches!(stmt, StatementNode::Block(_) | StatementNode::If { .. }),
             "оператор if должен быть разрешён: {:?}",
             stmt
         );
@@ -434,7 +449,7 @@ mod tests {
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
         assert!(
-            !matches!(stmt, Statement::Unresolved(_)),
+            !matches!(stmt, StatementNode::Unresolved(_)),
             "return должен быть разрешён: {:?}",
             stmt
         );
@@ -446,10 +461,10 @@ mod tests {
         let ast_continue = ast::Statement::Continue(crate::diagnostics::Location::default());
         let ast_break = ast::Statement::Break(crate::diagnostics::Location::default());
         let m = Rc::new(RefCell::new(ModelNode::default()));
-        let r1 = resolve_statement(&Statement::Unresolved(ast_continue), m.clone()).unwrap();
-        let r2 = resolve_statement(&Statement::Unresolved(ast_break), m).unwrap();
-        assert_eq!(r1, Statement::Continue);
-        assert_eq!(r2, Statement::Break);
+        let r1 = resolve_statement(&StatementNode::Unresolved(ast_continue), m.clone()).unwrap();
+        let r2 = resolve_statement(&StatementNode::Unresolved(ast_break), m).unwrap();
+        assert_eq!(r1, StatementNode::Continue);
+        assert_eq!(r2, StatementNode::Break);
     }
 
     // ─── Циклы ────────────────────────────────────────────────────────────────
@@ -460,9 +475,9 @@ mod tests {
     ///
     /// `always { <stmt> }` оборачивает оператор в `Block([<stmt>])`.
     /// Эта функция раскрывает один уровень вложенности.
-    fn first_in_block(stmt: &Statement) -> &Statement {
+    fn first_in_block(stmt: &StatementNode) -> &StatementNode {
         match stmt {
-            Statement::Block(stmts) => stmts.first().expect("блок пуст"),
+            StatementNode::Block(stmts) => stmts.first().expect("блок пуст"),
             other => other,
         }
     }
@@ -487,7 +502,7 @@ mod tests {
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
-            matches!(stmt, Statement::Loop { cond: Some(_), .. }),
+            matches!(stmt, StatementNode::Loop { cond: Some(_), .. }),
             "ожидался Loop с условием, получен: {:?}",
             stmt
         );
@@ -510,7 +525,7 @@ mod tests {
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
-            matches!(stmt, Statement::Loop { cond: None, .. }),
+            matches!(stmt, StatementNode::Loop { cond: None, .. }),
             "ожидался Loop без условия, получен: {:?}",
             stmt
         );
@@ -535,7 +550,7 @@ mod tests {
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
-            matches!(stmt, Statement::For { .. }),
+            matches!(stmt, StatementNode::For { .. }),
             "ожидался For, получен: {:?}",
             stmt
         );
@@ -555,7 +570,15 @@ mod tests {
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
-            matches!(stmt, Statement::For { init: None, cond: None, step: None, .. }),
+            matches!(
+                stmt,
+                StatementNode::For {
+                    init: None,
+                    cond: None,
+                    step: None,
+                    ..
+                }
+            ),
             "ожидался For{{None, None, None}}, получен: {:?}",
             stmt
         );
@@ -568,7 +591,7 @@ mod tests {
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
-            matches!(stmt, Statement::Return(None)),
+            matches!(stmt, StatementNode::Return(None)),
             "ожидался Return(None), получен: {:?}",
             stmt
         );
@@ -590,7 +613,7 @@ mod tests {
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
-            matches!(stmt, Statement::If { else_: Some(_), .. }),
+            matches!(stmt, StatementNode::If { else_: Some(_), .. }),
             "ожидался If{{else_: Some}}, получен: {:?}",
             stmt
         );
@@ -603,7 +626,7 @@ mod tests {
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
-            matches!(stmt, Statement::If { else_: None, .. }),
+            matches!(stmt, StatementNode::If { else_: None, .. }),
             "ожидался If{{else_: None}}, получен: {:?}",
             stmt
         );
@@ -626,14 +649,14 @@ mod tests {
         let stmt = nb.statement().expect("оператор должен быть");
         // Блок должен быть разрешён
         assert!(
-            !matches!(stmt, Statement::Unresolved(_)),
+            !matches!(stmt, StatementNode::Unresolved(_)),
             "блок с локальной var должен быть разрешён: {:?}",
             stmt
         );
         // Первый оператор — Statement::Variable(x, ...)
-        if let Statement::Block(stmts) = stmt {
+        if let StatementNode::Block(stmts) = stmt {
             assert!(
-                matches!(stmts.first(), Some(Statement::Variable(n, _, _)) if n == "x"),
+                matches!(stmts.first(), Some(StatementNode::Variable(n, _, _)) if n == "x"),
                 "первый оператор должен быть Variable(x): {:?}",
                 stmts.first()
             );
@@ -655,13 +678,10 @@ mod tests {
         let node = build("always { var x: bit = false; x = true; } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
-        if let Statement::Block(stmts) = stmt {
+        if let StatementNode::Block(stmts) = stmt {
             // Инициализатор должен быть Some(Bool(false))
             assert!(
-                matches!(
-                    stmts.first(),
-                    Some(Statement::Variable(_, _, Some(_)))
-                ),
+                matches!(stmts.first(), Some(StatementNode::Variable(_, _, Some(_)))),
                 "у переменной x должен быть инициализатор: {:?}",
                 stmts.first()
             );
@@ -681,13 +701,13 @@ mod tests {
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
         assert!(
-            !matches!(stmt, Statement::Unresolved(_)),
+            !matches!(stmt, StatementNode::Unresolved(_)),
             "блок с локальной const должен быть разрешён: {:?}",
             stmt
         );
-        if let Statement::Block(stmts) = stmt {
+        if let StatementNode::Block(stmts) = stmt {
             assert!(
-                matches!(stmts.first(), Some(Statement::Variable(n, _, _)) if n == "C"),
+                matches!(stmts.first(), Some(StatementNode::Variable(n, _, _)) if n == "C"),
                 "первый оператор должен быть Variable(C): {:?}",
                 stmts.first()
             );
@@ -706,13 +726,12 @@ mod tests {
     /// ```
     #[test]
     fn local_var_shadows_model_var() {
-        let node =
-            build("var x: bit = true; always { var x: bit = false; x = false; } start S;");
+        let node = build("var x: bit = true; always { var x: bit = false; x = false; } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
         // Блок разрешается (затенение работает)
         assert!(
-            !matches!(stmt, Statement::Unresolved(_)),
+            !matches!(stmt, StatementNode::Unresolved(_)),
             "блок с затенённой переменной должен быть разрешён: {:?}",
             stmt
         );
@@ -743,11 +762,18 @@ mod tests {
         let def = Box::new(VariableDefine::Variable {
             loc,
             typ: Some(crate::parser::ast::Type::Bit),
-            name: Some(Identifier { loc, name: "inner".into() }),
+            name: Some(Identifier {
+                loc,
+                name: "inner".into(),
+            }),
             initializer: None,
         });
         let var_stmt = ast::Statement::Variable(loc, def, None);
-        let block = ast::Statement::Block { loc, unchecked: false, statements: vec![var_stmt] };
+        let block = ast::Statement::Block {
+            loc,
+            unchecked: false,
+            statements: vec![var_stmt],
+        };
 
         let m = Rc::new(RefCell::new(ModelNode::default()));
         let resolved = resolve_ast_statement(&block, m.clone()).unwrap();
@@ -758,9 +784,9 @@ mod tests {
             "inner не должна быть в модели после выхода из блока"
         );
         // Но Statement::Variable(inner) должен быть внутри блока
-        if let Statement::Block(stmts) = resolved {
+        if let StatementNode::Block(stmts) = resolved {
             assert!(
-                matches!(stmts.first(), Some(Statement::Variable(n, _, _)) if n == "inner"),
+                matches!(stmts.first(), Some(StatementNode::Variable(n, _, _)) if n == "inner"),
                 "разрешённый блок должен содержать Variable(inner): {:?}",
                 stmts.first()
             );
@@ -779,18 +805,28 @@ mod tests {
     /// ```
     #[test]
     fn local_var_in_for_init_resolves() {
-        let node =
-            build("always { for var i: bit = false; i; i = false { } } start S;");
+        let node = build("always { for var i: bit = false; i; i = false { } } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
-            matches!(stmt, Statement::For { init: Some(_), cond: Some(_), .. }),
+            matches!(
+                stmt,
+                StatementNode::For {
+                    init: Some(_),
+                    cond: Some(_),
+                    ..
+                }
+            ),
             "ожидался For{{init: Some, cond: Some}}: {:?}",
             stmt
         );
-        if let Statement::For { init: Some(init_box), .. } = stmt {
+        if let StatementNode::For {
+            init: Some(init_box),
+            ..
+        } = stmt
+        {
             assert!(
-                matches!(init_box.as_ref(), Statement::Variable(n, _, _) if n == "i"),
+                matches!(init_box.as_ref(), StatementNode::Variable(n, _, _) if n == "i"),
                 "init for должен быть Variable(i): {:?}",
                 init_box
             );
@@ -816,9 +852,9 @@ mod tests {
         });
         let stmt = ast::Statement::Variable(loc, def, None);
         let m = Rc::new(RefCell::new(ModelNode::default()));
-        let result = resolve_statement(&Statement::Unresolved(stmt), m).unwrap();
+        let result = resolve_statement(&StatementNode::Unresolved(stmt), m).unwrap();
         assert!(
-            matches!(result, Statement::Variable(ref n, _, None) if n == "tmp"),
+            matches!(result, StatementNode::Variable(ref n, _, None) if n == "tmp"),
             "ожидался Variable(tmp, _, None), получен: {:?}",
             result
         );

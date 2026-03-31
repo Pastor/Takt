@@ -21,14 +21,15 @@ use crate::semantic::import::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
 use crate::semantic::naming::normalize_model_name;
 use crate::semantic::reference::resolve_state_references;
-use crate::semantic::type_::construct_type;
 use crate::semantic::type_inference::type_inference;
+use crate::semantic::type_node::{TypeNode, construct_type};
 use crate::semantic::validate::{
     check_implicit_bool_conditions, check_transition_completeness, validate_model,
 };
 use crate::semantic::{
-    Condition, ConditionNode, Expression, FunctionNode, Implement, ModelNode, NamedCodeBlock,
-    Reference, StateNode, StateNodeKind, Statement, TypeNode, VariableNode,
+    ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, Implement,
+    ModelNode, NamedCodeBlockDefinitionNode, ReferenceNode, StateNode, StateNodeKind,
+    StatementNode, VariableNode,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -268,8 +269,8 @@ fn construct_model_stage0(
                             name: name.clone(),
                             ty: construct_type(typ, model_node.clone())?,
                             expr: initializer
-                                .map(|e| Expression::Unresolved(e))
-                                .unwrap_or(Expression::None),
+                                .map(|e| ExpressionNode::Unresolved(e))
+                                .unwrap_or(ExpressionNode::None),
                         },
                     )
                 }
@@ -294,7 +295,7 @@ fn construct_model_stage0(
                             loc,
                             name: name.clone(),
                             ty: type_node,
-                            expr: Expression::Unresolved(
+                            expr: ExpressionNode::Unresolved(
                                 initializer
                                     .filter(|i| {
                                         matches!(
@@ -327,7 +328,7 @@ fn construct_model_stage0(
                             loc,
                             name: name.clone(),
                             ty: construct_type(typ, model_node.clone())?,
-                            expr: Expression::Unresolved(initializer),
+                            expr: ExpressionNode::Unresolved(initializer),
                         },
                     )
                 }
@@ -363,10 +364,10 @@ fn construct_model_stage0(
                 .clone();
             conditions.insert(
                 name.clone(),
-                ConditionNode {
+                ConditionDefinitionNode {
                     name: name.clone(),
                     loc: def_loc,
-                    value: Condition::Unresolved(def.value.clone()),
+                    value: ConditionNode::Unresolved(def.value.clone()),
                     upper: Some(Rc::downgrade(&model_node)),
                 },
             );
@@ -383,22 +384,22 @@ fn construct_model_stage0(
                 .name
                 .clone();
             let block = match name.as_str() {
-                "enter" => NamedCodeBlock::Enter {
+                "enter" => NamedCodeBlockDefinitionNode::Enter {
                     upper: Some(Rc::downgrade(&model_node)),
-                    body: Statement::Unresolved(def.statement.clone()),
+                    body: StatementNode::Unresolved(def.statement.clone()),
                 },
-                "exit" => NamedCodeBlock::Exit {
+                "exit" => NamedCodeBlockDefinitionNode::Exit {
                     upper: Some(Rc::downgrade(&model_node)),
-                    body: Statement::Unresolved(def.statement.clone()),
+                    body: StatementNode::Unresolved(def.statement.clone()),
                 },
-                "always" => NamedCodeBlock::Always {
+                "always" => NamedCodeBlockDefinitionNode::Always {
                     upper: Some(Rc::downgrade(&model_node)),
-                    body: Statement::Unresolved(def.statement.clone()),
+                    body: StatementNode::Unresolved(def.statement.clone()),
                 },
-                name => NamedCodeBlock::Unknown {
+                name => NamedCodeBlockDefinitionNode::Unknown {
                     upper: Some(Rc::downgrade(&model_node)),
                     name: name.to_string(),
-                    body: Statement::Unresolved(def.statement.clone()),
+                    body: StatementNode::Unresolved(def.statement.clone()),
                 },
             };
             named_blocks.push(block);
@@ -414,7 +415,10 @@ fn construct_model_stage0(
                 })?
                 .name
                 .clone();
-            functions.insert(name.clone(), FunctionNode::Unresolved(*def.clone()));
+            functions.insert(
+                name.clone(),
+                FunctionDefinitionNode::Unresolved(*def.clone()),
+            );
         } else if let ModelElement::Enum(e) = element {
             // FE1: Обработка перечислений. Присваиваем последовательные значения
             // вариантам без явных значений (автоинкремент от 0).
@@ -431,7 +435,7 @@ fn construct_model_stage0(
                 variant_pairs.push((variant.name.name.clone(), val));
             }
             let enum_loc = e.name.as_ref().map(|id| id.loc).unwrap_or(e.loc);
-            let mut enum_node = crate::semantic::EnumNode::new(
+            let mut enum_node = crate::semantic::EnumDefinitionNode::new(
                 &enum_name,
                 &variant_pairs
                     .iter()
@@ -504,7 +508,7 @@ fn construct_model_stage1(
                     name: name.clone(),
                     references,
                     implements: construct_implement(
-                        Expression::Unresolved(implement_expression),
+                        ExpressionNode::Unresolved(implement_expression),
                         Rc::clone(&model),
                     )?,
                     next,
@@ -534,7 +538,7 @@ fn construct_model_stage1(
     Ok(Rc::clone(&model))
 }
 
-/// Разрешает инициализаторы переменных, заменяя [`Expression::Unresolved`]
+/// Разрешает инициализаторы переменных, заменяя [`ExpressionNode::Unresolved`]
 /// полностью разрешёнными семантическими выражениями.
 ///
 /// Вызывается до [`type_inference`], чтобы вывод типа работал с разрешёнными,
@@ -556,7 +560,7 @@ fn resolve_variable_expressions(
                 loc,
                 name: n,
                 ty,
-                expr: Expression::Unresolved(expr),
+                expr: ExpressionNode::Unresolved(expr),
             } => VariableNode::Simple {
                 upper,
                 loc,
@@ -569,7 +573,7 @@ fn resolve_variable_expressions(
                 loc,
                 name: n,
                 ty,
-                expr: Expression::Unresolved(expr),
+                expr: ExpressionNode::Unresolved(expr),
             } => VariableNode::Const {
                 upper,
                 loc,
@@ -582,7 +586,7 @@ fn resolve_variable_expressions(
                 loc,
                 name: n,
                 ty,
-                expr: Expression::Unresolved(expr),
+                expr: ExpressionNode::Unresolved(expr),
             } => VariableNode::Port {
                 upper,
                 loc,
@@ -654,7 +658,7 @@ fn construct_model_stage3(
 ///    передавая контекст вложенной модели (для корректного разрешения
 ///    переменных во вложенных областях видимости).
 ///
-/// При ошибке разрешения оператор сохраняется в виде [`Statement::Unresolved`]
+/// При ошибке разрешения оператор сохраняется в виде [`StatementNode::Unresolved`]
 /// (ошибка не пробрасывается), что позволяет корректно обрабатывать
 /// встроенные функции (`debug`, `S`, …) без их явной регистрации.
 fn construct_model_stage4(
@@ -741,9 +745,9 @@ fn construct_model_stage6(
 }
 
 fn resolve_functions(
-    functions: HashMap<String, FunctionNode>,
+    functions: HashMap<String, FunctionDefinitionNode>,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<HashMap<String, FunctionNode>, Diagnostic> {
+) -> Result<HashMap<String, FunctionDefinitionNode>, Diagnostic> {
     let mut resolved_functions = HashMap::with_capacity(functions.len());
 
     for (name, function) in functions {
@@ -982,11 +986,11 @@ pub fn construct_states(
             for element in def.elements.iter() {
                 if let StateElement::Reference(_, id, cond) = element {
                     let cond = if let Some(cond) = cond {
-                        Condition::Unresolved(cond.clone())
+                        ConditionNode::Unresolved(cond.clone())
                     } else {
-                        Condition::None
+                        ConditionNode::None
                     };
-                    references.push(Reference {
+                    references.push(ReferenceNode {
                         location: id.loc,
                         name: id.name.clone(),
                         cond,
@@ -1025,10 +1029,10 @@ pub fn construct_states(
             // Определяем вид узла: Implement (есть `= Выражение`) или Simple.
             let state_loc = def.loc;
             let state = if let Some(expr) = implements {
-                let next = next.map(|n| Reference {
+                let next = next.map(|n| ReferenceNode {
                     location: state_loc,
                     name: n,
-                    cond: Condition::None,
+                    cond: ConditionNode::None,
                     object: Box::new(StateNode::Unresolved),
                 });
                 StateNode::Implement {
@@ -1101,7 +1105,7 @@ pub fn construct_states(
                                     format!("Ссылка '{}' не найдена", &r.name),
                                 )
                             })?;
-                            Ok(Reference {
+                            Ok(ReferenceNode {
                                 location: r.location,
                                 name: r.name,
                                 cond: r.cond,
@@ -1139,9 +1143,9 @@ pub fn construct_states(
 ///
 /// Возвращает [`Diagnostic`], если ссылка указывает на несуществующее состояние.
 fn resolve_references(
-    references: Vec<Reference<StateNode>>,
+    references: Vec<ReferenceNode<StateNode>>,
     states: &HashMap<String, Box<StateNode>>,
-) -> Result<Vec<Reference<StateNode>>, Diagnostic> {
+) -> Result<Vec<ReferenceNode<StateNode>>, Diagnostic> {
     references
         .into_iter()
         .map(|r| {
@@ -1152,7 +1156,7 @@ fn resolve_references(
                         format!("Ссылка '{}' не найдена", &r.name),
                     )
                 })?;
-                Ok(Reference {
+                Ok(ReferenceNode {
                     location: r.location,
                     name: r.name,
                     cond: r.cond,
@@ -1176,7 +1180,7 @@ fn resolve_references(
 fn construct_named_blocks(
     state: &StateDefine,
     upper: Option<Weak<RefCell<ModelNode>>>,
-) -> Result<Vec<NamedCodeBlock>, Diagnostic> {
+) -> Result<Vec<NamedCodeBlockDefinitionNode>, Diagnostic> {
     let mut named_blocks = Vec::new();
     for element in state.elements.iter() {
         if let StateElement::NamedBlockCode(def) = element {
@@ -1192,22 +1196,22 @@ fn construct_named_blocks(
                 .name
                 .clone();
             let block = match name.as_str() {
-                "enter" => NamedCodeBlock::Enter {
+                "enter" => NamedCodeBlockDefinitionNode::Enter {
                     upper: upper.clone(),
-                    body: Statement::Unresolved(def.statement.clone()),
+                    body: StatementNode::Unresolved(def.statement.clone()),
                 },
-                "exit" => NamedCodeBlock::Exit {
+                "exit" => NamedCodeBlockDefinitionNode::Exit {
                     upper: upper.clone(),
-                    body: Statement::Unresolved(def.statement.clone()),
+                    body: StatementNode::Unresolved(def.statement.clone()),
                 },
-                "always" => NamedCodeBlock::Always {
+                "always" => NamedCodeBlockDefinitionNode::Always {
                     upper: upper.clone(),
-                    body: Statement::Unresolved(def.statement.clone()),
+                    body: StatementNode::Unresolved(def.statement.clone()),
                 },
-                name => NamedCodeBlock::Unknown {
+                name => NamedCodeBlockDefinitionNode::Unknown {
                     upper: upper.clone(),
                     name: name.to_string(),
-                    body: Statement::Unresolved(def.statement.clone()),
+                    body: StatementNode::Unresolved(def.statement.clone()),
                 },
             };
             named_blocks.push(block);
@@ -1216,7 +1220,7 @@ fn construct_named_blocks(
     Ok(named_blocks)
 }
 
-/// Строит [`Implement`] из семантического выражения [`Expression`].
+/// Строит [`Implement`] из семантического выражения [`ExpressionNode`].
 ///
 /// Обрабатывает разрешённые семантические выражения: `Model`, `Add`, `BitwiseOr`,
 /// `Parenthesis`. Для ещё не разрешённых АСД-выражений (`Unresolved`) делегирует
@@ -1230,22 +1234,22 @@ fn construct_named_blocks(
 /// Возвращает [`Diagnostic`], если встречается неподдерживаемое выражение
 /// (например, числовой литерал там, где ожидается имя модели).
 fn construct_implement(
-    expression: Expression,
+    expression: ExpressionNode,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Implement, Diagnostic> {
     let model = Rc::clone(&model);
     match expression {
         // Ещё не разрешённое АСД-выражение: обходим напрямую без полного construct_expression
-        Expression::Unresolved(expr) => construct_implement_ast(expr, model),
+        ExpressionNode::Unresolved(expr) => construct_implement_ast(expr, model),
         // Разрешённая модель
-        Expression::Model(model) => Ok(Implement::Model(Rc::clone(&model))),
-        Expression::Parenthesis(expression) => construct_implement(*expression, model),
-        Expression::Add(left, right) => {
+        ExpressionNode::Model(model) => Ok(Implement::Model(Rc::clone(&model))),
+        ExpressionNode::Parenthesis(expression) => construct_implement(*expression, model),
+        ExpressionNode::Add(left, right) => {
             let left = construct_implement(*left, model.clone())?;
             let right = construct_implement(*right, model.clone())?;
             Ok(Implement::Add(Box::new(left), Box::new(right)))
         }
-        Expression::BitwiseOr(left, right) => {
+        ExpressionNode::BitwiseOr(left, right) => {
             let left = construct_implement(*left, model.clone())?;
             let right = construct_implement(*right, model.clone())?;
             Ok(Implement::Or(Box::new(left), Box::new(right)))
@@ -1259,7 +1263,7 @@ fn construct_implement(
 /// Строит [`Implement`] непосредственно из АСД-выражения [`ast::Expression`].
 ///
 /// Используется из [`construct_implement`] для обработки варианта
-/// [`Expression::Unresolved`]. Напрямую обходит АСД, не вызывая полный
+/// [`ExpressionNode::Unresolved`]. Напрямую обходит АСД, не вызывая полный
 /// [`construct_expression`], что является оптимизацией для ограниченного
 /// подмножества выражений реализации.
 ///

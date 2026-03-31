@@ -251,14 +251,14 @@ pub fn nondeterministic_transition_warnings(
 /// ```
 /// use grammar::parse;
 /// use grammar::semantic::tree::construct_model;
-/// use grammar::semantic::EnumNode;
+/// use grammar::semantic::EnumDefinitionNode;
 ///
 /// // Создаём модель с перечислением программно
 /// let (ast, _) = parse("start S;", 0).unwrap();
 /// let model = construct_model(&ast, None, &[]).unwrap();
 /// {
 ///     let mut m = model.borrow_mut();
-///     let e = EnumNode::new("Dir", &[("North", Some(0)), ("South", Some(1))]);
+///     let e = EnumDefinitionNode::new("Dir", &[("North", Some(0)), ("South", Some(1))]);
 ///     m.enums.insert("Dir".to_string(), e);
 /// }
 /// let errors = grammar::enum_type_safety_errors(model);

@@ -1,22 +1,22 @@
 //! Построение семантических узлов функций языка BuT.
 //!
-//! Основная функция [`construct_function`] преобразует [`FunctionNode::Unresolved`]
+//! Основная функция [`construct_function`] преобразует [`FunctionDefinitionNode::Unresolved`]
 //! (необработанное AST-определение) в:
-//! - [`FunctionNode::Local`] — локальная функция с телом;
-//! - [`FunctionNode::External`] — внешняя функция (`extern fn`).
+//! - [`FunctionDefinitionNode::Local`] — локальная функция с телом;
+//! - [`FunctionDefinitionNode::External`] — внешняя функция (`extern fn`).
 //!
-//! Уже разрешённые функции ([`FunctionNode::Local`], [`FunctionNode::External`],
-//! [`FunctionNode::Builtin`]) возвращаются без изменений.
+//! Уже разрешённые функции ([`FunctionDefinitionNode::Local`], [`FunctionDefinitionNode::External`],
+//! [`FunctionDefinitionNode::Builtin`]) возвращаются без изменений.
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::statement::resolve_statement;
-use crate::semantic::type_::construct_type;
-use crate::semantic::{FunctionNode, ModelNode, Statement, TypeNode};
+use crate::semantic::type_node::{TypeNode, construct_type};
+use crate::semantic::{FunctionDefinitionNode, ModelNode, StatementNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Строит разрешённый семантический узел функции из [`FunctionNode`].
+/// Строит разрешённый семантический узел функции из [`FunctionDefinitionNode`].
 ///
 /// Обрабатывает только `Unresolved`-вариант; остальные возвращаются без изменений.
 ///
@@ -28,10 +28,10 @@ use std::rc::Rc;
 /// - параметр не имеет объявления типа;
 /// - локальная функция объявлена без тела.
 pub fn construct_function(
-    func: FunctionNode,
+    func: FunctionDefinitionNode,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<FunctionNode, Diagnostic> {
-    if let FunctionNode::Unresolved(def) = func {
+) -> Result<FunctionDefinitionNode, Diagnostic> {
+    if let FunctionDefinitionNode::Unresolved(def) = func {
         let name = def
             .clone()
             .name
@@ -74,7 +74,7 @@ pub fn construct_function(
                 None => TypeNode::Unit,
             };
             if def.external {
-                Ok(FunctionNode::External {
+                Ok(FunctionDefinitionNode::External {
                     upper: Some(Rc::downgrade(&model)),
                     loc: def.loc,
                     name: name.clone(),
@@ -83,11 +83,11 @@ pub fn construct_function(
                 })
             } else {
                 let statement = if let Some(body) = def.body {
-                    resolve_statement(&Statement::Unresolved(body), model.clone())?
+                    resolve_statement(&StatementNode::Unresolved(body), model.clone())?
                 } else {
                     return Err("Локальная функция должна иметь тело".into());
                 };
-                Ok(FunctionNode::Local {
+                Ok(FunctionDefinitionNode::Local {
                     upper: Some(Rc::downgrade(&model)),
                     loc: def.loc,
                     name: name.clone(),
@@ -97,7 +97,7 @@ pub fn construct_function(
                 })
             }
         }
-    } else if let FunctionNode::None = func {
+    } else if let FunctionDefinitionNode::None = func {
         Err("Функция не определена".into())
     } else {
         Ok(func)
@@ -109,8 +109,9 @@ pub fn construct_function(
 #[cfg(test)]
 mod tests {
     use crate::parse;
+    use crate::semantic::FunctionDefinitionNode;
     use crate::semantic::tree::construct_model;
-    use crate::semantic::{FunctionNode, TypeNode};
+    use crate::semantic::type_node::TypeNode;
 
     /// Строит модель и возвращает корневой ModelNode.
     fn build(src: &str) -> Result<crate::semantic::ModelNode, crate::diagnostics::Diagnostic> {
@@ -130,7 +131,7 @@ mod tests {
     fn extern_fn_no_params_resolves_to_external() {
         let node = build("extern fn foo(x: bit);").unwrap();
         match node.functions.get("foo").expect("функция foo не найдена") {
-            FunctionNode::External {
+            FunctionDefinitionNode::External {
                 name, params, ret, ..
             } => {
                 assert_eq!(name, "foo");
@@ -148,7 +149,7 @@ mod tests {
     fn extern_fn_with_return_type() {
         let node = build("extern fn status() -> bit;").unwrap();
         match node.functions.get("status").expect("status не найдена") {
-            FunctionNode::External { ret, .. } => assert_eq!(*ret, TypeNode::Bit),
+            FunctionDefinitionNode::External { ret, .. } => assert_eq!(*ret, TypeNode::Bit),
             other => panic!("ожидался External, получен {:?}", other),
         }
     }
@@ -158,7 +159,7 @@ mod tests {
     fn extern_fn_no_return_type_defaults_to_unit() {
         let node = build("extern fn noop();").unwrap();
         match node.functions.get("noop").expect("noop не найдена") {
-            FunctionNode::External { params, ret, .. } => {
+            FunctionDefinitionNode::External { params, ret, .. } => {
                 assert!(params.is_empty(), "параметров быть не должно");
                 assert_eq!(*ret, TypeNode::Unit);
             }
@@ -183,7 +184,7 @@ mod tests {
     fn local_fn_resolves_to_local() {
         let node = build("fn id(x: bit) -> bit { return true; }").unwrap();
         match node.functions.get("id").expect("id не найдена") {
-            FunctionNode::Local {
+            FunctionDefinitionNode::Local {
                 name, params, ret, ..
             } => {
                 assert_eq!(name, "id");
@@ -201,7 +202,7 @@ mod tests {
     fn local_fn_no_params_no_return() {
         let node = build("fn noop() { }").unwrap();
         match node.functions.get("noop").expect("noop не найдена") {
-            FunctionNode::Local { params, ret, .. } => {
+            FunctionDefinitionNode::Local { params, ret, .. } => {
                 assert!(params.is_empty());
                 assert_eq!(*ret, TypeNode::Unit);
             }
@@ -216,7 +217,7 @@ mod tests {
     fn local_fn_multiple_params() {
         let node = build("fn add(a: bit, b: bit) -> bit { return true; }").unwrap();
         match node.functions.get("add").expect("add не найдена") {
-            FunctionNode::Local { params, .. } => {
+            FunctionDefinitionNode::Local { params, .. } => {
                 assert_eq!(params.len(), 2);
                 assert_eq!(params[0].0, "a");
                 assert_eq!(params[0].1, TypeNode::Bit);
@@ -232,7 +233,7 @@ mod tests {
     fn extern_fn_alias_param_resolves() {
         let node = build("type u8 = [bit;8]; extern fn foo(x: u8);").unwrap();
         match node.functions.get("foo").expect("foo не найдена") {
-            FunctionNode::External { params, .. } => {
+            FunctionDefinitionNode::External { params, .. } => {
                 assert_eq!(params.len(), 1);
                 assert_eq!(params[0].1, TypeNode::Array(8, Box::new(TypeNode::Bit)));
             }
@@ -252,7 +253,7 @@ mod tests {
         use std::cell::RefCell;
         use std::rc::Rc;
         let model = Rc::new(RefCell::new(ModelNode::default()));
-        let result = construct_function(FunctionNode::None, model);
+        let result = construct_function(FunctionDefinitionNode::None, model);
         assert!(result.is_err(), "FunctionNode::None должен давать ошибку");
     }
 
@@ -260,16 +261,16 @@ mod tests {
     #[test]
     fn already_resolved_local_passthrough() {
         use super::*;
-        use crate::semantic::Statement;
+        use crate::semantic::StatementNode;
         use std::cell::RefCell;
         use std::rc::Rc;
-        let local = FunctionNode::Local {
+        let local = FunctionDefinitionNode::Local {
             upper: None,
             loc: Default::default(),
             name: "f".into(),
             params: vec![],
             ret: TypeNode::Unit,
-            body: Statement::None,
+            body: StatementNode::None,
         };
         let model = Rc::new(RefCell::new(ModelNode::default()));
         let result = construct_function(local.clone(), model).unwrap();

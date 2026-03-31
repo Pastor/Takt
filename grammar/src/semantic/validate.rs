@@ -20,9 +20,10 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::{ast as ast_types, ast};
 use crate::semantic::condition::resolve_condition;
+use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
-    Condition, Expression, FunctionNode, ModelNode, Reference, StateNode, StateNodeKind, Statement,
-    TypeNode, VariableNode,
+    ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, ReferenceNode, StateNode,
+    StateNodeKind, StatementNode, VariableNode,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -87,11 +88,11 @@ fn model_only_one_start_state(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagn
 fn check_bit_variable_value(
     name: &str,
     ty: &TypeNode,
-    expr: &Expression,
+    expr: &ExpressionNode,
     loc: Location,
 ) -> Result<(), Diagnostic> {
     if *ty == TypeNode::Bit {
-        if let Expression::Number(n) = expr {
+        if let ExpressionNode::Number(n) = expr {
             if *n != 0 && *n != 1 {
                 return Err(Diagnostic::error(
                     loc,
@@ -132,24 +133,24 @@ fn validate_bit_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> 
 }
 
 fn validate_cond(
-    context: Option<Condition>,
-    cond: &Condition,
+    context: Option<ConditionNode>,
+    cond: &ConditionNode,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<(), Diagnostic> {
     let _borrowed = model.borrow();
     match cond.clone() {
-        Condition::None => {}
-        Condition::Unresolved(cond) => {
+        ConditionNode::None => {}
+        ConditionNode::Unresolved(cond) => {
             #[allow(clippy::collapsible_if)]
             if let Some(context) = context
                 && let ast::Condition::Variable(id) = cond.clone()
             {
-                if let Condition::Function(func, args, _) = context
-                    && let FunctionNode::Builtin(name, ..) = *func.borrow()
+                if let ConditionNode::Function(func, args, _) = context
+                    && let FunctionDefinitionNode::Builtin(name, ..) = *func.borrow()
                     && name == "S"
                     && args.len() == 1
                     && let Some(cond) = args.get(0)
-                    && let Condition::Model(model) = *cond.clone()
+                    && let ConditionNode::Model(model) = *cond.clone()
                 {
                     let model = model.borrow();
                     let model_name = model.name.clone().unwrap();
@@ -166,75 +167,75 @@ fn validate_cond(
                 }
             }
 
-            if let Condition::Unresolved(_) = resolve_condition(&cond, model.clone())? {
+            if let ConditionNode::Unresolved(_) = resolve_condition(&cond, model.clone())? {
                 return Err(Diagnostic::error(
                     Location::Implicit,
                     format!("Unresolved condition: {:?}", cond),
                 ));
             }
         }
-        Condition::ArraySubscript(_, _) => {}
-        Condition::Parenthesis(cond) => {
+        ConditionNode::ArraySubscript(_, _) => {}
+        ConditionNode::Parenthesis(cond) => {
             validate_cond(None, &cond, model.clone())?;
         }
-        Condition::BitAccess(cond, _) => {
+        ConditionNode::BitAccess(cond, _) => {
             validate_cond(None, &cond, model.clone())?;
         }
-        Condition::Function(_, conds, _) => {
+        ConditionNode::Function(_, conds, _) => {
             for cond in conds {
                 validate_cond(None, &cond, model.clone())?;
             }
         }
-        Condition::Not(cond) => {
+        ConditionNode::Not(cond) => {
             validate_cond(None, &cond, model.clone())?;
         }
-        Condition::Add(left, right) => {
+        ConditionNode::Add(left, right) => {
             validate_cond(None, &left, model.clone())?;
             validate_cond(None, &right, model.clone())?;
         }
-        Condition::Subtract(left, right) => {
+        ConditionNode::Subtract(left, right) => {
             validate_cond(None, &left, model.clone())?;
             validate_cond(None, &right, model.clone())?;
         }
-        Condition::And(left, right) => {
+        ConditionNode::And(left, right) => {
             validate_cond(None, &left, model.clone())?;
             validate_cond(None, &right, model.clone())?;
         }
-        Condition::Or(left, right) => {
+        ConditionNode::Or(left, right) => {
             validate_cond(None, &left, model.clone())?;
             validate_cond(None, &right, model.clone())?;
         }
-        Condition::Less(left, right) => {
+        ConditionNode::Less(left, right) => {
             validate_cond(None, &left, model.clone())?;
             validate_cond(None, &right, model.clone())?;
         }
-        Condition::More(left, right) => {
+        ConditionNode::More(left, right) => {
             validate_cond(None, &left, model.clone())?;
             validate_cond(None, &right, model.clone())?;
         }
-        Condition::LessEqual(left, right) => {
+        ConditionNode::LessEqual(left, right) => {
             validate_cond(None, &left, model.clone())?;
             validate_cond(None, &right, model.clone())?;
         }
-        Condition::MoreEqual(left, right) => {
+        ConditionNode::MoreEqual(left, right) => {
             validate_cond(None, &left, model.clone())?;
             validate_cond(None, &right, model.clone())?;
         }
-        Condition::Equal(left, right) => {
+        ConditionNode::Equal(left, right) => {
             validate_cond(None, &left, model.clone())?;
             validate_cond(Some(*left.clone()), &right, model.clone())?;
         }
-        Condition::NotEqual(left, right) => {
+        ConditionNode::NotEqual(left, right) => {
             validate_cond(None, &left, model.clone())?;
             validate_cond(None, &right, model.clone())?;
         }
-        Condition::Number(_) => {}
-        Condition::Rational(_, _) => {}
-        Condition::String(_) => {}
-        Condition::Bool(_) => {}
-        Condition::Variable(_var, _) => {}
-        Condition::Model(_model) => {}
-        Condition::State(_state) => {}
+        ConditionNode::Number(_) => {}
+        ConditionNode::Rational(_, _) => {}
+        ConditionNode::String(_) => {}
+        ConditionNode::Bool(_) => {}
+        ConditionNode::Variable(_var, _) => {}
+        ConditionNode::Model(_model) => {}
+        ConditionNode::State(_state) => {}
     }
     Ok(())
 }
@@ -254,67 +255,70 @@ fn validate_state_references(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagno
     Ok(())
 }
 
-fn validate_expression(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+fn validate_expression(
+    expr: &ExpressionNode,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<(), Diagnostic> {
     let _borrowed = model.borrow();
     match expr {
-        Expression::None => {}
-        Expression::Unresolved(_) => {}
-        Expression::ArraySubscript(_, _) => {}
-        Expression::ArraySlice(_, _, _) => {}
-        Expression::Parenthesis(expr)
-        | Expression::BitAccess(expr, _)
-        | Expression::CodeBlock(expr, _)
-        | Expression::NamedFunctionBox(expr, _)
-        | Expression::Not(expr)
-        | Expression::UnaryPlus(expr)
-        | Expression::Negate(expr)
-        | Expression::Cast(expr, _)
-        | Expression::BitwiseNot(expr) => {
+        ExpressionNode::None => {}
+        ExpressionNode::Unresolved(_) => {}
+        ExpressionNode::ArraySubscript(_, _) => {}
+        ExpressionNode::ArraySlice(_, _, _) => {}
+        ExpressionNode::Parenthesis(expr)
+        | ExpressionNode::BitAccess(expr, _)
+        | ExpressionNode::CodeBlock(expr, _)
+        | ExpressionNode::NamedFunctionBox(expr, _)
+        | ExpressionNode::Not(expr)
+        | ExpressionNode::UnaryPlus(expr)
+        | ExpressionNode::Negate(expr)
+        | ExpressionNode::Cast(expr, _)
+        | ExpressionNode::BitwiseNot(expr) => {
             validate_expression(expr, model.clone())?;
         }
-        Expression::Power(left, right)
-        | Expression::Multiply(left, right)
-        | Expression::Divide(left, right)
-        | Expression::Modulo(left, right)
-        | Expression::Add(left, right)
-        | Expression::Subtract(left, right)
-        | Expression::ShiftLeft(left, right)
-        | Expression::ShiftRight(left, right)
-        | Expression::BitwiseAnd(left, right)
-        | Expression::BitwiseXor(left, right)
-        | Expression::BitwiseOr(left, right)
-        | Expression::Less(left, right)
-        | Expression::More(left, right)
-        | Expression::LessEqual(left, right)
-        | Expression::MoreEqual(left, right)
-        | Expression::Equal(left, right)
-        | Expression::NotEqual(left, right)
-        | Expression::And(left, right)
-        | Expression::Or(left, right)
-        | Expression::Assign(left, right) => {
+        ExpressionNode::Power(left, right)
+        | ExpressionNode::Multiply(left, right)
+        | ExpressionNode::Divide(left, right)
+        | ExpressionNode::Modulo(left, right)
+        | ExpressionNode::Add(left, right)
+        | ExpressionNode::Subtract(left, right)
+        | ExpressionNode::ShiftLeft(left, right)
+        | ExpressionNode::ShiftRight(left, right)
+        | ExpressionNode::BitwiseAnd(left, right)
+        | ExpressionNode::BitwiseXor(left, right)
+        | ExpressionNode::BitwiseOr(left, right)
+        | ExpressionNode::Less(left, right)
+        | ExpressionNode::More(left, right)
+        | ExpressionNode::LessEqual(left, right)
+        | ExpressionNode::MoreEqual(left, right)
+        | ExpressionNode::Equal(left, right)
+        | ExpressionNode::NotEqual(left, right)
+        | ExpressionNode::And(left, right)
+        | ExpressionNode::Or(left, right)
+        | ExpressionNode::Assign(left, right) => {
             validate_expression(left, model.clone())?;
             validate_expression(right, model.clone())?;
         }
-        Expression::ConditionalOperator(left, right, other) => {
+        ExpressionNode::ConditionalOperator(left, right, other) => {
             validate_expression(left, model.clone())?;
             validate_expression(right, model.clone())?;
             validate_expression(other, model.clone())?;
         }
-        Expression::Number(_) => {}
-        Expression::Rational(_, _) => {}
-        Expression::String(_) => {}
-        Expression::Type(_) => {}
-        Expression::Address(_, _) => {}
-        Expression::Bool(_) => {}
-        Expression::Variable(_var) => {}
-        Expression::Model(_model) => {}
-        Expression::Condition(cond) => {
+        ExpressionNode::Number(_) => {}
+        ExpressionNode::Rational(_, _) => {}
+        ExpressionNode::String(_) => {}
+        ExpressionNode::Type(_) => {}
+        ExpressionNode::Address(_, _) => {}
+        ExpressionNode::Bool(_) => {}
+        ExpressionNode::Variable(_var) => {}
+        ExpressionNode::Model(_model) => {}
+        ExpressionNode::Condition(cond) => {
             validate_cond(None, &cond.borrow().value, model.clone())?;
         }
-        Expression::List(_) => {}
-        Expression::Array(exprs)
-        | Expression::Initializer(exprs)
-        | Expression::Function(_, exprs) => {
+        ExpressionNode::List(_) => {}
+        ExpressionNode::Array(exprs)
+        | ExpressionNode::Initializer(exprs)
+        | ExpressionNode::Function(_, exprs) => {
             for expr in exprs {
                 validate_expression(expr, model.clone())?;
             }
@@ -324,7 +328,7 @@ fn validate_expression(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Resu
 }
 
 fn validate_reference(
-    reference: &Reference<StateNode>,
+    reference: &ReferenceNode<StateNode>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<(), Diagnostic> {
     validate_cond(None, &reference.cond, model.clone())?;
@@ -359,7 +363,7 @@ fn validate_conditions(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> 
 /// Возвращает `true`, если AST-условие перехода гарантированно является булевым.
 ///
 /// Используется для условий на рёбрах `ref`, которые в текущем конвейере
-/// хранятся как [`Condition::Unresolved`] и содержат «сырой» [`ast::Condition`].
+/// хранятся как [`ConditionNode::Unresolved`] и содержат «сырой» [`ast::Condition`].
 ///
 /// ## Правила классификации
 ///
@@ -411,7 +415,9 @@ pub(crate) fn is_boolean_ast_condition(
                 return match &var {
                     VariableNode::Simple { ty, .. }
                     | VariableNode::Port { ty, .. }
-                    | VariableNode::Const { ty, .. } => matches!(ty, TypeNode::Bool | TypeNode::Bit),
+                    | VariableNode::Const { ty, .. } => {
+                        matches!(ty, TypeNode::Bool | TypeNode::Bit)
+                    }
                     // Тип не разрешён — не предупреждаем
                     VariableNode::Unresolved => true,
                 };
@@ -524,21 +530,21 @@ fn emit_implicit_bool_warning(
 /// | Побитовые операции (`&`, `\|`)                   | числовое   |
 /// | Элемент массива (`arr[n]`)                       | числовое   |
 /// | Доступ к битовому полю (`.n`)                    | числовое   |
-fn is_boolean_semantic_condition(cond: &Condition) -> bool {
+fn is_boolean_semantic_condition(cond: &ConditionNode) -> bool {
     match cond {
-        Condition::None => true,
-        Condition::Bool(_) => true,
-        Condition::Equal(_, _)
-        | Condition::NotEqual(_, _)
-        | Condition::Less(_, _)
-        | Condition::More(_, _)
-        | Condition::LessEqual(_, _)
-        | Condition::MoreEqual(_, _) => true,
-        Condition::Not(_) => true,
-        Condition::Parenthesis(inner) => is_boolean_semantic_condition(inner),
+        ConditionNode::None => true,
+        ConditionNode::Bool(_) => true,
+        ConditionNode::Equal(_, _)
+        | ConditionNode::NotEqual(_, _)
+        | ConditionNode::Less(_, _)
+        | ConditionNode::More(_, _)
+        | ConditionNode::LessEqual(_, _)
+        | ConditionNode::MoreEqual(_, _) => true,
+        ConditionNode::Not(_) => true,
+        ConditionNode::Parenthesis(inner) => is_boolean_semantic_condition(inner),
         // Тип возврата функции неизвестен — не предупреждаем
-        Condition::Function(_, _, _) => true,
-        Condition::Variable(v, _) => {
+        ConditionNode::Function(_, _, _) => true,
+        ConditionNode::Variable(v, _) => {
             let borrowed = v.borrow();
             match &*borrowed {
                 VariableNode::Simple { ty, .. }
@@ -555,14 +561,14 @@ fn is_boolean_semantic_condition(cond: &Condition) -> bool {
 ///
 /// Вызывается только когда [`is_boolean_semantic_condition`] вернул `false`,
 /// поэтому покрывает только «числовые» ветви.
-fn semantic_condition_summary(cond: &Condition) -> String {
+fn semantic_condition_summary(cond: &ConditionNode) -> String {
     match cond {
-        Condition::Number(n) => format!("числовой литерал {}", n),
-        Condition::Rational(s, neg) => {
+        ConditionNode::Number(n) => format!("числовой литерал {}", n),
+        ConditionNode::Rational(s, neg) => {
             format!("вещественный литерал {}{}", if *neg { "-" } else { "" }, s)
         }
-        Condition::String(_) => "строковый литерал".to_string(),
-        Condition::Variable(v, _) => {
+        ConditionNode::String(_) => "строковый литерал".to_string(),
+        ConditionNode::Variable(v, _) => {
             let borrowed = v.borrow();
             let (name_str, ty) = match &*borrowed {
                 VariableNode::Simple { name, ty, .. }
@@ -572,11 +578,11 @@ fn semantic_condition_summary(cond: &Condition) -> String {
             };
             format!("переменная '{}' типа {:?}", name_str, ty)
         }
-        Condition::Add(_, _) => "арифметическое сложение".to_string(),
-        Condition::Subtract(_, _) => "арифметическое вычитание".to_string(),
-        Condition::And(_, _) => "побитовое И".to_string(),
-        Condition::Or(_, _) => "побитовое ИЛИ".to_string(),
-        Condition::ArraySubscript(var, idx) => {
+        ConditionNode::Add(_, _) => "арифметическое сложение".to_string(),
+        ConditionNode::Subtract(_, _) => "арифметическое вычитание".to_string(),
+        ConditionNode::And(_, _) => "побитовое И".to_string(),
+        ConditionNode::Or(_, _) => "побитовое ИЛИ".to_string(),
+        ConditionNode::ArraySubscript(var, idx) => {
             let name = match &*var.borrow() {
                 VariableNode::Simple { name, .. }
                 | VariableNode::Port { name, .. }
@@ -585,7 +591,7 @@ fn semantic_condition_summary(cond: &Condition) -> String {
             };
             format!("элемент массива '{}[{}]'", name, idx)
         }
-        Condition::BitAccess(_, _) => "доступ к битовому полю".to_string(),
+        ConditionNode::BitAccess(_, _) => "доступ к битовому полю".to_string(),
         _ => "числовое выражение".to_string(),
     }
 }
@@ -593,7 +599,7 @@ fn semantic_condition_summary(cond: &Condition) -> String {
 /// Проверяет условие одного перехода и при необходимости добавляет предупреждение Се11.
 ///
 /// Основной путь — условие уже разрешено на этапе 6 конвейера
-/// ([`crate::semantic::tree`]). Неразрешённый вариант [`Condition::Unresolved`]
+/// ([`crate::semantic::tree`]). Неразрешённый вариант [`ConditionNode::Unresolved`]
 /// используется только как запасной (для паттернов вида `S(Model).StateName`,
 /// которые не могут быть разрешены в текущем контексте).
 ///
@@ -602,21 +608,21 @@ fn semantic_condition_summary(cond: &Condition) -> String {
 fn check_one_ref(
     prefix: &str,
     target_name: &str,
-    cond: &Condition,
+    cond: &ConditionNode,
     model: &Rc<RefCell<ModelNode>>,
     is_next: bool,
     out: &mut Vec<Diagnostic>,
 ) {
     match cond {
         // ── Основной путь: разрешённое семантическое условие ──────────────────
-        cond if !matches!(cond, Condition::Unresolved(_)) => {
+        cond if !matches!(cond, ConditionNode::Unresolved(_)) => {
             if !is_boolean_semantic_condition(cond) {
                 let summary = semantic_condition_summary(cond);
                 emit_implicit_bool_warning(prefix, target_name, &summary, is_next, out);
             }
         }
         // ── Запасной путь: условие не разрешено (например, S(Model).StateName) ──
-        Condition::Unresolved(ast_cond) => {
+        ConditionNode::Unresolved(ast_cond) => {
             if !is_boolean_ast_condition(ast_cond, model) {
                 let summary = ast_condition_summary(ast_cond, model);
                 emit_implicit_bool_warning(prefix, target_name, &summary, is_next, out);
@@ -818,17 +824,13 @@ pub fn check_transition_completeness(model: Rc<RefCell<ModelNode>>) -> Vec<Diagn
 }
 
 /// Рекурсивно собирает диагностики Ce5 для модели и всех вложенных моделей.
-fn collect_transition_completeness(
-    model: &Rc<RefCell<ModelNode>>,
-    out: &mut Vec<Diagnostic>,
-) {
+fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
     let borrowed = model.borrow();
 
     // Если состояний нет — модуль без автомата, пропускаем
     if borrowed.states.is_empty() {
         // Рекурсивный спуск во вложенные модели
-        let nested: Vec<Rc<RefCell<ModelNode>>> =
-            borrowed.models.values().map(Rc::clone).collect();
+        let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
         drop(borrowed);
         for m in nested {
             collect_transition_completeness(&m, out);
@@ -888,8 +890,7 @@ fn collect_transition_completeness(
             StateNode::Implement {
                 references, next, ..
             } => {
-                let mut t: Vec<String> =
-                    references.iter().map(|r| r.name.clone()).collect();
+                let mut t: Vec<String> = references.iter().map(|r| r.name.clone()).collect();
                 if let Some(nr) = next {
                     t.push(nr.name.clone());
                 }
@@ -964,8 +965,7 @@ fn collect_transition_completeness(
     }
 
     // Рекурсивный спуск во вложенные модели
-    let nested: Vec<Rc<RefCell<ModelNode>>> =
-        borrowed.models.values().map(Rc::clone).collect();
+    let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
     drop(borrowed);
 
     for m in nested {
@@ -1781,11 +1781,17 @@ mod tests {
     fn ni6_valid_enum_initializer_no_errors() {
         let model_rc = {
             let (ast, _) = crate::parse("start S;", 0).expect("ошибка разбора");
-            let m = crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
+            let m =
+                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             // Добавляем перечисление и переменную с корректным значением программно
-            let e = crate::semantic::EnumNode::new(
+            let e = crate::semantic::EnumDefinitionNode::new(
                 "Direction",
-                &[("North", Some(0)), ("South", Some(1)), ("East", Some(2)), ("West", Some(3))],
+                &[
+                    ("North", Some(0)),
+                    ("South", Some(1)),
+                    ("East", Some(2)),
+                    ("West", Some(3)),
+                ],
             );
             m.borrow_mut().enums.insert("Direction".to_string(), e);
             let dir_var = crate::semantic::VariableNode::Simple {
@@ -1793,13 +1799,16 @@ mod tests {
                 loc: crate::diagnostics::Location::Implicit,
                 name: "dir".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Direction".to_string()),
-                expr: crate::semantic::Expression::Number(0),
+                expr: crate::semantic::ExpressionNode::Number(0),
             };
             m.borrow_mut().variables.insert("dir".to_string(), dir_var);
             m
         };
         let errors = check_enum_type_safety(model_rc);
-        assert!(errors.is_empty(), "допустимое значение enum не должно вызывать ошибок NI6");
+        assert!(
+            errors.is_empty(),
+            "допустимое значение enum не должно вызывать ошибок NI6"
+        );
     }
 
     /// Переменная с некорректным значением enum вызывает ошибку NI6.
@@ -1818,14 +1827,15 @@ mod tests {
                 0,
             )
             .expect("ошибка разбора");
-            let m = crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
+            let m =
+                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             // Добавляем переменную с некорректным значением enum программно
             let dir_var = crate::semantic::VariableNode::Simple {
                 upper: None,
                 loc: crate::diagnostics::Location::Implicit,
                 name: "dir".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Direction".to_string()),
-                expr: crate::semantic::Expression::Number(99),
+                expr: crate::semantic::ExpressionNode::Number(99),
             };
             m.borrow_mut().variables.insert("dir".to_string(), dir_var);
             m
@@ -1845,51 +1855,59 @@ mod tests {
                 0,
             )
             .expect("ошибка разбора");
-            let m = crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
+            let m =
+                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             let prio_var = crate::semantic::VariableNode::Simple {
                 upper: None,
                 loc: crate::diagnostics::Location::Implicit,
                 name: "prio".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Priority".to_string()),
-                expr: crate::semantic::Expression::Number(5),
+                expr: crate::semantic::ExpressionNode::Number(5),
             };
-            m.borrow_mut().variables.insert("prio".to_string(), prio_var);
+            m.borrow_mut()
+                .variables
+                .insert("prio".to_string(), prio_var);
             m
         };
         let errors = check_enum_type_safety(model_rc);
-        assert!(errors.is_empty(), "значение 5 (Medium) допустимо для Priority");
+        assert!(
+            errors.is_empty(),
+            "значение 5 (Medium) допустимо для Priority"
+        );
     }
 
     /// Несколько переменных — несколько ошибок NI6.
     #[test]
     fn ni6_multiple_invalid_enum_vars_gives_multiple_errors() {
         let model_rc = {
-            let (ast, _) = crate::parse(
-                "enum Dir { North = 0, South = 1 } start S;",
-                0,
-            )
-            .expect("ошибка разбора");
-            let m = crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
+            let (ast, _) = crate::parse("enum Dir { North = 0, South = 1 } start S;", 0)
+                .expect("ошибка разбора");
+            let m =
+                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             let v1 = crate::semantic::VariableNode::Simple {
                 upper: None,
                 loc: crate::diagnostics::Location::Implicit,
                 name: "a".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Dir".to_string()),
-                expr: crate::semantic::Expression::Number(42),
+                expr: crate::semantic::ExpressionNode::Number(42),
             };
             let v2 = crate::semantic::VariableNode::Simple {
                 upper: None,
                 loc: crate::diagnostics::Location::Implicit,
                 name: "b".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Dir".to_string()),
-                expr: crate::semantic::Expression::Number(99),
+                expr: crate::semantic::ExpressionNode::Number(99),
             };
             m.borrow_mut().variables.insert("a".to_string(), v1);
             m.borrow_mut().variables.insert("b".to_string(), v2);
             m
         };
         let errors = check_enum_type_safety(model_rc);
-        assert_eq!(errors.len(), 2, "два некорректных значения должны дать 2 ошибки NI6");
+        assert_eq!(
+            errors.len(),
+            2,
+            "два некорректных значения должны дать 2 ошибки NI6"
+        );
     }
 
     /// Переменная типа bit не проверяется функцией NI6.
@@ -1897,7 +1915,10 @@ mod tests {
     fn ni6_non_enum_var_not_checked() {
         let model_rc = build_rc("var x: bit = 0; start S;");
         let errors = check_enum_type_safety(model_rc);
-        assert!(errors.is_empty(), "переменная типа bit не должна проверяться NI6");
+        assert!(
+            errors.is_empty(),
+            "переменная типа bit не должна проверяться NI6"
+        );
     }
 
     /// Переменная с неизвестным enum-типом (перечисление не найдено) — не вызывает NI6.
@@ -1905,19 +1926,23 @@ mod tests {
     fn ni6_unknown_enum_type_no_error() {
         let model_rc = {
             let (ast, _) = crate::parse("start S;", 0).expect("ошибка разбора");
-            let m = crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
+            let m =
+                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             let var = crate::semantic::VariableNode::Simple {
                 upper: None,
                 loc: crate::diagnostics::Location::Implicit,
                 name: "x".to_string(),
                 ty: crate::semantic::TypeNode::Enum("UnknownEnum".to_string()),
-                expr: crate::semantic::Expression::Number(99),
+                expr: crate::semantic::ExpressionNode::Number(99),
             };
             m.borrow_mut().variables.insert("x".to_string(), var);
             m
         };
         let errors = check_enum_type_safety(model_rc);
-        assert!(errors.is_empty(), "неизвестный тип enum не вызывает NI6 (ошибка другой проверки)");
+        assert!(
+            errors.is_empty(),
+            "неизвестный тип enum не вызывает NI6 (ошибка другой проверки)"
+        );
     }
 }
 
@@ -1949,15 +1974,15 @@ mod tests_ce4_declarations {
         let model_rc = {
             let (ast, _) = crate::parse("enum Color { Red = 0, Green = 1 } start S;", 0)
                 .expect("ошибка разбора");
-            let m = crate::semantic::tree::construct_model(&ast, None, &[])
-                .expect("ошибка семантики");
+            let m =
+                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             // Переменная типа Color — Color объявлен в AST
             let var = crate::semantic::VariableNode::Simple {
                 upper: None,
                 loc: crate::diagnostics::Location::Implicit,
                 name: "c".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Color".to_string()),
-                expr: crate::semantic::Expression::Number(0),
+                expr: crate::semantic::ExpressionNode::Number(0),
             };
             m.borrow_mut().variables.insert("c".to_string(), var);
             m
@@ -1994,7 +2019,7 @@ mod tests_ce4_declarations {
             loc: crate::diagnostics::Location::Implicit,
             name: "y".to_string(),
             ty: crate::semantic::TypeNode::Inference,
-            expr: crate::semantic::Expression::Number(0),
+            expr: crate::semantic::ExpressionNode::Number(0),
         };
         model_rc.borrow_mut().variables.insert("y".to_string(), var);
         let result = validate_enum_type_declarations(model_rc);
@@ -2014,21 +2039,24 @@ mod tests_ce4_declarations {
     fn ce4_undeclared_enum_type_is_error() {
         let model_rc = {
             let (ast, _) = crate::parse("start S;", 0).expect("ошибка разбора");
-            let m = crate::semantic::tree::construct_model(&ast, None, &[])
-                .expect("ошибка семантики");
+            let m =
+                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             // Переменная типа Size — Size НЕ объявлен
             let var = crate::semantic::VariableNode::Simple {
                 upper: None,
                 loc: crate::diagnostics::Location::Implicit,
                 name: "s".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Size".to_string()),
-                expr: crate::semantic::Expression::Number(0),
+                expr: crate::semantic::ExpressionNode::Number(0),
             };
             m.borrow_mut().variables.insert("s".to_string(), var);
             m
         };
         let result = validate_enum_type_declarations(model_rc);
-        assert!(result.is_err(), "необъявленный enum-тип должен давать ошибку Ce4");
+        assert!(
+            result.is_err(),
+            "необъявленный enum-тип должен давать ошибку Ce4"
+        );
         let err = result.unwrap_err();
         assert!(
             err.message.contains("Size"),
@@ -2053,20 +2081,23 @@ mod tests_ce4_declarations {
     fn ce4_undeclared_enum_in_const_is_error() {
         let model_rc = {
             let (ast, _) = crate::parse("start S;", 0).expect("ошибка разбора");
-            let m = crate::semantic::tree::construct_model(&ast, None, &[])
-                .expect("ошибка семантики");
+            let m =
+                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             let var = crate::semantic::VariableNode::Const {
                 upper: None,
                 loc: crate::diagnostics::Location::Implicit,
                 name: "C".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Status".to_string()),
-                expr: crate::semantic::Expression::Number(0),
+                expr: crate::semantic::ExpressionNode::Number(0),
             };
             m.borrow_mut().variables.insert("C".to_string(), var);
             m
         };
         let result = validate_enum_type_declarations(model_rc);
-        assert!(result.is_err(), "константа с необъявленным enum-типом должна давать ошибку Ce4");
+        assert!(
+            result.is_err(),
+            "константа с необъявленным enum-типом должна давать ошибку Ce4"
+        );
     }
 
     /// Порт с необъявленным enum-типом также проверяется.
@@ -2074,20 +2105,23 @@ mod tests_ce4_declarations {
     fn ce4_undeclared_enum_in_port_is_error() {
         let model_rc = {
             let (ast, _) = crate::parse("start S;", 0).expect("ошибка разбора");
-            let m = crate::semantic::tree::construct_model(&ast, None, &[])
-                .expect("ошибка семантики");
+            let m =
+                crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики");
             let var = crate::semantic::VariableNode::Port {
                 upper: None,
                 loc: crate::diagnostics::Location::Implicit,
                 name: "p".to_string(),
                 ty: crate::semantic::TypeNode::Enum("Dir".to_string()),
-                expr: crate::semantic::Expression::Number(0),
+                expr: crate::semantic::ExpressionNode::Number(0),
             };
             m.borrow_mut().variables.insert("p".to_string(), var);
             m
         };
         let result = validate_enum_type_declarations(model_rc);
-        assert!(result.is_err(), "порт с необъявленным enum-типом должен давать ошибку Ce4");
+        assert!(
+            result.is_err(),
+            "порт с необъявленным enum-типом должен давать ошибку Ce4"
+        );
     }
 
     /// Модель без переменных — проверка пуста и всегда ок.
@@ -2117,15 +2151,12 @@ pub fn check_nondeterministic_transitions(model: Rc<RefCell<ModelNode>>) -> Vec<
     warnings
 }
 
-fn check_nondeterministic_model(
-    model: Rc<RefCell<ModelNode>>,
-    warnings: &mut Vec<Diagnostic>,
-) {
+fn check_nondeterministic_model(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnostic>) {
     let borrowed = model.borrow();
     let model_name = borrowed.name.clone().unwrap_or_default();
 
     for (state_name, state) in &borrowed.states {
-        let references: &[Reference<StateNode>] = match state {
+        let references: &[ReferenceNode<StateNode>] = match state {
             StateNode::Simple { references, .. } => references,
             StateNode::Implement { references, .. } => references,
             StateNode::Unresolved => continue,
@@ -2134,7 +2165,7 @@ fn check_nondeterministic_model(
         // Подсчёт безусловных переходов (Condition::None)
         let unconditional_count = references
             .iter()
-            .filter(|r| matches!(r.cond, Condition::None))
+            .filter(|r| matches!(r.cond, ConditionNode::None))
             .count();
 
         if unconditional_count > 1 {
@@ -2154,8 +2185,7 @@ fn check_nondeterministic_model(
     }
 
     // Рекурсивно для вложенных моделей
-    let nested: Vec<Rc<RefCell<ModelNode>>> =
-        borrowed.models.values().map(Rc::clone).collect();
+    let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
     drop(borrowed);
 
     for nested_model in nested {
@@ -2180,20 +2210,20 @@ fn is_valid_enum_value(enum_name: &str, n: i64, model: &Rc<RefCell<ModelNode>>) 
 
 /// Рекурсивно обходит выражения и проверяет присваивания переменным типа enum (NI6).
 fn check_enum_expr(
-    expr: &Expression,
+    expr: &ExpressionNode,
     model: &Rc<RefCell<ModelNode>>,
     out: &mut Vec<Diagnostic>,
 ) {
     match expr {
-        Expression::Assign(left, right) => {
-            if let Expression::Variable(var_rc) = left.as_ref() {
+        ExpressionNode::Assign(left, right) => {
+            if let ExpressionNode::Variable(var_rc) = left.as_ref() {
                 let borrowed = var_rc.borrow();
                 if let VariableNode::Simple { name, ty, .. }
                 | VariableNode::Port { name, ty, .. }
                 | VariableNode::Const { name, ty, .. } = &*borrowed
                 {
                     if let TypeNode::Enum(enum_name) = ty {
-                        if let Expression::Number(n) = right.as_ref() {
+                        if let ExpressionNode::Number(n) = right.as_ref() {
                             if !is_valid_enum_value(enum_name, *n, model) {
                                 let valid_values: Vec<String> = model
                                     .borrow()
@@ -2225,49 +2255,51 @@ fn check_enum_expr(
             check_enum_expr(left, model, out);
             check_enum_expr(right, model, out);
         }
-        Expression::Parenthesis(e)
-        | Expression::BitAccess(e, _)
-        | Expression::Not(e)
-        | Expression::BitwiseNot(e)
-        | Expression::UnaryPlus(e)
-        | Expression::Negate(e)
-        | Expression::Cast(e, _) => {
+        ExpressionNode::Parenthesis(e)
+        | ExpressionNode::BitAccess(e, _)
+        | ExpressionNode::Not(e)
+        | ExpressionNode::BitwiseNot(e)
+        | ExpressionNode::UnaryPlus(e)
+        | ExpressionNode::Negate(e)
+        | ExpressionNode::Cast(e, _) => {
             check_enum_expr(e, model, out);
         }
-        Expression::CodeBlock(e, _) => {
+        ExpressionNode::CodeBlock(e, _) => {
             check_enum_expr(e, model, out);
         }
-        Expression::NamedFunctionBox(e, _) => {
+        ExpressionNode::NamedFunctionBox(e, _) => {
             check_enum_expr(e, model, out);
         }
-        Expression::Power(l, r)
-        | Expression::Multiply(l, r)
-        | Expression::Divide(l, r)
-        | Expression::Modulo(l, r)
-        | Expression::Add(l, r)
-        | Expression::Subtract(l, r)
-        | Expression::ShiftLeft(l, r)
-        | Expression::ShiftRight(l, r)
-        | Expression::BitwiseAnd(l, r)
-        | Expression::BitwiseXor(l, r)
-        | Expression::BitwiseOr(l, r)
-        | Expression::Less(l, r)
-        | Expression::More(l, r)
-        | Expression::LessEqual(l, r)
-        | Expression::MoreEqual(l, r)
-        | Expression::Equal(l, r)
-        | Expression::NotEqual(l, r)
-        | Expression::And(l, r)
-        | Expression::Or(l, r) => {
+        ExpressionNode::Power(l, r)
+        | ExpressionNode::Multiply(l, r)
+        | ExpressionNode::Divide(l, r)
+        | ExpressionNode::Modulo(l, r)
+        | ExpressionNode::Add(l, r)
+        | ExpressionNode::Subtract(l, r)
+        | ExpressionNode::ShiftLeft(l, r)
+        | ExpressionNode::ShiftRight(l, r)
+        | ExpressionNode::BitwiseAnd(l, r)
+        | ExpressionNode::BitwiseXor(l, r)
+        | ExpressionNode::BitwiseOr(l, r)
+        | ExpressionNode::Less(l, r)
+        | ExpressionNode::More(l, r)
+        | ExpressionNode::LessEqual(l, r)
+        | ExpressionNode::MoreEqual(l, r)
+        | ExpressionNode::Equal(l, r)
+        | ExpressionNode::NotEqual(l, r)
+        | ExpressionNode::And(l, r)
+        | ExpressionNode::Or(l, r) => {
             check_enum_expr(l, model, out);
             check_enum_expr(r, model, out);
         }
-        Expression::ConditionalOperator(c, t, e) => {
+        ExpressionNode::ConditionalOperator(c, t, e) => {
             check_enum_expr(c, model, out);
             check_enum_expr(t, model, out);
             check_enum_expr(e, model, out);
         }
-        Expression::Function(_, args) | Expression::Array(args) | Expression::Initializer(args) => {
+        ExpressionNode::Function(_, args)
+        | ExpressionNode::Array(args)
+        | ExpressionNode::Initializer(args) => {
             for a in args {
                 check_enum_expr(a, model, out);
             }
@@ -2278,31 +2310,31 @@ fn check_enum_expr(
 
 /// Рекурсивно обходит операторы и проверяет присваивания переменным типа enum (NI6).
 fn check_enum_stmt(
-    stmt: &Statement,
+    stmt: &StatementNode,
     model: &Rc<RefCell<ModelNode>>,
     out: &mut Vec<Diagnostic>,
 ) {
     match stmt {
-        Statement::Expression(expr) => check_enum_expr(expr, model, out),
-        Statement::Block(stmts) => {
+        StatementNode::Expression(expr) => check_enum_expr(expr, model, out),
+        StatementNode::Block(stmts) => {
             for s in stmts {
                 check_enum_stmt(s, model, out);
             }
         }
-        Statement::If { cond, then_, else_ } => {
+        StatementNode::If { cond, then_, else_ } => {
             check_enum_expr(cond, model, out);
             check_enum_stmt(then_, model, out);
             if let Some(e) = else_ {
                 check_enum_stmt(e, model, out);
             }
         }
-        Statement::Loop { cond, body } => {
+        StatementNode::Loop { cond, body } => {
             if let Some(c) = cond {
                 check_enum_expr(c, model, out);
             }
             check_enum_stmt(body, model, out);
         }
-        Statement::For {
+        StatementNode::For {
             init,
             cond,
             step,
@@ -2319,8 +2351,8 @@ fn check_enum_stmt(
             }
             check_enum_stmt(body, model, out);
         }
-        Statement::Return(Some(e)) => check_enum_expr(e, model, out),
-        Statement::Variable(_, _, Some(e)) => check_enum_expr(e, model, out),
+        StatementNode::Return(Some(e)) => check_enum_expr(e, model, out),
+        StatementNode::Variable(_, _, Some(e)) => check_enum_expr(e, model, out),
         _ => {}
     }
 }
@@ -2336,12 +2368,12 @@ fn check_enum_stmt(
 fn check_enum_variable_value(
     name: &str,
     ty: &TypeNode,
-    expr: &Expression,
+    expr: &ExpressionNode,
     loc: Location,
     model: &Rc<RefCell<ModelNode>>,
 ) -> Result<(), Diagnostic> {
     if let TypeNode::Enum(enum_name) = ty {
-        if let Expression::Number(n) = expr {
+        if let ExpressionNode::Number(n) = expr {
             if !is_valid_enum_value(enum_name, *n, model) {
                 let valid_values: Vec<String> = model
                     .borrow()
@@ -2380,7 +2412,7 @@ fn check_enum_variable_value(
 /// Пробрасывает [`Diagnostic`] из [`check_enum_variable_value`].
 fn validate_enum_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     // Собираем данные без удержания заимствования
-    let vars: Vec<(String, TypeNode, Expression, Location)> = model
+    let vars: Vec<(String, TypeNode, ExpressionNode, Location)> = model
         .borrow()
         .variables
         .iter()
@@ -2401,7 +2433,7 @@ fn validate_enum_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic>
 /// Рекурсивно собирает ошибки NI6 для модели и всех вложенных моделей.
 fn collect_enum_type_safety(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
     // Собираем данные без удержания заимствования
-    let vars: Vec<(String, TypeNode, Expression)> = model
+    let vars: Vec<(String, TypeNode, ExpressionNode)> = model
         .borrow()
         .variables
         .iter()
@@ -2416,7 +2448,7 @@ fn collect_enum_type_safety(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagno
 
     for (name, ty, expr) in &vars {
         if let TypeNode::Enum(enum_name) = ty {
-            if let Expression::Number(n) = expr {
+            if let ExpressionNode::Number(n) = expr {
                 if !is_valid_enum_value(enum_name, *n, model) {
                     let valid_values: Vec<String> = model
                         .borrow()
@@ -2445,7 +2477,7 @@ fn collect_enum_type_safety(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagno
         }
     }
 
-    let named_blocks: Vec<Statement> = model
+    let named_blocks: Vec<StatementNode> = model
         .borrow()
         .named_blocks
         .iter()
@@ -2455,7 +2487,7 @@ fn collect_enum_type_safety(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagno
         check_enum_stmt(stmt, model, out);
     }
 
-    let state_blocks: Vec<Statement> = model
+    let state_blocks: Vec<StatementNode> = model
         .borrow()
         .states
         .values()

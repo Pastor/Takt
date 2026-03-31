@@ -1,15 +1,15 @@
 //! Построение семантических выражений языка BuT.
 //!
 //! Основная функция [`construct_expression`] преобразует АСД-выражение
-//! [`ast::Expression`] в разрешённое семантическое [`Expression`].
+//! [`ast::Expression`] в разрешённое семантическое [`ExpressionNode`].
 //!
 //! ## Разрешение идентификаторов
 //!
 //! Для [`ast::Expression::Variable`] поиск ведётся в следующем порядке:
 //!
-//! 1. `search_var` → [`Expression::Variable`]
-//! 2. `search_model` → [`Expression::Model`]
-//! 3. `search_cond` → [`Expression::Condition`]
+//! 1. `search_var` → [`ExpressionNode::Variable`]
+//! 2. `search_model` → [`ExpressionNode::Model`]
+//! 3. `search_cond` → [`ExpressionNode::Condition`]
 //! 4. Иначе → [`Diagnostic`]-ошибка
 //!
 //! ## Вспомогательные функции
@@ -21,7 +21,8 @@
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::builtin::builtin_function;
-use crate::semantic::{Expression, ModelNode, Statement, TypeNode, VariableNode};
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, ModelNode, StatementNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -39,19 +40,19 @@ use std::rc::Rc;
 pub fn construct_expression(
     expr: ast::Expression,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<Expression, Diagnostic> {
+) -> Result<ExpressionNode, Diagnostic> {
     match expr {
         // ── Литералы ──────────────────────────────────────────────────────────
-        ast::Expression::Number(_, n) => Ok(Expression::Number(n)),
-        ast::Expression::Rational(_, s, neg) => Ok(Expression::Rational(s, neg)),
-        ast::Expression::Bool(_, v) => Ok(Expression::Bool(v)),
+        ast::Expression::Number(_, n) => Ok(ExpressionNode::Number(n)),
+        ast::Expression::Rational(_, s, neg) => Ok(ExpressionNode::Rational(s, neg)),
+        ast::Expression::Bool(_, v) => Ok(ExpressionNode::Bool(v)),
         // Строки: извлекаем текст из Vec<StringLiteral>
-        ast::Expression::String(lits) => Ok(Expression::String(
+        ast::Expression::String(lits) => Ok(ExpressionNode::String(
             lits.into_iter().map(|l| l.string).collect(),
         )),
-        ast::Expression::Type(_, t) => Ok(Expression::Type(t)),
-        ast::Expression::Address(_, addr, bit) => Ok(Expression::Address(addr, bit)),
-        ast::Expression::List(_, pl) => Ok(Expression::List(pl)),
+        ast::Expression::Type(_, t) => Ok(ExpressionNode::Type(t)),
+        ast::Expression::Address(_, addr, bit) => Ok(ExpressionNode::Address(addr, bit)),
+        ast::Expression::List(_, pl) => Ok(ExpressionNode::List(pl)),
 
         // ── Разрешение идентификатора ──────────────────────────────────────────
         //
@@ -62,19 +63,19 @@ pub fn construct_expression(
             let name = &id.name;
             // 1. Переменная (включая порты и константы)
             if let Some(var) = model.borrow().search_var(name) {
-                return Ok(Expression::Variable(Rc::new(RefCell::new(var))));
+                return Ok(ExpressionNode::Variable(Rc::new(RefCell::new(var))));
             }
             // 2. Именованная модель
             if let Some(m) = model.borrow().search_model(name) {
-                return Ok(Expression::Model(m));
+                return Ok(ExpressionNode::Model(m));
             }
             // 3. Именованное условие
             if let Some(cond) = model.borrow().search_cond(name) {
-                return Ok(Expression::Condition(Rc::new(RefCell::new(cond))));
+                return Ok(ExpressionNode::Condition(Rc::new(RefCell::new(cond))));
             }
             // 4. Вариант перечисления (NI6): имя является вариантом доступного перечисления
             if let Some((_enum_name, value)) = model.borrow().search_enum_variant(name) {
-                return Ok(Expression::Number(value));
+                return Ok(ExpressionNode::Number(value));
             }
             Err(
                 format!("Идентификатор '{}' не найден в области видимости", name)
@@ -117,7 +118,10 @@ pub fn construct_expression(
                         .into());
                 }
             }
-            Ok(Expression::ArraySubscript(Rc::new(RefCell::new(var)), n))
+            Ok(ExpressionNode::ArraySubscript(
+                Rc::new(RefCell::new(var)),
+                n,
+            ))
         }
         ast::Expression::ArraySlice(_, id, start, end) => {
             let var = model.borrow().search_var(&id.name).ok_or_else(|| {
@@ -137,7 +141,7 @@ pub fn construct_expression(
                         .into());
                 }
             }
-            Ok(Expression::ArraySlice(
+            Ok(ExpressionNode::ArraySlice(
                 Rc::new(RefCell::new(var)),
                 start,
                 end,
@@ -146,11 +150,12 @@ pub fn construct_expression(
 
         // ── Структурные выражения ─────────────────────────────────────────────
         ast::Expression::Parenthesis(_, inner) => {
-            Ok(Expression::Parenthesis(resolve_expr(*inner, model)?))
+            Ok(ExpressionNode::Parenthesis(resolve_expr(*inner, model)?))
         }
-        ast::Expression::BitAccess(_, inner, member) => {
-            Ok(Expression::BitAccess(resolve_expr(*inner, model)?, member))
-        }
+        ast::Expression::BitAccess(_, inner, member) => Ok(ExpressionNode::BitAccess(
+            resolve_expr(*inner, model)?,
+            member,
+        )),
 
         // Вызов функции: ищем в контексте, для неизвестных (встроенных) — создаём заглушку.
         //
@@ -165,128 +170,129 @@ pub fn construct_expression(
                 Rc::new(RefCell::new(builtin_function(&id.name)?.clone()))
             };
             let resolved_args = resolve_elems(args, model)?;
-            Ok(Expression::Function(func, resolved_args))
+            Ok(ExpressionNode::Function(func, resolved_args))
         }
 
         // Блок кода как выражение: разрешаем базовое выражение, Statement не трогаем.
-        ast::Expression::CodeBlock(_, inner, stmt) => Ok(Expression::CodeBlock(
+        ast::Expression::CodeBlock(_, inner, stmt) => Ok(ExpressionNode::CodeBlock(
             resolve_expr(*inner, model)?,
-            Statement::Unresolved(*stmt),
+            StatementNode::Unresolved(*stmt),
         )),
 
         // Именованный вызов: разрешаем базовое выражение, аргументы оставляем как есть.
-        ast::Expression::NamedFunction(_, inner, named_args) => Ok(Expression::NamedFunctionBox(
-            resolve_expr(*inner, model)?,
-            named_args,
-        )),
+        ast::Expression::NamedFunction(_, inner, named_args) => Ok(
+            ExpressionNode::NamedFunctionBox(resolve_expr(*inner, model)?, named_args),
+        ),
 
         // Приведение типа: разрешаем выражение.
         ast::Expression::Cast(_, inner, ty) => {
-            Ok(Expression::Cast(resolve_expr(*inner, model)?, ty))
+            Ok(ExpressionNode::Cast(resolve_expr(*inner, model)?, ty))
         }
 
         // ── Унарные операции ──────────────────────────────────────────────────
-        ast::Expression::Not(_, e) => Ok(Expression::Not(resolve_expr(*e, model)?)),
-        ast::Expression::BitwiseNot(_, e) => Ok(Expression::BitwiseNot(resolve_expr(*e, model)?)),
-        ast::Expression::UnaryPlus(_, e) => Ok(Expression::UnaryPlus(resolve_expr(*e, model)?)),
-        ast::Expression::Negate(_, e) => Ok(Expression::Negate(resolve_expr(*e, model)?)),
+        ast::Expression::Not(_, e) => Ok(ExpressionNode::Not(resolve_expr(*e, model)?)),
+        ast::Expression::BitwiseNot(_, e) => {
+            Ok(ExpressionNode::BitwiseNot(resolve_expr(*e, model)?))
+        }
+        ast::Expression::UnaryPlus(_, e) => Ok(ExpressionNode::UnaryPlus(resolve_expr(*e, model)?)),
+        ast::Expression::Negate(_, e) => Ok(ExpressionNode::Negate(resolve_expr(*e, model)?)),
 
         // ── Бинарные операции ─────────────────────────────────────────────────
         ast::Expression::Power(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::Power(l, r))
+            Ok(ExpressionNode::Power(l, r))
         }
         ast::Expression::Multiply(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::Multiply(l, r))
+            Ok(ExpressionNode::Multiply(l, r))
         }
         ast::Expression::Divide(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::Divide(l, r))
+            Ok(ExpressionNode::Divide(l, r))
         }
         ast::Expression::Modulo(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::Modulo(l, r))
+            Ok(ExpressionNode::Modulo(l, r))
         }
         ast::Expression::Add(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::Add(l, r))
+            Ok(ExpressionNode::Add(l, r))
         }
         ast::Expression::Subtract(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::Subtract(l, r))
+            Ok(ExpressionNode::Subtract(l, r))
         }
         ast::Expression::ShiftLeft(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::ShiftLeft(l, r))
+            Ok(ExpressionNode::ShiftLeft(l, r))
         }
         ast::Expression::ShiftRight(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::ShiftRight(l, r))
+            Ok(ExpressionNode::ShiftRight(l, r))
         }
         ast::Expression::BitwiseAnd(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::BitwiseAnd(l, r))
+            Ok(ExpressionNode::BitwiseAnd(l, r))
         }
         ast::Expression::BitwiseXor(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::BitwiseXor(l, r))
+            Ok(ExpressionNode::BitwiseXor(l, r))
         }
         ast::Expression::BitwiseOr(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::BitwiseOr(l, r))
+            Ok(ExpressionNode::BitwiseOr(l, r))
         }
         ast::Expression::Less(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::Less(l, r))
+            Ok(ExpressionNode::Less(l, r))
         }
         ast::Expression::More(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::More(l, r))
+            Ok(ExpressionNode::More(l, r))
         }
         ast::Expression::LessEqual(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::LessEqual(l, r))
+            Ok(ExpressionNode::LessEqual(l, r))
         }
         ast::Expression::MoreEqual(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::MoreEqual(l, r))
+            Ok(ExpressionNode::MoreEqual(l, r))
         }
         ast::Expression::Equal(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::Equal(l, r))
+            Ok(ExpressionNode::Equal(l, r))
         }
         ast::Expression::NotEqual(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::NotEqual(l, r))
+            Ok(ExpressionNode::NotEqual(l, r))
         }
         ast::Expression::And(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::And(l, r))
+            Ok(ExpressionNode::And(l, r))
         }
         ast::Expression::Or(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::Or(l, r))
+            Ok(ExpressionNode::Or(l, r))
         }
 
         // ── Прочие выражения ──────────────────────────────────────────────────
         ast::Expression::Assign(_, l, r) => {
             let (l, r) = resolve_bin(*l, *r, model)?;
-            Ok(Expression::Assign(l, r))
+            Ok(ExpressionNode::Assign(l, r))
         }
         ast::Expression::ConditionalOperator(_, cond, then_e, else_e) => {
             let cond = construct_expression(*cond, model.clone())?;
             let then_e = construct_expression(*then_e, model.clone())?;
             let else_e = construct_expression(*else_e, model)?;
-            Ok(Expression::ConditionalOperator(
+            Ok(ExpressionNode::ConditionalOperator(
                 Box::new(cond),
                 Box::new(then_e),
                 Box::new(else_e),
             ))
         }
-        ast::Expression::Array(_, items) => Ok(Expression::Array(resolve_elems(items, model)?)),
+        ast::Expression::Array(_, items) => Ok(ExpressionNode::Array(resolve_elems(items, model)?)),
         ast::Expression::Initializer(_, items) => {
-            Ok(Expression::Initializer(resolve_elems(items, model)?))
+            Ok(ExpressionNode::Initializer(resolve_elems(items, model)?))
         }
     }
 }
@@ -298,7 +304,7 @@ pub fn construct_expression(
 fn resolve_expr(
     expr: ast::Expression,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<Box<Expression>, Diagnostic> {
+) -> Result<Box<ExpressionNode>, Diagnostic> {
     construct_expression(expr, model).map(Box::new)
 }
 
@@ -310,7 +316,7 @@ fn resolve_bin(
     left: ast::Expression,
     right: ast::Expression,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<(Box<Expression>, Box<Expression>), Diagnostic> {
+) -> Result<(Box<ExpressionNode>, Box<ExpressionNode>), Diagnostic> {
     let l = construct_expression(left, model.clone()).map(Box::new)?;
     let r = construct_expression(right, model).map(Box::new)?;
     Ok((l, r))
@@ -387,7 +393,7 @@ fn check_slice_bounds(
 fn resolve_elems(
     items: Vec<ast::Expression>,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<Vec<Expression>, Diagnostic> {
+) -> Result<Vec<ExpressionNode>, Diagnostic> {
     items
         .into_iter()
         .map(|e| construct_expression(e, model.clone()))
@@ -401,8 +407,8 @@ mod tests {
     use super::*;
     use crate::parse;
     use crate::semantic::tree::construct_model;
-    use crate::semantic::{Condition, ModelNode, TypeNode, VariableNode};
-
+    use crate::semantic::type_node::TypeNode;
+    use crate::semantic::{ConditionNode, ModelNode, VariableNode};
     // ── Вспомогательные функции ───────────────────────────────────────────────
 
     /// Строит семантическую модель из исходного кода BuT.
@@ -412,7 +418,7 @@ mod tests {
     }
 
     /// Возвращает разрешённый инициализатор переменной `name`.
-    fn var_expr(node: &ModelNode, name: &str) -> Expression {
+    fn var_expr(node: &ModelNode, name: &str) -> ExpressionNode {
         match node.search_var(name).expect("переменная не найдена") {
             VariableNode::Simple { expr, .. }
             | VariableNode::Const { expr, .. }
@@ -427,7 +433,7 @@ mod tests {
     #[test]
     fn number_literal_resolved() {
         let node = build("var x: bit = false; cond c = 42;").unwrap();
-        assert_eq!(node.conditions["c"].value, Condition::Number(42));
+        assert_eq!(node.conditions["c"].value, ConditionNode::Number(42));
     }
 
     /// Булев литерал `true`: инициализатор переменной → `Bool(true)`.
@@ -435,7 +441,7 @@ mod tests {
     fn bool_literal_in_var_initializer() {
         let node = build("var flag: bit = true;").unwrap();
         assert!(
-            matches!(var_expr(&node, "flag"), Expression::Bool(true)),
+            matches!(var_expr(&node, "flag"), ExpressionNode::Bool(true)),
             "инициализатор должен быть Bool(true)"
         );
     }
@@ -445,7 +451,7 @@ mod tests {
     fn bool_false_literal_in_var() {
         let node = build("var flag: bit = false;").unwrap();
         assert!(
-            matches!(var_expr(&node, "flag"), Expression::Bool(false)),
+            matches!(var_expr(&node, "flag"), ExpressionNode::Bool(false)),
             "инициализатор должен быть Bool(false)"
         );
     }
@@ -455,7 +461,7 @@ mod tests {
     fn number_literal_in_var_initializer() {
         let node = build("var x: [bit;8] = 0;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Number(_)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Number(_)),
             "инициализатор должен быть Number"
         );
     }
@@ -473,7 +479,7 @@ mod tests {
     fn variable_ref_in_initializer_resolves() {
         let node = build("var a: bit = false; var b: bit = a;").unwrap();
         assert!(
-            matches!(var_expr(&node, "b"), Expression::Variable(_)),
+            matches!(var_expr(&node, "b"), ExpressionNode::Variable(_)),
             "инициализатор b должен быть Variable(a)"
         );
     }
@@ -515,7 +521,7 @@ mod tests {
     fn add_in_var_initializer() {
         let node = build("var x: [bit;8] = 1 + 2;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Add(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Add(_, _)),
             "инициализатор должен быть Add"
         );
     }
@@ -525,7 +531,7 @@ mod tests {
     fn subtract_in_var_initializer() {
         let node = build("var x: [bit;8] = 3 - 1;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Subtract(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Subtract(_, _)),
             "инициализатор должен быть Subtract"
         );
     }
@@ -535,7 +541,7 @@ mod tests {
     fn bitwise_and_in_var_initializer() {
         let node = build("var x: [bit;8] = 255 & 15;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::BitwiseAnd(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::BitwiseAnd(_, _)),
             "инициализатор должен быть BitwiseAnd"
         );
     }
@@ -545,7 +551,7 @@ mod tests {
     fn bitwise_or_in_var_initializer() {
         let node = build("var x: [bit;8] = 15 | 240;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::BitwiseOr(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::BitwiseOr(_, _)),
             "инициализатор должен быть BitwiseOr"
         );
     }
@@ -555,7 +561,7 @@ mod tests {
     fn not_in_var_initializer() {
         let node = build("var x: bit = !false;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Not(_)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Not(_)),
             "инициализатор должен быть Not"
         );
     }
@@ -565,7 +571,7 @@ mod tests {
     fn parenthesis_in_var_initializer() {
         let node = build("var x: [bit;8] = (42);").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Parenthesis(_)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Parenthesis(_)),
             "инициализатор должен быть Parenthesis"
         );
     }
@@ -575,7 +581,7 @@ mod tests {
     fn less_in_var_initializer() {
         let node = build("var x: bit = 1 < 2;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Less(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Less(_, _)),
             "инициализатор должен быть Less"
         );
     }
@@ -585,7 +591,7 @@ mod tests {
     fn more_in_var_initializer() {
         let node = build("var x: bit = 2 > 1;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::More(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::More(_, _)),
             "инициализатор должен быть More"
         );
     }
@@ -595,7 +601,7 @@ mod tests {
     fn equal_in_var_initializer() {
         let node = build("var x: bit = 1 == 1;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Equal(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Equal(_, _)),
             "инициализатор должен быть Equal"
         );
     }
@@ -605,7 +611,7 @@ mod tests {
     fn not_equal_in_var_initializer() {
         let node = build("var x: bit = 1 != 2;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::NotEqual(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::NotEqual(_, _)),
             "инициализатор должен быть NotEqual"
         );
     }
@@ -686,7 +692,7 @@ mod tests {
     fn array_subscript_in_var_initializer() {
         let node = build("var buf: [bit;8] = 0; var x: bit = buf[3];").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::ArraySubscript(_, 3)),
+            matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, 3)),
             "инициализатор x должен быть ArraySubscript(buf, 3)"
         );
     }
@@ -708,7 +714,7 @@ mod tests {
     fn array_subscript_valid_index() {
         let node = build("var buf: [bit;8] = 0; var x: bit = buf[0];").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::ArraySubscript(_, 0)),
+            matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, 0)),
             "x должен быть ArraySubscript(buf, 0)"
         );
     }
@@ -718,7 +724,7 @@ mod tests {
     fn array_subscript_last_valid_index() {
         let node = build("var buf: [bit;8] = 0; var x: bit = buf[7];").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::ArraySubscript(_, 7)),
+            matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, 7)),
             "x должен быть ArraySubscript(buf, 7)"
         );
     }
@@ -762,7 +768,7 @@ mod tests {
             loc: crate::diagnostics::Location::Implicit,
             name: "x".into(),
             ty: TypeNode::Bit,
-            expr: Expression::None,
+            expr: ExpressionNode::None,
         };
         assert_eq!(var_type(&v), TypeNode::Bit);
     }
@@ -845,7 +851,7 @@ mod tests {
     fn multiply_in_var_initializer() {
         let node = build("var x: [bit;8] = 2 * 3;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Multiply(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Multiply(_, _)),
             "инициализатор должен быть Multiply"
         );
     }
@@ -855,7 +861,7 @@ mod tests {
     fn divide_in_var_initializer() {
         let node = build("var x: [bit;8] = 6 / 2;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Divide(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Divide(_, _)),
             "инициализатор должен быть Divide"
         );
     }
@@ -865,7 +871,7 @@ mod tests {
     fn modulo_in_var_initializer() {
         let node = build("var x: [bit;8] = 7 % 3;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Modulo(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Modulo(_, _)),
             "инициализатор должен быть Modulo"
         );
     }
@@ -875,7 +881,7 @@ mod tests {
     fn power_in_var_initializer() {
         let node = build("var x: [bit;8] = 2 ** 3;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Power(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Power(_, _)),
             "инициализатор должен быть Power"
         );
     }
@@ -885,7 +891,7 @@ mod tests {
     fn shift_left_in_var_initializer() {
         let node = build("var x: [bit;8] = 1 << 2;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::ShiftLeft(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::ShiftLeft(_, _)),
             "инициализатор должен быть ShiftLeft"
         );
     }
@@ -895,7 +901,7 @@ mod tests {
     fn shift_right_in_var_initializer() {
         let node = build("var x: [bit;8] = 4 >> 1;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::ShiftRight(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::ShiftRight(_, _)),
             "инициализатор должен быть ShiftRight"
         );
     }
@@ -905,7 +911,7 @@ mod tests {
     fn bitwise_xor_in_var_initializer() {
         let node = build("var x: [bit;8] = 3 ^ 1;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::BitwiseXor(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::BitwiseXor(_, _)),
             "инициализатор должен быть BitwiseXor"
         );
     }
@@ -917,7 +923,7 @@ mod tests {
     fn less_equal_in_var_initializer() {
         let node = build("var x: bit = 1 <= 2;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::LessEqual(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::LessEqual(_, _)),
             "инициализатор должен быть LessEqual"
         );
     }
@@ -927,7 +933,7 @@ mod tests {
     fn more_equal_in_var_initializer() {
         let node = build("var x: bit = 2 >= 1;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::MoreEqual(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::MoreEqual(_, _)),
             "инициализатор должен быть MoreEqual"
         );
     }
@@ -939,7 +945,7 @@ mod tests {
     fn and_in_var_initializer() {
         let node = build("var x: bit = true && false;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::And(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::And(_, _)),
             "инициализатор должен быть And"
         );
     }
@@ -949,7 +955,7 @@ mod tests {
     fn or_in_var_initializer() {
         let node = build("var x: bit = true || false;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Or(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Or(_, _)),
             "инициализатор должен быть Or"
         );
     }
@@ -961,7 +967,7 @@ mod tests {
     fn unary_plus_in_var_initializer() {
         let node = build("var x: [bit;8] = +5;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::UnaryPlus(_)),
+            matches!(var_expr(&node, "x"), ExpressionNode::UnaryPlus(_)),
             "инициализатор должен быть UnaryPlus"
         );
     }
@@ -971,7 +977,7 @@ mod tests {
     fn bitwise_not_in_var_initializer() {
         let node = build("var x: [bit;8] = ~0;").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::BitwiseNot(_)),
+            matches!(var_expr(&node, "x"), ExpressionNode::BitwiseNot(_)),
             "инициализатор должен быть BitwiseNot"
         );
     }
@@ -981,7 +987,7 @@ mod tests {
     fn rational_literal_in_var_initializer() {
         let node = build("var r = 3.14;").unwrap();
         assert!(
-            matches!(var_expr(&node, "r"), Expression::Rational(_, _)),
+            matches!(var_expr(&node, "r"), ExpressionNode::Rational(_, _)),
             "инициализатор должен быть Rational"
         );
     }
@@ -993,7 +999,10 @@ mod tests {
         let node = build("var r = -3.14;").unwrap();
         let expr = var_expr(&node, "r");
         assert!(
-            matches!(expr, Expression::Rational(_, _) | Expression::Negate(_)),
+            matches!(
+                expr,
+                ExpressionNode::Rational(_, _) | ExpressionNode::Negate(_)
+            ),
             "инициализатор должен быть Rational или Negate"
         );
     }
@@ -1015,7 +1024,7 @@ mod tests {
         let expr = ast::Expression::ConditionalOperator(loc, cond_expr, then_expr, else_expr);
         let result = construct_expression(expr, model).unwrap();
         assert!(
-            matches!(result, Expression::ConditionalOperator(_, _, _)),
+            matches!(result, ExpressionNode::ConditionalOperator(_, _, _)),
             "должен получиться ConditionalOperator"
         );
     }
@@ -1047,7 +1056,7 @@ mod tests {
         let expr = ast::Expression::ConditionalOperator(loc, cond_expr, then_expr, else_expr);
         let result = construct_expression(expr, model).unwrap();
         assert!(
-            matches!(result, Expression::ConditionalOperator(_, _, _)),
+            matches!(result, ExpressionNode::ConditionalOperator(_, _, _)),
             "ConditionalOperator с переменной-условием должен разрешиться"
         );
     }
@@ -1082,7 +1091,7 @@ mod tests {
     fn array_slice_in_var_initializer() {
         let node = build("var buf: [bit;8] = 0; var y: [bit;4] = buf[1:5];").unwrap();
         assert!(
-            matches!(var_expr(&node, "y"), Expression::ArraySlice(_, _, _)),
+            matches!(var_expr(&node, "y"), ExpressionNode::ArraySlice(_, _, _)),
             "инициализатор y должен быть ArraySlice"
         );
     }
@@ -1129,7 +1138,7 @@ mod tests {
     fn cast_in_var_initializer() {
         let node = build("var x: [bit;8] = 42 as [bit;8];").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), Expression::Cast(_, _)),
+            matches!(var_expr(&node, "x"), ExpressionNode::Cast(_, _)),
             "инициализатор должен быть Cast"
         );
     }
@@ -1151,7 +1160,7 @@ mod tests {
         let expr = ast::Expression::Array(loc, items);
         let result = construct_expression(expr, model).unwrap();
         assert!(
-            matches!(result, Expression::Array(_)),
+            matches!(result, ExpressionNode::Array(_)),
             "должен получиться Expression::Array"
         );
     }
@@ -1166,7 +1175,7 @@ mod tests {
         let expr = ast::Expression::Type(crate::diagnostics::Location::default(), Type::Bit);
         let result = construct_expression(expr, model).unwrap();
         assert!(
-            matches!(result, Expression::Type(Type::Bit)),
+            matches!(result, ExpressionNode::Type(Type::Bit)),
             "должен получиться Expression::Type(Type::Bit)"
         );
     }
@@ -1178,7 +1187,7 @@ mod tests {
         let expr = ast::Expression::Address(crate::diagnostics::Location::default(), 0x1234, 5);
         let result = construct_expression(expr, model).unwrap();
         assert!(
-            matches!(result, Expression::Address(0x1234, 5)),
+            matches!(result, ExpressionNode::Address(0x1234, 5)),
             "должен получиться Expression::Address(0x1234, 5)"
         );
     }
@@ -1190,7 +1199,7 @@ mod tests {
         let expr = ast::Expression::List(crate::diagnostics::Location::default(), vec![]);
         let result = construct_expression(expr, model).unwrap();
         assert!(
-            matches!(result, Expression::List(_)),
+            matches!(result, ExpressionNode::List(_)),
             "должен получиться Expression::List"
         );
     }
@@ -1248,7 +1257,7 @@ mod tests {
             loc: crate::diagnostics::Location::Implicit,
             name: "p".into(),
             ty: TypeNode::Bit,
-            expr: Expression::None,
+            expr: ExpressionNode::None,
         };
         assert_eq!(var_type(&v), TypeNode::Bit);
     }
@@ -1261,7 +1270,7 @@ mod tests {
             loc: crate::diagnostics::Location::Implicit,
             name: "c".into(),
             ty: TypeNode::Bool,
-            expr: Expression::None,
+            expr: ExpressionNode::None,
         };
         assert_eq!(var_type(&v), TypeNode::Bool);
     }

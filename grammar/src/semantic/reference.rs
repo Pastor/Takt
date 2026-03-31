@@ -2,7 +2,7 @@
 //!
 //! Функция [`resolve_state_references`] выполняет дополнительный проход
 //! разрешения условий для всех `ref`-переходов состояния: заменяет
-//! [`Condition::Unresolved`] полностью разрешёнными семантическими условиями
+//! [`ConditionNode::Unresolved`] полностью разрешёнными семантическими условиями
 //! с помощью [`resolve_condition`].
 //!
 //! Родительская модель берётся непосредственно из узла состояния (`state.upper()`),
@@ -10,9 +10,9 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::semantic::condition::resolve_condition;
-use crate::semantic::{Condition, Reference, StateNode};
+use crate::semantic::{ConditionNode, ReferenceNode, StateNode};
 
-/// Разрешает список условий `ref`-ссылок, заменяя [`Condition::Unresolved`]
+/// Разрешает список условий `ref`-ссылок, заменяя [`ConditionNode::Unresolved`]
 /// полностью разрешёнными семантическими условиями.
 ///
 /// Контекст для разрешения берётся из [`StateNode::upper`] — ссылки на
@@ -23,9 +23,9 @@ use crate::semantic::{Condition, Reference, StateNode};
 /// Пробрасывает [`Diagnostic`] из [`resolve_condition`], если условие не
 /// удаётся разрешить (например, неизвестная переменная или функция).
 fn resolve_references(
-    references: &[Reference<StateNode>],
+    references: &[ReferenceNode<StateNode>],
     state: &StateNode,
-) -> Result<Vec<Reference<StateNode>>, Diagnostic> {
+) -> Result<Vec<ReferenceNode<StateNode>>, Diagnostic> {
     // Берём родительскую модель из узла состояния
     let model = match state.upper() {
         Some(m) => m,
@@ -35,9 +35,9 @@ fn resolve_references(
 
     let mut new_references = Vec::with_capacity(references.len());
     for reference in references {
-        if let Condition::Unresolved(cond) = reference.cond.clone() {
+        if let ConditionNode::Unresolved(cond) = reference.cond.clone() {
             let resolved_cond = resolve_condition(&cond, model.clone())?;
-            let resolved_reference = Reference {
+            let resolved_reference = ReferenceNode {
                 cond: resolved_cond,
                 ..reference.clone()
             };

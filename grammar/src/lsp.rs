@@ -10,7 +10,7 @@ use crate::semantic;
 use cell::RefCell;
 use lsp_types::*;
 use semantic::index::SemanticNodeRef;
-use semantic::{FunctionNode, ModelNode, VariableNode};
+use semantic::{FunctionDefinitionNode, ModelNode, VariableNode};
 use std::cell;
 
 /// Типы семантических токенов (порядок важен — индекс используется как тип в легенде).
@@ -400,9 +400,13 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             // Имена функций
             for (name, func) in &borrowed.functions {
                 let detail = match func {
-                    FunctionNode::Local { ret, .. } => Some(format!("fn -> {:?}", ret)),
-                    FunctionNode::External { ret, .. } => Some(format!("extern fn -> {:?}", ret)),
-                    FunctionNode::Builtin(_, _, ret) => Some(format!("builtin fn -> {:?}", ret)),
+                    FunctionDefinitionNode::Local { ret, .. } => Some(format!("fn -> {:?}", ret)),
+                    FunctionDefinitionNode::External { ret, .. } => {
+                        Some(format!("extern fn -> {:?}", ret))
+                    }
+                    FunctionDefinitionNode::Builtin(_, _, ret) => {
+                        Some(format!("builtin fn -> {:?}", ret))
+                    }
                     _ => None,
                 };
                 items.push(CompletionItem {
@@ -583,23 +587,23 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
         text
     };
 
-    let make_func_hover = |func: &FunctionNode, word: &str, doc: &[String]| {
+    let make_func_hover = |func: &FunctionDefinitionNode, word: &str, doc: &[String]| {
         let sig = match func {
-            FunctionNode::Local { params, ret, .. } => {
+            FunctionDefinitionNode::Local { params, ret, .. } => {
                 let ps: Vec<String> = params
                     .iter()
                     .map(|(n, t)| format!("{}: {:?}", n, t))
                     .collect();
                 format!("fn {}({}) -> {:?}", word, ps.join(", "), ret)
             }
-            FunctionNode::External { params, ret, .. } => {
+            FunctionDefinitionNode::External { params, ret, .. } => {
                 let ps: Vec<String> = params
                     .iter()
                     .map(|(n, t)| format!("{}: {:?}", n, t))
                     .collect();
                 format!("extern fn {}({}) -> {:?}", word, ps.join(", "), ret)
             }
-            FunctionNode::Builtin(name, params, ret) => {
+            FunctionDefinitionNode::Builtin(name, params, ret) => {
                 format!("builtin fn {}({} params) -> {:?}", name, params.len(), ret)
             }
             _ => format!("fn {}", word),

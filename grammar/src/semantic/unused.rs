@@ -6,8 +6,8 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::{
-    Condition, ConditionNode, Expression, FunctionNode, ModelNode, NamedCodeBlock, Statement,
-    VariableNode,
+    ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
+    NamedCodeBlockDefinitionNode, StatementNode, VariableNode,
 };
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -76,8 +76,7 @@ fn check_model_unused(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnost
     }
 
     // Рекурсивно для вложенных моделей
-    let nested: Vec<Rc<RefCell<ModelNode>>> =
-        borrowed.models.values().map(Rc::clone).collect();
+    let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
     drop(borrowed);
 
     for nested_model in nested {
@@ -94,9 +93,9 @@ fn collect_from_var(var: &VariableNode, used: &mut HashSet<String>) {
     }
 }
 
-fn collect_from_expr(expr: &Expression, used: &mut HashSet<String>) {
+fn collect_from_expr(expr: &ExpressionNode, used: &mut HashSet<String>) {
     match expr {
-        Expression::Variable(var_rc) => {
+        ExpressionNode::Variable(var_rc) => {
             let borrowed = var_rc.borrow();
             if let VariableNode::Simple { name, .. }
             | VariableNode::Port { name, .. }
@@ -105,7 +104,7 @@ fn collect_from_expr(expr: &Expression, used: &mut HashSet<String>) {
                 used.insert(name.clone());
             }
         }
-        Expression::ArraySubscript(var_rc, _) | Expression::ArraySlice(var_rc, _, _) => {
+        ExpressionNode::ArraySubscript(var_rc, _) | ExpressionNode::ArraySlice(var_rc, _, _) => {
             let borrowed = var_rc.borrow();
             if let VariableNode::Simple { name, .. }
             | VariableNode::Port { name, .. }
@@ -114,47 +113,47 @@ fn collect_from_expr(expr: &Expression, used: &mut HashSet<String>) {
                 used.insert(name.clone());
             }
         }
-        Expression::Not(e)
-        | Expression::BitwiseNot(e)
-        | Expression::UnaryPlus(e)
-        | Expression::Negate(e)
-        | Expression::Parenthesis(e)
-        | Expression::BitAccess(e, _)
-        | Expression::Cast(e, _) => collect_from_expr(e, used),
-        Expression::Add(l, r)
-        | Expression::Subtract(l, r)
-        | Expression::Multiply(l, r)
-        | Expression::Divide(l, r)
-        | Expression::Modulo(l, r)
-        | Expression::Power(l, r)
-        | Expression::BitwiseAnd(l, r)
-        | Expression::BitwiseXor(l, r)
-        | Expression::BitwiseOr(l, r)
-        | Expression::ShiftLeft(l, r)
-        | Expression::ShiftRight(l, r)
-        | Expression::And(l, r)
-        | Expression::Or(l, r)
-        | Expression::Equal(l, r)
-        | Expression::NotEqual(l, r)
-        | Expression::Less(l, r)
-        | Expression::More(l, r)
-        | Expression::LessEqual(l, r)
-        | Expression::MoreEqual(l, r)
-        | Expression::Assign(l, r) => {
+        ExpressionNode::Not(e)
+        | ExpressionNode::BitwiseNot(e)
+        | ExpressionNode::UnaryPlus(e)
+        | ExpressionNode::Negate(e)
+        | ExpressionNode::Parenthesis(e)
+        | ExpressionNode::BitAccess(e, _)
+        | ExpressionNode::Cast(e, _) => collect_from_expr(e, used),
+        ExpressionNode::Add(l, r)
+        | ExpressionNode::Subtract(l, r)
+        | ExpressionNode::Multiply(l, r)
+        | ExpressionNode::Divide(l, r)
+        | ExpressionNode::Modulo(l, r)
+        | ExpressionNode::Power(l, r)
+        | ExpressionNode::BitwiseAnd(l, r)
+        | ExpressionNode::BitwiseXor(l, r)
+        | ExpressionNode::BitwiseOr(l, r)
+        | ExpressionNode::ShiftLeft(l, r)
+        | ExpressionNode::ShiftRight(l, r)
+        | ExpressionNode::And(l, r)
+        | ExpressionNode::Or(l, r)
+        | ExpressionNode::Equal(l, r)
+        | ExpressionNode::NotEqual(l, r)
+        | ExpressionNode::Less(l, r)
+        | ExpressionNode::More(l, r)
+        | ExpressionNode::LessEqual(l, r)
+        | ExpressionNode::MoreEqual(l, r)
+        | ExpressionNode::Assign(l, r) => {
             collect_from_expr(l, used);
             collect_from_expr(r, used);
         }
-        Expression::ConditionalOperator(cond, then_e, else_e) => {
+        ExpressionNode::ConditionalOperator(cond, then_e, else_e) => {
             collect_from_expr(cond, used);
             collect_from_expr(then_e, used);
             collect_from_expr(else_e, used);
         }
-        Expression::Function(_, args) => {
+        ExpressionNode::Function(_, args) => {
             for arg in args {
                 collect_from_expr(arg, used);
             }
         }
-        Expression::Array(items) | Expression::Initializer(items) => {
+        ExpressionNode::Array(items) | ExpressionNode::Initializer(items) => {
             for item in items {
                 collect_from_expr(item, used);
             }
@@ -163,28 +162,33 @@ fn collect_from_expr(expr: &Expression, used: &mut HashSet<String>) {
     }
 }
 
-fn collect_from_stmt(stmt: &Statement, used: &mut HashSet<String>) {
+fn collect_from_stmt(stmt: &StatementNode, used: &mut HashSet<String>) {
     match stmt {
-        Statement::Block(stmts) => {
+        StatementNode::Block(stmts) => {
             for s in stmts {
                 collect_from_stmt(s, used);
             }
         }
-        Statement::Expression(e) => collect_from_expr(e, used),
-        Statement::If { cond, then_, else_ } => {
+        StatementNode::Expression(e) => collect_from_expr(e, used),
+        StatementNode::If { cond, then_, else_ } => {
             collect_from_expr(cond, used);
             collect_from_stmt(then_, used);
             if let Some(e) = else_ {
                 collect_from_stmt(e, used);
             }
         }
-        Statement::Loop { cond, body } => {
+        StatementNode::Loop { cond, body } => {
             if let Some(c) = cond {
                 collect_from_expr(c, used);
             }
             collect_from_stmt(body, used);
         }
-        Statement::For { init, cond, step, body } => {
+        StatementNode::For {
+            init,
+            cond,
+            step,
+            body,
+        } => {
             if let Some(s) = init {
                 collect_from_stmt(s, used);
             }
@@ -196,15 +200,15 @@ fn collect_from_stmt(stmt: &Statement, used: &mut HashSet<String>) {
             }
             collect_from_stmt(body, used);
         }
-        Statement::Variable(_, _, Some(e)) => collect_from_expr(e, used),
-        Statement::Return(Some(e)) => collect_from_expr(e, used),
+        StatementNode::Variable(_, _, Some(e)) => collect_from_expr(e, used),
+        StatementNode::Return(Some(e)) => collect_from_expr(e, used),
         _ => {}
     }
 }
 
-fn collect_from_condition(cond: &Condition, used: &mut HashSet<String>) {
+fn collect_from_condition(cond: &ConditionNode, used: &mut HashSet<String>) {
     match cond {
-        Condition::Variable(var_rc, _) => {
+        ConditionNode::Variable(var_rc, _) => {
             let borrowed = var_rc.borrow();
             if let VariableNode::Simple { name, .. }
             | VariableNode::Port { name, .. }
@@ -213,26 +217,26 @@ fn collect_from_condition(cond: &Condition, used: &mut HashSet<String>) {
                 used.insert(name.clone());
             }
         }
-        Condition::Not(c) | Condition::Parenthesis(c) => collect_from_condition(c, used),
-        Condition::And(l, r)
-        | Condition::Or(l, r)
-        | Condition::Equal(l, r)
-        | Condition::NotEqual(l, r)
-        | Condition::Less(l, r)
-        | Condition::More(l, r)
-        | Condition::LessEqual(l, r)
-        | Condition::MoreEqual(l, r)
-        | Condition::Add(l, r)
-        | Condition::Subtract(l, r) => {
+        ConditionNode::Not(c) | ConditionNode::Parenthesis(c) => collect_from_condition(c, used),
+        ConditionNode::And(l, r)
+        | ConditionNode::Or(l, r)
+        | ConditionNode::Equal(l, r)
+        | ConditionNode::NotEqual(l, r)
+        | ConditionNode::Less(l, r)
+        | ConditionNode::More(l, r)
+        | ConditionNode::LessEqual(l, r)
+        | ConditionNode::MoreEqual(l, r)
+        | ConditionNode::Add(l, r)
+        | ConditionNode::Subtract(l, r) => {
             collect_from_condition(l, used);
             collect_from_condition(r, used);
         }
-        Condition::Function(_, args, _) => {
+        ConditionNode::Function(_, args, _) => {
             for arg in args {
                 collect_from_condition(arg, used);
             }
         }
-        Condition::ArraySubscript(var_rc, _) => {
+        ConditionNode::ArraySubscript(var_rc, _) => {
             let borrowed = var_rc.borrow();
             if let VariableNode::Simple { name, .. }
             | VariableNode::Port { name, .. }
@@ -241,31 +245,28 @@ fn collect_from_condition(cond: &Condition, used: &mut HashSet<String>) {
                 used.insert(name.clone());
             }
         }
-        Condition::BitAccess(_, _) => {}
+        ConditionNode::BitAccess(_, _) => {}
         _ => {}
     }
 }
 
-fn collect_from_condition_node(cond_node: &ConditionNode, used: &mut HashSet<String>) {
+fn collect_from_condition_node(cond_node: &ConditionDefinitionNode, used: &mut HashSet<String>) {
     collect_from_condition(&cond_node.value, used);
 }
 
-fn collect_from_named_block(block: &NamedCodeBlock, used: &mut HashSet<String>) {
+fn collect_from_named_block(block: &NamedCodeBlockDefinitionNode, used: &mut HashSet<String>) {
     if let Some(stmt) = block.statement() {
         collect_from_stmt(stmt, used);
     }
 }
 
-fn collect_from_func(func: &FunctionNode, used: &mut HashSet<String>) {
-    if let FunctionNode::Local { body, .. } = func {
+fn collect_from_func(func: &FunctionDefinitionNode, used: &mut HashSet<String>) {
+    if let FunctionDefinitionNode::Local { body, .. } = func {
         collect_from_stmt(body, used);
     }
 }
 
-fn collect_from_state(
-    state: &crate::semantic::StateNode,
-    used: &mut HashSet<String>,
-) {
+fn collect_from_state(state: &crate::semantic::StateNode, used: &mut HashSet<String>) {
     use crate::semantic::StateNode;
     match state {
         StateNode::Simple {

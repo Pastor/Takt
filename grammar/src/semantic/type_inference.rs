@@ -33,7 +33,8 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast::Type;
-use crate::semantic::{Expression, ModelNode, TypeNode, VariableNode};
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, ModelNode, VariableNode};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -53,7 +54,13 @@ pub fn type_inference(
 ) -> Result<HashMap<String, VariableNode>, Diagnostic> {
     for (name, var) in variables.clone() {
         match var {
-            VariableNode::Simple { upper, loc, ty: TypeNode::Inference, ref expr, .. } => {
+            VariableNode::Simple {
+                upper,
+                loc,
+                ty: TypeNode::Inference,
+                ref expr,
+                ..
+            } => {
                 let typ = extract_type(expr, model.clone())?;
                 variables.insert(
                     name.clone(),
@@ -66,7 +73,13 @@ pub fn type_inference(
                     },
                 );
             }
-            VariableNode::Const { upper, loc, ty: TypeNode::Inference, ref expr, .. } => {
+            VariableNode::Const {
+                upper,
+                loc,
+                ty: TypeNode::Inference,
+                ref expr,
+                ..
+            } => {
                 let typ = extract_type(expr, model.clone())?;
                 variables.insert(
                     name.clone(),
@@ -278,86 +291,89 @@ pub(crate) fn ast_type_to_node_ctx(ty: &Type, model: Rc<RefCell<ModelNode>>) -> 
 /// В текущей реализации всегда успешен. Возвращает `Unsupported`
 /// для выражений, тип которых не поддаётся автоматическому выводу
 /// (например, вызовы функций с неизвестной сигнатурой).
-fn extract_type(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<TypeNode, Diagnostic> {
+fn extract_type(
+    expr: &ExpressionNode,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<TypeNode, Diagnostic> {
     match expr {
         // ── Литералы ──────────────────────────────────────────────────────────
-        Expression::Bool(_) => Ok(TypeNode::Bool),
-        Expression::Number(n) => Ok(infer_int_type(*n)),
-        Expression::Rational(_, _) => Ok(TypeNode::Rational),
-        Expression::String(_) | Expression::Address(_, _) => Ok(TypeNode::Unsupported),
+        ExpressionNode::Bool(_) => Ok(TypeNode::Bool),
+        ExpressionNode::Number(n) => Ok(infer_int_type(*n)),
+        ExpressionNode::Rational(_, _) => Ok(TypeNode::Rational),
+        ExpressionNode::String(_) | ExpressionNode::Address(_, _) => Ok(TypeNode::Unsupported),
 
         // ── Идентификаторы ────────────────────────────────────────────────────
-        Expression::Variable(var_rc) => Ok(type_of_var(&var_rc.borrow())),
+        ExpressionNode::Variable(var_rc) => Ok(type_of_var(&var_rc.borrow())),
         // Условия всегда вычисляются в булев (1-битный) результат.
-        Expression::Condition(_) => Ok(TypeNode::Bit),
-        Expression::Model(_) => Ok(TypeNode::Unsupported),
+        ExpressionNode::Condition(_) => Ok(TypeNode::Bit),
+        ExpressionNode::Model(_) => Ok(TypeNode::Unsupported),
 
         // ── Скобки ────────────────────────────────────────────────────────────
-        Expression::Parenthesis(inner) => extract_type(inner, model),
+        ExpressionNode::Parenthesis(inner) => extract_type(inner, model),
 
         // ── Логические операции и сравнения → Bit ─────────────────────────────
-        Expression::Not(_)
-        | Expression::And(_, _)
-        | Expression::Or(_, _)
-        | Expression::Equal(_, _)
-        | Expression::NotEqual(_, _)
-        | Expression::Less(_, _)
-        | Expression::More(_, _)
-        | Expression::LessEqual(_, _)
-        | Expression::MoreEqual(_, _) => Ok(TypeNode::Bit),
+        ExpressionNode::Not(_)
+        | ExpressionNode::And(_, _)
+        | ExpressionNode::Or(_, _)
+        | ExpressionNode::Equal(_, _)
+        | ExpressionNode::NotEqual(_, _)
+        | ExpressionNode::Less(_, _)
+        | ExpressionNode::More(_, _)
+        | ExpressionNode::LessEqual(_, _)
+        | ExpressionNode::MoreEqual(_, _) => Ok(TypeNode::Bit),
 
         // ── Унарные операции → тип операнда ──────────────────────────────────
-        Expression::BitwiseNot(e) | Expression::UnaryPlus(e) | Expression::Negate(e) => {
-            extract_type(e, model)
-        }
+        ExpressionNode::BitwiseNot(e)
+        | ExpressionNode::UnaryPlus(e)
+        | ExpressionNode::Negate(e) => extract_type(e, model),
 
         // ── Арифметические бинарные операции → наиболее широкий тип ──────────
-        Expression::Add(l, r)
-        | Expression::Subtract(l, r)
-        | Expression::Multiply(l, r)
-        | Expression::Divide(l, r)
-        | Expression::Modulo(l, r)
-        | Expression::Power(l, r) => {
+        ExpressionNode::Add(l, r)
+        | ExpressionNode::Subtract(l, r)
+        | ExpressionNode::Multiply(l, r)
+        | ExpressionNode::Divide(l, r)
+        | ExpressionNode::Modulo(l, r)
+        | ExpressionNode::Power(l, r) => {
             let lt = extract_type(l, model.clone())?;
             let rt = extract_type(r, model)?;
             Ok(wider_type(lt, rt))
         }
 
         // ── Побитовые бинарные операции → наиболее широкий тип ───────────────
-        Expression::BitwiseAnd(l, r)
-        | Expression::BitwiseXor(l, r)
-        | Expression::BitwiseOr(l, r)
-        | Expression::ShiftLeft(l, r)
-        | Expression::ShiftRight(l, r) => {
+        ExpressionNode::BitwiseAnd(l, r)
+        | ExpressionNode::BitwiseXor(l, r)
+        | ExpressionNode::BitwiseOr(l, r)
+        | ExpressionNode::ShiftLeft(l, r)
+        | ExpressionNode::ShiftRight(l, r) => {
             let lt = extract_type(l, model.clone())?;
             let rt = extract_type(r, model)?;
             Ok(wider_type(lt, rt))
         }
 
         // ── Тернарный оператор → тип наиболее широкой ветви ──────────────────
-        Expression::ConditionalOperator(_, then_e, else_e) => {
+        ExpressionNode::ConditionalOperator(_, then_e, else_e) => {
             let tt = extract_type(then_e, model.clone())?;
             let et = extract_type(else_e, model)?;
             Ok(wider_type(tt, et))
         }
 
         // ── Присваивание → тип правой части ──────────────────────────────────
-        Expression::Assign(_, r) => extract_type(r, model),
+        ExpressionNode::Assign(_, r) => extract_type(r, model),
 
         // ── Обращение к массиву → тип элемента ───────────────────────────────
-        Expression::ArraySubscript(var_rc, _) => match type_of_var(&var_rc.borrow()) {
+        ExpressionNode::ArraySubscript(var_rc, _) => match type_of_var(&var_rc.borrow()) {
             TypeNode::Array(_, elem_type) => Ok(*elem_type),
             other => Ok(other),
         },
 
         // ── Срез массива → тип элемента ──────────────────────────────────────
-        Expression::ArraySlice(var_rc, _, _) => match type_of_var(&var_rc.borrow()) {
+        ExpressionNode::ArraySlice(var_rc, _, _) => match type_of_var(&var_rc.borrow()) {
             TypeNode::Array(_, elem_type) => Ok(*elem_type),
             other => Ok(other),
         },
 
         // ── Массивный литерал → Array(N, тип_элемента) ───────────────────────
-        Expression::Array(items) => {
+        ExpressionNode::Array(items) => {
             let n = items.len() as u16;
             if items.is_empty() {
                 return Ok(TypeNode::Array(0, Box::new(TypeNode::Bit)));
@@ -367,7 +383,7 @@ fn extract_type(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<Type
         }
 
         // ── Инициализатор структуры → тип первого элемента ───────────────────
-        Expression::Initializer(items) => {
+        ExpressionNode::Initializer(items) => {
             if items.is_empty() {
                 return Ok(TypeNode::Unsupported);
             }
@@ -377,8 +393,8 @@ fn extract_type(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<Type
         }
 
         // ── Приведение типа → результирующий тип (FE2: с разрешением псевдонимов) ──
-        Expression::Cast(_, ty) => Ok(ast_type_to_node_ctx(ty, model)),
-        Expression::Type(ty) => Ok(ast_type_to_node(ty)),
+        ExpressionNode::Cast(_, ty) => Ok(ast_type_to_node_ctx(ty, model)),
+        ExpressionNode::Type(ty) => Ok(ast_type_to_node(ty)),
 
         // ── Ce6: Вывод типа из возвращаемого типа функции ────────────────────
         //
@@ -389,33 +405,33 @@ fn extract_type(expr: &Expression, model: Rc<RefCell<ModelNode>>) -> Result<Type
         //
         // Поддерживаются разрешённые функции (Local, External, Builtin)
         // и неразрешённые (Unresolved), для которых тип берётся из AST-определения.
-        Expression::Function(func_rc, _args) => {
+        ExpressionNode::Function(func_rc, _args) => {
             let func = func_rc.borrow();
             let ret_type = match &*func {
-                crate::semantic::FunctionNode::Local { ret, .. } => ret.clone(),
-                crate::semantic::FunctionNode::External { ret, .. } => ret.clone(),
-                crate::semantic::FunctionNode::Builtin(_, _, ret) => ret.clone(),
+                crate::semantic::FunctionDefinitionNode::Local { ret, .. } => ret.clone(),
+                crate::semantic::FunctionDefinitionNode::External { ret, .. } => ret.clone(),
+                crate::semantic::FunctionDefinitionNode::Builtin(_, _, ret) => ret.clone(),
                 // Ce6+FE2: функция ещё не разрешена — читаем return_type из AST,
                 // с разрешением пользовательских псевдонимов через контекст модели
-                crate::semantic::FunctionNode::Unresolved(def) => {
+                crate::semantic::FunctionDefinitionNode::Unresolved(def) => {
                     if let Some(ret_ast) = &def.return_type {
                         ast_type_to_node_ctx(ret_ast, model.clone())
                     } else {
                         TypeNode::Unit // функция без return_type → void/Unit
                     }
                 }
-                crate::semantic::FunctionNode::None => TypeNode::Unsupported,
+                crate::semantic::FunctionDefinitionNode::None => TypeNode::Unsupported,
             };
             Ok(ret_type)
         }
 
         // ── Выражения без выводимого типа ────────────────────────────────────
-        Expression::BitAccess(_, _)
-        | Expression::CodeBlock(_, _)
-        | Expression::NamedFunctionBox(_, _)
-        | Expression::List(_)
-        | Expression::None
-        | Expression::Unresolved(_) => Ok(TypeNode::Unsupported),
+        ExpressionNode::BitAccess(_, _)
+        | ExpressionNode::CodeBlock(_, _)
+        | ExpressionNode::NamedFunctionBox(_, _)
+        | ExpressionNode::List(_)
+        | ExpressionNode::None
+        | ExpressionNode::Unresolved(_) => Ok(TypeNode::Unsupported),
     }
 }
 
@@ -439,7 +455,7 @@ mod tests {
     #[test]
     fn bool_literal_type_is_bool() {
         let ty = extract_type(
-            &Expression::Bool(true),
+            &ExpressionNode::Bool(true),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -450,7 +466,7 @@ mod tests {
     #[test]
     fn number_literal_type_is_array8() {
         let ty = extract_type(
-            &Expression::Number(42),
+            &ExpressionNode::Number(42),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -461,7 +477,7 @@ mod tests {
     #[test]
     fn rational_literal_type_is_rational() {
         let ty = extract_type(
-            &Expression::Rational("3.14".to_string(), false),
+            &ExpressionNode::Rational("3.14".to_string(), false),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -471,9 +487,9 @@ mod tests {
     /// `extract_type(Parenthesis(Bool(_)))` → `Bool` (тип из внутреннего).
     #[test]
     fn parenthesis_propagates_inner_type() {
-        let inner = Box::new(Expression::Bool(false));
+        let inner = Box::new(ExpressionNode::Bool(false));
         let ty = extract_type(
-            &Expression::Parenthesis(inner),
+            &ExpressionNode::Parenthesis(inner),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -484,7 +500,7 @@ mod tests {
     #[test]
     fn not_expression_type_is_bit() {
         let ty = extract_type(
-            &Expression::Not(Box::new(Expression::Bool(true))),
+            &ExpressionNode::Not(Box::new(ExpressionNode::Bool(true))),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -495,9 +511,9 @@ mod tests {
     #[test]
     fn comparison_type_is_bit() {
         let ty = extract_type(
-            &Expression::Equal(
-                Box::new(Expression::Number(1)),
-                Box::new(Expression::Number(2)),
+            &ExpressionNode::Equal(
+                Box::new(ExpressionNode::Number(1)),
+                Box::new(ExpressionNode::Number(2)),
             ),
             Rc::new(RefCell::new(ModelNode::default())),
         )
@@ -509,9 +525,9 @@ mod tests {
     #[test]
     fn add_two_small_numbers_is_array8() {
         let ty = extract_type(
-            &Expression::Add(
-                Box::new(Expression::Number(1)),
-                Box::new(Expression::Number(2)),
+            &ExpressionNode::Add(
+                Box::new(ExpressionNode::Number(1)),
+                Box::new(ExpressionNode::Number(2)),
             ),
             Rc::new(RefCell::new(ModelNode::default())),
         )
@@ -523,9 +539,9 @@ mod tests {
     #[test]
     fn add_rational_bit_is_rational() {
         let ty = extract_type(
-            &Expression::Add(
-                Box::new(Expression::Rational("1.0".into(), false)),
-                Box::new(Expression::Number(2)),
+            &ExpressionNode::Add(
+                Box::new(ExpressionNode::Rational("1.0".into(), false)),
+                Box::new(ExpressionNode::Number(2)),
             ),
             Rc::new(RefCell::new(ModelNode::default())),
         )
@@ -537,7 +553,7 @@ mod tests {
     #[test]
     fn negate_rational_is_rational() {
         let ty = extract_type(
-            &Expression::Negate(Box::new(Expression::Rational("1.0".into(), false))),
+            &ExpressionNode::Negate(Box::new(ExpressionNode::Rational("1.0".into(), false))),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -660,7 +676,7 @@ mod tests {
     #[test]
     fn unary_plus_number_type_is_bit() {
         let ty = extract_type(
-            &Expression::UnaryPlus(Box::new(Expression::Number(5))),
+            &ExpressionNode::UnaryPlus(Box::new(ExpressionNode::Number(5))),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -671,7 +687,7 @@ mod tests {
     #[test]
     fn bitwise_not_rational_is_rational() {
         let ty = extract_type(
-            &Expression::BitwiseNot(Box::new(Expression::Rational("1.0".into(), false))),
+            &ExpressionNode::BitwiseNot(Box::new(ExpressionNode::Rational("1.0".into(), false))),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -682,9 +698,9 @@ mod tests {
     #[test]
     fn multiply_rational_bit_is_rational() {
         let ty = extract_type(
-            &Expression::Multiply(
-                Box::new(Expression::Rational("2.0".into(), false)),
-                Box::new(Expression::Number(3)),
+            &ExpressionNode::Multiply(
+                Box::new(ExpressionNode::Rational("2.0".into(), false)),
+                Box::new(ExpressionNode::Number(3)),
             ),
             Rc::new(RefCell::new(ModelNode::default())),
         )
@@ -696,9 +712,9 @@ mod tests {
     #[test]
     fn subtract_two_numbers_is_array8() {
         let ty = extract_type(
-            &Expression::Subtract(
-                Box::new(Expression::Number(5)),
-                Box::new(Expression::Number(3)),
+            &ExpressionNode::Subtract(
+                Box::new(ExpressionNode::Number(5)),
+                Box::new(ExpressionNode::Number(3)),
             ),
             Rc::new(RefCell::new(ModelNode::default())),
         )
@@ -710,9 +726,9 @@ mod tests {
     #[test]
     fn shift_left_numbers_is_array8() {
         let ty = extract_type(
-            &Expression::ShiftLeft(
-                Box::new(Expression::Number(1)),
-                Box::new(Expression::Number(2)),
+            &ExpressionNode::ShiftLeft(
+                Box::new(ExpressionNode::Number(1)),
+                Box::new(ExpressionNode::Number(2)),
             ),
             Rc::new(RefCell::new(ModelNode::default())),
         )
@@ -726,10 +742,10 @@ mod tests {
     #[test]
     fn conditional_operator_widens_type() {
         let ty = extract_type(
-            &Expression::ConditionalOperator(
-                Box::new(Expression::Bool(true)),
-                Box::new(Expression::Number(0)),
-                Box::new(Expression::Rational("1.0".into(), false)),
+            &ExpressionNode::ConditionalOperator(
+                Box::new(ExpressionNode::Bool(true)),
+                Box::new(ExpressionNode::Number(0)),
+                Box::new(ExpressionNode::Rational("1.0".into(), false)),
             ),
             Rc::new(RefCell::new(ModelNode::default())),
         )
@@ -741,10 +757,10 @@ mod tests {
     #[test]
     fn conditional_operator_both_bit_is_bit() {
         let ty = extract_type(
-            &Expression::ConditionalOperator(
-                Box::new(Expression::Bool(true)),
-                Box::new(Expression::Number(1)),
-                Box::new(Expression::Number(0)),
+            &ExpressionNode::ConditionalOperator(
+                Box::new(ExpressionNode::Bool(true)),
+                Box::new(ExpressionNode::Number(1)),
+                Box::new(ExpressionNode::Number(0)),
             ),
             Rc::new(RefCell::new(ModelNode::default())),
         )
@@ -758,7 +774,7 @@ mod tests {
     #[test]
     fn array_literal_infers_element_type() {
         let ty = extract_type(
-            &Expression::Array(vec![Expression::Number(1), Expression::Number(2)]),
+            &ExpressionNode::Array(vec![ExpressionNode::Number(1), ExpressionNode::Number(2)]),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -772,7 +788,7 @@ mod tests {
     #[test]
     fn empty_array_literal_type() {
         let ty = extract_type(
-            &Expression::Array(vec![]),
+            &ExpressionNode::Array(vec![]),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -783,9 +799,9 @@ mod tests {
     #[test]
     fn assign_infers_rhs_type() {
         let ty = extract_type(
-            &Expression::Assign(
-                Box::new(Expression::None),
-                Box::new(Expression::Rational("3.14".into(), false)),
+            &ExpressionNode::Assign(
+                Box::new(ExpressionNode::None),
+                Box::new(ExpressionNode::Rational("3.14".into(), false)),
             ),
             Rc::new(RefCell::new(ModelNode::default())),
         )
@@ -800,7 +816,7 @@ mod tests {
     fn cast_to_rational_type() {
         use crate::parser::ast::Type;
         let ty = extract_type(
-            &Expression::Cast(Box::new(Expression::Number(0)), Type::Rational),
+            &ExpressionNode::Cast(Box::new(ExpressionNode::Number(0)), Type::Rational),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -812,8 +828,8 @@ mod tests {
     fn cast_to_array_type() {
         use crate::parser::ast::Type;
         let ty = extract_type(
-            &Expression::Cast(
-                Box::new(Expression::Number(0)),
+            &ExpressionNode::Cast(
+                Box::new(ExpressionNode::Number(0)),
                 Type::Array {
                     loc: crate::diagnostics::Location::default(),
                     element_type: Box::new(Type::Bit),
@@ -832,7 +848,7 @@ mod tests {
     #[test]
     fn string_literal_type_is_unsupported() {
         let ty = extract_type(
-            &Expression::String(vec!["hello".into()]),
+            &ExpressionNode::String(vec!["hello".into()]),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -843,7 +859,7 @@ mod tests {
     #[test]
     fn none_expression_type_is_unsupported() {
         let ty = extract_type(
-            &Expression::None,
+            &ExpressionNode::None,
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -1031,7 +1047,10 @@ mod tests {
     #[test]
     fn wider_type_enum_and_rational_is_unsupported() {
         let a = TypeNode::Enum("Dir".to_string());
-        assert_eq!(wider_type(a.clone(), TypeNode::Rational), TypeNode::Unsupported);
+        assert_eq!(
+            wider_type(a.clone(), TypeNode::Rational),
+            TypeNode::Unsupported
+        );
         assert_eq!(wider_type(TypeNode::Rational, a), TypeNode::Unsupported);
     }
 
@@ -1054,10 +1073,10 @@ mod tests {
     #[test]
     fn ast_type_to_node_ctx_with_enum_in_model() {
         use crate::parser::ast::Type;
-        use crate::semantic::EnumNode;
+        use crate::semantic::EnumDefinitionNode;
 
         let model = Rc::new(RefCell::new(ModelNode::default()));
-        let e = EnumNode::new("Dir", &[("North", None), ("South", None)]);
+        let e = EnumDefinitionNode::new("Dir", &[("North", None), ("South", None)]);
         model.borrow_mut().enums.insert("Dir".to_string(), e);
 
         assert_eq!(
@@ -1147,4 +1166,3 @@ mod tests {
         }
     }
 }
-

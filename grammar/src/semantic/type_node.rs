@@ -32,7 +32,7 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast::Type;
-use crate::semantic::{ModelNode, TypeNode};
+use crate::semantic::ModelNode;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -63,13 +63,12 @@ pub(crate) fn construct_type(
             "float" => Ok(TypeNode::Rational),
             "unit" => Ok(TypeNode::Unit),
             local => {
-                let rc = model
-                    .borrow()
-                    .search_type(local)
-                    .ok_or_else(|| Diagnostic::declaration_error(
+                let rc = model.borrow().search_type(local).ok_or_else(|| {
+                    Diagnostic::declaration_error(
                         def.loc,
                         format!("Локальный тип '{}' не найден", local),
-                    ))?;
+                    )
+                })?;
                 Ok(rc.borrow().clone())
             }
         },
@@ -237,7 +236,10 @@ mod tests {
             "u8".to_string(),
             TypeNode::Array(8, Box::new(TypeNode::Bit)),
         );
-        let model = Rc::new(RefCell::new(ModelNode { types: map, ..Default::default() }));
+        let model = Rc::new(RefCell::new(ModelNode {
+            types: map,
+            ..Default::default()
+        }));
         assert_eq!(
             construct_type(Some(alias("u8")), model).unwrap(),
             TypeNode::Array(8, Box::new(TypeNode::Bit))
@@ -355,11 +357,56 @@ mod tests {
             "Color".to_string(),
             TypeNode::Array(8, Box::new(TypeNode::Bit)),
         );
-        let model = Rc::new(RefCell::new(ModelNode { types: map, ..Default::default() }));
+        let model = Rc::new(RefCell::new(ModelNode {
+            types: map,
+            ..Default::default()
+        }));
         // Type::Enum("Color") всё равно → TypeNode::Enum("Color"), не Array
         assert_eq!(
             construct_type(Some(Type::Enum("Color".to_string())), model).unwrap(),
             TypeNode::Enum("Color".to_string())
         );
     }
+}
+
+/// Семантический узел типа данных.
+///
+/// Варианты:
+/// - [`Detecting`](TypeNode::Inference) — тип выводится (временная заглушка).
+/// - [`Address`](TypeNode::Address) — адресный тип порта `(адрес, бит?)`.
+/// - [`Bit`](TypeNode::Bit) — 1-битный примитив (`bit`).
+/// - [`Bool`](TypeNode::Bool) — булев тип (`bool`).
+/// - [`Rational`](TypeNode::Rational) — вещественное число (`float`).
+/// - [`Array`](TypeNode::Array) — массив фиксированного размера `(N, элемент)`.
+/// - [`Enum`](TypeNode::Enum) — перечисление (Ce4).
+/// - [`Unsupported`](TypeNode::Unsupported) — неподдерживаемый тип (например, функциональный).
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
+pub enum TypeNode {
+    /// Тип ещё не определён (вывод типа в процессе).
+    #[default]
+    Inference,
+    /// Адресный тип порта: `(адрес, номер_бита?)`.
+    Address(u64, Option<u64>),
+    /// 1-битный примитив (`bit`).
+    Bit,
+    /// Тип `bool` — булев тип (`true`/`false`).
+    Bool,
+    /// Тип с плавающей точкой (`float`).
+    Rational,
+    /// Массив фиксированного размера: `(количество_элементов, тип_элемента)`.
+    Array(u16, Box<TypeNode>),
+    /// Перечисление (Ce4): именованный тип с фиксированным набором значений.
+    ///
+    /// Хранит имя перечисления.
+    Enum(String),
+    /// Неподдерживаемый тип (например, функциональный).
+    Unsupported,
+    /// Пустой тип.
+    Unit,
+    /// Встроенный строковый тип (внутренний, для встроенных функций).
+    BuiltinString,
+    /// Встроенный тип модели (внутренний, для встроенных функций).
+    BuiltinModel,
+    /// Встроенный тип состояния (внутренний, для встроенных функций).
+    BuiltinState,
 }

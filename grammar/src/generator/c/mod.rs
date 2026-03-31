@@ -2,7 +2,8 @@ use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
 use crate::semantic::naming::{normalize_lowercase_snakecase, normalize_model_name};
-use crate::semantic::{Expression, ModelNode, TypeNode, VariableNode};
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, ModelNode, VariableNode};
 use std::fs;
 use std::path::Path;
 
@@ -54,7 +55,11 @@ impl Generator {
             TypeNode::BuiltinString => "char *".to_string(),
             // Ce4: перечисление представляется как uint32_t в C
             TypeNode::Enum(enum_name) => {
-                format!("uint32_t /*enum {}*/ {}", enum_name, name.clone().unwrap_or_default())
+                format!(
+                    "uint32_t /*enum {}*/ {}",
+                    enum_name,
+                    name.clone().unwrap_or_default()
+                )
             }
             TypeNode::BuiltinModel
             | TypeNode::BuiltinState
@@ -66,7 +71,10 @@ impl Generator {
         }
     }
 
-    fn generate_model_enum(#[allow(unused_mut)] mut printer: &mut Printer, model: &ModelNode) -> Result<(), Diagnostic> {
+    fn generate_model_enum(
+        #[allow(unused_mut)] mut printer: &mut Printer,
+        model: &ModelNode,
+    ) -> Result<(), Diagnostic> {
         printer.ident("enum {").nl().up();
         let upper = Self::get_upper_name(model);
         printer.ident(&upper).print("_INIT");
@@ -108,7 +116,7 @@ impl Generator {
                     VariableNode::Unresolved => {}
                     VariableNode::Simple { ty, expr, .. } => {
                         printer.ident(Self::get_typed_variable(ty, Some(name.clone())).as_str());
-                        if let Expression::None = expr {
+                        if let ExpressionNode::None = expr {
                             //Skip
                         } else {
                             //TODO:
@@ -141,10 +149,9 @@ impl Generator {
     fn generate_header(&self, model: &ModelNode) -> Result<String, Diagnostic> {
         let mut header = String::new();
         let mut printer = Printer::new(4, &mut header);
-        let id =
-            normalize_lowercase_snakecase(model.name.clone().unwrap_or("unknown".to_string()))
-                .to_uppercase()
-                + "__";
+        let id = normalize_lowercase_snakecase(model.name.clone().unwrap_or("unknown".to_string()))
+            .to_uppercase()
+            + "__";
         printer.print("#ifndef ").print(&id).nl();
         printer.print("#define ").print(&id).nl();
         printer.print("#include <stdint.h>").nl();

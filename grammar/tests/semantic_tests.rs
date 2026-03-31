@@ -10,12 +10,12 @@
 //! - файлы-примеры из `tests/data/semantic/`.
 
 use grammar::parse;
+use grammar::semantic::enum_node::EnumDefinitionNode;
 use grammar::semantic::tree::{
     construct_model, construct_model_with_docs, implicit_bool_warnings,
     transition_completeness_warnings,
 };
-use grammar::semantic::{Implement, StateNode, TypeNode, VariableNode};
-
+use grammar::semantic::{Implement, StateNode, VariableNode};
 // ─── Вспомогательная функция ──────────────────────────────────────────────────
 
 /// Разбирает BuT-программу и возвращает корневой [`ModelNode`].
@@ -414,8 +414,7 @@ fn plain_import_registers_model() {
 
     let src = r#"import "ping.but";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model(&ast, None, &[dir_str])
-        .expect("ошибка построения семантики");
+    let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
     assert!(
         root.borrow().search_model("Ping").is_some(),
@@ -431,8 +430,7 @@ fn plain_import_normalizes_filename_to_camel_case() {
 
     let src = r#"import "my_model.but";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model(&ast, None, &[dir_str])
-        .expect("ошибка построения семантики");
+    let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
     assert!(
         root.borrow().search_model("MyModel").is_some(),
@@ -451,8 +449,7 @@ fn global_symbol_import_registers_under_alias() {
 
     let src = r#"import "engine.but" as Motor;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model(&ast, None, &[dir_str])
-        .expect("ошибка построения семантики");
+    let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
     assert!(
         root.borrow().search_model("Motor").is_some(),
@@ -471,10 +468,7 @@ fn duplicate_import_plain_is_error() {
     let src = r#"import "dup.but"; import "dup.but";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
-    assert!(
-        result.is_err(),
-        "Дублирующийся импорт должен давать ошибку"
-    );
+    assert!(result.is_err(), "Дублирующийся импорт должен давать ошибку");
     let err = result.unwrap_err();
     assert!(
         err.message.contains("уже объявлена"),
@@ -489,7 +483,10 @@ fn import_missing_file_is_error() {
     let src = r#"import "ghost.but";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &["/nonexistent_dir_xyz".to_string()]);
-    assert!(result.is_err(), "Импорт несуществующего файла должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "Импорт несуществующего файла должен давать ошибку"
+    );
     let err = result.unwrap_err();
     assert!(
         err.message.contains("не найден"),
@@ -523,8 +520,7 @@ fn imported_model_usable_in_implements() {
         state Done;
     "#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model(&ast, None, &[dir_str])
-        .expect("ошибка построения семантики");
+    let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
     // Entry реализует Worker — должно быть найдено без ошибок
     assert!(root.borrow().states.contains_key("Entry"));
@@ -536,7 +532,10 @@ fn global_symbol_import_missing_file_is_error() {
     let src = r#"import "ghost.but" as Ghost;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &["/nonexistent".to_string()]);
-    assert!(result.is_err(), "Импорт несуществующего файла должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "Импорт несуществующего файла должен давать ошибку"
+    );
 }
 
 /// Имя из импорта через `as` не совпадает с нормализованным именем файла.
@@ -547,8 +546,7 @@ fn global_symbol_import_only_alias_registered() {
 
     let src = r#"import "engine.but" as Motor;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model(&ast, None, &[dir_str])
-        .expect("ошибка построения семантики");
+    let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
     // Только алиас должен быть зарегистрирован
     assert!(root.borrow().search_model("Motor").is_some());
@@ -600,7 +598,10 @@ fn search_func_returns_none_when_no_functions() {
 #[test]
 fn implement_without_next_no_stack_overflow() {
     let node = build("start A = M { } state B; model M { start S; }");
-    if let StateNode::Implement { next, implements, .. } = &node.states["A"] {
+    if let StateNode::Implement {
+        next, implements, ..
+    } = &node.states["A"]
+    {
         assert!(next.is_none(), "next должен быть None");
         assert!(
             matches!(implements, grammar::semantic::Implement::Model(_)),
@@ -632,11 +633,7 @@ fn implement_parenthesized_add_resolves() {
 /// Переменная из родительской области видимости видна во вложенной модели.
 #[test]
 fn nested_model_sees_parent_variable() {
-    let (ast, _) = parse(
-        "var global_flag: bit = false; model Inner { start S; }",
-        0,
-    )
-    .unwrap();
+    let (ast, _) = parse("var global_flag: bit = false; model Inner { start S; }", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
     let inner = root.borrow().search_model("Inner").unwrap();
     // Inner должна видеть переменную из родительского контекста через upper
@@ -730,7 +727,9 @@ fn error_message_contains_missing_ref_name() {
 // ─── Тесты файлов-примеров из tests/data/semantic/ ────────────────────────────
 
 /// Вспомогательная функция: читает .but-файл и строит семантическое дерево.
-fn build_file(path: &str) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
+fn build_file(
+    path: &str,
+) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
     let src = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("не могу прочитать {}: {}", path, e));
     let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
@@ -750,8 +749,14 @@ fn build_file_err(path: &str) -> grammar::diagnostics::Diagnostic {
 fn example_simple_fsm_is_valid() {
     let node = build_file("tests/data/semantic/valid/simple_fsm.but").unwrap();
     assert!(node.has_states(), "FSM должен иметь состояния");
-    assert!(node.states.contains_key("Start"), "состояние Start должно присутствовать");
-    assert!(node.states.contains_key("Finish"), "состояние Finish должно присутствовать");
+    assert!(
+        node.states.contains_key("Start"),
+        "состояние Start должно присутствовать"
+    );
+    assert!(
+        node.states.contains_key("Finish"),
+        "состояние Finish должно присутствовать"
+    );
 }
 
 /// `tests/data/semantic/valid/type_aliases.but` — псевдонимы типов разрешаются.
@@ -759,20 +764,44 @@ fn example_simple_fsm_is_valid() {
 fn example_type_aliases_is_valid() {
     let node = build_file("tests/data/semantic/valid/type_aliases.but").unwrap();
     assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
-    assert!(node.types.contains_key("u16"), "тип u16 должен быть объявлен");
-    assert!(node.search_var("counter").is_some(), "переменная counter должна быть найдена");
-    assert!(node.search_var("STATUS").is_some(), "порт STATUS должен быть найден");
+    assert!(
+        node.types.contains_key("u16"),
+        "тип u16 должен быть объявлен"
+    );
+    assert!(
+        node.search_var("counter").is_some(),
+        "переменная counter должна быть найдена"
+    );
+    assert!(
+        node.search_var("STATUS").is_some(),
+        "порт STATUS должен быть найден"
+    );
 }
 
 /// `tests/data/semantic/valid/conditions.but` — все условия разрешаются.
 #[test]
 fn example_conditions_is_valid() {
     let node = build_file("tests/data/semantic/valid/conditions.but").unwrap();
-    assert!(node.conditions.contains_key("always_true"), "условие always_true должно быть");
-    assert!(node.conditions.contains_key("always_false"), "условие always_false должно быть");
-    assert!(node.conditions.contains_key("is_flag_set"), "условие is_flag_set должно быть");
-    assert!(node.conditions.contains_key("negated"), "условие negated должно быть");
-    assert!(node.conditions.contains_key("grouped"), "условие grouped должно быть");
+    assert!(
+        node.conditions.contains_key("always_true"),
+        "условие always_true должно быть"
+    );
+    assert!(
+        node.conditions.contains_key("always_false"),
+        "условие always_false должно быть"
+    );
+    assert!(
+        node.conditions.contains_key("is_flag_set"),
+        "условие is_flag_set должно быть"
+    );
+    assert!(
+        node.conditions.contains_key("negated"),
+        "условие negated должно быть"
+    );
+    assert!(
+        node.conditions.contains_key("grouped"),
+        "условие grouped должно быть"
+    );
 }
 
 /// `tests/data/semantic/valid/composition.but` — компоновка моделей корректна.
@@ -780,41 +809,71 @@ fn example_conditions_is_valid() {
 fn example_composition_is_valid() {
     let node = build_file("tests/data/semantic/valid/composition.but").unwrap();
     // Модели Step1, Step2, Step3 должны быть в контексте
-    assert!(node.search_model("Step1").is_some(), "Step1 должна быть найдена");
-    assert!(node.search_model("Step2").is_some(), "Step2 должна быть найдена");
-    assert!(node.search_model("Step3").is_some(), "Step3 должна быть найдена");
+    assert!(
+        node.search_model("Step1").is_some(),
+        "Step1 должна быть найдена"
+    );
+    assert!(
+        node.search_model("Step2").is_some(),
+        "Step2 должна быть найдена"
+    );
+    assert!(
+        node.search_model("Step3").is_some(),
+        "Step3 должна быть найдена"
+    );
     // Состояния Sequential, Parallel, Combined должны быть Implement-узлами
-    assert!(node.states.contains_key("Sequential"), "состояние Sequential должно быть");
-    assert!(node.states.contains_key("Parallel"), "состояние Parallel должно быть");
-    assert!(node.states.contains_key("Combined"), "состояние Combined должно быть");
+    assert!(
+        node.states.contains_key("Sequential"),
+        "состояние Sequential должно быть"
+    );
+    assert!(
+        node.states.contains_key("Parallel"),
+        "состояние Parallel должно быть"
+    );
+    assert!(
+        node.states.contains_key("Combined"),
+        "состояние Combined должно быть"
+    );
 }
 
 /// `tests/data/semantic/invalid/missing_var.but` — должна возникнуть ошибка.
 #[test]
 fn example_missing_var_is_error() {
     let result = build_file("tests/data/semantic/invalid/missing_var.but");
-    assert!(result.is_err(), "missing_var.but должен давать ошибку семантики");
+    assert!(
+        result.is_err(),
+        "missing_var.but должен давать ошибку семантики"
+    );
 }
 
 /// `tests/data/semantic/invalid/unknown_model.but` — должна возникнуть ошибка.
 #[test]
 fn example_unknown_model_is_error() {
     let result = build_file("tests/data/semantic/invalid/unknown_model.but");
-    assert!(result.is_err(), "unknown_model.but должен давать ошибку семантики");
+    assert!(
+        result.is_err(),
+        "unknown_model.but должен давать ошибку семантики"
+    );
 }
 
 /// `tests/data/semantic/invalid/double_next.but` — должна возникнуть ошибка.
 #[test]
 fn example_double_next_is_error() {
     let result = build_file("tests/data/semantic/invalid/double_next.but");
-    assert!(result.is_err(), "double_next.but должен давать ошибку семантики");
+    assert!(
+        result.is_err(),
+        "double_next.but должен давать ошибку семантики"
+    );
 }
 
 /// `tests/data/semantic/invalid/dangling_ref.but` — должна возникнуть ошибка.
 #[test]
 fn example_dangling_ref_is_error() {
     let result = build_file("tests/data/semantic/invalid/dangling_ref.but");
-    assert!(result.is_err(), "dangling_ref.but должен давать ошибку семантики");
+    assert!(
+        result.is_err(),
+        "dangling_ref.but должен давать ошибку семантики"
+    );
 }
 
 // ─── Тесты импорта std.but ────────────────────────────────────────────────────
@@ -824,11 +883,7 @@ fn example_dangling_ref_is_error() {
 fn std_but_import_works() {
     let src = r#"import "std.but";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model(
-        &ast,
-        None,
-        &["tests/data/include".to_string()],
-    );
+    let root = construct_model(&ast, None, &["tests/data/include".to_string()]);
     assert!(root.is_ok(), "импорт std.but должен завершаться без ошибок");
     let root = root.unwrap();
     // Нормализованное имя файла std.but → Std
@@ -841,7 +896,9 @@ fn std_but_import_works() {
 // ─── Тесты выборочного импорта (ImportDefine::Rename) ────────────────────────
 
 /// Вспомогательная функция: строит модель из inline-кода с путём поиска shared.but.
-fn build_with_includes(src: &str) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
+fn build_with_includes(
+    src: &str,
+) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     construct_model(&ast, None, &["tests/data/include".to_string()]).map(|m| m.take())
 }
@@ -851,7 +908,8 @@ fn build_with_includes(src: &str) -> Result<grammar::semantic::ModelNode, gramma
 fn rename_import_model_no_alias() {
     let node = build_with_includes(
         r#"import { SharedModel } from "shared.but"; start E = SharedModel { }"#,
-    ).unwrap();
+    )
+    .unwrap();
     assert!(
         node.search_model("SharedModel").is_some(),
         "SharedModel должна быть доступна после импорта"
@@ -861,9 +919,9 @@ fn rename_import_model_no_alias() {
 /// `import { SharedModel as M } from "shared.but"` — модель доступна под псевдонимом M.
 #[test]
 fn rename_import_model_with_alias() {
-    let node = build_with_includes(
-        r#"import { SharedModel as M } from "shared.but"; start E = M { }"#,
-    ).unwrap();
+    let node =
+        build_with_includes(r#"import { SharedModel as M } from "shared.but"; start E = M { }"#)
+            .unwrap();
     assert!(
         node.search_model("M").is_some(),
         "модель должна быть доступна под псевдонимом M"
@@ -879,7 +937,8 @@ fn rename_import_model_with_alias() {
 fn rename_import_type() {
     let node = build_with_includes(
         r#"import { SharedType } from "shared.but"; var x: SharedType = 0; start S;"#,
-    ).unwrap();
+    )
+    .unwrap();
     assert!(
         node.types.contains_key("SharedType"),
         "тип SharedType должен быть в контексте после импорта"
@@ -895,7 +954,8 @@ fn rename_import_type() {
 fn rename_import_type_with_alias() {
     let node = build_with_includes(
         r#"import { SharedType as ST } from "shared.but"; var x: ST = 0; start S;"#,
-    ).unwrap();
+    )
+    .unwrap();
     assert!(
         node.types.contains_key("ST"),
         "псевдоним ST должен быть в контексте"
@@ -909,9 +969,7 @@ fn rename_import_type_with_alias() {
 /// `import { shared_var }` — переменная импортируется в контекст.
 #[test]
 fn rename_import_variable() {
-    let node = build_with_includes(
-        r#"import { shared_var } from "shared.but"; start S;"#,
-    ).unwrap();
+    let node = build_with_includes(r#"import { shared_var } from "shared.but"; start S;"#).unwrap();
     assert!(
         node.search_var("shared_var").is_some(),
         "переменная shared_var должна быть в контексте после импорта"
@@ -921,9 +979,8 @@ fn rename_import_variable() {
 /// `import { shared_var as sv }` — переменная импортируется под псевдонимом.
 #[test]
 fn rename_import_variable_with_alias() {
-    let node = build_with_includes(
-        r#"import { shared_var as sv } from "shared.but"; start S;"#,
-    ).unwrap();
+    let node =
+        build_with_includes(r#"import { shared_var as sv } from "shared.but"; start S;"#).unwrap();
     assert!(
         node.search_var("sv").is_some(),
         "переменная должна быть видна под псевдонимом sv"
@@ -939,7 +996,8 @@ fn rename_import_variable_with_alias() {
 fn rename_import_condition() {
     let node = build_with_includes(
         r#"import { shared_cond } from "shared.but"; start S { ref E: shared_cond; } state E;"#,
-    ).unwrap();
+    )
+    .unwrap();
     assert!(
         node.conditions.contains_key("shared_cond"),
         "условие shared_cond должно быть в контексте"
@@ -960,10 +1018,11 @@ fn rename_import_multiple_symbols() {
 /// Импорт несуществующего символа — ошибка.
 #[test]
 fn rename_import_missing_symbol_is_error() {
-    let result = build_with_includes(
-        r#"import { NonExistent } from "shared.but"; start S;"#,
+    let result = build_with_includes(r#"import { NonExistent } from "shared.but"; start S;"#);
+    assert!(
+        result.is_err(),
+        "импорт несуществующего символа должен давать ошибку"
     );
-    assert!(result.is_err(), "импорт несуществующего символа должен давать ошибку");
     let err = result.unwrap_err();
     assert!(
         err.message.contains("NonExistent"),
@@ -992,8 +1051,14 @@ fn example_rename_import_is_valid() {
         .map(|m| m.take())
         .unwrap();
     // ST — псевдоним SharedType, M — псевдоним SharedModel
-    assert!(node.types.contains_key("ST"), "тип ST должен быть импортирован");
-    assert!(node.search_model("M").is_some(), "модель M должна быть импортирована");
+    assert!(
+        node.types.contains_key("ST"),
+        "тип ST должен быть импортирован"
+    );
+    assert!(
+        node.search_model("M").is_some(),
+        "модель M должна быть импортирована"
+    );
 }
 
 // ─── Тесты проверки типа и границ массива ─────────────────────────────────────
@@ -1017,7 +1082,10 @@ fn array_subscript_last_valid_index() {
 fn array_subscript_out_of_bounds_is_error() {
     let (ast, _) = parse("var buf: [bit;8] = 0; var x: bit = buf[8]; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
-    assert!(result.is_err(), "индекс buf[8] должен давать ошибку для массива размером 8");
+    assert!(
+        result.is_err(),
+        "индекс buf[8] должен давать ошибку для массива размером 8"
+    );
 }
 
 /// ArraySubscript: отрицательный индекс — ошибка.
@@ -1034,7 +1102,10 @@ fn array_subscript_negative_index_is_error() {
 fn array_subscript_on_bit_is_error() {
     let (ast, _) = parse("var flag: bit = false; var x: bit = flag[0]; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
-    assert!(result.is_err(), "индексирование Bit-переменной должно давать ошибку");
+    assert!(
+        result.is_err(),
+        "индексирование Bit-переменной должно давать ошибку"
+    );
     let err = result.unwrap_err();
     assert!(
         err.message.contains("flag"),
@@ -1055,14 +1126,20 @@ fn example_array_access_is_valid() {
 #[test]
 fn example_array_out_of_bounds_is_error() {
     let result = build_file("tests/data/semantic/invalid/array_out_of_bounds.but");
-    assert!(result.is_err(), "array_out_of_bounds.but должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "array_out_of_bounds.but должен давать ошибку"
+    );
 }
 
 /// `example_non_array_subscript.but` — должна возникнуть ошибка.
 #[test]
 fn example_non_array_subscript_is_error() {
     let result = build_file("tests/data/semantic/invalid/non_array_subscript.but");
-    assert!(result.is_err(), "non_array_subscript.but должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "non_array_subscript.but должен давать ошибку"
+    );
 }
 
 /// `example_rename_import_missing.but` — должна возникнуть ошибка.
@@ -1072,7 +1149,10 @@ fn example_rename_import_missing_is_error() {
         .expect("файл не найден");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &["tests/data/include".to_string()]).map(|m| m.take());
-    assert!(result.is_err(), "импорт несуществующего символа должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "импорт несуществующего символа должен давать ошибку"
+    );
 }
 
 /// После импорта `std.but` типы u8, u16, … доступны внутри импортированной модели.
@@ -1110,7 +1190,8 @@ fn std_but_contains_u8_u16_types() {
 
 // ─── Тесты resolve_statement и named blocks ──────────────────────────────────
 
-use grammar::semantic::Statement;
+use grammar::semantic::StatementNode;
+use grammar::semantic::type_node::TypeNode;
 
 /// Model-level `always` block с известной переменной → блок разрешается.
 #[test]
@@ -1119,8 +1200,9 @@ fn model_always_block_with_known_var_resolves() {
     let nb = node.get_named_block("always").expect("always должен быть");
     let stmt = nb.statement().expect("оператор должен быть");
     assert!(
-        !matches!(stmt, Statement::Unresolved(_)),
-        "always должен быть разрешён: {:?}", stmt
+        !matches!(stmt, StatementNode::Unresolved(_)),
+        "always должен быть разрешён: {:?}",
+        stmt
     );
 }
 
@@ -1129,7 +1211,10 @@ fn model_always_block_with_known_var_resolves() {
 fn state_enter_block_is_populated() {
     let node = build("var x: bit = false; start S { enter { x = x; } }");
     let state = node.states.get("S").unwrap();
-    assert!(state.get_named_block("enter").is_some(), "enter должен быть в state.named_blocks");
+    assert!(
+        state.get_named_block("enter").is_some(),
+        "enter должен быть в state.named_blocks"
+    );
 }
 
 /// State-level `enter` с известной переменной → разрешается (не Unresolved).
@@ -1140,8 +1225,9 @@ fn state_enter_block_resolves() {
     let enter = state.get_named_block("enter").expect("enter не найден");
     let stmt = enter.statement().expect("оператор должен быть");
     assert!(
-        !matches!(stmt, Statement::Unresolved(_)),
-        "enter должен быть разрешён: {:?}", stmt
+        !matches!(stmt, StatementNode::Unresolved(_)),
+        "enter должен быть разрешён: {:?}",
+        stmt
     );
 }
 
@@ -1150,7 +1236,10 @@ fn state_enter_block_resolves() {
 fn state_enter_exit_blocks_both_present() {
     let node = build("var x: bit = false; start S { enter { x = x; } exit { x = x; } }");
     let state = node.states.get("S").unwrap();
-    assert!(state.get_named_block("enter").is_some(), "enter отсутствует");
+    assert!(
+        state.get_named_block("enter").is_some(),
+        "enter отсутствует"
+    );
     assert!(state.get_named_block("exit").is_some(), "exit отсутствует");
 }
 
@@ -1163,8 +1252,9 @@ fn state_named_block_if_resolves() {
     let stmt = always.statement().expect("оператор должен быть");
     // Блок разрешён — не остаётся как Unresolved на верхнем уровне
     assert!(
-        !matches!(stmt, Statement::Unresolved(_)),
-        "always должен быть разрешён: {:?}", stmt
+        !matches!(stmt, StatementNode::Unresolved(_)),
+        "always должен быть разрешён: {:?}",
+        stmt
     );
 }
 
@@ -1179,10 +1269,12 @@ fn nested_model_named_blocks_resolve_with_own_context() {
     let inner = node.search_model("Inner").expect("Inner не найдена");
     let inner = inner.borrow();
     let state = inner.states.get("On").expect("состояние On не найдено");
-    let enter = state.get_named_block("enter").expect("enter не найден в On");
+    let enter = state
+        .get_named_block("enter")
+        .expect("enter не найден в On");
     let stmt = enter.statement().expect("оператор должен быть");
     assert!(
-        !matches!(stmt, Statement::Unresolved(_)),
+        !matches!(stmt, StatementNode::Unresolved(_)),
         "enter во Inner::On должен быть разрешён"
     );
 }
@@ -1194,8 +1286,9 @@ fn return_statement_in_named_block_resolves() {
     let nb = node.get_named_block("always").expect("always не найден");
     let stmt = nb.statement().expect("оператор должен быть");
     assert!(
-        !matches!(stmt, Statement::Unresolved(_)),
-        "return должен быть разрешён: {:?}", stmt
+        !matches!(stmt, StatementNode::Unresolved(_)),
+        "return должен быть разрешён: {:?}",
+        stmt
     );
 }
 
@@ -1208,8 +1301,9 @@ fn named_block_with_builtin_func_call_does_not_error() {
     let stmt = nb.statement().expect("оператор должен быть");
     // С заглушкой FunctionNode разрешение успешно
     assert!(
-        !matches!(stmt, Statement::Unresolved(_)),
-        "always с встроенной функцией должен быть разрешён: {:?}", stmt
+        !matches!(stmt, StatementNode::Unresolved(_)),
+        "always с встроенной функцией должен быть разрешён: {:?}",
+        stmt
     );
 }
 
@@ -1261,9 +1355,18 @@ fn example_named_blocks_is_valid() {
     let node = build_file("tests/data/semantic/valid/named_blocks.but").unwrap();
     assert!(node.has_states(), "named_blocks.but должен иметь состояния");
     let active = node.states.get("Active").expect("Active не найдено");
-    assert!(active.get_named_block("enter").is_some(), "enter должен быть в Active");
-    assert!(active.get_named_block("exit").is_some(),  "exit должен быть в Active");
-    assert!(active.get_named_block("always").is_some(), "always должен быть в Active");
+    assert!(
+        active.get_named_block("enter").is_some(),
+        "enter должен быть в Active"
+    );
+    assert!(
+        active.get_named_block("exit").is_some(),
+        "exit должен быть в Active"
+    );
+    assert!(
+        active.get_named_block("always").is_some(),
+        "always должен быть в Active"
+    );
 }
 
 /// Файл if_while_for.but строится без ошибок.
@@ -1279,21 +1382,28 @@ fn example_nested_model_blocks_is_valid() {
     let inner = node.search_model("Inner").expect("Inner не найдена");
     let inner = inner.borrow();
     let on = inner.states.get("On").expect("On не найдено");
-    assert!(on.get_named_block("enter").is_some(), "enter должен быть в On");
+    assert!(
+        on.get_named_block("enter").is_some(),
+        "enter должен быть в On"
+    );
 }
 
 /// named_block_undeclared_var.but (порт без адреса) → ошибка семантики.
 #[test]
 fn example_named_block_invalid_port_is_error() {
     let result = build_file("tests/data/semantic/invalid/named_block_undeclared_var.but");
-    assert!(result.is_err(), "файл с некорректным портом должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "файл с некорректным портом должен давать ошибку"
+    );
 }
 
 /// Несколько именованных блоков с одним и тем же именем (например, два `enter`)
 /// корректно сохраняются и разрешаются.
 #[test]
 fn multiple_named_blocks_with_same_name_resolve() {
-    let node = build("var a: bit = 0; var b: bit = 0; start S { enter { a = 1; } enter { b = 1; } }");
+    let node =
+        build("var a: bit = 0; var b: bit = 0; start S { enter { a = 1; } enter { b = 1; } }");
     let state = node.states.get("S").expect("S не найден");
     let blocks = state.get_named_blocks("enter");
     assert_eq!(blocks.len(), 2, "Должно быть два блока enter");
@@ -1301,20 +1411,27 @@ fn multiple_named_blocks_with_same_name_resolve() {
     // Проверяем, что оба разрешены
     for block in blocks {
         let stmt = block.statement().expect("оператор должен быть");
-        assert!(!matches!(stmt, Statement::Unresolved(_)), "блок должен быть разрешён");
+        assert!(
+            !matches!(stmt, StatementNode::Unresolved(_)),
+            "блок должен быть разрешён"
+        );
     }
 }
 
 /// Несколько `always` блоков на уровне модели.
 #[test]
 fn multiple_model_level_always_blocks() {
-    let node = build("var a: bit = 0; var b: bit = 0; always { a = 1; } always { b = 1; } start S;");
+    let node =
+        build("var a: bit = 0; var b: bit = 0; always { a = 1; } always { b = 1; } start S;");
     let blocks = node.get_named_blocks("always");
     assert_eq!(blocks.len(), 2, "Должно быть два блока always");
 
     for block in blocks {
         let stmt = block.statement().expect("оператор должен быть");
-        assert!(!matches!(stmt, Statement::Unresolved(_)), "блок должен быть разрешён");
+        assert!(
+            !matches!(stmt, StatementNode::Unresolved(_)),
+            "блок должен быть разрешён"
+        );
     }
 }
 
@@ -1323,9 +1440,21 @@ fn multiple_model_level_always_blocks() {
 fn example_multiple_named_blocks_is_valid() {
     let node = build_file("tests/data/semantic/valid/multiple_named_blocks.but").unwrap();
     let initial = node.states.get("Initial").expect("Initial не найдено");
-    assert_eq!(initial.get_named_blocks("enter").len(), 2, "Должно быть два enter в Initial");
-    assert_eq!(initial.get_named_blocks("exit").len(), 2, "Должно быть два exit в Initial");
-    assert_eq!(node.get_named_blocks("always").len(), 3, "Должно быть три always на уровне модели");
+    assert_eq!(
+        initial.get_named_blocks("enter").len(),
+        2,
+        "Должно быть два enter в Initial"
+    );
+    assert_eq!(
+        initial.get_named_blocks("exit").len(),
+        2,
+        "Должно быть два exit в Initial"
+    );
+    assert_eq!(
+        node.get_named_blocks("always").len(),
+        3,
+        "Должно быть три always на уровне модели"
+    );
 }
 
 // ─── Тесты корректности значений типа bit ──────────────────────────────────────
@@ -1336,10 +1465,22 @@ fn example_multiple_named_blocks_is_valid() {
 #[test]
 fn example_bit_values_valid_is_valid() {
     let node = build_file("tests/data/semantic/valid/bit_values.but").unwrap();
-    assert!(node.search_var("a").is_some(), "переменная a должна быть найдена");
-    assert!(node.search_var("b").is_some(), "переменная b должна быть найдена");
-    assert!(node.search_var("c").is_some(), "переменная c должна быть найдена");
-    assert!(node.search_var("d").is_some(), "переменная d должна быть найдена");
+    assert!(
+        node.search_var("a").is_some(),
+        "переменная a должна быть найдена"
+    );
+    assert!(
+        node.search_var("b").is_some(),
+        "переменная b должна быть найдена"
+    );
+    assert!(
+        node.search_var("c").is_some(),
+        "переменная c должна быть найдена"
+    );
+    assert!(
+        node.search_var("d").is_some(),
+        "переменная d должна быть найдена"
+    );
 }
 
 /// `tests/data/semantic/invalid/bit_out_of_range.but` — недопустимое bit-значение → ошибка.
@@ -1348,7 +1489,10 @@ fn example_bit_values_valid_is_valid() {
 #[test]
 fn example_bit_out_of_range_is_error() {
     let result = build_file("tests/data/semantic/invalid/bit_out_of_range.but");
-    assert!(result.is_err(), "bit_out_of_range.but должен давать ошибку семантики");
+    assert!(
+        result.is_err(),
+        "bit_out_of_range.but должен давать ошибку семантики"
+    );
     let err = result.unwrap_err();
     assert!(
         err.message.contains("bit"),
@@ -1365,21 +1509,41 @@ fn example_type_inference_numbers_is_valid() {
     let node = build_file("tests/data/semantic/valid/type_inference_numbers.but").unwrap();
     // 8-битные
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("a") {
-        assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)), "a=0 → [bit;8]");
+        assert_eq!(
+            ty,
+            TypeNode::Array(8, Box::new(TypeNode::Bit)),
+            "a=0 → [bit;8]"
+        );
     }
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("c") {
-        assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)), "c=255 → [bit;8]");
+        assert_eq!(
+            ty,
+            TypeNode::Array(8, Box::new(TypeNode::Bit)),
+            "c=255 → [bit;8]"
+        );
     }
     // 16-битные
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("d") {
-        assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)), "d=256 → [bit;16]");
+        assert_eq!(
+            ty,
+            TypeNode::Array(16, Box::new(TypeNode::Bit)),
+            "d=256 → [bit;16]"
+        );
     }
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("f") {
-        assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)), "f=65535 → [bit;16]");
+        assert_eq!(
+            ty,
+            TypeNode::Array(16, Box::new(TypeNode::Bit)),
+            "f=65535 → [bit;16]"
+        );
     }
     // 32-битные
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("g") {
-        assert_eq!(ty, TypeNode::Array(32, Box::new(TypeNode::Bit)), "g=65536 → [bit;32]");
+        assert_eq!(
+            ty,
+            TypeNode::Array(32, Box::new(TypeNode::Bit)),
+            "g=65536 → [bit;32]"
+        );
     }
 }
 
@@ -1417,8 +1581,14 @@ fn example_functions_is_valid() {
     assert!(node.functions.contains_key("send"), "внешняя функция send");
     assert!(node.functions.contains_key("recv"), "внешняя функция recv");
     assert!(node.functions.contains_key("noop"), "внешняя функция noop");
-    assert!(node.functions.contains_key("identity"), "локальная функция identity");
-    assert!(node.functions.contains_key("init"), "локальная функция init");
+    assert!(
+        node.functions.contains_key("identity"),
+        "локальная функция identity"
+    );
+    assert!(
+        node.functions.contains_key("init"),
+        "локальная функция init"
+    );
 }
 
 /// `tests/data/semantic/valid/bool_type.but` — переменные типа bool.
@@ -1442,17 +1612,35 @@ fn example_bool_type_is_valid() {
 fn example_integer_types_is_valid() {
     let node = build_file("tests/data/semantic/valid/integer_types.but").unwrap();
     assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
-    assert!(node.types.contains_key("u16"), "тип u16 должен быть объявлен");
-    assert!(node.types.contains_key("u32"), "тип u32 должен быть объявлен");
+    assert!(
+        node.types.contains_key("u16"),
+        "тип u16 должен быть объявлен"
+    );
+    assert!(
+        node.types.contains_key("u32"),
+        "тип u32 должен быть объявлен"
+    );
     // Проверяем вывод типа из числовых литералов
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("small") {
-        assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)), "small=42 → [bit;8]");
+        assert_eq!(
+            ty,
+            TypeNode::Array(8, Box::new(TypeNode::Bit)),
+            "small=42 → [bit;8]"
+        );
     }
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("medium") {
-        assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)), "medium=300 → [bit;16]");
+        assert_eq!(
+            ty,
+            TypeNode::Array(16, Box::new(TypeNode::Bit)),
+            "medium=300 → [bit;16]"
+        );
     }
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("large") {
-        assert_eq!(ty, TypeNode::Array(32, Box::new(TypeNode::Bit)), "large=70000 → [bit;32]");
+        assert_eq!(
+            ty,
+            TypeNode::Array(32, Box::new(TypeNode::Bit)),
+            "large=70000 → [bit;32]"
+        );
     }
 }
 
@@ -1460,7 +1648,9 @@ fn example_integer_types_is_valid() {
 #[test]
 fn example_state_machine_full_is_valid() {
     let node = build_file("tests/data/semantic/valid/state_machine_full.but").unwrap();
-    let tl = node.search_model("TrafficLight").expect("модель TrafficLight не найдена");
+    let tl = node
+        .search_model("TrafficLight")
+        .expect("модель TrafficLight не найдена");
     let tl = tl.borrow();
     assert!(tl.states.contains_key("Red"), "состояние Red");
     assert!(tl.states.contains_key("Green"), "состояние Green");
@@ -1471,7 +1661,10 @@ fn example_state_machine_full_is_valid() {
 #[test]
 fn example_duplicate_model_is_error() {
     let result = build_file("tests/data/semantic/invalid/duplicate_model.but");
-    assert!(result.is_err(), "дублирующееся имя модели должно давать ошибку");
+    assert!(
+        result.is_err(),
+        "дублирующееся имя модели должно давать ошибку"
+    );
 }
 
 /// `tests/data/semantic/invalid/bit_value_in_const.but` — бит-константа с недопустимым значением → ошибка.
@@ -1492,7 +1685,10 @@ fn example_no_start_state_is_error() {
 #[test]
 fn example_unknown_type_in_function_is_error() {
     let result = build_file("tests/data/semantic/invalid/unknown_type_in_function.but");
-    assert!(result.is_err(), "неизвестный тип параметра должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "неизвестный тип параметра должен давать ошибку"
+    );
 }
 
 // ─── Тесты Се1: обнаружение циклических импортов ──────────────────────────────
@@ -1522,7 +1718,11 @@ fn circular_import_two_files_is_error() {
     let dir_str = dir.path().to_string_lossy().into_owned();
 
     // a.but → b.but
-    write_tmp_in_dir(&dir, "a.but", r#"import "b.but"; start Entry = B { } state Done;"#);
+    write_tmp_in_dir(
+        &dir,
+        "a.but",
+        r#"import "b.but"; start Entry = B { } state Done;"#,
+    );
     // b.but → a.but  (замыкает цикл)
     write_tmp_in_dir(&dir, "b.but", r#"import "a.but"; model B { start S; }"#);
 
@@ -1557,7 +1757,11 @@ fn circular_import_three_files_is_error() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    write_tmp_in_dir(&dir, "ca.but", r#"import "cb.but"; start Entry = Cb { } state Done;"#);
+    write_tmp_in_dir(
+        &dir,
+        "ca.but",
+        r#"import "cb.but"; start Entry = Cb { } state Done;"#,
+    );
     write_tmp_in_dir(&dir, "cb.but", r#"import "cc.but"; model Cb { start S; }"#);
     // cc.but → ca.but  (замыкает цикл длиной 3)
     write_tmp_in_dir(&dir, "cc.but", r#"import "ca.but"; model Cc { start S; }"#);
@@ -1566,7 +1770,10 @@ fn circular_import_three_files_is_error() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
-    assert!(result.is_err(), "трёхзвенный циклический импорт должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "трёхзвенный циклический импорт должен давать ошибку"
+    );
     let err = result.unwrap_err();
     assert!(
         err.message.contains("циклический") || err.message.to_lowercase().contains("цикл"),
@@ -1590,7 +1797,10 @@ fn circular_import_self_reference_is_error() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
-    assert!(result.is_err(), "самоссылающийся импорт должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "самоссылающийся импорт должен давать ошибку"
+    );
     let err = result.unwrap_err();
     assert!(
         err.message.contains("циклический") || err.message.to_lowercase().contains("цикл"),
@@ -1620,7 +1830,11 @@ fn diamond_import_is_not_cycle_error() {
     write_tmp_in_dir(&dir, "db.but", r#"import "d.but"; model Db { start S; }"#);
     write_tmp_in_dir(&dir, "dc.but", r#"import "d.but"; model Dc { start S; }"#);
     // a.but импортирует оба
-    write_tmp_in_dir(&dir, "da.but", r#"import "db.but"; import "dc.but"; start S;"#);
+    write_tmp_in_dir(
+        &dir,
+        "da.but",
+        r#"import "db.but"; import "dc.but"; start S;"#,
+    );
 
     let src = r#"import "da.but";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
@@ -1646,14 +1860,25 @@ fn circular_import_via_global_symbol_is_error() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    write_tmp_in_dir(&dir, "ga.but", r#"import "gb.but" as Gb; start Entry = Gb { } state Done;"#);
-    write_tmp_in_dir(&dir, "gb.but", r#"import "ga.but" as Ga; model Gb { start S; }"#);
+    write_tmp_in_dir(
+        &dir,
+        "ga.but",
+        r#"import "gb.but" as Gb; start Entry = Gb { } state Done;"#,
+    );
+    write_tmp_in_dir(
+        &dir,
+        "gb.but",
+        r#"import "ga.but" as Ga; model Gb { start S; }"#,
+    );
 
     let src = r#"import "ga.but" as Ga;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
-    assert!(result.is_err(), "циклический as-импорт должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "циклический as-импорт должен давать ошибку"
+    );
     let err = result.unwrap_err();
     assert!(
         err.message.contains("циклический") || err.message.to_lowercase().contains("цикл"),
@@ -1670,15 +1895,26 @@ fn circular_import_via_rename_is_error() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    write_tmp_in_dir(&dir, "ra.but", r#"import { Rb } from "rb.but"; start Entry = Rb { } state Done;"#);
-    write_tmp_in_dir(&dir, "rb.but", r#"import { Ra } from "ra.but"; model Ra { start S; } model Rb { start S; }"#);
+    write_tmp_in_dir(
+        &dir,
+        "ra.but",
+        r#"import { Rb } from "rb.but"; start Entry = Rb { } state Done;"#,
+    );
+    write_tmp_in_dir(
+        &dir,
+        "rb.but",
+        r#"import { Ra } from "ra.but"; model Ra { start S; } model Rb { start S; }"#,
+    );
 
     // Инициируем цикл через Plain-импорт (ra.but содержит rename-импорт rb.but, который замкнёт цикл)
     let src = r#"import "ra.but";"#;
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
-    assert!(result.is_err(), "циклический rename-импорт должен давать ошибку");
+    assert!(
+        result.is_err(),
+        "циклический rename-импорт должен давать ошибку"
+    );
     let err = result.unwrap_err();
     assert!(
         err.message.contains("циклический") || err.message.to_lowercase().contains("цикл"),
@@ -1703,7 +1939,11 @@ fn linear_import_chain_is_valid() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
-    assert!(result.is_ok(), "линейная цепочка импортов должна успешно строиться: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "линейная цепочка импортов должна успешно строиться: {:?}",
+        result.err()
+    );
 }
 
 // ─── Тесты Се12: документационные комментарии в семантическом дереве ──────────
@@ -1719,8 +1959,8 @@ fn linear_import_chain_is_valid() {
 fn doc_comment_for_state() {
     let src = "/// Начальное состояние.\nstart S;";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     assert_eq!(
         root.borrow().element_doc("S"),
         ["Начальное состояние."],
@@ -1733,8 +1973,8 @@ fn doc_comment_for_state() {
 fn doc_comment_for_variable() {
     let src = "/// Счётчик.\nvar counter: bit = false;";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     assert_eq!(
         root.borrow().element_doc("counter"),
         ["Счётчик."],
@@ -1747,8 +1987,8 @@ fn doc_comment_for_variable() {
 fn doc_comment_for_type() {
     let src = "/// Байт.\ntype u8 = [bit;8];";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     assert_eq!(
         root.borrow().element_doc("u8"),
         ["Байт."],
@@ -1761,8 +2001,8 @@ fn doc_comment_for_type() {
 fn doc_comment_for_condition() {
     let src = "/// Истинно всегда.\ncond always_true = true;";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     assert_eq!(
         root.borrow().element_doc("always_true"),
         ["Истинно всегда."],
@@ -1775,8 +2015,8 @@ fn doc_comment_for_condition() {
 fn doc_comment_for_nested_model_from_parent() {
     let src = "/// Вложенная модель.\nmodel M { start S; }";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     assert_eq!(
         root.borrow().element_doc("M"),
         ["Вложенная модель."],
@@ -1789,8 +2029,8 @@ fn doc_comment_for_nested_model_from_parent() {
 fn doc_comment_for_nested_model_own_doc() {
     let src = "/// Своя документация.\nmodel Inner { start S; }";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     let inner = root.borrow().search_model("Inner").unwrap();
     assert_eq!(
         inner.borrow().own_doc(),
@@ -1804,8 +2044,8 @@ fn doc_comment_for_nested_model_own_doc() {
 fn multi_line_doc_comment_for_state() {
     let src = "/// Строка 1.\n/// Строка 2.\n/// Строка 3.\nstart S;";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     let doc = root.borrow().element_doc("S").to_vec();
     assert_eq!(doc.len(), 3, "должно быть три строки документации");
     assert_eq!(doc[0], "Строка 1.");
@@ -1818,8 +2058,8 @@ fn multi_line_doc_comment_for_state() {
 fn regular_comment_not_in_docs() {
     let src = "// Обычный комментарий.\nstart S;";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     assert!(
         root.borrow().element_doc("S").is_empty(),
         "обычный // комментарий не должен попасть в документацию"
@@ -1831,8 +2071,8 @@ fn regular_comment_not_in_docs() {
 fn no_doc_comment_returns_empty() {
     let src = "start S; state Done;";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     assert!(root.borrow().element_doc("S").is_empty());
     assert!(root.borrow().element_doc("Done").is_empty());
     assert!(root.borrow().own_doc().is_empty());
@@ -1848,8 +2088,8 @@ fn each_element_gets_its_own_doc() {
         "state B;\n",
     );
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     assert_eq!(root.borrow().element_doc("A"), ["Состояние A."]);
     assert_eq!(root.borrow().element_doc("B"), ["Состояние B."]);
 }
@@ -1878,8 +2118,8 @@ fn doc_comment_for_state_inside_model() {
         "}\n",
     );
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     let m = root.borrow().search_model("M").unwrap();
     assert_eq!(
         m.borrow().element_doc("S"),
@@ -1897,24 +2137,50 @@ fn example_doc_comments_file_is_valid() {
     let src = std::fs::read_to_string("tests/data/semantic/valid/doc_comments.but")
         .expect("не могу прочитать doc_comments.but");
     let (ast, comments) = parse(&src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
 
     // Проверяем документацию на верхнем уровне
     let rb = root.borrow();
     assert!(!rb.element_doc("u8").is_empty(), "тип u8 должен иметь doc");
-    assert!(!rb.element_doc("counter").is_empty(), "переменная counter должна иметь doc");
-    assert!(!rb.element_doc("MaxReached").is_empty(), "условие MaxReached должно иметь doc");
-    assert!(!rb.element_doc("TrafficLight").is_empty(), "модель TrafficLight должна иметь doc");
+    assert!(
+        !rb.element_doc("counter").is_empty(),
+        "переменная counter должна иметь doc"
+    );
+    assert!(
+        !rb.element_doc("MaxReached").is_empty(),
+        "условие MaxReached должно иметь doc"
+    );
+    assert!(
+        !rb.element_doc("TrafficLight").is_empty(),
+        "модель TrafficLight должна иметь doc"
+    );
 
     // Проверяем документацию состояний внутри TrafficLight
-    let tl = rb.search_model("TrafficLight").expect("TrafficLight не найдена");
+    let tl = rb
+        .search_model("TrafficLight")
+        .expect("TrafficLight не найдена");
     let tl = tl.borrow();
-    assert!(!tl.own_doc().is_empty(), "TrafficLight должна иметь собственную документацию");
-    assert!(!tl.element_doc("timer").is_empty(), "переменная timer должна иметь doc");
-    assert!(!tl.element_doc("Red").is_empty(), "состояние Red должно иметь doc");
-    assert!(!tl.element_doc("Green").is_empty(), "состояние Green должно иметь doc");
-    assert!(!tl.element_doc("Yellow").is_empty(), "состояние Yellow должно иметь doc");
+    assert!(
+        !tl.own_doc().is_empty(),
+        "TrafficLight должна иметь собственную документацию"
+    );
+    assert!(
+        !tl.element_doc("timer").is_empty(),
+        "переменная timer должна иметь doc"
+    );
+    assert!(
+        !tl.element_doc("Red").is_empty(),
+        "состояние Red должно иметь doc"
+    );
+    assert!(
+        !tl.element_doc("Green").is_empty(),
+        "состояние Green должно иметь doc"
+    );
+    assert!(
+        !tl.element_doc("Yellow").is_empty(),
+        "состояние Yellow должно иметь doc"
+    );
 }
 
 /// Документация модели содержит несколько строк из многострочного `///`-блока.
@@ -1926,14 +2192,18 @@ fn multi_line_doc_for_model() {
         "model M { start S; }\n",
     );
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
-    let root = construct_model_with_docs(&ast, None, &[], &comments)
-        .expect("ошибка построения семантики");
+    let root =
+        construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     let doc = root.borrow().element_doc("M").to_vec();
     assert_eq!(doc.len(), 2, "должно быть две строки документации для M");
     assert_eq!(doc[0], "Первая строка.");
     assert_eq!(doc[1], "Вторая строка.");
     let m = root.borrow().search_model("M").unwrap();
-    assert_eq!(m.borrow().own_doc().len(), 2, "M.doc тоже должен содержать обе строки");
+    assert_eq!(
+        m.borrow().own_doc().len(),
+        2,
+        "M.doc тоже должен содержать обе строки"
+    );
 }
 
 // ─── Се11: строгая проверка булевости условий переходов ──────────────────────
@@ -1952,7 +2222,10 @@ fn se11_explicit_comparison_no_warnings() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert!(warnings.is_empty(), "явное сравнение не должно давать предупреждений");
+    assert!(
+        warnings.is_empty(),
+        "явное сравнение не должно давать предупреждений"
+    );
 }
 
 /// Числовая переменная без сравнения — предупреждение Се11.
@@ -1969,7 +2242,11 @@ fn se11_numeric_var_in_ref_gives_warning() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert_eq!(warnings.len(), 1, "числовая переменная в условии должна давать предупреждение");
+    assert_eq!(
+        warnings.len(),
+        1,
+        "числовая переменная в условии должна давать предупреждение"
+    );
     assert!(
         warnings[0].message.contains("timer"),
         "предупреждение должно упоминать имя переменной"
@@ -1983,7 +2260,11 @@ fn se11_number_literal_in_ref_gives_warning() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert_eq!(warnings.len(), 1, "числовой литерал в условии должен давать предупреждение");
+    assert_eq!(
+        warnings.len(),
+        1,
+        "числовой литерал в условии должен давать предупреждение"
+    );
 }
 
 /// Переменная типа `bool` в условии — нет предупреждений.
@@ -1993,7 +2274,10 @@ fn se11_bool_var_in_ref_no_warnings() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert!(warnings.is_empty(), "переменная bool не должна давать предупреждений");
+    assert!(
+        warnings.is_empty(),
+        "переменная bool не должна давать предупреждений"
+    );
 }
 
 /// Переменная типа `bit` (1 бит) в условии — нет предупреждений.
@@ -2003,7 +2287,10 @@ fn se11_bit_var_in_ref_no_warnings() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert!(warnings.is_empty(), "переменная bit не должна давать предупреждений");
+    assert!(
+        warnings.is_empty(),
+        "переменная bit не должна давать предупреждений"
+    );
 }
 
 /// Булев литерал в условии — нет предупреждений.
@@ -2013,7 +2300,10 @@ fn se11_bool_literal_in_ref_no_warnings() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert!(warnings.is_empty(), "булев литерал не должен давать предупреждений");
+    assert!(
+        warnings.is_empty(),
+        "булев литерал не должен давать предупреждений"
+    );
 }
 
 /// Безусловный переход (без условия) — нет предупреждений.
@@ -2023,7 +2313,10 @@ fn se11_unconditional_ref_no_warnings() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert!(warnings.is_empty(), "безусловный переход не должен давать предупреждений");
+    assert!(
+        warnings.is_empty(),
+        "безусловный переход не должен давать предупреждений"
+    );
 }
 
 /// Несколько переходов: один числовой, один явный — одно предупреждение.
@@ -2067,10 +2360,8 @@ fn se11_nested_model_numeric_ref_warning() {
 /// Все переходы в файле используют явные сравнения или булевы переменные.
 #[test]
 fn se11_valid_file_no_warnings() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/valid/implicit_bool_warn.but",
-    )
-    .expect("не удалось прочитать файл");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_warn.but")
+        .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2084,10 +2375,8 @@ fn se11_valid_file_no_warnings() {
 /// Файл `implicit_bool_numeric.but` — одно предупреждение о числовом условии.
 #[test]
 fn se11_numeric_file_gives_one_warning() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/valid/implicit_bool_numeric.but",
-    )
-    .expect("не удалось прочитать файл");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_numeric.but")
+        .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2109,7 +2398,10 @@ fn se11_less_comparison_no_warnings() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert!(warnings.is_empty(), "условие '<' не должно давать предупреждений");
+    assert!(
+        warnings.is_empty(),
+        "условие '<' не должно давать предупреждений"
+    );
 }
 
 /// Условия `>`, `<=`, `>=` — нет предупреждений Се11.
@@ -2137,7 +2429,10 @@ fn se11_not_condition_no_warnings() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert!(warnings.is_empty(), "условие '!' не должно давать предупреждений");
+    assert!(
+        warnings.is_empty(),
+        "условие '!' не должно давать предупреждений"
+    );
 }
 
 /// Именованное условие в ref — нет предупреждений Се11.
@@ -2180,10 +2475,8 @@ fn se11_arithmetic_in_ref_gives_warning() {
 /// Файл с арифметическим условием — одно предупреждение.
 #[test]
 fn se11_arithmetic_file_gives_one_warning() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/valid/implicit_bool_arithmetic.but",
-    )
-    .expect("не удалось прочитать файл");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_arithmetic.but")
+        .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2197,10 +2490,8 @@ fn se11_arithmetic_file_gives_one_warning() {
 /// Файл с именованными условиями — нет предупреждений Се11.
 #[test]
 fn se11_named_cond_file_no_warnings() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/valid/implicit_bool_named_cond.but",
-    )
-    .expect("не удалось прочитать файл");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_named_cond.but")
+        .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2238,14 +2529,14 @@ fn se11_warning_contains_source_state_name() {
 /// ```
 #[test]
 fn ref_cond_bit_var_is_resolved() {
-    use grammar::semantic::Condition;
+    use grammar::semantic::ConditionNode;
     let src = "var flag: bit = false; start A { ref B: flag; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
     if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
         assert_eq!(references.len(), 1);
         assert!(
-            matches!(references[0].cond, Condition::Variable(_, _)),
+            matches!(references[0].cond, ConditionNode::Variable(_, _)),
             "условие должно быть разрешено в Variable, получено: {:?}",
             references[0].cond
         );
@@ -2264,13 +2555,13 @@ fn ref_cond_bit_var_is_resolved() {
 /// ```
 #[test]
 fn ref_cond_bool_var_is_resolved() {
-    use grammar::semantic::Condition;
+    use grammar::semantic::ConditionNode;
     let src = "var done: bool = false; start A { ref B: done; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
     if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
         assert!(
-            matches!(references[0].cond, Condition::Variable(_, _)),
+            matches!(references[0].cond, ConditionNode::Variable(_, _)),
             "условие должно быть разрешено в Variable"
         );
     } else {
@@ -2289,7 +2580,7 @@ fn ref_cond_bool_var_is_resolved() {
 /// ```
 #[test]
 fn ref_cond_named_cond_is_resolved() {
-    use grammar::semantic::Condition;
+    use grammar::semantic::ConditionNode;
     let src = "var x: [bit;8] = 0; cond full = x = 255; start A { ref B: full; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
@@ -2297,7 +2588,7 @@ fn ref_cond_named_cond_is_resolved() {
         assert_eq!(references.len(), 1);
         // Именованное условие раскрывается до значения (Equal или аналог)
         assert!(
-            !matches!(references[0].cond, Condition::Unresolved(_)),
+            !matches!(references[0].cond, ConditionNode::Unresolved(_)),
             "условие не должно оставаться Unresolved после этапа 6"
         );
     } else {
@@ -2314,13 +2605,13 @@ fn ref_cond_named_cond_is_resolved() {
 /// ```
 #[test]
 fn ref_no_cond_is_none() {
-    use grammar::semantic::Condition;
+    use grammar::semantic::ConditionNode;
     let src = "start A { ref B; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
     if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
         assert_eq!(references.len(), 1);
-        assert_eq!(references[0].cond, Condition::None);
+        assert_eq!(references[0].cond, ConditionNode::None);
     } else {
         panic!("ожидался StateNode::Simple для A");
     }
@@ -2335,12 +2626,12 @@ fn ref_no_cond_is_none() {
 /// ```
 #[test]
 fn ref_cond_bool_literal_is_resolved() {
-    use grammar::semantic::Condition;
+    use grammar::semantic::ConditionNode;
     let src = "start A { ref B: true; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
     if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
-        assert_eq!(references[0].cond, Condition::Bool(true));
+        assert_eq!(references[0].cond, ConditionNode::Bool(true));
     } else {
         panic!("ожидался StateNode::Simple для A");
     }
@@ -2356,13 +2647,13 @@ fn ref_cond_bool_literal_is_resolved() {
 /// ```
 #[test]
 fn ref_cond_comparison_is_resolved() {
-    use grammar::semantic::Condition;
+    use grammar::semantic::ConditionNode;
     let src = "var x: [bit;8] = 0; start A { ref B: x = 255; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
     if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
         assert!(
-            matches!(references[0].cond, Condition::Equal(_, _)),
+            matches!(references[0].cond, ConditionNode::Equal(_, _)),
             "ожидалось Condition::Equal, получено {:?}",
             references[0].cond
         );
@@ -2407,7 +2698,11 @@ fn se11_bitwise_and_in_ref_gives_warning() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert_eq!(warnings.len(), 1, "побитовое И должно давать предупреждение");
+    assert_eq!(
+        warnings.len(),
+        1,
+        "побитовое И должно давать предупреждение"
+    );
     assert!(
         warnings[0].message.contains("побитовое И"),
         "сообщение должно упоминать тип операции: {}",
@@ -2428,7 +2723,11 @@ fn se11_resolved_number_literal_in_ref_has_value_in_message() {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
-    assert_eq!(warnings.len(), 1, "числовой литерал должен давать предупреждение");
+    assert_eq!(
+        warnings.len(),
+        1,
+        "числовой литерал должен давать предупреждение"
+    );
     assert!(
         warnings[0].message.contains("42"),
         "сообщение должно упоминать значение: {}",
@@ -2439,10 +2738,8 @@ fn se11_resolved_number_literal_in_ref_has_value_in_message() {
 /// Пример файла с разрешёнными условиями — без ошибок и предупреждений.
 #[test]
 fn ref_cond_resolved_file_is_valid() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/valid/ref_cond_resolved.but",
-    )
-    .expect("не удалось прочитать файл");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/ref_cond_resolved.but")
+        .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения семантики");
     let warnings = implicit_bool_warnings(&root);
@@ -2456,10 +2753,8 @@ fn ref_cond_resolved_file_is_valid() {
 /// Контрпример файла с арифметическим условием — одно предупреждение Се11.
 #[test]
 fn ref_cond_arithmetic_file_gives_warning() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/valid/ref_cond_arithmetic.but",
-    )
-    .expect("не удалось прочитать файл");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/ref_cond_arithmetic.but")
+        .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения семантики");
     let warnings = implicit_bool_warnings(&root);
@@ -2490,7 +2785,10 @@ fn ref_cond_arithmetic_file_gives_warning() {
 fn variable_node_has_parent_upper() {
     let (ast, _) = parse("var flag: bit = false;", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
-    let var = root.borrow().search_var("flag").expect("переменная flag не найдена");
+    let var = root
+        .borrow()
+        .search_var("flag")
+        .expect("переменная flag не найдена");
     let upper = var.upper();
     assert!(
         upper.is_some(),
@@ -2506,7 +2804,10 @@ fn variable_node_has_parent_upper() {
 fn const_node_has_parent_upper() {
     let (ast, _) = parse("type u8 = [bit;8]; const C: u8 = 0;", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
-    let var = root.borrow().search_var("C").expect("константа C не найдена");
+    let var = root
+        .borrow()
+        .search_var("C")
+        .expect("константа C не найдена");
     assert!(
         var.upper().is_some(),
         "константа должна иметь ссылку на родительскую модель"
@@ -2522,7 +2823,10 @@ fn const_node_has_parent_upper() {
 #[test]
 fn condition_node_has_parent_upper() {
     let node = build("cond done = true;");
-    let cond = node.conditions.get("done").expect("условие done не найдено");
+    let cond = node
+        .conditions
+        .get("done")
+        .expect("условие done не найдено");
     assert!(
         cond.upper.is_some(),
         "именованное условие должно иметь ссылку на родительскую модель"
@@ -2537,11 +2841,16 @@ fn condition_node_has_parent_upper() {
 /// ```
 #[test]
 fn nested_variable_upper_points_to_inner_model() {
-    
     let (ast, _) = parse("model Inner { var x: bit = false; start S; }", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
-    let inner = root.borrow().search_model("Inner").expect("Inner не найдена");
-    let var = inner.borrow().search_var("x").expect("переменная x не найдена");
+    let inner = root
+        .borrow()
+        .search_model("Inner")
+        .expect("Inner не найдена");
+    let var = inner
+        .borrow()
+        .search_var("x")
+        .expect("переменная x не найдена");
     let upper = var.upper().expect("переменная должна иметь upper");
     // upper должен ссылаться на Inner, а не на корневую модель
     assert_eq!(
@@ -2562,7 +2871,7 @@ fn unresolved_variable_upper_is_none() {
 /// Вспомогательные методы `name()` и `ty()` у VariableNode работают корректно.
 #[test]
 fn variable_node_name_and_ty_methods() {
-    use grammar::semantic::TypeNode;
+    use grammar::semantic::type_node::TypeNode;
     let node = build("var flag: bit = false;");
     let var = node.search_var("flag").expect("flag не найдена");
     assert_eq!(var.name(), "flag");
@@ -2629,9 +2938,7 @@ fn example_local_var_nested_is_valid() {
 /// внутри переменных ссылался на живой узел модели.
 #[test]
 fn variable_upper_gives_access_to_sibling_vars() {
-    
-    let (ast, _) = parse("var a: bit = false; var b: bit = false;", 0)
-        .expect("ошибка разбора");
+    let (ast, _) = parse("var a: bit = false; var b: bit = false;", 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let var_a = root.borrow().search_var("a").expect("a не найдена");
     let upper = var_a.upper().expect("upper должен быть Some");
@@ -2650,7 +2957,11 @@ fn no_strong_cycle_with_conditions() {
     use std::rc::Rc;
     let (ast, _) = parse("var x: bit = false; cond done = x = false; start S;", 0).unwrap();
     let root = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-    assert_eq!(Rc::strong_count(&root), 1, "модель с условиями: счётчик Rc должен быть 1");
+    assert_eq!(
+        Rc::strong_count(&root),
+        1,
+        "модель с условиями: счётчик Rc должен быть 1"
+    );
 }
 
 /// Модель с именованными блоками не создаёт сильных циклов (SA8).
@@ -2659,7 +2970,11 @@ fn no_strong_cycle_with_named_blocks() {
     use std::rc::Rc;
     let (ast, _) = parse("var x: bit = false; start S { always { x = x; } }", 0).unwrap();
     let root = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-    assert_eq!(Rc::strong_count(&root), 1, "модель с блоками: счётчик Rc должен быть 1");
+    assert_eq!(
+        Rc::strong_count(&root),
+        1,
+        "модель с блоками: счётчик Rc должен быть 1"
+    );
 }
 
 // ─── Ce5: Проверка достижимости и полноты переходов ──────────────────────────
@@ -2704,9 +3019,7 @@ fn ce5_single_terminal_no_warning() {
 /// Цепочка состояний с терминальным в конце — нет предупреждений.
 #[test]
 fn ce5_chain_with_terminal_no_warning() {
-    let warns = ce5_warnings(
-        "start A { ref B: true; } state B { ref C: true; } state C;",
-    );
+    let warns = ce5_warnings("start A { ref B: true; } state B { ref C: true; } state C;");
     assert!(
         warns.is_empty(),
         "цепочка с терминальным в конце: предупреждений не должно быть"
@@ -2716,8 +3029,7 @@ fn ce5_chain_with_terminal_no_warning() {
 /// Цикл без терминального — предупреждение Ce5.2 (нет терминальных).
 #[test]
 fn ce5_cycle_no_terminal_gives_warning() {
-    let warns =
-        ce5_warnings("start A { ref B: true; } state B { ref A: true; }");
+    let warns = ce5_warnings("start A { ref B: true; } state B { ref A: true; }");
     assert!(
         !warns.is_empty(),
         "цикл без терминального состояния должен давать предупреждение"
@@ -2734,8 +3046,7 @@ fn ce5_cycle_no_terminal_gives_warning() {
 #[test]
 fn ce5_no_terminal_warning_level() {
     use grammar::diagnostics::Level;
-    let warns =
-        ce5_warnings("start A { ref B: true; } state B { ref A: true; }");
+    let warns = ce5_warnings("start A { ref B: true; } state B { ref A: true; }");
     assert!(!warns.is_empty());
     assert_eq!(warns[0].level, Level::Warning);
 }
@@ -2749,8 +3060,14 @@ fn ce5_state_no_path_to_terminal_warning() {
          state C { ref D: true; } state D { ref C: true; }",
     );
     // Должны быть предупреждения о C и D
-    let has_cd = warns.iter().any(|w| w.message.contains('C') || w.message.contains('D'));
-    assert!(has_cd, "состояния C и D не имеют пути к терминальному: {:?}", warns);
+    let has_cd = warns
+        .iter()
+        .any(|w| w.message.contains('C') || w.message.contains('D'));
+    assert!(
+        has_cd,
+        "состояния C и D не имеют пути к терминальному: {:?}",
+        warns
+    );
 }
 
 /// Модель без состояний — нет предупреждений Ce5.
@@ -2871,8 +3188,10 @@ fn example_ce5_next_with_ref_warns() {
 /// EnumNode::new создаёт варианты с автоинкрементом значений.
 #[test]
 fn ce4_enum_node_auto_increment() {
-    use grammar::semantic::EnumNode;
-    let e = EnumNode::new("Status", &[("Idle", None), ("Active", None), ("Done", None)]);
+    let e = EnumDefinitionNode::new(
+        "Status",
+        &[("Idle", None), ("Active", None), ("Done", None)],
+    );
     assert_eq!(e.name, "Status");
     assert_eq!(e.variants[0], ("Idle".to_string(), 0));
     assert_eq!(e.variants[1], ("Active".to_string(), 1));
@@ -2882,8 +3201,10 @@ fn ce4_enum_node_auto_increment() {
 /// EnumNode::new принимает явные значения для вариантов.
 #[test]
 fn ce4_enum_node_explicit_values() {
-    use grammar::semantic::EnumNode;
-    let e = EnumNode::new("Color", &[("Red", Some(10)), ("Green", Some(20)), ("Blue", Some(30))]);
+    let e = EnumDefinitionNode::new(
+        "Color",
+        &[("Red", Some(10)), ("Green", Some(20)), ("Blue", Some(30))],
+    );
     assert_eq!(e.find_variant("Red"), Some(10));
     assert_eq!(e.find_variant("Green"), Some(20));
     assert_eq!(e.find_variant("Blue"), Some(30));
@@ -2892,8 +3213,7 @@ fn ce4_enum_node_explicit_values() {
 /// EnumNode::find_variant возвращает None для несуществующего варианта.
 #[test]
 fn ce4_enum_find_variant_missing() {
-    use grammar::semantic::EnumNode;
-    let e = EnumNode::new("Dir", &[("North", None), ("South", None)]);
+    let e = EnumDefinitionNode::new("Dir", &[("North", None), ("South", None)]);
     assert_eq!(e.find_variant("East"), None);
     assert_eq!(e.find_variant("West"), None);
 }
@@ -2901,8 +3221,7 @@ fn ce4_enum_find_variant_missing() {
 /// EnumNode::has_variant возвращает true/false корректно.
 #[test]
 fn ce4_enum_has_variant() {
-    use grammar::semantic::EnumNode;
-    let e = EnumNode::new("Speed", &[("Slow", None), ("Fast", None)]);
+    let e = EnumDefinitionNode::new("Speed", &[("Slow", None), ("Fast", None)]);
     assert!(e.has_variant("Slow"));
     assert!(e.has_variant("Fast"));
     assert!(!e.has_variant("Medium"));
@@ -2911,9 +3230,9 @@ fn ce4_enum_has_variant() {
 /// ModelNode::search_enum находит перечисление по имени.
 #[test]
 fn ce4_search_enum_finds_enum() {
-    use grammar::semantic::{EnumNode, ModelNode};
+    use grammar::semantic::ModelNode;
     let mut model = ModelNode::default();
-    let e = EnumNode::new("Color", &[("Red", None), ("Green", None)]);
+    let e = EnumDefinitionNode::new("Color", &[("Red", None), ("Green", None)]);
     model.enums.insert("Color".to_string(), e.clone());
     let found = model.search_enum("Color");
     assert!(found.is_some());
@@ -2931,7 +3250,7 @@ fn ce4_search_enum_returns_none() {
 /// TypeNode::Enum хранит имя перечисления.
 #[test]
 fn ce4_type_node_enum_variant() {
-    use grammar::semantic::TypeNode;
+    use grammar::semantic::type_node::TypeNode;
     let ty = TypeNode::Enum("Status".to_string());
     if let TypeNode::Enum(name) = &ty {
         assert_eq!(name, "Status");
@@ -2943,18 +3262,16 @@ fn ce4_type_node_enum_variant() {
 /// Два разных EnumNode не равны.
 #[test]
 fn ce4_enum_nodes_not_equal() {
-    use grammar::semantic::EnumNode;
-    let a = EnumNode::new("A", &[("X", None)]);
-    let b = EnumNode::new("B", &[("Y", None)]);
+    let a = EnumDefinitionNode::new("A", &[("X", None)]);
+    let b = EnumDefinitionNode::new("B", &[("Y", None)]);
     assert_ne!(a, b);
 }
 
 /// EnumNode с одинаковым содержимым равны.
 #[test]
 fn ce4_enum_nodes_equal() {
-    use grammar::semantic::EnumNode;
-    let a = EnumNode::new("Status", &[("Ok", Some(0)), ("Err", Some(1))]);
-    let b = EnumNode::new("Status", &[("Ok", Some(0)), ("Err", Some(1))]);
+    let a = EnumDefinitionNode::new("Status", &[("Ok", Some(0)), ("Err", Some(1))]);
+    let b = EnumDefinitionNode::new("Status", &[("Ok", Some(0)), ("Err", Some(1))]);
     assert_eq!(a, b);
 }
 
@@ -2968,10 +3285,10 @@ fn example_ce4_enum_basic_valid() {
 /// ModelNode с enums корректно сравнивается (PartialEq включает enums).
 #[test]
 fn ce4_model_eq_with_enums() {
-    use grammar::semantic::{EnumNode, ModelNode};
+    use grammar::semantic::ModelNode;
     let mut m1 = ModelNode::default();
     let mut m2 = ModelNode::default();
-    let e = EnumNode::new("Dir", &[("North", None)]);
+    let e = EnumDefinitionNode::new("Dir", &[("North", None)]);
     m1.enums.insert("Dir".to_string(), e.clone());
     m2.enums.insert("Dir".to_string(), e.clone());
     assert_eq!(m1, m2);
@@ -2985,12 +3302,14 @@ fn ce4_model_eq_with_enums() {
 /// `var result = getbool();` → тип `result` = `Bool`
 #[test]
 fn ce6_type_inferred_from_function_return() {
-    use grammar::semantic::TypeNode;
+    use grammar::semantic::type_node::TypeNode;
     let node = build(
         "fn getbool() -> bool { return true; } \
          var result = getbool(); start S;",
     );
-    let var_result = node.search_var("result").expect("переменная result не найдена");
+    let var_result = node
+        .search_var("result")
+        .expect("переменная result не найдена");
     let ty = var_result.ty().clone();
     assert_eq!(
         ty,
@@ -3004,22 +3323,18 @@ fn ce6_type_inferred_from_function_return() {
 /// `var x: bit = false; var y = x;` → тип `y` = тип `x` = `Bit`
 #[test]
 fn ce6_type_chain_from_variable() {
-    use grammar::semantic::TypeNode;
+    use grammar::semantic::type_node::TypeNode;
     // Явно задаём тип x, чтобы избежать зависимости от порядка обработки HashMap
     let node = build("var x: bit = false; var y = x; start S;");
     let var_y = node.search_var("y").expect("переменная y не найдена");
     let ty = var_y.ty().clone();
-    assert_eq!(
-        ty,
-        TypeNode::Bit,
-        "тип y должен быть Bit (через x: bit)"
-    );
+    assert_eq!(ty, TypeNode::Bit, "тип y должен быть Bit (через x: bit)");
 }
 
 /// Ce6: Вывод типа булевой переменной из функции, возвращающей bool.
 #[test]
 fn ce6_bool_return_type_inferred() {
-    use grammar::semantic::TypeNode;
+    use grammar::semantic::type_node::TypeNode;
     let node = build(
         "fn check() -> bool { return true; } \
          var flag = check(); start S;",
@@ -3032,7 +3347,7 @@ fn ce6_bool_return_type_inferred() {
 /// Ce6: Функция с типом [bit;32] — тип переменной = [bit;32].
 #[test]
 fn ce6_array32_return_type_inferred() {
-    use grammar::semantic::TypeNode;
+    use grammar::semantic::type_node::TypeNode;
     let node = build(
         "fn get32() -> [bit;32] { return 0; } \
          var val = get32(); start S;",
@@ -3049,12 +3364,14 @@ fn ce6_array32_return_type_inferred() {
 /// Ce6: Переменная с явным типом не перезаписывается выводом Ce6.
 #[test]
 fn ce6_explicit_type_not_overwritten_by_function() {
-    use grammar::semantic::TypeNode;
+    use grammar::semantic::type_node::TypeNode;
     let node = build(
         "fn getbool() -> bool { return true; } \
          var result: bit = getbool(); start S;",
     );
-    let var_result = node.search_var("result").expect("переменная result не найдена");
+    let var_result = node
+        .search_var("result")
+        .expect("переменная result не найдена");
     let ty = var_result.ty().clone();
     assert_eq!(
         ty,
@@ -3082,10 +3399,11 @@ fn example_ce6_type_inference_chain_valid() {
 /// FE6: Функция с параметром типа [bit;8] — разбирается без ошибок.
 #[test]
 fn test_fn_array_param() {
-    
     let node = build_file("tests/data/semantic/valid/fn_array_param.but")
         .expect("fn_array_param.but должен разбираться без ошибок");
-    let m = node.search_model("M").expect("модель M должна быть найдена");
+    let m = node
+        .search_model("M")
+        .expect("модель M должна быть найдена");
     let borrowed = m.borrow();
     // Функция process должна присутствовать
     assert!(
@@ -3097,7 +3415,6 @@ fn test_fn_array_param() {
 /// FE6: Функция с псевдонимом типа в параметре — разбирается без ошибок.
 #[test]
 fn test_fn_alias_param() {
-    
     let node = build(
         "type u8 = [bit;8]; \
          fn process(data: u8) -> bit { return 0; } \
@@ -3133,7 +3450,11 @@ fn test_unused_variable_warning() {
         "должно быть ровно одно предупреждение Ce13, получено: {:?}",
         warnings
     );
-    assert_eq!(warnings[0].level, Level::Warning, "уровень должен быть Warning");
+    assert_eq!(
+        warnings[0].level,
+        Level::Warning,
+        "уровень должен быть Warning"
+    );
     assert!(
         warnings[0].message.contains("Ce13"),
         "сообщение должно содержать Ce13: {}",
@@ -3194,10 +3515,8 @@ fn test_nondeterministic_transitions() {
 #[test]
 fn test_deterministic_no_warning() {
     let (ast, _) = grammar::parse(
-        &std::fs::read_to_string(
-            "tests/data/semantic/valid/deterministic_transitions.but",
-        )
-        .unwrap(),
+        &std::fs::read_to_string("tests/data/semantic/valid/deterministic_transitions.but")
+            .unwrap(),
         0,
     )
     .unwrap();
@@ -3215,11 +3534,12 @@ fn test_deterministic_no_warning() {
 /// FE1: Базовое перечисление — разбирается без ошибок, варианты присутствуют в EnumNode.
 #[test]
 fn test_enum_basic() {
-    
     let node = build_file("tests/data/semantic/valid/enum_basic.but")
         .expect("enum_basic.but должен разбираться без ошибок");
     // Перечисление находится во вложенной модели M
-    let m = node.search_model("M").expect("модель M должна быть найдена");
+    let m = node
+        .search_model("M")
+        .expect("модель M должна быть найдена");
     let borrowed = m.borrow();
     assert!(
         borrowed.enums.contains_key("Direction"),
@@ -3238,12 +3558,16 @@ fn test_enum_basic() {
 /// тип выводится как Array(8, Bit) через разрешение псевдонима u8 = [bit;8].
 #[test]
 fn test_type_alias_inference() {
-    use grammar::semantic::TypeNode;
+    use grammar::semantic::type_node::TypeNode;
     let node = build_file("tests/data/semantic/valid/type_alias_inference.but")
         .expect("type_alias_inference.but должен разбираться без ошибок");
-    let m = node.search_model("M").expect("модель M должна быть найдена");
+    let m = node
+        .search_model("M")
+        .expect("модель M должна быть найдена");
     let borrowed = m.borrow();
-    let x_var = borrowed.search_var("x").expect("переменная x должна быть найдена");
+    let x_var = borrowed
+        .search_var("x")
+        .expect("переменная x должна быть найдена");
     let ty = x_var.ty().clone();
     assert_eq!(
         ty,
@@ -3257,7 +3581,9 @@ fn test_type_alias_inference() {
 fn test_enum_with_values() {
     let node = build_file("tests/data/semantic/valid/enum_with_values.but")
         .expect("enum_with_values.but должен разбираться без ошибок");
-    let m = node.search_model("M").expect("модель M должна быть найдена");
+    let m = node
+        .search_model("M")
+        .expect("модель M должна быть найдена");
     let borrowed = m.borrow();
     assert!(
         borrowed.enums.contains_key("Priority"),
@@ -3268,7 +3594,6 @@ fn test_enum_with_values() {
     assert_eq!(prio.find_variant("Medium"), Some(5), "Medium = 5");
     assert_eq!(prio.find_variant("High"), Some(10), "High = 10");
 }
-
 
 // ─── Ce4: Интеграционные тесты enum-типизированных переменных ─────────────────
 
@@ -3429,7 +3754,9 @@ fn ce4_enum_declared_inside_model_local_to_it() {
                start Root = Inner;";
     let node = build(src);
     // В Inner: enum Status и переменная s: Status должны работать
-    let inner = node.search_model("Inner").expect("модель Inner должна быть найдена");
+    let inner = node
+        .search_model("Inner")
+        .expect("модель Inner должна быть найдена");
     let borrowed = inner.borrow();
     assert!(
         borrowed.enums.contains_key("Status"),
@@ -3442,8 +3769,7 @@ fn ce4_enum_declared_inside_model_local_to_it() {
     }
     // В корневой модели enum Status недоступен
     assert!(
-        node.search_enum("Status").is_none()
-            || node.enums.get("Status").is_none(),
+        node.search_enum("Status").is_none() || node.enums.get("Status").is_none(),
         "enum Status не должен быть виден в корневой модели напрямую"
     );
 }

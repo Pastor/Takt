@@ -36,8 +36,8 @@
 use crate::diagnostics::Location;
 use crate::parser::ast;
 use crate::semantic::{
-    Condition, Expression, FunctionNode, ModelNode, NamedCodeBlock, StateNode, StateNodeKind,
-    Statement, VariableNode,
+    ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, NamedCodeBlockDefinitionNode,
+    StateNode, StateNodeKind, StatementNode, VariableNode,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -269,8 +269,10 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
     // Функции (fn, extern fn; встроенные не индексируются — нет позиции в коде)
     for (name, func) in &borrowed.functions {
         let (loc, kind) = match func {
-            FunctionNode::Local { loc, .. } => (*loc, SemanticNodeKind::Function),
-            FunctionNode::External { loc, .. } => (*loc, SemanticNodeKind::ExternFunction),
+            FunctionDefinitionNode::Local { loc, .. } => (*loc, SemanticNodeKind::Function),
+            FunctionDefinitionNode::External { loc, .. } => {
+                (*loc, SemanticNodeKind::ExternFunction)
+            }
             _ => continue,
         };
         if let Location::Source(_, start, end) = loc {
@@ -407,7 +409,7 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
 /// Рекурсивно обходит семантическое условие перехода и собирает записи
 /// для идентификаторов, позиция которых ещё сохранена в дереве.
 ///
-/// Добавляет записи только для [`Condition::Unresolved`], когда АСД-узел
+/// Добавляет записи только для [`ConditionNode::Unresolved`], когда АСД-узел
 /// сохраняет исходные байтовые позиции. Разрешённые варианты
 /// (`Variable`, `Function`, …) не несут позиции *использования*:
 /// в них хранится ссылка на узел *объявления*, а не на место употребления,
@@ -430,37 +432,37 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
 /// Condition::Unresolved(ast::Variable(id@"x", loc=5..6))  →  IndexEntry("x", 5, 6)
 /// ```
 fn collect_condition_entries(
-    cond: &Condition,
+    cond: &ConditionNode,
     model: &Rc<RefCell<ModelNode>>,
     entries: &mut Vec<IndexEntry>,
 ) {
     match cond {
         // Единственный случай, когда позиция использования сохранена — АСД-форма
-        Condition::Unresolved(ast_cond) => {
+        ConditionNode::Unresolved(ast_cond) => {
             collect_ast_condition_entries(ast_cond, model, entries);
         }
         // Бинарные операторы: обходим оба операнда
-        Condition::And(l, r)
-        | Condition::Or(l, r)
-        | Condition::Add(l, r)
-        | Condition::Subtract(l, r)
-        | Condition::Less(l, r)
-        | Condition::More(l, r)
-        | Condition::LessEqual(l, r)
-        | Condition::MoreEqual(l, r)
-        | Condition::Equal(l, r)
-        | Condition::NotEqual(l, r) => {
+        ConditionNode::And(l, r)
+        | ConditionNode::Or(l, r)
+        | ConditionNode::Add(l, r)
+        | ConditionNode::Subtract(l, r)
+        | ConditionNode::Less(l, r)
+        | ConditionNode::More(l, r)
+        | ConditionNode::LessEqual(l, r)
+        | ConditionNode::MoreEqual(l, r)
+        | ConditionNode::Equal(l, r)
+        | ConditionNode::NotEqual(l, r) => {
             collect_condition_entries(l, model, entries);
             collect_condition_entries(r, model, entries);
         }
         // Унарные операторы
-        Condition::Not(c) | Condition::Parenthesis(c) => {
+        ConditionNode::Not(c) | ConditionNode::Parenthesis(c) => {
             collect_condition_entries(c, model, entries);
         }
-        Condition::BitAccess(c, _) => {
+        ConditionNode::BitAccess(c, _) => {
             collect_condition_entries(c, model, entries);
         }
-        Condition::Function(func_rc, args, loc) => {
+        ConditionNode::Function(func_rc, args, loc) => {
             // Позиция имени функции сохранена — добавляем запись
             if let Location::Source(_, start, end) = loc {
                 let name = func_rc.borrow().name().to_string();
@@ -480,7 +482,7 @@ fn collect_condition_entries(
             }
         }
         // Позиция использования переменной сохранена — добавляем запись
-        Condition::Variable(var_rc, loc) => {
+        ConditionNode::Variable(var_rc, loc) => {
             if let Location::Source(_, start, end) = loc {
                 let name = var_rc.borrow().name().to_string();
                 entries.push(IndexEntry {
@@ -611,27 +613,27 @@ fn collect_ast_condition_entries(
 ///
 /// ## Ограничение
 ///
-/// Семантический [`NamedCodeBlock`] **не хранит позицию объявления блока** (`loc`):
+/// Семантический [`NamedCodeBlockDefinitionNode`] **не хранит позицию объявления блока** (`loc`):
 /// ключевые слова `enter`, `exit`, `always`, `<custom>` не могут быть
 /// найдены через индекс. Для устранения ограничения необходимо добавить поле
-/// `loc: Location` в [`NamedCodeBlock`].
+/// `loc: Location` в [`NamedCodeBlockDefinitionNode`].
 ///
 /// В успешно построенных моделях тело полностью разрешено и позиции
 /// использования переменных/функций не сохраняются; функция добавляет записи
 /// только для неразрешённых подвыражений (`Statement::Unresolved` /
 /// `Expression::Unresolved`).
 fn collect_named_block_entries(
-    nb: &NamedCodeBlock,
+    nb: &NamedCodeBlockDefinitionNode,
     model: &Rc<RefCell<ModelNode>>,
     entries: &mut Vec<IndexEntry>,
 ) {
     let body = match nb {
-        NamedCodeBlock::Enter { body, .. }
-        | NamedCodeBlock::Exit { body, .. }
-        | NamedCodeBlock::Always { body, .. }
-        | NamedCodeBlock::Unknown { body, .. } => body,
+        NamedCodeBlockDefinitionNode::Enter { body, .. }
+        | NamedCodeBlockDefinitionNode::Exit { body, .. }
+        | NamedCodeBlockDefinitionNode::Always { body, .. }
+        | NamedCodeBlockDefinitionNode::Unknown { body, .. } => body,
         // None/Unresolved — тело отсутствует или ещё не прикреплено
-        NamedCodeBlock::None | NamedCodeBlock::Unresolved(..) => return,
+        NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(..) => return,
     };
     collect_statement_entries(body, model, entries);
 }
@@ -643,33 +645,33 @@ fn collect_named_block_entries(
 /// (`Block`, `If`, `Loop`, `For`), чтобы добраться до возможных
 /// `Statement::Unresolved` или `Expression::Unresolved` вглубь дерева.
 fn collect_statement_entries(
-    stmt: &Statement,
+    stmt: &StatementNode,
     model: &Rc<RefCell<ModelNode>>,
     entries: &mut Vec<IndexEntry>,
 ) {
     match stmt {
         // АСД-оператор, ещё не прошедший семантическое понижение
-        Statement::Unresolved(ast_stmt) => {
+        StatementNode::Unresolved(ast_stmt) => {
             collect_ast_statement_entries(ast_stmt, model, entries);
         }
-        Statement::Block(stmts) => {
+        StatementNode::Block(stmts) => {
             for s in stmts {
                 collect_statement_entries(s, model, entries);
             }
         }
-        Statement::Expression(expr) => {
+        StatementNode::Expression(expr) => {
             collect_semantic_expression_entries(expr, model, entries);
         }
-        Statement::If { then_, else_, .. } => {
+        StatementNode::If { then_, else_, .. } => {
             collect_statement_entries(then_, model, entries);
             if let Some(e) = else_ {
                 collect_statement_entries(e, model, entries);
             }
         }
-        Statement::Loop { body, .. } => {
+        StatementNode::Loop { body, .. } => {
             collect_statement_entries(body, model, entries);
         }
-        Statement::For { init, body, .. } => {
+        StatementNode::For { init, body, .. } => {
             if let Some(i) = init {
                 collect_statement_entries(i, model, entries);
             }
@@ -682,16 +684,16 @@ fn collect_statement_entries(
 }
 
 /// Обрабатывает семантическое выражение: добавляет записи только для
-/// [`Expression::Unresolved`], где АСД-форма сохраняет позиции идентификаторов.
+/// [`ExpressionNode::Unresolved`], где АСД-форма сохраняет позиции идентификаторов.
 ///
 /// Для всех разрешённых вариантов позиция использования потеряна в ходе
 /// семантического понижения — они пропускаются.
 fn collect_semantic_expression_entries(
-    expr: &Expression,
+    expr: &ExpressionNode,
     model: &Rc<RefCell<ModelNode>>,
     entries: &mut Vec<IndexEntry>,
 ) {
-    if let Expression::Unresolved(ast_expr) = expr {
+    if let ExpressionNode::Unresolved(ast_expr) = expr {
         collect_ast_expression_entries(ast_expr, model, entries);
     }
 }
@@ -1286,7 +1288,7 @@ mod tests {
     fn collect_condition_entries_none_no_entry() {
         let mut entries = Vec::new();
         let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
-        collect_condition_entries(&Condition::None, &model, &mut entries);
+        collect_condition_entries(&ConditionNode::None, &model, &mut entries);
         assert!(
             entries.is_empty(),
             "Condition::None не должен давать записей"
@@ -1298,7 +1300,7 @@ mod tests {
     fn collect_condition_entries_bool_no_entry() {
         let mut entries = Vec::new();
         let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
-        collect_condition_entries(&Condition::Bool(true), &model, &mut entries);
+        collect_condition_entries(&ConditionNode::Bool(true), &model, &mut entries);
         assert!(
             entries.is_empty(),
             "Condition::Bool не должен давать записей"
@@ -1450,7 +1452,7 @@ mod tests {
     fn named_block_none_does_not_panic() {
         let mut entries = Vec::new();
         let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
-        collect_named_block_entries(&NamedCodeBlock::None, &model, &mut entries);
+        collect_named_block_entries(&NamedCodeBlockDefinitionNode::None, &model, &mut entries);
         assert!(entries.is_empty());
     }
 
@@ -1459,7 +1461,7 @@ mod tests {
     fn statement_entries_none_does_not_panic() {
         let mut entries = Vec::new();
         let model = Rc::new(RefCell::new(super::super::ModelNode::default()));
-        collect_statement_entries(&Statement::None, &model, &mut entries);
+        collect_statement_entries(&StatementNode::None, &model, &mut entries);
         assert!(entries.is_empty());
     }
 
