@@ -18,7 +18,7 @@
 //!   а также числа с плавающей точкой и экспоненту.
 //! - Строковые литералы заключаются в двойные кавычки `"..."` и допускают
 //!   конкатенацию смежных строк.
-//! - Комментарии: однострочные `//` и документационные `///`. Блочные `/* */` не поддерживаются.
+//! - Комментарии: однострочные `//`, документационные `///` и блочные `/* */`.
 
 use std::str::FromStr;
 use std::{fmt, str::CharIndices};
@@ -280,7 +280,7 @@ impl<'input> fmt::Display for Token<'input> {
 /// Преобразует строку исходного кода в последовательность токенов ([`Token`]).
 /// Для опережающего просмотра используется [`PeekNth`].
 ///
-/// Комментарии (строчные `//` и документационные `///`) собираются отдельно
+/// Комментарии (строчные `//`, документационные `///` и блочные `/* */`) собираются отдельно
 /// в вектор [`Comment`] и не включаются в поток токенов.
 ///
 /// # Примеры
@@ -677,7 +677,7 @@ impl<'input> Lexer<'input> {
                         Ok(val) => return Some(val),
                     }
                 }
-                // Слэш: деление `/` или начало комментария `//`
+                // Слэш: деление `/`, начало строчного `//` или блочного `/* */` комментария
                 Some((start, '/')) => {
                     match self.chars.peek() {
                         Some((_, '/')) => {
@@ -729,6 +729,38 @@ impl<'input> Lexer<'input> {
                                     self.input[start..last].to_owned(),
                                 ));
                             }
+                        }
+                        Some((_, '*')) => {
+                            // Блочный комментарий `/* ... */`
+                            self.chars.next(); // потребляем `*`
+
+                            // Сканируем до закрывающей пары `*/`
+                            let mut last = self.input.len();
+                            loop {
+                                match self.chars.next() {
+                                    None => {
+                                        // Неожиданный конец файла внутри комментария
+                                        self.errors.push(LexicalError::EndOfFileInComment(
+                                            Location::Source(self.file_no, start, self.input.len()),
+                                        ));
+                                        return None;
+                                    }
+                                    Some((offset, '*')) => {
+                                        if matches!(self.chars.peek(), Some((_, '/'))) {
+                                            self.chars.next(); // потребляем `/`
+                                            last = offset + 2;
+                                            break;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+
+                            // Блочный комментарий не производит токены, только собирается
+                            self.comments.push(Comment::Block(
+                                Location::Source(self.file_no, start, last),
+                                self.input[start..last].to_owned(),
+                            ));
                         }
                         _ => {
                             return Some((start, Token::Divide, start + 1));

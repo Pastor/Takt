@@ -1,0 +1,191 @@
+diff --git a/grammar/src/generator/c/mod.rs b/grammar/src/generator/c/mod.rs
+index 06b5423..ce2207f 100644
+--- a/grammar/src/generator/c/mod.rs
++++ b/grammar/src/generator/c/mod.rs
+@@ -63,6 +63,7 @@ impl Generator {
+             }
+             TypeNode::BuiltinModel
+             | TypeNode::BuiltinState
++            | TypeNode::BuiltinNumeric
+             | TypeNode::Unsupported
+             | TypeNode::Inference
+             | TypeNode::Address(_, _) => {
+diff --git a/grammar/src/semantic/builtin.rs b/grammar/src/semantic/builtin.rs
+index 9d949ca..ea13753 100644
+--- a/grammar/src/semantic/builtin.rs
++++ b/grammar/src/semantic/builtin.rs
+@@ -6,10 +6,13 @@
+ //!
+ //! ## Текущий список встроенных функций
+ //!
+-//! | Имя     | Параметры                      | Возвращаемый тип  | Описание                              |
+-//! |---------|--------------------------------|-------------------|---------------------------------------|
+-//! | `debug` | `text: BuiltinString`          | `Unit`            | Вывод отладочного сообщения           |
+-//! | `S`     | `model: BuiltinModel`          | `BuiltinState`    | Получение начального состояния модели |
++//! | Имя     | Параметры                               | Возвращаемый тип  | Описание                              |
++//! |---------|----------------------------------------|-------------------|---------------------------------------|
++//! | `debug` | `text: BuiltinString`                  | `Unit`            | Вывод отладочного сообщения           |
++//! | `S`     | `model: BuiltinModel`                  | `BuiltinState`    | Получение начального состояния модели |
++//! | `min`   | `a: BuiltinNumeric, b: BuiltinNumeric` | `BuiltinNumeric`  | Минимум из двух числовых значений     |
++//! | `max`   | `a: BuiltinNumeric, b: BuiltinNumeric` | `BuiltinNumeric`  | Максимум из двух числовых значений    |
++//! | `abs`   | `x: BuiltinNumeric`                    | `BuiltinNumeric`  | Абсолютное значение числа             |
+ 
+ use crate::diagnostics::Diagnostic;
+ use crate::semantic::FunctionDefinitionNode;
+@@ -23,6 +26,9 @@ use std::convert::Into;
+ const BUILTIN_FUNCTIONS: phf::Map<&'static str, FunctionDefinitionNode> = phf_map! {
+     "debug" => FunctionDefinitionNode::Builtin("debug", &[("text", TypeNode::BuiltinString)], TypeNode::Unit),
+     "S" => FunctionDefinitionNode::Builtin("S", &[("model", TypeNode::BuiltinModel)], TypeNode::BuiltinState),
++    "min" => FunctionDefinitionNode::Builtin("min", &[("a", TypeNode::BuiltinNumeric), ("b", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
++    "max" => FunctionDefinitionNode::Builtin("max", &[("a", TypeNode::BuiltinNumeric), ("b", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
++    "abs" => FunctionDefinitionNode::Builtin("abs", &[("x", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
+ };
+ 
+ /// Возвращает [`FunctionDefinitionNode`] встроенной функции по имени.
+@@ -119,4 +125,131 @@ mod tests {
+             panic!("ожидался FunctionNode::Builtin");
+         }
+     }
++
++    // ── Тесты min ─────────────────────────────────────────────────────────────
++
++    /// `builtin_function("min")` возвращает корректный узел с двумя числовыми параметрами.
++    ///
++    /// # Пример (BuT):
++    /// ```but
++    /// var result: bit = min(a, b);   // минимум двух значений
++    /// ```
++    #[test]
++    fn builtin_min_exists() {
++        let func = builtin_function("min").unwrap();
++        assert!(
++            matches!(
++                func,
++                FunctionDefinitionNode::Builtin("min", _, TypeNode::BuiltinNumeric)
++            ),
++            "min должна быть Builtin с возвратом BuiltinNumeric"
++        );
++    }
++
++    /// Параметры `min`: два параметра `a: BuiltinNumeric`, `b: BuiltinNumeric`.
++    #[test]
++    fn builtin_min_has_two_numeric_params() {
++        if let FunctionDefinitionNode::Builtin(_, params, ret) = builtin_function("min").unwrap() {
++            assert_eq!(params.len(), 2, "min должна принимать 2 параметра");
++            assert_eq!(params[0].0, "a");
++            assert_eq!(params[0].1, TypeNode::BuiltinNumeric);
++            assert_eq!(params[1].0, "b");
++            assert_eq!(params[1].1, TypeNode::BuiltinNumeric);
++            assert_eq!(*ret, TypeNode::BuiltinNumeric);
++        } else {
++            panic!("ожидался FunctionNode::Builtin");
++        }
++    }
++
++    // ── Тесты max ─────────────────────────────────────────────────────────────
++
++    /// `builtin_function("max")` возвращает корректный узел с двумя числовыми параметрами.
++    ///
++    /// # Пример (BuT):
++    /// ```but
++    /// var result: bit = max(a, b);   // максимум двух значений
++    /// ```
++    #[test]
++    fn builtin_max_exists() {
++        let func = builtin_function("max").unwrap();
++        assert!(
++            matches!(
++                func,
++                FunctionDefinitionNode::Builtin("max", _, TypeNode::BuiltinNumeric)
++            ),
++            "max должна быть Builtin с возвратом BuiltinNumeric"
++        );
++    }
++
++    /// Параметры `max`: два параметра `a: BuiltinNumeric`, `b: BuiltinNumeric`.
++    #[test]
++    fn builtin_max_has_two_numeric_params() {
++        if let FunctionDefinitionNode::Builtin(_, params, ret) = builtin_function("max").unwrap() {
++            assert_eq!(params.len(), 2, "max должна принимать 2 параметра");
++            assert_eq!(params[0].0, "a");
++            assert_eq!(params[0].1, TypeNode::BuiltinNumeric);
++            assert_eq!(params[1].0, "b");
++            assert_eq!(params[1].1, TypeNode::BuiltinNumeric);
++            assert_eq!(*ret, TypeNode::BuiltinNumeric);
++        } else {
++            panic!("ожидался FunctionNode::Builtin");
++        }
++    }
++
++    // ── Тесты abs ─────────────────────────────────────────────────────────────
++
++    /// `builtin_function("abs")` возвращает корректный узел с одним числовым параметром.
++    ///
++    /// # Пример (BuT):
++    /// ```but
++    /// var result: bit = abs(x);   // абсолютное значение
++    /// ```
++    #[test]
++    fn builtin_abs_exists() {
++        let func = builtin_function("abs").unwrap();
++        assert!(
++            matches!(
++                func,
++                FunctionDefinitionNode::Builtin("abs", _, TypeNode::BuiltinNumeric)
++            ),
++            "abs должна быть Builtin с возвратом BuiltinNumeric"
++        );
++    }
++
++    /// Параметры `abs`: один параметр `x: BuiltinNumeric`.
++    #[test]
++    fn builtin_abs_has_one_numeric_param() {
++        if let FunctionDefinitionNode::Builtin(_, params, ret) = builtin_function("abs").unwrap() {
++            assert_eq!(params.len(), 1, "abs должна принимать 1 параметр");
++            assert_eq!(params[0].0, "x");
++            assert_eq!(params[0].1, TypeNode::BuiltinNumeric);
++            assert_eq!(*ret, TypeNode::BuiltinNumeric);
++        } else {
++            panic!("ожидался FunctionNode::Builtin");
++        }
++    }
++
++    /// Контрпример: `builtin_function("sin")` — неизвестная функция → ошибка.
++    ///
++    /// # Контрпример (BuT):
++    /// ```but
++    /// sin(3.14);   // ошибка: функция sin не определена
++    /// ```
++    #[test]
++    fn unknown_math_builtin_is_error() {
++        let result = builtin_function("sin");
++        assert!(result.is_err(), "sin должна быть неизвестной");
++    }
++
++    /// Все встроенные математические функции доступны через `builtin_function`.
++    #[test]
++    fn all_math_builtins_registered() {
++        for name in &["min", "max", "abs"] {
++            assert!(
++                builtin_function(name).is_ok(),
++                "Встроенная функция '{}' должна быть зарегистрирована",
++                name
++            );
++        }
++    }
+ }
+diff --git a/grammar/src/semantic/type_node.rs b/grammar/src/semantic/type_node.rs
+index 457f40b..d9073d9 100644
+--- a/grammar/src/semantic/type_node.rs
++++ b/grammar/src/semantic/type_node.rs
+@@ -409,4 +409,10 @@ pub enum TypeNode {
+     BuiltinModel,
+     /// Встроенный тип состояния (внутренний, для встроенных функций).
+     BuiltinState,
++    /// Встроенный числовой тип (внутренний, для встроенных функций).
++    ///
++    /// Обозначает «любой числовой тип»: `Bit`, `Rational`, `Array(_, Bit)`.
++    /// Используется для параметров и возвращаемых значений математических
++    /// встроенных функций (`min`, `max`, `abs`).
++    BuiltinNumeric,
+ }

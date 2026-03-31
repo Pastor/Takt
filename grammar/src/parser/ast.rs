@@ -58,6 +58,8 @@ pub enum Comment {
     Line(Location, String),
     /// Документационный строчный комментарий `/// ...`.
     DocLine(Location, String),
+    /// Блочный комментарий `/* ... */`.
+    Block(Location, String),
 }
 
 impl Comment {
@@ -65,7 +67,7 @@ impl Comment {
     #[inline]
     pub const fn value(&self) -> &String {
         match self {
-            Self::Line(_, s) | Self::DocLine(_, s) => s,
+            Self::Line(_, s) | Self::DocLine(_, s) | Self::Block(_, s) => s,
         }
     }
 
@@ -79,6 +81,12 @@ impl Comment {
     #[inline]
     pub const fn is_line(&self) -> bool {
         matches!(self, Self::Line(..) | Self::DocLine(..))
+    }
+
+    /// Возвращает `true`, если комментарий является блочным (`/* */`).
+    #[inline]
+    pub const fn is_block(&self) -> bool {
+        matches!(self, Self::Block(..))
     }
 }
 

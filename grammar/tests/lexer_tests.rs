@@ -769,6 +769,126 @@ fn comment_at_eof_without_newline() {
     assert!(errors.is_empty());
 }
 
+// ─────────────────────── Тесты блочных комментариев ──────────────────────────
+
+/// Блочный комментарий `/* */` не производит токены, но собирается.
+#[test]
+fn block_comment_produces_no_tokens() {
+    let src = "/* блочный комментарий */\nmodel";
+    assert_eq!(token_count(src), 1, "После блочного комментария — только 'model'");
+    assert_eq!(comment_count(src), 1, "Ожидался один блочный комментарий");
+}
+
+/// Блочный комментарий помечается флагом `is_block()`.
+#[test]
+fn block_comment_is_detected_as_block() {
+    use grammar::parser::ast::Comment;
+    let src = "/* блок */\nmodel";
+    let mut comments = Vec::new();
+    let mut errors = Vec::new();
+    let _: Vec<_> = Lexer::new(src, 0, &mut comments, &mut errors).collect();
+    assert_eq!(comments.len(), 1);
+    assert!(
+        matches!(&comments[0], Comment::Block(..)),
+        "Ожидался Comment::Block, получено: {:?}",
+        comments[0]
+    );
+    assert!(comments[0].is_block(), "is_block() должен возвращать true");
+    assert!(!comments[0].is_doc(), "is_doc() должен возвращать false");
+    assert!(!comments[0].is_line(), "is_line() должен возвращать false");
+}
+
+/// Блочный комментарий может содержать несколько строк.
+#[test]
+fn multiline_block_comment_lexes_ok() {
+    let src = "/*\n строка 1\n строка 2\n*/\nvar x = 1;";
+    let errors = collect_errors(src);
+    assert!(errors.is_empty(), "Многострочный блочный комментарий вызвал ошибку: {:?}", errors);
+    assert_eq!(comment_count(src), 1, "Ожидался один комментарий");
+    assert_eq!(token_count(src), 5, "Ожидались токены: var, x, =, 1, ;");
+}
+
+/// Блочный комментарий может содержать `//` внутри.
+#[test]
+fn block_comment_containing_line_comment_syntax() {
+    let src = "/* содержит // строчный синтаксис */\nmodel";
+    assert_eq!(comment_count(src), 1);
+    assert_eq!(token_count(src), 1);
+    let errors = collect_errors(src);
+    assert!(errors.is_empty());
+}
+
+/// Несколько блочных комментариев — все собраны.
+#[test]
+fn multiple_block_comments_collected() {
+    let src = "/* первый */ var /* второй */ x = 1;";
+    assert_eq!(comment_count(src), 2, "Ожидались 2 блочных комментария");
+    assert_eq!(token_count(src), 5, "var, x, =, 1, ;");
+    let errors = collect_errors(src);
+    assert!(errors.is_empty());
+}
+
+/// Смешанные строчные и блочные комментарии — все собраны.
+#[test]
+fn mixed_line_and_block_comments_collected() {
+    let src = "// строчный\n/* блочный */\n/// документация\nmodel";
+    assert_eq!(comment_count(src), 3, "Ожидались 3 комментария");
+    assert_eq!(token_count(src), 1, "После комментариев — только 'model'");
+}
+
+/// Незакрытый блочный комментарий порождает `EndOfFileInComment`.
+#[test]
+fn unclosed_block_comment_produces_eof_error() {
+    let src = "/* незакрытый комментарий";
+    let errors = collect_errors(src);
+    assert!(
+        !errors.is_empty(),
+        "Незакрытый блочный комментарий должен давать ошибку"
+    );
+    assert!(
+        matches!(errors[0], LexicalError::EndOfFileInComment(_)),
+        "Ожидалась EndOfFileInComment, получено: {:?}",
+        errors[0]
+    );
+}
+
+/// Пустой блочный комментарий `/**/` разбирается без ошибок.
+#[test]
+fn empty_block_comment_lexes_ok() {
+    let src = "/**/ model";
+    let errors = collect_errors(src);
+    assert!(errors.is_empty(), "Пустой блочный комментарий вызвал ошибку: {:?}", errors);
+    assert_eq!(comment_count(src), 1);
+    assert_eq!(token_count(src), 1);
+}
+
+/// Деление `/` после блочного комментария разбирается корректно.
+#[test]
+fn divide_after_block_comment_is_divide_token() {
+    let src = "/* комментарий */ 10 / 2";
+    assert_eq!(comment_count(src), 1);
+    assert_eq!(token_count(src), 3, "10, /, 2");
+    let errors = collect_errors(src);
+    assert!(errors.is_empty());
+}
+
+/// Значение блочного комментария содержит исходный текст включая `/*` и `*/`.
+#[test]
+fn block_comment_value_contains_full_text() {
+    use grammar::parser::ast::Comment;
+    let src = "/* содержимое */";
+    let mut comments = Vec::new();
+    let mut errors = Vec::new();
+    let _: Vec<_> = Lexer::new(src, 0, &mut comments, &mut errors).collect();
+    assert_eq!(comments.len(), 1);
+    let val = comments[0].value();
+    assert!(
+        val.contains("содержимое"),
+        "Значение должно содержать текст комментария: {}",
+        val
+    );
+}
+
 // ─────────────────────── Тесты ошибочных конструкций ─────────────────────────
 
 /// Неизвестный символ `@` порождает `UnrecognisedToken`.

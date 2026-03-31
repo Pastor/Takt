@@ -63,6 +63,7 @@ impl Generator {
             }
             TypeNode::BuiltinModel
             | TypeNode::BuiltinState
+            | TypeNode::BuiltinNumeric
             | TypeNode::Unsupported
             | TypeNode::Inference
             | TypeNode::Address(_, _) => {
