@@ -1091,6 +1091,32 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
             ModelElement::Import(_)
             | ModelElement::Formula(_)
             | ModelElement::StraySemicolon(_) => {}
+            ModelElement::Struct(def) => {
+                let children: Vec<DocumentSymbol> = def
+                    .fields
+                    .iter()
+                    .map(|v| {
+                        make_sym(
+                            v.name.name.clone(),
+                            SymbolKind::FIELD,
+                            loc_to_range(&v.loc, source),
+                            loc_to_range(&v.name.loc, source),
+                            None,
+                        )
+                    })
+                    .collect();
+                out.push(make_sym(
+                    def.name.clone().unwrap().name.clone(),
+                    SymbolKind::STRUCT,
+                    loc_to_range(&def.loc, source),
+                    loc_to_range(&def.loc, source),
+                    if children.is_empty() {
+                        None
+                    } else {
+                        Some(children)
+                    },
+                ));
+            }
         }
     }
 
