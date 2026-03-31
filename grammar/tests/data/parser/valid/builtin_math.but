@@ -14,7 +14,10 @@ var hi: bit = max(x, y);
 // Пример 3: abs одного значения
 var magnitude: bit = abs(x);
 
-// Пример 4: вложенные вызовы
+// Пример 4: clamp — ограничение значения в диапазон
+var bounded: bit = clamp(x, y, x);
+
+// Пример 5: вложенные вызовы
 var nested: bit = min(max(x, y), abs(x));
 
 start S;

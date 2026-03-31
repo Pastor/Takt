@@ -2,6 +2,7 @@ use lalrpop_util::ParseError;
 use super::parser::ast::*;
 use super::diagnostics::Location;
 use super::parser::lexer::{Token, LexicalError};
+use super::parser::parse_address_literal;
 use lalrpop_util::ErrorRecovery;
 grammar<'input, 'err>(input: &'input str, file_no: u64 , parser_errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, LexicalError>> );
 
@@ -65,6 +66,7 @@ ModelElement: ModelElement = {
     ConditionDefine => ModelElement::Condition(Box::new(<>)),
     NamedBlockCodeDefine => ModelElement::NamedBlockCode(<>),
     <e:EnumDefine> => ModelElement::Enum(e),
+    <s:StructDefine> => ModelElement::Struct(s),
     <l:@L> ";" <r:@R> => ModelElement::StraySemicolon(Location::Source(file_no, l, r)),
 }
 
@@ -197,6 +199,32 @@ EnumDefine: Box<EnumDefine> = {
             loc: Location::Source(file_no, l, r),
             name,
             variants: Vec::new(),
+        })
+    },
+}
+
+StructField: StructField = {
+    <l:@L> <name:Identifier> ":" <ty:Type> <r:@R> => StructField {
+        loc: Location::Source(file_no, l, r),
+        name,
+        ty,
+    },
+}
+
+StructDefine: Box<StructDefine> = {
+    <l:@L> "struct" <name:IdentifierOrError> "{" <fields:Comma<StructField>> "}" <r:@R> => {
+        Box::new(StructDefine {
+            loc: Location::Source(file_no, l, r),
+            name,
+            fields,
+        })
+    },
+    <l:@L> "struct" <name:IdentifierOrError> "{" <false_token:!> "}" <r:@R> => {
+        parser_errors.push(false_token);
+        Box::new(StructDefine {
+            loc: Location::Source(file_no, l, r),
+            name,
+            fields: Vec::new(),
         })
     },
 }
@@ -336,6 +364,8 @@ LoopCond: Expression = { LoopCondP14 }
 
 LoopCondP14: Expression = {
     <a:@L> <l:LoopCondP13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    // Тернарный оператор в контексте loop-условия (правоассоциативный)
+    <a:@L> <c:LoopCondP13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
     LoopCondP13,
 }
 
@@ -414,9 +444,13 @@ LoopCondP2: Expression = {
 // LoopCondP1: как Precedence1, но БЕЗ инициализатора массива `{ expr, ... }`.
 // Именно это устраняет конфликт LR(1): '{' всегда начинает тело цикла, а не условие.
 LoopCondP1: Expression = {
-    <l:@L> <n:number> ":" <bit:number> <r:@R> => Expression::Address(Location::Source(file_no, l, r), n, bit),
-    <l:@L> <n:number>                  <r:@R> => Expression::Number(Location::Source(file_no, l, r), n),
-    <l:@L> <n:rational>                <r:@R> => Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1),
+    // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта)
+    <l:@L> <a:address> <r:@R> => {
+        let (addr_val, bit_val) = parse_address_literal(a);
+        Expression::Address(Location::Source(file_no, l, r), addr_val, bit_val)
+    },
+    <l:@L> <n:number>   <r:@R> => Expression::Number(Location::Source(file_no, l, r), n),
+    <l:@L> <n:rational> <r:@R> => Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1),
     // инициализатор массива '{...}' здесь намеренно отсутствует
     Precedence0
 }
@@ -427,6 +461,8 @@ Expression: Expression = {
 
 Precedence14: Expression = {
     <a:@L> <l:Precedence13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    // Тернарный оператор: cond ? then : else (правоассоциативный, ниже присваивания)
+    <a:@L> <c:Precedence13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
     Precedence13,
 }
 
@@ -503,8 +539,10 @@ Precedence2: Expression = {
 }
 
 Precedence1: Expression = {
-    <l:@L> <n:number> ":" <bit:number> <r:@R> => {
-        Expression::Address(Location::Source(file_no, l, r), n, bit)
+    // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта с тернарным `?:`)
+    <l:@L> <a:address> <r:@R> => {
+        let (addr_val, bit_val) = parse_address_literal(a);
+        Expression::Address(Location::Source(file_no, l, r), addr_val, bit_val)
     },
     <l:@L> <n:number> <r:@R> => {
         Expression::Number(Location::Source(file_no, l, r), n)
@@ -767,6 +805,7 @@ extern {
         identifier => Token::Identifier(<&'input str>),
         string => Token::StringLiteral(<bool>, <&'input str>),
         number => Token::Number(<i64>),
+        address => Token::AddressLiteral(<&'input str>),
         rational => Token::RationalNumber(<&'input str>, <bool>),
         "->" => Token::PeirceArrow,
         "#" => Token::Sharp,
@@ -801,6 +840,7 @@ extern {
         "[" => Token::OpenBracket,
         "]" => Token::CloseBracket,
         "." => Token::Member,
+        "?" => Token::Question,
         "," => Token::Comma,
         "import" => Token::Import,
         "type" => Token::Type,
@@ -828,5 +868,6 @@ extern {
         "next" => Token::Next,
         "var" => Token::Variable,
         "enum" => Token::Enum,
+        "struct" => Token::Struct,
     }
 }

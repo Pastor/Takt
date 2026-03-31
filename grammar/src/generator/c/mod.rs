@@ -61,6 +61,14 @@ impl Generator {
                     name.clone().unwrap_or_default()
                 )
             }
+            // NI3: структурный тип представляется как struct в C
+            TypeNode::Struct(struct_name) => {
+                format!(
+                    "struct {} {}",
+                    struct_name,
+                    name.clone().unwrap_or_default()
+                )
+            }
             TypeNode::BuiltinModel
             | TypeNode::BuiltinState
             | TypeNode::BuiltinNumeric

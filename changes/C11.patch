@@ -1,0 +1,539 @@
+diff --git a/examples/traffic_light.but b/examples/traffic_light.but
+index 6a0c3f9..2ebbd50 100644
+--- a/examples/traffic_light.but
++++ b/examples/traffic_light.but
+@@ -1,20 +1,28 @@
++/// Пример: Управление светофором
++
++/// байтовый тип
+ type u8 = [bit;8];
+-// Пример: Управление светофором
++
++/// Модель светофора
+ model TrafficLight {
++    /// Время отображение нужного цвета
+     var timer: u8 = 0;
+ 
++    /// Красный цвет
+     start Red {
+         enter { timer = 0; }
+         always { timer = timer + 1; }
+         ref Yellow: timer > 10;
+     }
+ 
++    /// Желтый цвет
+     state Yellow {
+         enter { timer = 0; }
+         always { timer = timer + 1; }
+         ref Green: timer > 3;
+     }
+ 
++    /// Зеленый
+     state Green {
+         enter { timer = 0; }
+         always { timer = timer + 1; }
+diff --git a/grammar/src/grammar.lalrpop b/grammar/src/grammar.lalrpop
+index a920c3c..2ee8cc0 100644
+--- a/grammar/src/grammar.lalrpop
++++ b/grammar/src/grammar.lalrpop
+@@ -2,6 +2,7 @@ use lalrpop_util::ParseError;
+ use super::parser::ast::*;
+ use super::diagnostics::Location;
+ use super::parser::lexer::{Token, LexicalError};
++use super::parser::parse_address_literal;
+ use lalrpop_util::ErrorRecovery;
+ grammar<'input, 'err>(input: &'input str, file_no: u64 , parser_errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, LexicalError>> );
+ 
+@@ -336,6 +337,8 @@ LoopCond: Expression = { LoopCondP14 }
+ 
+ LoopCondP14: Expression = {
+     <a:@L> <l:LoopCondP13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
++    // Тернарный оператор в контексте loop-условия (правоассоциативный)
++    <a:@L> <c:LoopCondP13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
+     LoopCondP13,
+ }
+ 
+@@ -414,9 +417,13 @@ LoopCondP2: Expression = {
+ // LoopCondP1: как Precedence1, но БЕЗ инициализатора массива `{ expr, ... }`.
+ // Именно это устраняет конфликт LR(1): '{' всегда начинает тело цикла, а не условие.
+ LoopCondP1: Expression = {
+-    <l:@L> <n:number> ":" <bit:number> <r:@R> => Expression::Address(Location::Source(file_no, l, r), n, bit),
+-    <l:@L> <n:number>                  <r:@R> => Expression::Number(Location::Source(file_no, l, r), n),
+-    <l:@L> <n:rational>                <r:@R> => Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1),
++    // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта)
++    <l:@L> <a:address> <r:@R> => {
++        let (addr_val, bit_val) = parse_address_literal(a);
++        Expression::Address(Location::Source(file_no, l, r), addr_val, bit_val)
++    },
++    <l:@L> <n:number>   <r:@R> => Expression::Number(Location::Source(file_no, l, r), n),
++    <l:@L> <n:rational> <r:@R> => Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1),
+     // инициализатор массива '{...}' здесь намеренно отсутствует
+     Precedence0
+ }
+@@ -427,6 +434,8 @@ Expression: Expression = {
+ 
+ Precedence14: Expression = {
+     <a:@L> <l:Precedence13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
++    // Тернарный оператор: cond ? then : else (правоассоциативный, ниже присваивания)
++    <a:@L> <c:Precedence13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
+     Precedence13,
+ }
+ 
+@@ -503,8 +512,10 @@ Precedence2: Expression = {
+ }
+ 
+ Precedence1: Expression = {
+-    <l:@L> <n:number> ":" <bit:number> <r:@R> => {
+-        Expression::Address(Location::Source(file_no, l, r), n, bit)
++    // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта с тернарным `?:`)
++    <l:@L> <a:address> <r:@R> => {
++        let (addr_val, bit_val) = parse_address_literal(a);
++        Expression::Address(Location::Source(file_no, l, r), addr_val, bit_val)
+     },
+     <l:@L> <n:number> <r:@R> => {
+         Expression::Number(Location::Source(file_no, l, r), n)
+@@ -767,6 +778,7 @@ extern {
+         identifier => Token::Identifier(<&'input str>),
+         string => Token::StringLiteral(<bool>, <&'input str>),
+         number => Token::Number(<i64>),
++        address => Token::AddressLiteral(<&'input str>),
+         rational => Token::RationalNumber(<&'input str>, <bool>),
+         "->" => Token::PeirceArrow,
+         "#" => Token::Sharp,
+@@ -801,6 +813,7 @@ extern {
+         "[" => Token::OpenBracket,
+         "]" => Token::CloseBracket,
+         "." => Token::Member,
++        "?" => Token::Question,
+         "," => Token::Comma,
+         "import" => Token::Import,
+         "type" => Token::Type,
+diff --git a/grammar/src/parser/lexer.rs b/grammar/src/parser/lexer.rs
+index 95edcfc..022c004 100644
+--- a/grammar/src/parser/lexer.rs
++++ b/grammar/src/parser/lexer.rs
+@@ -151,6 +151,8 @@ pub enum Token<'input> {
+     Member,
+     /// Двоеточие `:`.
+     Colon,
++    /// Символ вопроса `?` (тернарный оператор).
++    Question,
+     /// Символ `[`.
+     OpenBracket,
+     /// Символ `]`.
+@@ -236,6 +238,7 @@ impl<'input> fmt::Display for Token<'input> {
+             Token::MoreEqual => write!(f, ">="),
+             Token::Member => write!(f, "."),
+             Token::Colon => write!(f, ":"),
++            Token::Question => write!(f, "?"),
+             Token::OpenBracket => write!(f, "["),
+             Token::CloseBracket => write!(f, "]"),
+             Token::ShiftRight => write!(f, ">>"),
+@@ -488,9 +491,29 @@ impl<'input> Lexer<'input> {
+                 // Удаляем разделители `_` перед разбором hex-числа
+                 let hex_raw = &self.input[start + 2..=end];
+                 let hex: String = hex_raw.chars().filter(|&c| c != '_').collect();
++                let hex_val = i64::from_str_radix(&hex, 16).unwrap();
++
++                // Проверяем, является ли это адресным литералом `0xNNNN:bit`
++                // (токен AddressLiteral, чтобы избежать LR(1)-конфликта с тернарным `?:`)
++                if matches!(self.chars.peek(), Some((_, ':'))) {
++                    if matches!(self.chars.peek_nth(1), Some((_, '0'..='9'))) {
++                        self.chars.next(); // потребляем ':'
++                        let mut bit_end = end + 1;
++                        while let Some((i, ch)) = self.chars.peek() {
++                            if ch.is_ascii_digit() {
++                                bit_end = *i;
++                                self.chars.next();
++                            } else {
++                                break;
++                            }
++                        }
++                        return Ok((start, Token::AddressLiteral(&self.input[start..=bit_end]), bit_end + 1));
++                    }
++                }
++
+                 return Ok((
+                     start,
+-                    Token::Number(i64::from_str_radix(&hex, 16).unwrap()),
++                    Token::Number(hex_val),
+                     end + 1,
+                 ));
+             }
+@@ -894,6 +917,7 @@ impl<'input> Lexer<'input> {
+                 Some((i, '[')) => return Some((i, Token::OpenBracket, i + 1)),
+                 Some((i, ']')) => return Some((i, Token::CloseBracket, i + 1)),
+                 Some((i, ':')) => return Some((i, Token::Colon, i + 1)),
++                Some((i, '?')) => return Some((i, Token::Question, i + 1)),
+                 Some((i, '~')) => return Some((i, Token::BitwiseNot, i + 1)),
+                 // Пробельные символы игнорируются
+                 Some((_, ch)) if ch.is_whitespace() => (),
+diff --git a/grammar/src/parser/mod.rs b/grammar/src/parser/mod.rs
+index f31081a..d98cf33 100644
+--- a/grammar/src/parser/mod.rs
++++ b/grammar/src/parser/mod.rs
+@@ -3,3 +3,31 @@ pub mod ast;
+ 
+ /// Модуль лексического анализатора BuT.
+ pub mod lexer;
++
++/// Разбирает строку адресного литерала вида `"0xNNNN:bit"` в пару `(адрес, бит)`.
++///
++/// Используется в правилах LALRPOP-грамматики для токена [`lexer::Token::AddressLiteral`].
++/// Поддерживает шестнадцатеричную (`0x…`) и десятичную форму адреса.
++///
++/// # Примеры
++///
++/// ```
++/// use grammar::parser::parse_address_literal;
++/// assert_eq!(parse_address_literal("0x00200000:0"), (2097152, 0));
++/// assert_eq!(parse_address_literal("0xFF:3"),       (255, 3));
++/// ```
++pub fn parse_address_literal(s: &str) -> (i64, i64) {
++    if let Some(pos) = s.rfind(':') {
++        let addr_part = &s[..pos];
++        let bit_part  = &s[pos + 1..];
++        let addr = if addr_part.starts_with("0x") || addr_part.starts_with("0X") {
++            i64::from_str_radix(&addr_part[2..], 16).unwrap_or(0)
++        } else {
++            addr_part.parse::<i64>().unwrap_or(0)
++        };
++        let bit = bit_part.parse::<i64>().unwrap_or(0);
++        (addr, bit)
++    } else {
++        (0, 0)
++    }
++}
+diff --git a/grammar/src/semantic/builtin.rs b/grammar/src/semantic/builtin.rs
+index ea13753..6df9245 100644
+--- a/grammar/src/semantic/builtin.rs
++++ b/grammar/src/semantic/builtin.rs
+@@ -13,6 +13,7 @@
+ //! | `min`   | `a: BuiltinNumeric, b: BuiltinNumeric` | `BuiltinNumeric`  | Минимум из двух числовых значений     |
+ //! | `max`   | `a: BuiltinNumeric, b: BuiltinNumeric` | `BuiltinNumeric`  | Максимум из двух числовых значений    |
+ //! | `abs`   | `x: BuiltinNumeric`                    | `BuiltinNumeric`  | Абсолютное значение числа             |
++//! | `clamp` | `x, lo, hi: BuiltinNumeric`            | `BuiltinNumeric`  | Ограничение значения в диапазон       |
+ 
+ use crate::diagnostics::Diagnostic;
+ use crate::semantic::FunctionDefinitionNode;
+@@ -29,6 +30,7 @@ const BUILTIN_FUNCTIONS: phf::Map<&'static str, FunctionDefinitionNode> = phf_ma
+     "min" => FunctionDefinitionNode::Builtin("min", &[("a", TypeNode::BuiltinNumeric), ("b", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
+     "max" => FunctionDefinitionNode::Builtin("max", &[("a", TypeNode::BuiltinNumeric), ("b", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
+     "abs" => FunctionDefinitionNode::Builtin("abs", &[("x", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
++    "clamp" => FunctionDefinitionNode::Builtin("clamp", &[("x", TypeNode::BuiltinNumeric), ("lo", TypeNode::BuiltinNumeric), ("hi", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
+ };
+ 
+ /// Возвращает [`FunctionDefinitionNode`] встроенной функции по имени.
+@@ -244,7 +246,7 @@ mod tests {
+     /// Все встроенные математические функции доступны через `builtin_function`.
+     #[test]
+     fn all_math_builtins_registered() {
+-        for name in &["min", "max", "abs"] {
++        for name in &["min", "max", "abs", "clamp"] {
+             assert!(
+                 builtin_function(name).is_ok(),
+                 "Встроенная функция '{}' должна быть зарегистрирована",
+@@ -252,4 +254,41 @@ mod tests {
+             );
+         }
+     }
++
++    // ── Тесты clamp ───────────────────────────────────────────────────────────
++
++    /// `builtin_function("clamp")` возвращает корректный узел с тремя параметрами.
++    ///
++    /// # Пример (BuT):
++    /// ```but
++    /// var r: bit = clamp(x, lo, hi);   // ограничение x в [lo, hi]
++    /// ```
++    #[test]
++    fn builtin_clamp_exists() {
++        let func = builtin_function("clamp").unwrap();
++        assert!(
++            matches!(
++                func,
++                FunctionDefinitionNode::Builtin("clamp", _, TypeNode::BuiltinNumeric)
++            ),
++            "clamp должна быть Builtin с возвратом BuiltinNumeric"
++        );
++    }
++
++    /// Параметры `clamp`: три параметра `x`, `lo`, `hi` типа `BuiltinNumeric`.
++    #[test]
++    fn builtin_clamp_has_three_params() {
++        if let FunctionDefinitionNode::Builtin(_, params, ret) = builtin_function("clamp").unwrap() {
++            assert_eq!(params.len(), 3, "clamp должна принимать 3 параметра");
++            assert_eq!(params[0].0, "x");
++            assert_eq!(params[1].0, "lo");
++            assert_eq!(params[2].0, "hi");
++            for (_, ty) in *params {
++                assert_eq!(*ty, TypeNode::BuiltinNumeric);
++            }
++            assert_eq!(*ret, TypeNode::BuiltinNumeric);
++        } else {
++            panic!("ожидался FunctionNode::Builtin");
++        }
++    }
+ }
+diff --git a/grammar/tests/data/parser/valid/builtin_math.but b/grammar/tests/data/parser/valid/builtin_math.but
+index 4bf4392..9f1f28a 100644
+--- a/grammar/tests/data/parser/valid/builtin_math.but
++++ b/grammar/tests/data/parser/valid/builtin_math.but
+@@ -14,7 +14,10 @@ var hi: bit = max(x, y);
+ // Пример 3: abs одного значения
+ var magnitude: bit = abs(x);
+ 
+-// Пример 4: вложенные вызовы
++// Пример 4: clamp — ограничение значения в диапазон
++var bounded: bit = clamp(x, y, x);
++
++// Пример 5: вложенные вызовы
+ var nested: bit = min(max(x, y), abs(x));
+ 
+ start S;
+diff --git a/grammar/tests/data/parser/valid/ternary_operator.but b/grammar/tests/data/parser/valid/ternary_operator.but
+index 12c1590..5c2a5b6 100644
+--- a/grammar/tests/data/parser/valid/ternary_operator.but
++++ b/grammar/tests/data/parser/valid/ternary_operator.but
+@@ -1,26 +1,24 @@
+-// Примеры корректного использования тернарного оператора в языке BuT.
++// Примеры корректного использования тернарного оператора `? :` в языке BuT.
+ //
+-// ВАЖНО: Синтаксис `? :` в текущей грамматике BuT не поддерживается
+-// через парсер — узел Expression::ConditionalOperator создаётся напрямую
+-// в AST (например, через formula-блоки или внутренние преобразования).
+-//
+-// Данный файл демонстрирует семантически корректный BuT-код рядом
+-// с псевдокодом тернарного оператора для документирования намерения.
++// Оператор является правоассоциативным и имеет приоритет ниже присваивания.
++// Синтаксис: cond ? expr_then : expr_else
+ 
+-// Пример 1: переменная с булевым условием
+-// Эквивалент: var result = flag ? 1 : 0;
++// Пример 1: простой тернарный оператор
+ var flag: bit = true;
+-var result: bit = flag;      // пока — прямое присваивание
++var result: bit = flag ? true : false;
+ 
+-// Пример 2: переменная с числовым сравнением как условием
+-// Эквивалент: var y = x > 5 ? x : 5;
+-var x: [bit;8] = 10;
+-var y: [bit;8] = x;          // пока — прямое присваивание
++// Пример 2: тернарный оператор с выражением-условием
++var x: bit = true;
++var y: bit = x ? false : true;
+ 
+-// Пример 3: вложенный тернарный оператор
+-// Эквивалент: var z = a ? b ? 1 : 2 : 3;
++// Пример 3: правоассоциативная вложенность (nested right)
+ var a: bit = true;
+ var b: bit = false;
+-var z: bit = a;              // пока — прямое присваивание
++var z: bit = a ? b ? true : false : false;
++
++// Пример 4: тернарный оператор в правой части присваивания
++var c: bit = true;
++var d: bit = false;
++var e: bit = c ? d : c;
+ 
+ start S;
+diff --git a/grammar/tests/data/semantic/valid/builtin_math.but b/grammar/tests/data/semantic/valid/builtin_math.but
+index 79484a4..e3378c9 100644
+--- a/grammar/tests/data/semantic/valid/builtin_math.but
++++ b/grammar/tests/data/semantic/valid/builtin_math.but
+@@ -1,6 +1,6 @@
+ // Примеры использования встроенных математических функций языка BuT.
+ //
+-// Встроенные функции min, max, abs доступны в любом контексте программы
++// Встроенные функции min, max, abs, clamp доступны в любом контексте программы
+ // и работают с числовыми типами: bit, float, [bit;N].
+ 
+ // Переменные для демонстрации
+@@ -19,13 +19,18 @@ var max_result: bit = max(a, b);
+ // abs(x) → |x|
+ var abs_result: bit = abs(a);
+ 
++// Вызов clamp: ограничение значения в диапазон [lo, hi]
++// clamp(x, lo, hi) → x если lo ≤ x ≤ hi; иначе lo или hi
++var clamp_result: bit = clamp(a, b, a);
++
+ // Конечный автомат с использованием встроенных функций
+ start Idle {
+     always {
+-        // Применяем min/max для ограничения значений
++        // Применяем min/max/abs/clamp для обработки числовых значений
+         var lo: bit = min(a, b);
+         var hi: bit = max(a, b);
+         var magnitude: bit = abs(a);
++        var bounded: bit = clamp(a, b, a);
+         debug("вычисление завершено");
+     }
+     ref Idle: a = 0;
+diff --git a/grammar/tests/lsp_tests.rs b/grammar/tests/lsp_tests.rs
+index b5b4c12..25daf4f 100644
+--- a/grammar/tests/lsp_tests.rs
++++ b/grammar/tests/lsp_tests.rs
+@@ -448,6 +448,33 @@ start Main = Robot;
+         }
+     }
+ 
++    #[test]
++    fn hover_model() {
++        const SRC: &str = r#"model Robot {
++    start Idle;
++}
++start Main = Robot;
++        "#;
++        let h = hover_info(SRC, Position::new(3, 16));
++        assert!(
++            h.is_some(),
++            "hover должен найти модель реализации состояния"
++        );
++        let h = h.unwrap();
++        if let lsp_types::HoverContents::Markup(mc) = h.contents {
++            assert!(
++                mc.value.contains("Robot"),
++                "hover должен содержать имя модели: {}",
++                mc.value
++            );
++            assert!(
++                mc.value.contains("model"),
++                "hover должен указывать 'model': {}",
++                mc.value
++            );
++        }
++    }
++
+     // ── Тесты goto_declaration ────────────────────────────────────────────────
+ 
+     /// Курсор на объявлении переменной → возвращает тот же диапазон (самоссылка).
+@@ -458,7 +485,10 @@ start Main = Robot;
+         let src = "var counter: bit = false;";
+         // Позиция 4 — символ 'c' в "counter"
+         let range = goto_declaration(src, Position::new(0, 4));
+-        assert!(range.is_some(), "goto_declaration на объявлении переменной должен вернуть диапазон");
++        assert!(
++            range.is_some(),
++            "goto_declaration на объявлении переменной должен вернуть диапазон"
++        );
+         let range = range.unwrap();
+         assert_eq!(range.start.line, 0, "декларация переменной на строке 0");
+     }
+@@ -469,7 +499,10 @@ start Main = Robot;
+         let src = "extern fn send(data: bit); start S;";
+         // Позиция 10 — символ 's' в "send"
+         let range = goto_declaration(src, Position::new(0, 10));
+-        assert!(range.is_some(), "goto_declaration на объявлении функции должен вернуть диапазон");
++        assert!(
++            range.is_some(),
++            "goto_declaration на объявлении функции должен вернуть диапазон"
++        );
+         let range = range.unwrap();
+         assert_eq!(range.start.line, 0, "декларация функции на строке 0");
+     }
+@@ -480,7 +513,10 @@ start Main = Robot;
+         let src = "start Idle; state Moving;";
+         // Позиция 6 — символ 'I' в "Idle"
+         let range = goto_declaration(src, Position::new(0, 6));
+-        assert!(range.is_some(), "goto_declaration на объявлении состояния должен вернуть диапазон");
++        assert!(
++            range.is_some(),
++            "goto_declaration на объявлении состояния должен вернуть диапазон"
++        );
+         let range = range.unwrap();
+         assert_eq!(range.start.line, 0, "декларация состояния на строке 0");
+     }
+diff --git a/grammar/tests/parser_tests.rs b/grammar/tests/parser_tests.rs
+index 6394686..7a250bc 100644
+--- a/grammar/tests/parser_tests.rs
++++ b/grammar/tests/parser_tests.rs
+@@ -1601,4 +1601,89 @@ fn expression_loc_method() {
+         Expression::Assign(loc.clone(), inner.clone(), inner.clone()).loc(),
+         loc
+     );
++    assert_eq!(
++        Expression::ConditionalOperator(loc.clone(), inner.clone(), inner.clone(), inner.clone())
++            .loc(),
++        loc
++    );
++}
++
++// ─────────────────────────────── Тернарный оператор ─────────────────────────
++
++/// Простой тернарный оператор `flag ? true : false` разбирается без ошибок.
++#[test]
++fn ternary_simple_parses() {
++    let src = "var flag: bit = true; var r: bit = flag ? true : false; start S;";
++    must_parse(src);
++}
++
++/// Вложенный тернарный оператор (правоассоциативный) разбирается корректно.
++#[test]
++fn ternary_nested_right_associative() {
++    // a ? b ? 1 : 2 : 3  →  a ? (b ? 1 : 2) : 3
++    let src = "var a: bit = true; var b: bit = false; var z: bit = a ? b ? true : false : false; start S;";
++    must_parse(src);
++}
++
++/// Тернарный оператор с выражением в условии.
++#[test]
++fn ternary_condition_expression() {
++    let src = "var x: bit = true; var y: bit = x ? false : true; start S;";
++    must_parse(src);
++}
++
++/// Тернарный оператор в теле автомата (`always`-блок).
++#[test]
++fn ternary_in_always_block() {
++    let src = r#"
++var flag: bit = true;
++start Idle {
++    always {
++        var r: bit = flag ? true : false;
++    }
++    ref Idle: flag = 0;
++}
++"#;
++    must_parse(src);
++}
++
++/// Тернарный оператор в выражении внутри `always`-блока с присваиванием.
++#[test]
++fn ternary_in_assignment_expression() {
++    let src = r#"
++var a: bit = true;
++var b: bit = false;
++start S {
++    always {
++        a = b ? true : false;
++    }
++    ref S: a = 0;
++}
++"#;
++    must_parse(src);
++}
++
++/// Интеграционный тест: файл `ternary_operator.but` разбирается без ошибок.
++#[test]
++fn ternary_operator_file_parses() {
++    let path = Path::new("tests/data/parser/valid/ternary_operator.but");
++    let src = fs::read_to_string(path).expect("не удалось прочитать файл");
++    must_parse(&src);
++}
++
++/// Контр-пример: незакрытый тернарный оператор (без `else`) — ошибка парсера.
++#[test]
++fn ternary_missing_else_branch_is_error() {
++    // `flag ? true` без `: else` не является корректным тернарным выражением
++    let src = "var flag: bit = true; var r: bit = flag ? true; start S;";
++    let result = grammar::parse(src, 0);
++    assert!(result.is_err(), "ожидалась ошибка парсера для неполного тернарного оператора");
++}
++
++/// Контр-пример: тернарный оператор без условия — ошибка парсера.
++#[test]
++fn ternary_missing_condition_is_error() {
++    let src = "var r: bit = ? true : false; start S;";
++    let result = grammar::parse(src, 0);
++    assert!(result.is_err(), "ожидалась ошибка парсера для тернарного оператора без условия");
+ }

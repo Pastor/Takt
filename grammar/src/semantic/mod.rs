@@ -13,6 +13,7 @@ mod builtin;
 mod condition;
 pub(crate) mod docs;
 pub mod enum_node;
+pub mod struct_node;
 mod expression;
 mod function;
 mod import;
@@ -31,6 +32,7 @@ use crate::diagnostics::Location;
 use crate::parser::ast;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
 pub use crate::semantic::enum_node::EnumDefinitionNode;
+pub use crate::semantic::struct_node::StructDefinitionNode;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -70,6 +72,8 @@ pub struct ModelNode {
     pub conditions: HashMap<String, ConditionDefinitionNode>,
     /// Объявленные перечисления (Ce4).
     pub enums: HashMap<String, EnumDefinitionNode>,
+    /// Объявленные структурные типы (NI3).
+    pub structs: HashMap<String, StructDefinitionNode>,
     /// Состояния модели: имя → узел состояния.
     pub states: HashMap<String, StateNode>,
     /// Информация о реализации (зарезервировано).
@@ -246,6 +250,17 @@ impl ModelNode {
             return model.borrow().search_enum_variant(variant_name);
         }
         None
+    }
+
+    /// Ищет структурный тип по имени, включая родительские модели (NI3).
+    pub fn search_struct(&self, name: &str) -> Option<StructDefinitionNode> {
+        if let Some(s) = self.structs.get(name) {
+            Some(s.clone())
+        } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
+            model.borrow().search_struct(name)
+        } else {
+            None
+        }
     }
 
     /// Возвращает список всех именованных блоков с заданным именем.

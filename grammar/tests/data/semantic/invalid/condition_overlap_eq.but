@@ -1,0 +1,19 @@
+// Контр-пример: два перехода с одинаковым условием `level = 5`.
+//
+// NI4: структурно идентичные условия — гарантированное недетерминированное
+// поведение. Оба перехода будут доступны одновременно при level = 5.
+
+var level: [bit;8] = 0;
+
+start Idle {
+    ref StateA: level = 5;
+    ref StateB: level = 5;
+}
+
+state StateA {
+    ref Idle: level != 5;
+}
+
+state StateB {
+    ref Idle: level != 5;
+}

@@ -448,6 +448,33 @@ start Main = Robot;
         }
     }
 
+    #[test]
+    fn hover_model() {
+        const SRC: &str = r#"model Robot {
+    start Idle;
+}
+start Main = Robot;
+        "#;
+        let h = hover_info(SRC, Position::new(3, 16));
+        assert!(
+            h.is_some(),
+            "hover должен найти модель реализации состояния"
+        );
+        let h = h.unwrap();
+        if let lsp_types::HoverContents::Markup(mc) = h.contents {
+            assert!(
+                mc.value.contains("Robot"),
+                "hover должен содержать имя модели: {}",
+                mc.value
+            );
+            assert!(
+                mc.value.contains("model"),
+                "hover должен указывать 'model': {}",
+                mc.value
+            );
+        }
+    }
+
     // ── Тесты goto_declaration ────────────────────────────────────────────────
 
     /// Курсор на объявлении переменной → возвращает тот же диапазон (самоссылка).
@@ -458,7 +485,10 @@ start Main = Robot;
         let src = "var counter: bit = false;";
         // Позиция 4 — символ 'c' в "counter"
         let range = goto_declaration(src, Position::new(0, 4));
-        assert!(range.is_some(), "goto_declaration на объявлении переменной должен вернуть диапазон");
+        assert!(
+            range.is_some(),
+            "goto_declaration на объявлении переменной должен вернуть диапазон"
+        );
         let range = range.unwrap();
         assert_eq!(range.start.line, 0, "декларация переменной на строке 0");
     }
@@ -469,7 +499,10 @@ start Main = Robot;
         let src = "extern fn send(data: bit); start S;";
         // Позиция 10 — символ 's' в "send"
         let range = goto_declaration(src, Position::new(0, 10));
-        assert!(range.is_some(), "goto_declaration на объявлении функции должен вернуть диапазон");
+        assert!(
+            range.is_some(),
+            "goto_declaration на объявлении функции должен вернуть диапазон"
+        );
         let range = range.unwrap();
         assert_eq!(range.start.line, 0, "декларация функции на строке 0");
     }
@@ -480,7 +513,10 @@ start Main = Robot;
         let src = "start Idle; state Moving;";
         // Позиция 6 — символ 'I' в "Idle"
         let range = goto_declaration(src, Position::new(0, 6));
-        assert!(range.is_some(), "goto_declaration на объявлении состояния должен вернуть диапазон");
+        assert!(
+            range.is_some(),
+            "goto_declaration на объявлении состояния должен вернуть диапазон"
+        );
         let range = range.unwrap();
         assert_eq!(range.start.line, 0, "декларация состояния на строке 0");
     }

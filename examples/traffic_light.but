@@ -1,20 +1,28 @@
+/// Пример: Управление светофором
+
+/// байтовый тип
 type u8 = [bit;8];
-// Пример: Управление светофором
+
+/// Модель светофора
 model TrafficLight {
+    /// Время отображение нужного цвета
     var timer: u8 = 0;
 
+    /// Красный цвет
     start Red {
         enter { timer = 0; }
         always { timer = timer + 1; }
         ref Yellow: timer > 10;
     }
 
+    /// Желтый цвет
     state Yellow {
         enter { timer = 0; }
         always { timer = timer + 1; }
         ref Green: timer > 3;
     }
 
+    /// Зеленый
     state Green {
         enter { timer = 0; }
         always { timer = timer + 1; }

@@ -151,6 +151,8 @@ pub enum Token<'input> {
     Member,
     /// Двоеточие `:`.
     Colon,
+    /// Символ вопроса `?` (тернарный оператор).
+    Question,
     /// Символ `[`.
     OpenBracket,
     /// Символ `]`.
@@ -192,6 +194,8 @@ pub enum Token<'input> {
     Extern,
     /// Ключевое слово `enum`.
     Enum,
+    /// Ключевое слово `struct`.
+    Struct,
 }
 
 impl<'input> fmt::Display for Token<'input> {
@@ -236,6 +240,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::MoreEqual => write!(f, ">="),
             Token::Member => write!(f, "."),
             Token::Colon => write!(f, ":"),
+            Token::Question => write!(f, "?"),
             Token::OpenBracket => write!(f, "["),
             Token::CloseBracket => write!(f, "]"),
             Token::ShiftRight => write!(f, ">>"),
@@ -271,6 +276,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Next => write!(f, "next"),
             Token::Extern => write!(f, "extern"),
             Token::Enum => write!(f, "enum"),
+            Token::Struct => write!(f, "struct"),
         }
     }
 }
@@ -409,6 +415,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "next"     => Token::Next,
     "extern"   => Token::Extern,
     "enum"     => Token::Enum,
+    "struct"   => Token::Struct,
 };
 
 impl<'input> Lexer<'input> {
@@ -488,9 +495,29 @@ impl<'input> Lexer<'input> {
                 // Удаляем разделители `_` перед разбором hex-числа
                 let hex_raw = &self.input[start + 2..=end];
                 let hex: String = hex_raw.chars().filter(|&c| c != '_').collect();
+                let hex_val = i64::from_str_radix(&hex, 16).unwrap();
+
+                // Проверяем, является ли это адресным литералом `0xNNNN:bit`
+                // (токен AddressLiteral, чтобы избежать LR(1)-конфликта с тернарным `?:`)
+                if matches!(self.chars.peek(), Some((_, ':'))) {
+                    if matches!(self.chars.peek_nth(1), Some((_, '0'..='9'))) {
+                        self.chars.next(); // потребляем ':'
+                        let mut bit_end = end + 1;
+                        while let Some((i, ch)) = self.chars.peek() {
+                            if ch.is_ascii_digit() {
+                                bit_end = *i;
+                                self.chars.next();
+                            } else {
+                                break;
+                            }
+                        }
+                        return Ok((start, Token::AddressLiteral(&self.input[start..=bit_end]), bit_end + 1));
+                    }
+                }
+
                 return Ok((
                     start,
-                    Token::Number(i64::from_str_radix(&hex, 16).unwrap()),
+                    Token::Number(hex_val),
                     end + 1,
                 ));
             }
@@ -894,6 +921,7 @@ impl<'input> Lexer<'input> {
                 Some((i, '[')) => return Some((i, Token::OpenBracket, i + 1)),
                 Some((i, ']')) => return Some((i, Token::CloseBracket, i + 1)),
                 Some((i, ':')) => return Some((i, Token::Colon, i + 1)),
+                Some((i, '?')) => return Some((i, Token::Question, i + 1)),
                 Some((i, '~')) => return Some((i, Token::BitwiseNot, i + 1)),
                 // Пробельные символы игнорируются
                 Some((_, ch)) if ch.is_whitespace() => (),

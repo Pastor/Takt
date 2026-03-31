@@ -736,6 +736,12 @@ fn build_file(
     construct_model(&ast, None, &[]).map(|m| m.take())
 }
 
+/// Строит семантическую модель из исходного кода BuT.
+fn build_from_src(src: &str) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
+    let (ast, _) = parse(src, 0).expect("ошибка разбора исходного кода");
+    construct_model(&ast, None, &[]).map(|m| m.take())
+}
+
 /// Разбирает BuT-файл и ожидает семантическую ошибку.
 fn build_file_err(path: &str) -> grammar::diagnostics::Diagnostic {
     let src = std::fs::read_to_string(path)
@@ -3773,3 +3779,227 @@ fn ce4_enum_declared_inside_model_local_to_it() {
         "enum Status не должен быть виден в корневой модели напрямую"
     );
 }
+
+// ─── Тесты NI3: Структурные типы ─────────────────────────────────────────────
+
+/// NI3: Объявление структуры добавляет её в `model.structs`.
+#[test]
+fn test_struct_registers_in_model() {
+    let src = r#"
+struct Point { x: [bit;16], y: [bit;16] }
+start S;
+"#;
+    let node = build_from_src(src).expect("должен разобраться без ошибок");
+    assert!(
+        node.structs.contains_key("Point"),
+        "struct Point должен быть в model.structs, есть: {:?}",
+        node.structs.keys().collect::<Vec<_>>()
+    );
+}
+
+/// NI3: Поля структуры хранят корректные типы.
+#[test]
+fn test_struct_fields_have_correct_types() {
+    use grammar::semantic::type_node::TypeNode;
+    let src = r#"
+struct Vec2 { x: [bit;16], y: [bit;16] }
+start S;
+"#;
+    let node = build_from_src(src).expect("должен разобраться без ошибок");
+    let s = node.structs.get("Vec2").expect("Vec2 должен быть в structs");
+    assert_eq!(s.fields.len(), 2);
+    assert_eq!(s.fields[0].0, "x");
+    assert_eq!(s.fields[0].1, TypeNode::Array(16, Box::new(TypeNode::Bit)));
+    assert_eq!(s.fields[1].0, "y");
+    assert_eq!(s.fields[1].1, TypeNode::Array(16, Box::new(TypeNode::Bit)));
+}
+
+/// NI3: Переменная структурного типа имеет TypeNode::Struct.
+#[test]
+fn test_struct_variable_type() {
+    use grammar::semantic::type_node::TypeNode;
+    let src = r#"
+struct Flags { active: bit, ready: bit }
+var ctrl: Flags = 0;
+start S;
+"#;
+    let node = build_from_src(src).expect("должен разобраться без ошибок");
+    let var_node = node.variables.get("ctrl").expect("ctrl должен быть в переменных");
+    assert_eq!(
+        var_node.ty(),
+        &TypeNode::Struct("Flags".to_string()),
+        "тип переменной ctrl должен быть TypeNode::Struct"
+    );
+}
+
+/// NI3: Структура регистрируется также в таблице псевдонимов типов.
+#[test]
+fn test_struct_in_types_map() {
+    use grammar::semantic::type_node::TypeNode;
+    let src = r#"
+struct Config { value: [bit;8] }
+start S;
+"#;
+    let node = build_from_src(src).expect("должен разобраться без ошибок");
+    assert!(
+        node.types.contains_key("Config"),
+        "Config должен быть в types"
+    );
+    assert_eq!(
+        node.types.get("Config"),
+        Some(&TypeNode::Struct("Config".to_string()))
+    );
+}
+
+/// NI3: `search_struct` находит структуру в текущем контексте.
+#[test]
+fn test_search_struct() {
+    let src = r#"
+struct MyStruct { field: bit }
+start S;
+"#;
+    let node = build_from_src(src).expect("должен разобраться без ошибок");
+    assert!(
+        node.search_struct("MyStruct").is_some(),
+        "search_struct должен найти MyStruct"
+    );
+    assert!(
+        node.search_struct("Unknown").is_none(),
+        "search_struct не должен находить несуществующую структуру"
+    );
+}
+
+/// NI3: Интеграционный тест — файл `struct_types.but` разбирается семантически.
+#[test]
+fn test_struct_types_file_semantic() {
+    let node = build_file("tests/data/semantic/valid/struct_types.but")
+        .expect("struct_types.but должен разбираться без ошибок");
+    assert!(
+        node.structs.contains_key("Point"),
+        "struct Point должен быть в semantic модели"
+    );
+    assert!(
+        node.structs.contains_key("Flags"),
+        "struct Flags должен быть в semantic модели"
+    );
+}
+
+// ─── Тесты NI4: Анализ перекрытия условий переходов ──────────────────────────
+
+/// NI4: Одинаковые условия `level = 5` на два разных перехода — предупреждение NI4.
+#[test]
+fn test_ni4_duplicate_condition_warns() {
+    use grammar::diagnostics::Level;
+    let src = std::fs::read_to_string(
+        "tests/data/semantic/invalid/condition_overlap_eq.but",
+    )
+    .expect("файл condition_overlap_eq.but должен существовать");
+    let (ast, _) = grammar::parse(&src, 0).unwrap();
+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+    let ni4_warnings: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.message.contains("NI4"))
+        .collect();
+    assert!(
+        !ni4_warnings.is_empty(),
+        "ожидалось предупреждение NI4 для одинаковых условий, получено: {:?}",
+        warnings
+    );
+    assert_eq!(ni4_warnings[0].level, Level::Warning);
+}
+
+/// NI4: Перекрывающиеся интервальные условия `level < 10` и `level < 20` — предупреждение NI4.
+#[test]
+fn test_ni4_interval_overlap_warns() {
+    let src = std::fs::read_to_string(
+        "tests/data/semantic/invalid/condition_overlap_interval.but",
+    )
+    .expect("файл condition_overlap_interval.but должен существовать");
+    let (ast, _) = grammar::parse(&src, 0).unwrap();
+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+    let ni4_warnings: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.message.contains("NI4"))
+        .collect();
+    assert!(
+        !ni4_warnings.is_empty(),
+        "ожидалось предупреждение NI4 для перекрывающихся условий level<10 и level<20, получено: {:?}",
+        warnings
+    );
+}
+
+/// NI4: Непересекающиеся условия `level < 10` и `level > 20` — предупреждений NI4 нет.
+#[test]
+fn test_ni4_non_overlapping_no_warn() {
+    let src = std::fs::read_to_string(
+        "tests/data/semantic/valid/no_condition_overlap.but",
+    )
+    .expect("файл no_condition_overlap.but должен существовать");
+    let (ast, _) = grammar::parse(&src, 0).unwrap();
+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+    let ni4_warnings: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.message.contains("NI4"))
+        .collect();
+    assert!(
+        ni4_warnings.is_empty(),
+        "непересекающиеся условия level<10 и level>20 не должны давать предупреждений NI4: {:?}",
+        ni4_warnings
+    );
+}
+
+/// NI4: Условия `x = 3` и `x < 10` перекрываются (3 < 10) — предупреждение NI4.
+#[test]
+fn test_ni4_eq_lt_overlap_warns() {
+    let src = r#"
+var x: [bit;8] = 0;
+start S {
+    ref A: x = 3;
+    ref B: x < 10;
+}
+state A { ref S: x != 3; }
+state B { ref S: x >= 10; }
+"#;
+    let (ast, _) = grammar::parse(src, 0).unwrap();
+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+    let ni4_warnings: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.message.contains("NI4"))
+        .collect();
+    assert!(
+        !ni4_warnings.is_empty(),
+        "x=3 и x<10 перекрываются (3 < 10) — ожидалось NI4, получено: {:?}",
+        warnings
+    );
+}
+
+/// NI4: Условия `x = 15` и `x < 10` не перекрываются (15 ≥ 10) — предупреждений NI4 нет.
+#[test]
+fn test_ni4_eq_lt_no_overlap_no_warn() {
+    let src = r#"
+var x: [bit;8] = 0;
+start S {
+    ref A: x = 15;
+    ref B: x < 10;
+}
+state A { ref S: x != 15; }
+state B { ref S: x >= 10; }
+"#;
+    let (ast, _) = grammar::parse(src, 0).unwrap();
+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+    let ni4_warnings: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.message.contains("NI4"))
+        .collect();
+    assert!(
+        ni4_warnings.is_empty(),
+        "x=15 и x<10 не перекрываются — не должно быть NI4, получено: {:?}",
+        ni4_warnings
+    );
+}
+

@@ -1,6 +1,6 @@
 // Примеры использования встроенных математических функций языка BuT.
 //
-// Встроенные функции min, max, abs доступны в любом контексте программы
+// Встроенные функции min, max, abs, clamp доступны в любом контексте программы
 // и работают с числовыми типами: bit, float, [bit;N].
 
 // Переменные для демонстрации
@@ -19,13 +19,18 @@ var max_result: bit = max(a, b);
 // abs(x) → |x|
 var abs_result: bit = abs(a);
 
+// Вызов clamp: ограничение значения в диапазон [lo, hi]
+// clamp(x, lo, hi) → x если lo ≤ x ≤ hi; иначе lo или hi
+var clamp_result: bit = clamp(a, b, a);
+
 // Конечный автомат с использованием встроенных функций
 start Idle {
     always {
-        // Применяем min/max для ограничения значений
+        // Применяем min/max/abs/clamp для обработки числовых значений
         var lo: bit = min(a, b);
         var hi: bit = max(a, b);
         var magnitude: bit = abs(a);
+        var bounded: bit = clamp(a, b, a);
         debug("вычисление завершено");
     }
     ref Idle: a = 0;

@@ -13,6 +13,7 @@
 //! | `min`   | `a: BuiltinNumeric, b: BuiltinNumeric` | `BuiltinNumeric`  | Минимум из двух числовых значений     |
 //! | `max`   | `a: BuiltinNumeric, b: BuiltinNumeric` | `BuiltinNumeric`  | Максимум из двух числовых значений    |
 //! | `abs`   | `x: BuiltinNumeric`                    | `BuiltinNumeric`  | Абсолютное значение числа             |
+//! | `clamp` | `x, lo, hi: BuiltinNumeric`            | `BuiltinNumeric`  | Ограничение значения в диапазон       |
 
 use crate::diagnostics::Diagnostic;
 use crate::semantic::FunctionDefinitionNode;
@@ -29,6 +30,7 @@ const BUILTIN_FUNCTIONS: phf::Map<&'static str, FunctionDefinitionNode> = phf_ma
     "min" => FunctionDefinitionNode::Builtin("min", &[("a", TypeNode::BuiltinNumeric), ("b", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
     "max" => FunctionDefinitionNode::Builtin("max", &[("a", TypeNode::BuiltinNumeric), ("b", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
     "abs" => FunctionDefinitionNode::Builtin("abs", &[("x", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
+    "clamp" => FunctionDefinitionNode::Builtin("clamp", &[("x", TypeNode::BuiltinNumeric), ("lo", TypeNode::BuiltinNumeric), ("hi", TypeNode::BuiltinNumeric)], TypeNode::BuiltinNumeric),
 };
 
 /// Возвращает [`FunctionDefinitionNode`] встроенной функции по имени.
@@ -244,12 +246,49 @@ mod tests {
     /// Все встроенные математические функции доступны через `builtin_function`.
     #[test]
     fn all_math_builtins_registered() {
-        for name in &["min", "max", "abs"] {
+        for name in &["min", "max", "abs", "clamp"] {
             assert!(
                 builtin_function(name).is_ok(),
                 "Встроенная функция '{}' должна быть зарегистрирована",
                 name
             );
+        }
+    }
+
+    // ── Тесты clamp ───────────────────────────────────────────────────────────
+
+    /// `builtin_function("clamp")` возвращает корректный узел с тремя параметрами.
+    ///
+    /// # Пример (BuT):
+    /// ```but
+    /// var r: bit = clamp(x, lo, hi);   // ограничение x в [lo, hi]
+    /// ```
+    #[test]
+    fn builtin_clamp_exists() {
+        let func = builtin_function("clamp").unwrap();
+        assert!(
+            matches!(
+                func,
+                FunctionDefinitionNode::Builtin("clamp", _, TypeNode::BuiltinNumeric)
+            ),
+            "clamp должна быть Builtin с возвратом BuiltinNumeric"
+        );
+    }
+
+    /// Параметры `clamp`: три параметра `x`, `lo`, `hi` типа `BuiltinNumeric`.
+    #[test]
+    fn builtin_clamp_has_three_params() {
+        if let FunctionDefinitionNode::Builtin(_, params, ret) = builtin_function("clamp").unwrap() {
+            assert_eq!(params.len(), 3, "clamp должна принимать 3 параметра");
+            assert_eq!(params[0].0, "x");
+            assert_eq!(params[1].0, "lo");
+            assert_eq!(params[2].0, "hi");
+            for (_, ty) in *params {
+                assert_eq!(*ty, TypeNode::BuiltinNumeric);
+            }
+            assert_eq!(*ret, TypeNode::BuiltinNumeric);
+        } else {
+            panic!("ожидался FunctionNode::Builtin");
         }
     }
 }

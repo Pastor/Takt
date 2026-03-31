@@ -85,6 +85,8 @@ pub(crate) fn construct_type(
         // Type::Enum используется только в парсере как узел грамматики;
         // в качестве типа переменной не поддерживается на уровне семантики.
         Type::Enum(name) => Ok(TypeNode::Enum(name.clone())),
+        // Type::Struct — ссылка на объявленный структурный тип.
+        Type::Struct(name) => Ok(TypeNode::Struct(name.clone())),
     }
 }
 
@@ -379,6 +381,7 @@ mod tests {
 /// - [`Rational`](TypeNode::Rational) — вещественное число (`float`).
 /// - [`Array`](TypeNode::Array) — массив фиксированного размера `(N, элемент)`.
 /// - [`Enum`](TypeNode::Enum) — перечисление (Ce4).
+/// - [`Struct`](TypeNode::Struct) — структурный тип (NI3).
 /// - [`Unsupported`](TypeNode::Unsupported) — неподдерживаемый тип (например, функциональный).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum TypeNode {
@@ -415,4 +418,8 @@ pub enum TypeNode {
     /// Используется для параметров и возвращаемых значений математических
     /// встроенных функций (`min`, `max`, `abs`).
     BuiltinNumeric,
+    /// Структурный тип (NI3): именованная структура с полями.
+    ///
+    /// Хранит имя структуры.
+    Struct(String),
 }

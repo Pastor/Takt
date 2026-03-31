@@ -1,0 +1,19 @@
+// Контр-пример: два перехода с перекрывающимися интервальными условиями.
+//
+// NI4: условия `level < 10` и `level < 20` перекрываются — при значении
+// level = 5 выполнятся оба, что создаёт недетерминированность.
+
+var level: [bit;8] = 0;
+
+start Idle {
+    ref LowState:  level < 10;
+    ref MidState:  level < 20;
+}
+
+state LowState {
+    ref Idle: level >= 10;
+}
+
+state MidState {
+    ref Idle: level >= 20;
+}

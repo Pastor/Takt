@@ -160,6 +160,8 @@ pub enum Type {
     },
     /// Перечисление типов.
     Enum(String),
+    /// Структурный тип (ссылка по имени).
+    Struct(String),
     /// Функциональный тип `(параметры) -> возврат`.
     Function {
         /// Список входных параметров.
@@ -254,6 +256,8 @@ pub enum ModelElement {
     StraySemicolon(Location),
     /// Перечисление.
     Enum(Box<EnumDefine>),
+    /// Структурный тип.
+    Struct(Box<StructDefine>),
 }
 
 /// Вид состояния автомата.
@@ -351,6 +355,32 @@ pub struct EnumDefine {
 }
 
 impl Eq for EnumDefine {}
+
+/// Определение структурного типа: `struct Имя { поле: Тип, ... }`.
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct StructDefine {
+    /// Местоположение в исходном коде.
+    pub loc: Location,
+    /// Имя структуры.
+    pub name: Option<Identifier>,
+    /// Поля структуры.
+    pub fields: Vec<StructField>,
+}
+
+impl Eq for StructDefine {}
+
+/// Поле структуры: `имя: Тип`.
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct StructField {
+    /// Местоположение поля в исходном коде.
+    pub loc: Location,
+    /// Имя поля.
+    pub name: Identifier,
+    /// Тип поля.
+    pub ty: Type,
+}
 
 /// Определение псевдонима типа: `type Имя = Тип`.
 #[derive(Debug, PartialEq, Eq, Clone)]

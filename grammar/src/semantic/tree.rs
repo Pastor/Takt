@@ -469,6 +469,46 @@ fn construct_model_stage0(
                     .type_locs
                     .insert(enum_name.clone(), enum_loc);
             }
+        } else if let ModelElement::Struct(s) = element {
+            // NI3: Обработка структурных типов.
+            let struct_name = s
+                .name
+                .as_ref()
+                .map(|id| id.name.clone())
+                .unwrap_or_default();
+            let struct_loc = s.name.as_ref().map(|id| id.loc).unwrap_or(s.loc);
+
+            // Разрешаем типы полей в контексте текущей модели.
+            let mut field_pairs: Vec<(String, TypeNode)> = Vec::new();
+            for field in &s.fields {
+                let field_ty =
+                    crate::semantic::type_node::construct_type(Some(field.ty.clone()), model_node.clone())
+                        .unwrap_or(TypeNode::Unsupported);
+                field_pairs.push((field.name.name.clone(), field_ty));
+            }
+
+            let mut struct_node = crate::semantic::StructDefinitionNode {
+                name: struct_name.clone(),
+                fields: field_pairs,
+                loc: struct_loc,
+            };
+            struct_node.loc = struct_loc;
+
+            model_node
+                .borrow_mut()
+                .structs
+                .insert(struct_name.clone(), struct_node);
+            // Регистрируем структуру в таблице типов для разрешения `var p: Point = ...;`
+            if !struct_name.is_empty() {
+                model_node
+                    .borrow_mut()
+                    .types
+                    .insert(struct_name.clone(), TypeNode::Struct(struct_name.clone()));
+                model_node
+                    .borrow_mut()
+                    .type_locs
+                    .insert(struct_name.clone(), struct_loc);
+            }
         }
     }
     model_node.borrow_mut().models = models;
