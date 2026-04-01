@@ -387,6 +387,9 @@ impl Generator {
             cond.push_str("main->state == ");
             cond.push_str(&name);
         }
+        if cond.is_empty() {
+            cond.push_str("false");
+        }
         printer
             .up()
             .ident("return ")
