@@ -860,8 +860,8 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
             hover_text = text;
         }
         // Ищем вариант перечисления
-        else if let Some((enum_name, value)) = borrowed.search_enum_variant(&word) {
-            hover_text = format!("```but\n{}::{} = {}\n```", enum_name, word, value);
+        else if let Some((enum_node, value)) = borrowed.search_enum_variant(&word) {
+            hover_text = format!("```but\n{}::{} = {}\n```", &enum_node.name, word, value);
         }
         // Ищем модель
         else if borrowed.search_model(&word).is_some() {

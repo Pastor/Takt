@@ -3,11 +3,13 @@
 //! Этот модуль определяет структуры данных, представляющие результат
 //! семантического анализа программы BuT:
 //!
-//! - [`ContextNode`] — область видимости с импортами, моделями, переменными и т.д.
-//! - [`ModelNode`] — семантическая модель (конечный автомат или компоновка).
+//! - [`ModelNode`] — семантическая модель: конечный автомат или компоновка автоматов;
+//!   содержит словари состояний, переменных, условий, функций и вложенных моделей.
 //! - [`StateNode`] — состояние автомата (неразрешённое, простое или с реализацией).
-//! - [`ReferenceNode`] — ссылка на другой узел с условием перехода.
-//! - [`ConditionNode`] — условие перехода между состояниями.
+//! - [`ReferenceNode`] — ссылка-переход между состояниями с опциональным условием.
+//! - [`ConditionNode`] — семантическое представление условия перехода.
+//! - [`VariableNode`] — переменная, порт или константа с разрешённым типом.
+//! - [`Implement`] — реализация модели: ссылка, последовательная или параллельная компоновка.
 
 mod builtin;
 mod condition;
@@ -253,13 +255,17 @@ impl ModelNode {
     /// let mut model = ModelNode::default();
     /// let e = EnumDefinitionNode::new("Direction", &[("North", None), ("South", Some(180))]);
     /// model.enums.insert("Direction".to_string(), e);
-    /// assert_eq!(model.search_enum_variant("North"), Some(("Direction".to_string(), 0)));
+    /// let result = model.search_enum_variant("North");
+    /// assert!(result.is_some());
+    /// let (enum_node, value) = result.unwrap();
+    /// assert_eq!(enum_node.name, "Direction");
+    /// assert_eq!(value, 0);
     /// assert_eq!(model.search_enum_variant("East"), None);
     /// ```
-    pub fn search_enum_variant(&self, variant_name: &str) -> Option<(String, i64)> {
-        for (enum_name, enum_node) in &self.enums {
+    pub fn search_enum_variant(&self, variant_name: &str) -> Option<(EnumDefinitionNode, i64)> {
+        for (_, enum_node) in &self.enums {
             if let Some(val) = enum_node.find_variant(variant_name) {
-                return Some((enum_name.clone(), val));
+                return Some((enum_node.clone(), val));
             }
         }
         if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
@@ -826,6 +832,7 @@ impl PartialEq for ConditionDefinitionNode {
 impl Eq for ConditionDefinitionNode {}
 
 impl ConditionDefinitionNode {
+    /// Возвращает имя условия.
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -1104,7 +1111,7 @@ pub enum ConditionNode {
     Model(Rc<RefCell<ModelNode>>),
     /// Ссылка на состояние.
     State(Rc<RefCell<StateNode>>),
-    EnumVariant(String, i64),
+    EnumVariant(Rc<RefCell<EnumDefinitionNode>>, String, i64),
 }
 
 impl PartialEq for ConditionNode {

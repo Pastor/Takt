@@ -1,13 +1,43 @@
+//! Генератор C-кода из семантического дерева BuT.
+//!
+//! Модуль реализует трансляцию семантического дерева [`ModelNode`] в пару файлов:
+//! заголовочный (`.h`) и исходный (`.c`).
+//!
+//! ## Алгоритм трансляции
+//!
+//! 1. **Заголовок** (`generate_header`): генерирует `#ifndef`-защиту, структуру
+//!    модели (рекурсивно для вложенных моделей) и прототипы функций `_init`, `_tick`, `_reset`.
+//! 2. **Источник** (`generate_source`): генерирует `#include` и раскрывает
+//!    константы, порты и перечисления через `#define`.
+//! 3. **Вспомогательные функции**: `unroll_model`, `unroll_variable`, `unroll_cond`,
+//!    `unroll_expression` рекурсивно преобразуют семантические узлы в C-выражения.
+//!
+//! ## Именование
+//!
+//! - Структура модели: `<PascalCase>` (например, `MainRobot`).
+//! - Поля структуры: snake_case (например, `main->robot.idle`).
+//! - Порты: `PORT_<UPPER_SNAKE>` (например, `PORT_MAIN_SENSORS_1`).
+//! - Константы: `CONST_<UPPER_SNAKE>`.
+//! - Условия: `COND_<UPPER_SNAKE>`.
+//! - Перечисления: `ENUM_<UPPER_SNAKE>_<VARIANT>`.
+//!
+//! ## Интерфейс портов
+//!
+//! Сгенерированный код обращается к портам через указатели на функции
+//! `write_bit`, `read_bit`, `write_float`, `read_float`, которые должны
+//! быть предоставлены платформенным слоем.
+
 #![allow(clippy::explicit_auto_deref)]
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
+use crate::parser::ast::Member;
 use crate::semantic::naming::{normalize_lowercase_snakecase, normalize_model_name};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
-    ConditionDefinitionNode, EnumDefinitionNode, ExpressionNode, Implement, ModelNode, StateNode,
-    VariableNode,
+    ConditionDefinitionNode, ConditionNode, EnumDefinitionNode, ExpressionNode, Implement,
+    ModelNode, StateNode, VariableNode,
 };
 use itertools::Itertools;
 use std::fs;
@@ -18,13 +48,17 @@ const FUNCTION_PORT_READ_BIT: &str = "read_bit";
 const FUNCTION_PORT_WRITE_FLOAT: &str = "write_float";
 const FUNCTION_PORT_READ_FLOAT: &str = "read_float";
 
+/// Генератор C-кода для модели BuT.
+///
+/// Реализует трейт [`Generator`](crate::generator::Generator): принимает
+/// корневой [`ModelNode`] и записывает пару файлов `.h`/`.c` по заданному пути.
 pub struct Generator {}
 
 impl AsGenerator for Generator {
     fn generate(&self, model: &ModelNode, output_path: &str) -> Result<(), Diagnostic> {
         let header = self.generate_header(model)?;
         let source = self.generate_source(model)?;
-        let model_name = Self::determinate_model_name(model)?;
+        let model_name = Self::resolve_model_name(model)?;
         let filename = normalize_lowercase_snakecase(model_name);
         let _ = fs::create_dir(Path::new(output_path));
         fs::write(Path::new(output_path).join(filename.clone() + ".h"), header)
@@ -44,13 +78,13 @@ impl Generator {
             .and_then(|weak| weak.upgrade())
             .map(|rc| Self::get_upper_name(&rc.borrow()) + "_")
             .unwrap_or_default()
-            + &*normalize_lowercase_snakecase(Self::determinate_model_name(model).unwrap())
+            + &*normalize_lowercase_snakecase(Self::resolve_model_name(model).unwrap())
                 .to_uppercase()
     }
 
     #[inline]
     fn get_model_name_struct(model: &ModelNode) -> String {
-        normalize_model_name(Self::determinate_model_name(model).unwrap().as_str())
+        normalize_model_name(Self::resolve_model_name(model).unwrap().as_str())
     }
 
     fn get_typed_variable(typ: &TypeNode, name: Option<String>) -> Option<String> {
@@ -195,7 +229,7 @@ impl Generator {
         } else {
             printer
                 .print(" ")
-                .print(normalize_lowercase_snakecase(Self::determinate_model_name(model)?).as_str())
+                .print(normalize_lowercase_snakecase(Self::resolve_model_name(model)?).as_str())
                 .print(";");
         }
         printer.nl();
@@ -220,7 +254,7 @@ impl Generator {
                 VariableNode::Unresolved => {}
                 VariableNode::Simple { .. } => {}
                 VariableNode::Port { name, expr, .. } => {
-                    let name = Self::determinate_raw_name(upper_name.clone(), name)?;
+                    let name = Self::resolve_raw_name(upper_name.clone(), name)?;
 
                     let (address, bit) = if let ExpressionNode::Address(address, bit) = expr {
                         (address, bit)
@@ -234,7 +268,7 @@ impl Generator {
                     printer.nl();
                 }
                 VariableNode::Const { name, expr, .. } => {
-                    let name = Self::determinate_raw_name(upper_name.clone(), name)?;
+                    let name = Self::resolve_raw_name(upper_name.clone(), name)?;
                     printer.print("#define CONST_").print(&name).nl();
                 }
             }
@@ -251,9 +285,10 @@ impl Generator {
             .into_values()
             .sorted_by(|a, b| a.name().cmp(b.name()))
         {
+            //TODO: unroll_cond
             printer
                 .print("#define COND_")
-                .print(&Self::determinate_cond_name(upper_name.clone(), &cond)?)
+                .print(&Self::resolve_cond_name(upper_name.clone(), &cond)?)
                 .nl();
         }
         let enums = model.enums.clone();
@@ -261,8 +296,8 @@ impl Generator {
             printer
                 .print(format!("/* Enum  {}*/", en.name()).as_str())
                 .nl();
-            let prefix = "#define ENUM_".to_string()
-                + &*Self::determinate_enum_name(upper_name.clone(), &en)?;
+            let prefix =
+                "#define ENUM_".to_string() + &*Self::resolve_enum_name(upper_name.clone(), &en)?;
             for (name, value) in en.variants {
                 printer
                     .print(prefix.clone().as_str())
@@ -278,7 +313,7 @@ impl Generator {
     fn generate_source(&self, model: &ModelNode) -> Result<String, Diagnostic> {
         let mut source = String::new();
         let mut printer = Printer::new(4, &mut source);
-        let filename = normalize_lowercase_snakecase(Self::determinate_model_name(model)?);
+        let filename = normalize_lowercase_snakecase(Self::resolve_model_name(model)?);
         printer
             .print(format!("#include \"{}.h\" ", filename).as_str())
             .nl();
@@ -290,8 +325,8 @@ impl Generator {
     fn generate_header(&self, model: &ModelNode) -> Result<String, Diagnostic> {
         let mut header = String::new();
         let mut printer = Printer::new(4, &mut header);
-        let id = normalize_lowercase_snakecase(Self::determinate_model_name(model)?).to_uppercase()
-            + "__";
+        let id =
+            normalize_lowercase_snakecase(Self::resolve_model_name(model)?).to_uppercase() + "__";
         printer.print("#ifndef ").print(&id).nl();
         printer.print("#define ").print(&id).nl();
         printer.print("#include <stdint.h>").nl();
@@ -331,13 +366,13 @@ impl Generator {
             let access = if parent.upper.is_none() { "->" } else { "." };
             Ok(Self::unroll_model(&parent)?
                 + access
-                + &*normalize_lowercase_snakecase(Self::determinate_model_name(model)?))
+                + &*normalize_lowercase_snakecase(Self::resolve_model_name(model)?))
         } else {
             Ok("main".to_string())
         }
     }
 
-    fn unroll_variables(var: &VariableNode) -> Result<String, Diagnostic> {
+    fn unroll_variable(var: &VariableNode) -> Result<String, Diagnostic> {
         match var {
             VariableNode::Unresolved => Err("Unresolved variable can't unrolled".into()),
             VariableNode::Simple { upper, name, .. } => {
@@ -352,22 +387,104 @@ impl Generator {
                 let rc = upper.clone().and_then(|w| w.upgrade()).unwrap();
                 let model = rc.borrow();
                 let upper_name = Self::get_upper_name(&*model);
-                let name = Self::determinate_raw_name(upper_name.clone(), name.clone())?;
+                let name = Self::resolve_raw_name(upper_name.clone(), name.clone())?;
                 Ok("PORT_".to_string() + &name)
             }
             VariableNode::Const { upper, name, .. } => {
                 let rc = upper.clone().and_then(|w| w.upgrade()).unwrap();
                 let model = rc.borrow();
                 let upper_name = Self::get_upper_name(&*model);
-                let name = Self::determinate_raw_name(upper_name.clone(), name.clone())?;
+                let name = Self::resolve_raw_name(upper_name.clone(), name.clone())?;
                 Ok("CONST_".to_string() + &name)
             }
         }
     }
 
+    fn unroll_cond(cond: &ConditionNode) -> Result<String, Diagnostic> {
+        match cond {
+            ConditionNode::ArraySubscript(array, num) => {
+                Ok(Self::unroll_variable(&*array.borrow())? + "[" + num.to_string().as_str() + "]")
+            }
+            ConditionNode::Parenthesis(cond) => {
+                Ok("(".to_owned() + &*Self::unroll_cond(cond)? + ")")
+            }
+            ConditionNode::BitAccess(cond, m) => {
+                let bit = if let Member::Number(num) = m {
+                    *num
+                } else {
+                    0i64
+                };
+                let member = Self::unroll_cond(cond)?;
+                Ok(format!("(*main->read_bit)({}, {})", member, bit))
+            }
+            ConditionNode::Function(fun, args, _) => {
+                todo!("Unrolling not implemented {:?}", fun)
+            }
+            ConditionNode::Not(cond) => Ok("!".to_owned() + &*Self::unroll_cond(cond)?),
+            ConditionNode::Add(left, right) => {
+                Ok(Self::unroll_cond(left)? + " + " + &*Self::unroll_cond(right)?)
+            }
+            ConditionNode::Subtract(left, right) => {
+                Ok(Self::unroll_cond(left)? + " - " + &*Self::unroll_cond(right)?)
+            }
+            ConditionNode::And(left, right) => {
+                Ok(Self::unroll_cond(left)? + " && " + &*Self::unroll_cond(right)?)
+            }
+            ConditionNode::Or(left, right) => {
+                Ok(Self::unroll_cond(left)? + " || " + &*Self::unroll_cond(right)?)
+            }
+            ConditionNode::Less(left, right) => {
+                Ok(Self::unroll_cond(left)? + " < " + &*Self::unroll_cond(right)?)
+            }
+            ConditionNode::More(left, right) => {
+                Ok(Self::unroll_cond(left)? + " > " + &*Self::unroll_cond(right)?)
+            }
+            ConditionNode::LessEqual(left, right) => {
+                Ok(Self::unroll_cond(left)? + " <= " + &*Self::unroll_cond(right)?)
+            }
+            ConditionNode::MoreEqual(left, right) => {
+                Ok(Self::unroll_cond(left)? + " >= " + &*Self::unroll_cond(right)?)
+            }
+            ConditionNode::Equal(left, right) => {
+                Ok(Self::unroll_cond(left)? + " == " + &*Self::unroll_cond(right)?)
+            }
+            ConditionNode::NotEqual(left, right) => {
+                Ok(Self::unroll_cond(left)? + " != " + &*Self::unroll_cond(right)?)
+            }
+            ConditionNode::Number(n) => Ok(n.to_string()),
+            ConditionNode::Rational(n, _) => Ok(n.to_string()),
+            ConditionNode::String(n) => Ok(n.iter().join("").to_string()),
+            ConditionNode::Bool(n) => Ok(n.to_string()),
+            ConditionNode::Variable(var, _) => Self::unroll_variable(&*var.borrow()),
+            ConditionNode::Model(model) => Self::unroll_model(&*model.borrow()),
+            ConditionNode::State(state) => {
+                todo!("Not implement unrolling {:?}", state);
+            }
+            ConditionNode::EnumVariant(edn, name, n) => {
+                let edn = &*edn.borrow();
+                let upper_name = Self::get_upper_name(
+                    &*edn
+                        .upper
+                        .clone()
+                        .and_then(|w| w.upgrade())
+                        .unwrap()
+                        .borrow(),
+                );
+                Ok("ENUM_".to_string()
+                    + &*Self::resolve_enum_name(upper_name.clone(), &edn)?
+                    + normalize_lowercase_snakecase(name.clone())
+                        .to_uppercase()
+                        .as_str())
+            }
+            cond => Err(format!("Can't unrolling condition {:#?}", cond)
+                .as_str()
+                .into()),
+        }
+    }
+
     fn unroll_expression(expr: &ExpressionNode) -> Result<String, Diagnostic> {
         match expr {
-            ExpressionNode::ArraySubscript(var, n) => Ok(Self::unroll_variables(&*var.borrow())?
+            ExpressionNode::ArraySubscript(var, n) => Ok(Self::unroll_variable(&*var.borrow())?
                 + &*"[".to_string()
                 + n.to_string().as_str()
                 + &*"]".to_string()),
@@ -455,7 +572,7 @@ impl Generator {
             ExpressionNode::Rational(n, _) => Ok(n.clone()),
             ExpressionNode::String(n) => Ok(n.join("").to_string()),
             ExpressionNode::Bool(n) => Ok(n.to_string()),
-            ExpressionNode::Variable(var) => Self::unroll_variables(&*var.borrow()),
+            ExpressionNode::Variable(var) => Self::unroll_variable(&*var.borrow()),
             ExpressionNode::Model(model) => {
                 todo!("Model unrolling not yet implemented")
             }
@@ -469,7 +586,7 @@ impl Generator {
                         .unwrap()
                         .borrow(),
                 );
-                let name = Self::determinate_cond_name(upper_name.clone(), &cond)?;
+                let name = Self::resolve_cond_name(upper_name.clone(), &cond)?;
                 Ok("COND_".to_string() + &*name)
             }
             expr => Err(format!("Cnt unrolled {:#?}", expr).as_str().into()),
@@ -483,7 +600,7 @@ impl Generator {
             VariableNode::Unresolved => Err("Unresolved variable".into()),
             VariableNode::Simple { name, ty, .. } => Err("Not implement yet".into()),
             VariableNode::Port { name, ty, expr, .. } => {
-                let name = Self::determinate_raw_name(upper_name.clone(), name.clone())?;
+                let name = Self::resolve_raw_name(upper_name.clone(), name.clone())?;
                 match ty {
                     TypeNode::Bit | TypeNode::Bool => {
                         let bit = if let ExpressionNode::Address(_, bit) = expr {
@@ -505,7 +622,7 @@ impl Generator {
     }
 
     #[inline]
-    fn determinate_raw_name(upper_name: String, name: String) -> Result<String, Diagnostic> {
+    fn resolve_raw_name(upper_name: String, name: String) -> Result<String, Diagnostic> {
         Ok(
             (upper_name.to_owned() + "_" + normalize_lowercase_snakecase(name.clone()).as_str())
                 .to_uppercase(),
@@ -513,23 +630,23 @@ impl Generator {
     }
 
     #[inline]
-    fn determinate_cond_name(
+    fn resolve_cond_name(
         upper_name: String,
         cond: &ConditionDefinitionNode,
     ) -> Result<String, Diagnostic> {
-        Self::determinate_raw_name(upper_name, cond.name.clone())
+        Self::resolve_raw_name(upper_name, cond.name.clone())
     }
 
     #[inline]
-    fn determinate_enum_name(
+    fn resolve_enum_name(
         upper_name: String,
         en: &EnumDefinitionNode,
     ) -> Result<String, Diagnostic> {
-        Self::determinate_raw_name(upper_name, en.name.clone())
+        Self::resolve_raw_name(upper_name, en.name.clone())
     }
 
     #[inline]
-    fn determinate_model_name(model: &ModelNode) -> Result<String, Diagnostic> {
+    fn resolve_model_name(model: &ModelNode) -> Result<String, Diagnostic> {
         let name = model.name.clone().unwrap_or("Unknown".to_string());
         if !name.eq("Unknown") {
             Ok(name)
@@ -538,9 +655,7 @@ impl Generator {
         {
             match state.clone() {
                 StateNode::Unresolved | StateNode::Simple { .. } => Ok(state.name().to_string()),
-                StateNode::Implement { implements, .. } => {
-                    Self::determinate_implement_name(implements)
-                }
+                StateNode::Implement { implements, .. } => Self::resolve_implement_name(implements),
             }
         } else {
             Ok(name)
@@ -548,16 +663,16 @@ impl Generator {
     }
 
     #[inline]
-    fn determinate_implement_name(implement: Implement) -> Result<String, Diagnostic> {
+    fn resolve_implement_name(implement: Implement) -> Result<String, Diagnostic> {
         match implement {
             Implement::None => Ok("".to_string()),
             Implement::Unresolved(_) => Ok("Unresolved".to_string()),
-            Implement::Model(model) => Self::determinate_model_name(&model.borrow()),
-            Implement::Parentless(i) => Self::determinate_implement_name(*i),
+            Implement::Model(model) => Self::resolve_model_name(&model.borrow()),
+            Implement::Parentless(i) => Self::resolve_implement_name(*i),
             Implement::Add(left, right) | Implement::Or(left, right) => {
-                Ok(Self::determinate_implement_name(*left)?
+                Ok(Self::resolve_implement_name(*left)?
                     + "_"
-                    + &*Self::determinate_implement_name(*right)?)
+                    + &*Self::resolve_implement_name(*right)?)
             }
         }
     }

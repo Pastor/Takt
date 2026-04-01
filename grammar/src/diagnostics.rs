@@ -70,7 +70,7 @@ pub enum ErrorType {
     TypeError,
     /// Предупреждение (не ошибка).
     Warning,
-    /// Семантическая ошрибка
+    /// Семантическая ошибка.
     SematicError,
 }
 

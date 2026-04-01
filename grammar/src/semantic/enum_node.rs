@@ -7,6 +7,9 @@
 //! объявлений `enum` в исходном тексте.
 
 use crate::diagnostics::Location;
+use crate::semantic::ModelNode;
+use std::cell::RefCell;
+use std::rc::Weak;
 
 /// Семантический узел перечисления (Ce4).
 ///
@@ -23,6 +26,7 @@ use crate::diagnostics::Location;
 /// поэтому `EnumNode` создаётся программно через API.
 #[derive(Default, Debug, Clone)]
 pub struct EnumDefinitionNode {
+    pub upper: Option<Weak<RefCell<ModelNode>>>,
     /// Имя перечисления.
     pub name: String,
     /// Варианты перечисления: `(имя_варианта, числовое_значение)`.
@@ -70,6 +74,7 @@ impl EnumDefinitionNode {
             .map(|(i, (vname, val))| (vname.to_string(), val.unwrap_or(i as i64)))
             .collect();
         EnumDefinitionNode {
+            upper: None,
             name: name.to_string(),
             variants: resolved,
             loc: Location::Implicit,

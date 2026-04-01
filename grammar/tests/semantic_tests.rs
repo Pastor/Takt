@@ -3743,11 +3743,11 @@ fn ce4_enum_variant_accessible_from_nested_model() {
         inner.borrow().search_enum_variant("N").is_some(),
         "вариант N из родительского enum Dir должен быть доступен в Inner"
     );
-    assert_eq!(
-        inner.borrow().search_enum_variant("N"),
-        Some(("Dir".to_string(), 0)),
-        "N должен иметь значение 0 из Dir"
-    );
+    let result = inner.borrow().search_enum_variant("N");
+    assert!(result.is_some(), "N должен иметь значение 0 из Dir");
+    let (enum_node, value) = result.unwrap();
+    assert_eq!(enum_node.name, "Dir", "enum должен называться Dir");
+    assert_eq!(value, 0, "N должен иметь значение 0");
 }
 
 /// Ce4: enum, объявленный внутри модели, доступен только в ней (не в родителе).

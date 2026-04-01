@@ -147,8 +147,12 @@ pub fn resolve_condition(
                 return Ok(ConditionNode::Model(model.clone()));
             } else if let Some(state) = model.borrow().search_state(&name) {
                 return Ok(ConditionNode::State(state.clone()));
-            } else if let Some((name, val)) = model.borrow().search_enum_variant(&name) {
-                return Ok(ConditionNode::EnumVariant(name, val));
+            } else if let Some((edn, val)) = model.borrow().search_enum_variant(&name) {
+                return Ok(ConditionNode::EnumVariant(
+                    Rc::new(RefCell::new(edn)),
+                    name,
+                    val,
+                ));
             }
             Ok(ConditionNode::Unresolved(ast::Condition::Variable(
                 id.clone(),

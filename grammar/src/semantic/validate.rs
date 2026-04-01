@@ -236,7 +236,7 @@ fn validate_cond(
         ConditionNode::Variable(_var, _) => {}
         ConditionNode::Model(_model) => {}
         ConditionNode::State(_state) => {}
-        ConditionNode::EnumVariant(_, _) => {}
+        ConditionNode::EnumVariant(_, _, _) => {}
     }
     Ok(())
 }

@@ -12,6 +12,15 @@ use crate::semantic::{ModelNode, NamedCodeBlockDefinitionNode, StatementNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// Разрешает список именованных блоков кода, превращая каждый
+/// [`NamedCodeBlockDefinitionNode::Unresolved`] в конкретный вариант
+/// (`Enter`, `Exit`, `Always` или `Unknown`), и повторно разрешает тело
+/// уже-разрешённых блоков с помощью [`resolve_statement`].
+///
+/// # Ошибки
+///
+/// Возвращает [`Diagnostic`], если встречается [`NamedCodeBlockDefinitionNode::None`]
+/// (неопределённый блок) или если [`resolve_statement`] завершается с ошибкой.
 pub fn resolve_named_blocks(
     named_blocks: Vec<NamedCodeBlockDefinitionNode>,
     model: Rc<RefCell<ModelNode>>,
