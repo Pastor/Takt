@@ -30,8 +30,8 @@
 #![allow(clippy::explicit_auto_deref)]
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
+use crate::generator::Generator as AsGenerator;
 use crate::parser::ast::Member;
 use crate::semantic::naming::{normalize_lowercase_snakecase, normalize_model_name};
 use crate::semantic::type_node::TypeNode;
@@ -269,7 +269,14 @@ impl Generator {
                 }
                 VariableNode::Const { name, expr, .. } => {
                     let name = Self::resolve_raw_name(upper_name.clone(), name)?;
-                    printer.print("#define CONST_").print(&name).nl();
+                    let unrolled = Self::unroll_expression(&expr)?;
+                    printer
+                        .print("#define CONST_")
+                        .print(&name)
+                        .print(" (")
+                        .print(unrolled.as_str())
+                        .print(")")
+                        .nl();
                 }
             }
         }
@@ -285,10 +292,13 @@ impl Generator {
             .into_values()
             .sorted_by(|a, b| a.name().cmp(b.name()))
         {
-            //TODO: unroll_cond
+            let unrolled = Self::unroll_cond(&cond.value)?;
             printer
                 .print("#define COND_")
                 .print(&Self::resolve_cond_name(upper_name.clone(), &cond)?)
+                .print(" (")
+                .print(unrolled.as_str())
+                .print(")")
                 .nl();
         }
         let enums = model.enums.clone();
