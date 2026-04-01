@@ -1104,6 +1104,7 @@ pub enum ConditionNode {
     Model(Rc<RefCell<ModelNode>>),
     /// Ссылка на состояние.
     State(Rc<RefCell<StateNode>>),
+    EnumVariant(String, i64),
 }
 
 impl PartialEq for ConditionNode {

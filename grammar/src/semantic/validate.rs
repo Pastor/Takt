@@ -236,6 +236,7 @@ fn validate_cond(
         ConditionNode::Variable(_var, _) => {}
         ConditionNode::Model(_model) => {}
         ConditionNode::State(_state) => {}
+        ConditionNode::EnumVariant(_, _) => {}
     }
     Ok(())
 }
@@ -2187,27 +2188,17 @@ fn extract_simple_constraint(cond: &ConditionNode) -> Option<(String, Constraint
 
     match cond {
         ConditionNode::Equal(l, r) => match (l.as_ref(), r.as_ref()) {
-            (var, ConditionNode::Number(n)) => {
-                var_name(var).map(|name| (name, Constraint::Eq(*n)))
-            }
-            (ConditionNode::Number(n), var) => {
-                var_name(var).map(|name| (name, Constraint::Eq(*n)))
-            }
+            (var, ConditionNode::Number(n)) => var_name(var).map(|name| (name, Constraint::Eq(*n))),
+            (ConditionNode::Number(n), var) => var_name(var).map(|name| (name, Constraint::Eq(*n))),
             _ => None,
         },
         ConditionNode::NotEqual(l, r) => match (l.as_ref(), r.as_ref()) {
-            (var, ConditionNode::Number(n)) => {
-                var_name(var).map(|name| (name, Constraint::Ne(*n)))
-            }
-            (ConditionNode::Number(n), var) => {
-                var_name(var).map(|name| (name, Constraint::Ne(*n)))
-            }
+            (var, ConditionNode::Number(n)) => var_name(var).map(|name| (name, Constraint::Ne(*n))),
+            (ConditionNode::Number(n), var) => var_name(var).map(|name| (name, Constraint::Ne(*n))),
             _ => None,
         },
         ConditionNode::Less(l, r) => match (l.as_ref(), r.as_ref()) {
-            (var, ConditionNode::Number(n)) => {
-                var_name(var).map(|name| (name, Constraint::Lt(*n)))
-            }
+            (var, ConditionNode::Number(n)) => var_name(var).map(|name| (name, Constraint::Lt(*n))),
             (ConditionNode::Number(n), var) => {
                 // n < var  →  var > n
                 var_name(var).map(|name| (name, Constraint::Gt(*n)))
@@ -2215,9 +2206,7 @@ fn extract_simple_constraint(cond: &ConditionNode) -> Option<(String, Constraint
             _ => None,
         },
         ConditionNode::LessEqual(l, r) => match (l.as_ref(), r.as_ref()) {
-            (var, ConditionNode::Number(n)) => {
-                var_name(var).map(|name| (name, Constraint::Le(*n)))
-            }
+            (var, ConditionNode::Number(n)) => var_name(var).map(|name| (name, Constraint::Le(*n))),
             (ConditionNode::Number(n), var) => {
                 // n <= var  →  var >= n
                 var_name(var).map(|name| (name, Constraint::Ge(*n)))
@@ -2225,9 +2214,7 @@ fn extract_simple_constraint(cond: &ConditionNode) -> Option<(String, Constraint
             _ => None,
         },
         ConditionNode::More(l, r) => match (l.as_ref(), r.as_ref()) {
-            (var, ConditionNode::Number(n)) => {
-                var_name(var).map(|name| (name, Constraint::Gt(*n)))
-            }
+            (var, ConditionNode::Number(n)) => var_name(var).map(|name| (name, Constraint::Gt(*n))),
             (ConditionNode::Number(n), var) => {
                 // n > var  →  var < n
                 var_name(var).map(|name| (name, Constraint::Lt(*n)))
@@ -2235,9 +2222,7 @@ fn extract_simple_constraint(cond: &ConditionNode) -> Option<(String, Constraint
             _ => None,
         },
         ConditionNode::MoreEqual(l, r) => match (l.as_ref(), r.as_ref()) {
-            (var, ConditionNode::Number(n)) => {
-                var_name(var).map(|name| (name, Constraint::Ge(*n)))
-            }
+            (var, ConditionNode::Number(n)) => var_name(var).map(|name| (name, Constraint::Ge(*n))),
             (ConditionNode::Number(n), var) => {
                 // n >= var  →  var <= n
                 var_name(var).map(|name| (name, Constraint::Le(*n)))
@@ -2257,47 +2242,47 @@ fn constraints_overlap(a: &Constraint, b: &Constraint) -> bool {
     use Constraint::*;
     match (a, b) {
         // Eq vs *
-        (Eq(x), Eq(y))   => x == y,
-        (Eq(x), Ne(y))   => x != y,
-        (Eq(x), Lt(y))   => x < y,
-        (Eq(x), Le(y))   => x <= y,
-        (Eq(x), Gt(y))   => x > y,
-        (Eq(x), Ge(y))   => x >= y,
+        (Eq(x), Eq(y)) => x == y,
+        (Eq(x), Ne(y)) => x != y,
+        (Eq(x), Lt(y)) => x < y,
+        (Eq(x), Le(y)) => x <= y,
+        (Eq(x), Gt(y)) => x > y,
+        (Eq(x), Ge(y)) => x >= y,
         // Ne vs *
-        (Ne(x), Eq(y))   => x != y,
-        (Ne(x), Ne(_y))  => *x != i64::MAX, // всегда истинно (хотя бы одно значение)
-        (Ne(_), Lt(_))   => true,            // всегда есть значение ≠ x и < y
-        (Ne(_), Le(_))   => true,
-        (Ne(_), Gt(_))   => true,
-        (Ne(_), Ge(_))   => true,
+        (Ne(x), Eq(y)) => x != y,
+        (Ne(x), Ne(_y)) => *x != i64::MAX, // всегда истинно (хотя бы одно значение)
+        (Ne(_), Lt(_)) => true,            // всегда есть значение ≠ x и < y
+        (Ne(_), Le(_)) => true,
+        (Ne(_), Gt(_)) => true,
+        (Ne(_), Ge(_)) => true,
         // Lt vs *
-        (Lt(x), Eq(y))   => *y < *x,
-        (Lt(_), Ne(_))   => true,
-        (Lt(_), Lt(_))   => true,                    // (-∞, x-1] ∩ (-∞, y-1] всегда непусто
-        (Lt(_), Le(_))   => true,                    // (-∞, x-1] ∩ (-∞, y] всегда непусто
-        (Lt(x), Gt(y))   => *y + 1 < *x,            // (y, ∞) ∩ (-∞, x-1): нужно y+1 < x
-        (Lt(x), Ge(y))   => *y < *x,                // [y, ∞) ∩ (-∞, x-1): нужно y < x
+        (Lt(x), Eq(y)) => *y < *x,
+        (Lt(_), Ne(_)) => true,
+        (Lt(_), Lt(_)) => true,        // (-∞, x-1] ∩ (-∞, y-1] всегда непусто
+        (Lt(_), Le(_)) => true,        // (-∞, x-1] ∩ (-∞, y] всегда непусто
+        (Lt(x), Gt(y)) => *y + 1 < *x, // (y, ∞) ∩ (-∞, x-1): нужно y+1 < x
+        (Lt(x), Ge(y)) => *y < *x,     // [y, ∞) ∩ (-∞, x-1): нужно y < x
         // Le vs *
-        (Le(x), Eq(y))   => *y <= *x,
-        (Le(_), Ne(_))   => true,
-        (Le(_), Lt(_))   => true,                    // (-∞, x] ∩ (-∞, y-1] всегда непусто
-        (Le(_), Le(_))   => true,                    // (-∞, x] ∩ (-∞, y] всегда непусто
-        (Le(x), Gt(y))   => *y < *x,                // нужно y < x (хотя бы y+1 <= x)
-        (Le(x), Ge(y))   => *y <= *x,
+        (Le(x), Eq(y)) => *y <= *x,
+        (Le(_), Ne(_)) => true,
+        (Le(_), Lt(_)) => true,    // (-∞, x] ∩ (-∞, y-1] всегда непусто
+        (Le(_), Le(_)) => true,    // (-∞, x] ∩ (-∞, y] всегда непусто
+        (Le(x), Gt(y)) => *y < *x, // нужно y < x (хотя бы y+1 <= x)
+        (Le(x), Ge(y)) => *y <= *x,
         // Gt vs *
-        (Gt(x), Eq(y))   => *y > *x,
-        (Gt(_), Ne(_))   => true,
-        (Gt(x), Lt(y))   => *x + 1 < *y,
-        (Gt(x), Le(y))   => *x < *y,
-        (Gt(_), Gt(_))   => true,                    // (x, ∞) ∩ (y, ∞) всегда непусто
-        (Gt(_), Ge(_))   => true,                    // (x, ∞) ∩ [y, ∞) всегда непусто
+        (Gt(x), Eq(y)) => *y > *x,
+        (Gt(_), Ne(_)) => true,
+        (Gt(x), Lt(y)) => *x + 1 < *y,
+        (Gt(x), Le(y)) => *x < *y,
+        (Gt(_), Gt(_)) => true, // (x, ∞) ∩ (y, ∞) всегда непусто
+        (Gt(_), Ge(_)) => true, // (x, ∞) ∩ [y, ∞) всегда непусто
         // Ge vs *
-        (Ge(x), Eq(y))   => *y >= *x,
-        (Ge(_), Ne(_))   => true,
-        (Ge(x), Lt(y))   => *x < *y,
-        (Ge(x), Le(y))   => *x <= *y,
-        (Ge(_), Gt(_))   => true,                    // [x, ∞) ∩ (y, ∞) всегда непусто
-        (Ge(_), Ge(_))   => true,                    // [x, ∞) ∩ [y, ∞) всегда непусто
+        (Ge(x), Eq(y)) => *y >= *x,
+        (Ge(_), Ne(_)) => true,
+        (Ge(x), Lt(y)) => *x < *y,
+        (Ge(x), Le(y)) => *x <= *y,
+        (Ge(_), Gt(_)) => true, // [x, ∞) ∩ (y, ∞) всегда непусто
+        (Ge(_), Ge(_)) => true, // [x, ∞) ∩ [y, ∞) всегда непусто
     }
 }
 

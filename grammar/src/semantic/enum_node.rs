@@ -32,6 +32,12 @@ pub struct EnumDefinitionNode {
     pub loc: Location,
 }
 
+impl EnumDefinitionNode {
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+}
+
 impl PartialEq for EnumDefinitionNode {
     fn eq(&self, other: &Self) -> bool {
         // loc игнорируется: не является частью семантической идентичности перечисления
