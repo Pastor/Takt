@@ -166,10 +166,11 @@ fn parser_error_to_diagnostic(
 ///
 /// ```no_run
 /// // Без импортов — пустой список путей
-/// grammar::compile_to_c("start S;", ".output", &[]).unwrap();
+/// grammar::compile_to_c("dummy.but", "start S;", ".output", &[]).unwrap();
 ///
 /// // С импортами — указываем директорию поиска
 /// grammar::compile_to_c(
+///     "dummy.but",
 ///     r#"import "std.but"; start S;"#,
 ///     ".output",
 ///     &["/usr/lib/but".to_string()],
@@ -180,7 +181,7 @@ pub fn compile_to_c(
     source: &str,
     output_path: &str,
     search_paths: &[String],
-) -> Result<(), diagnostics::Diagnostic> {
+) -> Result<(), Diagnostic> {
     // Шаг 1: Синтаксический анализ
     let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
 
@@ -224,9 +225,9 @@ pub fn compile_to_c(
 /// assert_eq!(warnings.len(), 1);
 /// ```
 pub fn unused_variable_warnings(
-    model: std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
-) -> Vec<crate::diagnostics::Diagnostic> {
-    crate::semantic::unused::check_unused_variables(model)
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+) -> Vec<Diagnostic> {
+    semantic::unused::check_unused_variables(model)
 }
 
 /// Ce14: возвращает предупреждения о недетерминированных переходах в модели.
@@ -246,9 +247,9 @@ pub fn unused_variable_warnings(
 /// assert_eq!(warnings.len(), 1);
 /// ```
 pub fn nondeterministic_transition_warnings(
-    model: std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
-) -> Vec<crate::diagnostics::Diagnostic> {
-    crate::semantic::validate::check_nondeterministic_transitions(model)
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+) -> Vec<Diagnostic> {
+    semantic::validate::check_nondeterministic_transitions(model)
 }
 
 /// NI6: возвращает ошибки типобезопасных операций с перечислениями в модели.
@@ -275,9 +276,9 @@ pub fn nondeterministic_transition_warnings(
 /// assert!(errors.is_empty());
 /// ```
 pub fn enum_type_safety_errors(
-    model: std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
-) -> Vec<crate::diagnostics::Diagnostic> {
-    crate::semantic::validate::check_enum_type_safety(model)
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+) -> Vec<Diagnostic> {
+    semantic::validate::check_enum_type_safety(model)
 }
 
 #[cfg(test)]
