@@ -196,5 +196,7 @@ model Elevator {
         }
     }
 }
-start Main = Elevator;
+start Main = Elevator {
+    next End;
+}
 state End;
