@@ -761,27 +761,31 @@ impl<'input> Lexer<'input> {
                             // Блочный комментарий `/* ... */`
                             self.chars.next(); // потребляем `*`
 
-                            // Сканируем до закрывающей пары `*/`
-                            let mut last = self.input.len();
-                            loop {
-                                match self.chars.next() {
-                                    None => {
-                                        // Неожиданный конец файла внутри комментария
-                                        self.errors.push(LexicalError::EndOfFileInComment(
-                                            Location::Source(self.file_no, start, self.input.len()),
-                                        ));
-                                        return None;
-                                    }
-                                    Some((offset, '*')) => {
-                                        if matches!(self.chars.peek(), Some((_, '/'))) {
-                                            self.chars.next(); // потребляем `/`
-                                            last = offset + 2;
-                                            break;
+                            // Сканируем до закрывающей пары `*/`; возвращаем позицию за `*/`
+                            let last = 'scan: {
+                                loop {
+                                    match self.chars.next() {
+                                        None => {
+                                            // Неожиданный конец файла внутри комментария
+                                            self.errors.push(LexicalError::EndOfFileInComment(
+                                                Location::Source(
+                                                    self.file_no,
+                                                    start,
+                                                    self.input.len(),
+                                                ),
+                                            ));
+                                            return None;
                                         }
+                                        Some((offset, '*')) => {
+                                            if matches!(self.chars.peek(), Some((_, '/'))) {
+                                                self.chars.next(); // потребляем `/`
+                                                break 'scan offset + 2;
+                                            }
+                                        }
+                                        _ => {}
                                     }
-                                    _ => {}
                                 }
-                            }
+                            };
 
                             // Блочный комментарий не производит токены, только собирается
                             self.comments.push(Comment::Block(

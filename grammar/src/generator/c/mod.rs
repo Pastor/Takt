@@ -244,7 +244,7 @@ impl Generator {
         model: &ModelNode,
     ) -> Result<(), Diagnostic> {
         let upper_name = Self::get_upper_name(model);
-        for (name, model) in model.models.iter() {
+        for (_name, model) in model.models.iter() {
             Self::generate_constants_and_ports_and_enums(printer, &model.borrow())?
         }
 
@@ -259,7 +259,7 @@ impl Generator {
                 VariableNode::Port { name, expr, .. } => {
                     let name = Self::resolve_raw_name(upper_name.clone(), name)?;
 
-                    let (address, bit) = if let ExpressionNode::Address(address, bit) = expr {
+                    let (address, _bit) = if let ExpressionNode::Address(address, bit) = expr {
                         (address, bit)
                     } else if let ExpressionNode::Number(address) = expr {
                         (address, 0)
@@ -283,7 +283,8 @@ impl Generator {
                 }
             }
         }
-        for state in model
+        // Состояния транслируются в enum-константы в generate_model_states — здесь пропускаем.
+        for _state in model
             .states
             .clone()
             .into_values()
@@ -502,7 +503,7 @@ impl Generator {
                     member, bit
                 ))
             }
-            ConditionNode::Function(fun, args, _) => {
+            ConditionNode::Function(fun, _args, _) => {
                 todo!("Unrolling not implemented {:?}", fun)
             }
             ConditionNode::Not(cond) => Ok("!(".to_owned() + &*Self::unroll_cond(cond)? + ")"),
@@ -565,7 +566,7 @@ impl Generator {
             ConditionNode::State(state) => {
                 todo!("Not implement unrolling {:?}", state);
             }
-            ConditionNode::EnumVariant(edn, name, n) => {
+            ConditionNode::EnumVariant(edn, name, _n) => {
                 let edn = &*edn.borrow();
                 let upper_name = Self::get_upper_name(
                     &*edn
@@ -577,6 +578,7 @@ impl Generator {
                 );
                 Ok("ENUM_".to_string()
                     + &*Self::resolve_enum_name(upper_name.clone(), &edn)?
+                    + "_"
                     + normalize_lowercase_snakecase(name.clone())
                         .to_uppercase()
                         .as_str())
@@ -596,10 +598,10 @@ impl Generator {
             ExpressionNode::Parenthesis(expr) => {
                 Ok("(".to_string() + &*Self::unroll_expression(expr)? + &*")".to_string())
             }
-            ExpressionNode::BitAccess(val, bit) => {
+            ExpressionNode::BitAccess(val, _bit) => {
                 todo!("BitAccess {:?} not enrolled", val);
             }
-            ExpressionNode::Function(fun, args) => {
+            ExpressionNode::Function(fun, _args) => {
                 todo!("Function {:?} not enrolled", fun);
             }
             ExpressionNode::Not(expr) => Ok("!".to_string() + &*Self::unroll_expression(&**expr)?),
@@ -627,10 +629,9 @@ impl Generator {
             ExpressionNode::Add(left, right) => Ok(Self::unroll_expression(&**left)?
                 + &*" + ".to_string()
                 + &*Self::unroll_expression(&**right)?),
-            ExpressionNode::Subtract(array, sub) => Ok(Self::unroll_expression(&**array)?
-                + &*"[".to_string()
-                + &*Self::unroll_expression(&**sub)?
-                + &*"]".to_string()),
+            ExpressionNode::Subtract(left, right) => Ok(Self::unroll_expression(&**left)?
+                + &*" - ".to_string()
+                + &*Self::unroll_expression(&**right)?),
             ExpressionNode::ShiftLeft(left, right) => Ok(Self::unroll_expression(&**left)?
                 + &*" << ".to_string()
                 + &*Self::unroll_expression(&**right)?),
@@ -678,7 +679,7 @@ impl Generator {
             ExpressionNode::String(n) => Ok(n.join("").to_string()),
             ExpressionNode::Bool(n) => Ok(n.to_string()),
             ExpressionNode::Variable(var) => Self::unroll_variable(&*var.borrow()),
-            ExpressionNode::Model(model) => {
+            ExpressionNode::Model(_model) => {
                 todo!("Model unrolling not yet implemented")
             }
             ExpressionNode::Condition(cond) => {
@@ -698,12 +699,17 @@ impl Generator {
         }
     }
 
+    /// Генерирует C-выражение записи значения в порт через `write_bit` / `write_float`.
+    ///
+    /// Сейчас поддерживаются только порты типа `bit` и `bool`.
+    /// Вызов зарезервирован для будущей реализации `_tick`.
+    #[allow(dead_code)]
     fn port_write(var: &VariableNode, val: &ExpressionNode) -> Result<String, Diagnostic> {
         let upper_name = Self::get_upper_name(&*var.upper().unwrap().borrow());
         let val = Self::unroll_expression(val)?;
         match var {
             VariableNode::Unresolved => Err("Unresolved variable".into()),
-            VariableNode::Simple { name, ty, .. } => Err("Not implement yet".into()),
+            VariableNode::Simple { name: _, ty: _, .. } => Err("Not implement yet".into()),
             VariableNode::Port { name, ty, expr, .. } => {
                 let name = Self::resolve_raw_name(upper_name.clone(), name.clone())?;
                 match ty {

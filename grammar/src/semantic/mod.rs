@@ -1119,6 +1119,9 @@ pub enum ConditionNode {
     Model(Rc<RefCell<ModelNode>>),
     /// Ссылка на состояние.
     State(Rc<RefCell<StateNode>>),
+    /// Вариант перечисления (Ce4/NI6).
+    ///
+    /// Поля: `(определение перечисления, имя варианта, числовое значение варианта)`.
     EnumVariant(Rc<RefCell<EnumDefinitionNode>>, String, i64),
 }
 

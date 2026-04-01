@@ -26,6 +26,7 @@ use std::rc::Weak;
 /// поэтому `EnumNode` создаётся программно через API.
 #[derive(Default, Debug, Clone)]
 pub struct EnumDefinitionNode {
+    /// Слабая ссылка на родительскую модель (для разрешения имён при генерации кода).
     pub upper: Option<Weak<RefCell<ModelNode>>>,
     /// Имя перечисления.
     pub name: String,
