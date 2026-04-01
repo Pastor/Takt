@@ -329,6 +329,34 @@ impl Generator {
             .nl();
         Self::generate_constants_and_ports_and_enums(&mut printer, model)?;
         printer.nl();
+        let struct_name = Self::get_model_name_struct(model);
+        printer
+            .print("void ")
+            .print(&struct_name)
+            .print("_init(struct ")
+            .print(&struct_name)
+            .print(" *main) {")
+            .nl();
+        //TODO: Инициализация автомата
+        printer.print("}").nl().nl();
+        printer
+            .print("void ")
+            .print(&struct_name)
+            .print("_tick(struct ")
+            .print(&struct_name)
+            .print(" *main) {")
+            .nl();
+        //TODO: Обработка входных сигналов и переходы
+        printer.print("}").nl().nl();
+        printer
+            .print("void ")
+            .print(&struct_name)
+            .print("_reset(struct ")
+            .print(&struct_name)
+            .print(" *main) {")
+            .nl();
+        printer.up().ident(format!("{}_init(main);", &struct_name).as_str()).down().nl();
+        printer.print("}").nl().nl();
         Ok(source)
     }
 
@@ -756,5 +784,10 @@ start Main = Robot;
             let result = Generator::unroll_model(model).unwrap();
             assert_eq!("main->robot.idle", &result);
         }
+        let generator = Generator{};
+        let header = generator.generate_header(model).unwrap();
+        let source = generator.generate_source(model).unwrap();
+        println!("{}", header);
+        println!("{}", source);
     }
 }
