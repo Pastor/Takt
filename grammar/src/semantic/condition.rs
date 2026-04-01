@@ -161,6 +161,71 @@ pub fn resolve_condition(
     }
 }
 
+fn rebuild_condition(cond: &ConditionNode, model: Rc<RefCell<ModelNode>>) -> ConditionNode {
+    match cond {
+        ConditionNode::Unresolved(ast_cond) => resolve_condition(ast_cond, model.clone()).unwrap(),
+        ConditionNode::Parenthesis(cond) => {
+            ConditionNode::Parenthesis(Box::new(rebuild_condition(cond, model.clone())))
+        }
+        ConditionNode::BitAccess(cond, m) => {
+            ConditionNode::BitAccess(Box::new(rebuild_condition(cond, model.clone())), m.clone())
+        }
+        ConditionNode::Function(a, b, v) => ConditionNode::Function(a.clone(), b.clone(), *v),
+        ConditionNode::Not(cond) => ConditionNode::Not(Box::new(rebuild_condition(cond, model))),
+        ConditionNode::Add(left, right) => {
+            let left = rebuild_condition(left, model.clone());
+            let right = rebuild_condition(right, model);
+            ConditionNode::Add(Box::new(left), Box::new(right))
+        }
+        ConditionNode::Subtract(left, right) => {
+            let left = rebuild_condition(left, model.clone());
+            let right = rebuild_condition(right, model);
+            ConditionNode::Subtract(Box::new(left), Box::new(right))
+        }
+        ConditionNode::And(left, right) => {
+            let left = rebuild_condition(left, model.clone());
+            let right = rebuild_condition(right, model);
+            ConditionNode::And(Box::new(left), Box::new(right))
+        }
+        ConditionNode::Or(left, right) => {
+            let left = rebuild_condition(left, model.clone());
+            let right = rebuild_condition(right, model);
+            ConditionNode::Or(Box::new(left), Box::new(right))
+        }
+        ConditionNode::Less(left, right) => {
+            let left = rebuild_condition(left, model.clone());
+            let right = rebuild_condition(right, model);
+            ConditionNode::Less(Box::new(left), Box::new(right))
+        }
+        ConditionNode::More(left, right) => {
+            let left = rebuild_condition(left, model.clone());
+            let right = rebuild_condition(right, model);
+            ConditionNode::More(Box::new(left), Box::new(right))
+        }
+        ConditionNode::LessEqual(left, right) => {
+            let left = rebuild_condition(left, model.clone());
+            let right = rebuild_condition(right, model);
+            ConditionNode::LessEqual(Box::new(left), Box::new(right))
+        }
+        ConditionNode::MoreEqual(left, right) => {
+            let left = rebuild_condition(left, model.clone());
+            let right = rebuild_condition(right, model);
+            ConditionNode::MoreEqual(Box::new(left), Box::new(right))
+        }
+        ConditionNode::Equal(left, right) => {
+            let left = rebuild_condition(left, model.clone());
+            let right = rebuild_condition(right, model);
+            ConditionNode::Equal(Box::new(left), Box::new(right))
+        }
+        ConditionNode::NotEqual(left, right) => {
+            let left = rebuild_condition(left, model.clone());
+            let right = rebuild_condition(right, model);
+            ConditionNode::NotEqual(Box::new(left), Box::new(right))
+        }
+        cond => cond.clone(),
+    }
+}
+
 /// Разрешает все неразрешённые именованные условия в `conditions`.
 ///
 /// Перебирает `conditions` и для каждой записи, значение которой равно
@@ -189,7 +254,14 @@ pub fn extract_conditions(
                 },
             );
         } else {
-            result.insert(name.clone(), cond.clone());
+            let new_cond = rebuild_condition(&cond.value, model.clone());
+            result.insert(
+                name.clone(),
+                ConditionDefinitionNode {
+                    value: new_cond,
+                    ..cond.clone()
+                },
+            );
         }
     }
     Ok(result)

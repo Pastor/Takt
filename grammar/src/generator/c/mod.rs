@@ -30,8 +30,8 @@
 #![allow(clippy::explicit_auto_deref)]
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::indent::Printer;
 use crate::generator::Generator as AsGenerator;
+use crate::generator::indent::Printer;
 use crate::parser::ast::Member;
 use crate::semantic::naming::{normalize_lowercase_snakecase, normalize_model_name};
 use crate::semantic::type_node::TypeNode;
@@ -184,12 +184,15 @@ impl Generator {
                     VariableNode::Const { .. } => {}
                 }
             }
+            if first_model {
+                printer.ident("void *userdata;").nl();
+            }
         }
         if first_model {
             printer
                 .ident(
                     format!(
-                        "void  (*{}  )(int address, int bit, bool val);",
+                        "void  (*{}  )(int address, int bit, bool val, void *userdata);",
                         FUNCTION_PORT_WRITE_BIT
                     )
                     .as_str(),
@@ -198,7 +201,7 @@ impl Generator {
             printer
                 .ident(
                     format!(
-                        "bool  (*{}   )(int address, int bit);",
+                        "bool  (*{}   )(int address, int bit, void *userdata);",
                         FUNCTION_PORT_READ_BIT
                     )
                     .as_str(),
@@ -207,7 +210,7 @@ impl Generator {
             printer
                 .ident(
                     format!(
-                        "void  (*{})(int address, int bit, float val);",
+                        "void  (*{})(int address, int bit, float val, void *userdata);",
                         FUNCTION_PORT_WRITE_FLOAT
                     )
                     .as_str(),
@@ -216,7 +219,7 @@ impl Generator {
             printer
                 .ident(
                     format!(
-                        "float (*{} )(int address, int bit);",
+                        "float (*{} )(int address, int bit, void *userdata);",
                         FUNCTION_PORT_READ_FLOAT
                     )
                     .as_str(),
@@ -337,7 +340,11 @@ impl Generator {
             .print(&struct_name)
             .print(" *main) {")
             .nl();
-        //TODO: Инициализация автомата
+        {
+            printer.up().ident("main->state = ");
+            let upper = Self::get_upper_name(model);
+            printer.print(&upper).print("_INIT;").down().nl();
+        }
         printer.print("}").nl().nl();
         printer
             .print("void ")
@@ -355,7 +362,37 @@ impl Generator {
             .print(&struct_name)
             .print(" *main) {")
             .nl();
-        printer.up().ident(format!("{}_init(main);", &struct_name).as_str()).down().nl();
+        printer
+            .up()
+            .ident(format!("{}_init(main);", &struct_name).as_str())
+            .down()
+            .nl();
+        printer.print("}").nl().nl();
+        printer
+            .print("bool ")
+            .print(&struct_name)
+            .print("_is_done(const struct ")
+            .print(&struct_name)
+            .print(" *main) {")
+            .nl();
+        let mut cond = String::new();
+        let upper_model_name = Self::get_upper_name(model);
+        for state in model.get_end_states().iter() {
+            if !cond.is_empty() {
+                cond.push_str(" || ");
+            }
+            let name = normalize_lowercase_snakecase(state.name().to_string()).to_uppercase();
+            let name = format!("{}_{}", &upper_model_name, name);
+            cond.push_str("main->state == ");
+            cond.push_str(&name);
+        }
+        printer
+            .up()
+            .ident("return ")
+            .print(cond.as_str())
+            .print(";")
+            .down()
+            .nl();
         printer.print("}").nl().nl();
         Ok(source)
     }
@@ -390,6 +427,13 @@ impl Generator {
             .print("void ")
             .print(&struct_name)
             .print("_reset(struct ")
+            .print(&struct_name)
+            .print(" *main);")
+            .nl();
+        printer
+            .print("bool ")
+            .print(&struct_name)
+            .print("_is_done(const struct ")
             .print(&struct_name)
             .print(" *main);")
             .nl();
@@ -453,42 +497,65 @@ impl Generator {
                     0i64
                 };
                 let member = Self::unroll_cond(cond)?;
-                Ok(format!("(*main->read_bit)({}, {})", member, bit))
+                Ok(format!(
+                    "(*main->read_bit)({}, {}, main->userdata)",
+                    member, bit
+                ))
             }
             ConditionNode::Function(fun, args, _) => {
                 todo!("Unrolling not implemented {:?}", fun)
             }
-            ConditionNode::Not(cond) => Ok("!".to_owned() + &*Self::unroll_cond(cond)?),
-            ConditionNode::Add(left, right) => {
-                Ok(Self::unroll_cond(left)? + " + " + &*Self::unroll_cond(right)?)
-            }
-            ConditionNode::Subtract(left, right) => {
-                Ok(Self::unroll_cond(left)? + " - " + &*Self::unroll_cond(right)?)
-            }
-            ConditionNode::And(left, right) => {
-                Ok(Self::unroll_cond(left)? + " && " + &*Self::unroll_cond(right)?)
-            }
-            ConditionNode::Or(left, right) => {
-                Ok(Self::unroll_cond(left)? + " || " + &*Self::unroll_cond(right)?)
-            }
-            ConditionNode::Less(left, right) => {
-                Ok(Self::unroll_cond(left)? + " < " + &*Self::unroll_cond(right)?)
-            }
-            ConditionNode::More(left, right) => {
-                Ok(Self::unroll_cond(left)? + " > " + &*Self::unroll_cond(right)?)
-            }
-            ConditionNode::LessEqual(left, right) => {
-                Ok(Self::unroll_cond(left)? + " <= " + &*Self::unroll_cond(right)?)
-            }
-            ConditionNode::MoreEqual(left, right) => {
-                Ok(Self::unroll_cond(left)? + " >= " + &*Self::unroll_cond(right)?)
-            }
-            ConditionNode::Equal(left, right) => {
-                Ok(Self::unroll_cond(left)? + " == " + &*Self::unroll_cond(right)?)
-            }
-            ConditionNode::NotEqual(left, right) => {
-                Ok(Self::unroll_cond(left)? + " != " + &*Self::unroll_cond(right)?)
-            }
+            ConditionNode::Not(cond) => Ok("!(".to_owned() + &*Self::unroll_cond(cond)? + ")"),
+            ConditionNode::Add(left, right) => Ok("(".to_owned()
+                + &*Self::unroll_cond(left)?
+                + " + "
+                + &*Self::unroll_cond(right)?
+                + ")"),
+            ConditionNode::Subtract(left, right) => Ok("(".to_owned()
+                + &*Self::unroll_cond(left)?
+                + " - "
+                + &*Self::unroll_cond(right)?
+                + ")"),
+            ConditionNode::And(left, right) => Ok("(".to_owned()
+                + &*Self::unroll_cond(left)?
+                + " && "
+                + &*Self::unroll_cond(right)?
+                + ")"),
+            ConditionNode::Or(left, right) => Ok("(".to_owned()
+                + &*Self::unroll_cond(left)?
+                + " || "
+                + &*Self::unroll_cond(right)?
+                + ")"),
+            ConditionNode::Less(left, right) => Ok("(".to_owned()
+                + &*Self::unroll_cond(left)?
+                + " < "
+                + &*Self::unroll_cond(right)?
+                + ")"),
+            ConditionNode::More(left, right) => Ok("(".to_owned()
+                + &*Self::unroll_cond(left)?
+                + " > "
+                + &*Self::unroll_cond(right)?
+                + ")"),
+            ConditionNode::LessEqual(left, right) => Ok("(".to_owned()
+                + &*Self::unroll_cond(left)?
+                + " <= "
+                + &*Self::unroll_cond(right)?
+                + ")"),
+            ConditionNode::MoreEqual(left, right) => Ok("(".to_owned()
+                + &*Self::unroll_cond(left)?
+                + " >= "
+                + &*Self::unroll_cond(right)?
+                + ")"),
+            ConditionNode::Equal(left, right) => Ok("(".to_owned()
+                + &*Self::unroll_cond(left)?
+                + " == "
+                + &*Self::unroll_cond(right)?
+                + ")"),
+            ConditionNode::NotEqual(left, right) => Ok("(".to_owned()
+                + &*Self::unroll_cond(left)?
+                + " != "
+                + &*Self::unroll_cond(right)?
+                + ")"),
             ConditionNode::Number(n) => Ok(n.to_string()),
             ConditionNode::Rational(n, _) => Ok(n.to_string()),
             ConditionNode::String(n) => Ok(n.iter().join("").to_string()),
@@ -648,7 +715,7 @@ impl Generator {
                         };
 
                         Ok(format!(
-                            "(*main->write_bit)(PORT_{}, {}, {})",
+                            "(*main->write_bit)(PORT_{}, {}, {}, main->userdata)",
                             &name, bit, val
                         ))
                     }
@@ -784,7 +851,7 @@ start Main = Robot;
             let result = Generator::unroll_model(model).unwrap();
             assert_eq!("main->robot.idle", &result);
         }
-        let generator = Generator{};
+        let generator = Generator {};
         let header = generator.generate_header(model).unwrap();
         let source = generator.generate_source(model).unwrap();
         println!("{}", header);

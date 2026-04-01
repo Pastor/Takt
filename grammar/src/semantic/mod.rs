@@ -108,6 +108,14 @@ impl ModelNode {
             None => None,
         }
     }
+
+    pub(crate) fn get_end_states(&self) -> Vec<StateNode> {
+        self.states
+            .clone()
+            .into_values()
+            .filter(|state| state.kind() == StateNodeKind::End)
+            .collect::<Vec<StateNode>>()
+    }
 }
 
 impl PartialEq for ModelNode {

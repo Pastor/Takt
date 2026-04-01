@@ -481,9 +481,11 @@ fn construct_model_stage0(
             // Разрешаем типы полей в контексте текущей модели.
             let mut field_pairs: Vec<(String, TypeNode)> = Vec::new();
             for field in &s.fields {
-                let field_ty =
-                    crate::semantic::type_node::construct_type(Some(field.ty.clone()), model_node.clone())
-                        .unwrap_or(TypeNode::Unsupported);
+                let field_ty = crate::semantic::type_node::construct_type(
+                    Some(field.ty.clone()),
+                    model_node.clone(),
+                )
+                .unwrap_or(TypeNode::Unsupported);
                 field_pairs.push((field.name.name.clone(), field_ty));
             }
 
@@ -672,6 +674,7 @@ fn construct_model_stage3(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     let mut conditions = model.borrow().conditions.clone();
+    conditions = extract_conditions(&conditions, model.clone())?;
     conditions = extract_conditions(&conditions, model.clone())?;
     model.borrow_mut().conditions = conditions;
     // Рекурсивно обрабатываем вложенные модели с их собственным контекстом

@@ -6,7 +6,9 @@
 .temporary
 .syntx.json
 output.txt
-/grammar/.output
+/grammar/.output/elevator.[ch]
+/grammar/.output/cmake-build-debug
+/grammar/.output/.idea
 extensions/zed-but/target
 extensions/zed-but/Cargo.lock
 extensions/zed-but/extension.wasm

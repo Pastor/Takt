@@ -197,3 +197,4 @@ model Elevator {
     }
 }
 start Main = Elevator;
+state End;
