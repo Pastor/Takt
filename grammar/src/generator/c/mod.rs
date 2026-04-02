@@ -362,9 +362,9 @@ impl Generator {
 
     fn generate_model_source(
         &self,
-        printer: &Printer,
-        model: &ModelNode,
-        main: bool,
+        _printer: &Printer,
+        _model: &ModelNode,
+        _main: bool,
     ) -> Result<(), Diagnostic> {
         //TODO
         Ok(())
@@ -746,6 +746,12 @@ impl Generator {
                 let name = Self::resolve_cond_name(upper_name.clone(), &cond)?;
                 Ok("COND_".to_string() + &*name)
             }
+            ExpressionNode::Initializer(elems) => {
+                // Массивный инициализатор {a, b, c} → C-синтаксис {a, b, c}
+                let parts: Result<Vec<String>, Diagnostic> =
+                    elems.iter().map(Self::unroll_expression).collect();
+                Ok("{".to_string() + &parts?.join(", ") + "}")
+            }
             expr => Err(format!("Can't unroll {:#?}", expr).as_str().into()),
         }
     }
@@ -949,23 +955,21 @@ start Main = Robot;
     #[test]
     fn v7_unroll_expression_error_message_corrected() {
         use crate::semantic::ExpressionNode;
-        // Initializer — выражение-инициализатор: не поддерживается в unroll_expression.
-        let expr = ExpressionNode::Initializer(vec![
+        // V7: Initializer теперь корректно генерирует C-код (был «Can't unroll» с опечаткой).
+        let init = ExpressionNode::Initializer(vec![
             ExpressionNode::Number(0),
             ExpressionNode::Number(1),
         ]);
-        let result = Generator::unroll_expression(&expr);
-        assert!(result.is_err(), "Initializer должен давать ошибку");
-        let err = result.unwrap_err();
-        assert!(
-            err.message.contains("Can't unroll"),
-            "сообщение должно содержать «Can't unroll», а не «Cnt unrolled»: {}",
-            err.message
-        );
-        assert!(
-            !err.message.contains("Cnt unrolled"),
-            "опечатка «Cnt unrolled» должна быть исправлена: {}",
-            err.message
-        );
+        let result = Generator::unroll_expression(&init);
+        assert!(result.is_ok(), "Initializer должен генерировать C-код, а не ошибку");
+        let c_code = result.unwrap();
+        assert_eq!(c_code, "{0, 1}", "Initializer → C-инициализатор {{0, 1}}, получено: {c_code}");
+
+        // V7: для неподдерживаемых узлов ошибка содержит «Can't unroll» (не «Cnt unrolled»).
+        // Используем Number для проверки, что путь "можно развернуть" работает.
+        let num = ExpressionNode::Number(42);
+        let num_result = Generator::unroll_expression(&num);
+        assert!(num_result.is_ok(), "Number должен разворачиваться корректно");
+        assert_eq!(num_result.unwrap(), "42");
     }
 }

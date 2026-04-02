@@ -875,7 +875,6 @@ fn divide_after_block_comment_is_divide_token() {
 /// Значение блочного комментария содержит исходный текст включая `/*` и `*/`.
 #[test]
 fn block_comment_value_contains_full_text() {
-    use grammar::parser::ast::Comment;
     let src = "/* содержимое */";
     let mut comments = Vec::new();
     let mut errors = Vec::new();

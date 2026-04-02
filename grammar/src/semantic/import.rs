@@ -7,7 +7,6 @@ use crate::diagnostics::Diagnostic;
 use crate::parser::ast::ImportPath;
 use itertools::Itertools;
 use std::fs::{exists, read_to_string};
-use std::path::Path;
 
 /// Читает содержимое файла импорта, используя путь [`ImportPath`].
 ///
