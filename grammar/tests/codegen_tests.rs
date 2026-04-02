@@ -232,7 +232,7 @@ fn test_compile_identifier_import_with_search_path() {
     .unwrap();
 
     // import sensors::light;  →  ищем sensors/light.but в search_paths
-    let main_src = r#"import sensors::light; start Ready; state Done;"#;
+    let main_src = r#"import {Light} from sensors::light; start Ready = Light; state Done;"#;
     let out_dir = tempdir().unwrap();
     let search_paths = vec![lib_root.path().to_string_lossy().into_owned()];
 
@@ -257,9 +257,9 @@ fn test_compile_multiple_imports_single_search_path() {
     fs::write(lib_dir.path().join("b.but"), "model B { start S; }").unwrap();
 
     let main_src = r#"
-import "a.but";
+import {A} from "a.but";
 import "b.but";
-start Ready;
+start Ready = A;
 state Done;
 "#;
     let out_dir = tempdir().unwrap();
@@ -329,7 +329,7 @@ fn test_include_dirs_end_to_end_integration() {
 
     // Создаём входной .but файл во временной директории
     let src_dir = tempdir().unwrap();
-    let src_content = r#"import "fsm_base.but"; start Ready; state Done;"#;
+    let src_content = r#"import {FsmBase} from "fsm_base.but"; start Ready = FsmBase; state Done;"#;
     let src_file = src_dir.path().join("main.but");
     fs::write(&src_file, src_content).unwrap();
 
