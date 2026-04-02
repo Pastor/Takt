@@ -120,10 +120,12 @@ model Timer {
     )
     .unwrap();
 
-    // Главный файл использует import
+    // Главный файл использует import и объявляет состояния на верхнем уровне.
+    // compile_to_c генерирует для корневой модели, у которой должен быть start-state.
     let main_src = r#"
 import "timer.but";
-start Main = Timer;
+start Ready;
+state Done;
 "#;
 
     let out_dir = tempdir().unwrap();
@@ -181,7 +183,7 @@ fn test_compile_second_search_path_wins() {
     )
     .unwrap();
 
-    let main_src = r#"import "utils.but"; start Main = Utils;"#;
+    let main_src = r#"import "utils.but"; start Ready; state Done;"#;
     let out_dir = tempdir().unwrap();
     let search_paths = vec![
         dir1.path().to_string_lossy().into_owned(),
@@ -230,7 +232,7 @@ fn test_compile_identifier_import_with_search_path() {
     .unwrap();
 
     // import sensors::light;  →  ищем sensors/light.but в search_paths
-    let main_src = r#"import sensors::light; start Main = Light;"#;
+    let main_src = r#"import sensors::light; start Ready; state Done;"#;
     let out_dir = tempdir().unwrap();
     let search_paths = vec![lib_root.path().to_string_lossy().into_owned()];
 
@@ -257,7 +259,8 @@ fn test_compile_multiple_imports_single_search_path() {
     let main_src = r#"
 import "a.but";
 import "b.but";
-start Root = A;
+start Ready;
+state Done;
 "#;
     let out_dir = tempdir().unwrap();
     let search_paths = vec![lib_dir.path().to_string_lossy().into_owned()];
@@ -326,7 +329,7 @@ fn test_include_dirs_end_to_end_integration() {
 
     // Создаём входной .but файл во временной директории
     let src_dir = tempdir().unwrap();
-    let src_content = r#"import "fsm_base.but"; start Root = FsmBase;"#;
+    let src_content = r#"import "fsm_base.but"; start Ready; state Done;"#;
     let src_file = src_dir.path().join("main.but");
     fs::write(&src_file, src_content).unwrap();
 
