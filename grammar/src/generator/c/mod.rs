@@ -30,8 +30,8 @@
 #![allow(clippy::explicit_auto_deref)]
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
+use crate::generator::Generator as AsGenerator;
 use crate::parser::ast::Member;
 use crate::semantic::naming::{normalize_lowercase_snakecase, normalize_model_name};
 use crate::semantic::type_node::TypeNode;
@@ -360,13 +360,70 @@ impl Generator {
         Ok(())
     }
 
-    fn generate_model_source(
-        &self,
+    fn generate_implement_source(
+        printer: &Printer,
+        implement: &Implement,
+        model: &ModelNode,
+        main: bool,
+    ) -> Result<(), Diagnostic> {
+        match implement {
+            Implement::None | Implement::Unresolved(_) => {
+                return Err(Diagnostic::error(
+                    Location::Codegen,
+                    "Implementation maybe defined".to_string(),
+                ));
+            }
+            Implement::Model(slave) => {
+                let new_name = model.name.clone().unwrap_or_default()
+                    + "_"
+                    + &*slave.clone().borrow().name.clone().unwrap_or_default();
+                let new_model = slave.clone().borrow().copy(new_name.as_str());
+                Self::generate_model_source(printer, &new_model, false)?;
+            }
+            Implement::Parentless(implement) => {
+                Self::generate_implement_source(printer, implement, model, main)?;
+            }
+            Implement::Add(left, right) => {
+                
+            }
+            Implement::Or(left, right) => {}
+        }
+        Ok(())
+    }
+
+    fn generate_model_tick_source(
         _printer: &Printer,
         _model: &ModelNode,
         _main: bool,
     ) -> Result<(), Diagnostic> {
         //TODO
+        Ok(())
+    }
+
+    fn generate_model_source(
+        printer: &Printer,
+        model: &ModelNode,
+        main: bool,
+    ) -> Result<(), Diagnostic> {
+        // for model in model.models.values() {
+        //     self.generate_model_source(&printer, &*model.clone().borrow(), false)?;
+        // }
+        let start = model.get_start_state().ok_or(Diagnostic::error(
+            Location::Codegen,
+            "Start state not found".to_string(),
+        ))?;
+        if let StateNode::Implement { implements, .. } = start {
+            return Self::generate_implement_source(printer, &implements, model, false);
+        } else if let StateNode::Simple { .. } = start {
+            if main {
+                return Ok(());
+            }
+        } else {
+            return Err(Diagnostic::error(
+                Location::Codegen,
+                "Unimplement state".to_string(),
+            ));
+        }
         Ok(())
     }
 
@@ -378,6 +435,7 @@ impl Generator {
             .print(format!("#include \"{}.h\" ", filename).as_str())
             .nl();
         Self::generate_constants_and_ports_and_enums(&mut printer, model)?;
+        Self::generate_model_source(&printer, model, true)?;
         printer.nl();
         let struct_name = Self::get_model_name_struct(model);
         printer
@@ -401,7 +459,7 @@ impl Generator {
             .print(" *main) {")
             .nl();
         printer.up();
-        self.generate_model_source(&printer, model, true)?;
+        Self::generate_model_tick_source(&printer, model, true)?;
         printer.down();
         printer.print("}").nl().nl();
         printer
@@ -956,20 +1014,27 @@ start Main = Robot;
     fn v7_unroll_expression_error_message_corrected() {
         use crate::semantic::ExpressionNode;
         // V7: Initializer теперь корректно генерирует C-код (был «Can't unroll» с опечаткой).
-        let init = ExpressionNode::Initializer(vec![
-            ExpressionNode::Number(0),
-            ExpressionNode::Number(1),
-        ]);
+        let init =
+            ExpressionNode::Initializer(vec![ExpressionNode::Number(0), ExpressionNode::Number(1)]);
         let result = Generator::unroll_expression(&init);
-        assert!(result.is_ok(), "Initializer должен генерировать C-код, а не ошибку");
+        assert!(
+            result.is_ok(),
+            "Initializer должен генерировать C-код, а не ошибку"
+        );
         let c_code = result.unwrap();
-        assert_eq!(c_code, "{0, 1}", "Initializer → C-инициализатор {{0, 1}}, получено: {c_code}");
+        assert_eq!(
+            c_code, "{0, 1}",
+            "Initializer → C-инициализатор {{0, 1}}, получено: {c_code}"
+        );
 
         // V7: для неподдерживаемых узлов ошибка содержит «Can't unroll» (не «Cnt unrolled»).
         // Используем Number для проверки, что путь "можно развернуть" работает.
         let num = ExpressionNode::Number(42);
         let num_result = Generator::unroll_expression(&num);
-        assert!(num_result.is_ok(), "Number должен разворачиваться корректно");
+        assert!(
+            num_result.is_ok(),
+            "Number должен разворачиваться корректно"
+        );
         assert_eq!(num_result.unwrap(), "42");
     }
 }

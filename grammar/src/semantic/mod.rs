@@ -126,6 +126,29 @@ impl ModelNode {
             .filter(|state| state.kind() == StateNodeKind::End)
             .collect::<Vec<StateNode>>()
     }
+
+    pub(crate) fn copy(&self, new_name: &str) -> ModelNode {
+        ModelNode {
+            name: Some(new_name.to_string()),
+            loc: self.loc,
+            upper: self.upper.clone(),
+            models: self.models.clone(),
+            named_blocks: self.named_blocks.clone(),
+            functions: self.functions.clone(),
+            variables: self.variables.clone(),
+            types: self.types.clone(),
+            type_locs: self.type_locs.clone(),
+            raw_type_defs: self.raw_type_defs.clone(),
+            named_block_raw: self.named_block_raw.clone(),
+            conditions: self.conditions.clone(),
+            enums: self.enums.clone(),
+            structs: self.structs.clone(),
+            states: self.states.clone(),
+            implements: self.implements.clone(),
+            doc: self.doc.clone(),
+            docs: self.docs.clone(),
+        }
+    }
 }
 
 impl PartialEq for ModelNode {
