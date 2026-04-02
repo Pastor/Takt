@@ -17,6 +17,7 @@ pub(crate) mod docs;
 pub mod enum_node;
 mod expression;
 mod function;
+pub mod implement;
 mod import;
 pub mod index;
 mod named_block;
@@ -35,6 +36,7 @@ use crate::parser::ast;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
 pub use crate::semantic::enum_node::EnumDefinitionNode;
 pub use crate::semantic::struct_node::StructDefinitionNode;
+use implement::Implement;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -1057,31 +1059,6 @@ impl StateNode {
     pub fn get_named_block(&self, name: &str) -> Option<&NamedCodeBlockDefinitionNode> {
         self.named_blocks().iter().find(|b| b.name() == name)
     }
-}
-
-/// Реализация модели: описывает, как состояние или корневой автомат
-/// составлен из именованных моделей.
-///
-/// - [`Unresolved`](Implement::Unresolved) — временная заглушка до второго прохода.
-/// - [`Model`](Implement::Model) — ссылка на конкретную именованную модель.
-/// - [`Parentless`](Implement::Parentless) — обёртка без родителя (скобки).
-/// - [`Add`](Implement::Add) — последовательная компоновка `A + B`.
-/// - [`Or`](Implement::Or) — параллельная компоновка `A | B`.
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub enum Implement {
-    /// Реализация не задана (значение по умолчанию для безымянной корневой модели).
-    #[default]
-    None,
-    /// «Сырое» АСД-выражение реализации, ожидающее разрешения на этапе stage1.
-    Unresolved(ast::Expression),
-    /// Ссылка на конкретную именованную модель.
-    Model(Rc<RefCell<ModelNode>>),
-    /// Скобочная группировка: `(реализация)`.
-    Parentless(Box<Implement>),
-    /// Последовательная компоновка: `левое + правое`.
-    Add(Box<Implement>, Box<Implement>),
-    /// Параллельная компоновка: `левое | правое`.
-    Or(Box<Implement>, Box<Implement>),
 }
 
 /// Условие перехода между состояниями.

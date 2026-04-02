@@ -30,14 +30,15 @@
 #![allow(clippy::explicit_auto_deref)]
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::indent::Printer;
 use crate::generator::Generator as AsGenerator;
+use crate::generator::indent::Printer;
 use crate::parser::ast::Member;
+use crate::semantic::implement::Implement;
 use crate::semantic::naming::{normalize_lowercase_snakecase, normalize_model_name};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
-    ConditionDefinitionNode, ConditionNode, EnumDefinitionNode, ExpressionNode, Implement,
-    ModelNode, StateNode, VariableNode,
+    ConditionDefinitionNode, ConditionNode, EnumDefinitionNode, ExpressionNode, ModelNode,
+    StateNode, VariableNode,
 };
 use itertools::Itertools;
 use std::fs;
@@ -389,6 +390,10 @@ impl Generator {
             Implement::Or(_left, _right) => {
                 // TODO(NI5): генерация параллельной композиции
             }
+            _ => Err(Diagnostic::error(
+                Location::Codegen,
+                "Unimplement implement".to_string(),
+            ))?,
         }
         Ok(())
     }
@@ -902,6 +907,7 @@ impl Generator {
                     + "_"
                     + &*Self::resolve_implement_name(*right)?)
             }
+            _ => Err("Not implement yet".into()),
         }
     }
 }

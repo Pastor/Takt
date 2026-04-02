@@ -17,6 +17,7 @@ use crate::parser::ast::{
 use crate::semantic::condition::extract_conditions;
 use crate::semantic::expression::construct_expression;
 use crate::semantic::function::construct_function;
+use crate::semantic::implement::Implement;
 use crate::semantic::import::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
 use crate::semantic::naming::normalize_model_name;
@@ -28,9 +29,9 @@ use crate::semantic::validate::{
     validate_model,
 };
 use crate::semantic::{
-    ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, Implement,
-    ModelNode, NamedCodeBlockDefinitionNode, ReferenceNode, StateNode, StateNodeKind,
-    StatementNode, VariableNode,
+    ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
+    NamedCodeBlockDefinitionNode, ReferenceNode, StateNode, StateNodeKind, StatementNode,
+    VariableNode, implement,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -85,13 +86,13 @@ fn construct_model_stage0(
     let name = model.name.clone();
 
     let model_node = ModelNode {
-        upper: upper.as_ref().map(|m| Rc::downgrade(m)),
+        upper: upper.as_ref().map(Rc::downgrade),
         loc: model.loc,
         name: name.map(|i| i.name.clone()),
         implements: model
             .implements
             .clone()
-            .map(|i| Implement::Unresolved(i))
+            .map(Implement::Unresolved)
             .unwrap_or(Implement::None),
         ..Default::default()
     };
@@ -115,8 +116,7 @@ fn construct_model_stage0(
             }
         }
         if !raw_defs.is_empty() {
-            let cycle_diags =
-                check_type_alias_cycles_ast(&raw_defs, &type_locs_pre);
+            let cycle_diags = check_type_alias_cycles_ast(&raw_defs, &type_locs_pre);
             if let Some(first) = cycle_diags.into_iter().next() {
                 return Err(first);
             }
@@ -579,7 +579,7 @@ fn construct_model_stage1(
                     named_blocks,
                     name: name.clone(),
                     references,
-                    implements: construct_implement(
+                    implements: implement::construct_implement(
                         ExpressionNode::Unresolved(implement_expression),
                         Rc::clone(&model),
                     )?,
@@ -1291,94 +1291,6 @@ fn construct_named_blocks(
         }
     }
     Ok(named_blocks)
-}
-
-/// Строит [`Implement`] из семантического выражения [`ExpressionNode`].
-///
-/// Обрабатывает разрешённые семантические выражения: `Model`, `Add`, `BitwiseOr`,
-/// `Parenthesis`. Для ещё не разрешённых АСД-выражений (`Unresolved`) делегирует
-/// в [`construct_implement_ast`], который напрямую обходит структуру АСД,
-/// минуя полный цикл `construct_expression`. Это оптимизация: выражения реализации
-/// (`A + B`, `A | B`) используют лишь ограниченное подмножество языка,
-/// и специализированный обход работает быстрее и без лишних аллокаций.
-///
-/// # Ошибки
-///
-/// Возвращает [`Diagnostic`], если встречается неподдерживаемое выражение
-/// (например, числовой литерал там, где ожидается имя модели).
-fn construct_implement(
-    expression: ExpressionNode,
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<Implement, Diagnostic> {
-    let model = Rc::clone(&model);
-    match expression {
-        // Ещё не разрешённое АСД-выражение: обходим напрямую без полного construct_expression
-        ExpressionNode::Unresolved(expr) => construct_implement_ast(expr, model),
-        // Разрешённая модель
-        ExpressionNode::Model(model) => Ok(Implement::Model(Rc::clone(&model))),
-        ExpressionNode::Parenthesis(expression) => construct_implement(*expression, model),
-        ExpressionNode::Add(left, right) => {
-            let left = construct_implement(*left, model.clone())?;
-            let right = construct_implement(*right, model.clone())?;
-            Ok(Implement::Add(Box::new(left), Box::new(right)))
-        }
-        ExpressionNode::BitwiseOr(left, right) => {
-            let left = construct_implement(*left, model.clone())?;
-            let right = construct_implement(*right, model.clone())?;
-            Ok(Implement::Or(Box::new(left), Box::new(right)))
-        }
-        other => Err(format!("Неизвестное выражение реализации: {:?}", other)
-            .as_str()
-            .into()),
-    }
-}
-
-/// Строит [`Implement`] непосредственно из АСД-выражения [`ast::Expression`].
-///
-/// Используется из [`construct_implement`] для обработки варианта
-/// [`ExpressionNode::Unresolved`]. Напрямую обходит АСД, не вызывая полный
-/// [`construct_expression`], что является оптимизацией для ограниченного
-/// подмножества выражений реализации.
-///
-/// Поддерживаемые варианты:
-/// - `Variable(id)` → именованная модель `id`;
-/// - `Add(left, right)` → последовательная компоновка `left + right`;
-/// - `BitwiseOr(left, right)` → параллельная компоновка `left | right`;
-/// - `Parenthesis(inner)` → группировка `(inner)`.
-///
-/// # Ошибки
-///
-/// Возвращает [`Diagnostic`], если модель не найдена или встречается
-/// неподдерживаемый вид выражения (например, числовой литерал).
-fn construct_implement_ast(
-    expr: ast::Expression,
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<Implement, Diagnostic> {
-    match expr {
-        ast::Expression::Variable(id) => {
-            let borrowed = model.as_ref().borrow();
-            let found = borrowed.search_model(&id.name).ok_or_else(|| {
-                Diagnostic::error(id.loc, format!("Модель '{}' не найдена", &id.name))
-            })?;
-            Ok(Implement::Model(Rc::clone(&found)))
-        }
-        ast::Expression::Parenthesis(_, inner) => construct_implement_ast(*inner, model),
-        ast::Expression::Add(_, left, right) => {
-            let left = construct_implement_ast(*left, model.clone())?;
-            let right = construct_implement_ast(*right, model.clone())?;
-            Ok(Implement::Add(Box::new(left), Box::new(right)))
-        }
-        ast::Expression::BitwiseOr(_, left, right) => {
-            let left = construct_implement_ast(*left, model.clone())?;
-            let right = construct_implement_ast(*right, model.clone())?;
-            Ok(Implement::Or(Box::new(left), Box::new(right)))
-        }
-        other => Err(
-            format!("Выражение реализации не поддерживается: {:?}", other)
-                .as_str()
-                .into(),
-        ),
-    }
 }
 
 #[cfg(test)]

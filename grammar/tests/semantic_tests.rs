@@ -11,11 +11,12 @@
 
 use grammar::parse;
 use grammar::semantic::enum_node::EnumDefinitionNode;
+use grammar::semantic::implement::Implement;
 use grammar::semantic::tree::{
     construct_model, construct_model_with_docs, implicit_bool_warnings,
     transition_completeness_warnings,
 };
-use grammar::semantic::{Implement, StateNode, VariableNode};
+use grammar::semantic::{StateNode, VariableNode};
 // ─── Вспомогательная функция ──────────────────────────────────────────────────
 
 /// Разбирает BuT-программу и возвращает корневой [`ModelNode`].
@@ -604,7 +605,7 @@ fn implement_without_next_no_stack_overflow() {
     {
         assert!(next.is_none(), "next должен быть None");
         assert!(
-            matches!(implements, grammar::semantic::Implement::Model(_)),
+            matches!(implements, Implement::Model(_)),
             "реализация должна разрешиться в Implement::Model"
         );
     } else {
@@ -737,7 +738,9 @@ fn build_file(
 }
 
 /// Строит семантическую модель из исходного кода BuT.
-fn build_from_src(src: &str) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
+fn build_from_src(
+    src: &str,
+) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
     let (ast, _) = parse(src, 0).expect("ошибка разбора исходного кода");
     construct_model(&ast, None, &[]).map(|m| m.take())
 }
@@ -1729,7 +1732,7 @@ fn circular_import_two_files_is_error() {
         "a.but",
         r#"import "b.but"; start Entry = B { } state Done;"#,
     );
-    // b.but → a.but  (замыкает цикл)
+    // b.but → a.but (замыкает цикл)
     write_tmp_in_dir(&dir, "b.but", r#"import "a.but"; model B { start S; }"#);
 
     let src = r#"import "a.but";"#;
@@ -1769,7 +1772,7 @@ fn circular_import_three_files_is_error() {
         r#"import "cb.but"; start Entry = Cb { } state Done;"#,
     );
     write_tmp_in_dir(&dir, "cb.but", r#"import "cc.but"; model Cb { start S; }"#);
-    // cc.but → ca.but  (замыкает цикл длиной 3)
+    // cc.but → ca.but (замыкает цикл длиной 3)
     write_tmp_in_dir(&dir, "cc.but", r#"import "ca.but"; model Cc { start S; }"#);
 
     let src = r#"import "ca.but";"#;
@@ -1914,7 +1917,7 @@ fn circular_import_via_rename_is_error() {
 
     // Инициируем цикл через Plain-импорт (ra.but содержит rename-импорт rb.but, который замкнёт цикл)
     let src = r#"import "ra.but";"#;
-    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
     assert!(
@@ -2539,7 +2542,7 @@ fn ref_cond_bit_var_is_resolved() {
     let src = "var flag: bit = false; start A { ref B: flag; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
-    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+    if let StateNode::Simple { references, .. } = state_a {
         assert_eq!(references.len(), 1);
         assert!(
             matches!(references[0].cond, ConditionNode::Variable(_, _)),
@@ -2565,7 +2568,7 @@ fn ref_cond_bool_var_is_resolved() {
     let src = "var done: bool = false; start A { ref B: done; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
-    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+    if let StateNode::Simple { references, .. } = state_a {
         assert!(
             matches!(references[0].cond, ConditionNode::Variable(_, _)),
             "условие должно быть разрешено в Variable"
@@ -2590,7 +2593,7 @@ fn ref_cond_named_cond_is_resolved() {
     let src = "var x: [bit;8] = 0; cond full = x = 255; start A { ref B: full; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
-    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+    if let StateNode::Simple { references, .. } = state_a {
         assert_eq!(references.len(), 1);
         // Именованное условие раскрывается до значения (Equal или аналог)
         assert!(
@@ -2615,7 +2618,7 @@ fn ref_no_cond_is_none() {
     let src = "start A { ref B; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
-    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+    if let StateNode::Simple { references, .. } = state_a {
         assert_eq!(references.len(), 1);
         assert_eq!(references[0].cond, ConditionNode::None);
     } else {
@@ -2636,7 +2639,7 @@ fn ref_cond_bool_literal_is_resolved() {
     let src = "start A { ref B: true; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
-    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+    if let StateNode::Simple { references, .. } = state_a {
         assert_eq!(references[0].cond, ConditionNode::Bool(true));
     } else {
         panic!("ожидался StateNode::Simple для A");
@@ -2657,7 +2660,7 @@ fn ref_cond_comparison_is_resolved() {
     let src = "var x: [bit;8] = 0; start A { ref B: x = 255; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
-    if let grammar::semantic::StateNode::Simple { references, .. } = state_a {
+    if let StateNode::Simple { references, .. } = state_a {
         assert!(
             matches!(references[0].cond, ConditionNode::Equal(_, _)),
             "ожидалось Condition::Equal, получено {:?}",
@@ -2962,7 +2965,7 @@ fn variable_upper_gives_access_to_sibling_vars() {
 fn no_strong_cycle_with_conditions() {
     use std::rc::Rc;
     let (ast, _) = parse("var x: bit = false; cond done = x = false; start S;", 0).unwrap();
-    let root = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let root = construct_model(&ast, None, &[]).unwrap();
     assert_eq!(
         Rc::strong_count(&root),
         1,
@@ -2975,7 +2978,7 @@ fn no_strong_cycle_with_conditions() {
 fn no_strong_cycle_with_named_blocks() {
     use std::rc::Rc;
     let (ast, _) = parse("var x: bit = false; start S { always { x = x; } }", 0).unwrap();
-    let root = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let root = construct_model(&ast, None, &[]).unwrap();
     assert_eq!(
         Rc::strong_count(&root),
         1,
@@ -3442,12 +3445,12 @@ fn test_unused_variable_warning() {
     let _node = build_file("tests/data/semantic/valid/unused_variable.but")
         .expect("unused_variable.but должен разбираться без ошибок");
     let model_rc = {
-        let (ast, _) = grammar::parse(
+        let (ast, _) = parse(
             &std::fs::read_to_string("tests/data/semantic/valid/unused_variable.but").unwrap(),
             0,
         )
         .unwrap();
-        grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap()
+        construct_model(&ast, None, &[]).unwrap()
     };
     let warnings = grammar::unused_variable_warnings(model_rc);
     assert_eq!(
@@ -3476,12 +3479,12 @@ fn test_unused_variable_warning() {
 /// FE3: Если все переменные используются — предупреждений Ce13 нет.
 #[test]
 fn test_all_vars_used_no_warning() {
-    let (ast, _) = grammar::parse(
+    let (ast, _) = parse(
         &std::fs::read_to_string("tests/data/semantic/valid/all_vars_used.but").unwrap(),
         0,
     )
     .unwrap();
-    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::unused_variable_warnings(model_rc);
     assert!(
         warnings.is_empty(),
@@ -3496,12 +3499,12 @@ fn test_all_vars_used_no_warning() {
 #[test]
 fn test_nondeterministic_transitions() {
     use grammar::diagnostics::Level;
-    let (ast, _) = grammar::parse(
+    let (ast, _) = parse(
         &std::fs::read_to_string("tests/data/semantic/valid/nondeterministic_warn.but").unwrap(),
         0,
     )
     .unwrap();
-    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     assert_eq!(
         warnings.len(),
@@ -3520,13 +3523,13 @@ fn test_nondeterministic_transitions() {
 /// FE4: Переходы с условиями — предупреждений Ce14 нет.
 #[test]
 fn test_deterministic_no_warning() {
-    let (ast, _) = grammar::parse(
+    let (ast, _) = parse(
         &std::fs::read_to_string("tests/data/semantic/valid/deterministic_transitions.but")
             .unwrap(),
         0,
     )
     .unwrap();
-    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     assert!(
         warnings.is_empty(),
@@ -3775,7 +3778,7 @@ fn ce4_enum_declared_inside_model_local_to_it() {
     }
     // В корневой модели enum Status недоступен
     assert!(
-        node.search_enum("Status").is_none() || node.enums.get("Status").is_none(),
+        node.search_enum("Status").is_none() || !node.enums.contains_key("Status"),
         "enum Status не должен быть виден в корневой модели напрямую"
     );
 }
@@ -3806,7 +3809,10 @@ struct Vec2 { x: [bit;16], y: [bit;16] }
 start S;
 "#;
     let node = build_from_src(src).expect("должен разобраться без ошибок");
-    let s = node.structs.get("Vec2").expect("Vec2 должен быть в structs");
+    let s = node
+        .structs
+        .get("Vec2")
+        .expect("Vec2 должен быть в structs");
     assert_eq!(s.fields.len(), 2);
     assert_eq!(s.fields[0].0, "x");
     assert_eq!(s.fields[0].1, TypeNode::Array(16, Box::new(TypeNode::Bit)));
@@ -3824,7 +3830,10 @@ var ctrl: Flags = 0;
 start S;
 "#;
     let node = build_from_src(src).expect("должен разобраться без ошибок");
-    let var_node = node.variables.get("ctrl").expect("ctrl должен быть в переменных");
+    let var_node = node
+        .variables
+        .get("ctrl")
+        .expect("ctrl должен быть в переменных");
     assert_eq!(
         var_node.ty(),
         &TypeNode::Struct("Flags".to_string()),
@@ -3890,12 +3899,10 @@ fn test_struct_types_file_semantic() {
 #[test]
 fn test_ni4_duplicate_condition_warns() {
     use grammar::diagnostics::Level;
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/invalid/condition_overlap_eq.but",
-    )
-    .expect("файл condition_overlap_eq.but должен существовать");
-    let (ast, _) = grammar::parse(&src, 0).unwrap();
-    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/condition_overlap_eq.but")
+        .expect("файл condition_overlap_eq.but должен существовать");
+    let (ast, _) = parse(&src, 0).unwrap();
+    let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     let ni4_warnings: Vec<_> = warnings
         .iter()
@@ -3912,12 +3919,10 @@ fn test_ni4_duplicate_condition_warns() {
 /// NI4: Перекрывающиеся интервальные условия `level < 10` и `level < 20` — предупреждение NI4.
 #[test]
 fn test_ni4_interval_overlap_warns() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/invalid/condition_overlap_interval.but",
-    )
-    .expect("файл condition_overlap_interval.but должен существовать");
-    let (ast, _) = grammar::parse(&src, 0).unwrap();
-    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/condition_overlap_interval.but")
+        .expect("файл condition_overlap_interval.but должен существовать");
+    let (ast, _) = parse(&src, 0).unwrap();
+    let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     let ni4_warnings: Vec<_> = warnings
         .iter()
@@ -3933,12 +3938,10 @@ fn test_ni4_interval_overlap_warns() {
 /// NI4: Непересекающиеся условия `level < 10` и `level > 20` — предупреждений NI4 нет.
 #[test]
 fn test_ni4_non_overlapping_no_warn() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/valid/no_condition_overlap.but",
-    )
-    .expect("файл no_condition_overlap.but должен существовать");
-    let (ast, _) = grammar::parse(&src, 0).unwrap();
-    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let src = std::fs::read_to_string("tests/data/semantic/valid/no_condition_overlap.but")
+        .expect("файл no_condition_overlap.but должен существовать");
+    let (ast, _) = parse(&src, 0).unwrap();
+    let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     let ni4_warnings: Vec<_> = warnings
         .iter()
@@ -3963,8 +3966,8 @@ start S {
 state A { ref S: x != 3; }
 state B { ref S: x >= 10; }
 "#;
-    let (ast, _) = grammar::parse(src, 0).unwrap();
-    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let (ast, _) = parse(src, 0).unwrap();
+    let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     let ni4_warnings: Vec<_> = warnings
         .iter()
@@ -3989,8 +3992,8 @@ start S {
 state A { ref S: x != 15; }
 state B { ref S: x >= 10; }
 "#;
-    let (ast, _) = grammar::parse(src, 0).unwrap();
-    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
+    let (ast, _) = parse(src, 0).unwrap();
+    let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     let ni4_warnings: Vec<_> = warnings
         .iter()
@@ -4049,10 +4052,8 @@ fn i5_non_recursive_type_alias_ok() {
 /// Ce16: прямая рекурсия из тестового файла `recursive_type_alias.but`.
 #[test]
 fn i5_file_recursive_type_alias() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/invalid/recursive_type_alias.but",
-    )
-    .expect("не удалось прочитать файл");
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/recursive_type_alias.but")
+        .expect("не удалось прочитать файл");
     let err = build_err(&src);
     assert!(
         err.message.contains("Ce16"),
@@ -4064,10 +4065,9 @@ fn i5_file_recursive_type_alias() {
 /// Ce16: взаимная рекурсия из тестового файла `mutual_recursive_type_alias.but`.
 #[test]
 fn i5_file_mutual_recursive_type_alias() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/invalid/mutual_recursive_type_alias.but",
-    )
-    .expect("не удалось прочитать файл");
+    let src =
+        std::fs::read_to_string("tests/data/semantic/invalid/mutual_recursive_type_alias.but")
+            .expect("не удалось прочитать файл");
     let err = build_err(&src);
     assert!(
         err.message.contains("Ce16"),
@@ -4079,10 +4079,8 @@ fn i5_file_mutual_recursive_type_alias() {
 /// Ce16: корректные псевдонимы из тестового файла `non_recursive_type_alias.but` — OK.
 #[test]
 fn i5_file_non_recursive_type_alias_ok() {
-    let src = std::fs::read_to_string(
-        "tests/data/semantic/valid/non_recursive_type_alias.but",
-    )
-    .expect("не удалось прочитать файл");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/non_recursive_type_alias.but")
+        .expect("не удалось прочитать файл");
     let _model = build(&src);
     // Если дошли сюда — нет ошибки Ce16
 }
@@ -4103,7 +4101,10 @@ fn struct_basic_parses() {
 #[test]
 fn struct_fields_accessible() {
     let model = build("struct Pair { a: bit, b: bit } start Idle;");
-    let s = model.structs.get("Pair").expect("структура Pair должна существовать");
+    let s = model
+        .structs
+        .get("Pair")
+        .expect("структура Pair должна существовать");
     assert_eq!(s.fields.len(), 2, "структура Pair должна содержать 2 поля");
     assert!(s.find_field("a").is_some(), "поле a должно быть найдено");
     assert!(s.find_field("b").is_some(), "поле b должно быть найдено");
@@ -4113,7 +4114,8 @@ fn struct_fields_accessible() {
 /// NI3: структура регистрируется как тип и переменная с этим типом разрешается.
 #[test]
 fn struct_as_var_type_resolves() {
-    let model = build("struct Coord { x: [bit;16], y: [bit;16] } var origin: Coord = 0; start Idle;");
+    let model =
+        build("struct Coord { x: [bit;16], y: [bit;16] } var origin: Coord = 0; start Idle;");
     assert!(
         model.structs.contains_key("Coord"),
         "структура Coord должна быть в model.structs"
@@ -4143,12 +4145,9 @@ fn struct_as_var_type_file_ok() {
 /// Ce17: дублирующееся поле структуры — ошибка.
 #[test]
 fn struct_duplicate_field_error() {
-    let (ast, _) = grammar::parse(
-        "struct Bad { x: bit, y: bit, x: bit } start Idle;",
-        0,
-    )
-    .expect("ошибка разбора");
-    let result = grammar::semantic::tree::construct_model(&ast, None, &[]);
+    let (ast, _) =
+        parse("struct Bad { x: bit, y: bit, x: bit } start Idle;", 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_err(),
         "дублирующееся поле структуры должно давать ошибку Ce17"
@@ -4166,8 +4165,8 @@ fn struct_duplicate_field_error() {
 fn struct_duplicate_field_file_error() {
     let src = std::fs::read_to_string("tests/data/semantic/invalid/struct_duplicate_field.but")
         .expect("не удалось прочитать файл");
-    let (ast, _) = grammar::parse(&src, 0).expect("ошибка разбора файла");
-    let result = grammar::semantic::tree::construct_model(&ast, None, &[]);
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
+    let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_err(),
         "файл с дублирующимися полями должен давать ошибку Ce17"
@@ -4179,4 +4178,3 @@ fn struct_duplicate_field_file_error() {
         err.message
     );
 }
-
