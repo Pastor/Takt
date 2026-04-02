@@ -14,21 +14,21 @@ struct ThisIsMyModel {
     } ping;
     struct {
         enum {
-            THIS_IS_MY_MODEL_PONG_INIT,
-            THIS_IS_MY_MODEL_PONG_STOP,
-            THIS_IS_MY_MODEL_PONG_BEGIN
-        } state;
-    } pong;
-    struct {
-        enum {
             THIS_IS_MY_MODEL_TOGGLE_INIT,
             THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
+            THIS_IS_MY_MODEL_TOGGLE_PONG,
             THIS_IS_MY_MODEL_TOGGLE_ENTRY,
             THIS_IS_MY_MODEL_TOGGLE_END,
-            THIS_IS_MY_MODEL_TOGGLE_PONG,
             THIS_IS_MY_MODEL_TOGGLE_PING
         } state;
     } toggle;
+    struct {
+        enum {
+            THIS_IS_MY_MODEL_PONG_INIT,
+            THIS_IS_MY_MODEL_PONG_BEGIN,
+            THIS_IS_MY_MODEL_PONG_STOP
+        } state;
+    } pong;
     enum {
         THIS_IS_MY_MODEL_INIT,
         THIS_IS_MY_MODEL_ENTRY
