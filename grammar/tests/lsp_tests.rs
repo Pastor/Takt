@@ -10,7 +10,7 @@
 mod lsp_integration {
     use grammar::lsp::{goto_declaration, hover_info, node_at_position, position_to_offset};
     use grammar::parse;
-    use grammar::semantic::index::SemanticNodeKind;
+    use grammar::semantic::index::{SemanticIndex, SemanticNodeKind};
     use grammar::semantic::tree::construct_model;
     use lsp_types::Position;
 
@@ -644,6 +644,131 @@ start Main = Robot;
 
         let loc = goto_declaration_with_paths("", Position::new(0, 0), &[]);
         assert!(loc.is_none(), "пустой файл → None");
+    }
+
+    // ── I8: индексация локальных переменных в enter/exit/always ─────────────
+
+    /// I8: локальная переменная в `always`-блоке доступна через SemanticIndex.
+    #[test]
+    fn i8_local_var_in_always_indexed() {
+        let src = "start S;\nalways { var local_x: [bit;8] = 0; }";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let index = SemanticIndex::build(&model);
+
+        // Находим позицию имени "local_x" в "var local_x: ..."
+        // "start S;\nalways { var local_x: " — "local_x" начинается с байта 19
+        let offset = src.find("local_x").expect("local_x должен быть в источнике");
+        let node = index.node_at_offset(offset);
+        assert!(
+            node.is_some(),
+            "local_x должна быть в индексе по offset {}: {:?}",
+            offset,
+            node
+        );
+        let node = node.unwrap();
+        assert_eq!(node.name, "local_x", "имя узла: {:?}", node);
+        assert_eq!(
+            node.kind,
+            SemanticNodeKind::LocalVar,
+            "вид узла должен быть LocalVar: {:?}",
+            node
+        );
+    }
+
+    /// I8: локальная переменная в модельном `enter`-блоке доступна через SemanticIndex.
+    #[test]
+    fn i8_local_var_in_model_enter_indexed() {
+        // Блок enter на уровне модели (не внутри состояния)
+        let src = "start S;\nenter { var enter_var: bit = false; }";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let index = SemanticIndex::build(&model);
+
+        let offset = src.find("enter_var").expect("enter_var должен быть в источнике");
+        let node = index.node_at_offset(offset);
+        assert!(
+            node.is_some(),
+            "enter_var должна быть в индексе по offset {}",
+            offset
+        );
+        let node = node.unwrap();
+        assert_eq!(node.name, "enter_var");
+        assert_eq!(node.kind, SemanticNodeKind::LocalVar);
+    }
+
+    /// I8: локальная переменная в модельном `exit`-блоке доступна через SemanticIndex.
+    #[test]
+    fn i8_local_var_in_model_exit_indexed() {
+        // Блок exit на уровне модели (не внутри состояния)
+        let src = "start S;\nexit { var exit_var: bit = false; }";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let index = SemanticIndex::build(&model);
+
+        let offset = src.find("exit_var").expect("exit_var должен быть в источнике");
+        let node = index.node_at_offset(offset);
+        assert!(
+            node.is_some(),
+            "exit_var должна быть в индексе по offset {}",
+            offset
+        );
+        let node = node.unwrap();
+        assert_eq!(node.name, "exit_var");
+        assert_eq!(node.kind, SemanticNodeKind::LocalVar);
+    }
+
+    /// I8: поиск локальной переменной по позиции LSP в always-блоке.
+    #[test]
+    fn i8_node_at_position_local_var_in_always() {
+        let src = "start S;\nalways { var my_local: [bit;8] = 0; }";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+
+        // Находим строку и столбец для "my_local"
+        let offset = src.find("my_local").unwrap();
+        let line = src[..offset].matches('\n').count() as u32;
+        let line_start = src[..offset].rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let col = (offset - line_start) as u32;
+
+        let node = node_at_position(src, Position::new(line, col), &model);
+        assert!(
+            node.is_some(),
+            "my_local должна быть найдена по позиции ({}, {})",
+            line, col
+        );
+        let node = node.unwrap();
+        assert_eq!(node.name, "my_local");
+        assert_eq!(node.kind, SemanticNodeKind::LocalVar);
+    }
+
+    /// I8: тестовый файл local_var_in_blocks.but — все локальные переменные индексируются.
+    #[test]
+    fn i8_file_local_vars_indexed() {
+        let src = std::fs::read_to_string("tests/data/lsp/local_var_in_blocks.but")
+            .expect("не удалось прочитать файл");
+        let (ast, _) = parse(&src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let index = SemanticIndex::build(&model);
+
+        // Все три локальные переменные должны быть в индексе
+        for var_name in &["local_in_enter", "local_in_exit", "local_in_always"] {
+            let offset = src.find(var_name).unwrap_or_else(|| {
+                panic!("{} должен быть в тестовом файле", var_name)
+            });
+            let node = index.node_at_offset(offset);
+            assert!(
+                node.is_some(),
+                "{} должна быть в индексе по offset {}",
+                var_name, offset
+            );
+            assert_eq!(
+                node.unwrap().kind,
+                SemanticNodeKind::LocalVar,
+                "{} должна иметь вид LocalVar",
+                var_name
+            );
+        }
     }
 
     /// I7: кросс-файловый переход — объявление модели из импортируемого файла.

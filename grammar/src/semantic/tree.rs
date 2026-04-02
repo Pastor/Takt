@@ -408,6 +408,11 @@ fn construct_model_stage0(
                 })?
                 .name
                 .clone();
+            // I8: сохраняем сырой АСД-оператор для последующей индексации локальных переменных
+            model_node
+                .borrow_mut()
+                .named_block_raw
+                .push((name.clone(), def.statement.clone()));
             let block = match name.as_str() {
                 "enter" => NamedCodeBlockDefinitionNode::Enter {
                     upper: Some(Rc::downgrade(&model_node)),

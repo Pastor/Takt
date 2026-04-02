@@ -75,6 +75,11 @@ pub struct ModelNode {
     /// Используется `check_recursive_type_aliases` в `validate.rs` для обнаружения
     /// циклических ссылок между псевдонимами (Ce16).
     pub raw_type_defs: HashMap<String, ast::Type>,
+    /// Сырые АСД-операторы именованных блоков: `(имя_блока, оригинальный_оператор)`.
+    ///
+    /// Используется `SemanticIndex` (I8) для индексации объявлений локальных переменных
+    /// внутри `enter`/`exit`/`always`-блоков, позиции которых теряются при разрешении.
+    pub named_block_raw: Vec<(String, ast::Statement)>,
     /// Объявленные условия переходов.
     pub conditions: HashMap<String, ConditionDefinitionNode>,
     /// Объявленные перечисления (Ce4).

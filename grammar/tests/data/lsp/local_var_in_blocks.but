@@ -1,0 +1,17 @@
+/// Файл для тестирования индексации локальных переменных (I8).
+/// Проверяет, что переменные внутри enter/exit/always-блоков на уровне модели
+/// доступны через SemanticIndex::node_at_offset.
+
+start S;
+
+enter {
+    var local_in_enter: [bit;8] = 0;
+}
+
+exit {
+    var local_in_exit: bit = false;
+}
+
+always {
+    var local_in_always: [bit;8] = 42;
+}

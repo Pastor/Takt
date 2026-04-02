@@ -513,7 +513,7 @@ fn find_declaration_in_index<'a>(
     let is_declaration = matches!(
         kind,
         Variable | Const | Port | Function | ExternFunction | State | StartState | EndState
-            | TypeAlias | Condition | Enum | Model
+            | TypeAlias | Condition | Enum | Model | LocalVar
     );
     if !is_declaration {
         return None;
@@ -534,7 +534,7 @@ fn declaration_range_of(node: &SemanticNodeRef, source: &str) -> Option<Range> {
     match node.kind {
         // Декларационные виды: loc уже указывает на объявление
         Variable | Const | Port | Function | ExternFunction | State | StartState | EndState
-        | TypeAlias | Condition | Enum | Model => {
+        | TypeAlias | Condition | Enum | Model | LocalVar => {
             if let Location::Source(_, start, end) = node.loc {
                 Some(offset_to_range(source, start, end))
             } else {
@@ -947,6 +947,10 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
                     // Запасной вариант: показываем имя как есть
                     hover_text = format!("```but\n{}\n```", word);
                 }
+            }
+            SemanticNodeKind::LocalVar => {
+                // Локальная переменная в блоке (enter/exit/always/fn): показываем имя
+                hover_text = format!("```but\nvar {} (локальная)\n```", word);
             }
         }
     }

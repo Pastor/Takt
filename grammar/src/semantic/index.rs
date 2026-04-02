@@ -77,6 +77,8 @@ pub enum SemanticNodeKind {
     Enum,
     /// Именованная модель конечного автомата (`model`).
     Model,
+    /// Локальная переменная внутри блока (`enter`, `exit`, `always`, тела функции).
+    LocalVar,
 }
 
 /// Ссылка на узел семантического дерева с позицией в исходном тексте.
@@ -412,6 +414,13 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
     // Именованные блоки модели (always, enter, exit, …)
     for nb in &borrowed.named_blocks {
         collect_named_block_entries(nb, model, entries);
+    }
+
+    // I8: индексируем локальные переменные из сырых АСД-операторов именованных блоков.
+    // Сырые операторы сохраняют байтовые позиции, которые теряются при семантическом
+    // разрешении (StatementNode::Variable не несёт Location).
+    for (_, raw_stmt) in &borrowed.named_block_raw {
+        collect_ast_statement_entries(raw_stmt, model, entries);
     }
 
     // Рекурсивно обходим вложенные именованные модели
@@ -774,7 +783,39 @@ fn collect_ast_statement_entries(
         ast::Statement::Return(_, Some(expr)) => {
             collect_ast_expression_entries(expr, model, entries);
         }
-        // Continue, Break, Return(None), Variable(нет loc), StraySemicolon, Error,
+        // Объявление локальной переменной внутри блока (I8)
+        ast::Statement::Variable(_stmt_loc, var_def, init_expr) => {
+            // Извлекаем имя и локацию идентификатора объявляемой переменной
+            let (name, id_loc) = match var_def.as_ref() {
+                ast::VariableDefine::Variable {
+                    name: Some(id), ..
+                }
+                | ast::VariableDefine::Port {
+                    name: Some(id), ..
+                }
+                | ast::VariableDefine::Constant {
+                    name: Some(id), ..
+                } => (id.name.clone(), id.loc),
+                _ => return,
+            };
+            if let Location::Source(_, start, end) = id_loc {
+                entries.push(IndexEntry {
+                    start,
+                    end,
+                    node_ref: SemanticNodeRef {
+                        name: name.clone(),
+                        kind: SemanticNodeKind::LocalVar,
+                        loc: id_loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+            // Индексируем инициализатор (если есть переменные-ссылки в нём)
+            if let Some(init) = init_expr {
+                collect_ast_expression_entries(init, model, entries);
+            }
+        }
+        // Continue, Break, Return(None), StraySemicolon, Error,
         // Assembly, Formula, Args — либо нет идентификаторов, либо не применимы
         _ => {}
     }
