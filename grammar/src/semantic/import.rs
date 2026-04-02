@@ -7,6 +7,7 @@ use crate::diagnostics::Diagnostic;
 use crate::parser::ast::ImportPath;
 use itertools::Itertools;
 use std::fs::{exists, read_to_string};
+use std::path::Path;
 
 /// Читает содержимое файла импорта, используя путь [`ImportPath`].
 ///
@@ -79,6 +80,32 @@ pub(crate) fn read_import_file(
     }
 
     let filename = found.first().unwrap();
+
+    // V3: Защита от обхода каталогов (path traversal).
+    // Канонизируем найденный путь и проверяем, что он находится внутри
+    // одного из разрешённых каталогов поиска.
+    // Это предотвращает импорты вида `import "../../etc/passwd"`.
+    {
+        let canonical_file = std::fs::canonicalize(filename).map_err(|e| {
+            format!("Не удалось канонизировать путь «{}»: {}", filename, e)
+                .as_str()
+                .into()
+        })?;
+        let is_allowed = search_paths.iter().any(|dir| {
+            // Канонизируем директорию поиска; если это не удаётся — пропускаем её.
+            std::fs::canonicalize(dir)
+                .map(|canon_dir| canonical_file.starts_with(&canon_dir))
+                .unwrap_or(false)
+        });
+        if !is_allowed {
+            return Err(format!(
+                "Путь импорта «{}» выходит за пределы разрешённых директорий поиска: {:?}",
+                filename, search_paths
+            )
+            .as_str()
+            .into());
+        }
+    }
 
     // Проверяем, что файл имеет расширение .but
     if !filename.ends_with(".but") {
@@ -232,6 +259,65 @@ mod tests {
 
         let err = read_import_file(&search, &filename_path("model")).unwrap_err();
         assert!(err.message.contains("Недопустимое"));
+    }
+
+    // ── V3: Защита от обхода каталогов (path traversal) ──────────────────────
+
+    /// V3: Путь вида `../../etc/passwd` должен возвращать ошибку,
+    /// а не читать файлы за пределами разрешённых директорий.
+    #[test]
+    fn path_traversal_is_rejected() {
+        // Создаём две временные директории: разрешённую (search dir) и «жертву».
+        let allowed_dir = tempfile::tempdir().unwrap();
+        let victim_dir = tempfile::tempdir().unwrap();
+
+        // Кладём целевой файл в директорию «жертву» (не в search_paths).
+        fs::write(victim_dir.path().join("secret.but"), "start S;").unwrap();
+
+        // Строим относительный путь, выходящий за пределы allowed_dir.
+        // Например: "../<victim_basename>/secret.but"
+        let victim_dirname = victim_dir
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let traversal = format!("../{}/secret.but", victim_dirname);
+
+        let search = vec![allowed_dir.path().to_string_lossy().into_owned()];
+        let path = filename_path(&traversal);
+
+        let result = read_import_file(&search, &path);
+        // Ожидаем ошибку: файл либо не найден (файловая система не совпадёт),
+        // либо отклонён проверкой обхода каталогов.
+        match result {
+            Err(e) => {
+                // Допустимо: файл не найден или обход отклонён
+                let _ = e;
+            }
+            Ok(_) => {
+                panic!(
+                    "path traversal должен быть отклонён, \
+                     но файл был успешно прочитан"
+                );
+            }
+        }
+    }
+
+    /// V3: Легитимный вложенный путь внутри search_dir разрешён.
+    #[test]
+    fn nested_path_within_search_dir_is_allowed() {
+        let dir = tempfile::tempdir().unwrap();
+        let subdir = dir.path().join("sub");
+        fs::create_dir(&subdir).unwrap();
+        fs::write(subdir.join("ok.but"), "start S;").unwrap();
+
+        let search = vec![dir.path().to_string_lossy().into_owned()];
+        let path = filename_path("sub/ok.but");
+
+        // Должно успешно читаться — файл внутри search_dir.
+        let (content, _) = read_import_file(&search, &path).unwrap();
+        assert_eq!(content, "start S;");
     }
 
     /// Ошибка чтения файла (нет прав) возвращает осмысленный диагностик.
