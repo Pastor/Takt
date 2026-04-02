@@ -746,7 +746,7 @@ impl Generator {
                 let name = Self::resolve_cond_name(upper_name.clone(), &cond)?;
                 Ok("COND_".to_string() + &*name)
             }
-            expr => Err(format!("Cnt unrolled {:#?}", expr).as_str().into()),
+            expr => Err(format!("Can't unroll {:#?}", expr).as_str().into()),
         }
     }
 
@@ -940,5 +940,32 @@ start Main = Robot;
         let inner = inner.borrow();
         let name = Generator::get_model_name_struct(&inner);
         assert!(!name.is_empty(), "структурное имя не должно быть пустым");
+    }
+
+    // ── V7: Тест исправления опечатки в сообщении об ошибке ──────────────────
+
+    /// V7: неподдерживаемое выражение возвращает ошибку «Can't unroll»,
+    /// а не «Cnt unrolled» (опечатка была исправлена).
+    #[test]
+    fn v7_unroll_expression_error_message_corrected() {
+        use crate::semantic::ExpressionNode;
+        // Initializer — выражение-инициализатор: не поддерживается в unroll_expression.
+        let expr = ExpressionNode::Initializer(vec![
+            ExpressionNode::Number(0),
+            ExpressionNode::Number(1),
+        ]);
+        let result = Generator::unroll_expression(&expr);
+        assert!(result.is_err(), "Initializer должен давать ошибку");
+        let err = result.unwrap_err();
+        assert!(
+            err.message.contains("Can't unroll"),
+            "сообщение должно содержать «Can't unroll», а не «Cnt unrolled»: {}",
+            err.message
+        );
+        assert!(
+            !err.message.contains("Cnt unrolled"),
+            "опечатка «Cnt unrolled» должна быть исправлена: {}",
+            err.message
+        );
     }
 }
