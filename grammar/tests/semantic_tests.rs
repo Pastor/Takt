@@ -4087,3 +4087,96 @@ fn i5_file_non_recursive_type_alias_ok() {
     // Если дошли сюда — нет ошибки Ce16
 }
 
+// ─── NI3: Структурные типы (Ce17, Ce18) ──────────────────────────────────────
+
+/// NI3: базовое объявление структуры парсится и строится без ошибок.
+#[test]
+fn struct_basic_parses() {
+    let model = build("struct Point { x: [bit;16], y: [bit;16] } start Idle;");
+    assert!(
+        model.structs.contains_key("Point"),
+        "структура Point должна быть в model.structs"
+    );
+}
+
+/// NI3: поля структуры доступны в семантическом узле.
+#[test]
+fn struct_fields_accessible() {
+    let model = build("struct Pair { a: bit, b: bit } start Idle;");
+    let s = model.structs.get("Pair").expect("структура Pair должна существовать");
+    assert_eq!(s.fields.len(), 2, "структура Pair должна содержать 2 поля");
+    assert!(s.find_field("a").is_some(), "поле a должно быть найдено");
+    assert!(s.find_field("b").is_some(), "поле b должно быть найдено");
+    assert!(s.find_field("z").is_none(), "поле z не должно существовать");
+}
+
+/// NI3: структура регистрируется как тип и переменная с этим типом разрешается.
+#[test]
+fn struct_as_var_type_resolves() {
+    let model = build("struct Coord { x: [bit;16], y: [bit;16] } var origin: Coord = 0; start Idle;");
+    assert!(
+        model.structs.contains_key("Coord"),
+        "структура Coord должна быть в model.structs"
+    );
+    assert!(
+        model.variables.contains_key("origin"),
+        "переменная origin должна быть объявлена"
+    );
+}
+
+/// NI3: тестовый файл `struct_basic.but` — без ошибок.
+#[test]
+fn struct_basic_file_ok() {
+    let src = std::fs::read_to_string("tests/data/semantic/valid/struct_basic.but")
+        .expect("не удалось прочитать файл");
+    let _model = build(&src);
+}
+
+/// NI3: тестовый файл `struct_as_var_type.but` — без ошибок.
+#[test]
+fn struct_as_var_type_file_ok() {
+    let src = std::fs::read_to_string("tests/data/semantic/valid/struct_as_var_type.but")
+        .expect("не удалось прочитать файл");
+    let _model = build(&src);
+}
+
+/// Ce17: дублирующееся поле структуры — ошибка.
+#[test]
+fn struct_duplicate_field_error() {
+    let (ast, _) = grammar::parse(
+        "struct Bad { x: bit, y: bit, x: bit } start Idle;",
+        0,
+    )
+    .expect("ошибка разбора");
+    let result = grammar::semantic::tree::construct_model(&ast, None, &[]);
+    assert!(
+        result.is_err(),
+        "дублирующееся поле структуры должно давать ошибку Ce17"
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.message.contains("Ce17"),
+        "сообщение об ошибке должно содержать Ce17: {}",
+        err.message
+    );
+}
+
+/// Ce17: тестовый файл `struct_duplicate_field.but` — ошибка Ce17.
+#[test]
+fn struct_duplicate_field_file_error() {
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/struct_duplicate_field.but")
+        .expect("не удалось прочитать файл");
+    let (ast, _) = grammar::parse(&src, 0).expect("ошибка разбора файла");
+    let result = grammar::semantic::tree::construct_model(&ast, None, &[]);
+    assert!(
+        result.is_err(),
+        "файл с дублирующимися полями должен давать ошибку Ce17"
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.message.contains("Ce17"),
+        "сообщение должно содержать Ce17: {}",
+        err.message
+    );
+}
+
