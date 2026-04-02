@@ -70,6 +70,11 @@ pub struct ModelNode {
     pub types: HashMap<String, TypeNode>,
     /// Позиции объявлений псевдонимов типов: имя → позиция в исходном тексте.
     pub type_locs: HashMap<String, Location>,
+    /// Сырые АСД-типы псевдонимов: имя → оригинальный AST-тип до разрешения.
+    ///
+    /// Используется `check_recursive_type_aliases` в `validate.rs` для обнаружения
+    /// циклических ссылок между псевдонимами (Ce16).
+    pub raw_type_defs: HashMap<String, ast::Type>,
     /// Объявленные условия переходов.
     pub conditions: HashMap<String, ConditionDefinitionNode>,
     /// Объявленные перечисления (Ce4).

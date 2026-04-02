@@ -24,7 +24,8 @@ use crate::semantic::reference::resolve_state_references;
 use crate::semantic::type_inference::type_inference;
 use crate::semantic::type_node::{TypeNode, construct_type};
 use crate::semantic::validate::{
-    check_implicit_bool_conditions, check_transition_completeness, validate_model,
+    check_implicit_bool_conditions, check_transition_completeness, check_type_alias_cycles_ast,
+    validate_model,
 };
 use crate::semantic::{
     ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, Implement,
@@ -100,6 +101,28 @@ fn construct_model_stage0(
     let mut conditions = HashMap::new();
     let mut named_blocks = Vec::new();
     let mut functions = HashMap::new();
+
+    // Ce16: предварительная проверка циклических псевдонимов до вызова construct_type.
+    // Собираем все AST-определения типов из текущего уровня модели.
+    {
+        let mut raw_defs: std::collections::HashMap<String, ast::Type> = HashMap::new();
+        let mut type_locs_pre: std::collections::HashMap<String, crate::diagnostics::Location> =
+            HashMap::new();
+        for element in model.elements.iter() {
+            if let ModelElement::Type(def) = element {
+                raw_defs.insert(def.name.name.clone(), def.ty.clone());
+                type_locs_pre.insert(def.name.name.clone(), def.name.loc);
+            }
+        }
+        if !raw_defs.is_empty() {
+            let cycle_diags =
+                check_type_alias_cycles_ast(&raw_defs, &type_locs_pre);
+            if let Some(first) = cycle_diags.into_iter().next() {
+                return Err(first);
+            }
+        }
+    }
+
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
             let model = construct_model_stage0(
@@ -336,14 +359,16 @@ fn construct_model_stage0(
         } else if let ModelElement::Type(def) = element {
             let name = def.clone().name.name.clone();
             let typ = def.ty.clone();
-            model_node
-                .borrow_mut()
-                .types
-                .insert(name.clone(), construct_type(Some(typ), model_node.clone())?);
-            model_node
-                .borrow_mut()
-                .type_locs
-                .insert(name.clone(), def.name.loc);
+            // Вычисляем тип ДО borrow_mut, чтобы construct_type мог безопасно вызвать
+            // model_node.borrow() (search_type) без конфликта с borrow_mut.
+            let resolved_type = construct_type(Some(typ.clone()), model_node.clone())?;
+            // Сохраняем сырой АСД-тип для последующей проверки циклических псевдонимов (Ce16)
+            {
+                let mut bm = model_node.borrow_mut();
+                bm.raw_type_defs.insert(name.clone(), typ.clone());
+                bm.types.insert(name.clone(), resolved_type);
+                bm.type_locs.insert(name.clone(), def.name.loc);
+            }
         } else if let ModelElement::Condition(def) = element {
             let def_loc = def
                 .as_ref()

@@ -4003,3 +4003,87 @@ state B { ref S: x >= 10; }
     );
 }
 
+// ─── I5: Ce16 — рекурсивные псевдонимы типов ─────────────────────────────────
+
+/// Ce16: прямая рекурсия `type A = [A; 8]` — ошибка.
+#[test]
+fn i5_direct_recursive_type_alias_is_error() {
+    let err = build_err("type A = [A; 8]; start S;");
+    assert!(
+        err.message.contains("Ce16"),
+        "прямая рекурсия должна давать Ce16: {}",
+        err.message
+    );
+    assert!(
+        err.message.contains("'A'"),
+        "ошибка должна упоминать псевдоним 'A': {}",
+        err.message
+    );
+}
+
+/// Ce16: взаимная рекурсия `type A = [B; 4]; type B = [A; 2];` — ошибка.
+#[test]
+fn i5_mutual_recursive_type_alias_is_error() {
+    let err = build_err("type A = [B; 4]; type B = [A; 2]; start S;");
+    assert!(
+        err.message.contains("Ce16"),
+        "взаимная рекурсия должна давать Ce16: {}",
+        err.message
+    );
+}
+
+/// Ce16: линейная цепочка без цикла — OK.
+#[test]
+fn i5_non_recursive_type_alias_ok() {
+    let model = build("type A = [bit; 8]; type B = [A; 2]; var x: B = 0; start S;");
+    assert!(
+        model.types.contains_key("A"),
+        "псевдоним A должен быть в types"
+    );
+    assert!(
+        model.types.contains_key("B"),
+        "псевдоним B должен быть в types"
+    );
+}
+
+/// Ce16: прямая рекурсия из тестового файла `recursive_type_alias.but`.
+#[test]
+fn i5_file_recursive_type_alias() {
+    let src = std::fs::read_to_string(
+        "tests/data/semantic/invalid/recursive_type_alias.but",
+    )
+    .expect("не удалось прочитать файл");
+    let err = build_err(&src);
+    assert!(
+        err.message.contains("Ce16"),
+        "файл с прямой рекурсией должен давать Ce16: {}",
+        err.message
+    );
+}
+
+/// Ce16: взаимная рекурсия из тестового файла `mutual_recursive_type_alias.but`.
+#[test]
+fn i5_file_mutual_recursive_type_alias() {
+    let src = std::fs::read_to_string(
+        "tests/data/semantic/invalid/mutual_recursive_type_alias.but",
+    )
+    .expect("не удалось прочитать файл");
+    let err = build_err(&src);
+    assert!(
+        err.message.contains("Ce16"),
+        "файл со взаимной рекурсией должен давать Ce16: {}",
+        err.message
+    );
+}
+
+/// Ce16: корректные псевдонимы из тестового файла `non_recursive_type_alias.but` — OK.
+#[test]
+fn i5_file_non_recursive_type_alias_ok() {
+    let src = std::fs::read_to_string(
+        "tests/data/semantic/valid/non_recursive_type_alias.but",
+    )
+    .expect("не удалось прочитать файл");
+    let _model = build(&src);
+    // Если дошли сюда — нет ошибки Ce16
+}
+

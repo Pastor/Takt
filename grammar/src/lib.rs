@@ -31,7 +31,6 @@ extern crate core;
 use crate::parser::lexer::{LexicalError, Token};
 use crate::parser::{ast, lexer};
 use diagnostics::{Diagnostic, Location};
-use itertools::Itertools;
 use lalrpop_util::ParseError;
 use std::path::Path;
 
@@ -257,6 +256,16 @@ pub fn nondeterministic_transition_warnings(
     semantic::validate::check_nondeterministic_transitions(model)
 }
 
+/// Ce16: возвращает ошибки рекурсивных псевдонимов типов в модели.
+///
+/// Проверяет граф зависимостей псевдонимов типов на наличие циклов.
+/// При обнаружении цикла возвращает ошибку Ce16 с именем псевдонима.
+pub fn recursive_type_alias_errors(
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+) -> Vec<Diagnostic> {
+    semantic::validate::check_recursive_type_aliases(model)
+}
+
 /// NI6: возвращает ошибки типобезопасных операций с перечислениями в модели.
 ///
 /// Проверяет, что при присваивании переменной типа enum значение является
@@ -480,7 +489,7 @@ always {
     /// V1: обычный путь вида "path/to/model.but" → имя модели "model".
     #[test]
     fn compile_to_c_normal_filename_sets_model_name() {
-        use std::io;
+
         // Используем пустую директорию; ошибка записи нас не интересует —
         // важно только, что функция не паникует при нормальном имени файла.
         let dir = tempfile::tempdir().unwrap();
