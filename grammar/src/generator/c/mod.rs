@@ -87,7 +87,11 @@ impl Generator {
         normalize_model_name(Self::resolve_model_name(model).unwrap().as_str())
     }
 
-    fn get_typed_variable(typ: &TypeNode, name: Option<String>) -> Option<String> {
+    fn get_typed_variable(
+        typ: &TypeNode,
+        name: Option<String>,
+        model: &ModelNode,
+    ) -> Option<String> {
         match typ {
             TypeNode::Bit => Some(format!("int {}", name.clone().unwrap_or_default())),
             TypeNode::Bool => Some(format!("bool {}", name.clone().unwrap_or_default())),
@@ -114,12 +118,33 @@ impl Generator {
                 struct_name,
                 name.clone().unwrap_or_default()
             )),
+            TypeNode::Enum(enum_name) => {
+                let enum_node = model.search_enum(enum_name)?;
+                let max = enum_node
+                    .variants
+                    .into_iter()
+                    .sorted_by(|a, b| a.1.cmp(&b.1))
+                    .collect::<Vec<(String, i64)>>()
+                    .first()
+                    .map(|x| x.1)
+                    .unwrap_or_default();
+                let max = if max > i8::MAX as i64 && max < i16::MAX as i64 {
+                    16
+                } else if max > i16::MAX as i64 && max < i32::MAX as i64 {
+                    32
+                } else if max > i32::MAX as i64 {
+                    64
+                } else {
+                    8
+                };
+                let enum_name = normalize_lowercase_snakecase(enum_name.clone());
+                Some(format!("uint{}_t {}", max, &enum_name))
+            }
             TypeNode::BuiltinModel
             | TypeNode::BuiltinState
             | TypeNode::BuiltinNumeric
             | TypeNode::Unsupported
             | TypeNode::Inference
-            | TypeNode::Enum(_)
             | TypeNode::Address(_, _) => None,
         }
     }
@@ -168,7 +193,8 @@ impl Generator {
                 match var {
                     VariableNode::Unresolved => {}
                     VariableNode::Simple { ty, expr, .. } => {
-                        let typed_variable = Self::get_typed_variable(ty, Some(name.clone()));
+                        let typed_variable =
+                            Self::get_typed_variable(ty, Some(name.clone()), model);
                         if typed_variable.is_none() {
                             continue;
                         }
@@ -324,6 +350,16 @@ impl Generator {
         Ok(())
     }
 
+    fn generate_model_source(
+        &self,
+        printer: &Printer,
+        model: &ModelNode,
+        main: bool,
+    ) -> Result<(), Diagnostic> {
+        //TODO
+        Ok(())
+    }
+
     fn generate_source(&self, model: &ModelNode) -> Result<String, Diagnostic> {
         let mut source = String::new();
         let mut printer = Printer::new(4, &mut source);
@@ -354,7 +390,9 @@ impl Generator {
             .print(&struct_name)
             .print(" *main) {")
             .nl();
-        //TODO: Обработка входных сигналов и переходы
+        printer.up();
+        self.generate_model_source(&printer, model, true)?;
+        printer.down();
         printer.print("}").nl().nl();
         printer
             .print("void ")

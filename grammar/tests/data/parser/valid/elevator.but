@@ -195,6 +195,7 @@ model Engine {
             has_call = 0;
         }
     }
+    var action: Action = Closing;
 }
 start Main = Engine {
     next End;
