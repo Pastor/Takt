@@ -222,6 +222,22 @@ impl SemanticIndex {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// Ищет первый узел с заданным именем и видом.
+    ///
+    /// Используется для поиска декларации по имени при кросс-файловых переходах.
+    ///
+    /// Возвращает `None`, если узел с таким именем и видом не найден.
+    pub fn find_by_name(
+        &self,
+        name: &str,
+        kind: &SemanticNodeKind,
+    ) -> Option<&SemanticNodeRef> {
+        self.entries
+            .iter()
+            .find(|e| e.node_ref.name == name && &e.node_ref.kind == kind)
+            .map(|e| &e.node_ref)
+    }
 }
 
 /// Рекурсивно собирает записи из модели и всех вложенных моделей.

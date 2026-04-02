@@ -349,6 +349,18 @@ pub fn node_at_position(
     index.node_at_offset(offset).cloned()
 }
 
+/// LSP-локация: URI файла и диапазон объявления.
+///
+/// Используется [`goto_declaration_with_paths`] для возврата местоположения
+/// в произвольном файле (не только в текущем).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Location {
+    /// URI файла в формате `file:///абсолютный/путь` или просто путь к файлу.
+    pub uri: String,
+    /// Диапазон объявления в файле.
+    pub range: Range,
+}
+
 /// Разрешает позицию декларации элемента под курсором.
 ///
 /// Строит семантическую модель из исходного текста и возвращает [`Range`]
@@ -364,11 +376,150 @@ pub fn node_at_position(
 /// - Использования переменных внутри тел функций и блоков (`enter`, `exit`, `always`)
 ///   не индексируются: переход к декларации из таких контекстов недоступен.
 /// - Кросс-файловые декларации (импортированные элементы) не поддерживаются.
+///   Для поддержки кросс-файловых переходов используйте [`goto_declaration_with_paths`].
 pub fn goto_declaration(source: &str, position: Position) -> Option<Range> {
     let (ast, _) = crate::parse(source, 0).ok()?;
     let model = semantic::tree::construct_model(&ast, None, &[]).ok()?;
     let node = node_at_position(source, position, &model)?;
     declaration_range_of(&node, source)
+}
+
+/// Разрешает позицию декларации с поддержкой кросс-файловых переходов.
+///
+/// Расширенная версия [`goto_declaration`], принимающая пути поиска импортов.
+/// Строит семантическую модель из исходного текста (с разрешением импортов)
+/// и возвращает [`Location`] объявления идентификатора под курсором.
+///
+/// ## Алгоритм
+///
+/// 1. Ищет узел по позиции в семантическом дереве текущего файла.
+/// 2. Если декларация находится в текущем файле — возвращает её Range.
+/// 3. Если узел принадлежит импортированной модели — ищет файл импорта
+///    в `search_paths`, строит его семантическую модель и ищет декларацию там.
+///
+/// ## Ограничения
+///
+/// - Кросс-файловые переходы доступны только для символов верхнего уровня
+///   (модели, переменные, функции, типы, состояния). Переходы к локальным
+///   переменным внутри функций и блоков (`enter`, `exit`, `always`)
+///   не поддерживаются даже при наличии путей поиска.
+/// - Поиск файла импорта основан на имени модели и именах файлов `.but`.
+///   Если имя модели не совпадает с нормализованным именем файла, переход
+///   к декларации может не найти нужный файл.
+///
+/// Возвращает `None` если:
+/// - исходный текст не компилируется,
+/// - курсор вне идентификатора,
+/// - декларация не может быть разрешена ни в текущем, ни в импортированных файлах.
+pub fn goto_declaration_with_paths(
+    source: &str,
+    position: Position,
+    search_paths: &[String],
+) -> Option<Location> {
+    use crate::diagnostics::Location as DiagLoc;
+
+    let (ast, _) = crate::parse(source, 0).ok()?;
+    let model = semantic::tree::construct_model(&ast, None, search_paths).ok()?;
+    let node = node_at_position(source, position, &model)?;
+
+    // Пробуем найти декларацию в текущем файле
+    if let Some(range) = declaration_range_of(&node, source) {
+        return Some(Location {
+            uri: String::new(), // текущий файл — URI передаётся вызывающей стороной
+            range,
+        });
+    }
+
+    // Кросс-файловый поиск: только для модельных узлов (Model / State / Variable и т.д.)
+    // из импортированных моделей. Определяем имя модели, которой принадлежит узел.
+    let model_rc = node.model.as_ref()?.clone();
+    let model_name = model_rc.borrow().name.clone()?;
+
+    // Проверяем: если эта модель объявлена в текущем файле — дальше не ищем
+    // (декларация_range_of уже вернула None — нечего искать кросс-файлово).
+    // Ищем файл с именем, соответствующим имени модели, в директориях поиска.
+    let candidate_stem = to_snake_case(&model_name);
+
+    for dir in search_paths {
+        let dir_path = std::path::Path::new(dir);
+        // Пробуем имя файла из имени модели (CamelCase → snake_case.but)
+        for candidate in &[
+            format!("{}.but", candidate_stem),
+            format!("{}.but", model_name.to_lowercase()),
+        ] {
+            let file_path = dir_path.join(candidate);
+            if let Ok(import_source) = std::fs::read_to_string(&file_path) {
+                // Строим семантику импортированного файла
+                if let Ok((import_ast, _)) = crate::parse(&import_source, 0) {
+                    if let Ok(import_model) =
+                        semantic::tree::construct_model(&import_ast, None, search_paths)
+                    {
+                        // Ищем декларацию по имени узла в семантике импортированного файла
+                        let import_index =
+                            crate::semantic::index::SemanticIndex::build(&import_model);
+                        // Для узлов, которые являются декларациями, ищем по имени в индексе
+                        if let Some(found) = find_declaration_in_index(
+                            &import_index,
+                            &node.name,
+                            &node.kind,
+                        ) {
+                            if let DiagLoc::Source(_, start, end) = found.loc {
+                                return Some(Location {
+                                    uri: file_path
+                                        .canonicalize()
+                                        .map(|p| format!("file://{}", p.display()))
+                                        .unwrap_or_else(|_| {
+                                            format!("file://{}", file_path.display())
+                                        }),
+                                    range: offset_to_range(&import_source, start, end),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Конвертирует CamelCase-имя в snake_case для поиска файла.
+///
+/// `MyModel` → `my_model`, `Ping` → `ping`, `PingPong` → `ping_pong`.
+fn to_snake_case(name: &str) -> String {
+    let mut result = String::new();
+    for (i, ch) in name.chars().enumerate() {
+        if ch.is_uppercase() && i > 0 {
+            result.push('_');
+        }
+        result.push(ch.to_ascii_lowercase());
+    }
+    result
+}
+
+/// Ищет декларацию с заданным именем и видом в семантическом индексе.
+///
+/// Возвращает первую запись, у которой имя и вид узла совпадают.
+/// Проверяет только декларационные виды узлов (не использования).
+fn find_declaration_in_index<'a>(
+    index: &'a crate::semantic::index::SemanticIndex,
+    name: &str,
+    kind: &crate::semantic::index::SemanticNodeKind,
+) -> Option<&'a crate::semantic::index::SemanticNodeRef> {
+    use crate::semantic::index::SemanticNodeKind::*;
+
+    // Только декларационные виды (не использования)
+    let is_declaration = matches!(
+        kind,
+        Variable | Const | Port | Function | ExternFunction | State | StartState | EndState
+            | TypeAlias | Condition | Enum | Model
+    );
+    if !is_declaration {
+        return None;
+    }
+
+    index.find_by_name(name, kind)
 }
 
 /// Возвращает LSP-диапазон декларации для семантического узла.
