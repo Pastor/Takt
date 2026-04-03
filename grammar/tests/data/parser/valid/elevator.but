@@ -200,4 +200,5 @@ model Engine {
 start Main = Engine {
     next End;
 }
+state Middle = Engine + (Engine | Engine) + Engine + Engine + Engine;
 state End;

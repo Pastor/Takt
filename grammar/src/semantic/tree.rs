@@ -17,7 +17,7 @@ use crate::parser::ast::{
 use crate::semantic::condition::extract_conditions;
 use crate::semantic::expression::construct_expression;
 use crate::semantic::function::construct_function;
-use crate::semantic::implement::Implement;
+use crate::semantic::implement::{Implement, compact_implement};
 use crate::semantic::import::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
 use crate::semantic::naming::normalize_model_name;
@@ -106,9 +106,8 @@ fn construct_model_stage0(
     // Ce16: предварительная проверка циклических псевдонимов до вызова construct_type.
     // Собираем все AST-определения типов из текущего уровня модели.
     {
-        let mut raw_defs: std::collections::HashMap<String, ast::Type> = HashMap::new();
-        let mut type_locs_pre: std::collections::HashMap<String, crate::diagnostics::Location> =
-            HashMap::new();
+        let mut raw_defs: HashMap<String, ast::Type> = HashMap::new();
+        let mut type_locs_pre: HashMap<String, Location> = HashMap::new();
         for element in model.elements.iter() {
             if let ModelElement::Type(def) = element {
                 raw_defs.insert(def.name.name.clone(), def.ty.clone());
@@ -511,11 +510,8 @@ fn construct_model_stage0(
             // Разрешаем типы полей в контексте текущей модели.
             let mut field_pairs: Vec<(String, TypeNode)> = Vec::new();
             for field in &s.fields {
-                let field_ty = crate::semantic::type_node::construct_type(
-                    Some(field.ty.clone()),
-                    model_node.clone(),
-                )
-                .unwrap_or(TypeNode::Unsupported);
+                let field_ty = construct_type(Some(field.ty.clone()), model_node.clone())
+                    .unwrap_or(TypeNode::Unsupported);
                 field_pairs.push((field.name.name.clone(), field_ty));
             }
 
@@ -571,6 +567,13 @@ fn construct_model_stage1(
             kind,
         } = state.clone()
         {
+            let implements = implement::unroll_implement_expression(
+                name.clone(),
+                ExpressionNode::Unresolved(implement_expression),
+                Rc::clone(&model),
+            )?;
+            let implements =
+                compact_implement(state.name().to_string(), &implements, Rc::clone(&model))?;
             prepared_states.insert(
                 name.clone(),
                 StateNode::Implement {
@@ -579,10 +582,7 @@ fn construct_model_stage1(
                     named_blocks,
                     name: name.clone(),
                     references,
-                    implements: implement::unroll_implement_expression(
-                        ExpressionNode::Unresolved(implement_expression),
-                        Rc::clone(&model),
-                    )?,
+                    implements,
                     next,
                     kind,
                 },
@@ -940,10 +940,10 @@ pub fn construct_model(
 ///
 /// # Параметры
 ///
-/// - `model` — корневой узел АСД, результат [`parse`](crate::parse).
+/// - `model` — корневой узел АСД, результат [`parse`](parse).
 /// - `upper` — родительская модель (`None` для корня).
 /// - `search_paths` — пути поиска для файлов импорта.
-/// - `comments` — комментарии из [`parse`](crate::parse) (второй элемент кортежа).
+/// - `comments` — комментарии из [`parse`](parse) (второй элемент кортежа).
 ///
 /// # Алгоритм привязки
 ///

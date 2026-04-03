@@ -107,6 +107,35 @@ pub struct ModelNode {
 }
 
 impl ModelNode {
+    pub(crate) fn new(name: &str, parent: Option<Rc<RefCell<ModelNode>>>) -> ModelNode {
+        ModelNode {
+            name: Some(name.to_string()),
+            loc: Location::Codegen,
+            upper: parent.map(|p| Rc::downgrade(&p)),
+            models: Default::default(),
+            named_blocks: vec![],
+            functions: Default::default(),
+            variables: Default::default(),
+            types: Default::default(),
+            type_locs: Default::default(),
+            raw_type_defs: Default::default(),
+            named_block_raw: vec![],
+            conditions: Default::default(),
+            enums: Default::default(),
+            structs: HashMap::new(),
+            states: HashMap::new(),
+            implements: Implement::None,
+            doc: Vec::new(),
+            docs: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        self.name.as_ref().unwrap().as_str()
+    }
+}
+
+impl ModelNode {
     pub(crate) fn get_start_state(&self) -> Option<StateNode> {
         match self
             .states
@@ -129,11 +158,11 @@ impl ModelNode {
             .collect::<Vec<StateNode>>()
     }
 
-    pub(crate) fn copy(&self, new_name: &str) -> ModelNode {
+    pub(crate) fn copy(&self, new_name: &str, upper: Option<Rc<RefCell<ModelNode>>>) -> ModelNode {
         ModelNode {
             name: Some(new_name.to_string()),
             loc: self.loc,
-            upper: self.upper.clone(),
+            upper: upper.and_then(|p| Some(Rc::downgrade(&p))),
             models: self.models.clone(),
             named_blocks: self.named_blocks.clone(),
             functions: self.functions.clone(),

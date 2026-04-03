@@ -27,20 +27,22 @@
 //! `write_bit`, `read_bit`, `write_float`, `read_float`, которые должны
 //! быть предоставлены платформенным слоем.
 
+#![allow(clippy::needless_borrow)]
 #![allow(clippy::explicit_auto_deref)]
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
-use crate::parser::ast::Member;
+use crate::parser::ast::{Member, StateKind};
 use crate::semantic::implement::Implement;
 use crate::semantic::naming::{normalize_lowercase_snakecase, normalize_model_name};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
     ConditionDefinitionNode, ConditionNode, EnumDefinitionNode, ExpressionNode, ModelNode,
-    StateNode, VariableNode,
+    StateNode, StateNodeKind, VariableNode,
 };
 use itertools::Itertools;
+use log::warn;
 use std::fs;
 use std::path::Path;
 
@@ -83,8 +85,8 @@ impl Generator {
             // никогда не возвращает Err на практике, но явная обработка
             // исключает потенциальную панику при будущих изменениях.
             + &*normalize_lowercase_snakecase(
-                Self::resolve_model_name(model).unwrap_or_else(|_| "Unknown".to_string()),
-            )
+            Self::resolve_model_name(model).unwrap_or_else(|_| "Unknown".to_string()),
+        )
             .to_uppercase()
     }
 
@@ -167,12 +169,39 @@ impl Generator {
         printer.ident("enum {").nl().up();
         let upper = Self::get_upper_name(model);
         printer.ident(&upper).print("_INIT");
-        for name in model.states.keys().clone() {
+        for (name, state) in model.states.iter() {
             let name = normalize_lowercase_snakecase(name.clone()).to_uppercase();
             let name = format!("{}_{}", &upper, name);
+            if let StateNode::Implement { .. } = state {
+                printer.print(",").nl().ident(&name).print("_INIT");
+            }
             printer.print(",").nl().ident(&name);
         }
         printer.down().nl().ident("} state;").nl();
+        Ok(())
+    }
+
+    fn generate_model_states_struct(
+        #[allow(unused_mut)] mut printer: &mut Printer,
+        model: &ModelNode,
+    ) -> Result<(), Diagnostic> {
+        for (name, state) in model.states.iter() {
+            if let StateNode::Implement {
+                implements, kind, ..
+            } = state
+                && let Implement::Model(m) = implements
+                && *kind != StateNodeKind::Start
+            {
+                Self::generate_model_struct(&mut printer, &*m.borrow(), false)?;
+            } else {
+                warn!(
+                    "For model '{}' on state '{}'",
+                    model.name.clone().unwrap().clone(),
+                    &name
+                );
+                continue;
+            }
+        }
         Ok(())
     }
 
@@ -181,6 +210,15 @@ impl Generator {
         model: &ModelNode,
         first_model: bool,
     ) -> Result<(), Diagnostic> {
+        printer
+            .ident(
+                format!(
+                    "/** Generated '{}' structure */",
+                    model.name.clone().unwrap_or("?".to_string())
+                )
+                .as_str(),
+            )
+            .nl();
         printer.ident("struct ");
         if first_model {
             printer
@@ -188,16 +226,40 @@ impl Generator {
                 .print(" ");
         }
         printer.print("{").nl().up();
-        //Models
-        {
-            for (_, model) in model.models.clone().iter() {
-                Self::generate_model_struct(&mut printer, &*model.borrow(), false)?;
+        let start = model.get_start_state().ok_or(Diagnostic::warning(
+            Location::Codegen,
+            format!(
+                "Start state not found for model ''{}''",
+                model.name.clone().unwrap_or_default()
+            ),
+        ))?;
+        if let StateNode::Implement { implements, .. } = start {
+            if let Implement::Model(implement_model) = implements {
+                Self::generate_model_struct(printer, &*implement_model.borrow(), false)?;
+            } else if let Implement::Parallel(implements) = implements {
+                //TODO: Доделать параллельную обработку
+                for implement in implements {
+                    if let Implement::Model(implement_model) = *implement {
+                        Self::generate_model_struct(printer, &*implement_model.borrow(), false)?;
+                    }
+                }
             }
         }
         //States
         {
-            let _ = Self::generate_model_states(&mut printer, &*model);
+            printer
+                .ident(
+                    format!(
+                        "/** Generated states to '{}' */",
+                        model.name.clone().unwrap_or("?".to_string())
+                    )
+                    .as_str(),
+                )
+                .nl();
+            let _ = Self::generate_model_states(printer, model);
+            let _ = Self::generate_model_states_struct(printer, model);
         }
+
         //Variables
         {
             for (name, var) in model.variables.clone().iter() {
@@ -378,8 +440,7 @@ impl Generator {
                 let new_name = model.name.clone().unwrap_or_default()
                     + "_"
                     + &*slave.clone().borrow().name.clone().unwrap_or_default();
-                let new_model = slave.clone().borrow().copy(new_name.as_str());
-                Self::generate_model_source(printer, &new_model, false)?;
+                Self::generate_model_source(printer, &*slave.clone().borrow(), false)?;
             }
             Implement::Parentless(implement) => {
                 Self::generate_implement_source(printer, implement, model, main)?;
