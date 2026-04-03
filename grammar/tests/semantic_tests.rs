@@ -213,14 +213,16 @@ fn implement_single_model_resolves() {
     }
 }
 
-/// Реализация с `+` (последовательная компоновка) разрешается в `Implement::Sequence`.
+/// Реализация с `+` (последовательная компоновка) после compact_implement
+/// разрешается в `Implement::Model` (последовательность упаковывается в модель).
 #[test]
 fn implement_add_composition_resolves() {
     let node = build("start Entry = M1 + M2; model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["Entry"] {
         assert!(
-            matches!(implements, Implement::Sequence(_)),
-            "Компоновка + должна разрешаться в Implement::Sequence"
+            matches!(implements, Implement::Model(_)),
+            "Компоновка + после compact_implement должна разрешаться в Implement::Model, получили: {:?}",
+            implements
         );
     } else {
         panic!("ожидался StateNode::Implement для Entry");
@@ -616,13 +618,15 @@ fn implement_without_next_no_stack_overflow() {
 /// Скобочная компоновка `(M1 + M2)` разрешается корректно.
 ///
 /// Проверяет ветку `ast::Expression::Parenthesis` в `construct_implement_ast`.
+/// После compact_implement последовательность упаковывается в `Implement::Model`.
 #[test]
 fn implement_parenthesized_add_resolves() {
     let node = build("start E = (M1 + M2) { } model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["E"] {
         assert!(
-            matches!(implements, Implement::Sequence(_)),
-            "скобочная компоновка должна давать Implement::Sequence"
+            matches!(implements, Implement::Model(_)),
+            "скобочная компоновка после compact_implement должна давать Implement::Model, получили: {:?}",
+            implements
         );
     } else {
         panic!("ожидался StateNode::Implement для E");

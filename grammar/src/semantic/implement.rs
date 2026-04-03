@@ -188,8 +188,10 @@ pub fn compact_implement(
     match implement {
         Implement::None | Implement::Unresolved(_) => Err("Неизвестная реализация".into()),
         Implement::Model(model) => {
-            // Копируем содержимое модели и меняем его владельца, добавляем в список моделей
-            let model_name = format!("{}{}", prefix_name, model.borrow().name.clone().unwrap());
+            // Копируем содержимое модели и меняем его владельца, добавляем в список моделей.
+            // Для анонимных моделей (корневой import) имя состоит только из префикса.
+            let base = model.borrow().name.clone().unwrap_or_default();
+            let model_name = format!("{}{}", prefix_name, base);
             let model_node = owned.borrow().search_model(&model_name);
             if model_node.is_some() {
                 return Ok(Implement::Model(model_node.unwrap()));
@@ -206,7 +208,7 @@ pub fn compact_implement(
             compact_implement(prefix_name, implement, owned.clone())
         }
         Implement::Sequence(implements) => {
-            let prefix_name = format!("{}Sequence", prefix_name.clone());
+            let prefix_name = format!("{}_Sequence", prefix_name.clone());
             let model = ModelNode::new(prefix_name.clone().as_str(), Some(owned.clone()));
             let model_rc = Rc::new(RefCell::new(model));
             let mut prev = None;

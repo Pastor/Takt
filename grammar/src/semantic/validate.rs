@@ -154,7 +154,7 @@ fn validate_cond(
                     && let ConditionNode::Model(model) = *cond.clone()
                 {
                     let model = model.borrow();
-                    let model_name = model.name.clone().unwrap();
+                    let model_name = model.name.clone().unwrap_or_else(|| "<анонимная>".to_string());
                     model.search_state(&id.name).ok_or_else(|| {
                         Diagnostic::error(
                             id.loc,
@@ -228,7 +228,10 @@ fn validate_cond(
         }
         ConditionNode::NotEqual(left, right) => {
             validate_cond(None, &left, model.clone())?;
-            validate_cond(None, &right, model.clone())?;
+            // Передаём контекст левого операнда — как в Equal — для проверки
+            // паттерна `S(Model) != СостояниеИмя`: имя состояния должно быть
+            // валидным в указанной модели.
+            validate_cond(Some(*left.clone()), &right, model.clone())?;
         }
         ConditionNode::Number(_) => {}
         ConditionNode::Rational(_, _) => {}
