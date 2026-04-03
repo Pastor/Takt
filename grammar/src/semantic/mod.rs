@@ -9,15 +9,15 @@
 //! - [`ReferenceNode`] — ссылка-переход между состояниями с опциональным условием.
 //! - [`ConditionNode`] — семантическое представление условия перехода.
 //! - [`VariableNode`] — переменная, порт или константа с разрешённым типом.
-//! - [`Implement`] — реализация модели: ссылка, последовательная или параллельная компоновка.
+//! - [`Extend`] — реализация модели: ссылка, последовательная или параллельная компоновка.
 
 mod builtin;
 mod condition;
 pub(crate) mod docs;
 pub mod enum_node;
 mod expression;
+pub mod extend;
 mod function;
-pub mod implement;
 mod import;
 pub mod index;
 mod named_block;
@@ -36,7 +36,7 @@ use crate::parser::ast;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
 pub use crate::semantic::enum_node::EnumDefinitionNode;
 pub use crate::semantic::struct_node::StructDefinitionNode;
-use implement::Implement;
+use extend::Extend;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -91,7 +91,7 @@ pub struct ModelNode {
     /// Состояния модели: имя → узел состояния.
     pub states: HashMap<String, StateNode>,
     /// Информация о реализации (зарезервировано).
-    pub implements: Implement,
+    pub implements: Extend,
     /// Документация самой модели (строки из `///`-комментариев перед `model`).
     ///
     /// Заполняется [`construct_model_with_docs`](tree::construct_model_with_docs).
@@ -107,11 +107,14 @@ pub struct ModelNode {
 }
 
 impl ModelNode {
-    pub(crate) fn new(name: &str, parent: Option<Rc<RefCell<ModelNode>>>) -> ModelNode {
-        ModelNode {
+    pub(crate) fn new(
+        name: &str,
+        parent: Option<Rc<RefCell<ModelNode>>>,
+    ) -> Rc<RefCell<ModelNode>> {
+        let model = ModelNode {
             name: Some(name.to_string()),
             loc: Location::Codegen,
-            upper: parent.map(|p| Rc::downgrade(&p)),
+            upper: parent.clone().map(|p| Rc::downgrade(&p)),
             models: Default::default(),
             named_blocks: vec![],
             functions: Default::default(),
@@ -124,10 +127,18 @@ impl ModelNode {
             enums: Default::default(),
             structs: HashMap::new(),
             states: HashMap::new(),
-            implements: Implement::None,
+            implements: Extend::None,
             doc: Vec::new(),
             docs: HashMap::new(),
+        };
+        let model = Rc::new(RefCell::new(model));
+        if let Some(parent) = parent.clone() {
+            parent
+                .borrow_mut()
+                .models
+                .insert(name.to_string(), model.clone());
         }
+        model
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -950,7 +961,7 @@ pub enum StateNode {
         /// Ссылки-переходы.
         references: Vec<ReferenceNode<StateNode>>,
         /// Информация о реализации (зарезервировано).
-        implements: Implement,
+        implements: Extend,
         /// Единственный `next`-переход (если задан).
         next: Option<ReferenceNode<StateNode>>,
         /// Разновидность состояния (обычное, начальное, конечное).

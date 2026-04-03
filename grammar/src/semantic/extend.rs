@@ -1,9 +1,9 @@
-//! Построение и развёртка структуры [`Implement`] — реализации модели.
+//! Построение и развёртка структуры [`Extend`] — реализации модели.
 //!
 //! Модуль предоставляет две публичные функции:
-//! - [`construct_implement`] — строит [`Implement`] из семантического выражения [`ExpressionNode`];
-//! - [`unroll_implement_expression`] — разворачивает выражение в плоскую
-//!   структуру [`Implement::Sequence`] / [`Implement::Parallel`].
+//! - [`construct_implement`] — строит [`Extend`] из семантического выражения [`ExpressionNode`];
+//! - [`unroll_extend_expression`] — разворачивает выражение в плоскую
+//!   структуру [`Extend::Concatenation`] / [`Extend::Parallel`].
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast;
@@ -17,13 +17,13 @@ use std::rc::Rc;
 /// Реализация модели: описывает, как состояние или корневой автомат
 /// составлен из именованных моделей.
 ///
-/// - [`Unresolved`](Implement::Unresolved) — временная заглушка до второго прохода.
-/// - [`Model`](Implement::Model) — ссылка на конкретную именованную модель.
-/// - [`Parentless`](Implement::Parentless) — обёртка без родителя (скобки).
-/// - [`Add`](Implement::Add) — последовательная компоновка `A + B`.
-/// - [`Or`](Implement::Or) — параллельная компоновка `A | B`.
+/// - [`Unresolved`](Extend::Unresolved) — временная заглушка до второго прохода.
+/// - [`Model`](Extend::Model) — ссылка на конкретную именованную модель.
+/// - [`Parentless`](Extend::Parentless) — обёртка без родителя (скобки).
+/// - [`Add`](Extend::Add) — последовательная компоновка `A + B`.
+/// - [`Or`](Extend::Or) — параллельная компоновка `A | B`.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub enum Implement {
+pub enum Extend {
     /// Реализация не задана (значение по умолчанию для безымянной корневой модели).
     #[default]
     None,
@@ -32,58 +32,62 @@ pub enum Implement {
     /// Ссылка на конкретную именованную модель.
     Model(Rc<RefCell<ModelNode>>),
     /// Скобочная группировка: `(реализация)`.
-    Parentless(Box<Implement>),
+    Parentless(Box<Extend>),
 
     /// Последовательная компоновка: `левое + правое + ...`.
-    Sequence(Vec<Box<Implement>>),
+    Concatenation(Vec<Box<Extend>>),
     /// Параллельная компоновка: `левое | правое | ...`.
-    Parallel(Vec<Box<Implement>>),
+    Parallel(Vec<Box<Extend>>),
 }
 
-impl Implement {
+impl Extend {
+    #[inline]
     pub fn is_model(&self) -> bool {
-        matches!(self, Implement::Model(_))
+        matches!(self, Extend::Model(_))
     }
+    #[inline]
     pub fn is_parentless(&self) -> bool {
-        matches!(self, Implement::Parentless(_))
+        matches!(self, Extend::Parentless(_))
     }
+    #[inline]
     pub fn is_sequence(&self) -> bool {
-        matches!(self, Implement::Sequence(_))
+        matches!(self, Extend::Concatenation(_))
     }
+    #[inline]
     pub fn is_parallel(&self) -> bool {
-        matches!(self, Implement::Parallel(_))
+        matches!(self, Extend::Parallel(_))
     }
     pub fn name(&self) -> String {
         match self {
-            Implement::None => "None".to_string(),
-            Implement::Unresolved(_) => "Unresolved".to_string(),
-            Implement::Model(model) => model.clone().borrow().name().to_string(),
-            Implement::Parentless(implement) => implement.name(),
-            Implement::Sequence(_) => "Sequence".to_string(),
-            Implement::Parallel(_) => "Parallel".to_string(),
+            Extend::None => "None".to_string(),
+            Extend::Unresolved(_) => "Unresolved".to_string(),
+            Extend::Model(model) => model.clone().borrow().name().to_string(),
+            Extend::Parentless(implement) => implement.name(),
+            Extend::Concatenation(_) => "Concatenation".to_string(),
+            Extend::Parallel(_) => "Parallel".to_string(),
         }
     }
 }
 
-impl Display for Implement {
+impl Display for Extend {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Implement::None => write!(f, "None"),
-            Implement::Unresolved(_) => write!(f, "Unresolved"),
-            Implement::Model(model) => {
+            Extend::None => write!(f, "None"),
+            Extend::Unresolved(_) => write!(f, "Unresolved"),
+            Extend::Model(model) => {
                 write!(f, "{}", model.borrow().name.clone().unwrap_or_default())
             }
-            Implement::Parentless(implement) => write!(f, "({})", implement),
-            Implement::Sequence(implements) => write!(
+            Extend::Parentless(extends) => write!(f, "({})", extends),
+            Extend::Concatenation(extends) => write!(
                 f,
                 "{}",
-                implements
+                extends
                     .iter()
                     .map(|i| i.to_string())
                     .collect::<Vec<String>>()
                     .join(" + ")
             ),
-            Implement::Parallel(implements) => write!(
+            Extend::Parallel(implements) => write!(
                 f,
                 "{}",
                 implements
@@ -96,7 +100,7 @@ impl Display for Implement {
     }
 }
 
-fn unroll_implement_expression_ast(
+fn unroll_expression_ast(
     expr: ast::Expression,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<ExpressionNode, Diagnostic> {
@@ -108,93 +112,93 @@ fn unroll_implement_expression_ast(
             })?;
             Ok(ExpressionNode::Model(Rc::clone(&found)))
         }
-        ast::Expression::Parenthesis(_, inner) => unroll_implement_expression_ast(*inner, model),
+        ast::Expression::Parenthesis(_, inner) => unroll_expression_ast(*inner, model),
         ast::Expression::Add(_, left, right) => {
-            let left = unroll_implement_expression_ast(*left, model.clone())?;
-            let right = unroll_implement_expression_ast(*right, model.clone())?;
+            let left = unroll_expression_ast(*left, model.clone())?;
+            let right = unroll_expression_ast(*right, model.clone())?;
             Ok(ExpressionNode::Add(Box::new(left), Box::new(right)))
         }
         ast::Expression::BitwiseOr(_, left, right) => {
-            let left = unroll_implement_expression_ast(*left, model.clone())?;
-            let right = unroll_implement_expression_ast(*right, model.clone())?;
+            let left = unroll_expression_ast(*left, model.clone())?;
+            let right = unroll_expression_ast(*right, model.clone())?;
             Ok(ExpressionNode::BitwiseOr(Box::new(left), Box::new(right)))
         }
         other => Err(
-            format!("Выражение реализации не поддерживается: {:?}", other)
+            format!("Выражение AST расширения не поддерживается: {:?}", other)
                 .as_str()
                 .into(),
         ),
     }
 }
 
-/// Разворачивает семантическое выражение реализации в плоскую структуру [`Implement`],
-/// объединяя цепочки `+` в [`Implement::Sequence`] и `|` в [`Implement::Parallel`].
-pub fn unroll_implement_expression(
+/// Разворачивает семантическое выражение расширения в плоскую структуру [`Extend`],
+/// объединяя цепочки `+` в [`Extend::Concatenation`] и `|` в [`Extend::Parallel`].
+pub fn unroll_extend_expression(
     prefix_name: String,
     expression: ExpressionNode,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<Implement, Diagnostic> {
+) -> Result<Extend, Diagnostic> {
     let model = Rc::clone(&model);
     match expression {
         ExpressionNode::Unresolved(expr) => {
-            let unrolled = unroll_implement_expression_ast(expr, model.clone())?;
-            unroll_implement_expression(prefix_name, unrolled, model)
+            let unrolled = unroll_expression_ast(expr, model.clone())?;
+            unroll_extend_expression(prefix_name, unrolled, model)
         }
-        ExpressionNode::Model(model) => Ok(Implement::Model(Rc::clone(&model))),
+        ExpressionNode::Model(model) => Ok(Extend::Model(Rc::clone(&model))),
         ExpressionNode::Parenthesis(expression) => {
-            unroll_implement_expression(prefix_name, *expression, model)
+            unroll_extend_expression(prefix_name, *expression, model)
         }
         ExpressionNode::Add(left, right) => {
-            let left = unroll_implement_expression(prefix_name.clone(), *left, model.clone())?;
-            let right = unroll_implement_expression(prefix_name.clone(), *right, model.clone())?;
+            let left = unroll_extend_expression(prefix_name.clone(), *left, model.clone())?;
+            let right = unroll_extend_expression(prefix_name.clone(), *right, model.clone())?;
             // Плоская конкатенация: если операнд уже Sequence — разворачиваем его элементы.
-            let mut items: Vec<Box<Implement>> = Vec::new();
+            let mut items: Vec<Box<Extend>> = Vec::new();
             match left {
-                Implement::Sequence(seq) => items.extend(seq),
+                Extend::Concatenation(seq) => items.extend(seq),
                 other => items.push(Box::new(other)),
             }
             match right {
-                Implement::Sequence(seq) => items.extend(seq),
+                Extend::Concatenation(seq) => items.extend(seq),
                 other => items.push(Box::new(other)),
             }
-            Ok(Implement::Sequence(items))
+            Ok(Extend::Concatenation(items))
         }
         ExpressionNode::BitwiseOr(left, right) => {
-            let left = unroll_implement_expression(prefix_name.clone(), *left, model.clone())?;
-            let right = unroll_implement_expression(prefix_name.clone(), *right, model.clone())?;
+            let left = unroll_extend_expression(prefix_name.clone(), *left, model.clone())?;
+            let right = unroll_extend_expression(prefix_name.clone(), *right, model.clone())?;
             // Плоское объединение: если операнд уже Parallel — разворачиваем его элементы.
-            let mut items: Vec<Box<Implement>> = Vec::new();
+            let mut items: Vec<Box<Extend>> = Vec::new();
             match left {
-                Implement::Parallel(p) => items.extend(p),
+                Extend::Parallel(p) => items.extend(p),
                 other => items.push(Box::new(other)),
             }
             match right {
-                Implement::Parallel(p) => items.extend(p),
+                Extend::Parallel(p) => items.extend(p),
                 other => items.push(Box::new(other)),
             }
-            Ok(Implement::Parallel(items))
+            Ok(Extend::Parallel(items))
         }
-        other => Err(format!("Неизвестное выражение реализации: {:?}", other)
+        other => Err(format!("Неизвестное выражение расширения: {:?}", other)
             .as_str()
             .into()),
     }
 }
 
-pub fn compact_implement(
+pub fn compact_extend(
     prefix_name: String,
-    implement: &Implement,
+    extend: &Extend,
     owned: Rc<RefCell<ModelNode>>,
-) -> Result<Implement, Diagnostic> {
-    match implement {
-        Implement::None | Implement::Unresolved(_) => Err("Неизвестная реализация".into()),
-        Implement::Model(model) => {
+) -> Result<Extend, Diagnostic> {
+    match extend {
+        Extend::None | Extend::Unresolved(_) => Err("Неизвестная реализация".into()),
+        Extend::Model(model) => {
             // Копируем содержимое модели и меняем его владельца, добавляем в список моделей.
             // Для анонимных моделей (корневой import) имя состоит только из префикса.
             let base = model.borrow().name.clone().unwrap_or_default();
             let model_name = format!("{}{}", prefix_name, base);
             let model_node = owned.borrow().search_model(&model_name);
             if model_node.is_some() {
-                return Ok(Implement::Model(model_node.unwrap()));
+                return Ok(Extend::Model(model_node.unwrap()));
             }
             let model_node = model.borrow().copy(&model_name, Some(owned.clone()));
             let mode_rc = Rc::new(RefCell::new(model_node));
@@ -202,24 +206,18 @@ pub fn compact_implement(
                 .borrow_mut()
                 .models
                 .insert(model_name.clone(), mode_rc.clone());
-            Ok(Implement::Model(mode_rc))
+            Ok(Extend::Model(mode_rc))
         }
-        Implement::Parentless(implement) => {
-            compact_implement(prefix_name, implement, owned.clone())
-        }
-        Implement::Sequence(implements) => {
-            let prefix_name = format!("{}_Sequence", prefix_name.clone());
+        Extend::Parentless(extend_item) => compact_extend(prefix_name, extend_item, owned.clone()),
+        Extend::Concatenation(extends) => {
+            let prefix_name = format!("{}_Concatenation", prefix_name.clone());
             let model = ModelNode::new(prefix_name.clone().as_str(), Some(owned.clone()));
-            let model_rc = Rc::new(RefCell::new(model));
             let mut prev = None;
             let mut n = 0;
-            let mut last_name = String::new();
-            let max_sequence_length: usize = implements.len();
-            for implement in implements.iter().rev() {
+            let max_sequence_length: usize = extends.len();
+            for implement in extends.iter().rev() {
                 let model_name = format!("{}_{}", prefix_name, n);
-                last_name = model_name.clone();
-                let implement_model =
-                    compact_implement(model_name.clone(), implement, owned.clone())?;
+                let extend_model = compact_extend(model_name.clone(), implement, owned.clone())?;
                 n += 1;
                 let kind = if n >= max_sequence_length {
                     StateNodeKind::Start
@@ -227,12 +225,12 @@ pub fn compact_implement(
                     StateNodeKind::Simple
                 };
                 let state = StateNode::Implement {
-                    upper: Some(Rc::downgrade(&model_rc)),
+                    upper: Some(Rc::downgrade(&model)),
                     loc: Location::Codegen,
                     named_blocks: vec![],
                     name: model_name.clone(),
                     references: vec![],
-                    implements: implement_model.clone(),
+                    implements: extend_model.clone(),
                     next: prev.clone(),
                     kind,
                 };
@@ -242,23 +240,153 @@ pub fn compact_implement(
                     cond: ConditionNode::None,
                     object: Box::new(state.clone()),
                 });
-                model_rc
-                    .borrow_mut()
-                    .states
-                    .insert(model_name.clone(), state);
+                model.borrow_mut().states.insert(model_name.clone(), state);
             }
-            Ok(Implement::Model(model_rc))
+            Ok(Extend::Model(model))
         }
-        Implement::Parallel(implements) => {
-            let implements = implements
+        Extend::Parallel(extends) => {
+            let extends = extends
                 .iter()
                 .map(|implement| {
-                    Box::new(
-                        compact_implement(prefix_name.clone(), implement, owned.clone()).unwrap(),
-                    )
+                    Box::new(compact_extend(prefix_name.clone(), implement, owned.clone()).unwrap())
                 })
                 .collect::<Vec<_>>();
-            Ok(Implement::Parallel(implements))
+            Ok(Extend::Parallel(extends))
+        }
+    }
+}
+
+mod minimalistic {
+    use crate::semantic::ModelNode;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::rc::Rc;
+
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    struct Name {
+        local: String,
+        unique: String,
+    }
+
+    impl Name {
+        fn new(local: String, unique: String) -> Self {
+            Name { local, unique }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    enum Element {
+        Model {
+            name: Name,
+            states: Vec<Name>,
+            start: Name,
+        },
+        StateExtend {
+            name: Name,
+            extend: Vec<Element>,
+            next: Name,
+        },
+        State {
+            name: Name,
+            references: Vec<Name>,
+        },
+    }
+
+    struct Snapshot {
+        root: Rc<RefCell<ModelNode>>,
+        used_elements: HashMap<Name, Element>,
+        start: Name,
+    }
+
+    impl Snapshot {
+        #[inline]
+        fn model_at(&self, name: &str) -> Option<Rc<RefCell<ModelNode>>> {
+            model_by_unique_name(name, self.root.clone())
+        }
+
+        #[inline]
+        fn used_models(&self) -> Vec<Element> {
+            self.used_elements
+                .values()
+                .filter(|e| matches!(e, Element::Model { .. }))
+                .cloned()
+                .collect::<Vec<Element>>()
+        }
+    }
+
+    fn unique_model_name(model: Rc<RefCell<ModelNode>>) -> String {
+        let name = model.borrow().name.clone().unwrap_or_default();
+        if let Some(upper) = model.borrow().upper.as_ref() {
+            return format!("{}:{}", unique_model_name(upper.upgrade().unwrap()), name);
+        }
+        name
+    }
+
+    fn model_by_unique_name(
+        model_name: &str,
+        owned: Rc<RefCell<ModelNode>>,
+    ) -> Option<Rc<RefCell<ModelNode>>> {
+        if let Some(index) = model_name.find(":") {
+            let (upper_name, lower_name) = model_name.split_at(index);
+            if owned.borrow().name() == upper_name {
+                return model_by_unique_name(&lower_name[2..], owned.clone());
+            } else {
+                if let Some(model) = owned.borrow().search_model(upper_name) {
+                    if lower_name.is_empty() {
+                        return Some(model.clone());
+                    }
+                    return model_by_unique_name(&lower_name[2..], model.clone());
+                }
+            }
+        } else {
+            if owned.borrow().name() == model_name {
+                return Some(owned);
+            } else if let Some(model) = owned.borrow().search_model(model_name) {
+                return Some(model.clone());
+            }
+        }
+        None
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_unique_model_name() {
+            let model = ModelNode::new("A", None);
+            assert_eq!(unique_model_name(model.clone()), "A");
+
+            let model = ModelNode::new("B", Some(model.clone()));
+            assert_eq!(unique_model_name(model.clone()), "A:B");
+        }
+
+        #[test]
+        fn test_model_by_unique_name() {
+            let global = ModelNode::new("A", None);
+            let model = ModelNode::new("B", Some(global.clone()));
+            let _ = ModelNode::new("C", Some(model.clone()));
+            assert_eq!(
+                model_by_unique_name("A", global.clone())
+                    .unwrap()
+                    .borrow()
+                    .name(),
+                "A"
+            );
+            assert_eq!(
+                model_by_unique_name("A:B", global.clone())
+                    .unwrap()
+                    .borrow()
+                    .name(),
+                "B"
+            );
+            assert_eq!(
+                model_by_unique_name("A:B:C", global.clone())
+                    .unwrap()
+                    .borrow()
+                    .name(),
+                "C"
+            );
         }
     }
 }
@@ -268,7 +396,7 @@ mod tests {
     use crate::diagnostics::Location;
     use crate::parse;
     use crate::parser::ast;
-    use crate::semantic::implement::{Implement, compact_implement, unroll_implement_expression};
+    use crate::semantic::extend::{Extend, compact_extend, unroll_extend_expression};
     use crate::semantic::tree::construct_model;
     use crate::semantic::{ExpressionNode, StateNode};
 
@@ -297,14 +425,14 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
         let (ast, _) = parse(SRC, 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
 
-        let implement = unroll_implement_expression(
+        let implement = unroll_extend_expression(
             String::from("O"),
             ExpressionNode::Unresolved(ast::Expression::Variable(ast::Identifier::new("A"))),
             model_rc.clone(),
         )
         .unwrap();
-        assert!(matches!(implement, Implement::Model(_)));
-        let implement = unroll_implement_expression(
+        assert!(matches!(implement, Extend::Model(_)));
+        let implement = unroll_extend_expression(
             String::from("O"),
             ExpressionNode::Unresolved(ast::Expression::BitwiseOr(
                 Location::Implicit,
@@ -314,9 +442,9 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
             model_rc.clone(),
         )
         .unwrap();
-        assert!(matches!(implement, Implement::Parallel(_)));
+        assert!(matches!(implement, Extend::Parallel(_)));
         // start Entry = A | B | (A + B)  →  Parallel([A, B, Sequence([A, B])])
-        let implement = unroll_implement_expression(
+        let implement = unroll_extend_expression(
             String::from("O"),
             ExpressionNode::Unresolved(ast::Expression::BitwiseOr(
                 Location::Implicit,
@@ -339,20 +467,12 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
         .unwrap();
         assert_eq!(
             implement,
-            Implement::Parallel(vec![
-                Box::new(Implement::Model(
-                    model_rc.borrow().search_model("A").unwrap()
-                )),
-                Box::new(Implement::Model(
-                    model_rc.borrow().search_model("B").unwrap()
-                )),
-                Box::new(Implement::Sequence(vec![
-                    Box::new(Implement::Model(
-                        model_rc.borrow().search_model("A").unwrap()
-                    )),
-                    Box::new(Implement::Model(
-                        model_rc.borrow().search_model("B").unwrap()
-                    )),
+            Extend::Parallel(vec![
+                Box::new(Extend::Model(model_rc.borrow().search_model("A").unwrap())),
+                Box::new(Extend::Model(model_rc.borrow().search_model("B").unwrap())),
+                Box::new(Extend::Concatenation(vec![
+                    Box::new(Extend::Model(model_rc.borrow().search_model("A").unwrap())),
+                    Box::new(Extend::Model(model_rc.borrow().search_model("B").unwrap())),
                 ]))
             ])
         );
@@ -363,31 +483,23 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
         let (ast, _) = parse(SRC, 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
 
-        let ma = || {
-            Box::new(Implement::Model(
-                model_rc.borrow().search_model("A").unwrap(),
-            ))
-        };
-        let mb = || {
-            Box::new(Implement::Model(
-                model_rc.borrow().search_model("B").unwrap(),
-            ))
-        };
-        let par_ab = || Implement::Parallel(vec![ma(), mb()]);
+        let ma = || Box::new(Extend::Model(model_rc.borrow().search_model("A").unwrap()));
+        let mb = || Box::new(Extend::Model(model_rc.borrow().search_model("B").unwrap()));
+        let par_ab = || Extend::Parallel(vec![ma(), mb()]);
 
         let pairs = vec![
             // Next1 = A + B + (A | B)
             (
                 "Next1",
-                Implement::Sequence(vec![ma(), mb(), Box::new(par_ab())]),
+                Extend::Concatenation(vec![ma(), mb(), Box::new(par_ab())]),
                 "Next1_Sequence",
             ),
             // Next2 = A + (B | A) + B
             (
                 "Next2",
-                Implement::Sequence(vec![
+                Extend::Concatenation(vec![
                     ma(),
-                    Box::new(Implement::Parallel(vec![mb(), ma()])),
+                    Box::new(Extend::Parallel(vec![mb(), ma()])),
                     mb(),
                 ]),
                 "Next2_Sequence",
@@ -395,36 +507,36 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
             // Next3 = A + (B + A) + B  →  все элементы разворачиваются в одну последовательность
             (
                 "Next3",
-                Implement::Sequence(vec![ma(), mb(), ma(), mb()]),
+                Extend::Concatenation(vec![ma(), mb(), ma(), mb()]),
                 "Next3_Sequence",
             ),
             // Next4 = A + (B + A) + (B | A)
             (
                 "Next4",
-                Implement::Sequence(vec![
+                Extend::Concatenation(vec![
                     ma(),
                     mb(),
                     ma(),
-                    Box::new(Implement::Parallel(vec![mb(), ma()])),
+                    Box::new(Extend::Parallel(vec![mb(), ma()])),
                 ]),
                 "Next4_Sequence",
             ),
             // Next5 = (A | B) + (A + B)
             (
                 "Next5",
-                Implement::Sequence(vec![Box::new(par_ab()), ma(), mb()]),
+                Extend::Concatenation(vec![Box::new(par_ab()), ma(), mb()]),
                 "Next5_Sequence",
             ),
             // Next6 = (A | B) + (A + B) + (A | B)
             (
                 "Next6",
-                Implement::Sequence(vec![Box::new(par_ab()), ma(), mb(), Box::new(par_ab())]),
+                Extend::Concatenation(vec![Box::new(par_ab()), ma(), mb(), Box::new(par_ab())]),
                 "Next6_Sequence",
             ),
             // Next7 = (A | B) + (A + B) + (A | B) + (A + B)
             (
                 "Next7",
-                Implement::Sequence(vec![
+                Extend::Concatenation(vec![
                     Box::new(par_ab()),
                     ma(),
                     mb(),
@@ -437,7 +549,7 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
             // Next8 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B)
             (
                 "Next8",
-                Implement::Sequence(vec![
+                Extend::Concatenation(vec![
                     Box::new(par_ab()),
                     ma(),
                     mb(),
@@ -451,7 +563,7 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
             // Next9 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B)
             (
                 "Next9",
-                Implement::Sequence(vec![
+                Extend::Concatenation(vec![
                     Box::new(par_ab()),
                     ma(),
                     mb(),
@@ -467,7 +579,7 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
             // Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + B)
             (
                 "Next10",
-                Implement::Sequence(vec![
+                Extend::Concatenation(vec![
                     Box::new(par_ab()),
                     ma(),
                     mb(),
@@ -485,10 +597,10 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
             // Entry = A | B | (A + B)
             (
                 "Entry",
-                Implement::Parallel(vec![
+                Extend::Parallel(vec![
                     ma(),
                     mb(),
-                    Box::new(Implement::Sequence(vec![ma(), mb()])),
+                    Box::new(Extend::Concatenation(vec![ma(), mb()])),
                 ]),
                 "EntryA | EntryB | Entry_Sequence",
             ),
@@ -514,12 +626,12 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
         let (ast, _) = parse(SRC, 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
 
-        let result = compact_implement(String::from("O"), &Implement::None, model_rc.clone());
+        let result = compact_extend(String::from("O"), &Extend::None, model_rc.clone());
         assert!(result.is_err());
 
-        let result = compact_implement(
+        let result = compact_extend(
             String::from("O"),
-            &Implement::Unresolved(ast::Expression::Variable(ast::Identifier::new("A"))),
+            &Extend::Unresolved(ast::Expression::Variable(ast::Identifier::new("A"))),
             model_rc.clone(),
         );
         assert!(result.is_err());
@@ -527,13 +639,13 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
         let model_a = model_rc.borrow().search_model("A").unwrap();
         let model_b = model_rc.borrow().search_model("B").unwrap();
         {
-            let result = compact_implement(
+            let result = compact_extend(
                 String::from("O"),
-                &Implement::Model(model_a.clone()),
+                &Extend::Model(model_a.clone()),
                 model_rc.clone(),
             );
             assert!(result.is_ok());
-            let Implement::Model(result) = result.unwrap() else {
+            let Extend::Model(result) = result.unwrap() else {
                 panic!("Result is not a model")
             };
             let result = result.borrow();
@@ -543,36 +655,36 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
             );
         }
         {
-            let result = compact_implement(
+            let result = compact_extend(
                 String::from("O"),
-                &Implement::Sequence(vec![
-                    Box::new(Implement::Model(model_a.clone())),
-                    Box::new(Implement::Model(model_b.clone())),
+                &Extend::Concatenation(vec![
+                    Box::new(Extend::Model(model_a.clone())),
+                    Box::new(Extend::Model(model_b.clone())),
                 ]),
                 model_rc.clone(),
             );
             assert!(result.is_ok());
             let result = result.unwrap();
-            let Implement::Model(result) = result else {
+            let Extend::Model(result) = result else {
                 panic!("Result is not a model")
             };
             let result = result.borrow();
-            assert_eq!(result.name(), "O_Sequence".to_string());
-            assert!(result.search_state("O_Sequence_1").is_some());
-            assert!(result.search_state("O_Sequence_0").is_some());
+            assert_eq!(result.name(), "O_Concatenation".to_string());
+            assert!(result.search_state("O_Concatenation_1").is_some());
+            assert!(result.search_state("O_Concatenation_0").is_some());
         }
         {
-            let result = compact_implement(
+            let result = compact_extend(
                 String::from("O"),
-                &Implement::Parallel(vec![
-                    Box::new(Implement::Model(model_a.clone())),
-                    Box::new(Implement::Model(model_b.clone())),
+                &Extend::Parallel(vec![
+                    Box::new(Extend::Model(model_a.clone())),
+                    Box::new(Extend::Model(model_b.clone())),
                 ]),
                 model_rc.clone(),
             );
             assert!(result.is_ok());
             let result = result.unwrap();
-            let Implement::Parallel(implements) = result.clone() else {
+            let Extend::Parallel(implements) = result.clone() else {
                 panic!("Result is not a parallel implement")
             };
             assert_eq!(result.name(), "Parallel".to_string());

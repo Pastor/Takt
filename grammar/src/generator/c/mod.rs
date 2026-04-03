@@ -34,7 +34,7 @@ use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
 use crate::parser::ast::{Member, StateKind};
-use crate::semantic::implement::Implement;
+use crate::semantic::extend::Extend;
 use crate::semantic::naming::{normalize_lowercase_snakecase, normalize_model_name};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
@@ -189,7 +189,7 @@ impl Generator {
             if let StateNode::Implement {
                 implements, kind, ..
             } = state
-                && let Implement::Model(m) = implements
+                && let Extend::Model(m) = implements
                 && *kind != StateNodeKind::Start
             {
                 Self::generate_model_struct(&mut printer, &*m.borrow(), false)?;
@@ -234,12 +234,12 @@ impl Generator {
             ),
         ))?;
         if let StateNode::Implement { implements, .. } = start {
-            if let Implement::Model(implement_model) = implements {
+            if let Extend::Model(implement_model) = implements {
                 Self::generate_model_struct(printer, &*implement_model.borrow(), false)?;
-            } else if let Implement::Parallel(implements) = implements {
+            } else if let Extend::Parallel(implements) = implements {
                 //TODO: Доделать параллельную обработку
                 for implement in implements {
-                    if let Implement::Model(implement_model) = *implement {
+                    if let Extend::Model(implement_model) = *implement {
                         Self::generate_model_struct(printer, &*implement_model.borrow(), false)?;
                     }
                 }
@@ -425,30 +425,30 @@ impl Generator {
 
     fn generate_implement_source(
         printer: &Printer,
-        implement: &Implement,
+        implement: &Extend,
         model: &ModelNode,
         main: bool,
     ) -> Result<(), Diagnostic> {
         match implement {
-            Implement::None | Implement::Unresolved(_) => {
+            Extend::None | Extend::Unresolved(_) => {
                 return Err(Diagnostic::error(
                     Location::Codegen,
                     "Implementation maybe defined".to_string(),
                 ));
             }
-            Implement::Model(slave) => {
+            Extend::Model(slave) => {
                 let new_name = model.name.clone().unwrap_or_default()
                     + "_"
                     + &*slave.clone().borrow().name.clone().unwrap_or_default();
                 Self::generate_model_source(printer, &*slave.clone().borrow(), false)?;
             }
-            Implement::Parentless(implement) => {
+            Extend::Parentless(implement) => {
                 Self::generate_implement_source(printer, implement, model, main)?;
             }
-            Implement::Sequence(_items) => {
+            Extend::Concatenation(_items) => {
                 // TODO(NI5): генерация плоской последовательной композиции
             }
-            Implement::Parallel(_items) => {
+            Extend::Parallel(_items) => {
                 // TODO(NI5): генерация плоской параллельной композиции
             }
             _ => Err(Diagnostic::error(
@@ -957,13 +957,13 @@ impl Generator {
     }
 
     #[inline]
-    fn resolve_implement_name(implement: Implement) -> Result<String, Diagnostic> {
+    fn resolve_implement_name(implement: Extend) -> Result<String, Diagnostic> {
         match implement {
-            Implement::None => Ok("".to_string()),
-            Implement::Unresolved(_) => Ok("Unresolved".to_string()),
-            Implement::Model(model) => Self::resolve_model_name(&model.borrow()),
-            Implement::Parentless(i) => Self::resolve_implement_name(*i),
-            Implement::Sequence(implements) | Implement::Parallel(implements) => {
+            Extend::None => Ok("".to_string()),
+            Extend::Unresolved(_) => Ok("Unresolved".to_string()),
+            Extend::Model(model) => Self::resolve_model_name(&model.borrow()),
+            Extend::Parentless(i) => Self::resolve_implement_name(*i),
+            Extend::Concatenation(implements) | Extend::Parallel(implements) => {
                 let name = implements
                     .iter()
                     .map(|implement| Self::resolve_implement_name(*implement.clone()))

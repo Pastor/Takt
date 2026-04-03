@@ -11,7 +11,7 @@
 
 use grammar::parse;
 use grammar::semantic::enum_node::EnumDefinitionNode;
-use grammar::semantic::implement::Implement;
+use grammar::semantic::extend::Extend;
 use grammar::semantic::tree::{
     construct_model, construct_model_with_docs, implicit_bool_warnings,
     transition_completeness_warnings,
@@ -205,7 +205,7 @@ fn implement_single_model_resolves() {
     let node = build("start A = M { } state B; model M { start S; }");
     if let StateNode::Implement { implements, .. } = &node.states["A"] {
         assert!(
-            matches!(implements, Implement::Model(_)),
+            matches!(implements, Extend::Model(_)),
             "Простая реализация должна разрешаться в Implement::Model"
         );
     } else {
@@ -220,7 +220,7 @@ fn implement_add_composition_resolves() {
     let node = build("start Entry = M1 + M2; model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["Entry"] {
         assert!(
-            matches!(implements, Implement::Model(_)),
+            matches!(implements, Extend::Model(_)),
             "Компоновка + после compact_implement должна разрешаться в Implement::Model, получили: {:?}",
             implements
         );
@@ -235,7 +235,7 @@ fn implement_or_composition_resolves() {
     let node = build("start Entry = M1 | M2; model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["Entry"] {
         assert!(
-            matches!(implements, Implement::Parallel(_)),
+            matches!(implements, Extend::Parallel(_)),
             "Компоновка | должна разрешаться в Implement::Parallel"
         );
     } else {
@@ -607,7 +607,7 @@ fn implement_without_next_no_stack_overflow() {
     {
         assert!(next.is_none(), "next должен быть None");
         assert!(
-            matches!(implements, Implement::Model(_)),
+            matches!(implements, Extend::Model(_)),
             "реализация должна разрешиться в Implement::Model"
         );
     } else {
@@ -624,7 +624,7 @@ fn implement_parenthesized_add_resolves() {
     let node = build("start E = (M1 + M2) { } model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["E"] {
         assert!(
-            matches!(implements, Implement::Model(_)),
+            matches!(implements, Extend::Model(_)),
             "скобочная компоновка после compact_implement должна давать Implement::Model, получили: {:?}",
             implements
         );

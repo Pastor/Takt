@@ -16,8 +16,8 @@ use crate::parser::ast::{
 };
 use crate::semantic::condition::extract_conditions;
 use crate::semantic::expression::construct_expression;
+use crate::semantic::extend::{Extend, compact_extend};
 use crate::semantic::function::construct_function;
-use crate::semantic::implement::{Implement, compact_implement};
 use crate::semantic::import::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
 use crate::semantic::naming::normalize_model_name;
@@ -31,7 +31,7 @@ use crate::semantic::validate::{
 use crate::semantic::{
     ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
     NamedCodeBlockDefinitionNode, ReferenceNode, StateNode, StateNodeKind, StatementNode,
-    VariableNode, implement,
+    VariableNode, extend,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -92,8 +92,8 @@ fn construct_model_stage0(
         implements: model
             .implements
             .clone()
-            .map(Implement::Unresolved)
-            .unwrap_or(Implement::None),
+            .map(Extend::Unresolved)
+            .unwrap_or(Extend::None),
         ..Default::default()
     };
     let model_node = Rc::new(RefCell::new(model_node));
@@ -559,7 +559,7 @@ fn construct_model_stage1(
         if let StateNode::Implement {
             upper,
             loc,
-            implements: Implement::Unresolved(implement_expression),
+            implements: Extend::Unresolved(implement_expression),
             named_blocks,
             references,
             next,
@@ -567,13 +567,13 @@ fn construct_model_stage1(
             kind,
         } = state.clone()
         {
-            let implements = implement::unroll_implement_expression(
+            let implements = extend::unroll_extend_expression(
                 name.clone(),
                 ExpressionNode::Unresolved(implement_expression),
                 Rc::clone(&model),
             )?;
             let implements =
-                compact_implement(state.name().to_string(), &implements, Rc::clone(&model))?;
+                compact_extend(state.name().to_string(), &implements, Rc::clone(&model))?;
             prepared_states.insert(
                 name.clone(),
                 StateNode::Implement {
@@ -1114,7 +1114,7 @@ pub fn construct_states(
                     named_blocks: construct_named_blocks(def, Some(Rc::downgrade(&upper)))?,
                     name: name.clone(),
                     references,
-                    implements: Implement::Unresolved(expr),
+                    implements: Extend::Unresolved(expr),
                     next,
                     kind,
                 }
