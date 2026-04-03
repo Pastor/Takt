@@ -257,6 +257,7 @@ pub fn compact_extend(
 }
 
 mod minimalistic {
+    use crate::diagnostics::{Diagnostic, Location};
     use crate::semantic::ModelNode;
     use std::cell::RefCell;
     use std::collections::HashMap;
@@ -299,6 +300,26 @@ mod minimalistic {
     }
 
     impl Snapshot {
+        pub(crate) fn create(model: Rc<RefCell<ModelNode>>) -> Result<Self, Diagnostic> {
+            let mut used_elements = HashMap::new();
+            let Some(start) = model.borrow().get_start_state() else {
+                return Err(Diagnostic::error(
+                    Location::Implicit,
+                    "Model must have a start state".to_string(),
+                ));
+            };
+            //TODO: Рекурсивный спуск для создания упрощенной модели
+            let local_name = start.name();
+            Ok(Snapshot {
+                root: model.clone(),
+                used_elements,
+                start: Name::new(
+                    local_name.to_string(),
+                    unique_state_name(local_name, model.clone()),
+                ),
+            })
+        }
+
         #[inline]
         fn model_at(&self, name: &str) -> Option<Rc<RefCell<ModelNode>>> {
             model_by_unique_name(name, self.root.clone())
@@ -320,6 +341,11 @@ mod minimalistic {
             return format!("{}:{}", unique_model_name(upper.upgrade().unwrap()), name);
         }
         name
+    }
+
+    fn unique_state_name(local_name: &str, model: Rc<RefCell<ModelNode>>) -> String {
+        let name = unique_model_name(model);
+        format!("{}:{}", &name, local_name)
     }
 
     fn model_by_unique_name(
