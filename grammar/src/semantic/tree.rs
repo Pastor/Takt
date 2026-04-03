@@ -579,7 +579,7 @@ fn construct_model_stage1(
                     named_blocks,
                     name: name.clone(),
                     references,
-                    implements: implement::construct_implement(
+                    implements: implement::unroll_implement_expression(
                         ExpressionNode::Unresolved(implement_expression),
                         Rc::clone(&model),
                     )?,

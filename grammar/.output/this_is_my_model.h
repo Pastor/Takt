@@ -6,29 +6,29 @@
 struct ThisIsMyModel {
     struct {
         enum {
+            THIS_IS_MY_MODEL_PONG_INIT,
+            THIS_IS_MY_MODEL_PONG_BEGIN,
+            THIS_IS_MY_MODEL_PONG_STOP
+        } state;
+    } pong;
+    struct {
+        enum {
             THIS_IS_MY_MODEL_PING_INIT,
-            THIS_IS_MY_MODEL_PING_END,
-            THIS_IS_MY_MODEL_PING_START
+            THIS_IS_MY_MODEL_PING_START,
+            THIS_IS_MY_MODEL_PING_END
         } state;
         bool toggle;
     } ping;
     struct {
         enum {
             THIS_IS_MY_MODEL_TOGGLE_INIT,
-            THIS_IS_MY_MODEL_TOGGLE_ENTRY,
+            THIS_IS_MY_MODEL_TOGGLE_PING,
             THIS_IS_MY_MODEL_TOGGLE_END,
             THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
-            THIS_IS_MY_MODEL_TOGGLE_PING,
+            THIS_IS_MY_MODEL_TOGGLE_ENTRY,
             THIS_IS_MY_MODEL_TOGGLE_PONG
         } state;
     } toggle;
-    struct {
-        enum {
-            THIS_IS_MY_MODEL_PONG_INIT,
-            THIS_IS_MY_MODEL_PONG_STOP,
-            THIS_IS_MY_MODEL_PONG_BEGIN
-        } state;
-    } pong;
     enum {
         THIS_IS_MY_MODEL_INIT,
         THIS_IS_MY_MODEL_ENTRY

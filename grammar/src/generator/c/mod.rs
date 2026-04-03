@@ -384,11 +384,11 @@ impl Generator {
             Implement::Parentless(implement) => {
                 Self::generate_implement_source(printer, implement, model, main)?;
             }
-            Implement::Add(_left, _right) => {
-                // TODO(NI5): генерация последовательной композиции
+            Implement::Sequence(_items) => {
+                // TODO(NI5): генерация плоской последовательной композиции
             }
-            Implement::Or(_left, _right) => {
-                // TODO(NI5): генерация параллельной композиции
+            Implement::Parallel(_items) => {
+                // TODO(NI5): генерация плоской параллельной композиции
             }
             _ => Err(Diagnostic::error(
                 Location::Codegen,
@@ -902,12 +902,13 @@ impl Generator {
             Implement::Unresolved(_) => Ok("Unresolved".to_string()),
             Implement::Model(model) => Self::resolve_model_name(&model.borrow()),
             Implement::Parentless(i) => Self::resolve_implement_name(*i),
-            Implement::Add(left, right) | Implement::Or(left, right) => {
-                Ok(Self::resolve_implement_name(*left)?
-                    + "_"
-                    + &*Self::resolve_implement_name(*right)?)
+            Implement::Sequence(implements) | Implement::Parallel(implements) => {
+                let name = implements
+                    .iter()
+                    .map(|implement| Self::resolve_implement_name(*implement.clone()))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(name.join("_"))
             }
-            _ => Err("Not implement yet".into()),
         }
     }
 }

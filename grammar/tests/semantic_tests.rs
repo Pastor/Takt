@@ -213,28 +213,28 @@ fn implement_single_model_resolves() {
     }
 }
 
-/// Реализация с `+` (последовательная компоновка) разрешается в `Implement::Add`.
+/// Реализация с `+` (последовательная компоновка) разрешается в `Implement::Sequence`.
 #[test]
 fn implement_add_composition_resolves() {
     let node = build("start Entry = M1 + M2; model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["Entry"] {
         assert!(
-            matches!(implements, Implement::Add(_, _)),
-            "Компоновка + должна разрешаться в Implement::Add"
+            matches!(implements, Implement::Sequence(_)),
+            "Компоновка + должна разрешаться в Implement::Sequence"
         );
     } else {
         panic!("ожидался StateNode::Implement для Entry");
     }
 }
 
-/// Реализация с `|` (параллельная компоновка) разрешается в `Implement::Or`.
+/// Реализация с `|` (параллельная компоновка) разрешается в `Implement::Parallel`.
 #[test]
 fn implement_or_composition_resolves() {
     let node = build("start Entry = M1 | M2; model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["Entry"] {
         assert!(
-            matches!(implements, Implement::Or(_, _)),
-            "Компоновка | должна разрешаться в Implement::Or"
+            matches!(implements, Implement::Parallel(_)),
+            "Компоновка | должна разрешаться в Implement::Parallel"
         );
     } else {
         panic!("ожидался StateNode::Implement для Entry");
@@ -621,8 +621,8 @@ fn implement_parenthesized_add_resolves() {
     let node = build("start E = (M1 + M2) { } model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["E"] {
         assert!(
-            matches!(implements, Implement::Add(_, _)),
-            "скобочная компоновка должна давать Implement::Add"
+            matches!(implements, Implement::Sequence(_)),
+            "скобочная компоновка должна давать Implement::Sequence"
         );
     } else {
         panic!("ожидался StateNode::Implement для E");
