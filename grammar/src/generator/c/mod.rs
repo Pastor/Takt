@@ -35,6 +35,7 @@ use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
 use crate::parser::ast::{Member, StateKind};
 use crate::semantic::extend::Extend;
+use crate::semantic::extend::minimalistic::Snapshot;
 use crate::semantic::naming::{normalize_lowercase_snakecase, normalize_model_name};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
@@ -43,8 +44,10 @@ use crate::semantic::{
 };
 use itertools::Itertools;
 use log::warn;
+use std::cell::RefCell;
 use std::fs;
 use std::path::Path;
+use std::rc::Rc;
 
 const FUNCTION_PORT_WRITE_BIT: &str = "write_bit";
 const FUNCTION_PORT_READ_BIT: &str = "read_bit";
@@ -59,6 +62,8 @@ pub struct Generator {}
 
 impl AsGenerator for Generator {
     fn generate(&self, model: &ModelNode, output_path: &str) -> Result<(), Diagnostic> {
+        //TODO: При генерации следует работать с примитивным слепком модели
+        let _snapshot = Snapshot::create(Rc::new(RefCell::new(model.copy(None, None))));
         let header = self.generate_header(model)?;
         let source = self.generate_source(model)?;
         let model_name = Self::resolve_model_name(model)?;

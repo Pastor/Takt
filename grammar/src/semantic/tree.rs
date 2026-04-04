@@ -16,7 +16,7 @@ use crate::parser::ast::{
 };
 use crate::semantic::condition::extract_conditions;
 use crate::semantic::expression::construct_expression;
-use crate::semantic::extend::{Extend, compact_extend};
+use crate::semantic::extend::Extend;
 use crate::semantic::function::construct_function;
 use crate::semantic::import::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
@@ -568,12 +568,9 @@ fn construct_model_stage1(
         } = state.clone()
         {
             let implements = extend::unroll_extend_expression(
-                name.clone(),
                 ExpressionNode::Unresolved(implement_expression),
                 Rc::clone(&model),
             )?;
-            let implements =
-                compact_extend(state.name().to_string(), &implements, Rc::clone(&model))?;
             prepared_states.insert(
                 name.clone(),
                 StateNode::Implement {

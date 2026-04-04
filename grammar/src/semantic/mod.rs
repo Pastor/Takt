@@ -169,11 +169,20 @@ impl ModelNode {
             .collect::<Vec<StateNode>>()
     }
 
-    pub(crate) fn copy(&self, new_name: &str, upper: Option<Rc<RefCell<ModelNode>>>) -> ModelNode {
+    pub(crate) fn copy(
+        &self,
+        new_name: Option<String>,
+        upper: Option<Rc<RefCell<ModelNode>>>,
+    ) -> ModelNode {
+        let name = if new_name.is_none() {
+            self.name.clone()
+        } else {
+            new_name.clone()
+        };
         ModelNode {
-            name: Some(new_name.to_string()),
+            name,
             loc: self.loc,
-            upper: upper.and_then(|p| Some(Rc::downgrade(&p))),
+            upper: upper.map(|p| Rc::downgrade(&p)),
             models: self.models.clone(),
             named_blocks: self.named_blocks.clone(),
             functions: self.functions.clone(),

@@ -1,15 +1,12 @@
 //! Построение и развёртка структуры [`Extend`] — реализации модели.
 //!
 //! Модуль предоставляет две публичные функции:
-//! - [`construct_implement`] — строит [`Extend`] из семантического выражения [`ExpressionNode`];
 //! - [`unroll_extend_expression`] — разворачивает выражение в плоскую
 //!   структуру [`Extend::Concatenation`] / [`Extend::Parallel`].
 
-use crate::diagnostics::{Diagnostic, Location};
+use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
-use crate::semantic::{
-    ConditionNode, ExpressionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind,
-};
+use crate::semantic::{ExpressionNode, ModelNode};
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
@@ -20,8 +17,8 @@ use std::rc::Rc;
 /// - [`Unresolved`](Extend::Unresolved) — временная заглушка до второго прохода.
 /// - [`Model`](Extend::Model) — ссылка на конкретную именованную модель.
 /// - [`Parentless`](Extend::Parentless) — обёртка без родителя (скобки).
-/// - [`Add`](Extend::Add) — последовательная компоновка `A + B`.
-/// - [`Or`](Extend::Or) — параллельная компоновка `A | B`.
+/// - [`Concatenation`](Extend::Concatenation) — последовательная компоновка `A + B`.
+/// - [`Parallel`](Extend::Parallel) — параллельная компоновка `A | B`.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum Extend {
     /// Реализация не задана (значение по умолчанию для безымянной корневой модели).
@@ -144,7 +141,6 @@ fn unroll_expression_ast(
 /// Разворачивает семантическое выражение расширения в плоскую структуру [`Extend`],
 /// объединяя цепочки `+` в [`Extend::Concatenation`] и `|` в [`Extend::Parallel`].
 pub fn unroll_extend_expression(
-    prefix_name: String,
     expression: ExpressionNode,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Extend, Diagnostic> {
@@ -152,15 +148,13 @@ pub fn unroll_extend_expression(
     match expression {
         ExpressionNode::Unresolved(expr) => {
             let unrolled = unroll_expression_ast(expr, model.clone())?;
-            unroll_extend_expression(prefix_name, unrolled, model)
+            unroll_extend_expression(unrolled, model)
         }
         ExpressionNode::Model(model) => Ok(Extend::Model(Rc::clone(&model))),
-        ExpressionNode::Parenthesis(expression) => {
-            unroll_extend_expression(prefix_name, *expression, model)
-        }
+        ExpressionNode::Parenthesis(expression) => unroll_extend_expression(*expression, model),
         ExpressionNode::Add(left, right) => {
-            let left = unroll_extend_expression(prefix_name.clone(), *left, model.clone())?;
-            let right = unroll_extend_expression(prefix_name.clone(), *right, model.clone())?;
+            let left = unroll_extend_expression(*left, model.clone())?;
+            let right = unroll_extend_expression(*right, model.clone())?;
             // Плоская конкатенация: если операнд уже Sequence — разворачиваем его элементы.
             let mut items: Vec<Box<Extend>> = Vec::new();
             match left {
@@ -174,8 +168,8 @@ pub fn unroll_extend_expression(
             Ok(Extend::Concatenation(items))
         }
         ExpressionNode::BitwiseOr(left, right) => {
-            let left = unroll_extend_expression(prefix_name.clone(), *left, model.clone())?;
-            let right = unroll_extend_expression(prefix_name.clone(), *right, model.clone())?;
+            let left = unroll_extend_expression(*left, model.clone())?;
+            let right = unroll_extend_expression(*right, model.clone())?;
             // Плоское объединение: если операнд уже Parallel — разворачиваем его элементы.
             let mut items: Vec<Box<Extend>> = Vec::new();
             match left {
@@ -194,96 +188,17 @@ pub fn unroll_extend_expression(
     }
 }
 
-/// Компактирует [`Extend`] в конкретную модель (или `Parallel`), копируя
-/// исходные модели с новыми именами вида `"<prefix><OriginalName>"`.
-///
-/// - [`Extend::Model`] — копирует модель под именем `prefix + orig_name`.
-/// - [`Extend::Concatenation`] — создаёт промежуточную модель `prefix_Concatenation`
-///   с цепочкой `Implement`-состояний в обратном порядке.
-/// - [`Extend::Parallel`] — рекурсивно компактирует каждый операнд.
-/// - [`Extend::None`] / [`Extend::Unresolved`] — возвращает ошибку.
-pub fn compact_extend(
-    prefix_name: String,
-    extend: &Extend,
-    owned: Rc<RefCell<ModelNode>>,
-) -> Result<Extend, Diagnostic> {
-    match extend {
-        Extend::None | Extend::Unresolved(_) => Err("Неизвестная реализация".into()),
-        Extend::Model(model) => {
-            // Копируем содержимое модели и меняем его владельца, добавляем в список моделей.
-            // Для анонимных моделей (корневой import) имя состоит только из префикса.
-            let base = model.borrow().name.clone().unwrap_or_default();
-            let model_name = format!("{}{}", prefix_name, base);
-            let model_node = owned.borrow().search_model(&model_name);
-            if model_node.is_some() {
-                return Ok(Extend::Model(model_node.unwrap()));
-            }
-            let model_node = model.borrow().copy(&model_name, Some(owned.clone()));
-            let mode_rc = Rc::new(RefCell::new(model_node));
-            owned
-                .borrow_mut()
-                .models
-                .insert(model_name.clone(), mode_rc.clone());
-            Ok(Extend::Model(mode_rc))
-        }
-        Extend::Parentless(extend_item) => compact_extend(prefix_name, extend_item, owned.clone()),
-        Extend::Concatenation(extends) => {
-            let prefix_name = format!("{}_Concatenation", prefix_name.clone());
-            let model = ModelNode::new(prefix_name.clone().as_str(), Some(owned.clone()));
-            let mut prev = None;
-            let mut n = 0;
-            let max_sequence_length: usize = extends.len();
-            for implement in extends.iter().rev() {
-                let model_name = format!("{}_{}", prefix_name, n);
-                let extend_model = compact_extend(model_name.clone(), implement, owned.clone())?;
-                n += 1;
-                let kind = if n >= max_sequence_length {
-                    StateNodeKind::Start
-                } else {
-                    StateNodeKind::Simple
-                };
-                let state = StateNode::Implement {
-                    upper: Some(Rc::downgrade(&model)),
-                    loc: Location::Codegen,
-                    named_blocks: vec![],
-                    name: model_name.clone(),
-                    references: vec![],
-                    implements: extend_model.clone(),
-                    next: prev.clone(),
-                    kind,
-                };
-                prev = Some(ReferenceNode {
-                    location: Location::Codegen,
-                    name: state.name().to_string(),
-                    cond: ConditionNode::None,
-                    object: Box::new(state.clone()),
-                });
-                model.borrow_mut().states.insert(model_name.clone(), state);
-            }
-            Ok(Extend::Model(model))
-        }
-        Extend::Parallel(extends) => {
-            let extends = extends
-                .iter()
-                .map(|implement| {
-                    Box::new(compact_extend(prefix_name.clone(), implement, owned.clone()).unwrap())
-                })
-                .collect::<Vec<_>>();
-            Ok(Extend::Parallel(extends))
-        }
-    }
-}
-
-mod minimalistic {
+pub mod minimalistic {
     use crate::diagnostics::{Diagnostic, Location};
     use crate::semantic::extend::Extend;
     use crate::semantic::{ModelNode, StateNode};
     use std::cell::RefCell;
     use std::collections::HashMap;
+    use std::fmt::{Debug, Display};
     use std::rc::Rc;
 
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-    struct Name {
+    #[derive(Clone, PartialEq, Eq, Hash)]
+    pub(crate) struct Name {
         local: String,
         unique: String,
     }
@@ -294,8 +209,37 @@ mod minimalistic {
         }
     }
 
+    impl Display for Name {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{} ({})", self.local, self.unique)
+        }
+    }
+
+    impl Debug for Name {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            Display::fmt(self, f)
+        }
+    }
+
+    impl From<Rc<RefCell<ModelNode>>> for Name {
+        fn from(model: Rc<RefCell<ModelNode>>) -> Self {
+            Name::new(
+                model.borrow().name.clone().unwrap().clone(),
+                unique_model_name(model.clone()),
+            )
+        }
+    }
+
     #[derive(Debug, Clone)]
-    enum Element {
+    pub(crate) enum StateExtend {
+        None,
+        Model(Name),
+        Concatenation(Vec<StateExtend>),
+        Parallel(Vec<StateExtend>),
+    }
+
+    #[derive(Debug, Clone)]
+    pub(crate) enum Element {
         Model {
             name: Name,
             states: Vec<Name>,
@@ -303,7 +247,7 @@ mod minimalistic {
         },
         StateExtend {
             name: Name,
-            extend: Vec<Element>,
+            extend: StateExtend,
             next: Name,
         },
         State {
@@ -312,7 +256,7 @@ mod minimalistic {
         },
     }
 
-    struct Snapshot {
+    pub(crate) struct Snapshot {
         root: Rc<RefCell<ModelNode>>,
         used_elements: HashMap<Name, Element>,
         start: Name,
@@ -326,7 +270,7 @@ mod minimalistic {
         ///
         /// # Ошибки
         /// Возвращает [`Diagnostic`], если у модели нет стартового состояния.
-        pub(crate) fn create(model: Rc<RefCell<ModelNode>>) -> Result<Self, Diagnostic> {
+        pub fn create(model: Rc<RefCell<ModelNode>>) -> Result<Self, Diagnostic> {
             let mut used_elements = HashMap::new();
             let Some(start) = model.borrow().get_start_state() else {
                 return Err(Diagnostic::error(
@@ -348,12 +292,12 @@ mod minimalistic {
         }
 
         #[inline]
-        fn model_at(&self, name: &str) -> Option<Rc<RefCell<ModelNode>>> {
+        pub(crate) fn model_at(&self, name: &str) -> Option<Rc<RefCell<ModelNode>>> {
             model_by_unique_name(name, self.root.clone())
         }
 
         #[inline]
-        fn used_models(&self) -> Vec<Element> {
+        pub(crate) fn used_models(&self) -> Vec<Element> {
             self.used_elements
                 .values()
                 .filter(|e| matches!(e, Element::Model { .. }))
@@ -365,13 +309,20 @@ mod minimalistic {
     fn unique_model_name(model: Rc<RefCell<ModelNode>>) -> String {
         let name = model.borrow().name.clone().unwrap_or_default();
         if let Some(upper) = model.borrow().upper.as_ref() {
-            return format!("{}:{}", unique_model_name(upper.upgrade().unwrap()), name);
+            let model_name = unique_model_name(upper.upgrade().unwrap());
+            if model_name.is_empty() {
+                return name;
+            }
+            return format!("{}:{}", model_name, name);
         }
         name
     }
 
     fn unique_state_name(local_name: &str, model: Rc<RefCell<ModelNode>>) -> String {
         let name = unique_model_name(model);
+        if name.is_empty() {
+            return local_name.to_string();
+        }
         format!("{}:{}", &name, local_name)
     }
 
@@ -420,7 +371,10 @@ mod minimalistic {
         used: &mut HashMap<Name, Element>,
     ) {
         let name_str = state.name().to_string();
-        let key = Name::new(name_str.clone(), unique_state_name(&name_str, model.clone()));
+        let key = Name::new(
+            name_str.clone(),
+            unique_state_name(&name_str, model.clone()),
+        );
         if used.contains_key(&key) {
             return; // Уже обработано — прерываем возможный цикл
         }
@@ -447,7 +401,9 @@ mod minimalistic {
                     }
                 }
             }
-            StateNode::Implement { implements, next, .. } => {
+            StateNode::Implement {
+                implements, next, ..
+            } => {
                 let next_name = next
                     .as_ref()
                     .map(|n| Name::new(n.name.clone(), unique_state_name(&n.name, model.clone())))
@@ -457,18 +413,17 @@ mod minimalistic {
                     key.clone(),
                     Element::StateExtend {
                         name: key.clone(),
-                        extend: vec![],
+                        extend: StateExtend::None,
                         next: next_name.clone(),
                     },
                 );
-                // Обходим вложенные модели через выражение реализации
-                let extend_elems = visit_extend(implements, model.clone(), used);
+                visit_extend(implements, model.clone(), used);
                 // Обновляем запись с реальным содержимым после обхода
                 used.insert(
                     key.clone(),
                     Element::StateExtend {
                         name: key,
-                        extend: extend_elems,
+                        extend: build_extend(implements, model.clone()),
                         next: next_name.clone(),
                     },
                 );
@@ -485,6 +440,27 @@ mod minimalistic {
         }
     }
 
+    fn build_extend(extend: &Extend, model: Rc<RefCell<ModelNode>>) -> StateExtend {
+        match extend {
+            Extend::None => StateExtend::None,
+            Extend::Unresolved(_) => StateExtend::None,
+            Extend::Model(model) => StateExtend::Model(Name::from(Rc::clone(&model))),
+            Extend::Parentless(extend) => build_extend(extend, model),
+            Extend::Concatenation(extends) => StateExtend::Concatenation(
+                extends
+                    .iter()
+                    .map(|extend| build_extend(extend, model.clone()))
+                    .collect(),
+            ),
+            Extend::Parallel(extends) => StateExtend::Parallel(
+                extends
+                    .iter()
+                    .map(|extend| build_extend(extend, model.clone()))
+                    .collect(),
+            ),
+        }
+    }
+
     /// Рекурсивно обходит выражение реализации [`Extend`], регистрирует
     /// используемые модели в `used` и возвращает плоский список вложенных элементов.
     ///
@@ -496,7 +472,7 @@ mod minimalistic {
         extend: &Extend,
         model: Rc<RefCell<ModelNode>>,
         used: &mut HashMap<Name, Element>,
-    ) -> Vec<Element> {
+    ) {
         match extend {
             Extend::Model(m_rc) => {
                 let unique = unique_model_name(m_rc.clone());
@@ -505,8 +481,7 @@ mod minimalistic {
                 if !used.contains_key(&key) {
                     // Собираем имена состояний отдельным borrow, чтобы не
                     // удерживать его при последующих вызовах
-                    let state_keys: Vec<String> =
-                        m_rc.borrow().states.keys().cloned().collect();
+                    let state_keys: Vec<String> = m_rc.borrow().states.keys().cloned().collect();
                     let start_opt = m_rc.borrow().get_start_state();
                     let states: Vec<Name> = state_keys
                         .iter()
@@ -534,14 +509,14 @@ mod minimalistic {
                         visit_state(&start, m_rc.clone(), used);
                     }
                 }
-                vec![]
             }
             Extend::Parentless(inner) => visit_extend(inner, model, used),
-            Extend::Concatenation(items) | Extend::Parallel(items) => items
-                .iter()
-                .flat_map(|item| visit_extend(item, model.clone(), used))
-                .collect(),
-            Extend::None | Extend::Unresolved(_) => vec![],
+            Extend::Concatenation(items) | Extend::Parallel(items) => {
+                for item in items {
+                    visit_extend(item, model.clone(), used)
+                }
+            }
+            Extend::None | Extend::Unresolved(_) => (),
         }
     }
 
@@ -549,6 +524,7 @@ mod minimalistic {
     mod tests {
         use super::*;
         use crate::parse;
+        use crate::semantic::extend::tests::SRC;
         use crate::semantic::tree::construct_model;
 
         #[test]
@@ -640,10 +616,11 @@ mod minimalistic {
             // Стартовое состояние найдено
             assert_eq!(snap.start.local, "S");
             // S зарегистрировано среди используемых элементов
-            assert!(snap
-                .used_elements
-                .values()
-                .any(|e| matches!(e, Element::State { name, .. } if name.local == "S")));
+            assert!(
+                snap.used_elements
+                    .values()
+                    .any(|e| matches!(e, Element::State { name, .. } if name.local == "S"))
+            );
         }
 
         /// Snapshot::create регистрирует модели из выражений реализации.
@@ -659,10 +636,11 @@ mod minimalistic {
             // Стартовое состояние корневой модели — Entry
             assert_eq!(snap.start.local, "Entry");
             // compact_extend именует копию как "Entry" + "A" = "EntryA"
-            assert!(snap
-                .used_models()
-                .iter()
-                .any(|e| matches!(e, Element::Model { name, .. } if name.local == "EntryA")));
+            assert!(
+                snap.used_models()
+                    .iter()
+                    .any(|e| matches!(e, Element::Model { name, .. } if name.local == "A"))
+            );
         }
 
         /// Snapshot::create не дублирует элементы при параллельных ссылках на одну модель.
@@ -679,9 +657,17 @@ mod minimalistic {
             let model_count = snap
                 .used_models()
                 .iter()
-                .filter(|e| matches!(e, Element::Model { name, .. } if name.local == "EntryA"))
+                .filter(|e| matches!(e, Element::Model { name, .. } if name.local == "A"))
                 .count();
             assert_eq!(model_count, 1);
+        }
+
+        #[test]
+        fn test_snapshot_create_complex() {
+            let (ast, _) = parse(SRC, 0).unwrap();
+            let model_rc = construct_model(&ast, None, &[]).unwrap();
+            let snap = Snapshot::create(model_rc).unwrap();
+            assert_eq!(snap.start.local, "Entry");
         }
     }
 }
@@ -691,27 +677,47 @@ mod tests {
     use crate::diagnostics::Location;
     use crate::parse;
     use crate::parser::ast;
-    use crate::semantic::extend::{Extend, compact_extend, unroll_extend_expression};
+    use crate::semantic::extend::{Extend, unroll_extend_expression};
     use crate::semantic::tree::construct_model;
     use crate::semantic::{ExpressionNode, StateNode};
 
-    const SRC: &str = r#"
+    pub const SRC: &str = r#"
 model A {
     start Start;
 }
 model B {
     start Start;
 }
-start Entry = A | B | (A + B);
-state Next1 = A + B + (A | B);
-state Next2 = A + (B | A) + B;
-state Next3 = A + (B + A) + B;
-state Next4 = A + (B + A) + (B | A);
-state Next5 = (A | B) + (A + B);
-state Next6 = (A | B) + (A + B) + (A | B);
-state Next7 = (A | B) + (A + B) + (A | B) + (A + B);
-state Next8 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B);
-state Next9 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B);
+start Entry = A | B | (A + B) {
+    next Next1;
+}
+state Next1 = A + B + (A | B) {
+    next Next2;
+}
+state Next2 = A + (B | A) + B {
+    next Next3;
+}
+state Next3 = A + (B + A) + B {
+    next Next4;
+}
+state Next4 = A + (B + A) + (B | A) {
+    next Next5;
+}
+state Next5 = (A | B) + (A + B) {
+    next Next6;
+}
+state Next6 = (A | B) + (A + B) + (A | B) {
+    next Next7;
+}
+state Next7 = (A | B) + (A + B) + (A | B) + (A + B) {
+    next Next8;
+}
+state Next8 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) {
+    next Next9;
+}
+state Next9 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) {
+    next Next10;
+}
 state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + B);
 "#;
 
@@ -721,14 +727,12 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
         let model_rc = construct_model(&ast, None, &[]).unwrap();
 
         let implement = unroll_extend_expression(
-            String::from("O"),
             ExpressionNode::Unresolved(ast::Expression::Variable(ast::Identifier::new("A"))),
             model_rc.clone(),
         )
         .unwrap();
         assert!(matches!(implement, Extend::Model(_)));
         let implement = unroll_extend_expression(
-            String::from("O"),
             ExpressionNode::Unresolved(ast::Expression::BitwiseOr(
                 Location::Implicit,
                 Box::new(ast::Expression::Variable(ast::Identifier::new("A"))),
@@ -740,7 +744,6 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
         assert!(matches!(implement, Extend::Parallel(_)));
         // start Entry = A | B | (A + B)  →  Parallel([A, B, Sequence([A, B])])
         let implement = unroll_extend_expression(
-            String::from("O"),
             ExpressionNode::Unresolved(ast::Expression::BitwiseOr(
                 Location::Implicit,
                 Box::new(ast::Expression::BitwiseOr(
@@ -900,92 +903,153 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
                 "EntryA | EntryB | Entry_Concatenation",
             ),
         ];
-        for (name, _expected, expected_name) in pairs {
+        for (name, expected, _expected_name) in pairs {
             let state = model_rc.borrow().search_state(name).unwrap();
             let StateNode::Implement { ref implements, .. } = *state.borrow() else {
                 panic!("State is not an implement")
             };
             assert_eq!(
-                implements.to_string(),
-                expected_name,
+                *implements, expected,
                 "State {} is not unrolled. {} != {}",
-                name,
-                implements,
-                expected_name
+                name, implements, expected
             );
         }
     }
 
     #[test]
-    fn test_implement_to_model() {
+    fn test_extend_predicates() {
+        use crate::semantic::ModelNode;
+
+        let model = ModelNode::new("A", None);
+
+        assert!(!Extend::None.is_model());
+        assert!(!Extend::None.is_parentless());
+        assert!(!Extend::None.is_sequence());
+        assert!(!Extend::None.is_parallel());
+
+        let extend_model = Extend::Model(model.clone());
+        assert!(extend_model.is_model());
+        assert!(!extend_model.is_parentless());
+        assert!(!extend_model.is_sequence());
+        assert!(!extend_model.is_parallel());
+
+        let parentless = Extend::Parentless(Box::new(Extend::Model(model.clone())));
+        assert!(!parentless.is_model());
+        assert!(parentless.is_parentless());
+        assert!(!parentless.is_sequence());
+        assert!(!parentless.is_parallel());
+
+        let seq = Extend::Concatenation(vec![Box::new(Extend::Model(model.clone()))]);
+        assert!(!seq.is_model());
+        assert!(!seq.is_parentless());
+        assert!(seq.is_sequence());
+        assert!(!seq.is_parallel());
+
+        let par = Extend::Parallel(vec![Box::new(Extend::Model(model.clone()))]);
+        assert!(!par.is_model());
+        assert!(!par.is_parentless());
+        assert!(!par.is_sequence());
+        assert!(par.is_parallel());
+    }
+
+    #[test]
+    fn test_extend_name() {
+        use crate::semantic::ModelNode;
+
+        let model = ModelNode::new("MyModel", None);
+
+        assert_eq!(Extend::None.name(), "None");
+        assert_eq!(
+            Extend::Unresolved(ast::Expression::Variable(ast::Identifier::new("X"))).name(),
+            "Unresolved"
+        );
+        assert_eq!(Extend::Model(model.clone()).name(), "MyModel");
+        assert_eq!(
+            Extend::Parentless(Box::new(Extend::Model(model.clone()))).name(),
+            "MyModel"
+        );
+        assert_eq!(
+            Extend::Concatenation(vec![Box::new(Extend::Model(model.clone()))]).name(),
+            "Concatenation"
+        );
+        assert_eq!(
+            Extend::Parallel(vec![Box::new(Extend::Model(model.clone()))]).name(),
+            "Parallel"
+        );
+    }
+
+    #[test]
+    fn test_extend_display() {
+        use crate::semantic::ModelNode;
+
+        let a = ModelNode::new("A", None);
+        let b = ModelNode::new("B", None);
+
+        assert_eq!(format!("{}", Extend::None), "None");
+        assert_eq!(
+            format!(
+                "{}",
+                Extend::Unresolved(ast::Expression::Variable(ast::Identifier::new("X")))
+            ),
+            "Unresolved"
+        );
+        assert_eq!(format!("{}", Extend::Model(a.clone())), "A");
+        assert_eq!(
+            format!("{}", Extend::Parentless(Box::new(Extend::Model(a.clone())))),
+            "(A)"
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                Extend::Concatenation(vec![
+                    Box::new(Extend::Model(a.clone())),
+                    Box::new(Extend::Model(b.clone())),
+                ])
+            ),
+            "A + B"
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                Extend::Parallel(vec![
+                    Box::new(Extend::Model(a.clone())),
+                    Box::new(Extend::Model(b.clone())),
+                ])
+            ),
+            "A | B"
+        );
+    }
+
+    #[test]
+    fn test_unroll_model_not_found() {
         let (ast, _) = parse(SRC, 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
 
-        let result = compact_extend(String::from("O"), &Extend::None, model_rc.clone());
-        assert!(result.is_err());
-
-        let result = compact_extend(
-            String::from("O"),
-            &Extend::Unresolved(ast::Expression::Variable(ast::Identifier::new("A"))),
+        let result = unroll_extend_expression(
+            ExpressionNode::Unresolved(ast::Expression::Variable(ast::Identifier::new(
+                "NonExistent",
+            ))),
             model_rc.clone(),
         );
         assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.message.contains("NonExistent"));
+    }
 
-        let model_a = model_rc.borrow().search_model("A").unwrap();
-        let model_b = model_rc.borrow().search_model("B").unwrap();
-        {
-            let result = compact_extend(
-                String::from("O"),
-                &Extend::Model(model_a.clone()),
-                model_rc.clone(),
-            );
-            assert!(result.is_ok());
-            let Extend::Model(result) = result.unwrap() else {
-                panic!("Result is not a model")
-            };
-            let result = result.borrow();
-            assert_eq!(
-                format!("O{}", model_a.borrow().name.clone().unwrap()),
-                result.name.clone().unwrap()
-            );
-        }
-        {
-            let result = compact_extend(
-                String::from("O"),
-                &Extend::Concatenation(vec![
-                    Box::new(Extend::Model(model_a.clone())),
-                    Box::new(Extend::Model(model_b.clone())),
-                ]),
-                model_rc.clone(),
-            );
-            assert!(result.is_ok());
-            let result = result.unwrap();
-            let Extend::Model(result) = result else {
-                panic!("Result is not a model")
-            };
-            let result = result.borrow();
-            assert_eq!(result.name(), "O_Concatenation".to_string());
-            assert!(result.search_state("O_Concatenation_1").is_some());
-            assert!(result.search_state("O_Concatenation_0").is_some());
-        }
-        {
-            let result = compact_extend(
-                String::from("O"),
-                &Extend::Parallel(vec![
-                    Box::new(Extend::Model(model_a.clone())),
-                    Box::new(Extend::Model(model_b.clone())),
-                ]),
-                model_rc.clone(),
-            );
-            assert!(result.is_ok());
-            let result = result.unwrap();
-            let Extend::Parallel(implements) = result.clone() else {
-                panic!("Result is not a parallel implement")
-            };
-            assert_eq!(result.name(), "Parallel".to_string());
-            assert_eq!(implements.len(), 2);
-            assert!(implements[0].is_model());
-            assert!(implements[1].is_model());
-        }
+    #[test]
+    fn test_unroll_unsupported_expression() {
+        use crate::semantic::ModelNode;
+
+        let model = ModelNode::new("Root", None);
+
+        // ExpressionNode::BitwiseAnd не поддерживается — должна вернуть ошибку
+        let result = unroll_extend_expression(
+            ExpressionNode::BitwiseAnd(
+                Box::new(ExpressionNode::Model(model.clone())),
+                Box::new(ExpressionNode::Model(model.clone())),
+            ),
+            model.clone(),
+        );
+        assert!(result.is_err());
     }
 }
