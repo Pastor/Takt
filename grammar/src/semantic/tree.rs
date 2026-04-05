@@ -571,6 +571,7 @@ fn construct_model_stage1(
                 ExpressionNode::Unresolved(implement_expression),
                 Rc::clone(&model),
             )?;
+            let implements = extend::compact_implement(implements, Rc::clone(&model), &name);
             prepared_states.insert(
                 name.clone(),
                 StateNode::Implement {

@@ -7,67 +7,67 @@
 struct ThisIsMyModel {
     /** Generated 'Entry_Sequence' structure */
     struct {
-        /** Generated 'Entry_Sequence_1Ping' structure */
+        /** Generated 'Ping' structure */
         struct {
-            /** Generated states to 'Entry_Sequence_1Ping' */
+            /** Generated states to 'Ping' */
             enum {
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_1_PING_INIT,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_1_PING_START,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_1_PING_END
+                THIS_IS_MY_MODEL_PING_INIT,
+                THIS_IS_MY_MODEL_PING_START,
+                THIS_IS_MY_MODEL_PING_END
             } state;
             bool toggle;
-        } entry__sequence_1_ping;
-        /** Generated 'Entry_Sequence_1Pong' structure */
+        } ping;
+        /** Generated 'Pong' structure */
         struct {
-            /** Generated states to 'Entry_Sequence_1Pong' */
+            /** Generated states to 'Pong' */
             enum {
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_1_PONG_INIT,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_1_PONG_STOP,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_1_PONG_BEGIN
+                THIS_IS_MY_MODEL_PONG_INIT,
+                THIS_IS_MY_MODEL_PONG_BEGIN,
+                THIS_IS_MY_MODEL_PONG_STOP
             } state;
-        } entry__sequence_1_pong;
+        } pong;
         /** Generated states to 'Entry_Sequence' */
         enum {
-            THIS_IS_MY_MODEL_ENTRY__SEQUENCE_INIT,
-            THIS_IS_MY_MODEL_ENTRY__SEQUENCE_ENTRY__SEQUENCE_0_INIT,
-            THIS_IS_MY_MODEL_ENTRY__SEQUENCE_ENTRY__SEQUENCE_0,
-            THIS_IS_MY_MODEL_ENTRY__SEQUENCE_ENTRY__SEQUENCE_1_INIT,
-            THIS_IS_MY_MODEL_ENTRY__SEQUENCE_ENTRY__SEQUENCE_1
+            THIS_IS_MY_MODEL_ENTRY_SEQUENCE_INIT,
+            THIS_IS_MY_MODEL_ENTRY_SEQUENCE_STEP0_INIT,
+            THIS_IS_MY_MODEL_ENTRY_SEQUENCE_STEP0,
+            THIS_IS_MY_MODEL_ENTRY_SEQUENCE_STEP1_INIT,
+            THIS_IS_MY_MODEL_ENTRY_SEQUENCE_STEP1
         } state;
-        /** Generated 'Entry_Sequence_0Toggle' structure */
+        /** Generated 'Toggle' structure */
         struct {
-            /** Generated states to 'Entry_Sequence_0Toggle' */
+            /** Generated states to 'Toggle' */
             enum {
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_INIT,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_ENTRY,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_END,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_PING_INIT,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_PING,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_PONG_INIT,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_PONG,
-                THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_COMPLETE
+                THIS_IS_MY_MODEL_TOGGLE_INIT,
+                THIS_IS_MY_MODEL_TOGGLE_ENTRY,
+                THIS_IS_MY_MODEL_TOGGLE_END,
+                THIS_IS_MY_MODEL_TOGGLE_PING_INIT,
+                THIS_IS_MY_MODEL_TOGGLE_PING,
+                THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
+                THIS_IS_MY_MODEL_TOGGLE_PONG_INIT,
+                THIS_IS_MY_MODEL_TOGGLE_PONG
             } state;
-            /** Generated 'PingPing' structure */
+            /** Generated 'Ping' structure */
             struct {
-                /** Generated states to 'PingPing' */
+                /** Generated states to 'Ping' */
                 enum {
-                    THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_PING_PING_INIT,
-                    THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_PING_PING_START,
-                    THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_PING_PING_END
+                    THIS_IS_MY_MODEL_PING_INIT,
+                    THIS_IS_MY_MODEL_PING_START,
+                    THIS_IS_MY_MODEL_PING_END
                 } state;
                 bool toggle;
-            } ping_ping;
-            /** Generated 'PongPong' structure */
+            } ping;
+            /** Generated 'Pong' structure */
             struct {
-                /** Generated states to 'PongPong' */
+                /** Generated states to 'Pong' */
                 enum {
-                    THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_PONG_PONG_INIT,
-                    THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_PONG_PONG_BEGIN,
-                    THIS_IS_MY_MODEL_ENTRY__SEQUENCE_0_TOGGLE_PONG_PONG_STOP
+                    THIS_IS_MY_MODEL_PONG_INIT,
+                    THIS_IS_MY_MODEL_PONG_BEGIN,
+                    THIS_IS_MY_MODEL_PONG_STOP
                 } state;
-            } pong_pong;
-        } entry__sequence_0_toggle;
-    } entry__sequence;
+            } pong;
+        } toggle;
+    } entry_sequence;
     /** Generated states to 'ThisIsMyModel' */
     enum {
         THIS_IS_MY_MODEL_INIT,

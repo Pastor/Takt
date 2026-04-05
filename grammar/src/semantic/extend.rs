@@ -4,9 +4,9 @@
 //! - [`unroll_extend_expression`] — разворачивает выражение в плоскую
 //!   структуру [`Extend::Concatenation`] / [`Extend::Parallel`].
 
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast;
-use crate::semantic::{ExpressionNode, ModelNode};
+use crate::semantic::{ConditionNode, ExpressionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind};
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
@@ -135,6 +135,67 @@ fn unroll_expression_ast(
                 .as_str()
                 .into(),
         ),
+    }
+}
+
+/// Упаковывает плоскую [`Extend::Concatenation`] в синтетическую [`Extend::Model`].
+///
+/// Для `M1 + M2` создаёт новую анонимную модель с состояниями `Step0 = M1 { next Step1 }`
+/// и `Step1 = M2`, возвращая `Extend::Model(synthetic)`. Одноэлементная конкатенация
+/// сворачивается рекурсивно. `Parentless` прозрачно делегирует внутрь.
+///
+/// Вызывается сразу после [`unroll_extend_expression`] в стадии stage1.
+pub fn compact_implement(
+    extend: Extend,
+    parent: Rc<RefCell<ModelNode>>,
+    state_name: &str,
+) -> Extend {
+    match extend {
+        // Одноэлементная последовательность — прозрачно разворачиваем.
+        Extend::Concatenation(mut items) if items.len() == 1 => {
+            compact_implement(*items.remove(0), parent, state_name)
+        }
+        // Несколько элементов: создаём синтетическую модель со ступенями Step0…StepN-1.
+        Extend::Concatenation(items) => {
+            let seq_name = format!("{}_Sequence", state_name);
+            let seq_model = ModelNode::new(&seq_name, Some(Rc::clone(&parent)));
+            let n = items.len();
+            for (i, item) in items.into_iter().enumerate() {
+                let step_name = format!("Step{}", i);
+                let next: Option<ReferenceNode<StateNode>> = if i + 1 < n {
+                    Some(ReferenceNode {
+                        location: Location::Codegen,
+                        name: format!("Step{}", i + 1),
+                        cond: ConditionNode::None,
+                        object: Box::new(StateNode::Unresolved),
+                    })
+                } else {
+                    None
+                };
+                let kind = if i == 0 {
+                    StateNodeKind::Start
+                } else {
+                    StateNodeKind::Simple
+                };
+                let inner = compact_implement(*item, Rc::clone(&seq_model), &step_name);
+                let state = StateNode::Implement {
+                    upper: Some(Rc::downgrade(&seq_model)),
+                    loc: Location::Codegen,
+                    named_blocks: vec![],
+                    name: step_name.clone(),
+                    references: vec![],
+                    implements: inner,
+                    next,
+                    kind,
+                };
+                seq_model.borrow_mut().states.insert(step_name, state);
+            }
+            Extend::Model(seq_model)
+        }
+        // Скобочная группировка — делегируем внутрь.
+        Extend::Parentless(inner) => compact_implement(*inner, parent, state_name),
+        // Остальное не требует обработки.
+        other => other,
     }
 }
 
@@ -309,11 +370,16 @@ pub mod minimalistic {
     fn unique_model_name(model: Rc<RefCell<ModelNode>>) -> String {
         let name = model.borrow().name.clone().unwrap_or_default();
         if let Some(upper) = model.borrow().upper.as_ref() {
-            let model_name = unique_model_name(upper.upgrade().unwrap());
-            if model_name.is_empty() {
-                return name;
+            // Weak может быть невалиден, если родительский Rc уже дропнут
+            // (например, для моделей из импортированных файлов).
+            // В этом случае используем локальное имя без префикса.
+            if let Some(parent) = upper.upgrade() {
+                let model_name = unique_model_name(parent);
+                if model_name.is_empty() {
+                    return name;
+                }
+                return format!("{}:{}", model_name, name);
             }
-            return format!("{}:{}", model_name, name);
         }
         name
     }
@@ -778,140 +844,57 @@ state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + 
 
     #[test]
     fn test_unroll_implement_expressions() {
+        // После compact_implement все состояния с `+` на верхнем уровне дают Model(synthetic).
+        // Это тест пост-компактного состояния семантического дерева.
         let (ast, _) = parse(SRC, 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
 
-        let ma = || Box::new(Extend::Model(model_rc.borrow().search_model("A").unwrap()));
-        let mb = || Box::new(Extend::Model(model_rc.borrow().search_model("B").unwrap()));
-        let par_ab = || Extend::Parallel(vec![ma(), mb()]);
-
-        let pairs = vec![
-            // Next1 = A + B + (A | B)
-            (
-                "Next1",
-                Extend::Concatenation(vec![ma(), mb(), Box::new(par_ab())]),
-                "Next1_Concatenation",
-            ),
-            // Next2 = A + (B | A) + B
-            (
-                "Next2",
-                Extend::Concatenation(vec![
-                    ma(),
-                    Box::new(Extend::Parallel(vec![mb(), ma()])),
-                    mb(),
-                ]),
-                "Next2_Concatenation",
-            ),
-            // Next3 = A + (B + A) + B  →  все элементы разворачиваются в одну последовательность
-            (
-                "Next3",
-                Extend::Concatenation(vec![ma(), mb(), ma(), mb()]),
-                "Next3_Concatenation",
-            ),
-            // Next4 = A + (B + A) + (B | A)
-            (
-                "Next4",
-                Extend::Concatenation(vec![
-                    ma(),
-                    mb(),
-                    ma(),
-                    Box::new(Extend::Parallel(vec![mb(), ma()])),
-                ]),
-                "Next4_Concatenation",
-            ),
-            // Next5 = (A | B) + (A + B)
-            (
-                "Next5",
-                Extend::Concatenation(vec![Box::new(par_ab()), ma(), mb()]),
-                "Next5_Concatenation",
-            ),
-            // Next6 = (A | B) + (A + B) + (A | B)
-            (
-                "Next6",
-                Extend::Concatenation(vec![Box::new(par_ab()), ma(), mb(), Box::new(par_ab())]),
-                "Next6_Concatenation",
-            ),
-            // Next7 = (A | B) + (A + B) + (A | B) + (A + B)
-            (
-                "Next7",
-                Extend::Concatenation(vec![
-                    Box::new(par_ab()),
-                    ma(),
-                    mb(),
-                    Box::new(par_ab()),
-                    ma(),
-                    mb(),
-                ]),
-                "Next7_Concatenation",
-            ),
-            // Next8 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B)
-            (
-                "Next8",
-                Extend::Concatenation(vec![
-                    Box::new(par_ab()),
-                    ma(),
-                    mb(),
-                    Box::new(par_ab()),
-                    ma(),
-                    mb(),
-                    Box::new(par_ab()),
-                ]),
-                "Next8_Concatenation",
-            ),
-            // Next9 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B)
-            (
-                "Next9",
-                Extend::Concatenation(vec![
-                    Box::new(par_ab()),
-                    ma(),
-                    mb(),
-                    Box::new(par_ab()),
-                    ma(),
-                    mb(),
-                    Box::new(par_ab()),
-                    ma(),
-                    mb(),
-                ]),
-                "Next9_Concatenation",
-            ),
-            // Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + B)
-            (
-                "Next10",
-                Extend::Concatenation(vec![
-                    Box::new(par_ab()),
-                    ma(),
-                    mb(),
-                    Box::new(par_ab()),
-                    ma(),
-                    mb(),
-                    Box::new(par_ab()),
-                    ma(),
-                    mb(),
-                    ma(),
-                    mb(),
-                ]),
-                "Next10_Concatenation",
-            ),
-            // Entry = A | B | (A + B)
-            (
-                "Entry",
-                Extend::Parallel(vec![
-                    ma(),
-                    mb(),
-                    Box::new(Extend::Concatenation(vec![ma(), mb()])),
-                ]),
-                "EntryA | EntryB | Entry_Concatenation",
-            ),
+        // Next1..Next10: верхний уровень — конкатенация → упаковывается в Model(synthetic).
+        let seq_states_with_step_count = [
+            ("Next1", 3usize),  // A + B + (A|B)      → 3 ступени
+            ("Next2", 3),       // A + (B|A) + B       → 3 ступени
+            ("Next3", 4),       // A + B + A + B        → 4 ступени
+            ("Next4", 4),       // A + B + A + (B|A)   → 4 ступени
+            ("Next5", 3),       // (A|B) + A + B        → 3 ступени
+            ("Next6", 4),       // (A|B) + A + B + (A|B) → 4 ступени
+            ("Next7", 6),       // (A|B)+A+B+(A|B)+A+B → 6 ступеней
+            ("Next8", 7),       // … + (A|B)            → 7 ступеней
+            ("Next9", 9),       // … + A + B            → 9 ступеней
+            ("Next10", 11),     // … + A + B            → 11 ступеней
         ];
-        for (name, expected, _expected_name) in pairs {
+        for (name, expected_steps) in seq_states_with_step_count {
             let state = model_rc.borrow().search_state(name).unwrap();
             let StateNode::Implement { ref implements, .. } = *state.borrow() else {
-                panic!("State is not an implement")
+                panic!("State {name} is not an Implement node")
             };
+            let Extend::Model(seq_rc) = implements else {
+                panic!("State {name}: после compact_implement ожидался Extend::Model, получили: {implements}");
+            };
+            let step_count = seq_rc.borrow().states.len();
             assert_eq!(
-                *implements, expected,
-                "State {} is not unrolled. {} != {}",
-                name, implements, expected
+                step_count, expected_steps,
+                "State {name}: синтетическая модель должна содержать {expected_steps} ступеней, содержит {step_count}"
+            );
+            // Стартовая ступень существует и имеет kind=Start.
+            let seq = seq_rc.borrow();
+            let start = seq.get_start_state();
+            assert!(
+                start.is_some(),
+                "State {name}: в синтетической модели должно быть стартовое состояние"
+            );
+        }
+
+        // Entry = A | B | (A + B): верхний уровень — параллель → Parallel(_).
+        // compact_implement не трогает Parallel, поэтому вложенная конкатенация
+        // остаётся как Concatenation внутри Parallel.
+        {
+            let state = model_rc.borrow().search_state("Entry").unwrap();
+            let StateNode::Implement { ref implements, .. } = *state.borrow() else {
+                panic!("State Entry is not an Implement node")
+            };
+            assert!(
+                matches!(implements, Extend::Parallel(_)),
+                "Entry = A | B | (A + B): ожидался Extend::Parallel, получили: {implements}"
             );
         }
     }

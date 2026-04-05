@@ -143,7 +143,7 @@ impl Generator {
                     .into_iter()
                     .sorted_by(|a, b| a.1.cmp(&b.1))
                     .collect::<Vec<(String, i64)>>()
-                    .first()
+                    .last()
                     .map(|x| x.1)
                     .unwrap_or_default();
                 let max = if max > i8::MAX as i64 && max < i16::MAX as i64 {
@@ -442,9 +442,6 @@ impl Generator {
                 ));
             }
             Extend::Model(slave) => {
-                let new_name = model.name.clone().unwrap_or_default()
-                    + "_"
-                    + &*slave.clone().borrow().name.clone().unwrap_or_default();
                 Self::generate_model_source(printer, &*slave.clone().borrow(), false)?;
             }
             Extend::Parentless(implement) => {
@@ -456,10 +453,6 @@ impl Generator {
             Extend::Parallel(_items) => {
                 // TODO(NI5): генерация плоской параллельной композиции
             }
-            _ => Err(Diagnostic::error(
-                Location::Codegen,
-                "Unimplement implement".to_string(),
-            ))?,
         }
         Ok(())
     }
@@ -505,7 +498,7 @@ impl Generator {
         let mut printer = Printer::new(4, &mut source);
         let filename = normalize_lowercase_snakecase(Self::resolve_model_name(model)?);
         printer
-            .print(format!("#include \"{}.h\" ", filename).as_str())
+            .print(format!("#include \"{}.h\"", filename).as_str())
             .nl();
         Self::generate_constants_and_ports_and_enums(&mut printer, model)?;
         Self::generate_model_source(&printer, model, true)?;
@@ -1111,5 +1104,85 @@ start Main = Robot;
             "Number должен разворачиваться корректно"
         );
         assert_eq!(num_result.unwrap(), "42");
+    }
+
+    // ── Тесты имён констант и портов ─────────────────────────────────────────
+
+    /// Константы и порты с ALL_CAPS-именами не разбиваются посимвольно.
+    ///
+    /// Регрессия: `normalize_lowercase_snakecase("MATRIX")` ранее давала
+    /// `m_a_t_r_i_x`, что приводило к `CONST_..._M_A_T_R_I_X` вместо `CONST_..._MATRIX`.
+    #[test]
+    fn const_port_names_are_not_char_split() {
+        let src = r#"
+type u8 = [bit;8];
+const MATRIX: u8 = 0;
+const NUMB: u8 = 255;
+port SENSOR: u8 = 0x100000;
+start Main { always { } }
+        "#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        let model = model.borrow();
+        let generator = Generator {};
+        let source = generator.generate_source(&model).unwrap();
+        assert!(
+            source.contains("CONST_MAIN_MATRIX"),
+            "ожидалось CONST_MAIN_MATRIX, получено:\n{source}"
+        );
+        assert!(
+            source.contains("CONST_MAIN_NUMB"),
+            "ожидалось CONST_MAIN_NUMB, получено:\n{source}"
+        );
+        assert!(
+            source.contains("PORT_MAIN_SENSOR"),
+            "ожидалось PORT_MAIN_SENSOR, получено:\n{source}"
+        );
+        assert!(
+            !source.contains("M_A_T_R_I_X"),
+            "имя не должно разбиваться посимвольно:\n{source}"
+        );
+    }
+
+    /// include в .c-файле не содержит лишнего пробела перед закрывающей кавычкой.
+    #[test]
+    fn include_directive_has_no_trailing_space() {
+        let src = r#"start Main { always { } }"#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        let model = model.borrow();
+        let generator = Generator {};
+        let source = generator.generate_source(&model).unwrap();
+        assert!(
+            !source.contains(".h\" "),
+            "#include не должен содержать пробел после кавычки:\n{source}"
+        );
+    }
+
+    /// Enum с большими значениями выбирает тип достаточной ширины по максимуму.
+    ///
+    /// Регрессия: `.first()` выбирал минимальное значение → тип uint8_t для
+    /// enum с вариантами High=200 (> i8::MAX), тогда как нужен uint16_t.
+    #[test]
+    fn enum_type_sized_by_maximum_variant() {
+        let src = r#"
+enum Priority { Low = 0, Medium = 5, High = 200 }
+var p: Priority = 0;
+start Main { always { } }
+        "#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        let model = model.borrow();
+        let generator = Generator {};
+        let header = generator.generate_header(&model).unwrap();
+        // High=200 > i8::MAX(127) → должен выбраться uint16_t
+        assert!(
+            header.contains("uint16_t"),
+            "ожидался uint16_t для max=200, получено:\n{header}"
+        );
+        assert!(
+            !header.contains("uint8_t p"),
+            "uint8_t слишком мал для max=200:\n{header}"
+        );
     }
 }
