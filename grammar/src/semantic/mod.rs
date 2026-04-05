@@ -30,6 +30,8 @@ mod type_inference;
 pub mod type_node;
 pub mod unused;
 pub(crate) mod validate;
+pub mod minimap;
+mod test_constants;
 
 use crate::diagnostics::Location;
 use crate::parser::ast;

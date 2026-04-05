@@ -12,8 +12,8 @@ struct ThisIsMyModel {
             /** Generated states to 'Ping' */
             enum {
                 THIS_IS_MY_MODEL_PING_INIT,
-                THIS_IS_MY_MODEL_PING_START,
-                THIS_IS_MY_MODEL_PING_END
+                THIS_IS_MY_MODEL_PING_END,
+                THIS_IS_MY_MODEL_PING_START
             } state;
             bool toggle;
         } ping;
@@ -39,21 +39,21 @@ struct ThisIsMyModel {
             /** Generated states to 'Toggle' */
             enum {
                 THIS_IS_MY_MODEL_TOGGLE_INIT,
-                THIS_IS_MY_MODEL_TOGGLE_ENTRY,
-                THIS_IS_MY_MODEL_TOGGLE_END,
                 THIS_IS_MY_MODEL_TOGGLE_PING_INIT,
                 THIS_IS_MY_MODEL_TOGGLE_PING,
+                THIS_IS_MY_MODEL_TOGGLE_ENTRY,
                 THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
                 THIS_IS_MY_MODEL_TOGGLE_PONG_INIT,
-                THIS_IS_MY_MODEL_TOGGLE_PONG
+                THIS_IS_MY_MODEL_TOGGLE_PONG,
+                THIS_IS_MY_MODEL_TOGGLE_END
             } state;
             /** Generated 'Ping' structure */
             struct {
                 /** Generated states to 'Ping' */
                 enum {
                     THIS_IS_MY_MODEL_PING_INIT,
-                    THIS_IS_MY_MODEL_PING_START,
-                    THIS_IS_MY_MODEL_PING_END
+                    THIS_IS_MY_MODEL_PING_END,
+                    THIS_IS_MY_MODEL_PING_START
                 } state;
                 bool toggle;
             } ping;
