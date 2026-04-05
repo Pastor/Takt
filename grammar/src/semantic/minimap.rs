@@ -93,8 +93,10 @@ impl Element {
 
 pub(crate) struct Map {
     root: Rc<RefCell<ModelNode>>,
+    root_name: Name,
     elements: HashMap<Name, Element>,
     start: Name,
+    states: Vec<Name>,
 }
 
 impl Map {
@@ -116,6 +118,13 @@ impl Map {
         let local_name = start.name().to_string();
         // Рекурсивный спуск: обходим все достижимые состояния начиная со стартового
         visit_state(&start, model.clone(), &mut used_elements);
+        let mut states = Vec::new();
+        model.borrow().states.iter().for_each(|state| {
+            states.push(Name::new(
+                state.0.clone(),
+                unique_state_name(state.0, model.clone()),
+            ));
+        });
         Ok(Map {
             root: model.clone(),
             elements: used_elements,
@@ -123,6 +132,8 @@ impl Map {
                 local_name.clone(),
                 unique_state_name(&local_name, model.clone()),
             ),
+            root_name: Name::from(model),
+            states,
         })
     }
 
@@ -150,6 +161,18 @@ impl Map {
 
     pub(crate) fn element_at(&self, name: Name) -> Option<Element> {
         self.elements.get(&name).cloned()
+    }
+
+    pub(crate) fn own(&self) -> Option<Element> {
+        self.elements.get(&self.root_name).cloned()
+    }
+
+    pub(crate) fn root_name(&self) -> Name {
+        self.root_name.clone()
+    }
+
+    pub(crate) fn states(&self) -> Vec<Name> {
+        self.states.clone()
     }
 }
 

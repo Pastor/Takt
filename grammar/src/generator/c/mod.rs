@@ -610,20 +610,30 @@ impl Generator {
                 printer.ident(&state_name.unique_uppercase_snakecase());
             }
             printer.down().nl().ident("} state;").nl();
-            //TODO: Определение переменных модели
+            printer
+                .ident("/// FIXME: Определение переменных модели, определение extend")
+                .nl();
             printer.down();
             printer.print("};").nl();
             printer.nl();
         }
-        let state_name = map.start();
-        let start_state = map.state_at(state_name.clone()).ok_or_else(|| {
-            Diagnostic::error(Location::Codegen, "Start state not found".to_string())
-        })?;
-        let struct_name = state_name.clone().unique_camelcase();
+        let root_name = map.root_name();
+        let struct_name = root_name.unique_camelcase();
         printer
             .print(format!("typedef struct {} {{", struct_name).as_str())
-            .nl();
+            .nl()
+            .up();
+        printer.ident("enum {").up().nl();
+        printer.ident(&*(root_name.unique_uppercase_snakecase() + "_INIT"));
+        for state_name in map.states() {
+            printer.print(",").nl();
+            printer.ident(&state_name.unique_uppercase_snakecase());
+        }
+        printer.down().nl().ident("} state;").nl().down();
         printer.up();
+        printer
+            .ident("/// FIXME: Определение переменных модели, определение extend")
+            .nl();
         printer.down();
         printer.print("};").nl();
         printer.nl();

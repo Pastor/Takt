@@ -38,6 +38,10 @@ impl CMap {
         self.map.used_models()
     }
 
+    pub fn own_model(&self) -> Option<Element> {
+        self.map.own()
+    }
+
     pub fn start(&self) -> Name {
         self.map.start()
     }
@@ -50,5 +54,13 @@ impl CMap {
         } else {
             None
         }
+    }
+
+    pub fn root_name(&self) -> Name {
+        self.map.root_name()
+    }
+
+    pub fn states(&self) -> Vec<Name> {
+        self.map.states()
     }
 }
