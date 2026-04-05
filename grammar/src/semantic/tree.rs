@@ -20,7 +20,7 @@ use crate::semantic::extend::Extend;
 use crate::semantic::function::construct_function;
 use crate::semantic::import::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
-use crate::semantic::naming::normalize_model_name;
+use crate::semantic::naming::normalize_camelcase_name;
 use crate::semantic::reference::resolve_state_references;
 use crate::semantic::type_inference::type_inference;
 use crate::semantic::type_node::{TypeNode, construct_type};
@@ -157,7 +157,7 @@ fn construct_model_stage0(
                             )
                         })?
                         .to_string_lossy();
-                    let model_name = normalize_model_name(&stem);
+                    let model_name = normalize_camelcase_name(&stem);
                     if models.contains_key(&model_name) {
                         return Err(Diagnostic::declaration_error(
                             *import_loc,

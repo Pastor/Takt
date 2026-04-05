@@ -30,13 +30,16 @@
 #![allow(clippy::needless_borrow)]
 #![allow(clippy::explicit_auto_deref)]
 
+mod c_map;
+
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::indent::Printer;
 use crate::generator::Generator as AsGenerator;
+use crate::generator::c::c_map::CMap;
+use crate::generator::indent::Printer;
 use crate::parser::ast::Member;
 use crate::semantic::extend::Extend;
-use crate::semantic::minimap::minimap::Map;
-use crate::semantic::naming::{normalize_lowercase_snakecase, normalize_model_name};
+use crate::semantic::minimap::{Element, Map};
+use crate::semantic::naming::{normalize_camelcase_name, normalize_lowercase_snakecase};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
     ConditionDefinitionNode, ConditionNode, EnumDefinitionNode, ExpressionNode, ModelNode,
@@ -63,16 +66,16 @@ pub struct Generator {}
 impl AsGenerator for Generator {
     fn generate(&self, model: &ModelNode, output_path: &str) -> Result<(), Diagnostic> {
         //TODO: При генерации следует работать с примитивным слепком модели
-        let _snapshot = Map::create(Rc::new(RefCell::new(model.copy(None, None))));
-        let header = self.generate_header(model)?;
-        let source = self.generate_source(model)?;
+        let map = CMap::new(model.name(), model)?;
+        let header = self.generate_header(map.get_filename(), &map)?;
+        // let source = self.generate_source(model)?;
         let model_name = Self::resolve_model_name(model)?;
         let filename = normalize_lowercase_snakecase(model_name);
         let _ = fs::create_dir(Path::new(output_path));
         fs::write(Path::new(output_path).join(filename.clone() + ".h"), header)
             .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)))?;
-        fs::write(Path::new(output_path).join(filename + ".c"), source)
-            .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)))?;
+        // fs::write(Path::new(output_path).join(filename + ".c"), source)
+        //     .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)))?;
         Ok(())
     }
 }
@@ -98,7 +101,7 @@ impl Generator {
     #[inline]
     fn get_model_name_struct(model: &ModelNode) -> String {
         // V6: заменить unwrap() на unwrap_or_else для безопасности.
-        normalize_model_name(
+        normalize_camelcase_name(
             Self::resolve_model_name(model)
                 .unwrap_or_else(|_| "Unknown".to_string())
                 .as_str(),
@@ -573,36 +576,76 @@ impl Generator {
         Ok(source)
     }
 
-    fn generate_header(&self, model: &ModelNode) -> Result<String, Diagnostic> {
+    fn generate_header(&self, filename: &str, map: &CMap) -> Result<String, Diagnostic> {
         let mut header = String::new();
         let mut printer = Printer::new(4, &mut header);
-        let id =
-            normalize_lowercase_snakecase(Self::resolve_model_name(model)?).to_uppercase() + "__";
+        let id = normalize_lowercase_snakecase(filename.to_string())
+            .replace("\\.", "_")
+            .to_uppercase()
+            + "_H__";
         printer.print("#ifndef ").print(&id).nl();
         printer.print("#define ").print(&id).nl();
         printer.print("#include <stdint.h>").nl();
         printer.print("#include <stdbool.h>").nl();
         printer.nl();
-        Self::generate_model_struct(&mut printer, model, true)?;
-        let struct_name = Self::get_model_name_struct(model);
+        for element in map.using_models() {
+            let Element::Model {
+                name,
+                states,
+                start,
+            } = element
+            else {
+                continue;
+            };
+            let struct_name = name.unique_camelcase();
+            printer.print(format!("/* Model {} */", name).as_str()).nl();
+            printer
+                .print(format!("typedef struct {} {{", struct_name).as_str())
+                .nl();
+            printer.up();
+            printer.ident("enum {").up().nl();
+            printer.ident(&*(name.unique_uppercase_snakecase() + "_INIT"));
+            for state_name in states {
+                printer.print(",").nl();
+                printer.ident(&state_name.unique_uppercase_snakecase());
+            }
+            printer.down().nl().ident("} state;").nl();
+            //TODO: Определение переменных модели
+            printer.down();
+            printer.print("};").nl();
+            printer.nl();
+        }
+        let state_name = map.start();
+        let start_state = map.state_at(state_name.clone()).ok_or_else(|| {
+            Diagnostic::error(Location::Codegen, "Start state not found".to_string())
+        })?;
+        let struct_name = state_name.clone().unique_camelcase();
+        printer
+            .print(format!("typedef struct {} {{", struct_name).as_str())
+            .nl();
+        printer.up();
+        printer.down();
+        printer.print("};").nl();
+        printer.nl();
+
         printer
             .print("void ")
             .print(&struct_name)
-            .print("_init(struct ")
+            .print("_init(")
             .print(&struct_name)
             .print(" *main);")
             .nl();
         printer
             .print("void ")
             .print(&struct_name)
-            .print("_tick(struct ")
+            .print("_tick(")
             .print(&struct_name)
             .print(" *main);")
             .nl();
         printer
             .print("void ")
             .print(&struct_name)
-            .print("_reset(struct ")
+            .print("_reset(")
             .print(&struct_name)
             .print(" *main);")
             .nl();
@@ -975,6 +1018,7 @@ impl Generator {
 #[cfg(test)]
 mod tests {
     use crate::generator::c::Generator;
+    use crate::generator::c::c_map::CMap;
     use crate::{parse, semantic};
 
     const SRC: &str = r#"
@@ -1030,21 +1074,15 @@ start Main = Robot;
         let model = &*model.borrow();
         let result = Generator::unroll_model(model).unwrap();
         assert_eq!("main", &result);
-        {
-            let model = model.search_model("Robot").unwrap();
-            let model = &*model.borrow();
-            let result = Generator::unroll_model(model).unwrap();
-            assert_eq!("main->robot", &result);
-            let model = model.search_model("Idle").unwrap();
-            let model = &*model.borrow();
-            let result = Generator::unroll_model(model).unwrap();
-            assert_eq!("main->robot.idle", &result);
-        }
-        let generator = Generator {};
-        let header = generator.generate_header(model).unwrap();
-        let source = generator.generate_source(model).unwrap();
-        println!("{}", header);
-        println!("{}", source);
+
+        let model = model.search_model("Robot").unwrap();
+        let model = &*model.borrow();
+        let result = Generator::unroll_model(model).unwrap();
+        assert_eq!("main->robot", &result);
+        let model = model.search_model("Idle").unwrap();
+        let model = &*model.borrow();
+        let result = Generator::unroll_model(model).unwrap();
+        assert_eq!("main->robot.idle", &result);
     }
 
     // ── V6: Тесты безопасности resolve_model_name ─────────────────────────────
@@ -1174,7 +1212,8 @@ start Main { always { } }
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         let model = model.borrow();
         let generator = Generator {};
-        let header = generator.generate_header(&model).unwrap();
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let header = generator.generate_header(map.get_filename(), &map).unwrap();
         // High=200 > i8::MAX(127) → должен выбраться uint16_t
         assert!(
             header.contains("uint16_t"),

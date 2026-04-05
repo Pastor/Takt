@@ -46,7 +46,7 @@ use crate::diagnostics::Location;
 use crate::parser::ast;
 use crate::parser::ast::ModelElement;
 use crate::semantic::ModelNode;
-use crate::semantic::naming::normalize_model_name;
+use crate::semantic::naming::normalize_camelcase_name;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -103,7 +103,7 @@ fn element_name(element: &ModelElement) -> Option<String> {
     match element {
         ModelElement::Variable(v) => variable_name(v),
         ModelElement::State(s) => s.name.as_ref().map(|id| id.name.clone()),
-        ModelElement::Model(m) => m.name.as_ref().map(|id| normalize_model_name(&id.name)),
+        ModelElement::Model(m) => m.name.as_ref().map(|id| normalize_camelcase_name(&id.name)),
         ModelElement::Function(f) => f.name.as_ref().map(|id| id.name.clone()),
         ModelElement::Condition(c) => c.name.as_ref().map(|id| id.name.clone()),
         ModelElement::Type(t) => Some(t.name.name.clone()),
@@ -270,7 +270,7 @@ pub(crate) fn attach_docs(
             if let ModelElement::Model(m) = e {
                 m.name
                     .as_ref()
-                    .map(|id| (normalize_model_name(&id.name), m.as_ref()))
+                    .map(|id| (normalize_camelcase_name(&id.name), m.as_ref()))
             } else {
                 None
             }

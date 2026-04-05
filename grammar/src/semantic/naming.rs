@@ -2,7 +2,7 @@
 ///
 /// Преобразует `my_model`, `mein-leib`, `Mein_Leib` → `MyModel`, `MeinLeib`.
 /// Небуквенно-цифровые символы (`_`, `-`, `#` и т.д.) используются как разделители слов.
-pub fn normalize_model_name(name: &str) -> String {
+pub fn normalize_camelcase_name(name: &str) -> String {
     let mut result = String::new();
     let mut upper = true;
     for ch in name.chars() {
@@ -17,6 +17,10 @@ pub fn normalize_model_name(name: &str) -> String {
         upper = false;
     }
     result
+}
+
+pub fn normalize_unique_name(name: &str) -> String {
+    normalize_lowercase_snakecase(name.replace(":", "_"))
 }
 
 pub fn normalize_lowercase_snakecase(name: String) -> String {
@@ -49,9 +53,9 @@ mod tests {
 
     #[test]
     fn normalize_model_name() {
-        use super::normalize_model_name;
+        use super::normalize_camelcase_name;
         for (name, expected) in NAMES {
-            let normalized = normalize_model_name(name);
+            let normalized = normalize_camelcase_name(name);
             assert_eq!(&normalized, expected);
         }
     }
@@ -61,22 +65,22 @@ mod tests {
     /// Пустая строка остаётся пустой.
     #[test]
     fn normalize_model_name_empty() {
-        use super::normalize_model_name;
-        assert_eq!(normalize_model_name(""), "");
+        use super::normalize_camelcase_name;
+        assert_eq!(normalize_camelcase_name(""), "");
     }
 
     /// Строка из одних цифр не изменяется.
     #[test]
     fn normalize_model_name_digits_only() {
-        use super::normalize_model_name;
-        assert_eq!(normalize_model_name("123"), "123");
+        use super::normalize_camelcase_name;
+        assert_eq!(normalize_camelcase_name("123"), "123");
     }
 
     /// Одно слово: первая буква становится заглавной.
     #[test]
     fn normalize_model_name_single_word() {
-        use super::normalize_model_name;
-        assert_eq!(normalize_model_name("hello"), "Hello");
+        use super::normalize_camelcase_name;
+        assert_eq!(normalize_camelcase_name("hello"), "Hello");
     }
 
     // ── Тесты normalize_lowercase_snakecase ───────────────────────────────────
@@ -85,24 +89,42 @@ mod tests {
     #[test]
     fn snakecase_camel_case() {
         use super::normalize_lowercase_snakecase;
-        assert_eq!(normalize_lowercase_snakecase("MyModel".to_string()), "my_model");
-        assert_eq!(normalize_lowercase_snakecase("ThisIsMyModel".to_string()), "this_is_my_model");
-        assert_eq!(normalize_lowercase_snakecase("isReady".to_string()), "is_ready");
+        assert_eq!(
+            normalize_lowercase_snakecase("MyModel".to_string()),
+            "my_model"
+        );
+        assert_eq!(
+            normalize_lowercase_snakecase("ThisIsMyModel".to_string()),
+            "this_is_my_model"
+        );
+        assert_eq!(
+            normalize_lowercase_snakecase("isReady".to_string()),
+            "is_ready"
+        );
     }
 
     /// ALL_CAPS-имя (уже разделено `_`) не разбивается на символы.
     #[test]
     fn snakecase_all_caps_with_underscore() {
         use super::normalize_lowercase_snakecase;
-        assert_eq!(normalize_lowercase_snakecase("IS_EMPTY".to_string()), "is_empty");
-        assert_eq!(normalize_lowercase_snakecase("AT_FLOOR".to_string()), "at_floor");
+        assert_eq!(
+            normalize_lowercase_snakecase("IS_EMPTY".to_string()),
+            "is_empty"
+        );
+        assert_eq!(
+            normalize_lowercase_snakecase("AT_FLOOR".to_string()),
+            "at_floor"
+        );
     }
 
     /// Сплошные заглавные без разделителя не разбиваются посимвольно.
     #[test]
     fn snakecase_solid_all_caps() {
         use super::normalize_lowercase_snakecase;
-        assert_eq!(normalize_lowercase_snakecase("MATRIX".to_string()), "matrix");
+        assert_eq!(
+            normalize_lowercase_snakecase("MATRIX".to_string()),
+            "matrix"
+        );
         assert_eq!(normalize_lowercase_snakecase("NUMB".to_string()), "numb");
     }
 
@@ -111,7 +133,10 @@ mod tests {
     fn snakecase_with_digits() {
         use super::normalize_lowercase_snakecase;
         assert_eq!(normalize_lowercase_snakecase("B1".to_string()), "b1");
-        assert_eq!(normalize_lowercase_snakecase("sensors1".to_string()), "sensors1");
+        assert_eq!(
+            normalize_lowercase_snakecase("sensors1".to_string()),
+            "sensors1"
+        );
     }
 
     /// Пустая строка остаётся пустой.
