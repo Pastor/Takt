@@ -1,13 +1,27 @@
-use crate::diagnostics::Diagnostic;
-use crate::semantic::ModelNode;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::minimap::{Element, Map, Name};
 use crate::semantic::naming::normalize_camelcase_name;
+use crate::semantic::ModelNode;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct CMap {
     filename: String,
     map: Map,
+}
+
+impl CMap {
+    pub(crate) fn raw_model_at(&self, name: Name) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+        Ok(self
+            .map
+            .model_at(Some(name.unique().to_string()))
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    Location::Codegen,
+                    format!("Model with name '{}' not found", name),
+                )
+            })?)
+    }
 }
 
 impl CMap {

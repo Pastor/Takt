@@ -144,6 +144,9 @@ impl ModelNode {
     }
 
     pub(crate) fn name(&self) -> &str {
+        if self.name.is_none() {
+            return "";
+        }
         self.name.as_ref().unwrap().as_str()
     }
 }

@@ -33,12 +33,12 @@
 mod c_map;
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::Generator as AsGenerator;
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
+use crate::generator::Generator as AsGenerator;
 use crate::parser::ast::Member;
 use crate::semantic::extend::Extend;
-use crate::semantic::minimap::{Element, Map};
+use crate::semantic::minimap::{Element, Map, Name, StateExtend};
 use crate::semantic::naming::{normalize_camelcase_name, normalize_lowercase_snakecase};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
@@ -346,14 +346,15 @@ impl Generator {
         Ok(())
     }
 
+    #[deprecated]
     fn generate_constants_and_ports_and_enums(
         printer: &mut Printer,
         model: &ModelNode,
     ) -> Result<(), Diagnostic> {
         let upper_name = Self::get_upper_name(model);
-        for (_name, model) in model.models.iter() {
-            Self::generate_constants_and_ports_and_enums(printer, &model.borrow())?
-        }
+        // for (_name, model) in model.models.iter() {
+        //     Self::generate_constants_and_ports_and_enums(printer, &model.borrow())?
+        // }
 
         let variables = model.variables.clone();
         for var in variables
@@ -576,6 +577,152 @@ impl Generator {
         Ok(source)
     }
 
+    fn generate_model_header(
+        printer: &mut Printer,
+        map: &CMap,
+        name: Name,
+        states: Vec<Name>,
+        main: bool,
+    ) -> Result<(), Diagnostic> {
+        let model = map.raw_model_at(name.clone())?;
+        printer
+            .ident(
+                format!(
+                    "// NOTICE: Определение констант для модели {}",
+                    name.unique()
+                )
+                .as_str(),
+            )
+            .nl();
+        // FIXME: Only source Self::generate_constants_and_ports_and_enums(&mut printer, &*model.borrow())?;
+        let struct_name = name.unique_camelcase();
+        printer.print(format!("/* Model {} */", name).as_str()).nl();
+        printer
+            .print(format!("typedef struct {} {{", struct_name).as_str())
+            .nl();
+        printer.up();
+        printer.ident("enum {").up().nl();
+        printer.ident(&*(name.unique_uppercase_snakecase() + "_INIT"));
+        for state_name in states.clone() {
+            if map.state_at(state_name.clone()).is_none() {
+                continue;
+            }
+            printer.print(",").nl();
+            printer.ident(&state_name.unique_uppercase_snakecase());
+        }
+        printer.down().nl().ident("} state;").nl();
+
+        printer
+            .ident("// NOTICE: Определение переменных модели")
+            .nl();
+        for var in model.borrow().variables.clone().into_values() {
+            match var {
+                VariableNode::Unresolved => {}
+                VariableNode::Simple { name, ty, .. } => {
+                    let tv = Self::get_typed_variable(&ty, Some(name.clone()), &*model.borrow())
+                        .ok_or_else(|| {
+                            Diagnostic::error(
+                                Location::Codegen,
+                                format!("Variable {} not found", name),
+                            )
+                        })?;
+                    printer.ident(&tv).print(";").nl();
+                }
+                VariableNode::Port { .. } => {}
+                VariableNode::Const { .. } => {}
+            }
+        }
+        let mut is_extend = false;
+        for state_name in states {
+            let Some(state) = map.state_at(state_name.clone()) else {
+                warn!("State {} not used", state_name);
+                continue;
+            };
+            if state.is_state()
+                && let Element::StateExtend { extend, .. } = state
+            {
+                if !is_extend {
+                    printer.ident("// FIXME: Определение extend").nl();
+                    is_extend = true;
+                }
+                match extend {
+                    StateExtend::None => {}
+                    StateExtend::Model(model) => {
+                        printer
+                            .ident(&format!("{} step1;", model.unique_camelcase()))
+                            .nl();
+                    }
+                    StateExtend::Concatenation(extend) => {
+                        for (i, state) in extend.iter().enumerate() {
+                            match state {
+                                StateExtend::None => {}
+                                StateExtend::Model(model) => {
+                                    printer
+                                        .ident(&format!("{} step{};", model.unique_camelcase(), i))
+                                        .nl();
+                                }
+                                StateExtend::Concatenation(_) => {
+                                    todo!("Concatenation");
+                                }
+                                StateExtend::Parallel(_) => {
+                                    todo!("Parallel");
+                                }
+                            }
+                        }
+                    }
+                    StateExtend::Parallel(extend) => {}
+                }
+            }
+        }
+        if main {
+            printer
+                .ident("/// NOTICE: Функции портов ввода вывода")
+                .nl();
+            printer.ident("void  *userdata;".to_string().as_str()).nl();
+            printer
+                .ident(
+                    format!(
+                        "void  (*{}  )(int address, int bit, bool val, void *userdata);",
+                        FUNCTION_PORT_WRITE_BIT
+                    )
+                    .as_str(),
+                )
+                .nl();
+            printer
+                .ident(
+                    format!(
+                        "bool  (*{}   )(int address, int bit, void *userdata);",
+                        FUNCTION_PORT_READ_BIT
+                    )
+                    .as_str(),
+                )
+                .nl();
+            printer
+                .ident(
+                    format!(
+                        "void  (*{})(int address, int bit, float val, void *userdata);",
+                        FUNCTION_PORT_WRITE_FLOAT
+                    )
+                    .as_str(),
+                )
+                .nl();
+            printer
+                .ident(
+                    format!(
+                        "float (*{} )(int address, int bit, void *userdata);",
+                        FUNCTION_PORT_READ_FLOAT
+                    )
+                    .as_str(),
+                )
+                .nl();
+        }
+
+        printer.down();
+        printer.print("};").nl();
+        printer.nl();
+        Ok(())
+    }
+
     fn generate_header(&self, filename: &str, map: &CMap) -> Result<String, Diagnostic> {
         let mut header = String::new();
         let mut printer = Printer::new(4, &mut header);
@@ -588,56 +735,15 @@ impl Generator {
         printer.print("#include <stdint.h>").nl();
         printer.print("#include <stdbool.h>").nl();
         printer.nl();
+
         for element in map.using_models() {
-            let Element::Model {
-                name,
-                states,
-                start,
-            } = element
-            else {
+            let Element::Model { name, states, .. } = element else {
                 continue;
             };
-            let struct_name = name.unique_camelcase();
-            printer.print(format!("/* Model {} */", name).as_str()).nl();
-            printer
-                .print(format!("typedef struct {} {{", struct_name).as_str())
-                .nl();
-            printer.up();
-            printer.ident("enum {").up().nl();
-            printer.ident(&*(name.unique_uppercase_snakecase() + "_INIT"));
-            for state_name in states {
-                printer.print(",").nl();
-                printer.ident(&state_name.unique_uppercase_snakecase());
-            }
-            printer.down().nl().ident("} state;").nl();
-            printer
-                .ident("/// FIXME: Определение переменных модели, определение extend")
-                .nl();
-            printer.down();
-            printer.print("};").nl();
-            printer.nl();
+            Self::generate_model_header(&mut printer, map, name, states, false)?;
         }
-        let root_name = map.root_name();
-        let struct_name = root_name.unique_camelcase();
-        printer
-            .print(format!("typedef struct {} {{", struct_name).as_str())
-            .nl()
-            .up();
-        printer.ident("enum {").up().nl();
-        printer.ident(&*(root_name.unique_uppercase_snakecase() + "_INIT"));
-        for state_name in map.states() {
-            printer.print(",").nl();
-            printer.ident(&state_name.unique_uppercase_snakecase());
-        }
-        printer.down().nl().ident("} state;").nl().down();
-        printer.up();
-        printer
-            .ident("/// FIXME: Определение переменных модели, определение extend")
-            .nl();
-        printer.down();
-        printer.print("};").nl();
-        printer.nl();
-
+        Self::generate_model_header(&mut printer, map, map.root_name(), map.states(), true)?;
+        let struct_name = map.root_name().unique_camelcase();
         printer
             .print("void ")
             .print(&struct_name)
@@ -662,7 +768,7 @@ impl Generator {
         printer
             .print("bool ")
             .print(&struct_name)
-            .print("_is_done(const struct ")
+            .print("_is_done(const ")
             .print(&struct_name)
             .print(" *main);")
             .nl();
@@ -1027,8 +1133,8 @@ impl Generator {
 
 #[cfg(test)]
 mod tests {
-    use crate::generator::c::Generator;
     use crate::generator::c::c_map::CMap;
+    use crate::generator::c::Generator;
     use crate::{parse, semantic};
 
     const SRC: &str = r#"
@@ -1215,11 +1321,12 @@ start Main { always { } }
     fn enum_type_sized_by_maximum_variant() {
         let src = r#"
 enum Priority { Low = 0, Medium = 5, High = 200 }
-var p: Priority = 0;
+var p: Priority = Low;
 start Main { always { } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model.borrow_mut().name = Some("Test".to_string());
         let model = model.borrow();
         let generator = Generator {};
         let map = CMap::new(model.name(), &*model).unwrap();

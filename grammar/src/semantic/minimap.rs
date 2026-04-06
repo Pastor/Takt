@@ -52,8 +52,9 @@ impl Debug for Name {
 
 impl From<Rc<RefCell<ModelNode>>> for Name {
     fn from(model: Rc<RefCell<ModelNode>>) -> Self {
+        let local_name = model.borrow().name.clone().unwrap_or_default();
         Name::new(
-            model.borrow().name.clone().unwrap().clone(),
+            local_name,
             unique_model_name(model.clone()),
         )
     }
