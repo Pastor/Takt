@@ -22,6 +22,10 @@ impl Name {
     pub fn local(&self) -> &str {
         &self.local
     }
+    pub fn local_lowercase_snakecase(&self) -> String {
+        normalize_lowercase_snakecase(self.local.clone())
+    }
+
     pub fn unique(&self) -> &str {
         &self.unique
     }

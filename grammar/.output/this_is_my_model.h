@@ -3,25 +3,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// NOTICE: Определение констант для модели ThisIsMyModel:Entry_Sequence
-/* Model Entry_Sequence (ThisIsMyModel:Entry_Sequence) */
-typedef struct ThisIsMyModelEntrySequence {
-    enum {
-        THIS_IS_MY_MODEL_ENTRY_SEQUENCE_INIT,
-        THIS_IS_MY_MODEL_ENTRY_SEQUENCE_STEP0,
-        THIS_IS_MY_MODEL_ENTRY_SEQUENCE_STEP1
-    } state;
-    // NOTICE: Определение переменных модели
-    // FIXME: Определение extend
-};
-
 // NOTICE: Определение констант для модели ThisIsMyModel:Ping
 /* Model Ping (ThisIsMyModel:Ping) */
 typedef struct ThisIsMyModelPing {
     enum {
         THIS_IS_MY_MODEL_PING_INIT,
-        THIS_IS_MY_MODEL_PING_START,
-        THIS_IS_MY_MODEL_PING_END
+        THIS_IS_MY_MODEL_PING_END,
+        THIS_IS_MY_MODEL_PING_START
     } state;
     // NOTICE: Определение переменных модели
     bool toggle;
@@ -32,14 +20,16 @@ typedef struct ThisIsMyModelPing {
 typedef struct ThisIsMyModelToggle {
     enum {
         THIS_IS_MY_MODEL_TOGGLE_INIT,
-        THIS_IS_MY_MODEL_TOGGLE_ENTRY,
-        THIS_IS_MY_MODEL_TOGGLE_PONG,
         THIS_IS_MY_MODEL_TOGGLE_PING,
+        THIS_IS_MY_MODEL_TOGGLE_PONG,
+        THIS_IS_MY_MODEL_TOGGLE_END,
         THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
-        THIS_IS_MY_MODEL_TOGGLE_END
+        THIS_IS_MY_MODEL_TOGGLE_ENTRY
     } state;
     // NOTICE: Определение переменных модели
-    // FIXME: Определение extend
+    // NOTICE: Определение extend
+    ThisIsMyModelPing ping;
+    ThisIsMyModelPong pong;
 };
 
 // NOTICE: Определение констант для модели ThisIsMyModel:Pong
@@ -62,12 +52,18 @@ typedef struct ThisIsMyModel {
     } state;
     // NOTICE: Определение переменных модели
     uint64_t it;
+    // NOTICE: Определение extend
+    struct {
+        ThisIsMyModelPing ping0;
+        ThisIsMyModelPong pong1;
+    } entry_parallel0;
+    ThisIsMyModelToggle entry_toggle1;
     /// NOTICE: Функции портов ввода вывода
+    void  *userdata;
     void  (*write_bit  )(int address, int bit, bool val, void *userdata);
     bool  (*read_bit   )(int address, int bit, void *userdata);
     void  (*write_float)(int address, int bit, float val, void *userdata);
     float (*read_float )(int address, int bit, void *userdata);
-    // FIXME: Определение extend
 };
 
 void ThisIsMyModel_init(ThisIsMyModel *main);

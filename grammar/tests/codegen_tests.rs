@@ -311,6 +311,95 @@ fn test_compile_example_file_with_include_path() {
     );
 }
 
+// ── Тесты именования полей структуры для extend-состояний ────────────────────
+
+/// Проверяет именование полей структуры для единичного и составного extend.
+///
+/// Позитивный тест: `start Main = Engine` → поле `main` (без номера).
+/// Позитивный тест: `Middle = Engine + (Engine | Engine) + Engine + Engine + Engine`
+///   → поля `middle_engine0`, `middle_parallel1`, `middle_engine2` и т.д.
+#[test]
+fn test_extend_field_naming_single_and_composite() {
+    use grammar::{
+        generator::{Language, generate},
+        parse,
+        semantic::tree::construct_model,
+    };
+
+    let src = r#"
+model Engine {
+    start Idle {}
+    state Running {}
+}
+start Main = Engine {
+    next Middle;
+}
+state Middle = Engine + (Engine | Engine) + Engine + Engine + Engine {
+    next End;
+}
+state End;
+"#;
+
+    let tmp = tempdir().expect("не удалось создать временный каталог");
+    let out_path = tmp.path().to_str().unwrap();
+
+    let (ast, _) = parse(src, 0).expect("синтаксический анализ должен быть успешен");
+    let root =
+        construct_model(&ast, None, &[]).expect("семантический анализ должен быть успешен");
+    root.borrow_mut().name = Some("Elevator".to_string());
+
+    let result = generate(Language::C, &root.borrow(), out_path);
+    assert!(
+        result.is_ok(),
+        "компиляция должна быть успешной: {:?}",
+        result
+    );
+
+    // Читаем сгенерированный .h файл
+    let h_file = fs::read_dir(out_path)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("h"))
+        .expect("должен быть сгенерирован .h файл");
+    let content = fs::read_to_string(h_file.path()).expect("не удалось прочитать .h файл");
+
+    // Единичный extend: поле без номера
+    assert!(
+        content.contains("Engine main;"),
+        "единичный extend Main=Engine должен давать поле `main` без номера:\n{}",
+        content
+    );
+    // Составной extend: первый элемент Concatenation
+    assert!(
+        content.contains("Engine middle_engine0;"),
+        "первый элемент конкатенации должен быть `middle_engine0`:\n{}",
+        content
+    );
+    // Параллельный блок в Concatenation
+    assert!(
+        content.contains("} middle_parallel1;"),
+        "параллельный блок должен быть `middle_parallel1`:\n{}",
+        content
+    );
+    // Поля внутри параллельного блока
+    assert!(
+        content.contains("Engine engine0;"),
+        "первый элемент внутри параллельного блока должен быть `engine0`:\n{}",
+        content
+    );
+    assert!(
+        content.contains("Engine engine1;"),
+        "второй элемент внутри параллельного блока должен быть `engine1`:\n{}",
+        content
+    );
+    // Остальные элементы конкатенации
+    assert!(
+        content.contains("Engine middle_engine2;"),
+        "третий элемент конкатенации должен быть `middle_engine2`:\n{}",
+        content
+    );
+}
+
 // ── Тесты вспомогательных функций CLI ────────────────────────────────────────
 
 /// Функция разбора аргументов корректно обрабатывает `-I` с двоеточием.

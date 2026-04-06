@@ -198,7 +198,9 @@ model Engine {
     var action: Action = Closing;
 }
 start Main = Engine {
+    next Middle;
+}
+state Middle = Engine + (Engine | Engine) + Engine + Engine + Engine {
     next End;
 }
-state Middle = Engine + (Engine | Engine) + Engine + Engine + Engine;
 state End;

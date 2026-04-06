@@ -33,9 +33,9 @@
 mod c_map;
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::Generator as AsGenerator;
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
-use crate::generator::Generator as AsGenerator;
 use crate::parser::ast::Member;
 use crate::semantic::extend::Extend;
 use crate::semantic::minimap::{Element, Map, Name, StateExtend};
@@ -577,13 +577,134 @@ impl Generator {
         Ok(source)
     }
 
+    /// Генерирует поля структуры C для extend состояния.
+    /// Единичный Model → `{state}`, составной → делегирует в build_concat_item.
+    fn build_extend_header(
+        printer: &mut Printer,
+        state_name: &Name,
+        extend: &StateExtend,
+    ) -> Result<(), Diagnostic> {
+        match extend {
+            StateExtend::None => {}
+            StateExtend::Model(model) => {
+                printer
+                    .ident(&format!(
+                        "{} {};",
+                        model.unique_camelcase(),
+                        state_name.local_lowercase_snakecase(),
+                    ))
+                    .nl();
+            }
+            StateExtend::Concatenation(items) => {
+                for (idx, item) in items.iter().enumerate() {
+                    Self::build_concat_item(printer, state_name, item, idx)?;
+                }
+            }
+            StateExtend::Parallel(items) => {
+                printer.ident("struct {").nl().up();
+                for (idx, item) in items.iter().enumerate() {
+                    Self::build_parallel_item(printer, item, idx)?;
+                }
+                printer
+                    .down()
+                    .ident(&format!("}} {};", state_name.local_lowercase_snakecase()))
+                    .nl();
+            }
+        }
+        Ok(())
+    }
+
+    /// Генерирует поле для элемента конкатенации.
+    /// Model → `{state}_{model}{idx}`, Parallel → struct `{state}_parallel{idx}`.
+    fn build_concat_item(
+        printer: &mut Printer,
+        state_name: &Name,
+        extend: &StateExtend,
+        idx: usize,
+    ) -> Result<(), Diagnostic> {
+        match extend {
+            StateExtend::None => {}
+            StateExtend::Model(model) => {
+                printer
+                    .ident(&format!(
+                        "{} {}_{}{};",
+                        model.unique_camelcase(),
+                        state_name.local_lowercase_snakecase(),
+                        model.local_lowercase_snakecase(),
+                        idx,
+                    ))
+                    .nl();
+            }
+            StateExtend::Parallel(items) => {
+                printer.ident("struct {").nl().up();
+                for (inner_idx, item) in items.iter().enumerate() {
+                    Self::build_parallel_item(printer, item, inner_idx)?;
+                }
+                printer
+                    .down()
+                    .ident(&format!(
+                        "}} {}_parallel{};",
+                        state_name.local_lowercase_snakecase(),
+                        idx,
+                    ))
+                    .nl();
+            }
+            StateExtend::Concatenation(items) => {
+                for (inner_idx, item) in items.iter().enumerate() {
+                    Self::build_concat_item(printer, state_name, item, inner_idx)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Генерирует поле для элемента параллельного блока.
+    /// Model → `{model}{idx}`, вложенный Parallel → struct `parallel{idx}`.
+    fn build_parallel_item(
+        printer: &mut Printer,
+        extend: &StateExtend,
+        idx: usize,
+    ) -> Result<(), Diagnostic> {
+        match extend {
+            StateExtend::None => {}
+            StateExtend::Model(model) => {
+                printer
+                    .ident(&format!(
+                        "{} {}{};",
+                        model.unique_camelcase(),
+                        model.local_lowercase_snakecase(),
+                        idx,
+                    ))
+                    .nl();
+            }
+            StateExtend::Parallel(items) => {
+                printer.ident("struct {").nl().up();
+                for (inner_idx, item) in items.iter().enumerate() {
+                    Self::build_parallel_item(printer, item, inner_idx)?;
+                }
+                printer
+                    .down()
+                    .ident(&format!("}} parallel{};", idx))
+                    .nl();
+            }
+            StateExtend::Concatenation(items) => {
+                for (inner_idx, item) in items.iter().enumerate() {
+                    Self::build_parallel_item(printer, item, inner_idx)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn generate_model_header(
         printer: &mut Printer,
         map: &CMap,
         name: Name,
         states: Vec<Name>,
+        num: Option<usize>,
         main: bool,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<usize, Diagnostic> {
+        let num = num.unwrap_or(0);
         let model = map.raw_model_at(name.clone())?;
         printer
             .ident(
@@ -642,36 +763,10 @@ impl Generator {
                 && let Element::StateExtend { extend, .. } = state
             {
                 if !is_extend {
-                    printer.ident("// FIXME: Определение extend").nl();
+                    printer.ident("// NOTICE: Определение extend").nl();
                     is_extend = true;
                 }
-                match extend {
-                    StateExtend::None => {}
-                    StateExtend::Model(model) => {
-                        printer
-                            .ident(&format!("{} step1;", model.unique_camelcase()))
-                            .nl();
-                    }
-                    StateExtend::Concatenation(extend) => {
-                        for (i, state) in extend.iter().enumerate() {
-                            match state {
-                                StateExtend::None => {}
-                                StateExtend::Model(model) => {
-                                    printer
-                                        .ident(&format!("{} step{};", model.unique_camelcase(), i))
-                                        .nl();
-                                }
-                                StateExtend::Concatenation(_) => {
-                                    todo!("Concatenation");
-                                }
-                                StateExtend::Parallel(_) => {
-                                    todo!("Parallel");
-                                }
-                            }
-                        }
-                    }
-                    StateExtend::Parallel(extend) => {}
-                }
+                Self::build_extend_header(printer, &state_name, &extend)?;
             }
         }
         if main {
@@ -720,7 +815,7 @@ impl Generator {
         printer.down();
         printer.print("};").nl();
         printer.nl();
-        Ok(())
+        Ok(num)
     }
 
     fn generate_header(&self, filename: &str, map: &CMap) -> Result<String, Diagnostic> {
@@ -736,13 +831,22 @@ impl Generator {
         printer.print("#include <stdbool.h>").nl();
         printer.nl();
 
+        let mut num = 0;
         for element in map.using_models() {
             let Element::Model { name, states, .. } = element else {
                 continue;
             };
-            Self::generate_model_header(&mut printer, map, name, states, false)?;
+            Self::generate_model_header(&mut printer, map, name, states, Some(num), false)?;
+            num += 1;
         }
-        Self::generate_model_header(&mut printer, map, map.root_name(), map.states(), true)?;
+        Self::generate_model_header(
+            &mut printer,
+            map,
+            map.root_name(),
+            map.states(),
+            Some(num),
+            true,
+        )?;
         let struct_name = map.root_name().unique_camelcase();
         printer
             .print("void ")
@@ -1133,8 +1237,8 @@ impl Generator {
 
 #[cfg(test)]
 mod tests {
-    use crate::generator::c::c_map::CMap;
     use crate::generator::c::Generator;
+    use crate::generator::c::c_map::CMap;
     use crate::{parse, semantic};
 
     const SRC: &str = r#"
@@ -1339,6 +1443,75 @@ start Main { always { } }
         assert!(
             !header.contains("uint8_t p"),
             "uint8_t слишком мал для max=200:\n{header}"
+        );
+    }
+
+    #[test]
+    fn test_parallel_extend_numbering_starts_from_zero() {
+        // state Par = Eng | Eng: внутри struct поля eng0, eng1 (по имени модели),
+        // сам struct: `} par;` (по имени состояния, без номера).
+        let src = r#"
+model Eng { start S; }
+start Main = Eng {
+    next Par;
+}
+state Par = Eng | Eng;
+"#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model.borrow_mut().name = Some("Test".to_string());
+        let model = model.borrow();
+        let generator = Generator {};
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let header = generator.generate_header(map.get_filename(), &map).unwrap();
+        // Внутри параллельного блока поля нумеруются с 0 по имени модели
+        assert!(
+            header.contains("eng0;"),
+            "первый элемент parallel должен быть eng0:\n{header}"
+        );
+        assert!(
+            header.contains("eng1;"),
+            "второй элемент parallel должен быть eng1:\n{header}"
+        );
+        // Сам struct закрывается именем состояния без номера
+        assert!(
+            header.contains("} par;"),
+            "struct parallel должен закрываться как `}} par;`:\n{header}"
+        );
+    }
+
+    #[test]
+    fn test_concatenation_with_parallel_no_gaps() {
+        // state Mid = Eng + (Eng | Eng) + Eng:
+        // idx 0: mid_eng0, idx 1: struct{ eng0, eng1 } mid_parallel1, idx 2: mid_eng2.
+        let src = r#"
+model Eng { start S; }
+start Main = Eng {
+    next Mid;
+}
+state Mid = Eng + (Eng | Eng) + Eng;
+"#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model.borrow_mut().name = Some("Test".to_string());
+        let model = model.borrow();
+        let generator = Generator {};
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let header = generator.generate_header(map.get_filename(), &map).unwrap();
+        // Первый элемент конкатенации: {state}_{model}{idx}
+        assert!(
+            header.contains("mid_eng0;"),
+            "первый элемент конкатенации должен быть mid_eng0:\n{header}"
+        );
+        // Параллельный блок под индексом 1
+        assert!(
+            header.contains("} mid_parallel1;"),
+            "параллельный блок должен закрываться как `}} mid_parallel1;`:\n{header}"
+        );
+        // Последний элемент конкатенации под индексом 2
+        assert!(
+            header.contains("mid_eng2;"),
+            "третий элемент конкатенации должен быть mid_eng2:\n{header}"
         );
     }
 }
