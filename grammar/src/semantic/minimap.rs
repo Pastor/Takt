@@ -2,6 +2,7 @@ use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::extend::Extend;
 use crate::semantic::naming::{normalize_camelcase_name, normalize_lowercase_snakecase};
 use crate::semantic::{ModelNode, StateNode};
+use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
@@ -40,7 +41,15 @@ impl Name {
 
 impl Display for Name {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({})", self.local, self.unique)
+        write!(
+            f,
+            "{} ({})",
+            self.local,
+            self.unique
+                .split(':')
+                .map(|p| format!("{}{}", p.split_at(1).0.to_uppercase(), p.split_at(1).1))
+                .join(":")
+        )
     }
 }
 
@@ -53,10 +62,7 @@ impl Debug for Name {
 impl From<Rc<RefCell<ModelNode>>> for Name {
     fn from(model: Rc<RefCell<ModelNode>>) -> Self {
         let local_name = model.borrow().name.clone().unwrap_or_default();
-        Name::new(
-            local_name,
-            unique_model_name(model.clone()),
-        )
+        Name::new(local_name, unique_model_name(model.clone()))
     }
 }
 
