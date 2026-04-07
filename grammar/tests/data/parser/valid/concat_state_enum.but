@@ -1,0 +1,20 @@
+// Тест: enum поля состояния для конкатенации (concat_state_enum)
+// Для state Mid = A + (B | C) + D генерируется mid_state с вариантами
+// MID_INIT, MID_A0, MID_PARALLEL1, MID_D2
+model A {
+  start Running;
+}
+model B {
+  start Running;
+}
+model C {
+  start Running;
+}
+model D {
+  start Running;
+}
+
+start Main = A {
+    next Mid;
+}
+state Mid = A + (B | C) + D;

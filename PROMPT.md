@@ -6,23 +6,36 @@
 крупной ИТ компании и прежде чем приступать к выполнению выбери самый оптимальный вариант
 
 1. Проанализируй модуль генерации C кода, выяви логические ошибки, исправь их. Изменения предоставь в виде patch файла с
-   именем Changes-02.patch (директория changes). Исправь именование полей структуры описывающей модель генерируемого C
-   кода, посмотри пример файла elevator.h (директория .output), в нем со строки 35 по строку 43 должен получиться такой
-   результат
+   именем Changes-03.patch (директория changes). Добавь задание поля состояния для каждого из `extend` состояний модели,
+   посмотри пример файла elevator.h (директория .output), в нем должен получиться такой результат вместо кода со строки
+   35 - 48:
    ```cplus
     ElevatorEngine main;
     ElevatorEngine middle_engine0;
     struct {
         ElevatorEngine engine0;
         ElevatorEngine engine1;
+        enum {
+            ELEVATOR_MIDDLE_PARALLEL1_INIT,
+            ELEVATOR_MIDDLE_PARALLEL1_TICK,
+            ELEVATOR_MIDDLE_PARALLEL1_END
+        } state;
     } middle_parallel1;
     ElevatorEngine middle_engine2;
     ElevatorEngine middle_engine3;
     ElevatorEngine middle_engine4;
+    enum {
+        ELEVATOR_ENGINE_MIDDLE_INIT,
+        ELEVATOR_ENGINE_MIDDLE_ENGINE0,
+        ELEVATOR_ENGINE_MIDDLE_PARALLEL1,
+        ELEVATOR_ENGINE_MIDDLE_ENGINE2,
+        ELEVATOR_ENGINE_MIDDLE_ENGINE3,
+        ELEVATOR_ENGINE_MIDDLE_ENGINE4
+    } middle_state;
    ```
-   утверждение по генерации такое: если `extend` единичный (просто модель `StateExtend::Model`), то имя поле должно быть
-   не нумеровано и состоять только из имени расширяемого состояния, если `extend` составной, то все поля должны быть
-   нумерованы и состоять из имени расширяемого состояния и номера поля
+   утверждение по генерации такое: если `extend` составной то для него должно быть создано поле состояния, состоящее из
+   имени расширяемого состояния и суффикса `_state`, если `extend` с параллельной компановкой то для него должно быть
+   создано поле состояния `state` в структуре определения его составных компонент.
 2. Проанализируй проект целиком, сформируй список улучшений и проблем в проекте, предложи решения их. Приведи в
    соответствие с файлом README.md (параллельно актуализируй его), удали в нем уже сделанные пункты или пункты, которые
    не будут выполняться (зачеркнутые)

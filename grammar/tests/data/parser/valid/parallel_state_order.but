@@ -1,0 +1,10 @@
+// Тест: порядок полей в parallel-состоянии
+// Поля моделей должны быть перед enum state в генерируемом struct
+model Worker {
+  start Running;
+}
+
+start Main = Worker {
+    next Par;
+}
+state Par = Worker | Worker;

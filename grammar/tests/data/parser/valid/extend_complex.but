@@ -1,0 +1,48 @@
+var x = 1;
+var y = 2;
+
+struct Coord {
+  x: [bit; 32],
+  y: [bit; 32],
+  z: [bit; 32]
+}
+const c: Coord = {0, 0, 0};
+
+model A {
+  start Start;
+}
+model B {
+  start Start;
+}
+model C {
+  enum Point {
+    Global,
+    Local
+  }
+  model C1 {
+    start Start;
+  }
+  model C2 {
+    start Start;
+  }
+  start Start = C1 | C2 {
+    next End;
+  }
+  state End;
+}
+model D {
+  start Start;
+}
+model E {
+  start Start = D + F {
+    next End;
+  }
+  state End;
+}
+model F {
+  start Start;
+}
+start Start = A + B + (C | D) + E {
+    next Next;
+}
+state Next = F;

@@ -1201,11 +1201,12 @@ fn max(a: u8, b: u8) -> u8;
 
 ---
 
-### Реализованные улучшения (FE1–FE6, NI2–NI4, NI6, C3, C5, C5-1, C6, C11, LSP, V1–V7, I5–I8, Changes-01)
+### Реализованные улучшения (FE1–FE6, NI2–NI4, NI6, C3, C5, C5-1, C6, C11, LSP, V1–V7, I5–I8, Changes-01, Changes-03)
 
 | #           | Фича                                                         | Патч              | Статус        |
 |-------------|--------------------------------------------------------------|-------------------|---------------|
 | Changes-01  | Исправление логических ошибок (4 бага)                       | Changes-01.patch  | ✅ Исправлено  |
+| Changes-03  | Порядок полей в Parallel + enum state для Concatenation (B4, B5) | Changes-03.patch | ✅ Исправлено |
 | FE1  | Синтаксис `enum` в грамматике (Ce4+)                         | FE1.patch   | ✅ Реализовано |
 | FE2  | Вывод типа из пользовательских псевдонимов                   | FE2.patch   | ✅ Реализовано |
 | FE3  | Диагностика неиспользуемых переменных (Ce13)                 | FE3.patch   | ✅ Реализовано |
@@ -1307,6 +1308,62 @@ ConditionNode::NotEqual(left, right) => {
 - Исправлены 3 устаревших интеграционных теста в `tests/semantic_tests.rs`
   (тесты `implement_add_composition_resolves`, `implement_parenthesized_add_resolves` проверяли
   `Implement::Sequence` вместо корректного `Implement::Model` после компактирования)
+
+---
+
+#### Changes-03. Порядок полей в Parallel + enum state для Concatenation — **Исправлено**
+
+Два логических бага в генераторе C-кода (`generator/c/mod.rs`):
+
+**B4 — Неправильный порядок полей в `StateExtend::Parallel`.**
+
+`enum { ... } state;` генерировался первым в struct, тогда как поля данных (`eng0`, `eng1`) должны предшествовать управляющим полям:
+
+```c
+// Было (неверно):
+struct {
+    enum { ELEVATOR_MIDDLE_PARALLEL1_INIT, ... } state;
+    ElevatorEngine engine0;
+    ElevatorEngine engine1;
+} middle_parallel1;
+
+// Стало (верно):
+struct {
+    ElevatorEngine engine0;
+    ElevatorEngine engine1;
+    enum { ELEVATOR_MIDDLE_PARALLEL1_INIT, ... } state;
+} middle_parallel1;
+```
+
+Исправлено в `build_extend_header` и `build_concat_item` (ветка `Parallel`): цикл полей перенесён перед генерацией enum.
+
+**B5 — Отсутствие поля `{state}_state` для `StateExtend::Concatenation`.**
+
+Для составных состояний (`state Mid = Eng + (Eng | Eng) + Eng`) не генерировалось поле для отслеживания активного под-элемента. Добавлена новая функция `build_concat_state_enum`:
+
+```c
+// Теперь генерируется:
+enum {
+    ELEVATOR_MIDDLE_INIT,
+    ELEVATOR_MIDDLE_ENGINE0,
+    ELEVATOR_MIDDLE_PARALLEL1,
+    ELEVATOR_MIDDLE_ENGINE2,
+    ELEVATOR_MIDDLE_ENGINE3,
+    ELEVATOR_MIDDLE_ENGINE4
+} middle_state;
+```
+
+Формат вариантов: Model → `{STATE}_{MODEL}{idx}`, Parallel/Concatenation → `{STATE}_PARALLEL{idx}`.
+
+Дополнительно: добавлен параметр `unique_prefix: &str` в `build_parallel_item` для корректной генерации вложенных Parallel-блоков с полем `state`.
+
+**Тесты (3 новых + 2 обновлённых):**
+
+- `test_parallel_extend_numbering_starts_from_zero` — добавлена проверка: `eng0;` расположен перед `} state;` внутри parallel struct
+- `test_concatenation_with_parallel_no_gaps` — добавлены проверки: порядок полей в parallel + наличие `mid_state;`
+- `test_concatenation_generates_state_enum` — новый: проверяет `mid_state;` с вариантами `TEST_MID_INIT`, `TEST_MID_ENG0`, `TEST_MID_PARALLEL1`, `TEST_MID_ENG2`
+
+**Обновлённые выходные файлы:** `grammar/.output/elevator.h`, `grammar/.output/extend_complex.h`.
 
 ---
 
@@ -1589,6 +1646,8 @@ start T {
 | B1 | 🔴 Высокий | `generator/c/mod.rs:630` | **Баг: `Subtract` генерировал `a[b]` вместо `a - b`**. Оператор вычитания транслировался в C-код как взятие по индексу: вместо `a - b` генерировалось `a[b]`. Исправлено: теперь генерируется `a - b`. |
 | B2 | 🟡 Средний | `generator/c/mod.rs:582` | **Баг: `EnumVariant` в `unroll_cond` пропускал `_` между префиксом и именем варианта**. Генерировалось `ENUM_ROBOT_DIRECTIONnorth` вместо `ENUM_ROBOT_DIRECTION_NORTH`. Исправлено. |
 | B3 | 🟢 Низкий | `parser/lexer.rs:765` | **Предупреждение: мёртвое начальное значение переменной `last`**. Инициализация `let mut last = self.input.len()` никогда не читалась: либо функция возвращалась раньше, либо значение перезаписывалось. Переписано через `break 'scan` — исключает неопределённость. |
+| B4 | 🟡 Средний | `generator/c/mod.rs` | **Баг: `StateExtend::Parallel` генерировал `enum state` перед полями**. В struct параллельного состояния `enum { ... } state;` располагался первым, тогда как по C-конвенции данные должны предшествовать управляющим полям. Исправлено (Changes-03). |
+| B5 | 🟡 Средний | `generator/c/mod.rs` | **Баг: `StateExtend::Concatenation` не генерировал поле `{state}_state`**. Для составных состояний отсутствовал enum для отслеживания активного под-элемента (например `middle_state`). Исправлено: добавлен `build_concat_state_enum` (Changes-03). |
 
 ### Потенциальные ошибки и уязвимости
 

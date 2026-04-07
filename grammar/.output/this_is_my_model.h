@@ -6,58 +6,68 @@
 // NOTICE: Определение констант для модели ThisIsMyModel:Ping
 /* Model Ping (ThisIsMyModel:Ping) */
 typedef struct ThisIsMyModelPing {
-    enum {
-        THIS_IS_MY_MODEL_PING_INIT,
-        THIS_IS_MY_MODEL_PING_END,
-        THIS_IS_MY_MODEL_PING_START
-    } state;
     // NOTICE: Определение переменных модели
     bool toggle;
-};
-
-// NOTICE: Определение констант для модели ThisIsMyModel:Toggle
-/* Model Toggle (ThisIsMyModel:Toggle) */
-typedef struct ThisIsMyModelToggle {
     enum {
-        THIS_IS_MY_MODEL_TOGGLE_INIT,
-        THIS_IS_MY_MODEL_TOGGLE_PING,
-        THIS_IS_MY_MODEL_TOGGLE_PONG,
-        THIS_IS_MY_MODEL_TOGGLE_END,
-        THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
-        THIS_IS_MY_MODEL_TOGGLE_ENTRY
+        THIS_IS_MY_MODEL_PING_INIT,
+        THIS_IS_MY_MODEL_PING_START,
+        THIS_IS_MY_MODEL_PING_END
     } state;
-    // NOTICE: Определение переменных модели
-    // NOTICE: Определение extend
-    ThisIsMyModelPing ping;
-    ThisIsMyModelPong pong;
 };
 
 // NOTICE: Определение констант для модели ThisIsMyModel:Pong
 /* Model Pong (ThisIsMyModel:Pong) */
 typedef struct ThisIsMyModelPong {
+    // NOTICE: Определение переменных модели
     enum {
         THIS_IS_MY_MODEL_PONG_INIT,
-        THIS_IS_MY_MODEL_PONG_STOP,
-        THIS_IS_MY_MODEL_PONG_BEGIN
+        THIS_IS_MY_MODEL_PONG_BEGIN,
+        THIS_IS_MY_MODEL_PONG_STOP
     } state;
+};
+
+// NOTICE: Определение констант для модели ThisIsMyModel:Toggle
+/* Model Toggle (ThisIsMyModel:Toggle) */
+typedef struct ThisIsMyModelToggle {
     // NOTICE: Определение переменных модели
+    enum {
+        THIS_IS_MY_MODEL_TOGGLE_INIT,
+        THIS_IS_MY_MODEL_TOGGLE_PING,
+        THIS_IS_MY_MODEL_TOGGLE_END,
+        THIS_IS_MY_MODEL_TOGGLE_PONG,
+        THIS_IS_MY_MODEL_TOGGLE_ENTRY,
+        THIS_IS_MY_MODEL_TOGGLE_COMPLETE
+    } state;
+    // NOTICE: Определение extend
+    ThisIsMyModelPing ping;
+    ThisIsMyModelPong pong;
 };
 
 // NOTICE: Определение констант для модели ThisIsMyModel
 /* Model ThisIsMyModel (ThisIsMyModel) */
 typedef struct ThisIsMyModel {
+    // NOTICE: Определение переменных модели
+    uint64_t it;
     enum {
         THIS_IS_MY_MODEL_INIT,
         THIS_IS_MY_MODEL_ENTRY
     } state;
-    // NOTICE: Определение переменных модели
-    uint64_t it;
     // NOTICE: Определение extend
     struct {
         ThisIsMyModelPing ping0;
         ThisIsMyModelPong pong1;
+        enum {
+            THIS_IS_MY_MODEL_ENTRY_PARALLEL0_INIT,
+            THIS_IS_MY_MODEL_ENTRY_PARALLEL0_TICK,
+            THIS_IS_MY_MODEL_ENTRY_PARALLEL0_END
+        } state;
     } entry_parallel0;
     ThisIsMyModelToggle entry_toggle1;
+    enum {
+        THIS_IS_MY_MODEL_ENTRY_INIT,
+        THIS_IS_MY_MODEL_ENTRY_PARALLEL0,
+        THIS_IS_MY_MODEL_ENTRY_TOGGLE1
+    } entry_state;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
     void  (*write_bit  )(int address, int bit, bool val, void *userdata);

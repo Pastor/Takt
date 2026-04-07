@@ -599,12 +599,29 @@ impl Generator {
                 for (idx, item) in items.iter().enumerate() {
                     Self::build_concat_item(printer, state_name, item, idx)?;
                 }
+                Self::build_concat_state_enum(printer, state_name, items)?;
             }
             StateExtend::Parallel(items) => {
                 printer.ident("struct {").nl().up();
                 for (idx, item) in items.iter().enumerate() {
-                    Self::build_parallel_item(printer, item, idx)?;
+                    Self::build_parallel_item(
+                        printer,
+                        item,
+                        idx,
+                        &state_name.unique_lowercase_snakecase(),
+                    )?;
                 }
+                printer.ident("enum {").up().nl();
+                printer
+                    .ident(&*(state_name.unique_uppercase_snakecase() + "_INIT,"))
+                    .nl();
+                printer
+                    .ident(&*(state_name.unique_uppercase_snakecase() + "_TICK,"))
+                    .nl();
+                printer
+                    .ident(&*(state_name.unique_uppercase_snakecase() + "_END"))
+                    .nl();
+                printer.down().ident("} state;").nl();
                 printer
                     .down()
                     .ident(&format!("}} {};", state_name.local_lowercase_snakecase()))
@@ -636,17 +653,31 @@ impl Generator {
                     .nl();
             }
             StateExtend::Parallel(items) => {
+                let local_partial_name =
+                    format!("{}_parallel{}", state_name.local_lowercase_snakecase(), idx);
+                let unique_partial_name = format!(
+                    "{}_parallel{}",
+                    state_name.unique_lowercase_snakecase(),
+                    idx
+                );
                 printer.ident("struct {").nl().up();
                 for (inner_idx, item) in items.iter().enumerate() {
-                    Self::build_parallel_item(printer, item, inner_idx)?;
+                    Self::build_parallel_item(printer, item, inner_idx, &unique_partial_name)?;
                 }
+                printer.ident("enum {").up().nl();
+                printer
+                    .ident(&*(unique_partial_name.to_uppercase() + "_INIT,"))
+                    .nl();
+                printer
+                    .ident(&*(unique_partial_name.to_uppercase() + "_TICK,"))
+                    .nl();
+                printer
+                    .ident(&*(unique_partial_name.to_uppercase() + "_END"))
+                    .nl();
+                printer.down().ident("} state;").nl();
                 printer
                     .down()
-                    .ident(&format!(
-                        "}} {}_parallel{};",
-                        state_name.local_lowercase_snakecase(),
-                        idx,
-                    ))
+                    .ident(&format!("}} {};", local_partial_name))
                     .nl();
             }
             StateExtend::Concatenation(items) => {
@@ -659,11 +690,12 @@ impl Generator {
     }
 
     /// Генерирует поле для элемента параллельного блока.
-    /// Model → `{model}{idx}`, вложенный Parallel → struct `parallel{idx}`.
+    /// Model → `{model}{idx}`, вложенный Parallel → struct `parallel{idx}` с enum state.
     fn build_parallel_item(
         printer: &mut Printer,
         extend: &StateExtend,
         idx: usize,
+        unique_prefix: &str,
     ) -> Result<(), Diagnostic> {
         match extend {
             StateExtend::None => {}
@@ -678,21 +710,76 @@ impl Generator {
                     .nl();
             }
             StateExtend::Parallel(items) => {
+                let nested_prefix = format!("{}_parallel{}", unique_prefix, idx);
                 printer.ident("struct {").nl().up();
                 for (inner_idx, item) in items.iter().enumerate() {
-                    Self::build_parallel_item(printer, item, inner_idx)?;
+                    Self::build_parallel_item(printer, item, inner_idx, &nested_prefix)?;
                 }
+                printer.ident("enum {").up().nl();
                 printer
-                    .down()
-                    .ident(&format!("}} parallel{};", idx))
+                    .ident(&*(nested_prefix.to_uppercase() + "_INIT,"))
                     .nl();
+                printer
+                    .ident(&*(nested_prefix.to_uppercase() + "_TICK,"))
+                    .nl();
+                printer
+                    .ident(&*(nested_prefix.to_uppercase() + "_END"))
+                    .nl();
+                printer.down().ident("} state;").nl();
+                printer.down().ident(&format!("}} parallel{};", idx)).nl();
             }
             StateExtend::Concatenation(items) => {
                 for (inner_idx, item) in items.iter().enumerate() {
-                    Self::build_parallel_item(printer, item, inner_idx)?;
+                    Self::build_parallel_item(printer, item, inner_idx, unique_prefix)?;
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Генерирует enum поля состояния для конкатенации.
+    /// Вариант INIT + по одному варианту на элемент: Model → {STATE}_{MODEL}{idx}, Parallel → {STATE}_PARALLEL{idx}.
+    fn build_concat_state_enum(
+        printer: &mut Printer,
+        state_name: &Name,
+        items: &[StateExtend],
+    ) -> Result<(), Diagnostic> {
+        let prefix = state_name.unique_uppercase_snakecase();
+        let mut variants: Vec<String> = vec![format!("{}_INIT", prefix)];
+        for (idx, item) in items.iter().enumerate() {
+            let variant = match item {
+                StateExtend::None => continue,
+                StateExtend::Model(model) => {
+                    format!(
+                        "{}_{}{}",
+                        prefix,
+                        model.local_lowercase_snakecase().to_uppercase(),
+                        idx,
+                    )
+                }
+                StateExtend::Parallel(_) | StateExtend::Concatenation(_) => {
+                    format!("{}_PARALLEL{}", prefix, idx)
+                }
+            };
+            variants.push(variant);
+        }
+        variants.push(format!("{}_END", prefix));
+        printer.ident("enum {").up().nl();
+        let last = variants.len() - 1;
+        for (i, variant) in variants.iter().enumerate() {
+            if i < last {
+                printer.ident(&format!("{},", variant)).nl();
+            } else {
+                printer.ident(variant).nl();
+            }
+        }
+        printer
+            .down()
+            .ident(&format!(
+                "}} {}_state;",
+                state_name.local_lowercase_snakecase()
+            ))
+            .nl();
         Ok(())
     }
 
@@ -722,17 +809,6 @@ impl Generator {
             .print(format!("typedef struct {} {{", struct_name).as_str())
             .nl();
         printer.up();
-        printer.ident("enum {").up().nl();
-        printer.ident(&*(name.unique_uppercase_snakecase() + "_INIT"));
-        for state_name in states.clone() {
-            if map.state_at(state_name.clone()).is_none() {
-                continue;
-            }
-            printer.print(",").nl();
-            printer.ident(&state_name.unique_uppercase_snakecase());
-        }
-        printer.down().nl().ident("} state;").nl();
-
         printer
             .ident("// NOTICE: Определение переменных модели")
             .nl();
@@ -753,6 +829,20 @@ impl Generator {
                 VariableNode::Const { .. } => {}
             }
         }
+        ///
+        printer.ident("enum {").up().nl();
+        printer.ident(&*(name.unique_uppercase_snakecase() + "_INIT"));
+        for state_name in states.clone() {
+            if map.state_at(state_name.clone()).is_none() {
+                continue;
+            }
+            printer.print(",").nl();
+            printer.ident(&state_name.unique_uppercase_snakecase());
+        }
+        printer.print(",").nl();
+        printer.ident(&*(name.unique_uppercase_snakecase() + "_END"));
+        printer.down().nl().ident("} state;").nl();
+        ///
         let mut is_extend = false;
         for state_name in states {
             let Some(state) = map.state_at(state_name.clone()) else {
@@ -1478,6 +1568,19 @@ state Par = Eng | Eng;
             header.contains("} par;"),
             "struct parallel должен закрываться как `}} par;`:\n{header}"
         );
+        // Поля eng0/eng1 должны быть ПЕРЕД `} state;` внутри parallel struct
+        // Ищем последний `} state;` до `} par;`, чтобы взять state именно parallel struct
+        let pos_par_close = header.find("} par;").expect("} par; не найден");
+        let pos_state = header[..pos_par_close]
+            .rfind("} state;")
+            .expect("} state; не найден до } par;");
+        let pos_eng0 = header[..pos_par_close]
+            .rfind("eng0;")
+            .expect("eng0 не найден до } par;");
+        assert!(
+            pos_eng0 < pos_state,
+            "поля должны быть перед state enum:\n{header}"
+        );
     }
 
     #[test]
@@ -1512,6 +1615,71 @@ state Mid = Eng + (Eng | Eng) + Eng;
         assert!(
             header.contains("mid_eng2;"),
             "третий элемент конкатенации должен быть mid_eng2:\n{header}"
+        );
+        // Внутри parallel struct поля должны быть перед state enum
+        // Ищем последний `} state;` до `} mid_parallel1;`
+        let pos_par1_close = header
+            .find("} mid_parallel1;")
+            .expect("} mid_parallel1; не найден");
+        let pos_state = header[..pos_par1_close]
+            .rfind("} state;")
+            .expect("} state; не найден до } mid_parallel1;");
+        let pos_eng0 = header[..pos_par1_close]
+            .rfind("eng0;")
+            .expect("eng0 не найден до } mid_parallel1;");
+        assert!(
+            pos_eng0 < pos_state,
+            "поля parallel должны быть перед state enum:\n{header}"
+        );
+        // concat state enum должен присутствовать
+        assert!(
+            header.contains("mid_state;"),
+            "concat state enum mid_state должен быть сгенерирован:\n{header}"
+        );
+    }
+
+    #[test]
+    fn test_concatenation_generates_state_enum() {
+        // state Mid = Eng + (Eng | Eng) + Eng:
+        // ожидается mid_state с вариантами INIT, ENG0, PARALLEL1, ENG2.
+        let src = r#"
+model Eng { start S; }
+start Main = Eng {
+    next Mid;
+}
+state Mid = Eng + (Eng | Eng) + Eng;
+"#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model.borrow_mut().name = Some("Test".to_string());
+        let model = model.borrow();
+        let generator = Generator {};
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let header = generator.generate_header(map.get_filename(), &map).unwrap();
+        // enum поле состояния конкатенации
+        assert!(
+            header.contains("mid_state;"),
+            "ожидался mid_state enum:\n{header}"
+        );
+        // вариант INIT
+        assert!(
+            header.contains("TEST_MID_INIT"),
+            "ожидался TEST_MID_INIT:\n{header}"
+        );
+        // вариант для первого Model-элемента (idx=0)
+        assert!(
+            header.contains("TEST_MID_ENG0"),
+            "ожидался TEST_MID_ENG0:\n{header}"
+        );
+        // вариант для Parallel-элемента (idx=1)
+        assert!(
+            header.contains("TEST_MID_PARALLEL1"),
+            "ожидался TEST_MID_PARALLEL1:\n{header}"
+        );
+        // вариант для последнего Model-элемента (idx=2)
+        assert!(
+            header.contains("TEST_MID_ENG2"),
+            "ожидался TEST_MID_ENG2:\n{header}"
         );
     }
 }
