@@ -3,7 +3,24 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// NOTICE: Определение констант для модели ThisIsMyModel:Ping
+// NOTICE: Определение констант для модели Toggle (ThisIsMyModel:Toggle)
+/* Model Toggle (ThisIsMyModel:Toggle) */
+typedef struct ThisIsMyModelToggle {
+    // NOTICE: Определение переменных модели
+    enum {
+        THIS_IS_MY_MODEL_TOGGLE_INIT,
+        THIS_IS_MY_MODEL_TOGGLE_END,
+        THIS_IS_MY_MODEL_TOGGLE_PING,
+        THIS_IS_MY_MODEL_TOGGLE_ENTRY,
+        THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
+        THIS_IS_MY_MODEL_TOGGLE_PONG
+    } state;
+    // NOTICE: Определение extend
+    ThisIsMyModelPing ping;
+    ThisIsMyModelPong pong;
+};
+
+// NOTICE: Определение констант для модели Ping (ThisIsMyModel:Ping)
 /* Model Ping (ThisIsMyModel:Ping) */
 typedef struct ThisIsMyModelPing {
     // NOTICE: Определение переменных модели
@@ -15,24 +32,7 @@ typedef struct ThisIsMyModelPing {
     } state;
 };
 
-// NOTICE: Определение констант для модели ThisIsMyModel:Toggle
-/* Model Toggle (ThisIsMyModel:Toggle) */
-typedef struct ThisIsMyModelToggle {
-    // NOTICE: Определение переменных модели
-    enum {
-        THIS_IS_MY_MODEL_TOGGLE_INIT,
-        THIS_IS_MY_MODEL_TOGGLE_ENTRY,
-        THIS_IS_MY_MODEL_TOGGLE_PING,
-        THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
-        THIS_IS_MY_MODEL_TOGGLE_PONG,
-        THIS_IS_MY_MODEL_TOGGLE_END
-    } state;
-    // NOTICE: Определение extend
-    ThisIsMyModelPing ping;
-    ThisIsMyModelPong pong;
-};
-
-// NOTICE: Определение констант для модели ThisIsMyModel:Pong
+// NOTICE: Определение констант для модели Pong (ThisIsMyModel:Pong)
 /* Model Pong (ThisIsMyModel:Pong) */
 typedef struct ThisIsMyModelPong {
     // NOTICE: Определение переменных модели
@@ -44,7 +44,7 @@ typedef struct ThisIsMyModelPong {
     } state;
 };
 
-// NOTICE: Определение констант для модели ThisIsMyModel
+// NOTICE: Определение констант для модели ThisIsMyModel (ThisIsMyModel)
 /* Model ThisIsMyModel (ThisIsMyModel) */
 typedef struct ThisIsMyModel {
     // NOTICE: Определение переменных модели
