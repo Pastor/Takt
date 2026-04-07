@@ -1,53 +1,88 @@
+diff --git a/grammar/.output/elevator.h b/grammar/.output/elevator.h
+index 616dac5..3be28ee 100644
+--- a/grammar/.output/elevator.h
++++ b/grammar/.output/elevator.h
+@@ -11,10 +11,11 @@ typedef struct ElevatorEngine {
+     enum {
+         ELEVATOR_ENGINE_INIT,
+         ELEVATOR_ENGINE_MOVING_DOWN,
+-        ELEVATOR_ENGINE_MOVING_UP,
+         ELEVATOR_ENGINE_DOOR_OPENING,
++        ELEVATOR_ENGINE_DOOR_CLOSING,
++        ELEVATOR_ENGINE_MOVING_UP,
+         ELEVATOR_ENGINE_IDLE,
+-        ELEVATOR_ENGINE_DOOR_CLOSING
++        ELEVATOR_ENGINE_END
+     } state;
+ };
+ 
+@@ -22,16 +23,17 @@ typedef struct ElevatorEngine {
+ /* Model elevator (Elevator) */
+ typedef struct Elevator {
+     // NOTICE: Определение переменных модели
++    uint8_t current_floor;
+     uint8_t has_call;
+     uint8_t target_floor;
+-    uint8_t current_floor;
+     enum {
+         ELEVATOR_INIT,
+-        ELEVATOR_END,
++        ELEVATOR_MAIN,
+         ELEVATOR_MIDDLE,
+-        ELEVATOR_MAIN
++        ELEVATOR_END
+     } state;
+     // NOTICE: Определение extend
++    ElevatorEngine main;
+     ElevatorEngine middle_engine0;
+     struct {
+         ElevatorEngine engine0;
+@@ -51,9 +53,9 @@ typedef struct Elevator {
+         ELEVATOR_MIDDLE_PARALLEL1,
+         ELEVATOR_MIDDLE_ENGINE2,
+         ELEVATOR_MIDDLE_ENGINE3,
+-        ELEVATOR_MIDDLE_ENGINE4
++        ELEVATOR_MIDDLE_ENGINE4,
++        ELEVATOR_MIDDLE_END
+     } middle_state;
+-    ElevatorEngine main;
+     /// NOTICE: Функции портов ввода вывода
+     void  *userdata;
+     void  (*write_bit  )(int address, int bit, bool val, void *userdata);
 diff --git a/grammar/.output/extend_complex.h b/grammar/.output/extend_complex.h
-index 26c6edc..6151cc4 100644
+index 238ad09..e3ccc91 100644
 --- a/grammar/.output/extend_complex.h
 +++ b/grammar/.output/extend_complex.h
-@@ -3,37 +3,44 @@
+@@ -3,17 +3,6 @@
  #include <stdint.h>
  #include <stdbool.h>
  
--// NOTICE: Определение констант для модели extend_complex:E
--/* Model E (Extend_complex:E) */
--typedef struct ExtendComplexE {
-+// NOTICE: Определение констант для модели extend_complex:C
-+/* Model C (Extend_complex:C) */
-+typedef struct ExtendComplexC {
-     // NOTICE: Определение переменных модели
+-// NOTICE: Определение констант для модели extend_complex:F
+-/* Model F (Extend_complex:F) */
+-typedef struct ExtendComplexF {
+-    // NOTICE: Определение переменных модели
+-    enum {
+-        EXTEND_COMPLEX_F_INIT,
+-        EXTEND_COMPLEX_F_START,
+-        EXTEND_COMPLEX_F_END
+-    } state;
+-};
+-
+ // NOTICE: Определение констант для модели extend_complex:C
+ /* Model C (Extend_complex:C) */
+ typedef struct ExtendComplexC {
+@@ -21,8 +10,7 @@ typedef struct ExtendComplexC {
      enum {
--        EXTEND_COMPLEX_E_INIT,
--        EXTEND_COMPLEX_E_END,
--        EXTEND_COMPLEX_E_START
-+        EXTEND_COMPLEX_C_INIT,
-+        EXTEND_COMPLEX_C_START,
-+        EXTEND_COMPLEX_C_END
+         EXTEND_COMPLEX_C_INIT,
+         EXTEND_COMPLEX_C_END,
+-        EXTEND_COMPLEX_C_START,
+-        EXTEND_COMPLEX_C_END
++        EXTEND_COMPLEX_C_START
      } state;
      // NOTICE: Определение extend
--    ExtendComplexD start_d0;
--    ExtendComplexF start_f1;
-+    struct {
-+        ExtendComplexCC1 c10;
-+        ExtendComplexCC2 c21;
-+        enum {
-+            EXTEND_COMPLEX_C_START_INIT,
-+            EXTEND_COMPLEX_C_START_TICK,
-+            EXTEND_COMPLEX_C_START_END
-+        } state;
-+    } start;
- };
- 
--// NOTICE: Определение констант для модели extend_complex:D
--/* Model D (Extend_complex:D) */
--typedef struct ExtendComplexD {
-+// NOTICE: Определение констант для модели extend_complex:F
-+/* Model F (Extend_complex:F) */
-+typedef struct ExtendComplexF {
-     // NOTICE: Определение переменных модели
-     enum {
--        EXTEND_COMPLEX_D_INIT,
--        EXTEND_COMPLEX_D_START
-+        EXTEND_COMPLEX_F_INIT,
-+        EXTEND_COMPLEX_F_START
-     } state;
+     struct {
+@@ -36,36 +24,36 @@ typedef struct ExtendComplexC {
+     } start;
  };
  
 -// NOTICE: Определение констант для модели extend_complex:C:C2
@@ -59,13 +94,75 @@ index 26c6edc..6151cc4 100644
      // NOTICE: Определение переменных модели
      enum {
 -        EXTEND_COMPLEX_C_C2_INIT,
--        EXTEND_COMPLEX_C_C2_START
+-        EXTEND_COMPLEX_C_C2_START,
+-        EXTEND_COMPLEX_C_C2_END
 +        EXTEND_COMPLEX_D_INIT,
-+        EXTEND_COMPLEX_D_START
++        EXTEND_COMPLEX_D_START,
++        EXTEND_COMPLEX_D_END
      } state;
  };
  
-@@ -47,54 +54,52 @@ typedef struct ExtendComplexCC1 {
+-// NOTICE: Определение констант для модели extend_complex:C:C1
+-/* Model C1 (Extend_complex:C:C1) */
+-typedef struct ExtendComplexCC1 {
++// NOTICE: Определение констант для модели extend_complex:F
++/* Model F (Extend_complex:F) */
++typedef struct ExtendComplexF {
+     // NOTICE: Определение переменных модели
+     enum {
+-        EXTEND_COMPLEX_C_C1_INIT,
+-        EXTEND_COMPLEX_C_C1_START,
+-        EXTEND_COMPLEX_C_C1_END
++        EXTEND_COMPLEX_F_INIT,
++        EXTEND_COMPLEX_F_START,
++        EXTEND_COMPLEX_F_END
+     } state;
+ };
+ 
+-// NOTICE: Определение констант для модели extend_complex:D
+-/* Model D (Extend_complex:D) */
+-typedef struct ExtendComplexD {
++// NOTICE: Определение констант для модели extend_complex:B
++/* Model B (Extend_complex:B) */
++typedef struct ExtendComplexB {
+     // NOTICE: Определение переменных модели
+     enum {
+-        EXTEND_COMPLEX_D_INIT,
+-        EXTEND_COMPLEX_D_START,
+-        EXTEND_COMPLEX_D_END
++        EXTEND_COMPLEX_B_INIT,
++        EXTEND_COMPLEX_B_START,
++        EXTEND_COMPLEX_B_END
+     } state;
+ };
+ 
+@@ -76,7 +64,6 @@ typedef struct ExtendComplexE {
+     enum {
+         EXTEND_COMPLEX_E_INIT,
+         EXTEND_COMPLEX_E_START,
+-        EXTEND_COMPLEX_E_END,
+         EXTEND_COMPLEX_E_END
+     } state;
+     // NOTICE: Определение extend
+@@ -90,6 +77,17 @@ typedef struct ExtendComplexE {
+     } start_state;
+ };
+ 
++// NOTICE: Определение констант для модели extend_complex:C:C1
++/* Model C1 (Extend_complex:C:C1) */
++typedef struct ExtendComplexCC1 {
++    // NOTICE: Определение переменных модели
++    enum {
++        EXTEND_COMPLEX_C_C1_INIT,
++        EXTEND_COMPLEX_C_C1_START,
++        EXTEND_COMPLEX_C_C1_END
++    } state;
++};
++
+ // NOTICE: Определение констант для модели extend_complex:A
+ /* Model A (Extend_complex:A) */
+ typedef struct ExtendComplexA {
+@@ -101,14 +99,14 @@ typedef struct ExtendComplexA {
      } state;
  };
  
@@ -78,406 +175,278 @@ index 26c6edc..6151cc4 100644
      // NOTICE: Определение переменных модели
      enum {
 -        EXTEND_COMPLEX_B_INIT,
--        EXTEND_COMPLEX_B_START
+-        EXTEND_COMPLEX_B_START,
+-        EXTEND_COMPLEX_B_END
 +        EXTEND_COMPLEX_C_C2_INIT,
-+        EXTEND_COMPLEX_C_C2_START
++        EXTEND_COMPLEX_C_C2_START,
++        EXTEND_COMPLEX_C_C2_END
      } state;
  };
  
--// NOTICE: Определение констант для модели extend_complex:F
--/* Model F (Extend_complex:F) */
--typedef struct ExtendComplexF {
-+// NOTICE: Определение констант для модели extend_complex:A
-+/* Model A (Extend_complex:A) */
-+typedef struct ExtendComplexA {
-     // NOTICE: Определение переменных модели
-     enum {
--        EXTEND_COMPLEX_F_INIT,
--        EXTEND_COMPLEX_F_START
-+        EXTEND_COMPLEX_A_INIT,
-+        EXTEND_COMPLEX_A_START
-     } state;
- };
- 
--// NOTICE: Определение констант для модели extend_complex:C
--/* Model C (Extend_complex:C) */
--typedef struct ExtendComplexC {
-+// NOTICE: Определение констант для модели extend_complex:E
-+/* Model E (Extend_complex:E) */
-+typedef struct ExtendComplexE {
-     // NOTICE: Определение переменных модели
-     enum {
--        EXTEND_COMPLEX_C_INIT,
--        EXTEND_COMPLEX_C_START,
--        EXTEND_COMPLEX_C_END
-+        EXTEND_COMPLEX_E_INIT,
-+        EXTEND_COMPLEX_E_END,
-+        EXTEND_COMPLEX_E_START
-     } state;
-     // NOTICE: Определение extend
--    struct {
--        enum {
--            EXTEND_COMPLEX_C_START_INIT,
--            EXTEND_COMPLEX_C_START_TICK,
--            EXTEND_COMPLEX_C_START_END
--        } state;
--        ExtendComplexCC1 c10;
--        ExtendComplexCC2 c21;
--    } start;
-+    ExtendComplexD start_d0;
-+    ExtendComplexF start_f1;
-+    enum {
-+        EXTEND_COMPLEX_E_START_INIT,
-+        EXTEND_COMPLEX_E_START_D0,
-+        EXTEND_COMPLEX_E_START_F1
-+    } start_state;
- };
- 
--// NOTICE: Определение констант для модели extend_complex:A
--/* Model A (Extend_complex:A) */
--typedef struct ExtendComplexA {
-+// NOTICE: Определение констант для модели extend_complex:B
-+/* Model B (Extend_complex:B) */
-+typedef struct ExtendComplexB {
-     // NOTICE: Определение переменных модели
-     enum {
--        EXTEND_COMPLEX_A_INIT,
--        EXTEND_COMPLEX_A_START
-+        EXTEND_COMPLEX_B_INIT,
-+        EXTEND_COMPLEX_B_START
-     } state;
- };
- 
-@@ -102,8 +107,8 @@ typedef struct ExtendComplexA {
- /* Model extend_complex (Extend_complex) */
- typedef struct ExtendComplex {
-     // NOTICE: Определение переменных модели
--    uint8_t x;
-     uint8_t y;
-+    uint8_t x;
+@@ -120,12 +118,11 @@ typedef struct ExtendComplex {
+     uint8_t x;
      enum {
          EXTEND_COMPLEX_INIT,
-         EXTEND_COMPLEX_NEXT,
-@@ -114,15 +119,22 @@ typedef struct ExtendComplex {
+-        EXTEND_COMPLEX_NEXT,
+         EXTEND_COMPLEX_START,
++        EXTEND_COMPLEX_NEXT,
+         EXTEND_COMPLEX_END
+     } state;
+     // NOTICE: Определение extend
+-    ExtendComplexF next;
      ExtendComplexA start_a0;
      ExtendComplexB start_b1;
      struct {
-+        ExtendComplexC c0;
-+        ExtendComplexD d1;
-         enum {
-             EXTEND_COMPLEX_START_PARALLEL2_INIT,
-             EXTEND_COMPLEX_START_PARALLEL2_TICK,
-             EXTEND_COMPLEX_START_PARALLEL2_END
-         } state;
--        ExtendComplexC c0;
--        ExtendComplexD d1;
-     } start_parallel2;
-     ExtendComplexE start_e3;
-+    enum {
-+        EXTEND_COMPLEX_START_INIT,
-+        EXTEND_COMPLEX_START_A0,
-+        EXTEND_COMPLEX_START_B1,
-+        EXTEND_COMPLEX_START_PARALLEL2,
-+        EXTEND_COMPLEX_START_E3
-+    } start_state;
+@@ -146,6 +143,7 @@ typedef struct ExtendComplex {
+         EXTEND_COMPLEX_START_E3,
+         EXTEND_COMPLEX_START_END
+     } start_state;
++    ExtendComplexF next;
      /// NOTICE: Функции портов ввода вывода
      void  *userdata;
      void  (*write_bit  )(int address, int bit, bool val, void *userdata);
+diff --git a/grammar/.output/this_is_my_model.h b/grammar/.output/this_is_my_model.h
+index 881ca97..1e1aa57 100644
+--- a/grammar/.output/this_is_my_model.h
++++ b/grammar/.output/this_is_my_model.h
+@@ -10,8 +10,8 @@ typedef struct ThisIsMyModelPing {
+     bool toggle;
+     enum {
+         THIS_IS_MY_MODEL_PING_INIT,
+-        THIS_IS_MY_MODEL_PING_START,
+-        THIS_IS_MY_MODEL_PING_END
++        THIS_IS_MY_MODEL_PING_END,
++        THIS_IS_MY_MODEL_PING_START
+     } state;
+ };
+ 
+@@ -21,8 +21,9 @@ typedef struct ThisIsMyModelPong {
+     // NOTICE: Определение переменных модели
+     enum {
+         THIS_IS_MY_MODEL_PONG_INIT,
++        THIS_IS_MY_MODEL_PONG_STOP,
+         THIS_IS_MY_MODEL_PONG_BEGIN,
+-        THIS_IS_MY_MODEL_PONG_STOP
++        THIS_IS_MY_MODEL_PONG_END
+     } state;
+ };
+ 
+@@ -34,8 +35,8 @@ typedef struct ThisIsMyModelToggle {
+         THIS_IS_MY_MODEL_TOGGLE_INIT,
+         THIS_IS_MY_MODEL_TOGGLE_PING,
+         THIS_IS_MY_MODEL_TOGGLE_END,
+-        THIS_IS_MY_MODEL_TOGGLE_PONG,
+         THIS_IS_MY_MODEL_TOGGLE_ENTRY,
++        THIS_IS_MY_MODEL_TOGGLE_PONG,
+         THIS_IS_MY_MODEL_TOGGLE_COMPLETE
+     } state;
+     // NOTICE: Определение extend
+@@ -50,7 +51,8 @@ typedef struct ThisIsMyModel {
+     uint64_t it;
+     enum {
+         THIS_IS_MY_MODEL_INIT,
+-        THIS_IS_MY_MODEL_ENTRY
++        THIS_IS_MY_MODEL_ENTRY,
++        THIS_IS_MY_MODEL_END
+     } state;
+     // NOTICE: Определение extend
+     struct {
+@@ -66,7 +68,8 @@ typedef struct ThisIsMyModel {
+     enum {
+         THIS_IS_MY_MODEL_ENTRY_INIT,
+         THIS_IS_MY_MODEL_ENTRY_PARALLEL0,
+-        THIS_IS_MY_MODEL_ENTRY_TOGGLE1
++        THIS_IS_MY_MODEL_ENTRY_TOGGLE1,
++        THIS_IS_MY_MODEL_ENTRY_END
+     } entry_state;
+     /// NOTICE: Функции портов ввода вывода
+     void  *userdata;
 diff --git a/grammar/src/generator/c/mod.rs b/grammar/src/generator/c/mod.rs
-index 5ef423a..778c1b6 100644
+index eb243d5..4a3895e 100644
 --- a/grammar/src/generator/c/mod.rs
 +++ b/grammar/src/generator/c/mod.rs
-@@ -599,12 +599,29 @@ impl Generator {
-                 for (idx, item) in items.iter().enumerate() {
-                     Self::build_concat_item(printer, state_name, item, idx)?;
-                 }
-+                Self::build_concat_state_enum(printer, state_name, items)?;
-             }
-             StateExtend::Parallel(items) => {
-                 printer.ident("struct {").nl().up();
-                 for (idx, item) in items.iter().enumerate() {
--                    Self::build_parallel_item(printer, item, idx)?;
-+                    Self::build_parallel_item(
-+                        printer,
-+                        item,
-+                        idx,
-+                        &state_name.unique_lowercase_snakecase(),
-+                    )?;
-                 }
-+                printer.ident("enum {").up().nl();
-+                printer
-+                    .ident(&*(state_name.unique_uppercase_snakecase() + "_INIT,"))
-+                    .nl();
-+                printer
-+                    .ident(&*(state_name.unique_uppercase_snakecase() + "_TICK,"))
-+                    .nl();
-+                printer
-+                    .ident(&*(state_name.unique_uppercase_snakecase() + "_END"))
-+                    .nl();
-+                printer.down().ident("} state;").nl();
-                 printer
-                     .down()
-                     .ident(&format!("}} {};", state_name.local_lowercase_snakecase()))
-@@ -636,17 +653,31 @@ impl Generator {
-                     .nl();
-             }
-             StateExtend::Parallel(items) => {
-+                let local_partial_name =
-+                    format!("{}_parallel{}", state_name.local_lowercase_snakecase(), idx);
-+                let unique_partial_name = format!(
-+                    "{}_parallel{}",
-+                    state_name.unique_lowercase_snakecase(),
-+                    idx
-+                );
-                 printer.ident("struct {").nl().up();
-                 for (inner_idx, item) in items.iter().enumerate() {
--                    Self::build_parallel_item(printer, item, inner_idx)?;
-+                    Self::build_parallel_item(printer, item, inner_idx, &unique_partial_name)?;
-                 }
-+                printer.ident("enum {").up().nl();
-+                printer
-+                    .ident(&*(unique_partial_name.to_uppercase() + "_INIT,"))
-+                    .nl();
-+                printer
-+                    .ident(&*(unique_partial_name.to_uppercase() + "_TICK,"))
-+                    .nl();
-+                printer
-+                    .ident(&*(unique_partial_name.to_uppercase() + "_END"))
-+                    .nl();
-+                printer.down().ident("} state;").nl();
-                 printer
-                     .down()
--                    .ident(&format!(
--                        "}} {}_parallel{};",
--                        state_name.local_lowercase_snakecase(),
--                        idx,
--                    ))
-+                    .ident(&format!("}} {};", local_partial_name))
-                     .nl();
-             }
-             StateExtend::Concatenation(items) => {
-@@ -659,11 +690,12 @@ impl Generator {
+@@ -38,7 +38,7 @@ use crate::generator::c::c_map::CMap;
+ use crate::generator::indent::Printer;
+ use crate::parser::ast::Member;
+ use crate::semantic::extend::Extend;
+-use crate::semantic::minimap::{Element, Map, Name, StateExtend};
++use crate::semantic::minimap::{Element, Name, StateExtend};
+ use crate::semantic::naming::{normalize_camelcase_name, normalize_lowercase_snakecase};
+ use crate::semantic::type_node::TypeNode;
+ use crate::semantic::{
+@@ -47,10 +47,8 @@ use crate::semantic::{
+ };
+ use itertools::Itertools;
+ use log::warn;
+-use std::cell::RefCell;
+ use std::fs;
+ use std::path::Path;
+-use std::rc::Rc;
+ 
+ const FUNCTION_PORT_WRITE_BIT: &str = "write_bit";
+ const FUNCTION_PORT_READ_BIT: &str = "read_bit";
+@@ -98,6 +96,8 @@ impl Generator {
+             .to_uppercase()
      }
  
-     /// Генерирует поле для элемента параллельного блока.
--    /// Model → `{model}{idx}`, вложенный Parallel → struct `parallel{idx}`.
-+    /// Model → `{model}{idx}`, вложенный Parallel → struct `parallel{idx}` с enum state.
-     fn build_parallel_item(
-         printer: &mut Printer,
-         extend: &StateExtend,
-         idx: usize,
-+        unique_prefix: &str,
-     ) -> Result<(), Diagnostic> {
-         match extend {
-             StateExtend::None => {}
-@@ -678,24 +710,78 @@ impl Generator {
-                     .nl();
-             }
-             StateExtend::Parallel(items) => {
-+                let nested_prefix = format!("{}_parallel{}", unique_prefix, idx);
-                 printer.ident("struct {").nl().up();
-                 for (inner_idx, item) in items.iter().enumerate() {
--                    Self::build_parallel_item(printer, item, inner_idx)?;
-+                    Self::build_parallel_item(printer, item, inner_idx, &nested_prefix)?;
-                 }
-+                printer.ident("enum {").up().nl();
-                 printer
--                    .down()
--                    .ident(&format!("}} parallel{};", idx))
-+                    .ident(&*(nested_prefix.to_uppercase() + "_INIT,"))
-                     .nl();
-+                printer
-+                    .ident(&*(nested_prefix.to_uppercase() + "_TICK,"))
-+                    .nl();
-+                printer
-+                    .ident(&*(nested_prefix.to_uppercase() + "_END"))
-+                    .nl();
-+                printer.down().ident("} state;").nl();
-+                printer.down().ident(&format!("}} parallel{};", idx)).nl();
-             }
-             StateExtend::Concatenation(items) => {
-                 for (inner_idx, item) in items.iter().enumerate() {
--                    Self::build_parallel_item(printer, item, inner_idx)?;
-+                    Self::build_parallel_item(printer, item, inner_idx, unique_prefix)?;
-                 }
-             }
++    // Функции generate_source и вспомогательные генераторы .c-файла оставлены до реализации I1–I4.
++    #[allow(dead_code)]
+     #[inline]
+     fn get_model_name_struct(model: &ModelNode) -> String {
+         // V6: заменить unwrap() на unwrap_or_else для безопасности.
+@@ -170,6 +170,7 @@ impl Generator {
          }
+     }
+ 
++    #[allow(dead_code)]
+     fn generate_model_states(
+         #[allow(unused_mut)] mut printer: &mut Printer,
+         model: &ModelNode,
+@@ -189,6 +190,7 @@ impl Generator {
          Ok(())
      }
  
-+    /// Генерирует enum поля состояния для конкатенации.
-+    /// Вариант INIT + по одному варианту на элемент: Model → {STATE}_{MODEL}{idx}, Parallel → {STATE}_PARALLEL{idx}.
-+    fn build_concat_state_enum(
-+        printer: &mut Printer,
-+        state_name: &Name,
-+        items: &[StateExtend],
-+    ) -> Result<(), Diagnostic> {
-+        let prefix = state_name.unique_uppercase_snakecase();
-+        let mut variants: Vec<String> = vec![format!("{}_INIT", prefix)];
-+        for (idx, item) in items.iter().enumerate() {
-+            let variant = match item {
-+                StateExtend::None => continue,
-+                StateExtend::Model(model) => {
-+                    format!(
-+                        "{}_{}{}",
-+                        prefix,
-+                        model.local_lowercase_snakecase().to_uppercase(),
-+                        idx,
-+                    )
-+                }
-+                StateExtend::Parallel(_) | StateExtend::Concatenation(_) => {
-+                    format!("{}_PARALLEL{}", prefix, idx)
-+                }
-+            };
-+            variants.push(variant);
-+        }
-+        printer.ident("enum {").up().nl();
-+        let last = variants.len() - 1;
-+        for (i, variant) in variants.iter().enumerate() {
-+            if i < last {
-+                printer.ident(&format!("{},", variant)).nl();
-+            } else {
-+                printer.ident(variant).nl();
-+            }
-+        }
-+        printer
-+            .down()
-+            .ident(&format!(
-+                "}} {}_state;",
-+                state_name.local_lowercase_snakecase()
-+            ))
-+            .nl();
-+        Ok(())
-+    }
-+
-     fn generate_model_header(
++    #[allow(dead_code)]
+     fn generate_model_states_struct(
+         #[allow(unused_mut)] mut printer: &mut Printer,
+         model: &ModelNode,
+@@ -213,6 +215,7 @@ impl Generator {
+         Ok(())
+     }
+ 
++    #[allow(dead_code)]
+     fn generate_model_struct(
+         #[allow(unused_mut)] mut printer: &mut Printer,
+         model: &ModelNode,
+@@ -347,6 +350,7 @@ impl Generator {
+     }
+ 
+     #[deprecated]
++    #[allow(dead_code)]
+     fn generate_constants_and_ports_and_enums(
          printer: &mut Printer,
-         map: &CMap,
-@@ -722,17 +808,6 @@ impl Generator {
-             .print(format!("typedef struct {} {{", struct_name).as_str())
-             .nl();
-         printer.up();
--        printer.ident("enum {").up().nl();
--        printer.ident(&*(name.unique_uppercase_snakecase() + "_INIT"));
--        for state_name in states.clone() {
--            if map.state_at(state_name.clone()).is_none() {
--                continue;
--            }
--            printer.print(",").nl();
--            printer.ident(&state_name.unique_uppercase_snakecase());
--        }
--        printer.down().nl().ident("} state;").nl();
--
-         printer
-             .ident("// NOTICE: Определение переменных модели")
-             .nl();
-@@ -753,6 +828,18 @@ impl Generator {
+         model: &ModelNode,
+@@ -432,6 +436,7 @@ impl Generator {
+         Ok(())
+     }
+ 
++    #[allow(dead_code)]
+     fn generate_implement_source(
+         printer: &Printer,
+         implement: &Extend,
+@@ -461,15 +466,17 @@ impl Generator {
+         Ok(())
+     }
+ 
++    #[allow(dead_code)]
+     fn generate_model_tick_source(
+         _printer: &Printer,
+         _model: &ModelNode,
+         _main: bool,
+     ) -> Result<(), Diagnostic> {
+-        //TODO
++        //TODO: реализовать генерацию тела _tick (I1)
+         Ok(())
+     }
+ 
++    #[allow(dead_code)]
+     fn generate_model_source(
+         printer: &Printer,
+         model: &ModelNode,
+@@ -497,6 +504,11 @@ impl Generator {
+         Ok(())
+     }
+ 
++    /// Генерирует содержимое `.c`-файла для модели.
++    ///
++    /// Не вызывается напрямую: генерация `.c`-файлов отложена до реализации I1–I4.
++    /// Код сохранён для будущей доработки.
++    #[allow(dead_code, deprecated)]
+     fn generate_source(&self, model: &ModelNode) -> Result<String, Diagnostic> {
+         let mut source = String::new();
+         let mut printer = Printer::new(4, &mut source);
+@@ -829,20 +841,29 @@ impl Generator {
                  VariableNode::Const { .. } => {}
              }
          }
-+        ///
-+        printer.ident("enum {").up().nl();
-+        printer.ident(&*(name.unique_uppercase_snakecase() + "_INIT"));
-+        for state_name in states.clone() {
-+            if map.state_at(state_name.clone()).is_none() {
-+                continue;
+-        ///
++        // Генерируем enum состояний модели
++        let end_constant = name.unique_uppercase_snakecase() + "_END";
+         printer.ident("enum {").up().nl();
+         printer.ident(&*(name.unique_uppercase_snakecase() + "_INIT"));
++        let mut end_already_generated = false;
+         for state_name in states.clone() {
+             if map.state_at(state_name.clone()).is_none() {
+                 continue;
+             }
+             printer.print(",").nl();
+-            printer.ident(&state_name.unique_uppercase_snakecase());
++            let constant = state_name.unique_uppercase_snakecase();
++            if constant == end_constant {
++                end_already_generated = true;
 +            }
-+            printer.print(",").nl();
-+            printer.ident(&state_name.unique_uppercase_snakecase());
++            printer.ident(&constant);
 +        }
-+        printer.down().nl().ident("} state;").nl();
-+        ///
++        // Добавляем _END только если ни одно состояние не сгенерировало ту же константу
++        if !end_already_generated {
++            printer.print(",").nl();
++            printer.ident(&end_constant);
+         }
+-        printer.print(",").nl();
+-        printer.ident(&*(name.unique_uppercase_snakecase() + "_END"));
+         printer.down().nl().ident("} state;").nl();
+-        ///
++        // Генерируем поля extend-состояний
          let mut is_extend = false;
          for state_name in states {
              let Some(state) = map.state_at(state_name.clone()) else {
-@@ -1478,6 +1565,19 @@ state Par = Eng | Eng;
-             header.contains("} par;"),
-             "struct parallel должен закрываться как `}} par;`:\n{header}"
-         );
-+        // Поля eng0/eng1 должны быть ПЕРЕД `} state;` внутри parallel struct
-+        // Ищем последний `} state;` до `} par;`, чтобы взять state именно parallel struct
-+        let pos_par_close = header.find("} par;").expect("} par; не найден");
-+        let pos_state = header[..pos_par_close]
-+            .rfind("} state;")
-+            .expect("} state; не найден до } par;");
-+        let pos_eng0 = header[..pos_par_close]
-+            .rfind("eng0;")
-+            .expect("eng0 не найден до } par;");
-+        assert!(
-+            pos_eng0 < pos_state,
-+            "поля должны быть перед state enum:\n{header}"
-+        );
+@@ -1011,6 +1032,7 @@ impl Generator {
+         }
      }
  
-     #[test]
-@@ -1513,5 +1613,70 @@ state Mid = Eng + (Eng | Eng) + Eng;
-             header.contains("mid_eng2;"),
-             "третий элемент конкатенации должен быть mid_eng2:\n{header}"
-         );
-+        // Внутри parallel struct поля должны быть перед state enum
-+        // Ищем последний `} state;` до `} mid_parallel1;`
-+        let pos_par1_close = header
-+            .find("} mid_parallel1;")
-+            .expect("} mid_parallel1; не найден");
-+        let pos_state = header[..pos_par1_close]
-+            .rfind("} state;")
-+            .expect("} state; не найден до } mid_parallel1;");
-+        let pos_eng0 = header[..pos_par1_close]
-+            .rfind("eng0;")
-+            .expect("eng0 не найден до } mid_parallel1;");
-+        assert!(
-+            pos_eng0 < pos_state,
-+            "поля parallel должны быть перед state enum:\n{header}"
-+        );
-+        // concat state enum должен присутствовать
-+        assert!(
-+            header.contains("mid_state;"),
-+            "concat state enum mid_state должен быть сгенерирован:\n{header}"
-+        );
-+    }
-+
-+    #[test]
-+    fn test_concatenation_generates_state_enum() {
-+        // state Mid = Eng + (Eng | Eng) + Eng:
-+        // ожидается mid_state с вариантами INIT, ENG0, PARALLEL1, ENG2.
-+        let src = r#"
-+model Eng { start S; }
-+start Main = Eng {
-+    next Mid;
-+}
-+state Mid = Eng + (Eng | Eng) + Eng;
-+"#;
-+        let (model_ast, _) = parse(src, 0).unwrap();
-+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
-+        model.borrow_mut().name = Some("Test".to_string());
-+        let model = model.borrow();
-+        let generator = Generator {};
-+        let map = CMap::new(model.name(), &*model).unwrap();
-+        let header = generator.generate_header(map.get_filename(), &map).unwrap();
-+        // enum поле состояния конкатенации
-+        assert!(
-+            header.contains("mid_state;"),
-+            "ожидался mid_state enum:\n{header}"
-+        );
-+        // вариант INIT
-+        assert!(
-+            header.contains("TEST_MID_INIT"),
-+            "ожидался TEST_MID_INIT:\n{header}"
-+        );
-+        // вариант для первого Model-элемента (idx=0)
-+        assert!(
-+            header.contains("TEST_MID_ENG0"),
-+            "ожидался TEST_MID_ENG0:\n{header}"
-+        );
-+        // вариант для Parallel-элемента (idx=1)
-+        assert!(
-+            header.contains("TEST_MID_PARALLEL1"),
-+            "ожидался TEST_MID_PARALLEL1:\n{header}"
-+        );
-+        // вариант для последнего Model-элемента (idx=2)
-+        assert!(
-+            header.contains("TEST_MID_ENG2"),
-+            "ожидался TEST_MID_ENG2:\n{header}"
-+        );
++    #[allow(dead_code)]
+     fn unroll_cond(cond: &ConditionNode) -> Result<String, Diagnostic> {
+         match cond {
+             ConditionNode::ArraySubscript(array, num) => {
+@@ -1282,6 +1304,7 @@ impl Generator {
+         Self::resolve_raw_name(upper_name, cond.name.clone())
      }
- }
+ 
++    #[allow(dead_code)]
+     #[inline]
+     fn resolve_enum_name(
+         upper_name: String,
+diff --git a/grammar/tests/semantic_tests.rs b/grammar/tests/semantic_tests.rs
+index 48985d3..a3732fe 100644
+--- a/grammar/tests/semantic_tests.rs
++++ b/grammar/tests/semantic_tests.rs
+@@ -217,11 +217,12 @@ fn implement_single_model_resolves() {
+ /// разрешается в `Implement::Model` (последовательность упаковывается в модель).
+ #[test]
+ fn implement_add_composition_resolves() {
++    // compact_implement отключён: конкатенация остаётся как Extend::Concatenation.
+     let node = build("start Entry = M1 + M2; model M1 { start S; } model M2 { start T; }");
+     if let StateNode::Implement { implements, .. } = &node.states["Entry"] {
+         assert!(
+-            matches!(implements, Extend::Model(_)),
+-            "Компоновка + после compact_implement должна разрешаться в Implement::Model, получили: {:?}",
++            matches!(implements, Extend::Concatenation(items) if items.len() == 2),
++            "Компоновка M1 + M2 должна давать Extend::Concatenation с 2 элементами, получили: {:?}",
+             implements
+         );
+     } else {
+@@ -621,11 +622,12 @@ fn implement_without_next_no_stack_overflow() {
+ /// После compact_implement последовательность упаковывается в `Implement::Model`.
+ #[test]
+ fn implement_parenthesized_add_resolves() {
++    // compact_implement отключён: (M1 + M2) раскрывается до Concatenation([M1, M2]).
+     let node = build("start E = (M1 + M2) { } model M1 { start S; } model M2 { start T; }");
+     if let StateNode::Implement { implements, .. } = &node.states["E"] {
+         assert!(
+-            matches!(implements, Extend::Model(_)),
+-            "скобочная компоновка после compact_implement должна давать Implement::Model, получили: {:?}",
++            matches!(implements, Extend::Concatenation(items) if items.len() == 2),
++            "скобочная компоновка (M1 + M2) должна давать Extend::Concatenation с 2 элементами, получили: {:?}",
+             implements
+         );
+     } else {

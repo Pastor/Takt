@@ -30,6 +30,10 @@ mod type_inference;
 pub mod type_node;
 pub mod unused;
 pub(crate) mod validate;
+/// Карта семантических элементов модели для генератора кода.
+///
+/// Содержит снимок достижимых состояний и моделей в виде плоской карты [`Map`](minimap::Map),
+/// используемый генератором C-заголовков.
 pub mod minimap;
 mod test_constants;
 
@@ -166,6 +170,8 @@ impl ModelNode {
         }
     }
 
+    /// Возвращает все конечные состояния модели.
+    #[allow(dead_code)]
     pub(crate) fn get_end_states(&self) -> Vec<StateNode> {
         self.states
             .clone()

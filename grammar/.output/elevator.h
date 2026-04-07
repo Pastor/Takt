@@ -11,10 +11,11 @@ typedef struct ElevatorEngine {
     enum {
         ELEVATOR_ENGINE_INIT,
         ELEVATOR_ENGINE_MOVING_DOWN,
-        ELEVATOR_ENGINE_MOVING_UP,
         ELEVATOR_ENGINE_DOOR_OPENING,
+        ELEVATOR_ENGINE_DOOR_CLOSING,
+        ELEVATOR_ENGINE_MOVING_UP,
         ELEVATOR_ENGINE_IDLE,
-        ELEVATOR_ENGINE_DOOR_CLOSING
+        ELEVATOR_ENGINE_END
     } state;
 };
 
@@ -22,16 +23,17 @@ typedef struct ElevatorEngine {
 /* Model elevator (Elevator) */
 typedef struct Elevator {
     // NOTICE: Определение переменных модели
+    uint8_t current_floor;
     uint8_t has_call;
     uint8_t target_floor;
-    uint8_t current_floor;
     enum {
         ELEVATOR_INIT,
-        ELEVATOR_END,
+        ELEVATOR_MAIN,
         ELEVATOR_MIDDLE,
-        ELEVATOR_MAIN
+        ELEVATOR_END
     } state;
     // NOTICE: Определение extend
+    ElevatorEngine main;
     ElevatorEngine middle_engine0;
     struct {
         ElevatorEngine engine0;
@@ -51,9 +53,9 @@ typedef struct Elevator {
         ELEVATOR_MIDDLE_PARALLEL1,
         ELEVATOR_MIDDLE_ENGINE2,
         ELEVATOR_MIDDLE_ENGINE3,
-        ELEVATOR_MIDDLE_ENGINE4
+        ELEVATOR_MIDDLE_ENGINE4,
+        ELEVATOR_MIDDLE_END
     } middle_state;
-    ElevatorEngine main;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
     void  (*write_bit  )(int address, int bit, bool val, void *userdata);

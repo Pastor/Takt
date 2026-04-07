@@ -19,6 +19,9 @@ pub fn normalize_camelcase_name(name: &str) -> String {
     result
 }
 
+/// Нормализует уникальное имя (с разделителями `:`): заменяет `:` на `_`,
+/// затем применяет `normalize_lowercase_snakecase`.
+#[allow(dead_code)]
 pub fn normalize_unique_name(name: &str) -> String {
     normalize_lowercase_snakecase(name.replace(":", "_"))
 }

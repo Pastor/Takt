@@ -3,24 +3,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// NOTICE: Определение констант для модели extend_complex:F
-/* Model F (Extend_complex:F) */
-typedef struct ExtendComplexF {
-    // NOTICE: Определение переменных модели
-    enum {
-        EXTEND_COMPLEX_F_INIT,
-        EXTEND_COMPLEX_F_START,
-        EXTEND_COMPLEX_F_END
-    } state;
-};
-
 // NOTICE: Определение констант для модели extend_complex:C
-/* Model C (Extend_complex:C) */
+/* Model C (ExtendComplex:C) */
 typedef struct ExtendComplexC {
     // NOTICE: Определение переменных модели
     enum {
         EXTEND_COMPLEX_C_INIT,
-        EXTEND_COMPLEX_C_END,
         EXTEND_COMPLEX_C_START,
         EXTEND_COMPLEX_C_END
     } state;
@@ -37,7 +25,7 @@ typedef struct ExtendComplexC {
 };
 
 // NOTICE: Определение констант для модели extend_complex:C:C2
-/* Model C2 (Extend_complex:C:C2) */
+/* Model C2 (ExtendComplex:C:C2) */
 typedef struct ExtendComplexCC2 {
     // NOTICE: Определение переменных модели
     enum {
@@ -47,19 +35,8 @@ typedef struct ExtendComplexCC2 {
     } state;
 };
 
-// NOTICE: Определение констант для модели extend_complex:C:C1
-/* Model C1 (Extend_complex:C:C1) */
-typedef struct ExtendComplexCC1 {
-    // NOTICE: Определение переменных модели
-    enum {
-        EXTEND_COMPLEX_C_C1_INIT,
-        EXTEND_COMPLEX_C_C1_START,
-        EXTEND_COMPLEX_C_C1_END
-    } state;
-};
-
 // NOTICE: Определение констант для модели extend_complex:D
-/* Model D (Extend_complex:D) */
+/* Model D (ExtendComplex:D) */
 typedef struct ExtendComplexD {
     // NOTICE: Определение переменных модели
     enum {
@@ -69,14 +46,57 @@ typedef struct ExtendComplexD {
     } state;
 };
 
+// NOTICE: Определение констант для модели extend_complex:A
+/* Model A (ExtendComplex:A) */
+typedef struct ExtendComplexA {
+    // NOTICE: Определение переменных модели
+    enum {
+        EXTEND_COMPLEX_A_INIT,
+        EXTEND_COMPLEX_A_START,
+        EXTEND_COMPLEX_A_END
+    } state;
+};
+
+// NOTICE: Определение констант для модели extend_complex:F
+/* Model F (ExtendComplex:F) */
+typedef struct ExtendComplexF {
+    // NOTICE: Определение переменных модели
+    enum {
+        EXTEND_COMPLEX_F_INIT,
+        EXTEND_COMPLEX_F_START,
+        EXTEND_COMPLEX_F_END
+    } state;
+};
+
+// NOTICE: Определение констант для модели extend_complex:C:C1
+/* Model C1 (ExtendComplex:C:C1) */
+typedef struct ExtendComplexCC1 {
+    // NOTICE: Определение переменных модели
+    enum {
+        EXTEND_COMPLEX_C_C1_INIT,
+        EXTEND_COMPLEX_C_C1_START,
+        EXTEND_COMPLEX_C_C1_END
+    } state;
+};
+
+// NOTICE: Определение констант для модели extend_complex:B
+/* Model B (ExtendComplex:B) */
+typedef struct ExtendComplexB {
+    // NOTICE: Определение переменных модели
+    enum {
+        EXTEND_COMPLEX_B_INIT,
+        EXTEND_COMPLEX_B_START,
+        EXTEND_COMPLEX_B_END
+    } state;
+};
+
 // NOTICE: Определение констант для модели extend_complex:E
-/* Model E (Extend_complex:E) */
+/* Model E (ExtendComplex:E) */
 typedef struct ExtendComplexE {
     // NOTICE: Определение переменных модели
     enum {
         EXTEND_COMPLEX_E_INIT,
         EXTEND_COMPLEX_E_START,
-        EXTEND_COMPLEX_E_END,
         EXTEND_COMPLEX_E_END
     } state;
     // NOTICE: Определение extend
@@ -90,34 +110,12 @@ typedef struct ExtendComplexE {
     } start_state;
 };
 
-// NOTICE: Определение констант для модели extend_complex:A
-/* Model A (Extend_complex:A) */
-typedef struct ExtendComplexA {
-    // NOTICE: Определение переменных модели
-    enum {
-        EXTEND_COMPLEX_A_INIT,
-        EXTEND_COMPLEX_A_START,
-        EXTEND_COMPLEX_A_END
-    } state;
-};
-
-// NOTICE: Определение констант для модели extend_complex:B
-/* Model B (Extend_complex:B) */
-typedef struct ExtendComplexB {
-    // NOTICE: Определение переменных модели
-    enum {
-        EXTEND_COMPLEX_B_INIT,
-        EXTEND_COMPLEX_B_START,
-        EXTEND_COMPLEX_B_END
-    } state;
-};
-
 // NOTICE: Определение констант для модели extend_complex
-/* Model extend_complex (Extend_complex) */
+/* Model extend_complex (ExtendComplex) */
 typedef struct ExtendComplex {
     // NOTICE: Определение переменных модели
-    uint8_t y;
     uint8_t x;
+    uint8_t y;
     enum {
         EXTEND_COMPLEX_INIT,
         EXTEND_COMPLEX_NEXT,

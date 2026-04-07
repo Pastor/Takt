@@ -38,7 +38,7 @@ use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
 use crate::parser::ast::Member;
 use crate::semantic::extend::Extend;
-use crate::semantic::minimap::{Element, Map, Name, StateExtend};
+use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::naming::{normalize_camelcase_name, normalize_lowercase_snakecase};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
@@ -47,10 +47,8 @@ use crate::semantic::{
 };
 use itertools::Itertools;
 use log::warn;
-use std::cell::RefCell;
 use std::fs;
 use std::path::Path;
-use std::rc::Rc;
 
 const FUNCTION_PORT_WRITE_BIT: &str = "write_bit";
 const FUNCTION_PORT_READ_BIT: &str = "read_bit";
@@ -98,6 +96,8 @@ impl Generator {
             .to_uppercase()
     }
 
+    // Функции generate_source и вспомогательные генераторы .c-файла оставлены до реализации I1–I4.
+    #[allow(dead_code)]
     #[inline]
     fn get_model_name_struct(model: &ModelNode) -> String {
         // V6: заменить unwrap() на unwrap_or_else для безопасности.
@@ -170,6 +170,7 @@ impl Generator {
         }
     }
 
+    #[allow(dead_code)]
     fn generate_model_states(
         #[allow(unused_mut)] mut printer: &mut Printer,
         model: &ModelNode,
@@ -189,6 +190,7 @@ impl Generator {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn generate_model_states_struct(
         #[allow(unused_mut)] mut printer: &mut Printer,
         model: &ModelNode,
@@ -213,6 +215,7 @@ impl Generator {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn generate_model_struct(
         #[allow(unused_mut)] mut printer: &mut Printer,
         model: &ModelNode,
@@ -347,6 +350,7 @@ impl Generator {
     }
 
     #[deprecated]
+    #[allow(dead_code)]
     fn generate_constants_and_ports_and_enums(
         printer: &mut Printer,
         model: &ModelNode,
@@ -432,6 +436,7 @@ impl Generator {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn generate_implement_source(
         printer: &Printer,
         implement: &Extend,
@@ -461,15 +466,17 @@ impl Generator {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn generate_model_tick_source(
         _printer: &Printer,
         _model: &ModelNode,
         _main: bool,
     ) -> Result<(), Diagnostic> {
-        //TODO
+        //TODO: реализовать генерацию тела _tick (I1)
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn generate_model_source(
         printer: &Printer,
         model: &ModelNode,
@@ -497,6 +504,11 @@ impl Generator {
         Ok(())
     }
 
+    /// Генерирует содержимое `.c`-файла для модели.
+    ///
+    /// Не вызывается напрямую: генерация `.c`-файлов отложена до реализации I1–I4.
+    /// Код сохранён для будущей доработки.
+    #[allow(dead_code, deprecated)]
     fn generate_source(&self, model: &ModelNode) -> Result<String, Diagnostic> {
         let mut source = String::new();
         let mut printer = Printer::new(4, &mut source);
@@ -829,20 +841,29 @@ impl Generator {
                 VariableNode::Const { .. } => {}
             }
         }
-        ///
+        // Генерируем enum состояний модели
+        let end_constant = name.unique_uppercase_snakecase() + "_END";
         printer.ident("enum {").up().nl();
         printer.ident(&*(name.unique_uppercase_snakecase() + "_INIT"));
+        let mut end_already_generated = false;
         for state_name in states.clone() {
             if map.state_at(state_name.clone()).is_none() {
                 continue;
             }
             printer.print(",").nl();
-            printer.ident(&state_name.unique_uppercase_snakecase());
+            let constant = state_name.unique_uppercase_snakecase();
+            if constant == end_constant {
+                end_already_generated = true;
+            }
+            printer.ident(&constant);
         }
-        printer.print(",").nl();
-        printer.ident(&*(name.unique_uppercase_snakecase() + "_END"));
+        // Добавляем _END только если ни одно состояние не сгенерировало ту же константу
+        if !end_already_generated {
+            printer.print(",").nl();
+            printer.ident(&end_constant);
+        }
         printer.down().nl().ident("} state;").nl();
-        ///
+        // Генерируем поля extend-состояний
         let mut is_extend = false;
         for state_name in states {
             let Some(state) = map.state_at(state_name.clone()) else {
@@ -1011,6 +1032,7 @@ impl Generator {
         }
     }
 
+    #[allow(dead_code)]
     fn unroll_cond(cond: &ConditionNode) -> Result<String, Diagnostic> {
         match cond {
             ConditionNode::ArraySubscript(array, num) => {
@@ -1282,6 +1304,7 @@ impl Generator {
         Self::resolve_raw_name(upper_name, cond.name.clone())
     }
 
+    #[allow(dead_code)]
     #[inline]
     fn resolve_enum_name(
         upper_name: String,

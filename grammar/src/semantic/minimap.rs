@@ -19,6 +19,8 @@ impl Name {
         Name { local, unique }
     }
 
+    /// Возвращает локальное имя (без пути родителей).
+    #[allow(dead_code)]
     pub fn local(&self) -> &str {
         &self.local
     }
@@ -44,6 +46,11 @@ impl Name {
 }
 
 impl Display for Name {
+    /// Отображает имя в формате `"Local (Parent:Child)"`.
+    ///
+    /// Каждый сегмент уникального пути приводится к CamelCase через
+    /// [`normalize_camelcase_name`], чтобы `extend_complex:C` отображалось
+    /// как `ExtendComplex:C`, а не `Extend_complex:C`.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -51,7 +58,7 @@ impl Display for Name {
             self.local,
             self.unique
                 .split(':')
-                .map(|p| format!("{}{}", p.split_at(1).0.to_uppercase(), p.split_at(1).1))
+                .map(normalize_camelcase_name)
                 .join(":")
         )
     }
@@ -78,18 +85,26 @@ pub(crate) enum StateExtend {
     Parallel(Vec<StateExtend>),
 }
 
+/// Элемент карты модели: модель, состояние с extend или чистое состояние.
+///
+/// Поля `start`, `name`, `next`, `references` хранятся для будущей генерации
+/// `.c`-источника (I1–I4) и не читаются напрямую в текущей реализации.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) enum Element {
+    /// Вложенная модель со списком состояний и именем стартового состояния.
     Model {
         name: Name,
         states: Vec<Name>,
         start: Name,
     },
+    /// Состояние с объявлением extend (`=`) и ссылкой на следующее состояние.
     StateExtend {
         name: Name,
         extend: StateExtend,
         next: Name,
     },
+    /// Простое состояние со списком переходов.
     State {
         name: Name,
         references: Vec<Name>,
@@ -102,10 +117,14 @@ impl Element {
     }
 }
 
+/// Снимок семантической карты модели: все достижимые элементы, имена состояний.
+///
+/// Поле `start` и методы `start()`/`own()` зарезервированы для генератора `.c`-файла (I1–I4).
 pub(crate) struct Map {
     root: Rc<RefCell<ModelNode>>,
     root_name: Name,
     elements: HashMap<Name, Element>,
+    #[allow(dead_code)]
     start: Name,
     states: Vec<Name>,
 }
@@ -165,6 +184,8 @@ impl Map {
             .collect::<Vec<Element>>()
     }
 
+    /// Возвращает имя стартового состояния. Зарезервировано для генератора `.c` (I1).
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn start(&self) -> Name {
         self.start.clone()
@@ -174,6 +195,8 @@ impl Map {
         self.elements.get(&name).cloned()
     }
 
+    /// Возвращает элемент корневой модели. Зарезервировано для генератора `.c` (I1).
+    #[allow(dead_code)]
     pub(crate) fn own(&self) -> Option<Element> {
         self.elements.get(&self.root_name).cloned()
     }

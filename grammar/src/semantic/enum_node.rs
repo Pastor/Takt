@@ -38,6 +38,8 @@ pub struct EnumDefinitionNode {
 }
 
 impl EnumDefinitionNode {
+    /// Возвращает имя перечисления.
+    #[allow(dead_code)]
     pub(crate) fn name(&self) -> &str {
         &self.name
     }

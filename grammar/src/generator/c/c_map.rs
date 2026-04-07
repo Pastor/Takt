@@ -36,6 +36,8 @@ impl CMap {
         &self.filename
     }
 
+    /// Возвращает имя корневой структуры в PascalCase (например, `ElevatorEngine`).
+    #[allow(dead_code)]
     pub fn get_struct_name(&self) -> String {
         let name = self
             .map
@@ -52,10 +54,14 @@ impl CMap {
         self.map.used_models()
     }
 
+    /// Возвращает элемент корневой модели из карты (если есть).
+    #[allow(dead_code)]
     pub fn own_model(&self) -> Option<Element> {
         self.map.own()
     }
 
+    /// Возвращает имя стартового состояния корневой модели.
+    #[allow(dead_code)]
     pub fn start(&self) -> Name {
         self.map.start()
     }

@@ -217,11 +217,12 @@ fn implement_single_model_resolves() {
 /// разрешается в `Implement::Model` (последовательность упаковывается в модель).
 #[test]
 fn implement_add_composition_resolves() {
+    // compact_implement отключён: конкатенация остаётся как Extend::Concatenation.
     let node = build("start Entry = M1 + M2; model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["Entry"] {
         assert!(
-            matches!(implements, Extend::Model(_)),
-            "Компоновка + после compact_implement должна разрешаться в Implement::Model, получили: {:?}",
+            matches!(implements, Extend::Concatenation(items) if items.len() == 2),
+            "Компоновка M1 + M2 должна давать Extend::Concatenation с 2 элементами, получили: {:?}",
             implements
         );
     } else {
@@ -621,11 +622,12 @@ fn implement_without_next_no_stack_overflow() {
 /// После compact_implement последовательность упаковывается в `Implement::Model`.
 #[test]
 fn implement_parenthesized_add_resolves() {
+    // compact_implement отключён: (M1 + M2) раскрывается до Concatenation([M1, M2]).
     let node = build("start E = (M1 + M2) { } model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["E"] {
         assert!(
-            matches!(implements, Extend::Model(_)),
-            "скобочная компоновка после compact_implement должна давать Implement::Model, получили: {:?}",
+            matches!(implements, Extend::Concatenation(items) if items.len() == 2),
+            "скобочная компоновка (M1 + M2) должна давать Extend::Concatenation с 2 элементами, получили: {:?}",
             implements
         );
     } else {

@@ -252,7 +252,7 @@ pub fn unroll_extend_expression(
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use crate::diagnostics::Location;
     use crate::parse;
     use crate::parser::ast;
@@ -318,51 +318,46 @@ pub mod tests {
 
     #[test]
     fn test_unroll_implement_expressions() {
-        // После compact_implement все состояния с `+` на верхнем уровне дают Model(synthetic).
-        // Это тест пост-компактного состояния семантического дерева.
+        // compact_implement отключён в tree.rs, поэтому состояния с `+` остаются
+        // как Extend::Concatenation(items) с плоским списком элементов.
+        // unroll_extend_expression раскрывает цепочки + и () в плоский Concatenation:
+        // A + (B + C) + D  →  Concatenation([A, B, C, D]) (скобки прозрачны).
         let (ast, _) = parse(SRC, 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
 
-        // Next1..Next10: верхний уровень — конкатенация → упаковывается в Model(synthetic).
-        let seq_states_with_step_count = [
-            ("Next1", 3usize), // A + B + (A|B)      → 3 ступени
-            ("Next2", 3),      // A + (B|A) + B       → 3 ступени
-            ("Next3", 4),      // A + B + A + B        → 4 ступени
-            ("Next4", 4),      // A + B + A + (B|A)   → 4 ступени
-            ("Next5", 3),      // (A|B) + A + B        → 3 ступени
-            ("Next6", 4),      // (A|B) + A + B + (A|B) → 4 ступени
-            ("Next7", 6),      // (A|B)+A+B+(A|B)+A+B → 6 ступеней
-            ("Next8", 7),      // … + (A|B)            → 7 ступеней
-            ("Next9", 9),      // … + A + B            → 9 ступеней
-            ("Next10", 11),    // … + A + B            → 11 ступеней
+        // Next1..Next10: верхний уровень — конкатенация → плоский Concatenation.
+        // Количество элементов = ожидаемое число ступеней.
+        let seq_states_with_item_count = [
+            ("Next1", 3usize), // A + B + (A|B)                         → [A, B, Par]
+            ("Next2", 3),      // A + (B|A) + B                         → [A, Par, B]
+            ("Next3", 4),      // A + (B + A) + B  (скобки прозрачны)   → [A, B, A, B]
+            ("Next4", 4),      // A + (B + A) + (B|A)                   → [A, B, A, Par]
+            ("Next5", 3),      // (A|B) + (A + B)                       → [Par, A, B]
+            ("Next6", 4),      // (A|B) + (A + B) + (A|B)               → [Par, A, B, Par]
+            ("Next7", 6),      // … + (A + B)                           → [Par,A,B,Par,A,B]
+            ("Next8", 7),      // … + (A|B)                             → + Par
+            ("Next9", 9),      // … + (A + B)                           → + A, B
+            ("Next10", 11),    // … + (A + B)                           → + A, B
         ];
-        for (name, expected_steps) in seq_states_with_step_count {
+        for (name, expected_items) in seq_states_with_item_count {
             let state = model_rc.borrow().search_state(name).unwrap();
             let StateNode::Implement { ref implements, .. } = *state.borrow() else {
                 panic!("State {name} is not an Implement node")
             };
-            let Extend::Model(seq_rc) = implements else {
+            let Extend::Concatenation(items) = implements else {
                 panic!(
-                    "State {name}: после compact_implement ожидался Extend::Model, получили: {implements}"
+                    "State {name}: ожидался Extend::Concatenation, получили: {implements}"
                 );
             };
-            let step_count = seq_rc.borrow().states.len();
             assert_eq!(
-                step_count, expected_steps,
-                "State {name}: синтетическая модель должна содержать {expected_steps} ступеней, содержит {step_count}"
-            );
-            // Стартовая ступень существует и имеет kind=Start.
-            let seq = seq_rc.borrow();
-            let start = seq.get_start_state();
-            assert!(
-                start.is_some(),
-                "State {name}: в синтетической модели должно быть стартовое состояние"
+                items.len(),
+                expected_items,
+                "State {name}: конкатенация должна содержать {expected_items} элементов, содержит {}",
+                items.len()
             );
         }
 
-        // Entry = A | B | (A + B): верхний уровень — параллель → Parallel(_).
-        // compact_implement не трогает Parallel, поэтому вложенная конкатенация
-        // остаётся как Concatenation внутри Parallel.
+        // Entry = A | B | (A + B): верхний уровень — параллель → Parallel.
         {
             let state = model_rc.borrow().search_state("Entry").unwrap();
             let StateNode::Implement { ref implements, .. } = *state.borrow() else {
