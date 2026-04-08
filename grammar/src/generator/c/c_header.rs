@@ -228,7 +228,7 @@ fn generate_model_header(
     let struct_name = name.unique_camelcase();
     printer.print(format!("/* Model {} */", name).as_str()).nl();
     printer
-        .print(format!("typedef struct {} {{", struct_name).as_str())
+        .print(format!("struct {} {{", struct_name).as_str())
         .nl();
     printer.up();
     printer
@@ -331,7 +331,7 @@ fn generate_model_header(
 
     printer.down();
     // Корректное закрытие typedef struct: } TypeName;
-    printer.print(format!("}} {};", struct_name).as_str()).nl();
+    printer.print("};".to_string().as_str()).nl();
     printer.nl();
     Ok(num)
 }
