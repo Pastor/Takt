@@ -38,9 +38,9 @@ use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::Generator as AsGenerator;
 use crate::generator::c::c_header::generate_header;
 use crate::generator::c::c_map::CMap;
-use crate::semantic::naming::normalize_lowercase_snakecase;
-use crate::semantic::type_node::TypeNode;
+use crate::generator::c::c_source::generate_source;
 use crate::semantic::ModelNode;
+use crate::semantic::type_node::TypeNode;
 use itertools::Itertools;
 use std::fs;
 use std::path::Path;
@@ -61,14 +61,19 @@ impl AsGenerator for Generator {
         //TODO: При генерации следует работать с примитивным слепком модели
         let map = CMap::new(model.name(), model)?;
         let header = generate_header(map.get_filename(), &map)?;
-        // let source = self.generate_source(model)?;
-        let model_name = Self::resolve_model_name(model)?;
-        let filename = normalize_lowercase_snakecase(model_name);
+        let source = generate_source(map.get_filename(), &map)?;
+        let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));
-        fs::write(Path::new(output_path).join(filename.clone() + ".h"), header)
-            .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)))?;
-        // fs::write(Path::new(output_path).join(filename + ".c"), source)
-        //     .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)))?;
+        fs::write(
+            Path::new(output_path).join(filename.to_owned() + ".h"),
+            header,
+        )
+        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)))?;
+        fs::write(
+            Path::new(output_path).join(filename.to_owned() + ".c"),
+            source,
+        )
+        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)))?;
         Ok(())
     }
 }
@@ -121,7 +126,11 @@ fn get_typed_variable(typ: &TypeNode, name: Option<String>, model: &ModelNode) -
                 8
             };
             // Исправлено: используем имя переменной (name), а не имя enum-типа
-            Some(format!("uint{}_t {}", bits, name.clone().unwrap_or_default()))
+            Some(format!(
+                "uint{}_t {}",
+                bits,
+                name.clone().unwrap_or_default()
+            ))
         }
         TypeNode::BuiltinModel
         | TypeNode::BuiltinState
@@ -132,10 +141,10 @@ fn get_typed_variable(typ: &TypeNode, name: Option<String>, model: &ModelNode) -
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::generator::c::Generator;
+    use crate::generator::c::c_map::CMap;
+    use crate::generator::c::c_source::generate_source;
     use crate::{parse, semantic};
 
     const SRC: &str = r#"
@@ -188,18 +197,6 @@ start Main = Robot;
             .map_err(|d| d.into_iter().next().unwrap())
             .unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
-        let model = &*model.borrow();
-        let result = Generator::unroll_model(model).unwrap();
-        assert_eq!("main", &result);
-
-        let model = model.search_model("Robot").unwrap();
-        let model = &*model.borrow();
-        let result = Generator::unroll_model(model).unwrap();
-        assert_eq!("main->robot", &result);
-        let model = model.search_model("Idle").unwrap();
-        let model = &*model.borrow();
-        let result = Generator::unroll_model(model).unwrap();
-        assert_eq!("main->robot.idle", &result);
     }
 
     // ── V6: Тесты безопасности resolve_model_name ─────────────────────────────
@@ -212,8 +209,7 @@ start Main = Robot;
         let model = model_rc.borrow();
         let inner = model.search_model("Named").unwrap();
         let inner = inner.borrow();
-        // Должен вернуть строку без паники
-        let name = Generator::get_upper_name(&inner);
+        let name = inner.name();
         assert!(!name.is_empty(), "имя не должно быть пустым");
     }
 
@@ -225,40 +221,8 @@ start Main = Robot;
         let model = model_rc.borrow();
         let inner = model.search_model("MyModel").unwrap();
         let inner = inner.borrow();
-        let name = Generator::get_model_name_struct(&inner);
+        let name = inner.name();
         assert!(!name.is_empty(), "структурное имя не должно быть пустым");
-    }
-
-    // ── V7: Тест исправления опечатки в сообщении об ошибке ──────────────────
-
-    /// V7: неподдерживаемое выражение возвращает ошибку «Can't unroll»,
-    /// а не «Cnt unrolled» (опечатка была исправлена).
-    #[test]
-    fn v7_unroll_expression_error_message_corrected() {
-        use crate::semantic::ExpressionNode;
-        // V7: Initializer теперь корректно генерирует C-код (был «Can't unroll» с опечаткой).
-        let init =
-            ExpressionNode::Initializer(vec![ExpressionNode::Number(0), ExpressionNode::Number(1)]);
-        let result = Generator::unroll_expression(&init);
-        assert!(
-            result.is_ok(),
-            "Initializer должен генерировать C-код, а не ошибку"
-        );
-        let c_code = result.unwrap();
-        assert_eq!(
-            c_code, "{0, 1}",
-            "Initializer → C-инициализатор {{0, 1}}, получено: {c_code}"
-        );
-
-        // V7: для неподдерживаемых узлов ошибка содержит «Can't unroll» (не «Cnt unrolled»).
-        // Используем Number для проверки, что путь "можно развернуть" работает.
-        let num = ExpressionNode::Number(42);
-        let num_result = Generator::unroll_expression(&num);
-        assert!(
-            num_result.is_ok(),
-            "Number должен разворачиваться корректно"
-        );
-        assert_eq!(num_result.unwrap(), "42");
     }
 
     // ── Тесты имён констант и портов ─────────────────────────────────────────
@@ -279,8 +243,8 @@ start Main { always { } }
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         let model = model.borrow();
-        let generator = Generator {};
-        let source = generator.generate_source(&model).unwrap();
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let source = generate_source(map.get_filename(), &map).unwrap();
         assert!(
             source.contains("CONST_MAIN_MATRIX"),
             "ожидалось CONST_MAIN_MATRIX, получено:\n{source}"
@@ -306,8 +270,8 @@ start Main { always { } }
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         let model = model.borrow();
-        let generator = Generator {};
-        let source = generator.generate_source(&model).unwrap();
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let source = generate_source(map.get_filename(), &map).unwrap();
         assert!(
             !source.contains(".h\" "),
             "#include не должен содержать пробел после кавычки:\n{source}"

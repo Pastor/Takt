@@ -225,7 +225,6 @@ fn generate_model_header(
     printer
         .ident(format!("// NOTICE: Определение констант для модели {}", name).as_str())
         .nl();
-    // FIXME: Only source Self::generate_constants_and_ports_and_enums(&mut printer, &*model.borrow())?;
     let struct_name = name.unique_camelcase();
     printer.print(format!("/* Model {} */", name).as_str()).nl();
     printer

@@ -20,22 +20,22 @@ pub mod extend;
 mod function;
 mod import;
 pub mod index;
-mod named_block;
-pub(crate) mod naming;
-mod reference;
-mod statement;
-pub mod struct_node;
-pub mod tree;
-mod type_inference;
-pub mod type_node;
-pub mod unused;
-pub(crate) mod validate;
 /// Карта семантических элементов модели для генератора кода.
 ///
 /// Содержит снимок достижимых состояний и моделей в виде плоской карты [`Map`](minimap::Map),
 /// используемый генератором C-заголовков.
 pub mod minimap;
+mod named_block;
+pub(crate) mod naming;
+mod reference;
+mod statement;
+pub mod struct_node;
 mod test_constants;
+pub mod tree;
+mod type_inference;
+pub mod type_node;
+pub mod unused;
+pub(crate) mod validate;
 
 use crate::diagnostics::Location;
 use crate::parser::ast;
@@ -994,6 +994,16 @@ impl StateNode {
         match self {
             StateNode::Unresolved => StateNodeKind::Simple,
             StateNode::Simple { kind, .. } | StateNode::Implement { kind, .. } => *kind,
+        }
+    }
+
+    pub(crate) fn is_terminated(&self) -> bool {
+        match self {
+            StateNode::Unresolved => false,
+            StateNode::Simple { references, .. } => references.is_empty(),
+            StateNode::Implement {
+                references, next, ..
+            } => references.is_empty() && next.is_none(),
         }
     }
 }

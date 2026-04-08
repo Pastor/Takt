@@ -5,7 +5,7 @@ use crate::semantic::{ModelNode, StateNode};
 use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -105,15 +105,34 @@ pub(crate) enum Element {
         next: Name,
     },
     /// Простое состояние со списком переходов.
-    State {
-        name: Name,
-        references: Vec<Name>,
-    },
+    State { name: Name, references: Vec<Name> },
 }
 
 impl Element {
     pub(crate) fn is_state(&self) -> bool {
         matches!(self, Element::State { .. } | Element::StateExtend { .. })
+    }
+
+    pub(crate) fn name(&self) -> Name {
+        match self {
+            Element::Model { name, .. }
+            | Element::StateExtend { name, .. }
+            | Element::State { name, .. } => name.clone(),
+        }
+    }
+}
+
+impl Display for Element {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Element::Model { name, .. }
+                | Element::StateExtend { name, .. }
+                | Element::State { name, .. } => name,
+            }
+        )
     }
 }
 
@@ -155,14 +174,25 @@ impl Map {
                 unique_state_name(state.0, model.clone()),
             ));
         });
+        let model_name = Name::from(model.clone());
+        let start_state = Name::new(
+            local_name.clone(),
+            unique_state_name(&local_name, model.clone()),
+        );
+        // used_elements.insert(
+        //     model_name.clone(),
+        //     Element::Model {
+        //         name: model_name.clone(),
+        //         states: states.clone(),
+        //         start: start_state.clone(),
+        //     },
+        // );
+
         Ok(Map {
             root: model.clone(),
             elements: used_elements,
-            start: Name::new(
-                local_name.clone(),
-                unique_state_name(&local_name, model.clone()),
-            ),
-            root_name: Name::from(model),
+            start: start_state,
+            root_name: model_name,
             states,
         })
     }
@@ -173,6 +203,14 @@ impl Map {
             return model_by_unique_name(&name, self.root.clone());
         }
         Some(self.root.clone())
+    }
+
+    #[inline]
+    pub(crate) fn state_at(&self, name: Option<String>) -> Option<Rc<RefCell<StateNode>>> {
+        if let Some(name) = name {
+            return state_by_unique_name(&name, self.root.clone());
+        }
+        None
     }
 
     #[inline]
@@ -263,6 +301,21 @@ fn model_by_unique_name(
         } else if let Some(model) = owned.borrow().search_model(model_name) {
             return Some(model);
         }
+    }
+    None
+}
+
+fn state_by_unique_name(
+    state_name: &str,
+    owned: Rc<RefCell<ModelNode>>,
+) -> Option<Rc<RefCell<StateNode>>> {
+    if let Some(index) = state_name.rfind(':') {
+        let (model_name, rest) = state_name.split_at(index);
+        let state_name = &rest[1..];
+        let model = model_by_unique_name(model_name, owned.clone())?;
+        return model.borrow().search_state(state_name);
+    } else if let Some(state) = owned.borrow().search_state(state_name) {
+        return Some(state);
     }
     None
 }
