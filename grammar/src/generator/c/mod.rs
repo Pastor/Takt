@@ -40,6 +40,7 @@ use crate::generator::c::c_header::generate_header;
 use crate::generator::c::c_map::CMap;
 use crate::generator::c::c_source::generate_source;
 use crate::semantic::ModelNode;
+use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 use itertools::Itertools;
 use std::fs;
@@ -59,7 +60,10 @@ pub struct Generator {}
 impl AsGenerator for Generator {
     fn generate(&self, model: &ModelNode, output_path: &str) -> Result<(), Diagnostic> {
         //TODO: При генерации следует работать с примитивным слепком модели
-        let map = CMap::new(model.name(), model)?;
+        let map = CMap::new(
+            &*normalize_lowercase_snakecase(model.name().to_string()),
+            model,
+        )?;
         let header = generate_header(map.get_filename(), &map)?;
         let source = generate_source(map.get_filename(), &map)?;
         let filename = map.get_filename();
@@ -242,6 +246,7 @@ start Main { always { } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model.borrow_mut().name = Some("Main".to_string());
         let model = model.borrow();
         let map = CMap::new(model.name(), &*model).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();

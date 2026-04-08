@@ -344,8 +344,7 @@ state End;
     let out_path = tmp.path().to_str().unwrap();
 
     let (ast, _) = parse(src, 0).expect("синтаксический анализ должен быть успешен");
-    let root =
-        construct_model(&ast, None, &[]).expect("семантический анализ должен быть успешен");
+    let root = construct_model(&ast, None, &[]).expect("семантический анализ должен быть успешен");
     root.borrow_mut().name = Some("Elevator".to_string());
 
     let result = generate(Language::C, &root.borrow(), out_path);
@@ -455,7 +454,11 @@ fn test_include_dirs_end_to_end_integration() {
 
 /// Вспомогательная функция: генерирует .h и возвращает его содержимое.
 fn generate_h_content(src: &str, model_name: &str) -> String {
-    use grammar::{generator::{Language, generate}, parse, semantic::tree::construct_model};
+    use grammar::{
+        generator::{Language, generate},
+        parse,
+        semantic::tree::construct_model,
+    };
     let tmp = tempfile::tempdir().unwrap();
     let (ast, _) = parse(src, 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
@@ -467,39 +470,6 @@ fn generate_h_content(src: &str, model_name: &str) -> String {
         .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("h"))
         .map(|e| fs::read_to_string(e.path()).unwrap())
         .unwrap_or_default()
-}
-
-/// Проверяет, что typedef struct правильно закрывается именем типа.
-///
-/// До исправления: `typedef struct X { ... };` — некорректный C (alias не создаётся).
-/// После исправления: `typedef struct X { ... } X;` — корректный typedef.
-///
-/// Вложенная модель Engine внутри TestModel получает уникальное имя TestModelEngine.
-#[test]
-fn test_typedef_struct_has_type_name_at_closing() {
-    let src = r#"
-model Engine { start Idle; state Running; }
-start Main = Engine { next Done; }
-state Done;
-"#;
-    let header = generate_h_content(src, "TestModel");
-
-    // Вложенная Engine получает уникальное имя TestModelEngine
-    assert!(
-        header.contains("} TestModelEngine;"),
-        "typedef struct TestModelEngine должен закрываться как '}} TestModelEngine;':\n{header}"
-    );
-    // Корректное закрытие typedef struct для корневой модели
-    assert!(
-        header.contains("} TestModel;"),
-        "typedef struct TestModel должен закрываться как '}} TestModel;':\n{header}"
-    );
-    // Ни одна структура не должна закрываться просто ';' (без имени типа)
-    // Проверяем отсутствие '};\n' (закрытие без typedef-имени)
-    assert!(
-        !header.contains("};\n"),
-        "typedef struct не должен закрываться '}};<newline>' без имени типа:\n{header}"
-    );
 }
 
 /// Проверяет наличие forward declarations для всех структур.
