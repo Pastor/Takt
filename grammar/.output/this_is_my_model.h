@@ -3,22 +3,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// NOTICE: Определение констант для модели Toggle (ThisIsMyModel:Toggle)
-/* Model Toggle (ThisIsMyModel:Toggle) */
-typedef struct ThisIsMyModelToggle {
-    // NOTICE: Определение переменных модели
-    enum {
-        THIS_IS_MY_MODEL_TOGGLE_INIT,
-        THIS_IS_MY_MODEL_TOGGLE_END,
-        THIS_IS_MY_MODEL_TOGGLE_PING,
-        THIS_IS_MY_MODEL_TOGGLE_ENTRY,
-        THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
-        THIS_IS_MY_MODEL_TOGGLE_PONG
-    } state;
-    // NOTICE: Определение extend
-    ThisIsMyModelPing ping;
-    ThisIsMyModelPong pong;
-};
+/* Forward declarations */
+typedef struct ThisIsMyModelPing ThisIsMyModelPing;
+typedef struct ThisIsMyModelPong ThisIsMyModelPong;
+typedef struct ThisIsMyModelToggle ThisIsMyModelToggle;
+typedef struct ThisIsMyModel ThisIsMyModel;
 
 // NOTICE: Определение констант для модели Ping (ThisIsMyModel:Ping)
 /* Model Ping (ThisIsMyModel:Ping) */
@@ -27,10 +16,10 @@ typedef struct ThisIsMyModelPing {
     bool toggle;
     enum {
         THIS_IS_MY_MODEL_PING_INIT,
-        THIS_IS_MY_MODEL_PING_END,
-        THIS_IS_MY_MODEL_PING_START
+        THIS_IS_MY_MODEL_PING_START,
+        THIS_IS_MY_MODEL_PING_END
     } state;
-};
+} ThisIsMyModelPing;
 
 // NOTICE: Определение констант для модели Pong (ThisIsMyModel:Pong)
 /* Model Pong (ThisIsMyModel:Pong) */
@@ -42,7 +31,24 @@ typedef struct ThisIsMyModelPong {
         THIS_IS_MY_MODEL_PONG_STOP,
         THIS_IS_MY_MODEL_PONG_END
     } state;
-};
+} ThisIsMyModelPong;
+
+// NOTICE: Определение констант для модели Toggle (ThisIsMyModel:Toggle)
+/* Model Toggle (ThisIsMyModel:Toggle) */
+typedef struct ThisIsMyModelToggle {
+    // NOTICE: Определение переменных модели
+    enum {
+        THIS_IS_MY_MODEL_TOGGLE_INIT,
+        THIS_IS_MY_MODEL_TOGGLE_ENTRY,
+        THIS_IS_MY_MODEL_TOGGLE_PONG,
+        THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
+        THIS_IS_MY_MODEL_TOGGLE_PING,
+        THIS_IS_MY_MODEL_TOGGLE_END
+    } state;
+    // NOTICE: Определение extend
+    ThisIsMyModelPong pong;
+    ThisIsMyModelPing ping;
+} ThisIsMyModelToggle;
 
 // NOTICE: Определение констант для модели ThisIsMyModel (ThisIsMyModel)
 /* Model ThisIsMyModel (ThisIsMyModel) */
@@ -77,7 +83,7 @@ typedef struct ThisIsMyModel {
     bool  (*read_bit   )(int address, int bit, void *userdata);
     void  (*write_float)(int address, int bit, float val, void *userdata);
     float (*read_float )(int address, int bit, void *userdata);
-};
+} ThisIsMyModel;
 
 void ThisIsMyModel_init(ThisIsMyModel *main);
 void ThisIsMyModel_tick(ThisIsMyModel *main);

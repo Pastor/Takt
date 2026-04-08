@@ -9,6 +9,7 @@ use crate::semantic::VariableNode;
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use log::warn;
+use std::collections::{HashMap, HashSet};
 
 /// Генерирует поля структуры C для extend состояния.
 /// Единичный Model → `{state}`, составной → делегирует в build_concat_item.
@@ -330,16 +331,95 @@ fn generate_model_header(
     }
 
     printer.down();
-    printer.print("};").nl();
+    // Корректное закрытие typedef struct: } TypeName;
+    printer.print(format!("}} {};", struct_name).as_str()).nl();
     printer.nl();
     Ok(num)
+}
+
+/// Собирает имена моделей-зависимостей из элемента StateExtend.
+fn collect_extend_model_deps(extend: &StateExtend, deps: &mut Vec<String>) {
+    match extend {
+        StateExtend::None => {}
+        StateExtend::Model(name) => deps.push(name.unique().to_string()),
+        StateExtend::Concatenation(items) | StateExtend::Parallel(items) => {
+            for item in items {
+                collect_extend_model_deps(item, deps);
+            }
+        }
+    }
+}
+
+/// Рекурсивный DFS для топологической сортировки моделей.
+fn topo_dfs(
+    key: &str,
+    by_name: &HashMap<String, Element>,
+    deps_map: &HashMap<String, Vec<String>>,
+    visited: &mut HashSet<String>,
+    result: &mut Vec<Element>,
+) {
+    if visited.contains(key) {
+        return;
+    }
+    visited.insert(key.to_string());
+    // Сначала рекурсивно обрабатываем зависимости
+    if let Some(deps) = deps_map.get(key) {
+        for dep in deps.clone() {
+            topo_dfs(&dep, by_name, deps_map, visited, result);
+        }
+    }
+    // Затем добавляем текущую модель
+    if let Some(elem) = by_name.get(key) {
+        result.push(elem.clone());
+    }
+}
+
+/// Топологически сортирует список моделей так, чтобы зависимости шли первыми.
+///
+/// Модель A зависит от B, если одно из её состояний расширяет B (`StateExtend::Model`).
+/// Алгоритм: обход в глубину (DFS) с постфиксным добавлением в результат.
+/// Нет гарантий порядка одноуровневых вершин — нужен только частичный порядок.
+fn topological_sort_models(map: &CMap, models: Vec<Element>) -> Vec<Element> {
+    // Фаза 1: строим карту unique_name → Element
+    let mut by_name: HashMap<String, Element> = HashMap::new();
+    for elem in models {
+        if let Element::Model { name, .. } = &elem {
+            by_name.insert(name.unique().to_string(), elem);
+        }
+    }
+
+    // Фаза 2: строим граф зависимостей (только зависимости из нашего набора моделей)
+    let mut deps_map: HashMap<String, Vec<String>> = HashMap::new();
+    let keys: Vec<String> = by_name.keys().cloned().collect();
+    for key in &keys {
+        if let Some(Element::Model { states, .. }) = by_name.get(key) {
+            let mut deps = Vec::new();
+            for state_name in states.clone() {
+                if let Some(Element::StateExtend { extend, .. }) = map.state_at(state_name) {
+                    collect_extend_model_deps(&extend, &mut deps);
+                }
+            }
+            // Отбрасываем зависимости, которых нет в нашем наборе
+            deps.retain(|d| by_name.contains_key(d.as_str()));
+            deps_map.insert(key.clone(), deps);
+        }
+    }
+
+    // Фаза 3: топологический обход (DFS)
+    let mut visited = HashSet::new();
+    let mut result = Vec::new();
+    for key in &keys {
+        topo_dfs(key, &by_name, &deps_map, &mut visited, &mut result);
+    }
+    result
 }
 
 pub fn generate_header(filename: &str, map: &CMap) -> Result<String, Diagnostic> {
     let mut header = String::new();
     let mut printer = Printer::new(4, &mut header);
+    // Исправлено: заменяем '.' (не '\.') для корректного C-идентификатора #ifndef guard
     let id = normalize_lowercase_snakecase(filename.to_string())
-        .replace("\\.", "_")
+        .replace(".", "_")
         .to_uppercase()
         + "_H__";
     printer.print("#ifndef ").print(&id).nl();
@@ -348,8 +428,29 @@ pub fn generate_header(filename: &str, map: &CMap) -> Result<String, Diagnostic>
     printer.print("#include <stdbool.h>").nl();
     printer.nl();
 
+    // Топологически сортируем зависимые модели — зависимости идут первыми
+    let sorted_models = topological_sort_models(map, map.using_models());
+
+    // Forward declarations всех структур: позволяют компилятору C знать о типах
+    // раньше их полного определения (важно при взаимных ссылках)
+    if !sorted_models.is_empty() {
+        printer.print("/* Forward declarations */").nl();
+        for element in &sorted_models {
+            let Element::Model { name, .. } = element else {
+                continue;
+            };
+            let s = name.unique_camelcase();
+            printer.print(&format!("typedef struct {0} {0};", s)).nl();
+        }
+        let root_struct = map.root_name().unique_camelcase();
+        printer
+            .print(&format!("typedef struct {0} {0};", root_struct))
+            .nl();
+        printer.nl();
+    }
+
     let mut num = 0;
-    for element in map.using_models() {
+    for element in sorted_models {
         let Element::Model { name, states, .. } = element else {
             continue;
         };
@@ -403,14 +504,17 @@ mod tests {
     use crate::generator::c::c_map::CMap;
     use crate::{parse, semantic};
 
-    /// Enum с большими значениями выбирает тип достаточной ширины по максимуму.
+    /// Enum выбирает минимальный беззнаковый тип по максимальному значению варианта.
     ///
-    /// Регрессия: `.first()` выбирал минимальное значение → тип uint8_t для
-    /// enum с вариантами High=200 (> i8::MAX), тогда как нужен uint16_t.
+    /// Граница: u8::MAX = 255.
+    /// - max ≤ 255  → uint8_t
+    /// - 255 < max ≤ 65535  → uint16_t
+    /// - max > 65535 → uint32_t (и далее uint64_t)
     #[test]
     fn enum_type_sized_by_maximum_variant() {
+        // High=300 > u8::MAX(255) → uint16_t
         let src = r#"
-enum Priority { Low = 0, Medium = 5, High = 200 }
+enum Priority { Low = 0, Medium = 5, High = 300 }
 var p: Priority = Low;
 start Main { always { } }
         "#;
@@ -420,14 +524,30 @@ start Main { always { } }
         let model = model.borrow();
         let map = CMap::new(model.name(), &*model).unwrap();
         let header = generate_header(map.get_filename(), &map).unwrap();
-        // High=200 > i8::MAX(127) → должен выбраться uint16_t
         assert!(
             header.contains("uint16_t"),
-            "ожидался uint16_t для max=200, получено:\n{header}"
+            "ожидался uint16_t для max=300, получено:\n{header}"
         );
         assert!(
             !header.contains("uint8_t p"),
-            "uint8_t слишком мал для max=200:\n{header}"
+            "uint8_t слишком мал для max=300:\n{header}"
+        );
+
+        // High=200 ≤ u8::MAX(255) → uint8_t (ранее ошибочно давал uint16_t)
+        let src2 = r#"
+enum Levels { Low = 0, High = 200 }
+var lv: Levels = Low;
+start Main { always { } }
+        "#;
+        let (model_ast2, _) = parse(src2, 0).unwrap();
+        let model2 = semantic::tree::construct_model(&model_ast2, None, &[]).unwrap();
+        model2.borrow_mut().name = Some("Test2".to_string());
+        let model2 = model2.borrow();
+        let map2 = CMap::new(model2.name(), &*model2).unwrap();
+        let header2 = generate_header(map2.get_filename(), &map2).unwrap();
+        assert!(
+            header2.contains("uint8_t lv"),
+            "ожидался uint8_t для max=200 (≤ u8::MAX=255), получено:\n{header2}"
         );
     }
 

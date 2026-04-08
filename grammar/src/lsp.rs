@@ -786,11 +786,12 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     // Шаг 1: пытаемся найти узел по точной позиции в объявлении
     let position_node = node_at_position(source, position, &model);
 
-    // Шаг 2: извлекаем слово под курсором для резервного поиска
-    let word = match position_node.as_ref() {
-        Some(node_ref) => node_ref.name.clone(),
-        None => word_at_position(source, position)?,
-    };
+    // Шаг 2: всегда берём слово непосредственно под курсором как основу поиска.
+    // Направленный поиск (position_node) задействуется только если имя узла совпадает
+    // с тем, что стоит под курсором.  Это устраняет ситуацию, когда курсор стоит на
+    // ссылке (например `Robot` в `start Main = Robot;`), а position_node указывает на
+    // объявление `Main`, чей диапазон покрывает всю строку.
+    let word = word_at_position(source, position)?;
     if word.is_empty() {
         return None;
     }
@@ -847,8 +848,12 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     //
     // Ключевое правило: клон Rc должен храниться в именованном биндинге ДО вызова borrow(),
     // иначе временная переменная освобождается раньше, чем завершается заимствование.
+    //
+    // Направленный поиск активируется только если имя узла совпадает с курсорным словом.
+    // Если cursor_word = "Robot", а position_node.name = "Main" (объявление покрывает
+    // всю строку), поиск пропускается и уступает место резервному поиску по имени.
     use crate::semantic::index::SemanticNodeKind;
-    if let Some(ref node_ref) = position_node {
+    if let Some(ref node_ref) = position_node.as_ref().filter(|n| n.name == word) {
         // Клонируем Rc в именованный биндинг, чтобы продлить его жизнь на весь блок
         let node_model_rc = node_ref.model.clone().unwrap_or_else(|| model.clone());
         let node_model = node_model_rc.borrow();

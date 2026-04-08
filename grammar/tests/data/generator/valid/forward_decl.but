@@ -1,0 +1,26 @@
+/// Пример: несколько моделей с перекрёстными зависимостями.
+/// Генератор должен сортировать их топологически и добавлять
+/// forward declarations, чтобы порядок объявлений не вызывал ошибок компилятора C.
+
+model Pong {
+    start Init;
+    state Done;
+}
+
+model Ping {
+    var active: bool = false;
+    start Init;
+    state End;
+}
+
+/// Toggle ссылается на Ping и Pong
+model Toggle = Ping + Pong {
+    next End;
+}
+
+state End;
+
+/// Корневая модель использует Toggle
+start Main = Toggle {
+    next End;
+}

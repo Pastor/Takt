@@ -1,0 +1,14 @@
+/// Пример: enum с разными размерами значений.
+/// Генератор выбирает минимальный беззнаковый C-тип по максимальному значению варианта.
+/// 0..255 → uint8_t, 256..65535 → uint16_t, 65536..4294967295 → uint32_t.
+
+/// Помещается в uint8_t (max=200 ≤ 255)
+enum SmallEnum { A = 0, B = 100, C = 200 }
+
+/// Требует uint16_t (max=1000 > 255)
+enum MediumEnum { X = 0, Y = 500, Z = 1000 }
+
+var small_val: SmallEnum = A;
+var medium_val: MediumEnum = X;
+
+start Main { always { } }
