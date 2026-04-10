@@ -97,7 +97,7 @@ fn resolve_ast_statement(
 
         // ── Оператор-выражение (присваивание, вызов функции и т.п.) ───────────
         ast::Statement::Expression(_, expr) => {
-            let resolved = construct_expression(expr.clone(), vec![], model)?;
+            let resolved = construct_expression(expr.clone(), params.clone(), model)?;
             Ok(StatementNode::Expression(Box::new(resolved)))
         }
 
@@ -833,6 +833,50 @@ mod tests {
                 "init for должен быть Variable(i): {:?}",
                 init_box
             );
+        }
+    }
+
+    /// Параметр функции виден в операторе-выражении (`Statement::Expression`).
+    ///
+    /// Регрессионный тест для ошибки «Идентификатор 'value' не найден в области видимости».
+    /// До исправления `construct_expression` в ветке `Expression` вызывалась с `vec![]`
+    /// вместо `params.clone()`, из-за чего параметры функции были невидимы в операторах вида
+    /// `value > 100` или `out = value`.
+    ///
+    /// # Пример (BuT)
+    /// ```but
+    /// fn clamp_temp(value: u8): u8 {
+    ///     if value > 100 { return 100; }
+    ///     return value;
+    /// }
+    /// start S;
+    /// ```
+    #[test]
+    fn function_param_visible_in_expression_statement() {
+        use crate::semantic::FunctionDefinitionNode;
+        // `out = value` — оператор-выражение (присваивание), где `value` — параметр функции.
+        // До исправления это приводило к ошибке LSP «Идентификатор 'value' не найден».
+        let node = build(concat!(
+            "type u8 = [bit;8]; ",
+            "var out: u8 = 0; ",
+            "fn clamp(value: u8) -> u8 { out = value; return value; } ",
+            "start S;"
+        ));
+        // Проверяем, что модель успешно построена и функция clamp присутствует
+        assert!(
+            node.functions.contains_key("clamp"),
+            "функция clamp должна быть в модели"
+        );
+        // Проверяем, что тело функции разрешено (нет Unresolved на верхнем уровне)
+        let func = node.functions.get("clamp").expect("функция clamp не найдена");
+        if let FunctionDefinitionNode::Local { body, .. } = func {
+            assert!(
+                !matches!(body, StatementNode::Unresolved(_)),
+                "тело функции clamp должно быть разрешено, получен: {:?}",
+                body
+            );
+        } else {
+            panic!("функция clamp должна быть Local, получен: {:?}", func);
         }
     }
 
