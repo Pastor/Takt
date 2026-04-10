@@ -46,10 +46,10 @@ use itertools::Itertools;
 use std::fs;
 use std::path::Path;
 
-const FUNCTION_PORT_WRITE_BIT: &str = "write_bit";
-const FUNCTION_PORT_READ_BIT: &str = "read_bit";
-const FUNCTION_PORT_WRITE_FLOAT: &str = "write_float";
-const FUNCTION_PORT_READ_FLOAT: &str = "read_float";
+pub(super) const FUNCTION_PORT_WRITE_BIT: &str = "write_bit";
+pub(super) const FUNCTION_PORT_READ_BIT: &str = "read_bit";
+pub(super) const FUNCTION_PORT_WRITE_FLOAT: &str = "write_float";
+pub(super) const FUNCTION_PORT_READ_FLOAT: &str = "read_float";
 
 /// Генератор C-кода для модели BuT.
 ///
@@ -127,7 +127,7 @@ pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
     }
 }
 
-fn get_typed_variable(typ: &TypeNode, name: Option<String>, model: &ModelNode) -> Option<String> {
+pub(super) fn get_typed_variable(typ: &TypeNode, name: Option<String>, model: &ModelNode) -> Option<String> {
     match typ {
         TypeNode::Array(size, typ) => {
             if let TypeNode::Rational = **typ {
@@ -144,7 +144,7 @@ fn get_typed_variable(typ: &TypeNode, name: Option<String>, model: &ModelNode) -
                 ))
             }
         }
-        t => get_c_type(typ, model).map(|c_type| format!("{} {}", c_type, name.clone().unwrap())),
+        _t => get_c_type(typ, model).map(|c_type| format!("{} {}", c_type, name.clone().unwrap())),
     }
 }
 

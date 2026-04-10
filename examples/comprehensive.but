@@ -1,0 +1,87 @@
+/// Всесторонний пример: демонстрирует возможности языка BuT.
+///
+/// Использует: переменные, константы, перечисления, внешние функции,
+/// условные операторы (if/else), циклы (loop, for), вызовы функций,
+/// именованные условия (cond), состояния (start/state).
+
+/// Псевдоним типа — 8-битное целое
+type u8 = [bit;8];
+
+/// Перечисление режимов работы
+enum Mode { Auto = 0, Manual = 1, Emergency = 2 }
+
+/// Внешние функции платформенного слоя
+extern fn log_temp(value: u8);
+extern fn log_count(n: u8);
+
+/// Модель управляющего контроллера температуры
+model Controller {
+    var temperature: u8 = 0;
+    var count: u8 = 0;
+    const MAX_TEMP: u8 = 100;
+    const MAX_COUNT: u8 = 10;
+
+    /// Ограничивает значение диапазоном [0, MAX_TEMP]
+    fn clamp_temp(value: u8) -> u8 {
+        if value > 100 { return 100; }
+        return value;
+    }
+
+    /// Увеличивает счётчик на 1
+    fn increment(n: u8) -> u8 {
+        return n + 1;
+    }
+
+    /// Начальное состояние
+    start Idle {
+        enter {
+            count = 0;
+            temperature = 0;
+        }
+        always {
+            var delta: u8 = 1;
+            temperature = temperature + delta;
+            log_temp(temperature);
+        }
+        exit { count = increment(count); }
+        ref Heating: temperature > 10;
+    }
+
+    /// Состояние нагрева
+    state Heating {
+        enter {
+            var boost: u8 = 5;
+            temperature = temperature + boost;
+        }
+        always {
+            loop count < 3 {
+                count = count + 1;
+            }
+        }
+        ref Cooling: temperature > MAX_TEMP;
+        ref Idle: count >= MAX_COUNT;
+    }
+
+    /// Состояние охлаждения
+    state Cooling {
+        always {
+            for var i: u8 = 0; i < 3; i = i + 1 {
+                temperature = temperature - 1;
+            }
+            if temperature < 0 { temperature = 0; }
+            log_count(count);
+        }
+        ref Done: temperature <= 0;
+        ref Idle: temperature > 0;
+    }
+
+    /// Конечное состояние — работа завершена (нет переходов)
+    state Done {
+        enter {
+            temperature = 0;
+            count = 0;
+        }
+    }
+}
+
+start Entry = Controller;

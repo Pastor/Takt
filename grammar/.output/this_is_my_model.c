@@ -1,4 +1,5 @@
 #include "this_is_my_model.h"
+#include <math.h>
 /// Константы и порты модели ThisIsMyModel (ThisIsMyModel)
 #define CONST_THIS_IS_MY_MODEL_MATRIX {0, 0, 0, 0, 0, 0, 0, 0}
 #define CONST_THIS_IS_MY_MODEL_NUMB 255

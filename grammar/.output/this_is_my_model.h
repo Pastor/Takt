@@ -41,8 +41,8 @@ struct ThisIsMyModelToggle {
         THIS_IS_MY_MODEL_TOGGLE_INIT,
         THIS_IS_MY_MODEL_TOGGLE_PONG,
         THIS_IS_MY_MODEL_TOGGLE_ENTRY,
-        THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
         THIS_IS_MY_MODEL_TOGGLE_END,
+        THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
         THIS_IS_MY_MODEL_TOGGLE_PING
     } state;
     // NOTICE: Определение extend

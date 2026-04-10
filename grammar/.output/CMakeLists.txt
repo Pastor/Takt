@@ -1,7 +1,19 @@
-cmake_minimum_required(VERSION 4.3)
+cmake_minimum_required(VERSION 3.10)
 project(_output C)
 
-set(CMAKE_C_STANDARD 90)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# Elevator — пример конечного автомата лифта
 add_executable(elevator elevator_main.c elevator.c)
+target_link_libraries(elevator m)
+
+# ExtendComplex — пример с составными состояниями
 add_executable(extend_complex extend_complex_main.c extend_complex.c)
+target_link_libraries(extend_complex m)
+
+# Comprehensive — всесторонний пример (генерируется скриптом generate_examples.sh)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/comprehensive.c")
+    add_executable(comprehensive comprehensive_main.c comprehensive.c)
+    target_link_libraries(comprehensive m)
+endif()
