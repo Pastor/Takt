@@ -32,7 +32,8 @@ pub fn resolve_named_blocks(
                 return Err("Statement должен быть определен".into());
             }
             NamedCodeBlockDefinitionNode::Unresolved(name, stmt) => {
-                let stmt = resolve_statement(&StatementNode::Unresolved(stmt), model.clone())?;
+                let stmt =
+                    resolve_statement(&StatementNode::Unresolved(stmt), vec![], model.clone())?;
                 match name.as_str() {
                     "enter" => NamedCodeBlockDefinitionNode::Enter {
                         upper: Some(Rc::downgrade(&model)),
@@ -56,26 +57,26 @@ pub fn resolve_named_blocks(
             NamedCodeBlockDefinitionNode::Enter { upper, body } => {
                 NamedCodeBlockDefinitionNode::Enter {
                     upper,
-                    body: resolve_statement(&body, model.clone())?,
+                    body: resolve_statement(&body, vec![], model.clone())?,
                 }
             }
             NamedCodeBlockDefinitionNode::Exit { upper, body } => {
                 NamedCodeBlockDefinitionNode::Exit {
                     upper,
-                    body: resolve_statement(&body, model.clone())?,
+                    body: resolve_statement(&body, vec![], model.clone())?,
                 }
             }
             NamedCodeBlockDefinitionNode::Always { upper, body } => {
                 NamedCodeBlockDefinitionNode::Always {
                     upper,
-                    body: resolve_statement(&body, model.clone())?,
+                    body: resolve_statement(&body, vec![], model.clone())?,
                 }
             }
             NamedCodeBlockDefinitionNode::Unknown { upper, name, body } => {
                 NamedCodeBlockDefinitionNode::Unknown {
                     upper,
                     name: name.clone(),
-                    body: resolve_statement(&body, model.clone())?,
+                    body: resolve_statement(&body, vec![], model.clone())?,
                 }
             }
         };

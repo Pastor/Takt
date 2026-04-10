@@ -1,12 +1,28 @@
-var x = 1;
-var y = 2;
+type u8 = [bit; 8];
 
+var x: u8 = 1;
+var y: u8 = 2;
+const ENABLED: bool = true;
 struct Coord {
   x: [bit; 32],
   y: [bit; 32],
   z: [bit; 32]
 }
 const c: Coord = {0, 0, 0};
+enum Constant {
+    X, Y, Z
+}
+
+fn is_collected(c: Constant, v: u8) -> bool {
+    if c == X && v == 1 {
+        return true;
+    } else if (c == Y && v == 2) {
+        return true;
+    }
+    return false;
+}
+
+extern fn has_flag(v: bool) -> bool;
 
 model A {
   start Start;
@@ -20,7 +36,10 @@ model C {
     Local
   }
   model C1 {
-    start Start;
+    start Start {
+        ref End: is_collected(Y, y) & is_collected(X, x) & has_flag(ENABLED);
+    }
+    state End;
   }
   model C2 {
     start Start;

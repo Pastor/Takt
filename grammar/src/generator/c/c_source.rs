@@ -10,14 +10,14 @@
 //! `_init`, `_tick`, `_reset`). Код перенесён сюда из `mod.rs` и готов
 //! к дальнейшей доработке.
 
-use super::Generator;
+use super::{Generator, get_c_type};
 use crate::diagnostics::Diagnostic;
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
-use crate::semantic::minimap::Element;
+use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
-use crate::semantic::{ConditionDefinitionNode, EnumDefinitionNode, ExpressionNode, VariableNode};
-use log::error;
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, FunctionDefinitionNode, StatementNode, VariableNode};
 
 /// Генерирует содержимое `.c`-файла для модели.
 ///
@@ -31,6 +31,7 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
         .print(format!("#include \"{}.h\"", filename).as_str())
         .nl();
     generate_constants_and_ports_and_enums(&mut printer, map)?;
+    generate_functions(&mut printer, map)?;
     // Self::generate_model_source(&printer, model, true)?;
     printer.nl();
     let struct_name = map.root_name().unique_camelcase();
@@ -146,101 +147,306 @@ fn generate_constants_and_ports_and_enums(
                     };
                     lines.push(format!("#define PORT_{} 0x{:x}", name, address));
                 }
-                VariableNode::Const { name, expr, .. } => {
+                VariableNode::Const { name, ref expr, .. } => {
                     let name = model_name.unique_uppercase_snakecase()
                         + "_"
                         + normalize_lowercase_snakecase(name.clone())
                             .to_uppercase()
                             .as_str();
-                    let value = if let ExpressionNode::Number(value) = expr {
-                        value
-                    } else {
-                        error!("Unresolved constant value: {:?}", expr);
-                        //return Err("Unresolved constant value".into());
-                        continue;
-                    };
-                    lines.push(format!("#define CONST_{} 0x{:x}", name, value));
+                    let value = const_expr_string(expr, &name)?;
+                    lines.push(format!("#define CONST_{} {}", name, value));
                 }
             }
         }
-        if lines.is_empty() {
-            continue;
+        if !lines.is_empty() {
+            printer
+                .print(format!("/// Константы и порты модели {}", model_name).as_str())
+                .nl();
+            lines.sort();
+            printer.print(lines.join("\n").as_str()).nl();
         }
-        printer
-            .print(format!("/// Константы, перечисления и порты модели {}", model_name).as_str())
-            .nl();
-        lines.sort();
-        printer.print(lines.join("\n").as_str()).nl();
-    }
 
-    // let upper_name = Self::get_upper_name(model);
-    //
-    // let variables = model.variables.clone();
-    // for var in variables
-    //     .into_values()
-    //     .sorted_by(|a, b| a.name().cmp(b.name()))
-    // {
-    //     match var.clone() {
-    //         VariableNode::Unresolved => {}
-    //         VariableNode::Simple { .. } => {}
-    //         VariableNode::Port { name, expr, .. } => {
-    //             let name = Self::resolve_raw_name(upper_name.clone(), name)?;
-    //
-    //             let (address, _bit) = if let ExpressionNode::Address(address, bit) = expr {
-    //                 (address, bit)
-    //             } else if let ExpressionNode::Number(address) = expr {
-    //                 (address, 0)
-    //             } else {
-    //                 return Err("Unresolved address".into());
-    //             };
-    //             printer.print("#define PORT_").print(&name).print(" ");
-    //             printer.print(format!("0x{:x}", address).as_str());
-    //             printer.nl();
-    //         }
-    //         VariableNode::Const { name, expr, .. } => {
-    //             let name = Self::resolve_raw_name(upper_name.clone(), name)?;
-    //             let unrolled = Self::unroll_expression(&expr)?;
-    //             printer
-    //                 .print("#define CONST_")
-    //                 .print(&name)
-    //                 .print(" (")
-    //                 .print(unrolled.as_str())
-    //                 .print(")")
-    //                 .nl();
-    //         }
-    //     }
-    // }
-    // let conditions = model.conditions.clone();
-    // for cond in conditions
-    //     .into_values()
-    //     .sorted_by(|a, b| a.name().cmp(b.name()))
-    // {
-    //     let unrolled = Self::unroll_cond(&cond.value)?;
-    //     printer
-    //         .print("#define COND_")
-    //         .print(&Self::resolve_cond_name(upper_name.clone(), &cond)?)
-    //         .print(" (")
-    //         .print(unrolled.as_str())
-    //         .print(")")
-    //         .nl();
-    // }
-    // let enums = model.enums.clone();
-    // for en in enums.into_values().sorted_by(|a, b| a.name().cmp(b.name())) {
-    //     printer
-    //         .print(format!("/* Enum  {}*/", en.name()).as_str())
-    //         .nl();
-    //     let prefix =
-    //         "#define ENUM_".to_string() + &*Self::resolve_enum_name(upper_name.clone(), &en)?;
-    //     for (name, value) in en.variants {
-    //         printer
-    //             .print(prefix.clone().as_str())
-    //             .print("_")
-    //             .print(normalize_lowercase_snakecase(name).to_uppercase().as_str())
-    //             .print(format!(" {}", value).as_str())
-    //             .nl();
-    //     }
-    // }
+        let enums = model.enums.clone().into_values();
+        let mut lines = Vec::new();
+        for en in enums {
+            let prefix = format!("#define ENUM_{}_", model_name.unique_uppercase_snakecase());
+            for (name, value) in en.variants {
+                lines.push(format!(
+                    "{}{} {}",
+                    prefix,
+                    normalize_lowercase_snakecase(name.clone()).to_uppercase(),
+                    value
+                ));
+            }
+        }
+        if !lines.is_empty() {
+            printer
+                .print(format!("/// Перечисления модели {}", model_name).as_str())
+                .nl();
+            lines.sort();
+            printer.print(lines.join("\n").as_str()).nl();
+        }
+    }
     Ok(())
+}
+
+fn get_function_name(fun: &FunctionDefinitionNode) -> String {
+    match fun {
+        FunctionDefinitionNode::Local { upper, name, .. } => {
+            let model_name = Name::from(upper.clone().unwrap().upgrade().unwrap());
+            format!("{}_{}", model_name.unique_camelcase(), name)
+        }
+        FunctionDefinitionNode::External { name, .. } => name.clone(),
+        _ => {
+            unreachable!("Unresolved function definition");
+        }
+    }
+}
+
+fn generate_stmt_expression(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    expr: &ExpressionNode,
+) -> Result<(), Diagnostic> {
+    match expr {
+        ExpressionNode::None | ExpressionNode::Unresolved(_) => {
+            return Err("Unresolved expression".into());
+        }
+        ExpressionNode::ArraySubscript(_, _) => {}
+        ExpressionNode::ArraySlice(_, _, _) => {}
+        ExpressionNode::Parenthesis(_) => {}
+        ExpressionNode::BitAccess(_, _) => {}
+        ExpressionNode::Function(_, _) => {}
+        ExpressionNode::CodeBlock(_, _) => {}
+        ExpressionNode::NamedFunctionBox(_, _) => {}
+        ExpressionNode::Not(_) => {}
+        ExpressionNode::BitwiseNot(_) => {}
+        ExpressionNode::UnaryPlus(_) => {}
+        ExpressionNode::Negate(_) => {}
+        ExpressionNode::Power(_, _) => {}
+        ExpressionNode::Multiply(_, _) => {}
+        ExpressionNode::Divide(_, _) => {}
+        ExpressionNode::Modulo(_, _) => {}
+        ExpressionNode::Add(_, _) => {}
+        ExpressionNode::Subtract(_, _) => {}
+        ExpressionNode::ShiftLeft(_, _) => {}
+        ExpressionNode::ShiftRight(_, _) => {}
+        ExpressionNode::BitwiseAnd(_, _) => {}
+        ExpressionNode::BitwiseXor(_, _) => {}
+        ExpressionNode::BitwiseOr(_, _) => {}
+        ExpressionNode::Less(_, _) => {}
+        ExpressionNode::More(_, _) => {}
+        ExpressionNode::LessEqual(_, _) => {}
+        ExpressionNode::MoreEqual(_, _) => {}
+        ExpressionNode::Equal(_, _) => {}
+        ExpressionNode::NotEqual(_, _) => {}
+        ExpressionNode::And(_, _) => {}
+        ExpressionNode::Or(_, _) => {}
+        ExpressionNode::ConditionalOperator(_, _, _) => {}
+        ExpressionNode::Assign(_, _) => {}
+        ExpressionNode::Number(n) => {
+            printer.print(format!("{}", n).as_str());
+        }
+        ExpressionNode::Rational(_, _) => {}
+        ExpressionNode::String(v) => {
+            printer.print("\"").print(v.join("").as_str()).print("\"");
+        }
+        ExpressionNode::Type(_) => {}
+        ExpressionNode::Address(_, _) => {}
+        ExpressionNode::Bool(value) => {
+            if *value {
+                printer.print("true");
+            } else {
+                printer.print("false");
+            }
+        }
+        ExpressionNode::Variable(_) => {}
+        ExpressionNode::Model(_) => {}
+        ExpressionNode::Condition(_) => {}
+        ExpressionNode::List(_) => {}
+        ExpressionNode::Array(_) => {}
+        ExpressionNode::Initializer(_) => {}
+        ExpressionNode::Cast(expr, typ) => {
+            let model = map.raw_model_at(owner.name())?;
+            let model = &*model.borrow();
+            let type_c = get_c_type(typ, model).unwrap();
+            printer.print("(").print(&*type_c).print(")(");
+            generate_stmt_expression(printer, map, owner, params.clone(), expr)?;
+            printer.print(")");
+        }
+    }
+    Ok(())
+}
+
+fn generate_code_block(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    body: &StatementNode,
+) -> Result<(), Diagnostic> {
+    match body {
+        StatementNode::None => {}
+        StatementNode::Unresolved(_) => {}
+        StatementNode::Block(block) => {
+            printer.print("{").nl().up();
+            for stmt in block {
+                generate_code_block(printer, map, owner, params.clone(), stmt)?;
+            }
+            printer.down().print("}");
+        }
+        StatementNode::Expression(expr) => {
+            generate_stmt_expression(printer, map, owner, params.clone(), expr)?;
+        }
+        StatementNode::If { .. } => {}
+        StatementNode::Loop { .. } => {}
+        StatementNode::For { .. } => {}
+        StatementNode::Variable(var, ty, init) => {}
+        StatementNode::Return(ret) => {
+            printer.ident("return");
+            if let Some(expr) = ret {
+                printer.print(" ( ");
+                generate_stmt_expression(printer, map, owner, params.clone(), expr)?;
+                printer.print(" )");
+            }
+            printer.print(";").nl();
+        }
+        StatementNode::Continue => {
+            printer.ident("continue");
+        }
+        StatementNode::Break => {
+            printer.ident("break");
+        }
+    }
+    Ok(())
+}
+
+fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic> {
+    let mut models = map.using_models();
+    models.insert(
+        0,
+        Element::Model {
+            name: map.root_name().clone(),
+            states: map.states().clone(),
+            start: map.start().clone(),
+        },
+    );
+    for model in models {
+        let model_name = model.name();
+        let element = model.clone();
+        let model = map.raw_model_at(model.name())?;
+        let model = &*model.borrow();
+        let mut external_funcs = Vec::new();
+        let mut local_funcs = Vec::new();
+        for ref fun in model.functions.clone().into_values() {
+            match fun {
+                FunctionDefinitionNode::Local {
+                    upper,
+                    name,
+                    params,
+                    body,
+                    ret,
+                    ..
+                } => {
+                    let mut definition = String::new();
+                    let mut tiny_params = params
+                        .into_iter()
+                        .map(|(name, typ)| {
+                            get_c_type(&typ, model)
+                                .map(|c_type| format!("{} {}", c_type, name.clone()))
+                                .unwrap()
+                        })
+                        .collect::<Vec<String>>();
+                    tiny_params.insert(0, format!("{} *main", map.root_name().unique_camelcase()));
+                    definition.push_str(
+                        format!(
+                            "static {} {}({}) ",
+                            get_c_type(&ret, model).unwrap().as_str(),
+                            get_function_name(&fun),
+                            tiny_params.join(", ")
+                        )
+                        .as_str(),
+                    );
+                    let mut code_block = String::new();
+                    {
+                        let mut tmp_printer = Printer::new(4, &mut code_block);
+                        tmp_printer.up();
+                        generate_code_block(&mut tmp_printer, map, &element, params.clone(), body)?;
+                        tmp_printer.down().nl();
+                    }
+                    definition.push_str(&code_block);
+                    local_funcs.push(definition);
+                }
+                FunctionDefinitionNode::External {
+                    name, params, ret, ..
+                } => {
+                    let params = params
+                        .into_iter()
+                        .map(|(name, typ)| {
+                            get_c_type(&typ, model)
+                                .map(|c_type| format!("{} {}", c_type, name.clone()))
+                                .unwrap()
+                        })
+                        .collect::<Vec<String>>();
+                    external_funcs.push(format!(
+                        "extern {} {}({});",
+                        get_c_type(&ret, model).unwrap().as_str(),
+                        get_function_name(&fun),
+                        params.join(", ").as_str()
+                    ));
+                }
+                _ => {
+                    return Err(format!("Unresolved function '{}'", fun.name())
+                        .as_str()
+                        .into());
+                }
+            }
+        }
+
+        if !external_funcs.is_empty() {
+            printer.print("///Внешние функции").nl();
+            external_funcs.sort();
+            for func in external_funcs {
+                printer.print(func.as_str()).nl();
+            }
+        }
+        if !local_funcs.is_empty() {
+            printer.print("///Функции моделей").nl();
+            local_funcs.sort();
+            for func in local_funcs {
+                printer.print(func.as_str()).nl();
+            }
+        }
+    }
+    Ok(())
+}
+
+fn const_expr_string(expr: &ExpressionNode, name: &String) -> Result<String, Diagnostic> {
+    Ok(if let ExpressionNode::Number(value) = expr {
+        value.to_string()
+    } else if let ExpressionNode::Bool(value) = expr {
+        if *value {
+            "true".to_string()
+        } else {
+            "false".to_string()
+        }
+    } else if let ExpressionNode::String(value) = expr {
+        format!("\"{}\"", value.join(""))
+    } else if let ExpressionNode::Rational(value, _) = expr {
+        value.clone()
+    } else if let ExpressionNode::Initializer(value) = expr {
+        let mut parts = Vec::new();
+        for v in value.iter() {
+            parts.push(const_expr_string(v, name)?);
+        }
+        format!("{{{}}}", parts.join(", "))
+    } else {
+        return Err(format!("Unresolved constant '{}' value: {:?}", name, expr)
+            .as_str()
+            .into());
+    })
 }
 
 impl Generator {
@@ -502,31 +708,4 @@ impl Generator {
             }
         }
     */
-    /// Формирует имя константы/порта в UPPER_SNAKE_CASE из пространства имён модели.
-    #[inline]
-    fn resolve_raw_name(upper_name: String, name: String) -> Result<String, Diagnostic> {
-        Ok(
-            (upper_name.to_owned() + "_" + normalize_lowercase_snakecase(name.clone()).as_str())
-                .to_uppercase(),
-        )
-    }
-
-    /// Формирует имя именованного условия в UPPER_SNAKE_CASE.
-    #[inline]
-    fn resolve_cond_name(
-        upper_name: String,
-        cond: &ConditionDefinitionNode,
-    ) -> Result<String, Diagnostic> {
-        Self::resolve_raw_name(upper_name, cond.name.clone())
-    }
-
-    /// Формирует имя перечисления в UPPER_SNAKE_CASE.
-    #[allow(dead_code)]
-    #[inline]
-    fn resolve_enum_name(
-        upper_name: String,
-        en: &EnumDefinitionNode,
-    ) -> Result<String, Diagnostic> {
-        Self::resolve_raw_name(upper_name, en.name.clone())
-    }
 }

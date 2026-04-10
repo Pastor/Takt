@@ -82,11 +82,53 @@ impl AsGenerator for Generator {
     }
 }
 
+pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
+    match typ {
+        TypeNode::Bit => Some("int".to_string()),
+        TypeNode::Bool => Some("bool".to_string()),
+        TypeNode::Rational => Some("float".to_string()),
+        TypeNode::Array(size, typ) => {
+            if let TypeNode::Rational = **typ {
+                Some("float *".to_string())
+            } else {
+                Some(format!("uint{}_t", *size))
+            }
+        }
+        TypeNode::Unit => Some("void".to_string()),
+        TypeNode::BuiltinString => Some("char *".to_string()),
+        TypeNode::Struct(struct_name) => Some(format!("{}", struct_name)),
+        TypeNode::Enum(enum_name) => {
+            let enum_node = model.search_enum(enum_name)?;
+            let max = enum_node
+                .variants
+                .into_iter()
+                .sorted_by(|a, b| a.1.cmp(&b.1))
+                .collect::<Vec<(String, i64)>>()
+                .last()
+                .map(|x| x.1)
+                .unwrap_or_default();
+            let bits: u8 = if max > u32::MAX as i64 {
+                64
+            } else if max > u16::MAX as i64 {
+                32
+            } else if max > u8::MAX as i64 {
+                16
+            } else {
+                8
+            };
+            Some(format!("uint{}_t", bits))
+        }
+        TypeNode::BuiltinModel
+        | TypeNode::BuiltinState
+        | TypeNode::BuiltinNumeric
+        | TypeNode::Unsupported
+        | TypeNode::Inference
+        | TypeNode::Address(_, _) => None,
+    }
+}
+
 fn get_typed_variable(typ: &TypeNode, name: Option<String>, model: &ModelNode) -> Option<String> {
     match typ {
-        TypeNode::Bit => Some(format!("int {}", name.clone().unwrap_or_default())),
-        TypeNode::Bool => Some(format!("bool {}", name.clone().unwrap_or_default())),
-        TypeNode::Rational => Some(format!("float {}", name.clone().unwrap_or_default())),
         TypeNode::Array(size, typ) => {
             if let TypeNode::Rational = **typ {
                 Some(format!(
@@ -102,46 +144,7 @@ fn get_typed_variable(typ: &TypeNode, name: Option<String>, model: &ModelNode) -
                 ))
             }
         }
-        TypeNode::Unit => Some("void".to_string()),
-        TypeNode::BuiltinString => Some("char *".to_string()),
-        TypeNode::Struct(struct_name) => Some(format!(
-            "struct {} {}",
-            struct_name,
-            name.clone().unwrap_or_default()
-        )),
-        TypeNode::Enum(enum_name) => {
-            let enum_node = model.search_enum(enum_name)?;
-            let max = enum_node
-                .variants
-                .into_iter()
-                .sorted_by(|a, b| a.1.cmp(&b.1))
-                .collect::<Vec<(String, i64)>>()
-                .last()
-                .map(|x| x.1)
-                .unwrap_or_default();
-            // Выбираем минимальный беззнаковый тип, вмещающий максимальное значение
-            let bits: u8 = if max > u32::MAX as i64 {
-                64
-            } else if max > u16::MAX as i64 {
-                32
-            } else if max > u8::MAX as i64 {
-                16
-            } else {
-                8
-            };
-            // Исправлено: используем имя переменной (name), а не имя enum-типа
-            Some(format!(
-                "uint{}_t {}",
-                bits,
-                name.clone().unwrap_or_default()
-            ))
-        }
-        TypeNode::BuiltinModel
-        | TypeNode::BuiltinState
-        | TypeNode::BuiltinNumeric
-        | TypeNode::Unsupported
-        | TypeNode::Inference
-        | TypeNode::Address(_, _) => None,
+        t => get_c_type(typ, model).map(|c_type| format!("{} {}", c_type, name.clone().unwrap())),
     }
 }
 

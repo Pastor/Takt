@@ -28,7 +28,7 @@
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::expression::construct_expression;
-use crate::semantic::type_node::construct_type;
+use crate::semantic::type_node::{TypeNode, construct_type};
 use crate::semantic::{ExpressionNode, ModelNode, StatementNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -42,16 +42,17 @@ use std::rc::Rc;
 /// При ошибке разрешения выражения оператор сохраняется как `Unresolved`.
 pub fn resolve_statement(
     statement: &StatementNode,
+    params: Vec<(String, TypeNode)>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<StatementNode, Diagnostic> {
     match statement {
-        StatementNode::Unresolved(stmt) => Ok(resolve_ast_statement(stmt, model)?),
+        StatementNode::Unresolved(stmt) => Ok(resolve_ast_statement(stmt, params.clone(), model)?),
         StatementNode::None => Ok(StatementNode::None),
         StatementNode::Block(stmts) => {
             let mut resolved = Vec::with_capacity(stmts.len());
             let mut locals: Vec<(String, Option<VariableNode>)> = Vec::new();
             for s in stmts {
-                let r = resolve_statement(s, model.clone())?;
+                let r = resolve_statement(s, params.clone(), model.clone())?;
                 if let Some(entry) = register_local_var(&r, &model) {
                     locals.push(entry);
                 }
@@ -70,6 +71,7 @@ pub fn resolve_statement(
 /// обернуть в `Unresolved`).
 fn resolve_ast_statement(
     stmt: &ast::Statement,
+    params: Vec<(String, TypeNode)>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<StatementNode, Diagnostic> {
     match stmt {
@@ -83,7 +85,7 @@ fn resolve_ast_statement(
             let mut resolved = Vec::with_capacity(statements.len());
             let mut locals: Vec<(String, Option<VariableNode>)> = Vec::new();
             for s in statements {
-                let r = resolve_ast_statement(s, model.clone())?;
+                let r = resolve_ast_statement(s, params.clone(), model.clone())?;
                 if let Some(entry) = register_local_var(&r, &model) {
                     locals.push(entry);
                 }
@@ -95,19 +97,19 @@ fn resolve_ast_statement(
 
         // ── Оператор-выражение (присваивание, вызов функции и т.п.) ───────────
         ast::Statement::Expression(_, expr) => {
-            let resolved = construct_expression(expr.clone(), model)?;
+            let resolved = construct_expression(expr.clone(), vec![], model)?;
             Ok(StatementNode::Expression(Box::new(resolved)))
         }
 
         // ── Условный оператор if ───────────────────────────────────────────────
         ast::Statement::If(_, cond, then_, else_) => {
-            let cond = construct_expression(cond.clone(), model.clone())?;
-            let then_ = resolve_ast_statement(then_, model.clone())
+            let cond = construct_expression(cond.clone(), params.clone(), model.clone())?;
+            let then_ = resolve_ast_statement(then_, params.clone(), model.clone())
                 .unwrap_or_else(|_| StatementNode::Unresolved(then_.as_ref().clone()));
             let else_ = else_
                 .as_ref()
                 .map(|e| {
-                    resolve_ast_statement(e, model.clone())
+                    resolve_ast_statement(e, params.clone(), model.clone())
                         .unwrap_or_else(|_| StatementNode::Unresolved(e.as_ref().clone()))
                 })
                 .map(Box::new);
@@ -124,10 +126,10 @@ fn resolve_ast_statement(
         ast::Statement::Loop(_, cond, body) => {
             let cond = cond
                 .as_ref()
-                .map(|c| construct_expression(c.clone(), model.clone()))
+                .map(|c| construct_expression(c.clone(), params.clone(), model.clone()))
                 .transpose()?
                 .map(Box::new);
-            let body = resolve_ast_statement(body, model)
+            let body = resolve_ast_statement(body, params.clone(), model)
                 .unwrap_or_else(|_| StatementNode::Unresolved(body.as_ref().clone()));
             Ok(StatementNode::Loop {
                 cond,
@@ -145,7 +147,7 @@ fn resolve_ast_statement(
             let init_resolved = init
                 .as_ref()
                 .map(|s| {
-                    resolve_ast_statement(s, model.clone())
+                    resolve_ast_statement(s, params.clone(), model.clone())
                         .unwrap_or_else(|_| StatementNode::Unresolved(s.as_ref().clone()))
                 })
                 .map(Box::new);
@@ -160,18 +162,18 @@ fn resolve_ast_statement(
 
             let cond = cond
                 .as_ref()
-                .map(|e| construct_expression(*e.clone(), model.clone()))
+                .map(|e| construct_expression(*e.clone(), params.clone(), model.clone()))
                 .transpose()?
                 .map(Box::new);
             let step = step
                 .as_ref()
-                .map(|e| construct_expression(*e.clone(), model.clone()))
+                .map(|e| construct_expression(*e.clone(), params.clone(), model.clone()))
                 .transpose()?
                 .map(Box::new);
             let body = body
                 .as_ref()
                 .map(|s| {
-                    resolve_ast_statement(s, model.clone())
+                    resolve_ast_statement(s, params.clone(), model.clone())
                         .unwrap_or_else(|_| StatementNode::Unresolved(s.as_ref().clone()))
                 })
                 .map(Box::new)
@@ -226,7 +228,7 @@ fn resolve_ast_statement(
                 }
             };
             let init = def_init
-                .map(|e| construct_expression(e, model))
+                .map(|e| construct_expression(e, params.clone(), model))
                 .transpose()?
                 .map(Box::new);
             Ok(StatementNode::Variable(name, ty, init))
@@ -236,7 +238,7 @@ fn resolve_ast_statement(
         ast::Statement::Return(_, expr) => {
             let expr = expr
                 .as_ref()
-                .map(|e| construct_expression(e.clone(), model))
+                .map(|e| construct_expression(e.clone(), params.clone(), model))
                 .transpose()?
                 .map(Box::new);
             Ok(StatementNode::Return(expr))
@@ -337,7 +339,7 @@ mod tests {
     #[test]
     fn resolve_none_returns_none() {
         let m = Rc::new(RefCell::new(ModelNode::default()));
-        let result = resolve_statement(&StatementNode::None, m).unwrap();
+        let result = resolve_statement(&StatementNode::None, vec![], m).unwrap();
         assert_eq!(result, StatementNode::None);
     }
 
@@ -346,7 +348,7 @@ mod tests {
     fn resolve_already_resolved_passthrough() {
         let m = Rc::new(RefCell::new(ModelNode::default()));
         let stmt = StatementNode::Continue;
-        let result = resolve_statement(&stmt, m).unwrap();
+        let result = resolve_statement(&stmt, vec![], m).unwrap();
         assert_eq!(result, StatementNode::Continue);
     }
 
@@ -355,7 +357,7 @@ mod tests {
     fn resolve_block_recursively() {
         let m = Rc::new(RefCell::new(ModelNode::default()));
         let stmt = StatementNode::Block(vec![StatementNode::Continue, StatementNode::Break]);
-        let result = resolve_statement(&stmt, m).unwrap();
+        let result = resolve_statement(&stmt, vec![], m).unwrap();
         assert_eq!(
             result,
             StatementNode::Block(vec![StatementNode::Continue, StatementNode::Break])
@@ -461,8 +463,9 @@ mod tests {
         let ast_continue = ast::Statement::Continue(crate::diagnostics::Location::default());
         let ast_break = ast::Statement::Break(crate::diagnostics::Location::default());
         let m = Rc::new(RefCell::new(ModelNode::default()));
-        let r1 = resolve_statement(&StatementNode::Unresolved(ast_continue), m.clone()).unwrap();
-        let r2 = resolve_statement(&StatementNode::Unresolved(ast_break), m).unwrap();
+        let r1 =
+            resolve_statement(&StatementNode::Unresolved(ast_continue), vec![], m.clone()).unwrap();
+        let r2 = resolve_statement(&StatementNode::Unresolved(ast_break), vec![], m).unwrap();
         assert_eq!(r1, StatementNode::Continue);
         assert_eq!(r2, StatementNode::Break);
     }
@@ -776,7 +779,7 @@ mod tests {
         };
 
         let m = Rc::new(RefCell::new(ModelNode::default()));
-        let resolved = resolve_ast_statement(&block, m.clone()).unwrap();
+        let resolved = resolve_ast_statement(&block, vec![], m.clone()).unwrap();
 
         // После разрешения блока `inner` не должна оставаться в модели
         assert!(
@@ -852,7 +855,7 @@ mod tests {
         });
         let stmt = ast::Statement::Variable(loc, def, None);
         let m = Rc::new(RefCell::new(ModelNode::default()));
-        let result = resolve_statement(&StatementNode::Unresolved(stmt), m).unwrap();
+        let result = resolve_statement(&StatementNode::Unresolved(stmt), vec![], m).unwrap();
         assert!(
             matches!(result, StatementNode::Variable(ref n, _, None) if n == "tmp"),
             "ожидался Variable(tmp, _, None), получен: {:?}",

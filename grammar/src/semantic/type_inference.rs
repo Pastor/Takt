@@ -393,7 +393,7 @@ fn extract_type(
         }
 
         // ── Приведение типа → результирующий тип (FE2: с разрешением псевдонимов) ──
-        ExpressionNode::Cast(_, ty) => Ok(ast_type_to_node_ctx(ty, model)),
+        ExpressionNode::Cast(_, ty) => Ok(ty.clone()),
         ExpressionNode::Type(ty) => Ok(ast_type_to_node(ty)),
 
         // ── Ce6: Вывод типа из возвращаемого типа функции ────────────────────
@@ -814,9 +814,8 @@ mod tests {
     /// `Cast(_, Type::Rational)` → `Rational`.
     #[test]
     fn cast_to_rational_type() {
-        use crate::parser::ast::Type;
         let ty = extract_type(
-            &ExpressionNode::Cast(Box::new(ExpressionNode::Number(0)), Type::Rational),
+            &ExpressionNode::Cast(Box::new(ExpressionNode::Number(0)), TypeNode::Rational),
             Rc::new(RefCell::new(ModelNode::default())),
         )
         .unwrap();
@@ -826,15 +825,10 @@ mod tests {
     /// `Cast(_, Type::Array{...})` → `Array(N, Bit)`.
     #[test]
     fn cast_to_array_type() {
-        use crate::parser::ast::Type;
         let ty = extract_type(
             &ExpressionNode::Cast(
                 Box::new(ExpressionNode::Number(0)),
-                Type::Array {
-                    loc: crate::diagnostics::Location::default(),
-                    element_type: Box::new(Type::Bit),
-                    element_count: 4,
-                },
+                TypeNode::Array(4, Box::new(TypeNode::Bit)),
             ),
             Rc::new(RefCell::new(ModelNode::default())),
         )

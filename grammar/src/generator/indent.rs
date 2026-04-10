@@ -46,6 +46,15 @@ impl<'a> Printer<'a> {
         }
     }
 
+    pub fn copy(&self, writer: &'a mut dyn Write) -> Self {
+        Self {
+            indent: self.indent,
+            indent_size: self.indent_size,
+            padding: RefCell::new(self.padding.borrow().clone()),
+            writer,
+        }
+    }
+
     /// Увеличивает уровень вложенности на один.
     pub fn up(&mut self) -> &mut Self {
         self.indent += 1;

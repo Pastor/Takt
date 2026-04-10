@@ -83,7 +83,11 @@ pub fn construct_function(
                 })
             } else {
                 let statement = if let Some(body) = def.body {
-                    resolve_statement(&StatementNode::Unresolved(body), model.clone())?
+                    resolve_statement(
+                        &StatementNode::Unresolved(body),
+                        params.clone(),
+                        model.clone(),
+                    )?
                 } else {
                     return Err("Локальная функция должна иметь тело".into());
                 };

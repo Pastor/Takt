@@ -636,7 +636,7 @@ fn resolve_variable_expressions(
                 loc,
                 name: n,
                 ty,
-                expr: construct_expression(expr, model.clone())?,
+                expr: construct_expression(expr, vec![], model.clone())?,
             },
             VariableNode::Const {
                 upper,
@@ -649,7 +649,7 @@ fn resolve_variable_expressions(
                 loc,
                 name: n,
                 ty,
-                expr: construct_expression(expr, model.clone())?,
+                expr: construct_expression(expr, vec![], model.clone())?,
             },
             VariableNode::Port {
                 upper,
@@ -662,7 +662,7 @@ fn resolve_variable_expressions(
                 loc,
                 name: n,
                 ty,
-                expr: construct_expression(expr, model.clone())?,
+                expr: construct_expression(expr, vec![], model.clone())?,
             },
             other => other,
         };

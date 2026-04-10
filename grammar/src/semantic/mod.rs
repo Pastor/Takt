@@ -1356,7 +1356,7 @@ pub enum ExpressionNode {
     /// Инициализатор структуры: `{ элемент,* }`.
     Initializer(Vec<ExpressionNode>),
     /// Приведение типа: `выражение as Тип`.
-    Cast(Box<ExpressionNode>, Type),
+    Cast(Box<ExpressionNode>, TypeNode),
 }
 
 /// Ссылка на узел семантического дерева с условием перехода.

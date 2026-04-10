@@ -18,9 +18,10 @@
 //! - [`resolve_bin`] — разрешает бинарное выражение (оба операнда).
 //! - [`resolve_elems`] — разрешает все элементы вектора выражений.
 
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast;
 use crate::semantic::builtin::builtin_function;
+use crate::semantic::type_inference::ast_type_to_node;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, ModelNode, StatementNode, VariableNode};
 use std::cell::RefCell;
@@ -39,6 +40,7 @@ use std::rc::Rc;
 /// - любое подвыражение не разрешается (ошибка пробрасывается).
 pub fn construct_expression(
     expr: ast::Expression,
+    params: Vec<(String, TypeNode)>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<ExpressionNode, Diagnostic> {
     match expr {
@@ -61,6 +63,19 @@ pub fn construct_expression(
         // модель или условие, что соответствует ожидаемой семантике языка BuT.
         ast::Expression::Variable(id) => {
             let name = &id.name;
+            for (param_name, param_type) in params {
+                if param_name == *name {
+                    return Ok(ExpressionNode::Variable(Rc::new(RefCell::new(
+                        VariableNode::Simple {
+                            upper: Some(Rc::downgrade(&model)),
+                            loc: Location::Implicit,
+                            name: name.clone(),
+                            ty: param_type.clone(),
+                            expr: Default::default(),
+                        },
+                    ))));
+                }
+            }
             // 1. Переменная (включая порты и константы)
             if let Some(var) = model.borrow().search_var(name) {
                 return Ok(ExpressionNode::Variable(Rc::new(RefCell::new(var))));
@@ -149,11 +164,13 @@ pub fn construct_expression(
         }
 
         // ── Структурные выражения ─────────────────────────────────────────────
-        ast::Expression::Parenthesis(_, inner) => {
-            Ok(ExpressionNode::Parenthesis(resolve_expr(*inner, model)?))
-        }
+        ast::Expression::Parenthesis(_, inner) => Ok(ExpressionNode::Parenthesis(resolve_expr(
+            *inner,
+            params.clone(),
+            model,
+        )?)),
         ast::Expression::BitAccess(_, inner, member) => Ok(ExpressionNode::BitAccess(
-            resolve_expr(*inner, model)?,
+            resolve_expr(*inner, params.clone(), model)?,
             member,
         )),
 
@@ -169,131 +186,155 @@ pub fn construct_expression(
             } else {
                 Rc::new(RefCell::new(builtin_function(&id.name)?.clone()))
             };
-            let resolved_args = resolve_elems(args, model)?;
+            let resolved_args = resolve_elems(args, params.clone(), model)?;
             Ok(ExpressionNode::Function(func, resolved_args))
         }
 
         // Блок кода как выражение: разрешаем базовое выражение, Statement не трогаем.
         ast::Expression::CodeBlock(_, inner, stmt) => Ok(ExpressionNode::CodeBlock(
-            resolve_expr(*inner, model)?,
+            resolve_expr(*inner, params.clone(), model)?,
             StatementNode::Unresolved(*stmt),
         )),
 
         // Именованный вызов: разрешаем базовое выражение, аргументы оставляем как есть.
-        ast::Expression::NamedFunction(_, inner, named_args) => Ok(
-            ExpressionNode::NamedFunctionBox(resolve_expr(*inner, model)?, named_args),
-        ),
+        ast::Expression::NamedFunction(_, inner, named_args) => {
+            Ok(ExpressionNode::NamedFunctionBox(
+                resolve_expr(*inner, params.clone(), model)?,
+                named_args,
+            ))
+        }
 
         // Приведение типа: разрешаем выражение.
-        ast::Expression::Cast(_, inner, ty) => {
-            Ok(ExpressionNode::Cast(resolve_expr(*inner, model)?, ty))
-        }
+        ast::Expression::Cast(_, inner, ty) => Ok(ExpressionNode::Cast(
+            resolve_expr(*inner, params.clone(), model)?,
+            ast_type_to_node(&ty),
+        )),
 
         // ── Унарные операции ──────────────────────────────────────────────────
-        ast::Expression::Not(_, e) => Ok(ExpressionNode::Not(resolve_expr(*e, model)?)),
-        ast::Expression::BitwiseNot(_, e) => {
-            Ok(ExpressionNode::BitwiseNot(resolve_expr(*e, model)?))
-        }
-        ast::Expression::UnaryPlus(_, e) => Ok(ExpressionNode::UnaryPlus(resolve_expr(*e, model)?)),
-        ast::Expression::Negate(_, e) => Ok(ExpressionNode::Negate(resolve_expr(*e, model)?)),
+        ast::Expression::Not(_, e) => Ok(ExpressionNode::Not(resolve_expr(
+            *e,
+            params.clone(),
+            model,
+        )?)),
+        ast::Expression::BitwiseNot(_, e) => Ok(ExpressionNode::BitwiseNot(resolve_expr(
+            *e,
+            params.clone(),
+            model,
+        )?)),
+        ast::Expression::UnaryPlus(_, e) => Ok(ExpressionNode::UnaryPlus(resolve_expr(
+            *e,
+            params.clone(),
+            model,
+        )?)),
+        ast::Expression::Negate(_, e) => Ok(ExpressionNode::Negate(resolve_expr(
+            *e,
+            params.clone(),
+            model,
+        )?)),
 
         // ── Бинарные операции ─────────────────────────────────────────────────
         ast::Expression::Power(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::Power(l, r))
         }
         ast::Expression::Multiply(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::Multiply(l, r))
         }
         ast::Expression::Divide(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::Divide(l, r))
         }
         ast::Expression::Modulo(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::Modulo(l, r))
         }
         ast::Expression::Add(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::Add(l, r))
         }
         ast::Expression::Subtract(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::Subtract(l, r))
         }
         ast::Expression::ShiftLeft(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::ShiftLeft(l, r))
         }
         ast::Expression::ShiftRight(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::ShiftRight(l, r))
         }
         ast::Expression::BitwiseAnd(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::BitwiseAnd(l, r))
         }
         ast::Expression::BitwiseXor(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::BitwiseXor(l, r))
         }
         ast::Expression::BitwiseOr(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::BitwiseOr(l, r))
         }
         ast::Expression::Less(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::Less(l, r))
         }
         ast::Expression::More(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::More(l, r))
         }
         ast::Expression::LessEqual(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::LessEqual(l, r))
         }
         ast::Expression::MoreEqual(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::MoreEqual(l, r))
         }
         ast::Expression::Equal(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::Equal(l, r))
         }
         ast::Expression::NotEqual(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::NotEqual(l, r))
         }
         ast::Expression::And(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::And(l, r))
         }
         ast::Expression::Or(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::Or(l, r))
         }
 
         // ── Прочие выражения ──────────────────────────────────────────────────
         ast::Expression::Assign(_, l, r) => {
-            let (l, r) = resolve_bin(*l, *r, model)?;
+            let (l, r) = resolve_bin(*l, *r, params.clone(), model)?;
             Ok(ExpressionNode::Assign(l, r))
         }
         ast::Expression::ConditionalOperator(_, cond, then_e, else_e) => {
-            let cond = construct_expression(*cond, model.clone())?;
-            let then_e = construct_expression(*then_e, model.clone())?;
-            let else_e = construct_expression(*else_e, model)?;
+            let cond = construct_expression(*cond, params.clone(), model.clone())?;
+            let then_e = construct_expression(*then_e, params.clone(), model.clone())?;
+            let else_e = construct_expression(*else_e, params.clone(), model)?;
             Ok(ExpressionNode::ConditionalOperator(
                 Box::new(cond),
                 Box::new(then_e),
                 Box::new(else_e),
             ))
         }
-        ast::Expression::Array(_, items) => Ok(ExpressionNode::Array(resolve_elems(items, model)?)),
-        ast::Expression::Initializer(_, items) => {
-            Ok(ExpressionNode::Initializer(resolve_elems(items, model)?))
-        }
+        ast::Expression::Array(_, items) => Ok(ExpressionNode::Array(resolve_elems(
+            items,
+            params.clone(),
+            model,
+        )?)),
+        ast::Expression::Initializer(_, items) => Ok(ExpressionNode::Initializer(resolve_elems(
+            items,
+            params.clone(),
+            model,
+        )?)),
     }
 }
 
@@ -303,9 +344,10 @@ pub fn construct_expression(
 #[inline]
 fn resolve_expr(
     expr: ast::Expression,
+    params: Vec<(String, TypeNode)>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Box<ExpressionNode>, Diagnostic> {
-    construct_expression(expr, model).map(Box::new)
+    construct_expression(expr, params.clone(), model).map(Box::new)
 }
 
 /// Разрешает оба операнда бинарного выражения.
@@ -315,10 +357,11 @@ fn resolve_expr(
 fn resolve_bin(
     left: ast::Expression,
     right: ast::Expression,
+    params: Vec<(String, TypeNode)>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<(Box<ExpressionNode>, Box<ExpressionNode>), Diagnostic> {
-    let l = construct_expression(left, model.clone()).map(Box::new)?;
-    let r = construct_expression(right, model).map(Box::new)?;
+    let l = construct_expression(left, params.clone(), model.clone()).map(Box::new)?;
+    let r = construct_expression(right, params.clone(), model).map(Box::new)?;
     Ok((l, r))
 }
 
@@ -392,11 +435,12 @@ fn check_slice_bounds(
 #[inline]
 fn resolve_elems(
     items: Vec<ast::Expression>,
+    params: Vec<(String, TypeNode)>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Vec<ExpressionNode>, Diagnostic> {
     items
         .into_iter()
-        .map(|e| construct_expression(e, model.clone()))
+        .map(|e| construct_expression(e, params.clone(), model.clone()))
         .collect()
 }
 
@@ -1022,7 +1066,7 @@ mod tests {
         let then_expr = Box::new(ast::Expression::Number(loc, 0));
         let else_expr = Box::new(ast::Expression::Number(loc, 1));
         let expr = ast::Expression::ConditionalOperator(loc, cond_expr, then_expr, else_expr);
-        let result = construct_expression(expr, model).unwrap();
+        let result = construct_expression(expr, vec![], model).unwrap();
         assert!(
             matches!(result, ExpressionNode::ConditionalOperator(_, _, _)),
             "должен получиться ConditionalOperator"
@@ -1054,7 +1098,7 @@ mod tests {
         let then_expr = Box::new(ast::Expression::Number(loc, 10));
         let else_expr = Box::new(ast::Expression::Number(loc, 20));
         let expr = ast::Expression::ConditionalOperator(loc, cond_expr, then_expr, else_expr);
-        let result = construct_expression(expr, model).unwrap();
+        let result = construct_expression(expr, vec![], model).unwrap();
         assert!(
             matches!(result, ExpressionNode::ConditionalOperator(_, _, _)),
             "ConditionalOperator с переменной-условием должен разрешиться"
@@ -1077,7 +1121,7 @@ mod tests {
         let then_expr = Box::new(ast::Expression::Number(loc, 0));
         let else_expr = Box::new(ast::Expression::Number(loc, 1));
         let expr = ast::Expression::ConditionalOperator(loc, cond_expr, then_expr, else_expr);
-        let result = construct_expression(expr, model);
+        let result = construct_expression(expr, vec![], model);
         assert!(
             result.is_err(),
             "тернарный оператор с неизвестным условием должен давать ошибку"
@@ -1158,7 +1202,7 @@ mod tests {
             ast::Expression::Number(loc, 1),
         ];
         let expr = ast::Expression::Array(loc, items);
-        let result = construct_expression(expr, model).unwrap();
+        let result = construct_expression(expr, vec![], model).unwrap();
         assert!(
             matches!(result, ExpressionNode::Array(_)),
             "должен получиться Expression::Array"
@@ -1173,7 +1217,7 @@ mod tests {
         use crate::parser::ast::Type;
         let model = Rc::new(RefCell::new(ModelNode::default()));
         let expr = ast::Expression::Type(crate::diagnostics::Location::default(), Type::Bit);
-        let result = construct_expression(expr, model).unwrap();
+        let result = construct_expression(expr, vec![], model).unwrap();
         assert!(
             matches!(result, ExpressionNode::Type(Type::Bit)),
             "должен получиться Expression::Type(Type::Bit)"
@@ -1185,7 +1229,7 @@ mod tests {
     fn construct_expression_address_variant() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
         let expr = ast::Expression::Address(crate::diagnostics::Location::default(), 0x1234, 5);
-        let result = construct_expression(expr, model).unwrap();
+        let result = construct_expression(expr, vec![], model).unwrap();
         assert!(
             matches!(result, ExpressionNode::Address(0x1234, 5)),
             "должен получиться Expression::Address(0x1234, 5)"
@@ -1197,7 +1241,7 @@ mod tests {
     fn construct_expression_list_variant() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
         let expr = ast::Expression::List(crate::diagnostics::Location::default(), vec![]);
-        let result = construct_expression(expr, model).unwrap();
+        let result = construct_expression(expr, vec![], model).unwrap();
         assert!(
             matches!(result, ExpressionNode::List(_)),
             "должен получиться Expression::List"
@@ -1209,7 +1253,7 @@ mod tests {
     fn construct_expression_unknown_variable_is_error() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
         let expr = ast::Expression::Variable(ast::Identifier::new("ghost"));
-        let result = construct_expression(expr, model);
+        let result = construct_expression(expr, vec![], model);
         assert!(
             result.is_err(),
             "неизвестный идентификатор должен давать ошибку"
@@ -1225,7 +1269,7 @@ mod tests {
             ast::Identifier::new("no_such_var"),
             0,
         );
-        let result = construct_expression(expr, model);
+        let result = construct_expression(expr, vec![], model);
         assert!(
             result.is_err(),
             "несуществующая переменная должна давать ошибку"
@@ -1242,7 +1286,7 @@ mod tests {
             Some(0),
             Some(4),
         );
-        let result = construct_expression(expr, model);
+        let result = construct_expression(expr, vec![], model);
         assert!(
             result.is_err(),
             "несуществующая переменная должна давать ошибку"
