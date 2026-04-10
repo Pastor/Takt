@@ -14,7 +14,7 @@ extern void log_temp(uint8_t value);
 static uint8_t ComprehensiveController_clamp_temp(Comprehensive *main, uint8_t value) {
         if (((value) > (100))) {
             return (100);
-}
+        }
         return (value);
 }
 
@@ -37,4 +37,3 @@ void Comprehensive_reset(Comprehensive *main) {
 bool Comprehensive_is_done(const Comprehensive *main) {
     return main->state == COMPREHENSIVE_ENTRY;
 }
-

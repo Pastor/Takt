@@ -14,8 +14,8 @@ struct Ni6EnumValidRobot {
     uint8_t dir;
     enum {
         NI6_ENUM_VALID_ROBOT_INIT,
-        NI6_ENUM_VALID_ROBOT_MOVING,
         NI6_ENUM_VALID_ROBOT_IDLE,
+        NI6_ENUM_VALID_ROBOT_MOVING,
         NI6_ENUM_VALID_ROBOT_END
     } state;
 };

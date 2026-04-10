@@ -215,7 +215,9 @@ fn resolve_variable_c_expr(
     params: &[(String, TypeNode)],
 ) -> Result<String, Diagnostic> {
     match var {
-        VariableNode::Simple { name, upper, loc, .. } => {
+        VariableNode::Simple {
+            name, upper, loc, ..
+        } => {
             // Локальная переменная (объявлена через register_local_var) имеет loc == Implicit
             if matches!(loc, Location::Implicit) {
                 return Ok(normalize_lowercase_snakecase(name.clone()));
@@ -236,10 +238,16 @@ fn resolve_variable_c_expr(
                     ))
                 } else {
                     // Корневая модель — поле напрямую
-                    Ok(format!("main->{}", normalize_lowercase_snakecase(name.clone())))
+                    Ok(format!(
+                        "main->{}",
+                        normalize_lowercase_snakecase(name.clone())
+                    ))
                 }
             } else {
-                Ok(format!("main->{}", normalize_lowercase_snakecase(name.clone())))
+                Ok(format!(
+                    "main->{}",
+                    normalize_lowercase_snakecase(name.clone())
+                ))
             }
         }
         VariableNode::Const { name, upper, .. } => {
@@ -258,7 +266,13 @@ fn resolve_variable_c_expr(
                 ))
             }
         }
-        VariableNode::Port { name, ty, expr, upper, .. } => {
+        VariableNode::Port {
+            name,
+            ty,
+            expr,
+            upper,
+            ..
+        } => {
             // Чтение порта через read_bit или read_float
             let model_name = if let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) {
                 Name::from(model_rc)
@@ -276,15 +290,14 @@ fn resolve_variable_c_expr(
                 0i64
             };
             match ty {
-                TypeNode::Rational => {
-                    Ok(format!("(*main->read_float)({}, main->userdata)", port_name))
-                }
-                _ => {
-                    Ok(format!(
-                        "(*main->read_bit)({}, {}, main->userdata)",
-                        port_name, bit
-                    ))
-                }
+                TypeNode::Rational => Ok(format!(
+                    "(*main->read_float)({}, main->userdata)",
+                    port_name
+                )),
+                _ => Ok(format!(
+                    "(*main->read_bit)({}, {}, main->userdata)",
+                    port_name, bit
+                )),
             }
         }
         VariableNode::Unresolved => Err("Неразрешённая переменная".into()),
@@ -324,10 +337,13 @@ fn generate_function_call(
 ) -> Result<(), Diagnostic> {
     match fun_def {
         FunctionDefinitionNode::Local { upper, name, .. } => {
-            let model_rc = upper
-                .as_ref()
-                .and_then(|w| w.upgrade())
-                .ok_or_else(|| -> Diagnostic { "Неразрешённый owner функции".into() })?;
+            let model_rc =
+                upper
+                    .as_ref()
+                    .and_then(|w| w.upgrade())
+                    .ok_or_else(|| -> Diagnostic {
+                        "Неразрешённый owner функции".into()
+                    })?;
             let model_name = Name::from(model_rc);
             let func_name = format!("{}_{}", model_name.unique_camelcase(), name);
             let arg_strs = generate_args(map, owner, &params, args)?;
@@ -339,66 +355,58 @@ fn generate_function_call(
             let arg_strs = generate_args(map, owner, &params, args)?;
             printer.print(&format!("{}({})", name, arg_strs.join(", ")));
         }
-        FunctionDefinitionNode::Builtin(builtin_name, _, _) => {
-            match *builtin_name {
-                "min" => {
-                    let arg_strs = generate_args(map, owner, &params, args)?;
-                    if arg_strs.len() >= 2 {
-                        printer.print(&format!(
-                            "((({a}) < ({b})) ? ({a}) : ({b}))",
-                            a = arg_strs[0],
-                            b = arg_strs[1]
-                        ));
-                    }
-                }
-                "max" => {
-                    let arg_strs = generate_args(map, owner, &params, args)?;
-                    if arg_strs.len() >= 2 {
-                        printer.print(&format!(
-                            "((({a}) > ({b})) ? ({a}) : ({b}))",
-                            a = arg_strs[0],
-                            b = arg_strs[1]
-                        ));
-                    }
-                }
-                "abs" => {
-                    let arg_strs = generate_args(map, owner, &params, args)?;
-                    if !arg_strs.is_empty() {
-                        printer.print(&format!(
-                            "((({x}) < 0) ? -({x}) : ({x}))",
-                            x = arg_strs[0]
-                        ));
-                    }
-                }
-                "clamp" => {
-                    let arg_strs = generate_args(map, owner, &params, args)?;
-                    if arg_strs.len() >= 3 {
-                        printer.print(&format!(
-                            "((({x}) < ({lo})) ? ({lo}) : ((({x}) > ({hi})) ? ({hi}) : ({x})))",
-                            x = arg_strs[0],
-                            lo = arg_strs[1],
-                            hi = arg_strs[2]
-                        ));
-                    }
-                }
-                "debug" | "S" => {
-                    return Err(format!(
-                        "Встроенная функция '{}' не поддерживается в C генераторе",
-                        builtin_name
-                    )
-                    .as_str()
-                    .into());
-                }
-                other => {
-                    return Err(format!(
-                        "Неизвестная встроенная функция '{}'",
-                        other
-                    )
-                    .as_str()
-                    .into());
+        FunctionDefinitionNode::Builtin(builtin_name, _, _) => match *builtin_name {
+            "min" => {
+                let arg_strs = generate_args(map, owner, &params, args)?;
+                if arg_strs.len() >= 2 {
+                    printer.print(&format!(
+                        "((({a}) < ({b})) ? ({a}) : ({b}))",
+                        a = arg_strs[0],
+                        b = arg_strs[1]
+                    ));
                 }
             }
-        }
+            "max" => {
+                let arg_strs = generate_args(map, owner, &params, args)?;
+                if arg_strs.len() >= 2 {
+                    printer.print(&format!(
+                        "((({a}) > ({b})) ? ({a}) : ({b}))",
+                        a = arg_strs[0],
+                        b = arg_strs[1]
+                    ));
+                }
+            }
+            "abs" => {
+                let arg_strs = generate_args(map, owner, &params, args)?;
+                if !arg_strs.is_empty() {
+                    printer.print(&format!("((({x}) < 0) ? -({x}) : ({x}))", x = arg_strs[0]));
+                }
+            }
+            "clamp" => {
+                let arg_strs = generate_args(map, owner, &params, args)?;
+                if arg_strs.len() >= 3 {
+                    printer.print(&format!(
+                        "((({x}) < ({lo})) ? ({lo}) : ((({x}) > ({hi})) ? ({hi}) : ({x})))",
+                        x = arg_strs[0],
+                        lo = arg_strs[1],
+                        hi = arg_strs[2]
+                    ));
+                }
+            }
+            "debug" | "S" => {
+                return Err(format!(
+                    "Встроенная функция '{}' не поддерживается в C генераторе",
+                    builtin_name
+                )
+                .as_str()
+                .into());
+            }
+            other => {
+                return Err(format!("Неизвестная встроенная функция '{}'", other)
+                    .as_str()
+                    .into());
+            }
+        },
         _ => {
             return Err("Неразрешённое определение функции".into());
         }
@@ -423,7 +431,6 @@ fn generate_stmt_expression(
         }
 
         // ── Литералы ──────────────────────────────────────────────────────────
-
         ExpressionNode::Number(n) => {
             printer.print(&n.to_string());
         }
@@ -441,7 +448,6 @@ fn generate_stmt_expression(
         }
 
         // ── Унарные операторы ──────────────────────────────────────────────────
-
         ExpressionNode::Not(e) => {
             printer.print("!(");
             generate_stmt_expression(printer, map, owner, params, e)?;
@@ -464,7 +470,6 @@ fn generate_stmt_expression(
         }
 
         // ── Степень → pow() ────────────────────────────────────────────────────
-
         ExpressionNode::Power(l, r) => {
             printer.print("pow((double)(");
             generate_stmt_expression(printer, map, owner, params.clone(), l)?;
@@ -474,7 +479,6 @@ fn generate_stmt_expression(
         }
 
         // ── Бинарные арифметические ────────────────────────────────────────────
-
         ExpressionNode::Multiply(l, r) => {
             printer.print("(");
             generate_stmt_expression(printer, map, owner, params.clone(), l)?;
@@ -512,7 +516,6 @@ fn generate_stmt_expression(
         }
 
         // ── Битовые сдвиги ────────────────────────────────────────────────────
-
         ExpressionNode::ShiftLeft(l, r) => {
             printer.print("(");
             generate_stmt_expression(printer, map, owner, params.clone(), l)?;
@@ -529,7 +532,6 @@ fn generate_stmt_expression(
         }
 
         // ── Побитовые операторы ────────────────────────────────────────────────
-
         ExpressionNode::BitwiseAnd(l, r) => {
             printer.print("(");
             generate_stmt_expression(printer, map, owner, params.clone(), l)?;
@@ -553,7 +555,6 @@ fn generate_stmt_expression(
         }
 
         // ── Сравнение ─────────────────────────────────────────────────────────
-
         ExpressionNode::Less(l, r) => {
             printer.print("(");
             generate_stmt_expression(printer, map, owner, params.clone(), l)?;
@@ -598,7 +599,6 @@ fn generate_stmt_expression(
         }
 
         // ── Логические ────────────────────────────────────────────────────────
-
         ExpressionNode::And(l, r) => {
             printer.print("(");
             generate_stmt_expression(printer, map, owner, params.clone(), l)?;
@@ -615,7 +615,6 @@ fn generate_stmt_expression(
         }
 
         // ── Специальные ───────────────────────────────────────────────────────
-
         ExpressionNode::Parenthesis(e) => {
             printer.print("(");
             generate_stmt_expression(printer, map, owner, params, e)?;
@@ -636,7 +635,14 @@ fn generate_stmt_expression(
             // Запись в порт → write_bit / write_float
             if let ExpressionNode::Variable(var_rc) = l.as_ref() {
                 let var = var_rc.borrow();
-                if let VariableNode::Port { name, ty, expr: addr_expr, upper, .. } = &*var {
+                if let VariableNode::Port {
+                    name,
+                    ty,
+                    expr: addr_expr,
+                    upper,
+                    ..
+                } = &*var
+                {
                     let model_name =
                         if let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) {
                             Name::from(model_rc)
@@ -648,8 +654,11 @@ fn generate_stmt_expression(
                         model_name.unique_uppercase_snakecase(),
                         normalize_lowercase_snakecase(name.clone()).to_uppercase()
                     );
-                    let bit =
-                        if let ExpressionNode::Address(_, bit) = addr_expr { *bit } else { 0i64 };
+                    let bit = if let ExpressionNode::Address(_, bit) = addr_expr {
+                        *bit
+                    } else {
+                        0i64
+                    };
                     let mut rhs_str = String::new();
                     {
                         let mut tmp = Printer::new(4, &mut rhs_str);
@@ -734,7 +743,6 @@ fn generate_stmt_expression(
         }
 
         // ── Неподдерживаемые ──────────────────────────────────────────────────
-
         ExpressionNode::ArraySlice(_, _, _) => {
             return Err("ArraySlice не поддерживается в C генераторе".into());
         }
@@ -773,7 +781,10 @@ fn condition_macro_name(cond: &ConditionDefinitionNode) -> String {
             normalize_lowercase_snakecase(cond.name.clone()).to_uppercase()
         )
     } else {
-        format!("COND_{}", normalize_lowercase_snakecase(cond.name.clone()).to_uppercase())
+        format!(
+            "COND_{}",
+            normalize_lowercase_snakecase(cond.name.clone()).to_uppercase()
+        )
     }
 }
 
@@ -835,7 +846,7 @@ fn generate_code_block(
         StatementNode::Loop { cond, body } => {
             match cond {
                 None => {
-                    printer.ident("while (1) ");
+                    printer.ident("while (true) ");
                 }
                 Some(cond_expr) => {
                     printer.ident("while ((");
@@ -847,9 +858,16 @@ fn generate_code_block(
             printer.nl();
         }
 
-        StatementNode::For { init, cond, step, body } => {
-            let has_var_init =
-                matches!(init.as_ref().map(|b| b.as_ref()), Some(StatementNode::Variable(..)));
+        StatementNode::For {
+            init,
+            cond,
+            step,
+            body,
+        } => {
+            let has_var_init = matches!(
+                init.as_ref().map(|b| b.as_ref()),
+                Some(StatementNode::Variable(..))
+            );
 
             if has_var_init {
                 // Объявление переменной выносим перед `for` в обёртку `{}`
@@ -951,10 +969,7 @@ fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<(), Diagnosti
         for ref fun in model.functions.clone().into_values() {
             match fun {
                 FunctionDefinitionNode::Local {
-                    params,
-                    body,
-                    ret,
-                    ..
+                    params, body, ret, ..
                 } => {
                     let mut definition = String::new();
                     let mut tiny_params = params
@@ -985,9 +1000,7 @@ fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<(), Diagnosti
                     definition.push_str(&code_block);
                     local_funcs.push(definition);
                 }
-                FunctionDefinitionNode::External {
-                    params, ret, ..
-                } => {
+                FunctionDefinitionNode::External { params, ret, .. } => {
                     let params = params
                         .iter()
                         .map(|(name, typ)| {
@@ -1101,13 +1114,19 @@ mod tests {
     #[test]
     fn test_expr_bool_true() {
         let (map, owner) = make_map_and_owner("start Main { always { } }");
-        assert_eq!(expr_to_str(&map, &owner, &ExpressionNode::Bool(true)), "true");
+        assert_eq!(
+            expr_to_str(&map, &owner, &ExpressionNode::Bool(true)),
+            "true"
+        );
     }
 
     #[test]
     fn test_expr_bool_false() {
         let (map, owner) = make_map_and_owner("start Main { always { } }");
-        assert_eq!(expr_to_str(&map, &owner, &ExpressionNode::Bool(false)), "false");
+        assert_eq!(
+            expr_to_str(&map, &owner, &ExpressionNode::Bool(false)),
+            "false"
+        );
     }
 
     #[test]
@@ -1341,10 +1360,7 @@ mod tests {
     #[test]
     fn test_expr_cast() {
         let (map, owner) = make_map_and_owner("start Main { always { } }");
-        let expr = ExpressionNode::Cast(
-            Box::new(ExpressionNode::Number(42)),
-            TypeNode::Bit,
-        );
+        let expr = ExpressionNode::Cast(Box::new(ExpressionNode::Number(42)), TypeNode::Bit);
         assert_eq!(expr_to_str(&map, &owner, &expr), "(int)(42)");
     }
 
@@ -1370,9 +1386,18 @@ mod tests {
         let model = model_rc.borrow();
         let map = CMap::new(model.name(), &*model).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
-        assert!(source.contains("#include \""), "отсутствует #include header:\n{source}");
-        assert!(source.contains(".h\""), "отсутствует .h в include:\n{source}");
-        assert!(source.contains("#include <math.h>"), "отсутствует #include <math.h>:\n{source}");
+        assert!(
+            source.contains("#include \""),
+            "отсутствует #include header:\n{source}"
+        );
+        assert!(
+            source.contains(".h\""),
+            "отсутствует .h в include:\n{source}"
+        );
+        assert!(
+            source.contains("#include <math.h>"),
+            "отсутствует #include <math.h>:\n{source}"
+        );
     }
 
     #[test]
@@ -1389,8 +1414,14 @@ start Main { always { } }
         let model = model_rc.borrow();
         let map = CMap::new(model.name(), &*model).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
-        assert!(source.contains("CONST_MAIN_LIMIT"), "CONST_MAIN_LIMIT отсутствует:\n{source}");
-        assert!(source.contains("PORT_MAIN_SENSOR"), "PORT_MAIN_SENSOR отсутствует:\n{source}");
+        assert!(
+            source.contains("CONST_MAIN_LIMIT"),
+            "CONST_MAIN_LIMIT отсутствует:\n{source}"
+        );
+        assert!(
+            source.contains("PORT_MAIN_SENSOR"),
+            "PORT_MAIN_SENSOR отсутствует:\n{source}"
+        );
     }
 
     #[test]
@@ -1406,7 +1437,13 @@ start Main { always { } }
         let model = model_rc.borrow();
         let map = CMap::new(model.name(), &*model).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
-        assert!(source.contains("extern void log_val"), "extern fn отсутствует:\n{source}");
-        assert!(source.contains("static int Main_double_it"), "local fn отсутствует:\n{source}");
+        assert!(
+            source.contains("extern void log_val"),
+            "extern fn отсутствует:\n{source}"
+        );
+        assert!(
+            source.contains("static int Main_double_it"),
+            "local fn отсутствует:\n{source}"
+        );
     }
 }
