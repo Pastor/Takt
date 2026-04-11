@@ -414,17 +414,71 @@ fn generate_function_call(
     Ok(())
 }
 
-/// Генерирует C-выражение из семантического узла выражения.
+/// Возвращает C-приоритет выражения (больше = сильнее связывает).
 ///
-/// Функция пишет в `printer` без начального отступа и без завершающего `;\n`.
-/// Отступ и разделители добавляет вызывающий код.
-fn generate_stmt_expression(
+/// Используется для минимизации лишних скобок: обёртка добавляется только
+/// если приоритет дочернего узла ниже требуемого минимума от родителя.
+fn expr_precedence(expr: &ExpressionNode) -> u8 {
+    match expr {
+        // Присваивание — наименьший приоритет
+        ExpressionNode::Assign(..) => 1,
+        // Тернарный оператор
+        ExpressionNode::ConditionalOperator(..) => 2,
+        // Логическое ИЛИ
+        ExpressionNode::Or(..) => 3,
+        // Логическое И
+        ExpressionNode::And(..) => 4,
+        // Побитовое ИЛИ
+        ExpressionNode::BitwiseOr(..) => 5,
+        // Побитовое исключающее ИЛИ
+        ExpressionNode::BitwiseXor(..) => 6,
+        // Побитовое И
+        ExpressionNode::BitwiseAnd(..) => 7,
+        // Равенство / неравенство
+        ExpressionNode::Equal(..) | ExpressionNode::NotEqual(..) => 8,
+        // Сравнение
+        ExpressionNode::Less(..)
+        | ExpressionNode::More(..)
+        | ExpressionNode::LessEqual(..)
+        | ExpressionNode::MoreEqual(..) => 9,
+        // Битовые сдвиги
+        ExpressionNode::ShiftLeft(..) | ExpressionNode::ShiftRight(..) => 10,
+        // Аддитивные операторы
+        ExpressionNode::Add(..) | ExpressionNode::Subtract(..) => 11,
+        // Мультипликативные операторы
+        ExpressionNode::Multiply(..) | ExpressionNode::Divide(..) | ExpressionNode::Modulo(..) => {
+            12
+        }
+        // Унарные операторы и приведение типов
+        ExpressionNode::Not(..)
+        | ExpressionNode::BitwiseNot(..)
+        | ExpressionNode::UnaryPlus(..)
+        | ExpressionNode::Negate(..)
+        | ExpressionNode::Cast(..) => 13,
+        // Атомы: литералы, переменные, вызовы функций, скобки и т.п.
+        _ => 15,
+    }
+}
+
+/// Генерирует C-выражение из семантического узла с учётом приоритета операторов.
+///
+/// Скобки добавляются автоматически только там, где это необходимо для
+/// сохранения семантики: если `expr_precedence(expr) < min_prec`.
+///
+/// Используйте `min_prec = 0` для выражений верхнего уровня.
+fn generate_expr(
     printer: &mut Printer,
     map: &CMap,
     owner: &Element,
     params: Vec<(String, TypeNode)>,
     expr: &ExpressionNode,
+    min_prec: u8,
 ) -> Result<(), Diagnostic> {
+    let my_prec = expr_precedence(expr);
+    let wrap = my_prec < min_prec;
+    if wrap {
+        printer.print("(");
+    }
     match expr {
         ExpressionNode::None | ExpressionNode::Unresolved(_) => {
             return Err("Неразрешённое выражение".into());
@@ -448,187 +502,152 @@ fn generate_stmt_expression(
         }
 
         // ── Унарные операторы ──────────────────────────────────────────────────
+        // min_prec=14 для операнда: бинарные выражения (prec≤13) будут обёрнуты;
+        // также исключает двусмысленные `--x` и `++x` (унарный + унарный).
         ExpressionNode::Not(e) => {
-            printer.print("!(");
-            generate_stmt_expression(printer, map, owner, params, e)?;
-            printer.print(")");
+            printer.print("!");
+            generate_expr(printer, map, owner, params, e, 14)?;
         }
         ExpressionNode::BitwiseNot(e) => {
-            printer.print("~(");
-            generate_stmt_expression(printer, map, owner, params, e)?;
-            printer.print(")");
+            printer.print("~");
+            generate_expr(printer, map, owner, params, e, 14)?;
         }
         ExpressionNode::UnaryPlus(e) => {
-            printer.print("+(");
-            generate_stmt_expression(printer, map, owner, params, e)?;
-            printer.print(")");
+            printer.print("+");
+            generate_expr(printer, map, owner, params, e, 14)?;
         }
         ExpressionNode::Negate(e) => {
-            printer.print("-(");
-            generate_stmt_expression(printer, map, owner, params, e)?;
-            printer.print(")");
+            printer.print("-");
+            generate_expr(printer, map, owner, params, e, 14)?;
         }
 
         // ── Степень → pow() ────────────────────────────────────────────────────
         ExpressionNode::Power(l, r) => {
             printer.print("pow((double)(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
+            generate_expr(printer, map, owner, params.clone(), l, 0)?;
             printer.print("), (double)(");
-            generate_stmt_expression(printer, map, owner, params, r)?;
+            generate_expr(printer, map, owner, params, r, 0)?;
             printer.print("))");
         }
 
         // ── Бинарные арифметические ────────────────────────────────────────────
+        // Левый операнд: допускается тот же приоритет (левоассоциативность).
+        // Правый операнд: требует более высокого приоритета (wrap при равном).
         ExpressionNode::Multiply(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") * (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 12)?;
+            printer.print(" * ");
+            generate_expr(printer, map, owner, params, r, 13)?;
         }
         ExpressionNode::Divide(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") / (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 12)?;
+            printer.print(" / ");
+            generate_expr(printer, map, owner, params, r, 13)?;
         }
         ExpressionNode::Modulo(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") % (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 12)?;
+            printer.print(" % ");
+            generate_expr(printer, map, owner, params, r, 13)?;
         }
         ExpressionNode::Add(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") + (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 11)?;
+            printer.print(" + ");
+            generate_expr(printer, map, owner, params, r, 12)?;
         }
         ExpressionNode::Subtract(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") - (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 11)?;
+            printer.print(" - ");
+            generate_expr(printer, map, owner, params, r, 12)?;
         }
 
         // ── Битовые сдвиги ────────────────────────────────────────────────────
         ExpressionNode::ShiftLeft(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") << (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 10)?;
+            printer.print(" << ");
+            generate_expr(printer, map, owner, params, r, 11)?;
         }
         ExpressionNode::ShiftRight(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") >> (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 10)?;
+            printer.print(" >> ");
+            generate_expr(printer, map, owner, params, r, 11)?;
         }
 
         // ── Побитовые операторы ────────────────────────────────────────────────
         ExpressionNode::BitwiseAnd(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") & (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 7)?;
+            printer.print(" & ");
+            generate_expr(printer, map, owner, params, r, 8)?;
         }
         ExpressionNode::BitwiseXor(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") ^ (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 6)?;
+            printer.print(" ^ ");
+            generate_expr(printer, map, owner, params, r, 7)?;
         }
         ExpressionNode::BitwiseOr(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") | (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 5)?;
+            printer.print(" | ");
+            generate_expr(printer, map, owner, params, r, 6)?;
         }
 
         // ── Сравнение ─────────────────────────────────────────────────────────
         ExpressionNode::Less(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") < (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 9)?;
+            printer.print(" < ");
+            generate_expr(printer, map, owner, params, r, 10)?;
         }
         ExpressionNode::More(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") > (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 9)?;
+            printer.print(" > ");
+            generate_expr(printer, map, owner, params, r, 10)?;
         }
         ExpressionNode::LessEqual(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") <= (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 9)?;
+            printer.print(" <= ");
+            generate_expr(printer, map, owner, params, r, 10)?;
         }
         ExpressionNode::MoreEqual(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") >= (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 9)?;
+            printer.print(" >= ");
+            generate_expr(printer, map, owner, params, r, 10)?;
         }
         ExpressionNode::Equal(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") == (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 8)?;
+            printer.print(" == ");
+            generate_expr(printer, map, owner, params, r, 9)?;
         }
         ExpressionNode::NotEqual(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") != (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 8)?;
+            printer.print(" != ");
+            generate_expr(printer, map, owner, params, r, 9)?;
         }
 
         // ── Логические ────────────────────────────────────────────────────────
         ExpressionNode::And(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") && (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 4)?;
+            printer.print(" && ");
+            generate_expr(printer, map, owner, params, r, 5)?;
         }
         ExpressionNode::Or(l, r) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") || (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), l, 3)?;
+            printer.print(" || ");
+            generate_expr(printer, map, owner, params, r, 4)?;
         }
 
         // ── Специальные ───────────────────────────────────────────────────────
+        // Явные скобки из исходного кода — всегда генерируем как есть.
         ExpressionNode::Parenthesis(e) => {
             printer.print("(");
-            generate_stmt_expression(printer, map, owner, params, e)?;
+            generate_expr(printer, map, owner, params, e, 0)?;
             printer.print(")");
         }
 
+        // Тернарный оператор: условие обёртывается при prec ≤ ||, чтобы
+        // присваивание или вложенный тернарный в условии был явно выделен.
         ExpressionNode::ConditionalOperator(cond, then_, else_) => {
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), cond)?;
-            printer.print(") ? (");
-            generate_stmt_expression(printer, map, owner, params.clone(), then_)?;
-            printer.print(") : (");
-            generate_stmt_expression(printer, map, owner, params, else_)?;
-            printer.print(")");
+            generate_expr(printer, map, owner, params.clone(), cond, 4)?;
+            printer.print(" ? ");
+            generate_expr(printer, map, owner, params.clone(), then_, 0)?;
+            printer.print(" : ");
+            generate_expr(printer, map, owner, params, else_, 0)?;
         }
 
         ExpressionNode::Assign(l, r) => {
@@ -662,7 +681,7 @@ fn generate_stmt_expression(
                     let mut rhs_str = String::new();
                     {
                         let mut tmp = Printer::new(4, &mut rhs_str);
-                        generate_stmt_expression(&mut tmp, map, owner, params, r)?;
+                        generate_expr(&mut tmp, map, owner, params, r, 0)?;
                     }
                     match ty {
                         TypeNode::Rational => {
@@ -681,12 +700,10 @@ fn generate_stmt_expression(
                     return Ok(());
                 }
             }
-            // Обычное присваивание
-            printer.print("(");
-            generate_stmt_expression(printer, map, owner, params.clone(), l)?;
-            printer.print(") = (");
-            generate_stmt_expression(printer, map, owner, params, r)?;
-            printer.print(")");
+            // Обычное присваивание (право-ассоциативно: тот же prec не оборачивается)
+            generate_expr(printer, map, owner, params.clone(), l, 1)?;
+            printer.print(" = ");
+            generate_expr(printer, map, owner, params, r, 1)?;
         }
 
         ExpressionNode::ArraySubscript(var_rc, idx) => {
@@ -717,7 +734,7 @@ fn generate_stmt_expression(
                 if i > 0 {
                     printer.print(", ");
                 }
-                generate_stmt_expression(printer, map, owner, params.clone(), elem)?;
+                generate_expr(printer, map, owner, params.clone(), elem, 0)?;
             }
             printer.print("}");
         }
@@ -728,7 +745,7 @@ fn generate_stmt_expression(
                 if i > 0 {
                     printer.print(", ");
                 }
-                generate_stmt_expression(printer, map, owner, params.clone(), elem)?;
+                generate_expr(printer, map, owner, params.clone(), elem, 0)?;
             }
             printer.print("}");
         }
@@ -737,9 +754,10 @@ fn generate_stmt_expression(
             let model = map.raw_model_at(owner.name())?;
             let model = &*model.borrow();
             let type_c = get_c_type(typ, model).unwrap_or_else(|| "int".to_string());
-            printer.print("(").print(&type_c).print(")(");
-            generate_stmt_expression(printer, map, owner, params, expr)?;
-            printer.print(")");
+            // Приводимое выражение оборачивается при prec < UNARY (13),
+            // то есть при наличии бинарных операторов: (int)(a + b).
+            printer.print("(").print(&type_c).print(")");
+            generate_expr(printer, map, owner, params, expr, 13)?;
         }
 
         // ── Неподдерживаемые ──────────────────────────────────────────────────
@@ -768,7 +786,25 @@ fn generate_stmt_expression(
             return Err("Model не поддерживается как выражение в C генераторе".into());
         }
     }
+    if wrap {
+        printer.print(")");
+    }
     Ok(())
+}
+
+/// Генерирует C-выражение из семантического узла выражения.
+///
+/// Функция пишет в `printer` без начального отступа и без завершающего `;\n`.
+/// Отступ и разделители добавляет вызывающий код.
+/// Является обёрткой над [`generate_expr`] с `min_prec = 0`.
+fn generate_stmt_expression(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    expr: &ExpressionNode,
+) -> Result<(), Diagnostic> {
+    generate_expr(printer, map, owner, params, expr, 0)
 }
 
 /// Генерирует имя макроса условия вида `COND_{MODEL}_{NAME}`.
@@ -830,11 +866,11 @@ fn generate_code_block(
         }
 
         StatementNode::If { cond, then_, else_ } => {
-            printer.ident("if ((");
+            printer.ident("if (");
             generate_stmt_expression(printer, map, owner, params.clone(), cond)?;
-            printer.print(")) {").up().nl();
+            printer.print(") {").up().nl();
             generate_code_block(printer, map, owner, params.clone(), then_)?;
-           printer.down().ident("}").nl();
+            printer.down().ident("}").nl();
             if let Some(else_) = else_ {
                 printer.print(" else {").up().nl();
                 generate_code_block(printer, map, owner, params.clone(), else_)?;
@@ -848,9 +884,9 @@ fn generate_code_block(
                     printer.ident("while (true) ");
                 }
                 Some(cond_expr) => {
-                    printer.ident("while ((");
+                    printer.ident("while (");
                     generate_stmt_expression(printer, map, owner, params.clone(), cond_expr)?;
-                    printer.print(")) ");
+                    printer.print(") ");
                 }
             }
             generate_code_block(printer, map, owner, params.clone(), body)?;
@@ -931,9 +967,8 @@ fn generate_code_block(
         StatementNode::Return(ret) => {
             printer.ident("return");
             if let Some(expr) = ret {
-                printer.print(" (");
+                printer.print(" ");
                 generate_stmt_expression(printer, map, owner, params, expr)?;
-                printer.print(")");
             }
             printer.print(";").nl();
         }
@@ -1155,30 +1190,64 @@ mod tests {
     #[test]
     fn test_expr_negate() {
         let (map, owner) = make_map_and_owner("start Main { always { } }");
-        let inner = Box::new(ExpressionNode::Number(42));
-        let expr = ExpressionNode::Negate(inner);
-        assert_eq!(expr_to_str(&map, &owner, &expr), "-(42)");
+        // Атом (число) — скобки не нужны
+        let expr = ExpressionNode::Negate(Box::new(ExpressionNode::Number(42)));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "-42");
+    }
+
+    #[test]
+    fn test_expr_negate_complex() {
+        let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // Бинарное выражение внутри унарного — скобки нужны
+        let inner = ExpressionNode::Add(
+            Box::new(ExpressionNode::Number(1)),
+            Box::new(ExpressionNode::Number(2)),
+        );
+        let expr = ExpressionNode::Negate(Box::new(inner));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "-(1 + 2)");
+    }
+
+    #[test]
+    fn test_expr_negate_negate() {
+        let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // Двойное отрицание — скобки нужны чтобы избежать `--x` (декремент в C)
+        let inner = ExpressionNode::Negate(Box::new(ExpressionNode::Number(5)));
+        let expr = ExpressionNode::Negate(Box::new(inner));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "-(-5)");
     }
 
     #[test]
     fn test_expr_not() {
         let (map, owner) = make_map_and_owner("start Main { always { } }");
-        let inner = Box::new(ExpressionNode::Bool(true));
-        let expr = ExpressionNode::Not(inner);
-        assert_eq!(expr_to_str(&map, &owner, &expr), "!(true)");
+        // Атом — без скобок
+        let expr = ExpressionNode::Not(Box::new(ExpressionNode::Bool(true)));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "!true");
+    }
+
+    #[test]
+    fn test_expr_not_complex() {
+        let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // Логическое И внутри NOT — нужны скобки
+        let inner = ExpressionNode::And(
+            Box::new(ExpressionNode::Bool(true)),
+            Box::new(ExpressionNode::Bool(false)),
+        );
+        let expr = ExpressionNode::Not(Box::new(inner));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "!(true && false)");
     }
 
     #[test]
     fn test_expr_bitwise_not() {
         let (map, owner) = make_map_and_owner("start Main { always { } }");
-        let inner = Box::new(ExpressionNode::Number(0xFF));
-        let expr = ExpressionNode::BitwiseNot(inner);
-        assert_eq!(expr_to_str(&map, &owner, &expr), "~(255)");
+        // Атом — без скобок
+        let expr = ExpressionNode::BitwiseNot(Box::new(ExpressionNode::Number(0xFF)));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "~255");
     }
 
     #[test]
     fn test_expr_parenthesis() {
         let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // Явные скобки из исходника — всегда генерируются
         let inner = Box::new(ExpressionNode::Number(42));
         let expr = ExpressionNode::Parenthesis(inner);
         assert_eq!(expr_to_str(&map, &owner, &expr), "(42)");
@@ -1189,11 +1258,12 @@ mod tests {
     #[test]
     fn test_expr_add() {
         let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // Атомы — без скобок
         let expr = ExpressionNode::Add(
             Box::new(ExpressionNode::Number(1)),
             Box::new(ExpressionNode::Number(2)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(1) + (2)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "1 + 2");
     }
 
     #[test]
@@ -1203,7 +1273,7 @@ mod tests {
             Box::new(ExpressionNode::Number(5)),
             Box::new(ExpressionNode::Number(3)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(5) - (3)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "5 - 3");
     }
 
     #[test]
@@ -1213,7 +1283,7 @@ mod tests {
             Box::new(ExpressionNode::Number(4)),
             Box::new(ExpressionNode::Number(5)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(4) * (5)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "4 * 5");
     }
 
     #[test]
@@ -1223,7 +1293,7 @@ mod tests {
             Box::new(ExpressionNode::Number(10)),
             Box::new(ExpressionNode::Number(2)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(10) / (2)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "10 / 2");
     }
 
     #[test]
@@ -1233,7 +1303,7 @@ mod tests {
             Box::new(ExpressionNode::Number(7)),
             Box::new(ExpressionNode::Number(3)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(7) % (3)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "7 % 3");
     }
 
     #[test]
@@ -1243,7 +1313,7 @@ mod tests {
             Box::new(ExpressionNode::Number(1)),
             Box::new(ExpressionNode::Number(4)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(1) << (4)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "1 << 4");
     }
 
     #[test]
@@ -1253,7 +1323,7 @@ mod tests {
             Box::new(ExpressionNode::Number(16)),
             Box::new(ExpressionNode::Number(2)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(16) >> (2)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "16 >> 2");
     }
 
     #[test]
@@ -1263,7 +1333,7 @@ mod tests {
             Box::new(ExpressionNode::Number(0xF0)),
             Box::new(ExpressionNode::Number(0xFF)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(240) & (255)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "240 & 255");
     }
 
     #[test]
@@ -1273,7 +1343,7 @@ mod tests {
             Box::new(ExpressionNode::Number(0xF0)),
             Box::new(ExpressionNode::Number(0x0F)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(240) | (15)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "240 | 15");
     }
 
     #[test]
@@ -1283,7 +1353,7 @@ mod tests {
             Box::new(ExpressionNode::Number(0xAA)),
             Box::new(ExpressionNode::Number(0x55)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(170) ^ (85)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "170 ^ 85");
     }
 
     #[test]
@@ -1293,7 +1363,7 @@ mod tests {
             Box::new(ExpressionNode::Number(1)),
             Box::new(ExpressionNode::Number(2)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(1) < (2)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "1 < 2");
     }
 
     #[test]
@@ -1303,7 +1373,7 @@ mod tests {
             Box::new(ExpressionNode::Number(3)),
             Box::new(ExpressionNode::Number(2)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(3) > (2)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "3 > 2");
     }
 
     #[test]
@@ -1313,7 +1383,7 @@ mod tests {
             Box::new(ExpressionNode::Number(0)),
             Box::new(ExpressionNode::Number(0)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(0) == (0)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "0 == 0");
     }
 
     #[test]
@@ -1323,7 +1393,7 @@ mod tests {
             Box::new(ExpressionNode::Number(1)),
             Box::new(ExpressionNode::Number(0)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(1) != (0)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "1 != 0");
     }
 
     #[test]
@@ -1333,7 +1403,7 @@ mod tests {
             Box::new(ExpressionNode::Bool(true)),
             Box::new(ExpressionNode::Bool(false)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(true) && (false)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "true && false");
     }
 
     #[test]
@@ -1343,25 +1413,114 @@ mod tests {
             Box::new(ExpressionNode::Bool(false)),
             Box::new(ExpressionNode::Bool(true)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(false) || (true)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "false || true");
     }
 
     #[test]
     fn test_expr_conditional_operator() {
         let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // Атомы — без скобок
         let expr = ExpressionNode::ConditionalOperator(
             Box::new(ExpressionNode::Bool(true)),
             Box::new(ExpressionNode::Number(1)),
             Box::new(ExpressionNode::Number(0)),
         );
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(true) ? (1) : (0)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "true ? 1 : 0");
     }
 
     #[test]
     fn test_expr_cast() {
         let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // Атом — без скобок после типа
         let expr = ExpressionNode::Cast(Box::new(ExpressionNode::Number(42)), TypeNode::Bit);
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(int)(42)");
+        assert_eq!(expr_to_str(&map, &owner, &expr), "(int)42");
+    }
+
+    #[test]
+    fn test_expr_cast_complex() {
+        let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // Бинарное выражение — нужны скобки после типа
+        let inner = ExpressionNode::Add(
+            Box::new(ExpressionNode::Number(1)),
+            Box::new(ExpressionNode::Number(2)),
+        );
+        let expr = ExpressionNode::Cast(Box::new(inner), TypeNode::Bit);
+        assert_eq!(expr_to_str(&map, &owner, &expr), "(int)(1 + 2)");
+    }
+
+    // ── Тесты приоритета операторов ────────────────────────────────────────────
+
+    #[test]
+    fn test_expr_precedence_mul_wins_over_add_left() {
+        let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // (a*b) + c → a * b + c (умножение на левой стороне сложения — без скобок)
+        let mul = ExpressionNode::Multiply(
+            Box::new(ExpressionNode::Number(2)),
+            Box::new(ExpressionNode::Number(3)),
+        );
+        let expr = ExpressionNode::Add(Box::new(mul), Box::new(ExpressionNode::Number(4)));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "2 * 3 + 4");
+    }
+
+    #[test]
+    fn test_expr_precedence_add_needs_parens_in_mul() {
+        let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // (a+b) * c → (a + b) * c (сложение в левом операнде умножения — скобки)
+        let add = ExpressionNode::Add(
+            Box::new(ExpressionNode::Number(2)),
+            Box::new(ExpressionNode::Number(3)),
+        );
+        let expr = ExpressionNode::Multiply(Box::new(add), Box::new(ExpressionNode::Number(4)));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "(2 + 3) * 4");
+    }
+
+    #[test]
+    fn test_expr_precedence_sub_right_needs_parens() {
+        let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // a - (b - c) → a - (b - c) (тот же приоритет на правой стороне вычитания)
+        let sub_right = ExpressionNode::Subtract(
+            Box::new(ExpressionNode::Number(3)),
+            Box::new(ExpressionNode::Number(1)),
+        );
+        let expr =
+            ExpressionNode::Subtract(Box::new(ExpressionNode::Number(5)), Box::new(sub_right));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "5 - (3 - 1)");
+    }
+
+    #[test]
+    fn test_expr_precedence_or_inside_and() {
+        let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // (a || b) && c → (a || b) && c (OR имеет меньший приоритет чем AND)
+        let or_expr = ExpressionNode::Or(
+            Box::new(ExpressionNode::Bool(true)),
+            Box::new(ExpressionNode::Bool(false)),
+        );
+        let expr = ExpressionNode::And(Box::new(or_expr), Box::new(ExpressionNode::Bool(true)));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "(true || false) && true");
+    }
+
+    #[test]
+    fn test_expr_precedence_and_no_parens_inside_or() {
+        let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // (a && b) || c → a && b || c (AND имеет больший приоритет чем OR — без скобок)
+        let and_expr = ExpressionNode::And(
+            Box::new(ExpressionNode::Bool(true)),
+            Box::new(ExpressionNode::Bool(false)),
+        );
+        let expr = ExpressionNode::Or(Box::new(and_expr), Box::new(ExpressionNode::Bool(true)));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "true && false || true");
+    }
+
+    #[test]
+    fn test_expr_precedence_compare_in_not() {
+        let (map, owner) = make_map_and_owner("start Main { always { } }");
+        // !(a > b) → !(a > b)
+        let cmp = ExpressionNode::More(
+            Box::new(ExpressionNode::Number(5)),
+            Box::new(ExpressionNode::Number(3)),
+        );
+        let expr = ExpressionNode::Not(Box::new(cmp));
+        assert_eq!(expr_to_str(&map, &owner, &expr), "!(5 > 3)");
     }
 
     #[test]
@@ -1444,6 +1603,66 @@ start Main { always { } }
         assert!(
             source.contains("static int Main_double_it"),
             "local fn отсутствует:\n{source}"
+        );
+    }
+
+    #[test]
+    fn test_generate_if_no_double_parens() {
+        // Проверяет, что условие `if` генерируется без двойных скобок: `if (cond)` а не `if ((cond))`.
+        // В BuT условие `if` пишется без скобок (как в Rust): `if cond { ... }`.
+        // Генератор добавляет ровно одну пару скобок для C.
+        let src = r#"
+type u8 = [bit;8];
+fn check(value: u8) -> bit {
+    if value > 100 {
+        return 1;
+    }
+    return 0;
+}
+start Main { always { } }
+        "#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some("Main".to_string());
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let source = generate_source(map.get_filename(), &map).unwrap();
+        // Условие if должно иметь ровно одну пару скобок
+        assert!(
+            source.contains("if (value > 100)"),
+            "ожидается `if (value > 100)`, получено:\n{source}"
+        );
+        // return должен быть без лишних скобок вокруг значения
+        assert!(
+            !source.contains("return (1)") && !source.contains("return (0)"),
+            "return не должен оборачивать значение в скобки:\n{source}"
+        );
+    }
+
+    #[test]
+    fn test_generate_loop_no_double_parens() {
+        // Проверяет, что условие `loop` (→ `while` в C) генерируется без двойных скобок.
+        // В BuT: `loop cond { ... }` — без скобок вокруг условия.
+        // Генератор добавляет ровно одну пару скобок для C: `while (cond)`.
+        let src = r#"
+type u8 = [bit;8];
+fn check(n: u8) -> bit {
+    loop n > 0 {
+        return 0;
+    }
+    return 1;
+}
+start Main { always { } }
+        "#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some("Main".to_string());
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let source = generate_source(map.get_filename(), &map).unwrap();
+        assert!(
+            source.contains("while (n > 0)"),
+            "ожидается `while (n > 0)`, получено:\n{source}"
         );
     }
 }

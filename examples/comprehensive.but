@@ -23,7 +23,8 @@ model Controller {
 
     /// Ограничивает значение диапазоном [0, MAX_TEMP]
     fn clamp_temp(value: u8) -> u8 {
-        if value > 100 { return 100; }
+        if value > MAX_TEMP { return MAX_TEMP; }
+        if value < temperature { return temperature;}
         return value;
     }
 
