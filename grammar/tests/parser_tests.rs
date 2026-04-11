@@ -1677,7 +1677,10 @@ fn ternary_missing_else_branch_is_error() {
     // `flag ? true` без `: else` не является корректным тернарным выражением
     let src = "var flag: bit = true; var r: bit = flag ? true; start S;";
     let result = grammar::parse(src, 0);
-    assert!(result.is_err(), "ожидалась ошибка парсера для неполного тернарного оператора");
+    assert!(
+        result.is_err(),
+        "ожидалась ошибка парсера для неполного тернарного оператора"
+    );
 }
 
 /// Контр-пример: тернарный оператор без условия — ошибка парсера.
@@ -1685,7 +1688,10 @@ fn ternary_missing_else_branch_is_error() {
 fn ternary_missing_condition_is_error() {
     let src = "var r: bit = ? true : false; start S;";
     let result = grammar::parse(src, 0);
-    assert!(result.is_err(), "ожидалась ошибка парсера для тернарного оператора без условия");
+    assert!(
+        result.is_err(),
+        "ожидалась ошибка парсера для тернарного оператора без условия"
+    );
 }
 
 // ─────────────────────────────── Структурные типы (NI3) ──────────────────────
@@ -1742,7 +1748,10 @@ fn struct_types_file_parses() {
 fn struct_missing_closing_brace_is_error() {
     let src = "struct Bad { x: bit start S;";
     let result = grammar::parse(src, 0);
-    assert!(result.is_err(), "ожидалась ошибка для структуры без закрывающей скобки");
+    assert!(
+        result.is_err(),
+        "ожидалась ошибка для структуры без закрывающей скобки"
+    );
 }
 
 /// Контр-пример: структура без имени — ошибка парсера.

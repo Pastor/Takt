@@ -40,16 +40,13 @@ use std::rc::Weak;
 
 /// Извлекает имя из опционального [`Identifier`].
 ///
-/// Возвращает [`Diagnostic`]-ошибку, если идентификатор отсутствует.
+/// Возвращает [`Diagnostic`]-ошибку с указанной позицией, если идентификатор отсутствует.
 #[inline]
-fn extract_name(id: Option<Identifier>) -> Result<String, Diagnostic> {
+fn extract_name(id: Option<Identifier>, loc: Location) -> Result<String, Diagnostic> {
     if let Some(id) = id {
         Ok(id.name.clone())
     } else {
-        Err(Diagnostic::error(
-            Location::Implicit,
-            "Идентификатор не задан".to_string(),
-        ))
+        Err(Diagnostic::error(loc, "Идентификатор не задан".to_string()))
     }
 }
 
@@ -64,13 +61,17 @@ fn extract_name(id: Option<Identifier>) -> Result<String, Diagnostic> {
 /// ```text
 /// Циклический импорт: /src/a.but → /src/b.but → /src/a.but
 /// ```
-fn check_import_cycle(import_stack: &[String], new_file: &str) -> Result<(), Diagnostic> {
+fn check_import_cycle(
+    import_stack: &[String],
+    new_file: &str,
+    loc: Location,
+) -> Result<(), Diagnostic> {
     if let Some(pos) = import_stack.iter().position(|f| f == new_file) {
         // Строим цепочку начиная с точки входа цикла
         let mut chain: Vec<&str> = import_stack[pos..].iter().map(|s| s.as_str()).collect();
         chain.push(new_file);
         return Err(Diagnostic::error(
-            Location::Implicit,
+            loc,
             format!("Циклический импорт: {}", chain.join(" → ")),
         ));
     }
@@ -133,7 +134,7 @@ fn construct_model_stage0(
             let model_name = model.borrow().name.clone().unwrap();
             if models.contains_key(&model_name) {
                 return Err(Diagnostic::declaration_error(
-                    Location::Implicit,
+                    model.borrow().loc,
                     format!("Модель с именем '{}' уже объявлена", &model_name),
                 ));
             }
@@ -143,7 +144,7 @@ fn construct_model_stage0(
                 ImportDefine::Plain(path, import_loc) => {
                     let (content, filename) = read_import_file(search_paths, path)?;
                     // Проверяем цикл ДО рекурсивной обработки файла
-                    check_import_cycle(import_stack, &filename)?;
+                    check_import_cycle(import_stack, &filename, *import_loc)?;
                     // Извлекаем только имя файла (без директории и расширения),
                     // затем нормализуем в CamelCase: "my_model.but" → "MyModel".
                     // Прежде использовался срез filename[..len-4], что давало полный путь
@@ -179,7 +180,7 @@ fn construct_model_stage0(
                 ImportDefine::GlobalSymbol(path, id, import_loc) => {
                     let (content, filename) = read_import_file(search_paths, path)?;
                     // Проверяем цикл ДО рекурсивной обработки файла
-                    check_import_cycle(import_stack, &filename)?;
+                    check_import_cycle(import_stack, &filename, *import_loc)?;
                     let model_name = id.name.clone();
                     if models.contains_key(&model_name) {
                         return Err(Diagnostic::declaration_error(
@@ -198,7 +199,6 @@ fn construct_model_stage0(
                         }
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
-                    let _ = import_loc; // loc доступен, но дублирует id.loc
                 }
                 // `import { A, B as C } from "file.but";`
                 //
@@ -207,10 +207,10 @@ fn construct_model_stage0(
                 //
                 // Поддерживаемые категории: модели, псевдонимы типов, переменные, условия.
                 // Приоритет поиска: модель → тип → переменная → условие.
-                ImportDefine::Rename(path, symbols, _import_loc) => {
+                ImportDefine::Rename(path, symbols, import_loc) => {
                     let (content, filename) = read_import_file(search_paths, path)?;
                     // Проверяем цикл ДО рекурсивной обработки файла
-                    check_import_cycle(import_stack, &filename)?;
+                    check_import_cycle(import_stack, &filename, *import_loc)?;
                     import_stack.push(filename.clone());
                     let result = match parse(&content, 0) {
                         Ok((ast_model, _)) => {
@@ -282,7 +282,7 @@ fn construct_model_stage0(
                     name,
                     initializer,
                 } => {
-                    let name = extract_name(name.clone())?;
+                    let name = extract_name(name.clone(), loc)?;
                     variables.insert(
                         name.clone(),
                         VariableNode::Simple {
@@ -302,7 +302,7 @@ fn construct_model_stage0(
                     name,
                     initializer,
                 } => {
-                    let name = extract_name(name.clone())?;
+                    let name = extract_name(name.clone(), loc)?;
                     let type_node = construct_type(typ, model_node.clone())?;
                     if type_node == TypeNode::Inference {
                         return Err(Diagnostic::error(
@@ -342,7 +342,7 @@ fn construct_model_stage0(
                     name,
                     initializer,
                 } => {
-                    let name = extract_name(name.clone())?;
+                    let name = extract_name(name.clone(), loc)?;
                     variables.insert(
                         name.clone(),
                         VariableNode::Const {
@@ -1172,7 +1172,7 @@ pub fn construct_states(
                         if let StateNode::Unresolved = *r.object {
                             let target = states.get(&r.name).ok_or_else(|| {
                                 Diagnostic::error(
-                                    Location::Implicit,
+                                    r.location,
                                     format!("Ссылка '{}' не найдена", &r.name),
                                 )
                             })?;
@@ -1222,10 +1222,7 @@ fn resolve_references(
         .map(|r| {
             if let StateNode::Unresolved = *r.object {
                 let target = states.get(&r.name).ok_or_else(|| {
-                    Diagnostic::error(
-                        Location::Implicit,
-                        format!("Ссылка '{}' не найдена", &r.name),
-                    )
+                    Diagnostic::error(r.location, format!("Ссылка '{}' не найдена", &r.name))
                 })?;
                 Ok(ReferenceNode {
                     location: r.location,

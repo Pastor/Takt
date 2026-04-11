@@ -19,7 +19,7 @@ pub mod lexer;
 pub fn parse_address_literal(s: &str) -> (i64, i64) {
     if let Some(pos) = s.rfind(':') {
         let addr_part = &s[..pos];
-        let bit_part  = &s[pos + 1..];
+        let bit_part = &s[pos + 1..];
         let addr = if addr_part.starts_with("0x") || addr_part.starts_with("0X") {
             i64::from_str_radix(&addr_part[2..], 16).unwrap_or(0)
         } else {

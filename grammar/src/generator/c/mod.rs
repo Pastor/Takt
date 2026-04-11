@@ -127,7 +127,11 @@ pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
     }
 }
 
-pub(super) fn get_typed_variable(typ: &TypeNode, name: Option<String>, model: &ModelNode) -> Option<String> {
+pub(super) fn get_typed_variable(
+    typ: &TypeNode,
+    name: Option<String>,
+    model: &ModelNode,
+) -> Option<String> {
     match typ {
         TypeNode::Array(size, typ) => {
             if let TypeNode::Rational = **typ {

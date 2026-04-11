@@ -66,7 +66,7 @@ fn model_only_one_start_state(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagn
 
     if start_count != 1 {
         return Err(Diagnostic::error(
-            Location::Implicit,
+            borrowed.loc,
             format!(
                 "В модели '{}' должно быть только одно начальное состояние (найдено: {})",
                 name, start_count
@@ -154,7 +154,10 @@ fn validate_cond(
                     && let ConditionNode::Model(model) = *cond.clone()
                 {
                     let model = model.borrow();
-                    let model_name = model.name.clone().unwrap_or_else(|| "<анонимная>".to_string());
+                    let model_name = model
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| "<анонимная>".to_string());
                     model.search_state(&id.name).ok_or_else(|| {
                         Diagnostic::error(
                             id.loc,
@@ -170,8 +173,8 @@ fn validate_cond(
 
             if let ConditionNode::Unresolved(_) = resolve_condition(&cond, model.clone())? {
                 return Err(Diagnostic::error(
-                    Location::Implicit,
-                    format!("Unresolved condition: {:?}", cond),
+                    cond.loc(),
+                    format!("Неразрешённое условие: {:?}", cond),
                 ));
             }
         }
@@ -3025,12 +3028,7 @@ pub fn check_enum_type_safety(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> 
 /// [`Diagnostic`] уровня `Error` с кодом Ce17 при первом нарушении,
 /// `None` если дублирований нет.
 pub fn check_duplicate_struct_fields(model: Rc<RefCell<ModelNode>>) -> Option<Diagnostic> {
-    let structs: Vec<_> = model
-        .borrow()
-        .structs
-        .values()
-        .cloned()
-        .collect();
+    let structs: Vec<_> = model.borrow().structs.values().cloned().collect();
 
     for s in &structs {
         let mut seen: HashSet<&str> = HashSet::new();
@@ -3048,12 +3046,8 @@ pub fn check_duplicate_struct_fields(model: Rc<RefCell<ModelNode>>) -> Option<Di
     }
 
     // Рекурсивная проверка вложенных моделей
-    let nested: Vec<Rc<RefCell<ModelNode>>> = model
-        .borrow()
-        .models
-        .values()
-        .map(Rc::clone)
-        .collect();
+    let nested: Vec<Rc<RefCell<ModelNode>>> =
+        model.borrow().models.values().map(Rc::clone).collect();
     for nested_model in nested {
         if let Some(diag) = check_duplicate_struct_fields(nested_model) {
             return Some(diag);
@@ -3089,12 +3083,7 @@ pub fn check_duplicate_struct_fields(model: Rc<RefCell<ModelNode>>) -> Option<Di
 /// [`Diagnostic`] уровня `Error` с кодом Ce18 при первом нарушении,
 /// `None` если все типы полей известны.
 pub fn check_struct_field_types(model: Rc<RefCell<ModelNode>>) -> Option<Diagnostic> {
-    let structs: Vec<_> = model
-        .borrow()
-        .structs
-        .values()
-        .cloned()
-        .collect();
+    let structs: Vec<_> = model.borrow().structs.values().cloned().collect();
 
     for s in &structs {
         for (field_name, field_ty) in &s.fields {
@@ -3114,12 +3103,8 @@ pub fn check_struct_field_types(model: Rc<RefCell<ModelNode>>) -> Option<Diagnos
     }
 
     // Рекурсивная проверка вложенных моделей
-    let nested: Vec<Rc<RefCell<ModelNode>>> = model
-        .borrow()
-        .models
-        .values()
-        .map(Rc::clone)
-        .collect();
+    let nested: Vec<Rc<RefCell<ModelNode>>> =
+        model.borrow().models.values().map(Rc::clone).collect();
     for nested_model in nested {
         if let Some(diag) = check_struct_field_types(nested_model) {
             return Some(diag);

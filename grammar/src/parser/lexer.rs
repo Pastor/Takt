@@ -511,15 +511,15 @@ impl<'input> Lexer<'input> {
                                 break;
                             }
                         }
-                        return Ok((start, Token::AddressLiteral(&self.input[start..=bit_end]), bit_end + 1));
+                        return Ok((
+                            start,
+                            Token::AddressLiteral(&self.input[start..=bit_end]),
+                            bit_end + 1,
+                        ));
                     }
                 }
 
-                return Ok((
-                    start,
-                    Token::Number(hex_val),
-                    end + 1,
-                ));
+                return Ok((start, Token::Number(hex_val), end + 1));
             }
         }
 

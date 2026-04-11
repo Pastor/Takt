@@ -124,6 +124,14 @@ pub fn collect_diagnostics(source: &str) -> Vec<Diagnostic> {
 }
 
 /// Конвертирует [`crate::diagnostics::Diagnostic`] в LSP [`Diagnostic`].
+///
+/// Диагностики с `Location::Source` получают точный диапазон в документе.
+/// Диагностики без координат (`Location::Implicit`, `Location::Codegen` и т.д.)
+/// получают нулевой диапазон `(0,0)-(0,0)`.
+///
+/// Вспомогательные заметки (`notes`) добавляются к тексту сообщения через
+/// символ переноса строки, чтобы редактор мог отобразить их вместе с основным
+/// сообщением без необходимости знать URI документа на этапе конвертации.
 pub fn grammar_diagnostic_to_lsp(
     diag: &crate::diagnostics::Diagnostic,
     source: &str,
@@ -146,10 +154,22 @@ pub fn grammar_diagnostic_to_lsp(
         },
     };
 
+    // Формируем полное сообщение: основной текст + заметки
+    let message = if diag.notes.is_empty() {
+        diag.message.clone()
+    } else {
+        let notes_text: String = diag
+            .notes
+            .iter()
+            .map(|n| format!("\nЗаметка: {}", n.message))
+            .collect();
+        format!("{}{}", diag.message, notes_text)
+    };
+
     Diagnostic {
         range,
         severity,
-        message: diag.message.clone(),
+        message,
         source: Some("but-lsp".to_string()),
         ..Default::default()
     }
@@ -458,11 +478,9 @@ pub fn goto_declaration_with_paths(
                         let import_index =
                             crate::semantic::index::SemanticIndex::build(&import_model);
                         // Для узлов, которые являются декларациями, ищем по имени в индексе
-                        if let Some(found) = find_declaration_in_index(
-                            &import_index,
-                            &node.name,
-                            &node.kind,
-                        ) {
+                        if let Some(found) =
+                            find_declaration_in_index(&import_index, &node.name, &node.kind)
+                        {
                             if let DiagLoc::Source(_, start, end) = found.loc {
                                 return Some(Location {
                                     uri: file_path
@@ -512,8 +530,19 @@ fn find_declaration_in_index<'a>(
     // Только декларационные виды (не использования)
     let is_declaration = matches!(
         kind,
-        Variable | Const | Port | Function | ExternFunction | State | StartState | EndState
-            | TypeAlias | Condition | Enum | Model | LocalVar
+        Variable
+            | Const
+            | Port
+            | Function
+            | ExternFunction
+            | State
+            | StartState
+            | EndState
+            | TypeAlias
+            | Condition
+            | Enum
+            | Model
+            | LocalVar
     );
     if !is_declaration {
         return None;

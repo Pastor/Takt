@@ -868,7 +868,10 @@ mod tests {
             "функция clamp должна быть в модели"
         );
         // Проверяем, что тело функции разрешено (нет Unresolved на верхнем уровне)
-        let func = node.functions.get("clamp").expect("функция clamp не найдена");
+        let func = node
+            .functions
+            .get("clamp")
+            .expect("функция clamp не найдена");
         if let FunctionDefinitionNode::Local { body, .. } = func {
             assert!(
                 !matches!(body, StatementNode::Unresolved(_)),

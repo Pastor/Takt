@@ -50,11 +50,7 @@ pub(crate) fn read_import_file(
 
         // Идентификаторный путь: `import a::b::c;` → ищем `a/b/c.but`
         ImportPath::Path(id_path) => {
-            let inner = id_path
-                .identifiers
-                .iter()
-                .map(|i| i.name.clone())
-                .join("/");
+            let inner = id_path.identifiers.iter().map(|i| i.name.clone()).join("/");
             search_paths
                 .iter()
                 .map(|dir| format!("{}/{}.but", dir, inner))
@@ -129,8 +125,8 @@ pub(crate) fn read_import_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::ast::{IdentifierPath, ImportPath, StringLiteral};
     use crate::diagnostics::Location;
+    use crate::parser::ast::{IdentifierPath, ImportPath, StringLiteral};
     use std::fs;
 
     // ─── Вспомогательные функции ──────────────────────────────────────────────
@@ -180,7 +176,10 @@ mod tests {
             dir2.path().to_string_lossy().into_owned(),
         ];
         let (content, _) = read_import_file(&search, &filename_path("x.but")).unwrap();
-        assert_eq!(content, "start A;", "должна вернуться версия из первого пути");
+        assert_eq!(
+            content, "start A;",
+            "должна вернуться версия из первого пути"
+        );
     }
 
     /// Идентификаторный путь `a::b` ищет файл `a/b.but`.
@@ -196,8 +195,14 @@ mod tests {
         let search = vec![dir.path().to_string_lossy().into_owned()];
         let path = ImportPath::Path(IdentifierPath {
             identifiers: vec![
-                Identifier { name: "a".to_string(), loc: Location::default() },
-                Identifier { name: "b".to_string(), loc: Location::default() },
+                Identifier {
+                    name: "a".to_string(),
+                    loc: Location::default(),
+                },
+                Identifier {
+                    name: "b".to_string(),
+                    loc: Location::default(),
+                },
             ],
             loc: Location::default(),
         });

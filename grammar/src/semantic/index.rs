@@ -230,11 +230,7 @@ impl SemanticIndex {
     /// Используется для поиска декларации по имени при кросс-файловых переходах.
     ///
     /// Возвращает `None`, если узел с таким именем и видом не найден.
-    pub fn find_by_name(
-        &self,
-        name: &str,
-        kind: &SemanticNodeKind,
-    ) -> Option<&SemanticNodeRef> {
+    pub fn find_by_name(&self, name: &str, kind: &SemanticNodeKind) -> Option<&SemanticNodeRef> {
         self.entries
             .iter()
             .find(|e| e.node_ref.name == name && &e.node_ref.kind == kind)
@@ -787,15 +783,9 @@ fn collect_ast_statement_entries(
         ast::Statement::Variable(_stmt_loc, var_def, init_expr) => {
             // Извлекаем имя и локацию идентификатора объявляемой переменной
             let (name, id_loc) = match var_def.as_ref() {
-                ast::VariableDefine::Variable {
-                    name: Some(id), ..
-                }
-                | ast::VariableDefine::Port {
-                    name: Some(id), ..
-                }
-                | ast::VariableDefine::Constant {
-                    name: Some(id), ..
-                } => (id.name.clone(), id.loc),
+                ast::VariableDefine::Variable { name: Some(id), .. }
+                | ast::VariableDefine::Port { name: Some(id), .. }
+                | ast::VariableDefine::Constant { name: Some(id), .. } => (id.name.clone(), id.loc),
                 _ => return,
             };
             if let Location::Source(_, start, end) = id_loc {

@@ -141,8 +141,8 @@ fn is_keyword_returns_true_for_keywords() {
     use grammar::parser::lexer::is_keyword;
 
     let keywords = [
-        "break", "const", "continue", "else", "false", "for", "fn", "if", "import", "loop", "return",
-        "string", "true", "type", "as", "assembly", "formula", "port", "model", "state",
+        "break", "const", "continue", "else", "false", "for", "fn", "if", "import", "loop",
+        "return", "string", "true", "type", "as", "assembly", "formula", "port", "model", "state",
         "start", "ref", "template", "cond", "var", "next", "extern",
     ];
     for kw in keywords {
@@ -775,7 +775,11 @@ fn comment_at_eof_without_newline() {
 #[test]
 fn block_comment_produces_no_tokens() {
     let src = "/* блочный комментарий */\nmodel";
-    assert_eq!(token_count(src), 1, "После блочного комментария — только 'model'");
+    assert_eq!(
+        token_count(src),
+        1,
+        "После блочного комментария — только 'model'"
+    );
     assert_eq!(comment_count(src), 1, "Ожидался один блочный комментарий");
 }
 
@@ -803,7 +807,11 @@ fn block_comment_is_detected_as_block() {
 fn multiline_block_comment_lexes_ok() {
     let src = "/*\n строка 1\n строка 2\n*/\nvar x = 1;";
     let errors = collect_errors(src);
-    assert!(errors.is_empty(), "Многострочный блочный комментарий вызвал ошибку: {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "Многострочный блочный комментарий вызвал ошибку: {:?}",
+        errors
+    );
     assert_eq!(comment_count(src), 1, "Ожидался один комментарий");
     assert_eq!(token_count(src), 5, "Ожидались токены: var, x, =, 1, ;");
 }
@@ -857,7 +865,11 @@ fn unclosed_block_comment_produces_eof_error() {
 fn empty_block_comment_lexes_ok() {
     let src = "/**/ model";
     let errors = collect_errors(src);
-    assert!(errors.is_empty(), "Пустой блочный комментарий вызвал ошибку: {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "Пустой блочный комментарий вызвал ошибку: {:?}",
+        errors
+    );
     assert_eq!(comment_count(src), 1);
     assert_eq!(token_count(src), 1);
 }

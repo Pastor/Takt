@@ -16,31 +16,10 @@
 
 # Задачи
 
-1. При генерации кода на Си не правильно определяются переменные моделей в функции. Сейчас код генерируется так:
-    ```cplusplus
-    static uint8_t ComprehensiveController_clamp_temp(Comprehensive *main, uint8_t value) {
-        if (value > CONST_COMPREHENSIVE_CONTROLLER_MAX_TEMP) {
-            return CONST_COMPREHENSIVE_CONTROLLER_MAX_TEMP;
-        }
-        if (value < main->controller.temperature) {
-            return main->controller.temperature;
-        }
-        return value;
-    }
-   ```
-   корректный результат должен быть таким:
-   ```cplusplus
-   static uint8_t ComprehensiveController_clamp_temp(Comprehensive *main, uint8_t value) {
-        if (value > CONST_COMPREHENSIVE_CONTROLLER_MAX_TEMP) {
-            return CONST_COMPREHENSIVE_CONTROLLER_MAX_TEMP;
-        }
-        if (value < main->entry.temperature) {
-            return main->entry.temperature;
-        }
-        return value;
-   }
-   ```
-   прими во внимание "Манифест генрации кода"
+1. Изучи реализацию `LSP`, если есть ошибки или потенциальные ошибки - исправь их. Посмотри реализацию предоставления 
+   диагностических сообщений в `LSP` сервер, посмотри везде и добейся передачи координат и/или области кода в которой 
+   выявлена ошибка или предупреждения для диагностического сообщения. Прими во внимание "Манифест генерации кода". 
+   Тезис такой — любое диагностическое сообщение должно содержать координаты или область кода, в которой оно было выявлено.
 
 2. Проанализируй проект целиком, сформируй список улучшений и проблем в проекте, предложи решения их. Приведи в
    соответствие с файлом `README.md` (параллельно актуализируй его), удали в нем уже сделанные пункты или пункты,

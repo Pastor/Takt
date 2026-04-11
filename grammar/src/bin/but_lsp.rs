@@ -38,19 +38,15 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
             },
         )),
         completion_provider: Some(CompletionOptions {
-            trigger_characters: Some(vec![
-                " ".to_string(),
-                ".".to_string(),
-                ":".to_string(),
-            ]),
+            trigger_characters: Some(vec![" ".to_string(), ".".to_string(), ":".to_string()]),
             resolve_provider: Some(false),
             ..Default::default()
         }),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         declaration_provider: Some(DeclarationCapability::Simple(true)),
         document_symbol_provider: Some(OneOf::Left(true)),
-        semantic_tokens_provider: Some(
-            SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
+        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
+            SemanticTokensOptions {
                 legend: SemanticTokensLegend {
                     token_types: grammar::lsp::SEMANTIC_TOKEN_TYPES.to_vec(),
                     token_modifiers: vec![],
@@ -58,8 +54,8 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
                 full: Some(SemanticTokensFullOptions::Bool(true)),
                 range: None,
                 work_done_progress_options: Default::default(),
-            }),
-        ),
+            },
+        )),
         ..Default::default()
     })?;
 
@@ -158,8 +154,12 @@ fn handle_request(
             let uri = &params.text_document_position_params.text_document.uri;
             let position = params.text_document_position_params.position;
             let text = state.get_text(uri).unwrap_or("");
-            let result = grammar::lsp::goto_declaration(text, position)
-                .map(|range| GotoDeclarationResponse::Scalar(Location { uri: uri.clone(), range }));
+            let result = grammar::lsp::goto_declaration(text, position).map(|range| {
+                GotoDeclarationResponse::Scalar(Location {
+                    uri: uri.clone(),
+                    range,
+                })
+            });
             connection.sender.send(Message::Response(Response::new_ok(
                 req.id,
                 serde_json::to_value(result)?,
@@ -248,9 +248,11 @@ fn publish_diagnostics(
         diagnostics,
         version: None,
     };
-    connection.sender.send(Message::Notification(Notification::new(
-        PublishDiagnostics::METHOD.to_string(),
-        params,
-    )))?;
+    connection
+        .sender
+        .send(Message::Notification(Notification::new(
+            PublishDiagnostics::METHOD.to_string(),
+            params,
+        )))?;
     Ok(())
 }

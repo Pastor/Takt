@@ -467,6 +467,34 @@ pub enum Condition {
     Variable(Identifier),
 }
 
+impl Condition {
+    /// Возвращает местоположение условия в исходном тексте.
+    pub fn loc(&self) -> Location {
+        match self {
+            Condition::ArraySubscript(loc, _, _)
+            | Condition::Parenthesis(loc, _)
+            | Condition::BitAccess(loc, _, _)
+            | Condition::Function(loc, _, _)
+            | Condition::Not(loc, _)
+            | Condition::Add(loc, _, _)
+            | Condition::Subtract(loc, _, _)
+            | Condition::And(loc, _, _)
+            | Condition::Or(loc, _, _)
+            | Condition::Less(loc, _, _)
+            | Condition::More(loc, _, _)
+            | Condition::LessEqual(loc, _, _)
+            | Condition::MoreEqual(loc, _, _)
+            | Condition::Equal(loc, _, _)
+            | Condition::NotEqual(loc, _, _)
+            | Condition::Number(loc, _)
+            | Condition::Rational(loc, _, _)
+            | Condition::Bool(loc, _) => *loc,
+            Condition::Variable(id) => id.loc,
+            Condition::String(parts) => parts.first().map(|s| s.loc).unwrap_or(Location::Implicit),
+        }
+    }
+}
+
 /// Элемент доступа к члену (для оператора `.`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]

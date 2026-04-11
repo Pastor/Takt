@@ -18,10 +18,10 @@ use super::{get_c_type, get_typed_variable};
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
+use crate::semantic::extend::Extend;
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::extend::Extend;
 use crate::semantic::{
     ConditionDefinitionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode,
     StatementNode, VariableNode,

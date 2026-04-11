@@ -278,7 +278,8 @@ mod tests {
     /// Параметры `clamp`: три параметра `x`, `lo`, `hi` типа `BuiltinNumeric`.
     #[test]
     fn builtin_clamp_has_three_params() {
-        if let FunctionDefinitionNode::Builtin(_, params, ret) = builtin_function("clamp").unwrap() {
+        if let FunctionDefinitionNode::Builtin(_, params, ret) = builtin_function("clamp").unwrap()
+        {
             assert_eq!(params.len(), 3, "clamp должна принимать 3 параметра");
             assert_eq!(params[0].0, "x");
             assert_eq!(params[1].0, "lo");

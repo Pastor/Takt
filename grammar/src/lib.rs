@@ -489,7 +489,6 @@ always {
     /// V1: обычный путь вида "path/to/model.but" → имя модели "model".
     #[test]
     fn compile_to_c_normal_filename_sets_model_name() {
-
         // Используем пустую директорию; ошибка записи нас не интересует —
         // важно только, что функция не паникует при нормальном имени файла.
         let dir = tempfile::tempdir().unwrap();

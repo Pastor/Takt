@@ -1,4 +1,4 @@
-use crate::diagnostics::{Diagnostic, Location};
+use crate::diagnostics::Diagnostic;
 use crate::semantic::extend::Extend;
 use crate::semantic::naming::{normalize_camelcase_name, normalize_lowercase_snakecase};
 use crate::semantic::{ModelNode, StateNode};
@@ -160,8 +160,8 @@ impl Map {
         let mut used_elements = HashMap::new();
         let Some(start) = model.borrow().get_start_state() else {
             return Err(Diagnostic::error(
-                Location::Implicit,
-                "Model must have a start state".to_string(),
+                model.borrow().loc,
+                "Модель должна содержать начальное состояние".to_string(),
             ));
         };
         let local_name = start.name().to_string();

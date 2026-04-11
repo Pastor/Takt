@@ -256,7 +256,7 @@ mod tests {
     use crate::diagnostics::Location;
     use crate::parse;
     use crate::parser::ast;
-    use crate::semantic::extend::{unroll_extend_expression, Extend};
+    use crate::semantic::extend::{Extend, unroll_extend_expression};
     use crate::semantic::test_constants::tests::SRC;
     use crate::semantic::tree::construct_model;
     use crate::semantic::{ExpressionNode, StateNode};
@@ -345,9 +345,7 @@ mod tests {
                 panic!("State {name} is not an Implement node")
             };
             let Extend::Concatenation(items) = implements else {
-                panic!(
-                    "State {name}: ожидался Extend::Concatenation, получили: {implements}"
-                );
+                panic!("State {name}: ожидался Extend::Concatenation, получили: {implements}");
             };
             assert_eq!(
                 items.len(),
