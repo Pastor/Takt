@@ -1,4 +1,5 @@
 #include "comprehensive.h"
+#include <assert.h>
 #include <math.h>
 /// Перечисления модели comprehensive (Comprehensive)
 #define ENUM_COMPREHENSIVE_AUTO 0
@@ -31,6 +32,21 @@ void Comprehensive_init(Comprehensive *main) {
 }
 
 void Comprehensive_tick(Comprehensive *main) {
+    assert(0 != main);
+    switch (main->state) {
+        case COMPREHENSIVE_INIT: {
+            ///FIXME: Пока не реализовано
+            break;
+        }
+        case COMPREHENSIVE_ENTRY: {
+            ///FIXME: Пока не реализовано
+            break;
+        }
+        case COMPREHENSIVE_END: {
+            ///FIXME: Пока не реализовано
+            break;
+        }
+    }
 }
 
 void Comprehensive_reset(Comprehensive *main) {

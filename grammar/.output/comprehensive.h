@@ -11,14 +11,14 @@ typedef struct Comprehensive Comprehensive;
 /* Model Controller (Comprehensive:Controller) */
 struct ComprehensiveController {
     // NOTICE: Определение переменных модели
-    uint8_t temperature;
     uint8_t count;
+    uint8_t temperature;
     enum {
         COMPREHENSIVE_CONTROLLER_INIT,
-        COMPREHENSIVE_CONTROLLER_DONE,
+        COMPREHENSIVE_CONTROLLER_COOLING,
         COMPREHENSIVE_CONTROLLER_IDLE,
         COMPREHENSIVE_CONTROLLER_HEATING,
-        COMPREHENSIVE_CONTROLLER_COOLING,
+        COMPREHENSIVE_CONTROLLER_DONE,
         COMPREHENSIVE_CONTROLLER_END
     } state;
 };

@@ -36,6 +36,7 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
     printer
         .print(format!("#include \"{}.h\"", filename).as_str())
         .nl();
+    printer.print("#include <assert.h>").nl();
     printer.print("#include <math.h>").nl();
     generate_constants_and_ports_and_enums(&mut printer, map)?;
     generate_functions(&mut printer, map)?;
@@ -66,6 +67,8 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
         .print(" *main) {")
         .nl();
     printer.up();
+    printer.ident("assert(0 != main);").nl();
+    generate_map_tick(&mut printer, map)?;
     printer.down();
     printer.print("}").nl().nl();
     printer
@@ -113,6 +116,44 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
         .nl();
     printer.print("}").nl().nl();
     Ok(source)
+}
+
+fn generate_map_tick(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic> {
+    printer.ident("switch (main->state) {").up().nl();
+    printer
+        .ident("case ")
+        .print(&map.root_name().unique_uppercase_snakecase())
+        .print("_INIT: {")
+        .up()
+        .nl();
+    printer.ident("///FIXME: Пока не реализовано").nl();
+    //TODO: Реализовать инициализацию переменных, расширяемых моделей если таковые есть
+    //      После инициализации следует перейти к начальному состоянию модели
+    printer.ident("break;").nl();
+    printer.down().ident("}").nl();
+    for state_name in map.states() {
+        printer
+            .ident("case ")
+            .print(&state_name.unique_uppercase_snakecase())
+            .print(": {")
+            .up()
+            .nl();
+        //TODO: Реализовать
+        printer.ident("///FIXME: Пока не реализовано").nl();
+        printer.ident("break;").nl();
+        printer.down().ident("}").nl();
+    }
+    printer
+        .ident("case ")
+        .print(&map.root_name().unique_uppercase_snakecase())
+        .print("_END: {")
+        .up()
+        .nl();
+    printer.ident("///FIXME: Пока не реализовано").nl();
+    printer.ident("break;").nl();
+    printer.down().ident("}").nl();
+    printer.down().ident("}").nl();
+    Ok(())
 }
 
 fn generate_constants_and_ports_and_enums(

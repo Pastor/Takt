@@ -1,4 +1,5 @@
 #include "this_is_my_model.h"
+#include <assert.h>
 #include <math.h>
 /// Константы и порты модели ThisIsMyModel (ThisIsMyModel)
 #define CONST_THIS_IS_MY_MODEL_MATRIX {0, 0, 0, 0, 0, 0, 0, 0}
@@ -11,6 +12,21 @@ void ThisIsMyModel_init(ThisIsMyModel *main) {
 }
 
 void ThisIsMyModel_tick(ThisIsMyModel *main) {
+    assert(0 != main);
+    switch (main->state) {
+        case THIS_IS_MY_MODEL_INIT: {
+            ///FIXME: Пока не реализовано
+            break;
+        }
+        case THIS_IS_MY_MODEL_ENTRY: {
+            ///FIXME: Пока не реализовано
+            break;
+        }
+        case THIS_IS_MY_MODEL_END: {
+            ///FIXME: Пока не реализовано
+            break;
+        }
+    }
 }
 
 void ThisIsMyModel_reset(ThisIsMyModel *main) {
