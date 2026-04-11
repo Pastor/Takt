@@ -935,6 +935,7 @@ return Err(Diagnostic::error(loc, "Неожиданный тип аргумен�
 | Changes-44-P02 | LSP: заметки в диагностических сообщениях, `Condition::loc()` в AST, 4 новых интеграционных теста для координат диагностик, `rustfmt` 13 файлов | ✅ Реализовано |
 | Changes-45    | Актуализация README: Changes-44 в таблице, новые открытые задачи (panic→diagnostic, unwrap cleanup)                  | ✅ Выполнено   |
 | Changes-46    | Координаты в предупреждениях Ce13 (`unused.rs`), Ce14, Ce5, NI6, Ce11 (`validate.rs`): `Location::Builtin` заменён на `var.loc()` / `state.loc()` / `r.location`; новый тест `ce13_unused_variable_warning_has_source_location` | ✅ Исправлено |
+| Changes-47    | Расширение Zed `zed-but`: поиск `but-lsp` сначала в PATH (`worktree.which`), затем в `$HOME/.cargo/bin` (`worktree.shell_env`); информативная ошибка если не найден; `extension.wasm` пересобран | ✅ Исправлено |
 | —             | SemanticIndex: поиск узла по LSP-позиции (LSP1)                               | ✅ Реализовано |
 | —             | `textDocument/declaration`: переход к декларации (LSP2)                       | ✅ Реализовано |
 | —             | `textDocument/documentSymbol`: структура документа (LSP3)                     | ✅ Реализовано |
