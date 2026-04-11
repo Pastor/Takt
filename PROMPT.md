@@ -16,26 +16,31 @@
 
 # Задачи
 
-1. При генерации кода на Си не добавляй лишнее обрамление выражений в скобки. Требование такое, если выражение состоит 
-    из единичного оператора без операций, не обрамляй скобками, в иных случаях смотри за порядком выполнения операций, 
-    и если он нарушается, обрамляй выражение скобками. Пример. Сейчас код генерируется так:
+1. При генерации кода на Си не правильно определяются переменные моделей в функции. Сейчас код генерируется так:
     ```cplusplus
     static uint8_t ComprehensiveController_clamp_temp(Comprehensive *main, uint8_t value) {
-        if (((value) > (100))) {
-            return (100);
+        if (value > CONST_COMPREHENSIVE_CONTROLLER_MAX_TEMP) {
+            return CONST_COMPREHENSIVE_CONTROLLER_MAX_TEMP;
         }
-        return (value);
+        if (value < main->controller.temperature) {
+            return main->controller.temperature;
+        }
+        return value;
     }
    ```
    корректный результат должен быть таким:
    ```cplusplus
    static uint8_t ComprehensiveController_clamp_temp(Comprehensive *main, uint8_t value) {
-        if (value > 100) {
-            return 100;
+        if (value > CONST_COMPREHENSIVE_CONTROLLER_MAX_TEMP) {
+            return CONST_COMPREHENSIVE_CONTROLLER_MAX_TEMP;
+        }
+        if (value < main->entry.temperature) {
+            return main->entry.temperature;
         }
         return value;
    }
    ```
+   прими во внимание "Манифест генрации кода"
 
 2. Проанализируй проект целиком, сформируй список улучшений и проблем в проекте, предложи решения их. Приведи в
    соответствие с файлом `README.md` (параллельно актуализируй его), удали в нем уже сделанные пункты или пункты,

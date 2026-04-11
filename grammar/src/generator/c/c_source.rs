@@ -21,9 +21,13 @@ use crate::generator::indent::Printer;
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
+use crate::semantic::extend::Extend;
 use crate::semantic::{
-    ConditionDefinitionNode, ExpressionNode, FunctionDefinitionNode, StatementNode, VariableNode,
+    ConditionDefinitionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode,
+    StatementNode, VariableNode,
 };
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Генерирует содержимое `.c`-файла для модели.
 pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diagnostic> {
@@ -204,6 +208,35 @@ fn get_function_name(fun: &FunctionDefinitionNode) -> String {
     }
 }
 
+/// Проверяет, является ли [`Extend`] прямой ссылкой на указанную модель.
+///
+/// Поддерживает `Extend::Model` и прозрачную обёртку `Extend::Parentless`.
+fn extend_contains_model(extend: &Extend, target: &Rc<RefCell<ModelNode>>) -> bool {
+    match extend {
+        Extend::Model(m) => Rc::ptr_eq(m, target),
+        Extend::Parentless(inner) => extend_contains_model(inner, target),
+        _ => false,
+    }
+}
+
+/// Возвращает имя поля в родительской C-структуре для вложенной модели.
+///
+/// Ищет в родительской модели состояние с `implements = Extend::Model(эта_модель)`
+/// и возвращает имя этого состояния в snake_case (именно оно используется как поле
+/// в сгенерированной C-структуре). Если не найдено — возвращает `None`.
+fn field_name_in_parent(model_rc: &Rc<RefCell<ModelNode>>) -> Option<String> {
+    let parent_rc = model_rc.borrow().upper.as_ref()?.upgrade()?;
+    let parent = parent_rc.borrow();
+    for (state_name, state_node) in &parent.states {
+        if let StateNode::Implement { implements, .. } = state_node {
+            if extend_contains_model(implements, model_rc) {
+                return Some(normalize_lowercase_snakecase(state_name.clone()));
+            }
+        }
+    }
+    None
+}
+
 /// Преобразует [`VariableNode`] в C-выражение для чтения.
 ///
 /// - `Simple` с `loc == Implicit` — локальная переменная (stack), доступ по имени.
@@ -228,12 +261,18 @@ fn resolve_variable_c_expr(
             }
             // Переменная уровня модели → main->field
             if let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) {
-                let model = model_rc.borrow();
-                if let Some(model_name) = &model.name {
-                    // Вложенная модель — через имя подструктуры
+                // Извлекаем имя модели до вызова field_name_in_parent, чтобы избежать
+                // двойного заимствования model_rc.
+                let model_name_opt = model_rc.borrow().name.clone();
+                if model_name_opt.is_some() {
+                    // Вложенная модель: поле структуры называется по имени состояния-контейнера,
+                    // а не по имени самой модели. Ищем это состояние в родителе.
+                    let field = field_name_in_parent(&model_rc).unwrap_or_else(|| {
+                        normalize_lowercase_snakecase(model_name_opt.unwrap_or_default())
+                    });
                     Ok(format!(
                         "main->{}.{}",
-                        normalize_lowercase_snakecase(model_name.clone()),
+                        field,
                         normalize_lowercase_snakecase(name.clone())
                     ))
                 } else {
@@ -1636,6 +1675,44 @@ start Main { always { } }
         assert!(
             !source.contains("return (1)") && !source.contains("return (0)"),
             "return не должен оборачивать значение в скобки:\n{source}"
+        );
+    }
+
+    #[test]
+    /// Проверяет, что переменная вложенной модели в функции генерируется как
+    /// `main->state_name.field`, а не `main->model_name.field`.
+    ///
+    /// Пример: модель `Controller` инстанциируется состоянием `Entry = Controller`.
+    /// Поле в C-структуре называется `entry` (по имени состояния), поэтому
+    /// функция `clamp_temp` должна обращаться к переменной как `main->entry.temperature`,
+    /// а не `main->controller.temperature`.
+    fn test_submodel_variable_uses_state_field_name() {
+        let src = r#"
+type u8 = [bit;8];
+model Controller {
+    var temperature: u8 = 0;
+    fn clamp(value: u8) -> u8 {
+        if value < temperature { return temperature; }
+        return value;
+    }
+    start Idle { }
+}
+start Entry = Controller;
+        "#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some("Root".to_string());
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let source = generate_source(map.get_filename(), &map).unwrap();
+        // Поле должно называться по имени состояния (`entry`), а не модели (`controller`)
+        assert!(
+            source.contains("main->entry.temperature"),
+            "ожидается `main->entry.temperature`, получено:\n{source}"
+        );
+        assert!(
+            !source.contains("main->controller.temperature"),
+            "не должно быть `main->controller.temperature`:\n{source}"
         );
     }
 
