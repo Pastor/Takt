@@ -4,7 +4,7 @@
 //! и условия модели, собирает множество используемых переменных и
 //! возвращает предупреждения для каждой объявленной, но неиспользуемой.
 
-use crate::diagnostics::{Diagnostic, Location};
+use crate::diagnostics::Diagnostic;
 use crate::semantic::{
     ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
     NamedCodeBlockDefinitionNode, StatementNode, VariableNode,
@@ -66,7 +66,7 @@ fn check_model_unused(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnost
         }
         if !used.contains(name.as_str()) {
             warnings.push(Diagnostic::warning(
-                Location::Builtin,
+                var.loc(),
                 format!(
                     "Ce13: переменная '{}' объявлена, но нигде не используется",
                     name

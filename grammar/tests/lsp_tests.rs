@@ -814,14 +814,11 @@ mod diagnostic_location_tests {
         // Пропущена точка с запятой — парсер должен вернуть ошибку с позицией
         let src = "var x: bit = false\nstart S;";
         let diags = collect_diagnostics(src);
-        assert!(
-            !diags.is_empty(),
-            "должна быть хотя бы одна диагностика"
-        );
+        assert!(!diags.is_empty(), "должна быть хотя бы одна диагностика");
         // Хотя бы одна диагностика должна иметь ненулевую позицию
-        let has_location = diags.iter().any(|d| {
-            d.range.start != Position::new(0, 0) || d.range.end != Position::new(0, 0)
-        });
+        let has_location = diags
+            .iter()
+            .any(|d| d.range.start != Position::new(0, 0) || d.range.end != Position::new(0, 0));
         assert!(
             has_location,
             "хотя бы одна диагностика должна содержать ненулевые координаты"
@@ -888,5 +885,29 @@ mod diagnostic_location_tests {
         // Проверяем просто что нет паники и набор диагностик не пустой
         // (конкретная ошибка зависит от реализации дублирования)
         let _ = diags; // не паникует
+    }
+
+    /// Проверяет, что предупреждение Ce13 (неиспользуемая переменная)
+    /// содержит координаты объявления переменной, а не нулевую позицию.
+    #[cfg(feature = "lsp")]
+    #[test]
+    fn ce13_unused_variable_warning_has_source_location() {
+        // Переменная `heading` объявлена на строке 0, нигде не используется
+        let src = "var heading: bit = false;\nstart S;";
+        let diags = collect_diagnostics(src);
+
+        let ce13 = diags
+            .iter()
+            .find(|d| d.message.contains("heading"))
+            .expect("должно быть предупреждение Ce13 для 'heading'");
+
+        // Предупреждение не должно указывать на (0,0)-(0,0) — у переменной есть позиция
+        let is_zero_range =
+            ce13.range.start == Position::new(0, 0) && ce13.range.end == Position::new(0, 0);
+        assert!(
+            !is_zero_range,
+            "Ce13 для 'heading' должно содержать координаты объявления, получено {:?}",
+            ce13.range
+        );
     }
 }

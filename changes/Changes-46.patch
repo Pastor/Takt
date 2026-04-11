@@ -1,0 +1,266 @@
+diff --git a/grammar/src/semantic/unused.rs b/grammar/src/semantic/unused.rs
+index fe0dea6..fcb3ff4 100644
+--- a/grammar/src/semantic/unused.rs
++++ b/grammar/src/semantic/unused.rs
+@@ -4,7 +4,7 @@
+ //! и условия модели, собирает множество используемых переменных и
+ //! возвращает предупреждения для каждой объявленной, но неиспользуемой.
+ 
+-use crate::diagnostics::{Diagnostic, Location};
++use crate::diagnostics::Diagnostic;
+ use crate::semantic::{
+     ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
+     NamedCodeBlockDefinitionNode, StatementNode, VariableNode,
+@@ -66,7 +66,7 @@ fn check_model_unused(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnost
+         }
+         if !used.contains(name.as_str()) {
+             warnings.push(Diagnostic::warning(
+-                Location::Builtin,
++                var.loc(),
+                 format!(
+                     "Ce13: переменная '{}' объявлена, но нигде не используется",
+                     name
+diff --git a/grammar/src/semantic/validate.rs b/grammar/src/semantic/validate.rs
+index 907ec77..3ae25a2 100644
+--- a/grammar/src/semantic/validate.rs
++++ b/grammar/src/semantic/validate.rs
+@@ -498,8 +498,10 @@ pub(crate) fn ast_condition_summary(
+ /// Добавляет предупреждение Се11 в `out`.
+ ///
+ /// Выносит форматирование сообщения в отдельную функцию, чтобы не дублировать его.
++/// `loc` — координаты перехода в исходном файле (берётся из [`ReferenceNode::location`]).
+ #[inline]
+ fn emit_implicit_bool_warning(
++    loc: Location,
+     prefix: &str,
+     target_name: &str,
+     summary: &str,
+@@ -508,7 +510,7 @@ fn emit_implicit_bool_warning(
+ ) {
+     let verb = if is_next { "next к" } else { "к" };
+     out.push(Diagnostic::warning(
+-        Location::Builtin,
++        loc,
+         format!(
+             "{}: условие перехода {} '{}' содержит {} — \
+              рекомендуется явное сравнение (например, '!= 0')",
+@@ -614,6 +616,7 @@ fn semantic_condition_summary(cond: &ConditionNode) -> String {
+ /// Описание условия для сообщения вычисляется **лениво** — только при наличии
+ /// реального нарушения.
+ fn check_one_ref(
++    loc: Location,
+     prefix: &str,
+     target_name: &str,
+     cond: &ConditionNode,
+@@ -626,14 +629,14 @@ fn check_one_ref(
+         cond if !matches!(cond, ConditionNode::Unresolved(_)) => {
+             if !is_boolean_semantic_condition(cond) {
+                 let summary = semantic_condition_summary(cond);
+-                emit_implicit_bool_warning(prefix, target_name, &summary, is_next, out);
++                emit_implicit_bool_warning(loc, prefix, target_name, &summary, is_next, out);
+             }
+         }
+         // ── Запасной путь: условие не разрешено (например, S(Model).StateName) ──
+         ConditionNode::Unresolved(ast_cond) => {
+             if !is_boolean_ast_condition(ast_cond, model) {
+                 let summary = ast_condition_summary(ast_cond, model);
+-                emit_implicit_bool_warning(prefix, target_name, &summary, is_next, out);
++                emit_implicit_bool_warning(loc, prefix, target_name, &summary, is_next, out);
+             }
+         }
+         _ => {}
+@@ -665,7 +668,7 @@ fn collect_implicit_bool_warnings(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<
+             } => {
+                 let prefix = prefix_for(name);
+                 for r in references {
+-                    check_one_ref(&prefix, &r.name, &r.cond, model, false, out);
++                    check_one_ref(r.location, &prefix, &r.name, &r.cond, model, false, out);
+                 }
+             }
+             StateNode::Implement {
+@@ -676,10 +679,10 @@ fn collect_implicit_bool_warnings(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<
+             } => {
+                 let prefix = prefix_for(name);
+                 for r in references {
+-                    check_one_ref(&prefix, &r.name, &r.cond, model, false, out);
++                    check_one_ref(r.location, &prefix, &r.name, &r.cond, model, false, out);
+                 }
+                 if let Some(nr) = next {
+-                    check_one_ref(&prefix, &nr.name, &nr.cond, model, true, out);
++                    check_one_ref(nr.location, &prefix, &nr.name, &nr.cond, model, true, out);
+                 }
+             }
+             StateNode::Unresolved => {}
+@@ -1041,6 +1044,7 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
+     }
+ 
+     let model_name = borrowed.name.clone().unwrap_or_default();
++    let model_loc = borrowed.loc;
+ 
+     // Строит префикс для сообщений: "модель 'M'" или пустую строку для корня
+     let model_prefix = if model_name.is_empty() {
+@@ -1072,7 +1076,7 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
+     // Правило Ce5.2: нет терминальных состояний вообще
+     if terminal_states.is_empty() {
+         out.push(Diagnostic::warning(
+-            Location::Builtin,
++            model_loc,
+             format!(
+                 "{}в модели нет терминальных состояний (состояний без переходов); \
+                  автомат не может завершить работу",
+@@ -1106,7 +1110,7 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
+     // Правило Ce5.1: из состояния нет пути к терминальному
+     // Используем BFS/DFS от каждого нетерминального состояния
+     if !terminal_states.is_empty() {
+-        for (state_name, _) in borrowed.states.iter() {
++        for (state_name, state) in borrowed.states.iter() {
+             // Терминальные состояния сами по себе достижимы
+             if terminal_states.contains(state_name) {
+                 continue;
+@@ -1136,7 +1140,7 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
+             };
+             if !can_reach {
+                 out.push(Diagnostic::warning(
+-                    Location::Builtin,
++                    state.loc(),
+                     format!(
+                         "{}состояние '{}' не имеет пути к терминальному состоянию",
+                         model_prefix, state_name
+@@ -1147,19 +1151,22 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
+     }
+ 
+     // Правила Ce5.3 и Ce5.4: проверка next совместно с ref
+-    for (state_name, state) in borrowed.states.iter() {
++    for (_state_name, state) in borrowed.states.iter() {
+         if let StateNode::Implement {
+-            references, next, ..
++            name,
++            references,
++            next,
++            ..
+         } = state
+         {
+             // Правило Ce5.3: ref + next одновременно → предупреждение
+             if next.is_some() && !references.is_empty() {
+                 out.push(Diagnostic::warning(
+-                    Location::Builtin,
++                    state.loc(),
+                     format!(
+                         "{}состояние '{}' содержит ref-переходы совместно с next: \
+                          переходы ref недостижимы после выполнения next",
+-                        model_prefix, state_name
++                        model_prefix, name
+                     ),
+                 ));
+             }
+@@ -2594,7 +2601,7 @@ fn check_nondeterministic_model(model: Rc<RefCell<ModelNode>>, warnings: &mut Ve
+ 
+         if unconditional_count > 1 {
+             warnings.push(Diagnostic::warning(
+-                Location::Builtin,
++                state.loc(),
+                 format!(
+                     "Ce14: {}: {} безусловных перехода(ов) — недетерминированное поведение",
+                     prefix, unconditional_count
+@@ -2688,6 +2695,7 @@ fn check_enum_expr(
+                     if let TypeNode::Enum(enum_name) = ty {
+                         if let ExpressionNode::Number(n) = right.as_ref() {
+                             if !is_valid_enum_value(enum_name, *n, model) {
++                                let var_loc = borrowed.loc();
+                                 let valid_values: Vec<String> = model
+                                     .borrow()
+                                     .search_enum(enum_name)
+@@ -2699,7 +2707,7 @@ fn check_enum_expr(
+                                     })
+                                     .unwrap_or_default();
+                                 out.push(Diagnostic::type_error(
+-                                    Location::Builtin,
++                                    var_loc,
+                                     format!(
+                                         "NI6: присваивание переменной '{}' типа '{}' \
+                                          значения {} недопустимо — не является вариантом \
+@@ -2896,20 +2904,20 @@ fn validate_enum_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic>
+ /// Рекурсивно собирает ошибки NI6 для модели и всех вложенных моделей.
+ fn collect_enum_type_safety(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
+     // Собираем данные без удержания заимствования
+-    let vars: Vec<(String, TypeNode, ExpressionNode)> = model
++    let vars: Vec<(String, TypeNode, ExpressionNode, Location)> = model
+         .borrow()
+         .variables
+         .iter()
+         .filter_map(|(_, var)| match var {
+             VariableNode::Simple { name, ty, expr, .. }
+             | VariableNode::Const { name, ty, expr, .. } => {
+-                Some((name.clone(), ty.clone(), expr.clone()))
++                Some((name.clone(), ty.clone(), expr.clone(), var.loc()))
+             }
+             _ => None,
+         })
+         .collect();
+ 
+-    for (name, ty, expr) in &vars {
++    for (name, ty, expr, loc) in &vars {
+         if let TypeNode::Enum(enum_name) = ty {
+             if let ExpressionNode::Number(n) = expr {
+                 if !is_valid_enum_value(enum_name, *n, model) {
+@@ -2924,7 +2932,7 @@ fn collect_enum_type_safety(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagno
+                         })
+                         .unwrap_or_default();
+                     out.push(Diagnostic::type_error(
+-                        Location::Builtin,
++                        *loc,
+                         format!(
+                             "NI6: переменная '{}' имеет тип '{}', но инициализирована \
+                              значением {} — не является вариантом перечисления \
+diff --git a/grammar/tests/lsp_tests.rs b/grammar/tests/lsp_tests.rs
+index 75396ce..d2b89eb 100644
+--- a/grammar/tests/lsp_tests.rs
++++ b/grammar/tests/lsp_tests.rs
+@@ -814,14 +814,11 @@ mod diagnostic_location_tests {
+         // Пропущена точка с запятой — парсер должен вернуть ошибку с позицией
+         let src = "var x: bit = false\nstart S;";
+         let diags = collect_diagnostics(src);
+-        assert!(
+-            !diags.is_empty(),
+-            "должна быть хотя бы одна диагностика"
+-        );
++        assert!(!diags.is_empty(), "должна быть хотя бы одна диагностика");
+         // Хотя бы одна диагностика должна иметь ненулевую позицию
+-        let has_location = diags.iter().any(|d| {
+-            d.range.start != Position::new(0, 0) || d.range.end != Position::new(0, 0)
+-        });
++        let has_location = diags
++            .iter()
++            .any(|d| d.range.start != Position::new(0, 0) || d.range.end != Position::new(0, 0));
+         assert!(
+             has_location,
+             "хотя бы одна диагностика должна содержать ненулевые координаты"
+@@ -889,4 +886,28 @@ mod diagnostic_location_tests {
+         // (конкретная ошибка зависит от реализации дублирования)
+         let _ = diags; // не паникует
+     }
++
++    /// Проверяет, что предупреждение Ce13 (неиспользуемая переменная)
++    /// содержит координаты объявления переменной, а не нулевую позицию.
++    #[cfg(feature = "lsp")]
++    #[test]
++    fn ce13_unused_variable_warning_has_source_location() {
++        // Переменная `heading` объявлена на строке 0, нигде не используется
++        let src = "var heading: bit = false;\nstart S;";
++        let diags = collect_diagnostics(src);
++
++        let ce13 = diags
++            .iter()
++            .find(|d| d.message.contains("heading"))
++            .expect("должно быть предупреждение Ce13 для 'heading'");
++
++        // Предупреждение не должно указывать на (0,0)-(0,0) — у переменной есть позиция
++        let is_zero_range =
++            ce13.range.start == Position::new(0, 0) && ce13.range.end == Position::new(0, 0);
++        assert!(
++            !is_zero_range,
++            "Ce13 для 'heading' должно содержать координаты объявления, получено {:?}",
++            ce13.range
++        );
++    }
+ }

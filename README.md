@@ -18,8 +18,9 @@
 8. [Диагностика и ошибки](#диагностика-и-ошибки)
 9. [Примеры программ](#примеры-программ)
 10. [Тестирование](#тестирование)
-11. [Оставшиеся проблемы и открытые задачи](#оставшиеся-проблемы-и-открытые-задачи)
-12. [Реализованные улучшения](#реализованные-улучшения)
+11. [Сборка и установка](#сборка-и-установка)
+12. [Оставшиеся проблемы и открытые задачи](#оставшиеся-проблемы-и-открытые-задачи)
+13. [Реализованные улучшения](#реализованные-улучшения)
 
 ---
 
@@ -703,6 +704,103 @@ fn abs(x: i8) -> u8;
 
 ---
 
+## Сборка и установка
+
+### Требования
+
+- Rust 1.75+ (`rustup update stable`)
+- LALRPOP (генерируется автоматически при сборке через `build.rs`)
+
+### Сборка из исходников
+
+```sh
+# Клонирование
+git clone https://github.com/your-org/BuT.git
+cd BuT
+
+# Сборка компилятора butc (без LSP-фичи)
+cargo build --release --bin butc
+
+# Сборка LSP-сервера (требует фичу lsp)
+cargo build --release --features lsp --bin but-lsp
+```
+
+Собранные бинарники появятся в `target/release/`.
+
+### Установка в `~/.cargo/bin`
+
+`cargo install` копирует бинарник в `~/.cargo/bin`, который обычно уже есть в `PATH`.
+
+```sh
+# Установить компилятор butc
+cargo install --path grammar --bin butc
+
+# Установить LSP-сервер but-lsp
+cargo install --path grammar --bin but-lsp --features lsp
+```
+
+После установки команды доступны глобально:
+
+```sh
+butc compile --target c input.but -o output/
+but-lsp --version
+```
+
+### Обновление до последней версии
+
+```sh
+cd BuT
+git pull
+cargo install --path grammar --bin butc --force
+cargo install --path grammar --bin but-lsp --features lsp --force
+```
+
+### Интеграция LSP-сервера с редакторами
+
+#### Zed
+
+Добавьте в `~/.config/zed/settings.json`:
+
+```json
+{
+  "lsp": {
+    "but-lsp": {
+      "binary": {
+        "path": "but-lsp"
+      }
+    }
+  }
+}
+```
+
+Если `but-lsp` не в `PATH`, укажите полный путь:
+
+```json
+{
+  "lsp": {
+    "but-lsp": {
+      "binary": {
+        "path": "/Users/username/.cargo/bin/but-lsp"
+      }
+    }
+  }
+}
+```
+
+#### VS Code / другие редакторы с поддержкой LSP
+
+Укажите путь к `but-lsp` в настройках расширения или в конфигурации LSP-клиента:
+
+```json
+{
+  "but.lsp.serverPath": "/Users/username/.cargo/bin/but-lsp"
+}
+```
+
+LSP-сервер запускается редактором автоматически при открытии файлов `.but`.
+
+---
+
 ## Оставшиеся проблемы и открытые задачи
 
 ### Известные проблемы
@@ -836,6 +934,7 @@ return Err(Diagnostic::error(loc, "Неожиданный тип аргумен�
 | Changes-44-P01 | Семантические координаты в диагностиках: `extract_name(loc)`, `check_import_cycle(loc)`, дублированное имя модели, `ref`-ссылки — `Location::Implicit` заменён реальными координатами (9 случаев) | ✅ Исправлено |
 | Changes-44-P02 | LSP: заметки в диагностических сообщениях, `Condition::loc()` в AST, 4 новых интеграционных теста для координат диагностик, `rustfmt` 13 файлов | ✅ Реализовано |
 | Changes-45    | Актуализация README: Changes-44 в таблице, новые открытые задачи (panic→diagnostic, unwrap cleanup)                  | ✅ Выполнено   |
+| Changes-46    | Координаты в предупреждениях Ce13 (`unused.rs`), Ce14, Ce5, NI6, Ce11 (`validate.rs`): `Location::Builtin` заменён на `var.loc()` / `state.loc()` / `r.location`; новый тест `ce13_unused_variable_warning_has_source_location` | ✅ Исправлено |
 | —             | SemanticIndex: поиск узла по LSP-позиции (LSP1)                               | ✅ Реализовано |
 | —             | `textDocument/declaration`: переход к декларации (LSP2)                       | ✅ Реализовано |
 | —             | `textDocument/documentSymbol`: структура документа (LSP3)                     | ✅ Реализовано |
