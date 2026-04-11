@@ -805,11 +805,9 @@ fn generate_code_block(
         StatementNode::Unresolved(_) => {}
 
         StatementNode::Block(block) => {
-            printer.print("{").nl().up();
             for stmt in block {
                 generate_code_block(printer, map, owner, params.clone(), stmt)?;
             }
-            printer.down().print("}");
         }
 
         StatementNode::Expression(expr) => {
@@ -834,13 +832,14 @@ fn generate_code_block(
         StatementNode::If { cond, then_, else_ } => {
             printer.ident("if ((");
             generate_stmt_expression(printer, map, owner, params.clone(), cond)?;
-            printer.print(")) ");
+            printer.print(")) {").up().nl();
             generate_code_block(printer, map, owner, params.clone(), then_)?;
+           printer.down().ident("}").nl();
             if let Some(else_) = else_ {
-                printer.print(" else ");
+                printer.print(" else {").up().nl();
                 generate_code_block(printer, map, owner, params.clone(), else_)?;
+                printer.down().ident("}").nl();
             }
-            printer.nl();
         }
 
         StatementNode::Loop { cond, body } => {
@@ -983,7 +982,7 @@ fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<(), Diagnosti
                     tiny_params.insert(0, format!("{} *main", map.root_name().unique_camelcase()));
                     definition.push_str(
                         format!(
-                            "static {} {}({}) ",
+                            "static {} {}({}) {{\n",
                             get_c_type(&ret, model).unwrap().as_str(),
                             get_function_name(&fun),
                             tiny_params.join(", ")
@@ -995,9 +994,10 @@ fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<(), Diagnosti
                         let mut tmp_printer = Printer::new(4, &mut code_block);
                         tmp_printer.up();
                         generate_code_block(&mut tmp_printer, map, &element, params.clone(), body)?;
-                        tmp_printer.down().nl();
+                        tmp_printer.down();
                     }
                     definition.push_str(&code_block);
+                    definition.push_str("}\n");
                     local_funcs.push(definition);
                 }
                 FunctionDefinitionNode::External { params, ret, .. } => {

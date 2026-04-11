@@ -1,5 +1,6 @@
 #include "elevator.h"
-/// Константы, перечисления и порты модели elevator (Elevator)
+#include <math.h>
+/// Константы и порты модели elevator (Elevator)
 #define PORT_ELEVATOR_BTNS_CAB_HI 0x30000001
 #define PORT_ELEVATOR_BTNS_CAB_LO 0x30000000
 #define PORT_ELEVATOR_BTNS_FLOOR_1 0x20000000
@@ -21,6 +22,21 @@
 #define PORT_ELEVATOR_SENSORS_8 0x10000007
 #define PORT_ELEVATOR_SENSORS_9 0x10000008
 #define PORT_ELEVATOR_SENSORS_CAB 0x10000009
+/// Перечисления модели elevator (Elevator)
+#define ENUM_ELEVATOR_BOTTOM 80
+#define ENUM_ELEVATOR_TOP 81
+/// Перечисления модели Engine (Elevator:Engine)
+#define ENUM_ELEVATOR_ENGINE_CLOSING 671
+#define ENUM_ELEVATOR_ENGINE_IDLE 670
+///Внешние функции
+extern void door_close();
+extern void door_open();
+extern void motor_down();
+extern void motor_stop();
+extern void motor_up();
+extern void read_floor_sensors();
+extern void scan_cabin_buttons();
+extern void scan_floor_buttons();
 
 void Elevator_init(Elevator *main) {
     main->state = ELEVATOR_INIT;

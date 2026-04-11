@@ -12,14 +12,14 @@ extern void log_count(uint8_t n);
 extern void log_temp(uint8_t value);
 ///Функции моделей
 static uint8_t ComprehensiveController_clamp_temp(Comprehensive *main, uint8_t value) {
-        if (((value) > (100))) {
-            return (100);
-        }
-        return (value);
+    if (((value) > (100))) {
+        return (100);
+    }
+    return (value);
 }
 
 static uint8_t ComprehensiveController_increment(Comprehensive *main, uint8_t n) {
-        return ((n) + (1));
+    return ((n) + (1));
 }
 
 
@@ -37,3 +37,4 @@ void Comprehensive_reset(Comprehensive *main) {
 bool Comprehensive_is_done(const Comprehensive *main) {
     return main->state == COMPREHENSIVE_ENTRY;
 }
+
