@@ -24,7 +24,7 @@ start Active {
     always {
         packet_count = packet_count + 1;
     }
-    ref Idle: packet_count == 0;
+    ref Idle: packet_count = 0;
 }
 
 /// Состояние ожидания (бездействия).

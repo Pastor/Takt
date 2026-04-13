@@ -16,6 +16,7 @@
 
 use super::{get_c_type, get_typed_variable};
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::c;
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
 use crate::semantic::extend::Extend;
@@ -29,6 +30,46 @@ use crate::semantic::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+fn generate_function_prototypes(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic> {
+    let root_name = map.root_name();
+    let sorted_models = c::topological_sort_models(map, map.using_models());
+
+    if !sorted_models.is_empty() {
+        for element in &sorted_models {
+            let Element::Model { name, .. } = element else {
+                continue;
+            };
+            let s = name.unique_camelcase();
+            printer
+                .print(&format!("/// Model functions '{}'", name))
+                .nl();
+            printer
+                .print(&format!(
+                    "static void {0}_init({1} *main);",
+                    s,
+                    root_name.unique_camelcase()
+                ))
+                .nl();
+            printer
+                .print(&format!(
+                    "static void {0}_tick({1} *main);",
+                    s,
+                    root_name.unique_camelcase()
+                ))
+                .nl();
+            printer
+                .print(&format!(
+                    "static void {0}_is_done({1} *main);",
+                    s,
+                    root_name.unique_camelcase()
+                ))
+                .nl();
+        }
+        printer.nl();
+    }
+    Ok(())
+}
+
 /// Генерирует содержимое `.c`-файла для модели.
 pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diagnostic> {
     let mut source = String::new();
@@ -39,6 +80,7 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
     printer.print("#include <assert.h>").nl();
     printer.print("#include <math.h>").nl();
     generate_constants_and_ports_and_enums(&mut printer, map)?;
+    generate_function_prototypes(&mut printer, map)?;
     generate_functions(&mut printer, map)?;
     printer.nl();
     let struct_name = map.root_name().unique_camelcase();
@@ -68,7 +110,7 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
         .nl();
     printer.up();
     printer.ident("assert(0 != main);").nl();
-    generate_map_tick(&mut printer, map)?;
+    generate_model_tick(&mut printer, &map.model())?;
     printer.down();
     printer.print("}").nl().nl();
     printer
@@ -118,11 +160,22 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
     Ok(source)
 }
 
-fn generate_map_tick(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic> {
+fn generate_model_tick(printer: &mut Printer, model: &Element) -> Result<(), Diagnostic> {
+    let Element::Model {
+        start,
+        states,
+        name,
+    } = model
+    else {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            "Элемент не является моделью".to_string(),
+        ));
+    };
     printer.ident("switch (main->state) {").up().nl();
     printer
         .ident("case ")
-        .print(&map.root_name().unique_uppercase_snakecase())
+        .print(&*name.unique_uppercase_snakecase())
         .print("_INIT: {")
         .up()
         .nl();
@@ -131,7 +184,7 @@ fn generate_map_tick(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic
     //      После инициализации следует перейти к начальному состоянию модели
     printer.ident("break;").nl();
     printer.down().ident("}").nl();
-    for state_name in map.states() {
+    for state_name in states.iter() {
         printer
             .ident("case ")
             .print(&state_name.unique_uppercase_snakecase())
@@ -145,7 +198,7 @@ fn generate_map_tick(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic
     }
     printer
         .ident("case ")
-        .print(&map.root_name().unique_uppercase_snakecase())
+        .print(&name.unique_uppercase_snakecase())
         .print("_END: {")
         .up()
         .nl();

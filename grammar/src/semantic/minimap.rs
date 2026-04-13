@@ -141,11 +141,8 @@ impl Display for Element {
 /// Поле `start` и методы `start()`/`own()` зарезервированы для генератора `.c`-файла (I1–I4).
 pub(crate) struct Map {
     root: Rc<RefCell<ModelNode>>,
-    root_name: Name,
     elements: HashMap<Name, Element>,
-    #[allow(dead_code)]
-    start: Name,
-    states: Vec<Name>,
+    model: Element,
 }
 
 impl Map {
@@ -179,22 +176,20 @@ impl Map {
             local_name.clone(),
             unique_state_name(&local_name, model.clone()),
         );
-        // used_elements.insert(
-        //     model_name.clone(),
-        //     Element::Model {
-        //         name: model_name.clone(),
-        //         states: states.clone(),
-        //         start: start_state.clone(),
-        //     },
-        // );
 
         Ok(Map {
             root: model.clone(),
             elements: used_elements,
-            start: start_state,
-            root_name: model_name,
-            states,
+            model: Element::Model {
+                name: model_name,
+                states,
+                start: start_state,
+            },
         })
+    }
+
+    pub(crate) fn model(&self) -> Element {
+        self.model.clone()
     }
 
     #[inline]
@@ -222,13 +217,6 @@ impl Map {
             .collect::<Vec<Element>>()
     }
 
-    /// Возвращает имя стартового состояния. Зарезервировано для генератора `.c` (I1).
-    #[allow(dead_code)]
-    #[inline]
-    pub(crate) fn start(&self) -> Name {
-        self.start.clone()
-    }
-
     pub(crate) fn element_at(&self, name: Name) -> Option<Element> {
         self.elements.get(&name).cloned()
     }
@@ -236,15 +224,18 @@ impl Map {
     /// Возвращает элемент корневой модели. Зарезервировано для генератора `.c` (I1).
     #[allow(dead_code)]
     pub(crate) fn own(&self) -> Option<Element> {
-        self.elements.get(&self.root_name).cloned()
+        self.elements.get(&self.model.name()).cloned()
     }
 
     pub(crate) fn root_name(&self) -> Name {
-        self.root_name.clone()
+        self.model.name().clone()
     }
 
     pub(crate) fn states(&self) -> Vec<Name> {
-        self.states.clone()
+        let Element::Model { states, .. } = self.model.clone() else {
+            unreachable!()
+        };
+        states
     }
 }
 
@@ -572,7 +563,10 @@ mod tests {
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let snap = Map::create(model_rc).unwrap();
         // Стартовое состояние найдено
-        assert_eq!(snap.start.local, "S");
+        let Element::Model { start, .. } = snap.model else {
+            unreachable!()
+        };
+        assert_eq!(start.local, "S");
         // S зарегистрировано среди используемых элементов
         assert!(
             snap.elements
@@ -592,7 +586,10 @@ mod tests {
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let snap = Map::create(model_rc).unwrap();
         // Стартовое состояние корневой модели — Entry
-        assert_eq!(snap.start.local, "Entry");
+        let Element::Model { start, .. } = snap.model.clone() else {
+            unreachable!()
+        };
+        assert_eq!(start.local, "Entry");
         // compact_extend именует копию как "Entry" + "A" = "EntryA"
         assert!(
             snap.used_models()
@@ -625,6 +622,9 @@ mod tests {
         let (ast, _) = parse(SRC, 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let snap = Map::create(model_rc).unwrap();
-        assert_eq!(snap.start.local, "Entry");
+        let Element::Model { start, .. } = snap.model else {
+            unreachable!()
+        };
+        assert_eq!(start.local, "Entry");
     }
 }

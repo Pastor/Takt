@@ -40,9 +40,11 @@ use crate::generator::c::c_header::generate_header;
 use crate::generator::c::c_map::CMap;
 use crate::generator::c::c_source::generate_source;
 use crate::semantic::ModelNode;
+use crate::semantic::minimap::{Element, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 use itertools::Itertools;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -289,4 +291,81 @@ start Main { always { } }
             "#include не должен содержать пробел после кавычки:\n{source}"
         );
     }
+}
+
+/// Собирает имена моделей-зависимостей из элемента StateExtend.
+pub fn collect_extend_model_deps(extend: &StateExtend, deps: &mut Vec<String>) {
+    match extend {
+        StateExtend::None => {}
+        StateExtend::Model(name) => deps.push(name.unique().to_string()),
+        StateExtend::Concatenation(items) | StateExtend::Parallel(items) => {
+            for item in items {
+                collect_extend_model_deps(item, deps);
+            }
+        }
+    }
+}
+
+/// Рекурсивный DFS для топологической сортировки моделей.
+pub fn topo_dfs(
+    key: &str,
+    by_name: &HashMap<String, Element>,
+    deps_map: &HashMap<String, Vec<String>>,
+    visited: &mut HashSet<String>,
+    result: &mut Vec<Element>,
+) {
+    if visited.contains(key) {
+        return;
+    }
+    visited.insert(key.to_string());
+    // Сначала рекурсивно обрабатываем зависимости
+    if let Some(deps) = deps_map.get(key) {
+        for dep in deps.clone() {
+            topo_dfs(&dep, by_name, deps_map, visited, result);
+        }
+    }
+    // Затем добавляем текущую модель
+    if let Some(elem) = by_name.get(key) {
+        result.push(elem.clone());
+    }
+}
+
+/// Топологически сортирует список моделей так, чтобы зависимости шли первыми.
+///
+/// Модель A зависит от B, если одно из её состояний расширяет B (`StateExtend::Model`).
+/// Алгоритм: обход в глубину (DFS) с постфиксным добавлением в результат.
+/// Нет гарантий порядка одноуровневых вершин — нужен только частичный порядок.
+pub fn topological_sort_models(map: &CMap, models: Vec<Element>) -> Vec<Element> {
+    // Фаза 1: строим карту unique_name → Element
+    let mut by_name: HashMap<String, Element> = HashMap::new();
+    for elem in models {
+        if let Element::Model { name, .. } = &elem {
+            by_name.insert(name.unique().to_string(), elem);
+        }
+    }
+
+    // Фаза 2: строим граф зависимостей (только зависимости из нашего набора моделей)
+    let mut deps_map: HashMap<String, Vec<String>> = HashMap::new();
+    let keys: Vec<String> = by_name.keys().cloned().collect();
+    for key in &keys {
+        if let Some(Element::Model { states, .. }) = by_name.get(key) {
+            let mut deps = Vec::new();
+            for state_name in states.clone() {
+                if let Some(Element::StateExtend { extend, .. }) = map.state_at(state_name) {
+                    collect_extend_model_deps(&extend, &mut deps);
+                }
+            }
+            // Отбрасываем зависимости, которых нет в нашем наборе
+            deps.retain(|d| by_name.contains_key(d.as_str()));
+            deps_map.insert(key.clone(), deps);
+        }
+    }
+
+    // Фаза 3: топологический обход (DFS)
+    let mut visited = HashSet::new();
+    let mut result = Vec::new();
+    for key in &keys {
+        topo_dfs(key, &by_name, &deps_map, &mut visited, &mut result);
+    }
+    result
 }

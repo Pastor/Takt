@@ -75,7 +75,14 @@ impl CMap {
     /// Возвращает имя стартового состояния корневой модели.
     #[allow(dead_code)]
     pub fn start(&self) -> Name {
-        self.map.start()
+        let Element::Model { start, .. } = self.map.model().clone() else {
+            unreachable!()
+        };
+        start
+    }
+
+    pub(crate) fn model(&self) -> Element {
+        self.map.model()
     }
 
     pub fn state_at(&self, name: Name) -> Option<Element> {
