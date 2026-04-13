@@ -1100,15 +1100,42 @@ fn generate_code_block(
         }
 
         StatementNode::If { cond, then_, else_ } => {
+            // Печатаем первый if
             printer.ident("if (");
             generate_stmt_expression(printer, map, owner, params.clone(), cond)?;
             printer.print(") {").up().nl();
             generate_code_block(printer, map, owner, params.clone(), then_)?;
-            printer.down().ident("}").nl();
-            if let Some(else_) = else_ {
-                printer.print(" else {").up().nl();
-                generate_code_block(printer, map, owner, params.clone(), else_)?;
-                printer.down().ident("}").nl();
+
+            // Обходим цепочку else/else-if: если else-ветка — одиночный if,
+            // схлопываем в `} else if (...)`, чтобы не создавать лишней вложенности
+            let mut current_else = else_.as_deref();
+            loop {
+                match current_else {
+                    None => {
+                        // Нет else — закрываем последний блок
+                        printer.down().ident("}").nl();
+                        break;
+                    }
+                    Some(StatementNode::If {
+                        cond: ec,
+                        then_: et,
+                        else_: ee,
+                    }) => {
+                        // else-ветка — одиночный if: схлопываем в else if
+                        printer.down().ident("} else if (");
+                        generate_stmt_expression(printer, map, owner, params.clone(), ec)?;
+                        printer.print(") {").up().nl();
+                        generate_code_block(printer, map, owner, params.clone(), et)?;
+                        current_else = ee.as_deref();
+                    }
+                    Some(else_stmt) => {
+                        // else-ветка — произвольный блок
+                        printer.down().ident("} else {").up().nl();
+                        generate_code_block(printer, map, owner, params.clone(), else_stmt)?;
+                        printer.down().ident("}").nl();
+                        break;
+                    }
+                }
             }
         }
 

@@ -16,10 +16,34 @@
 
 # Задачи
 
-1. Иправь в расширении `extensions/sed-but/src/lib.rs` поиск `LSP` сервера в директории 
-   `/Users/pastor/.cargo/bin/but-lsp` на поиск `but-lsp` сначала в директориях переменной окружения `PATH` и если там 
-   нет поиск в диретории пользовательской хоумовой диретории `$HOME/.cargo/bin/but-lsp`. Если файл сервера не найден то 
-   выдавать ошибку. Прими во внимание "Манифест генерации кода".
+1. При генерации си кода из примера `extend_complex.but` код функции `is_collected` получается следующий:
+   ```cplusplus
+   static bool ExtendComplex_is_collected(ExtendComplex *main, uint8_t c, uint8_t v) {
+        if (c == 0 && v == 1) {
+            return true;
+        }
+    else {
+            if ((c == 1 && v == 2)) {
+                return true;
+            }
+        }
+        return false;
+    }
+   ```
+   должно получиться так
+   ```cplusplus 
+   static bool ExtendComplex_is_collected(ExtendComplex *main, uint8_t c, uint8_t v) {
+        if (c == 0 && v == 1) {
+            return true;
+        } else if (c == 1 && v == 2) {
+            return true;
+        }
+        return false;
+    }
+   ```
+   Если у блока `else` один `statement` `if` то можно их схлопнуть в `if-else if`. Также в конструкции `if-else`
+   контролируй и исправь отступы6 У `else` не должно быть переноса на следующую строку. Прими во внимание "Манифест
+   генерации кода".
 
 2. Проанализируй проект целиком, сформируй список улучшений и проблем в проекте, предложи решения их. Приведи в
    соответствие с файлом `README.md` (параллельно актуализируй его), удали в нем уже сделанные пункты или пункты,

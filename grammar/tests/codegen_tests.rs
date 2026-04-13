@@ -452,6 +452,26 @@ fn test_include_dirs_end_to_end_integration() {
 
 // ── Тесты корректности сгенерированного C-заголовка (Changes-04) ─────────────
 
+/// Вспомогательная функция: генерирует .c и возвращает его содержимое.
+fn generate_c_content(src: &str, model_name: &str) -> String {
+    use grammar::{
+        generator::{Language, generate},
+        parse,
+        semantic::tree::construct_model,
+    };
+    let tmp = tempfile::tempdir().unwrap();
+    let (ast, _) = parse(src, 0).unwrap();
+    let root = construct_model(&ast, None, &[]).unwrap();
+    root.borrow_mut().name = Some(model_name.to_string());
+    generate(Language::C, &root.borrow(), tmp.path().to_str().unwrap()).unwrap();
+    fs::read_dir(tmp.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("c"))
+        .map(|e| fs::read_to_string(e.path()).unwrap())
+        .unwrap_or_default()
+}
+
 /// Вспомогательная функция: генерирует .h и возвращает его содержимое.
 fn generate_h_content(src: &str, model_name: &str) -> String {
     use grammar::{
@@ -524,4 +544,106 @@ state End;
             "структура ParentSub должна быть определена ДО Parent:\n{header}"
         );
     }
+}
+
+// ── Тесты генерации if/else-if (Changes-48) ───────────────────────────────────
+
+/// Проверяет, что конструкция `else if` схлопывается в `} else if (...)`,
+/// а не разворачивается во вложенный `else { if (...) { } }`.
+///
+/// Пример: `if c == X {} else if c == Y {}` должно генерироваться без
+/// лишнего уровня вложенности и переноса строки перед `else`.
+#[test]
+fn test_if_else_if_collapse() {
+    let src = r#"
+enum Color { Red, Green }
+fn check(c: Color) -> bool {
+    if c == Red {
+        return true;
+    } else if c == Green {
+        return true;
+    }
+    return false;
+}
+start S;
+"#;
+    let c = generate_c_content(src, "Fsm");
+
+    // Конструкция должна содержать } else if (
+    assert!(
+        c.contains("} else if ("),
+        "конструкция else-if должна быть схлопнута в `}} else if (`:\n{c}"
+    );
+    // Не должно быть переноса строки непосредственно перед else
+    assert!(
+        !c.contains("}\n else") && !c.contains("}\r\n else"),
+        "не должно быть переноса строки перед `else`:\n{c}"
+    );
+    // Не должно быть вложенного `else {\n    if (`
+    assert!(
+        !c.contains("else {\n        if (") && !c.contains("else {\r\n        if ("),
+        "else-ветка не должна содержать вложенный if:\n{c}"
+    );
+}
+
+/// Проверяет цепочку `if / else if / else if` из трёх ветвей.
+///
+/// Все три ветви должны генерироваться на одном уровне вложенности.
+#[test]
+fn test_if_else_if_chain() {
+    let src = r#"
+enum Dir { North, South, East }
+fn route(d: Dir) -> bool {
+    if d == North {
+        return true;
+    } else if d == South {
+        return true;
+    } else if d == East {
+        return true;
+    }
+    return false;
+}
+start S;
+"#;
+    let c = generate_c_content(src, "Fsm");
+
+    // Должно быть два вхождения } else if (
+    let count = c.matches("} else if (").count();
+    assert!(
+        count >= 2,
+        "цепочка из трёх ветвей должна содержать минимум 2 вхождения `}} else if (`, найдено {count}:\n{c}"
+    );
+    // Не должно быть вложенных else { if (
+    assert!(
+        !c.contains("else {\n        if ("),
+        "цепочка else-if не должна содержать вложенных блоков:\n{c}"
+    );
+}
+
+/// Проверяет обычный `if/else` (не `if/else-if`): else-ветка не является if,
+/// поэтому должна оставаться как `} else {` и не схлопываться.
+#[test]
+fn test_if_else_plain() {
+    let src = r#"
+fn flip(x: bool) -> bool {
+    if x {
+        return false;
+    } else {
+        return true;
+    }
+}
+start S;
+"#;
+    let c = generate_c_content(src, "Fsm");
+
+    // Должен присутствовать } else {
+    assert!(
+        c.contains("} else {"),
+        "обычный if-else должен генерировать `}} else {{`:\n{c}"
+    );
+    // Не должно быть переноса строки перед else
+    assert!(
+        !c.contains("}\n else") && !c.contains("}\r\n else"),
+        "не должно быть переноса строки перед `else`:\n{c}"
+    );
 }
