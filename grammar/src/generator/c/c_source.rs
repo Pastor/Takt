@@ -45,21 +45,21 @@ fn generate_function_prototypes(printer: &mut Printer, map: &CMap) -> Result<(),
                 .nl();
             printer
                 .print(&format!(
-                    "static void {0}_init({1} *main);",
+                    "static void {0}_init({0} *model, const {1} *main);",
                     s,
                     root_name.unique_camelcase()
                 ))
                 .nl();
             printer
                 .print(&format!(
-                    "static void {0}_tick({1} *main);",
+                    "static void {0}_tick({0} *model, const {1} *main);",
                     s,
                     root_name.unique_camelcase()
                 ))
                 .nl();
             printer
                 .print(&format!(
-                    "static void {0}_is_done({1} *main);",
+                    "static bool {0}_is_done(const {0} *model, const {1} *main);",
                     s,
                     root_name.unique_camelcase()
                 ))
@@ -82,59 +82,120 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
     generate_constants_and_ports_and_enums(&mut printer, map)?;
     generate_function_prototypes(&mut printer, map)?;
     generate_functions(&mut printer, map)?;
-    printer.nl();
-    let struct_name = map.root_name().unique_camelcase();
+    for model in map.using_models() {
+        generate_model_functions(&mut printer, &model, map)?;
+    }
+    generate_model_functions(&mut printer, &map.model(), map)?;
+    Ok(source)
+}
+
+fn generate_model_functions(
+    mut printer: &mut Printer,
+    model: &Element,
+    map: &CMap,
+) -> Result<(), Diagnostic> {
+    let is_main = model.name().eq(&map.root_name());
+    let Element::Model {
+        name,
+        states,
+        start,
+    } = model
+    else {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            format!("Model {} not defined", model.name().unique_camelcase()),
+        ));
+    };
+    let mut append = String::new();
+    let mut call_append = String::new();
+    if !is_main {
+        append.push_str(&format!(
+            ", const {} *main",
+            map.root_name().unique_camelcase()
+        ));
+        call_append.push_str(&", main".to_string());
+    }
+    let struct_name = name.unique_camelcase();
+    printer
+        .print(&format!(
+            "/// Функция инициализации модели {}",
+            model.name()
+        ))
+        .nl();
     printer
         .print("void ")
         .print(&struct_name)
         .print("_init(")
         .print(&struct_name)
-        .print(" *main) {")
+        .print(" *model")
+        .print(&append)
+        .print(") {")
         .nl();
-    {
-        printer
-            .up()
-            .ident("main->state = ")
-            .print(&map.root_name().unique_uppercase_snakecase())
-            .print("_INIT;")
-            .down()
-            .nl();
-    }
+    //NOTICE: init
+    printer.up();
+    printer.ident("assert(0 != model);").nl();
+
+    generate_model_init(&mut printer, model, map)?;
+    printer.down();
     printer.print("}").nl().nl();
+    printer
+        .print(&format!("/// Функция обработки модели {}", model.name()))
+        .nl();
     printer
         .print("void ")
         .print(&struct_name)
         .print("_tick(")
         .print(&struct_name)
-        .print(" *main) {")
+        .print(" *model")
+        .print(&append)
+        .print(") {")
         .nl();
+    //NOTICE: tick
     printer.up();
-    printer.ident("assert(0 != main);").nl();
-    generate_model_tick(&mut printer, &map.model())?;
+    printer.ident("assert(0 != model);").nl();
+    if !is_main {
+        printer.ident("assert(0 != main);").nl();
+    }
+    generate_model_tick(&mut printer, model, map)?;
     printer.down();
     printer.print("}").nl().nl();
+    printer
+        .print(&format!("/// Функция сброса модели {}", model.name()))
+        .nl();
     printer
         .print("void ")
         .print(&struct_name)
         .print("_reset(")
         .print(&struct_name)
-        .print(" *main) {")
+        .print(" *model")
+        .print(&append)
+        .print(") {")
         .nl();
     printer
         .up()
-        .ident(format!("{}_init(main);", &struct_name).as_str())
+        .ident(format!("{}_init(model", &struct_name).as_str())
+        .print(&call_append)
+        .print(");")
         .down()
         .nl();
     printer.print("}").nl().nl();
+    printer
+        .print(&format!(
+            "/// Функция проверки терминального состояния модели {}",
+            model.name()
+        ))
+        .nl();
     printer
         .print("bool ")
         .print(&struct_name)
         .print("_is_done(const ")
         .print(&struct_name)
-        .print(" *main) {")
+        .print(" *model")
+        .print(&append)
+        .print(") {")
         .nl();
     let mut cond = String::new();
-    for state_name in map.states().iter() {
+    for state_name in states.iter() {
         let state = map.raw_state_at(state_name.clone())?;
         let state = &*state.borrow();
         if !state.is_terminated() {
@@ -143,7 +204,7 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
         if !cond.is_empty() {
             cond.push_str(" || ");
         }
-        cond.push_str("main->state == ");
+        cond.push_str("model->state == ");
         cond.push_str(&state_name.unique_uppercase_snakecase());
     }
     if cond.is_empty() {
@@ -157,10 +218,14 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
         .down()
         .nl();
     printer.print("}").nl().nl();
-    Ok(source)
+    Ok(())
 }
 
-fn generate_model_tick(printer: &mut Printer, model: &Element) -> Result<(), Diagnostic> {
+fn generate_model_init(
+    printer: &mut Printer,
+    model: &Element,
+    map: &CMap,
+) -> Result<(), Diagnostic> {
     let Element::Model {
         start,
         states,
@@ -172,7 +237,43 @@ fn generate_model_tick(printer: &mut Printer, model: &Element) -> Result<(), Dia
             "Элемент не является моделью".to_string(),
         ));
     };
-    printer.ident("switch (main->state) {").up().nl();
+    let raw = map.raw_model_at(name.clone())?;
+    let raw = &*raw.borrow();
+    printer
+        .ident("model->state = ")
+        .print(&name.unique_uppercase_snakecase())
+        .print("_INIT;")
+        .nl();
+    for var in raw.variables.values() {
+        let VariableNode::Simple { name, ty, expr, .. } = var else {
+            continue;
+        };
+        if let ExpressionNode::None = expr {
+            continue;
+        }
+        //TODO: Реализовать инициализацию
+        printer.ident(&format!("/// model->{} = ?;", name)).nl();
+    }
+    Ok(())
+}
+
+fn generate_model_tick(
+    printer: &mut Printer,
+    model: &Element,
+    map: &CMap,
+) -> Result<(), Diagnostic> {
+    let Element::Model {
+        start,
+        states,
+        name,
+    } = model
+    else {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            "Элемент не является моделью".to_string(),
+        ));
+    };
+    printer.ident("switch (model->state) {").up().nl();
     printer
         .ident("case ")
         .print(&*name.unique_uppercase_snakecase())
