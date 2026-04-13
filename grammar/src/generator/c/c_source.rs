@@ -251,8 +251,9 @@ fn generate_model_init(
         if let ExpressionNode::None = expr {
             continue;
         }
-        //TODO: Реализовать инициализацию
-        printer.ident(&format!("/// model->{} = ?;", name)).nl();
+        printer.ident(&format!("model->{} = ", var.name()));
+        generate_expr(printer, map, model, vec![], expr, 0)?;
+        printer.print(";").nl();
     }
     Ok(())
 }
@@ -466,20 +467,20 @@ fn resolve_variable_c_expr(
                         normalize_lowercase_snakecase(model_name_opt.unwrap_or_default())
                     });
                     Ok(format!(
-                        "main->{}.{}",
+                        "model->{}.{}",
                         field,
                         normalize_lowercase_snakecase(name.clone())
                     ))
                 } else {
                     // Корневая модель — поле напрямую
                     Ok(format!(
-                        "main->{}",
+                        "model->{}",
                         normalize_lowercase_snakecase(name.clone())
                     ))
                 }
             } else {
                 Ok(format!(
-                    "main->{}",
+                    "model->{}",
                     normalize_lowercase_snakecase(name.clone())
                 ))
             }
@@ -1929,12 +1930,12 @@ start Entry = Controller;
         let source = generate_source(map.get_filename(), &map).unwrap();
         // Поле должно называться по имени состояния (`entry`), а не модели (`controller`)
         assert!(
-            source.contains("main->entry.temperature"),
-            "ожидается `main->entry.temperature`, получено:\n{source}"
+            source.contains("model->entry.temperature"),
+            "ожидается `model->entry.temperature`, получено:\n{source}"
         );
         assert!(
-            !source.contains("main->controller.temperature"),
-            "не должно быть `main->controller.temperature`:\n{source}"
+            !source.contains("model->controller.temperature"),
+            "не должно быть `model->controller.temperature`:\n{source}"
         );
     }
 
