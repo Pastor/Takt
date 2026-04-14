@@ -11,3 +11,4 @@ output.txt
 extensions/zed-but/target
 extensions/zed-but/Cargo.lock
 extensions/zed-but/extension.wasm
+/examples/example.pdf

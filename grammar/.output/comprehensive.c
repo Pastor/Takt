@@ -21,8 +21,8 @@ static uint8_t ComprehensiveController_clamp_temp(Comprehensive *main, uint8_t v
     if (value > CONST_COMPREHENSIVE_CONTROLLER_MAX_TEMP) {
         return CONST_COMPREHENSIVE_CONTROLLER_MAX_TEMP;
     }
-    if (value < main->entry.temperature) {
-        return main->entry.temperature;
+    if (value < model->entry.temperature) {
+        return model->entry.temperature;
     }
     return value;
 }
@@ -35,8 +35,8 @@ static uint8_t ComprehensiveController_increment(Comprehensive *main, uint8_t n)
 void ComprehensiveController_init(ComprehensiveController *model, const Comprehensive *main) {
     assert(0 != model);
     model->state = COMPREHENSIVE_CONTROLLER_INIT;
-    /// model->count = ?;
-    /// model->temperature = ?;
+    model->temperature = 0;
+    model->count = 0;
 }
 
 /// Функция обработки модели Controller (Comprehensive:Controller)
@@ -45,23 +45,26 @@ void ComprehensiveController_tick(ComprehensiveController *model, const Comprehe
     assert(0 != main);
     switch (model->state) {
         case COMPREHENSIVE_CONTROLLER_INIT: {
-            ///FIXME: Пока не реализовано
+            //FIXME: Пока не реализовано до конца
+            model->entry.count = 0;
+            model->entry.temperature = 0;
+            model->state = COMPREHENSIVE_CONTROLLER_IDLE;
             break;
         }
         case COMPREHENSIVE_CONTROLLER_IDLE: {
-            ///FIXME: Пока не реализовано
+            //FIXME: Пока не реализовано
             break;
         }
         case COMPREHENSIVE_CONTROLLER_COOLING: {
-            ///FIXME: Пока не реализовано
+            //FIXME: Пока не реализовано
             break;
         }
         case COMPREHENSIVE_CONTROLLER_DONE: {
-            ///FIXME: Пока не реализовано
+            //FIXME: Пока не реализовано
             break;
         }
         case COMPREHENSIVE_CONTROLLER_HEATING: {
-            ///FIXME: Пока не реализовано
+            //FIXME: Пока не реализовано
             break;
         }
         case COMPREHENSIVE_CONTROLLER_END: {
@@ -92,11 +95,13 @@ void Comprehensive_tick(Comprehensive *model) {
     assert(0 != model);
     switch (model->state) {
         case COMPREHENSIVE_INIT: {
-            ///FIXME: Пока не реализовано
+            //FIXME: Пока не реализовано до конца
+            ComprehensiveController_init(&model->entry);
+            model->state = COMPREHENSIVE_ENTRY;
             break;
         }
         case COMPREHENSIVE_ENTRY: {
-            ///FIXME: Пока не реализовано
+            //FIXME: Пока не реализовано
             break;
         }
         case COMPREHENSIVE_END: {

@@ -20,7 +20,7 @@ use crate::generator::c;
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
 use crate::semantic::extend::Extend;
-use crate::semantic::minimap::{Element, Name};
+use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
@@ -29,6 +29,23 @@ use crate::semantic::{
 };
 use std::cell::RefCell;
 use std::rc::Rc;
+
+fn generate_named_blocks(
+    printer: &mut Printer,
+    state: &StateNode,
+    map: &CMap,
+    owner: &Element,
+    block_name: &str,
+) -> Result<(), Diagnostic> {
+    let blocks = state.get_named_blocks(block_name);
+    for block in blocks {
+        let Some(stmt) = block.statement() else {
+            continue;
+        };
+        generate_code_block(printer, map, owner, vec![], stmt)?;
+    }
+    Ok(())
+}
 
 fn generate_function_prototypes(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic> {
     let root_name = map.root_name();
@@ -263,6 +280,7 @@ fn generate_model_tick(
     model: &Element,
     map: &CMap,
 ) -> Result<(), Diagnostic> {
+    let is_main = model.name().eq(&map.root_name());
     let Element::Model {
         start,
         states,
@@ -281,12 +299,60 @@ fn generate_model_tick(
         .print("_INIT: {")
         .up()
         .nl();
-    printer.ident("///FIXME: Пока не реализовано").nl();
+    let raw_state = map.raw_state_at(start.clone())?;
+    let raw_state = &*raw_state.borrow();
+    generate_named_blocks(printer, raw_state, map, model, "enter")?;
+    let append = if !is_main { ", main" } else { "" };
+    match map.state_at(start.clone()) {
+        Some(Element::State { name, .. }) => {
+            printer
+                .ident(&format!(
+                    "model->state = {};",
+                    name.unique_uppercase_snakecase()
+                ))
+                .nl();
+        }
+        Some(Element::StateExtend {
+            name: state_name,
+            extend,
+            next,
+        }) => {
+            if let StateExtend::Model(name) = extend {
+                printer
+                    .ident(&format!(
+                        "{}_init(&model->{}",
+                        name.unique_camelcase(),
+                        state_name.local().to_lowercase()
+                    ))
+                    .print(append)
+                    .print(");")
+                    .nl();
+                printer
+                    .ident(&format!(
+                        "model->state = {};",
+                        state_name.unique_uppercase_snakecase()
+                    ))
+                    .nl();
+            } else if let StateExtend::Parallel(steps) = extend {
+                //TODO: Инициализировать первый элемент последовательности и перейти на него
+            } else if let StateExtend::Concatenation(steps) = extend {
+                //TODO: Инициализировать первый элемент последовательности и перейти на него
+            }
+        }
+        _ => {
+            return Err(Diagnostic::error(
+                Location::Codegen,
+                "Начальное состояние модели не определено".to_string(),
+            ));
+        }
+    }
     //TODO: Реализовать инициализацию переменных, расширяемых моделей если таковые есть
     //      После инициализации следует перейти к начальному состоянию модели
     printer.ident("break;").nl();
     printer.down().ident("}").nl();
     for state_name in states.iter() {
+        let raw_state = map.raw_state_at(state_name.clone())?;
+        let raw_state = &*raw_state.borrow();
         printer
             .ident("case ")
             .print(&state_name.unique_uppercase_snakecase())
@@ -294,7 +360,7 @@ fn generate_model_tick(
             .up()
             .nl();
         //TODO: Реализовать
-        printer.ident("///FIXME: Пока не реализовано").nl();
+        printer.ident("//FIXME: Пока не реализовано").nl();
         printer.ident("break;").nl();
         printer.down().ident("}").nl();
     }
