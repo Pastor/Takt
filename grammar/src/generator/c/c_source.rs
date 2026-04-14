@@ -281,6 +281,7 @@ fn generate_model_tick(
     map: &CMap,
 ) -> Result<(), Diagnostic> {
     let is_main = model.name().eq(&map.root_name());
+    let model_name = model.name();
     let Element::Model {
         start,
         states,
@@ -303,6 +304,7 @@ fn generate_model_tick(
     let raw_state = &*raw_state.borrow();
     generate_named_blocks(printer, raw_state, map, model, "enter")?;
     let append = if !is_main { ", main" } else { "" };
+    let call_append = if !is_main { ", main" } else { ", model" };
     match map.state_at(start.clone()) {
         Some(Element::State { name, .. }) => {
             printer
@@ -346,33 +348,99 @@ fn generate_model_tick(
             ));
         }
     }
-    //TODO: Реализовать инициализацию переменных, расширяемых моделей если таковые есть
-    //      После инициализации следует перейти к начальному состоянию модели
     printer.ident("break;").nl();
     printer.down().ident("}").nl();
+    let mut end_already_defined = false;
     for state_name in states.iter() {
         let raw_state = map.raw_state_at(state_name.clone())?;
         let raw_state = &*raw_state.borrow();
+        let Some(state) = map.state_at(state_name.clone()) else {
+            return Err(Diagnostic::error(
+                Location::Codegen,
+                format!("Состояние '{}' не определено", state_name),
+            ));
+        };
         printer
             .ident("case ")
             .print(&state_name.unique_uppercase_snakecase())
             .print(": {")
             .up()
             .nl();
-        //TODO: Реализовать
-        printer.ident("//FIXME: Пока не реализовано").nl();
+        generate_named_blocks(printer, raw_state, map, model, "always")?;
+        if let Element::State { references, .. } = state {
+            for reference in raw_state.references() {
+                let cond = &reference.cond;
+                //TODO: генерация условия перехода, если переходим то дополнительно генерируем код для блоков exit и enter следующего состояния
+            }
+        } else if let Element::StateExtend { extend, next, .. } = state {
+            if let StateExtend::Model(name) = extend {
+                printer
+                    .ident(&format!(
+                        "{}_tick(&model->{}",
+                        name.unique_camelcase(),
+                        state_name.local().to_lowercase()
+                    ))
+                    .print(call_append)
+                    .print(");")
+                    .nl();
+                printer
+                    .ident(&format!(
+                        "if ({}_is_done(&model->{}",
+                        name.unique_camelcase(),
+                        state_name.local().to_lowercase()
+                    ))
+                    .print(call_append)
+                    .print(")) {")
+                    .up()
+                    .nl();
+                if next.local().is_empty() {
+                    printer
+                        .ident(&format!(
+                            "model->state = {}_END;",
+                            model_name.unique_uppercase_snakecase()
+                        ))
+                        .nl();
+                    printer.ident("break;").nl();
+                } else {
+                    printer
+                        .ident(&format!(
+                            "model->state = {};",
+                            next.unique_uppercase_snakecase()
+                        ))
+                        .nl();
+                    generate_named_blocks(printer, raw_state, map, model, "exit")?;
+                    let next_state = map.raw_state_at(next)?;
+                    let next_state = &*next_state.borrow();
+                    generate_named_blocks(printer, next_state, map, model, "enter")?;
+                    printer.ident("break;").nl();
+                }
+                printer.down().ident("}").nl();
+            } else if let StateExtend::Parallel(steps) = extend {
+                //TODO: Вызывать tick у всех и если все is_done переходить на следующее состояние и дополнительно генерируем код для блоков exit и enter следующего состояния
+            } else if let StateExtend::Concatenation(steps) = extend {
+                //TODO: Используем поле для перехода от элемента к элементу последовательности и  дополнительно генерируем код для блоков exit и enter следующего состояния
+            }
+        } else {
+            //TODO: Реализовать
+            printer.ident("//FIXME: Пока не реализовано").nl();
+        }
+        printer.ident("break;").nl();
+        printer.down().ident("}").nl();
+        if !end_already_defined {
+            end_already_defined = state_name.local().to_uppercase().eq("END");
+        }
+    }
+    if !end_already_defined {
+        printer
+            .ident("case ")
+            .print(&name.unique_uppercase_snakecase())
+            .print("_END: {")
+            .up()
+            .nl();
+        printer.ident("// FIXME: Пока не реализовано").nl();
         printer.ident("break;").nl();
         printer.down().ident("}").nl();
     }
-    printer
-        .ident("case ")
-        .print(&name.unique_uppercase_snakecase())
-        .print("_END: {")
-        .up()
-        .nl();
-    printer.ident("///FIXME: Пока не реализовано").nl();
-    printer.ident("break;").nl();
-    printer.down().ident("}").nl();
     printer.down().ident("}").nl();
     Ok(())
 }
