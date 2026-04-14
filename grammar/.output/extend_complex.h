@@ -5,13 +5,13 @@
 
 /* Forward declarations */
 typedef struct ExtendComplexCC1 ExtendComplexCC1;
-typedef struct ExtendComplexCC2 ExtendComplexCC2;
-typedef struct ExtendComplexC ExtendComplexC;
+typedef struct ExtendComplexB ExtendComplexB;
 typedef struct ExtendComplexD ExtendComplexD;
+typedef struct ExtendComplexA ExtendComplexA;
 typedef struct ExtendComplexF ExtendComplexF;
 typedef struct ExtendComplexE ExtendComplexE;
-typedef struct ExtendComplexB ExtendComplexB;
-typedef struct ExtendComplexA ExtendComplexA;
+typedef struct ExtendComplexCC2 ExtendComplexCC2;
+typedef struct ExtendComplexC ExtendComplexC;
 typedef struct ExtendComplex ExtendComplex;
 
 // NOTICE: Определение констант для модели C1 (ExtendComplex:C:C1)
@@ -20,41 +20,20 @@ struct ExtendComplexCC1 {
     // NOTICE: Определение переменных модели
     enum {
         EXTEND_COMPLEX_C_C1_INIT,
-        EXTEND_COMPLEX_C_C1_END,
-        EXTEND_COMPLEX_C_C1_START
+        EXTEND_COMPLEX_C_C1_START,
+        EXTEND_COMPLEX_C_C1_END
     } state;
 };
 
-// NOTICE: Определение констант для модели C2 (ExtendComplex:C:C2)
-/* Model C2 (ExtendComplex:C:C2) */
-struct ExtendComplexCC2 {
+// NOTICE: Определение констант для модели B (ExtendComplex:B)
+/* Model B (ExtendComplex:B) */
+struct ExtendComplexB {
     // NOTICE: Определение переменных модели
     enum {
-        EXTEND_COMPLEX_C_C2_INIT,
-        EXTEND_COMPLEX_C_C2_START,
-        EXTEND_COMPLEX_C_C2_END
+        EXTEND_COMPLEX_B_INIT,
+        EXTEND_COMPLEX_B_START,
+        EXTEND_COMPLEX_B_END
     } state;
-};
-
-// NOTICE: Определение констант для модели C (ExtendComplex:C)
-/* Model C (ExtendComplex:C) */
-struct ExtendComplexC {
-    // NOTICE: Определение переменных модели
-    enum {
-        EXTEND_COMPLEX_C_INIT,
-        EXTEND_COMPLEX_C_END,
-        EXTEND_COMPLEX_C_START
-    } state;
-    // NOTICE: Определение extend
-    struct {
-        ExtendComplexCC1 c10;
-        ExtendComplexCC2 c21;
-        enum {
-            EXTEND_COMPLEX_C_START_INIT,
-            EXTEND_COMPLEX_C_START_TICK,
-            EXTEND_COMPLEX_C_START_END
-        } state;
-    } start;
 };
 
 // NOTICE: Определение констант для модели D (ExtendComplex:D)
@@ -65,6 +44,17 @@ struct ExtendComplexD {
         EXTEND_COMPLEX_D_INIT,
         EXTEND_COMPLEX_D_START,
         EXTEND_COMPLEX_D_END
+    } state;
+};
+
+// NOTICE: Определение констант для модели A (ExtendComplex:A)
+/* Model A (ExtendComplex:A) */
+struct ExtendComplexA {
+    // NOTICE: Определение переменных модели
+    enum {
+        EXTEND_COMPLEX_A_INIT,
+        EXTEND_COMPLEX_A_START,
+        EXTEND_COMPLEX_A_END
     } state;
 };
 
@@ -99,42 +89,51 @@ struct ExtendComplexE {
     } start_state;
 };
 
-// NOTICE: Определение констант для модели B (ExtendComplex:B)
-/* Model B (ExtendComplex:B) */
-struct ExtendComplexB {
+// NOTICE: Определение констант для модели C2 (ExtendComplex:C:C2)
+/* Model C2 (ExtendComplex:C:C2) */
+struct ExtendComplexCC2 {
     // NOTICE: Определение переменных модели
     enum {
-        EXTEND_COMPLEX_B_INIT,
-        EXTEND_COMPLEX_B_START,
-        EXTEND_COMPLEX_B_END
+        EXTEND_COMPLEX_C_C2_INIT,
+        EXTEND_COMPLEX_C_C2_START,
+        EXTEND_COMPLEX_C_C2_END
     } state;
 };
 
-// NOTICE: Определение констант для модели A (ExtendComplex:A)
-/* Model A (ExtendComplex:A) */
-struct ExtendComplexA {
+// NOTICE: Определение констант для модели C (ExtendComplex:C)
+/* Model C (ExtendComplex:C) */
+struct ExtendComplexC {
     // NOTICE: Определение переменных модели
     enum {
-        EXTEND_COMPLEX_A_INIT,
-        EXTEND_COMPLEX_A_START,
-        EXTEND_COMPLEX_A_END
+        EXTEND_COMPLEX_C_INIT,
+        EXTEND_COMPLEX_C_END,
+        EXTEND_COMPLEX_C_START
     } state;
+    // NOTICE: Определение extend
+    struct {
+        ExtendComplexCC1 c10;
+        ExtendComplexCC2 c21;
+        enum {
+            EXTEND_COMPLEX_C_START_INIT,
+            EXTEND_COMPLEX_C_START_TICK,
+            EXTEND_COMPLEX_C_START_END
+        } state;
+    } start;
 };
 
 // NOTICE: Определение констант для модели extend_complex (ExtendComplex)
 /* Model extend_complex (ExtendComplex) */
 struct ExtendComplex {
     // NOTICE: Определение переменных модели
-    uint8_t y;
     uint8_t x;
+    uint8_t y;
     enum {
         EXTEND_COMPLEX_INIT,
-        EXTEND_COMPLEX_NEXT,
         EXTEND_COMPLEX_START,
+        EXTEND_COMPLEX_NEXT,
         EXTEND_COMPLEX_END
     } state;
     // NOTICE: Определение extend
-    ExtendComplexF next;
     ExtendComplexA start_a0;
     ExtendComplexB start_b1;
     struct {
@@ -155,6 +154,7 @@ struct ExtendComplex {
         EXTEND_COMPLEX_START_E3,
         EXTEND_COMPLEX_START_END
     } start_state;
+    ExtendComplexF next;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
     void  (*write_bit  )(int address, int bit, bool val, void *userdata);

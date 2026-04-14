@@ -19,6 +19,42 @@ static void ThisIsMyModelToggle_init(ThisIsMyModelToggle *model, const ThisIsMyM
 static void ThisIsMyModelToggle_tick(ThisIsMyModelToggle *model, const ThisIsMyModel *main);
 static bool ThisIsMyModelToggle_is_done(const ThisIsMyModelToggle *model, const ThisIsMyModel *main);
 
+/// Функция инициализации модели Ping (ThisIsMyModel:Ping)
+void ThisIsMyModelPing_init(ThisIsMyModelPing *model, const ThisIsMyModel *main) {
+    assert(0 != model);
+    model->state = THIS_IS_MY_MODEL_PING_INIT;
+    model->toggle = false;
+}
+
+/// Функция обработки модели Ping (ThisIsMyModel:Ping)
+void ThisIsMyModelPing_tick(ThisIsMyModelPing *model, const ThisIsMyModel *main) {
+    assert(0 != model);
+    assert(0 != main);
+    switch (model->state) {
+        case THIS_IS_MY_MODEL_PING_INIT: {
+            model->state = THIS_IS_MY_MODEL_PING_START;
+            break;
+        }
+        case THIS_IS_MY_MODEL_PING_END: {
+            break;
+        }
+        case THIS_IS_MY_MODEL_PING_START: {
+            model->ping.toggle = !model->ping.toggle;
+            break;
+        }
+    }
+}
+
+/// Функция сброса модели Ping (ThisIsMyModel:Ping)
+void ThisIsMyModelPing_reset(ThisIsMyModelPing *model, const ThisIsMyModel *main) {
+    ThisIsMyModelPing_init(model, main);
+}
+
+/// Функция проверки терминального состояния модели Ping (ThisIsMyModel:Ping)
+bool ThisIsMyModelPing_is_done(const ThisIsMyModelPing *model, const ThisIsMyModel *main) {
+    return model->state == THIS_IS_MY_MODEL_PING_END;
+}
+
 /// Функция инициализации модели Pong (ThisIsMyModel:Pong)
 void ThisIsMyModelPong_init(ThisIsMyModelPong *model, const ThisIsMyModel *main) {
     assert(0 != model);
@@ -31,19 +67,17 @@ void ThisIsMyModelPong_tick(ThisIsMyModelPong *model, const ThisIsMyModel *main)
     assert(0 != main);
     switch (model->state) {
         case THIS_IS_MY_MODEL_PONG_INIT: {
-            ///FIXME: Пока не реализовано
-            break;
-        }
-        case THIS_IS_MY_MODEL_PONG_BEGIN: {
-            ///FIXME: Пока не реализовано
+            model->state = THIS_IS_MY_MODEL_PONG_BEGIN;
             break;
         }
         case THIS_IS_MY_MODEL_PONG_STOP: {
-            ///FIXME: Пока не реализовано
+            break;
+        }
+        case THIS_IS_MY_MODEL_PONG_BEGIN: {
             break;
         }
         case THIS_IS_MY_MODEL_PONG_END: {
-            ///FIXME: Пока не реализовано
+            // FIXME: Пока не реализовано
             break;
         }
     }
@@ -71,31 +105,32 @@ void ThisIsMyModelToggle_tick(ThisIsMyModelToggle *model, const ThisIsMyModel *m
     assert(0 != main);
     switch (model->state) {
         case THIS_IS_MY_MODEL_TOGGLE_INIT: {
-            ///FIXME: Пока не реализовано
-            break;
-        }
-        case THIS_IS_MY_MODEL_TOGGLE_PONG: {
-            ///FIXME: Пока не реализовано
-            break;
-        }
-        case THIS_IS_MY_MODEL_TOGGLE_ENTRY: {
-            ///FIXME: Пока не реализовано
+            model->state = THIS_IS_MY_MODEL_TOGGLE_ENTRY;
             break;
         }
         case THIS_IS_MY_MODEL_TOGGLE_COMPLETE: {
-            ///FIXME: Пока не реализовано
+            break;
+        }
+        case THIS_IS_MY_MODEL_TOGGLE_PONG: {
+            ThisIsMyModelPong_tick(&model->pong, main);
+            if (ThisIsMyModelPong_is_done(&model->pong, main)) {
+                model->state = THIS_IS_MY_MODEL_TOGGLE_COMPLETE;
+                break;
+            }
+            break;
+        }
+        case THIS_IS_MY_MODEL_TOGGLE_END: {
             break;
         }
         case THIS_IS_MY_MODEL_TOGGLE_PING: {
-            ///FIXME: Пока не реализовано
+            ThisIsMyModelPing_tick(&model->ping, main);
+            if (ThisIsMyModelPing_is_done(&model->ping, main)) {
+                model->state = THIS_IS_MY_MODEL_TOGGLE_PONG;
+                break;
+            }
             break;
         }
-        case THIS_IS_MY_MODEL_TOGGLE_END: {
-            ///FIXME: Пока не реализовано
-            break;
-        }
-        case THIS_IS_MY_MODEL_TOGGLE_END: {
-            ///FIXME: Пока не реализовано
+        case THIS_IS_MY_MODEL_TOGGLE_ENTRY: {
             break;
         }
     }
@@ -111,52 +146,11 @@ bool ThisIsMyModelToggle_is_done(const ThisIsMyModelToggle *model, const ThisIsM
     return model->state == THIS_IS_MY_MODEL_TOGGLE_END;
 }
 
-/// Функция инициализации модели Ping (ThisIsMyModel:Ping)
-void ThisIsMyModelPing_init(ThisIsMyModelPing *model, const ThisIsMyModel *main) {
-    assert(0 != model);
-    model->state = THIS_IS_MY_MODEL_PING_INIT;
-    /// model->toggle = ?;
-}
-
-/// Функция обработки модели Ping (ThisIsMyModel:Ping)
-void ThisIsMyModelPing_tick(ThisIsMyModelPing *model, const ThisIsMyModel *main) {
-    assert(0 != model);
-    assert(0 != main);
-    switch (model->state) {
-        case THIS_IS_MY_MODEL_PING_INIT: {
-            ///FIXME: Пока не реализовано
-            break;
-        }
-        case THIS_IS_MY_MODEL_PING_END: {
-            ///FIXME: Пока не реализовано
-            break;
-        }
-        case THIS_IS_MY_MODEL_PING_START: {
-            ///FIXME: Пока не реализовано
-            break;
-        }
-        case THIS_IS_MY_MODEL_PING_END: {
-            ///FIXME: Пока не реализовано
-            break;
-        }
-    }
-}
-
-/// Функция сброса модели Ping (ThisIsMyModel:Ping)
-void ThisIsMyModelPing_reset(ThisIsMyModelPing *model, const ThisIsMyModel *main) {
-    ThisIsMyModelPing_init(model, main);
-}
-
-/// Функция проверки терминального состояния модели Ping (ThisIsMyModel:Ping)
-bool ThisIsMyModelPing_is_done(const ThisIsMyModelPing *model, const ThisIsMyModel *main) {
-    return model->state == THIS_IS_MY_MODEL_PING_END;
-}
-
 /// Функция инициализации модели ThisIsMyModel (ThisIsMyModel)
 void ThisIsMyModel_init(ThisIsMyModel *model) {
     assert(0 != model);
     model->state = THIS_IS_MY_MODEL_INIT;
-    /// model->it = ?;
+    model->it = 0;
 }
 
 /// Функция обработки модели ThisIsMyModel (ThisIsMyModel)
@@ -164,15 +158,32 @@ void ThisIsMyModel_tick(ThisIsMyModel *model) {
     assert(0 != model);
     switch (model->state) {
         case THIS_IS_MY_MODEL_INIT: {
-            ///FIXME: Пока не реализовано
+            ThisIsMyModelPing_init(&model->entry_parallel0.ping0);
+            ThisIsMyModelPong_init(&model->entry_parallel0.pong1);
+            model->entry_parallel0.state = THIS_IS_MY_MODEL_ENTRY_PARALLEL0_INIT;
+            model->entry_state = THIS_IS_MY_MODEL_ENTRY_PARALLEL0;
+            model->state = THIS_IS_MY_MODEL_ENTRY;
             break;
         }
         case THIS_IS_MY_MODEL_ENTRY: {
-            ///FIXME: Пока не реализовано
+            if (model->entry_state == THIS_IS_MY_MODEL_ENTRY_PARALLEL0) {
+                ThisIsMyModelPing_tick(&model->entry_parallel0.ping0, model);
+                ThisIsMyModelPong_tick(&model->entry_parallel0.pong1, model);
+                if (ThisIsMyModelPing_is_done(&model->entry_parallel0.ping0, model) && ThisIsMyModelPong_is_done(&model->entry_parallel0.pong1, model)) {
+                    ThisIsMyModelToggle_init(&model->entry_toggle1);
+                    model->entry_state = THIS_IS_MY_MODEL_ENTRY_TOGGLE1;
+                }
+            } else if (model->entry_state == THIS_IS_MY_MODEL_ENTRY_TOGGLE1) {
+                ThisIsMyModelToggle_tick(&model->entry_toggle1, model);
+                if (ThisIsMyModelToggle_is_done(&model->entry_toggle1, model)) {
+                    model->state = THIS_IS_MY_MODEL_END;
+                    break;
+                }
+            }
             break;
         }
         case THIS_IS_MY_MODEL_END: {
-            ///FIXME: Пока не реализовано
+            // FIXME: Пока не реализовано
             break;
         }
     }
