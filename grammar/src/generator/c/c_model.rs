@@ -49,21 +49,21 @@ pub(super) fn generate_function_prototypes(
                 .nl();
             printer
                 .print(&format!(
-                    "static void {0}_init({0} *model, const {1} *main);",
+                    "static void {0}_init({0} *model, {1} *main);",
                     s,
                     root_name.unique_camelcase()
                 ))
                 .nl();
             printer
                 .print(&format!(
-                    "static void {0}_tick({0} *model, const {1} *main);",
+                    "static void {0}_tick({0} *model, {1} *main);",
                     s,
                     root_name.unique_camelcase()
                 ))
                 .nl();
             printer
                 .print(&format!(
-                    "static bool {0}_is_done(const {0} *model, const {1} *main);",
+                    "static bool {0}_is_done(const {0} *model, {1} *main);",
                     s,
                     root_name.unique_camelcase()
                 ))
@@ -776,10 +776,7 @@ pub(super) fn generate_model_functions(
     let mut append = String::new();
     let mut call_append = String::new();
     if !is_main {
-        append.push_str(&format!(
-            ", const {} *main",
-            map.root_name().unique_camelcase()
-        ));
+        append.push_str(&format!(", {} *main", map.root_name().unique_camelcase()));
         call_append.push_str(&", main".to_string());
     }
     let struct_name = name.unique_camelcase();

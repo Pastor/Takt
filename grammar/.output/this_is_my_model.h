@@ -4,10 +4,22 @@
 #include <stdbool.h>
 
 /* Forward declarations */
-typedef struct ThisIsMyModelPing ThisIsMyModelPing;
 typedef struct ThisIsMyModelPong ThisIsMyModelPong;
+typedef struct ThisIsMyModelPing ThisIsMyModelPing;
 typedef struct ThisIsMyModelToggle ThisIsMyModelToggle;
 typedef struct ThisIsMyModel ThisIsMyModel;
+
+// NOTICE: Определение констант для модели Pong (ThisIsMyModel:Pong)
+/* Model Pong (ThisIsMyModel:Pong) */
+struct ThisIsMyModelPong {
+    // NOTICE: Определение переменных модели
+    enum {
+        THIS_IS_MY_MODEL_PONG_INIT,
+        THIS_IS_MY_MODEL_PONG_BEGIN,
+        THIS_IS_MY_MODEL_PONG_STOP,
+        THIS_IS_MY_MODEL_PONG_END
+    } state;
+};
 
 // NOTICE: Определение констант для модели Ping (ThisIsMyModel:Ping)
 /* Model Ping (ThisIsMyModel:Ping) */
@@ -21,27 +33,15 @@ struct ThisIsMyModelPing {
     } state;
 };
 
-// NOTICE: Определение констант для модели Pong (ThisIsMyModel:Pong)
-/* Model Pong (ThisIsMyModel:Pong) */
-struct ThisIsMyModelPong {
-    // NOTICE: Определение переменных модели
-    enum {
-        THIS_IS_MY_MODEL_PONG_INIT,
-        THIS_IS_MY_MODEL_PONG_STOP,
-        THIS_IS_MY_MODEL_PONG_BEGIN,
-        THIS_IS_MY_MODEL_PONG_END
-    } state;
-};
-
 // NOTICE: Определение констант для модели Toggle (ThisIsMyModel:Toggle)
 /* Model Toggle (ThisIsMyModel:Toggle) */
 struct ThisIsMyModelToggle {
     // NOTICE: Определение переменных модели
     enum {
         THIS_IS_MY_MODEL_TOGGLE_INIT,
-        THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
-        THIS_IS_MY_MODEL_TOGGLE_END,
         THIS_IS_MY_MODEL_TOGGLE_ENTRY,
+        THIS_IS_MY_MODEL_TOGGLE_END,
+        THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
         THIS_IS_MY_MODEL_TOGGLE_PING,
         THIS_IS_MY_MODEL_TOGGLE_PONG
     } state;

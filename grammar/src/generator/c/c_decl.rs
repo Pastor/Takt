@@ -152,7 +152,7 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
                         .collect::<Vec<String>>();
                     tiny_params.insert(
                         0,
-                        format!("const {} *main", map.root_name().unique_camelcase()),
+                        format!("const {} *model", map.root_name().unique_camelcase()),
                     );
                     definition.push_str(
                         format!(

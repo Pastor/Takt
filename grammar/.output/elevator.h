@@ -14,11 +14,11 @@ struct ElevatorEngine {
     uint16_t action;
     enum {
         ELEVATOR_ENGINE_INIT,
-        ELEVATOR_ENGINE_DOOR_CLOSING,
         ELEVATOR_ENGINE_MOVING_UP,
-        ELEVATOR_ENGINE_MOVING_DOWN,
-        ELEVATOR_ENGINE_DOOR_OPENING,
+        ELEVATOR_ENGINE_DOOR_CLOSING,
         ELEVATOR_ENGINE_IDLE,
+        ELEVATOR_ENGINE_DOOR_OPENING,
+        ELEVATOR_ENGINE_MOVING_DOWN,
         ELEVATOR_ENGINE_END
     } state;
 };
@@ -28,13 +28,13 @@ struct ElevatorEngine {
 struct Elevator {
     // NOTICE: Определение переменных модели
     uint8_t current_floor;
-    uint8_t has_call;
     uint8_t target_floor;
+    uint8_t has_call;
     enum {
         ELEVATOR_INIT,
-        ELEVATOR_END,
         ELEVATOR_MAIN,
-        ELEVATOR_MIDDLE
+        ELEVATOR_MIDDLE,
+        ELEVATOR_END
     } state;
     // NOTICE: Определение extend
     ElevatorEngine main;

@@ -314,12 +314,12 @@ pub(super) fn generate_condition_expr(
             generate_condition_expr(r, map, owner)?
         )),
         ConditionNode::And(l, r) => Ok(format!(
-            "{} & {}",
+            "{} && {}",
             generate_condition_expr(l, map, owner)?,
             generate_condition_expr(r, map, owner)?
         )),
         ConditionNode::Or(l, r) => Ok(format!(
-            "{} | {}",
+            "{} || {}",
             generate_condition_expr(l, map, owner)?,
             generate_condition_expr(r, map, owner)?
         )),
