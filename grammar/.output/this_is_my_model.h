@@ -27,8 +27,8 @@ struct ThisIsMyModelPong {
     // NOTICE: Определение переменных модели
     enum {
         THIS_IS_MY_MODEL_PONG_INIT,
-        THIS_IS_MY_MODEL_PONG_BEGIN,
         THIS_IS_MY_MODEL_PONG_STOP,
+        THIS_IS_MY_MODEL_PONG_BEGIN,
         THIS_IS_MY_MODEL_PONG_END
     } state;
 };
@@ -39,15 +39,15 @@ struct ThisIsMyModelToggle {
     // NOTICE: Определение переменных модели
     enum {
         THIS_IS_MY_MODEL_TOGGLE_INIT,
-        THIS_IS_MY_MODEL_TOGGLE_PONG,
         THIS_IS_MY_MODEL_TOGGLE_COMPLETE,
         THIS_IS_MY_MODEL_TOGGLE_END,
+        THIS_IS_MY_MODEL_TOGGLE_ENTRY,
         THIS_IS_MY_MODEL_TOGGLE_PING,
-        THIS_IS_MY_MODEL_TOGGLE_ENTRY
+        THIS_IS_MY_MODEL_TOGGLE_PONG
     } state;
     // NOTICE: Определение extend
-    ThisIsMyModelPong pong;
     ThisIsMyModelPing ping;
+    ThisIsMyModelPong pong;
 };
 
 // NOTICE: Определение констант для модели ThisIsMyModel (ThisIsMyModel)

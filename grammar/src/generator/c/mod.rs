@@ -30,8 +30,11 @@
 #![allow(clippy::needless_borrow)]
 #![allow(clippy::explicit_auto_deref)]
 
+mod c_decl;
+mod c_expr;
 mod c_header;
 mod c_map;
+mod c_model;
 mod c_source;
 
 use crate::diagnostics::{Diagnostic, Location};
