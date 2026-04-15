@@ -1,0 +1,453 @@
+diff --git a/grammar/src/generator/c/c_source.rs b/grammar/src/generator/c/c_source.rs
+index a322d35..de50aec 100644
+--- a/grammar/src/generator/c/c_source.rs
++++ b/grammar/src/generator/c/c_source.rs
+@@ -488,7 +488,9 @@ fn generate_condition_expr(
+         ConditionNode::Variable(var_rc, _) => {
+             let var = var_rc.borrow();
+             if let VariableNode::Simple { upper, .. } = &*var {
+-                if let Some(s) = resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true) {
++                if let Some(s) =
++                    resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true)
++                {
+                     return Ok(s);
+                 }
+             }
+@@ -498,7 +500,9 @@ fn generate_condition_expr(
+         ConditionNode::ArraySubscript(var_rc, idx) => {
+             let var = var_rc.borrow();
+             if let VariableNode::Simple { upper, .. } = &*var {
+-                if let Some(s) = resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true) {
++                if let Some(s) =
++                    resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true)
++                {
+                     return Ok(format!("{}[{}]", s, idx));
+                 }
+             }
+@@ -506,12 +510,51 @@ fn generate_condition_expr(
+             Ok(format!("{}[{}]", base, idx))
+         }
+         ConditionNode::BitAccess(inner, member) => {
+-            let inner_str = generate_condition_expr(inner, map, owner)?;
+-            let suffix = match member {
+-                Member::Identifier(id) => id.name.clone(),
+-                Member::Number(n) => n.to_string(),
+-            };
+-            Ok(format!("{}.{}", inner_str, suffix))
++            match member {
++                Member::Identifier(id) => {
++                    // Доступ к полю структуры: inner.field
++                    let inner_str = generate_condition_expr(inner, map, owner)?;
++                    Ok(format!("{}.{}", inner_str, id.name))
++                }
++                Member::Number(n) => {
++                    // Битовый доступ: проверяем, является ли inner портовой переменной
++                    if let ConditionNode::Variable(var_rc, _) = inner.as_ref() {
++                        let var = var_rc.borrow();
++                        if let VariableNode::Port {
++                            name, ty, upper, ..
++                        } = &*var
++                        {
++                            if matches!(ty, TypeNode::Rational) {
++                                return Err(Diagnostic::error(
++                                    Location::Codegen,
++                                    "BitAccess на float-порт не поддерживается в условии"
++                                        .to_string(),
++                                ));
++                            }
++                            let model_name =
++                                if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade()) {
++                                    Name::from(rc)
++                                } else {
++                                    return Err(
++                                        "Неразрешённый owner порта при BitAccess в условии".into(),
++                                    );
++                                };
++                            let port_name = format!(
++                                "PORT_{}_{}",
++                                model_name.unique_uppercase_snakecase(),
++                                normalize_lowercase_snakecase(name.clone()).to_uppercase()
++                            );
++                            return Ok(format!(
++                                "(*main->read_bit)({}, {}, main->userdata)",
++                                port_name, n
++                            ));
++                        }
++                    }
++                    // Обычная переменная/выражение: ((inner >> N) & 1u)
++                    let inner_str = generate_condition_expr(inner, map, owner)?;
++                    Ok(format!("(({} >> {}) & 1u)", inner_str, n))
++                }
++            }
+         }
+         ConditionNode::Function(fun_rc, args, _) => {
+             let fun = fun_rc.borrow();
+@@ -1719,6 +1762,70 @@ fn generate_expr(
+                     return Ok(());
+                 }
+             }
++            // BitAccess как lvalue: inner.N = val
++            if let ExpressionNode::BitAccess(inner_expr, Member::Number(n)) = l.as_ref() {
++                // Порт.бит = val → write_bit(PORT, N, val, userdata)
++                if let ExpressionNode::Variable(var_rc) = inner_expr.as_ref() {
++                    let var = var_rc.borrow();
++                    if let VariableNode::Port {
++                        name, ty, upper, ..
++                    } = &*var
++                    {
++                        if matches!(ty, TypeNode::Rational) {
++                            return Err(Diagnostic::error(
++                                Location::Codegen,
++                                "BitAccess на float-порт не поддерживается при записи".to_string(),
++                            ));
++                        }
++                        let model_name = if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade())
++                        {
++                            Name::from(rc)
++                        } else {
++                            return Err("Неразрешённый owner порта при BitAccess записи".into());
++                        };
++                        let port_name = format!(
++                            "PORT_{}_{}",
++                            model_name.unique_uppercase_snakecase(),
++                            normalize_lowercase_snakecase(name.clone()).to_uppercase()
++                        );
++                        let mut rhs_str = String::new();
++                        {
++                            let mut tmp = Printer::new(4, &mut rhs_str);
++                            generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
++                        }
++                        printer.print(&format!(
++                            "(*main->write_bit)({}, {}, {}, main->userdata)",
++                            port_name, n, rhs_str
++                        ));
++                        return Ok(());
++                    }
++                }
++                // Обычная переменная.бит = val
++                // x = (x & ~(1u << N)) | ((val & 1u) << N)
++                let mut lhs_str = String::new();
++                {
++                    let mut tmp = Printer::new(4, &mut lhs_str);
++                    generate_expr(
++                        &mut tmp,
++                        map,
++                        owner,
++                        params.clone(),
++                        inner_expr,
++                        0,
++                        has_model,
++                    )?;
++                }
++                let mut rhs_str = String::new();
++                {
++                    let mut tmp = Printer::new(4, &mut rhs_str);
++                    generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
++                }
++                printer.print(&format!(
++                    "{0} = ({0} & ~(1u << {1})) | (({2} & 1u) << {1})",
++                    lhs_str, n, rhs_str
++                ));
++                return Ok(());
++            }
+             // Обычное присваивание (право-ассоциативно: тот же prec не оборачивается)
+             generate_expr(printer, map, owner, params.clone(), l, 1, has_model)?;
+             printer.print(" = ");
+@@ -1794,8 +1901,51 @@ fn generate_expr(
+         ExpressionNode::ArraySlice(_, _, _) => {
+             return Err("ArraySlice не поддерживается в C генераторе".into());
+         }
+-        ExpressionNode::BitAccess(_, _) => {
+-            return Err("BitAccess не поддерживается в C генераторе".into());
++        ExpressionNode::BitAccess(inner, member) => {
++            match member {
++                Member::Identifier(id) => {
++                    // Доступ к полю структуры: inner.field — используем максимальный приоритет
++                    generate_expr(printer, map, owner, params, inner, 15, has_model)?;
++                    printer.print(&format!(".{}", id.name));
++                }
++                Member::Number(n) => {
++                    // Битовый доступ к порту: (*main->read_bit)(PORT_X, N, main->userdata)
++                    if let ExpressionNode::Variable(var_rc) = inner.as_ref() {
++                        let var = var_rc.borrow();
++                        if let VariableNode::Port {
++                            name, ty, upper, ..
++                        } = &*var
++                        {
++                            if matches!(ty, TypeNode::Rational) {
++                                return Err(Diagnostic::error(
++                                    Location::Codegen,
++                                    "BitAccess на float-порт не поддерживается".to_string(),
++                                ));
++                            }
++                            let model_name =
++                                if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade()) {
++                                    Name::from(rc)
++                                } else {
++                                    return Err("Неразрешённый owner порта при BitAccess".into());
++                                };
++                            let port_name = format!(
++                                "PORT_{}_{}",
++                                model_name.unique_uppercase_snakecase(),
++                                normalize_lowercase_snakecase(name.clone()).to_uppercase()
++                            );
++                            printer.print(&format!(
++                                "(*main->read_bit)({}, {}, main->userdata)",
++                                port_name, n
++                            ));
++                            return Ok(());
++                        }
++                    }
++                    // Обычная переменная/выражение: ((inner >> N) & 1u)
++                    printer.print("((");
++                    generate_expr(printer, map, owner, params, inner, 0, has_model)?;
++                    printer.print(&format!(" >> {}) & 1u)", n));
++                }
++            }
+         }
+         ExpressionNode::CodeBlock(_, _) => {
+             return Err("CodeBlock не поддерживается как выражение в C генераторе".into());
+@@ -1921,7 +2071,14 @@ fn generate_code_block(
+                     }) => {
+                         // else-ветка — одиночный if: схлопываем в else if
+                         printer.down().ident("} else if (");
+-                        generate_stmt_expression(printer, map, owner, params.clone(), ec, has_model)?;
++                        generate_stmt_expression(
++                            printer,
++                            map,
++                            owner,
++                            params.clone(),
++                            ec,
++                            has_model,
++                        )?;
+                         printer.print(") {").up().nl();
+                         generate_code_block(printer, map, owner, params.clone(), et, has_model)?;
+                         current_else = ee.as_deref();
+@@ -1929,7 +2086,14 @@ fn generate_code_block(
+                     Some(else_stmt) => {
+                         // else-ветка — произвольный блок
+                         printer.down().ident("} else {").up().nl();
+-                        generate_code_block(printer, map, owner, params.clone(), else_stmt, has_model)?;
++                        generate_code_block(
++                            printer,
++                            map,
++                            owner,
++                            params.clone(),
++                            else_stmt,
++                            has_model,
++                        )?;
+                         printer.down().ident("}").nl();
+                         break;
+                     }
+@@ -1944,7 +2108,14 @@ fn generate_code_block(
+                 }
+                 Some(cond_expr) => {
+                     printer.ident("while (");
+-                    generate_stmt_expression(printer, map, owner, params.clone(), cond_expr, has_model)?;
++                    generate_stmt_expression(
++                        printer,
++                        map,
++                        owner,
++                        params.clone(),
++                        cond_expr,
++                        has_model,
++                    )?;
+                     printer.print(") ");
+                 }
+             }
+@@ -1973,12 +2144,26 @@ fn generate_code_block(
+                 printer.ident("for (;");
+                 if let Some(cond_expr) = cond {
+                     printer.print(" ");
+-                    generate_stmt_expression(printer, map, owner, params.clone(), cond_expr, has_model)?;
++                    generate_stmt_expression(
++                        printer,
++                        map,
++                        owner,
++                        params.clone(),
++                        cond_expr,
++                        has_model,
++                    )?;
+                 }
+                 printer.print(";");
+                 if let Some(step_expr) = step {
+                     printer.print(" ");
+-                    generate_stmt_expression(printer, map, owner, params.clone(), step_expr, has_model)?;
++                    generate_stmt_expression(
++                        printer,
++                        map,
++                        owner,
++                        params.clone(),
++                        step_expr,
++                        has_model,
++                    )?;
+                 }
+                 printer.print(") ");
+                 generate_code_block(printer, map, owner, params.clone(), body, has_model)?;
+@@ -1990,18 +2175,39 @@ fn generate_code_block(
+                 if let Some(init_stmt) = init {
+                     // Инициализация — только выражение (без отступа и точки с запятой)
+                     if let StatementNode::Expression(expr) = init_stmt.as_ref() {
+-                        generate_stmt_expression(printer, map, owner, params.clone(), expr, has_model)?;
++                        generate_stmt_expression(
++                            printer,
++                            map,
++                            owner,
++                            params.clone(),
++                            expr,
++                            has_model,
++                        )?;
+                     }
+                 }
+                 printer.print(";");
+                 if let Some(cond_expr) = cond {
+                     printer.print(" ");
+-                    generate_stmt_expression(printer, map, owner, params.clone(), cond_expr, has_model)?;
++                    generate_stmt_expression(
++                        printer,
++                        map,
++                        owner,
++                        params.clone(),
++                        cond_expr,
++                        has_model,
++                    )?;
+                 }
+                 printer.print(";");
+                 if let Some(step_expr) = step {
+                     printer.print(" ");
+-                    generate_stmt_expression(printer, map, owner, params.clone(), step_expr, has_model)?;
++                    generate_stmt_expression(
++                        printer,
++                        map,
++                        owner,
++                        params.clone(),
++                        step_expr,
++                        has_model,
++                    )?;
+                 }
+                 printer.print(") ");
+                 generate_code_block(printer, map, owner, params.clone(), body, has_model)?;
+@@ -2073,7 +2279,10 @@ fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<(), Diagnosti
+                                 .unwrap()
+                         })
+                         .collect::<Vec<String>>();
+-                    tiny_params.insert(0, format!("const {} *main", map.root_name().unique_camelcase()));
++                    tiny_params.insert(
++                        0,
++                        format!("const {} *main", map.root_name().unique_camelcase()),
++                    );
+                     definition.push_str(
+                         format!(
+                             "static {} {}({}) {{\n",
+@@ -2087,7 +2296,14 @@ fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<(), Diagnosti
+                     {
+                         let mut tmp_printer = Printer::new(4, &mut code_block);
+                         tmp_printer.up();
+-                        generate_code_block(&mut tmp_printer, map, &element, params.clone(), body, false)?;
++                        generate_code_block(
++                            &mut tmp_printer,
++                            map,
++                            &element,
++                            params.clone(),
++                            body,
++                            false,
++                        )?;
+                         tmp_printer.down();
+                     }
+                     definition.push_str(&code_block);
+@@ -2927,7 +3143,7 @@ state End;";
+     /// Генерация extend_complex.but не должна возвращать ошибку.
+     #[test]
+     fn test_extend_complex_generates_without_error() {
+-        let src = std::fs::read_to_string("tests/data/parser/valid/extend_complex.but")
++        let src = std::fs::read_to_string("../examples/extend_complex.but")
+             .expect("не удалось прочитать extend_complex.but");
+         let (ast, _) = parse(&src, 0).expect("ошибка разбора extend_complex.but");
+         let model_rc =
+@@ -2993,10 +3209,7 @@ state End;";
+         let before_end = &code[..end_case_start];
+         // До блока ROOT_END: нет model->state = ROOT_END (переход только из S)
+         let transition_in_s = code.contains("model->state = ROOT_END;");
+-        assert!(
+-            transition_in_s,
+-            "ожидается переход S → ROOT_END:\n{code}"
+-        );
++        assert!(transition_in_s, "ожидается переход S → ROOT_END:\n{code}");
+     }
+ 
+     /// is_done всегда проверяет MODEL_END, даже если нет явных терминальных состояний.
+@@ -3032,4 +3245,74 @@ state End;";
+             "ожидается is_done для A:\n{code}"
+         );
+     }
++
++    // ── Тесты BitAccess ────────────────────────────────────────────────────────
++
++    /// Чтение бита переменной в условии `ref`: `flags.2` → `((model->flags >> 2) & 1u)`
++    #[test]
++    fn test_bit_access_var_read_in_condition() {
++        let src =
++            "type u8 = [bit;8]; var flags: u8 = 0; start S { ref Done: flags.2; } state Done;";
++        let code = generate_source_str(src);
++        assert!(
++            code.contains("((model->flags >> 2) & 1u)"),
++            "ожидается ((model->flags >> 2) & 1u) в условии:\n{code}"
++        );
++    }
++
++    /// Чтение бита порта в условии `ref`: `BTN.0` → `(*main->read_bit)(PORT_ROOT_BTN, 0, ...)`
++    #[test]
++    fn test_bit_access_port_read_in_condition() {
++        let src =
++            "type u8 = [bit;8]; port BTN: u8 = 0x200000; start S { ref Done: BTN.0; } state Done;";
++        let code = generate_source_str(src);
++        assert!(
++            code.contains("(*main->read_bit)(PORT_ROOT_BTN, 0, main->userdata)"),
++            "ожидается (*main->read_bit)(PORT_ROOT_BTN, 0, ...) в условии:\n{code}"
++        );
++    }
++
++    /// Чтение бита переменной в блоке `always`: `x = flags.3` → `((model->flags >> 3) & 1u)`
++    #[test]
++    fn test_bit_access_var_read_in_always() {
++        let src = "type u8 = [bit;8]; var flags: u8 = 0; var x: u8 = 0; start S { always { x = flags.3; } ref Done: true; } state Done;";
++        let code = generate_source_str(src);
++        assert!(
++            code.contains("((model->flags >> 3) & 1u)"),
++            "ожидается ((model->flags >> 3) & 1u) при чтении в always:\n{code}"
++        );
++    }
++
++    /// Запись бита переменной: `flags.3 = true` → bit-set идиома C
++    #[test]
++    fn test_bit_access_var_write_in_always() {
++        let src = "type u8 = [bit;8]; var flags: u8 = 0; start S { always { flags.3 = true; } ref Done: true; } state Done;";
++        let code = generate_source_str(src);
++        assert!(
++            code.contains("model->flags = (model->flags & ~(1u << 3)) | ((true & 1u) << 3)"),
++            "ожидается bit-set идиома для flags.3 = true:\n{code}"
++        );
++    }
++
++    /// Чтение бита порта в `always`: `x = BTN.0` → `(*main->read_bit)(PORT_ROOT_BTN, 0, ...)`
++    #[test]
++    fn test_bit_access_port_read_in_always() {
++        let src = "type u8 = [bit;8]; port BTN: u8 = 0x200000; var x: u8 = 0; start S { always { x = BTN.0; } ref Done: true; } state Done;";
++        let code = generate_source_str(src);
++        assert!(
++            code.contains("(*main->read_bit)(PORT_ROOT_BTN, 0, main->userdata)"),
++            "ожидается (*main->read_bit)(PORT_ROOT_BTN, 0, ...) при чтении порта:\n{code}"
++        );
++    }
++
++    /// Запись бита порта: `LED.7 = true` → `(*main->write_bit)(PORT_ROOT_LED, 7, true, ...)`
++    #[test]
++    fn test_bit_access_port_write_in_always() {
++        let src = "type u8 = [bit;8]; port LED: u8 = 0x100000; start S { always { LED.7 = true; } ref Done: true; } state Done;";
++        let code = generate_source_str(src);
++        assert!(
++            code.contains("(*main->write_bit)(PORT_ROOT_LED, 7, true, main->userdata)"),
++            "ожидается (*main->write_bit)(PORT_ROOT_LED, 7, true, ...) при записи порта:\n{code}"
++        );
++    }
+ }
