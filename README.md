@@ -818,6 +818,11 @@ LSP-сервер запускается редактором автоматич�
    паника при ошибочных входных данных недопустима в компиляторе
 7. **Незащищённые `unwrap()` в LSP и генераторе C** — `lsp.rs:1298`, `c_source.rs:201` и ряд других
    мест могут вызвать панику при неожиданных входных данных вместо возврата диагностики
+8. **Нереализованные переходы для составных состояний** — в `c_source.rs:597` генератор C выводит
+   `//TODO: условный переход в X не поддерживается` вместо кода перехода для состояний типа
+   `StateExtend::Model` и `StateExtend::State`; тихий сбой маскирует ошибку от пользователя
+9. **Нереализованная ветка `else` в tick-генераторе** — `c_source.rs:1031-1032` содержит
+   `//TODO: Реализовать` + `//FIXME: Пока не реализовано` в ветке обработки неизвестных типов элементов
 
 ### Открытые задачи
 
@@ -879,6 +884,21 @@ return Err(Diagnostic::error(loc, "Неожиданный тип аргумен�
 панике при освобождённом объекте. Необходимо заменить на `.upgrade().ok_or_else(...)` или
 `if let Some(...)` с корректной обработкой ошибки / ранним возвратом.
 
+Дополнительно `c_source.rs` содержит двойной `unwrap` в `get_function_name` (~строка 1137):
+`upper.clone().unwrap().upgrade().unwrap()` — и несколько `unwrap()` на `get_c_type()` (~строки 2073, 2080,
+2103, 2108), которые могут вызвать панику при непредвиденных типах.
+
+#### Поддержка условных переходов для составных состояний
+
+В `c_source.rs:597` для `StateExtend::Model` и `StateExtend::State` в качестве условия генерируется
+`//TODO: условный переход не поддерживается` вместо кода. Необходимо реализовать условные переходы,
+вернув корректную ошибку диагностики вместо тихого сбоя.
+
+#### Реализация ветки обработки неизвестных типов элементов в `tick`
+
+В `c_source.rs:1031-1032` находится заглушка `//TODO: Реализовать` + `//FIXME: Пока не реализовано`.
+Необходимо либо реализовать обработку, либо вернуть `Err` с диагностическим сообщением.
+
 ---
 
 ### Реализованные улучшения
@@ -939,6 +959,9 @@ return Err(Diagnostic::error(loc, "Неожиданный тип аргумен�
 | Changes-49    | Исправление падающих тестов: `minimap.rs` — недостижимые состояния пропускаются в `generate_model_tick` (`continue` вместо ошибки) | ✅ Исправлено |
 | Changes-50-P01 | Кодогенератор C: `break` в non-last if-блоках concat/parallel; порядок exit→enter→state→break в `generate_extend_transition` и `StateExtend::Model`; `_init→enter→state` в INIT-case; новые функции `generate_condition_expr` и `generate_state_transitions` (безусловные и условные переходы `Element::State`); паника в неразрешённых функциях заменена на `Err` | ✅ Реализовано |
 | Changes-50-P02 | Новые тесты: `test_concat_non_last_has_break_inside_if`, `test_transition_exit_before_state_change`, `test_init_calls_enter_after_init`, `test_simple_state_unconditional_transition`, `test_always_blocks_before_transitions` | ✅ Добавлено |
+| Changes-51-P01 | Кодогенератор C: исправление ошибок компиляции gcc — добавлен `resolve_simple_var_in_context` для корректного разрешения переменных (same-model/tick, root-from-nested, local-fn); `append = ", model"` для root-контекста; `const Root *main` в локальных функциях; prepend `main`/`model` как первый аргумент вызовов Local-функций в условиях | ✅ Исправлено |
+| Changes-51-P02 | Кодогенератор C: параметр `has_model: bool` пробросан через `generate_code_block`, `generate_stmt_expression`, `generate_expr`; обновлены тесты `test_init_parallel_generates_init_calls`, `test_init_concatenation_generates_first_init_only`, `test_tick_concatenation_generates_state_chain`, `test_submodel_variable_uses_state_field_name` | ✅ Исправлено |
+| Changes-52    | Кодогенератор C: единое терминальное состояние `_END` — все терминальные состояния получают явный переход в `_END`; `_is_done` всегда проверяет `_END`; удалён FIXME из auto-generated `_END`-кейса; 4 новых unit-теста | ✅ Реализовано |
 | —             | SemanticIndex: поиск узла по LSP-позиции (LSP1)                               | ✅ Реализовано |
 | —             | `textDocument/declaration`: переход к декларации (LSP2)                       | ✅ Реализовано |
 | —             | `textDocument/documentSymbol`: структура документа (LSP3)                     | ✅ Реализовано |

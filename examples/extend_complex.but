@@ -12,11 +12,16 @@ const c: Coord = {0, 0, 0};
 enum Constant {
     X, Y, Z
 }
+port IDLE: bit = 0x44533932:1;
+port WORK: bit = 0x44533932:2;
+port WAIT: bit = 0x44533932:33;
 
 fn is_collected(c: Constant, v: u8) -> bool {
     if c == X && v == 1 {
         return true;
-    } else if (c == Y && v == 2) {
+    } else if c == Y && v == 2 {
+        return true;
+    } else if x.2 == 0 {
         return true;
     }
     return false;
@@ -28,7 +33,17 @@ model A {
   start Start;
 }
 model B {
-  start Start;
+  start Start {
+    always {
+        if WAIT {
+            WORK = 0;
+            IDLE = 1;
+        } else {
+            IDLE = 0;
+            WORK = 1;
+        }
+    }
+  }
 }
 model C {
   enum Point {

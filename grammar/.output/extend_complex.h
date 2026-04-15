@@ -4,26 +4,15 @@
 #include <stdbool.h>
 
 /* Forward declarations */
-typedef struct ExtendComplexB ExtendComplexB;
 typedef struct ExtendComplexCC1 ExtendComplexCC1;
-typedef struct ExtendComplexF ExtendComplexF;
-typedef struct ExtendComplexA ExtendComplexA;
-typedef struct ExtendComplexCC2 ExtendComplexCC2;
-typedef struct ExtendComplexC ExtendComplexC;
 typedef struct ExtendComplexD ExtendComplexD;
+typedef struct ExtendComplexF ExtendComplexF;
+typedef struct ExtendComplexCC2 ExtendComplexCC2;
 typedef struct ExtendComplexE ExtendComplexE;
+typedef struct ExtendComplexC ExtendComplexC;
+typedef struct ExtendComplexA ExtendComplexA;
+typedef struct ExtendComplexB ExtendComplexB;
 typedef struct ExtendComplex ExtendComplex;
-
-// NOTICE: Определение констант для модели B (ExtendComplex:B)
-/* Model B (ExtendComplex:B) */
-struct ExtendComplexB {
-    // NOTICE: Определение переменных модели
-    enum {
-        EXTEND_COMPLEX_B_INIT,
-        EXTEND_COMPLEX_B_START,
-        EXTEND_COMPLEX_B_END
-    } state;
-};
 
 // NOTICE: Определение констант для модели C1 (ExtendComplex:C:C1)
 /* Model C1 (ExtendComplex:C:C1) */
@@ -31,8 +20,19 @@ struct ExtendComplexCC1 {
     // NOTICE: Определение переменных модели
     enum {
         EXTEND_COMPLEX_C_C1_INIT,
-        EXTEND_COMPLEX_C_C1_END,
-        EXTEND_COMPLEX_C_C1_START
+        EXTEND_COMPLEX_C_C1_START,
+        EXTEND_COMPLEX_C_C1_END
+    } state;
+};
+
+// NOTICE: Определение констант для модели D (ExtendComplex:D)
+/* Model D (ExtendComplex:D) */
+struct ExtendComplexD {
+    // NOTICE: Определение переменных модели
+    enum {
+        EXTEND_COMPLEX_D_INIT,
+        EXTEND_COMPLEX_D_START,
+        EXTEND_COMPLEX_D_END
     } state;
 };
 
@@ -47,17 +47,6 @@ struct ExtendComplexF {
     } state;
 };
 
-// NOTICE: Определение констант для модели A (ExtendComplex:A)
-/* Model A (ExtendComplex:A) */
-struct ExtendComplexA {
-    // NOTICE: Определение переменных модели
-    enum {
-        EXTEND_COMPLEX_A_INIT,
-        EXTEND_COMPLEX_A_START,
-        EXTEND_COMPLEX_A_END
-    } state;
-};
-
 // NOTICE: Определение констант для модели C2 (ExtendComplex:C:C2)
 /* Model C2 (ExtendComplex:C:C2) */
 struct ExtendComplexCC2 {
@@ -67,6 +56,26 @@ struct ExtendComplexCC2 {
         EXTEND_COMPLEX_C_C2_START,
         EXTEND_COMPLEX_C_C2_END
     } state;
+};
+
+// NOTICE: Определение констант для модели E (ExtendComplex:E)
+/* Model E (ExtendComplex:E) */
+struct ExtendComplexE {
+    // NOTICE: Определение переменных модели
+    enum {
+        EXTEND_COMPLEX_E_INIT,
+        EXTEND_COMPLEX_E_START,
+        EXTEND_COMPLEX_E_END
+    } state;
+    // NOTICE: Определение extend
+    ExtendComplexD start_d0;
+    ExtendComplexF start_f1;
+    enum {
+        EXTEND_COMPLEX_E_START_INIT,
+        EXTEND_COMPLEX_E_START_D0,
+        EXTEND_COMPLEX_E_START_F1,
+        EXTEND_COMPLEX_E_START_END
+    } start_state;
 };
 
 // NOTICE: Определение констант для модели C (ExtendComplex:C)
@@ -90,35 +99,26 @@ struct ExtendComplexC {
     } start;
 };
 
-// NOTICE: Определение констант для модели D (ExtendComplex:D)
-/* Model D (ExtendComplex:D) */
-struct ExtendComplexD {
+// NOTICE: Определение констант для модели A (ExtendComplex:A)
+/* Model A (ExtendComplex:A) */
+struct ExtendComplexA {
     // NOTICE: Определение переменных модели
     enum {
-        EXTEND_COMPLEX_D_INIT,
-        EXTEND_COMPLEX_D_START,
-        EXTEND_COMPLEX_D_END
+        EXTEND_COMPLEX_A_INIT,
+        EXTEND_COMPLEX_A_START,
+        EXTEND_COMPLEX_A_END
     } state;
 };
 
-// NOTICE: Определение констант для модели E (ExtendComplex:E)
-/* Model E (ExtendComplex:E) */
-struct ExtendComplexE {
+// NOTICE: Определение констант для модели B (ExtendComplex:B)
+/* Model B (ExtendComplex:B) */
+struct ExtendComplexB {
     // NOTICE: Определение переменных модели
     enum {
-        EXTEND_COMPLEX_E_INIT,
-        EXTEND_COMPLEX_E_START,
-        EXTEND_COMPLEX_E_END
+        EXTEND_COMPLEX_B_INIT,
+        EXTEND_COMPLEX_B_START,
+        EXTEND_COMPLEX_B_END
     } state;
-    // NOTICE: Определение extend
-    ExtendComplexD start_d0;
-    ExtendComplexF start_f1;
-    enum {
-        EXTEND_COMPLEX_E_START_INIT,
-        EXTEND_COMPLEX_E_START_D0,
-        EXTEND_COMPLEX_E_START_F1,
-        EXTEND_COMPLEX_E_START_END
-    } start_state;
 };
 
 // NOTICE: Определение констант для модели extend_complex (ExtendComplex)

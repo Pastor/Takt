@@ -212,22 +212,8 @@ fn generate_model_functions(
         .print(&append)
         .print(") {")
         .nl();
-    let mut cond = String::new();
-    for state_name in states.iter() {
-        let state = map.raw_state_at(state_name.clone())?;
-        let state = &*state.borrow();
-        if !state.is_terminated() {
-            continue;
-        }
-        if !cond.is_empty() {
-            cond.push_str(" || ");
-        }
-        cond.push_str("model->state == ");
-        cond.push_str(&state_name.unique_uppercase_snakecase());
-    }
-    if cond.is_empty() {
-        cond.push_str("false");
-    }
+    // Единственное терминальное состояние модели — всегда END
+    let cond = format!("model->state == {}_END", name.unique_uppercase_snakecase());
     printer
         .up()
         .ident("return ")
@@ -948,6 +934,17 @@ fn generate_model_tick(
         generate_named_blocks(printer, raw_state, map, model, "always")?;
         if let Element::State { .. } = state {
             generate_state_transitions(printer, raw_state, map, model, &model_name, states)?;
+            // Терминальное состояние (нет переходов) — явно переходим в END
+            // Исключение: если состояние уже является END (не добавляем самопереход)
+            if raw_state.is_terminated() && !state_name.local().to_uppercase().eq("END") {
+                generate_named_blocks(printer, raw_state, map, model, "exit")?;
+                printer
+                    .ident(&format!(
+                        "model->state = {}_END;",
+                        model_name.unique_uppercase_snakecase()
+                    ))
+                    .nl();
+            }
         } else if let Element::StateExtend { extend, next, .. } = state {
             if let StateExtend::Model(name) = extend {
                 printer
@@ -1047,7 +1044,6 @@ fn generate_model_tick(
             .print("_END: {")
             .up()
             .nl();
-        printer.ident("// FIXME: Пока не реализовано").nl();
         printer.ident("break;").nl();
         printer.down().ident("}").nl();
     }
@@ -2959,6 +2955,81 @@ state End;";
         assert!(
             code.contains("ExtendComplexA_init"),
             "ожидается ExtendComplexA_init:\n{code}"
+        );
+    }
+
+    // ── Тесты единственного терминального состояния END ───────────────────────
+
+    /// Терминальное состояние с произвольным именем (не End) должно переходить в MODEL_END.
+    #[test]
+    fn test_terminal_state_transitions_to_end() {
+        let src = "start S { ref Done: true; } state Done;";
+        let code = generate_source_str(src);
+        // Done — терминальное состояние, должно переходить в ROOT_END
+        assert!(
+            code.contains("model->state = ROOT_END;"),
+            "ожидается переход Done → ROOT_END:\n{code}"
+        );
+        // is_done должна проверять ROOT_END
+        assert!(
+            code.contains("model->state == ROOT_END"),
+            "ожидается is_done проверяет ROOT_END:\n{code}"
+        );
+    }
+
+    /// Состояние End уже является терминальным — не должно иметь самоперехода.
+    #[test]
+    fn test_end_state_no_self_transition() {
+        let src = "start S { ref End: true; } state End;";
+        let code = generate_source_str(src);
+        // End IS ROOT_END, не должно быть model->state = ROOT_END; внутри case End
+        // is_done должна проверять ROOT_END
+        assert!(
+            code.contains("model->state == ROOT_END"),
+            "ожидается is_done проверяет ROOT_END:\n{code}"
+        );
+        // Не должно быть лишнего перехода End→End
+        let end_case_start = code.find("case ROOT_END:").unwrap_or(0);
+        let before_end = &code[..end_case_start];
+        // До блока ROOT_END: нет model->state = ROOT_END (переход только из S)
+        let transition_in_s = code.contains("model->state = ROOT_END;");
+        assert!(
+            transition_in_s,
+            "ожидается переход S → ROOT_END:\n{code}"
+        );
+    }
+
+    /// is_done всегда проверяет MODEL_END, даже если нет явных терминальных состояний.
+    #[test]
+    fn test_is_done_always_checks_model_end() {
+        let src = "model A { start Start; } start S = A { next End; } state End;";
+        let code = generate_source_str(src);
+        // is_done для A: проверяет ROOT_A_END
+        assert!(
+            code.contains("model->state == ROOT_A_END"),
+            "ожидается is_done для A проверяет ROOT_A_END:\n{code}"
+        );
+        // is_done для Root: проверяет ROOT_END
+        assert!(
+            code.contains("model->state == ROOT_END"),
+            "ожидается is_done для Root проверяет ROOT_END:\n{code}"
+        );
+    }
+
+    /// Вложенная модель с нестандартным терминальным состоянием.
+    #[test]
+    fn test_submodel_terminal_state_transitions_to_end() {
+        let src = "model A { start Run; state Finish; } start S = A { next End; } state End;";
+        let code = generate_source_str(src);
+        // Finish (терминальное в A) должно переходить в ROOT_A_END
+        assert!(
+            code.contains("model->state = ROOT_A_END;"),
+            "ожидается Finish → ROOT_A_END:\n{code}"
+        );
+        // is_done для A: ROOT_A_END
+        assert!(
+            code.contains("model->state == ROOT_A_END"),
+            "ожидается is_done для A:\n{code}"
         );
     }
 }
