@@ -11,8 +11,8 @@ typedef struct LspDemo LspDemo;
 /* Model Robot (LspDemo:Robot) */
 struct LspDemoRobot {
     // NOTICE: Определение переменных модели
-    int active;
     uint8_t speed;
+    int active;
     enum {
         LSP_DEMO_ROBOT_INIT,
         LSP_DEMO_ROBOT_MOVING,

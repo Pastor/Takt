@@ -1,0 +1,19 @@
+/// Тест: вызов extern функции в блоке always.
+/// Проверяет, что extern fn корректно разрешается семантически.
+
+type u8 = [bit;8];
+
+extern fn log_value(v: u8);
+
+model Counter {
+    var x: u8 = 0;
+
+    start Running {
+        always {
+            x = x + 1;
+            log_value(x);
+        }
+    }
+}
+
+start Root = Counter;

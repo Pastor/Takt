@@ -23,7 +23,7 @@ fn tmp_but_file(name: &str, content: &str) -> (tempfile::TempDir, String) {
 #[test]
 fn test_compile_simple_fsm_to_c() {
     use grammar::{
-        generator::{generate, Language},
+        generator::{Language, generate},
         parse,
         semantic::tree::construct_model,
     };
@@ -321,7 +321,7 @@ fn test_compile_example_file_with_include_path() {
 #[test]
 fn test_extend_field_naming_single_and_composite() {
     use grammar::{
-        generator::{generate, Language},
+        generator::{Language, generate},
         parse,
         semantic::tree::construct_model,
     };
@@ -455,7 +455,7 @@ fn test_include_dirs_end_to_end_integration() {
 /// Вспомогательная функция: генерирует .c и возвращает его содержимое.
 fn generate_c_content(src: &str, model_name: &str) -> String {
     use grammar::{
-        generator::{generate, Language},
+        generator::{Language, generate},
         parse,
         semantic::tree::construct_model,
     };
@@ -475,7 +475,7 @@ fn generate_c_content(src: &str, model_name: &str) -> String {
 /// Вспомогательная функция: генерирует .h и возвращает его содержимое.
 fn generate_h_content(src: &str, model_name: &str) -> String {
     use grammar::{
-        generator::{generate, Language},
+        generator::{Language, generate},
         parse,
         semantic::tree::construct_model,
     };

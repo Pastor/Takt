@@ -5,19 +5,19 @@
 #define PORT_BIT_ACCESS_BTN 0x200000
 #define PORT_BIT_ACCESS_LED 0x100000
 /// Model functions 'BitOps (BitAccess:BitOps)'
-static void BitAccessBitOps_init(BitAccessBitOps *model, const BitAccess *main);
-static void BitAccessBitOps_tick(BitAccessBitOps *model, const BitAccess *main);
-static bool BitAccessBitOps_is_done(const BitAccessBitOps *model, const BitAccess *main);
+static void BitAccessBitOps_init(BitAccessBitOps *model, BitAccess *main);
+static void BitAccessBitOps_tick(BitAccessBitOps *model, BitAccess *main);
+static bool BitAccessBitOps_is_done(const BitAccessBitOps *model, BitAccess *main);
 
 /// Функция инициализации модели BitOps (BitAccess:BitOps)
-void BitAccessBitOps_init(BitAccessBitOps *model, const BitAccess *main) {
+void BitAccessBitOps_init(BitAccessBitOps *model, BitAccess *main) {
     assert(0 != model);
     model->state = BIT_ACCESS_BIT_OPS_INIT;
     model->flags = 0;
 }
 
 /// Функция обработки модели BitOps (BitAccess:BitOps)
-void BitAccessBitOps_tick(BitAccessBitOps *model, const BitAccess *main) {
+void BitAccessBitOps_tick(BitAccessBitOps *model, BitAccess *main) {
     assert(0 != model);
     assert(0 != main);
     switch (model->state) {
@@ -48,12 +48,12 @@ void BitAccessBitOps_tick(BitAccessBitOps *model, const BitAccess *main) {
 }
 
 /// Функция сброса модели BitOps (BitAccess:BitOps)
-void BitAccessBitOps_reset(BitAccessBitOps *model, const BitAccess *main) {
+void BitAccessBitOps_reset(BitAccessBitOps *model, BitAccess *main) {
     BitAccessBitOps_init(model, main);
 }
 
 /// Функция проверки терминального состояния модели BitOps (BitAccess:BitOps)
-bool BitAccessBitOps_is_done(const BitAccessBitOps *model, const BitAccess *main) {
+bool BitAccessBitOps_is_done(const BitAccessBitOps *model, BitAccess *main) {
     return model->state == BIT_ACCESS_BIT_OPS_END;
 }
 

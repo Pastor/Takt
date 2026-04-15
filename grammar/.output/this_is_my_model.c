@@ -7,88 +7,27 @@
 #define PORT_THIS_IS_MY_MODEL_A 0x548835
 #define PORT_THIS_IS_MY_MODEL_B1 0x648835
 /// Model functions 'Ping (ThisIsMyModel:Ping)'
-static void ThisIsMyModelPing_init(ThisIsMyModelPing *model, const ThisIsMyModel *main);
-static void ThisIsMyModelPing_tick(ThisIsMyModelPing *model, const ThisIsMyModel *main);
-static bool ThisIsMyModelPing_is_done(const ThisIsMyModelPing *model, const ThisIsMyModel *main);
+static void ThisIsMyModelPing_init(ThisIsMyModelPing *model, ThisIsMyModel *main);
+static void ThisIsMyModelPing_tick(ThisIsMyModelPing *model, ThisIsMyModel *main);
+static bool ThisIsMyModelPing_is_done(const ThisIsMyModelPing *model, ThisIsMyModel *main);
 /// Model functions 'Pong (ThisIsMyModel:Pong)'
-static void ThisIsMyModelPong_init(ThisIsMyModelPong *model, const ThisIsMyModel *main);
-static void ThisIsMyModelPong_tick(ThisIsMyModelPong *model, const ThisIsMyModel *main);
-static bool ThisIsMyModelPong_is_done(const ThisIsMyModelPong *model, const ThisIsMyModel *main);
+static void ThisIsMyModelPong_init(ThisIsMyModelPong *model, ThisIsMyModel *main);
+static void ThisIsMyModelPong_tick(ThisIsMyModelPong *model, ThisIsMyModel *main);
+static bool ThisIsMyModelPong_is_done(const ThisIsMyModelPong *model, ThisIsMyModel *main);
 /// Model functions 'Toggle (ThisIsMyModel:Toggle)'
-static void ThisIsMyModelToggle_init(ThisIsMyModelToggle *model, const ThisIsMyModel *main);
-static void ThisIsMyModelToggle_tick(ThisIsMyModelToggle *model, const ThisIsMyModel *main);
-static bool ThisIsMyModelToggle_is_done(const ThisIsMyModelToggle *model, const ThisIsMyModel *main);
-
-/// Функция инициализации модели Toggle (ThisIsMyModel:Toggle)
-void ThisIsMyModelToggle_init(ThisIsMyModelToggle *model, const ThisIsMyModel *main) {
-    assert(0 != model);
-    model->state = THIS_IS_MY_MODEL_TOGGLE_INIT;
-}
-
-/// Функция обработки модели Toggle (ThisIsMyModel:Toggle)
-void ThisIsMyModelToggle_tick(ThisIsMyModelToggle *model, const ThisIsMyModel *main) {
-    assert(0 != model);
-    assert(0 != main);
-    switch (model->state) {
-        case THIS_IS_MY_MODEL_TOGGLE_INIT: {
-            model->state = THIS_IS_MY_MODEL_TOGGLE_ENTRY;
-            break;
-        }
-        case THIS_IS_MY_MODEL_TOGGLE_ENTRY: {
-            if (main->it == 0) {
-                model->state = THIS_IS_MY_MODEL_TOGGLE_PING;
-                break;
-            }
-            break;
-        }
-        case THIS_IS_MY_MODEL_TOGGLE_END: {
-            break;
-        }
-        case THIS_IS_MY_MODEL_TOGGLE_COMPLETE: {
-            if (true) {
-                model->state = THIS_IS_MY_MODEL_TOGGLE_END;
-                break;
-            }
-            break;
-        }
-        case THIS_IS_MY_MODEL_TOGGLE_PING: {
-            ThisIsMyModelPing_tick(&model->ping, main);
-            if (ThisIsMyModelPing_is_done(&model->ping, main)) {
-                model->state = THIS_IS_MY_MODEL_TOGGLE_PONG;
-                break;
-            }
-            break;
-        }
-        case THIS_IS_MY_MODEL_TOGGLE_PONG: {
-            ThisIsMyModelPong_tick(&model->pong, main);
-            if (ThisIsMyModelPong_is_done(&model->pong, main)) {
-                model->state = THIS_IS_MY_MODEL_TOGGLE_COMPLETE;
-                break;
-            }
-            break;
-        }
-    }
-}
-
-/// Функция сброса модели Toggle (ThisIsMyModel:Toggle)
-void ThisIsMyModelToggle_reset(ThisIsMyModelToggle *model, const ThisIsMyModel *main) {
-    ThisIsMyModelToggle_init(model, main);
-}
-
-/// Функция проверки терминального состояния модели Toggle (ThisIsMyModel:Toggle)
-bool ThisIsMyModelToggle_is_done(const ThisIsMyModelToggle *model, const ThisIsMyModel *main) {
-    return model->state == THIS_IS_MY_MODEL_TOGGLE_END;
-}
+static void ThisIsMyModelToggle_init(ThisIsMyModelToggle *model, ThisIsMyModel *main);
+static void ThisIsMyModelToggle_tick(ThisIsMyModelToggle *model, ThisIsMyModel *main);
+static bool ThisIsMyModelToggle_is_done(const ThisIsMyModelToggle *model, ThisIsMyModel *main);
 
 /// Функция инициализации модели Ping (ThisIsMyModel:Ping)
-void ThisIsMyModelPing_init(ThisIsMyModelPing *model, const ThisIsMyModel *main) {
+void ThisIsMyModelPing_init(ThisIsMyModelPing *model, ThisIsMyModel *main) {
     assert(0 != model);
     model->state = THIS_IS_MY_MODEL_PING_INIT;
     model->toggle = false;
 }
 
 /// Функция обработки модели Ping (ThisIsMyModel:Ping)
-void ThisIsMyModelPing_tick(ThisIsMyModelPing *model, const ThisIsMyModel *main) {
+void ThisIsMyModelPing_tick(ThisIsMyModelPing *model, ThisIsMyModel *main) {
     assert(0 != model);
     assert(0 != main);
     switch (model->state) {
@@ -116,23 +55,23 @@ void ThisIsMyModelPing_tick(ThisIsMyModelPing *model, const ThisIsMyModel *main)
 }
 
 /// Функция сброса модели Ping (ThisIsMyModel:Ping)
-void ThisIsMyModelPing_reset(ThisIsMyModelPing *model, const ThisIsMyModel *main) {
+void ThisIsMyModelPing_reset(ThisIsMyModelPing *model, ThisIsMyModel *main) {
     ThisIsMyModelPing_init(model, main);
 }
 
 /// Функция проверки терминального состояния модели Ping (ThisIsMyModel:Ping)
-bool ThisIsMyModelPing_is_done(const ThisIsMyModelPing *model, const ThisIsMyModel *main) {
+bool ThisIsMyModelPing_is_done(const ThisIsMyModelPing *model, ThisIsMyModel *main) {
     return model->state == THIS_IS_MY_MODEL_PING_END;
 }
 
 /// Функция инициализации модели Pong (ThisIsMyModel:Pong)
-void ThisIsMyModelPong_init(ThisIsMyModelPong *model, const ThisIsMyModel *main) {
+void ThisIsMyModelPong_init(ThisIsMyModelPong *model, ThisIsMyModel *main) {
     assert(0 != model);
     model->state = THIS_IS_MY_MODEL_PONG_INIT;
 }
 
 /// Функция обработки модели Pong (ThisIsMyModel:Pong)
-void ThisIsMyModelPong_tick(ThisIsMyModelPong *model, const ThisIsMyModel *main) {
+void ThisIsMyModelPong_tick(ThisIsMyModelPong *model, ThisIsMyModel *main) {
     assert(0 != model);
     assert(0 != main);
     switch (model->state) {
@@ -156,13 +95,74 @@ void ThisIsMyModelPong_tick(ThisIsMyModelPong *model, const ThisIsMyModel *main)
 }
 
 /// Функция сброса модели Pong (ThisIsMyModel:Pong)
-void ThisIsMyModelPong_reset(ThisIsMyModelPong *model, const ThisIsMyModel *main) {
+void ThisIsMyModelPong_reset(ThisIsMyModelPong *model, ThisIsMyModel *main) {
     ThisIsMyModelPong_init(model, main);
 }
 
 /// Функция проверки терминального состояния модели Pong (ThisIsMyModel:Pong)
-bool ThisIsMyModelPong_is_done(const ThisIsMyModelPong *model, const ThisIsMyModel *main) {
+bool ThisIsMyModelPong_is_done(const ThisIsMyModelPong *model, ThisIsMyModel *main) {
     return model->state == THIS_IS_MY_MODEL_PONG_END;
+}
+
+/// Функция инициализации модели Toggle (ThisIsMyModel:Toggle)
+void ThisIsMyModelToggle_init(ThisIsMyModelToggle *model, ThisIsMyModel *main) {
+    assert(0 != model);
+    model->state = THIS_IS_MY_MODEL_TOGGLE_INIT;
+}
+
+/// Функция обработки модели Toggle (ThisIsMyModel:Toggle)
+void ThisIsMyModelToggle_tick(ThisIsMyModelToggle *model, ThisIsMyModel *main) {
+    assert(0 != model);
+    assert(0 != main);
+    switch (model->state) {
+        case THIS_IS_MY_MODEL_TOGGLE_INIT: {
+            model->state = THIS_IS_MY_MODEL_TOGGLE_ENTRY;
+            break;
+        }
+        case THIS_IS_MY_MODEL_TOGGLE_PING: {
+            ThisIsMyModelPing_tick(&model->ping, main);
+            if (ThisIsMyModelPing_is_done(&model->ping, main)) {
+                model->state = THIS_IS_MY_MODEL_TOGGLE_PONG;
+                break;
+            }
+            break;
+        }
+        case THIS_IS_MY_MODEL_TOGGLE_END: {
+            break;
+        }
+        case THIS_IS_MY_MODEL_TOGGLE_PONG: {
+            ThisIsMyModelPong_tick(&model->pong, main);
+            if (ThisIsMyModelPong_is_done(&model->pong, main)) {
+                model->state = THIS_IS_MY_MODEL_TOGGLE_COMPLETE;
+                break;
+            }
+            break;
+        }
+        case THIS_IS_MY_MODEL_TOGGLE_ENTRY: {
+            if (main->it == 0) {
+                model->state = THIS_IS_MY_MODEL_TOGGLE_PING;
+                break;
+            }
+            break;
+        }
+        case THIS_IS_MY_MODEL_TOGGLE_COMPLETE: {
+            if (true) {
+                model->state = THIS_IS_MY_MODEL_TOGGLE_END;
+                break;
+            }
+            break;
+        }
+    }
+}
+
+/// Функция сброса модели Toggle (ThisIsMyModel:Toggle)
+void ThisIsMyModelToggle_reset(ThisIsMyModelToggle *model, ThisIsMyModel *main) {
+    ThisIsMyModelToggle_init(model, main);
+}
+
+/// Функция проверки терминального состояния модели Toggle (ThisIsMyModel:Toggle)
+bool ThisIsMyModelToggle_is_done(const ThisIsMyModelToggle *model, ThisIsMyModel *main) {
+    return model->state == THIS_IS_MY_MODEL_TOGGLE_END;
 }
 
 /// Функция инициализации модели ThisIsMyModel (ThisIsMyModel)

@@ -571,12 +571,12 @@ start Main { always { } }
 
     #[test]
     /// Проверяет, что переменная вложенной модели в функции генерируется как
-    /// `main->state_name.field`, а не `main->model_name.field`.
+    /// `model->state_name.field`, а не `model->model_name.field`.
     ///
     /// Пример: модель `Controller` инстанциируется состоянием `Entry = Controller`.
     /// Поле в C-структуре называется `entry` (по имени состояния), поэтому
-    /// функция `clamp_temp` должна обращаться к переменной как `main->entry.temperature`,
-    /// а не `main->controller.temperature`.
+    /// функция `clamp` должна обращаться к переменной как `model->entry.temperature`.
+    /// Первый параметр функции — `const Root *model` (корневая модель), не `main`.
     fn test_submodel_variable_uses_state_field_name() {
         let src = r#"
 type u8 = [bit;8];
@@ -596,10 +596,11 @@ start Entry = Controller;
         let model = model_rc.borrow();
         let map = CMap::new(model.name(), &*model).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
-        // Поле должно называться по имени состояния (`entry`), а не модели (`controller`)
+        // Поле должно называться по имени состояния (`entry`), а не модели (`controller`).
+        // Первый параметр функции — `model` (не `main`).
         assert!(
-            source.contains("main->entry.temperature"),
-            "ожидается `main->entry.temperature`, получено:\n{source}"
+            source.contains("model->entry.temperature"),
+            "ожидается `model->entry.temperature`, получено:\n{source}"
         );
         assert!(
             !source.contains("model->controller.temperature"),

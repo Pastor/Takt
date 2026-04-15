@@ -294,6 +294,72 @@ start Main { always { } }
             "#include не должен содержать пробел после кавычки:\n{source}"
         );
     }
+
+    /// Вызов extern функции в блоке always генерируется в C-коде.
+    #[test]
+    fn test_extern_fn_call_in_always() {
+        let src = r#"
+type u8 = [bit;8];
+extern fn log_val(v: u8);
+model Counter {
+    var x: u8 = 0;
+    start Running {
+        always { x = x + 1; log_val(x); }
+    }
+}
+start Root = Counter;
+"#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some("main".to_string());
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let source = generate_source(map.get_filename(), &map).unwrap();
+        // Ищем именно вызов, а не декларацию — вызов не содержит "extern"
+        let call_present = source
+            .lines()
+            .filter(|l| !l.contains("extern "))
+            .any(|l| l.contains("log_val("));
+        assert!(
+            call_present,
+            "вызов extern функции должен быть в генерированном коде (без 'extern'):\n{source}"
+        );
+    }
+
+    /// Вызов extern функции после локальной переменной в блоке always генерируется.
+    #[test]
+    fn test_extern_fn_call_after_local_var_in_always() {
+        let src = r#"
+type u8 = [bit;8];
+extern fn log_val(v: u8);
+model Counter {
+    var x: u8 = 0;
+    start Running {
+        always {
+            var delta: u8 = 1;
+            x = x + delta;
+            log_val(x);
+        }
+    }
+}
+start Root = Counter;
+"#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some("main".to_string());
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &*model).unwrap();
+        let source = generate_source(map.get_filename(), &map).unwrap();
+        eprintln!("=== GENERATED ===\n{source}\n=== END ===");
+        let call_present = source
+            .lines()
+            .filter(|l| !l.contains("extern "))
+            .any(|l| l.contains("log_val("));
+        assert!(
+            call_present,
+            "вызов extern функции после local var должен быть:\n{source}"
+        );
+    }
 }
 
 /// Собирает имена моделей-зависимостей из элемента StateExtend.

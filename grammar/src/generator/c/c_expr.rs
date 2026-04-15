@@ -171,11 +171,18 @@ pub(super) fn resolve_variable_c_expr(
 
 /// Разрешает путь доступа к [`VariableNode::Simple`] с учётом контекста генерации.
 ///
-/// - Если переменная принадлежит той же модели, что и `owner`:
-///   - `has_model = true` → `model->varname`
-///   - `has_model = false` → `main->field.varname` (нет `model` в области видимости)
-/// - Если переменная корневой модели и `owner` — вложенная модель → `main->varname`
-/// - Иначе (родительский код обращается к дочернему полю) → делегируем в [`resolve_variable_c_expr`]
+/// Сигнатуры C-функций:
+///   - Tick/init (`has_model = true`):   `void SubModel_tick(SubModel *model, Root *main)`
+///   - Локальная функция (`has_model = false`): `static T Model_fn(const Root *model, ...)`
+///
+/// Правила доступа:
+/// - Переменная той же модели, что `owner`:
+///   - `has_model = true`  → `model->var`
+///   - `has_model = false` → `model->field.var` (через поле дочерней модели в Root)
+/// - Переменная корневой модели, `owner` — вложенная:
+///   - `has_model = true`  → `main->var`
+///   - `has_model = false` → `model->var` (первый параметр — сама Root)
+/// - Иначе → делегируем в [`resolve_variable_c_expr`]
 pub(super) fn resolve_simple_var_in_context(
     var_name: &str,
     upper: &Option<std::rc::Weak<std::cell::RefCell<ModelNode>>>,
@@ -198,14 +205,24 @@ pub(super) fn resolve_simple_var_in_context(
         if has_model {
             // Переменная принадлежит текущей генерируемой модели, `model` доступен
             Some(format!("model->{}", snake))
+        } else if is_root_var {
+            // Локальная функция корневой модели: `const Root *model` → прямой доступ
+            Some(format!("model->{}", snake))
         } else {
-            // Нет `model` в области видимости (локальная функция): обращаемся через main
+            // Локальная функция вложенной модели: первый параметр — `const Root *model`,
+            // доступ через поле-контейнер дочерней модели.
             let field = field_name_in_parent(&var_model_rc)?;
-            Some(format!("main->{}.{}", field, snake))
+            Some(format!("model->{}.{}", field, snake))
         }
     } else if is_root_var && !is_root_owner {
-        // Переменная корневой модели, а мы внутри вложенной
-        Some(format!("main->{}", snake))
+        // Переменная корневой модели, accessed из вложенной:
+        // - tick/init: `main->var` (Root передаётся как `main`)
+        // - локальная функция: `model->var` (первый параметр — сама Root)
+        if has_model {
+            Some(format!("main->{}", snake))
+        } else {
+            Some(format!("model->{}", snake))
+        }
     } else {
         // Родительская модель обращается к переменной дочерней — стандартный путь
         None
@@ -897,9 +914,15 @@ pub(super) fn generate_expr(
 
         ExpressionNode::Variable(var_rc) => {
             let var = var_rc.borrow();
-            let var_expr = if let VariableNode::Simple { upper, .. } = &*var {
-                resolve_simple_var_in_context(var.name(), upper, &params, owner, map, has_model)
-                    .map_or_else(|| resolve_variable_c_expr(&*var, &params), Ok)?
+            let var_expr = if let VariableNode::Simple { upper, loc, .. } = &*var {
+                // Локальные переменные (loc == Implicit) доступны по имени напрямую,
+                // а не через model->name, даже если они принадлежат той же модели.
+                if matches!(loc, crate::diagnostics::Location::Implicit) {
+                    normalize_lowercase_snakecase(var.name().to_string())
+                } else {
+                    resolve_simple_var_in_context(var.name(), upper, &params, owner, map, has_model)
+                        .map_or_else(|| resolve_variable_c_expr(&*var, &params), Ok)?
+                }
             } else {
                 resolve_variable_c_expr(&*var, &params)?
             };
@@ -1077,7 +1100,7 @@ pub(super) fn generate_code_block(
                 }
                 Ok(()) => {}
                 Err(_) => {
-                    // Пропускаем неподдерживаемые выражения (debug, S и т.п.)
+                    // Пропускаем неподдерживаемые выражения (S и т.п.)
                 }
             }
         }

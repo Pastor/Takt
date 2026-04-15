@@ -4184,3 +4184,60 @@ fn struct_duplicate_field_file_error() {
         err.message
     );
 }
+
+// ─── Task 1: вызов extern функций ─────────────────────────────────────────────
+
+/// Extern-функция в блоке always разрешается без ошибок семантики.
+#[test]
+fn extern_fn_in_always_resolves_ok() {
+    let src = std::fs::read_to_string("tests/data/semantic/valid/extern_fn_in_always.but")
+        .expect("не удалось прочитать файл");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[]);
+    assert!(
+        result.is_ok(),
+        "extern fn в always не должна давать ошибку: {:?}",
+        result.err()
+    );
+}
+
+/// Extern-функция после локальной переменной разрешается без ошибок.
+#[test]
+fn extern_fn_after_local_var_resolves_ok() {
+    let src =
+        std::fs::read_to_string("tests/data/semantic/valid/extern_fn_local_var.but")
+            .expect("не удалось прочитать файл");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[]);
+    assert!(
+        result.is_ok(),
+        "extern fn после local var не должна давать ошибку: {:?}",
+        result.err()
+    );
+}
+
+/// Extern-функция в always доступна в функциях модели (`search_func` находит External).
+#[test]
+fn extern_fn_is_resolvable_via_search_func() {
+    use grammar::semantic::FunctionDefinitionNode;
+    let src = r#"
+type u8 = [bit;8];
+extern fn my_log(v: u8);
+model M {
+    var x: u8 = 0;
+    start S { always { my_log(x); } }
+}
+start Root = M;
+"#;
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let model_rc = construct_model(&ast, None, &[]).expect("ошибка семантики");
+    let model = model_rc.borrow();
+    let func = model
+        .search_func("my_log")
+        .expect("extern fn my_log должна быть найдена");
+    assert!(
+        matches!(*func.borrow(), FunctionDefinitionNode::External { .. }),
+        "extern fn должна быть External, получено: {:?}",
+        *func.borrow()
+    );
+}

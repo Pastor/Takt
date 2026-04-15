@@ -14,38 +14,38 @@
 /// Перечисления модели C (ExtendComplex:C)
 #define ENUM_EXTEND_COMPLEX_C_GLOBAL 0
 #define ENUM_EXTEND_COMPLEX_C_LOCAL 1
-/// Model functions 'C1 (ExtendComplex:C:C1)'
-static void ExtendComplexCC1_init(ExtendComplexCC1 *model, const ExtendComplex *main);
-static void ExtendComplexCC1_tick(ExtendComplexCC1 *model, const ExtendComplex *main);
-static bool ExtendComplexCC1_is_done(const ExtendComplexCC1 *model, const ExtendComplex *main);
-/// Model functions 'C2 (ExtendComplex:C:C2)'
-static void ExtendComplexCC2_init(ExtendComplexCC2 *model, const ExtendComplex *main);
-static void ExtendComplexCC2_tick(ExtendComplexCC2 *model, const ExtendComplex *main);
-static bool ExtendComplexCC2_is_done(const ExtendComplexCC2 *model, const ExtendComplex *main);
-/// Model functions 'C (ExtendComplex:C)'
-static void ExtendComplexC_init(ExtendComplexC *model, const ExtendComplex *main);
-static void ExtendComplexC_tick(ExtendComplexC *model, const ExtendComplex *main);
-static bool ExtendComplexC_is_done(const ExtendComplexC *model, const ExtendComplex *main);
-/// Model functions 'A (ExtendComplex:A)'
-static void ExtendComplexA_init(ExtendComplexA *model, const ExtendComplex *main);
-static void ExtendComplexA_tick(ExtendComplexA *model, const ExtendComplex *main);
-static bool ExtendComplexA_is_done(const ExtendComplexA *model, const ExtendComplex *main);
-/// Model functions 'D (ExtendComplex:D)'
-static void ExtendComplexD_init(ExtendComplexD *model, const ExtendComplex *main);
-static void ExtendComplexD_tick(ExtendComplexD *model, const ExtendComplex *main);
-static bool ExtendComplexD_is_done(const ExtendComplexD *model, const ExtendComplex *main);
-/// Model functions 'F (ExtendComplex:F)'
-static void ExtendComplexF_init(ExtendComplexF *model, const ExtendComplex *main);
-static void ExtendComplexF_tick(ExtendComplexF *model, const ExtendComplex *main);
-static bool ExtendComplexF_is_done(const ExtendComplexF *model, const ExtendComplex *main);
-/// Model functions 'E (ExtendComplex:E)'
-static void ExtendComplexE_init(ExtendComplexE *model, const ExtendComplex *main);
-static void ExtendComplexE_tick(ExtendComplexE *model, const ExtendComplex *main);
-static bool ExtendComplexE_is_done(const ExtendComplexE *model, const ExtendComplex *main);
 /// Model functions 'B (ExtendComplex:B)'
-static void ExtendComplexB_init(ExtendComplexB *model, const ExtendComplex *main);
-static void ExtendComplexB_tick(ExtendComplexB *model, const ExtendComplex *main);
-static bool ExtendComplexB_is_done(const ExtendComplexB *model, const ExtendComplex *main);
+static void ExtendComplexB_init(ExtendComplexB *model, ExtendComplex *main);
+static void ExtendComplexB_tick(ExtendComplexB *model, ExtendComplex *main);
+static bool ExtendComplexB_is_done(const ExtendComplexB *model, ExtendComplex *main);
+/// Model functions 'A (ExtendComplex:A)'
+static void ExtendComplexA_init(ExtendComplexA *model, ExtendComplex *main);
+static void ExtendComplexA_tick(ExtendComplexA *model, ExtendComplex *main);
+static bool ExtendComplexA_is_done(const ExtendComplexA *model, ExtendComplex *main);
+/// Model functions 'D (ExtendComplex:D)'
+static void ExtendComplexD_init(ExtendComplexD *model, ExtendComplex *main);
+static void ExtendComplexD_tick(ExtendComplexD *model, ExtendComplex *main);
+static bool ExtendComplexD_is_done(const ExtendComplexD *model, ExtendComplex *main);
+/// Model functions 'F (ExtendComplex:F)'
+static void ExtendComplexF_init(ExtendComplexF *model, ExtendComplex *main);
+static void ExtendComplexF_tick(ExtendComplexF *model, ExtendComplex *main);
+static bool ExtendComplexF_is_done(const ExtendComplexF *model, ExtendComplex *main);
+/// Model functions 'E (ExtendComplex:E)'
+static void ExtendComplexE_init(ExtendComplexE *model, ExtendComplex *main);
+static void ExtendComplexE_tick(ExtendComplexE *model, ExtendComplex *main);
+static bool ExtendComplexE_is_done(const ExtendComplexE *model, ExtendComplex *main);
+/// Model functions 'C2 (ExtendComplex:C:C2)'
+static void ExtendComplexCC2_init(ExtendComplexCC2 *model, ExtendComplex *main);
+static void ExtendComplexCC2_tick(ExtendComplexCC2 *model, ExtendComplex *main);
+static bool ExtendComplexCC2_is_done(const ExtendComplexCC2 *model, ExtendComplex *main);
+/// Model functions 'C1 (ExtendComplex:C:C1)'
+static void ExtendComplexCC1_init(ExtendComplexCC1 *model, ExtendComplex *main);
+static void ExtendComplexCC1_tick(ExtendComplexCC1 *model, ExtendComplex *main);
+static bool ExtendComplexCC1_is_done(const ExtendComplexCC1 *model, ExtendComplex *main);
+/// Model functions 'C (ExtendComplex:C)'
+static void ExtendComplexC_init(ExtendComplexC *model, ExtendComplex *main);
+static void ExtendComplexC_tick(ExtendComplexC *model, ExtendComplex *main);
+static bool ExtendComplexC_is_done(const ExtendComplexC *model, ExtendComplex *main);
 
 ///Внешние функции
 extern bool has_flag(bool v);
@@ -62,13 +62,13 @@ static bool ExtendComplex_is_collected(const ExtendComplex *model, uint8_t c, ui
 }
 
 /// Функция инициализации модели C1 (ExtendComplex:C:C1)
-void ExtendComplexCC1_init(ExtendComplexCC1 *model, const ExtendComplex *main) {
+void ExtendComplexCC1_init(ExtendComplexCC1 *model, ExtendComplex *main) {
     assert(0 != model);
     model->state = EXTEND_COMPLEX_C_C1_INIT;
 }
 
 /// Функция обработки модели C1 (ExtendComplex:C:C1)
-void ExtendComplexCC1_tick(ExtendComplexCC1 *model, const ExtendComplex *main) {
+void ExtendComplexCC1_tick(ExtendComplexCC1 *model, ExtendComplex *main) {
     assert(0 != model);
     assert(0 != main);
     switch (model->state) {
@@ -76,122 +76,142 @@ void ExtendComplexCC1_tick(ExtendComplexCC1 *model, const ExtendComplex *main) {
             model->state = EXTEND_COMPLEX_C_C1_START;
             break;
         }
-        case EXTEND_COMPLEX_C_C1_END: {
-            break;
-        }
         case EXTEND_COMPLEX_C_C1_START: {
-            if (ExtendComplex_is_collected(main, 1, main->y) & ExtendComplex_is_collected(main, 0, main->x) & has_flag(CONST_EXTEND_COMPLEX_ENABLED)) {
+            if (ExtendComplex_is_collected(main, 1, main->y) && ExtendComplex_is_collected(main, 0, main->x) && has_flag(CONST_EXTEND_COMPLEX_ENABLED)) {
                 model->state = EXTEND_COMPLEX_C_C1_END;
                 break;
             }
+            break;
+        }
+        case EXTEND_COMPLEX_C_C1_END: {
             break;
         }
     }
 }
 
 /// Функция сброса модели C1 (ExtendComplex:C:C1)
-void ExtendComplexCC1_reset(ExtendComplexCC1 *model, const ExtendComplex *main) {
+void ExtendComplexCC1_reset(ExtendComplexCC1 *model, ExtendComplex *main) {
     ExtendComplexCC1_init(model, main);
 }
 
 /// Функция проверки терминального состояния модели C1 (ExtendComplex:C:C1)
-bool ExtendComplexCC1_is_done(const ExtendComplexCC1 *model, const ExtendComplex *main) {
+bool ExtendComplexCC1_is_done(const ExtendComplexCC1 *model, ExtendComplex *main) {
     return model->state == EXTEND_COMPLEX_C_C1_END;
 }
 
-/// Функция инициализации модели C (ExtendComplex:C)
-void ExtendComplexC_init(ExtendComplexC *model, const ExtendComplex *main) {
+/// Функция инициализации модели A (ExtendComplex:A)
+void ExtendComplexA_init(ExtendComplexA *model, ExtendComplex *main) {
     assert(0 != model);
-    model->state = EXTEND_COMPLEX_C_INIT;
+    model->state = EXTEND_COMPLEX_A_INIT;
 }
 
-/// Функция обработки модели C (ExtendComplex:C)
-void ExtendComplexC_tick(ExtendComplexC *model, const ExtendComplex *main) {
+/// Функция обработки модели A (ExtendComplex:A)
+void ExtendComplexA_tick(ExtendComplexA *model, ExtendComplex *main) {
     assert(0 != model);
     assert(0 != main);
     switch (model->state) {
-        case EXTEND_COMPLEX_C_INIT: {
-            ExtendComplexCC1_init(&model->start.c10, main);
-            ExtendComplexCC2_init(&model->start.c21, main);
-            model->start.state = EXTEND_COMPLEX_C_START_INIT;
-            model->state = EXTEND_COMPLEX_C_START;
+        case EXTEND_COMPLEX_A_INIT: {
+            model->state = EXTEND_COMPLEX_A_START;
             break;
         }
-        case EXTEND_COMPLEX_C_END: {
+        case EXTEND_COMPLEX_A_START: {
+            model->state = EXTEND_COMPLEX_A_END;
             break;
         }
-        case EXTEND_COMPLEX_C_START: {
-            ExtendComplexCC1_tick(&model->start.c10, main);
-            ExtendComplexCC2_tick(&model->start.c21, main);
-            if (ExtendComplexCC1_is_done(&model->start.c10, main) && ExtendComplexCC2_is_done(&model->start.c21, main)) {
-                model->state = EXTEND_COMPLEX_C_END;
-                break;
-            }
+        case EXTEND_COMPLEX_A_END: {
             break;
         }
     }
 }
 
-/// Функция сброса модели C (ExtendComplex:C)
-void ExtendComplexC_reset(ExtendComplexC *model, const ExtendComplex *main) {
-    ExtendComplexC_init(model, main);
+/// Функция сброса модели A (ExtendComplex:A)
+void ExtendComplexA_reset(ExtendComplexA *model, ExtendComplex *main) {
+    ExtendComplexA_init(model, main);
 }
 
-/// Функция проверки терминального состояния модели C (ExtendComplex:C)
-bool ExtendComplexC_is_done(const ExtendComplexC *model, const ExtendComplex *main) {
-    return model->state == EXTEND_COMPLEX_C_END;
+/// Функция проверки терминального состояния модели A (ExtendComplex:A)
+bool ExtendComplexA_is_done(const ExtendComplexA *model, ExtendComplex *main) {
+    return model->state == EXTEND_COMPLEX_A_END;
 }
 
-/// Функция инициализации модели B (ExtendComplex:B)
-void ExtendComplexB_init(ExtendComplexB *model, const ExtendComplex *main) {
+/// Функция инициализации модели F (ExtendComplex:F)
+void ExtendComplexF_init(ExtendComplexF *model, ExtendComplex *main) {
     assert(0 != model);
-    model->state = EXTEND_COMPLEX_B_INIT;
+    model->state = EXTEND_COMPLEX_F_INIT;
 }
 
-/// Функция обработки модели B (ExtendComplex:B)
-void ExtendComplexB_tick(ExtendComplexB *model, const ExtendComplex *main) {
+/// Функция обработки модели F (ExtendComplex:F)
+void ExtendComplexF_tick(ExtendComplexF *model, ExtendComplex *main) {
     assert(0 != model);
     assert(0 != main);
     switch (model->state) {
-        case EXTEND_COMPLEX_B_INIT: {
-            model->state = EXTEND_COMPLEX_B_START;
+        case EXTEND_COMPLEX_F_INIT: {
+            model->state = EXTEND_COMPLEX_F_START;
             break;
         }
-        case EXTEND_COMPLEX_B_START: {
-            if ((*main->read_bit)(PORT_EXTEND_COMPLEX_WAIT, 33, main->userdata)) {
-                (*main->write_bit)(PORT_EXTEND_COMPLEX_WORK, 2, 0, main->userdata);
-                (*main->write_bit)(PORT_EXTEND_COMPLEX_IDLE, 1, 1, main->userdata);
-            } else {
-                (*main->write_bit)(PORT_EXTEND_COMPLEX_IDLE, 1, 0, main->userdata);
-                (*main->write_bit)(PORT_EXTEND_COMPLEX_WORK, 2, 1, main->userdata);
-            }
-            model->state = EXTEND_COMPLEX_B_END;
+        case EXTEND_COMPLEX_F_START: {
+            model->state = EXTEND_COMPLEX_F_END;
             break;
         }
-        case EXTEND_COMPLEX_B_END: {
+        case EXTEND_COMPLEX_F_END: {
             break;
         }
     }
 }
 
-/// Функция сброса модели B (ExtendComplex:B)
-void ExtendComplexB_reset(ExtendComplexB *model, const ExtendComplex *main) {
-    ExtendComplexB_init(model, main);
+/// Функция сброса модели F (ExtendComplex:F)
+void ExtendComplexF_reset(ExtendComplexF *model, ExtendComplex *main) {
+    ExtendComplexF_init(model, main);
 }
 
-/// Функция проверки терминального состояния модели B (ExtendComplex:B)
-bool ExtendComplexB_is_done(const ExtendComplexB *model, const ExtendComplex *main) {
-    return model->state == EXTEND_COMPLEX_B_END;
+/// Функция проверки терминального состояния модели F (ExtendComplex:F)
+bool ExtendComplexF_is_done(const ExtendComplexF *model, ExtendComplex *main) {
+    return model->state == EXTEND_COMPLEX_F_END;
+}
+
+/// Функция инициализации модели C2 (ExtendComplex:C:C2)
+void ExtendComplexCC2_init(ExtendComplexCC2 *model, ExtendComplex *main) {
+    assert(0 != model);
+    model->state = EXTEND_COMPLEX_C_C2_INIT;
+}
+
+/// Функция обработки модели C2 (ExtendComplex:C:C2)
+void ExtendComplexCC2_tick(ExtendComplexCC2 *model, ExtendComplex *main) {
+    assert(0 != model);
+    assert(0 != main);
+    switch (model->state) {
+        case EXTEND_COMPLEX_C_C2_INIT: {
+            model->state = EXTEND_COMPLEX_C_C2_START;
+            break;
+        }
+        case EXTEND_COMPLEX_C_C2_START: {
+            model->state = EXTEND_COMPLEX_C_C2_END;
+            break;
+        }
+        case EXTEND_COMPLEX_C_C2_END: {
+            break;
+        }
+    }
+}
+
+/// Функция сброса модели C2 (ExtendComplex:C:C2)
+void ExtendComplexCC2_reset(ExtendComplexCC2 *model, ExtendComplex *main) {
+    ExtendComplexCC2_init(model, main);
+}
+
+/// Функция проверки терминального состояния модели C2 (ExtendComplex:C:C2)
+bool ExtendComplexCC2_is_done(const ExtendComplexCC2 *model, ExtendComplex *main) {
+    return model->state == EXTEND_COMPLEX_C_C2_END;
 }
 
 /// Функция инициализации модели E (ExtendComplex:E)
-void ExtendComplexE_init(ExtendComplexE *model, const ExtendComplex *main) {
+void ExtendComplexE_init(ExtendComplexE *model, ExtendComplex *main) {
     assert(0 != model);
     model->state = EXTEND_COMPLEX_E_INIT;
 }
 
 /// Функция обработки модели E (ExtendComplex:E)
-void ExtendComplexE_tick(ExtendComplexE *model, const ExtendComplex *main) {
+void ExtendComplexE_tick(ExtendComplexE *model, ExtendComplex *main) {
     assert(0 != model);
     assert(0 != main);
     switch (model->state) {
@@ -225,128 +245,108 @@ void ExtendComplexE_tick(ExtendComplexE *model, const ExtendComplex *main) {
 }
 
 /// Функция сброса модели E (ExtendComplex:E)
-void ExtendComplexE_reset(ExtendComplexE *model, const ExtendComplex *main) {
+void ExtendComplexE_reset(ExtendComplexE *model, ExtendComplex *main) {
     ExtendComplexE_init(model, main);
 }
 
 /// Функция проверки терминального состояния модели E (ExtendComplex:E)
-bool ExtendComplexE_is_done(const ExtendComplexE *model, const ExtendComplex *main) {
+bool ExtendComplexE_is_done(const ExtendComplexE *model, ExtendComplex *main) {
     return model->state == EXTEND_COMPLEX_E_END;
 }
 
-/// Функция инициализации модели A (ExtendComplex:A)
-void ExtendComplexA_init(ExtendComplexA *model, const ExtendComplex *main) {
+/// Функция инициализации модели B (ExtendComplex:B)
+void ExtendComplexB_init(ExtendComplexB *model, ExtendComplex *main) {
     assert(0 != model);
-    model->state = EXTEND_COMPLEX_A_INIT;
+    model->state = EXTEND_COMPLEX_B_INIT;
 }
 
-/// Функция обработки модели A (ExtendComplex:A)
-void ExtendComplexA_tick(ExtendComplexA *model, const ExtendComplex *main) {
+/// Функция обработки модели B (ExtendComplex:B)
+void ExtendComplexB_tick(ExtendComplexB *model, ExtendComplex *main) {
     assert(0 != model);
     assert(0 != main);
     switch (model->state) {
-        case EXTEND_COMPLEX_A_INIT: {
-            model->state = EXTEND_COMPLEX_A_START;
+        case EXTEND_COMPLEX_B_INIT: {
+            model->state = EXTEND_COMPLEX_B_START;
             break;
         }
-        case EXTEND_COMPLEX_A_START: {
-            model->state = EXTEND_COMPLEX_A_END;
+        case EXTEND_COMPLEX_B_START: {
+            if ((*main->read_bit)(PORT_EXTEND_COMPLEX_WAIT, 33, main->userdata)) {
+                (*main->write_bit)(PORT_EXTEND_COMPLEX_WORK, 2, 0, main->userdata);
+                (*main->write_bit)(PORT_EXTEND_COMPLEX_IDLE, 1, 1, main->userdata);
+            } else {
+                (*main->write_bit)(PORT_EXTEND_COMPLEX_IDLE, 1, 0, main->userdata);
+                (*main->write_bit)(PORT_EXTEND_COMPLEX_WORK, 2, 1, main->userdata);
+            }
+            model->state = EXTEND_COMPLEX_B_END;
             break;
         }
-        case EXTEND_COMPLEX_A_END: {
+        case EXTEND_COMPLEX_B_END: {
             break;
         }
     }
 }
 
-/// Функция сброса модели A (ExtendComplex:A)
-void ExtendComplexA_reset(ExtendComplexA *model, const ExtendComplex *main) {
-    ExtendComplexA_init(model, main);
+/// Функция сброса модели B (ExtendComplex:B)
+void ExtendComplexB_reset(ExtendComplexB *model, ExtendComplex *main) {
+    ExtendComplexB_init(model, main);
 }
 
-/// Функция проверки терминального состояния модели A (ExtendComplex:A)
-bool ExtendComplexA_is_done(const ExtendComplexA *model, const ExtendComplex *main) {
-    return model->state == EXTEND_COMPLEX_A_END;
+/// Функция проверки терминального состояния модели B (ExtendComplex:B)
+bool ExtendComplexB_is_done(const ExtendComplexB *model, ExtendComplex *main) {
+    return model->state == EXTEND_COMPLEX_B_END;
 }
 
-/// Функция инициализации модели C2 (ExtendComplex:C:C2)
-void ExtendComplexCC2_init(ExtendComplexCC2 *model, const ExtendComplex *main) {
+/// Функция инициализации модели C (ExtendComplex:C)
+void ExtendComplexC_init(ExtendComplexC *model, ExtendComplex *main) {
     assert(0 != model);
-    model->state = EXTEND_COMPLEX_C_C2_INIT;
+    model->state = EXTEND_COMPLEX_C_INIT;
 }
 
-/// Функция обработки модели C2 (ExtendComplex:C:C2)
-void ExtendComplexCC2_tick(ExtendComplexCC2 *model, const ExtendComplex *main) {
+/// Функция обработки модели C (ExtendComplex:C)
+void ExtendComplexC_tick(ExtendComplexC *model, ExtendComplex *main) {
     assert(0 != model);
     assert(0 != main);
     switch (model->state) {
-        case EXTEND_COMPLEX_C_C2_INIT: {
-            model->state = EXTEND_COMPLEX_C_C2_START;
+        case EXTEND_COMPLEX_C_INIT: {
+            ExtendComplexCC1_init(&model->start.c10, main);
+            ExtendComplexCC2_init(&model->start.c21, main);
+            model->start.state = EXTEND_COMPLEX_C_START_INIT;
+            model->state = EXTEND_COMPLEX_C_START;
             break;
         }
-        case EXTEND_COMPLEX_C_C2_START: {
-            model->state = EXTEND_COMPLEX_C_C2_END;
+        case EXTEND_COMPLEX_C_END: {
             break;
         }
-        case EXTEND_COMPLEX_C_C2_END: {
+        case EXTEND_COMPLEX_C_START: {
+            ExtendComplexCC1_tick(&model->start.c10, main);
+            ExtendComplexCC2_tick(&model->start.c21, main);
+            if (ExtendComplexCC1_is_done(&model->start.c10, main) && ExtendComplexCC2_is_done(&model->start.c21, main)) {
+                model->state = EXTEND_COMPLEX_C_END;
+                break;
+            }
             break;
         }
     }
 }
 
-/// Функция сброса модели C2 (ExtendComplex:C:C2)
-void ExtendComplexCC2_reset(ExtendComplexCC2 *model, const ExtendComplex *main) {
-    ExtendComplexCC2_init(model, main);
+/// Функция сброса модели C (ExtendComplex:C)
+void ExtendComplexC_reset(ExtendComplexC *model, ExtendComplex *main) {
+    ExtendComplexC_init(model, main);
 }
 
-/// Функция проверки терминального состояния модели C2 (ExtendComplex:C:C2)
-bool ExtendComplexCC2_is_done(const ExtendComplexCC2 *model, const ExtendComplex *main) {
-    return model->state == EXTEND_COMPLEX_C_C2_END;
-}
-
-/// Функция инициализации модели F (ExtendComplex:F)
-void ExtendComplexF_init(ExtendComplexF *model, const ExtendComplex *main) {
-    assert(0 != model);
-    model->state = EXTEND_COMPLEX_F_INIT;
-}
-
-/// Функция обработки модели F (ExtendComplex:F)
-void ExtendComplexF_tick(ExtendComplexF *model, const ExtendComplex *main) {
-    assert(0 != model);
-    assert(0 != main);
-    switch (model->state) {
-        case EXTEND_COMPLEX_F_INIT: {
-            model->state = EXTEND_COMPLEX_F_START;
-            break;
-        }
-        case EXTEND_COMPLEX_F_START: {
-            model->state = EXTEND_COMPLEX_F_END;
-            break;
-        }
-        case EXTEND_COMPLEX_F_END: {
-            break;
-        }
-    }
-}
-
-/// Функция сброса модели F (ExtendComplex:F)
-void ExtendComplexF_reset(ExtendComplexF *model, const ExtendComplex *main) {
-    ExtendComplexF_init(model, main);
-}
-
-/// Функция проверки терминального состояния модели F (ExtendComplex:F)
-bool ExtendComplexF_is_done(const ExtendComplexF *model, const ExtendComplex *main) {
-    return model->state == EXTEND_COMPLEX_F_END;
+/// Функция проверки терминального состояния модели C (ExtendComplex:C)
+bool ExtendComplexC_is_done(const ExtendComplexC *model, ExtendComplex *main) {
+    return model->state == EXTEND_COMPLEX_C_END;
 }
 
 /// Функция инициализации модели D (ExtendComplex:D)
-void ExtendComplexD_init(ExtendComplexD *model, const ExtendComplex *main) {
+void ExtendComplexD_init(ExtendComplexD *model, ExtendComplex *main) {
     assert(0 != model);
     model->state = EXTEND_COMPLEX_D_INIT;
 }
 
 /// Функция обработки модели D (ExtendComplex:D)
-void ExtendComplexD_tick(ExtendComplexD *model, const ExtendComplex *main) {
+void ExtendComplexD_tick(ExtendComplexD *model, ExtendComplex *main) {
     assert(0 != model);
     assert(0 != main);
     switch (model->state) {
@@ -365,12 +365,12 @@ void ExtendComplexD_tick(ExtendComplexD *model, const ExtendComplex *main) {
 }
 
 /// Функция сброса модели D (ExtendComplex:D)
-void ExtendComplexD_reset(ExtendComplexD *model, const ExtendComplex *main) {
+void ExtendComplexD_reset(ExtendComplexD *model, ExtendComplex *main) {
     ExtendComplexD_init(model, main);
 }
 
 /// Функция проверки терминального состояния модели D (ExtendComplex:D)
-bool ExtendComplexD_is_done(const ExtendComplexD *model, const ExtendComplex *main) {
+bool ExtendComplexD_is_done(const ExtendComplexD *model, ExtendComplex *main) {
     return model->state == EXTEND_COMPLEX_D_END;
 }
 
@@ -390,6 +390,14 @@ void ExtendComplex_tick(ExtendComplex *model) {
             ExtendComplexA_init(&model->start_a0, model);
             model->start_state = EXTEND_COMPLEX_START_A0;
             model->state = EXTEND_COMPLEX_START;
+            break;
+        }
+        case EXTEND_COMPLEX_NEXT: {
+            ExtendComplexF_tick(&model->next, model);
+            if (ExtendComplexF_is_done(&model->next, model)) {
+                model->state = EXTEND_COMPLEX_END;
+                break;
+            }
             break;
         }
         case EXTEND_COMPLEX_START: {
@@ -423,14 +431,6 @@ void ExtendComplex_tick(ExtendComplex *model) {
                     model->state = EXTEND_COMPLEX_NEXT;
                     break;
                 }
-            }
-            break;
-        }
-        case EXTEND_COMPLEX_NEXT: {
-            ExtendComplexF_tick(&model->next, model);
-            if (ExtendComplexF_is_done(&model->next, model)) {
-                model->state = EXTEND_COMPLEX_END;
-                break;
             }
             break;
         }

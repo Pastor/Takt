@@ -56,21 +56,41 @@ void ElevatorEngine_tick(ElevatorEngine *model, Elevator *main) {
     assert(0 != main);
     switch (model->state) {
         case ELEVATOR_ENGINE_INIT: {
+            door_open();
             model->state = ELEVATOR_ENGINE_IDLE;
             break;
         }
-        case ELEVATOR_ENGINE_MOVING_UP: {
+        case ELEVATOR_ENGINE_MOVING_DOWN: {
+            motor_down();
+            read_floor_sensors();
+            scan_floor_buttons();
             if ((*main->read_bit)(PORT_ELEVATOR_SENSORS_CAB, 0, main->userdata)) {
+                scan_cabin_buttons();
             }
             if (main->current_floor == main->target_floor) {
+                motor_stop();
+                door_open();
                 main->has_call = 0;
                 model->state = ELEVATOR_ENGINE_DOOR_OPENING;
                 break;
             }
             break;
         }
+        case ELEVATOR_ENGINE_IDLE: {
+            scan_floor_buttons();
+            if ((*main->read_bit)(PORT_ELEVATOR_SENSORS_CAB, 0, main->userdata)) {
+                scan_cabin_buttons();
+            }
+            if (main->has_call == 1 && !(main->current_floor == main->target_floor)) {
+                model->state = ELEVATOR_ENGINE_DOOR_CLOSING;
+                break;
+            }
+            break;
+        }
         case ELEVATOR_ENGINE_DOOR_CLOSING: {
+            door_close();
             if ((*main->read_bit)(PORT_ELEVATOR_SENSORS_CAB, 1, main->userdata) || main->current_floor == main->target_floor) {
+                door_open();
                 model->state = ELEVATOR_ENGINE_IDLE;
                 break;
             }
@@ -84,27 +104,24 @@ void ElevatorEngine_tick(ElevatorEngine *model, Elevator *main) {
             }
             break;
         }
-        case ELEVATOR_ENGINE_IDLE: {
+        case ELEVATOR_ENGINE_MOVING_UP: {
+            motor_up();
+            read_floor_sensors();
+            scan_floor_buttons();
             if ((*main->read_bit)(PORT_ELEVATOR_SENSORS_CAB, 0, main->userdata)) {
+                scan_cabin_buttons();
             }
-            if (main->has_call == 1 && !(main->current_floor == main->target_floor)) {
-                model->state = ELEVATOR_ENGINE_DOOR_CLOSING;
+            if (main->current_floor == main->target_floor) {
+                motor_stop();
+                door_open();
+                main->has_call = 0;
+                model->state = ELEVATOR_ENGINE_DOOR_OPENING;
                 break;
             }
             break;
         }
         case ELEVATOR_ENGINE_DOOR_OPENING: {
             model->state = ELEVATOR_ENGINE_END;
-            break;
-        }
-        case ELEVATOR_ENGINE_MOVING_DOWN: {
-            if ((*main->read_bit)(PORT_ELEVATOR_SENSORS_CAB, 0, main->userdata)) {
-            }
-            if (main->current_floor == main->target_floor) {
-                main->has_call = 0;
-                model->state = ELEVATOR_ENGINE_DOOR_OPENING;
-                break;
-            }
             break;
         }
         case ELEVATOR_ENGINE_END: {
@@ -127,9 +144,9 @@ bool ElevatorEngine_is_done(const ElevatorEngine *model, Elevator *main) {
 void Elevator_init(Elevator *model) {
     assert(0 != model);
     model->state = ELEVATOR_INIT;
-    model->current_floor = 1;
     model->target_floor = 1;
     model->has_call = 0;
+    model->current_floor = 1;
 }
 
 /// Функция обработки модели elevator (Elevator)

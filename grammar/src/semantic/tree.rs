@@ -887,8 +887,10 @@ fn construct_model_impl(
     let model = construct_model_stage1(model)?;
     let model = construct_model_stage2(model)?;
     let model = construct_model_stage3(model)?;
-    let model = construct_model_stage4(model)?;
+    // Функции (этап 5) должны разрешаться перед именованными блоками (этап 4),
+    // чтобы блоки always/enter/exit могли находить уже разрешённые функции через search_func.
     let model = construct_model_stage5(model)?;
+    let model = construct_model_stage4(model)?;
     let model = construct_model_stage6(model)?;
     validate_model(model.clone())?;
     Ok(model)
@@ -922,8 +924,10 @@ pub fn construct_model(
     let model = construct_model_stage1(model)?;
     let model = construct_model_stage2(model)?;
     let model = construct_model_stage3(model)?;
-    let model = construct_model_stage4(model)?;
+    // Функции (этап 5) должны разрешаться перед именованными блоками (этап 4),
+    // чтобы блоки always/enter/exit могли находить уже разрешённые функции через search_func.
     let model = construct_model_stage5(model)?;
+    let model = construct_model_stage4(model)?;
     let model = construct_model_stage6(model)?;
     validate_model(model.clone())?;
     Ok(model)
