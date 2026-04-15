@@ -35,7 +35,7 @@ static float port_read_float(int address, int bit, void *userdata) {
 
 int main(void) {
     struct Ports ports = {};
-    struct Elevator elevator = {
+    Elevator elevator = {
             .userdata = &ports,
             .write_bit = port_write_bit,
             .read_bit = port_read_bit,

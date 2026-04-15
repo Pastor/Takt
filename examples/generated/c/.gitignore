@@ -1,0 +1,5 @@
+.idea
+cmake-*-debug
+elevator.[ch]
+extend_complex.[ch]
+comprehensive.[ch]

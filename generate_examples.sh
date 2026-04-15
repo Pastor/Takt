@@ -8,7 +8,7 @@ cd "$SCRIPT_DIR"
 cargo build --bin butc 2>/dev/null
 
 BUTC="./target/debug/butc"
-OUTPUT="grammar/.output"
+OUTPUT="examples/generated/c"
 
 echo "Генерация C-кода из примеров BuT..."
 for but_file in examples/*.but; do

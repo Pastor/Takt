@@ -43,7 +43,7 @@ int main(void) {
 
     Comprehensive_init(&ctrl);
 
-    for (i = 0; i < 100 && !Comprehensive_is_done(&ctrl); i++) {
+    for (i = 0; i < 1000 && !Comprehensive_is_done(&ctrl); i++) {
         Comprehensive_tick(&ctrl);
     }
 
