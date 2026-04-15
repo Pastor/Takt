@@ -1,0 +1,320 @@
+diff --git a/grammar/src/generator/c/c_source.rs b/grammar/src/generator/c/c_source.rs
+index 7b50e8d..edaf5c0 100644
+--- a/grammar/src/generator/c/c_source.rs
++++ b/grammar/src/generator/c/c_source.rs
+@@ -43,7 +43,7 @@ fn generate_named_blocks(
+         let Some(stmt) = block.statement() else {
+             continue;
+         };
+-        generate_code_block(printer, map, owner, vec![], stmt)?;
++        generate_code_block(printer, map, owner, vec![], stmt, true)?;
+     }
+     Ok(())
+ }
+@@ -270,7 +270,7 @@ fn generate_model_init(
+             continue;
+         }
+         printer.ident(&format!("model->{} = ", var.name()));
+-        generate_expr(printer, map, model, vec![], expr, 0)?;
++        generate_expr(printer, map, model, vec![], expr, 0, true)?;
+         printer.print(";").nl();
+     }
+     Ok(())
+@@ -501,11 +501,21 @@ fn generate_condition_expr(
+         )),
+         ConditionNode::Variable(var_rc, _) => {
+             let var = var_rc.borrow();
++            if let VariableNode::Simple { upper, .. } = &*var {
++                if let Some(s) = resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true) {
++                    return Ok(s);
++                }
++            }
+             resolve_variable_c_expr(&var, &[])
+         }
+         ConditionNode::EnumVariant(_, _, value) => Ok(value.to_string()),
+         ConditionNode::ArraySubscript(var_rc, idx) => {
+             let var = var_rc.borrow();
++            if let VariableNode::Simple { upper, .. } = &*var {
++                if let Some(s) = resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true) {
++                    return Ok(format!("{}[{}]", s, idx));
++                }
++            }
+             let base = resolve_variable_c_expr(&var, &[])?;
+             Ok(format!("{}[{}]", base, idx))
+         }
+@@ -534,7 +544,20 @@ fn generate_condition_expr(
+                 .iter()
+                 .map(|a| generate_condition_expr(a, map, owner))
+                 .collect();
+-            Ok(format!("{}({})", fn_name, args_strs?.join(", ")))
++            let args_strs = args_strs?;
++            // Локальная функция в C принимает main/model как первый аргумент
++            if matches!(*fun, FunctionDefinitionNode::Local { .. }) {
++                let first_arg = if owner.name().eq(&map.root_name()) {
++                    "model"
++                } else {
++                    "main"
++                };
++                let mut all_args = vec![first_arg.to_string()];
++                all_args.extend(args_strs);
++                Ok(format!("{}({})", fn_name, all_args.join(", ")))
++            } else {
++                Ok(format!("{}({})", fn_name, args_strs.join(", ")))
++            }
+         }
+         ConditionNode::Model(_) | ConditionNode::State(_) => Err(Diagnostic::error(
+             Location::Codegen,
+@@ -822,7 +845,7 @@ fn generate_model_tick(
+         .nl();
+     let raw_state = map.raw_state_at(start.clone())?;
+     let raw_state = &*raw_state.borrow();
+-    let append = if !is_main { ", main" } else { "" };
++    let append = if !is_main { ", main" } else { ", model" };
+     let call_append = if !is_main { ", main" } else { ", model" };
+     match map.state_at(start.clone()) {
+         Some(Element::State { name, .. }) => {
+@@ -1260,6 +1283,49 @@ fn resolve_variable_c_expr(
+     }
+ }
+ 
++/// Разрешает путь доступа к [`VariableNode::Simple`] с учётом контекста генерации.
++///
++/// - Если переменная принадлежит той же модели, что и `owner`:
++///   - `has_model = true` → `model->varname`
++///   - `has_model = false` → `main->field.varname` (нет `model` в области видимости)
++/// - Если переменная корневой модели и `owner` — вложенная модель → `main->varname`
++/// - Иначе (родительский код обращается к дочернему полю) → делегируем в [`resolve_variable_c_expr`]
++fn resolve_simple_var_in_context(
++    var_name: &str,
++    upper: &Option<std::rc::Weak<std::cell::RefCell<ModelNode>>>,
++    params: &[(String, TypeNode)],
++    owner: &Element,
++    map: &CMap,
++    has_model: bool,
++) -> Option<String> {
++    // Параметры функции — доступ по имени, обрабатывается в resolve_variable_c_expr
++    if params.iter().any(|(p, _)| p == var_name) {
++        return None;
++    }
++    let var_model_rc = upper.as_ref().and_then(|w| w.upgrade())?;
++    let var_model_name = Name::from(var_model_rc.clone());
++    let is_same_model = var_model_name.unique() == owner.name().unique();
++    let is_root_var = var_model_rc.borrow().upper.is_none();
++    let is_root_owner = owner.name().eq(&map.root_name());
++    let snake = normalize_lowercase_snakecase(var_name.to_string());
++    if is_same_model {
++        if has_model {
++            // Переменная принадлежит текущей генерируемой модели, `model` доступен
++            Some(format!("model->{}", snake))
++        } else {
++            // Нет `model` в области видимости (локальная функция): обращаемся через main
++            let field = field_name_in_parent(&var_model_rc)?;
++            Some(format!("main->{}.{}", field, snake))
++        }
++    } else if is_root_var && !is_root_owner {
++        // Переменная корневой модели, а мы внутри вложенной
++        Some(format!("main->{}", snake))
++    } else {
++        // Родительская модель обращается к переменной дочерней — стандартный путь
++        None
++    }
++}
++
+ /// Генерирует список C-аргументов для вызова функции.
+ fn generate_args(
+     map: &CMap,
+@@ -1271,7 +1337,7 @@ fn generate_args(
+     for arg in args {
+         let mut s = String::new();
+         let mut tmp = Printer::new(4, &mut s);
+-        generate_stmt_expression(&mut tmp, map, owner, params.to_vec(), arg)?;
++        generate_stmt_expression(&mut tmp, map, owner, params.to_vec(), arg, true)?;
+         result.push(s);
+     }
+     Ok(result)
+@@ -1429,6 +1495,7 @@ fn generate_expr(
+     params: Vec<(String, TypeNode)>,
+     expr: &ExpressionNode,
+     min_prec: u8,
++    has_model: bool,
+ ) -> Result<(), Diagnostic> {
+     let my_prec = expr_precedence(expr);
+     let wrap = my_prec < min_prec;
+@@ -1462,27 +1529,27 @@ fn generate_expr(
+         // также исключает двусмысленные `--x` и `++x` (унарный + унарный).
+         ExpressionNode::Not(e) => {
+             printer.print("!");
+-            generate_expr(printer, map, owner, params, e, 14)?;
++            generate_expr(printer, map, owner, params, e, 14, has_model)?;
+         }
+         ExpressionNode::BitwiseNot(e) => {
+             printer.print("~");
+-            generate_expr(printer, map, owner, params, e, 14)?;
++            generate_expr(printer, map, owner, params, e, 14, has_model)?;
+         }
+         ExpressionNode::UnaryPlus(e) => {
+             printer.print("+");
+-            generate_expr(printer, map, owner, params, e, 14)?;
++            generate_expr(printer, map, owner, params, e, 14, has_model)?;
+         }
+         ExpressionNode::Negate(e) => {
+             printer.print("-");
+-            generate_expr(printer, map, owner, params, e, 14)?;
++            generate_expr(printer, map, owner, params, e, 14, has_model)?;
+         }
+ 
+         // ── Степень → pow() ────────────────────────────────────────────────────
+         ExpressionNode::Power(l, r) => {
+             printer.print("pow((double)(");
+-            generate_expr(printer, map, owner, params.clone(), l, 0)?;
++            generate_expr(printer, map, owner, params.clone(), l, 0, has_model)?;
+             printer.print("), (double)(");
+-            generate_expr(printer, map, owner, params, r, 0)?;
++            generate_expr(printer, map, owner, params, r, 0, has_model)?;
+             printer.print("))");
+         }
+ 
+@@ -1490,120 +1557,120 @@ fn generate_expr(
+         // Левый операнд: допускается тот же приоритет (левоассоциативность).
+         // Правый операнд: требует более высокого приоритета (wrap при равном).
+         ExpressionNode::Multiply(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 12)?;
++            generate_expr(printer, map, owner, params.clone(), l, 12, has_model)?;
+             printer.print(" * ");
+-            generate_expr(printer, map, owner, params, r, 13)?;
++            generate_expr(printer, map, owner, params, r, 13, has_model)?;
+         }
+         ExpressionNode::Divide(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 12)?;
++            generate_expr(printer, map, owner, params.clone(), l, 12, has_model)?;
+             printer.print(" / ");
+-            generate_expr(printer, map, owner, params, r, 13)?;
++            generate_expr(printer, map, owner, params, r, 13, has_model)?;
+         }
+         ExpressionNode::Modulo(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 12)?;
++            generate_expr(printer, map, owner, params.clone(), l, 12, has_model)?;
+             printer.print(" % ");
+-            generate_expr(printer, map, owner, params, r, 13)?;
++            generate_expr(printer, map, owner, params, r, 13, has_model)?;
+         }
+         ExpressionNode::Add(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 11)?;
++            generate_expr(printer, map, owner, params.clone(), l, 11, has_model)?;
+             printer.print(" + ");
+-            generate_expr(printer, map, owner, params, r, 12)?;
++            generate_expr(printer, map, owner, params, r, 12, has_model)?;
+         }
+         ExpressionNode::Subtract(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 11)?;
++            generate_expr(printer, map, owner, params.clone(), l, 11, has_model)?;
+             printer.print(" - ");
+-            generate_expr(printer, map, owner, params, r, 12)?;
++            generate_expr(printer, map, owner, params, r, 12, has_model)?;
+         }
+ 
+         // ── Битовые сдвиги ────────────────────────────────────────────────────
+         ExpressionNode::ShiftLeft(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 10)?;
++            generate_expr(printer, map, owner, params.clone(), l, 10, has_model)?;
+             printer.print(" << ");
+-            generate_expr(printer, map, owner, params, r, 11)?;
++            generate_expr(printer, map, owner, params, r, 11, has_model)?;
+         }
+         ExpressionNode::ShiftRight(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 10)?;
++            generate_expr(printer, map, owner, params.clone(), l, 10, has_model)?;
+             printer.print(" >> ");
+-            generate_expr(printer, map, owner, params, r, 11)?;
++            generate_expr(printer, map, owner, params, r, 11, has_model)?;
+         }
+ 
+         // ── Побитовые операторы ────────────────────────────────────────────────
+         ExpressionNode::BitwiseAnd(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 7)?;
++            generate_expr(printer, map, owner, params.clone(), l, 7, has_model)?;
+             printer.print(" & ");
+-            generate_expr(printer, map, owner, params, r, 8)?;
++            generate_expr(printer, map, owner, params, r, 8, has_model)?;
+         }
+         ExpressionNode::BitwiseXor(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 6)?;
++            generate_expr(printer, map, owner, params.clone(), l, 6, has_model)?;
+             printer.print(" ^ ");
+-            generate_expr(printer, map, owner, params, r, 7)?;
++            generate_expr(printer, map, owner, params, r, 7, has_model)?;
+         }
+         ExpressionNode::BitwiseOr(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 5)?;
++            generate_expr(printer, map, owner, params.clone(), l, 5, has_model)?;
+             printer.print(" | ");
+-            generate_expr(printer, map, owner, params, r, 6)?;
++            generate_expr(printer, map, owner, params, r, 6, has_model)?;
+         }
+ 
+         // ── Сравнение ─────────────────────────────────────────────────────────
+         ExpressionNode::Less(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 9)?;
++            generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
+             printer.print(" < ");
+-            generate_expr(printer, map, owner, params, r, 10)?;
++            generate_expr(printer, map, owner, params, r, 10, has_model)?;
+         }
+         ExpressionNode::More(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 9)?;
++            generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
+             printer.print(" > ");
+-            generate_expr(printer, map, owner, params, r, 10)?;
++            generate_expr(printer, map, owner, params, r, 10, has_model)?;
+         }
+         ExpressionNode::LessEqual(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 9)?;
++            generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
+             printer.print(" <= ");
+-            generate_expr(printer, map, owner, params, r, 10)?;
++            generate_expr(printer, map, owner, params, r, 10, has_model)?;
+         }
+         ExpressionNode::MoreEqual(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 9)?;
++            generate_expr(printer, map, owner, params.clone(), l, 9, has_model)?;
+             printer.print(" >= ");
+-            generate_expr(printer, map, owner, params, r, 10)?;
++            generate_expr(printer, map, owner, params, r, 10, has_model)?;
+         }
+         ExpressionNode::Equal(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 8)?;
++            generate_expr(printer, map, owner, params.clone(), l, 8, has_model)?;
+             printer.print(" == ");
+-            generate_expr(printer, map, owner, params, r, 9)?;
++            generate_expr(printer, map, owner, params, r, 9, has_model)?;
+         }
+         ExpressionNode::NotEqual(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 8)?;
++            generate_expr(printer, map, owner, params.clone(), l, 8, has_model)?;
+             printer.print(" != ");
+-            generate_expr(printer, map, owner, params, r, 9)?;
++            generate_expr(printer, map, owner, params, r, 9, has_model)?;
+         }
+ 
+         // ── Логические ────────────────────────────────────────────────────────
+         ExpressionNode::And(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 4)?;
++            generate_expr(printer, map, owner, params.clone(), l, 4, has_model)?;
+             printer.print(" && ");
+-            generate_expr(printer, map, owner, params, r, 5)?;
++            generate_expr(printer, map, owner, params, r, 5, has_model)?;
+         }
+         ExpressionNode::Or(l, r) => {
+-            generate_expr(printer, map, owner, params.clone(), l, 3)?;
++            generate_expr(printer, map, owner, params.clone(), l, 3, has_model)?;
+             printer.print(" || ");
+-            generate_expr(printer, map, owner, params, r, 4)?;
++            generate_expr(printer, map, owner, params, r, 4, has_model)?;
+         }
+ 
+         // ── Специальные ───────────────────────────────────────────────────────
+         // Явные скобки из исходного кода — всегда генерируем как есть.
+         ExpressionNode::Parenthesis(e) => {
+             printer.print("(");
+-            generate_expr(printer, map, owner, params, e, 0)?;
++            generate_expr(printer, map, owner, params, e, 0, has_model)?;

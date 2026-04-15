@@ -936,6 +936,9 @@ return Err(Diagnostic::error(loc, "Неожиданный тип аргумен�
 | Changes-45    | Актуализация README: Changes-44 в таблице, новые открытые задачи (panic→diagnostic, unwrap cleanup)                  | ✅ Выполнено   |
 | Changes-46    | Координаты в предупреждениях Ce13 (`unused.rs`), Ce14, Ce5, NI6, Ce11 (`validate.rs`): `Location::Builtin` заменён на `var.loc()` / `state.loc()` / `r.location`; новый тест `ce13_unused_variable_warning_has_source_location` | ✅ Исправлено |
 | Changes-47    | Расширение Zed `zed-but`: поиск `but-lsp` сначала в PATH (`worktree.which`), затем в `$HOME/.cargo/bin` (`worktree.shell_env`); информативная ошибка если не найден; `extension.wasm` пересобран | ✅ Исправлено |
+| Changes-49    | Исправление падающих тестов: `minimap.rs` — недостижимые состояния пропускаются в `generate_model_tick` (`continue` вместо ошибки) | ✅ Исправлено |
+| Changes-50-P01 | Кодогенератор C: `break` в non-last if-блоках concat/parallel; порядок exit→enter→state→break в `generate_extend_transition` и `StateExtend::Model`; `_init→enter→state` в INIT-case; новые функции `generate_condition_expr` и `generate_state_transitions` (безусловные и условные переходы `Element::State`); паника в неразрешённых функциях заменена на `Err` | ✅ Реализовано |
+| Changes-50-P02 | Новые тесты: `test_concat_non_last_has_break_inside_if`, `test_transition_exit_before_state_change`, `test_init_calls_enter_after_init`, `test_simple_state_unconditional_transition`, `test_always_blocks_before_transitions` | ✅ Добавлено |
 | —             | SemanticIndex: поиск узла по LSP-позиции (LSP1)                               | ✅ Реализовано |
 | —             | `textDocument/declaration`: переход к декларации (LSP2)                       | ✅ Реализовано |
 | —             | `textDocument/documentSymbol`: структура документа (LSP3)                     | ✅ Реализовано |
@@ -1371,9 +1374,9 @@ start T {
 
 | #  | Приоритет | Местоположение | Описание | Статус |
 |----|-----------|----------------|----------|--------|
-| I1 | 🔴 Высокий | `generator/c/c_source.rs` | **Неполная генерация тел функций**. `_tick` не содержит обработки переходов, `enter`/`exit`/`always`-блоков, записи портов. Сгенерированный C-код функционально неполон. | 🔲 Открыто |
-| I2 | 🟡 Средний | `generator/c/c_source.rs` | **`todo!()` для вызовов функций** (`ConditionNode::Function`, `ExpressionNode::Function`). | 🔲 Открыто |
-| I3 | 🟡 Средний | `generator/c/c_source.rs` | **`todo!()` для `ConditionNode::State`** — `S(Model)` в условиях генерирует панику. | 🔲 Открыто |
+| I1 | 🔴 Высокий | `generator/c/c_source.rs` | **Неполная генерация тел функций**. `_tick` не содержит обработки переходов, `enter`/`exit`/`always`-блоков, записи портов. Сгенерированный C-код функционально неполон. | 🔶 Частично: безусловные переходы для `Element::State` реализованы (Changes-50); `enter`/`exit` вызываются в правильном порядке; `always` генерируется до проверок; `break` добавлен в if-блоки. Условные переходы и запись портов — открыто. |
+| I2 | 🟡 Средний | `generator/c/c_source.rs` | **`todo!()` для вызовов функций** (`ConditionNode::Function`, `ExpressionNode::Function`). | 🔶 Частично: `ConditionNode::Function` для `Local`/`External` функций генерирует вызов в условиях перехода (Changes-50); неразрешённые функции возвращают `Err` вместо паники; `ExpressionNode::Function` — открыто. |
+| I3 | 🟡 Средний | `generator/c/c_source.rs` | **`todo!()` для `ConditionNode::State`** — `S(Model)` в условиях генерирует панику. | 🔶 Частично: паника устранена — возвращается `Err` и генерируется `//TODO` комментарий (Changes-50). |
 | I4 | 🟡 Средний | `generator/c/c_source.rs` | **`todo!()` для `ExpressionNode::Model`** — вложенная модель как значение вызывает панику. | 🔲 Открыто |
 | I5 | 🟡 Средний | `semantic/validate.rs` | **Нет проверки рекурсивных псевдонимов типов**. `type A = [A; 8];` вызывал stack overflow. | ✅ Реализовано: Ce16, DFS-обход графа зависимостей псевдонимов. |
 | I6 | 🟢 Низкий | `bin/butc.rs` | **Нет флага `--verbose` / `--quiet`**. | ✅ Реализовано: `--verbose` / `-v`, `--quiet` / `-q`; взаимоисключающие. |

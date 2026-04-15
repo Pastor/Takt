@@ -16,9 +16,41 @@
 
 # Задачи
 
-1. Рассмотри `TODO` по генерации кода в файле `c_source.rs`. В блоке состояния инициализации следует дописать код
-   генерации исходника для расширенных состояний. В блоке `tick` дописать реализацию `parallel` и `concatenate`
-   вариантов компановки моделей. Прими во внимание "Манифест генерации кода".
+1. Проверь следующие утверждения для кода который будет сгенерирован генератором си:
+    1. смена состояния в блоке `case` должно завершаться `break`. Пример было
+       ```c
+             else if (model->start_state == EXTEND_COMPLEX_START_B1) {
+                 ExtendComplexB_tick(&model->start_b1, model);
+                 if (ExtendComplexB_is_done(&model->start_b1, model)) {
+                     ExtendComplexC_init(&model->start_parallel2.c0);
+                     ExtendComplexD_init(&model->start_parallel2.d1);
+                     model->start_parallel2.state = EXTEND_COMPLEX_START_PARALLEL2_INIT;
+                     model->start_state = EXTEND_COMPLEX_START_PARALLEL2;
+                 }
+             } 
+       ```
+       стало
+       ```c
+              else if (model->start_state == EXTEND_COMPLEX_START_B1) {
+                 ExtendComplexB_tick(&model->start_b1, model);
+                 if (ExtendComplexB_is_done(&model->start_b1, model)) {
+                     ExtendComplexC_init(&model->start_parallel2.c0);
+                     ExtendComplexD_init(&model->start_parallel2.d1);
+                     model->start_parallel2.state = EXTEND_COMPLEX_START_PARALLEL2_INIT;
+                     model->start_state = EXTEND_COMPLEX_START_PARALLEL2;
+                     break;
+                 }
+                 break;
+             } 
+       ```
+    2. Весь сгенерированный код должен компилироваться `gcc` без ошибок
+    3. Перед переходом в новое состояние необходимо проинициализировать соответствующие `extend`, а также добавить блоки
+       кода `exit` текущего состояния и `enter` состония на который мы переходим если таковые имеются
+    4. Состояния `INIT` должны в себе содержать переход на старотовое состояние соблюдая пункт 3
+    5. При нахождении в состоянии должны сначала генерировать `always` блоки при их наличии, а потом уже проверять
+       условия, проверки, смену состояния и т.д.
+
+   Прими во внимание "Манифест генерации кода".
 
 2. Проанализируй проект целиком, сформируй список улучшений и проблем в проекте, предложи решения их. Приведи в
    соответствие с файлом `README.md` (параллельно актуализируй его), удали в нем уже сделанные пункты или пункты,

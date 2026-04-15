@@ -1,0 +1,382 @@
+diff --git a/grammar/src/generator/c/c_source.rs b/grammar/src/generator/c/c_source.rs
+index 280547f..7b50e8d 100644
+--- a/grammar/src/generator/c/c_source.rs
++++ b/grammar/src/generator/c/c_source.rs
+@@ -19,13 +19,14 @@ use crate::diagnostics::{Diagnostic, Location};
+ use crate::generator::c;
+ use crate::generator::c::c_map::CMap;
+ use crate::generator::indent::Printer;
++use crate::parser::ast::Member;
+ use crate::semantic::extend::Extend;
+ use crate::semantic::minimap::{Element, Name, StateExtend};
+ use crate::semantic::naming::normalize_lowercase_snakecase;
+ use crate::semantic::type_node::TypeNode;
+ use crate::semantic::{
+-    ConditionDefinitionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode,
+-    StatementNode, VariableNode,
++    ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
++    StateNode, StatementNode, VariableNode,
+ };
+ use std::cell::RefCell;
+ use std::rc::Rc;
+@@ -420,6 +421,194 @@ fn generate_parallel_items_tick(
+     done_exprs
+ }
+ 
++/// Преобразует [`ConditionNode`] в строку C-выражения.
++///
++/// Используется при генерации условий переходов для простых состояний.
++/// Возвращает пустую строку для безусловных переходов (`ConditionNode::None`).
++fn generate_condition_expr(
++    cond: &ConditionNode,
++    map: &CMap,
++    owner: &Element,
++) -> Result<String, Diagnostic> {
++    match cond {
++        ConditionNode::None | ConditionNode::Unresolved(_) => Ok(String::new()),
++        ConditionNode::Bool(b) => Ok(if *b { "true" } else { "false" }.to_string()),
++        ConditionNode::Number(n) => Ok(n.to_string()),
++        ConditionNode::Rational(s, neg) => {
++            if *neg {
++                Ok(format!("-{}", s))
++            } else {
++                Ok(s.clone())
++            }
++        }
++        ConditionNode::String(parts) => Ok(format!("\"{}\"", parts.join(""))),
++        ConditionNode::Not(inner) => Ok(format!(
++            "!({})",
++            generate_condition_expr(inner, map, owner)?
++        )),
++        ConditionNode::Parenthesis(inner) => {
++            Ok(format!("({})", generate_condition_expr(inner, map, owner)?))
++        }
++        ConditionNode::Add(l, r) => Ok(format!(
++            "{} + {}",
++            generate_condition_expr(l, map, owner)?,
++            generate_condition_expr(r, map, owner)?
++        )),
++        ConditionNode::Subtract(l, r) => Ok(format!(
++            "{} - {}",
++            generate_condition_expr(l, map, owner)?,
++            generate_condition_expr(r, map, owner)?
++        )),
++        ConditionNode::And(l, r) => Ok(format!(
++            "{} & {}",
++            generate_condition_expr(l, map, owner)?,
++            generate_condition_expr(r, map, owner)?
++        )),
++        ConditionNode::Or(l, r) => Ok(format!(
++            "{} | {}",
++            generate_condition_expr(l, map, owner)?,
++            generate_condition_expr(r, map, owner)?
++        )),
++        ConditionNode::Less(l, r) => Ok(format!(
++            "{} < {}",
++            generate_condition_expr(l, map, owner)?,
++            generate_condition_expr(r, map, owner)?
++        )),
++        ConditionNode::More(l, r) => Ok(format!(
++            "{} > {}",
++            generate_condition_expr(l, map, owner)?,
++            generate_condition_expr(r, map, owner)?
++        )),
++        ConditionNode::LessEqual(l, r) => Ok(format!(
++            "{} <= {}",
++            generate_condition_expr(l, map, owner)?,
++            generate_condition_expr(r, map, owner)?
++        )),
++        ConditionNode::MoreEqual(l, r) => Ok(format!(
++            "{} >= {}",
++            generate_condition_expr(l, map, owner)?,
++            generate_condition_expr(r, map, owner)?
++        )),
++        ConditionNode::Equal(l, r) => Ok(format!(
++            "{} == {}",
++            generate_condition_expr(l, map, owner)?,
++            generate_condition_expr(r, map, owner)?
++        )),
++        ConditionNode::NotEqual(l, r) => Ok(format!(
++            "{} != {}",
++            generate_condition_expr(l, map, owner)?,
++            generate_condition_expr(r, map, owner)?
++        )),
++        ConditionNode::Variable(var_rc, _) => {
++            let var = var_rc.borrow();
++            resolve_variable_c_expr(&var, &[])
++        }
++        ConditionNode::EnumVariant(_, _, value) => Ok(value.to_string()),
++        ConditionNode::ArraySubscript(var_rc, idx) => {
++            let var = var_rc.borrow();
++            let base = resolve_variable_c_expr(&var, &[])?;
++            Ok(format!("{}[{}]", base, idx))
++        }
++        ConditionNode::BitAccess(inner, member) => {
++            let inner_str = generate_condition_expr(inner, map, owner)?;
++            let suffix = match member {
++                Member::Identifier(id) => id.name.clone(),
++                Member::Number(n) => n.to_string(),
++            };
++            Ok(format!("{}.{}", inner_str, suffix))
++        }
++        ConditionNode::Function(fun_rc, args, _) => {
++            let fun = fun_rc.borrow();
++            // Пропускаем неразрешённые и пустые функции — они не могут быть сгенерированы
++            if !matches!(
++                *fun,
++                FunctionDefinitionNode::Local { .. } | FunctionDefinitionNode::External { .. }
++            ) {
++                return Err(Diagnostic::error(
++                    Location::Codegen,
++                    "Неразрешённая функция в условии перехода".to_string(),
++                ));
++            }
++            let fn_name = get_function_name(&fun);
++            let args_strs: Result<Vec<_>, _> = args
++                .iter()
++                .map(|a| generate_condition_expr(a, map, owner))
++                .collect();
++            Ok(format!("{}({})", fn_name, args_strs?.join(", ")))
++        }
++        ConditionNode::Model(_) | ConditionNode::State(_) => Err(Diagnostic::error(
++            Location::Codegen,
++            "Ссылки на модели и состояния не поддерживаются в условиях переходов".to_string(),
++        )),
++    }
++}
++
++/// Генерирует переходы между состояниями для простого состояния [`Element::State`].
++///
++/// Для каждой ссылки (`ref`-перехода) формирует:
++/// - безусловный переход (`ConditionNode::None`): `exit → enter → state → break`
++/// - условный переход: `if (cond) { exit → enter → state → break }`
++fn generate_state_transitions(
++    printer: &mut Printer,
++    raw_state: &StateNode,
++    map: &CMap,
++    model: &Element,
++    model_name: &Name,
++    states: &[Name],
++) -> Result<(), Diagnostic> {
++    for reference in raw_state.references() {
++        let Some(target) = states.iter().find(|n| n.local() == reference.name).cloned() else {
++            continue; // целевое состояние не найдено в достижимых состояниях
++        };
++        let has_cond = !matches!(
++            reference.cond,
++            ConditionNode::None | ConditionNode::Unresolved(_)
++        );
++        if has_cond {
++            match generate_condition_expr(&reference.cond, map, model) {
++                Ok(cond_str) => {
++                    printer.ident(&format!("if ({}) {{", cond_str)).up().nl();
++                    generate_named_blocks(printer, raw_state, map, model, "exit")?;
++                    let target_rc = map.raw_state_at(target.clone())?;
++                    let target_raw = &*target_rc.borrow();
++                    generate_named_blocks(printer, target_raw, map, model, "enter")?;
++                    printer
++                        .ident(&format!(
++                            "model->state = {};",
++                            target.unique_uppercase_snakecase()
++                        ))
++                        .nl();
++                    printer.ident("break;").nl();
++                    printer.down().ident("}").nl();
++                }
++                Err(_) => {
++                    // Условие не поддерживается — оставляем комментарий
++                    printer
++                        .ident(&format!(
++                            "//TODO: условный переход в {} не поддерживается",
++                            target.local()
++                        ))
++                        .nl();
++                }
++            }
++        } else {
++            // Безусловный переход: exit → enter → state → break
++            generate_named_blocks(printer, raw_state, map, model, "exit")?;
++            let target_rc = map.raw_state_at(target.clone())?;
++            let target_raw = &*target_rc.borrow();
++            generate_named_blocks(printer, target_raw, map, model, "enter")?;
++            printer
++                .ident(&format!(
++                    "model->state = {};",
++                    target.unique_uppercase_snakecase()
++                ))
++                .nl();
++            printer.ident("break;").nl();
++        }
++    }
++    Ok(())
++}
++
+ /// Генерирует переход из расширенного состояния (Parallel / Concatenation).
+ ///
+ /// При пустом `next` выполняет `model->state = {MODEL}_END; break;`.
+@@ -434,6 +623,8 @@ fn generate_extend_transition(
+     next: &Name,
+ ) -> Result<(), Diagnostic> {
+     if next.local().is_empty() {
++        // Переход в терминальное состояние: exit текущего → state = END → break
++        generate_named_blocks(printer, raw_state, map, model, "exit")?;
+         printer
+             .ident(&format!(
+                 "model->state = {}_END;",
+@@ -442,16 +633,17 @@ fn generate_extend_transition(
+             .nl();
+         printer.ident("break;").nl();
+     } else {
++        // Переход в следующее состояние: exit текущего → enter следующего → state → break
++        generate_named_blocks(printer, raw_state, map, model, "exit")?;
++        let next_raw = map.raw_state_at(next.clone())?;
++        let next_raw = &*next_raw.borrow();
++        generate_named_blocks(printer, next_raw, map, model, "enter")?;
+         printer
+             .ident(&format!(
+                 "model->state = {};",
+                 next.unique_uppercase_snakecase()
+             ))
+             .nl();
+-        generate_named_blocks(printer, raw_state, map, model, "exit")?;
+-        let next_raw = map.raw_state_at(next.clone())?;
+-        let next_raw = &*next_raw.borrow();
+-        generate_named_blocks(printer, next_raw, map, model, "enter")?;
+         printer.ident("break;").nl();
+     }
+     Ok(())
+@@ -553,6 +745,7 @@ fn generate_concat_tick(
+                     printer
+                         .ident(&format!("{} = {};", state_field, next_variant))
+                         .nl();
++                    printer.ident("break;").nl();
+                 }
+                 printer.down().ident("}").nl();
+             }
+@@ -587,6 +780,7 @@ fn generate_concat_tick(
+                         printer
+                             .ident(&format!("{} = {};", state_field, next_variant))
+                             .nl();
++                        printer.ident("break;").nl();
+                     }
+                     printer.down().ident("}").nl();
+                 }
+@@ -628,11 +822,12 @@ fn generate_model_tick(
+         .nl();
+     let raw_state = map.raw_state_at(start.clone())?;
+     let raw_state = &*raw_state.borrow();
+-    generate_named_blocks(printer, raw_state, map, model, "enter")?;
+     let append = if !is_main { ", main" } else { "" };
+     let call_append = if !is_main { ", main" } else { ", model" };
+     match map.state_at(start.clone()) {
+         Some(Element::State { name, .. }) => {
++            // Простое стартовое состояние: enter → state
++            generate_named_blocks(printer, raw_state, map, model, "enter")?;
+             printer
+                 .ident(&format!(
+                     "model->state = {};",
+@@ -646,6 +841,7 @@ fn generate_model_tick(
+             next,
+         }) => {
+             if let StateExtend::Model(name) = extend {
++                // _init → enter → state
+                 printer
+                     .ident(&format!(
+                         "{}_init(&model->{}",
+@@ -655,6 +851,7 @@ fn generate_model_tick(
+                     .print(append)
+                     .print(");")
+                     .nl();
++                generate_named_blocks(printer, raw_state, map, model, "enter")?;
+                 printer
+                     .ident(&format!(
+                         "model->state = {};",
+@@ -662,6 +859,7 @@ fn generate_model_tick(
+                     ))
+                     .nl();
+             } else if let StateExtend::Parallel(steps) = extend {
++                // parallel_init → enter → state
+                 let local = state_name.local_lowercase_snakecase();
+                 let unique_upper = state_name.unique_uppercase_snakecase();
+                 let access = format!("model->{}", local);
+@@ -669,6 +867,7 @@ fn generate_model_tick(
+                 printer
+                     .ident(&format!("model->{}.state = {}_INIT;", local, unique_upper))
+                     .nl();
++                generate_named_blocks(printer, raw_state, map, model, "enter")?;
+                 printer
+                     .ident(&format!(
+                         "model->state = {};",
+@@ -676,6 +875,7 @@ fn generate_model_tick(
+                     ))
+                     .nl();
+             } else if let StateExtend::Concatenation(steps) = extend {
++                // concat_init → enter → state
+                 let local = state_name.local_lowercase_snakecase();
+                 let unique_upper = state_name.unique_uppercase_snakecase();
+                 if let Some(first) = steps.first() {
+@@ -691,6 +891,7 @@ fn generate_model_tick(
+                         .ident(&format!("model->{}_state = {};", local, variant))
+                         .nl();
+                 }
++                generate_named_blocks(printer, raw_state, map, model, "enter")?;
+                 printer
+                     .ident(&format!(
+                         "model->state = {};",
+@@ -713,10 +914,7 @@ fn generate_model_tick(
+         let raw_state = map.raw_state_at(state_name.clone())?;
+         let raw_state = &*raw_state.borrow();
+         let Some(state) = map.state_at(state_name.clone()) else {
+-            return Err(Diagnostic::error(
+-                Location::Codegen,
+-                format!("Состояние '{}' не определено", state_name),
+-            ));
++            continue; // недостижимое состояние — пропускаем генерацию case
+         };
+         printer
+             .ident("case ")
+@@ -725,11 +923,8 @@ fn generate_model_tick(
+             .up()
+             .nl();
+         generate_named_blocks(printer, raw_state, map, model, "always")?;
+-        if let Element::State { references, .. } = state {
+-            for reference in raw_state.references() {
+-                let cond = &reference.cond;
+-                //TODO: генерация условия перехода, если переходим то дополнительно генерируем код для блоков exit и enter следующего состояния
+-            }
++        if let Element::State { .. } = state {
++            generate_state_transitions(printer, raw_state, map, model, &model_name, states)?;
+         } else if let Element::StateExtend { extend, next, .. } = state {
+             if let StateExtend::Model(name) = extend {
+                 printer
+@@ -752,6 +947,8 @@ fn generate_model_tick(
+                     .up()
+                     .nl();
+                 if next.local().is_empty() {
++                    // exit текущего → state = END → break
++                    generate_named_blocks(printer, raw_state, map, model, "exit")?;
+                     printer
+                         .ident(&format!(
+                             "model->state = {}_END;",
+@@ -760,16 +957,17 @@ fn generate_model_tick(
+                         .nl();
+                     printer.ident("break;").nl();
+                 } else {
++                    // exit текущего → enter следующего → state → break
++                    generate_named_blocks(printer, raw_state, map, model, "exit")?;
++                    let next_state = map.raw_state_at(next.clone())?;
++                    let next_state = &*next_state.borrow();
++                    generate_named_blocks(printer, next_state, map, model, "enter")?;
+                     printer
+                         .ident(&format!(
+                             "model->state = {};",
+                             next.unique_uppercase_snakecase()
+                         ))
+                         .nl();
+-                    generate_named_blocks(printer, raw_state, map, model, "exit")?;
+-                    let next_state = map.raw_state_at(next)?;
+-                    let next_state = &*next_state.borrow();
+-                    generate_named_blocks(printer, next_state, map, model, "enter")?;
+                     printer.ident("break;").nl();
+                 }
+                 printer.down().ident("}").nl();
