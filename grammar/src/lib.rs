@@ -51,7 +51,9 @@ pub mod semantic;
     clippy::type_complexity,
     clippy::ptr_arg,
     clippy::redundant_clone,
-    clippy::just_underscores_and_digits
+    clippy::just_underscores_and_digits,
+    clippy::redundant_field_names,
+    clippy::collapsible_if
 )]
 mod grammar {
     include!(concat!(env!("OUT_DIR"), "/grammar.rs"));
@@ -93,10 +95,10 @@ pub fn parse(src: &str, file_no: u64) -> Result<(ast::Model, Vec<ast::Comment>),
 
     let mut diagnostics = Vec::with_capacity(lex.errors.len() + parser_errors.len());
     for lexical_error in lex.errors {
-        diagnostics.push(Diagnostic::parser_error(
-            lexical_error.loc(),
-            lexical_error.to_string(),
-        ))
+        diagnostics.push(
+            Diagnostic::parser_error(lexical_error.loc(), lexical_error.to_string())
+                .with_code(lexical_error.code()),
+        );
     }
 
     for e in parser_errors {
@@ -122,7 +124,8 @@ fn parser_error_to_diagnostic(
         ParseError::InvalidToken { location } => Diagnostic::parser_error(
             Location::Source(file_no, *location, *location),
             "недопустимый токен".to_string(),
-        ),
+        )
+        .with_code("SY-001"),
         ParseError::UnrecognizedToken {
             token: (l, token, r),
             expected,
@@ -133,16 +136,20 @@ fn parser_error_to_diagnostic(
                 token,
                 expected.join(", ")
             ),
-        ),
-        ParseError::User { error } => Diagnostic::parser_error(error.loc(), error.to_string()),
+        )
+        .with_code("SY-002"),
+        ParseError::User { error } => Diagnostic::parser_error(error.loc(), error.to_string())
+            .with_code(error.code()),
         ParseError::ExtraToken { token } => Diagnostic::parser_error(
             Location::Source(file_no, token.0, token.2),
             format!("лишний токен '{}'", token.1),
-        ),
+        )
+        .with_code("SY-003"),
         ParseError::UnrecognizedEof { expected, location } => Diagnostic::parser_error(
             Location::Source(file_no, *location, *location),
             format!("неожиданный конец файла, ожидалось {}", expected.join(", ")),
-        ),
+        )
+        .with_code("SY-004"),
     }
 }
 
@@ -197,9 +204,9 @@ pub fn compile_to_c(
             .file_name()
             .and_then(|s| s.to_str())
             .map(|s| {
-                // V2: `splitn(2, '.')` безопасно выделяет часть до первой точки.
-                //     Если точки нет — возвращает всю строку.
-                s.splitn(2, '.').next().unwrap_or(s).to_owned()
+                // `split('.')` выделяет часть до первой точки.
+                // Если точки нет — возвращает всю строку.
+                s.split('.').next().unwrap_or(s).to_owned()
             })
             .unwrap_or_else(|| "Root".to_owned());
         model.borrow_mut().name = Some(stem);

@@ -65,17 +65,9 @@ use std::rc::Rc;
 /// ```
 fn strip_doc_prefix(text: &str) -> String {
     // Убираем "///" (ровно три символа)
-    let stripped = if text.starts_with("///") {
-        &text[3..]
-    } else {
-        text
-    };
+    let stripped = text.strip_prefix("///").unwrap_or(text);
     // Убираем один пробел после "///" (если есть)
-    if stripped.starts_with(' ') {
-        stripped[1..].to_string()
-    } else {
-        stripped.to_string()
-    }
+    stripped.strip_prefix(' ').unwrap_or(stripped).to_string()
 }
 
 /// Возвращает стартовую байтовую позицию элемента модели, если она доступна.
@@ -207,11 +199,11 @@ pub(crate) fn attach_docs(
     let mut doc_lines: Vec<(usize, usize, String)> = all_comments
         .iter()
         .filter_map(|c| {
-            if let ast::Comment::DocLine(loc, text) = c {
+            if let ast::Comment::DocLine(loc, text) = c
                 // Location::Builtin не имеет числовых позиций — пропускаем
-                if let Location::Source(_, start, end) = loc {
-                    return Some((*start, *end, strip_doc_prefix(text)));
-                }
+                && let Location::Source(_, start, end) = loc
+            {
+                return Some((*start, *end, strip_doc_prefix(text)));
             }
             None
         })

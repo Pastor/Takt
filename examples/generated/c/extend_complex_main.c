@@ -1,5 +1,9 @@
 #include "extend_complex.h"
 
+bool has_flag(bool v) {
+  return v;
+}
+
 struct Ports {
 };
 

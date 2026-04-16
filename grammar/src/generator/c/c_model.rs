@@ -80,15 +80,16 @@ fn generate_model_init(
     map: &CMap,
 ) -> Result<(), Diagnostic> {
     let Element::Model {
-        start,
-        states,
+        start: _,
+        states: _,
         name,
     } = model
     else {
         return Err(Diagnostic::error(
             Location::Codegen,
             "Элемент не является моделью".to_string(),
-        ));
+        )
+        .with_code("CC-006"));
     };
     let raw = map.raw_model_at(name.clone())?;
     let raw = &*raw.borrow();
@@ -98,9 +99,13 @@ fn generate_model_init(
         .print("_INIT;")
         .nl();
     for var in raw.variables.values() {
-        let VariableNode::Simple { name, ty, expr, .. } = var else {
+        let VariableNode::Simple { name: var_name, ty: _, expr, .. } = var else {
             continue;
         };
+        // Пропускаем неиспользуемые переменные — они не попадают в struct
+        if !map.usage().variables.contains(var_name) {
+            continue;
+        }
         if let ExpressionNode::None = expr {
             continue;
         }
@@ -196,7 +201,8 @@ fn generate_concat_item_init(
         _ => Err(Diagnostic::error(
             Location::Codegen,
             "Неподдерживаемый тип элемента конкатенации".to_string(),
-        )),
+        )
+        .with_code("CC-007")),
     }
 }
 
@@ -266,7 +272,7 @@ fn generate_state_transitions(
     raw_state: &StateNode,
     map: &CMap,
     model: &Element,
-    model_name: &Name,
+    _model_name: &Name,
     states: &[Name],
 ) -> Result<(), Diagnostic> {
     use crate::semantic::ConditionNode;
@@ -524,7 +530,8 @@ fn generate_model_tick(
         return Err(Diagnostic::error(
             Location::Codegen,
             "Элемент не является моделью".to_string(),
-        ));
+        )
+        .with_code("CC-006"));
     };
     printer.ident("switch (model->state) {").up().nl();
     printer
@@ -551,7 +558,7 @@ fn generate_model_tick(
         Some(Element::StateExtend {
             name: state_name,
             extend,
-            next,
+            next: _,
         }) => {
             if let StateExtend::Model(name) = extend {
                 // _init → enter → state
@@ -617,7 +624,8 @@ fn generate_model_tick(
             return Err(Diagnostic::error(
                 Location::Codegen,
                 "Начальное состояние модели не определено".to_string(),
-            ));
+            )
+            .with_code("CC-008"));
         }
     }
     printer.ident("break;").nl();
@@ -764,20 +772,21 @@ pub(super) fn generate_model_functions(
     let is_main = model.name().eq(&map.root_name());
     let Element::Model {
         name,
-        states,
-        start,
+        states: _,
+        start: _,
     } = model
     else {
         return Err(Diagnostic::error(
             Location::Codegen,
             format!("Model {} not defined", model.name().unique_camelcase()),
-        ));
+        )
+        .with_code("CC-006"));
     };
     let mut append = String::new();
     let mut call_append = String::new();
     if !is_main {
         append.push_str(&format!(", {} *main", map.root_name().unique_camelcase()));
-        call_append.push_str(&", main".to_string());
+        call_append.push_str(", main");
     }
     let struct_name = name.unique_camelcase();
     printer

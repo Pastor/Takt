@@ -157,17 +157,13 @@ impl ModelNode {
 
 impl ModelNode {
     pub(crate) fn get_start_state(&self) -> Option<StateNode> {
-        match self
-            .states
+        self.states
             .clone()
             .into_values()
             .filter(|state| state.kind() == StateNodeKind::Start)
             .collect::<Vec<StateNode>>()
             .first()
-        {
-            Some(state) => Some(state.clone()),
-            None => None,
-        }
+            .cloned()
     }
 
     /// Возвращает все конечные состояния модели.
@@ -366,7 +362,7 @@ impl ModelNode {
     /// assert_eq!(model.search_enum_variant("East"), None);
     /// ```
     pub fn search_enum_variant(&self, variant_name: &str) -> Option<(EnumDefinitionNode, i64)> {
-        for (_, enum_node) in &self.enums {
+        for enum_node in self.enums.values() {
             if let Some(val) = enum_node.find_variant(variant_name) {
                 return Some((enum_node.clone(), val));
             }
@@ -949,6 +945,9 @@ impl ConditionDefinitionNode {
 /// - [`Implement`](StateNode::Implement) — состояние с реализацией (`= Модель`),
 ///   может иметь оператор `next`.
 #[derive(Default, Debug, Clone)]
+// Вариант Implement крупнее Simple из-за поля `implements`, которое содержит векторы.
+// Боксирование поля `next` допустимо, но требует масштабного рефакторинга — откладываем.
+#[allow(clippy::large_enum_variant)]
 pub enum StateNode {
     /// Состояние не разрешено (временная заглушка при построении дерева).
     #[default]

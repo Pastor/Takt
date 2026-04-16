@@ -46,6 +46,7 @@ impl<'a> Printer<'a> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn copy(&self, writer: &'a mut dyn Write) -> Self {
         Self {
             indent: self.indent,

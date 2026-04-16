@@ -154,10 +154,10 @@ fn resolve_ast_statement(
 
             // Регистрируем переменную из init для cond/step/body
             let mut for_locals: Vec<(String, Option<VariableNode>)> = Vec::new();
-            if let Some(init_stmt) = &init_resolved {
-                if let Some(entry) = register_local_var(init_stmt, &model) {
-                    for_locals.push(entry);
-                }
+            if let Some(init_stmt) = &init_resolved
+                && let Some(entry) = register_local_var(init_stmt, &model)
+            {
+                for_locals.push(entry);
             }
 
             let cond = cond

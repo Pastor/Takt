@@ -366,14 +366,28 @@ impl LexicalError {
     /// Возвращает местоположение в исходном тексте, где возникла ошибка.
     pub fn loc(&self) -> Location {
         match self {
-            LexicalError::EndOfFileInComment(loc) => loc.clone(),
-            LexicalError::EndOfFileInString(loc) => loc.clone(),
-            LexicalError::EndOfFileInHex(loc) => loc.clone(),
-            LexicalError::MissingNumber(loc) => loc.clone(),
-            LexicalError::InvalidCharacterInHexLiteral(loc, _) => loc.clone(),
-            LexicalError::UnrecognisedToken(loc, _) => loc.clone(),
-            LexicalError::MissingExponent(loc) => loc.clone(),
-            LexicalError::ExpectedFrom(loc, _) => loc.clone(),
+            LexicalError::EndOfFileInComment(loc) => *loc,
+            LexicalError::EndOfFileInString(loc) => *loc,
+            LexicalError::EndOfFileInHex(loc) => *loc,
+            LexicalError::MissingNumber(loc) => *loc,
+            LexicalError::InvalidCharacterInHexLiteral(loc, _) => *loc,
+            LexicalError::UnrecognisedToken(loc, _) => *loc,
+            LexicalError::MissingExponent(loc) => *loc,
+            LexicalError::ExpectedFrom(loc, _) => *loc,
+        }
+    }
+
+    /// Возвращает код ошибки в формате `LE-NNN`.
+    pub fn code(&self) -> &'static str {
+        match self {
+            LexicalError::EndOfFileInComment(_) => "LE-001",
+            LexicalError::EndOfFileInString(_) => "LE-002",
+            LexicalError::EndOfFileInHex(_) => "LE-003",
+            LexicalError::MissingNumber(_) => "LE-004",
+            LexicalError::InvalidCharacterInHexLiteral(_, _) => "LE-005",
+            LexicalError::UnrecognisedToken(_, _) => "LE-006",
+            LexicalError::MissingExponent(_) => "LE-007",
+            LexicalError::ExpectedFrom(_, _) => "LE-008",
         }
     }
 }
@@ -461,9 +475,10 @@ impl<'input> Lexer<'input> {
     fn parse_number(&mut self, mut start: usize, ch: char) -> Result<'input> {
         let mut is_rational = false;
         let mut is_minus = false;
-        if ch == '0' {
-            if let Some((_, 'x')) = self.chars.peek() {
-                // Шестнадцатеричный литерал: 0x...
+        if ch == '0'
+            && let Some((_, 'x')) = self.chars.peek()
+        {
+            // Шестнадцатеричный литерал: 0x...
                 self.chars.next();
 
                 let mut end = match self.chars.next() {
@@ -499,28 +514,27 @@ impl<'input> Lexer<'input> {
 
                 // Проверяем, является ли это адресным литералом `0xNNNN:bit`
                 // (токен AddressLiteral, чтобы избежать LR(1)-конфликта с тернарным `?:`)
-                if matches!(self.chars.peek(), Some((_, ':'))) {
-                    if matches!(self.chars.peek_nth(1), Some((_, '0'..='9'))) {
-                        self.chars.next(); // потребляем ':'
-                        let mut bit_end = end + 1;
-                        while let Some((i, ch)) = self.chars.peek() {
-                            if ch.is_ascii_digit() {
-                                bit_end = *i;
-                                self.chars.next();
-                            } else {
-                                break;
-                            }
+                if matches!(self.chars.peek(), Some((_, ':')))
+                    && matches!(self.chars.peek_nth(1), Some((_, '0'..='9')))
+                {
+                    self.chars.next(); // потребляем ':'
+                    let mut bit_end = end + 1;
+                    while let Some((i, ch)) = self.chars.peek() {
+                        if ch.is_ascii_digit() {
+                            bit_end = *i;
+                            self.chars.next();
+                        } else {
+                            break;
                         }
-                        return Ok((
-                            start,
-                            Token::AddressLiteral(&self.input[start..=bit_end]),
-                            bit_end + 1,
-                        ));
                     }
+                    return Ok((
+                        start,
+                        Token::AddressLiteral(&self.input[start..=bit_end]),
+                        bit_end + 1,
+                    ));
                 }
 
                 return Ok((start, Token::Number(hex_val), end + 1));
-            }
         }
 
         if ch == '.' {
@@ -548,23 +562,23 @@ impl<'input> Lexer<'input> {
             rational_start = start + 1;
         }
 
-        if let Some((_, '.')) = self.chars.peek() {
-            if let Some((i, ch)) = self.chars.peek_nth(1) {
-                if ch.is_ascii_digit() && !is_rational {
-                    // Дробная часть: 3.14
-                    rational_start = *i;
-                    rational_end = *i;
-                    is_rational = true;
-                    self.chars.next(); // пропускаем '.'
-                    while let Some((i, ch)) = self.chars.peek() {
-                        if !ch.is_ascii_digit() && *ch != '_' {
-                            break;
-                        }
-                        rational_end = *i;
-                        end = *i;
-                        self.chars.next();
-                    }
+        if let Some((_, '.')) = self.chars.peek()
+            && let Some((i, ch)) = self.chars.peek_nth(1)
+            && ch.is_ascii_digit()
+            && !is_rational
+        {
+            // Дробная часть: 3.14
+            rational_start = *i;
+            rational_end = *i;
+            is_rational = true;
+            self.chars.next(); // пропускаем '.'
+            while let Some((i, ch)) = self.chars.peek() {
+                if !ch.is_ascii_digit() && *ch != '_' {
+                    break;
                 }
+                rational_end = *i;
+                end = *i;
+                self.chars.next();
             }
         }
 
@@ -845,9 +859,7 @@ impl<'input> Lexer<'input> {
                     };
                 }
                 Some((i, '^')) => {
-                    return match self.chars.peek() {
-                        _ => Some((i, Token::BitwiseXor, i + 1)),
-                    };
+                    return Some((i, Token::BitwiseXor, i + 1));
                 }
                 Some((i, '&')) => {
                     return match self.chars.peek() {
@@ -859,9 +871,7 @@ impl<'input> Lexer<'input> {
                     };
                 }
                 Some((i, '+')) => {
-                    return match self.chars.peek() {
-                        _ => Some((i, Token::Add, i + 1)),
-                    };
+                    return Some((i, Token::Add, i + 1));
                 }
                 Some((i, '-')) => {
                     return match self.chars.peek() {
@@ -889,9 +899,7 @@ impl<'input> Lexer<'input> {
                     };
                 }
                 Some((i, '%')) => {
-                    return match self.chars.peek() {
-                        _ => Some((i, Token::Modulo, i + 1)),
-                    };
+                    return Some((i, Token::Modulo, i + 1));
                 }
                 Some((i, '<')) => {
                     return match self.chars.peek() {

@@ -555,8 +555,10 @@ state End;
 /// лишнего уровня вложенности и переноса строки перед `else`.
 #[test]
 fn test_if_else_if_collapse() {
+    // check вызывается в always, чтобы функция попала в UsageSet и была сгенерирована.
     let src = r#"
 enum Color { Red, Green }
+var c: Color = Red;
 fn check(c: Color) -> bool {
     if c == Red {
         return true;
@@ -565,7 +567,7 @@ fn check(c: Color) -> bool {
     }
     return false;
 }
-start S;
+start S { always { check(c); } }
 "#;
     let c = generate_c_content(src, "Fsm");
 
@@ -591,8 +593,10 @@ start S;
 /// Все три ветви должны генерироваться на одном уровне вложенности.
 #[test]
 fn test_if_else_if_chain() {
+    // route вызывается в always, чтобы функция попала в UsageSet и была сгенерирована.
     let src = r#"
 enum Dir { North, South, East }
+var d: Dir = North;
 fn route(d: Dir) -> bool {
     if d == North {
         return true;
@@ -603,7 +607,7 @@ fn route(d: Dir) -> bool {
     }
     return false;
 }
-start S;
+start S { always { route(d); } }
 "#;
     let c = generate_c_content(src, "Fsm");
 
@@ -624,7 +628,9 @@ start S;
 /// поэтому должна оставаться как `} else {` и не схлопываться.
 #[test]
 fn test_if_else_plain() {
+    // flip вызывается в always, чтобы функция попала в UsageSet и была сгенерирована.
     let src = r#"
+var flag: bool;
 fn flip(x: bool) -> bool {
     if x {
         return false;
@@ -632,7 +638,7 @@ fn flip(x: bool) -> bool {
         return true;
     }
 }
-start S;
+start S { always { flag = flip(flag); } }
 "#;
     let c = generate_c_content(src, "Fsm");
 
@@ -829,5 +835,173 @@ state B;
     assert!(
         c.contains("FSM_B"),
         "целевое состояние B должно присутствовать:\n{c}"
+    );
+}
+
+// ── Тесты оборачивания тела цикла в фигурные скобки (Changes-58) ──────────────
+
+/// Бесконечный `loop` генерирует `while (true) {` с фигурными скобками.
+#[test]
+fn loop_body_infinite_has_braces() {
+    let src = r#"
+var flag: bool;
+start A {
+    always {
+        loop { flag = true; }
+    }
+}
+"#;
+    let c = generate_c_content(src, "Fsm");
+    assert!(
+        c.contains("while (true) {"),
+        "бесконечный loop должен генерировать `while (true) {{`:\n{c}"
+    );
+}
+
+/// `loop` с условием генерирует `while (...) {` с фигурными скобками.
+#[test]
+fn loop_body_cond_has_braces() {
+    let src = r#"
+var flag: bool;
+start A {
+    always {
+        loop flag { flag = false; }
+    }
+}
+"#;
+    let c = generate_c_content(src, "Fsm");
+    assert!(
+        c.contains("while (") && c.contains(") {"),
+        "цикл loop с условием должен генерировать `while (...) {{`:\n{c}"
+    );
+}
+
+/// `for`-цикл генерирует `for (` с фигурными скобками вокруг тела.
+#[test]
+fn for_body_has_braces() {
+    let src = r#"
+var flag: bool;
+start A {
+    always {
+        for var i: bool = true; i; i = false { flag = i; }
+    }
+}
+"#;
+    let c = generate_c_content(src, "Fsm");
+    assert!(
+        c.contains("for ("),
+        "for-цикл должен генерировать `for (`:\n{c}"
+    );
+    assert!(
+        c.contains(") {"),
+        "тело for-цикла должно быть обёрнуто в фигурные скобки:\n{c}"
+    );
+}
+
+// ── Тесты фильтрации неиспользуемых элементов (Changes-59) ───────────────────
+
+/// Неиспользуемая переменная не попадает в сгенерированную C-структуру.
+///
+/// Позитивный пример: переменная `unused` объявлена, но нигде не используется —
+/// она должна отсутствовать в заголовочном файле и не инициализироваться в init.
+///
+/// Контр-пример: переменная `used` присваивается в always и должна присутствовать.
+#[test]
+fn unused_var_excluded() {
+    let src = r#"
+type u8 = [bit;8];
+var unused: u8 = 0;
+var used: u8 = 0;
+start S {
+    always { used = 1; }
+}
+"#;
+    // Поля struct — в .h, инициализация — в .c
+    let h = generate_h_content(src, "Fsm");
+    let c = generate_c_content(src, "Fsm");
+    assert!(
+        !h.contains("uint8_t unused"),
+        "неиспользуемая переменная `unused` не должна появляться в struct (.h):\n{h}"
+    );
+    assert!(
+        h.contains("uint8_t used"),
+        "используемая переменная `used` должна присутствовать в struct (.h):\n{h}"
+    );
+    assert!(
+        !c.contains("model->unused"),
+        "неиспользуемая переменная `unused` не должна инициализироваться в init (.c):\n{c}"
+    );
+}
+
+/// Используемая переменная остаётся в сгенерированной C-структуре.
+///
+/// Позитивный пример: переменная `counter` читается и пишется в always —
+/// она должна присутствовать в struct (.h).
+///
+/// Контр-пример: если бы фильтрация удаляла переменные из условий, код не скомпилировался бы.
+#[test]
+fn used_var_stays() {
+    let src = r#"
+type u8 = [bit;8];
+var counter: u8 = 0;
+start S {
+    always { counter = counter + 1; }
+}
+"#;
+    let h = generate_h_content(src, "Fsm");
+    assert!(
+        h.contains("uint8_t counter"),
+        "используемая переменная `counter` должна присутствовать в struct (.h):\n{h}"
+    );
+}
+
+/// Неиспользуемая константа не попадает в сгенерированный C-код.
+///
+/// Позитивный пример: `DEAD` объявлена, но нигде не используется —
+/// `CONST_FSM_DEAD` должна отсутствовать в `.c`-файле.
+///
+/// Контр-пример: `LIVE` используется в always, она должна присутствовать.
+#[test]
+fn unused_const_excluded() {
+    let src = r#"
+type u8 = [bit;8];
+const DEAD: u8 = 42;
+const LIVE: u8 = 7;
+var v: u8 = 0;
+start S {
+    always { v = LIVE; }
+}
+"#;
+    let c = generate_c_content(src, "Fsm");
+    assert!(
+        !c.contains("CONST_FSM_DEAD"),
+        "неиспользуемая константа DEAD не должна появляться в коде:\n{c}"
+    );
+    assert!(
+        c.contains("CONST_FSM_LIVE"),
+        "используемая константа LIVE должна присутствовать в коде:\n{c}"
+    );
+}
+
+/// Используемая константа остаётся в сгенерированном C-коде.
+///
+/// Позитивный пример: `MAX` используется в выражении присваивания переменной —
+/// она должна генерироваться как `#define CONST_FSM_MAX`.
+///
+/// Контр-пример: если бы фильтрация удаляла `MAX`, компилятор C выдал бы ошибку.
+#[test]
+fn used_const_stays() {
+    let src = r#"
+type u8 = [bit;8];
+const MAX: u8 = 255;
+var v: u8 = 0;
+start S {
+    always { v = MAX; }
+}
+"#;
+    let c = generate_c_content(src, "Fsm");
+    assert!(
+        c.contains("CONST_FSM_MAX"),
+        "используемая константа MAX должна присутствовать в коде:\n{c}"
     );
 }

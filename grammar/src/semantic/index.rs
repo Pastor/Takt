@@ -243,19 +243,19 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
     let borrowed = model.borrow();
 
     // Сама модель (только именованные; корневая анонимная модель пропускается)
-    if let Some(ref name) = borrowed.name {
-        if let Location::Source(_, start, end) = borrowed.loc {
-            entries.push(IndexEntry {
-                start,
-                end,
-                node_ref: SemanticNodeRef {
-                    name: name.clone(),
-                    kind: SemanticNodeKind::Model,
-                    loc: borrowed.loc,
-                    model: Some(model.clone()),
-                },
-            });
-        }
+    if let Some(ref name) = borrowed.name
+        && let Location::Source(_, start, end) = borrowed.loc
+    {
+        entries.push(IndexEntry {
+            start,
+            end,
+            node_ref: SemanticNodeRef {
+                name: name.clone(),
+                kind: SemanticNodeKind::Model,
+                loc: borrowed.loc,
+                model: Some(model.clone()),
+            },
+        });
     }
 
     // Переменные (var, port, const)

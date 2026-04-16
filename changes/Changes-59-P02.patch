@@ -1,0 +1,492 @@
+diff --git a/grammar/src/generator/c/c_decl.rs b/grammar/src/generator/c/c_decl.rs
+index d63fa1a..698c3f6 100644
+--- a/grammar/src/generator/c/c_decl.rs
++++ b/grammar/src/generator/c/c_decl.rs
+@@ -77,6 +77,10 @@ pub(super) fn generate_constants_and_ports_and_enums(
+                     lines.push(format!("#define PORT_{} 0x{:x}", name, address));
+                 }
+                 VariableNode::Const { name, ref expr, .. } => {
++                    // Пропускаем неиспользуемые константы
++                    if !map.usage().constants.contains(&name) {
++                        continue;
++                    }
+                     let name = model_name.unique_uppercase_snakecase()
+                         + "_"
+                         + normalize_lowercase_snakecase(name.clone())
+@@ -137,6 +141,10 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
+         let mut external_funcs = Vec::new();
+         let mut local_funcs = Vec::new();
+         for ref fun in model.functions.clone().into_values() {
++            // Пропускаем функции, которые нигде не вызываются
++            if !fun.name().is_empty() && !map.usage().functions.contains(fun.name()) {
++                continue;
++            }
+             match fun {
+                 FunctionDefinitionNode::Local {
+                     params, body, ret, ..
+diff --git a/grammar/src/generator/c/c_header.rs b/grammar/src/generator/c/c_header.rs
+index c2ca0df..bee5a82 100644
+--- a/grammar/src/generator/c/c_header.rs
++++ b/grammar/src/generator/c/c_header.rs
+@@ -10,7 +10,6 @@ use crate::semantic::VariableNode;
+ use crate::semantic::minimap::{Element, Name, StateExtend};
+ use crate::semantic::naming::normalize_lowercase_snakecase;
+ use log::warn;
+-use std::collections::{HashMap, HashSet};
+ 
+ /// Генерирует поля структуры C для extend состояния.
+ /// Единичный Model → `{state}`, составной → делегирует в build_concat_item.
+@@ -239,6 +238,10 @@ fn generate_model_header(
+         match var {
+             VariableNode::Unresolved => {}
+             VariableNode::Simple { name, ty, .. } => {
++                // Пропускаем переменные, которые нигде не используются
++                if !map.usage().variables.contains(&name) {
++                    continue;
++                }
+                 let tv = get_typed_variable(&ty, Some(name.clone()), &*model.borrow()).ok_or_else(
+                     || Diagnostic::error(Location::Codegen, format!("Variable {} not found", name)),
+                 )?;
+@@ -436,10 +439,11 @@ mod tests {
+     #[test]
+     fn enum_type_sized_by_maximum_variant() {
+         // High=300 > u8::MAX(255) → uint16_t
++        // p используется в always, чтобы попасть в UsageSet.
+         let src = r#"
+ enum Priority { Low = 0, Medium = 5, High = 300 }
+ var p: Priority = Low;
+-start Main { always { } }
++start Main { always { p = High; } }
+         "#;
+         let (model_ast, _) = parse(src, 0).unwrap();
+         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+@@ -457,10 +461,11 @@ start Main { always { } }
+         );
+ 
+         // High=200 ≤ u8::MAX(255) → uint8_t (ранее ошибочно давал uint16_t)
++        // lv используется в always, чтобы попасть в UsageSet.
+         let src2 = r#"
+ enum Levels { Low = 0, High = 200 }
+ var lv: Levels = Low;
+-start Main { always { } }
++start Main { always { lv = High; } }
+         "#;
+         let (model_ast2, _) = parse(src2, 0).unwrap();
+         let model2 = semantic::tree::construct_model(&model_ast2, None, &[]).unwrap();
+diff --git a/grammar/src/generator/c/c_model.rs b/grammar/src/generator/c/c_model.rs
+index c2c185f..8013691 100644
+--- a/grammar/src/generator/c/c_model.rs
++++ b/grammar/src/generator/c/c_model.rs
+@@ -80,8 +80,8 @@ fn generate_model_init(
+     map: &CMap,
+ ) -> Result<(), Diagnostic> {
+     let Element::Model {
+-        start,
+-        states,
++        start: _,
++        states: _,
+         name,
+     } = model
+     else {
+@@ -98,9 +98,13 @@ fn generate_model_init(
+         .print("_INIT;")
+         .nl();
+     for var in raw.variables.values() {
+-        let VariableNode::Simple { name, ty, expr, .. } = var else {
++        let VariableNode::Simple { name: var_name, ty: _, expr, .. } = var else {
+             continue;
+         };
++        // Пропускаем неиспользуемые переменные — они не попадают в struct
++        if !map.usage().variables.contains(var_name) {
++            continue;
++        }
+         if let ExpressionNode::None = expr {
+             continue;
+         }
+@@ -266,7 +270,7 @@ fn generate_state_transitions(
+     raw_state: &StateNode,
+     map: &CMap,
+     model: &Element,
+-    model_name: &Name,
++    _model_name: &Name,
+     states: &[Name],
+ ) -> Result<(), Diagnostic> {
+     use crate::semantic::ConditionNode;
+@@ -551,7 +555,7 @@ fn generate_model_tick(
+         Some(Element::StateExtend {
+             name: state_name,
+             extend,
+-            next,
++            next: _,
+         }) => {
+             if let StateExtend::Model(name) = extend {
+                 // _init → enter → state
+@@ -764,8 +768,8 @@ pub(super) fn generate_model_functions(
+     let is_main = model.name().eq(&map.root_name());
+     let Element::Model {
+         name,
+-        states,
+-        start,
++        states: _,
++        start: _,
+     } = model
+     else {
+         return Err(Diagnostic::error(
+@@ -777,7 +781,7 @@ pub(super) fn generate_model_functions(
+     let mut call_append = String::new();
+     if !is_main {
+         append.push_str(&format!(", {} *main", map.root_name().unique_camelcase()));
+-        call_append.push_str(&", main".to_string());
++        call_append.push_str(", main");
+     }
+     let struct_name = name.unique_camelcase();
+     printer
+diff --git a/grammar/src/generator/c/c_source.rs b/grammar/src/generator/c/c_source.rs
+index 6b485f6..902767f 100644
+--- a/grammar/src/generator/c/c_source.rs
++++ b/grammar/src/generator/c/c_source.rs
+@@ -491,11 +491,14 @@ mod tests {
+ 
+     #[test]
+     fn test_generate_source_with_const_and_port() {
++        // LIMIT используется в блоке always (присваивание переменной),
++        // чтобы константа попала в UsageSet и не была отфильтрована.
+         let src = r#"
+ type u8 = [bit;8];
+ const LIMIT: u8 = 100;
+ port SENSOR: u8 = 0x100000;
+-start Main { always { } }
++var v: u8 = 0;
++start Main { always { v = LIMIT; } }
+         "#;
+         let (model_ast, _) = parse(src, 0).unwrap();
+         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+@@ -515,10 +518,11 @@ start Main { always { } }
+ 
+     #[test]
+     fn test_generate_source_functions() {
++        // Обе функции вызываются в блоке always, чтобы они попали в UsageSet.
+         let src = r#"
+ extern fn log_val(x: bit);
+ fn double_it(x: bit) -> bit { return x; }
+-start Main { always { } }
++start Main { always { log_val(double_it(0)); } }
+         "#;
+         let (model_ast, _) = parse(src, 0).unwrap();
+         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+@@ -541,6 +545,7 @@ start Main { always { } }
+         // Проверяет, что условие `if` генерируется без двойных скобок: `if (cond)` а не `if ((cond))`.
+         // В BuT условие `if` пишется без скобок (как в Rust): `if cond { ... }`.
+         // Генератор добавляет ровно одну пару скобок для C.
++        // Функция вызывается в always, чтобы попасть в UsageSet.
+         let src = r#"
+ type u8 = [bit;8];
+ fn check(value: u8) -> bit {
+@@ -549,7 +554,7 @@ fn check(value: u8) -> bit {
+     }
+     return 0;
+ }
+-start Main { always { } }
++start Main { always { check(0); } }
+         "#;
+         let (model_ast, _) = parse(src, 0).unwrap();
+         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+@@ -578,6 +583,8 @@ start Main { always { } }
+     /// функция `clamp` должна обращаться к переменной как `model->entry.temperature`.
+     /// Первый параметр функции — `const Root *model` (корневая модель), не `main`.
+     fn test_submodel_variable_uses_state_field_name() {
++        // clamp вызывается в always блоке, чтобы попасть в UsageSet.
++        // temperature используется внутри clamp, поэтому поле генерируется в структуре.
+         let src = r#"
+ type u8 = [bit;8];
+ model Controller {
+@@ -586,7 +593,7 @@ model Controller {
+         if value < temperature { return temperature; }
+         return value;
+     }
+-    start Idle { }
++    start Idle { always { clamp(0); } }
+ }
+ start Entry = Controller;
+         "#;
+@@ -613,6 +620,7 @@ start Entry = Controller;
+         // Проверяет, что условие `loop` (→ `while` в C) генерируется без двойных скобок.
+         // В BuT: `loop cond { ... }` — без скобок вокруг условия.
+         // Генератор добавляет ровно одну пару скобок для C: `while (cond)`.
++        // Функция вызывается в always, чтобы попасть в UsageSet.
+         let src = r#"
+ type u8 = [bit;8];
+ fn check(n: u8) -> bit {
+@@ -621,7 +629,7 @@ fn check(n: u8) -> bit {
+     }
+     return 1;
+ }
+-start Main { always { } }
++start Main { always { check(0); } }
+         "#;
+         let (model_ast, _) = parse(src, 0).unwrap();
+         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+diff --git a/grammar/src/generator/c/mod.rs b/grammar/src/generator/c/mod.rs
+index 2cc47db..1f56510 100644
+--- a/grammar/src/generator/c/mod.rs
++++ b/grammar/src/generator/c/mod.rs
+@@ -101,7 +101,7 @@ pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
+         }
+         TypeNode::Unit => Some("void".to_string()),
+         TypeNode::BuiltinString => Some("char *".to_string()),
+-        TypeNode::Struct(struct_name) => Some(format!("{}", struct_name)),
++        TypeNode::Struct(struct_name) => Some(struct_name.to_string()),
+         TypeNode::Enum(enum_name) => {
+             let enum_node = model.search_enum(enum_name)?;
+             let max = enum_node
+@@ -249,12 +249,14 @@ start Main = Robot;
+     /// `m_a_t_r_i_x`, что приводило к `CONST_..._M_A_T_R_I_X` вместо `CONST_..._MATRIX`.
+     #[test]
+     fn const_port_names_are_not_char_split() {
++        // Константы используются в always, чтобы попасть в UsageSet.
+         let src = r#"
+ type u8 = [bit;8];
+ const MATRIX: u8 = 0;
+ const NUMB: u8 = 255;
+ port SENSOR: u8 = 0x100000;
+-start Main { always { } }
++var v: u8 = 0;
++start Main { always { v = MATRIX; v = NUMB; } }
+         "#;
+         let (model_ast, _) = parse(src, 0).unwrap();
+         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+diff --git a/grammar/tests/codegen_tests.rs b/grammar/tests/codegen_tests.rs
+index 2dc8afb..c2a1fde 100644
+--- a/grammar/tests/codegen_tests.rs
++++ b/grammar/tests/codegen_tests.rs
+@@ -555,8 +555,10 @@ state End;
+ /// лишнего уровня вложенности и переноса строки перед `else`.
+ #[test]
+ fn test_if_else_if_collapse() {
++    // check вызывается в always, чтобы функция попала в UsageSet и была сгенерирована.
+     let src = r#"
+ enum Color { Red, Green }
++var c: Color = Red;
+ fn check(c: Color) -> bool {
+     if c == Red {
+         return true;
+@@ -565,7 +567,7 @@ fn check(c: Color) -> bool {
+     }
+     return false;
+ }
+-start S;
++start S { always { check(c); } }
+ "#;
+     let c = generate_c_content(src, "Fsm");
+ 
+@@ -591,8 +593,10 @@ start S;
+ /// Все три ветви должны генерироваться на одном уровне вложенности.
+ #[test]
+ fn test_if_else_if_chain() {
++    // route вызывается в always, чтобы функция попала в UsageSet и была сгенерирована.
+     let src = r#"
+ enum Dir { North, South, East }
++var d: Dir = North;
+ fn route(d: Dir) -> bool {
+     if d == North {
+         return true;
+@@ -603,7 +607,7 @@ fn route(d: Dir) -> bool {
+     }
+     return false;
+ }
+-start S;
++start S { always { route(d); } }
+ "#;
+     let c = generate_c_content(src, "Fsm");
+ 
+@@ -624,7 +628,9 @@ start S;
+ /// поэтому должна оставаться как `} else {` и не схлопываться.
+ #[test]
+ fn test_if_else_plain() {
++    // flip вызывается в always, чтобы функция попала в UsageSet и была сгенерирована.
+     let src = r#"
++var flag: bool;
+ fn flip(x: bool) -> bool {
+     if x {
+         return false;
+@@ -632,7 +638,7 @@ fn flip(x: bool) -> bool {
+         return true;
+     }
+ }
+-start S;
++start S { always { flag = flip(flag); } }
+ "#;
+     let c = generate_c_content(src, "Fsm");
+ 
+@@ -831,3 +837,171 @@ state B;
+         "целевое состояние B должно присутствовать:\n{c}"
+     );
+ }
++
++// ── Тесты оборачивания тела цикла в фигурные скобки (Changes-58) ──────────────
++
++/// Бесконечный `loop` генерирует `while (true) {` с фигурными скобками.
++#[test]
++fn loop_body_infinite_has_braces() {
++    let src = r#"
++var flag: bool;
++start A {
++    always {
++        loop { flag = true; }
++    }
++}
++"#;
++    let c = generate_c_content(src, "Fsm");
++    assert!(
++        c.contains("while (true) {"),
++        "бесконечный loop должен генерировать `while (true) {{`:\n{c}"
++    );
++}
++
++/// `loop` с условием генерирует `while (...) {` с фигурными скобками.
++#[test]
++fn loop_body_cond_has_braces() {
++    let src = r#"
++var flag: bool;
++start A {
++    always {
++        loop flag { flag = false; }
++    }
++}
++"#;
++    let c = generate_c_content(src, "Fsm");
++    assert!(
++        c.contains("while (") && c.contains(") {"),
++        "цикл loop с условием должен генерировать `while (...) {{`:\n{c}"
++    );
++}
++
++/// `for`-цикл генерирует `for (` с фигурными скобками вокруг тела.
++#[test]
++fn for_body_has_braces() {
++    let src = r#"
++var flag: bool;
++start A {
++    always {
++        for var i: bool = true; i; i = false { flag = i; }
++    }
++}
++"#;
++    let c = generate_c_content(src, "Fsm");
++    assert!(
++        c.contains("for ("),
++        "for-цикл должен генерировать `for (`:\n{c}"
++    );
++    assert!(
++        c.contains(") {"),
++        "тело for-цикла должно быть обёрнуто в фигурные скобки:\n{c}"
++    );
++}
++
++// ── Тесты фильтрации неиспользуемых элементов (Changes-59) ───────────────────
++
++/// Неиспользуемая переменная не попадает в сгенерированную C-структуру.
++///
++/// Позитивный пример: переменная `unused` объявлена, но нигде не используется —
++/// она должна отсутствовать в заголовочном файле и не инициализироваться в init.
++///
++/// Контр-пример: переменная `used` присваивается в always и должна присутствовать.
++#[test]
++fn unused_var_excluded() {
++    let src = r#"
++type u8 = [bit;8];
++var unused: u8 = 0;
++var used: u8 = 0;
++start S {
++    always { used = 1; }
++}
++"#;
++    // Поля struct — в .h, инициализация — в .c
++    let h = generate_h_content(src, "Fsm");
++    let c = generate_c_content(src, "Fsm");
++    assert!(
++        !h.contains("uint8_t unused"),
++        "неиспользуемая переменная `unused` не должна появляться в struct (.h):\n{h}"
++    );
++    assert!(
++        h.contains("uint8_t used"),
++        "используемая переменная `used` должна присутствовать в struct (.h):\n{h}"
++    );
++    assert!(
++        !c.contains("model->unused"),
++        "неиспользуемая переменная `unused` не должна инициализироваться в init (.c):\n{c}"
++    );
++}
++
++/// Используемая переменная остаётся в сгенерированной C-структуре.
++///
++/// Позитивный пример: переменная `counter` читается и пишется в always —
++/// она должна присутствовать в struct (.h).
++///
++/// Контр-пример: если бы фильтрация удаляла переменные из условий, код не скомпилировался бы.
++#[test]
++fn used_var_stays() {
++    let src = r#"
++type u8 = [bit;8];
++var counter: u8 = 0;
++start S {
++    always { counter = counter + 1; }
++}
++"#;
++    let h = generate_h_content(src, "Fsm");
++    assert!(
++        h.contains("uint8_t counter"),
++        "используемая переменная `counter` должна присутствовать в struct (.h):\n{h}"
++    );
++}
++
++/// Неиспользуемая константа не попадает в сгенерированный C-код.
++///
++/// Позитивный пример: `DEAD` объявлена, но нигде не используется —
++/// `CONST_FSM_DEAD` должна отсутствовать в `.c`-файле.
++///
++/// Контр-пример: `LIVE` используется в always, она должна присутствовать.
++#[test]
++fn unused_const_excluded() {
++    let src = r#"
++type u8 = [bit;8];
++const DEAD: u8 = 42;
++const LIVE: u8 = 7;
++var v: u8 = 0;
++start S {
++    always { v = LIVE; }
++}
++"#;
++    let c = generate_c_content(src, "Fsm");
++    assert!(
++        !c.contains("CONST_FSM_DEAD"),
++        "неиспользуемая константа DEAD не должна появляться в коде:\n{c}"
++    );
++    assert!(
++        c.contains("CONST_FSM_LIVE"),
++        "используемая константа LIVE должна присутствовать в коде:\n{c}"
++    );
++}
++
++/// Используемая константа остаётся в сгенерированном C-коде.
++///
++/// Позитивный пример: `MAX` используется в выражении присваивания переменной —
++/// она должна генерироваться как `#define CONST_FSM_MAX`.
++///
++/// Контр-пример: если бы фильтрация удаляла `MAX`, компилятор C выдал бы ошибку.
++#[test]
++fn used_const_stays() {
++    let src = r#"
++type u8 = [bit;8];
++const MAX: u8 = 255;
++var v: u8 = 0;
++start S {
++    always { v = MAX; }
++}
++"#;
++    let c = generate_c_content(src, "Fsm");
++    assert!(
++        c.contains("CONST_FSM_MAX"),
++        "используемая константа MAX должна присутствовать в коде:\n{c}"
++    );
++}

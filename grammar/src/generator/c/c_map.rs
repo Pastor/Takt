@@ -1,6 +1,7 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::minimap::{Element, Map, Name};
 use crate::semantic::naming::normalize_camelcase_name;
+use crate::semantic::unused::UsageSet;
 use crate::semantic::{ModelNode, StateNode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -8,40 +9,50 @@ use std::rc::Rc;
 pub struct CMap {
     filename: String,
     map: Map,
+    /// Множество используемых имён модели (для фильтрации неиспользуемых элементов).
+    usage: UsageSet,
 }
 
 impl CMap {
     pub(crate) fn raw_model_at(&self, name: Name) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-        Ok(self
-            .map
+        self.map
             .model_at(Some(name.unique().to_string()))
             .ok_or_else(|| {
                 Diagnostic::error(
                     Location::Codegen,
                     format!("Model with name '{}' not found", name),
                 )
-            })?)
+                .with_code("CC-004")
+            })
     }
 
     pub(crate) fn raw_state_at(&self, name: Name) -> Result<Rc<RefCell<StateNode>>, Diagnostic> {
-        Ok(self
-            .map
+        self.map
             .state_at(Some(name.unique().to_string()))
             .ok_or_else(|| {
                 Diagnostic::error(
                     Location::Codegen,
                     format!("State with name '{}' not found", name),
                 )
-            })?)
+                .with_code("CC-005")
+            })
     }
 }
 
 impl CMap {
     pub fn new(filename: &str, model: &ModelNode) -> Result<Self, Diagnostic> {
+        let model_rc = Rc::new(RefCell::new(model.copy(None, None)));
+        let usage = crate::semantic::unused::compute_usage(Rc::clone(&model_rc));
         Ok(Self {
             filename: filename.to_string(),
-            map: Map::create(Rc::new(RefCell::new(model.copy(None, None))))?,
+            map: Map::create(model_rc)?,
+            usage,
         })
+    }
+
+    /// Возвращает ссылку на множество используемых имён модели.
+    pub fn usage(&self) -> &UsageSet {
+        &self.usage
     }
 
     pub fn get_filename(&self) -> &str {

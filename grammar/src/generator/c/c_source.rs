@@ -491,11 +491,14 @@ mod tests {
 
     #[test]
     fn test_generate_source_with_const_and_port() {
+        // LIMIT используется в блоке always (присваивание переменной),
+        // чтобы константа попала в UsageSet и не была отфильтрована.
         let src = r#"
 type u8 = [bit;8];
 const LIMIT: u8 = 100;
 port SENSOR: u8 = 0x100000;
-start Main { always { } }
+var v: u8 = 0;
+start Main { always { v = LIMIT; } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
@@ -515,10 +518,11 @@ start Main { always { } }
 
     #[test]
     fn test_generate_source_functions() {
+        // Обе функции вызываются в блоке always, чтобы они попали в UsageSet.
         let src = r#"
 extern fn log_val(x: bit);
 fn double_it(x: bit) -> bit { return x; }
-start Main { always { } }
+start Main { always { log_val(double_it(0)); } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
@@ -541,6 +545,7 @@ start Main { always { } }
         // Проверяет, что условие `if` генерируется без двойных скобок: `if (cond)` а не `if ((cond))`.
         // В BuT условие `if` пишется без скобок (как в Rust): `if cond { ... }`.
         // Генератор добавляет ровно одну пару скобок для C.
+        // Функция вызывается в always, чтобы попасть в UsageSet.
         let src = r#"
 type u8 = [bit;8];
 fn check(value: u8) -> bit {
@@ -549,7 +554,7 @@ fn check(value: u8) -> bit {
     }
     return 0;
 }
-start Main { always { } }
+start Main { always { check(0); } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
@@ -578,6 +583,8 @@ start Main { always { } }
     /// функция `clamp` должна обращаться к переменной как `model->entry.temperature`.
     /// Первый параметр функции — `const Root *model` (корневая модель), не `main`.
     fn test_submodel_variable_uses_state_field_name() {
+        // clamp вызывается в always блоке, чтобы попасть в UsageSet.
+        // temperature используется внутри clamp, поэтому поле генерируется в структуре.
         let src = r#"
 type u8 = [bit;8];
 model Controller {
@@ -586,7 +593,7 @@ model Controller {
         if value < temperature { return temperature; }
         return value;
     }
-    start Idle { }
+    start Idle { always { clamp(0); } }
 }
 start Entry = Controller;
         "#;
@@ -613,6 +620,7 @@ start Entry = Controller;
         // Проверяет, что условие `loop` (→ `while` в C) генерируется без двойных скобок.
         // В BuT: `loop cond { ... }` — без скобок вокруг условия.
         // Генератор добавляет ровно одну пару скобок для C: `while (cond)`.
+        // Функция вызывается в always, чтобы попасть в UsageSet.
         let src = r#"
 type u8 = [bit;8];
 fn check(n: u8) -> bit {
@@ -621,7 +629,7 @@ fn check(n: u8) -> bit {
     }
     return 1;
 }
-start Main { always { } }
+start Main { always { check(0); } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();

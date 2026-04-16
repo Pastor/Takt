@@ -68,6 +68,7 @@ pub(crate) fn construct_type(
                         def.loc,
                         format!("Локальный тип '{}' не найден", local),
                     )
+                    .with_code("SE-034")
                 })?;
                 Ok(rc.borrow().clone())
             }

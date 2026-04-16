@@ -77,6 +77,10 @@ pub(super) fn generate_constants_and_ports_and_enums(
                     lines.push(format!("#define PORT_{} 0x{:x}", name, address));
                 }
                 VariableNode::Const { name, ref expr, .. } => {
+                    // Пропускаем неиспользуемые константы
+                    if !map.usage().constants.contains(&name) {
+                        continue;
+                    }
                     let name = model_name.unique_uppercase_snakecase()
                         + "_"
                         + normalize_lowercase_snakecase(name.clone())
@@ -137,6 +141,10 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
         let mut external_funcs = Vec::new();
         let mut local_funcs = Vec::new();
         for ref fun in model.functions.clone().into_values() {
+            // Пропускаем функции, которые нигде не вызываются
+            if !fun.name().is_empty() && !map.usage().functions.contains(fun.name()) {
+                continue;
+            }
             match fun {
                 FunctionDefinitionNode::Local {
                     params, body, ret, ..

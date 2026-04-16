@@ -10,7 +10,6 @@ use crate::semantic::VariableNode;
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use log::warn;
-use std::collections::{HashMap, HashSet};
 
 /// Генерирует поля структуры C для extend состояния.
 /// Единичный Model → `{state}`, составной → делегирует в build_concat_item.
@@ -239,8 +238,18 @@ fn generate_model_header(
         match var {
             VariableNode::Unresolved => {}
             VariableNode::Simple { name, ty, .. } => {
+                // Пропускаем переменные, которые нигде не используются
+                if !map.usage().variables.contains(&name) {
+                    continue;
+                }
                 let tv = get_typed_variable(&ty, Some(name.clone()), &*model.borrow()).ok_or_else(
-                    || Diagnostic::error(Location::Codegen, format!("Variable {} not found", name)),
+                    || {
+                        Diagnostic::error(
+                            Location::Codegen,
+                            format!("Variable {} not found", name),
+                        )
+                        .with_code("CC-009")
+                    },
                 )?;
                 printer.ident(&tv).print(";").nl();
             }
@@ -436,10 +445,11 @@ mod tests {
     #[test]
     fn enum_type_sized_by_maximum_variant() {
         // High=300 > u8::MAX(255) → uint16_t
+        // p используется в always, чтобы попасть в UsageSet.
         let src = r#"
 enum Priority { Low = 0, Medium = 5, High = 300 }
 var p: Priority = Low;
-start Main { always { } }
+start Main { always { p = High; } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
@@ -457,10 +467,11 @@ start Main { always { } }
         );
 
         // High=200 ≤ u8::MAX(255) → uint8_t (ранее ошибочно давал uint16_t)
+        // lv используется в always, чтобы попасть в UsageSet.
         let src2 = r#"
 enum Levels { Low = 0, High = 200 }
 var lv: Levels = Low;
-start Main { always { } }
+start Main { always { lv = High; } }
         "#;
         let (model_ast2, _) = parse(src2, 0).unwrap();
         let model2 = semantic::tree::construct_model(&model_ast2, None, &[]).unwrap();

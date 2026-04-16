@@ -54,10 +54,10 @@ pub(super) fn field_name_in_parent(model_rc: &Rc<RefCell<ModelNode>>) -> Option<
     let parent_rc = model_rc.borrow().upper.as_ref()?.upgrade()?;
     let parent = parent_rc.borrow();
     for (state_name, state_node) in &parent.states {
-        if let StateNode::Implement { implements, .. } = state_node {
-            if extend_contains_model(implements, model_rc) {
-                return Some(normalize_lowercase_snakecase(state_name.clone()));
-            }
+        if let StateNode::Implement { implements, .. } = state_node
+            && extend_contains_model(implements, model_rc)
+        {
+            return Some(normalize_lowercase_snakecase(state_name.clone()));
         }
     }
     None
@@ -372,24 +372,22 @@ pub(super) fn generate_condition_expr(
         )),
         ConditionNode::Variable(var_rc, _) => {
             let var = var_rc.borrow();
-            if let VariableNode::Simple { upper, .. } = &*var {
-                if let Some(s) =
+            if let VariableNode::Simple { upper, .. } = &*var
+                && let Some(s) =
                     resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true)
-                {
-                    return Ok(s);
-                }
+            {
+                return Ok(s);
             }
             resolve_variable_c_expr(&var, &[])
         }
         ConditionNode::EnumVariant(_, _, value) => Ok(value.to_string()),
         ConditionNode::ArraySubscript(var_rc, idx) => {
             let var = var_rc.borrow();
-            if let VariableNode::Simple { upper, .. } = &*var {
-                if let Some(s) =
+            if let VariableNode::Simple { upper, .. } = &*var
+                && let Some(s) =
                     resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true)
-                {
-                    return Ok(format!("{}[{}]", s, idx));
-                }
+            {
+                return Ok(format!("{}[{}]", s, idx));
             }
             let base = resolve_variable_c_expr(&var, &[])?;
             Ok(format!("{}[{}]", base, idx))
@@ -414,7 +412,8 @@ pub(super) fn generate_condition_expr(
                                     Location::Codegen,
                                     "BitAccess на float-порт не поддерживается в условии"
                                         .to_string(),
-                                ));
+                                )
+                                .with_code("CC-001"));
                             }
                             let model_name =
                                 if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade()) {
@@ -451,7 +450,8 @@ pub(super) fn generate_condition_expr(
                 return Err(Diagnostic::error(
                     Location::Codegen,
                     "Неразрешённая функция в условии перехода".to_string(),
-                ));
+                )
+                .with_code("CC-002"));
             }
             let fn_name = get_function_name(&fun);
             let args_strs: Result<Vec<_>, _> = args
@@ -476,7 +476,8 @@ pub(super) fn generate_condition_expr(
         ConditionNode::Model(_) | ConditionNode::State(_) => Err(Diagnostic::error(
             Location::Codegen,
             "Ссылки на модели и состояния не поддерживаются в условиях переходов".to_string(),
-        )),
+        )
+        .with_code("CC-003")),
     }
 }
 
@@ -844,7 +845,8 @@ pub(super) fn generate_expr(
                             return Err(Diagnostic::error(
                                 Location::Codegen,
                                 "BitAccess на float-порт не поддерживается при записи".to_string(),
-                            ));
+                            )
+                            .with_code("CC-001"));
                         }
                         let model_name = if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade())
                         {
@@ -995,7 +997,8 @@ pub(super) fn generate_expr(
                                 return Err(Diagnostic::error(
                                     Location::Codegen,
                                     "BitAccess на float-порт не поддерживается".to_string(),
-                                ));
+                                )
+                                .with_code("CC-001"));
                             }
                             let model_name =
                                 if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade()) {
@@ -1162,9 +1165,11 @@ pub(super) fn generate_code_block(
         StatementNode::Loop { cond, body } => {
             match cond {
                 None => {
-                    printer.ident("while (true) ");
+                    // Бесконечный цикл
+                    printer.ident("while (true) {").up().nl();
                 }
                 Some(cond_expr) => {
+                    // Цикл с условием
                     printer.ident("while (");
                     generate_stmt_expression(
                         printer,
@@ -1174,11 +1179,11 @@ pub(super) fn generate_code_block(
                         cond_expr,
                         has_model,
                     )?;
-                    printer.print(") ");
+                    printer.print(") {").up().nl();
                 }
             }
             generate_code_block(printer, map, owner, params.clone(), body, has_model)?;
-            printer.nl();
+            printer.down().ident("}").nl();
         }
 
         StatementNode::For {
@@ -1223,9 +1228,9 @@ pub(super) fn generate_code_block(
                         has_model,
                     )?;
                 }
-                printer.print(") ");
+                printer.print(") {").up().nl();
                 generate_code_block(printer, map, owner, params.clone(), body, has_model)?;
-                printer.nl();
+                printer.down().ident("}").nl();
                 printer.down();
                 printer.ident("}").nl();
             } else {
@@ -1267,9 +1272,9 @@ pub(super) fn generate_code_block(
                         has_model,
                     )?;
                 }
-                printer.print(") ");
+                printer.print(") {").up().nl();
                 generate_code_block(printer, map, owner, params.clone(), body, has_model)?;
-                printer.nl();
+                printer.down().ident("}").nl();
             }
         }
 

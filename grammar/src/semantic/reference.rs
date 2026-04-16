@@ -72,7 +72,7 @@ pub fn resolve_state_references(state: &StateNode) -> Result<StateNode, Diagnost
             named_blocks: named_blocks.clone(),
             name: name.clone(),
             references: resolve_references(references, state)?,
-            kind: kind.clone(),
+            kind: *kind,
         }),
         StateNode::Implement {
             upper,
@@ -91,7 +91,7 @@ pub fn resolve_state_references(state: &StateNode) -> Result<StateNode, Diagnost
             references: resolve_references(references, state)?,
             implements: implements.clone(),
             next: next.clone(),
-            kind: kind.clone(),
+            kind: *kind,
         }),
         other => Ok(other.clone()),
     }

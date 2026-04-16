@@ -46,7 +46,7 @@ fn extract_name(id: Option<Identifier>, loc: Location) -> Result<String, Diagnos
     if let Some(id) = id {
         Ok(id.name.clone())
     } else {
-        Err(Diagnostic::error(loc, "Идентификатор не задан".to_string()))
+        Err(Diagnostic::error(loc, "Идентификатор не задан".to_string()).with_code("SE-021"))
     }
 }
 
@@ -70,10 +70,10 @@ fn check_import_cycle(
         // Строим цепочку начиная с точки входа цикла
         let mut chain: Vec<&str> = import_stack[pos..].iter().map(|s| s.as_str()).collect();
         chain.push(new_file);
-        return Err(Diagnostic::error(
-            loc,
-            format!("Циклический импорт: {}", chain.join(" → ")),
-        ));
+        return Err(
+            Diagnostic::error(loc, format!("Циклический импорт: {}", chain.join(" → ")))
+                .with_code("SE-013"),
+        );
     }
     Ok(())
 }
@@ -136,7 +136,8 @@ fn construct_model_stage0(
                 return Err(Diagnostic::declaration_error(
                     model.borrow().loc,
                     format!("Модель с именем '{}' уже объявлена", &model_name),
-                ));
+                )
+                .with_code("SE-006"));
             }
             models.insert(model_name, model);
         } else if let ModelElement::Import(def) = element {
@@ -156,6 +157,7 @@ fn construct_model_stage0(
                                 *import_loc,
                                 format!("Неверный путь к файлу импорта: «{}»", filename),
                             )
+                            .with_code("SE-013")
                         })?
                         .to_string_lossy();
                     let model_name = normalize_camelcase_name(&stem);
@@ -163,7 +165,8 @@ fn construct_model_stage0(
                         return Err(Diagnostic::declaration_error(
                             *import_loc,
                             format!("Модель с именем '{}' уже объявлена", &model_name),
-                        ));
+                        )
+                        .with_code("SE-006"));
                     }
                     match parse(&content, 0) {
                         Ok((model, _)) => {
@@ -186,7 +189,8 @@ fn construct_model_stage0(
                         return Err(Diagnostic::declaration_error(
                             id.loc,
                             format!("Модель с именем '{}' уже объявлена", &model_name),
-                        ));
+                        )
+                        .with_code("SE-006"));
                     }
                     match parse(&content, 0) {
                         Ok((model, _)) => {
@@ -237,7 +241,8 @@ fn construct_model_stage0(
                                 return Err(Diagnostic::declaration_error(
                                     sym_loc,
                                     format!("Модель с именем '{}' уже объявлена", alias),
-                                ));
+                                )
+                                .with_code("SE-006"));
                             }
                             models.insert(alias, Rc::clone(m));
                         } else if let Some(t) = src.types.get(orig) {
@@ -245,7 +250,8 @@ fn construct_model_stage0(
                                 return Err(Diagnostic::declaration_error(
                                     sym_loc,
                                     format!("Тип '{}' уже объявлен", alias),
-                                ));
+                                )
+                                .with_code("SE-007"));
                             }
                             model_node.borrow_mut().types.insert(alias, t.clone());
                         } else if let Some(v) = src.variables.get(orig) {
@@ -253,7 +259,8 @@ fn construct_model_stage0(
                                 return Err(Diagnostic::declaration_error(
                                     sym_loc,
                                     format!("Переменная '{}' уже объявлена", alias),
-                                ));
+                                )
+                                .with_code("SE-005"));
                             }
                             variables.insert(alias, v.clone());
                         } else if let Some(c) = src.conditions.get(orig) {
@@ -261,14 +268,16 @@ fn construct_model_stage0(
                                 return Err(Diagnostic::declaration_error(
                                     sym_loc,
                                     format!("Условие '{}' уже объявлено", alias),
-                                ));
+                                )
+                                .with_code("SE-008"));
                             }
                             conditions.insert(alias, c.clone());
                         } else {
                             return Err(Diagnostic::declaration_error(
                                 orig_id.loc,
                                 format!("Идентификатор '{}' не найден в импортируемом файле", orig),
-                            ));
+                            )
+                            .with_code("SE-017"));
                         }
                     }
                 }
@@ -291,7 +300,7 @@ fn construct_model_stage0(
                             name: name.clone(),
                             ty: construct_type(typ, model_node.clone())?,
                             expr: initializer
-                                .map(|e| ExpressionNode::Unresolved(e))
+                                .map(ExpressionNode::Unresolved)
                                 .unwrap_or(ExpressionNode::None),
                         },
                     )
@@ -308,7 +317,8 @@ fn construct_model_stage0(
                         return Err(Diagnostic::error(
                             loc,
                             "Порт должен иметь конкретный тип".to_string(),
-                        ));
+                        )
+                        .with_code("SE-023"));
                     }
                     variables.insert(
                         name.clone(),
@@ -331,6 +341,7 @@ fn construct_model_stage0(
                                             loc,
                                             "Порт должен быть инициализирован адресом".to_string(),
                                         )
+                                        .with_code("SE-024")
                                     })?,
                             ),
                         },
@@ -383,6 +394,7 @@ fn construct_model_stage0(
                         def_loc,
                         "Условие при определении должно иметь имя".to_string(),
                     )
+                    .with_code("SE-019")
                 })?
                 .name
                 .clone();
@@ -404,6 +416,7 @@ fn construct_model_stage0(
                         def.loc,
                         "Именованный блок кода при определении должен иметь имя".to_string(),
                     )
+                    .with_code("SE-018")
                 })?
                 .name
                 .clone();
@@ -441,6 +454,7 @@ fn construct_model_stage0(
                         def.loc,
                         "При определении функция должна иметь имя".to_string(),
                     )
+                    .with_code("SE-022")
                 })?
                 .name
                 .clone();
@@ -1052,7 +1066,10 @@ pub fn construct_states(
             let name = def
                 .clone()
                 .name
-                .ok_or_else(|| Diagnostic::error(def.loc, "Имя состояния не задано".to_string()))?
+                .ok_or_else(|| {
+                    Diagnostic::error(def.loc, "Имя состояния не задано".to_string())
+                        .with_code("SE-020")
+                })?
                 .name;
             let implements = def.implements.clone();
             let kind = def.kind.clone();
@@ -1076,7 +1093,8 @@ pub fn construct_states(
                         return Err(Diagnostic::error(
                             id.loc,
                             format!("Состояние '{}' уже содержит оператор next", &id.name),
-                        ));
+                        )
+                        .with_code("SE-012"));
                     }
                     next = Some(id.name.clone());
                 }
@@ -1097,7 +1115,8 @@ pub fn construct_states(
                             def.loc,
                             "Состояние с типом next не поддерживается в качестве определения"
                                 .to_string(),
-                        ));
+                        )
+                        .with_code("SE-021"));
                     }
                 },
             };
@@ -1172,13 +1191,14 @@ pub fn construct_states(
                 let resolved = resolve_references(references, &states)?;
                 // Разрешаем next-ссылку отдельно (это одиночный Reference, не список).
                 let next = next
-                    .map(|r| {
+                    .map(|r| -> Result<ReferenceNode<StateNode>, Diagnostic> {
                         if let StateNode::Unresolved = *r.object {
                             let target = states.get(&r.name).ok_or_else(|| {
                                 Diagnostic::error(
                                     r.location,
                                     format!("Ссылка '{}' не найдена", &r.name),
                                 )
+                                .with_code("SE-002")
                             })?;
                             Ok(ReferenceNode {
                                 location: r.location,
@@ -1227,6 +1247,7 @@ fn resolve_references(
             if let StateNode::Unresolved = *r.object {
                 let target = states.get(&r.name).ok_or_else(|| {
                     Diagnostic::error(r.location, format!("Ссылка '{}' не найдена", &r.name))
+                        .with_code("SE-002")
                 })?;
                 Ok(ReferenceNode {
                     location: r.location,
@@ -1264,6 +1285,7 @@ fn construct_named_blocks(
                         def.loc,
                         "Именованный блок кода при определении должен иметь имя".to_string(),
                     )
+                    .with_code("SE-018")
                 })?
                 .name
                 .clone();

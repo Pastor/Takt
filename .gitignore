@@ -13,4 +13,4 @@ extensions/zed-but/Cargo.lock
 extensions/zed-but/extension.wasm
 /examples/example.pdf
 /*.o
-/grammar/.output/*.o
+/grammar/.output

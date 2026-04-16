@@ -118,6 +118,7 @@ fn unroll_expression_ast(
             let borrowed = model.as_ref().borrow();
             let found = borrowed.search_model(&id.name).ok_or_else(|| {
                 Diagnostic::error(id.loc, format!("Модель '{}' не найдена", &id.name))
+                    .with_code("SE-001")
             })?;
             Ok(ExpressionNode::Model(Rc::clone(&found)))
         }

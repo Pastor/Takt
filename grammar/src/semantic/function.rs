@@ -35,13 +35,17 @@ pub fn construct_function(
         let name = def
             .clone()
             .name
-            .ok_or_else(|| "При определении функция должна иметь имя".into())?
+            .ok_or_else(|| {
+                Diagnostic::from("При определении функция должна иметь имя")
+                    .with_code("SE-022")
+            })?
             .name
             .clone();
         if model.borrow().functions.contains_key(&name) {
-            Err(format!("Функция с именем '{}' уже определена", name)
-                .as_str()
-                .into())
+            Err(Diagnostic::from(
+                format!("Функция с именем '{}' уже определена", name).as_str(),
+            )
+            .with_code("SE-009"))
         } else {
             let mut params = Vec::new();
             for (_, param) in def.params.iter() {
@@ -70,7 +74,7 @@ pub fn construct_function(
                 }
             }
             let rett = match def.return_type {
-                Some(t) => construct_type(Some(t), model.clone()).map_err(|e| e)?,
+                Some(t) => construct_type(Some(t), model.clone())?,
                 None => TypeNode::Unit,
             };
             if def.external {

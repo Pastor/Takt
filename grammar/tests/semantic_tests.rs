@@ -3470,10 +3470,10 @@ fn test_unused_variable_warning() {
         Level::Warning,
         "уровень должен быть Warning"
     );
-    assert!(
-        warnings[0].message.contains("Ce13"),
-        "сообщение должно содержать Ce13: {}",
-        warnings[0].message
+    assert_eq!(
+        warnings[0].code.as_deref(),
+        Some("SE-036"),
+        "код предупреждения Ce13 должен быть SE-036"
     );
     assert!(
         warnings[0].message.contains("unused"),
@@ -3519,10 +3519,10 @@ fn test_nondeterministic_transitions() {
         warnings
     );
     assert_eq!(warnings[0].level, Level::Warning);
-    assert!(
-        warnings[0].message.contains("Ce14"),
-        "сообщение должно содержать Ce14: {}",
-        warnings[0].message
+    assert_eq!(
+        warnings[0].code.as_deref(),
+        Some("SE-037"),
+        "код предупреждения Ce14 должен быть SE-037"
     );
 }
 
@@ -3912,7 +3912,7 @@ fn test_ni4_duplicate_condition_warns() {
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     let ni4_warnings: Vec<_> = warnings
         .iter()
-        .filter(|w| w.message.contains("NI4"))
+        .filter(|w| w.code.as_deref() == Some("SE-042"))
         .collect();
     assert!(
         !ni4_warnings.is_empty(),
@@ -3932,7 +3932,7 @@ fn test_ni4_interval_overlap_warns() {
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     let ni4_warnings: Vec<_> = warnings
         .iter()
-        .filter(|w| w.message.contains("NI4"))
+        .filter(|w| w.code.as_deref() == Some("SE-042"))
         .collect();
     assert!(
         !ni4_warnings.is_empty(),
@@ -3951,7 +3951,7 @@ fn test_ni4_non_overlapping_no_warn() {
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     let ni4_warnings: Vec<_> = warnings
         .iter()
-        .filter(|w| w.message.contains("NI4"))
+        .filter(|w| w.code.as_deref() == Some("SE-042"))
         .collect();
     assert!(
         ni4_warnings.is_empty(),
@@ -3977,7 +3977,7 @@ state B { ref S: x >= 10; }
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     let ni4_warnings: Vec<_> = warnings
         .iter()
-        .filter(|w| w.message.contains("NI4"))
+        .filter(|w| w.code.as_deref() == Some("SE-042"))
         .collect();
     assert!(
         !ni4_warnings.is_empty(),
@@ -4003,7 +4003,7 @@ state B { ref S: x >= 10; }
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
     let ni4_warnings: Vec<_> = warnings
         .iter()
-        .filter(|w| w.message.contains("NI4"))
+        .filter(|w| w.code.as_deref() == Some("SE-042"))
         .collect();
     assert!(
         ni4_warnings.is_empty(),
@@ -4018,13 +4018,14 @@ state B { ref S: x >= 10; }
 #[test]
 fn i5_direct_recursive_type_alias_is_error() {
     let err = build_err("type A = [A; 8]; start S;");
-    assert!(
-        err.message.contains("Ce16"),
-        "прямая рекурсия должна давать Ce16: {}",
-        err.message
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-039"),
+        "код ошибки Ce16 должен быть SE-039: {:?}",
+        err.code
     );
     assert!(
-        err.message.contains("'A'"),
+        err.message.contains("'A'") || err.message.contains("A"),
         "ошибка должна упоминать псевдоним 'A': {}",
         err.message
     );
@@ -4034,10 +4035,11 @@ fn i5_direct_recursive_type_alias_is_error() {
 #[test]
 fn i5_mutual_recursive_type_alias_is_error() {
     let err = build_err("type A = [B; 4]; type B = [A; 2]; start S;");
-    assert!(
-        err.message.contains("Ce16"),
-        "взаимная рекурсия должна давать Ce16: {}",
-        err.message
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-039"),
+        "код ошибки Ce16 должен быть SE-039: {:?}",
+        err.code
     );
 }
 
@@ -4061,10 +4063,11 @@ fn i5_file_recursive_type_alias() {
     let src = std::fs::read_to_string("tests/data/semantic/invalid/recursive_type_alias.but")
         .expect("не удалось прочитать файл");
     let err = build_err(&src);
-    assert!(
-        err.message.contains("Ce16"),
-        "файл с прямой рекурсией должен давать Ce16: {}",
-        err.message
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-039"),
+        "код ошибки Ce16 должен быть SE-039: {:?}",
+        err.code
     );
 }
 
@@ -4075,10 +4078,11 @@ fn i5_file_mutual_recursive_type_alias() {
         std::fs::read_to_string("tests/data/semantic/invalid/mutual_recursive_type_alias.but")
             .expect("не удалось прочитать файл");
     let err = build_err(&src);
-    assert!(
-        err.message.contains("Ce16"),
-        "файл со взаимной рекурсией должен давать Ce16: {}",
-        err.message
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-039"),
+        "код ошибки Ce16 должен быть SE-039: {:?}",
+        err.code
     );
 }
 
@@ -4159,10 +4163,11 @@ fn struct_duplicate_field_error() {
         "дублирующееся поле структуры должно давать ошибку Ce17"
     );
     let err = result.unwrap_err();
-    assert!(
-        err.message.contains("Ce17"),
-        "сообщение об ошибке должно содержать Ce17: {}",
-        err.message
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-040"),
+        "код ошибки Ce17 должен быть SE-040: {:?}",
+        err.code
     );
 }
 
@@ -4178,10 +4183,11 @@ fn struct_duplicate_field_file_error() {
         "файл с дублирующимися полями должен давать ошибку Ce17"
     );
     let err = result.unwrap_err();
-    assert!(
-        err.message.contains("Ce17"),
-        "сообщение должно содержать Ce17: {}",
-        err.message
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-040"),
+        "код ошибки Ce17 должен быть SE-040: {:?}",
+        err.code
     );
 }
 

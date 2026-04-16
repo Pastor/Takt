@@ -19,7 +19,6 @@ use crate::diagnostics::Diagnostic;
 use crate::semantic::FunctionDefinitionNode;
 use crate::semantic::type_node::TypeNode;
 use phf::phf_map;
-use std::convert::Into;
 
 /// Статическая таблица встроенных функций языка BuT.
 ///
@@ -47,9 +46,12 @@ const BUILTIN_FUNCTIONS: phf::Map<&'static str, FunctionDefinitionNode> = phf_ma
 /// start A = S(M) { }    // встроенная функция S
 /// ```
 pub fn builtin_function(name: &str) -> Result<&FunctionDefinitionNode, Diagnostic> {
-    Ok(BUILTIN_FUNCTIONS
+    BUILTIN_FUNCTIONS
         .get(name)
-        .ok_or_else(|| format!("Неизвестная функция '{}'", name).as_str().into())?)
+        .ok_or_else(|| {
+            Diagnostic::from(format!("Неизвестная функция '{}'", name).as_str())
+                .with_code("SE-004")
+        })
 }
 
 // ── Тесты ─────────────────────────────────────────────────────────────────────

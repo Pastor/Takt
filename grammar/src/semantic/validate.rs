@@ -71,7 +71,8 @@ fn model_only_one_start_state(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagn
                 "В модели '{}' должно быть только одно начальное состояние (найдено: {})",
                 name, start_count
             ),
-        ));
+        )
+        .with_code("SE-011"));
     }
     Ok(())
 }
@@ -92,19 +93,20 @@ fn check_bit_variable_value(
     expr: &ExpressionNode,
     loc: Location,
 ) -> Result<(), Diagnostic> {
-    if *ty == TypeNode::Bit {
-        if let ExpressionNode::Number(n) = expr {
-            if *n != 0 && *n != 1 {
-                return Err(Diagnostic::error(
-                    loc,
-                    format!(
-                        "Переменная '{}' имеет тип bit, но инициализирована значением {} \
-                         (допустимые числовые значения: 0 или 1)",
-                        name, n
-                    ),
-                ));
-            }
-        }
+    if *ty == TypeNode::Bit
+        && let ExpressionNode::Number(n) = expr
+        && *n != 0
+        && *n != 1
+    {
+        return Err(Diagnostic::error(
+            loc,
+            format!(
+                "Переменная '{}' имеет тип bit, но инициализирована значением {} \
+                 (допустимые числовые значения: 0 или 1)",
+                name, n
+            ),
+        )
+        .with_code("SE-035"));
     }
     Ok(())
 }
@@ -150,7 +152,7 @@ fn validate_cond(
                     && let FunctionDefinitionNode::Builtin(name, ..) = *func.borrow()
                     && name == "S"
                     && args.len() == 1
-                    && let Some(cond) = args.get(0)
+                    && let Some(cond) = args.first()
                     && let ConditionNode::Model(model) = *cond.clone()
                 {
                     let model = model.borrow();
@@ -166,6 +168,7 @@ fn validate_cond(
                                 &id.name, &model_name
                             ),
                         )
+                        .with_code("SE-033")
                     })?;
                     return Ok(());
                 }
@@ -175,7 +178,8 @@ fn validate_cond(
                 return Err(Diagnostic::error(
                     cond.loc(),
                     format!("Неразрешённое условие: {:?}", cond),
-                ));
+                )
+                .with_code("SE-025"));
             }
         }
         ConditionNode::ArraySubscript(_, _) => {}
@@ -509,14 +513,17 @@ fn emit_implicit_bool_warning(
     out: &mut Vec<Diagnostic>,
 ) {
     let verb = if is_next { "next к" } else { "к" };
-    out.push(Diagnostic::warning(
-        loc,
-        format!(
-            "{}: условие перехода {} '{}' содержит {} — \
-             рекомендуется явное сравнение (например, '!= 0')",
-            prefix, verb, target_name, summary
-        ),
-    ));
+    out.push(
+        Diagnostic::warning(
+            loc,
+            format!(
+                "{}: условие перехода {} '{}' содержит {} — \
+                 рекомендуется явное сравнение (например, '!= 0')",
+                prefix, verb, target_name, summary
+            ),
+        )
+        .with_code("SE-037"),
+    );
 }
 
 /// Проверяет, является ли разрешённое семантическое условие гарантированно булевым.
@@ -626,18 +633,16 @@ fn check_one_ref(
 ) {
     match cond {
         // ── Основной путь: разрешённое семантическое условие ──────────────────
-        cond if !matches!(cond, ConditionNode::Unresolved(_)) => {
-            if !is_boolean_semantic_condition(cond) {
-                let summary = semantic_condition_summary(cond);
-                emit_implicit_bool_warning(loc, prefix, target_name, &summary, is_next, out);
-            }
+        cond if !matches!(cond, ConditionNode::Unresolved(_))
+            && !is_boolean_semantic_condition(cond) =>
+        {
+            let summary = semantic_condition_summary(cond);
+            emit_implicit_bool_warning(loc, prefix, target_name, &summary, is_next, out);
         }
         // ── Запасной путь: условие не разрешено (например, S(Model).StateName) ──
-        ConditionNode::Unresolved(ast_cond) => {
-            if !is_boolean_ast_condition(ast_cond, model) {
-                let summary = ast_condition_summary(ast_cond, model);
-                emit_implicit_bool_warning(loc, prefix, target_name, &summary, is_next, out);
-            }
+        ConditionNode::Unresolved(ast_cond) if !is_boolean_ast_condition(ast_cond, model) => {
+            let summary = ast_condition_summary(ast_cond, model);
+            emit_implicit_bool_warning(loc, prefix, target_name, &summary, is_next, out);
         }
         _ => {}
     }
@@ -765,17 +770,18 @@ fn validate_enum_type_declarations(model: Rc<RefCell<ModelNode>>) -> Result<(), 
         .collect();
 
     for (var_name, ty, loc) in vars {
-        if let TypeNode::Enum(enum_name) = &ty {
-            if model.borrow().search_enum(enum_name).is_none() {
-                return Err(Diagnostic::declaration_error(
-                    loc,
-                    format!(
-                        "Ce4: переменная '{}' объявлена с типом '{}', \
-                         но перечисление '{}' не найдено в области видимости",
-                        var_name, enum_name, enum_name
-                    ),
-                ));
-            }
+        if let TypeNode::Enum(enum_name) = &ty
+            && model.borrow().search_enum(enum_name).is_none()
+        {
+            return Err(Diagnostic::declaration_error(
+                loc,
+                format!(
+                    "переменная '{}' объявлена с типом '{}', \
+                     но перечисление '{}' не найдено в области видимости",
+                    var_name, enum_name, enum_name
+                ),
+            )
+            .with_code("SE-035"));
         }
     }
     Ok(())
@@ -799,22 +805,20 @@ pub const MAX_ARRAY_SIZE: u16 = 1024;
 ///
 /// Проверяет как внешний, так и вложенные (многомерные) массивы.
 pub(crate) fn check_type_array_size(ty: &TypeNode, loc: Location) -> Result<(), Diagnostic> {
-    match ty {
-        TypeNode::Array(size, elem) => {
-            if *size > MAX_ARRAY_SIZE {
-                return Err(Diagnostic::error(
-                    loc.clone(),
-                    format!(
-                        "Ce15: размер массива {} превышает максимально допустимый {} (2^10). \
-                         Используйте динамическую память или разбейте массив на части.",
-                        size, MAX_ARRAY_SIZE
-                    ),
-                ));
-            }
-            // Рекурсивная проверка вложенных массивов (многомерные типы)
-            check_type_array_size(elem, loc)?;
+    if let TypeNode::Array(size, elem) = ty {
+        if *size > MAX_ARRAY_SIZE {
+            return Err(Diagnostic::error(
+                loc,
+                format!(
+                    "размер массива {} превышает максимально допустимый {} (2^10). \
+                     Используйте динамическую память или разбейте массив на части.",
+                    size, MAX_ARRAY_SIZE
+                ),
+            )
+            .with_code("SE-038"));
         }
-        _ => {}
+        // Рекурсивная проверка вложенных массивов (многомерные типы)
+        check_type_array_size(elem, loc)?;
     }
     Ok(())
 }
@@ -911,21 +915,24 @@ pub fn check_type_alias_cycles_ast(
             continue;
         }
         let mut stack: HashSet<String> = HashSet::new();
-        if let Some(cycle_start) = dfs_type_cycle(name, raw_defs, &mut visited, &mut stack) {
-            if !reported.contains(&cycle_start) {
-                reported.insert(cycle_start.clone());
-                let loc = type_locs
-                    .get(&cycle_start)
-                    .copied()
-                    .unwrap_or(Location::Implicit);
-                diags.push(Diagnostic::error(
+        if let Some(cycle_start) = dfs_type_cycle(name, raw_defs, &mut visited, &mut stack)
+            && !reported.contains(&cycle_start)
+        {
+            reported.insert(cycle_start.clone());
+            let loc = type_locs
+                .get(&cycle_start)
+                .copied()
+                .unwrap_or(Location::Implicit);
+            diags.push(
+                Diagnostic::error(
                     loc,
                     format!(
-                        "Ce16: псевдоним типа '{}' образует циклическую зависимость",
+                        "псевдоним типа '{}' образует циклическую зависимость",
                         cycle_start
                     ),
-                ));
-            }
+                )
+                .with_code("SE-039"),
+            );
         }
     }
 
@@ -1075,14 +1082,17 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
 
     // Правило Ce5.2: нет терминальных состояний вообще
     if terminal_states.is_empty() {
-        out.push(Diagnostic::warning(
-            model_loc,
-            format!(
-                "{}в модели нет терминальных состояний (состояний без переходов); \
-                 автомат не может завершить работу",
-                model_prefix
-            ),
-        ));
+        out.push(
+            Diagnostic::warning(
+                model_loc,
+                format!(
+                    "{}в модели нет терминальных состояний (состояний без переходов); \
+                     автомат не может завершить работу",
+                    model_prefix
+                ),
+            )
+            .with_code("SE-010"),
+        );
     }
 
     // Строим граф переходов: имя_состояния -> список целей
@@ -1139,13 +1149,16 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
                 found
             };
             if !can_reach {
-                out.push(Diagnostic::warning(
-                    state.loc(),
-                    format!(
-                        "{}состояние '{}' не имеет пути к терминальному состоянию",
-                        model_prefix, state_name
-                    ),
-                ));
+                out.push(
+                    Diagnostic::warning(
+                        state.loc(),
+                        format!(
+                            "{}состояние '{}' не имеет пути к терминальному состоянию",
+                            model_prefix, state_name
+                        ),
+                    )
+                    .with_code("SE-010"),
+                );
             }
         }
     }
@@ -1161,14 +1174,17 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
         {
             // Правило Ce5.3: ref + next одновременно → предупреждение
             if next.is_some() && !references.is_empty() {
-                out.push(Diagnostic::warning(
-                    state.loc(),
-                    format!(
-                        "{}состояние '{}' содержит ref-переходы совместно с next: \
-                         переходы ref недостижимы после выполнения next",
-                        model_prefix, name
-                    ),
-                ));
+                out.push(
+                    Diagnostic::warning(
+                        state.loc(),
+                        format!(
+                            "{}состояние '{}' содержит ref-переходы совместно с next: \
+                             переходы ref недостижимы после выполнения next",
+                            model_prefix, name
+                        ),
+                    )
+                    .with_code("SE-012"),
+                );
             }
         }
     }
@@ -2049,7 +2065,11 @@ mod tests {
         };
         let errors = check_enum_type_safety(model_rc);
         assert_eq!(errors.len(), 1, "значение 99 недопустимо для Direction");
-        assert!(errors[0].message.contains("NI6"));
+        assert_eq!(
+            errors[0].code.as_deref(),
+            Some("SE-043"),
+            "код ошибки NI6 должен быть SE-043"
+        );
         assert!(errors[0].message.contains("99"));
     }
 
@@ -2267,10 +2287,11 @@ mod tests_ce4_declarations {
             "сообщение должно содержать имя отсутствующего enum: {}",
             err.message
         );
-        assert!(
-            err.message.contains("Ce4"),
-            "сообщение должно содержать код ошибки Ce4: {}",
-            err.message
+        assert_eq!(
+            err.code.as_deref(),
+            Some("SE-035"),
+            "код ошибки Ce4 должен быть SE-035: {:?}",
+            err.code
         );
     }
 
@@ -2375,10 +2396,11 @@ mod tests_ce15_array_size {
             "массив размером MAX_ARRAY_SIZE+1 должен давать ошибку Ce15"
         );
         let err = result.unwrap_err();
-        assert!(
-            err.message.contains("Ce15"),
-            "сообщение должно содержать код Ce15: {}",
-            err.message
+        assert_eq!(
+            err.code.as_deref(),
+            Some("SE-038"),
+            "код ошибки Ce15 должен быть SE-038: {:?}",
+            err.code
         );
     }
 
@@ -2600,13 +2622,16 @@ fn check_nondeterministic_model(model: Rc<RefCell<ModelNode>>, warnings: &mut Ve
             .count();
 
         if unconditional_count > 1 {
-            warnings.push(Diagnostic::warning(
-                state.loc(),
-                format!(
-                    "Ce14: {}: {} безусловных перехода(ов) — недетерминированное поведение",
-                    prefix, unconditional_count
-                ),
-            ));
+            warnings.push(
+                Diagnostic::warning(
+                    state.loc(),
+                    format!(
+                        "{}: {} безусловных перехода(ов) — недетерминированное поведение",
+                        prefix, unconditional_count
+                    ),
+                )
+                .with_code("SE-037"),
+            );
         }
 
         // NI4: Анализ структурного и интервального перекрытия условных переходов
@@ -2622,14 +2647,17 @@ fn check_nondeterministic_model(model: Rc<RefCell<ModelNode>>, warnings: &mut Ve
 
                 // Структурно одинаковые условия — гарантированное перекрытие
                 if cond_i == cond_j {
-                    warnings.push(Diagnostic::warning(
-                        conditional[i].location.clone(),
-                        format!(
-                            "NI4: {}: переходы в '{}' и '{}' имеют одинаковое условие — \
-                             гарантированное недетерминированное поведение",
-                            prefix, conditional[i].name, conditional[j].name
-                        ),
-                    ));
+                    warnings.push(
+                        Diagnostic::warning(
+                            conditional[i].location,
+                            format!(
+                                "{}: переходы в '{}' и '{}' имеют одинаковое условие — \
+                                 гарантированное недетерминированное поведение",
+                                prefix, conditional[i].name, conditional[j].name
+                            ),
+                        )
+                        .with_code("SE-042"),
+                    );
                     continue;
                 }
 
@@ -2640,14 +2668,17 @@ fn check_nondeterministic_model(model: Rc<RefCell<ModelNode>>, warnings: &mut Ve
                 ) {
                     // Условия на одну и ту же переменную
                     if var_i == var_j && constraints_overlap(&constr_i, &constr_j) {
-                        warnings.push(Diagnostic::warning(
-                            conditional[i].location.clone(),
-                            format!(
-                                "NI4: {}: условия переходов в '{}' и '{}' могут одновременно \
-                                 выполняться — возможное перекрытие",
-                                prefix, conditional[i].name, conditional[j].name
-                            ),
-                        ));
+                        warnings.push(
+                            Diagnostic::warning(
+                                conditional[i].location,
+                                format!(
+                                    "{}: условия переходов в '{}' и '{}' могут одновременно \
+                                     выполняться — возможное перекрытие",
+                                    prefix, conditional[i].name, conditional[j].name
+                                ),
+                            )
+                            .with_code("SE-042"),
+                        );
                     }
                 }
             }
@@ -2691,36 +2722,36 @@ fn check_enum_expr(
                 if let VariableNode::Simple { name, ty, .. }
                 | VariableNode::Port { name, ty, .. }
                 | VariableNode::Const { name, ty, .. } = &*borrowed
+                    && let TypeNode::Enum(enum_name) = ty
+                    && let ExpressionNode::Number(n) = right.as_ref()
+                    && !is_valid_enum_value(enum_name, *n, model)
                 {
-                    if let TypeNode::Enum(enum_name) = ty {
-                        if let ExpressionNode::Number(n) = right.as_ref() {
-                            if !is_valid_enum_value(enum_name, *n, model) {
-                                let var_loc = borrowed.loc();
-                                let valid_values: Vec<String> = model
-                                    .borrow()
-                                    .search_enum(enum_name)
-                                    .map(|e| {
-                                        e.variants
-                                            .iter()
-                                            .map(|(vn, vv)| format!("{}={}", vn, vv))
-                                            .collect()
-                                    })
-                                    .unwrap_or_default();
-                                out.push(Diagnostic::type_error(
-                                    var_loc,
-                                    format!(
-                                        "NI6: присваивание переменной '{}' типа '{}' \
-                                         значения {} недопустимо — не является вариантом \
-                                         перечисления (допустимые варианты: {})",
-                                        name,
-                                        enum_name,
-                                        n,
-                                        valid_values.join(", ")
-                                    ),
-                                ));
-                            }
-                        }
-                    }
+                    let var_loc = borrowed.loc();
+                    let valid_values: Vec<String> = model
+                        .borrow()
+                        .search_enum(enum_name)
+                        .map(|e| {
+                            e.variants
+                                .iter()
+                                .map(|(vn, vv)| format!("{}={}", vn, vv))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    out.push(
+                        Diagnostic::type_error(
+                            var_loc,
+                            format!(
+                                "присваивание переменной '{}' типа '{}' \
+                                 значения {} недопустимо — не является вариантом \
+                                 перечисления (допустимые варианты: {})",
+                                name,
+                                enum_name,
+                                n,
+                                valid_values.join(", ")
+                            ),
+                        )
+                        .with_code("SE-043"),
+                    );
                 }
             }
             check_enum_expr(left, model, out);
@@ -2843,32 +2874,32 @@ fn check_enum_variable_value(
     loc: Location,
     model: &Rc<RefCell<ModelNode>>,
 ) -> Result<(), Diagnostic> {
-    if let TypeNode::Enum(enum_name) = ty {
-        if let ExpressionNode::Number(n) = expr {
-            if !is_valid_enum_value(enum_name, *n, model) {
-                let valid_values: Vec<String> = model
-                    .borrow()
-                    .search_enum(enum_name)
-                    .map(|e| {
-                        e.variants
-                            .iter()
-                            .map(|(vn, vv)| format!("{}={}", vn, vv))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                return Err(Diagnostic::error(
-                    loc,
-                    format!(
-                        "NI6: переменная '{}' имеет тип '{}', но инициализирована значением {} \
-                         — не является вариантом перечисления (допустимые варианты: {})",
-                        name,
-                        enum_name,
-                        n,
-                        valid_values.join(", ")
-                    ),
-                ));
-            }
-        }
+    if let TypeNode::Enum(enum_name) = ty
+        && let ExpressionNode::Number(n) = expr
+        && !is_valid_enum_value(enum_name, *n, model)
+    {
+        let valid_values: Vec<String> = model
+            .borrow()
+            .search_enum(enum_name)
+            .map(|e| {
+                e.variants
+                    .iter()
+                    .map(|(vn, vv)| format!("{}={}", vn, vv))
+                    .collect()
+            })
+            .unwrap_or_default();
+        return Err(Diagnostic::error(
+            loc,
+            format!(
+                "переменная '{}' имеет тип '{}', но инициализирована значением {} \
+                 — не является вариантом перечисления (допустимые варианты: {})",
+                name,
+                enum_name,
+                n,
+                valid_values.join(", ")
+            ),
+        )
+        .with_code("SE-043"));
     }
     Ok(())
 }
@@ -2886,8 +2917,8 @@ fn validate_enum_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic>
     let vars: Vec<(String, TypeNode, ExpressionNode, Location)> = model
         .borrow()
         .variables
-        .iter()
-        .filter_map(|(_, var)| match var {
+        .values()
+        .filter_map(|var| match var {
             VariableNode::Simple { name, ty, expr, .. }
             | VariableNode::Const { name, ty, expr, .. } => {
                 Some((name.clone(), ty.clone(), expr.clone(), var.loc()))
@@ -2907,8 +2938,8 @@ fn collect_enum_type_safety(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagno
     let vars: Vec<(String, TypeNode, ExpressionNode, Location)> = model
         .borrow()
         .variables
-        .iter()
-        .filter_map(|(_, var)| match var {
+        .values()
+        .filter_map(|var| match var {
             VariableNode::Simple { name, ty, expr, .. }
             | VariableNode::Const { name, ty, expr, .. } => {
                 Some((name.clone(), ty.clone(), expr.clone(), var.loc()))
@@ -2918,33 +2949,35 @@ fn collect_enum_type_safety(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagno
         .collect();
 
     for (name, ty, expr, loc) in &vars {
-        if let TypeNode::Enum(enum_name) = ty {
-            if let ExpressionNode::Number(n) = expr {
-                if !is_valid_enum_value(enum_name, *n, model) {
-                    let valid_values: Vec<String> = model
-                        .borrow()
-                        .search_enum(enum_name)
-                        .map(|e| {
-                            e.variants
-                                .iter()
-                                .map(|(vn, vv)| format!("{}={}", vn, vv))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    out.push(Diagnostic::type_error(
-                        *loc,
-                        format!(
-                            "NI6: переменная '{}' имеет тип '{}', но инициализирована \
-                             значением {} — не является вариантом перечисления \
-                             (допустимые варианты: {})",
-                            name,
-                            enum_name,
-                            n,
-                            valid_values.join(", ")
-                        ),
-                    ));
-                }
-            }
+        if let TypeNode::Enum(enum_name) = ty
+            && let ExpressionNode::Number(n) = expr
+            && !is_valid_enum_value(enum_name, *n, model)
+        {
+            let valid_values: Vec<String> = model
+                .borrow()
+                .search_enum(enum_name)
+                .map(|e| {
+                    e.variants
+                        .iter()
+                        .map(|(vn, vv)| format!("{}={}", vn, vv))
+                        .collect()
+                })
+                .unwrap_or_default();
+            out.push(
+                Diagnostic::type_error(
+                    *loc,
+                    format!(
+                        "переменная '{}' имеет тип '{}', но инициализирована \
+                         значением {} — не является вариантом перечисления \
+                         (допустимые варианты: {})",
+                        name,
+                        enum_name,
+                        n,
+                        valid_values.join(", ")
+                    ),
+                )
+                .with_code("SE-043"),
+            );
         }
     }
 
@@ -3042,13 +3075,16 @@ pub fn check_duplicate_struct_fields(model: Rc<RefCell<ModelNode>>) -> Option<Di
         let mut seen: HashSet<&str> = HashSet::new();
         for (field_name, _) in &s.fields {
             if !seen.insert(field_name.as_str()) {
-                return Some(Diagnostic::error(
-                    s.loc,
-                    format!(
-                        "Ce17: структура '{}' содержит дублирующееся поле '{}'",
-                        s.name, field_name
-                    ),
-                ));
+                return Some(
+                    Diagnostic::error(
+                        s.loc,
+                        format!(
+                            "структура '{}' содержит дублирующееся поле '{}'",
+                            s.name, field_name
+                        ),
+                    )
+                    .with_code("SE-040"),
+                );
             }
         }
     }
@@ -3098,13 +3134,16 @@ pub fn check_struct_field_types(model: Rc<RefCell<ModelNode>>) -> Option<Diagnos
             if let TypeNode::Struct(type_name) = field_ty {
                 // Проверяем, что структурный тип поля существует в области видимости
                 if model.borrow().search_struct(type_name).is_none() {
-                    return Some(Diagnostic::error(
-                        s.loc,
-                        format!(
-                            "Ce18: поле '{}' структуры '{}' ссылается на неизвестный тип '{}'",
-                            field_name, s.name, type_name
-                        ),
-                    ));
+                    return Some(
+                        Diagnostic::error(
+                            s.loc,
+                            format!(
+                                "поле '{}' структуры '{}' ссылается на неизвестный тип '{}'",
+                                field_name, s.name, type_name
+                            ),
+                        )
+                        .with_code("SE-041"),
+                    );
                 }
             }
         }

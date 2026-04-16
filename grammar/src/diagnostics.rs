@@ -12,6 +12,14 @@
 //! - [`Diagnostic`] — единица диагностики, объединяющая уровень, тип, сообщение
 //!   и список дополнительных замечаний.
 //!
+//! ## Коды ошибок
+//!
+//! Каждая диагностика может содержать код вида `XX-YYY`, где:
+//! - `LE` — лексические ошибки (лексер)
+//! - `SY` — синтаксические ошибки (парсер)
+//! - `SE` — семантические ошибки (анализ)
+//! - `CC` — ошибки кодогенерации Си
+//!
 //! ## Конвертации
 //!
 //! `Diagnostic` реализует `From<&str>` и `From<String>` для удобного создания
@@ -89,7 +97,13 @@ pub struct Note {
 /// Диагностическое сообщение, возникающее в процессе компиляции BuT-программы.
 ///
 /// Каждое сообщение содержит местоположение в исходном тексте, уровень серьёзности,
-/// категорию ошибки, основной текст и список вспомогательных заметок.
+/// категорию ошибки, основной текст, опциональный код ошибки и список замечаний.
+///
+/// # Коды ошибок
+///
+/// Поле [`code`](Diagnostic::code) содержит строку вида `XX-YYY` (например, `LE-001`),
+/// однозначно идентифицирующую тип ошибки. Используйте [`Diagnostic::with_code`]
+/// для назначения кода существующей диагностике.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Diagnostic {
     /// Местоположение в исходном тексте, к которому относится диагностика.
@@ -100,17 +114,21 @@ pub struct Diagnostic {
     pub ty: ErrorType,
     /// Текст диагностического сообщения.
     pub message: String,
+    /// Код ошибки в формате `XX-YYY` (например, `LE-001`, `SE-005`).
+    /// `None` если код не назначен.
+    pub code: Option<String>,
     /// Вспомогательные заметки.
     pub notes: Vec<Note>,
 }
 
-impl Into<Diagnostic> for &str {
-    fn into(self) -> Diagnostic {
+impl From<&str> for Diagnostic {
+    fn from(s: &str) -> Diagnostic {
         Diagnostic {
             loc: Default::default(),
             level: Level::Error,
             ty: ErrorType::SematicError,
-            message: self.to_string(),
+            message: s.to_string(),
+            code: None,
             notes: vec![],
         }
     }
@@ -124,6 +142,7 @@ impl Diagnostic {
             ty: ErrorType::None,
             loc,
             message,
+            code: None,
             notes: Vec::new(),
         }
     }
@@ -135,6 +154,7 @@ impl Diagnostic {
             ty: ErrorType::None,
             loc,
             message,
+            code: None,
             notes: Vec::new(),
         }
     }
@@ -146,6 +166,7 @@ impl Diagnostic {
             ty: ErrorType::ParserError,
             loc,
             message,
+            code: None,
             notes: Vec::new(),
         }
     }
@@ -157,6 +178,7 @@ impl Diagnostic {
             ty: ErrorType::SyntaxError,
             loc,
             message,
+            code: None,
             notes: Vec::new(),
         }
     }
@@ -168,6 +190,7 @@ impl Diagnostic {
             ty: ErrorType::DeclarationError,
             loc,
             message,
+            code: None,
             notes: Vec::new(),
         }
     }
@@ -179,6 +202,7 @@ impl Diagnostic {
             ty: ErrorType::CastError,
             loc,
             message,
+            code: None,
             notes: Vec::new(),
         }
     }
@@ -195,6 +219,7 @@ impl Diagnostic {
             ty: ErrorType::CastError,
             loc,
             message,
+            code: None,
             notes: vec![Note {
                 loc: note_loc,
                 message: note,
@@ -209,6 +234,7 @@ impl Diagnostic {
             ty: ErrorType::TypeError,
             loc,
             message,
+            code: None,
             notes: Vec::new(),
         }
     }
@@ -220,6 +246,7 @@ impl Diagnostic {
             ty: ErrorType::CastError,
             loc,
             message,
+            code: None,
             notes: Vec::new(),
         }
     }
@@ -231,6 +258,7 @@ impl Diagnostic {
             ty: ErrorType::Warning,
             loc,
             message,
+            code: None,
             notes: Vec::new(),
         }
     }
@@ -247,6 +275,7 @@ impl Diagnostic {
             ty: ErrorType::Warning,
             loc,
             message,
+            code: None,
             notes: vec![Note {
                 loc: note_loc,
                 message: note,
@@ -261,6 +290,7 @@ impl Diagnostic {
             ty: ErrorType::Warning,
             loc,
             message,
+            code: None,
             notes,
         }
     }
@@ -277,6 +307,7 @@ impl Diagnostic {
             ty: ErrorType::None,
             loc,
             message,
+            code: None,
             notes: vec![Note {
                 loc: note_loc,
                 message: note,
@@ -291,8 +322,37 @@ impl Diagnostic {
             ty: ErrorType::None,
             loc,
             message,
+            code: None,
             notes,
         }
+    }
+
+    /// Назначает код ошибки и возвращает изменённую диагностику (builder-метод).
+    ///
+    /// Код должен иметь формат `XX-YYY`, например `LE-001`, `SE-015`, `CC-003`.
+    ///
+    /// # Пример
+    ///
+    /// ```
+    /// use grammar::diagnostics::{Diagnostic, Location};
+    ///
+    /// let d = Diagnostic::error(Location::Builtin, "ошибка".to_string())
+    ///     .with_code("SE-001");
+    /// assert_eq!(d.code.as_deref(), Some("SE-001"));
+    /// ```
+    #[must_use]
+    pub fn with_code(mut self, code: &str) -> Self {
+        self.code = Some(code.to_string());
+        self
+    }
+
+    /// Возвращает форматированный префикс кода для вывода, например `[SE-001] `.
+    /// Если код не задан, возвращает пустую строку.
+    pub fn code_prefix(&self) -> String {
+        self.code
+            .as_deref()
+            .map(|c| format!("[{}] ", c))
+            .unwrap_or_default()
     }
 }
 
@@ -335,9 +395,9 @@ impl Location {
     pub fn begin_range(&self) -> Self {
         match self {
             Location::Source(filename, start, _) => {
-                Location::Source(filename.clone(), *start, *start)
+                Location::Source(*filename, *start, *start)
             }
-            loc => loc.clone(),
+            loc => *loc,
         }
     }
 
@@ -345,8 +405,8 @@ impl Location {
     #[inline]
     pub fn end_range(&self) -> Self {
         match self {
-            Location::Source(filename, _, end) => Location::Source(filename.clone(), *end, *end),
-            loc => loc.clone(),
+            Location::Source(filename, _, end) => Location::Source(*filename, *end, *end),
+            loc => *loc,
         }
     }
 

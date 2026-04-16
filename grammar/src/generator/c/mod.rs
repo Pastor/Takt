@@ -77,12 +77,12 @@ impl AsGenerator for Generator {
             Path::new(output_path).join(filename.to_owned() + ".h"),
             header,
         )
-        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)))?;
+        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)).with_code("CC-010"))?;
         fs::write(
             Path::new(output_path).join(filename.to_owned() + ".c"),
             source,
         )
-        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)))?;
+        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)).with_code("CC-010"))?;
         Ok(())
     }
 }
@@ -101,7 +101,7 @@ pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
         }
         TypeNode::Unit => Some("void".to_string()),
         TypeNode::BuiltinString => Some("char *".to_string()),
-        TypeNode::Struct(struct_name) => Some(format!("{}", struct_name)),
+        TypeNode::Struct(struct_name) => Some(struct_name.to_string()),
         TypeNode::Enum(enum_name) => {
             let enum_node = model.search_enum(enum_name)?;
             let max = enum_node
@@ -249,12 +249,14 @@ start Main = Robot;
     /// `m_a_t_r_i_x`, что приводило к `CONST_..._M_A_T_R_I_X` вместо `CONST_..._MATRIX`.
     #[test]
     fn const_port_names_are_not_char_split() {
+        // Константы используются в always, чтобы попасть в UsageSet.
         let src = r#"
 type u8 = [bit;8];
 const MATRIX: u8 = 0;
 const NUMB: u8 = 255;
 port SENSOR: u8 = 0x100000;
-start Main { always { } }
+var v: u8 = 0;
+start Main { always { v = MATRIX; v = NUMB; } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();

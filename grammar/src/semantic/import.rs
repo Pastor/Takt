@@ -66,12 +66,14 @@ pub(crate) fn read_import_file(
         .collect();
 
     if found.is_empty() {
-        return Err(format!(
-            "Файл импорта не найден: {:?}. Пути поиска: {:?}",
-            path, search_paths
+        return Err(Diagnostic::from(
+            format!(
+                "Файл импорта не найден: «{:?}». Пути поиска: {:?}",
+                path, search_paths
+            )
+            .as_str(),
         )
-        .as_str()
-        .into());
+        .with_code("SE-013"));
     }
 
     let filename = found.first().unwrap();
@@ -82,9 +84,10 @@ pub(crate) fn read_import_file(
     // Это предотвращает импорты вида `import "../../etc/passwd"`.
     {
         let canonical_file = std::fs::canonicalize(filename).map_err(|e| {
-            format!("Не удалось канонизировать путь «{}»: {}", filename, e)
-                .as_str()
-                .into()
+            Diagnostic::from(
+                format!("Не удалось канонизировать путь «{}»: {}", filename, e).as_str(),
+            )
+            .with_code("SE-016")
         })?;
         let is_allowed = search_paths.iter().any(|dir| {
             // Канонизируем директорию поиска; если это не удаётся — пропускаем её.
@@ -93,28 +96,32 @@ pub(crate) fn read_import_file(
                 .unwrap_or(false)
         });
         if !is_allowed {
-            return Err(format!(
-                "Путь импорта «{}» выходит за пределы разрешённых директорий поиска: {:?}",
-                filename, search_paths
+            return Err(Diagnostic::from(
+                format!(
+                    "Путь импорта «{}» выходит за пределы разрешённых директорий поиска: {:?}",
+                    filename, search_paths
+                )
+                .as_str(),
             )
-            .as_str()
-            .into());
+            .with_code("SE-016"));
         }
     }
 
     // Проверяем, что файл имеет расширение .but
     if !filename.ends_with(".but") {
         return Err(
-            format!("Недопустимое расширение файла импорта: «{}»", filename)
-                .as_str()
-                .into(),
+            Diagnostic::from(
+                format!("Недопустимое расширение файла импорта: «{}»", filename).as_str(),
+            )
+            .with_code("SE-014"),
         );
     }
 
     let content = read_to_string(filename).map_err(|e| {
-        format!("Ошибка чтения файла импорта «{}»: {}", filename, e)
-            .as_str()
-            .into()
+        Diagnostic::from(
+            format!("Ошибка чтения файла импорта «{}»: {}", filename, e).as_str(),
+        )
+        .with_code("SE-015")
     })?;
 
     Ok((content, filename.clone()))

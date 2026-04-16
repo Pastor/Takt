@@ -63,10 +63,9 @@ pub fn resolve_condition(
                 .map(|c| resolve_condition(c, model.clone()).map(Box::new))
                 .collect::<Result<Vec<_>, _>>()?;
             let function = model.borrow().search_func(&name);
-            let function = if function.is_none() {
-                Rc::new(RefCell::new(builtin_function(&id.name)?.clone()))
-            } else {
-                function.unwrap()
+            let function = match function {
+                Some(f) => f,
+                None => Rc::new(RefCell::new(builtin_function(&id.name)?.clone())),
             };
             Ok(ConditionNode::Function(function, args, id.loc))
         }

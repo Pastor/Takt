@@ -1,0 +1,284 @@
+diff --git a/README.md b/README.md
+index 8dae70c..2e2bcdb 100644
+--- a/README.md
++++ b/README.md
+@@ -15,7 +15,7 @@
+ 5. [Семантика и модель выполнения](#семантика-и-модель-выполнения)
+ 6. [Модульная система](#модульная-система)
+ 7. [Встроенные функции](#встроенные-функции)
+-8. [Диагностика и ошибки](#диагностика-и-ошибки)
++8. [Диагностика и ошибки](#диагностика-и-ошибки) (коды ошибок: [LE](#le--лексические-ошибки), [SY](#sy--синтаксические-ошибки), [SE](#se--семантические-ошибки), [CC](#cc--ошибки-кодогенерации-си))
+ 9. [Примеры программ](#примеры-программ)
+ 10. [Тестирование](#тестирование)
+ 11. [Сборка и установка](#сборка-и-установка)
+@@ -485,6 +485,91 @@ import { TypeA, FnB as FnAlias } from "file.but"; // выборочный имп
+ | `SematicError`     | Нарушение семантических правил                |
+ | `Warning`          | Потенциально проблемный код                   |
+ 
++### Коды ошибок
++
++Каждая диагностика содержит код формата `XX-YYY`, где `XX` — группа, `YYY` — порядковый номер.
++
++#### LE — Лексические ошибки
++
++| Код    | Описание                                              |
++|--------|-------------------------------------------------------|
++| LE-001 | Незакрытый блочный комментарий                        |
++| LE-002 | Незакрытая строка (конец файла внутри строкового литерала) |
++| LE-003 | Незакрытый шестнадцатеричный литерал                  |
++| LE-004 | Отсутствует цифра после знака числа                   |
++| LE-005 | Недопустимый символ в шестнадцатеричном литерале      |
++| LE-006 | Нераспознанный токен                                  |
++| LE-007 | Отсутствует показатель степени в числе с плавающей точкой |
++| LE-008 | Ожидался токен `from`                                 |
++
++#### SY — Синтаксические ошибки
++
++| Код    | Описание                                              |
++|--------|-------------------------------------------------------|
++| SY-001 | Недопустимый токен                                    |
++| SY-002 | Нераспознанный токен                                  |
++| SY-003 | Лишний токен после завершения конструкции             |
++| SY-004 | Неожиданный конец файла                               |
++
++#### SE — Семантические ошибки
++
++| Код    | Описание                                              |
++|--------|-------------------------------------------------------|
++| SE-001 | Модель не найдена (при наследовании/расширении)       |
++| SE-002 | Ссылка на состояние не найдена                        |
++| SE-003 | Переменная не найдена в области видимости             |
++| SE-004 | Неизвестная встроенная функция                        |
++| SE-005 | Переменная с таким именем уже объявлена               |
++| SE-006 | Модель с таким именем уже объявлена                   |
++| SE-007 | Тип с таким именем уже объявлен                       |
++| SE-008 | Условие с таким именем уже объявлено                  |
++| SE-009 | Функция с таким именем уже определена                 |
++| SE-010 | Нет терминальных состояний / состояние без пути к терминальному |
++| SE-011 | Нет начального состояния в модели                     |
++| SE-012 | Оператор `next` объявлен дважды в одном состоянии     |
++| SE-013 | Файл импорта не найден                                |
++| SE-014 | Недопустимое расширение файла импорта                 |
++| SE-015 | Ошибка чтения файла импорта                           |
++| SE-016 | Путь импорта выходит за пределы разрешённых директорий |
++| SE-017 | Идентификатор не найден в импортируемом файле         |
++| SE-018 | Именованный блок кода не имеет имени                  |
++| SE-019 | Условие при определении не имеет имени                |
++| SE-020 | Состояние не имеет имени                              |
++| SE-021 | Состояние типа `next` не поддерживается как определение |
++| SE-022 | Функция при определении не имеет имени                |
++| SE-023 | Порт должен иметь конкретный тип                      |
++| SE-024 | Порт должен быть инициализирован адресом              |
++| SE-025 | Неразрешённое условие перехода                        |
++| SE-028 | Индекс массива вне границ                             |
++| SE-029 | Некорректные границы среза                            |
++| SE-030 | Тип не является массивом (применение индексации недопустимо) |
++| SE-033 | Состояние не найдено в модели                         |
++| SE-034 | Тип не найден в области видимости                     |
++| SE-035 | Enum-тип переменной не объявлен (Ce4)                 |
++| SE-036 | Предупреждение о неиспользуемой переменной (Ce13)     |
++| SE-037 | Предупреждение: неявное приведение числа к булевому или недетерминированный переход (Ce14) |
++| SE-038 | Размер массива превышает максимально допустимый (Ce15) |
++| SE-039 | Циклический псевдоним типа (Ce16)                     |
++| SE-040 | Дублирующееся поле структуры (Ce17)                   |
++| SE-041 | Неизвестный тип поля структуры (Ce18)                 |
++| SE-042 | Перекрывающиеся условия переходов (NI4)               |
++| SE-043 | Недопустимое значение для переменной типа enum (NI6)  |
++
++#### CC — Ошибки кодогенерации Си
++
++| Код    | Описание                                              |
++|--------|-------------------------------------------------------|
++| CC-001 | BitAccess на порт типа `float` не поддерживается      |
++| CC-002 | Неразрешённая функция в условии перехода              |
++| CC-003 | Ссылки на модели/состояния не поддерживаются в условиях |
++| CC-004 | Модель не найдена в карте генератора                  |
++| CC-005 | Состояние не найдено в карте генератора               |
++| CC-006 | Элемент не является моделью                           |
++| CC-007 | Неподдерживаемый тип элемента конкатенации            |
++| CC-008 | Начальное состояние модели не определено              |
++| CC-009 | Переменная не найдена при генерации заголовка         |
++| CC-010 | Ошибка записи выходного файла (`.h` или `.c`)         |
++
+ ### Примеры проверок
+ 
+ - Ровно одно `start`-состояние в каждой модели
+diff --git a/grammar/tests/semantic_tests.rs b/grammar/tests/semantic_tests.rs
+index 2822311..467ef64 100644
+--- a/grammar/tests/semantic_tests.rs
++++ b/grammar/tests/semantic_tests.rs
+@@ -3470,10 +3470,10 @@ fn test_unused_variable_warning() {
+         Level::Warning,
+         "уровень должен быть Warning"
+     );
+-    assert!(
+-        warnings[0].message.contains("Ce13"),
+-        "сообщение должно содержать Ce13: {}",
+-        warnings[0].message
++    assert_eq!(
++        warnings[0].code.as_deref(),
++        Some("SE-036"),
++        "код предупреждения Ce13 должен быть SE-036"
+     );
+     assert!(
+         warnings[0].message.contains("unused"),
+@@ -3519,10 +3519,10 @@ fn test_nondeterministic_transitions() {
+         warnings
+     );
+     assert_eq!(warnings[0].level, Level::Warning);
+-    assert!(
+-        warnings[0].message.contains("Ce14"),
+-        "сообщение должно содержать Ce14: {}",
+-        warnings[0].message
++    assert_eq!(
++        warnings[0].code.as_deref(),
++        Some("SE-037"),
++        "код предупреждения Ce14 должен быть SE-037"
+     );
+ }
+ 
+@@ -3912,7 +3912,7 @@ fn test_ni4_duplicate_condition_warns() {
+     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+     let ni4_warnings: Vec<_> = warnings
+         .iter()
+-        .filter(|w| w.message.contains("NI4"))
++        .filter(|w| w.code.as_deref() == Some("SE-042"))
+         .collect();
+     assert!(
+         !ni4_warnings.is_empty(),
+@@ -3932,7 +3932,7 @@ fn test_ni4_interval_overlap_warns() {
+     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+     let ni4_warnings: Vec<_> = warnings
+         .iter()
+-        .filter(|w| w.message.contains("NI4"))
++        .filter(|w| w.code.as_deref() == Some("SE-042"))
+         .collect();
+     assert!(
+         !ni4_warnings.is_empty(),
+@@ -3951,7 +3951,7 @@ fn test_ni4_non_overlapping_no_warn() {
+     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+     let ni4_warnings: Vec<_> = warnings
+         .iter()
+-        .filter(|w| w.message.contains("NI4"))
++        .filter(|w| w.code.as_deref() == Some("SE-042"))
+         .collect();
+     assert!(
+         ni4_warnings.is_empty(),
+@@ -3977,7 +3977,7 @@ state B { ref S: x >= 10; }
+     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+     let ni4_warnings: Vec<_> = warnings
+         .iter()
+-        .filter(|w| w.message.contains("NI4"))
++        .filter(|w| w.code.as_deref() == Some("SE-042"))
+         .collect();
+     assert!(
+         !ni4_warnings.is_empty(),
+@@ -4003,7 +4003,7 @@ state B { ref S: x >= 10; }
+     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
+     let ni4_warnings: Vec<_> = warnings
+         .iter()
+-        .filter(|w| w.message.contains("NI4"))
++        .filter(|w| w.code.as_deref() == Some("SE-042"))
+         .collect();
+     assert!(
+         ni4_warnings.is_empty(),
+@@ -4018,13 +4018,14 @@ state B { ref S: x >= 10; }
+ #[test]
+ fn i5_direct_recursive_type_alias_is_error() {
+     let err = build_err("type A = [A; 8]; start S;");
+-    assert!(
+-        err.message.contains("Ce16"),
+-        "прямая рекурсия должна давать Ce16: {}",
+-        err.message
++    assert_eq!(
++        err.code.as_deref(),
++        Some("SE-039"),
++        "код ошибки Ce16 должен быть SE-039: {:?}",
++        err.code
+     );
+     assert!(
+-        err.message.contains("'A'"),
++        err.message.contains("'A'") || err.message.contains("A"),
+         "ошибка должна упоминать псевдоним 'A': {}",
+         err.message
+     );
+@@ -4034,10 +4035,11 @@ fn i5_direct_recursive_type_alias_is_error() {
+ #[test]
+ fn i5_mutual_recursive_type_alias_is_error() {
+     let err = build_err("type A = [B; 4]; type B = [A; 2]; start S;");
+-    assert!(
+-        err.message.contains("Ce16"),
+-        "взаимная рекурсия должна давать Ce16: {}",
+-        err.message
++    assert_eq!(
++        err.code.as_deref(),
++        Some("SE-039"),
++        "код ошибки Ce16 должен быть SE-039: {:?}",
++        err.code
+     );
+ }
+ 
+@@ -4061,10 +4063,11 @@ fn i5_file_recursive_type_alias() {
+     let src = std::fs::read_to_string("tests/data/semantic/invalid/recursive_type_alias.but")
+         .expect("не удалось прочитать файл");
+     let err = build_err(&src);
+-    assert!(
+-        err.message.contains("Ce16"),
+-        "файл с прямой рекурсией должен давать Ce16: {}",
+-        err.message
++    assert_eq!(
++        err.code.as_deref(),
++        Some("SE-039"),
++        "код ошибки Ce16 должен быть SE-039: {:?}",
++        err.code
+     );
+ }
+ 
+@@ -4075,10 +4078,11 @@ fn i5_file_mutual_recursive_type_alias() {
+         std::fs::read_to_string("tests/data/semantic/invalid/mutual_recursive_type_alias.but")
+             .expect("не удалось прочитать файл");
+     let err = build_err(&src);
+-    assert!(
+-        err.message.contains("Ce16"),
+-        "файл со взаимной рекурсией должен давать Ce16: {}",
+-        err.message
++    assert_eq!(
++        err.code.as_deref(),
++        Some("SE-039"),
++        "код ошибки Ce16 должен быть SE-039: {:?}",
++        err.code
+     );
+ }
+ 
+@@ -4159,10 +4163,11 @@ fn struct_duplicate_field_error() {
+         "дублирующееся поле структуры должно давать ошибку Ce17"
+     );
+     let err = result.unwrap_err();
+-    assert!(
+-        err.message.contains("Ce17"),
+-        "сообщение об ошибке должно содержать Ce17: {}",
+-        err.message
++    assert_eq!(
++        err.code.as_deref(),
++        Some("SE-040"),
++        "код ошибки Ce17 должен быть SE-040: {:?}",
++        err.code
+     );
+ }
+ 
+@@ -4178,10 +4183,11 @@ fn struct_duplicate_field_file_error() {
+         "файл с дублирующимися полями должен давать ошибку Ce17"
+     );
+     let err = result.unwrap_err();
+-    assert!(
+-        err.message.contains("Ce17"),
+-        "сообщение должно содержать Ce17: {}",
+-        err.message
++    assert_eq!(
++        err.code.as_deref(),
++        Some("SE-040"),
++        "код ошибки Ce17 должен быть SE-040: {:?}",
++        err.code
+     );
+ }
+ 

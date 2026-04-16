@@ -159,7 +159,8 @@ impl Map {
             return Err(Diagnostic::error(
                 model.borrow().loc,
                 "Модель должна содержать начальное состояние".to_string(),
-            ));
+            )
+            .with_code("SE-011"));
         };
         let local_name = start.name().to_string();
         // Рекурсивный спуск: обходим все достижимые состояния начиная со стартового
@@ -397,7 +398,7 @@ fn build_extend(extend: &Extend, model: Rc<RefCell<ModelNode>>) -> StateExtend {
     match extend {
         Extend::None => StateExtend::None,
         Extend::Unresolved(_) => StateExtend::None,
-        Extend::Model(model) => StateExtend::Model(Name::from(Rc::clone(&model))),
+        Extend::Model(model) => StateExtend::Model(Name::from(Rc::clone(model))),
         Extend::Parentless(extend) => build_extend(extend, model),
         Extend::Concatenation(extends) => StateExtend::Concatenation(
             extends
