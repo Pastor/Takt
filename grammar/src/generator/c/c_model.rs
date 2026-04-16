@@ -99,7 +99,13 @@ fn generate_model_init(
         .print("_INIT;")
         .nl();
     for var in raw.variables.values() {
-        let VariableNode::Simple { name: var_name, ty: _, expr, .. } = var else {
+        let VariableNode::Simple {
+            name: var_name,
+            ty: _,
+            expr,
+            ..
+        } = var
+        else {
             continue;
         };
         // Пропускаем неиспользуемые переменные — они не попадают в struct

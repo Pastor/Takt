@@ -36,16 +36,15 @@ pub fn construct_function(
             .clone()
             .name
             .ok_or_else(|| {
-                Diagnostic::from("При определении функция должна иметь имя")
-                    .with_code("SE-022")
+                Diagnostic::from("При определении функция должна иметь имя").with_code("SE-022")
             })?
             .name
             .clone();
         if model.borrow().functions.contains_key(&name) {
-            Err(Diagnostic::from(
-                format!("Функция с именем '{}' уже определена", name).as_str(),
+            Err(
+                Diagnostic::from(format!("Функция с именем '{}' уже определена", name).as_str())
+                    .with_code("SE-009"),
             )
-            .with_code("SE-009"))
         } else {
             let mut params = Vec::new();
             for (_, param) in def.params.iter() {

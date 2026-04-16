@@ -1,5 +1,36 @@
 #include "elevator.h"
 
+void door_close() {
+    // FIXME: Not implement yet
+}
+
+void door_open() {
+    // FIXME: Not implement yet
+}
+void motor_down() {
+    // FIXME: Not implement yet
+}
+
+void motor_stop() {
+    // FIXME: Not implement yet
+}
+
+void motor_up() {
+    // FIXME: Not implement yet
+}
+
+void read_floor_sensors() {
+    // FIXME: Not implement yet
+}
+
+void scan_cabin_buttons() {
+    // FIXME: Not implement yet
+}
+
+void scan_floor_buttons() {
+    // FIXME: Not implement yet
+}
+
 struct Ports {
 };
 

@@ -388,10 +388,7 @@ fn check_model_unused(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnost
             warnings.push(
                 Diagnostic::warning(
                     var.loc(),
-                    format!(
-                        "переменная '{}' объявлена, но нигде не используется",
-                        name
-                    ),
+                    format!("переменная '{}' объявлена, но нигде не используется", name),
                 )
                 .with_code("SE-036"),
             );

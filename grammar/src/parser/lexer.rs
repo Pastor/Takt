@@ -479,62 +479,62 @@ impl<'input> Lexer<'input> {
             && let Some((_, 'x')) = self.chars.peek()
         {
             // Шестнадцатеричный литерал: 0x...
+            self.chars.next();
+
+            let mut end = match self.chars.next() {
+                Some((end, ch)) if ch.is_ascii_hexdigit() => end,
+                Some((..)) => {
+                    return Err(LexicalError::MissingNumber(Location::Source(
+                        self.file_no,
+                        start,
+                        start + 1,
+                    )));
+                }
+                None => {
+                    return Err(LexicalError::EndOfFileInHex(Location::Source(
+                        self.file_no,
+                        start,
+                        self.input.len(),
+                    )));
+                }
+            };
+
+            while let Some((i, ch)) = self.chars.peek() {
+                if !ch.is_ascii_hexdigit() && *ch != '_' {
+                    break;
+                }
+                end = *i;
                 self.chars.next();
+            }
 
-                let mut end = match self.chars.next() {
-                    Some((end, ch)) if ch.is_ascii_hexdigit() => end,
-                    Some((..)) => {
-                        return Err(LexicalError::MissingNumber(Location::Source(
-                            self.file_no,
-                            start,
-                            start + 1,
-                        )));
-                    }
-                    None => {
-                        return Err(LexicalError::EndOfFileInHex(Location::Source(
-                            self.file_no,
-                            start,
-                            self.input.len(),
-                        )));
-                    }
-                };
+            // Удаляем разделители `_` перед разбором hex-числа
+            let hex_raw = &self.input[start + 2..=end];
+            let hex: String = hex_raw.chars().filter(|&c| c != '_').collect();
+            let hex_val = i64::from_str_radix(&hex, 16).unwrap();
 
+            // Проверяем, является ли это адресным литералом `0xNNNN:bit`
+            // (токен AddressLiteral, чтобы избежать LR(1)-конфликта с тернарным `?:`)
+            if matches!(self.chars.peek(), Some((_, ':')))
+                && matches!(self.chars.peek_nth(1), Some((_, '0'..='9')))
+            {
+                self.chars.next(); // потребляем ':'
+                let mut bit_end = end + 1;
                 while let Some((i, ch)) = self.chars.peek() {
-                    if !ch.is_ascii_hexdigit() && *ch != '_' {
+                    if ch.is_ascii_digit() {
+                        bit_end = *i;
+                        self.chars.next();
+                    } else {
                         break;
                     }
-                    end = *i;
-                    self.chars.next();
                 }
+                return Ok((
+                    start,
+                    Token::AddressLiteral(&self.input[start..=bit_end]),
+                    bit_end + 1,
+                ));
+            }
 
-                // Удаляем разделители `_` перед разбором hex-числа
-                let hex_raw = &self.input[start + 2..=end];
-                let hex: String = hex_raw.chars().filter(|&c| c != '_').collect();
-                let hex_val = i64::from_str_radix(&hex, 16).unwrap();
-
-                // Проверяем, является ли это адресным литералом `0xNNNN:bit`
-                // (токен AddressLiteral, чтобы избежать LR(1)-конфликта с тернарным `?:`)
-                if matches!(self.chars.peek(), Some((_, ':')))
-                    && matches!(self.chars.peek_nth(1), Some((_, '0'..='9')))
-                {
-                    self.chars.next(); // потребляем ':'
-                    let mut bit_end = end + 1;
-                    while let Some((i, ch)) = self.chars.peek() {
-                        if ch.is_ascii_digit() {
-                            bit_end = *i;
-                            self.chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    return Ok((
-                        start,
-                        Token::AddressLiteral(&self.input[start..=bit_end]),
-                        bit_end + 1,
-                    ));
-                }
-
-                return Ok((start, Token::Number(hex_val), end + 1));
+            return Ok((start, Token::Number(hex_val), end + 1));
         }
 
         if ch == '.' {

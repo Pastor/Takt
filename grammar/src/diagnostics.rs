@@ -394,9 +394,7 @@ impl Location {
     #[inline]
     pub fn begin_range(&self) -> Self {
         match self {
-            Location::Source(filename, start, _) => {
-                Location::Source(*filename, *start, *start)
-            }
+            Location::Source(filename, start, _) => Location::Source(*filename, *start, *start),
             loc => *loc,
         }
     }

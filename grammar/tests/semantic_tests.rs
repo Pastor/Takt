@@ -4210,9 +4210,8 @@ fn extern_fn_in_always_resolves_ok() {
 /// Extern-функция после локальной переменной разрешается без ошибок.
 #[test]
 fn extern_fn_after_local_var_resolves_ok() {
-    let src =
-        std::fs::read_to_string("tests/data/semantic/valid/extern_fn_local_var.but")
-            .expect("не удалось прочитать файл");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/extern_fn_local_var.but")
+        .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[]);
     assert!(

@@ -244,11 +244,8 @@ fn generate_model_header(
                 }
                 let tv = get_typed_variable(&ty, Some(name.clone()), &*model.borrow()).ok_or_else(
                     || {
-                        Diagnostic::error(
-                            Location::Codegen,
-                            format!("Variable {} not found", name),
-                        )
-                        .with_code("CC-009")
+                        Diagnostic::error(Location::Codegen, format!("Variable {} not found", name))
+                            .with_code("CC-009")
                     },
                 )?;
                 printer.ident(&tv).print(";").nl();

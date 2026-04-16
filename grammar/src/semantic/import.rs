@@ -109,19 +109,15 @@ pub(crate) fn read_import_file(
 
     // Проверяем, что файл имеет расширение .but
     if !filename.ends_with(".but") {
-        return Err(
-            Diagnostic::from(
-                format!("Недопустимое расширение файла импорта: «{}»", filename).as_str(),
-            )
-            .with_code("SE-014"),
-        );
+        return Err(Diagnostic::from(
+            format!("Недопустимое расширение файла импорта: «{}»", filename).as_str(),
+        )
+        .with_code("SE-014"));
     }
 
     let content = read_to_string(filename).map_err(|e| {
-        Diagnostic::from(
-            format!("Ошибка чтения файла импорта «{}»: {}", filename, e).as_str(),
-        )
-        .with_code("SE-015")
+        Diagnostic::from(format!("Ошибка чтения файла импорта «{}»: {}", filename, e).as_str())
+            .with_code("SE-015")
     })?;
 
     Ok((content, filename.clone()))

@@ -138,8 +138,9 @@ fn parser_error_to_diagnostic(
             ),
         )
         .with_code("SY-002"),
-        ParseError::User { error } => Diagnostic::parser_error(error.loc(), error.to_string())
-            .with_code(error.code()),
+        ParseError::User { error } => {
+            Diagnostic::parser_error(error.loc(), error.to_string()).with_code(error.code())
+        }
         ParseError::ExtraToken { token } => Diagnostic::parser_error(
             Location::Source(file_no, token.0, token.2),
             format!("лишний токен '{}'", token.1),

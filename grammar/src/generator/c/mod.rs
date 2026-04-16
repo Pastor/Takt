@@ -77,12 +77,16 @@ impl AsGenerator for Generator {
             Path::new(output_path).join(filename.to_owned() + ".h"),
             header,
         )
-        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)).with_code("CC-010"))?;
+        .map_err(|e| {
+            Diagnostic::warning(Location::Codegen, format!("{:?}", e)).with_code("CC-010")
+        })?;
         fs::write(
             Path::new(output_path).join(filename.to_owned() + ".c"),
             source,
         )
-        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{:?}", e)).with_code("CC-010"))?;
+        .map_err(|e| {
+            Diagnostic::warning(Location::Codegen, format!("{:?}", e)).with_code("CC-010")
+        })?;
         Ok(())
     }
 }

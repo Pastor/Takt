@@ -128,12 +128,10 @@ pub fn construct_expression(
                 }
                 TypeNode::Inference => {} // тип ещё не выведен — пропускаем проверку
                 _ => {
-                    return Err(
-                        Diagnostic::from(
-                            format!("Переменная '{}' не является массивом", &id.name).as_str(),
-                        )
-                        .with_code("SE-030"),
-                    );
+                    return Err(Diagnostic::from(
+                        format!("Переменная '{}' не является массивом", &id.name).as_str(),
+                    )
+                    .with_code("SE-030"));
                 }
             }
             Ok(ExpressionNode::ArraySubscript(
@@ -153,12 +151,10 @@ pub fn construct_expression(
                 }
                 TypeNode::Inference => {} // тип ещё не выведен — пропускаем
                 _ => {
-                    return Err(
-                        Diagnostic::from(
-                            format!("Переменная '{}' не является массивом", &id.name).as_str(),
-                        )
-                        .with_code("SE-030"),
-                    );
+                    return Err(Diagnostic::from(
+                        format!("Переменная '{}' не является массивом", &id.name).as_str(),
+                    )
+                    .with_code("SE-030"));
                 }
             }
             Ok(ExpressionNode::ArraySlice(

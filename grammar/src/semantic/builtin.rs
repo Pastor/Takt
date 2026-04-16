@@ -46,12 +46,9 @@ const BUILTIN_FUNCTIONS: phf::Map<&'static str, FunctionDefinitionNode> = phf_ma
 /// start A = S(M) { }    // встроенная функция S
 /// ```
 pub fn builtin_function(name: &str) -> Result<&FunctionDefinitionNode, Diagnostic> {
-    BUILTIN_FUNCTIONS
-        .get(name)
-        .ok_or_else(|| {
-            Diagnostic::from(format!("Неизвестная функция '{}'", name).as_str())
-                .with_code("SE-004")
-        })
+    BUILTIN_FUNCTIONS.get(name).ok_or_else(|| {
+        Diagnostic::from(format!("Неизвестная функция '{}'", name).as_str()).with_code("SE-004")
+    })
 }
 
 // ── Тесты ─────────────────────────────────────────────────────────────────────

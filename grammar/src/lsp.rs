@@ -1805,6 +1805,7 @@ start S = M;
             level: Level::Error,
             ty: ErrorType::ParserError,
             message: "тестовая ошибка".to_string(),
+            code: None,
             notes: vec![],
         };
         let lsp_diag = grammar_diagnostic_to_lsp(&diag, "hello");
@@ -1821,6 +1822,7 @@ start S = M;
             level: Level::Warning,
             ty: ErrorType::Warning,
             message: "тестовое предупреждение".to_string(),
+            code: None,
             notes: vec![],
         };
         let lsp_diag = grammar_diagnostic_to_lsp(&diag, "hello world");
@@ -1838,6 +1840,7 @@ start S = M;
             level: Level::Info,
             ty: ErrorType::None,
             message: "встроенное".to_string(),
+            code: None,
             notes: vec![],
         };
         let lsp_diag = grammar_diagnostic_to_lsp(&diag, "");
