@@ -397,17 +397,17 @@ start Root = Counter;
         let source_enabled = generate_source(map_enabled.get_filename(), &map_enabled).unwrap();
 
         assert!(
-            source_enabled.contains("assert(model->x < 100);"),
+            source_enabled.contains("assert(!(model->x < 100));"),
             "Отсутствует проверка формулы модели:\n{}",
             source_enabled
         );
         assert!(
-            source_enabled.contains("assert(model->x >= 0);"),
+            source_enabled.contains("assert(!(model->x >= 0));"),
             "Отсутствует проверка формулы состояния:\n{}",
             source_enabled
         );
         assert!(
-            source_enabled.contains("assert(model->x > 0);"),
+            source_enabled.contains("assert(!(model->x > 0));"),
             "Отсутствует проверка встроенной формулы:\n{}",
             source_enabled
         );

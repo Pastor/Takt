@@ -552,7 +552,7 @@ pub(super) fn generate_condition_expr(
                     normalize_lowercase_snakecase(state.local().to_string()).to_uppercase()
                 );
 
-                Ok(format!("!({} == {})", path, state_const))
+                Ok(format!("{} == {}", path, state_const))
             } else {
                 Ok(format!(
                     "{} == {}",
@@ -1356,7 +1356,7 @@ pub(super) fn generate_formula_check(
         Formula::Guard(cond) => {
             let cond_expr = generate_condition_expr(cond, map, owner)?;
             if !cond_expr.is_empty() {
-                printer.ident(&format!("assert({});", cond_expr)).nl();
+                printer.ident(&format!("assert(!({}));", cond_expr)).nl();
             }
         }
         Formula::LTL(_) => {
