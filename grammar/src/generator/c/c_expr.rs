@@ -14,8 +14,8 @@ use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
-    ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
-    StateNode, StatementNode, VariableNode,
+    ConditionDefinitionNode, ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode,
+    ModelNode, StateNode, StatementNode, VariableNode,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -197,7 +197,7 @@ pub(super) fn resolve_simple_var_in_context(
     }
     let var_model_rc = upper.as_ref().and_then(|w| w.upgrade())?;
     let var_model_name = Name::from(var_model_rc.clone());
-    let is_same_model = var_model_name.unique() == owner.name().unique();
+    let is_same_model = var_model_name.eq(&owner.name());
     let is_root_var = var_model_rc.borrow().upper.is_none();
     let is_root_owner = owner.name().eq(&map.root_name());
     let snake = normalize_lowercase_snakecase(var_name.to_string());
@@ -1066,6 +1066,32 @@ pub(super) fn generate_stmt_expression(
     generate_expr(printer, map, owner, params, expr, 0, has_model)
 }
 
+pub(super) fn generate_formula_check(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    formula: &Formula,
+) -> Result<(), Diagnostic> {
+    match formula {
+        Formula::None => {}
+        Formula::Formulas(formulas) => {
+            for f in formulas {
+                generate_formula_check(printer, map, owner, f)?;
+            }
+        }
+        Formula::Guard(cond) => {
+            let cond_expr = generate_condition_expr(cond, map, owner)?;
+            if !cond_expr.is_empty() {
+                printer.ident(&format!("assert({});", cond_expr)).nl();
+            }
+        }
+        Formula::LTL(_) => {
+            // LTL-формулы в C-коде пока не проверяются
+        }
+    }
+    Ok(())
+}
+
 /// Генерирует C-оператор из семантического узла.
 ///
 /// Для `Block` рекурсивно генерирует все вложенные операторы.
@@ -1309,8 +1335,12 @@ pub(super) fn generate_code_block(
             printer.ident("break;").nl();
         }
 
-        StatementNode::InlineFormula(_) => {
-            // Встроенные формулы не генерируют C-код напрямую.
+        StatementNode::InlineFormula(formulas) => {
+            if map.guard_enable() {
+                for formula in formulas {
+                    generate_formula_check(printer, map, owner, formula)?;
+                }
+            }
         }
     }
     Ok(())

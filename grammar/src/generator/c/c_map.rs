@@ -11,6 +11,8 @@ pub struct CMap {
     map: Map,
     /// Множество используемых имён модели (для фильтрации неиспользуемых элементов).
     usage: UsageSet,
+    /// Флаг включения генерации проверок Guard-формул.
+    guard_enable: bool,
 }
 
 impl CMap {
@@ -40,14 +42,19 @@ impl CMap {
 }
 
 impl CMap {
-    pub fn new(filename: &str, model: &ModelNode) -> Result<Self, Diagnostic> {
+    pub fn new(filename: &str, model: &ModelNode, guard_enable: bool) -> Result<Self, Diagnostic> {
         let model_rc = Rc::new(RefCell::new(model.copy(None, None)));
         let usage = crate::semantic::unused::compute_usage(Rc::clone(&model_rc));
         Ok(Self {
             filename: filename.to_string(),
             map: Map::create(model_rc)?,
             usage,
+            guard_enable,
         })
+    }
+
+    pub fn guard_enable(&self) -> bool {
+        self.guard_enable
     }
 
     /// Возвращает ссылку на множество используемых имён модели.

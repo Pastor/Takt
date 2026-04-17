@@ -47,7 +47,7 @@ mod tests {
         let model_rc = semantic::tree::construct_model(&ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some("Main".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let owner = Element::Model {
             name: map.root_name().clone(),
             states: map.states().clone(),
@@ -472,7 +472,7 @@ mod tests {
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some("Main".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
         assert!(
             source.contains("#include \""),
@@ -503,7 +503,7 @@ start Main { always { v = LIMIT; } }
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some("Main".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
         assert!(
             source.contains("CONST_MAIN_LIMIT"),
@@ -527,7 +527,7 @@ start Main { always { log_val(double_it(0)); } }
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some("Main".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
         assert!(
             source.contains("extern void log_val"),
@@ -559,7 +559,7 @@ start Main { always { check(0); } }
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some("Main".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
         // Условие if должно иметь ровно одну пару скобок
         assert!(
@@ -600,7 +600,7 @@ start Entry = Controller;
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some("Root".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
         // Поле должно называться по имени состояния (`entry`), а не модели (`controller`).
         // Первый параметр функции — `model` (не `main`).
@@ -634,7 +634,7 @@ start Main { always { check(0); } }
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some("Main".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
         assert!(
             source.contains("while (n > 0)"),
@@ -650,7 +650,7 @@ start Main { always { check(0); } }
         let model_rc = semantic::tree::construct_model(&ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some("Root".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         generate_source(map.get_filename(), &map).unwrap()
     }
 
@@ -814,7 +814,7 @@ state End;";
             semantic::tree::construct_model(&ast, None, &[]).expect("ошибка построения модели");
         model_rc.borrow_mut().name = Some("extend_complex".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new("extend_complex", &*model).expect("ошибка создания CMap");
+        let map = CMap::new("extend_complex", &*model, false).expect("ошибка создания CMap");
         let result = generate_source(map.get_filename(), &map);
         assert!(
             result.is_ok(),

@@ -1,0 +1,602 @@
+diff --git a/grammar/src/generator/c/c_expr.rs b/grammar/src/generator/c/c_expr.rs
+index 33aeb0e..251875c 100644
+--- a/grammar/src/generator/c/c_expr.rs
++++ b/grammar/src/generator/c/c_expr.rs
+@@ -14,8 +14,8 @@ use crate::semantic::minimap::{Element, Name};
+ use crate::semantic::naming::normalize_lowercase_snakecase;
+ use crate::semantic::type_node::TypeNode;
+ use crate::semantic::{
+-    ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
+-    StateNode, StatementNode, VariableNode,
++    ConditionDefinitionNode, ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode,
++    ModelNode, StateNode, StatementNode, VariableNode,
+ };
+ use std::cell::RefCell;
+ use std::rc::Rc;
+@@ -197,7 +197,7 @@ pub(super) fn resolve_simple_var_in_context(
+     }
+     let var_model_rc = upper.as_ref().and_then(|w| w.upgrade())?;
+     let var_model_name = Name::from(var_model_rc.clone());
+-    let is_same_model = var_model_name.unique() == owner.name().unique();
++    let is_same_model = var_model_name.eq(&owner.name());
+     let is_root_var = var_model_rc.borrow().upper.is_none();
+     let is_root_owner = owner.name().eq(&map.root_name());
+     let snake = normalize_lowercase_snakecase(var_name.to_string());
+@@ -1066,6 +1066,32 @@ pub(super) fn generate_stmt_expression(
+     generate_expr(printer, map, owner, params, expr, 0, has_model)
+ }
+ 
++pub(super) fn generate_formula_check(
++    printer: &mut Printer,
++    map: &CMap,
++    owner: &Element,
++    formula: &Formula,
++) -> Result<(), Diagnostic> {
++    match formula {
++        Formula::None => {}
++        Formula::Formulas(formulas) => {
++            for f in formulas {
++                generate_formula_check(printer, map, owner, f)?;
++            }
++        }
++        Formula::Guard(cond) => {
++            let cond_expr = generate_condition_expr(cond, map, owner)?;
++            if !cond_expr.is_empty() {
++                printer.ident(&format!("assert({});", cond_expr)).nl();
++            }
++        }
++        Formula::LTL(_) => {
++            // LTL-формулы в C-коде пока не проверяются
++        }
++    }
++    Ok(())
++}
++
+ /// Генерирует C-оператор из семантического узла.
+ ///
+ /// Для `Block` рекурсивно генерирует все вложенные операторы.
+@@ -1309,8 +1335,12 @@ pub(super) fn generate_code_block(
+             printer.ident("break;").nl();
+         }
+ 
+-        StatementNode::InlineFormula(_) => {
+-            // Встроенные формулы не генерируют C-код напрямую.
++        StatementNode::InlineFormula(formulas) => {
++            if map.guard_enable() {
++                for formula in formulas {
++                    generate_formula_check(printer, map, owner, formula)?;
++                }
++            }
+         }
+     }
+     Ok(())
+diff --git a/grammar/src/generator/c/c_model.rs b/grammar/src/generator/c/c_model.rs
+index 67e61ea..2ae55c4 100644
+--- a/grammar/src/generator/c/c_model.rs
++++ b/grammar/src/generator/c/c_model.rs
+@@ -4,7 +4,9 @@
+ //! [`generate_model_functions`], [`generate_function_prototypes`]
+ //! и вспомогательные функции для работы с параллельными и последовательными состояниями.
+ 
+-use super::c_expr::{generate_code_block, generate_condition_expr, generate_expr};
++use super::c_expr::{
++    generate_code_block, generate_condition_expr, generate_expr, generate_formula_check,
++};
+ use crate::diagnostics::{Diagnostic, Location};
+ use crate::generator::c;
+ use crate::generator::c::c_map::CMap;
+@@ -539,6 +541,15 @@ fn generate_model_tick(
+         )
+         .with_code("CC-006"));
+     };
++
++    // Проверки Guard-формул модели
++    if map.guard_enable() {
++        let raw_model = map.raw_model_at(model_name.clone())?;
++        for formula in &raw_model.borrow().formulas {
++            generate_formula_check(printer, map, model, formula)?;
++        }
++    }
++
+     printer.ident("switch (model->state) {").up().nl();
+     printer
+         .ident("case ")
+@@ -649,6 +660,14 @@ fn generate_model_tick(
+             .print(": {")
+             .up()
+             .nl();
++
++        // Проверка Guard-формул состояния
++        if map.guard_enable() {
++            for formula in raw_state.formulas() {
++                generate_formula_check(printer, map, model, formula)?;
++            }
++        }
++
+         generate_named_blocks(printer, raw_state, map, model, "always")?;
+         if let Element::State { .. } = state {
+             generate_state_transitions(printer, raw_state, map, model, &model_name, states)?;
+diff --git a/grammar/src/generator/c/mod.rs b/grammar/src/generator/c/mod.rs
+index 9de13d8..9dddffc 100644
+--- a/grammar/src/generator/c/mod.rs
++++ b/grammar/src/generator/c/mod.rs
+@@ -63,11 +63,17 @@ pub(super) const FUNCTION_PORT_READ_FLOAT: &str = "read_float";
+ pub struct Generator {}
+ 
+ impl AsGenerator for Generator {
+-    fn generate(&self, model: &ModelNode, output_path: &str) -> Result<(), Diagnostic> {
++    fn generate(
++        &self,
++        model: &ModelNode,
++        output_path: &str,
++        guard_enable: bool,
++    ) -> Result<(), Diagnostic> {
+         //TODO: При генерации следует работать с примитивным слепком модели
+         let map = CMap::new(
+             &*normalize_lowercase_snakecase(model.name().to_string()),
+             model,
++            guard_enable,
+         )?;
+         let header = generate_header(map.get_filename(), &map)?;
+         let source = generate_source(map.get_filename(), &map)?;
+@@ -266,7 +272,7 @@ start Main { always { v = MATRIX; v = NUMB; } }
+         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+         model.borrow_mut().name = Some("Main".to_string());
+         let model = model.borrow();
+-        let map = CMap::new(model.name(), &*model).unwrap();
++        let map = CMap::new(model.name(), &*model, true).unwrap();
+         let source = generate_source(map.get_filename(), &map).unwrap();
+         assert!(
+             source.contains("CONST_MAIN_MATRIX"),
+@@ -293,7 +299,7 @@ start Main { always { v = MATRIX; v = NUMB; } }
+         let (model_ast, _) = parse(src, 0).unwrap();
+         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+         let model = model.borrow();
+-        let map = CMap::new(model.name(), &*model).unwrap();
++        let map = CMap::new(model.name(), &*model, true).unwrap();
+         let source = generate_source(map.get_filename(), &map).unwrap();
+         assert!(
+             !source.contains(".h\" "),
+@@ -319,7 +325,7 @@ start Root = Counter;
+         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+         model_rc.borrow_mut().name = Some("main".to_string());
+         let model = model_rc.borrow();
+-        let map = CMap::new(model.name(), &*model).unwrap();
++        let map = CMap::new(model.name(), &*model, true).unwrap();
+         let source = generate_source(map.get_filename(), &map).unwrap();
+         // Ищем именно вызов, а не декларацию — вызов не содержит "extern"
+         let call_present = source
+@@ -354,7 +360,7 @@ start Root = Counter;
+         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+         model_rc.borrow_mut().name = Some("main".to_string());
+         let model = model_rc.borrow();
+-        let map = CMap::new(model.name(), &*model).unwrap();
++        let map = CMap::new(model.name(), &*model, true).unwrap();
+         let source = generate_source(map.get_filename(), &map).unwrap();
+         eprintln!("=== GENERATED ===\n{source}\n=== END ===");
+         let call_present = source
+@@ -366,6 +372,54 @@ start Root = Counter;
+             "вызов extern функции после local var должен быть:\n{source}"
+         );
+     }
++
++    #[test]
++    fn test_guard_formula_codegen() {
++        let src = r#"
++            type u8 = [bit;8];
++            var x: u8 = 0;
++            :[Guard] x < 100;
++            start Running {
++                :[Guard] x >= 0;
++                always {
++                    x = x + 1;
++                    :[Guard] x > 0;
++                }
++            }
++        "#;
++        let (model_ast, _) = parse(src, 0).unwrap();
++        let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
++        model_rc.borrow_mut().name = Some("Main".to_string());
++        let model = model_rc.borrow();
++
++        // С включенными Guard-проверками
++        let map_enabled = CMap::new(model.name(), &*model, true).unwrap();
++        let source_enabled = generate_source(map_enabled.get_filename(), &map_enabled).unwrap();
++
++        assert!(
++            source_enabled.contains("assert(model->x < 100);"),
++            "Отсутствует проверка формулы модели:\n{}",
++            source_enabled
++        );
++        assert!(
++            source_enabled.contains("assert(model->x >= 0);"),
++            "Отсутствует проверка формулы состояния:\n{}",
++            source_enabled
++        );
++        assert!(
++            source_enabled.contains("assert(model->x > 0);"),
++            "Отсутствует проверка встроенной формулы:\n{}",
++            source_enabled
++        );
++
++        // С выключенными Guard-проверками
++        let map_disabled = CMap::new(model.name(), &*model, false).unwrap();
++        let source_disabled = generate_source(map_disabled.get_filename(), &map_disabled).unwrap();
++
++        assert!(!source_disabled.contains("assert(model->x < 100);"));
++        assert!(!source_disabled.contains("assert(model->x >= 0);"));
++        assert!(!source_disabled.contains("assert(model->x > 0);"));
++    }
+ }
+ 
+ /// Собирает имена моделей-зависимостей из элемента StateExtend.
+diff --git a/grammar/src/semantic/formula.rs b/grammar/src/semantic/formula.rs
+index a937d9d..461dcf6 100644
+--- a/grammar/src/semantic/formula.rs
++++ b/grammar/src/semantic/formula.rs
+@@ -3,8 +3,10 @@
+ //! Содержит тип [`Formula`] и функцию преобразования [`condition_to_formula`],
+ //! которая переводит [`ConditionNode`] в [`Formula`].
+ 
++use crate::parser::ast::LtlExpr;
+ use crate::semantic::ConditionNode;
+ use crate::verification::ltl::Ltl;
++use std::rc::Rc;
+ 
+ #[derive(Debug, Clone)]
+ pub enum Formula {
+@@ -34,3 +36,36 @@ pub fn condition_to_formula(cond: &ConditionNode) -> Formula {
+         cond => Formula::Guard(cond.clone()),
+     }
+ }
++
++pub fn ltl_ast_to_semantic(expr: &LtlExpr) -> Ltl {
++    match expr {
++        LtlExpr::True(_) => Ltl::True,
++        LtlExpr::False(_) => Ltl::False,
++        LtlExpr::Atom(id) => Ltl::Atom(id.name.clone()),
++        LtlExpr::Not(_, inner) => Ltl::Not(Rc::new(ltl_ast_to_semantic(inner))),
++        LtlExpr::Next(_, inner) => Ltl::Next(Rc::new(ltl_ast_to_semantic(inner))),
++        LtlExpr::Finally(_, inner) => Ltl::Finally(Rc::new(ltl_ast_to_semantic(inner))),
++        LtlExpr::Globally(_, inner) => Ltl::Globally(Rc::new(ltl_ast_to_semantic(inner))),
++        LtlExpr::And(_, l, r) => Ltl::And(
++            Rc::new(ltl_ast_to_semantic(l)),
++            Rc::new(ltl_ast_to_semantic(r)),
++        ),
++        LtlExpr::Or(_, l, r) => Ltl::Or(
++            Rc::new(ltl_ast_to_semantic(l)),
++            Rc::new(ltl_ast_to_semantic(r)),
++        ),
++        LtlExpr::Until(_, l, r) => Ltl::Until(
++            Rc::new(ltl_ast_to_semantic(l)),
++            Rc::new(ltl_ast_to_semantic(r)),
++        ),
++        LtlExpr::Release(_, l, r) => Ltl::Release(
++            Rc::new(ltl_ast_to_semantic(l)),
++            Rc::new(ltl_ast_to_semantic(r)),
++        ),
++        LtlExpr::Implies(_, l, r) => Ltl::Implies(
++            Rc::new(ltl_ast_to_semantic(l)),
++            Rc::new(ltl_ast_to_semantic(r)),
++        ),
++        LtlExpr::Parenthesis(_, inner) => ltl_ast_to_semantic(inner),
++    }
++}
+diff --git a/grammar/src/semantic/mod.rs b/grammar/src/semantic/mod.rs
+index 667d29d..463f3f0 100644
+--- a/grammar/src/semantic/mod.rs
++++ b/grammar/src/semantic/mod.rs
+@@ -1018,6 +1018,13 @@ impl StateNode {
+             } => references.is_empty() && next.is_none(),
+         }
+     }
++
++    pub fn formulas(&self) -> &[Formula] {
++        match self {
++            StateNode::Simple { formulas, .. } | StateNode::Implement { formulas, .. } => formulas,
++            _ => &[],
++        }
++    }
+ }
+ 
+ impl PartialEq for StateNode {
+diff --git a/grammar/src/semantic/tree.rs b/grammar/src/semantic/tree.rs
+index 3f286b8..7d44a71 100644
+--- a/grammar/src/semantic/tree.rs
++++ b/grammar/src/semantic/tree.rs
+@@ -104,7 +104,6 @@ fn construct_model_stage0(
+     let mut conditions = HashMap::new();
+     let mut named_blocks = Vec::new();
+     let mut functions = HashMap::new();
+-    let mut formula_conditions: Vec<ast::Condition> = Vec::new();
+ 
+     // Ce16: предварительная проверка циклических псевдонимов до вызова construct_type.
+     // Собираем все AST-определения типов из текущего уровня модели.
+@@ -557,11 +556,19 @@ fn construct_model_stage0(
+             match &**inline {
+                 ast::InlineFormulaDefine::Guard { conditions, .. } => {
+                     for cond in conditions {
+-                        formula_conditions.push(cond.clone());
++                        model_node
++                            .borrow_mut()
++                            .formulas
++                            .push(Formula::Guard(ConditionNode::Unresolved(cond.clone())));
+                     }
+                 }
+-                ast::InlineFormulaDefine::Ltl { .. } => {
+-                    // TODO: Реализовать поддержку LTL в моделях
++                ast::InlineFormulaDefine::Ltl { formulas, .. } => {
++                    for f in formulas {
++                        model_node
++                            .borrow_mut()
++                            .formulas
++                            .push(Formula::LTL(formula::ltl_ast_to_semantic(f)));
++                    }
+                 }
+             }
+         }
+@@ -572,15 +579,6 @@ fn construct_model_stage0(
+     model_node.borrow_mut().conditions = conditions;
+     model_node.borrow_mut().named_blocks = named_blocks;
+     model_node.borrow_mut().functions = functions;
+-    {
+-        let mut formulas = Vec::new();
+-        for cond in &formula_conditions {
+-            if let Ok(cn) = resolve_condition(cond, Rc::clone(&model_node)) {
+-                formulas.push(formula::condition_to_formula(&cn));
+-            }
+-        }
+-        model_node.borrow_mut().formulas = formulas;
+-    }
+     Ok(Rc::clone(&model_node))
+ }
+ 
+@@ -773,6 +771,10 @@ fn construct_model_stage3(
+ fn construct_model_stage4(
+     model: Rc<RefCell<ModelNode>>,
+ ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
++    // Разрешаем формулы на уровне текущей модели
++    let formulas = std::mem::take(&mut model.borrow_mut().formulas);
++    model.borrow_mut().formulas = resolve_formulas(formulas, model.clone())?;
++
+     // Разрешаем блоки на уровне текущей модели
+     let named_blocks = std::mem::take(&mut model.borrow_mut().named_blocks);
+     model.borrow_mut().named_blocks = resolve_named_blocks(named_blocks, model.clone())?;
+@@ -865,6 +867,37 @@ fn resolve_functions(
+     Ok(resolved_functions)
+ }
+ 
++fn resolve_formula(formula: Formula, model: Rc<RefCell<ModelNode>>) -> Result<Formula, Diagnostic> {
++    match formula {
++        Formula::None => Ok(Formula::None),
++        Formula::Formulas(formulas) => {
++            let mut resolved = Vec::with_capacity(formulas.len());
++            for f in formulas {
++                resolved.push(resolve_formula(f, model.clone())?);
++            }
++            Ok(Formula::Formulas(resolved))
++        }
++        Formula::Guard(cond) => match cond {
++            ConditionNode::Unresolved(ast_cond) => {
++                Ok(Formula::Guard(resolve_condition(&ast_cond, model)?))
++            }
++            other => Ok(Formula::Guard(other)),
++        },
++        Formula::LTL(ltl) => Ok(Formula::LTL(ltl)),
++    }
++}
++
++fn resolve_formulas(
++    formulas: Vec<Formula>,
++    model: Rc<RefCell<ModelNode>>,
++) -> Result<Vec<Formula>, Diagnostic> {
++    let mut resolved = Vec::with_capacity(formulas.len());
++    for f in formulas {
++        resolved.push(resolve_formula(f, model.clone())?);
++    }
++    Ok(resolved)
++}
++
+ /// Разрешает именованные блоки кода внутри одного состояния.
+ ///
+ /// Ошибки разрешения подавляются — оператор сохраняется как `Unresolved`.
+@@ -887,7 +920,7 @@ fn resolve_state_named_blocks(
+             name,
+             references,
+             kind,
+-            formulas,
++            formulas: resolve_formulas(formulas, model.clone())?,
+             named_blocks: resolve_named_blocks(named_blocks, model)?,
+         }),
+         StateNode::Implement {
+@@ -908,7 +941,7 @@ fn resolve_state_named_blocks(
+             implements,
+             next,
+             kind,
+-            formulas,
++            formulas: resolve_formulas(formulas, model.clone())?,
+             named_blocks: resolve_named_blocks(named_blocks, model)?,
+         }),
+         other => Ok(other),
+@@ -1103,7 +1136,7 @@ pub fn construct_states(
+             let kind = def.kind.clone();
+             let mut references = Vec::new();
+             let mut next: Option<String> = None;
+-            let mut state_formula_conditions: Vec<ast::Condition> = Vec::new();
++            let mut state_formulas: Vec<Formula> = Vec::new();
+             for element in def.elements.iter() {
+                 if let StateElement::Reference(_, id, cond) = element {
+                     let cond = if let Some(cond) = cond {
+@@ -1130,20 +1163,18 @@ pub fn construct_states(
+                     match &**inline {
+                         ast::InlineFormulaDefine::Guard { conditions, .. } => {
+                             for cond in conditions {
+-                                state_formula_conditions.push(cond.clone());
++                                state_formulas
++                                    .push(Formula::Guard(ConditionNode::Unresolved(cond.clone())));
+                             }
+                         }
+-                        ast::InlineFormulaDefine::Ltl { .. } => {
+-                            // TODO: Реализовать поддержку LTL в состояниях
++                        ast::InlineFormulaDefine::Ltl { formulas, .. } => {
++                            for f in formulas {
++                                state_formulas.push(Formula::LTL(formula::ltl_ast_to_semantic(f)));
++                            }
+                         }
+                     }
+                 }
+             }
+-            let state_formulas: Vec<Formula> = state_formula_conditions
+-                .iter()
+-                .filter_map(|c| resolve_condition(c, Rc::clone(&upper)).ok())
+-                .map(|cn| formula::condition_to_formula(&cn))
+-                .collect();
+             let kind = match kind {
+                 None => {
+                     if references.is_empty() {
+diff --git a/grammar/tests/codegen_tests.rs b/grammar/tests/codegen_tests.rs
+index c2a1fde..1f79235 100644
+--- a/grammar/tests/codegen_tests.rs
++++ b/grammar/tests/codegen_tests.rs
+@@ -46,7 +46,7 @@ model Traffic {
+         .borrow()
+         .search_model("Traffic")
+         .expect("модель Traffic должна быть найдена");
+-    let result = generate(Language::C, &traffic.borrow(), out_path);
++    let result = generate(Language::C, &traffic.borrow(), out_path, true);
+     assert!(
+         result.is_ok(),
+         "компиляция простой FSM должна быть успешной, ошибка: {:?}",
+@@ -70,7 +70,8 @@ const MODEL_FILENAME: &str = "model.but";
+ fn test_compile_invalid_syntax_returns_error() {
+     let src = "model { }"; // нет имени модели
+     let tmp = tempdir().unwrap();
+-    let result = grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[]);
++    let result =
++        grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[], true);
+     assert!(result.is_err(), "неверный код должен возвращать Err");
+ }
+ 
+@@ -79,7 +80,8 @@ fn test_compile_invalid_syntax_returns_error() {
+ fn test_compile_no_start_state_returns_error() {
+     let src = "model M { state S {} }"; // нет start-состояния
+     let tmp = tempdir().unwrap();
+-    let result = grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[]);
++    let result =
++        grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[], true);
+     assert!(
+         result.is_err(),
+         "модель без start-состояния должна возвращать Err"
+@@ -91,7 +93,8 @@ fn test_compile_no_start_state_returns_error() {
+ fn test_compile_no_imports_empty_search_paths() {
+     let src = "start S;";
+     let tmp = tempdir().unwrap();
+-    let result = grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[]);
++    let result =
++        grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[], true);
+     assert!(
+         result.is_ok(),
+         "программа без импортов должна компилироваться без путей поиска: {:?}",
+@@ -136,6 +139,7 @@ state Done;
+         main_src,
+         out_dir.path().to_str().unwrap(),
+         &search_paths,
++        true,
+     );
+     assert!(
+         result.is_ok(),
+@@ -159,6 +163,7 @@ fn test_compile_missing_import_without_search_path_is_error() {
+         main_src,
+         out_dir.path().to_str().unwrap(),
+         &[],
++        true,
+     );
+     assert!(
+         result.is_err(),
+@@ -195,6 +200,7 @@ fn test_compile_second_search_path_wins() {
+         main_src,
+         out_dir.path().to_str().unwrap(),
+         &search_paths,
++        true,
+     );
+     assert!(
+         result.is_ok(),
+@@ -215,6 +221,7 @@ fn test_compile_wrong_search_path_is_error() {
+         main_src,
+         out_dir.path().to_str().unwrap(),
+         &search_paths,
++        true,
+     );
+     assert!(result.is_err(), "файл в несуществующей директории → ошибка");
+ }
+@@ -241,6 +248,7 @@ fn test_compile_identifier_import_with_search_path() {
+         main_src,
+         out_dir.path().to_str().unwrap(),
+         &search_paths,
++        true,
+     );
+     assert!(
+         result.is_ok(),
+@@ -270,6 +278,7 @@ state Done;
+         main_src,
+         out_dir.path().to_str().unwrap(),
+         &search_paths,
++        true,
+     );
+     assert!(
+         result.is_ok(),
+@@ -303,6 +312,7 @@ fn test_compile_example_file_with_include_path() {
+         &src,
+         out_dir.path().to_str().unwrap(),
+         &search_paths,
++        true,
+     );
+     assert!(
+         result.is_ok(),
+@@ -347,7 +357,7 @@ state End;
+     let root = construct_model(&ast, None, &[]).expect("семантический анализ должен быть успешен");
+     root.borrow_mut().name = Some("Elevator".to_string());
+ 
+-    let result = generate(Language::C, &root.borrow(), out_path);
++    let result = generate(Language::C, &root.borrow(), out_path, true);
+     assert!(
+         result.is_ok(),
+         "компиляция должна быть успешной: {:?}",
+@@ -438,6 +448,7 @@ fn test_include_dirs_end_to_end_integration() {
+         src_content,
+         out_dir.path().to_str().unwrap(),
+         &search_paths,
++        true,
+     );
+ 
+     // Значение args не используется в вычислении — только для демонстрации
+@@ -463,7 +474,13 @@ fn generate_c_content(src: &str, model_name: &str) -> String {
+     let (ast, _) = parse(src, 0).unwrap();
+     let root = construct_model(&ast, None, &[]).unwrap();
+     root.borrow_mut().name = Some(model_name.to_string());
+-    generate(Language::C, &root.borrow(), tmp.path().to_str().unwrap()).unwrap();
++    generate(
++        Language::C,
++        &root.borrow(),
++        tmp.path().to_str().unwrap(),
++        true,
++    )
++    .unwrap();
+     fs::read_dir(tmp.path())
+         .unwrap()
+         .filter_map(|e| e.ok())
+@@ -483,7 +500,13 @@ fn generate_h_content(src: &str, model_name: &str) -> String {
+     let (ast, _) = parse(src, 0).unwrap();
+     let root = construct_model(&ast, None, &[]).unwrap();
+     root.borrow_mut().name = Some(model_name.to_string());
+-    generate(Language::C, &root.borrow(), tmp.path().to_str().unwrap()).unwrap();
++    generate(
++        Language::C,
++        &root.borrow(),
++        tmp.path().to_str().unwrap(),
++        true,
++    )
++    .unwrap();
+     fs::read_dir(tmp.path())
+         .unwrap()
+         .filter_map(|e| e.ok())

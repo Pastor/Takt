@@ -174,7 +174,7 @@ fn parser_error_to_diagnostic(
 ///
 /// ```no_run
 /// // Без импортов — пустой список путей
-/// grammar::compile_to_c("dummy.but", "start S;", ".output", &[]).unwrap();
+/// grammar::compile_to_c("dummy.but", "start S;", ".output", &[], true).unwrap();
 ///
 /// // С импортами — указываем директорию поиска
 /// grammar::compile_to_c(
@@ -182,6 +182,7 @@ fn parser_error_to_diagnostic(
 ///     r#"import "std.but"; start S;"#,
 ///     ".output",
 ///     &["/usr/lib/but".to_string()],
+///     true,
 /// ).unwrap();
 /// ```
 pub fn compile_to_c(
@@ -189,6 +190,7 @@ pub fn compile_to_c(
     source: &str,
     output_path: &str,
     search_paths: &[String],
+    guard_enable: bool,
 ) -> Result<(), Diagnostic> {
     // Шаг 1: Синтаксический анализ
     let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
@@ -215,7 +217,12 @@ pub fn compile_to_c(
     }
 
     // Шаг 3: Генерация C-кода
-    generator::generate(generator::Language::C, &model.borrow(), output_path)?;
+    generator::generate(
+        generator::Language::C,
+        &model.borrow(),
+        output_path,
+        guard_enable,
+    )?;
 
     Ok(())
 }
@@ -427,7 +434,7 @@ always {
         let model = construct_model(&model, None, &[]).unwrap();
         assert!(model.borrow().has_states());
         model.borrow_mut().name = Some(String::from("ThisIsMyModel"));
-        generate(Language::C, &model.borrow(), ".output").unwrap();
+        generate(Language::C, &model.borrow(), ".output", true).unwrap();
     }
 
     // ── Тесты ошибок парсера ──────────────────────────────────────────────────
@@ -502,7 +509,7 @@ always {
         let out = dir.path().to_string_lossy().into_owned();
         // Простой FSM без имени модели; имя должно быть взято из имени файла.
         let src = "start S;";
-        let result = compile_to_c("path/to/my_model.but", src, &out, &[]);
+        let result = compile_to_c("path/to/my_model.but", src, &out, &[], true);
         // Функция может вернуть ошибку генератора (файл записан / не записан),
         // но не должна паниковать.
         let _ = result;
@@ -515,7 +522,7 @@ always {
         let out = dir.path().to_string_lossy().into_owned();
         let src = "start S;";
         // Путь с завершающим слешем — не должен паниковать.
-        let _ = compile_to_c("some/dir/", src, &out, &[]);
+        let _ = compile_to_c("some/dir/", src, &out, &[], true);
     }
 
     /// V1: пустая строка имени файла — `file_name()` вернёт None → имя «Root».
@@ -525,7 +532,7 @@ always {
         let out = dir.path().to_string_lossy().into_owned();
         let src = "start S;";
         // Пустое имя файла — не должно паниковать.
-        let _ = compile_to_c("", src, &out, &[]);
+        let _ = compile_to_c("", src, &out, &[], true);
     }
 
     /// V2: имя файла без расширения — возвращается строка целиком.
@@ -535,7 +542,7 @@ always {
         let out = dir.path().to_string_lossy().into_owned();
         let src = "start S;";
         // Без точки — `splitn(2,'.')` вернёт всё имя файла.
-        let _ = compile_to_c("my_model", src, &out, &[]);
+        let _ = compile_to_c("my_model", src, &out, &[], true);
     }
 
     /// V2: имя файла с несколькими точками — берётся только часть до первой.
@@ -545,6 +552,6 @@ always {
         let out = dir.path().to_string_lossy().into_owned();
         let src = "start S;";
         // "arch.v2.but" → должно брать "arch", не "arch.v2".
-        let _ = compile_to_c("arch.v2.but", src, &out, &[]);
+        let _ = compile_to_c("arch.v2.but", src, &out, &[], true);
     }
 }

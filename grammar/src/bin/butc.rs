@@ -65,6 +65,8 @@ pub struct CompileOptions {
     /// При `true` подавляются все сообщения, кроме ошибок компиляции.
     /// Взаимоисключается с [`verbose`](CompileOptions::verbose).
     pub quiet: bool,
+    /// Флаг включения генерации проверок Guard-формул.
+    pub guard_enable: bool,
 }
 
 /// Разбивает строку путей на отдельные директории.
@@ -155,6 +157,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     let mut include_dirs: Vec<String> = Vec::new();
     let mut verbose = false;
     let mut quiet = false;
+    let mut guard_enable = true;
 
     let mut i = 0;
     while i < args.len() {
@@ -191,6 +194,12 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
             "--quiet" | "-q" => {
                 quiet = true;
             }
+            "--guard-enable" => {
+                guard_enable = true;
+            }
+            "--guard-disable" => {
+                guard_enable = false;
+            }
             // Позиционный аргумент — входной файл
             a if !a.starts_with('-') => {
                 input_file = Some(a.to_string());
@@ -220,6 +229,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
         include_dirs,
         verbose,
         quiet,
+        guard_enable,
     })
 }
 
@@ -236,6 +246,8 @@ fn print_usage() {
     eprintln!("  --verbose, -v          Расширенный вывод: все предупреждения и полные пути");
     eprintln!("  --quiet, -q            Тихий режим: только ошибки");
     eprintln!("                         Флаги --verbose и --quiet взаимоисключающие");
+    eprintln!("  --guard-enable         Включить генерацию проверок Guard-формул (по умолчанию)");
+    eprintln!("  --guard-disable        Выключить генерацию проверок Guard-формул");
     eprintln!();
     eprintln!("Целевые платформы:");
     eprintln!("  c    Генерация C-заголовочного файла");
@@ -292,6 +304,7 @@ fn main() {
                 &source,
                 &options.output_path,
                 &options.include_dirs,
+                options.guard_enable,
             ) {
                 eprintln!("Ошибка компиляции: {}", diag.message);
                 process::exit(1);

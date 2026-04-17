@@ -104,7 +104,6 @@ fn construct_model_stage0(
     let mut conditions = HashMap::new();
     let mut named_blocks = Vec::new();
     let mut functions = HashMap::new();
-    let mut formula_conditions: Vec<ast::Condition> = Vec::new();
 
     // Ce16: предварительная проверка циклических псевдонимов до вызова construct_type.
     // Собираем все AST-определения типов из текущего уровня модели.
@@ -557,11 +556,19 @@ fn construct_model_stage0(
             match &**inline {
                 ast::InlineFormulaDefine::Guard { conditions, .. } => {
                     for cond in conditions {
-                        formula_conditions.push(cond.clone());
+                        model_node
+                            .borrow_mut()
+                            .formulas
+                            .push(Formula::Guard(ConditionNode::Unresolved(cond.clone())));
                     }
                 }
-                ast::InlineFormulaDefine::Ltl { .. } => {
-                    // TODO: Реализовать поддержку LTL в моделях
+                ast::InlineFormulaDefine::Ltl { formulas, .. } => {
+                    for f in formulas {
+                        model_node
+                            .borrow_mut()
+                            .formulas
+                            .push(Formula::LTL(formula::ltl_ast_to_semantic(f)));
+                    }
                 }
             }
         }
@@ -572,15 +579,6 @@ fn construct_model_stage0(
     model_node.borrow_mut().conditions = conditions;
     model_node.borrow_mut().named_blocks = named_blocks;
     model_node.borrow_mut().functions = functions;
-    {
-        let mut formulas = Vec::new();
-        for cond in &formula_conditions {
-            if let Ok(cn) = resolve_condition(cond, Rc::clone(&model_node)) {
-                formulas.push(formula::condition_to_formula(&cn));
-            }
-        }
-        model_node.borrow_mut().formulas = formulas;
-    }
     Ok(Rc::clone(&model_node))
 }
 
@@ -773,6 +771,10 @@ fn construct_model_stage3(
 fn construct_model_stage4(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    // Разрешаем формулы на уровне текущей модели
+    let formulas = std::mem::take(&mut model.borrow_mut().formulas);
+    model.borrow_mut().formulas = resolve_formulas(formulas, model.clone())?;
+
     // Разрешаем блоки на уровне текущей модели
     let named_blocks = std::mem::take(&mut model.borrow_mut().named_blocks);
     model.borrow_mut().named_blocks = resolve_named_blocks(named_blocks, model.clone())?;
@@ -865,6 +867,37 @@ fn resolve_functions(
     Ok(resolved_functions)
 }
 
+fn resolve_formula(formula: Formula, model: Rc<RefCell<ModelNode>>) -> Result<Formula, Diagnostic> {
+    match formula {
+        Formula::None => Ok(Formula::None),
+        Formula::Formulas(formulas) => {
+            let mut resolved = Vec::with_capacity(formulas.len());
+            for f in formulas {
+                resolved.push(resolve_formula(f, model.clone())?);
+            }
+            Ok(Formula::Formulas(resolved))
+        }
+        Formula::Guard(cond) => match cond {
+            ConditionNode::Unresolved(ast_cond) => {
+                Ok(Formula::Guard(resolve_condition(&ast_cond, model)?))
+            }
+            other => Ok(Formula::Guard(other)),
+        },
+        Formula::LTL(ltl) => Ok(Formula::LTL(ltl)),
+    }
+}
+
+fn resolve_formulas(
+    formulas: Vec<Formula>,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<Vec<Formula>, Diagnostic> {
+    let mut resolved = Vec::with_capacity(formulas.len());
+    for f in formulas {
+        resolved.push(resolve_formula(f, model.clone())?);
+    }
+    Ok(resolved)
+}
+
 /// Разрешает именованные блоки кода внутри одного состояния.
 ///
 /// Ошибки разрешения подавляются — оператор сохраняется как `Unresolved`.
@@ -887,7 +920,7 @@ fn resolve_state_named_blocks(
             name,
             references,
             kind,
-            formulas,
+            formulas: resolve_formulas(formulas, model.clone())?,
             named_blocks: resolve_named_blocks(named_blocks, model)?,
         }),
         StateNode::Implement {
@@ -908,7 +941,7 @@ fn resolve_state_named_blocks(
             implements,
             next,
             kind,
-            formulas,
+            formulas: resolve_formulas(formulas, model.clone())?,
             named_blocks: resolve_named_blocks(named_blocks, model)?,
         }),
         other => Ok(other),
@@ -1103,7 +1136,7 @@ pub fn construct_states(
             let kind = def.kind.clone();
             let mut references = Vec::new();
             let mut next: Option<String> = None;
-            let mut state_formula_conditions: Vec<ast::Condition> = Vec::new();
+            let mut state_formulas: Vec<Formula> = Vec::new();
             for element in def.elements.iter() {
                 if let StateElement::Reference(_, id, cond) = element {
                     let cond = if let Some(cond) = cond {
@@ -1130,20 +1163,18 @@ pub fn construct_states(
                     match &**inline {
                         ast::InlineFormulaDefine::Guard { conditions, .. } => {
                             for cond in conditions {
-                                state_formula_conditions.push(cond.clone());
+                                state_formulas
+                                    .push(Formula::Guard(ConditionNode::Unresolved(cond.clone())));
                             }
                         }
-                        ast::InlineFormulaDefine::Ltl { .. } => {
-                            // TODO: Реализовать поддержку LTL в состояниях
+                        ast::InlineFormulaDefine::Ltl { formulas, .. } => {
+                            for f in formulas {
+                                state_formulas.push(Formula::LTL(formula::ltl_ast_to_semantic(f)));
+                            }
                         }
                     }
                 }
             }
-            let state_formulas: Vec<Formula> = state_formula_conditions
-                .iter()
-                .filter_map(|c| resolve_condition(c, Rc::clone(&upper)).ok())
-                .map(|cn| formula::condition_to_formula(&cn))
-                .collect();
             let kind = match kind {
                 None => {
                     if references.is_empty() {

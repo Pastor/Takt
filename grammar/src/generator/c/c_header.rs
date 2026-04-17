@@ -452,7 +452,7 @@ start Main { always { p = High; } }
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model.borrow_mut().name = Some("Test".to_string());
         let model = model.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let header = generate_header(map.get_filename(), &map).unwrap();
         assert!(
             header.contains("uint16_t"),
@@ -474,7 +474,7 @@ start Main { always { lv = High; } }
         let model2 = semantic::tree::construct_model(&model_ast2, None, &[]).unwrap();
         model2.borrow_mut().name = Some("Test2".to_string());
         let model2 = model2.borrow();
-        let map2 = CMap::new(model2.name(), &*model2).unwrap();
+        let map2 = CMap::new(model2.name(), &*model2, true).unwrap();
         let header2 = generate_header(map2.get_filename(), &map2).unwrap();
         assert!(
             header2.contains("uint8_t lv"),
@@ -497,7 +497,7 @@ state Par = Eng | Eng;
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model.borrow_mut().name = Some("Test".to_string());
         let model = model.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let header = generate_header(map.get_filename(), &map).unwrap();
         // Внутри параллельного блока поля нумеруются с 0 по имени модели
         assert!(
@@ -543,7 +543,7 @@ state Mid = Eng + (Eng | Eng) + Eng;
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model.borrow_mut().name = Some("Test".to_string());
         let model = model.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let header = generate_header(map.get_filename(), &map).unwrap();
         // Первый элемент конкатенации: {state}_{model}{idx}
         assert!(
@@ -597,7 +597,7 @@ state Mid = Eng + (Eng | Eng) + Eng;
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model.borrow_mut().name = Some("Test".to_string());
         let model = model.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let header = generate_header(map.get_filename(), &map).unwrap();
         // enum поле состояния конкатенации
         assert!(

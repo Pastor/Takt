@@ -4,7 +4,9 @@
 //! [`generate_model_functions`], [`generate_function_prototypes`]
 //! и вспомогательные функции для работы с параллельными и последовательными состояниями.
 
-use super::c_expr::{generate_code_block, generate_condition_expr, generate_expr};
+use super::c_expr::{
+    generate_code_block, generate_condition_expr, generate_expr, generate_formula_check,
+};
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::c;
 use crate::generator::c::c_map::CMap;
@@ -539,6 +541,15 @@ fn generate_model_tick(
         )
         .with_code("CC-006"));
     };
+
+    // Проверки Guard-формул модели
+    if map.guard_enable() {
+        let raw_model = map.raw_model_at(model_name.clone())?;
+        for formula in &raw_model.borrow().formulas {
+            generate_formula_check(printer, map, model, formula)?;
+        }
+    }
+
     printer.ident("switch (model->state) {").up().nl();
     printer
         .ident("case ")
@@ -649,6 +660,14 @@ fn generate_model_tick(
             .print(": {")
             .up()
             .nl();
+
+        // Проверка Guard-формул состояния
+        if map.guard_enable() {
+            for formula in raw_state.formulas() {
+                generate_formula_check(printer, map, model, formula)?;
+            }
+        }
+
         generate_named_blocks(printer, raw_state, map, model, "always")?;
         if let Element::State { .. } = state {
             generate_state_transitions(printer, raw_state, map, model, &model_name, states)?;

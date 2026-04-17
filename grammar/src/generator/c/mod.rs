@@ -63,11 +63,17 @@ pub(super) const FUNCTION_PORT_READ_FLOAT: &str = "read_float";
 pub struct Generator {}
 
 impl AsGenerator for Generator {
-    fn generate(&self, model: &ModelNode, output_path: &str) -> Result<(), Diagnostic> {
+    fn generate(
+        &self,
+        model: &ModelNode,
+        output_path: &str,
+        guard_enable: bool,
+    ) -> Result<(), Diagnostic> {
         //TODO: При генерации следует работать с примитивным слепком модели
         let map = CMap::new(
             &*normalize_lowercase_snakecase(model.name().to_string()),
             model,
+            guard_enable,
         )?;
         let header = generate_header(map.get_filename(), &map)?;
         let source = generate_source(map.get_filename(), &map)?;
@@ -266,7 +272,7 @@ start Main { always { v = MATRIX; v = NUMB; } }
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model.borrow_mut().name = Some("Main".to_string());
         let model = model.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
         assert!(
             source.contains("CONST_MAIN_MATRIX"),
@@ -293,7 +299,7 @@ start Main { always { v = MATRIX; v = NUMB; } }
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         let model = model.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
         assert!(
             !source.contains(".h\" "),
@@ -319,7 +325,7 @@ start Root = Counter;
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some("main".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
         // Ищем именно вызов, а не декларацию — вызов не содержит "extern"
         let call_present = source
@@ -354,7 +360,7 @@ start Root = Counter;
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some("main".to_string());
         let model = model_rc.borrow();
-        let map = CMap::new(model.name(), &*model).unwrap();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
         let source = generate_source(map.get_filename(), &map).unwrap();
         eprintln!("=== GENERATED ===\n{source}\n=== END ===");
         let call_present = source
@@ -365,6 +371,54 @@ start Root = Counter;
             call_present,
             "вызов extern функции после local var должен быть:\n{source}"
         );
+    }
+
+    #[test]
+    fn test_guard_formula_codegen() {
+        let src = r#"
+            type u8 = [bit;8];
+            var x: u8 = 0;
+            :[Guard] x < 100;
+            start Running {
+                :[Guard] x >= 0;
+                always {
+                    x = x + 1;
+                    :[Guard] x > 0;
+                }
+            }
+        "#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some("Main".to_string());
+        let model = model_rc.borrow();
+
+        // С включенными Guard-проверками
+        let map_enabled = CMap::new(model.name(), &*model, true).unwrap();
+        let source_enabled = generate_source(map_enabled.get_filename(), &map_enabled).unwrap();
+
+        assert!(
+            source_enabled.contains("assert(model->x < 100);"),
+            "Отсутствует проверка формулы модели:\n{}",
+            source_enabled
+        );
+        assert!(
+            source_enabled.contains("assert(model->x >= 0);"),
+            "Отсутствует проверка формулы состояния:\n{}",
+            source_enabled
+        );
+        assert!(
+            source_enabled.contains("assert(model->x > 0);"),
+            "Отсутствует проверка встроенной формулы:\n{}",
+            source_enabled
+        );
+
+        // С выключенными Guard-проверками
+        let map_disabled = CMap::new(model.name(), &*model, false).unwrap();
+        let source_disabled = generate_source(map_disabled.get_filename(), &map_disabled).unwrap();
+
+        assert!(!source_disabled.contains("assert(model->x < 100);"));
+        assert!(!source_disabled.contains("assert(model->x >= 0);"));
+        assert!(!source_disabled.contains("assert(model->x > 0);"));
     }
 }
 

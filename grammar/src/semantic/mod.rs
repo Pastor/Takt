@@ -1018,6 +1018,13 @@ impl StateNode {
             } => references.is_empty() && next.is_none(),
         }
     }
+
+    pub fn formulas(&self) -> &[Formula] {
+        match self {
+            StateNode::Simple { formulas, .. } | StateNode::Implement { formulas, .. } => formulas,
+            _ => &[],
+        }
+    }
 }
 
 impl PartialEq for StateNode {
