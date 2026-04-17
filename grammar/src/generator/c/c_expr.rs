@@ -8,7 +8,7 @@ use super::{get_c_type, get_typed_variable};
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
-use crate::parser::ast::Member;
+use crate::parser::ast::{Condition, Member};
 use crate::semantic::extend::Extend;
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
@@ -28,6 +28,7 @@ pub(super) fn get_function_name(fun: &FunctionDefinitionNode) -> String {
             format!("{}_{}", model_name.unique_camelcase(), name)
         }
         FunctionDefinitionNode::External { name, .. } => name.clone(),
+        FunctionDefinitionNode::Builtin(name, ..) => name.to_string(),
         _ => {
             unreachable!("Unresolved function definition");
         }
@@ -360,16 +361,168 @@ pub(super) fn generate_condition_expr(
             generate_condition_expr(l, map, owner)?,
             generate_condition_expr(r, map, owner)?
         )),
-        ConditionNode::Equal(l, r) => Ok(format!(
-            "{} == {}",
-            generate_condition_expr(l, map, owner)?,
-            generate_condition_expr(r, map, owner)?
-        )),
-        ConditionNode::NotEqual(l, r) => Ok(format!(
-            "{} != {}",
-            generate_condition_expr(l, map, owner)?,
-            generate_condition_expr(r, map, owner)?
-        )),
+        ConditionNode::Equal(l, r) => {
+            if let ConditionNode::Model(model) = l.as_ref() {
+                let eq_name = if let ConditionNode::Variable(v, ..) = r.as_ref() {
+                    let x = v.borrow();
+                    x.name().to_string()
+                } else if let ConditionNode::Unresolved(cond) = r.as_ref()
+                    && let Condition::Variable(id) = cond
+                {
+                    id.name.clone()
+                } else {
+                    return Err(Diagnostic::error(
+                        Location::Codegen,
+                        format!("Выражение {:?} не разыменовано", r.as_ref()),
+                    )
+                    .with_code("CC-013"));
+                };
+
+                let model_name = Name::from(model.clone());
+                let using_models = map.using_models();
+                let element = using_models
+                    .iter()
+                    .find(|m| m.name().eq(&model_name))
+                    .ok_or_else(|| {
+                        Diagnostic::error(
+                            Location::Codegen,
+                            format!("Модель {} не найдена", &model_name),
+                        )
+                        .with_code("CC-012")
+                    })?;
+
+                let Element::Model { states, .. } = element else {
+                    return Err(Diagnostic::error(
+                        Location::Codegen,
+                        format!("Элемент {} не является моделью", &model_name),
+                    )
+                    .with_code("CC-006"));
+                };
+
+                let state = states
+                    .iter()
+                    .find(|s| s.local() == eq_name)
+                    .ok_or_else(|| {
+                        Diagnostic::error(
+                            Location::Codegen,
+                            format!("Состояние {} не найдено", eq_name),
+                        )
+                        .with_code("CC-011")
+                    })?;
+
+                let is_same_model = model_name.eq(&owner.name());
+                let is_root_model = model.borrow().upper.is_none();
+                let is_root_owner = owner.name().eq(&map.root_name());
+
+                let path = if is_same_model {
+                    "model->state".to_string()
+                } else if is_root_model && !is_root_owner {
+                    "main->state".to_string()
+                } else {
+                    let field = field_name_in_parent(model).unwrap_or_else(|| {
+                        normalize_lowercase_snakecase(
+                            model.borrow().name.clone().unwrap_or_default(),
+                        )
+                    });
+                    format!("model->{}.state", field)
+                };
+
+                let state_const = format!(
+                    "{}_{}",
+                    model_name.unique_uppercase_snakecase(),
+                    normalize_lowercase_snakecase(state.local().to_string()).to_uppercase()
+                );
+
+                Ok(format!("{} == {}", path, state_const))
+            } else {
+                Ok(format!(
+                    "{} == {}",
+                    generate_condition_expr(l, map, owner)?,
+                    generate_condition_expr(r, map, owner)?
+                ))
+            }
+        }
+        ConditionNode::NotEqual(l, r) => {
+            if let ConditionNode::Model(model) = l.as_ref() {
+                let eq_name = if let ConditionNode::Variable(v, ..) = r.as_ref() {
+                    let x = v.borrow();
+                    x.name().to_string()
+                } else if let ConditionNode::Unresolved(cond) = r.as_ref()
+                    && let Condition::Variable(id) = cond
+                {
+                    id.name.clone()
+                } else {
+                    return Err(Diagnostic::error(
+                        Location::Codegen,
+                        format!("Выражение {:?} не разыменовано", r.as_ref()),
+                    )
+                    .with_code("CC-013"));
+                };
+
+                let model_name = Name::from(model.clone());
+                let using_models = map.using_models();
+                let element = using_models
+                    .iter()
+                    .find(|m| m.name().eq(&model_name))
+                    .ok_or_else(|| {
+                        Diagnostic::error(
+                            Location::Codegen,
+                            format!("Модель {} не найдена", &model_name),
+                        )
+                        .with_code("CC-012")
+                    })?;
+
+                let Element::Model { states, .. } = element else {
+                    return Err(Diagnostic::error(
+                        Location::Codegen,
+                        format!("Элемент {} не является моделью", &model_name),
+                    )
+                    .with_code("CC-006"));
+                };
+
+                let state = states
+                    .iter()
+                    .find(|s| s.local() == eq_name)
+                    .ok_or_else(|| {
+                        Diagnostic::error(
+                            Location::Codegen,
+                            format!("Состояние {} не найдено", eq_name),
+                        )
+                        .with_code("CC-011")
+                    })?;
+
+                let is_same_model = model_name.eq(&owner.name());
+                let is_root_model = model.borrow().upper.is_none();
+                let is_root_owner = owner.name().eq(&map.root_name());
+
+                let path = if is_same_model {
+                    "model->state".to_string()
+                } else if is_root_model && !is_root_owner {
+                    "main->state".to_string()
+                } else {
+                    let field = field_name_in_parent(model).unwrap_or_else(|| {
+                        normalize_lowercase_snakecase(
+                            model.borrow().name.clone().unwrap_or_default(),
+                        )
+                    });
+                    format!("model->{}.state", field)
+                };
+
+                let state_const = format!(
+                    "{}_{}",
+                    model_name.unique_uppercase_snakecase(),
+                    normalize_lowercase_snakecase(state.local().to_string()).to_uppercase()
+                );
+
+                Ok(format!("{} != {}", path, state_const))
+            } else {
+                Ok(format!(
+                    "{} != {}",
+                    generate_condition_expr(l, map, owner)?,
+                    generate_condition_expr(r, map, owner)?
+                ))
+            }
+        }
         ConditionNode::Variable(var_rc, _) => {
             let var = var_rc.borrow();
             if let VariableNode::Simple { upper, .. } = &*var
@@ -445,7 +598,9 @@ pub(super) fn generate_condition_expr(
             // Пропускаем неразрешённые и пустые функции — они не могут быть сгенерированы
             if !matches!(
                 *fun,
-                FunctionDefinitionNode::Local { .. } | FunctionDefinitionNode::External { .. }
+                FunctionDefinitionNode::Local { .. }
+                    | FunctionDefinitionNode::External { .. }
+                    | FunctionDefinitionNode::Builtin { .. }
             ) {
                 return Err(Diagnostic::error(
                     Location::Codegen,
