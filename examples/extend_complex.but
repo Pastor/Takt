@@ -78,7 +78,7 @@ model F {
 }
 start Start = A + B + (C | D) + E {
     next Next;
-    : E = End;
+    : E != End;
     : x > 0;
 }
 state Next = F;
