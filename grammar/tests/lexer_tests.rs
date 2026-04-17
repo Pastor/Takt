@@ -501,13 +501,12 @@ fn shift_right_display_is_correct() {
     assert_ne!(token.to_string(), "<<");
 }
 
-/// `->` лексируется как два отдельных токена: Subtract и More.
+/// `->` лексируется как один токен Arrow.
 #[test]
-fn arrow_lexes_as_subtract_then_more() {
+fn arrow_lexes_as_single_token() {
     let strings = collect_token_strings("->");
-    assert_eq!(strings.len(), 2, "-> должен давать 2 токена");
-    assert_eq!(strings[0], "-", "Первый — Subtract (-)");
-    assert_eq!(strings[1], ">", "Второй — More (>)");
+    assert_eq!(strings.len(), 1, "-> должен давать 1 токен");
+    assert_eq!(strings[0], "->", "Токен — Arrow (->)");
 }
 
 // ─────────────────────────── Тесты Display токенов ───────────────────────────
@@ -544,6 +543,13 @@ fn token_display_keywords() {
         ("formula", Token::Formula),
         ("template", Token::Template),
         ("pragma", Token::Pragma),
+        ("X", Token::LtlNext),
+        ("F", Token::LtlFinally),
+        ("G", Token::LtlGlobally),
+        ("U", Token::LtlUntil),
+        ("R", Token::LtlRelease),
+        ("LTL", Token::TypeLtl),
+        ("Guard", Token::TypeGuard),
     ];
     for (expected, token) in cases {
         assert_eq!(
@@ -593,6 +599,7 @@ fn token_display_operators() {
         (">>", Token::ShiftRight),
         ("<", Token::Less),
         ("<=", Token::LessEqual),
+        ("->", Token::Arrow),
         ("-->", Token::PeirceArrow),
     ];
     for (expected, token) in cases {

@@ -554,8 +554,15 @@ fn construct_model_stage0(
                     .insert(struct_name.clone(), struct_loc);
             }
         } else if let ModelElement::InlineFormula(inline) = element {
-            for cond in &inline.conditions {
-                formula_conditions.push(cond.clone());
+            match &**inline {
+                ast::InlineFormulaDefine::Guard { conditions, .. } => {
+                    for cond in conditions {
+                        formula_conditions.push(cond.clone());
+                    }
+                }
+                ast::InlineFormulaDefine::Ltl { .. } => {
+                    // TODO: Реализовать поддержку LTL в моделях
+                }
             }
         }
     }
@@ -1120,8 +1127,15 @@ pub fn construct_states(
                     }
                     next = Some(id.name.clone());
                 } else if let StateElement::InlineFormula(inline) = element {
-                    for cond in &inline.conditions {
-                        state_formula_conditions.push(cond.clone());
+                    match &**inline {
+                        ast::InlineFormulaDefine::Guard { conditions, .. } => {
+                            for cond in conditions {
+                                state_formula_conditions.push(cond.clone());
+                            }
+                        }
+                        ast::InlineFormulaDefine::Ltl { .. } => {
+                            // TODO: Реализовать поддержку LTL в состояниях
+                        }
                     }
                 }
             }

@@ -826,11 +826,53 @@ pub struct Parameter {
 /// Встроенная формула: `: условие1[, условие2, …];`
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-pub struct InlineFormulaDefine {
-    /// Местоположение в исходном тексте.
-    pub loc: Location,
-    /// Список условий.
-    pub conditions: Vec<Condition>,
+pub enum InlineFormulaDefine {
+    /// По умолчанию: Guard формула.
+    Guard {
+        /// Местоположение в исходном тексте.
+        loc: Location,
+        /// Список условий.
+        conditions: Vec<Condition>,
+    },
+    /// LTL формула.
+    Ltl {
+        /// Местоположение в исходном тексте.
+        loc: Location,
+        /// Список LTL формул.
+        formulas: Vec<LtlExpr>,
+    },
+}
+
+/// Выражение LTL формулы.
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub enum LtlExpr {
+    /// Логическая истина.
+    True(Location),
+    /// Логическая ложь.
+    False(Location),
+    /// Атомарное предложение (идентификатор).
+    Atom(Identifier),
+    /// Логическое НЕ.
+    Not(Location, Box<LtlExpr>),
+    /// Оператор "в следующем состоянии" (Next, X).
+    Next(Location, Box<LtlExpr>),
+    /// Оператор "в будущем" (Finally, F).
+    Finally(Location, Box<LtlExpr>),
+    /// Оператор "всегда" (Globally, G).
+    Globally(Location, Box<LtlExpr>),
+    /// Логическое И.
+    And(Location, Box<LtlExpr>, Box<LtlExpr>),
+    /// Логическое ИЛИ.
+    Or(Location, Box<LtlExpr>, Box<LtlExpr>),
+    /// Оператор "пока" (Until, U).
+    Until(Location, Box<LtlExpr>, Box<LtlExpr>),
+    /// Оператор "освобождение" (Release, R).
+    Release(Location, Box<LtlExpr>, Box<LtlExpr>),
+    /// Логическая импликация (->).
+    Implies(Location, Box<LtlExpr>, Box<LtlExpr>),
+    /// Выражение в скобках.
+    Parenthesis(Location, Box<LtlExpr>),
 }
 
 /// Определение формулы (`formula`).
@@ -966,13 +1008,8 @@ pub enum Statement {
     Error(Location),
     /// Одиночная точка с запятой.
     StraySemicolon(Location),
-    /// Встроенная формула в блоке кода: `: условие1[, условие2, …];`
-    InlineFormula {
-        /// Местоположение в исходном тексте.
-        loc: Location,
-        /// Список условий.
-        conditions: Vec<Condition>,
-    },
+    /// Встроенная формула в блоке кода: `: [Type] условие1[, условие2, …];`
+    InlineFormula(Box<InlineFormulaDefine>),
 }
 
 impl Statement {

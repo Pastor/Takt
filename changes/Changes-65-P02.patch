@@ -1,0 +1,218 @@
+diff --git a/grammar/tests/ltl_tests.rs b/grammar/tests/ltl_tests.rs
+new file mode 100644
+index 0000000..988f749
+--- /dev/null
++++ b/grammar/tests/ltl_tests.rs
+@@ -0,0 +1,118 @@
++use grammar::parse;
++use grammar::parser::ast::{InlineFormulaDefine, ModelElement, Statement};
++
++#[test]
++fn test_parse_ltl_formula() {
++    let src = r#"
++model M {
++    always {
++        :[LTL] X a;
++        :[LTL] G (a & b) -> F c;
++        :[LTL] a U b;
++        :[LTL] a R b;
++    }
++}
++"#;
++    let (model, _) = parse(src, 0).unwrap();
++    let elements = &model.elements;
++    let model_element = elements
++        .iter()
++        .find(|e| matches!(e, ModelElement::Model(_)))
++        .unwrap();
++    if let ModelElement::Model(m) = model_element {
++        let always = m
++            .elements
++            .iter()
++            .find(|e| matches!(e, ModelElement::NamedBlockCode(_)))
++            .unwrap();
++        if let ModelElement::NamedBlockCode(nb) = always {
++            if let Statement::Block { statements, .. } = &nb.statement {
++                assert_eq!(statements.len(), 4);
++                for stmt in statements {
++                    assert!(matches!(stmt, Statement::InlineFormula(_)));
++                    if let Statement::InlineFormula(f) = stmt {
++                        assert!(matches!(**f, InlineFormulaDefine::Ltl { .. }));
++                    }
++                }
++            }
++        }
++    }
++}
++
++#[test]
++fn test_parse_guard_formula() {
++    let src = r#"
++model M {
++    always {
++        : a > 0;
++        :[Guard] b < 10;
++    }
++}
++"#;
++    let (model, _) = parse(src, 0).unwrap();
++    let elements = &model.elements;
++    let model_element = elements
++        .iter()
++        .find(|e| matches!(e, ModelElement::Model(_)))
++        .unwrap();
++    if let ModelElement::Model(m) = model_element {
++        let always = m
++            .elements
++            .iter()
++            .find(|e| matches!(e, ModelElement::NamedBlockCode(_)))
++            .unwrap();
++        if let ModelElement::NamedBlockCode(nb) = always {
++            if let Statement::Block { statements, .. } = &nb.statement {
++                assert_eq!(statements.len(), 2);
++                for stmt in statements {
++                    assert!(matches!(stmt, Statement::InlineFormula(_)));
++                    if let Statement::InlineFormula(f) = stmt {
++                        assert!(matches!(**f, InlineFormulaDefine::Guard { .. }));
++                    }
++                }
++            }
++        }
++    }
++}
++
++#[test]
++fn test_parse_mixed_formulas() {
++    let src = r#"
++model M {
++    always {
++        :[LTL] X End;
++        : i > 0;
++    }
++}
++"#;
++    let (model, _) = parse(src, 0).unwrap();
++    let elements = &model.elements;
++    let model_element = elements
++        .iter()
++        .find(|e| matches!(e, ModelElement::Model(_)))
++        .unwrap();
++    if let ModelElement::Model(m) = model_element {
++        let always = m
++            .elements
++            .iter()
++            .find(|e| matches!(e, ModelElement::NamedBlockCode(_)))
++            .unwrap();
++        if let ModelElement::NamedBlockCode(nb) = always {
++            if let Statement::Block { statements, .. } = &nb.statement {
++                assert_eq!(statements.len(), 2);
++
++                if let Statement::InlineFormula(f) = &statements[0] {
++                    assert!(matches!(**f, InlineFormulaDefine::Ltl { .. }));
++                } else {
++                    panic!("Expected LTL formula");
++                }
++
++                if let Statement::InlineFormula(f) = &statements[1] {
++                    assert!(matches!(**f, InlineFormulaDefine::Guard { .. }));
++                } else {
++                    panic!("Expected Guard formula");
++                }
++            }
++        }
++    }
++}
+diff --git a/grammar/src/semantic/docs.rs b/grammar/src/semantic/docs.rs
+index db8dbcf..4bcf215 100644
+--- a/grammar/src/semantic/docs.rs
++++ b/grammar/src/semantic/docs.rs
+@@ -85,7 +85,15 @@ fn element_start(element: &ModelElement) -> Option<usize> {
+         ModelElement::StraySemicolon(loc) => Some(loc.start()),
+         ModelElement::Enum(e) => Some(e.loc.start()),
+         ModelElement::Struct(s) => Some(s.loc.start()),
+-        ModelElement::InlineFormula(f) => Some(f.loc.start()),
++        ModelElement::InlineFormula(f) => Some(inline_formula_loc(f).start()),
++    }
++}
++
++/// Возвращает местоположение встроенной формулы.
++fn inline_formula_loc(f: &ast::InlineFormulaDefine) -> Location {
++    match f {
++        ast::InlineFormulaDefine::Guard { loc, .. } => *loc,
++        ast::InlineFormulaDefine::Ltl { loc, .. } => *loc,
+     }
+ }
+ 
+diff --git a/grammar/src/semantic/statement.rs b/grammar/src/semantic/statement.rs
+index 7087439..633fd0c 100644
+--- a/grammar/src/semantic/statement.rs
++++ b/grammar/src/semantic/statement.rs
+@@ -250,13 +250,21 @@ fn resolve_ast_statement(
+         ast::Statement::Break(_) => Ok(StatementNode::Break),
+ 
+         // ── Встроенная формула ─────────────────────────────────────────────────
+-        ast::Statement::InlineFormula { conditions, .. } => {
+-            let resolved: Vec<Formula> = conditions
+-                .iter()
+-                .filter_map(|c| resolve_condition(c, model.clone()).ok())
+-                .map(|cn| crate::semantic::formula::condition_to_formula(&cn))
+-                .collect();
+-            Ok(StatementNode::InlineFormula(resolved))
++        ast::Statement::InlineFormula(inline) => {
++            match &**inline {
++                ast::InlineFormulaDefine::Guard { conditions, .. } => {
++                    let resolved: Vec<Formula> = conditions
++                        .iter()
++                        .filter_map(|c| resolve_condition(c, model.clone()).ok())
++                        .map(|cn| crate::semantic::formula::condition_to_formula(&cn))
++                        .collect();
++                    Ok(StatementNode::InlineFormula(resolved))
++                }
++                ast::InlineFormulaDefine::Ltl { .. } => {
++                    // TODO: Реализовать поддержку LTL в блоках кода
++                    Ok(StatementNode::InlineFormula(Vec::new()))
++                }
++            }
+         }
+ 
+         // ── Прочие варианты: оставляем как Unresolved ─────────────────────────
+diff --git a/grammar/src/semantic/tree.rs b/grammar/src/semantic/tree.rs
+index b3f2c78..3f286b8 100644
+--- a/grammar/src/semantic/tree.rs
++++ b/grammar/src/semantic/tree.rs
+@@ -554,8 +554,15 @@ fn construct_model_stage0(
+                     .insert(struct_name.clone(), struct_loc);
+             }
+         } else if let ModelElement::InlineFormula(inline) = element {
+-            for cond in &inline.conditions {
+-                formula_conditions.push(cond.clone());
++            match &**inline {
++                ast::InlineFormulaDefine::Guard { conditions, .. } => {
++                    for cond in conditions {
++                        formula_conditions.push(cond.clone());
++                    }
++                }
++                ast::InlineFormulaDefine::Ltl { .. } => {
++                    // TODO: Реализовать поддержку LTL в моделях
++                }
+             }
+         }
+     }
+@@ -1120,8 +1127,15 @@ pub fn construct_states(
+                     }
+                     next = Some(id.name.clone());
+                 } else if let StateElement::InlineFormula(inline) = element {
+-                    for cond in &inline.conditions {
+-                        state_formula_conditions.push(cond.clone());
++                    match &**inline {
++                        ast::InlineFormulaDefine::Guard { conditions, .. } => {
++                            for cond in conditions {
++                                state_formula_conditions.push(cond.clone());
++                            }
++                        }
++                        ast::InlineFormulaDefine::Ltl { .. } => {
++                            // TODO: Реализовать поддержку LTL в состояниях
++                        }
+                     }
+                 }
+             }

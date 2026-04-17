@@ -250,13 +250,21 @@ fn resolve_ast_statement(
         ast::Statement::Break(_) => Ok(StatementNode::Break),
 
         // ── Встроенная формула ─────────────────────────────────────────────────
-        ast::Statement::InlineFormula { conditions, .. } => {
-            let resolved: Vec<Formula> = conditions
-                .iter()
-                .filter_map(|c| resolve_condition(c, model.clone()).ok())
-                .map(|cn| crate::semantic::formula::condition_to_formula(&cn))
-                .collect();
-            Ok(StatementNode::InlineFormula(resolved))
+        ast::Statement::InlineFormula(inline) => {
+            match &**inline {
+                ast::InlineFormulaDefine::Guard { conditions, .. } => {
+                    let resolved: Vec<Formula> = conditions
+                        .iter()
+                        .filter_map(|c| resolve_condition(c, model.clone()).ok())
+                        .map(|cn| crate::semantic::formula::condition_to_formula(&cn))
+                        .collect();
+                    Ok(StatementNode::InlineFormula(resolved))
+                }
+                ast::InlineFormulaDefine::Ltl { .. } => {
+                    // TODO: Реализовать поддержку LTL в блоках кода
+                    Ok(StatementNode::InlineFormula(Vec::new()))
+                }
+            }
         }
 
         // ── Прочие варианты: оставляем как Unresolved ─────────────────────────

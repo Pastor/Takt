@@ -1,0 +1,325 @@
+diff --git a/grammar/src/grammar.lalrpop b/grammar/src/grammar.lalrpop
+index b34b562..4527b96 100644
+--- a/grammar/src/grammar.lalrpop
++++ b/grammar/src/grammar.lalrpop
+@@ -107,7 +107,14 @@ ButIdentifierPath: IdentifierPath = {
+ }
+ 
+ Identifier: Identifier = {
+-    <l:@L> <n:identifier> <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: n.to_string()}
++    <l:@L> <n:identifier> <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: n.to_string()},
++    <l:@L> "X" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "X".to_string()},
++    <l:@L> "F" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "F".to_string()},
++    <l:@L> "G" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "G".to_string()},
++    <l:@L> "U" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "U".to_string()},
++    <l:@L> "R" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "R".to_string()},
++    <l:@L> "LTL" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "LTL".to_string()},
++    <l:@L> "Guard" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "Guard".to_string()},
+ }
+ 
+ IdentifierOrError: Option<Identifier> = {
+@@ -238,7 +245,7 @@ BlockStatementOrSemiColon: Option<Statement> = {
+ 
+ FunctionDefine: Box<FunctionDefine> = {
+     <l:@L> <e: ("extern")?> "fn" <nl:@L> <name:IdentifierOrError> <nr:@R> <params:ParameterList>
+-    <return_type:("-" ">" <Type>)?> <r:@R> <body:BlockStatementOrSemiColon> => {
++    <return_type:("->" <Type>)?> <r:@R> <body:BlockStatementOrSemiColon> => {
+         Box::new(FunctionDefine {
+             loc: Location::Source(file_no, l, r),
+             name,
+@@ -272,10 +279,54 @@ FormulaDefine: Box<FormulaDefine> = {
+ 
+ InlineFormulaDefine: Box<InlineFormulaDefine> = {
+     <l:@L> ":" <conditions:CommaOne<Condition>> ";" <r:@R> => {
+-        Box::new(InlineFormulaDefine { loc: Location::Source(file_no, l, r), conditions })
++        Box::new(InlineFormulaDefine::Guard { loc: Location::Source(file_no, l, r), conditions })
++    },
++    <l:@L> ":" "[" "LTL" "]" <formulas:CommaOne<LtlExpr>> ";" <r:@R> => {
++        Box::new(InlineFormulaDefine::Ltl { loc: Location::Source(file_no, l, r), formulas })
++    },
++    <l:@L> ":" "[" "Guard" "]" <conditions:CommaOne<Condition>> ";" <r:@R> => {
++        Box::new(InlineFormulaDefine::Guard { loc: Location::Source(file_no, l, r), conditions })
+     }
+ }
+ 
++LtlExpr: LtlExpr = LtlImplies;
++
++LtlImplies: LtlExpr = {
++    <l_loc:@L> <l:LtlOr> "->" <r:LtlImplies> <r_loc:@R> => LtlExpr::Implies(Location::Source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
++    LtlOr
++};
++
++LtlOr: LtlExpr = {
++    <l_loc:@L> <l:LtlOr> "|" <r:LtlAnd> <r_loc:@R> => LtlExpr::Or(Location::Source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
++    LtlAnd
++};
++
++LtlAnd: LtlExpr = {
++    <l_loc:@L> <l:LtlAnd> "&" <r:LtlUntilRelease> <r_loc:@R> => LtlExpr::And(Location::Source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
++    LtlUntilRelease
++};
++
++LtlUntilRelease: LtlExpr = {
++    <l_loc:@L> <l:LtlUntilRelease> "U" <r:LtlUnary> <r_loc:@R> => LtlExpr::Until(Location::Source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
++    <l_loc:@L> <l:LtlUntilRelease> "R" <r:LtlUnary> <r_loc:@R> => LtlExpr::Release(Location::Source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
++    LtlUnary
++};
++
++LtlUnary: LtlExpr = {
++    <l:@L> "!" <e:LtlUnary> <r:@R> => LtlExpr::Not(Location::Source(file_no, l, r), Box::new(e)),
++    <l:@L> "X" <e:LtlUnary> <r:@R> => LtlExpr::Next(Location::Source(file_no, l, r), Box::new(e)),
++    <l:@L> "F" <e:LtlUnary> <r:@R> => LtlExpr::Finally(Location::Source(file_no, l, r), Box::new(e)),
++    <l:@L> "G" <e:LtlUnary> <r:@R> => LtlExpr::Globally(Location::Source(file_no, l, r), Box::new(e)),
++    LtlPrimary
++};
++
++LtlPrimary: LtlExpr = {
++    <l:@L> "true" <r:@R> => LtlExpr::True(Location::Source(file_no, l, r)),
++    <l:@L> "false" <r:@R> => LtlExpr::False(Location::Source(file_no, l, r)),
++    <l:@L> <n:identifier> <r:@R> => LtlExpr::Atom(Identifier{loc: Location::Source(file_no, l, r), name: n.to_string()}),
++    <l:@L> "(" <e:LtlExpr> ")" <r:@R> => LtlExpr::Parenthesis(Location::Source(file_no, l, r), Box::new(e)),
++};
++
+ Type: Type = {
+     <name:Identifier> => Type::Alias(name),
+     <l:@L> "[" <ty:Type> ";" <n:number> "]" <r:@R> => {
+@@ -711,8 +762,8 @@ NonIfStatement: Statement = {
+             block: Box::new(block)
+         }
+     },
+-    <l:@L> ":" <conditions:CommaOne<Condition>> ";" <r:@R> => {
+-        Statement::InlineFormula { loc: Location::Source(file_no, l, r), conditions }
++    <f:InlineFormulaDefine> => {
++        Statement::InlineFormula(f)
+     },
+     <SimpleStatement> ";" => <>,
+     <l:@L> "continue" <r:@R> ";" => {
+@@ -817,7 +868,6 @@ extern {
+         number => Token::Number(<i64>),
+         address => Token::AddressLiteral(<&'input str>),
+         rational => Token::RationalNumber(<&'input str>, <bool>),
+-        "->" => Token::PeirceArrow,
+         "#" => Token::Sharp,
+         ";" => Token::Semicolon,
+         ":" => Token::Colon,
+@@ -871,6 +921,8 @@ extern {
+         "as" => Token::As,
+         "assembly" => Token::Assembly,
+         "formula" => Token::Formula,
++        "->" => Token::Arrow,
++        "-->" => Token::PeirceArrow,
+         "model" => Token::Model,
+         "state" => Token::State,
+         "start" => Token::Start,
+@@ -879,5 +931,12 @@ extern {
+         "var" => Token::Variable,
+         "enum" => Token::Enum,
+         "struct" => Token::Struct,
++        "X" => Token::LtlNext,
++        "F" => Token::LtlFinally,
++        "G" => Token::LtlGlobally,
++        "U" => Token::LtlUntil,
++        "R" => Token::LtlRelease,
++        "LTL" => Token::TypeLtl,
++        "Guard" => Token::TypeGuard,
+     }
+ }
+diff --git a/grammar/src/parser/ast.rs b/grammar/src/parser/ast.rs
+index 850df75..cfb3ab7 100644
+--- a/grammar/src/parser/ast.rs
++++ b/grammar/src/parser/ast.rs
+@@ -826,11 +826,53 @@ pub struct Parameter {
+ /// Встроенная формула: `: условие1[, условие2, …];`
+ #[derive(Debug, PartialEq, Eq, Clone)]
+ #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+-pub struct InlineFormulaDefine {
+-    /// Местоположение в исходном тексте.
+-    pub loc: Location,
+-    /// Список условий.
+-    pub conditions: Vec<Condition>,
++pub enum InlineFormulaDefine {
++    /// По умолчанию: Guard формула.
++    Guard {
++        /// Местоположение в исходном тексте.
++        loc: Location,
++        /// Список условий.
++        conditions: Vec<Condition>,
++    },
++    /// LTL формула.
++    Ltl {
++        /// Местоположение в исходном тексте.
++        loc: Location,
++        /// Список LTL формул.
++        formulas: Vec<LtlExpr>,
++    },
++}
++
++/// Выражение LTL формулы.
++#[derive(Debug, PartialEq, Eq, Clone)]
++#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
++pub enum LtlExpr {
++    /// Логическая истина.
++    True(Location),
++    /// Логическая ложь.
++    False(Location),
++    /// Атомарное предложение (идентификатор).
++    Atom(Identifier),
++    /// Логическое НЕ.
++    Not(Location, Box<LtlExpr>),
++    /// Оператор "в следующем состоянии" (Next, X).
++    Next(Location, Box<LtlExpr>),
++    /// Оператор "в будущем" (Finally, F).
++    Finally(Location, Box<LtlExpr>),
++    /// Оператор "всегда" (Globally, G).
++    Globally(Location, Box<LtlExpr>),
++    /// Логическое И.
++    And(Location, Box<LtlExpr>, Box<LtlExpr>),
++    /// Логическое ИЛИ.
++    Or(Location, Box<LtlExpr>, Box<LtlExpr>),
++    /// Оператор "пока" (Until, U).
++    Until(Location, Box<LtlExpr>, Box<LtlExpr>),
++    /// Оператор "освобождение" (Release, R).
++    Release(Location, Box<LtlExpr>, Box<LtlExpr>),
++    /// Логическая импликация (->).
++    Implies(Location, Box<LtlExpr>, Box<LtlExpr>),
++    /// Выражение в скобках.
++    Parenthesis(Location, Box<LtlExpr>),
+ }
+ 
+ /// Определение формулы (`formula`).
+@@ -966,13 +1008,8 @@ pub enum Statement {
+     Error(Location),
+     /// Одиночная точка с запятой.
+     StraySemicolon(Location),
+-    /// Встроенная формула в блоке кода: `: условие1[, условие2, …];`
+-    InlineFormula {
+-        /// Местоположение в исходном тексте.
+-        loc: Location,
+-        /// Список условий.
+-        conditions: Vec<Condition>,
+-    },
++    /// Встроенная формула в блоке кода: `: [Type] условие1[, условие2, …];`
++    InlineFormula(Box<InlineFormulaDefine>),
+ }
+ 
+ impl Statement {
+diff --git a/grammar/src/parser/lexer.rs b/grammar/src/parser/lexer.rs
+index 1a834c2..70b31fb 100644
+--- a/grammar/src/parser/lexer.rs
++++ b/grammar/src/parser/lexer.rs
+@@ -196,6 +196,22 @@ pub enum Token<'input> {
+     Enum,
+     /// Ключевое слово `struct`.
+     Struct,
++    /// LTL оператор Next (X)
++    LtlNext,
++    /// LTL оператор Finally (F)
++    LtlFinally,
++    /// LTL оператор Globally (G)
++    LtlGlobally,
++    /// LTL оператор Until (U)
++    LtlUntil,
++    /// LTL оператор Release (R)
++    LtlRelease,
++    /// Тип формулы LTL
++    TypeLtl,
++    /// Тип формулы Guard
++    TypeGuard,
++    /// Оператор `->`
++    Arrow,
+ }
+ 
+ impl<'input> fmt::Display for Token<'input> {
+@@ -277,6 +293,14 @@ impl<'input> fmt::Display for Token<'input> {
+             Token::Extern => write!(f, "extern"),
+             Token::Enum => write!(f, "enum"),
+             Token::Struct => write!(f, "struct"),
++            Token::LtlNext => write!(f, "X"),
++            Token::LtlFinally => write!(f, "F"),
++            Token::LtlGlobally => write!(f, "G"),
++            Token::LtlUntil => write!(f, "U"),
++            Token::LtlRelease => write!(f, "R"),
++            Token::TypeLtl => write!(f, "LTL"),
++            Token::TypeGuard => write!(f, "Guard"),
++            Token::Arrow => write!(f, "->"),
+         }
+     }
+ }
+@@ -430,6 +454,13 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
+     "extern"   => Token::Extern,
+     "enum"     => Token::Enum,
+     "struct"   => Token::Struct,
++    "X"        => Token::LtlNext,
++    "F"        => Token::LtlFinally,
++    "G"        => Token::LtlGlobally,
++    "U"        => Token::LtlUntil,
++    "R"        => Token::LtlRelease,
++    "LTL"      => Token::TypeLtl,
++    "Guard"    => Token::TypeGuard,
+ };
+ 
+ impl<'input> Lexer<'input> {
+@@ -875,6 +906,19 @@ impl<'input> Lexer<'input> {
+                 }
+                 Some((i, '-')) => {
+                     return match self.chars.peek() {
++                        Some((_, '>')) => {
++                            self.chars.next();
++                            Some((i, Token::Arrow, i + 2))
++                        }
++                        Some((_, '-')) => {
++                            if matches!(self.chars.peek_nth(1), Some((_, '>'))) {
++                                self.chars.next(); // потребляем второй `-`
++                                self.chars.next(); // потребляем `>`
++                                Some((i, Token::PeirceArrow, i + 3))
++                            } else {
++                                Some((i, Token::Subtract, i + 1))
++                            }
++                        }
+                         Some((_, other)) if other.is_ascii_digit() => {
+                             // Отрицательный числовой литерал
+                             return match self.parse_number(i + 1, '-') {
+diff --git a/grammar/tests/lexer_tests.rs b/grammar/tests/lexer_tests.rs
+index 50f70e1..437de65 100644
+--- a/grammar/tests/lexer_tests.rs
++++ b/grammar/tests/lexer_tests.rs
+@@ -501,13 +501,12 @@ fn shift_right_display_is_correct() {
+     assert_ne!(token.to_string(), "<<");
+ }
+ 
+-/// `->` лексируется как два отдельных токена: Subtract и More.
++/// `->` лексируется как один токен Arrow.
+ #[test]
+-fn arrow_lexes_as_subtract_then_more() {
++fn arrow_lexes_as_single_token() {
+     let strings = collect_token_strings("->");
+-    assert_eq!(strings.len(), 2, "-> должен давать 2 токена");
+-    assert_eq!(strings[0], "-", "Первый — Subtract (-)");
+-    assert_eq!(strings[1], ">", "Второй — More (>)");
++    assert_eq!(strings.len(), 1, "-> должен давать 1 токен");
++    assert_eq!(strings[0], "->", "Токен — Arrow (->)");
+ }
+ 
+ // ─────────────────────────── Тесты Display токенов ───────────────────────────
+@@ -544,6 +543,13 @@ fn token_display_keywords() {
+         ("formula", Token::Formula),
+         ("template", Token::Template),
+         ("pragma", Token::Pragma),
++        ("X", Token::LtlNext),
++        ("F", Token::LtlFinally),
++        ("G", Token::LtlGlobally),
++        ("U", Token::LtlUntil),
++        ("R", Token::LtlRelease),
++        ("LTL", Token::TypeLtl),
++        ("Guard", Token::TypeGuard),
+     ];
+     for (expected, token) in cases {
+         assert_eq!(
+@@ -593,6 +599,7 @@ fn token_display_operators() {
+         (">>", Token::ShiftRight),
+         ("<", Token::Less),
+         ("<=", Token::LessEqual),
++        ("->", Token::Arrow),
+         ("-->", Token::PeirceArrow),
+     ];
+     for (expected, token) in cases {

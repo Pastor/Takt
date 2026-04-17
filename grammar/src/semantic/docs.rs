@@ -85,7 +85,15 @@ fn element_start(element: &ModelElement) -> Option<usize> {
         ModelElement::StraySemicolon(loc) => Some(loc.start()),
         ModelElement::Enum(e) => Some(e.loc.start()),
         ModelElement::Struct(s) => Some(s.loc.start()),
-        ModelElement::InlineFormula(f) => Some(f.loc.start()),
+        ModelElement::InlineFormula(f) => Some(inline_formula_loc(f).start()),
+    }
+}
+
+/// Возвращает местоположение встроенной формулы.
+fn inline_formula_loc(f: &ast::InlineFormulaDefine) -> Location {
+    match f {
+        ast::InlineFormulaDefine::Guard { loc, .. } => *loc,
+        ast::InlineFormulaDefine::Ltl { loc, .. } => *loc,
     }
 }
 

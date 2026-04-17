@@ -196,6 +196,22 @@ pub enum Token<'input> {
     Enum,
     /// Ключевое слово `struct`.
     Struct,
+    /// LTL оператор Next (X)
+    LtlNext,
+    /// LTL оператор Finally (F)
+    LtlFinally,
+    /// LTL оператор Globally (G)
+    LtlGlobally,
+    /// LTL оператор Until (U)
+    LtlUntil,
+    /// LTL оператор Release (R)
+    LtlRelease,
+    /// Тип формулы LTL
+    TypeLtl,
+    /// Тип формулы Guard
+    TypeGuard,
+    /// Оператор `->`
+    Arrow,
 }
 
 impl<'input> fmt::Display for Token<'input> {
@@ -277,6 +293,14 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Extern => write!(f, "extern"),
             Token::Enum => write!(f, "enum"),
             Token::Struct => write!(f, "struct"),
+            Token::LtlNext => write!(f, "X"),
+            Token::LtlFinally => write!(f, "F"),
+            Token::LtlGlobally => write!(f, "G"),
+            Token::LtlUntil => write!(f, "U"),
+            Token::LtlRelease => write!(f, "R"),
+            Token::TypeLtl => write!(f, "LTL"),
+            Token::TypeGuard => write!(f, "Guard"),
+            Token::Arrow => write!(f, "->"),
         }
     }
 }
@@ -430,6 +454,13 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "extern"   => Token::Extern,
     "enum"     => Token::Enum,
     "struct"   => Token::Struct,
+    "X"        => Token::LtlNext,
+    "F"        => Token::LtlFinally,
+    "G"        => Token::LtlGlobally,
+    "U"        => Token::LtlUntil,
+    "R"        => Token::LtlRelease,
+    "LTL"      => Token::TypeLtl,
+    "Guard"    => Token::TypeGuard,
 };
 
 impl<'input> Lexer<'input> {
@@ -875,6 +906,19 @@ impl<'input> Lexer<'input> {
                 }
                 Some((i, '-')) => {
                     return match self.chars.peek() {
+                        Some((_, '>')) => {
+                            self.chars.next();
+                            Some((i, Token::Arrow, i + 2))
+                        }
+                        Some((_, '-')) => {
+                            if matches!(self.chars.peek_nth(1), Some((_, '>'))) {
+                                self.chars.next(); // потребляем второй `-`
+                                self.chars.next(); // потребляем `>`
+                                Some((i, Token::PeirceArrow, i + 3))
+                            } else {
+                                Some((i, Token::Subtract, i + 1))
+                            }
+                        }
                         Some((_, other)) if other.is_ascii_digit() => {
                             // Отрицательный числовой литерал
                             return match self.parse_number(i + 1, '-') {
