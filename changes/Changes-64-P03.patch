@@ -1,0 +1,99 @@
+--- a/grammar/tests/buchi.rs
++++ b/grammar/tests/buchi.rs
+@@ -560,0 +561,96 @@
++        for i in 0..n_nodes {
++            ba_accepting.insert(i);
++        }
++    }
++
++    BuchiAutomaton {
++        states: ba_states,
++        initial_states: ba_initial,
++        transitions: ba_transitions,
++        accepting: ba_accepting,
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn test_parse_ltl() {
++        assert_eq!(
++            parse_ltl("false & G true"),
++            Ltl::And(
++                Rc::new(Ltl::False),
++                Rc::new(Ltl::Globally(Rc::new(Ltl::True)))
++            )
++        );
++    }
++
++    #[test]
++    fn test_x_p() {
++        let formula = parse_ltl("X p");
++        let automaton = build_buchi(&formula);
++        automaton.print();
++        assert!(!automaton.states.is_empty());
++    }
++
++    #[test]
++    fn test_f_p() {
++        let formula = parse_ltl("F p");
++        let automaton = build_buchi(&formula);
++        automaton.print();
++        assert!(!automaton.accepting.is_empty());
++    }
++
++    #[test]
++    fn test_g_p() {
++        let formula = parse_ltl("G p");
++        let automaton = build_buchi(&formula);
++        automaton.print();
++    }
++
++    #[test]
++    fn test_complex() {
++        let formula = parse_ltl("G (p -> F q)");
++        let automaton = build_buchi(&formula);
++        automaton.print();
++    }
++
++    #[test]
++    fn test_until() {
++        let formula = parse_ltl("p U q");
++        let automaton = build_buchi(&formula);
++        automaton.print();
++        assert!(!automaton.states.is_empty());
++    }
++
++    #[test]
++    fn test_release() {
++        let formula = parse_ltl("p R q");
++        let automaton = build_buchi(&formula);
++        automaton.print();
++        assert!(!automaton.states.is_empty());
++    }
++
++    #[test]
++    fn test_gf() {
++        let formula = parse_ltl("G F p");
++        let automaton = build_buchi(&formula);
++        automaton.print();
++        assert!(!automaton.accepting.is_empty());
++    }
++
++    #[test]
++    fn test_fg() {
++        let formula = parse_ltl("F G p");
++        let automaton = build_buchi(&formula);
++        automaton.print();
++    }
++
++    #[test]
++    fn test_nested_until() {
++        let formula = parse_ltl("p U (q U r)");
++        let automaton = build_buchi(&formula);
++        automaton.print();
++    }
++}
