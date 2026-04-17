@@ -1,0 +1,167 @@
+diff --git a/grammar/src/generator/c/c_expr.rs b/grammar/src/generator/c/c_expr.rs
+index 50f6172..9fb1dc8 100644
+--- a/grammar/src/generator/c/c_expr.rs
++++ b/grammar/src/generator/c/c_expr.rs
+@@ -35,30 +35,149 @@ pub(super) fn get_function_name(fun: &FunctionDefinitionNode) -> String {
+     }
+ }
+ 
+-/// Проверяет, является ли [`Extend`] прямой ссылкой на указанную модель.
++/// Возвращает имя поля в родительской C-структуре для вложенной модели.
+ ///
+-/// Поддерживает `Extend::Model` и прозрачную обёртку `Extend::Parentless`.
+-pub(super) fn extend_contains_model(extend: &Extend, target: &Rc<RefCell<ModelNode>>) -> bool {
++/// Ищет в родительской модели состояние с `implements = Extend::Model(эта_модель)`
++/// и возвращает имя этого состояния в snake_case (именно оно используется как поле
++/// в сгенерированной C-структуре). Если не найдено — возвращает `None`.
++fn find_in_extend(
++    extend: &Extend,
++    target: &Rc<RefCell<ModelNode>>,
++    state_name: &str,
++) -> Option<String> {
++    match extend {
++        Extend::Model(m) => {
++            if Rc::ptr_eq(m, target) {
++                Some(normalize_lowercase_snakecase(state_name.to_string()))
++            } else {
++                None
++            }
++        }
++        Extend::Concatenation(items) => {
++            for (idx, item) in items.iter().enumerate() {
++                if let Some(path) = find_in_concat(item, target, state_name, idx) {
++                    return Some(path);
++                }
++            }
++            None
++        }
++        Extend::Parallel(items) => {
++            for (idx, item) in items.iter().enumerate() {
++                if let Some(path) = find_in_parallel(item, target, state_name, idx) {
++                    return Some(path);
++                }
++            }
++            None
++        }
++        Extend::Parentless(inner) => find_in_extend(inner, target, state_name),
++        _ => None,
++    }
++}
++
++fn find_in_concat(
++    extend: &Extend,
++    target: &Rc<RefCell<ModelNode>>,
++    state_name: &str,
++    idx: usize,
++) -> Option<String> {
++    match extend {
++        Extend::Model(m) => {
++            if Rc::ptr_eq(m, target) {
++                let model_name = m.borrow().name.clone().unwrap_or_default();
++                Some(format!(
++                    "{}_{}{}",
++                    normalize_lowercase_snakecase(state_name.to_string()),
++                    normalize_lowercase_snakecase(model_name),
++                    idx
++                ))
++            } else {
++                None
++            }
++        }
++        Extend::Parallel(items) => {
++            let prefix = format!(
++                "{}_parallel{}",
++                normalize_lowercase_snakecase(state_name.to_string()),
++                idx
++            );
++            for (inner_idx, item) in items.iter().enumerate() {
++                if let Some(path) = find_in_parallel(item, target, &prefix, inner_idx) {
++                    return Some(path);
++                }
++            }
++            None
++        }
++        Extend::Concatenation(items) => {
++            for (inner_idx, item) in items.iter().enumerate() {
++                if let Some(path) = find_in_concat(item, target, state_name, inner_idx) {
++                    return Some(path);
++                }
++            }
++            None
++        }
++        Extend::Parentless(inner) => find_in_concat(inner, target, state_name, idx),
++        _ => None,
++    }
++}
++
++fn find_in_parallel(
++    extend: &Extend,
++    target: &Rc<RefCell<ModelNode>>,
++    prefix: &str,
++    idx: usize,
++) -> Option<String> {
+     match extend {
+-        Extend::Model(m) => Rc::ptr_eq(m, target),
+-        Extend::Parentless(inner) => extend_contains_model(inner, target),
+-        _ => false,
++        Extend::Model(m) => {
++            if Rc::ptr_eq(m, target) {
++                let model_name = m.borrow().name.clone().unwrap_or_default();
++                Some(format!(
++                    "{}.{}{}",
++                    normalize_lowercase_snakecase(prefix.to_string()),
++                    normalize_lowercase_snakecase(model_name),
++                    idx
++                ))
++            } else {
++                None
++            }
++        }
++        Extend::Parallel(items) => {
++            let nested_prefix = format!(
++                "{}.parallel{}",
++                normalize_lowercase_snakecase(prefix.to_string()),
++                idx
++            );
++            for (inner_idx, item) in items.iter().enumerate() {
++                if let Some(path) = find_in_parallel(item, target, &nested_prefix, inner_idx) {
++                    return Some(path);
++                }
++            }
++            None
++        }
++        Extend::Concatenation(items) => {
++            for (inner_idx, item) in items.iter().enumerate() {
++                if let Some(path) = find_in_parallel(item, target, prefix, inner_idx) {
++                    return Some(path);
++                }
++            }
++            None
++        }
++        Extend::Parentless(inner) => find_in_parallel(inner, target, prefix, idx),
++        _ => None,
+     }
+ }
+ 
+ /// Возвращает имя поля в родительской C-структуре для вложенной модели.
+ ///
+-/// Ищет в родительской модели состояние с `implements = Extend::Model(эта_модель)`
+-/// и возвращает имя этого состояния в snake_case (именно оно используется как поле
+-/// в сгенерированной C-структуре). Если не найдено — возвращает `None`.
++/// Ищет в родительской модели состояние, в реализации которого используется
++/// эта модель, и возвращает путь к полю в сгенерированной C-структуре.
+ pub(super) fn field_name_in_parent(model_rc: &Rc<RefCell<ModelNode>>) -> Option<String> {
+     let parent_rc = model_rc.borrow().upper.as_ref()?.upgrade()?;
+     let parent = parent_rc.borrow();
+     for (state_name, state_node) in &parent.states {
+-        if let StateNode::Implement { implements, .. } = state_node
+-            && extend_contains_model(implements, model_rc)
+-        {
+-            return Some(normalize_lowercase_snakecase(state_name.clone()));
++        if let StateNode::Implement { implements, .. } = state_node {
++            if let Some(path) = find_in_extend(implements, model_rc, state_name) {
++                return Some(path);
++            }
+         }
+     }
+     None
