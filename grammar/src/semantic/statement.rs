@@ -27,9 +27,10 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
+use crate::semantic::condition::resolve_condition;
 use crate::semantic::expression::construct_expression;
 use crate::semantic::type_node::{TypeNode, construct_type};
-use crate::semantic::{ExpressionNode, ModelNode, StatementNode, VariableNode};
+use crate::semantic::{ExpressionNode, Formula, ModelNode, StatementNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -247,6 +248,16 @@ fn resolve_ast_statement(
         // ── Простые операторы без выражений ───────────────────────────────────
         ast::Statement::Continue(_) => Ok(StatementNode::Continue),
         ast::Statement::Break(_) => Ok(StatementNode::Break),
+
+        // ── Встроенная формула ─────────────────────────────────────────────────
+        ast::Statement::InlineFormula { conditions, .. } => {
+            let resolved: Vec<Formula> = conditions
+                .iter()
+                .filter_map(|c| resolve_condition(c, model.clone()).ok())
+                .map(|cn| crate::semantic::formula::condition_to_formula(&cn))
+                .collect();
+            Ok(StatementNode::InlineFormula(resolved))
+        }
 
         // ── Прочие варианты: оставляем как Unresolved ─────────────────────────
         //

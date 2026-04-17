@@ -308,8 +308,6 @@ mod tests {
     use super::*;
     use crate::generator::{Language, generate};
     use crate::semantic::tree::construct_model;
-    #[cfg(feature = "ast-serde")]
-    use serde_json;
 
     const SRC: &str = r#"
 //Алиас типа

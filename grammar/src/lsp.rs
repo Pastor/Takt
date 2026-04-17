@@ -1306,6 +1306,7 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                     },
                 ));
             }
+            ModelElement::InlineFormula(_) => {}
         }
     }
 

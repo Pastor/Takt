@@ -63,6 +63,7 @@ ModelElement: ModelElement = {
     Model => ModelElement::Model(<>),
     StateDefine => ModelElement::State(<>),
     FormulaDefine=> ModelElement::Formula(<>),
+    InlineFormulaDefine => ModelElement::InlineFormula(<>),
     ConditionDefine => ModelElement::Condition(Box::new(<>)),
     NamedBlockCodeDefine => ModelElement::NamedBlockCode(<>),
     <e:EnumDefine> => ModelElement::Enum(e),
@@ -94,6 +95,7 @@ StateElement: StateElement = {
     "next" <name:Identifier> ";" => StateElement::Next(name),
     <l:@L> "ref" <i:Identifier> <e: (":" <Condition>)?> ";" <r:@R> => StateElement::Reference(Location::Source(file_no, l, r), i, e),
     <l:@L> ";" <r:@R> => StateElement::StraySemicolon(Location::Source(file_no, l, r)),
+    InlineFormulaDefine => StateElement::InlineFormula(<>),
 }
 
 ButIdentifierPath: IdentifierPath = {
@@ -268,6 +270,11 @@ FormulaDefine: Box<FormulaDefine> = {
     },
 }
 
+InlineFormulaDefine: Box<InlineFormulaDefine> = {
+    <l:@L> ":" <conditions:CommaOne<Condition>> ";" <r:@R> => {
+        Box::new(InlineFormulaDefine { loc: Location::Source(file_no, l, r), conditions })
+    }
+}
 
 Type: Type = {
     <name:Identifier> => Type::Alias(name),
@@ -703,6 +710,9 @@ NonIfStatement: Statement = {
             flags: None,
             block: Box::new(block)
         }
+    },
+    <l:@L> ":" <conditions:CommaOne<Condition>> ";" <r:@R> => {
+        Statement::InlineFormula { loc: Location::Source(file_no, l, r), conditions }
     },
     <SimpleStatement> ";" => <>,
     <l:@L> "continue" <r:@R> ";" => {

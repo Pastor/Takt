@@ -216,7 +216,7 @@ start Main = Robot;
         let (model_ast, _) = parse(SRC, 0)
             .map_err(|d| d.into_iter().next().unwrap())
             .unwrap();
-        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        let _model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
     }
 
     // ── V6: Тесты безопасности resolve_model_name ─────────────────────────────

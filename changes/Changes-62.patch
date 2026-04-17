@@ -1,0 +1,584 @@
+diff --git a/grammar/src/generator/c/c_expr.rs b/grammar/src/generator/c/c_expr.rs
+index 67c63a4..33aeb0e 100644
+--- a/grammar/src/generator/c/c_expr.rs
++++ b/grammar/src/generator/c/c_expr.rs
+@@ -1308,6 +1308,10 @@ pub(super) fn generate_code_block(
+         StatementNode::Break => {
+             printer.ident("break;").nl();
+         }
++
++        StatementNode::InlineFormula(_) => {
++            // Встроенные формулы не генерируют C-код напрямую.
++        }
+     }
+     Ok(())
+ }
+diff --git a/grammar/src/grammar.lalrpop b/grammar/src/grammar.lalrpop
+index 90086c6..b34b562 100644
+--- a/grammar/src/grammar.lalrpop
++++ b/grammar/src/grammar.lalrpop
+@@ -63,6 +63,7 @@ ModelElement: ModelElement = {
+     Model => ModelElement::Model(<>),
+     StateDefine => ModelElement::State(<>),
+     FormulaDefine=> ModelElement::Formula(<>),
++    InlineFormulaDefine => ModelElement::InlineFormula(<>),
+     ConditionDefine => ModelElement::Condition(Box::new(<>)),
+     NamedBlockCodeDefine => ModelElement::NamedBlockCode(<>),
+     <e:EnumDefine> => ModelElement::Enum(e),
+@@ -94,6 +95,7 @@ StateElement: StateElement = {
+     "next" <name:Identifier> ";" => StateElement::Next(name),
+     <l:@L> "ref" <i:Identifier> <e: (":" <Condition>)?> ";" <r:@R> => StateElement::Reference(Location::Source(file_no, l, r), i, e),
+     <l:@L> ";" <r:@R> => StateElement::StraySemicolon(Location::Source(file_no, l, r)),
++    InlineFormulaDefine => StateElement::InlineFormula(<>),
+ }
+ 
+ ButIdentifierPath: IdentifierPath = {
+@@ -268,6 +270,11 @@ FormulaDefine: Box<FormulaDefine> = {
+     },
+ }
+ 
++InlineFormulaDefine: Box<InlineFormulaDefine> = {
++    <l:@L> ":" <conditions:CommaOne<Condition>> ";" <r:@R> => {
++        Box::new(InlineFormulaDefine { loc: Location::Source(file_no, l, r), conditions })
++    }
++}
+ 
+ Type: Type = {
+     <name:Identifier> => Type::Alias(name),
+@@ -704,6 +711,9 @@ NonIfStatement: Statement = {
+             block: Box::new(block)
+         }
+     },
++    <l:@L> ":" <conditions:CommaOne<Condition>> ";" <r:@R> => {
++        Statement::InlineFormula { loc: Location::Source(file_no, l, r), conditions }
++    },
+     <SimpleStatement> ";" => <>,
+     <l:@L> "continue" <r:@R> ";" => {
+         Statement::Continue(Location::Source(file_no, l, r))
+diff --git a/grammar/src/parser/ast.rs b/grammar/src/parser/ast.rs
+index 1fccbc3..850df75 100644
+--- a/grammar/src/parser/ast.rs
++++ b/grammar/src/parser/ast.rs
+@@ -258,6 +258,8 @@ pub enum ModelElement {
+     Enum(Box<EnumDefine>),
+     /// Структурный тип.
+     Struct(Box<StructDefine>),
++    /// Встроенная формула в теле модели.
++    InlineFormula(Box<InlineFormulaDefine>),
+ }
+ 
+ /// Вид состояния автомата.
+@@ -300,6 +302,8 @@ pub enum StateElement {
+     NamedBlockCode(Box<NamedBlockCodeDefine>),
+     /// Одиночная точка с запятой.
+     StraySemicolon(Location),
++    /// Встроенная формула в теле состояния.
++    InlineFormula(Box<InlineFormulaDefine>),
+ }
+ 
+ /// База наследования: `Имя[(аргументы,*)]`.
+@@ -819,6 +823,16 @@ pub struct Parameter {
+     pub name: Option<Identifier>,
+ }
+ 
++/// Встроенная формула: `: условие1[, условие2, …];`
++#[derive(Debug, PartialEq, Eq, Clone)]
++#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
++pub struct InlineFormulaDefine {
++    /// Местоположение в исходном тексте.
++    pub loc: Location,
++    /// Список условий.
++    pub conditions: Vec<Condition>,
++}
++
+ /// Определение формулы (`formula`).
+ #[derive(Debug, PartialEq, Eq, Clone)]
+ #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+@@ -952,6 +966,13 @@ pub enum Statement {
+     Error(Location),
+     /// Одиночная точка с запятой.
+     StraySemicolon(Location),
++    /// Встроенная формула в блоке кода: `: условие1[, условие2, …];`
++    InlineFormula {
++        /// Местоположение в исходном тексте.
++        loc: Location,
++        /// Список условий.
++        conditions: Vec<Condition>,
++    },
+ }
+ 
+ impl Statement {
+diff --git a/grammar/src/semantic/docs.rs b/grammar/src/semantic/docs.rs
+index 62112c8..db8dbcf 100644
+--- a/grammar/src/semantic/docs.rs
++++ b/grammar/src/semantic/docs.rs
+@@ -85,6 +85,7 @@ fn element_start(element: &ModelElement) -> Option<usize> {
+         ModelElement::StraySemicolon(loc) => Some(loc.start()),
+         ModelElement::Enum(e) => Some(e.loc.start()),
+         ModelElement::Struct(s) => Some(s.loc.start()),
++        ModelElement::InlineFormula(f) => Some(f.loc.start()),
+     }
+ }
+ 
+diff --git a/grammar/src/semantic/extend.rs b/grammar/src/semantic/extend.rs
+index 35c86ee..5670028 100644
+--- a/grammar/src/semantic/extend.rs
++++ b/grammar/src/semantic/extend.rs
+@@ -190,6 +190,7 @@ pub fn compact_implement(
+                     implements: inner,
+                     next,
+                     kind,
++                    formulas: vec![],
+                 };
+                 seq_model.borrow_mut().states.insert(step_name, state);
+             }
+diff --git a/grammar/src/semantic/mod.rs b/grammar/src/semantic/mod.rs
+index af245ac..c46c664 100644
+--- a/grammar/src/semantic/mod.rs
++++ b/grammar/src/semantic/mod.rs
+@@ -17,6 +17,7 @@ pub(crate) mod docs;
+ pub mod enum_node;
+ mod expression;
+ pub mod extend;
++mod formula;
+ mod function;
+ mod import;
+ pub mod index;
+@@ -110,6 +111,8 @@ pub struct ModelNode {
+     ///
+     /// Заполняется [`construct_model_with_docs`](tree::construct_model_with_docs).
+     pub docs: HashMap<String, Vec<String>>,
++    /// Встроенные формулы модели.
++    pub formulas: Vec<ConditionNode>,
+ }
+ 
+ impl ModelNode {
+@@ -136,6 +139,7 @@ impl ModelNode {
+             implements: Extend::None,
+             doc: Vec::new(),
+             docs: HashMap::new(),
++            formulas: Vec::new(),
+         };
+         let model = Rc::new(RefCell::new(model));
+         if let Some(parent) = parent.clone() {
+@@ -205,6 +209,7 @@ impl ModelNode {
+             implements: self.implements.clone(),
+             doc: self.doc.clone(),
+             docs: self.docs.clone(),
++            formulas: self.formulas.clone(),
+         }
+     }
+ }
+@@ -222,6 +227,7 @@ impl PartialEq for ModelNode {
+             && self.enums == other.enums
+             && self.states == other.states
+             && self.implements == other.implements
++            && self.formulas == other.formulas
+     }
+ }
+ 
+@@ -744,6 +750,8 @@ pub enum StatementNode {
+     Continue,
+     /// Оператор `break`.
+     Break,
++    /// Встроенная формула: `: условие1[, условие2, …];`
++    InlineFormula(Vec<ConditionNode>),
+ }
+ 
+ /// Семантический узел переменной.
+@@ -966,6 +974,8 @@ pub enum StateNode {
+         references: Vec<ReferenceNode<StateNode>>,
+         /// Разновидность состояния (обычное, начальное, конечное).
+         kind: StateNodeKind,
++        /// Встроенные формулы состояния.
++        formulas: Vec<ConditionNode>,
+     },
+     /// Состояние с реализацией (`= Модель`): может иметь `next`-переход.
+     Implement {
+@@ -985,6 +995,8 @@ pub enum StateNode {
+         next: Option<ReferenceNode<StateNode>>,
+         /// Разновидность состояния (обычное, начальное, конечное).
+         kind: StateNodeKind,
++        /// Встроенные формулы состояния.
++        formulas: Vec<ConditionNode>,
+     },
+ }
+ 
+@@ -1018,6 +1030,7 @@ impl PartialEq for StateNode {
+                     named_blocks: nb1,
+                     references: r1,
+                     kind: k1,
++                    formulas: f1,
+                     ..
+                 },
+                 StateNode::Simple {
+@@ -1025,9 +1038,10 @@ impl PartialEq for StateNode {
+                     named_blocks: nb2,
+                     references: r2,
+                     kind: k2,
++                    formulas: f2,
+                     ..
+                 },
+-            ) => n1 == n2 && nb1 == nb2 && r1 == r2 && k1 == k2,
++            ) => n1 == n2 && nb1 == nb2 && r1 == r2 && k1 == k2 && f1 == f2,
+             (
+                 StateNode::Implement {
+                     name: n1,
+@@ -1036,6 +1050,7 @@ impl PartialEq for StateNode {
+                     implements: i1,
+                     next: nx1,
+                     kind: k1,
++                    formulas: f1,
+                     ..
+                 },
+                 StateNode::Implement {
+@@ -1045,9 +1060,10 @@ impl PartialEq for StateNode {
+                     implements: i2,
+                     next: nx2,
+                     kind: k2,
++                    formulas: f2,
+                     ..
+                 },
+-            ) => n1 == n2 && nb1 == nb2 && r1 == r2 && i1 == i2 && nx1 == nx2 && k1 == k2,
++            ) => n1 == n2 && nb1 == nb2 && r1 == r2 && i1 == i2 && nx1 == nx2 && k1 == k2 && f1 == f2,
+             _ => false,
+         }
+     }
+@@ -1555,6 +1571,7 @@ mod tests {
+             references: vec![],
+             kind: StateNodeKind::Simple,
+             loc: Default::default(),
++            formulas: vec![],
+         };
+         assert!(state.get_named_block("enter").is_some());
+         assert!(state.get_named_block("exit").is_none());
+diff --git a/grammar/src/semantic/reference.rs b/grammar/src/semantic/reference.rs
+index 0cf85f2..1aac259 100644
+--- a/grammar/src/semantic/reference.rs
++++ b/grammar/src/semantic/reference.rs
+@@ -66,6 +66,7 @@ pub fn resolve_state_references(state: &StateNode) -> Result<StateNode, Diagnost
+             name,
+             named_blocks,
+             kind,
++            formulas,
+         } => Ok(StateNode::Simple {
+             upper: upper.clone(),
+             loc: *loc,
+@@ -73,6 +74,7 @@ pub fn resolve_state_references(state: &StateNode) -> Result<StateNode, Diagnost
+             name: name.clone(),
+             references: resolve_references(references, state)?,
+             kind: *kind,
++            formulas: formulas.clone(),
+         }),
+         StateNode::Implement {
+             upper,
+@@ -83,6 +85,7 @@ pub fn resolve_state_references(state: &StateNode) -> Result<StateNode, Diagnost
+             implements,
+             next,
+             kind,
++            formulas,
+         } => Ok(StateNode::Implement {
+             upper: upper.clone(),
+             loc: *loc,
+@@ -92,6 +95,7 @@ pub fn resolve_state_references(state: &StateNode) -> Result<StateNode, Diagnost
+             implements: implements.clone(),
+             next: next.clone(),
+             kind: *kind,
++            formulas: formulas.clone(),
+         }),
+         other => Ok(other.clone()),
+     }
+diff --git a/grammar/src/semantic/statement.rs b/grammar/src/semantic/statement.rs
+index 562f7d0..dc24157 100644
+--- a/grammar/src/semantic/statement.rs
++++ b/grammar/src/semantic/statement.rs
+@@ -27,9 +27,10 @@
+ 
+ use crate::diagnostics::Diagnostic;
+ use crate::parser::ast;
++use crate::semantic::condition::resolve_condition;
+ use crate::semantic::expression::construct_expression;
+ use crate::semantic::type_node::{TypeNode, construct_type};
+-use crate::semantic::{ExpressionNode, ModelNode, StatementNode, VariableNode};
++use crate::semantic::{ConditionNode, ExpressionNode, ModelNode, StatementNode, VariableNode};
+ use std::cell::RefCell;
+ use std::rc::Rc;
+ 
+@@ -248,6 +249,15 @@ fn resolve_ast_statement(
+         ast::Statement::Continue(_) => Ok(StatementNode::Continue),
+         ast::Statement::Break(_) => Ok(StatementNode::Break),
+ 
++        // ── Встроенная формула ─────────────────────────────────────────────────
++        ast::Statement::InlineFormula { conditions, .. } => {
++            let resolved: Vec<ConditionNode> = conditions
++                .iter()
++                .filter_map(|c| resolve_condition(c, model.clone()).ok())
++                .collect();
++            Ok(StatementNode::InlineFormula(resolved))
++        }
++
+         // ── Прочие варианты: оставляем как Unresolved ─────────────────────────
+         //
+         // Assembly и Formula — встроенные низкоуровневые блоки, пропускаются.
+diff --git a/grammar/src/semantic/tree.rs b/grammar/src/semantic/tree.rs
+index 06c451e..cda190f 100644
+--- a/grammar/src/semantic/tree.rs
++++ b/grammar/src/semantic/tree.rs
+@@ -14,7 +14,7 @@ use crate::parser::ast::{
+     Identifier, ImportDefine, Model, ModelElement, StateDefine, StateElement, StateKind,
+     VariableDefine,
+ };
+-use crate::semantic::condition::extract_conditions;
++use crate::semantic::condition::{extract_conditions, resolve_condition};
+ use crate::semantic::expression::construct_expression;
+ use crate::semantic::extend::Extend;
+ use crate::semantic::function::construct_function;
+@@ -103,6 +103,7 @@ fn construct_model_stage0(
+     let mut conditions = HashMap::new();
+     let mut named_blocks = Vec::new();
+     let mut functions = HashMap::new();
++    let mut formula_conditions: Vec<ast::Condition> = Vec::new();
+ 
+     // Ce16: предварительная проверка циклических псевдонимов до вызова construct_type.
+     // Собираем все AST-определения типов из текущего уровня модели.
+@@ -551,6 +552,10 @@ fn construct_model_stage0(
+                     .type_locs
+                     .insert(struct_name.clone(), struct_loc);
+             }
++        } else if let ModelElement::InlineFormula(inline) = element {
++            for cond in &inline.conditions {
++                formula_conditions.push(cond.clone());
++            }
+         }
+     }
+     model_node.borrow_mut().models = models;
+@@ -559,6 +564,15 @@ fn construct_model_stage0(
+     model_node.borrow_mut().conditions = conditions;
+     model_node.borrow_mut().named_blocks = named_blocks;
+     model_node.borrow_mut().functions = functions;
++    {
++        let mut formulas = Vec::new();
++        for cond in &formula_conditions {
++            if let Ok(cn) = resolve_condition(cond, Rc::clone(&model_node)) {
++                formulas.push(cn);
++            }
++        }
++        model_node.borrow_mut().formulas = formulas;
++    }
+     Ok(Rc::clone(&model_node))
+ }
+ 
+@@ -579,6 +593,7 @@ fn construct_model_stage1(
+             next,
+             name,
+             kind,
++            formulas,
+         } = state.clone()
+         {
+             let implements = extend::unroll_extend_expression(
+@@ -597,6 +612,7 @@ fn construct_model_stage1(
+                     implements,
+                     next,
+                     kind,
++                    formulas,
+                 },
+             );
+         } else {
+@@ -856,12 +872,14 @@ fn resolve_state_named_blocks(
+             references,
+             named_blocks,
+             kind,
++            formulas,
+         } => Ok(StateNode::Simple {
+             upper: upper.clone(),
+             loc,
+             name,
+             references,
+             kind,
++            formulas,
+             named_blocks: resolve_named_blocks(named_blocks, model)?,
+         }),
+         StateNode::Implement {
+@@ -873,6 +891,7 @@ fn resolve_state_named_blocks(
+             next,
+             named_blocks,
+             kind,
++            formulas,
+         } => Ok(StateNode::Implement {
+             upper: upper.clone(),
+             loc,
+@@ -881,6 +900,7 @@ fn resolve_state_named_blocks(
+             implements,
+             next,
+             kind,
++            formulas,
+             named_blocks: resolve_named_blocks(named_blocks, model)?,
+         }),
+         other => Ok(other),
+@@ -1075,6 +1095,7 @@ pub fn construct_states(
+             let kind = def.kind.clone();
+             let mut references = Vec::new();
+             let mut next: Option<String> = None;
++            let mut state_formula_conditions: Vec<ast::Condition> = Vec::new();
+             for element in def.elements.iter() {
+                 if let StateElement::Reference(_, id, cond) = element {
+                     let cond = if let Some(cond) = cond {
+@@ -1097,8 +1118,16 @@ pub fn construct_states(
+                         .with_code("SE-012"));
+                     }
+                     next = Some(id.name.clone());
++                } else if let StateElement::InlineFormula(inline) = element {
++                    for cond in &inline.conditions {
++                        state_formula_conditions.push(cond.clone());
++                    }
+                 }
+             }
++            let state_formulas: Vec<ConditionNode> = state_formula_conditions
++                .iter()
++                .filter_map(|c| resolve_condition(c, Rc::clone(&upper)).ok())
++                .collect();
+             let kind = match kind {
+                 None => {
+                     if references.is_empty() {
+@@ -1138,6 +1167,7 @@ pub fn construct_states(
+                     implements: Extend::Unresolved(expr),
+                     next,
+                     kind,
++                    formulas: state_formulas,
+                 }
+             } else {
+                 StateNode::Simple {
+@@ -1147,6 +1177,7 @@ pub fn construct_states(
+                     name: name.clone(),
+                     references,
+                     kind,
++                    formulas: state_formulas,
+                 }
+             };
+             states.insert(name, Box::new(state));
+@@ -1164,6 +1195,7 @@ pub fn construct_states(
+                 references,
+                 named_blocks,
+                 kind,
++                formulas,
+             } => {
+                 let resolved = resolve_references(references, &states)?;
+                 new_states.insert(
+@@ -1175,6 +1207,7 @@ pub fn construct_states(
+                         name,
+                         references: resolved,
+                         kind,
++                        formulas,
+                     },
+                 );
+             }
+@@ -1187,6 +1220,7 @@ pub fn construct_states(
+                 implements,
+                 next,
+                 kind,
++                formulas,
+             } => {
+                 let resolved = resolve_references(references, &states)?;
+                 // Разрешаем next-ссылку отдельно (это одиночный Reference, не список).
+@@ -1222,6 +1256,7 @@ pub fn construct_states(
+                         implements,
+                         next,
+                         kind,
++                        formulas,
+                     },
+                 );
+             }
+diff --git a/grammar/tests/parser_tests.rs b/grammar/tests/parser_tests.rs
+index 74a916b..91f85ea 100644
+--- a/grammar/tests/parser_tests.rs
++++ b/grammar/tests/parser_tests.rs
+@@ -1763,3 +1763,52 @@ fn struct_anonymous_parses_with_recovery() {
+     // Принимаем как ошибку или успех с диагностикой — не panic
+     let _ = grammar::parse(src, 0);
+ }
++
++// ─── Inline formula ──────────────────────────────────────────────────────────
++
++/// Встроенная формула в теле модели разбирается как `ModelElement::InlineFormula`.
++#[test]
++fn test_inline_formula_in_model_parsed() {
++    let src = "model M { var temperature: bit = false; : temperature; }";
++    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
++    let m = ast
++        .elements
++        .iter()
++        .find(|e| matches!(e, grammar::parser::ast::ModelElement::Model(_)))
++        .unwrap();
++    if let grammar::parser::ast::ModelElement::Model(model) = m {
++        assert!(
++            model
++                .elements
++                .iter()
++                .any(|e| matches!(e, grammar::parser::ast::ModelElement::InlineFormula(_))),
++            "ожидался ModelElement::InlineFormula в теле model M"
++        );
++    }
++}
++
++/// Встроенная формула в теле состояния разбирается как `StateElement::InlineFormula`.
++#[test]
++fn test_inline_formula_in_state_parsed() {
++    let src = "model M { start S { : true, false; } }";
++    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
++    if let grammar::parser::ast::ModelElement::Model(model) = &ast.elements[0] {
++        if let grammar::parser::ast::ModelElement::State(state) = &model.elements[0] {
++            assert!(
++                state
++                    .elements
++                    .iter()
++                    .any(|e| matches!(e, grammar::parser::ast::StateElement::InlineFormula(_))),
++                "ожидался StateElement::InlineFormula в теле состояния S"
++            );
++        }
++    }
++}
++
++/// Встроенная формула в блоке `always` разбирается без ошибок.
++#[test]
++fn test_inline_formula_in_always_parsed() {
++    let src = "model M { always { var i: bit = false; : i, true; } start S; }";
++    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
++    assert!(!ast.elements.is_empty());
++}
+diff --git a/grammar/tests/semantic_tests.rs b/grammar/tests/semantic_tests.rs
+index 24216ca..4886bb7 100644
+--- a/grammar/tests/semantic_tests.rs
++++ b/grammar/tests/semantic_tests.rs
+@@ -4246,3 +4246,32 @@ start Root = M;
+         *func.borrow()
+     );
+ }
++
++// ─── Inline formula ──────────────────────────────────────────────────────────
++
++/// Встроенная формула на уровне модели разрешается и попадает в `model.formulas`.
++#[test]
++fn test_inline_formula_model_resolved() {
++    let (ast, _) =
++        grammar::parse("var x: bit = false; : x; start S;", 0).expect("ошибка разбора");
++    let node = construct_model(&ast, None, &[]).expect("ошибка построения");
++    assert_eq!(
++        node.borrow().formulas.len(),
++        1,
++        "ожидалась 1 встроенная формула в модели"
++    );
++}
++
++/// Встроенная формула на уровне состояния разрешается и попадает в `state.formulas`.
++#[test]
++fn test_inline_formula_state_resolved() {
++    let (ast, _) =
++        grammar::parse("var x: bit = false; start S { : x; }", 0).expect("ошибка разбора");
++    let node = construct_model(&ast, None, &[]).expect("ошибка построения");
++    let state = node.borrow().states.get("S").cloned().expect("состояние S не найдено");
++    if let StateNode::Simple { formulas, .. } = state {
++        assert_eq!(formulas.len(), 1, "ожидалась 1 встроенная формула в состоянии S");
++    } else {
++        panic!("ожидался Simple state");
++    }
++}

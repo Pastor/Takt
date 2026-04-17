@@ -17,6 +17,7 @@ pub(crate) mod docs;
 pub mod enum_node;
 mod expression;
 pub mod extend;
+pub mod formula;
 mod function;
 mod import;
 pub mod index;
@@ -41,6 +42,7 @@ use crate::diagnostics::Location;
 use crate::parser::ast;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
 pub use crate::semantic::enum_node::EnumDefinitionNode;
+pub use crate::semantic::formula::Formula;
 pub use crate::semantic::struct_node::StructDefinitionNode;
 use extend::Extend;
 use std::cell::RefCell;
@@ -110,6 +112,8 @@ pub struct ModelNode {
     ///
     /// Заполняется [`construct_model_with_docs`](tree::construct_model_with_docs).
     pub docs: HashMap<String, Vec<String>>,
+    /// Встроенные формулы модели.
+    pub formulas: Vec<Formula>,
 }
 
 impl ModelNode {
@@ -136,6 +140,7 @@ impl ModelNode {
             implements: Extend::None,
             doc: Vec::new(),
             docs: HashMap::new(),
+            formulas: Vec::new(),
         };
         let model = Rc::new(RefCell::new(model));
         if let Some(parent) = parent.clone() {
@@ -205,6 +210,7 @@ impl ModelNode {
             implements: self.implements.clone(),
             doc: self.doc.clone(),
             docs: self.docs.clone(),
+            formulas: self.formulas.clone(),
         }
     }
 }
@@ -222,6 +228,7 @@ impl PartialEq for ModelNode {
             && self.enums == other.enums
             && self.states == other.states
             && self.implements == other.implements
+            && self.formulas == other.formulas
     }
 }
 
@@ -744,6 +751,8 @@ pub enum StatementNode {
     Continue,
     /// Оператор `break`.
     Break,
+    /// Встроенная формула: `: условие1[, условие2, …];`
+    InlineFormula(Vec<Formula>),
 }
 
 /// Семантический узел переменной.
@@ -966,6 +975,8 @@ pub enum StateNode {
         references: Vec<ReferenceNode<StateNode>>,
         /// Разновидность состояния (обычное, начальное, конечное).
         kind: StateNodeKind,
+        /// Встроенные формулы состояния.
+        formulas: Vec<Formula>,
     },
     /// Состояние с реализацией (`= Модель`): может иметь `next`-переход.
     Implement {
@@ -985,6 +996,8 @@ pub enum StateNode {
         next: Option<ReferenceNode<StateNode>>,
         /// Разновидность состояния (обычное, начальное, конечное).
         kind: StateNodeKind,
+        /// Встроенные формулы состояния.
+        formulas: Vec<Formula>,
     },
 }
 
@@ -1018,6 +1031,7 @@ impl PartialEq for StateNode {
                     named_blocks: nb1,
                     references: r1,
                     kind: k1,
+                    formulas: f1,
                     ..
                 },
                 StateNode::Simple {
@@ -1025,9 +1039,10 @@ impl PartialEq for StateNode {
                     named_blocks: nb2,
                     references: r2,
                     kind: k2,
+                    formulas: f2,
                     ..
                 },
-            ) => n1 == n2 && nb1 == nb2 && r1 == r2 && k1 == k2,
+            ) => n1 == n2 && nb1 == nb2 && r1 == r2 && k1 == k2 && f1 == f2,
             (
                 StateNode::Implement {
                     name: n1,
@@ -1036,6 +1051,7 @@ impl PartialEq for StateNode {
                     implements: i1,
                     next: nx1,
                     kind: k1,
+                    formulas: f1,
                     ..
                 },
                 StateNode::Implement {
@@ -1045,9 +1061,12 @@ impl PartialEq for StateNode {
                     implements: i2,
                     next: nx2,
                     kind: k2,
+                    formulas: f2,
                     ..
                 },
-            ) => n1 == n2 && nb1 == nb2 && r1 == r2 && i1 == i2 && nx1 == nx2 && k1 == k2,
+            ) => {
+                n1 == n2 && nb1 == nb2 && r1 == r2 && i1 == i2 && nx1 == nx2 && k1 == k2 && f1 == f2
+            }
             _ => false,
         }
     }
@@ -1555,6 +1574,7 @@ mod tests {
             references: vec![],
             kind: StateNodeKind::Simple,
             loc: Default::default(),
+            formulas: vec![],
         };
         assert!(state.get_named_block("enter").is_some());
         assert!(state.get_named_block("exit").is_none());

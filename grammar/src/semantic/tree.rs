@@ -14,9 +14,10 @@ use crate::parser::ast::{
     Identifier, ImportDefine, Model, ModelElement, StateDefine, StateElement, StateKind,
     VariableDefine,
 };
-use crate::semantic::condition::extract_conditions;
+use crate::semantic::condition::{extract_conditions, resolve_condition};
 use crate::semantic::expression::construct_expression;
 use crate::semantic::extend::Extend;
+use crate::semantic::formula;
 use crate::semantic::function::construct_function;
 use crate::semantic::import::read_import_file;
 use crate::semantic::named_block::resolve_named_blocks;
@@ -29,9 +30,9 @@ use crate::semantic::validate::{
     validate_model,
 };
 use crate::semantic::{
-    ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
-    NamedCodeBlockDefinitionNode, ReferenceNode, StateNode, StateNodeKind, StatementNode,
-    VariableNode, extend,
+    ConditionDefinitionNode, ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode,
+    ModelNode, NamedCodeBlockDefinitionNode, ReferenceNode, StateNode, StateNodeKind,
+    StatementNode, VariableNode, extend,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -103,6 +104,7 @@ fn construct_model_stage0(
     let mut conditions = HashMap::new();
     let mut named_blocks = Vec::new();
     let mut functions = HashMap::new();
+    let mut formula_conditions: Vec<ast::Condition> = Vec::new();
 
     // Ce16: предварительная проверка циклических псевдонимов до вызова construct_type.
     // Собираем все AST-определения типов из текущего уровня модели.
@@ -551,6 +553,10 @@ fn construct_model_stage0(
                     .type_locs
                     .insert(struct_name.clone(), struct_loc);
             }
+        } else if let ModelElement::InlineFormula(inline) = element {
+            for cond in &inline.conditions {
+                formula_conditions.push(cond.clone());
+            }
         }
     }
     model_node.borrow_mut().models = models;
@@ -559,6 +565,15 @@ fn construct_model_stage0(
     model_node.borrow_mut().conditions = conditions;
     model_node.borrow_mut().named_blocks = named_blocks;
     model_node.borrow_mut().functions = functions;
+    {
+        let mut formulas = Vec::new();
+        for cond in &formula_conditions {
+            if let Ok(cn) = resolve_condition(cond, Rc::clone(&model_node)) {
+                formulas.push(formula::condition_to_formula(&cn));
+            }
+        }
+        model_node.borrow_mut().formulas = formulas;
+    }
     Ok(Rc::clone(&model_node))
 }
 
@@ -579,6 +594,7 @@ fn construct_model_stage1(
             next,
             name,
             kind,
+            formulas,
         } = state.clone()
         {
             let implements = extend::unroll_extend_expression(
@@ -597,6 +613,7 @@ fn construct_model_stage1(
                     implements,
                     next,
                     kind,
+                    formulas,
                 },
             );
         } else {
@@ -856,12 +873,14 @@ fn resolve_state_named_blocks(
             references,
             named_blocks,
             kind,
+            formulas,
         } => Ok(StateNode::Simple {
             upper: upper.clone(),
             loc,
             name,
             references,
             kind,
+            formulas,
             named_blocks: resolve_named_blocks(named_blocks, model)?,
         }),
         StateNode::Implement {
@@ -873,6 +892,7 @@ fn resolve_state_named_blocks(
             next,
             named_blocks,
             kind,
+            formulas,
         } => Ok(StateNode::Implement {
             upper: upper.clone(),
             loc,
@@ -881,6 +901,7 @@ fn resolve_state_named_blocks(
             implements,
             next,
             kind,
+            formulas,
             named_blocks: resolve_named_blocks(named_blocks, model)?,
         }),
         other => Ok(other),
@@ -1075,6 +1096,7 @@ pub fn construct_states(
             let kind = def.kind.clone();
             let mut references = Vec::new();
             let mut next: Option<String> = None;
+            let mut state_formula_conditions: Vec<ast::Condition> = Vec::new();
             for element in def.elements.iter() {
                 if let StateElement::Reference(_, id, cond) = element {
                     let cond = if let Some(cond) = cond {
@@ -1097,8 +1119,17 @@ pub fn construct_states(
                         .with_code("SE-012"));
                     }
                     next = Some(id.name.clone());
+                } else if let StateElement::InlineFormula(inline) = element {
+                    for cond in &inline.conditions {
+                        state_formula_conditions.push(cond.clone());
+                    }
                 }
             }
+            let state_formulas: Vec<Formula> = state_formula_conditions
+                .iter()
+                .filter_map(|c| resolve_condition(c, Rc::clone(&upper)).ok())
+                .map(|cn| formula::condition_to_formula(&cn))
+                .collect();
             let kind = match kind {
                 None => {
                     if references.is_empty() {
@@ -1138,6 +1169,7 @@ pub fn construct_states(
                     implements: Extend::Unresolved(expr),
                     next,
                     kind,
+                    formulas: state_formulas,
                 }
             } else {
                 StateNode::Simple {
@@ -1147,6 +1179,7 @@ pub fn construct_states(
                     name: name.clone(),
                     references,
                     kind,
+                    formulas: state_formulas,
                 }
             };
             states.insert(name, Box::new(state));
@@ -1164,6 +1197,7 @@ pub fn construct_states(
                 references,
                 named_blocks,
                 kind,
+                formulas,
             } => {
                 let resolved = resolve_references(references, &states)?;
                 new_states.insert(
@@ -1175,6 +1209,7 @@ pub fn construct_states(
                         name,
                         references: resolved,
                         kind,
+                        formulas,
                     },
                 );
             }
@@ -1187,6 +1222,7 @@ pub fn construct_states(
                 implements,
                 next,
                 kind,
+                formulas,
             } => {
                 let resolved = resolve_references(references, &states)?;
                 // Разрешаем next-ссылку отдельно (это одиночный Reference, не список).
@@ -1222,6 +1258,7 @@ pub fn construct_states(
                         implements,
                         next,
                         kind,
+                        formulas,
                     },
                 );
             }

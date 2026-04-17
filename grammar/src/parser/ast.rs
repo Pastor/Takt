@@ -258,6 +258,8 @@ pub enum ModelElement {
     Enum(Box<EnumDefine>),
     /// Структурный тип.
     Struct(Box<StructDefine>),
+    /// Встроенная формула в теле модели.
+    InlineFormula(Box<InlineFormulaDefine>),
 }
 
 /// Вид состояния автомата.
@@ -300,6 +302,8 @@ pub enum StateElement {
     NamedBlockCode(Box<NamedBlockCodeDefine>),
     /// Одиночная точка с запятой.
     StraySemicolon(Location),
+    /// Встроенная формула в теле состояния.
+    InlineFormula(Box<InlineFormulaDefine>),
 }
 
 /// База наследования: `Имя[(аргументы,*)]`.
@@ -819,6 +823,16 @@ pub struct Parameter {
     pub name: Option<Identifier>,
 }
 
+/// Встроенная формула: `: условие1[, условие2, …];`
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct InlineFormulaDefine {
+    /// Местоположение в исходном тексте.
+    pub loc: Location,
+    /// Список условий.
+    pub conditions: Vec<Condition>,
+}
+
 /// Определение формулы (`formula`).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
@@ -952,6 +966,13 @@ pub enum Statement {
     Error(Location),
     /// Одиночная точка с запятой.
     StraySemicolon(Location),
+    /// Встроенная формула в блоке кода: `: условие1[, условие2, …];`
+    InlineFormula {
+        /// Местоположение в исходном тексте.
+        loc: Location,
+        /// Список условий.
+        conditions: Vec<Condition>,
+    },
 }
 
 impl Statement {

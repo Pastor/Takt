@@ -1763,3 +1763,52 @@ fn struct_anonymous_parses_with_recovery() {
     // Принимаем как ошибку или успех с диагностикой — не panic
     let _ = grammar::parse(src, 0);
 }
+
+// ─── Inline formula ──────────────────────────────────────────────────────────
+
+/// Встроенная формула в теле модели разбирается как `ModelElement::InlineFormula`.
+#[test]
+fn test_inline_formula_in_model_parsed() {
+    let src = "model M { var temperature: bit = false; : temperature; }";
+    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
+    let m = ast
+        .elements
+        .iter()
+        .find(|e| matches!(e, grammar::parser::ast::ModelElement::Model(_)))
+        .unwrap();
+    if let grammar::parser::ast::ModelElement::Model(model) = m {
+        assert!(
+            model
+                .elements
+                .iter()
+                .any(|e| matches!(e, grammar::parser::ast::ModelElement::InlineFormula(_))),
+            "ожидался ModelElement::InlineFormula в теле model M"
+        );
+    }
+}
+
+/// Встроенная формула в теле состояния разбирается как `StateElement::InlineFormula`.
+#[test]
+fn test_inline_formula_in_state_parsed() {
+    let src = "model M { start S { : true, false; } }";
+    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
+    if let grammar::parser::ast::ModelElement::Model(model) = &ast.elements[0] {
+        if let grammar::parser::ast::ModelElement::State(state) = &model.elements[0] {
+            assert!(
+                state
+                    .elements
+                    .iter()
+                    .any(|e| matches!(e, grammar::parser::ast::StateElement::InlineFormula(_))),
+                "ожидался StateElement::InlineFormula в теле состояния S"
+            );
+        }
+    }
+}
+
+/// Встроенная формула в блоке `always` разбирается без ошибок.
+#[test]
+fn test_inline_formula_in_always_parsed() {
+    let src = "model M { always { var i: bit = false; : i, true; } start S; }";
+    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
+    assert!(!ast.elements.is_empty());
+}

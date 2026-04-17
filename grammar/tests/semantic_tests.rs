@@ -4246,3 +4246,112 @@ start Root = M;
         *func.borrow()
     );
 }
+
+// ─── Inline formula ──────────────────────────────────────────────────────────
+
+/// Встроенная формула на уровне модели разрешается и попадает в `model.formulas`.
+#[test]
+fn test_inline_formula_model_resolved() {
+    let (ast, _) = grammar::parse("var x: bit = false; : x; start S;", 0).expect("ошибка разбора");
+    let node = construct_model(&ast, None, &[]).expect("ошибка построения");
+    assert_eq!(
+        node.borrow().formulas.len(),
+        1,
+        "ожидалась 1 встроенная формула в модели"
+    );
+}
+
+/// Встроенная формула на уровне состояния разрешается и попадает в `state.formulas`.
+#[test]
+fn test_inline_formula_state_resolved() {
+    let (ast, _) =
+        grammar::parse("var x: bit = false; start S { : x; }", 0).expect("ошибка разбора");
+    let node = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let state = node
+        .borrow()
+        .states
+        .get("S")
+        .cloned()
+        .expect("состояние S не найдено");
+    if let StateNode::Simple { formulas, .. } = state {
+        assert_eq!(
+            formulas.len(),
+            1,
+            "ожидалась 1 встроенная формула в состоянии S"
+        );
+    } else {
+        panic!("ожидался Simple state");
+    }
+}
+
+// ─── Тесты condition_to_formula ───────────────────────────────────────────────
+
+/// `condition_to_formula` корректно преобразует булевый литерал.
+#[test]
+fn test_formula_from_condition_bool() {
+    use grammar::semantic::ConditionNode;
+    use grammar::semantic::formula::condition_to_formula;
+    let cn = ConditionNode::Bool(true);
+    let f = condition_to_formula(&cn);
+    assert!(
+        matches!(f, grammar::semantic::Formula::Boolean(true)),
+        "ожидался Formula::Boolean(true), получено: {:?}",
+        f
+    );
+}
+
+/// `condition_to_formula` корректно преобразует числовую константу.
+#[test]
+fn test_formula_from_condition_number() {
+    use grammar::semantic::ConditionNode;
+    use grammar::semantic::formula::condition_to_formula;
+    let cn = ConditionNode::Number(42);
+    let f = condition_to_formula(&cn);
+    assert!(
+        matches!(f, grammar::semantic::Formula::Number(42)),
+        "ожидался Formula::Number(42), получено: {:?}",
+        f
+    );
+}
+
+/// `condition_to_formula` корректно преобразует `Not`.
+#[test]
+fn test_formula_from_condition_not() {
+    use grammar::semantic::ConditionNode;
+    use grammar::semantic::formula::condition_to_formula;
+    let inner = ConditionNode::Bool(false);
+    let cn = ConditionNode::Not(Box::new(inner));
+    let f = condition_to_formula(&cn);
+    assert!(
+        matches!(f, grammar::semantic::Formula::Not(_)),
+        "ожидался Formula::Not(_), получено: {:?}",
+        f
+    );
+}
+
+/// `condition_to_formula` преобразует `None` в `Formula::Boolean(true)`.
+#[test]
+fn test_formula_from_condition_none() {
+    use grammar::semantic::ConditionNode;
+    use grammar::semantic::formula::condition_to_formula;
+    let f = condition_to_formula(&ConditionNode::None);
+    assert!(
+        matches!(f, grammar::semantic::Formula::Boolean(true)),
+        "ожидался Formula::Boolean(true) для None, получено: {:?}",
+        f
+    );
+}
+
+/// Встроенная формула на уровне модели хранится как `Formula::Variable`, а не `ConditionNode`.
+#[test]
+fn test_inline_formula_model_is_formula_type() {
+    let (ast, _) = grammar::parse("var x: bit = false; : x; start S;", 0).expect("ошибка разбора");
+    let node = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let formulas = node.borrow().formulas.clone();
+    assert_eq!(formulas.len(), 1, "ожидалась 1 формула в модели");
+    assert!(
+        matches!(formulas[0], grammar::semantic::Formula::Variable(_)),
+        "ожидался Formula::Variable(_), получено: {:?}",
+        formulas[0]
+    );
+}

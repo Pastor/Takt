@@ -77,7 +77,7 @@ impl From<Rc<RefCell<ModelNode>>> for Name {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum StateExtend {
     None,
     Model(Name),
@@ -90,7 +90,7 @@ pub(crate) enum StateExtend {
 /// Поля `start`, `name`, `next`, `references` хранятся для будущей генерации
 /// `.c`-источника (I1–I4) и не читаются напрямую в текущей реализации.
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Element {
     /// Вложенная модель со списком состояний и именем стартового состояния.
     Model {

@@ -35,7 +35,6 @@ mod tests {
     use crate::semantic::ExpressionNode;
     use crate::{parse, semantic};
 
-    use super::*;
     use crate::generator::c::c_expr::generate_stmt_expression;
     use crate::generator::indent::Printer;
     use crate::semantic::minimap::Element;

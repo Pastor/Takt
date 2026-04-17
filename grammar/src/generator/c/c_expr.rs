@@ -1308,6 +1308,10 @@ pub(super) fn generate_code_block(
         StatementNode::Break => {
             printer.ident("break;").nl();
         }
+
+        StatementNode::InlineFormula(_) => {
+            // Встроенные формулы не генерируют C-код напрямую.
+        }
     }
     Ok(())
 }

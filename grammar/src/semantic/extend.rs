@@ -190,6 +190,7 @@ pub fn compact_implement(
                     implements: inner,
                     next,
                     kind,
+                    formulas: vec![],
                 };
                 seq_model.borrow_mut().states.insert(step_name, state);
             }

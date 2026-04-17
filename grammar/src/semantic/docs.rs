@@ -85,6 +85,7 @@ fn element_start(element: &ModelElement) -> Option<usize> {
         ModelElement::StraySemicolon(loc) => Some(loc.start()),
         ModelElement::Enum(e) => Some(e.loc.start()),
         ModelElement::Struct(s) => Some(s.loc.start()),
+        ModelElement::InlineFormula(f) => Some(f.loc.start()),
     }
 }
 
