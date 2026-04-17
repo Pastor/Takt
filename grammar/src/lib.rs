@@ -45,6 +45,7 @@ pub mod lsp;
 pub mod parser;
 /// Модуль семантического анализа и построение семантического дерева
 pub mod semantic;
+pub mod verification;
 
 #[allow(
     clippy::needless_lifetimes,
