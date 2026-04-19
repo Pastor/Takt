@@ -1,0 +1,269 @@
+diff --git a/grammar/src/generator/c/c_decl.rs b/grammar/src/generator/c/c_decl.rs
+index 698c3f6..2e92c24 100644
+--- a/grammar/src/generator/c/c_decl.rs
++++ b/grammar/src/generator/c/c_decl.rs
+@@ -61,20 +61,8 @@ pub(super) fn generate_constants_and_ports_and_enums(
+         for var in variables {
+             match var {
+                 VariableNode::Unresolved | VariableNode::Simple { .. } => {}
+-                VariableNode::Port { name, expr, .. } => {
+-                    let name = model_name.unique_uppercase_snakecase()
+-                        + "_"
+-                        + normalize_lowercase_snakecase(name.clone())
+-                            .to_uppercase()
+-                            .as_str();
+-                    let (address, _bit) = if let ExpressionNode::Address(address, bit) = expr {
+-                        (address, bit)
+-                    } else if let ExpressionNode::Number(address) = expr {
+-                        (address, 0)
+-                    } else {
+-                        return Err("Unresolved address".into());
+-                    };
+-                    lines.push(format!("#define PORT_{} 0x{:x}", name, address));
++                VariableNode::Port { .. } => {
++                    // Порты генерируются как enum в заголовочном файле (ModelNamePorts).
+                 }
+                 VariableNode::Const { name, ref expr, .. } => {
+                     // Пропускаем неиспользуемые константы
+diff --git a/grammar/src/generator/c/c_expr.rs b/grammar/src/generator/c/c_expr.rs
+index 9fb1dc8..7d4c251 100644
+--- a/grammar/src/generator/c/c_expr.rs
++++ b/grammar/src/generator/c/c_expr.rs
+@@ -265,8 +265,8 @@ pub(super) fn resolve_variable_c_expr(
+                 return Err("Неразрешённый owner порта".into());
+             };
+             let port_name = format!(
+-                "PORT_{}_{}",
+-                model_name.unique_uppercase_snakecase(),
++                "{}Ports_{}",
++                model_name.unique_camelcase(),
+                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
+             );
+             let bit = if let ExpressionNode::Address(_, bit) = expr {
+@@ -696,8 +696,8 @@ pub(super) fn generate_condition_expr(
+                                     );
+                                 };
+                             let port_name = format!(
+-                                "PORT_{}_{}",
+-                                model_name.unique_uppercase_snakecase(),
++                                "{}Ports_{}",
++                                model_name.unique_camelcase(),
+                                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
+                             );
+                             return Ok(format!(
+@@ -1075,8 +1075,8 @@ pub(super) fn generate_expr(
+                             return Err("Неразрешённый owner порта при записи".into());
+                         };
+                     let port_name = format!(
+-                        "PORT_{}_{}",
+-                        model_name.unique_uppercase_snakecase(),
++                        "{}Ports_{}",
++                        model_name.unique_camelcase(),
+                         normalize_lowercase_snakecase(name.clone()).to_uppercase()
+                     );
+                     let bit = if let ExpressionNode::Address(_, bit) = addr_expr {
+@@ -1129,8 +1129,8 @@ pub(super) fn generate_expr(
+                             return Err("Неразрешённый owner порта при BitAccess записи".into());
+                         };
+                         let port_name = format!(
+-                            "PORT_{}_{}",
+-                            model_name.unique_uppercase_snakecase(),
++                            "{}Ports_{}",
++                            model_name.unique_camelcase(),
+                             normalize_lowercase_snakecase(name.clone()).to_uppercase()
+                         );
+                         let mut rhs_str = String::new();
+@@ -1281,8 +1281,8 @@ pub(super) fn generate_expr(
+                                     return Err("Неразрешённый owner порта при BitAccess".into());
+                                 };
+                             let port_name = format!(
+-                                "PORT_{}_{}",
+-                                model_name.unique_uppercase_snakecase(),
++                                "{}Ports_{}",
++                                model_name.unique_camelcase(),
+                                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
+                             );
+                             printer.print(&format!(
+diff --git a/grammar/src/generator/c/c_header.rs b/grammar/src/generator/c/c_header.rs
+index f78654e..c417b08 100644
+--- a/grammar/src/generator/c/c_header.rs
++++ b/grammar/src/generator/c/c_header.rs
+@@ -6,9 +6,9 @@ use crate::generator::c::{
+     FUNCTION_PORT_WRITE_FLOAT, get_typed_variable,
+ };
+ use crate::generator::indent::Printer;
+-use crate::semantic::VariableNode;
+ use crate::semantic::minimap::{Element, Name, StateExtend};
+ use crate::semantic::naming::normalize_lowercase_snakecase;
++use crate::semantic::{ExpressionNode, VariableNode};
+ use log::warn;
+ 
+ /// Генерирует поля структуры C для extend состояния.
+@@ -212,6 +212,71 @@ fn build_concat_state_enum(
+     Ok(())
+ }
+ 
++/// Генерирует `typedef enum { ... } ModelNamePorts;` для каждой модели с портами.
++///
++/// Каждый вариант перечисления имеет вид `{ModelCamelcase}Ports_{PORT_UPPER_SNAKE}`
++/// и значение, равное адресу порта. Определения размещаются в заголовочном файле
++/// до структур, чтобы их можно было использовать в сигнатурах функций.
++fn generate_port_enums(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic> {
++    let mut all_models = map.using_models();
++    all_models.insert(
++        0,
++        Element::Model {
++            name: map.root_name().clone(),
++            states: map.states().clone(),
++            start: map.start().clone(),
++        },
++    );
++    for element in &all_models {
++        let model_name = element.name();
++        let model = map.raw_model_at(model_name.clone())?;
++        let model_borrowed = model.borrow();
++
++        let mut ports: Vec<(String, i64)> = model_borrowed
++            .variables
++            .values()
++            .filter_map(|v| {
++                if let VariableNode::Port { name, expr, .. } = v {
++                    let address = if let ExpressionNode::Address(addr, _) = expr {
++                        *addr
++                    } else if let ExpressionNode::Number(addr) = expr {
++                        *addr
++                    } else {
++                        return None;
++                    };
++                    Some((name.clone(), address))
++                } else {
++                    None
++                }
++            })
++            .collect();
++
++        if ports.is_empty() {
++            continue;
++        }
++
++        ports.sort_by(|(a, _), (b, _)| a.cmp(b));
++
++        let enum_type = model_name.unique_camelcase() + "Ports";
++        printer.print(&format!("typedef enum {{")).nl();
++        printer.up();
++        for (port_name, address) in &ports {
++            let variant = format!(
++                "{}_{}",
++                enum_type,
++                normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
++            );
++            printer
++                .ident(&format!("{} = 0x{:x},", variant, address))
++                .nl();
++        }
++        printer.down();
++        printer.print(&format!("}} {};", enum_type)).nl();
++        printer.nl();
++    }
++    Ok(())
++}
++
+ fn generate_model_header(
+     printer: &mut Printer,
+     map: &CMap,
+@@ -378,6 +443,9 @@ pub fn generate_header(filename: &str, map: &CMap) -> Result<String, Diagnostic>
+         printer.nl();
+     }
+ 
++    // Генерируем enum типы для портов — до struct, чтобы можно было использовать в сигнатурах
++    generate_port_enums(&mut printer, map)?;
++
+     let mut num = 0;
+     for element in sorted_models {
+         let Element::Model { name, states, .. } = element else {
+diff --git a/grammar/src/generator/c/c_source.rs b/grammar/src/generator/c/c_source.rs
+index 189123d..49266ae 100644
+--- a/grammar/src/generator/c/c_source.rs
++++ b/grammar/src/generator/c/c_source.rs
+@@ -509,9 +509,11 @@ start Main { always { v = LIMIT; } }
+             source.contains("CONST_MAIN_LIMIT"),
+             "CONST_MAIN_LIMIT отсутствует:\n{source}"
+         );
++        // Порт теперь генерируется как вариант enum в заголовочном файле,
++        // а не как #define в .c-файле — в source больше нет PORT_MAIN_SENSOR.
+         assert!(
+-            source.contains("PORT_MAIN_SENSOR"),
+-            "PORT_MAIN_SENSOR отсутствует:\n{source}"
++            !source.contains("PORT_MAIN_SENSOR"),
++            "PORT_MAIN_SENSOR не должен присутствовать в .c-файле (теперь это enum в .h):\n{source}"
+         );
+     }
+ 
+@@ -924,15 +926,15 @@ state End;";
+         );
+     }
+ 
+-    /// Чтение бита порта в условии `ref`: `BTN.0` → `(*main->read_bit)(PORT_ROOT_BTN, 0, ...)`
++    /// Чтение бита порта в условии `ref`: `BTN.0` → `(*main->read_bit)(RootPorts_BTN, 0, ...)`
+     #[test]
+     fn test_bit_access_port_read_in_condition() {
+         let src =
+             "type u8 = [bit;8]; port BTN: u8 = 0x200000; start S { ref Done: BTN.0; } state Done;";
+         let code = generate_source_str(src);
+         assert!(
+-            code.contains("(*main->read_bit)(PORT_ROOT_BTN, 0, main->userdata)"),
+-            "ожидается (*main->read_bit)(PORT_ROOT_BTN, 0, ...) в условии:\n{code}"
++            code.contains("(*main->read_bit)(RootPorts_BTN, 0, main->userdata)"),
++            "ожидается (*main->read_bit)(RootPorts_BTN, 0, ...) в условии:\n{code}"
+         );
+     }
+ 
+@@ -958,25 +960,25 @@ state End;";
+         );
+     }
+ 
+-    /// Чтение бита порта в `always`: `x = BTN.0` → `(*main->read_bit)(PORT_ROOT_BTN, 0, ...)`
++    /// Чтение бита порта в `always`: `x = BTN.0` → `(*main->read_bit)(RootPorts_BTN, 0, ...)`
+     #[test]
+     fn test_bit_access_port_read_in_always() {
+         let src = "type u8 = [bit;8]; port BTN: u8 = 0x200000; var x: u8 = 0; start S { always { x = BTN.0; } ref Done: true; } state Done;";
+         let code = generate_source_str(src);
+         assert!(
+-            code.contains("(*main->read_bit)(PORT_ROOT_BTN, 0, main->userdata)"),
+-            "ожидается (*main->read_bit)(PORT_ROOT_BTN, 0, ...) при чтении порта:\n{code}"
++            code.contains("(*main->read_bit)(RootPorts_BTN, 0, main->userdata)"),
++            "ожидается (*main->read_bit)(RootPorts_BTN, 0, ...) при чтении порта:\n{code}"
+         );
+     }
+ 
+-    /// Запись бита порта: `LED.7 = true` → `(*main->write_bit)(PORT_ROOT_LED, 7, true, ...)`
++    /// Запись бита порта: `LED.7 = true` → `(*main->write_bit)(RootPorts_LED, 7, true, ...)`
+     #[test]
+     fn test_bit_access_port_write_in_always() {
+         let src = "type u8 = [bit;8]; port LED: u8 = 0x100000; start S { always { LED.7 = true; } ref Done: true; } state Done;";
+         let code = generate_source_str(src);
+         assert!(
+-            code.contains("(*main->write_bit)(PORT_ROOT_LED, 7, true, main->userdata)"),
+-            "ожидается (*main->write_bit)(PORT_ROOT_LED, 7, true, ...) при записи порта:\n{code}"
++            code.contains("(*main->write_bit)(RootPorts_LED, 7, true, main->userdata)"),
++            "ожидается (*main->write_bit)(RootPorts_LED, 7, true, ...) при записи порта:\n{code}"
+         );
+     }
+ }
+diff --git a/grammar/src/generator/c/mod.rs b/grammar/src/generator/c/mod.rs
+index 9dddffc..e72ee70 100644
+--- a/grammar/src/generator/c/mod.rs
++++ b/grammar/src/generator/c/mod.rs
+@@ -282,9 +282,10 @@ start Main { always { v = MATRIX; v = NUMB; } }
+             source.contains("CONST_MAIN_NUMB"),
+             "ожидалось CONST_MAIN_NUMB, получено:\n{source}"
+         );
++        // Порт теперь генерируется как enum в заголовочном файле — в .c его нет.
+         assert!(
+-            source.contains("PORT_MAIN_SENSOR"),
+-            "ожидалось PORT_MAIN_SENSOR, получено:\n{source}"
++            !source.contains("PORT_MAIN_SENSOR"),
++            "PORT_MAIN_SENSOR не должен присутствовать в .c-файле:\n{source}"
+         );
+         assert!(
+             !source.contains("M_A_T_R_I_X"),

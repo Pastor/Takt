@@ -282,9 +282,10 @@ start Main { always { v = MATRIX; v = NUMB; } }
             source.contains("CONST_MAIN_NUMB"),
             "ожидалось CONST_MAIN_NUMB, получено:\n{source}"
         );
+        // Порт теперь генерируется как enum в заголовочном файле — в .c его нет.
         assert!(
-            source.contains("PORT_MAIN_SENSOR"),
-            "ожидалось PORT_MAIN_SENSOR, получено:\n{source}"
+            !source.contains("PORT_MAIN_SENSOR"),
+            "PORT_MAIN_SENSOR не должен присутствовать в .c-файле:\n{source}"
         );
         assert!(
             !source.contains("M_A_T_R_I_X"),

@@ -509,9 +509,11 @@ start Main { always { v = LIMIT; } }
             source.contains("CONST_MAIN_LIMIT"),
             "CONST_MAIN_LIMIT отсутствует:\n{source}"
         );
+        // Порт теперь генерируется как вариант enum в заголовочном файле,
+        // а не как #define в .c-файле — в source больше нет PORT_MAIN_SENSOR.
         assert!(
-            source.contains("PORT_MAIN_SENSOR"),
-            "PORT_MAIN_SENSOR отсутствует:\n{source}"
+            !source.contains("PORT_MAIN_SENSOR"),
+            "PORT_MAIN_SENSOR не должен присутствовать в .c-файле (теперь это enum в .h):\n{source}"
         );
     }
 
@@ -924,15 +926,15 @@ state End;";
         );
     }
 
-    /// Чтение бита порта в условии `ref`: `BTN.0` → `(*main->read_bit)(PORT_ROOT_BTN, 0, ...)`
+    /// Чтение бита порта в условии `ref`: `BTN.0` → `(*main->read_bit)(RootPorts_BTN, 0, ...)`
     #[test]
     fn test_bit_access_port_read_in_condition() {
         let src =
             "type u8 = [bit;8]; port BTN: u8 = 0x200000; start S { ref Done: BTN.0; } state Done;";
         let code = generate_source_str(src);
         assert!(
-            code.contains("(*main->read_bit)(PORT_ROOT_BTN, 0, main->userdata)"),
-            "ожидается (*main->read_bit)(PORT_ROOT_BTN, 0, ...) в условии:\n{code}"
+            code.contains("(*main->read_bit)(RootPorts_BTN, 0, main->userdata)"),
+            "ожидается (*main->read_bit)(RootPorts_BTN, 0, ...) в условии:\n{code}"
         );
     }
 
@@ -958,25 +960,25 @@ state End;";
         );
     }
 
-    /// Чтение бита порта в `always`: `x = BTN.0` → `(*main->read_bit)(PORT_ROOT_BTN, 0, ...)`
+    /// Чтение бита порта в `always`: `x = BTN.0` → `(*main->read_bit)(RootPorts_BTN, 0, ...)`
     #[test]
     fn test_bit_access_port_read_in_always() {
         let src = "type u8 = [bit;8]; port BTN: u8 = 0x200000; var x: u8 = 0; start S { always { x = BTN.0; } ref Done: true; } state Done;";
         let code = generate_source_str(src);
         assert!(
-            code.contains("(*main->read_bit)(PORT_ROOT_BTN, 0, main->userdata)"),
-            "ожидается (*main->read_bit)(PORT_ROOT_BTN, 0, ...) при чтении порта:\n{code}"
+            code.contains("(*main->read_bit)(RootPorts_BTN, 0, main->userdata)"),
+            "ожидается (*main->read_bit)(RootPorts_BTN, 0, ...) при чтении порта:\n{code}"
         );
     }
 
-    /// Запись бита порта: `LED.7 = true` → `(*main->write_bit)(PORT_ROOT_LED, 7, true, ...)`
+    /// Запись бита порта: `LED.7 = true` → `(*main->write_bit)(RootPorts_LED, 7, true, ...)`
     #[test]
     fn test_bit_access_port_write_in_always() {
         let src = "type u8 = [bit;8]; port LED: u8 = 0x100000; start S { always { LED.7 = true; } ref Done: true; } state Done;";
         let code = generate_source_str(src);
         assert!(
-            code.contains("(*main->write_bit)(PORT_ROOT_LED, 7, true, main->userdata)"),
-            "ожидается (*main->write_bit)(PORT_ROOT_LED, 7, true, ...) при записи порта:\n{code}"
+            code.contains("(*main->write_bit)(RootPorts_LED, 7, true, main->userdata)"),
+            "ожидается (*main->write_bit)(RootPorts_LED, 7, true, ...) при записи порта:\n{code}"
         );
     }
 }

@@ -1,6 +1,6 @@
 .idea
 cmake-*-debug
 elevator.[ch]
-elevator2.[ch]
+elevator_mini.[ch]
 extend_complex.[ch]
 comprehensive.[ch]

@@ -6,9 +6,9 @@ use crate::generator::c::{
     FUNCTION_PORT_WRITE_FLOAT, get_typed_variable,
 };
 use crate::generator::indent::Printer;
-use crate::semantic::VariableNode;
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
+use crate::semantic::{ExpressionNode, VariableNode};
 use log::warn;
 
 /// Генерирует поля структуры C для extend состояния.
@@ -212,6 +212,71 @@ fn build_concat_state_enum(
     Ok(())
 }
 
+/// Генерирует `typedef enum { ... } ModelNamePorts;` для каждой модели с портами.
+///
+/// Каждый вариант перечисления имеет вид `{ModelCamelcase}Ports_{PORT_UPPER_SNAKE}`
+/// и значение, равное адресу порта. Определения размещаются в заголовочном файле
+/// до структур, чтобы их можно было использовать в сигнатурах функций.
+fn generate_port_enums(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic> {
+    let mut all_models = map.using_models();
+    all_models.insert(
+        0,
+        Element::Model {
+            name: map.root_name().clone(),
+            states: map.states().clone(),
+            start: map.start().clone(),
+        },
+    );
+    for element in &all_models {
+        let model_name = element.name();
+        let model = map.raw_model_at(model_name.clone())?;
+        let model_borrowed = model.borrow();
+
+        let mut ports: Vec<(String, i64)> = model_borrowed
+            .variables
+            .values()
+            .filter_map(|v| {
+                if let VariableNode::Port { name, expr, .. } = v {
+                    let address = if let ExpressionNode::Address(addr, _) = expr {
+                        *addr
+                    } else if let ExpressionNode::Number(addr) = expr {
+                        *addr
+                    } else {
+                        return None;
+                    };
+                    Some((name.clone(), address))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if ports.is_empty() {
+            continue;
+        }
+
+        ports.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+        let enum_type = model_name.unique_camelcase() + "Ports";
+        printer.print(&format!("typedef enum {{")).nl();
+        printer.up();
+        for (port_name, address) in &ports {
+            let variant = format!(
+                "{}_{}",
+                enum_type,
+                normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
+            );
+            printer
+                .ident(&format!("{} = 0x{:x},", variant, address))
+                .nl();
+        }
+        printer.down();
+        printer.print(&format!("}} {};", enum_type)).nl();
+        printer.nl();
+    }
+    Ok(())
+}
+
 fn generate_model_header(
     printer: &mut Printer,
     map: &CMap,
@@ -377,6 +442,9 @@ pub fn generate_header(filename: &str, map: &CMap) -> Result<String, Diagnostic>
             .nl();
         printer.nl();
     }
+
+    // Генерируем enum типы для портов — до struct, чтобы можно было использовать в сигнатурах
+    generate_port_enums(&mut printer, map)?;
 
     let mut num = 0;
     for element in sorted_models {

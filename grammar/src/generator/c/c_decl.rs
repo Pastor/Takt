@@ -61,20 +61,8 @@ pub(super) fn generate_constants_and_ports_and_enums(
         for var in variables {
             match var {
                 VariableNode::Unresolved | VariableNode::Simple { .. } => {}
-                VariableNode::Port { name, expr, .. } => {
-                    let name = model_name.unique_uppercase_snakecase()
-                        + "_"
-                        + normalize_lowercase_snakecase(name.clone())
-                            .to_uppercase()
-                            .as_str();
-                    let (address, _bit) = if let ExpressionNode::Address(address, bit) = expr {
-                        (address, bit)
-                    } else if let ExpressionNode::Number(address) = expr {
-                        (address, 0)
-                    } else {
-                        return Err("Unresolved address".into());
-                    };
-                    lines.push(format!("#define PORT_{} 0x{:x}", name, address));
+                VariableNode::Port { .. } => {
+                    // Порты генерируются как enum в заголовочном файле (ModelNamePorts).
                 }
                 VariableNode::Const { name, ref expr, .. } => {
                     // Пропускаем неиспользуемые константы

@@ -265,8 +265,8 @@ pub(super) fn resolve_variable_c_expr(
                 return Err("Неразрешённый owner порта".into());
             };
             let port_name = format!(
-                "PORT_{}_{}",
-                model_name.unique_uppercase_snakecase(),
+                "{}Ports_{}",
+                model_name.unique_camelcase(),
                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
             );
             let bit = if let ExpressionNode::Address(_, bit) = expr {
@@ -696,8 +696,8 @@ pub(super) fn generate_condition_expr(
                                     );
                                 };
                             let port_name = format!(
-                                "PORT_{}_{}",
-                                model_name.unique_uppercase_snakecase(),
+                                "{}Ports_{}",
+                                model_name.unique_camelcase(),
                                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
                             );
                             return Ok(format!(
@@ -1075,8 +1075,8 @@ pub(super) fn generate_expr(
                             return Err("Неразрешённый owner порта при записи".into());
                         };
                     let port_name = format!(
-                        "PORT_{}_{}",
-                        model_name.unique_uppercase_snakecase(),
+                        "{}Ports_{}",
+                        model_name.unique_camelcase(),
                         normalize_lowercase_snakecase(name.clone()).to_uppercase()
                     );
                     let bit = if let ExpressionNode::Address(_, bit) = addr_expr {
@@ -1129,8 +1129,8 @@ pub(super) fn generate_expr(
                             return Err("Неразрешённый owner порта при BitAccess записи".into());
                         };
                         let port_name = format!(
-                            "PORT_{}_{}",
-                            model_name.unique_uppercase_snakecase(),
+                            "{}Ports_{}",
+                            model_name.unique_camelcase(),
                             normalize_lowercase_snakecase(name.clone()).to_uppercase()
                         );
                         let mut rhs_str = String::new();
@@ -1281,8 +1281,8 @@ pub(super) fn generate_expr(
                                     return Err("Неразрешённый owner порта при BitAccess".into());
                                 };
                             let port_name = format!(
-                                "PORT_{}_{}",
-                                model_name.unique_uppercase_snakecase(),
+                                "{}Ports_{}",
+                                model_name.unique_camelcase(),
                                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
                             );
                             printer.print(&format!(
