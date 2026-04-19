@@ -1028,3 +1028,34 @@ start S {
         "используемая константа MAX должна присутствовать в коде:\n{c}"
     );
 }
+
+// ── Тест коллизии имён enum-варианта и состояния (Changes-XX) ─────────────────
+
+/// Проверяет что при сравнении переменной типа перечисления с одноимённым
+/// состоянием в правой части `=`, генерируется числовое значение варианта,
+/// а не идентификатор состояния.
+///
+/// Позитивный пример: `command = Stop` где `command: Command` и существует
+/// состояние `Stop` — должно генерировать `== 2` (индекс Stop в Command).
+///
+/// Контр-пример: без исправления генерировался бы `MOTOR_STOP` (состояние).
+#[test]
+fn test_enum_equal_name_collision_generates_value() {
+    let src = r#"
+enum Command { Up, Down, Stop }
+var command: Command = Stop;
+model Motor {
+    start Idle {
+        ref Stop: command = Stop;
+    }
+    state Stop { }
+}
+start Main = Motor;
+"#;
+    let c = generate_c_content(src, "Main");
+    // Должна быть сравнение с числовым значением (2 = индекс Stop), а не с MOTOR_STOP
+    assert!(
+        c.contains("== 2") || c.contains("command == 2"),
+        "команда Stop должна сравниваться с числовым значением варианта перечисления:\n{c}"
+    );
+}

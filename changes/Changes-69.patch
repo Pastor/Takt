@@ -1,0 +1,206 @@
+diff --git a/grammar/src/semantic/condition.rs b/grammar/src/semantic/condition.rs
+index 616a8aa..315e004 100644
+--- a/grammar/src/semantic/condition.rs
++++ b/grammar/src/semantic/condition.rs
+@@ -15,6 +15,34 @@ use std::cell::RefCell;
+ use std::collections::HashMap;
+ use std::rc::Rc;
+ 
++/// Разрешает правую часть оператора `=`/`!=` с учётом типа левой части.
++///
++/// Если левая часть — переменная типа перечисления `enum_name`, а правая —
++/// идентификатор, совпадающий с вариантом этого перечисления, возвращает
++/// `EnumVariant`, а не `State`. В остальных случаях делегирует в `resolve_condition`.
++fn resolve_rval_as_enum_variant(
++    cond: &ast::Condition,
++    model: Rc<RefCell<ModelNode>>,
++    enum_name: &str,
++) -> Result<ConditionNode, Diagnostic> {
++    if let ast::Condition::Variable(id) = cond {
++        let name = &id.name;
++        if let Some((edn, val)) = model.borrow().search_enum_variant(name) {
++            if edn.name == enum_name {
++                return Ok(ConditionNode::EnumVariant(
++                    Rc::new(RefCell::new(edn)),
++                    name.clone(),
++                    val,
++                ));
++            }
++        }
++        // Идентификатор не является вариантом enum_name — разрешаем как обычно
++        // (например, это переменная того же типа перечисления).
++        return resolve_condition(cond, model);
++    }
++    resolve_condition(cond, model)
++}
++
+ /// Строит разрешённое семантическое [`ConditionNode`] из АСД-условия [`ast::Condition`].
+ ///
+ /// Рекурсивно обходит дерево условий, разрешая имена переменных и функций
+@@ -115,12 +143,30 @@ pub fn resolve_condition(
+         }
+         ast::Condition::Equal(_, left, right) => {
+             let left = resolve_condition(left, model.clone())?;
+-            let right = resolve_condition(right, model.clone())?;
++            let right = if let ConditionNode::Variable(var_rc, _) = &left {
++                let ty = var_rc.borrow().ty().clone();
++                if let TypeNode::Enum(enum_name) = ty {
++                    resolve_rval_as_enum_variant(right, model.clone(), &enum_name)?
++                } else {
++                    resolve_condition(right, model.clone())?
++                }
++            } else {
++                resolve_condition(right, model.clone())?
++            };
+             Ok(ConditionNode::Equal(Box::new(left), Box::new(right)))
+         }
+         ast::Condition::NotEqual(_, left, right) => {
+             let left = resolve_condition(left, model.clone())?;
+-            let right = resolve_condition(right, model.clone())?;
++            let right = if let ConditionNode::Variable(var_rc, _) = &left {
++                let ty = var_rc.borrow().ty().clone();
++                if let TypeNode::Enum(enum_name) = ty {
++                    resolve_rval_as_enum_variant(right, model.clone(), &enum_name)?
++                } else {
++                    resolve_condition(right, model.clone())?
++                }
++            } else {
++                resolve_condition(right, model.clone())?
++            };
+             Ok(ConditionNode::NotEqual(Box::new(left), Box::new(right)))
+         }
+         ast::Condition::Number(_, n) => Ok(ConditionNode::Number(*n)),
+@@ -601,4 +647,94 @@ mod tests {
+             "ожидалось условие Variable"
+         );
+     }
++
++    // ─── тип-зависимое разрешение оператора = ────────────────────────────
++
++    /// Позитивный тест: когда левая часть `=` — переменная типа перечисления,
++    /// а одноимённое состояние тоже существует, правая часть должна разрешаться
++    /// как `EnumVariant`, а не как `State`.
++    ///
++    /// # Пример (BuT)
++    /// ```but
++    /// enum Command { Up, Down, Stop }
++    /// var command: Command = Stop;
++    /// model Motor {
++    ///     cond c = command = Stop;
++    ///     start Up {}
++    ///     state Stop {}
++    /// }
++    /// ```
++    #[test]
++    fn enum_variant_resolves_over_state_in_equal() {
++        let src = r#"
++enum Command { Up, Down, Stop }
++var command: Command = Stop;
++model Motor {
++    cond c = command = Stop;
++    start Up {}
++    state Stop {}
++}
++start Main = Motor;
++"#;
++        let node = build(src).unwrap();
++        let motor = node
++            .search_model("Motor")
++            .expect("модель Motor должна быть найдена");
++        let motor_borrowed = motor.borrow();
++        let c = motor_borrowed.conditions["c"].value.clone();
++        if let ConditionNode::Equal(_, right) = c {
++            assert!(
++                matches!(*right, ConditionNode::EnumVariant(_, _, _)),
++                "правая часть = должна быть EnumVariant, не State: {:?}",
++                right
++            );
++        } else {
++            panic!("ожидалось условие Equal, получено {:?}", c);
++        }
++    }
++
++    /// Позитивный тест: аналогично для `!=`.
++    #[test]
++    fn enum_variant_resolves_over_state_in_not_equal() {
++        let src = r#"
++enum Command { Up, Down, Stop }
++var command: Command = Stop;
++model Motor {
++    cond c = command != Stop;
++    start Up {}
++    state Stop {}
++}
++start Main = Motor;
++"#;
++        let node = build(src).unwrap();
++        let motor = node
++            .search_model("Motor")
++            .expect("модель Motor должна быть найдена");
++        let motor_borrowed = motor.borrow();
++        let c = motor_borrowed.conditions["c"].value.clone();
++        if let ConditionNode::NotEqual(_, right) = c {
++            assert!(
++                matches!(*right, ConditionNode::EnumVariant(_, _, _)),
++                "правая часть != должна быть EnumVariant, не State: {:?}",
++                right
++            );
++        } else {
++            panic!("ожидалось условие NotEqual, получено {:?}", c);
++        }
++    }
++
++    /// Отрицательный тест: `command = Foo` где `Foo` не вариант `Command` — ошибка.
++    #[test]
++    fn enum_equal_wrong_variant_is_error() {
++        let src = r#"
++enum Command { Up, Down, Stop }
++var command: Command = Stop;
++cond c = command = Foo;
++"#;
++        let result = build(src);
++        assert!(
++            result.is_err(),
++            "ожидалась ошибка: Foo не является вариантом Command"
++        );
++    }
+ }
+diff --git a/grammar/tests/codegen_tests.rs b/grammar/tests/codegen_tests.rs
+index 1f79235..433f5d7 100644
+--- a/grammar/tests/codegen_tests.rs
++++ b/grammar/tests/codegen_tests.rs
+@@ -1028,3 +1028,34 @@ start S {
+         "используемая константа MAX должна присутствовать в коде:\n{c}"
+     );
+ }
++
++// ── Тест коллизии имён enum-варианта и состояния (Changes-XX) ─────────────────
++
++/// Проверяет что при сравнении переменной типа перечисления с одноимённым
++/// состоянием в правой части `=`, генерируется числовое значение варианта,
++/// а не идентификатор состояния.
++///
++/// Позитивный пример: `command = Stop` где `command: Command` и существует
++/// состояние `Stop` — должно генерировать `== 2` (индекс Stop в Command).
++///
++/// Контр-пример: без исправления генерировался бы `MOTOR_STOP` (состояние).
++#[test]
++fn test_enum_equal_name_collision_generates_value() {
++    let src = r#"
++enum Command { Up, Down, Stop }
++var command: Command = Stop;
++model Motor {
++    start Idle {
++        ref Stop: command = Stop;
++    }
++    state Stop { }
++}
++start Main = Motor;
++"#;
++    let c = generate_c_content(src, "Main");
++    // Должна быть сравнение с числовым значением (2 = индекс Stop), а не с MOTOR_STOP
++    assert!(
++        c.contains("== 2") || c.contains("command == 2"),
++        "команда Stop должна сравниваться с числовым значением варианта перечисления:\n{c}"
++    );
++}

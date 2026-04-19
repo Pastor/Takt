@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hash;
 use std::rc::Rc;
 
-pub fn to_nnf(formula: &Ltl) -> Rc<Ltl> {
+fn to_nnf(formula: &Ltl) -> Rc<Ltl> {
     match formula {
         Ltl::True => Rc::new(Ltl::True),
         Ltl::False => Rc::new(Ltl::False),
@@ -64,6 +64,7 @@ struct GbaNode {
     next: BTreeSet<Rc<Ltl>>,
 }
 
+#[derive(Debug)]
 pub struct BuchiAutomaton {
     pub states: Vec<BTreeSet<Rc<Ltl>>>,
     pub initial_states: BTreeSet<usize>,

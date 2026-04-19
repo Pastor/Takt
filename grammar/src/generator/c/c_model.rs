@@ -309,12 +309,13 @@ fn generate_state_transitions(
                     printer.ident("break;").nl();
                     printer.down().ident("}").nl();
                 }
-                Err(_) => {
+                Err(di) => {
                     // Условие не поддерживается — оставляем комментарий
                     printer
                         .ident(&format!(
-                            "//TODO: условный переход в {} не поддерживается",
-                            target.local()
+                            "//TODO: условный переход в {} не поддерживается. Причина: {}",
+                            target.local(),
+                            di.message
                         ))
                         .nl();
                 }
