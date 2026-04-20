@@ -265,10 +265,8 @@ pub(super) fn resolve_variable_c_expr(
                 return Err("Неразрешённый owner порта".into());
             };
             let cls = PortClass::from_type(ty);
-            let type_name = cls.qualified_enum_name(&map.root_name().unique_camelcase());
             let variant = format!(
-                "{}_{}_{}",
-                type_name,
+                "{}_{}",
                 model_name.unique_uppercase_snakecase(),
                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
             );
@@ -690,11 +688,8 @@ pub(super) fn generate_condition_expr(
                                     );
                                 };
                             let cls = PortClass::from_type(ty);
-                            let type_name =
-                                cls.qualified_enum_name(&map.root_name().unique_camelcase());
                             let variant = format!(
-                                "{}_{}_{}",
-                                type_name,
+                                "{}_{}",
                                 model_name.unique_uppercase_snakecase(),
                                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
                             );
@@ -1081,10 +1076,8 @@ pub(super) fn generate_expr(
                             return Err("Неразрешённый owner порта при записи".into());
                         };
                     let cls = PortClass::from_type(ty);
-                    let type_name = cls.qualified_enum_name(&map.root_name().unique_camelcase());
                     let variant = format!(
-                        "{}_{}_{}",
-                        type_name,
+                        "{}_{}",
                         model_name.unique_uppercase_snakecase(),
                         normalize_lowercase_snakecase(name.clone()).to_uppercase()
                     );
@@ -1139,11 +1132,8 @@ pub(super) fn generate_expr(
                             )
                             .with_code("CC-001"));
                         }
-                        let type_name =
-                            cls.qualified_enum_name(&map.root_name().unique_camelcase());
                         let variant = format!(
-                            "{}_{}_{}",
-                            type_name,
+                            "{}_{}",
                             model_name.unique_uppercase_snakecase(),
                             normalize_lowercase_snakecase(name.clone()).to_uppercase()
                         );
@@ -1302,11 +1292,8 @@ pub(super) fn generate_expr(
                                     return Err("Неразрешённый owner порта при BitAccess".into());
                                 };
                             let cls = PortClass::from_type(ty);
-                            let type_name =
-                                cls.qualified_enum_name(&map.root_name().unique_camelcase());
                             let variant = format!(
-                                "{}_{}_{}",
-                                type_name,
+                                "{}_{}",
                                 model_name.unique_uppercase_snakecase(),
                                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
                             );

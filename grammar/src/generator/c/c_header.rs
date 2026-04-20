@@ -257,7 +257,7 @@ fn collect_ports_by_class(
 /// Генерирует тип-зависимые перечисления портов вида `{RootModel}_BitPort` и т. п.
 ///
 /// Все порты одного типа объединяются в единый `typedef enum`.
-/// Варианты именуются `{EnumTypeName}_{MODEL_UPPER}_{PORT_UPPER}` с последовательными значениями.
+/// Варианты именуются `{MODEL_UPPER}_{PORT_UPPER}` с последовательными значениями.
 /// Определения помещаются в заголовочный файл до struct-определений.
 fn generate_port_enums(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic> {
     let root_camelcase = map.root_name().unique_camelcase();
@@ -271,8 +271,7 @@ fn generate_port_enums(printer: &mut Printer, map: &CMap) -> Result<(), Diagnost
         printer.up();
         for (idx, (model_name, port_name)) in ports.iter().enumerate() {
             let variant = format!(
-                "{}_{}_{}",
-                type_name,
+                "{}_{}",
                 model_name.unique_uppercase_snakecase(),
                 normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
             );
