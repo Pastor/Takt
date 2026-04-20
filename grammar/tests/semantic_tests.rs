@@ -313,14 +313,15 @@ fn port_without_type_is_error() {
     assert!(result.is_err(), "Порт без типа должен давать ошибку");
 }
 
-/// Порт с инициализатором не-адресом — ошибка.
+/// Порт с инициализатором не-адресом — адрес игнорируется, порт создаётся без адреса.
 #[test]
-fn port_with_non_address_initializer_is_error() {
-    let (ast, _) = parse("type u8 = [bit;8]; port P: u8 = true;", 0).unwrap();
+fn port_with_non_address_initializer_is_valid() {
+    let (ast, _) = parse("type u8 = [bit;8]; port P: u8 = true; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(
-        result.is_err(),
-        "Порт с неверным инициализатором должен давать ошибку"
+        result.is_ok(),
+        "Порт с нелитеральным инициализатором должен быть принят (адрес опционален): {:?}",
+        result.err()
     );
 }
 
@@ -1403,13 +1404,14 @@ fn example_nested_model_blocks_is_valid() {
     );
 }
 
-/// named_block_undeclared_var.but (порт без адреса) → ошибка семантики.
+/// named_block_undeclared_var.but (порт без адреса) → теперь корректен, адрес опционален.
 #[test]
-fn example_named_block_invalid_port_is_error() {
+fn example_named_block_port_without_address_is_valid() {
     let result = build_file("tests/data/semantic/invalid/named_block_undeclared_var.but");
     assert!(
-        result.is_err(),
-        "файл с некорректным портом должен давать ошибку"
+        result.is_ok(),
+        "порт без адреса должен быть принят (адрес опционален): {:?}",
+        result.err()
     );
 }
 

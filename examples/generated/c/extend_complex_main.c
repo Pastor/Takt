@@ -7,34 +7,18 @@ bool has_flag(bool v) {
 struct Ports {
 };
 
-static void port_write_bit(int address, int bit, bool val, void *userdata) {
+static void port_write_bit(ExtendComplex_BitPort port, bool val, void *userdata) {
     struct Ports *ports = (struct Ports *) userdata;
-    (void) address;
-    (void) bit;
+    (void) port;
     (void) val;
     (void) ports;
 }
 
-static bool port_read_bit(int address, int bit, void *userdata) {
+static bool port_read_bit(ExtendComplex_BitPort port, void *userdata) {
     struct Ports *ports = (struct Ports *) userdata;
-    (void) address;
-    (void) bit;
+    (void) port;
     (void) ports;
     return false;
-}
-static void port_write_float(int address, int bit, float val, void *userdata) {
-    struct Ports *ports = (struct Ports *) userdata;
-    (void) address;
-    (void) bit;
-    (void) val;
-    (void) ports;
-}
-static float port_read_float(int address, int bit, void *userdata) {
-    struct Ports *ports = (struct Ports *) userdata;
-    (void) address;
-    (void) bit;
-    (void) ports;
-    return 0.0f;
 }
 
 int main(void) {
@@ -43,9 +27,7 @@ int main(void) {
       .x = 0, .y = 0,
       .userdata = &ports,
             .write_bit = port_write_bit,
-            .read_bit = port_read_bit,
-            .write_float = port_write_float,
-            .read_float = port_read_float
+            .read_bit  = port_read_bit
     };
 
     ExtendComplex_init(&extend_complex);

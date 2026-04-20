@@ -27,7 +27,7 @@ use crate::semantic::type_inference::type_inference;
 use crate::semantic::type_node::{TypeNode, construct_type};
 use crate::semantic::validate::{
     check_implicit_bool_conditions, check_transition_completeness, check_type_alias_cycles_ast,
-    validate_model,
+    validate_model, warn_nested_model_ports,
 };
 use crate::semantic::{
     ConditionDefinitionNode, ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode,
@@ -321,6 +321,16 @@ fn construct_model_stage0(
                         )
                         .with_code("SE-023"));
                     }
+                    // Адрес порта необязателен — если не задан, используем None.
+                    let expr = initializer
+                        .filter(|i| {
+                            matches!(
+                                i,
+                                ast::Expression::Address(..) | ast::Expression::Number(..)
+                            )
+                        })
+                        .map(ExpressionNode::Unresolved)
+                        .unwrap_or(ExpressionNode::None);
                     variables.insert(
                         name.clone(),
                         VariableNode::Port {
@@ -328,23 +338,7 @@ fn construct_model_stage0(
                             loc,
                             name: name.clone(),
                             ty: type_node,
-                            expr: ExpressionNode::Unresolved(
-                                initializer
-                                    .filter(|i| {
-                                        matches!(
-                                            i,
-                                            ast::Expression::Address(..)
-                                                | ast::Expression::Number(..)
-                                        )
-                                    })
-                                    .ok_or_else(|| {
-                                        Diagnostic::error(
-                                            loc,
-                                            "Порт должен быть инициализирован адресом".to_string(),
-                                        )
-                                        .with_code("SE-024")
-                                    })?,
-                            ),
+                            expr,
                         },
                     )
                 }
@@ -1103,6 +1097,14 @@ pub fn implicit_bool_warnings(model: &Rc<RefCell<ModelNode>>) -> Vec<Diagnostic>
 /// ```
 pub fn transition_completeness_warnings(model: &Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     check_transition_completeness(Rc::clone(model))
+}
+
+/// Возвращает предупреждения о портах, объявленных во вложенных моделях.
+///
+/// Порты в дочерних моделях попадают в общесистемные перечисления портов
+/// и доступны через колбэки корневой модели из любого места.
+pub fn nested_port_warnings(model: &Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+    warn_nested_model_ports(Rc::clone(model))
 }
 
 /// Извлекает все состояния из модели и разрешает ссылки между ними.

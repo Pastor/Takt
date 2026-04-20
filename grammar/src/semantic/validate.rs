@@ -1009,6 +1009,42 @@ pub fn validate_model(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     Ok(())
 }
 
+// ─── Предупреждения о портах во вложенных моделях ────────────────────────────
+
+/// Возвращает предупреждения о портах, объявленных во вложенных (не корневых) моделях.
+///
+/// Порты во вложенных моделях видны всем моделям в системе: они попадают
+/// в общие перечисления `BitPort`, `RationalPort`, `NumericPort` и доступны
+/// через колбэки корневой модели. Пользователи должны учитывать это при
+/// именовании портов.
+///
+/// Функция рекурсивно обходит все вложенные модели.
+pub fn warn_nested_model_ports(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+    let mut result = Vec::new();
+    let nested: Vec<Rc<RefCell<ModelNode>>> = model.borrow().models.values().cloned().collect();
+    for nested_model in nested {
+        let borrowed = nested_model.borrow();
+        if borrowed.upper.is_some() {
+            for var in borrowed.variables.values() {
+                if let VariableNode::Port { name, loc, .. } = var {
+                    result.push(Diagnostic::warning(
+                        *loc,
+                        format!(
+                            "Порт '{}' объявлен во вложенной модели '{}' и будет виден \
+                             всем моделям через перечисления портов корневой модели",
+                            name,
+                            borrowed.name()
+                        ),
+                    ));
+                }
+            }
+        }
+        drop(borrowed);
+        result.extend(warn_nested_model_ports(nested_model));
+    }
+    result
+}
+
 // ─── Ce5: Проверка достижимости и полноты переходов ──────────────────────────
 
 /// Проверяет полноту и достижимость переходов в модели конечного автомата.

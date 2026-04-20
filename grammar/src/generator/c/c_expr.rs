@@ -4,9 +4,13 @@
 //! [`generate_expr`], [`generate_code_block`], [`generate_stmt_expression`],
 //! а также вспомогательные функции разрешения имён переменных и функций.
 
-use super::{get_c_type, get_typed_variable};
+use super::{PortClass, get_c_type, get_typed_variable};
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::c::c_map::CMap;
+use crate::generator::c::{
+    FUNCTION_PORT_READ_BIT, FUNCTION_PORT_READ_FLOAT, FUNCTION_PORT_READ_NUMERIC,
+    FUNCTION_PORT_WRITE_BIT, FUNCTION_PORT_WRITE_FLOAT, FUNCTION_PORT_WRITE_NUMERIC,
+};
 use crate::generator::indent::Printer;
 use crate::parser::ast::{Condition, Member};
 use crate::semantic::extend::Extend;
@@ -192,6 +196,7 @@ pub(super) fn field_name_in_parent(model_rc: &Rc<RefCell<ModelNode>>) -> Option<
 pub(super) fn resolve_variable_c_expr(
     var: &VariableNode,
     params: &[(String, TypeNode)],
+    map: &CMap,
 ) -> Result<String, Diagnostic> {
     match var {
         VariableNode::Simple {
@@ -252,36 +257,33 @@ pub(super) fn resolve_variable_c_expr(
             }
         }
         VariableNode::Port {
-            name,
-            ty,
-            expr,
-            upper,
-            ..
+            name, ty, upper, ..
         } => {
-            // Чтение порта через read_bit или read_float
             let model_name = if let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) {
                 Name::from(model_rc)
             } else {
                 return Err("Неразрешённый owner порта".into());
             };
-            let port_name = format!(
-                "{}Ports_{}",
-                model_name.unique_camelcase(),
+            let cls = PortClass::from_type(ty);
+            let type_name = cls.qualified_enum_name(&map.root_name().unique_camelcase());
+            let variant = format!(
+                "{}_{}_{}",
+                type_name,
+                model_name.unique_uppercase_snakecase(),
                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
             );
-            let bit = if let ExpressionNode::Address(_, bit) = expr {
-                *bit
-            } else {
-                0i64
-            };
-            match ty {
-                TypeNode::Rational => Ok(format!(
-                    "(*main->read_float)({}, main->userdata)",
-                    port_name
+            match cls {
+                PortClass::Rational => Ok(format!(
+                    "(*main->{read_float})({variant}, main->userdata)",
+                    read_float = FUNCTION_PORT_READ_FLOAT
                 )),
-                _ => Ok(format!(
-                    "(*main->read_bit)({}, {}, main->userdata)",
-                    port_name, bit
+                PortClass::Numeric => Ok(format!(
+                    "(*main->{read_numeric})({variant}, main->userdata)",
+                    read_numeric = FUNCTION_PORT_READ_NUMERIC
+                )),
+                PortClass::Bit => Ok(format!(
+                    "(*main->{read_bit})({variant}, main->userdata)",
+                    read_bit = FUNCTION_PORT_READ_BIT
                 )),
             }
         }
@@ -650,7 +652,7 @@ pub(super) fn generate_condition_expr(
             {
                 return Ok(s);
             }
-            resolve_variable_c_expr(&var, &[])
+            resolve_variable_c_expr(&var, &[], map)
         }
         ConditionNode::EnumVariant(_, _, value) => Ok(value.to_string()),
         ConditionNode::ArraySubscript(var_rc, idx) => {
@@ -661,7 +663,7 @@ pub(super) fn generate_condition_expr(
             {
                 return Ok(format!("{}[{}]", s, idx));
             }
-            let base = resolve_variable_c_expr(&var, &[])?;
+            let base = resolve_variable_c_expr(&var, &[], map)?;
             Ok(format!("{}[{}]", base, idx))
         }
         ConditionNode::BitAccess(inner, member) => {
@@ -679,14 +681,6 @@ pub(super) fn generate_condition_expr(
                             name, ty, upper, ..
                         } = &*var
                         {
-                            if matches!(ty, TypeNode::Rational) {
-                                return Err(Diagnostic::error(
-                                    Location::Codegen,
-                                    "BitAccess на float-порт не поддерживается в условии"
-                                        .to_string(),
-                                )
-                                .with_code("CC-001"));
-                            }
                             let model_name =
                                 if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade()) {
                                     Name::from(rc)
@@ -695,15 +689,31 @@ pub(super) fn generate_condition_expr(
                                         "Неразрешённый owner порта при BitAccess в условии".into(),
                                     );
                                 };
-                            let port_name = format!(
-                                "{}Ports_{}",
-                                model_name.unique_camelcase(),
+                            let cls = PortClass::from_type(ty);
+                            let type_name =
+                                cls.qualified_enum_name(&map.root_name().unique_camelcase());
+                            let variant = format!(
+                                "{}_{}_{}",
+                                type_name,
+                                model_name.unique_uppercase_snakecase(),
                                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
                             );
-                            return Ok(format!(
-                                "(*main->read_bit)({}, {}, main->userdata)",
-                                port_name, n
-                            ));
+                            return match cls {
+                                PortClass::Bit => Ok(format!(
+                                    "(*main->{read_bit})({variant}, main->userdata)",
+                                    read_bit = FUNCTION_PORT_READ_BIT
+                                )),
+                                PortClass::Numeric => Ok(format!(
+                                    "(((*main->{read_numeric})({variant}, main->userdata) >> {n}) & 1u)",
+                                    read_numeric = FUNCTION_PORT_READ_NUMERIC
+                                )),
+                                PortClass::Rational => Err(Diagnostic::error(
+                                    Location::Codegen,
+                                    "BitAccess на float-порт не поддерживается в условии"
+                                        .to_string(),
+                                )
+                                .with_code("CC-001")),
+                            };
                         }
                     }
                     // Обычная переменная/выражение: ((inner >> N) & 1u)
@@ -1061,11 +1071,7 @@ pub(super) fn generate_expr(
             if let ExpressionNode::Variable(var_rc) = l.as_ref() {
                 let var = var_rc.borrow();
                 if let VariableNode::Port {
-                    name,
-                    ty,
-                    expr: addr_expr,
-                    upper,
-                    ..
+                    name, ty, upper, ..
                 } = &*var
                 {
                     let model_name =
@@ -1074,32 +1080,36 @@ pub(super) fn generate_expr(
                         } else {
                             return Err("Неразрешённый owner порта при записи".into());
                         };
-                    let port_name = format!(
-                        "{}Ports_{}",
-                        model_name.unique_camelcase(),
+                    let cls = PortClass::from_type(ty);
+                    let type_name = cls.qualified_enum_name(&map.root_name().unique_camelcase());
+                    let variant = format!(
+                        "{}_{}_{}",
+                        type_name,
+                        model_name.unique_uppercase_snakecase(),
                         normalize_lowercase_snakecase(name.clone()).to_uppercase()
                     );
-                    let bit = if let ExpressionNode::Address(_, bit) = addr_expr {
-                        *bit
-                    } else {
-                        0i64
-                    };
                     let mut rhs_str = String::new();
                     {
                         let mut tmp = Printer::new(4, &mut rhs_str);
                         generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
                     }
-                    match ty {
-                        TypeNode::Rational => {
+                    match cls {
+                        PortClass::Rational => {
                             printer.print(&format!(
-                                "(*main->write_float)({}, {}, main->userdata)",
-                                port_name, rhs_str
+                                "(*main->{write_float})({variant}, {rhs_str}, main->userdata)",
+                                write_float = FUNCTION_PORT_WRITE_FLOAT
                             ));
                         }
-                        _ => {
+                        PortClass::Numeric => {
                             printer.print(&format!(
-                                "(*main->write_bit)({}, {}, {}, main->userdata)",
-                                port_name, bit, rhs_str
+                                "(*main->{write_numeric})({variant}, {rhs_str}, main->userdata)",
+                                write_numeric = FUNCTION_PORT_WRITE_NUMERIC
+                            ));
+                        }
+                        PortClass::Bit => {
+                            printer.print(&format!(
+                                "(*main->{write_bit})({variant}, {rhs_str}, main->userdata)",
+                                write_bit = FUNCTION_PORT_WRITE_BIT
                             ));
                         }
                     }
@@ -1115,22 +1125,26 @@ pub(super) fn generate_expr(
                         name, ty, upper, ..
                     } = &*var
                     {
-                        if matches!(ty, TypeNode::Rational) {
-                            return Err(Diagnostic::error(
-                                Location::Codegen,
-                                "BitAccess на float-порт не поддерживается при записи".to_string(),
-                            )
-                            .with_code("CC-001"));
-                        }
                         let model_name = if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade())
                         {
                             Name::from(rc)
                         } else {
                             return Err("Неразрешённый owner порта при BitAccess записи".into());
                         };
-                        let port_name = format!(
-                            "{}Ports_{}",
-                            model_name.unique_camelcase(),
+                        let cls = PortClass::from_type(ty);
+                        if cls == PortClass::Rational {
+                            return Err(Diagnostic::error(
+                                Location::Codegen,
+                                "BitAccess на float-порт не поддерживается при записи".to_string(),
+                            )
+                            .with_code("CC-001"));
+                        }
+                        let type_name =
+                            cls.qualified_enum_name(&map.root_name().unique_camelcase());
+                        let variant = format!(
+                            "{}_{}_{}",
+                            type_name,
+                            model_name.unique_uppercase_snakecase(),
                             normalize_lowercase_snakecase(name.clone()).to_uppercase()
                         );
                         let mut rhs_str = String::new();
@@ -1138,10 +1152,24 @@ pub(super) fn generate_expr(
                             let mut tmp = Printer::new(4, &mut rhs_str);
                             generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
                         }
-                        printer.print(&format!(
-                            "(*main->write_bit)({}, {}, {}, main->userdata)",
-                            port_name, n, rhs_str
-                        ));
+                        match cls {
+                            PortClass::Bit => {
+                                printer.print(&format!(
+                                    "(*main->{write_bit})({variant}, {rhs_str}, main->userdata)",
+                                    write_bit = FUNCTION_PORT_WRITE_BIT
+                                ));
+                            }
+                            PortClass::Numeric => {
+                                printer.print(&format!(
+                                    "(*main->{write_numeric})({variant}, \
+                                    ((*main->{read_numeric})({variant}, main->userdata) \
+                                    & ~(1LL << {n})) | (({rhs_str} & 1LL) << {n}), main->userdata)",
+                                    write_numeric = FUNCTION_PORT_WRITE_NUMERIC,
+                                    read_numeric = FUNCTION_PORT_READ_NUMERIC,
+                                ));
+                            }
+                            PortClass::Rational => unreachable!(),
+                        }
                         return Ok(());
                     }
                 }
@@ -1181,9 +1209,9 @@ pub(super) fn generate_expr(
             let var = var_rc.borrow();
             let var_expr = if let VariableNode::Simple { upper, .. } = &*var {
                 resolve_simple_var_in_context(var.name(), upper, &params, owner, map, has_model)
-                    .map_or_else(|| resolve_variable_c_expr(&*var, &params), Ok)?
+                    .map_or_else(|| resolve_variable_c_expr(&*var, &params, map), Ok)?
             } else {
-                resolve_variable_c_expr(&*var, &params)?
+                resolve_variable_c_expr(&*var, &params, map)?
             };
             printer.print(&format!("{}[{}]", var_expr, idx));
         }
@@ -1197,10 +1225,10 @@ pub(super) fn generate_expr(
                     normalize_lowercase_snakecase(var.name().to_string())
                 } else {
                     resolve_simple_var_in_context(var.name(), upper, &params, owner, map, has_model)
-                        .map_or_else(|| resolve_variable_c_expr(&*var, &params), Ok)?
+                        .map_or_else(|| resolve_variable_c_expr(&*var, &params, map), Ok)?
                 }
             } else {
-                resolve_variable_c_expr(&*var, &params)?
+                resolve_variable_c_expr(&*var, &params, map)?
             };
             printer.print(&var_expr);
         }
@@ -1267,28 +1295,42 @@ pub(super) fn generate_expr(
                             name, ty, upper, ..
                         } = &*var
                         {
-                            if matches!(ty, TypeNode::Rational) {
-                                return Err(Diagnostic::error(
-                                    Location::Codegen,
-                                    "BitAccess на float-порт не поддерживается".to_string(),
-                                )
-                                .with_code("CC-001"));
-                            }
                             let model_name =
                                 if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade()) {
                                     Name::from(rc)
                                 } else {
                                     return Err("Неразрешённый owner порта при BitAccess".into());
                                 };
-                            let port_name = format!(
-                                "{}Ports_{}",
-                                model_name.unique_camelcase(),
+                            let cls = PortClass::from_type(ty);
+                            let type_name =
+                                cls.qualified_enum_name(&map.root_name().unique_camelcase());
+                            let variant = format!(
+                                "{}_{}_{}",
+                                type_name,
+                                model_name.unique_uppercase_snakecase(),
                                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
                             );
-                            printer.print(&format!(
-                                "(*main->read_bit)({}, {}, main->userdata)",
-                                port_name, n
-                            ));
+                            match cls {
+                                PortClass::Bit => {
+                                    printer.print(&format!(
+                                        "(*main->{read_bit})({variant}, main->userdata)",
+                                        read_bit = FUNCTION_PORT_READ_BIT
+                                    ));
+                                }
+                                PortClass::Numeric => {
+                                    printer.print(&format!(
+                                        "(((*main->{read_numeric})({variant}, main->userdata) >> {n}) & 1u)",
+                                        read_numeric = FUNCTION_PORT_READ_NUMERIC
+                                    ));
+                                }
+                                PortClass::Rational => {
+                                    return Err(Diagnostic::error(
+                                        Location::Codegen,
+                                        "BitAccess на float-порт не поддерживается".to_string(),
+                                    )
+                                    .with_code("CC-001"));
+                                }
+                            }
                             return Ok(());
                         }
                     }

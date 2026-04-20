@@ -34,44 +34,26 @@ void scan_floor_buttons() {
 struct Ports {
 };
 
-static void port_write_bit(int address, int bit, bool val, void *userdata) {
+static void port_write_numeric(Elevator_NumericPort port, int64_t val, void *userdata) {
     struct Ports *ports = (struct Ports *) userdata;
-    (void) address;
-    (void) bit;
+    (void) port;
     (void) val;
     (void) ports;
 }
 
-static bool port_read_bit(int address, int bit, void *userdata) {
+static int64_t port_read_numeric(Elevator_NumericPort port, void *userdata) {
     struct Ports *ports = (struct Ports *) userdata;
-    (void) address;
-    (void) bit;
+    (void) port;
     (void) ports;
-    return false;
-}
-static void port_write_float(int address, int bit, float val, void *userdata) {
-    struct Ports *ports = (struct Ports *) userdata;
-    (void) address;
-    (void) bit;
-    (void) val;
-    (void) ports;
-}
-static float port_read_float(int address, int bit, void *userdata) {
-    struct Ports *ports = (struct Ports *) userdata;
-    (void) address;
-    (void) bit;
-    (void) ports;
-    return 0.0f;
+    return 0;
 }
 
 int main(void) {
     struct Ports ports = {};
     Elevator elevator = {
             .userdata = &ports,
-            .write_bit = port_write_bit,
-            .read_bit = port_read_bit,
-            .write_float = port_write_float,
-            .read_float = port_read_float};
+            .write_numeric = port_write_numeric,
+            .read_numeric  = port_read_numeric};
 
     Elevator_init(&elevator);
     while (!Elevator_is_done(&elevator)) {

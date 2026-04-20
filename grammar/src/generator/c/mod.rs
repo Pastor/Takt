@@ -16,7 +16,7 @@
 //!
 //! - Структура модели: `<PascalCase>` (например, `MainRobot`).
 //! - Поля структуры: snake_case (например, `main->robot.idle`).
-//! - Порты: `PORT_<UPPER_SNAKE>` (например, `PORT_MAIN_SENSORS_1`).
+//! - Порты: варианты `BitPort`, `RationalPort`, `NumericPort` (например, `BitPort_MAIN_SENSORS_1`).
 //! - Константы: `CONST_<UPPER_SNAKE>`.
 //! - Условия: `COND_<UPPER_SNAKE>`.
 //! - Перечисления: `ENUM_<UPPER_SNAKE>_<VARIANT>`.
@@ -55,6 +55,45 @@ pub(super) const FUNCTION_PORT_WRITE_BIT: &str = "write_bit";
 pub(super) const FUNCTION_PORT_READ_BIT: &str = "read_bit";
 pub(super) const FUNCTION_PORT_WRITE_FLOAT: &str = "write_float";
 pub(super) const FUNCTION_PORT_READ_FLOAT: &str = "read_float";
+pub(super) const FUNCTION_PORT_WRITE_NUMERIC: &str = "write_numeric";
+pub(super) const FUNCTION_PORT_READ_NUMERIC: &str = "read_numeric";
+
+/// Категория типа порта — определяет имя перечисления и набор функций.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) enum PortClass {
+    /// Однобитовый порт (`bit`, `bool`).
+    Bit,
+    /// Порт с плавающей точкой (`rational`).
+    Rational,
+    /// Числовой порт (`u8`, `u16`, массив битов и т. п.).
+    Numeric,
+}
+
+impl PortClass {
+    /// Суффикс C-перечисления для этой категории.
+    pub(super) fn enum_name(self) -> &'static str {
+        match self {
+            PortClass::Bit => "BitPort",
+            PortClass::Rational => "RationalPort",
+            PortClass::Numeric => "NumericPort",
+        }
+    }
+
+    /// Полное имя C-перечисления с префиксом корневой модели.
+    /// Например: `ElevatorMini_BitPort`.
+    pub(super) fn qualified_enum_name(self, root_camelcase: &str) -> String {
+        format!("{}_{}", root_camelcase, self.enum_name())
+    }
+
+    /// Определяет категорию по [`TypeNode`].
+    pub(super) fn from_type(ty: &TypeNode) -> Self {
+        match ty {
+            TypeNode::Bit | TypeNode::Bool => PortClass::Bit,
+            TypeNode::Rational => PortClass::Rational,
+            _ => PortClass::Numeric,
+        }
+    }
+}
 
 /// Генератор C-кода для модели BuT.
 ///
