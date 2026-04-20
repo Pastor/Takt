@@ -35,11 +35,11 @@ model Motor {
             ElevatorMotor_Stop = true;
         }
     }
-    port ElevatorMotor_Up     : bit = 0x20000100:0;
-    port ElevatorMotor_Down   : bit = 0x20000100:1;
-    port ElevatorMotor_Stop   : bit = 0x20000100:2;
-    port ElevatorMotor_SensorU: bit = 0x20000100:3;
-    port ElevatorMotor_SensorD: bit = 0x20000100:4;
+    out ElevatorMotor_Up     : bit = 0x20000100:0;
+    out ElevatorMotor_Down   : bit = 0x20000100:1;
+    out ElevatorMotor_Stop   : bit = 0x20000100:2;
+    in  ElevatorMotor_SensorU: bit = 0x20000100:3;
+    in  ElevatorMotor_SensorD: bit = 0x20000100:4;
 }
 
 model Cabin {
@@ -48,46 +48,46 @@ model Cabin {
             command = Stop;
         }
     }
-    port FloorButton_F1       : bit = 0x10000000:0;
-    port FloorButton_F2       : bit = 0x10000000:1;
-    port FloorButton_F3       : bit = 0x10000000:2;
-    port FloorButton_F4       : bit = 0x10000000:3;
-    port FloorButton_F5       : bit = 0x10000000:4;
-    port FloorButton_F6       : bit = 0x10000000:5;
-    port FloorButton_F7       : bit = 0x10000000:6;
-    port FloorButton_F8       : bit = 0x10000000:7;
-    port FloorButton_F9       : bit = 0x10000000:0;
+    in  FloorButton_F1       : bit = 0x10000000:0;
+    in  FloorButton_F2       : bit = 0x10000000:1;
+    in  FloorButton_F3       : bit = 0x10000000:2;
+    in  FloorButton_F4       : bit = 0x10000000:3;
+    in  FloorButton_F5       : bit = 0x10000000:4;
+    in  FloorButton_F6       : bit = 0x10000000:5;
+    in  FloorButton_F7       : bit = 0x10000000:6;
+    in  FloorButton_F8       : bit = 0x10000000:7;
+    in  FloorButton_F9       : bit = 0x10000000:0;
 
-    port FloorSensor_F1_Top   : bit = 0x10000100:0;
-    port FloorSensor_F1_Bottom: bit = 0x10000100:1;
-    port FloorSensor_F2_Top   : bit = 0x10000100:2;
-    port FloorSensor_F2_Bottom: bit = 0x10000100:3;
-    port FloorSensor_F3_Top   : bit = 0x10000100:4;
-    port FloorSensor_F3_Bottom: bit = 0x10000100:5;
-    port FloorSensor_F4_Top   : bit = 0x10000100:6;
-    port FloorSensor_F4_Bottom: bit = 0x10000100:7;
-    port FloorSensor_F5_Top   : bit = 0x10000100:8;
-    port FloorSensor_F5_Bottom: bit = 0x10000100:9;
-    port FloorSensor_F6_Top   : bit = 0x10000100:10;
-    port FloorSensor_F6_Bottom: bit = 0x10000100:11;
-    port FloorSensor_F7_Top   : bit = 0x10000100:12;
-    port FloorSensor_F7_Bottom: bit = 0x10000100:13;
-    port FloorSensor_F8_Top   : bit = 0x10000100:14;
-    port FloorSensor_F8_Bottom: bit = 0x10000100:15;
-    port FloorSensor_F9_Top   : bit = 0x10000100:16;
-    port FloorSensor_F9_Bottom: bit = 0x10000100:17;
+    in  FloorSensor_F1_Top   : bit = 0x10000100:0;
+    in  FloorSensor_F1_Bottom: bit = 0x10000100:1;
+    in  FloorSensor_F2_Top   : bit = 0x10000100:2;
+    in  FloorSensor_F2_Bottom: bit = 0x10000100:3;
+    in  FloorSensor_F3_Top   : bit = 0x10000100:4;
+    in  FloorSensor_F3_Bottom: bit = 0x10000100:5;
+    in  FloorSensor_F4_Top   : bit = 0x10000100:6;
+    in  FloorSensor_F4_Bottom: bit = 0x10000100:7;
+    in  FloorSensor_F5_Top   : bit = 0x10000100:8;
+    in  FloorSensor_F5_Bottom: bit = 0x10000100:9;
+    in  FloorSensor_F6_Top   : bit = 0x10000100:10;
+    in  FloorSensor_F6_Bottom: bit = 0x10000100:11;
+    in  FloorSensor_F7_Top   : bit = 0x10000100:12;
+    in  FloorSensor_F7_Bottom: bit = 0x10000100:13;
+    in  FloorSensor_F8_Top   : bit = 0x10000100:14;
+    in  FloorSensor_F8_Bottom: bit = 0x10000100:15;
+    in  FloorSensor_F9_Top   : bit = 0x10000100:16;
+    in  FloorSensor_F9_Bottom: bit = 0x10000100:17;
 
-    port CabinButton_F1    : bit = 0x20000000:0;
-    port CabinButton_F2    : bit = 0x20000000:1;
-    port CabinButton_F3    : bit = 0x20000000:2;
-    port CabinButton_F4    : bit = 0x20000000:3;
-    port CabinButton_F5    : bit = 0x20000000:4;
-    port CabinButton_F6    : bit = 0x20000000:5;
-    port CabinButton_F7    : bit = 0x20000000:6;
-    port CabinButton_F8    : bit = 0x20000000:7;
-    port CabinButton_F9    : bit = 0x20000000:8;
-    port CabinButton_DO    : bit = 0x20000000:9;
-    port CabinButton_DC    : bit = 0x20000000:10;
+    in  CabinButton_F1    : bit = 0x20000000:0;
+    in  CabinButton_F2    : bit = 0x20000000:1;
+    in  CabinButton_F3    : bit = 0x20000000:2;
+    in  CabinButton_F4    : bit = 0x20000000:3;
+    in  CabinButton_F5    : bit = 0x20000000:4;
+    in  CabinButton_F6    : bit = 0x20000000:5;
+    in  CabinButton_F7    : bit = 0x20000000:6;
+    in  CabinButton_F8    : bit = 0x20000000:7;
+    in  CabinButton_F9    : bit = 0x20000000:8;
+    in  CabinButton_DO    : bit = 0x20000000:9;
+    in  CabinButton_DC    : bit = 0x20000000:10;
 }
 
 start Main = Cabin | Motor;

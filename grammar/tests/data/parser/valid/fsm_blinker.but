@@ -3,8 +3,8 @@
 
 type u8 = [bit;8];
 
-port LED:     u8  = 0x00100000;
-port BUTTON:  bit = 0x00200000:0;
+out LED:     u8  = 0x00100000;
+in  BUTTON:  bit = 0x00200000:0;
 
 var counter: u8 = 0;
 

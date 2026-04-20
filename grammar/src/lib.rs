@@ -325,8 +325,8 @@ const MATRIX: u8 = { 0, 0, 0, 0, 0, 0, 0, 0 };
 const NUMB: u8 = 0xFF;
 cond  IsEmpty = it = 0;
 //Порт с указанием отображаемого адреса
-port  A : u8  = 0x00548835;
-port  B1: bit = 0x00648835:6;
+out   A : u8  = 0x00548835;
+in    B1: bit = 0x00648835:6;
 //Переменная
 var   it: [bit;64] = 0;
 

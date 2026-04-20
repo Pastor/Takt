@@ -12,9 +12,9 @@ const c: Coord = {0, 0, 0};
 enum Constant {
     X, Y, Z
 }
-port IDLE: bit = 0x44533932:1;
-port WORK: bit = 0x44533932:2;
-port WAIT: bit = 0x44533932:33;
+out IDLE: bit = 0x44533932:1;
+out WORK: bit = 0x44533932:2;
+in  WAIT: bit = 0x44533932:33;
 
 fn is_collected(c: Constant, v: u8) -> bool {
     if c == X && v == 1 {

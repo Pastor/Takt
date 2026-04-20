@@ -168,8 +168,10 @@ pub enum Token<'input> {
 
     /// Ключевое слово `const`.
     Constant,
-    /// Ключевое слово `port`.
-    Port,
+    /// Ключевое слово `in` (входной порт).
+    PortIn,
+    /// Ключевое слово `out` (выходной порт).
+    PortOut,
 
     /// Стрелка `-->` (не используется в текущей грамматике).
     PeirceArrow,
@@ -287,7 +289,8 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Reference => write!(f, "ref"),
             Token::Template => write!(f, "template"),
             Token::Condition => write!(f, "cond"),
-            Token::Port => write!(f, "port"),
+            Token::PortIn => write!(f, "in"),
+            Token::PortOut => write!(f, "out"),
             Token::Variable => write!(f, "var"),
             Token::Next => write!(f, "next"),
             Token::Extern => write!(f, "extern"),
@@ -442,7 +445,8 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "as"       => Token::As,
     "assembly" => Token::Assembly,
     "formula"  => Token::Formula,
-    "port"     => Token::Port,
+    "in"       => Token::PortIn,
+    "out"      => Token::PortOut,
     "model"    => Token::Model,
     "state"    => Token::State,
     "start"    => Token::Start,

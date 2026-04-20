@@ -34,14 +34,7 @@ void scan_floor_buttons() {
 struct Ports {
 };
 
-static void port_write_numeric(Elevator_NumericPort port, int64_t val, void *userdata) {
-    struct Ports *ports = (struct Ports *) userdata;
-    (void) port;
-    (void) val;
-    (void) ports;
-}
-
-static int64_t port_read_numeric(Elevator_NumericPort port, void *userdata) {
+static int64_t port_read_numeric(Elevator_In_NumericPort port, void *userdata) {
     struct Ports *ports = (struct Ports *) userdata;
     (void) port;
     (void) ports;
@@ -52,7 +45,6 @@ int main(void) {
     struct Ports ports = {};
     Elevator elevator = {
             .userdata = &ports,
-            .write_numeric = port_write_numeric,
             .read_numeric  = port_read_numeric};
 
     Elevator_init(&elevator);

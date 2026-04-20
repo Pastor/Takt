@@ -43,6 +43,7 @@ use crate::generator::c::c_header::generate_header;
 use crate::generator::c::c_map::CMap;
 use crate::generator::c::c_source::generate_source;
 use crate::semantic::ModelNode;
+use crate::semantic::PortDirection;
 use crate::semantic::minimap::{Element, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
@@ -79,10 +80,18 @@ impl PortClass {
         }
     }
 
-    /// Полное имя C-перечисления с префиксом корневой модели.
-    /// Например: `ElevatorMini_BitPort`.
-    pub(super) fn qualified_enum_name(self, root_camelcase: &str) -> String {
-        format!("{}_{}", root_camelcase, self.enum_name())
+    /// Полное имя C-перечисления с направлением порта.
+    /// Например: `ElevatorMini_In_BitPort`, `ElevatorMini_Out_NumericPort`.
+    pub(super) fn qualified_enum_name_with_dir(
+        self,
+        root_camelcase: &str,
+        dir: PortDirection,
+    ) -> String {
+        let dir_str = match dir {
+            PortDirection::In => "In",
+            PortDirection::Out => "Out",
+        };
+        format!("{}_{}_{}", root_camelcase, dir_str, self.enum_name())
     }
 
     /// Определяет категорию по [`TypeNode`].
@@ -215,8 +224,8 @@ mod tests {
     const SRC: &str = r#"
 type u8 = [bit;8];
 
-port sensors_1: u8 = 0x100000000;
-port sensors_2: u8 = 0x200000000;
+in sensors_1: u8 = 0x100000000;
+in sensors_2: u8 = 0x200000000;
 cond AtFloor8 = sensors_1.0 & sensors_1.1;
 cond AtFloor9 = sensors_2.0 & sensors_2.1;
 
@@ -303,7 +312,7 @@ start Main = Robot;
 type u8 = [bit;8];
 const MATRIX: u8 = 0;
 const NUMB: u8 = 255;
-port SENSOR: u8 = 0x100000;
+in SENSOR: u8 = 0x100000;
 var v: u8 = 0;
 start Main { always { v = MATRIX; v = NUMB; } }
         "#;

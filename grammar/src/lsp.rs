@@ -1360,7 +1360,8 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             | Token::Start
             | Token::Variable
             | Token::Constant
-            | Token::Port
+            | Token::PortIn
+            | Token::PortOut
             | Token::Function
             | Token::Extern
             | Token::Enum

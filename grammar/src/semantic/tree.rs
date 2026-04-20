@@ -311,6 +311,7 @@ fn construct_model_stage0(
                     typ,
                     name,
                     initializer,
+                    direction,
                 } => {
                     let name = extract_name(name.clone(), loc)?;
                     let type_node = construct_type(typ, model_node.clone())?;
@@ -339,6 +340,7 @@ fn construct_model_stage0(
                             name: name.clone(),
                             ty: type_node,
                             expr,
+                            direction,
                         },
                     )
                 }
@@ -687,12 +689,14 @@ fn resolve_variable_expressions(
                 name: n,
                 ty,
                 expr: ExpressionNode::Unresolved(expr),
+                direction,
             } => VariableNode::Port {
                 upper,
                 loc,
                 name: n,
                 ty,
                 expr: construct_expression(expr, vec![], model.clone())?,
+                direction,
             },
             other => other,
         };

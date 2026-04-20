@@ -141,9 +141,16 @@ VariableDefine: Box<VariableDefine> = {
             loc: Location::Source(file_no, l, r), typ, name, initializer: e
         })
     },
-    <l:@L> "port" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
+    <l:@L> "in" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
-            loc: Location::Source(file_no, l, r), typ, name, initializer: e
+            loc: Location::Source(file_no, l, r), typ, name, initializer: e,
+            direction: PortDirection::In,
+        })
+    },
+    <l:@L> "out" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
+        Box::new(VariableDefine::Port {
+            loc: Location::Source(file_no, l, r), typ, name, initializer: e,
+            direction: PortDirection::Out,
         })
     },
 }
@@ -906,7 +913,8 @@ extern {
         "type" => Token::Type,
         "cond" => Token::Condition,
         "const" => Token::Constant,
-        "port" => Token::Port,
+        "in"   => Token::PortIn,
+        "out"  => Token::PortOut,
         "extern" => Token::Extern,
         "true" => Token::True,
         "false" => Token::False,

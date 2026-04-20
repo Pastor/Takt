@@ -495,7 +495,7 @@ mod tests {
         let src = r#"
 type u8 = [bit;8];
 const LIMIT: u8 = 100;
-port SENSOR: u8 = 0x100000;
+in SENSOR: u8 = 0x100000;
 var v: u8 = 0;
 start Main { always { v = LIMIT; } }
         "#;
@@ -930,7 +930,7 @@ state End;";
     #[test]
     fn test_bit_access_port_read_in_condition() {
         let src =
-            "type u8 = [bit;8]; port BTN: u8 = 0x200000; start S { ref Done: BTN.0; } state Done;";
+            "type u8 = [bit;8]; in BTN: u8 = 0x200000; start S { ref Done: BTN.0; } state Done;";
         let code = generate_source_str(src);
         assert!(
             code.contains("(((*main->read_numeric)(ROOT_BTN, main->userdata) >> 0) & 1u)"),
@@ -963,7 +963,7 @@ state End;";
     /// Чтение бита порта в `always`: `x = BTN.0` → `(((*main->read_numeric)(ROOT_BTN, ...) >> 0) & 1u)`
     #[test]
     fn test_bit_access_port_read_in_always() {
-        let src = "type u8 = [bit;8]; port BTN: u8 = 0x200000; var x: u8 = 0; start S { always { x = BTN.0; } ref Done: true; } state Done;";
+        let src = "type u8 = [bit;8]; in BTN: u8 = 0x200000; var x: u8 = 0; start S { always { x = BTN.0; } ref Done: true; } state Done;";
         let code = generate_source_str(src);
         assert!(
             code.contains("(((*main->read_numeric)(ROOT_BTN, main->userdata) >> 0) & 1u)"),
@@ -974,7 +974,7 @@ state End;";
     /// Запись бита порта: `LED.7 = true` → read-modify-write через write_numeric
     #[test]
     fn test_bit_access_port_write_in_always() {
-        let src = "type u8 = [bit;8]; port LED: u8 = 0x100000; start S { always { LED.7 = true; } ref Done: true; } state Done;";
+        let src = "type u8 = [bit;8]; out LED: u8 = 0x100000; start S { always { LED.7 = true; } ref Done: true; } state Done;";
         let code = generate_source_str(src);
         assert!(
             code.contains("write_numeric)(ROOT_LED,")

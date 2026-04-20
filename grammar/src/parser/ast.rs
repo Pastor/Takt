@@ -174,7 +174,17 @@ pub enum Type {
     Unit,
 }
 
-/// Описание (`var` или `const` или `port`).
+/// Направление порта: входной (`in`) или выходной (`out`).
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub enum PortDirection {
+    /// Входной порт — FSM только читает (значение поступает извне).
+    In,
+    /// Выходной порт — FSM только пишет (значение уходит наружу).
+    Out,
+}
+
+/// Описание (`var` или `const` или `in`/`out`-порта).
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum VariableDefine {
@@ -189,7 +199,7 @@ pub enum VariableDefine {
         /// Инициализатор переменной
         initializer: Option<Expression>,
     },
-    /// Порт (неизменяемое значение), инициализируется адресом
+    /// Порт ввода-вывода, объявляется через `in` (входной) или `out` (выходной).
     Port {
         /// Местоположение в исходном тексте.
         loc: Location,
@@ -197,8 +207,10 @@ pub enum VariableDefine {
         typ: Option<Type>,
         /// Имя порта
         name: Option<Identifier>,
-        /// Инициализатор порта
+        /// Инициализатор порта (адрес, необязателен)
         initializer: Option<Expression>,
+        /// Направление порта
+        direction: PortDirection,
     },
     /// Константа (неизменяемое значение)
     Constant {

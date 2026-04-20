@@ -113,7 +113,7 @@ fn search_var_finds_const() {
 /// `search_var` находит порт.
 #[test]
 fn search_var_finds_port() {
-    let node = build("type u8 = [bit;8]; port P: u8 = 0x00100000;");
+    let node = build("type u8 = [bit;8]; in P: u8 = 0x00100000;");
     assert!(node.search_var("P").is_some(), "Порт P должен быть найден");
     assert!(
         matches!(node.search_var("P").unwrap(), VariableNode::Port { .. }),
@@ -308,7 +308,7 @@ fn duplicate_nested_model_name_is_error() {
 /// Порт без явного типа — ошибка.
 #[test]
 fn port_without_type_is_error() {
-    let (ast, _) = parse("port P = 0x00100000;", 0).unwrap();
+    let (ast, _) = parse("in P = 0x00100000;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(result.is_err(), "Порт без типа должен давать ошибку");
 }
@@ -316,7 +316,7 @@ fn port_without_type_is_error() {
 /// Порт с инициализатором не-адресом — адрес игнорируется, порт создаётся без адреса.
 #[test]
 fn port_with_non_address_initializer_is_valid() {
-    let (ast, _) = parse("type u8 = [bit;8]; port P: u8 = true; start S;", 0).unwrap();
+    let (ast, _) = parse("type u8 = [bit;8]; in P: u8 = true; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_ok(),
@@ -1333,8 +1333,8 @@ type u8 = [bit;8];
 const MATRIX: u8 = { 0, 0, 0, 0, 0, 0, 0, 0 };
 const NUMB: u8 = 0xFF;
 cond IsEmpty = it = 0;
-port A : u8  = 0x00548835;
-port B1: bit = 0x00648835:6;
+out A : u8  = 0x00548835;
+in  B1: bit = 0x00648835:6;
 var it: [bit;64] = 0;
 model Ping {
     start Start {

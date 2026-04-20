@@ -7,9 +7,9 @@ use crate::generator::c::{
     get_typed_variable,
 };
 use crate::generator::indent::Printer;
-use crate::semantic::VariableNode;
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
+use crate::semantic::{PortDirection, VariableNode};
 use log::warn;
 
 /// Генерирует поля структуры C для extend состояния.
@@ -213,13 +213,14 @@ fn build_concat_state_enum(
     Ok(())
 }
 
-/// Собирает все порты из всех моделей, сгруппированные по [`PortClass`].
+/// Собирает все порты из всех моделей, сгруппированные по [`PortClass`] и [`PortDirection`].
 ///
-/// Возвращает словарь `PortClass → Vec<(model_name, port_name)>`.
+/// Возвращает словарь `(PortClass, PortDirection) → Vec<(model_name, port_name)>`.
 /// Порты отсортированы для детерминированной генерации.
 fn collect_ports_by_class(
     map: &CMap,
-) -> Result<std::collections::HashMap<PortClass, Vec<(Name, String)>>, Diagnostic> {
+) -> Result<std::collections::HashMap<(PortClass, PortDirection), Vec<(Name, String)>>, Diagnostic>
+{
     use std::collections::HashMap;
     let mut all_models = map.using_models();
     all_models.insert(
@@ -230,56 +231,70 @@ fn collect_ports_by_class(
             start: map.start().clone(),
         },
     );
-    let mut result: HashMap<PortClass, Vec<(Name, String)>> = HashMap::new();
+    let mut result: HashMap<(PortClass, PortDirection), Vec<(Name, String)>> = HashMap::new();
     for element in &all_models {
         let model_name = element.name();
         let model = map.raw_model_at(model_name.clone())?;
         let model_borrowed = model.borrow();
-        let mut ports: Vec<(Name, String, PortClass)> = model_borrowed
+        let mut ports: Vec<(Name, String, PortClass, PortDirection)> = model_borrowed
             .variables
             .values()
             .filter_map(|v| {
-                if let VariableNode::Port { name, ty, .. } = v {
-                    Some((model_name.clone(), name.clone(), PortClass::from_type(ty)))
+                if let VariableNode::Port {
+                    name,
+                    ty,
+                    direction,
+                    ..
+                } = v
+                {
+                    Some((
+                        model_name.clone(),
+                        name.clone(),
+                        PortClass::from_type(ty),
+                        *direction,
+                    ))
                 } else {
                     None
                 }
             })
             .collect();
-        ports.sort_by(|(_, a, _), (_, b, _)| a.cmp(b));
-        for (mname, pname, cls) in ports {
-            result.entry(cls).or_default().push((mname, pname));
+        ports.sort_by(|(_, a, _, _), (_, b, _, _)| a.cmp(b));
+        for (mname, pname, cls, dir) in ports {
+            result.entry((cls, dir)).or_default().push((mname, pname));
         }
     }
     Ok(result)
 }
 
-/// Генерирует тип-зависимые перечисления портов вида `{RootModel}_BitPort` и т. п.
+/// Генерирует тип-зависимые перечисления портов с разделением по направлению.
 ///
-/// Все порты одного типа объединяются в единый `typedef enum`.
+/// Для каждой комбинации `(PortClass, PortDirection)` генерируется отдельный `typedef enum`:
+/// `{Root}_In_BitPort`, `{Root}_Out_BitPort`, `{Root}_In_NumericPort` и т. п.
 /// Варианты именуются `{MODEL_UPPER}_{PORT_UPPER}` с последовательными значениями.
 /// Определения помещаются в заголовочный файл до struct-определений.
 fn generate_port_enums(printer: &mut Printer, map: &CMap) -> Result<(), Diagnostic> {
     let root_camelcase = map.root_name().unique_camelcase();
     let by_class = collect_ports_by_class(map)?;
     for cls in [PortClass::Bit, PortClass::Rational, PortClass::Numeric] {
-        let Some(ports) = by_class.get(&cls) else {
-            continue;
-        };
-        let type_name = cls.qualified_enum_name(&root_camelcase);
-        printer.print("typedef enum {").nl();
-        printer.up();
-        for (idx, (model_name, port_name)) in ports.iter().enumerate() {
-            let variant = format!(
-                "{}_{}",
-                model_name.unique_uppercase_snakecase(),
-                normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
-            );
-            printer.ident(&format!("{} = {},", variant, idx)).nl();
+        for dir in [PortDirection::In, PortDirection::Out] {
+            let Some(ports) = by_class.get(&(cls, dir)) else {
+                continue;
+            };
+            let type_name = cls.qualified_enum_name_with_dir(&root_camelcase, dir);
+            printer.print("typedef enum {").nl();
+            printer.up();
+            for (idx, (model_name, port_name)) in ports.iter().enumerate() {
+                let variant = format!(
+                    "{}_{}",
+                    model_name.unique_uppercase_snakecase(),
+                    normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
+                );
+                printer.ident(&format!("{} = {},", variant, idx)).nl();
+            }
+            printer.down();
+            printer.print(&format!("}} {};", type_name)).nl();
+            printer.nl();
         }
-        printer.down();
-        printer.print(&format!("}} {};", type_name)).nl();
-        printer.nl();
     }
     Ok(())
 }
@@ -368,55 +383,79 @@ fn generate_model_header(
     if main {
         let root_camelcase = map.root_name().unique_camelcase();
         let by_class = collect_ports_by_class(map)?;
-        let has_bit = by_class.contains_key(&PortClass::Bit);
-        let has_rational = by_class.contains_key(&PortClass::Rational);
-        let has_numeric = by_class.contains_key(&PortClass::Numeric);
-        if has_bit || has_rational || has_numeric {
+        let has_in_bit = by_class.contains_key(&(PortClass::Bit, PortDirection::In));
+        let has_out_bit = by_class.contains_key(&(PortClass::Bit, PortDirection::Out));
+        let has_in_rational = by_class.contains_key(&(PortClass::Rational, PortDirection::In));
+        let has_out_rational = by_class.contains_key(&(PortClass::Rational, PortDirection::Out));
+        let has_in_numeric = by_class.contains_key(&(PortClass::Numeric, PortDirection::In));
+        let has_out_numeric = by_class.contains_key(&(PortClass::Numeric, PortDirection::Out));
+        let has_any = has_in_bit
+            || has_out_bit
+            || has_in_rational
+            || has_out_rational
+            || has_in_numeric
+            || has_out_numeric;
+        if has_any {
             printer
                 .ident("/// NOTICE: Функции портов ввода вывода")
                 .nl();
             printer.ident("void  *userdata;").nl();
-            if has_bit {
-                let bit_type = PortClass::Bit.qualified_enum_name(&root_camelcase);
+            if has_out_bit {
+                let bit_out = PortClass::Bit
+                    .qualified_enum_name_with_dir(&root_camelcase, PortDirection::Out);
                 printer
                     .ident(&format!(
-                        "void  (*{write_bit})({bit_type} port, bool val, void *userdata);",
+                        "void  (*{write_bit})({bit_out} port, bool val, void *userdata);",
                         write_bit = FUNCTION_PORT_WRITE_BIT
                     ))
                     .nl();
+            }
+            if has_in_bit {
+                let bit_in =
+                    PortClass::Bit.qualified_enum_name_with_dir(&root_camelcase, PortDirection::In);
                 printer
                     .ident(&format!(
-                        "bool  (*{read_bit} )({bit_type} port, void *userdata);",
+                        "bool  (*{read_bit} )({bit_in} port, void *userdata);",
                         read_bit = FUNCTION_PORT_READ_BIT
                     ))
                     .nl();
             }
-            if has_rational {
-                let rat_type = PortClass::Rational.qualified_enum_name(&root_camelcase);
+            if has_out_rational {
+                let rat_out = PortClass::Rational
+                    .qualified_enum_name_with_dir(&root_camelcase, PortDirection::Out);
                 printer
                     .ident(&format!(
-                        "void  (*{write_float})({rat_type} port, float val, void *userdata);",
+                        "void  (*{write_float})({rat_out} port, float val, void *userdata);",
                         write_float = FUNCTION_PORT_WRITE_FLOAT
                     ))
                     .nl();
+            }
+            if has_in_rational {
+                let rat_in = PortClass::Rational
+                    .qualified_enum_name_with_dir(&root_camelcase, PortDirection::In);
                 printer
                     .ident(&format!(
-                        "float (*{read_float} )({rat_type} port, void *userdata);",
+                        "float (*{read_float} )({rat_in} port, void *userdata);",
                         read_float = FUNCTION_PORT_READ_FLOAT
                     ))
                     .nl();
             }
-            if has_numeric {
-                let num_type = PortClass::Numeric.qualified_enum_name(&root_camelcase);
+            if has_out_numeric {
+                let num_out = PortClass::Numeric
+                    .qualified_enum_name_with_dir(&root_camelcase, PortDirection::Out);
                 printer
                     .ident(&format!(
-                        "void    (*{write_numeric})({num_type} port, int64_t val, void *userdata);",
+                        "void    (*{write_numeric})({num_out} port, int64_t val, void *userdata);",
                         write_numeric = FUNCTION_PORT_WRITE_NUMERIC
                     ))
                     .nl();
+            }
+            if has_in_numeric {
+                let num_in = PortClass::Numeric
+                    .qualified_enum_name_with_dir(&root_camelcase, PortDirection::In);
                 printer
                     .ident(&format!(
-                        "int64_t (*{read_numeric} )({num_type} port, void *userdata);",
+                        "int64_t (*{read_numeric} )({num_in} port, void *userdata);",
                         read_numeric = FUNCTION_PORT_READ_NUMERIC
                     ))
                     .nl();

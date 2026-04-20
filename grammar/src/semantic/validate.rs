@@ -22,8 +22,8 @@ use crate::parser::{ast as ast_types, ast};
 use crate::semantic::condition::resolve_condition;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
-    ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, ReferenceNode, StateNode,
-    StateNodeKind, StatementNode, VariableNode,
+    ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, PortDirection, ReferenceNode,
+    StateNode, StateNodeKind, StatementNode, VariableNode,
 };
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -244,7 +244,22 @@ fn validate_cond(
         ConditionNode::Rational(_, _) => {}
         ConditionNode::String(_) => {}
         ConditionNode::Bool(_) => {}
-        ConditionNode::Variable(_var, _) => {}
+        ConditionNode::Variable(var_rc, _) => {
+            // Чтение из `out`-порта запрещено в условии (SE-027)
+            if let VariableNode::Port {
+                direction: PortDirection::Out,
+                name,
+                loc,
+                ..
+            } = &*var_rc.borrow()
+            {
+                return Err(Diagnostic::error(
+                    *loc,
+                    format!("Чтение из выходного порта '{}' запрещено", name),
+                )
+                .with_code("SE-027"));
+            }
+        }
         ConditionNode::Model(_model) => {}
         ConditionNode::State(_state) => {}
         ConditionNode::EnumVariant(_, _, _) => {}
@@ -306,9 +321,58 @@ fn validate_expression(
         | ExpressionNode::Equal(left, right)
         | ExpressionNode::NotEqual(left, right)
         | ExpressionNode::And(left, right)
-        | ExpressionNode::Or(left, right)
-        | ExpressionNode::Assign(left, right) => {
+        | ExpressionNode::Or(left, right) => {
             validate_expression(left, model.clone())?;
+            validate_expression(right, model.clone())?;
+        }
+        ExpressionNode::Assign(left, right) => {
+            // Запись в `in`-порт запрещена (SE-026)
+            let check_port = |expr: &ExpressionNode| {
+                if let ExpressionNode::Variable(v) = expr {
+                    return Some(v.clone());
+                }
+                if let ExpressionNode::BitAccess(inner, _) = expr {
+                    if let ExpressionNode::Variable(v) = inner.as_ref() {
+                        return Some(v.clone());
+                    }
+                }
+                None
+            };
+            if let Some(var_rc) = check_port(left) {
+                if let VariableNode::Port {
+                    direction: PortDirection::In,
+                    name,
+                    loc,
+                    ..
+                } = &*var_rc.borrow()
+                {
+                    return Err(Diagnostic::error(
+                        *loc,
+                        format!("Запись в входной порт '{}' запрещена", name),
+                    )
+                    .with_code("SE-026"));
+                }
+            }
+            // Для BitAccess как lvalue на out-порт не рекурсируем внутрь
+            // (это запись в порт, а не чтение — SE-027 здесь неприменим).
+            let is_out_port_bitaccess = if let ExpressionNode::BitAccess(inner, _) = left.as_ref() {
+                if let ExpressionNode::Variable(v) = inner.as_ref() {
+                    matches!(
+                        &*v.borrow(),
+                        VariableNode::Port {
+                            direction: PortDirection::Out,
+                            ..
+                        }
+                    )
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            if !is_out_port_bitaccess {
+                validate_expression(left, model.clone())?;
+            }
             validate_expression(right, model.clone())?;
         }
         ExpressionNode::ConditionalOperator(left, right, other) => {
@@ -322,7 +386,22 @@ fn validate_expression(
         ExpressionNode::Type(_) => {}
         ExpressionNode::Address(_, _) => {}
         ExpressionNode::Bool(_) => {}
-        ExpressionNode::Variable(_var) => {}
+        ExpressionNode::Variable(var_rc) => {
+            // Чтение из `out`-порта запрещено (SE-027)
+            if let VariableNode::Port {
+                direction: PortDirection::Out,
+                name,
+                loc,
+                ..
+            } = &*var_rc.borrow()
+            {
+                return Err(Diagnostic::error(
+                    *loc,
+                    format!("Чтение из выходного порта '{}' запрещено", name),
+                )
+                .with_code("SE-027"));
+            }
+        }
         ExpressionNode::Model(_model) => {}
         ExpressionNode::Condition(cond) => {
             validate_cond(None, &cond.borrow().value, model.clone())?;
@@ -2374,6 +2453,7 @@ mod tests_ce4_declarations {
                 name: "p".to_string(),
                 ty: TypeNode::Enum("Dir".to_string()),
                 expr: ExpressionNode::Number(0),
+                direction: crate::semantic::PortDirection::In,
             };
             m.borrow_mut().variables.insert("p".to_string(), var);
             m

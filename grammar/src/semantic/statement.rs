@@ -873,12 +873,12 @@ mod tests {
     #[test]
     fn function_param_visible_in_expression_statement() {
         use crate::semantic::FunctionDefinitionNode;
-        // `out = value` — оператор-выражение (присваивание), где `value` — параметр функции.
+        // `result = value` — оператор-выражение (присваивание), где `value` — параметр функции.
         // До исправления это приводило к ошибке LSP «Идентификатор 'value' не найден».
         let node = build(concat!(
             "type u8 = [bit;8]; ",
-            "var out: u8 = 0; ",
-            "fn clamp(value: u8) -> u8 { out = value; return value; } ",
+            "var result: u8 = 0; ",
+            "fn clamp(value: u8) -> u8 { result = value; return value; } ",
             "start S;"
         ));
         // Проверяем, что модель успешно построена и функция clamp присутствует

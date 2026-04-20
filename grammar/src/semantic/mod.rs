@@ -40,6 +40,7 @@ pub(crate) mod validate;
 
 use crate::diagnostics::Location;
 use crate::parser::ast;
+pub use crate::parser::ast::PortDirection;
 use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
 pub use crate::semantic::enum_node::EnumDefinitionNode;
 pub use crate::semantic::formula::Formula;
@@ -784,7 +785,7 @@ pub enum VariableNode {
         /// Инициализирующее выражение.
         expr: ExpressionNode,
     },
-    /// Порт, отображённый на аппаратный адрес.
+    /// Порт ввода-вывода, объявляется через `in` (входной) или `out` (выходной).
     Port {
         /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
         upper: Option<Weak<RefCell<ModelNode>>>,
@@ -794,8 +795,10 @@ pub enum VariableNode {
         name: String,
         /// Тип переменной.
         ty: TypeNode,
-        /// Адрес порта.
+        /// Адрес порта (необязателен).
         expr: ExpressionNode,
+        /// Направление порта (входной / выходной).
+        direction: PortDirection,
     },
     /// Константа.
     Const {

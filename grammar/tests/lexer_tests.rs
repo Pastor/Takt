@@ -142,8 +142,8 @@ fn is_keyword_returns_true_for_keywords() {
 
     let keywords = [
         "break", "const", "continue", "else", "false", "for", "fn", "if", "import", "loop",
-        "return", "string", "true", "type", "as", "assembly", "formula", "port", "model", "state",
-        "start", "ref", "template", "cond", "var", "next", "extern",
+        "return", "string", "true", "type", "as", "assembly", "formula", "in", "out", "model",
+        "state", "start", "ref", "template", "cond", "var", "next", "extern",
     ];
     for kw in keywords {
         assert!(is_keyword(kw), "'{}' должно быть ключевым словом", kw);
@@ -522,7 +522,8 @@ fn token_display_keywords() {
         ("cond", Token::Condition),
         ("var", Token::Variable),
         ("const", Token::Constant),
-        ("port", Token::Port),
+        ("in", Token::PortIn),
+        ("out", Token::PortOut),
         ("fn", Token::Function),
         ("true", Token::True),
         ("false", Token::False),
@@ -1031,7 +1032,7 @@ fn complete_but_program_lexes_without_errors() {
 /// Пример полной BuT-программы
 type u8 = [bit;8];
 const MAX: u8 = 0xFF;
-port LED: u8 = 00100000;
+out LED: u8 = 00100000;
 var counter: u8 = 0;
 cond IsMax = counter = MAX;
 model Blinker {

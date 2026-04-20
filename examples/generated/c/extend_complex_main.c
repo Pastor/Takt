@@ -7,14 +7,14 @@ bool has_flag(bool v) {
 struct Ports {
 };
 
-static void port_write_bit(ExtendComplex_BitPort port, bool val, void *userdata) {
+static void port_write_bit(ExtendComplex_Out_BitPort port, bool val, void *userdata) {
     struct Ports *ports = (struct Ports *) userdata;
     (void) port;
     (void) val;
     (void) ports;
 }
 
-static bool port_read_bit(ExtendComplex_BitPort port, void *userdata) {
+static bool port_read_bit(ExtendComplex_In_BitPort port, void *userdata) {
     struct Ports *ports = (struct Ports *) userdata;
     (void) port;
     (void) ports;

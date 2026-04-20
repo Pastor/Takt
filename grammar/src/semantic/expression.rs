@@ -1309,6 +1309,7 @@ mod tests {
             name: "p".into(),
             ty: TypeNode::Bit,
             expr: ExpressionNode::None,
+            direction: crate::semantic::PortDirection::In,
         };
         assert_eq!(var_type(&v), TypeNode::Bit);
     }

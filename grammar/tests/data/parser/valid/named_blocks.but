@@ -1,6 +1,6 @@
 // Именованные блоки кода (позитивный тест парсера)
 type u8 = [bit;8];
-port LED: u8 = 0x00100000;
+out LED: u8 = 0x00100000;
 
 model Blinker {
     start On {
