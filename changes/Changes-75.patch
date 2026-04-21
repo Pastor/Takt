@@ -1,0 +1,263 @@
+diff --git a/examples/elevator_mini.but b/examples/elevator_mini.but
+index 993e505..c96eb59 100644
+--- a/examples/elevator_mini.but
++++ b/examples/elevator_mini.but
+@@ -1,16 +1,34 @@
+-type u8 = [bit;8];
+-type u16 = [bit;16];
++// Управление 9-этажным лифтом — минимальная модель
++//
++// Архитектура:
++//   Motor  — управляет электродвигателем (Up/Down/Stop), реагирует на команду и концевые датчики
++//   Cabin  — отслеживает текущий этаж, принимает вызовы, управляет дверью
++//   Main   — параллельный запуск Cabin | Motor
++//
++// Разделяемые переменные (видны обоим авторам):
++//   command       : Command  — направление движения, устанавливается Cabin
++//   current_floor : u8       — текущий этаж (обновляется по датчикам нижней зоны этажа)
++//   target_floor  : u8       — целевой этаж (0 = нет задания)
++
++type u8  = [bit; 8];
++type u16 = [bit; 16];
+ 
+ enum Command {
+     Up,
+     Down,
+     Stop
+ }
+-var command: Command = Stop;
+ 
++var command:       Command = Stop;
++var current_floor: u8      = 1;
++var target_floor:  u8      = 0;
++
++// ─── Модель мотора ────────────────────────────────────────────────────────────
++// Простой трёхсостоянный автомат: Idle ↔ Up | Down → Stop → Idle.
++// Команда Stop или срабатывание концевого датчика прерывает движение.
+ model Motor {
+     start Idle {
+-        ref Up: command = Up;
++        ref Up:   command = Up;
+         ref Down: command = Down;
+         ref Stop: command = Stop;
+         enter {
+@@ -35,60 +53,151 @@ model Motor {
+             ElevatorMotor_Stop = true;
+         }
+     }
+-    out ElevatorMotor_Up     : bit = 0x20000100:0;
+-    out ElevatorMotor_Down   : bit = 0x20000100:1;
+-    out ElevatorMotor_Stop   : bit = 0x20000100:2;
+-    in  ElevatorMotor_SensorU: bit = 0x20000100:3;
+-    in  ElevatorMotor_SensorD: bit = 0x20000100:4;
++
++    // Выходные порты управления двигателем
++    out ElevatorMotor_Up:      bit;
++    out ElevatorMotor_Down:    bit;
++    out ElevatorMotor_Stop:    bit;
++    // Входные порты концевых датчиков (аппаратная защита от перехода)
++    in  ElevatorMotor_SensorU: bit;
++    in  ElevatorMotor_SensorD: bit;
+ }
+ 
++// ─── Модель кабины ────────────────────────────────────────────────────────────
++// Idle   — ожидание вызова (door open), обновление этажа, приём кнопок
++// Moving — движение к целевому этажу, постоянное обновление этажа по датчикам
++// AtFloor — прибытие: дверь открыта, ожидаем нажатия DC (закрыть дверь)
+ model Cabin {
++
++    // ── Ожидание ────────────────────────────────────────────────────────────
+     start Idle {
++        // Обновляем current_floor по нижнему датчику зоны этажа
++        always {
++            if FloorSensor_F1_Bottom { current_floor = 1; }
++            if FloorSensor_F2_Bottom { current_floor = 2; }
++            if FloorSensor_F3_Bottom { current_floor = 3; }
++            if FloorSensor_F4_Bottom { current_floor = 4; }
++            if FloorSensor_F5_Bottom { current_floor = 5; }
++            if FloorSensor_F6_Bottom { current_floor = 6; }
++            if FloorSensor_F7_Bottom { current_floor = 7; }
++            if FloorSensor_F8_Bottom { current_floor = 8; }
++            if FloorSensor_F9_Bottom { current_floor = 9; }
++        }
++        // Принимаем вызовы: кнопки кабины и кнопки вызова на этажах
++        always {
++            if CabinButton_F1 { target_floor = 1; }
++            if CabinButton_F2 { target_floor = 2; }
++            if CabinButton_F3 { target_floor = 3; }
++            if CabinButton_F4 { target_floor = 4; }
++            if CabinButton_F5 { target_floor = 5; }
++            if CabinButton_F6 { target_floor = 6; }
++            if CabinButton_F7 { target_floor = 7; }
++            if CabinButton_F8 { target_floor = 8; }
++            if CabinButton_F9 { target_floor = 9; }
++            if FloorButton_F1 { target_floor = 1; }
++            if FloorButton_F2 { target_floor = 2; }
++            if FloorButton_F3 { target_floor = 3; }
++            if FloorButton_F4 { target_floor = 4; }
++            if FloorButton_F5 { target_floor = 5; }
++            if FloorButton_F6 { target_floor = 6; }
++            if FloorButton_F7 { target_floor = 7; }
++            if FloorButton_F8 { target_floor = 8; }
++            if FloorButton_F9 { target_floor = 9; }
++        }
++        // Дверь открыта пока в Idle
++        always {
++            DoorOpen = true;
++        }
++        // Начать движение при наличии задания
++        ref Moving: target_floor != 0;
+         enter {
+             command = Stop;
+         }
+     }
+-    in  FloorButton_F1       : bit = 0x10000000:0;
+-    in  FloorButton_F2       : bit = 0x10000000:1;
+-    in  FloorButton_F3       : bit = 0x10000000:2;
+-    in  FloorButton_F4       : bit = 0x10000000:3;
+-    in  FloorButton_F5       : bit = 0x10000000:4;
+-    in  FloorButton_F6       : bit = 0x10000000:5;
+-    in  FloorButton_F7       : bit = 0x10000000:6;
+-    in  FloorButton_F8       : bit = 0x10000000:7;
+-    in  FloorButton_F9       : bit = 0x10000000:0;
+ 
+-    in  FloorSensor_F1_Top   : bit = 0x10000100:0;
+-    in  FloorSensor_F1_Bottom: bit = 0x10000100:1;
+-    in  FloorSensor_F2_Top   : bit = 0x10000100:2;
+-    in  FloorSensor_F2_Bottom: bit = 0x10000100:3;
+-    in  FloorSensor_F3_Top   : bit = 0x10000100:4;
+-    in  FloorSensor_F3_Bottom: bit = 0x10000100:5;
+-    in  FloorSensor_F4_Top   : bit = 0x10000100:6;
+-    in  FloorSensor_F4_Bottom: bit = 0x10000100:7;
+-    in  FloorSensor_F5_Top   : bit = 0x10000100:8;
+-    in  FloorSensor_F5_Bottom: bit = 0x10000100:9;
+-    in  FloorSensor_F6_Top   : bit = 0x10000100:10;
+-    in  FloorSensor_F6_Bottom: bit = 0x10000100:11;
+-    in  FloorSensor_F7_Top   : bit = 0x10000100:12;
+-    in  FloorSensor_F7_Bottom: bit = 0x10000100:13;
+-    in  FloorSensor_F8_Top   : bit = 0x10000100:14;
+-    in  FloorSensor_F8_Bottom: bit = 0x10000100:15;
+-    in  FloorSensor_F9_Top   : bit = 0x10000100:16;
+-    in  FloorSensor_F9_Bottom: bit = 0x10000100:17;
++    // ── Движение ─────────────────────────────────────────────────────────────
++    state Moving {
++        // Непрерывно обновляем current_floor по датчикам
++        always {
++            if FloorSensor_F1_Bottom { current_floor = 1; }
++            if FloorSensor_F2_Bottom { current_floor = 2; }
++            if FloorSensor_F3_Bottom { current_floor = 3; }
++            if FloorSensor_F4_Bottom { current_floor = 4; }
++            if FloorSensor_F5_Bottom { current_floor = 5; }
++            if FloorSensor_F6_Bottom { current_floor = 6; }
++            if FloorSensor_F7_Bottom { current_floor = 7; }
++            if FloorSensor_F8_Bottom { current_floor = 8; }
++            if FloorSensor_F9_Bottom { current_floor = 9; }
++        }
++        // Выбираем направление: выше — Up, ниже — Down
++        always {
++            if target_floor > current_floor { command = Up; }
++            if target_floor < current_floor { command = Down; }
++        }
++        // Прибыли на целевой этаж
++        ref AtFloor: target_floor = current_floor;
++    }
++
++    // ── Прибытие на этаж ─────────────────────────────────────────────────────
++    state AtFloor {
++        // Дверь открыта всё время пребывания на этаже
++        always {
++            DoorOpen = true;
++        }
++        enter {
++            command    = Stop;
++            target_floor = 0;
++        }
++        // Ждём нажатия кнопки закрытия двери (DC = Door Close)
++        ref Idle: CabinButton_DC;
++    }
++
++    // Выходные порты двери
++    out DoorOpen:  bit;
+ 
+-    in  CabinButton_F1    : bit = 0x20000000:0;
+-    in  CabinButton_F2    : bit = 0x20000000:1;
+-    in  CabinButton_F3    : bit = 0x20000000:2;
+-    in  CabinButton_F4    : bit = 0x20000000:3;
+-    in  CabinButton_F5    : bit = 0x20000000:4;
+-    in  CabinButton_F6    : bit = 0x20000000:5;
+-    in  CabinButton_F7    : bit = 0x20000000:6;
+-    in  CabinButton_F8    : bit = 0x20000000:7;
+-    in  CabinButton_F9    : bit = 0x20000000:8;
+-    in  CabinButton_DO    : bit = 0x20000000:9;
+-    in  CabinButton_DC    : bit = 0x20000000:10;
++    // Входные порты: кнопки вызова на этажах
++    in  FloorButton_F1: bit;
++    in  FloorButton_F2: bit;
++    in  FloorButton_F3: bit;
++    in  FloorButton_F4: bit;
++    in  FloorButton_F5: bit;
++    in  FloorButton_F6: bit;
++    in  FloorButton_F7: bit;
++    in  FloorButton_F8: bit;
++    in  FloorButton_F9: bit;
++
++    // Входные порты: датчики зоны этажа (Top = верхняя граница, Bottom = нижняя)
++    in  FloorSensor_F1_Top:    bit;
++    in  FloorSensor_F1_Bottom: bit;
++    in  FloorSensor_F2_Top:    bit;
++    in  FloorSensor_F2_Bottom: bit;
++    in  FloorSensor_F3_Top:    bit;
++    in  FloorSensor_F3_Bottom: bit;
++    in  FloorSensor_F4_Top:    bit;
++    in  FloorSensor_F4_Bottom: bit;
++    in  FloorSensor_F5_Top:    bit;
++    in  FloorSensor_F5_Bottom: bit;
++    in  FloorSensor_F6_Top:    bit;
++    in  FloorSensor_F6_Bottom: bit;
++    in  FloorSensor_F7_Top:    bit;
++    in  FloorSensor_F7_Bottom: bit;
++    in  FloorSensor_F8_Top:    bit;
++    in  FloorSensor_F8_Bottom: bit;
++    in  FloorSensor_F9_Top:    bit;
++    in  FloorSensor_F9_Bottom: bit;
++
++    // Входные порты: кнопки кабины (F1–F9, DO = открыть дверь, DC = закрыть дверь)
++    in  CabinButton_F1: bit;
++    in  CabinButton_F2: bit;
++    in  CabinButton_F3: bit;
++    in  CabinButton_F4: bit;
++    in  CabinButton_F5: bit;
++    in  CabinButton_F6: bit;
++    in  CabinButton_F7: bit;
++    in  CabinButton_F8: bit;
++    in  CabinButton_F9: bit;
++    in  CabinButton_DO: bit;
++    in  CabinButton_DC: bit;
+ }
+ 
+ start Main = Cabin | Motor;
+-
+diff --git a/grammar/src/semantic/tree.rs b/grammar/src/semantic/tree.rs
+index 86206c4..349f38a 100644
+--- a/grammar/src/semantic/tree.rs
++++ b/grammar/src/semantic/tree.rs
+@@ -1181,6 +1181,19 @@ pub fn construct_states(
+                     }
+                 }
+             }
++            // Если состояние не имеет реализации (= Expr), но имеет `next`,
++            // конвертируем `next` в безусловный переход (ref с ConditionNode::None).
++            if implements.is_none() {
++                if let Some(ref next_name) = next {
++                    references.push(ReferenceNode {
++                        location: def.loc,
++                        name: next_name.clone(),
++                        cond: ConditionNode::None,
++                        object: Box::new(StateNode::Unresolved),
++                    });
++                    next = None;
++                }
++            }
+             let kind = match kind {
+                 None => {
+                     if references.is_empty() {

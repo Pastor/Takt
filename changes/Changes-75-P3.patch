@@ -1,0 +1,435 @@
+diff --git a/examples/generated/c/elevator_mini.c b/examples/generated/c/elevator_mini.c
+new file mode 100644
+index 0000000..7c14e80
+--- /dev/null
++++ b/examples/generated/c/elevator_mini.c
+@@ -0,0 +1,303 @@
++#include "elevator_mini.h"
++#include <assert.h>
++#include <math.h>
++/// Перечисления модели elevator_mini (ElevatorMini)
++#define ENUM_ELEVATOR_MINI_DOWN 1
++#define ENUM_ELEVATOR_MINI_STOP 2
++#define ENUM_ELEVATOR_MINI_UP 0
++/// Model functions 'Motor (ElevatorMini:Motor)'
++static void ElevatorMiniMotor_init(ElevatorMiniMotor *model, ElevatorMini *main);
++static void ElevatorMiniMotor_tick(ElevatorMiniMotor *model, ElevatorMini *main);
++static bool ElevatorMiniMotor_is_done(const ElevatorMiniMotor *model, ElevatorMini *main);
++/// Model functions 'Cabin (ElevatorMini:Cabin)'
++static void ElevatorMiniCabin_init(ElevatorMiniCabin *model, ElevatorMini *main);
++static void ElevatorMiniCabin_tick(ElevatorMiniCabin *model, ElevatorMini *main);
++static bool ElevatorMiniCabin_is_done(const ElevatorMiniCabin *model, ElevatorMini *main);
++
++/// Функция инициализации модели Cabin (ElevatorMini:Cabin)
++void ElevatorMiniCabin_init(ElevatorMiniCabin *model, ElevatorMini *main) {
++    assert(0 != model);
++    model->state = ELEVATOR_MINI_CABIN_INIT;
++}
++
++/// Функция обработки модели Cabin (ElevatorMini:Cabin)
++void ElevatorMiniCabin_tick(ElevatorMiniCabin *model, ElevatorMini *main) {
++    assert(0 != model);
++    assert(0 != main);
++    switch (model->state) {
++        case ELEVATOR_MINI_CABIN_INIT: {
++            main->command = 2;
++            model->state = ELEVATOR_MINI_CABIN_IDLE;
++            break;
++        }
++        case ELEVATOR_MINI_CABIN_AT_FLOOR: {
++            (*main->write_bit)(ELEVATOR_MINI_CABIN_DOOR_OPEN, true, main->userdata);
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_CABIN_BUTTON_DC, main->userdata)) {
++                main->command = 2;
++                model->state = ELEVATOR_MINI_CABIN_IDLE;
++                break;
++            }
++            break;
++        }
++        case ELEVATOR_MINI_CABIN_MOVING: {
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F1_BOTTOM, main->userdata)) {
++                main->current_floor = 1;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F2_BOTTOM, main->userdata)) {
++                main->current_floor = 2;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F3_BOTTOM, main->userdata)) {
++                main->current_floor = 3;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F4_BOTTOM, main->userdata)) {
++                main->current_floor = 4;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F5_BOTTOM, main->userdata)) {
++                main->current_floor = 5;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F6_BOTTOM, main->userdata)) {
++                main->current_floor = 6;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F7_BOTTOM, main->userdata)) {
++                main->current_floor = 7;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F8_BOTTOM, main->userdata)) {
++                main->current_floor = 8;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F9_BOTTOM, main->userdata)) {
++                main->current_floor = 9;
++            }
++            if (main->target_floor > main->current_floor) {
++                main->command = 0;
++            }
++            if (main->target_floor < main->current_floor) {
++                main->command = 1;
++            }
++            if (main->target_floor == main->current_floor) {
++                main->command = 2;
++                main->target_floor = 0;
++                model->state = ELEVATOR_MINI_CABIN_AT_FLOOR;
++                break;
++            }
++            break;
++        }
++        case ELEVATOR_MINI_CABIN_IDLE: {
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F1_BOTTOM, main->userdata)) {
++                main->current_floor = 1;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F2_BOTTOM, main->userdata)) {
++                main->current_floor = 2;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F3_BOTTOM, main->userdata)) {
++                main->current_floor = 3;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F4_BOTTOM, main->userdata)) {
++                main->current_floor = 4;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F5_BOTTOM, main->userdata)) {
++                main->current_floor = 5;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F6_BOTTOM, main->userdata)) {
++                main->current_floor = 6;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F7_BOTTOM, main->userdata)) {
++                main->current_floor = 7;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F8_BOTTOM, main->userdata)) {
++                main->current_floor = 8;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F9_BOTTOM, main->userdata)) {
++                main->current_floor = 9;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_CABIN_BUTTON_F1, main->userdata)) {
++                main->target_floor = 1;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_CABIN_BUTTON_F2, main->userdata)) {
++                main->target_floor = 2;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_CABIN_BUTTON_F3, main->userdata)) {
++                main->target_floor = 3;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_CABIN_BUTTON_F4, main->userdata)) {
++                main->target_floor = 4;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_CABIN_BUTTON_F5, main->userdata)) {
++                main->target_floor = 5;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_CABIN_BUTTON_F6, main->userdata)) {
++                main->target_floor = 6;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_CABIN_BUTTON_F7, main->userdata)) {
++                main->target_floor = 7;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_CABIN_BUTTON_F8, main->userdata)) {
++                main->target_floor = 8;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_CABIN_BUTTON_F9, main->userdata)) {
++                main->target_floor = 9;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F1, main->userdata)) {
++                main->target_floor = 1;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F2, main->userdata)) {
++                main->target_floor = 2;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F3, main->userdata)) {
++                main->target_floor = 3;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F4, main->userdata)) {
++                main->target_floor = 4;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F5, main->userdata)) {
++                main->target_floor = 5;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F6, main->userdata)) {
++                main->target_floor = 6;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F7, main->userdata)) {
++                main->target_floor = 7;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F8, main->userdata)) {
++                main->target_floor = 8;
++            }
++            if ((*main->read_bit)(ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F9, main->userdata)) {
++                main->target_floor = 9;
++            }
++            (*main->write_bit)(ELEVATOR_MINI_CABIN_DOOR_OPEN, true, main->userdata);
++            if (main->target_floor != 0) {
++                model->state = ELEVATOR_MINI_CABIN_MOVING;
++                break;
++            }
++            break;
++        }
++        case ELEVATOR_MINI_CABIN_END: {
++            break;
++        }
++    }
++}
++
++/// Функция сброса модели Cabin (ElevatorMini:Cabin)
++void ElevatorMiniCabin_reset(ElevatorMiniCabin *model, ElevatorMini *main) {
++    ElevatorMiniCabin_init(model, main);
++}
++
++/// Функция проверки терминального состояния модели Cabin (ElevatorMini:Cabin)
++bool ElevatorMiniCabin_is_done(const ElevatorMiniCabin *model, ElevatorMini *main) {
++    return model->state == ELEVATOR_MINI_CABIN_END;
++}
++
++/// Функция инициализации модели Motor (ElevatorMini:Motor)
++void ElevatorMiniMotor_init(ElevatorMiniMotor *model, ElevatorMini *main) {
++    assert(0 != model);
++    model->state = ELEVATOR_MINI_MOTOR_INIT;
++}
++
++/// Функция обработки модели Motor (ElevatorMini:Motor)
++void ElevatorMiniMotor_tick(ElevatorMiniMotor *model, ElevatorMini *main) {
++    assert(0 != model);
++    assert(0 != main);
++    switch (model->state) {
++        case ELEVATOR_MINI_MOTOR_INIT: {
++            (*main->write_bit)(ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_STOP, true, main->userdata);
++            model->state = ELEVATOR_MINI_MOTOR_IDLE;
++            break;
++        }
++        case ELEVATOR_MINI_MOTOR_IDLE: {
++            if (main->command == 0) {
++                model->state = ELEVATOR_MINI_MOTOR_UP;
++                break;
++            }
++            if (main->command == 1) {
++                model->state = ELEVATOR_MINI_MOTOR_DOWN;
++                break;
++            }
++            if (main->command == 2) {
++                model->state = ELEVATOR_MINI_MOTOR_STOP;
++                break;
++            }
++            break;
++        }
++        case ELEVATOR_MINI_MOTOR_STOP: {
++            (*main->write_bit)(ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_STOP, true, main->userdata);
++            (*main->write_bit)(ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_STOP, true, main->userdata);
++            model->state = ELEVATOR_MINI_MOTOR_IDLE;
++            break;
++            break;
++        }
++        case ELEVATOR_MINI_MOTOR_DOWN: {
++            (*main->write_bit)(ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_DOWN, true, main->userdata);
++            if (main->command == 2 || (*main->read_bit)(ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_SENSOR_D, main->userdata)) {
++                model->state = ELEVATOR_MINI_MOTOR_STOP;
++                break;
++            }
++            break;
++        }
++        case ELEVATOR_MINI_MOTOR_UP: {
++            (*main->write_bit)(ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_UP, true, main->userdata);
++            if (main->command == 2 || (*main->read_bit)(ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_SENSOR_U, main->userdata)) {
++                model->state = ELEVATOR_MINI_MOTOR_STOP;
++                break;
++            }
++            break;
++        }
++        case ELEVATOR_MINI_MOTOR_END: {
++            break;
++        }
++    }
++}
++
++/// Функция сброса модели Motor (ElevatorMini:Motor)
++void ElevatorMiniMotor_reset(ElevatorMiniMotor *model, ElevatorMini *main) {
++    ElevatorMiniMotor_init(model, main);
++}
++
++/// Функция проверки терминального состояния модели Motor (ElevatorMini:Motor)
++bool ElevatorMiniMotor_is_done(const ElevatorMiniMotor *model, ElevatorMini *main) {
++    return model->state == ELEVATOR_MINI_MOTOR_END;
++}
++
++/// Функция инициализации модели elevator_mini (ElevatorMini)
++void ElevatorMini_init(ElevatorMini *model) {
++    assert(0 != model);
++    model->state = ELEVATOR_MINI_INIT;
++    model->current_floor = 1;
++    model->command = 2;
++    model->target_floor = 0;
++}
++
++/// Функция обработки модели elevator_mini (ElevatorMini)
++void ElevatorMini_tick(ElevatorMini *model) {
++    assert(0 != model);
++    switch (model->state) {
++        case ELEVATOR_MINI_INIT: {
++            ElevatorMiniCabin_init(&model->main.cabin0, model);
++            ElevatorMiniMotor_init(&model->main.motor1, model);
++            model->main.state = ELEVATOR_MINI_MAIN_INIT;
++            model->state = ELEVATOR_MINI_MAIN;
++            break;
++        }
++        case ELEVATOR_MINI_MAIN: {
++            ElevatorMiniCabin_tick(&model->main.cabin0, model);
++            ElevatorMiniMotor_tick(&model->main.motor1, model);
++            if (ElevatorMiniCabin_is_done(&model->main.cabin0, model) && ElevatorMiniMotor_is_done(&model->main.motor1, model)) {
++                model->state = ELEVATOR_MINI_END;
++                break;
++            }
++            break;
++        }
++        case ELEVATOR_MINI_END: {
++            break;
++        }
++    }
++}
++
++/// Функция сброса модели elevator_mini (ElevatorMini)
++void ElevatorMini_reset(ElevatorMini *model) {
++    ElevatorMini_init(model);
++}
++
++/// Функция проверки терминального состояния модели elevator_mini (ElevatorMini)
++bool ElevatorMini_is_done(const ElevatorMini *model) {
++    return model->state == ELEVATOR_MINI_END;
++}
++
+diff --git a/examples/generated/c/elevator_mini.h b/examples/generated/c/elevator_mini.h
+new file mode 100644
+index 0000000..e519ba8
+--- /dev/null
++++ b/examples/generated/c/elevator_mini.h
+@@ -0,0 +1,120 @@
++#ifndef ELEVATOR_MINI_H__
++#define ELEVATOR_MINI_H__
++#include <stdint.h>
++#include <stdbool.h>
++
++/* Forward declarations */
++typedef struct ElevatorMiniMotor ElevatorMiniMotor;
++typedef struct ElevatorMiniCabin ElevatorMiniCabin;
++typedef struct ElevatorMini ElevatorMini;
++
++typedef enum {
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_DC = 0,
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_DO = 1,
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_F1 = 2,
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_F2 = 3,
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_F3 = 4,
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_F4 = 5,
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_F5 = 6,
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_F6 = 7,
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_F7 = 8,
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_F8 = 9,
++    ELEVATOR_MINI_CABIN_CABIN_BUTTON_F9 = 10,
++    ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F1 = 11,
++    ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F2 = 12,
++    ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F3 = 13,
++    ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F4 = 14,
++    ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F5 = 15,
++    ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F6 = 16,
++    ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F7 = 17,
++    ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F8 = 18,
++    ELEVATOR_MINI_CABIN_FLOOR_BUTTON_F9 = 19,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F1_BOTTOM = 20,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F1_TOP = 21,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F2_BOTTOM = 22,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F2_TOP = 23,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F3_BOTTOM = 24,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F3_TOP = 25,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F4_BOTTOM = 26,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F4_TOP = 27,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F5_BOTTOM = 28,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F5_TOP = 29,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F6_BOTTOM = 30,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F6_TOP = 31,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F7_BOTTOM = 32,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F7_TOP = 33,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F8_BOTTOM = 34,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F8_TOP = 35,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F9_BOTTOM = 36,
++    ELEVATOR_MINI_CABIN_FLOOR_SENSOR_F9_TOP = 37,
++    ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_SENSOR_D = 38,
++    ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_SENSOR_U = 39,
++} ElevatorMini_In_BitPort;
++
++typedef enum {
++    ELEVATOR_MINI_CABIN_DOOR_OPEN = 0,
++    ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_DOWN = 1,
++    ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_STOP = 2,
++    ELEVATOR_MINI_MOTOR_ELEVATOR_MOTOR_UP = 3,
++} ElevatorMini_Out_BitPort;
++
++// NOTICE: Определение констант для модели Motor (ElevatorMini:Motor)
++/* Model Motor (ElevatorMini:Motor) */
++struct ElevatorMiniMotor {
++    // NOTICE: Определение переменных модели
++    enum {
++        ELEVATOR_MINI_MOTOR_INIT,
++        ELEVATOR_MINI_MOTOR_IDLE,
++        ELEVATOR_MINI_MOTOR_STOP,
++        ELEVATOR_MINI_MOTOR_DOWN,
++        ELEVATOR_MINI_MOTOR_UP,
++        ELEVATOR_MINI_MOTOR_END
++    } state;
++};
++
++// NOTICE: Определение констант для модели Cabin (ElevatorMini:Cabin)
++/* Model Cabin (ElevatorMini:Cabin) */
++struct ElevatorMiniCabin {
++    // NOTICE: Определение переменных модели
++    enum {
++        ELEVATOR_MINI_CABIN_INIT,
++        ELEVATOR_MINI_CABIN_AT_FLOOR,
++        ELEVATOR_MINI_CABIN_MOVING,
++        ELEVATOR_MINI_CABIN_IDLE,
++        ELEVATOR_MINI_CABIN_END
++    } state;
++};
++
++// NOTICE: Определение констант для модели elevator_mini (ElevatorMini)
++/* Model elevator_mini (ElevatorMini) */
++struct ElevatorMini {
++    // NOTICE: Определение переменных модели
++    uint8_t current_floor;
++    uint8_t command;
++    uint8_t target_floor;
++    enum {
++        ELEVATOR_MINI_INIT,
++        ELEVATOR_MINI_MAIN,
++        ELEVATOR_MINI_END
++    } state;
++    // NOTICE: Определение extend
++    struct {
++        ElevatorMiniCabin cabin0;
++        ElevatorMiniMotor motor1;
++        enum {
++            ELEVATOR_MINI_MAIN_INIT,
++            ELEVATOR_MINI_MAIN_TICK,
++            ELEVATOR_MINI_MAIN_END
++        } state;
++    } main;
++    /// NOTICE: Функции портов ввода вывода
++    void  *userdata;
++    void  (*write_bit)(ElevatorMini_Out_BitPort port, bool val, void *userdata);
++    bool  (*read_bit )(ElevatorMini_In_BitPort port, void *userdata);
++};
++
++void ElevatorMini_init(ElevatorMini *main);
++void ElevatorMini_tick(ElevatorMini *main);
++void ElevatorMini_reset(ElevatorMini *main);
++bool ElevatorMini_is_done(const ElevatorMini *main);
++#endif

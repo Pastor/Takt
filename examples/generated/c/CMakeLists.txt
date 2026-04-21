@@ -12,6 +12,12 @@ target_link_libraries(elevator m)
 add_executable(extend_complex extend_complex_main.c extend_complex.c)
 target_link_libraries(extend_complex m)
 
+# ElevatorMini — полный 9-этажный лифт с эмулятором датчиков
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/elevator_mini.c")
+    add_executable(elevator_mini elevator_mini_main.c elevator_mini.c)
+    target_link_libraries(elevator_mini m)
+endif()
+
 # Comprehensive — всесторонний пример (генерируется скриптом generate_examples.sh)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/comprehensive.c")
     add_executable(comprehensive comprehensive_main.c comprehensive.c)
