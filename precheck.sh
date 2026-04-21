@@ -20,7 +20,8 @@ $CARGO_CMD test -- --test-threads=1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-cargo build --bin butc 2>/dev/null
+$CARGO_CMD build --bin butc 2>/dev/null
+$CARGO_CMD build --features lsp --bin but-lsp
 
 BUTC="./target/debug/butc"
 OUTPUT="examples/generated/c"
