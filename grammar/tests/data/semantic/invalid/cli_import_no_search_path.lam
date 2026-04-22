@@ -1,0 +1,15 @@
+// Контр-пример: импорт без указания пути поиска завершается ошибкой.
+//
+// Этот файл использует `import "std.lam"`. Если не указать -I, компилятор
+// выдаст ошибку: «Файл импорта не найден: std.lam. Пути поиска: []»
+//
+// Демонстрация ошибки:
+//   lamc compile cli_import_no_search_path.lam   # → ошибка!
+//
+// Правильный вызов:
+//   lamc compile -I grammar/tests/data/include cli_import_no_search_path.lam
+
+import "std.lam";
+
+var x: u8 = 0;
+start S;

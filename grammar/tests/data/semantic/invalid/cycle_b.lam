@@ -1,0 +1,9 @@
+// Файл b.lam для проверки обнаружения циклических импортов.
+//
+// Замыкает цикл: b.lam импортирует a.lam, создавая a.lam → b.lam → a.lam.
+
+import "cycle_a.lam";
+
+model CycleB {
+    start S;
+}

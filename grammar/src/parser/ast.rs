@@ -1,4 +1,4 @@
-//! Узлы абстрактного синтаксического дерева (АСД) языка BuT.
+//! Узлы абстрактного синтаксического дерева (АСД) языка Lam.
 //!
 //! Этот модуль определяет все типы, образующие АСД после синтаксического анализа.
 //! Каждый узел несёт в себе информацию о местоположении ([`Location`]) в исходном
@@ -6,7 +6,7 @@
 //!
 //! ## Иерархия узлов
 //!
-//! - [`Model`] — корневой узел программы BuT; содержит список [`ModelElement`].
+//! - [`Model`] — корневой узел программы Lam; содержит список [`ModelElement`].
 //! - [`ModelElement`] — элемент модели: состояние, переменная, тип, условие,
 //!   именованный блок, функция или импорт.
 //! - [`StateDefine`] — определение состояния с элементами [`StateElement`].
@@ -130,7 +130,7 @@ impl ImportDefine {
 /// `None` используется при ошибке восстановления парсера.
 pub type ParameterList = Vec<(Location, Option<Parameter>)>;
 
-/// Тип данных в языке BuT.
+/// Тип данных в языке Lam.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Type {
@@ -521,7 +521,7 @@ pub enum Member {
     Number(i64),
 }
 
-/// Выражение языка BuT.
+/// Выражение языка Lam.
 ///
 /// Поддерживает полный спектр операций: арифметику, побитовые операции,
 /// сравнения, логику, обращение к массивам, вызовы функций и т.д.
@@ -955,7 +955,7 @@ impl FunctionDefine {
     }
 }
 
-/// Оператор языка BuT.
+/// Оператор языка Lam.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 #[allow(clippy::large_enum_variant, clippy::type_complexity)]

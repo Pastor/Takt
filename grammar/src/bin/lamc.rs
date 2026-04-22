@@ -1,11 +1,11 @@
-//! Компилятор BuT — утилита командной строки.
+//! Компилятор Lam — утилита командной строки.
 //!
 //! # Использование
 //!
 //! ```text
-//! butc compile [--target c] [-I dir1:dir2] [--verbose | --quiet] <input.but> [-o output_dir]
-//! butc compile input.but           # вывод в ./output
-//! butc --help                      # справка
+//! lamc compile [--target c] [-I dir1:dir2] [--verbose | --quiet] <input.lam> [-o output_dir]
+//! lamc compile input.lam           # вывод в ./output
+//! lamc --help                      # справка
 //! ```
 //!
 //! # Поиск файлов импорта
@@ -16,13 +16,13 @@
 //!
 //! ```text
 //! # Unix: два пути через двоеточие
-//! butc compile -I /usr/lib/but:/home/user/but main.but -o out
+//! lamc compile -I /usr/lib/lam:/home/user/lam main.lam -o out
 //!
 //! # Несколько флагов -I
-//! butc compile -I /usr/lib/but -I /home/user/but main.but
+//! lamc compile -I /usr/lib/lam -I /home/user/lam main.lam
 //!
 //! # Слитная форма без пробела
-//! butc compile -I/usr/lib/but main.but
+//! lamc compile -I/usr/lib/lam main.lam
 //! ```
 //!
 //! # Уровни диагностики
@@ -45,7 +45,7 @@ use std::process;
 pub struct CompileOptions {
     /// Целевой язык генерации (по умолчанию `"c"`).
     pub target: String,
-    /// Путь к входному `.but`-файлу.
+    /// Путь к входному `.lam`-файлу.
     pub input_file: String,
     /// Путь к выходному файлу или директории.
     pub output_path: String,
@@ -140,12 +140,12 @@ pub fn split_include_dirs(s: &str) -> Vec<String> {
 /// ```
 /// # use grammar_bin::{parse_compile_args, CompileOptions};
 /// let args = vec![
-///     "-I".to_string(), "/lib/but:/usr/but".to_string(),
-///     "main.but".to_string(),
+///     "-I".to_string(), "/lib/lam:/usr/lam".to_string(),
+///     "main.lam".to_string(),
 /// ];
 /// let opts = parse_compile_args(&args).unwrap();
-/// assert_eq!(opts.include_dirs, vec!["/lib/but", "/usr/but"]);
-/// assert_eq!(opts.input_file, "main.but");
+/// assert_eq!(opts.include_dirs, vec!["/lib/lam", "/usr/lam"]);
+/// assert_eq!(opts.input_file, "main.lam");
 /// assert_eq!(opts.target, "c");
 /// assert!(!opts.verbose);
 /// assert!(!opts.quiet);
@@ -235,8 +235,8 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
 
 /// Выводит справку по использованию утилиты в stderr.
 fn print_usage() {
-    eprintln!("Использование: butc compile [флаги] <input.but> [-o <output>]");
-    eprintln!("               butc --help");
+    eprintln!("Использование: lamc compile [флаги] <input.lam> [-o <output>]");
+    eprintln!("               lamc --help");
     eprintln!();
     eprintln!("Флаги:");
     eprintln!("  --target, -t <c>       Целевой язык (по умолчанию: c)");
@@ -253,11 +253,11 @@ fn print_usage() {
     eprintln!("  c    Генерация C-заголовочного файла");
     eprintln!();
     eprintln!("Примеры:");
-    eprintln!("  butc compile main.but");
-    eprintln!("  butc compile -I /lib/but:/home/user/but main.but -o build/");
-    eprintln!("  butc compile -I /lib/but -I /home/user/but --target c main.but");
-    eprintln!("  butc compile --verbose main.but");
-    eprintln!("  butc compile --quiet main.but -o dist/");
+    eprintln!("  lamc compile main.lam");
+    eprintln!("  lamc compile -I /lib/lam:/home/user/lam main.lam -o build/");
+    eprintln!("  lamc compile -I /lib/lam -I /home/user/lam --target c main.lam");
+    eprintln!("  lamc compile --verbose main.lam");
+    eprintln!("  lamc compile --quiet main.lam -o dist/");
 }
 
 fn main() {
@@ -422,9 +422,9 @@ mod tests {
     /// Минимальный вызов: только входной файл.
     #[test]
     fn parse_minimal() {
-        let args = vec!["main.but".to_string()];
+        let args = vec!["main.lam".to_string()];
         let opts = parse_compile_args(&args).unwrap();
-        assert_eq!(opts.input_file, "main.but");
+        assert_eq!(opts.input_file, "main.lam");
         assert_eq!(opts.target, "c");
         assert_eq!(opts.output_path, "output");
         assert!(opts.include_dirs.is_empty());
@@ -437,11 +437,11 @@ mod tests {
     fn parse_single_include_dir() {
         let args = vec![
             "-I".to_string(),
-            "/lib/but".to_string(),
-            "main.but".to_string(),
+            "/lib/lam".to_string(),
+            "main.lam".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
-        assert_eq!(opts.include_dirs, vec!["/lib/but"]);
+        assert_eq!(opts.include_dirs, vec!["/lib/lam"]);
     }
 
     /// Флаг `-I` с двоеточием — два пути.
@@ -449,11 +449,11 @@ mod tests {
     fn parse_include_dirs_colon() {
         let args = vec![
             "-I".to_string(),
-            "/lib/but:/usr/but".to_string(),
-            "main.but".to_string(),
+            "/lib/lam:/usr/lam".to_string(),
+            "main.lam".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
-        assert_eq!(opts.include_dirs, vec!["/lib/but", "/usr/but"]);
+        assert_eq!(opts.include_dirs, vec!["/lib/lam", "/usr/lam"]);
     }
 
     /// Флаг `-I` повторяется дважды — пути объединяются.
@@ -464,7 +464,7 @@ mod tests {
             "/a".to_string(),
             "-I".to_string(),
             "/b".to_string(),
-            "main.but".to_string(),
+            "main.lam".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/a", "/b"]);
@@ -476,7 +476,7 @@ mod tests {
         let args = vec![
             "--include-dirs".to_string(),
             "/lib:/usr".to_string(),
-            "main.but".to_string(),
+            "main.lam".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/lib", "/usr"]);
@@ -485,15 +485,15 @@ mod tests {
     /// Слитная форма: `-I/path` без пробела.
     #[test]
     fn parse_include_dir_glued() {
-        let args = vec!["-I/lib/but".to_string(), "main.but".to_string()];
+        let args = vec!["-I/lib/lam".to_string(), "main.lam".to_string()];
         let opts = parse_compile_args(&args).unwrap();
-        assert_eq!(opts.include_dirs, vec!["/lib/but"]);
+        assert_eq!(opts.include_dirs, vec!["/lib/lam"]);
     }
 
     /// Слитная форма с двоеточием: `-I/a:/b`.
     #[test]
     fn parse_include_dir_glued_colon() {
-        let args = vec!["-I/a:/b".to_string(), "main.but".to_string()];
+        let args = vec!["-I/a:/b".to_string(), "main.lam".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/a", "/b"]);
     }
@@ -505,20 +505,20 @@ mod tests {
             "--target".to_string(),
             "c".to_string(),
             "-I".to_string(),
-            "/lib/but:/usr/but".to_string(),
+            "/lib/lam:/usr/lam".to_string(),
             "-I".to_string(),
             "/local/but".to_string(),
-            "main.but".to_string(),
+            "main.lam".to_string(),
             "-o".to_string(),
             "build/".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.target, "c");
-        assert_eq!(opts.input_file, "main.but");
+        assert_eq!(opts.input_file, "main.lam");
         assert_eq!(opts.output_path, "build/");
         assert_eq!(
             opts.include_dirs,
-            vec!["/lib/but", "/usr/but", "/local/but"]
+            vec!["/lib/lam", "/usr/lam", "/local/but"]
         );
     }
 
@@ -526,7 +526,7 @@ mod tests {
     #[test]
     fn parse_output_flag() {
         let args = vec![
-            "main.but".to_string(),
+            "main.lam".to_string(),
             "-o".to_string(),
             "dist/".to_string(),
         ];
@@ -540,7 +540,7 @@ mod tests {
         let args = vec![
             "--output".to_string(),
             "out/".to_string(),
-            "main.but".to_string(),
+            "main.lam".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.output_path, "out/");
@@ -549,7 +549,7 @@ mod tests {
     /// Короткий флаг целевой платформы `-t`.
     #[test]
     fn parse_target_short_flag() {
-        let args = vec!["-t".to_string(), "c".to_string(), "main.but".to_string()];
+        let args = vec!["-t".to_string(), "c".to_string(), "main.lam".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.target, "c");
     }
@@ -578,7 +578,7 @@ mod tests {
     /// Нет аргумента после `-o` → ошибка.
     #[test]
     fn parse_output_missing_value_is_error() {
-        let args = vec!["main.but".to_string(), "-o".to_string()];
+        let args = vec!["main.lam".to_string(), "-o".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             err.contains("-o"),
@@ -590,7 +590,7 @@ mod tests {
     /// Нет аргумента после `-I` → ошибка.
     #[test]
     fn parse_include_missing_value_is_error() {
-        let args = vec!["main.but".to_string(), "-I".to_string()];
+        let args = vec!["main.lam".to_string(), "-I".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             err.contains("-I"),
@@ -602,7 +602,7 @@ mod tests {
     /// Нет аргумента после `--include-dirs` → ошибка.
     #[test]
     fn parse_include_dirs_missing_value_is_error() {
-        let args = vec!["main.but".to_string(), "--include-dirs".to_string()];
+        let args = vec!["main.lam".to_string(), "--include-dirs".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             err.contains("--include-dirs"),
@@ -614,7 +614,7 @@ mod tests {
     /// Неизвестный флаг → ошибка с его именем.
     #[test]
     fn parse_unknown_flag_is_error() {
-        let args = vec!["main.but".to_string(), "--unknown-flag".to_string()];
+        let args = vec!["main.lam".to_string(), "--unknown-flag".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             err.contains("--unknown-flag"),
@@ -629,7 +629,7 @@ mod tests {
         let args = vec![
             "-I".to_string(),
             "/a::/b".to_string(),
-            "main.but".to_string(),
+            "main.lam".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/a", "/b"]);
@@ -645,7 +645,7 @@ mod tests {
             "/second".to_string(),
             "-I".to_string(),
             "/third".to_string(),
-            "main.but".to_string(),
+            "main.lam".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/first", "/second", "/third"]);
@@ -656,7 +656,7 @@ mod tests {
     /// Флаг `--verbose` устанавливает `verbose = true`.
     #[test]
     fn parse_verbose_long_flag() {
-        let args = vec!["main.but".to_string(), "--verbose".to_string()];
+        let args = vec!["main.lam".to_string(), "--verbose".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert!(opts.verbose, "--verbose должен устанавливать verbose=true");
         assert!(!opts.quiet, "--verbose не должен затрагивать quiet");
@@ -665,7 +665,7 @@ mod tests {
     /// Короткий флаг `-v` устанавливает `verbose = true`.
     #[test]
     fn parse_verbose_short_flag() {
-        let args = vec!["-v".to_string(), "main.but".to_string()];
+        let args = vec!["-v".to_string(), "main.lam".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert!(opts.verbose, "-v должен устанавливать verbose=true");
     }
@@ -673,7 +673,7 @@ mod tests {
     /// Флаг `--quiet` устанавливает `quiet = true`.
     #[test]
     fn parse_quiet_long_flag() {
-        let args = vec!["main.but".to_string(), "--quiet".to_string()];
+        let args = vec!["main.lam".to_string(), "--quiet".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert!(opts.quiet, "--quiet должен устанавливать quiet=true");
         assert!(!opts.verbose, "--quiet не должен затрагивать verbose");
@@ -682,7 +682,7 @@ mod tests {
     /// Короткий флаг `-q` устанавливает `quiet = true`.
     #[test]
     fn parse_quiet_short_flag() {
-        let args = vec!["-q".to_string(), "main.but".to_string()];
+        let args = vec!["-q".to_string(), "main.lam".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert!(opts.quiet, "-q должен устанавливать quiet=true");
     }
@@ -690,7 +690,7 @@ mod tests {
     /// По умолчанию ни `verbose`, ни `quiet` не установлены.
     #[test]
     fn parse_defaults_no_verbose_no_quiet() {
-        let args = vec!["main.but".to_string()];
+        let args = vec!["main.lam".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert!(!opts.verbose, "verbose должен быть false по умолчанию");
         assert!(!opts.quiet, "quiet должен быть false по умолчанию");
@@ -700,7 +700,7 @@ mod tests {
     #[test]
     fn parse_verbose_and_quiet_is_error() {
         let args = vec![
-            "main.but".to_string(),
+            "main.lam".to_string(),
             "--verbose".to_string(),
             "--quiet".to_string(),
         ];
@@ -715,7 +715,7 @@ mod tests {
     /// Одновременное указание `-v` и `-q` → ошибка.
     #[test]
     fn parse_v_and_q_is_error() {
-        let args = vec!["main.but".to_string(), "-v".to_string(), "-q".to_string()];
+        let args = vec!["main.lam".to_string(), "-v".to_string(), "-q".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             !err.is_empty(),
@@ -732,7 +732,7 @@ mod tests {
             "/lib".to_string(),
             "--target".to_string(),
             "c".to_string(),
-            "main.but".to_string(),
+            "main.lam".to_string(),
             "-o".to_string(),
             "out/".to_string(),
         ];
@@ -749,7 +749,7 @@ mod tests {
     fn parse_quiet_with_other_flags() {
         let args = vec![
             "-q".to_string(),
-            "main.but".to_string(),
+            "main.lam".to_string(),
             "-o".to_string(),
             "dist/".to_string(),
         ];

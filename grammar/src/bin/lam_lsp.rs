@@ -1,4 +1,4 @@
-//! LSP-сервер для языка BuT.
+//! LSP-сервер для языка Lam.
 //!
 //! Реализует протокол Language Server Protocol для редактора Zed и других LSP-клиентов.
 //!
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     let init_result = InitializeResult {
         capabilities: serde_json::from_value(server_capabilities)?,
         server_info: Some(ServerInfo {
-            name: "but-lsp".to_string(),
+            name: "lam-lsp".to_string(),
             version: Some(env!("CARGO_PKG_VERSION").to_string()),
         }),
     };

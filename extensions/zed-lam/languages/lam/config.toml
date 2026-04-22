@@ -1,11 +1,11 @@
-name = "BuT"
-path_suffixes = ["but"]
+name = "Lam"
+path_suffixes = ["lam"]
 line_comments = ["// ", "/// "]
 autoclose_before = ";:.,=}])"
 tab_size = 4
 hard_tabs = false
 
-language_servers = ["but-lsp"]
+language_servers = ["lam-lsp"]
 
 brackets = [
     { start = "{", end = "}", close = true, newline = true },

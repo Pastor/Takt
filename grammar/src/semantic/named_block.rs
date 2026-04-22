@@ -1,4 +1,4 @@
-//! Разрешение именованных блоков кода языка BuT.
+//! Разрешение именованных блоков кода языка Lam.
 //!
 //! Функция [`resolve_named_blocks`] преобразует список [`NamedCodeBlockDefinitionNode`],
 //! вызывая [`resolve_statement`] для каждого блока с его [`StatementNode`].

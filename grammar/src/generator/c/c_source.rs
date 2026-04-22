@@ -1,4 +1,4 @@
-//! Генерация исходного C-файла (`.c`) из семантического дерева BuT.
+//! Генерация исходного C-файла (`.c`) из семантического дерева Lam.
 //!
 //! Точка входа: [`generate_source`] — собирает все секции `.c`-файла,
 //! делегируя генерацию деклараций, функций и моделей соответствующим модулям.
@@ -544,7 +544,7 @@ start Main { always { log_val(double_it(0)); } }
     #[test]
     fn test_generate_if_no_double_parens() {
         // Проверяет, что условие `if` генерируется без двойных скобок: `if (cond)` а не `if ((cond))`.
-        // В BuT условие `if` пишется без скобок (как в Rust): `if cond { ... }`.
+        // В Lam условие `if` пишется без скобок (как в Rust): `if cond { ... }`.
         // Генератор добавляет ровно одну пару скобок для C.
         // Функция вызывается в always, чтобы попасть в UsageSet.
         let src = r#"
@@ -619,7 +619,7 @@ start Entry = Controller;
     #[test]
     fn test_generate_loop_no_double_parens() {
         // Проверяет, что условие `loop` (→ `while` в C) генерируется без двойных скобок.
-        // В BuT: `loop cond { ... }` — без скобок вокруг условия.
+        // В Lam: `loop cond { ... }` — без скобок вокруг условия.
         // Генератор добавляет ровно одну пару скобок для C: `while (cond)`.
         // Функция вызывается в always, чтобы попасть в UsageSet.
         let src = r#"
@@ -646,7 +646,7 @@ start Main { always { check(0); } }
 
     // ── Тесты расширенных состояний: Parallel / Concatenation ─────────────────
 
-    /// Вспомогательная функция: генерирует полный `.c`-исходник из BuT-строки.
+    /// Вспомогательная функция: генерирует полный `.c`-исходник из Lam-строки.
     fn generate_source_str(src: &str) -> String {
         let (ast, _) = parse(src, 0).expect("ошибка разбора");
         let model_rc = semantic::tree::construct_model(&ast, None, &[]).unwrap();
@@ -806,12 +806,12 @@ state End;";
         );
     }
 
-    /// Генерация extend_complex.but не должна возвращать ошибку.
+    /// Генерация extend_complex.lam не должна возвращать ошибку.
     #[test]
     fn test_extend_complex_generates_without_error() {
-        let src = std::fs::read_to_string("../examples/extend_complex.but")
-            .expect("не удалось прочитать extend_complex.but");
-        let (ast, _) = parse(&src, 0).expect("ошибка разбора extend_complex.but");
+        let src = std::fs::read_to_string("../examples/extend_complex.lam")
+            .expect("не удалось прочитать extend_complex.lam");
+        let (ast, _) = parse(&src, 0).expect("ошибка разбора extend_complex.lam");
         let model_rc =
             semantic::tree::construct_model(&ast, None, &[]).expect("ошибка построения модели");
         model_rc.borrow_mut().name = Some("extend_complex".to_string());

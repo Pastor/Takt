@@ -95,7 +95,7 @@
     [`a | b`], [Альтернатива],
 )
 
-Полная грамматика в формате ISO EBNF находится в файле `BuT.ebnf`.
+Полная грамматика в формате ISO EBNF находится в файле `Lam.ebnf`.
 
 == Версия
 
@@ -147,8 +147,8 @@ start Main = Hello;
 Запустить компилятор:
 
 ```sh
-cargo build --release --bin butc
-./target/release/butc compile --target c hello.but -o out/
+cargo build --release --bin lamc
+./target/release/lamc compile --target c hello.lam -o out/
 ```
 
 В `out/` появятся `hello.h` и `hello.c`.
@@ -171,7 +171,7 @@ source_unit = { model_element } ;
 #table(
     columns: (auto, 1fr),
     table.header([Конструкция], [Описание]),
-    [`import "file.but";`], [Импорт другого файла],
+    [`import "file.lam";`], [Импорт другого файла],
     [`type T = ...;`], [Псевдоним типа],
     [`var x: T = v;`], [Глобальная переменная],
     [`const C: T = v;`], [Константа],
@@ -723,17 +723,17 @@ var BTN  : bit = 0x00200000:0;    // адрес:номер_бита
 === 10.1. Синтаксис импорта
 
 ```lam
-import "shared.but";                              // весь файл
-import "engine.but" as Motor;                     // с псевдонимом
-import * as Utils from "lib.but";                 // все экспорты
-import { TrafficLight, u8 } from "common.but";    // выборочный импорт
-import { OldName as NewName } from "types.but";   // с переименованием
+import "shared.lam";                              // весь файл
+import "engine.lam" as Motor;                     // с псевдонимом
+import * as Utils from "lib.lam";                 // все экспорты
+import { TrafficLight, u8 } from "common.lam";    // выборочный импорт
+import { OldName as NewName } from "types.lam";   // с переименованием
 ```
 
 === 10.2. Правила разрешения
 
 - Файлы ищутся по списку путей поиска.
-- Имя модуля выводится из имени файла (`my_file.but` → `MyFile`).
+- Имя модуля выводится из имени файла (`my_file.lam` → `MyFile`).
 - Повторный импорт одного файла идемпотентен.
 - Выборочный импорт ищет имя в порядке: модели → типы → переменные → условия.
 
@@ -763,7 +763,7 @@ import { OldName as NewName } from "types.but";   // с переименован
 === 12.1. Конвейер компиляции
 
 ```
-Исходный файл (.but)
+Исходный файл (.lam)
         │
         ▼
 ┌─────────────────┐
@@ -803,7 +803,7 @@ import { OldName as NewName } from "types.but";   // с переименован
 
 ```sh
 # Компиляция в C
-butc compile --target c input.but -o output/
+lamc compile --target c input.lam -o output/
 
 # Результат:
 # output/input.h  — заголовочный файл
@@ -930,24 +930,24 @@ extern fn hal_gpio_set(pin: u8, val: bit);
 // ─────────────────────────────────────────────────────────────────────────────
 = Часть 14. Инструментарий
 
-=== 14.1. Компилятор `butc`
+=== 14.1. Компилятор `lamc`
 
 ```sh
 # Сборка
-cargo build --release --bin butc
+cargo build --release --bin lamc
 
 # Компиляция в C
-butc compile --target c input.but -o output/
+lamc compile --target c input.lam -o output/
 ```
 
-=== 14.2. LSP-сервер `but-lsp`
+=== 14.2. LSP-сервер `lam-lsp`
 
 ```sh
 # Сборка с фичей lsp
-cargo build --release --features lsp --bin but-lsp
+cargo build --release --features lsp --bin lam-lsp
 
 # Установка
-cargo install --path grammar --bin but-lsp --features lsp
+cargo install --path grammar --bin lam-lsp --features lsp
 ```
 
 Поддерживаемые LSP-возможности:
@@ -962,8 +962,8 @@ cargo install --path grammar --bin but-lsp --features lsp
 ```json
 {
   "lsp": {
-    "but-lsp": {
-      "binary": { "path": "but-lsp" }
+    "lam-lsp": {
+      "binary": { "path": "lam-lsp" }
     }
   }
 }
@@ -978,8 +978,8 @@ cargo test --features lsp     # включая LSP-тесты
 
 Стратегия:
 
-- `.but`-файлы в `tests/data/valid/` должны компилироваться без ошибок.
-- `.but`-файлы в `tests/data/invalid/` должны производить диагностику.
+- `.lam`-файлы в `tests/data/valid/` должны компилироваться без ошибок.
+- `.lam`-файлы в `tests/data/invalid/` должны производить диагностику.
 
 === 14.4. Сборка из исходников
 
@@ -989,8 +989,8 @@ cargo test --features lsp     # включая LSP-тесты
 git clone https://github.com/your-org/BuT.git
 cd BuT
 
-cargo build --release --bin butc
-cargo install --path grammar --bin butc
+cargo build --release --bin lamc
+cargo install --path grammar --bin lamc
 ```
 
 #hline
@@ -1076,7 +1076,7 @@ start M = ButtonLED;
 
 === Управление лифтом (параллельная композиция, направленные порты)
 
-Файл `examples/elevator_mini.but` --- 9-этажная модель с параллельными автоматами Motor и Cabin:
+Файл `examples/elevator_mini.lam` --- 9-этажная модель с параллельными автоматами Motor и Cabin:
 
 ```lam
 type u8 = [bit;8];
@@ -1113,7 +1113,7 @@ model Motor {
     in  ElevatorMotor_SensorD: bit;
 }
 
-// model Cabin { ... } — см. examples/elevator_mini.but
+// model Cabin { ... } — см. examples/elevator_mini.lam
 
 start Main = Cabin | Motor;   // параллельный запуск
 ```
@@ -1150,7 +1150,7 @@ start System = (Init + Startup) + (Run | Halt);
 
 == B. Грамматика языка (EBNF)
 
-Полная грамматика находится в файле `BuT.ebnf`.
+Полная грамматика находится в файле `Lam.ebnf`.
 
 Краткая выдержка:
 
@@ -1233,11 +1233,11 @@ BuT/
 │   │   ├── c_expr.rs         — генерация выражений
 │   │   └── c_map.rs          — маппинг модели для навигации
 │   └── bin/
-│       ├── butc.rs           — CLI-компилятор
-│       └── but_lsp.rs        — LSP-сервер
-├── examples/                 — примеры .but файлов + сгенерированный C-код
+│       ├── lamc.rs           — CLI-компилятор
+│       └── lam_lsp.rs        — LSP-сервер
+├── examples/                 — примеры .lam файлов + сгенерированный C-код
 ├── changes/                  — патч-файлы
-├── extensions/zed-but/       — расширение для редактора Zed (v0.1.1)
+├── extensions/zed-lam/       — расширение для редактора Zed (v0.1.1)
 ├── doc/                      — документация
-└── BuT.ebnf                  — полная грамматика EBNF
+└── Lam.ebnf                  — полная грамматика EBNF
 ```

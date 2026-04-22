@@ -1,6 +1,6 @@
-//! Вспомогательные функции LSP-сервера для языка BuT.
+//! Вспомогательные функции LSP-сервера для языка Lam.
 //!
-//! Этот модуль реализует логику, связывающую компилятор BuT с протоколом LSP:
+//! Этот модуль реализует логику, связывающую компилятор Lam с протоколом LSP:
 //! сбор диагностики, генерацию подсказок автодополнения и информацию о типах
 //! для функции hover.
 //!
@@ -38,7 +38,7 @@ const TT_COMMENT: u32 = 7;
 const TT_OPERATOR: u32 = 8;
 const TT_CLASS: u32 = 9;
 
-/// Ключевые слова языка BuT для автодополнения.
+/// Ключевые слова языка Lam для автодополнения.
 const BUT_KEYWORDS: &[(&str, &str)] = &[
     ("model", "объявление модели конечного автомата"),
     ("state", "объявление обычного состояния"),
@@ -76,7 +76,7 @@ const BUT_KEYWORDS: &[(&str, &str)] = &[
     ("unit", "пустой тип (возвращаемый тип процедур)"),
 ];
 
-/// Собирает диагностику из исходного кода BuT.
+/// Собирает диагностику из исходного кода Lam.
 ///
 /// Выполняет лексический, синтаксический и семантический анализ.
 /// Возвращает список LSP-диагностик для отображения в редакторе.
@@ -170,7 +170,7 @@ pub fn grammar_diagnostic_to_lsp(
         range,
         severity,
         message,
-        source: Some("but-lsp".to_string()),
+        source: Some("lam-lsp".to_string()),
         ..Default::default()
     }
 }
@@ -423,7 +423,7 @@ pub fn goto_declaration(source: &str, position: Position) -> Option<Range> {
 ///   (модели, переменные, функции, типы, состояния). Переходы к локальным
 ///   переменным внутри функций и блоков (`enter`, `exit`, `always`)
 ///   не поддерживаются даже при наличии путей поиска.
-/// - Поиск файла импорта основан на имени модели и именах файлов `.but`.
+/// - Поиск файла импорта основан на имени модели и именах файлов `.lam`.
 ///   Если имя модели не совпадает с нормализованным именем файла, переход
 ///   к декларации может не найти нужный файл.
 ///
@@ -462,10 +462,10 @@ pub fn goto_declaration_with_paths(
 
     for dir in search_paths {
         let dir_path = std::path::Path::new(dir);
-        // Пробуем имя файла из имени модели (CamelCase → snake_case.but)
+        // Пробуем имя файла из имени модели (CamelCase → snake_case.lam)
         for candidate in &[
-            format!("{}.but", candidate_stem),
-            format!("{}.but", model_name.to_lowercase()),
+            format!("{}.lam", candidate_stem),
+            format!("{}.lam", model_name.to_lowercase()),
         ] {
             let file_path = dir_path.join(candidate);
             if let Ok(import_source) = std::fs::read_to_string(&file_path) {
@@ -602,7 +602,7 @@ fn declaration_range_of(node: &SemanticNodeRef, source: &str) -> Option<Range> {
     }
 }
 
-/// Генерирует элементы автодополнения для источника BuT.
+/// Генерирует элементы автодополнения для источника Lam.
 ///
 /// Возвращает ключевые слова языка, а также идентификаторы из семантической
 /// модели документа (имена моделей, состояний, переменных, функций).
@@ -1315,7 +1315,7 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
 
 /// Генерирует семантические токены для подсветки синтаксиса документа.
 ///
-/// Использует лексер BuT для токенизации и семантическую модель для уточнения
+/// Использует лексер Lam для токенизации и семантическую модель для уточнения
 /// типов идентификаторов (функции, типы, состояния, варианты перечислений и т.д.).
 /// Результат передаётся редактору в ответ на `textDocument/semanticTokens/full`.
 pub fn semantic_tokens(source: &str) -> SemanticTokens {
@@ -1437,7 +1437,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
 
     for (start, end, tt) in raw {
         // LSP требует длину токена в кодовых единицах UTF-16, а не в байтах.
-        // Для ASCII (большинство идентификаторов BuT) оба значения совпадают;
+        // Для ASCII (большинство идентификаторов Lam) оба значения совпадают;
         // различие возникает для кириллицы, CJK и прочих многобайтовых символов.
         let length: u32 = if end > start
             && end <= source.len()
@@ -1485,7 +1485,7 @@ mod tests {
 
     // ── Вспомогательный исходный код для тестов ────────────────────────────────
 
-    /// Минимально корректный BuT-файл с переменной, функцией, типом, перечислением.
+    /// Минимально корректный Lam-файл с переменной, функцией, типом, перечислением.
     const VALID_SRC: &str = r#"
 type u8 = [bit;8];
 var counter: [bit;8] = 0;
@@ -1614,7 +1614,7 @@ start S = M;
 
     // ── Тесты автодополнения ───────────────────────────────────────────────────
 
-    /// Список автодополнения содержит ключевые слова языка BuT.
+    /// Список автодополнения содержит ключевые слова языка Lam.
     #[test]
     fn test_completion_items_contains_keywords() {
         let items = completion_items("start S;");
@@ -1813,7 +1813,7 @@ start S = M;
         let lsp_diag = grammar_diagnostic_to_lsp(&diag, "hello");
         assert_eq!(lsp_diag.severity, Some(DiagnosticSeverity::ERROR));
         assert_eq!(lsp_diag.message, "тестовая ошибка");
-        assert_eq!(lsp_diag.source, Some("but-lsp".to_string()));
+        assert_eq!(lsp_diag.source, Some("lam-lsp".to_string()));
     }
 
     /// Предупреждение конвертируется в LSP DiagnosticSeverity::WARNING.
@@ -2012,7 +2012,7 @@ start S = M;
 
     // ── Тест семантических токенов ─────────────────────────────────────────────
 
-    /// semantic_tokens не должна паниковать на валидном BuT-исходнике.
+    /// semantic_tokens не должна паниковать на валидном Lam-исходнике.
     #[test]
     fn test_semantic_tokens_no_panic() {
         let tokens = semantic_tokens(VALID_SRC);
@@ -2041,7 +2041,7 @@ start S = M;
     #[test]
     fn test_semantic_tokens_utf16_length() {
         // Используем extern fn с кириллическим именем
-        // BuT поддерживает Unicode-идентификаторы через UnicodeXID
+        // Lam поддерживает Unicode-идентификаторы через UnicodeXID
         let src = "extern fn АБВ() -> [bit;8]; start S;";
         let tokens = semantic_tokens(src);
         // Ищем токен типа TT_FUNCTION для "АБВ"

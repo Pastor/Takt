@@ -1,4 +1,4 @@
-//! Построение семантического дерева из АСД языка BuT.
+//! Построение семантического дерева из АСД языка Lam.
 //!
 //! Основные функции модуля:
 //! - [`construct_model`] — главная точка входа, строит [`ModelNode`] из [`Model`].
@@ -55,12 +55,12 @@ fn extract_name(id: Option<Identifier>, loc: Location) -> Result<String, Diagnos
 ///
 /// Если `new_file` уже присутствует в `import_stack`, значит мы столкнулись
 /// с циклической зависимостью. В этом случае возвращается [`Diagnostic`]-ошибка
-/// с цепочкой вида `a.but → b.but → a.but`.
+/// с цепочкой вида `a.lam → b.lam → a.lam`.
 ///
 /// # Примеры цикла
 ///
 /// ```text
-/// Циклический импорт: /src/a.but → /src/b.but → /src/a.but
+/// Циклический импорт: /src/a.lam → /src/b.lam → /src/a.lam
 /// ```
 fn check_import_cycle(
     import_stack: &[String],
@@ -148,7 +148,7 @@ fn construct_model_stage0(
                     // Проверяем цикл ДО рекурсивной обработки файла
                     check_import_cycle(import_stack, &filename, *import_loc)?;
                     // Извлекаем только имя файла (без директории и расширения),
-                    // затем нормализуем в CamelCase: "my_model.but" → "MyModel".
+                    // затем нормализуем в CamelCase: "my_model.lam" → "MyModel".
                     // Прежде использовался срез filename[..len-4], что давало полный путь
                     // и, как следствие, некорректное имя (например, "TmpMyModel").
                     let stem = std::path::Path::new(&filename)
@@ -205,7 +205,7 @@ fn construct_model_stage0(
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
                 }
-                // `import { A, B as C } from "file.but";`
+                // `import { A, B as C } from "file.lam";`
                 //
                 // Загружает файл, строит его семантическую модель, затем
                 // выборочно экспортирует указанные имена в текущий контекст.
@@ -975,7 +975,7 @@ fn construct_model_impl(
 /// словарь состояний с разрешёнными ссылками между ними.
 ///
 /// Обнаруживает циклические зависимости между файлами импорта:
-/// при наличии цикла `a.but → b.but → a.but` возвращает [`Diagnostic`]-ошибку
+/// при наличии цикла `a.lam → b.lam → a.lam` возвращает [`Diagnostic`]-ошибку
 /// с полным описанием цепочки.
 ///
 /// # Ошибки
@@ -1060,14 +1060,14 @@ pub fn construct_model_with_docs(
 /// # Примеры
 ///
 /// ```rust,ignore
-/// // BuT-код с числовым условием → предупреждение
+/// // Lam-код с числовым условием → предупреждение
 /// let src = "var timer: [bit;8] = 0; start S { ref T: timer; } state T;";
 /// let (ast, _) = parse(src, 0)?;
 /// let root = construct_model(&ast, None, &[])?;
 /// let warnings = implicit_bool_warnings(&root);
 /// assert!(!warnings.is_empty());
 ///
-/// // BuT-код с явным сравнением → без предупреждений
+/// // Lam-код с явным сравнением → без предупреждений
 /// let src = "var timer: [bit;8] = 0; start S { ref T: timer != 0; } state T;";
 /// let (ast, _) = parse(src, 0)?;
 /// let root = construct_model(&ast, None, &[])?;
@@ -1422,7 +1422,7 @@ mod tests {
 
     // ─── вспомогательная функция ────────────────────────────────────────────
 
-    /// Разбирает BuT-программу и строит семантическую модель.
+    /// Разбирает Lam-программу и строит семантическую модель.
     fn build(src: &str) -> Result<ModelNode, Diagnostic> {
         let (ast, _) = parse(src, 0).expect("parse error");
         construct_model(&ast, None, &[]).map(|model| model.take())

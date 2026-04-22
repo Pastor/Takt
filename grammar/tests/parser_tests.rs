@@ -1,4 +1,4 @@
-//! Интеграционные тесты синтаксического анализатора BuT.
+//! Интеграционные тесты синтаксического анализатора Lam.
 //!
 //! # Структура АСД
 //!
@@ -52,19 +52,19 @@ fn first_named_model(src: &str) -> grammar::parser::ast::Model {
 
 // ─────────────────────────── Позитивные тесты (по файлам) ───────────────────
 
-/// Проверяет, что все `.but`-файлы из директории `valid` разбираются без ошибок.
+/// Проверяет, что все `.lam`-файлы из директории `valid` разбираются без ошибок.
 #[test]
 fn valid_files_parse_without_errors() {
     let dir = Path::new("tests/data/parser/valid");
     let entries: Vec<_> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("Не удалось прочитать директорию {:?}: {}", dir, e))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "but"))
+        .filter(|e| e.path().extension().map_or(false, |ext| ext == "lam"))
         .collect();
 
     assert!(
         !entries.is_empty(),
-        "Директория {:?} не содержит .but файлов",
+        "Директория {:?} не содержит .lam файлов",
         dir
     );
 
@@ -82,19 +82,19 @@ fn valid_files_parse_without_errors() {
 
 // ─────────────────────── Негативные тесты (контр-примеры по файлам) ─────────
 
-/// Проверяет, что все `.but`-файлы из директории `invalid` порождают диагностику.
+/// Проверяет, что все `.lam`-файлы из директории `invalid` порождают диагностику.
 #[test]
 fn invalid_files_produce_parse_errors() {
     let dir = Path::new("tests/data/parser/invalid");
     let entries: Vec<_> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("Не удалось прочитать директорию {:?}: {}", dir, e))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "but"))
+        .filter(|e| e.path().extension().map_or(false, |ext| ext == "lam"))
         .collect();
 
     assert!(
         !entries.is_empty(),
-        "Директория {:?} не содержит .but файлов",
+        "Директория {:?} не содержит .lam файлов",
         dir
     );
 
@@ -746,7 +746,7 @@ fn parse_cast_expression() {
 /// `import "path";`.
 #[test]
 fn parse_import_plain() {
-    let root = must_parse(r#"import "std.but"; model M { start S; }"#);
+    let root = must_parse(r#"import "std.lam"; model M { start S; }"#);
     let has_import = root
         .elements
         .iter()
@@ -757,7 +757,7 @@ fn parse_import_plain() {
 /// `import "path" as Alias;`.
 #[test]
 fn parse_import_with_alias() {
-    must_parse(r#"import "utils.but" as Utils; model M { start S; }"#);
+    must_parse(r#"import "utils.lam" as Utils; model M { start S; }"#);
 }
 
 // ──────────────────────── Тесты функций ────────────────────────────────────
@@ -1195,7 +1195,7 @@ fn parse_if_in_for_with_braces() {
 /// `import * as X from "path"` — глобальный импорт.
 #[test]
 fn parse_import_global_symbol() {
-    let root = must_parse(r#"import * as Lib from "lib.but"; model M { start S; }"#);
+    let root = must_parse(r#"import * as Lib from "lib.lam"; model M { start S; }"#);
     let has_import = root
         .elements
         .iter()
@@ -1207,7 +1207,7 @@ fn parse_import_global_symbol() {
 #[test]
 fn parse_import_rename() {
     let root = must_parse(
-        r#"import { MyModel, OldName as NewName } from "path.but"; model M { start S; }"#,
+        r#"import { MyModel, OldName as NewName } from "path.lam"; model M { start S; }"#,
     );
     let has_import = root
         .elements
@@ -1663,10 +1663,10 @@ start S {
     must_parse(src);
 }
 
-/// Интеграционный тест: файл `ternary_operator.but` разбирается без ошибок.
+/// Интеграционный тест: файл `ternary_operator.lam` разбирается без ошибок.
 #[test]
 fn ternary_operator_file_parses() {
-    let path = Path::new("tests/data/parser/valid/ternary_operator.but");
+    let path = Path::new("tests/data/parser/valid/ternary_operator.lam");
     let src = fs::read_to_string(path).expect("не удалось прочитать файл");
     must_parse(&src);
 }
@@ -1735,10 +1735,10 @@ start S;
     must_parse(src);
 }
 
-/// Интеграционный тест: файл `struct_types.but` разбирается без ошибок.
+/// Интеграционный тест: файл `struct_types.lam` разбирается без ошибок.
 #[test]
 fn struct_types_file_parses() {
-    let path = Path::new("tests/data/parser/valid/struct_types.but");
+    let path = Path::new("tests/data/parser/valid/struct_types.lam");
     let src = fs::read_to_string(path).expect("не удалось прочитать файл");
     must_parse(&src);
 }

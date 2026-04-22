@@ -2,23 +2,23 @@
 name = "grammar"
 version = "0.0.3"
 authors = ["Pastor <viruszold@gmail.com>"]
-description = "BuT"
+description = "Lam"
 homepage = "https://but.ru"
 repository = "https://github.com/Pastor/BuT"
 readme = "../README.md"
-keywords = ["BuT", "framework", "code", "generation"]
+keywords = ["Lam", "framework", "code", "generation"]
 license = "BSD"
 edition = "2024"
 exclude = ["src/grammar.lalrpop"]
 include = ["Cargo.toml", "src/**/*", "src/ast.rs", "README.md", "LICENSE*"]
 
 [[bin]]
-name = "butc"
-path = "src/bin/butc.rs"
+name = "lamc"
+path = "src/bin/lamc.rs"
 
 [[bin]]
-name = "but-lsp"
-path = "src/bin/but_lsp.rs"
+name = "lam-lsp"
+path = "src/bin/lam_lsp.rs"
 required-features = ["lsp"]
 
 [build-dependencies]

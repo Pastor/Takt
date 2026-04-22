@@ -196,7 +196,7 @@ pub(super) fn field_name_in_parent(model_rc: &Rc<RefCell<ModelNode>>) -> Option<
 pub(super) fn resolve_variable_c_expr(
     var: &VariableNode,
     params: &[(String, TypeNode)],
-    map: &CMap,
+    _map: &CMap,
 ) -> Result<String, Diagnostic> {
     match var {
         VariableNode::Simple {

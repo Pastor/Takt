@@ -1,6 +1,6 @@
 // Импорты (позитивный тест парсера)
-import "std.but";
-import "utils.but" as Utils;
+import "std.lam";
+import "utils.lam" as Utils;
 
 model M {
     start S;

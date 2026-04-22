@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 use zed_extension_api::{self as zed, LanguageServerId, Result};
 
-struct BuTExtension;
+struct LamExtension;
 
-impl zed::Extension for BuTExtension {
+impl zed::Extension for LamExtension {
     fn new() -> Self {
-        BuTExtension
+        LamExtension
     }
 
     fn language_server_command(
@@ -13,7 +13,7 @@ impl zed::Extension for BuTExtension {
         _language_server_id: &LanguageServerId,
         worktree: &zed::Worktree,
     ) -> Result<zed::Command> {
-        let binary_path = find_but_lsp(worktree)?;
+        let binary_path = find_lam_lsp(worktree)?;
         Ok(zed::Command {
             command: binary_path,
             args: vec![],
@@ -22,19 +22,19 @@ impl zed::Extension for BuTExtension {
     }
 }
 
-/// Находит исполняемый файл `but-lsp`, последовательно проверяя:
+/// Находит исполняемый файл `lam-lsp`, последовательно проверяя:
 ///
 /// 1. Директории переменной окружения `PATH` (через [`zed::Worktree::which`]).
-/// 2. `$HOME/.cargo/bin/but-lsp` — стандартное место установки через `cargo install`.
+/// 2. `$HOME/.cargo/bin/lam-lsp` — стандартное место установки через `cargo install`.
 ///
 /// Возвращает полный путь к бинарнику или ошибку с описанием проблемы.
-fn find_but_lsp(worktree: &zed::Worktree) -> Result<String> {
+fn find_lam_lsp(worktree: &zed::Worktree) -> Result<String> {
     // Шаг 1: поиск в PATH
-    if let Some(path) = worktree.which("but-lsp") {
+    if let Some(path) = worktree.which("lam-lsp") {
         return Ok(path);
     }
 
-    // Шаг 2: получаем HOME из окружения оболочки и проверяем ~/.cargo/bin/but-lsp
+    // Шаг 2: получаем HOME из окружения оболочки и проверяем ~/.cargo/bin/lam-lsp
     let home = worktree
         .shell_env()
         .into_iter()
@@ -42,18 +42,18 @@ fn find_but_lsp(worktree: &zed::Worktree) -> Result<String> {
         .map(|(_, value)| value)
         .ok_or_else(|| "переменная окружения HOME не задана".to_string())?;
 
-    let fallback = PathBuf::from(&home).join(".cargo/bin/but-lsp");
+    let fallback = PathBuf::from(&home).join(".cargo/bin/lam-lsp");
     if fallback.exists() {
         return Ok(fallback.to_string_lossy().into_owned());
     }
 
     Err(format!(
-        "исполняемый файл but-lsp не найден: \
+        "исполняемый файл lam-lsp не найден: \
          проверьте PATH или установите сервер командой \
-         `cargo install --path <путь-к-проекту>/grammar --bin but-lsp --features lsp`; \
-         ожидаемый путь после установки: {}/.cargo/bin/but-lsp",
+         `cargo install --path <путь-к-проекту>/grammar --bin lam-lsp --features lsp`; \
+         ожидаемый путь после установки: {}/.cargo/bin/lam-lsp",
         home
     ))
 }
 
-zed::register_extension!(BuTExtension);
+zed::register_extension!(LamExtension);

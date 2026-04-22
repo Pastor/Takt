@@ -1,4 +1,4 @@
-//! Дополнительные интеграционные тесты семантического анализа BuT.
+//! Дополнительные интеграционные тесты семантического анализа Lam.
 //!
 //! Проверяют:
 //! - поиск моделей и переменных в дереве видимости;
@@ -6,7 +6,7 @@
 //! - компоновку реализаций (`+`, `|`, скобки);
 //! - обнаружение дублирующихся имён моделей;
 //! - ошибочные пути: некорректный тип порта, несуществующий псевдоним и др.;
-//! - импорт моделей из файлов (`import "file.but"`, `import "file.but" as Name`);
+//! - импорт моделей из файлов (`import "file.lam"`, `import "file.lam" as Name`);
 //! - файлы-примеры из `tests/data/semantic/`.
 
 use grammar::parse;
@@ -19,7 +19,7 @@ use grammar::semantic::tree::{
 use grammar::semantic::{StateNode, VariableNode};
 // ─── Вспомогательная функция ──────────────────────────────────────────────────
 
-/// Разбирает BuT-программу и возвращает корневой [`ModelNode`].
+/// Разбирает Lam-программу и возвращает корневой [`ModelNode`].
 fn build(src: &str) -> grammar::semantic::ModelNode {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     construct_model(&ast, None, &[])
@@ -27,7 +27,7 @@ fn build(src: &str) -> grammar::semantic::ModelNode {
         .take()
 }
 
-/// Разбирает BuT-программу и ожидает ошибку семантического анализа.
+/// Разбирает Lam-программу и ожидает ошибку семантического анализа.
 fn build_err(src: &str) -> grammar::diagnostics::Diagnostic {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     construct_model(&ast, None, &[]).expect_err("ожидалась ошибка")
@@ -267,7 +267,7 @@ fn implement_unknown_model_is_error() {
 /// первое (`start S`) в HashMap, после чего модель остаётся без start-состояния.
 /// Это корректно обнаруживается валидатором как ошибка.
 ///
-/// # Контрпример (BuT)
+/// # Контрпример (Lam)
 /// ```but
 /// start S;   // добавляется как Start
 /// state S;   // перезаписывает — Start исчезает → ошибка валидации
@@ -401,9 +401,9 @@ fn type_definition_not_in_variables() {
 
 // ─── Интеграционные тесты импорта ────────────────────────────────────────────
 
-/// Вспомогательная функция: создаёт временную директорию с .but-файлом.
+/// Вспомогательная функция: создаёт временную директорию с .lam-файлом.
 /// Возвращает (TempDir, путь_к_файлу) — TempDir нужно держать живым до конца теста.
-fn write_tmp_but(name: &str, content: &str) -> (tempfile::TempDir, String) {
+fn write_tmp_lam(name: &str, content: &str) -> (tempfile::TempDir, String) {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join(name);
     std::fs::write(&p, content).unwrap();
@@ -411,13 +411,13 @@ fn write_tmp_but(name: &str, content: &str) -> (tempfile::TempDir, String) {
     (dir, dir_str)
 }
 
-/// `import "file.but"` — успешный импорт простой модели из файла.
+/// `import "file.lam"` — успешный импорт простой модели из файла.
 /// Импортированная модель доступна по нормализованному имени.
 #[test]
 fn plain_import_registers_model() {
-    let (_dir, dir_str) = write_tmp_but("ping.but", "model Ping { start S; }");
+    let (_dir, dir_str) = write_tmp_lam("ping.lam", "model Ping { start S; }");
 
-    let src = r#"import "ping.but";"#;
+    let src = r#"import "ping.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
@@ -428,18 +428,18 @@ fn plain_import_registers_model() {
 }
 
 /// Имя модели из импортированного файла нормализуется в CamelCase:
-/// `my_model.but` → `MyModel`.
+/// `my_model.lam` → `MyModel`.
 #[test]
 fn plain_import_normalizes_filename_to_camel_case() {
-    let (_dir, dir_str) = write_tmp_but("my_model.but", "start S;");
+    let (_dir, dir_str) = write_tmp_lam("my_model.lam", "start S;");
 
-    let src = r#"import "my_model.but";"#;
+    let src = r#"import "my_model.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
     assert!(
         root.borrow().search_model("MyModel").is_some(),
-        "my_model.but должен регистрироваться как MyModel"
+        "my_model.lam должен регистрироваться как MyModel"
     );
     assert!(
         root.borrow().search_model("my_model").is_none(),
@@ -447,12 +447,12 @@ fn plain_import_normalizes_filename_to_camel_case() {
     );
 }
 
-/// `import "file.but" as Alias` — модель доступна под заданным именем.
+/// `import "file.lam" as Alias` — модель доступна под заданным именем.
 #[test]
 fn global_symbol_import_registers_under_alias() {
-    let (_dir, dir_str) = write_tmp_but("engine.but", "start S;");
+    let (_dir, dir_str) = write_tmp_lam("engine.lam", "start S;");
 
-    let src = r#"import "engine.but" as Motor;"#;
+    let src = r#"import "engine.lam" as Motor;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
@@ -466,11 +466,11 @@ fn global_symbol_import_registers_under_alias() {
 #[test]
 fn duplicate_import_plain_is_error() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("dup.but"), "start S;").unwrap();
+    std::fs::write(dir.path().join("dup.lam"), "start S;").unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
     // Два одинаковых импорта
-    let src = r#"import "dup.but"; import "dup.but";"#;
+    let src = r#"import "dup.lam"; import "dup.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
     assert!(result.is_err(), "Дублирующийся импорт должен давать ошибку");
@@ -485,7 +485,7 @@ fn duplicate_import_plain_is_error() {
 /// Файл импорта не найден → ошибка с понятным сообщением.
 #[test]
 fn import_missing_file_is_error() {
-    let src = r#"import "ghost.but";"#;
+    let src = r#"import "ghost.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &["/nonexistent_dir_xyz".to_string()]);
     assert!(
@@ -503,9 +503,9 @@ fn import_missing_file_is_error() {
 /// Файл импорта содержит синтаксическую ошибку → ошибка при построении семантики.
 #[test]
 fn import_file_with_parse_error_is_error() {
-    let (_dir, dir_str) = write_tmp_but("broken.but", "model {"); // синтаксическая ошибка
+    let (_dir, dir_str) = write_tmp_lam("broken.lam", "model {"); // синтаксическая ошибка
 
-    let src = r#"import "broken.but";"#;
+    let src = r#"import "broken.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора основного файла");
     let result = construct_model(&ast, None, &[dir_str]);
     assert!(
@@ -517,10 +517,10 @@ fn import_file_with_parse_error_is_error() {
 /// Импортированная модель видна при разрешении `implements` в основном файле.
 #[test]
 fn imported_model_usable_in_implements() {
-    let (_dir, dir_str) = write_tmp_but("worker.but", "model Worker { start S; }");
+    let (_dir, dir_str) = write_tmp_lam("worker.lam", "model Worker { start S; }");
 
     let src = r#"
-        import "worker.but";
+        import "worker.lam";
         start Entry = Worker { }
         state Done;
     "#;
@@ -531,10 +531,10 @@ fn imported_model_usable_in_implements() {
     assert!(root.borrow().states.contains_key("Entry"));
 }
 
-/// `import "file.but" as Name` с несуществующим файлом → ошибка.
+/// `import "file.lam" as Name` с несуществующим файлом → ошибка.
 #[test]
 fn global_symbol_import_missing_file_is_error() {
-    let src = r#"import "ghost.but" as Ghost;"#;
+    let src = r#"import "ghost.lam" as Ghost;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &["/nonexistent".to_string()]);
     assert!(
@@ -547,9 +547,9 @@ fn global_symbol_import_missing_file_is_error() {
 /// Проверяем, что старое имя (по имени файла) НЕ регистрируется.
 #[test]
 fn global_symbol_import_only_alias_registered() {
-    let (_dir, dir_str) = write_tmp_but("engine.but", "start S;");
+    let (_dir, dir_str) = write_tmp_lam("engine.lam", "start S;");
 
-    let src = r#"import "engine.but" as Motor;"#;
+    let src = r#"import "engine.lam" as Motor;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
@@ -734,7 +734,7 @@ fn error_message_contains_missing_ref_name() {
 
 // ─── Тесты файлов-примеров из tests/data/semantic/ ────────────────────────────
 
-/// Вспомогательная функция: читает .but-файл и строит семантическое дерево.
+/// Вспомогательная функция: читает .lam-файл и строит семантическое дерево.
 fn build_file(
     path: &str,
 ) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
@@ -744,7 +744,7 @@ fn build_file(
     construct_model(&ast, None, &[]).map(|m| m.take())
 }
 
-/// Строит семантическую модель из исходного кода BuT.
+/// Строит семантическую модель из исходного кода Lam.
 fn build_from_src(
     src: &str,
 ) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
@@ -752,7 +752,7 @@ fn build_from_src(
     construct_model(&ast, None, &[]).map(|m| m.take())
 }
 
-/// Разбирает BuT-файл и ожидает семантическую ошибку.
+/// Разбирает Lam-файл и ожидает семантическую ошибку.
 fn build_file_err(path: &str) -> grammar::diagnostics::Diagnostic {
     let src = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("не могу прочитать {}: {}", path, e));
@@ -760,10 +760,10 @@ fn build_file_err(path: &str) -> grammar::diagnostics::Diagnostic {
     construct_model(&ast, None, &[]).expect_err("ожидалась ошибка семантического анализа")
 }
 
-/// `tests/data/semantic/valid/simple_fsm.but` — строится без ошибок.
+/// `tests/data/semantic/valid/simple_fsm.lam` — строится без ошибок.
 #[test]
 fn example_simple_fsm_is_valid() {
-    let node = build_file("tests/data/semantic/valid/simple_fsm.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/simple_fsm.lam").unwrap();
     assert!(node.has_states(), "FSM должен иметь состояния");
     assert!(
         node.states.contains_key("Start"),
@@ -775,10 +775,10 @@ fn example_simple_fsm_is_valid() {
     );
 }
 
-/// `tests/data/semantic/valid/type_aliases.but` — псевдонимы типов разрешаются.
+/// `tests/data/semantic/valid/type_aliases.lam` — псевдонимы типов разрешаются.
 #[test]
 fn example_type_aliases_is_valid() {
-    let node = build_file("tests/data/semantic/valid/type_aliases.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/type_aliases.lam").unwrap();
     assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
     assert!(
         node.types.contains_key("u16"),
@@ -794,10 +794,10 @@ fn example_type_aliases_is_valid() {
     );
 }
 
-/// `tests/data/semantic/valid/conditions.but` — все условия разрешаются.
+/// `tests/data/semantic/valid/conditions.lam` — все условия разрешаются.
 #[test]
 fn example_conditions_is_valid() {
-    let node = build_file("tests/data/semantic/valid/conditions.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/conditions.lam").unwrap();
     assert!(
         node.conditions.contains_key("always_true"),
         "условие always_true должно быть"
@@ -820,10 +820,10 @@ fn example_conditions_is_valid() {
     );
 }
 
-/// `tests/data/semantic/valid/composition.but` — компоновка моделей корректна.
+/// `tests/data/semantic/valid/composition.lam` — компоновка моделей корректна.
 #[test]
 fn example_composition_is_valid() {
-    let node = build_file("tests/data/semantic/valid/composition.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/composition.lam").unwrap();
     // Модели Step1, Step2, Step3 должны быть в контексте
     assert!(
         node.search_model("Step1").is_some(),
@@ -852,66 +852,66 @@ fn example_composition_is_valid() {
     );
 }
 
-/// `tests/data/semantic/invalid/missing_var.but` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/missing_var.lam` — должна возникнуть ошибка.
 #[test]
 fn example_missing_var_is_error() {
-    let result = build_file("tests/data/semantic/invalid/missing_var.but");
+    let result = build_file("tests/data/semantic/invalid/missing_var.lam");
     assert!(
         result.is_err(),
-        "missing_var.but должен давать ошибку семантики"
+        "missing_var.lam должен давать ошибку семантики"
     );
 }
 
-/// `tests/data/semantic/invalid/unknown_model.but` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/unknown_model.lam` — должна возникнуть ошибка.
 #[test]
 fn example_unknown_model_is_error() {
-    let result = build_file("tests/data/semantic/invalid/unknown_model.but");
+    let result = build_file("tests/data/semantic/invalid/unknown_model.lam");
     assert!(
         result.is_err(),
-        "unknown_model.but должен давать ошибку семантики"
+        "unknown_model.lam должен давать ошибку семантики"
     );
 }
 
-/// `tests/data/semantic/invalid/double_next.but` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/double_next.lam` — должна возникнуть ошибка.
 #[test]
 fn example_double_next_is_error() {
-    let result = build_file("tests/data/semantic/invalid/double_next.but");
+    let result = build_file("tests/data/semantic/invalid/double_next.lam");
     assert!(
         result.is_err(),
-        "double_next.but должен давать ошибку семантики"
+        "double_next.lam должен давать ошибку семантики"
     );
 }
 
-/// `tests/data/semantic/invalid/dangling_ref.but` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/dangling_ref.lam` — должна возникнуть ошибка.
 #[test]
 fn example_dangling_ref_is_error() {
-    let result = build_file("tests/data/semantic/invalid/dangling_ref.but");
+    let result = build_file("tests/data/semantic/invalid/dangling_ref.lam");
     assert!(
         result.is_err(),
-        "dangling_ref.but должен давать ошибку семантики"
+        "dangling_ref.lam должен давать ошибку семантики"
     );
 }
 
-// ─── Тесты импорта std.but ────────────────────────────────────────────────────
+// ─── Тесты импорта std.lam ────────────────────────────────────────────────────
 
-/// `import "std.but"` из стандартной библиотеки подключается без ошибок.
+/// `import "std.lam"` из стандартной библиотеки подключается без ошибок.
 #[test]
 fn std_but_import_works() {
-    let src = r#"import "std.but";"#;
+    let src = r#"import "std.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &["tests/data/include".to_string()]);
-    assert!(root.is_ok(), "импорт std.but должен завершаться без ошибок");
+    assert!(root.is_ok(), "импорт std.lam должен завершаться без ошибок");
     let root = root.unwrap();
-    // Нормализованное имя файла std.but → Std
+    // Нормализованное имя файла std.lam → Std
     assert!(
         root.borrow().search_model("Std").is_some(),
-        "модель Std должна быть зарегистрирована после импорта std.but"
+        "модель Std должна быть зарегистрирована после импорта std.lam"
     );
 }
 
 // ─── Тесты выборочного импорта (ImportDefine::Rename) ────────────────────────
 
-/// Вспомогательная функция: строит модель из inline-кода с путём поиска shared.but.
+/// Вспомогательная функция: строит модель из inline-кода с путём поиска shared.lam.
 fn build_with_includes(
     src: &str,
 ) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
@@ -919,11 +919,11 @@ fn build_with_includes(
     construct_model(&ast, None, &["tests/data/include".to_string()]).map(|m| m.take())
 }
 
-/// `import { SharedModel } from "shared.but"` — модель доступна под оригинальным именем.
+/// `import { SharedModel } from "shared.lam"` — модель доступна под оригинальным именем.
 #[test]
 fn rename_import_model_no_alias() {
     let node = build_with_includes(
-        r#"import { SharedModel } from "shared.but"; start E = SharedModel { }"#,
+        r#"import { SharedModel } from "shared.lam"; start E = SharedModel { }"#,
     )
     .unwrap();
     assert!(
@@ -932,11 +932,11 @@ fn rename_import_model_no_alias() {
     );
 }
 
-/// `import { SharedModel as M } from "shared.but"` — модель доступна под псевдонимом M.
+/// `import { SharedModel as M } from "shared.lam"` — модель доступна под псевдонимом M.
 #[test]
 fn rename_import_model_with_alias() {
     let node =
-        build_with_includes(r#"import { SharedModel as M } from "shared.but"; start E = M { }"#)
+        build_with_includes(r#"import { SharedModel as M } from "shared.lam"; start E = M { }"#)
             .unwrap();
     assert!(
         node.search_model("M").is_some(),
@@ -948,11 +948,11 @@ fn rename_import_model_with_alias() {
     );
 }
 
-/// `import { SharedType } from "shared.but"` — тип-псевдоним импортируется в контекст.
+/// `import { SharedType } from "shared.lam"` — тип-псевдоним импортируется в контекст.
 #[test]
 fn rename_import_type() {
     let node = build_with_includes(
-        r#"import { SharedType } from "shared.but"; var x: SharedType = 0; start S;"#,
+        r#"import { SharedType } from "shared.lam"; var x: SharedType = 0; start S;"#,
     )
     .unwrap();
     assert!(
@@ -969,7 +969,7 @@ fn rename_import_type() {
 #[test]
 fn rename_import_type_with_alias() {
     let node = build_with_includes(
-        r#"import { SharedType as ST } from "shared.but"; var x: ST = 0; start S;"#,
+        r#"import { SharedType as ST } from "shared.lam"; var x: ST = 0; start S;"#,
     )
     .unwrap();
     assert!(
@@ -985,7 +985,7 @@ fn rename_import_type_with_alias() {
 /// `import { shared_var }` — переменная импортируется в контекст.
 #[test]
 fn rename_import_variable() {
-    let node = build_with_includes(r#"import { shared_var } from "shared.but"; start S;"#).unwrap();
+    let node = build_with_includes(r#"import { shared_var } from "shared.lam"; start S;"#).unwrap();
     assert!(
         node.search_var("shared_var").is_some(),
         "переменная shared_var должна быть в контексте после импорта"
@@ -996,7 +996,7 @@ fn rename_import_variable() {
 #[test]
 fn rename_import_variable_with_alias() {
     let node =
-        build_with_includes(r#"import { shared_var as sv } from "shared.but"; start S;"#).unwrap();
+        build_with_includes(r#"import { shared_var as sv } from "shared.lam"; start S;"#).unwrap();
     assert!(
         node.search_var("sv").is_some(),
         "переменная должна быть видна под псевдонимом sv"
@@ -1011,7 +1011,7 @@ fn rename_import_variable_with_alias() {
 #[test]
 fn rename_import_condition() {
     let node = build_with_includes(
-        r#"import { shared_cond } from "shared.but"; start S { ref E: shared_cond; } state E;"#,
+        r#"import { shared_cond } from "shared.lam"; start S { ref E: shared_cond; } state E;"#,
     )
     .unwrap();
     assert!(
@@ -1024,7 +1024,7 @@ fn rename_import_condition() {
 #[test]
 fn rename_import_multiple_symbols() {
     let node = build_with_includes(
-        r#"import { SharedModel as M, SharedType as ST, shared_var as sv } from "shared.but"; start E = M { }"#,
+        r#"import { SharedModel as M, SharedType as ST, shared_var as sv } from "shared.lam"; start E = M { }"#,
     ).unwrap();
     assert!(node.search_model("M").is_some(), "M должна быть видна");
     assert!(node.types.contains_key("ST"), "ST должен быть виден");
@@ -1034,7 +1034,7 @@ fn rename_import_multiple_symbols() {
 /// Импорт несуществующего символа — ошибка.
 #[test]
 fn rename_import_missing_symbol_is_error() {
-    let result = build_with_includes(r#"import { NonExistent } from "shared.but"; start S;"#);
+    let result = build_with_includes(r#"import { NonExistent } from "shared.lam"; start S;"#);
     assert!(
         result.is_err(),
         "импорт несуществующего символа должен давать ошибку"
@@ -1052,16 +1052,16 @@ fn rename_import_missing_symbol_is_error() {
 fn rename_import_duplicate_alias_is_error() {
     // Объявляем модель M локально, затем пробуем импортировать SharedModel as M
     let result = build_with_includes(
-        r#"model M { start S; } import { SharedModel as M } from "shared.but"; start E = M { }"#,
+        r#"model M { start S; } import { SharedModel as M } from "shared.lam"; start E = M { }"#,
     );
     assert!(result.is_err(), "дублирующееся имя M должно давать ошибку");
 }
 
-/// `example_rename_import.but` — файл-пример строится без ошибок.
+/// `example_rename_import.lam` — файл-пример строится без ошибок.
 #[test]
 fn example_rename_import_is_valid() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/rename_import.but")
-        .expect("файл rename_import.but не найден");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/rename_import.lam")
+        .expect("файл rename_import.lam не найден");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
     let node = construct_model(&ast, None, &["tests/data/include".to_string()])
         .map(|m| m.take())
@@ -1130,38 +1130,38 @@ fn array_subscript_on_bit_is_error() {
     );
 }
 
-/// `example_array_access.but` — файл с корректными операциями над массивом строится без ошибок.
+/// `example_array_access.lam` — файл с корректными операциями над массивом строится без ошибок.
 #[test]
 fn example_array_access_is_valid() {
-    let result = build_file("tests/data/semantic/valid/array_access.but").unwrap();
+    let result = build_file("tests/data/semantic/valid/array_access.lam").unwrap();
     assert!(result.search_var("bit0").is_some());
     assert!(result.search_var("bit7").is_some());
 }
 
-/// `example_array_out_of_bounds.but` — должна возникнуть ошибка.
+/// `example_array_out_of_bounds.lam` — должна возникнуть ошибка.
 #[test]
 fn example_array_out_of_bounds_is_error() {
-    let result = build_file("tests/data/semantic/invalid/array_out_of_bounds.but");
+    let result = build_file("tests/data/semantic/invalid/array_out_of_bounds.lam");
     assert!(
         result.is_err(),
-        "array_out_of_bounds.but должен давать ошибку"
+        "array_out_of_bounds.lam должен давать ошибку"
     );
 }
 
-/// `example_non_array_subscript.but` — должна возникнуть ошибка.
+/// `example_non_array_subscript.lam` — должна возникнуть ошибка.
 #[test]
 fn example_non_array_subscript_is_error() {
-    let result = build_file("tests/data/semantic/invalid/non_array_subscript.but");
+    let result = build_file("tests/data/semantic/invalid/non_array_subscript.lam");
     assert!(
         result.is_err(),
-        "non_array_subscript.but должен давать ошибку"
+        "non_array_subscript.lam должен давать ошибку"
     );
 }
 
-/// `example_rename_import_missing.but` — должна возникнуть ошибка.
+/// `example_rename_import_missing.lam` — должна возникнуть ошибка.
 #[test]
 fn example_rename_import_missing_is_error() {
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/rename_import_missing.but")
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/rename_import_missing.lam")
         .expect("файл не найден");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &["tests/data/include".to_string()]).map(|m| m.take());
@@ -1171,36 +1171,36 @@ fn example_rename_import_missing_is_error() {
     );
 }
 
-/// После импорта `std.but` типы u8, u16, … доступны внутри импортированной модели.
+/// После импорта `std.lam` типы u8, u16, … доступны внутри импортированной модели.
 #[test]
 fn std_but_contains_u8_u16_types() {
-    let src = r#"import "std.but";"#;
+    let src = r#"import "std.lam";"#;
     let (ast, _) = parse(src, 0).unwrap();
     let root = construct_model(&ast, None, &["tests/data/include".to_string()]).unwrap();
     let std_model = root.borrow().search_model("Std").unwrap();
     assert!(
         std_model.borrow().types.contains_key("u8"),
-        "std.but должен содержать тип u8"
+        "std.lam должен содержать тип u8"
     );
     assert!(
         std_model.borrow().types.contains_key("u16"),
-        "std.but должен содержать тип u16"
+        "std.lam должен содержать тип u16"
     );
     assert!(
         std_model.borrow().types.contains_key("u32"),
-        "std.but должен содержать тип u32"
+        "std.lam должен содержать тип u32"
     );
     assert!(
         std_model.borrow().types.contains_key("u64"),
-        "std.but должен содержать тип u64"
+        "std.lam должен содержать тип u64"
     );
     assert!(
         std_model.borrow().types.contains_key("u128"),
-        "std.but должен содержать тип u128"
+        "std.lam должен содержать тип u128"
     );
     assert!(
         std_model.borrow().types.contains_key("bool"),
-        "std.but должен содержать тип bool"
+        "std.lam должен содержать тип bool"
     );
 }
 
@@ -1365,11 +1365,11 @@ always {
     construct_model(&ast, None, &[]).expect("construct_model не должен паниковать");
 }
 
-/// Файл named_blocks.but строится без ошибок, named_blocks заполнены.
+/// Файл named_blocks.lam строится без ошибок, named_blocks заполнены.
 #[test]
 fn example_named_blocks_is_valid() {
-    let node = build_file("tests/data/semantic/valid/named_blocks.but").unwrap();
-    assert!(node.has_states(), "named_blocks.but должен иметь состояния");
+    let node = build_file("tests/data/semantic/valid/named_blocks.lam").unwrap();
+    assert!(node.has_states(), "named_blocks.lam должен иметь состояния");
     let active = node.states.get("Active").expect("Active не найдено");
     assert!(
         active.get_named_block("enter").is_some(),
@@ -1385,16 +1385,16 @@ fn example_named_blocks_is_valid() {
     );
 }
 
-/// Файл if_while_for.but строится без ошибок.
+/// Файл if_while_for.lam строится без ошибок.
 #[test]
 fn example_if_while_for_is_valid() {
-    build_file("tests/data/semantic/valid/if_while_for.but").unwrap();
+    build_file("tests/data/semantic/valid/if_while_for.lam").unwrap();
 }
 
-/// Файл nested_model_blocks.but строится без ошибок, enter разрешён.
+/// Файл nested_model_blocks.lam строится без ошибок, enter разрешён.
 #[test]
 fn example_nested_model_blocks_is_valid() {
-    let node = build_file("tests/data/semantic/valid/nested_model_blocks.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/nested_model_blocks.lam").unwrap();
     let inner = node.search_model("Inner").expect("Inner не найдена");
     let inner = inner.borrow();
     let on = inner.states.get("On").expect("On не найдено");
@@ -1404,10 +1404,10 @@ fn example_nested_model_blocks_is_valid() {
     );
 }
 
-/// named_block_undeclared_var.but (порт без адреса) → теперь корректен, адрес опционален.
+/// named_block_undeclared_var.lam (порт без адреса) → теперь корректен, адрес опционален.
 #[test]
 fn example_named_block_port_without_address_is_valid() {
-    let result = build_file("tests/data/semantic/invalid/named_block_undeclared_var.but");
+    let result = build_file("tests/data/semantic/invalid/named_block_undeclared_var.lam");
     assert!(
         result.is_ok(),
         "порт без адреса должен быть принят (адрес опционален): {:?}",
@@ -1452,10 +1452,10 @@ fn multiple_model_level_always_blocks() {
     }
 }
 
-/// Файл multiple_named_blocks.but строится без ошибок, блоки извлекаются.
+/// Файл multiple_named_blocks.lam строится без ошибок, блоки извлекаются.
 #[test]
 fn example_multiple_named_blocks_is_valid() {
-    let node = build_file("tests/data/semantic/valid/multiple_named_blocks.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/multiple_named_blocks.lam").unwrap();
     let initial = node.states.get("Initial").expect("Initial не найдено");
     assert_eq!(
         initial.get_named_blocks("enter").len(),
@@ -1476,12 +1476,12 @@ fn example_multiple_named_blocks_is_valid() {
 
 // ─── Тесты корректности значений типа bit ──────────────────────────────────────
 
-/// `tests/data/semantic/valid/bit_values.but` — допустимые значения bit строятся без ошибок.
+/// `tests/data/semantic/valid/bit_values.lam` — допустимые значения bit строятся без ошибок.
 ///
 /// Проверяет: 0, 1, true, false, ссылка на переменную, константы, массив [bit;N].
 #[test]
 fn example_bit_values_valid_is_valid() {
-    let node = build_file("tests/data/semantic/valid/bit_values.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/bit_values.lam").unwrap();
     assert!(
         node.search_var("a").is_some(),
         "переменная a должна быть найдена"
@@ -1500,15 +1500,15 @@ fn example_bit_values_valid_is_valid() {
     );
 }
 
-/// `tests/data/semantic/invalid/bit_out_of_range.but` — недопустимое bit-значение → ошибка.
+/// `tests/data/semantic/invalid/bit_out_of_range.lam` — недопустимое bit-значение → ошибка.
 ///
 /// Тип `bit` принимает только 0, 1, true, false. Значение 2 — ошибка.
 #[test]
 fn example_bit_out_of_range_is_error() {
-    let result = build_file("tests/data/semantic/invalid/bit_out_of_range.but");
+    let result = build_file("tests/data/semantic/invalid/bit_out_of_range.lam");
     assert!(
         result.is_err(),
-        "bit_out_of_range.but должен давать ошибку семантики"
+        "bit_out_of_range.lam должен давать ошибку семантики"
     );
     let err = result.unwrap_err();
     assert!(
@@ -1518,12 +1518,12 @@ fn example_bit_out_of_range_is_error() {
     );
 }
 
-/// `tests/data/semantic/valid/type_inference_numbers.but` — вывод целочисленных типов.
+/// `tests/data/semantic/valid/type_inference_numbers.lam` — вывод целочисленных типов.
 ///
 /// 0..=255 → `[bit;8]`, 256..=65535 → `[bit;16]`, 65536..= → `[bit;32]`.
 #[test]
 fn example_type_inference_numbers_is_valid() {
-    let node = build_file("tests/data/semantic/valid/type_inference_numbers.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/type_inference_numbers.lam").unwrap();
     // 8-битные
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("a") {
         assert_eq!(
@@ -1564,14 +1564,14 @@ fn example_type_inference_numbers_is_valid() {
     }
 }
 
-/// `tests/data/semantic/valid/type_inference_bool.but` — вывод типа bool из литерала.
+/// `tests/data/semantic/valid/type_inference_bool.lam` — вывод типа bool из литерала.
 ///
 /// `true`/`false` без аннотации → `TypeNode::Bool`.
 /// Явная аннотация `: bool` → `TypeNode::Bool`.
 /// Явная аннотация `: bit` → `TypeNode::Bit`.
 #[test]
 fn example_type_inference_bool_is_valid() {
-    let node = build_file("tests/data/semantic/valid/type_inference_bool.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/type_inference_bool.lam").unwrap();
     // Вывод из литерала
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("flag") {
         assert_eq!(ty, TypeNode::Bool, "flag=true → Bool");
@@ -1591,10 +1591,10 @@ fn example_type_inference_bool_is_valid() {
 
 // ─── Тесты новых файлов-примеров ─────────────────────────────────────────────
 
-/// `tests/data/semantic/valid/functions.but` — локальные и внешние функции.
+/// `tests/data/semantic/valid/functions.lam` — локальные и внешние функции.
 #[test]
 fn example_functions_is_valid() {
-    let node = build_file("tests/data/semantic/valid/functions.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/functions.lam").unwrap();
     assert!(node.functions.contains_key("send"), "внешняя функция send");
     assert!(node.functions.contains_key("recv"), "внешняя функция recv");
     assert!(node.functions.contains_key("noop"), "внешняя функция noop");
@@ -1608,10 +1608,10 @@ fn example_functions_is_valid() {
     );
 }
 
-/// `tests/data/semantic/valid/bool_type.but` — переменные типа bool.
+/// `tests/data/semantic/valid/bool_type.lam` — переменные типа bool.
 #[test]
 fn example_bool_type_is_valid() {
-    let node = build_file("tests/data/semantic/valid/bool_type.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/bool_type.lam").unwrap();
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("ready") {
         assert_eq!(ty, TypeNode::Bool, "ready: bool → TypeNode::Bool");
     } else {
@@ -1624,10 +1624,10 @@ fn example_bool_type_is_valid() {
     }
 }
 
-/// `tests/data/semantic/valid/integer_types.but` — числовые псевдонимы типов.
+/// `tests/data/semantic/valid/integer_types.lam` — числовые псевдонимы типов.
 #[test]
 fn example_integer_types_is_valid() {
-    let node = build_file("tests/data/semantic/valid/integer_types.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/integer_types.lam").unwrap();
     assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
     assert!(
         node.types.contains_key("u16"),
@@ -1661,10 +1661,10 @@ fn example_integer_types_is_valid() {
     }
 }
 
-/// `tests/data/semantic/valid/state_machine_full.but` — полный автомат светофора.
+/// `tests/data/semantic/valid/state_machine_full.lam` — полный автомат светофора.
 #[test]
 fn example_state_machine_full_is_valid() {
-    let node = build_file("tests/data/semantic/valid/state_machine_full.but").unwrap();
+    let node = build_file("tests/data/semantic/valid/state_machine_full.lam").unwrap();
     let tl = node
         .search_model("TrafficLight")
         .expect("модель TrafficLight не найдена");
@@ -1674,34 +1674,34 @@ fn example_state_machine_full_is_valid() {
     assert!(tl.states.contains_key("Yellow"), "состояние Yellow");
 }
 
-/// `tests/data/semantic/invalid/duplicate_model.but` — дублирующееся имя модели → ошибка.
+/// `tests/data/semantic/invalid/duplicate_model.lam` — дублирующееся имя модели → ошибка.
 #[test]
 fn example_duplicate_model_is_error() {
-    let result = build_file("tests/data/semantic/invalid/duplicate_model.but");
+    let result = build_file("tests/data/semantic/invalid/duplicate_model.lam");
     assert!(
         result.is_err(),
         "дублирующееся имя модели должно давать ошибку"
     );
 }
 
-/// `tests/data/semantic/invalid/bit_value_in_const.but` — бит-константа с недопустимым значением → ошибка.
+/// `tests/data/semantic/invalid/bit_value_in_const.lam` — бит-константа с недопустимым значением → ошибка.
 #[test]
 fn example_bit_value_in_const_is_error() {
-    let result = build_file("tests/data/semantic/invalid/bit_value_in_const.but");
+    let result = build_file("tests/data/semantic/invalid/bit_value_in_const.lam");
     assert!(result.is_err(), "bit = 5 должно давать ошибку");
 }
 
-/// `tests/data/semantic/invalid/no_start_state.but` — модель без start → ошибка.
+/// `tests/data/semantic/invalid/no_start_state.lam` — модель без start → ошибка.
 #[test]
 fn example_no_start_state_is_error() {
-    let result = build_file("tests/data/semantic/invalid/no_start_state.but");
+    let result = build_file("tests/data/semantic/invalid/no_start_state.lam");
     assert!(result.is_err(), "модель без start должна давать ошибку");
 }
 
-/// `tests/data/semantic/invalid/unknown_type_in_function.but` — неизвестный тип параметра → ошибка.
+/// `tests/data/semantic/invalid/unknown_type_in_function.lam` — неизвестный тип параметра → ошибка.
 #[test]
 fn example_unknown_type_in_function_is_error() {
-    let result = build_file("tests/data/semantic/invalid/unknown_type_in_function.but");
+    let result = build_file("tests/data/semantic/invalid/unknown_type_in_function.lam");
     assert!(
         result.is_err(),
         "неизвестный тип параметра должен давать ошибку"
@@ -1712,21 +1712,21 @@ fn example_unknown_type_in_function_is_error() {
 //
 // Реализация Се1: семантический анализатор обнаруживает циклические зависимости
 // между файлами импорта. При обнаружении цикла возвращается ошибка вида:
-//   «Циклический импорт: /path/a.but → /path/b.but → /path/a.but»
+//   «Циклический импорт: /path/a.lam → /path/b.lam → /path/a.lam»
 //
 // Поддерживаемые сценарии:
 //   - прямой цикл между двумя файлами: a → b → a
 //   - длинная цепочка: a → b → c → a
 //   - самоссылающийся файл: a → a
 
-/// Вспомогательная функция: создаёт временный `.but`-файл в директории `dir`.
+/// Вспомогательная функция: создаёт временный `.lam`-файл в директории `dir`.
 fn write_tmp_in_dir(dir: &tempfile::TempDir, name: &str, content: &str) -> String {
     let path = dir.path().join(name);
     std::fs::write(&path, content).unwrap();
     dir.path().to_string_lossy().into_owned()
 }
 
-/// Прямой цикл между двумя файлами: `a.but` импортирует `b.but`, `b.but` — `a.but`.
+/// Прямой цикл между двумя файлами: `a.lam` импортирует `b.lam`, `b.lam` — `a.lam`.
 ///
 /// Ожидается ошибка «Циклический импорт» с упоминанием обоих файлов в цепочке.
 #[test]
@@ -1734,16 +1734,16 @@ fn circular_import_two_files_is_error() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    // a.but → b.but
+    // a.lam → b.lam
     write_tmp_in_dir(
         &dir,
-        "a.but",
-        r#"import "b.but"; start Entry = B { } state Done;"#,
+        "a.lam",
+        r#"import "b.lam"; start Entry = B { } state Done;"#,
     );
-    // b.but → a.but (замыкает цикл)
-    write_tmp_in_dir(&dir, "b.but", r#"import "a.but"; model B { start S; }"#);
+    // b.lam → a.lam (замыкает цикл)
+    write_tmp_in_dir(&dir, "b.lam", r#"import "a.lam"; model B { start S; }"#);
 
-    let src = r#"import "a.but";"#;
+    let src = r#"import "a.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -1755,13 +1755,13 @@ fn circular_import_two_files_is_error() {
         err.message
     );
     assert!(
-        err.message.contains("a.but"),
-        "сообщение должно упоминать файл a.but: {}",
+        err.message.contains("a.lam"),
+        "сообщение должно упоминать файл a.lam: {}",
         err.message
     );
     assert!(
-        err.message.contains("b.but"),
-        "сообщение должно упоминать файл b.but: {}",
+        err.message.contains("b.lam"),
+        "сообщение должно упоминать файл b.lam: {}",
         err.message
     );
 }
@@ -1776,14 +1776,14 @@ fn circular_import_three_files_is_error() {
 
     write_tmp_in_dir(
         &dir,
-        "ca.but",
-        r#"import "cb.but"; start Entry = Cb { } state Done;"#,
+        "ca.lam",
+        r#"import "cb.lam"; start Entry = Cb { } state Done;"#,
     );
-    write_tmp_in_dir(&dir, "cb.but", r#"import "cc.but"; model Cb { start S; }"#);
-    // cc.but → ca.but (замыкает цикл длиной 3)
-    write_tmp_in_dir(&dir, "cc.but", r#"import "ca.but"; model Cc { start S; }"#);
+    write_tmp_in_dir(&dir, "cb.lam", r#"import "cc.lam"; model Cb { start S; }"#);
+    // cc.lam → ca.lam (замыкает цикл длиной 3)
+    write_tmp_in_dir(&dir, "cc.lam", r#"import "ca.lam"; model Cc { start S; }"#);
 
-    let src = r#"import "ca.but";"#;
+    let src = r#"import "ca.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -1799,7 +1799,7 @@ fn circular_import_three_files_is_error() {
     );
 }
 
-/// Самоссылающийся файл: `self.but` импортирует самого себя.
+/// Самоссылающийся файл: `self.lam` импортирует самого себя.
 ///
 /// Это частный случай прямого цикла длиной 1.
 #[test]
@@ -1807,10 +1807,10 @@ fn circular_import_self_reference_is_error() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    // self.but импортирует себя же
-    write_tmp_in_dir(&dir, "self_ref.but", r#"import "self_ref.but"; start S;"#);
+    // self.lam импортирует себя же
+    write_tmp_in_dir(&dir, "self_ref.lam", r#"import "self_ref.lam"; start S;"#);
 
-    let src = r#"import "self_ref.but";"#;
+    let src = r#"import "self_ref.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -1825,8 +1825,8 @@ fn circular_import_self_reference_is_error() {
         err.message
     );
     assert!(
-        err.message.contains("self_ref.but"),
-        "сообщение должно упоминать файл self_ref.but: {}",
+        err.message.contains("self_ref.lam"),
+        "сообщение должно упоминать файл self_ref.lam: {}",
         err.message
     );
 }
@@ -1841,19 +1841,19 @@ fn diamond_import_is_not_cycle_error() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    // d.but — общая зависимость
-    write_tmp_in_dir(&dir, "d.but", r#"model D { start S; }"#);
-    // b.but и c.but оба импортируют d.but
-    write_tmp_in_dir(&dir, "db.but", r#"import "d.but"; model Db { start S; }"#);
-    write_tmp_in_dir(&dir, "dc.but", r#"import "d.but"; model Dc { start S; }"#);
-    // a.but импортирует оба
+    // d.lam — общая зависимость
+    write_tmp_in_dir(&dir, "d.lam", r#"model D { start S; }"#);
+    // b.lam и c.lam оба импортируют d.lam
+    write_tmp_in_dir(&dir, "db.lam", r#"import "d.lam"; model Db { start S; }"#);
+    write_tmp_in_dir(&dir, "dc.lam", r#"import "d.lam"; model Dc { start S; }"#);
+    // a.lam импортирует оба
     write_tmp_in_dir(
         &dir,
-        "da.but",
-        r#"import "db.but"; import "dc.but"; start S;"#,
+        "da.lam",
+        r#"import "db.lam"; import "dc.lam"; start S;"#,
     );
 
-    let src = r#"import "da.but";"#;
+    let src = r#"import "da.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -1879,16 +1879,16 @@ fn circular_import_via_global_symbol_is_error() {
 
     write_tmp_in_dir(
         &dir,
-        "ga.but",
-        r#"import "gb.but" as Gb; start Entry = Gb { } state Done;"#,
+        "ga.lam",
+        r#"import "gb.lam" as Gb; start Entry = Gb { } state Done;"#,
     );
     write_tmp_in_dir(
         &dir,
-        "gb.but",
-        r#"import "ga.but" as Ga; model Gb { start S; }"#,
+        "gb.lam",
+        r#"import "ga.lam" as Ga; model Gb { start S; }"#,
     );
 
-    let src = r#"import "ga.but" as Ga;"#;
+    let src = r#"import "ga.lam" as Ga;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -1914,17 +1914,17 @@ fn circular_import_via_rename_is_error() {
 
     write_tmp_in_dir(
         &dir,
-        "ra.but",
-        r#"import { Rb } from "rb.but"; start Entry = Rb { } state Done;"#,
+        "ra.lam",
+        r#"import { Rb } from "rb.lam"; start Entry = Rb { } state Done;"#,
     );
     write_tmp_in_dir(
         &dir,
-        "rb.but",
-        r#"import { Ra } from "ra.but"; model Ra { start S; } model Rb { start S; }"#,
+        "rb.lam",
+        r#"import { Ra } from "ra.lam"; model Ra { start S; } model Rb { start S; }"#,
     );
 
-    // Инициируем цикл через Plain-импорт (ra.but содержит rename-импорт rb.but, который замкнёт цикл)
-    let src = r#"import "ra.but";"#;
+    // Инициируем цикл через Plain-импорт (ra.lam содержит rename-импорт rb.lam, который замкнёт цикл)
+    let src = r#"import "ra.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -1948,11 +1948,11 @@ fn linear_import_chain_is_valid() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    write_tmp_in_dir(&dir, "lc.but", r#"model Lc { start S; }"#);
-    write_tmp_in_dir(&dir, "lb.but", r#"import "lc.but"; model Lb { start S; }"#);
-    write_tmp_in_dir(&dir, "la.but", r#"import "lb.but"; model La { start S; }"#);
+    write_tmp_in_dir(&dir, "lc.lam", r#"model Lc { start S; }"#);
+    write_tmp_in_dir(&dir, "lb.lam", r#"import "lc.lam"; model Lb { start S; }"#);
+    write_tmp_in_dir(&dir, "la.lam", r#"import "lb.lam"; model La { start S; }"#);
 
-    let src = r#"import "la.but";"#;
+    let src = r#"import "la.lam";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -2148,11 +2148,11 @@ fn doc_comment_for_state_inside_model() {
     );
 }
 
-/// `tests/data/semantic/valid/doc_comments.but` — файл с doc-комментариями строится корректно.
+/// `tests/data/semantic/valid/doc_comments.lam` — файл с doc-комментариями строится корректно.
 #[test]
 fn example_doc_comments_file_is_valid() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/doc_comments.but")
-        .expect("не могу прочитать doc_comments.but");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/doc_comments.lam")
+        .expect("не могу прочитать doc_comments.lam");
     let (ast, comments) = parse(&src, 0).expect("ошибка разбора");
     let root =
         construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
@@ -2227,7 +2227,7 @@ fn multi_line_doc_for_model() {
 
 /// Явное сравнение в условии перехода — нет предупреждений.
 ///
-/// # BuT
+/// # Lam
 /// ```but
 /// var timer: [bit;8] = 0;
 /// start S { ref T: timer != 0; }
@@ -2247,7 +2247,7 @@ fn se11_explicit_comparison_no_warnings() {
 
 /// Числовая переменная без сравнения — предупреждение Се11.
 ///
-/// # BuT
+/// # Lam
 /// ```but
 /// var timer: [bit;8] = 0;
 /// start S { ref T: timer; }   // ← Предупреждение
@@ -2372,12 +2372,12 @@ fn se11_nested_model_numeric_ref_warning() {
     );
 }
 
-/// Файл `implicit_bool_warn.but` из тестовых данных — без предупреждений.
+/// Файл `implicit_bool_warn.lam` из тестовых данных — без предупреждений.
 ///
 /// Все переходы в файле используют явные сравнения или булевы переменные.
 #[test]
 fn se11_valid_file_no_warnings() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_warn.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_warn.lam")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
@@ -2389,10 +2389,10 @@ fn se11_valid_file_no_warnings() {
     );
 }
 
-/// Файл `implicit_bool_numeric.but` — одно предупреждение о числовом условии.
+/// Файл `implicit_bool_numeric.lam` — одно предупреждение о числовом условии.
 #[test]
 fn se11_numeric_file_gives_one_warning() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_numeric.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_numeric.lam")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
@@ -2492,7 +2492,7 @@ fn se11_arithmetic_in_ref_gives_warning() {
 /// Файл с арифметическим условием — одно предупреждение.
 #[test]
 fn se11_arithmetic_file_gives_one_warning() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_arithmetic.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_arithmetic.lam")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
@@ -2507,7 +2507,7 @@ fn se11_arithmetic_file_gives_one_warning() {
 /// Файл с именованными условиями — нет предупреждений Се11.
 #[test]
 fn se11_named_cond_file_no_warnings() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_named_cond.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_named_cond.lam")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
@@ -2538,7 +2538,7 @@ fn se11_warning_contains_source_state_name() {
 
 /// Условие ref с bit-переменной разрешается в `Condition::Variable`, не в `Condition::Unresolved`.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// var flag: bit = false;
 /// start A { ref B: flag; }
@@ -2564,7 +2564,7 @@ fn ref_cond_bit_var_is_resolved() {
 
 /// Условие ref с bool-переменной разрешается в `Condition::Variable`.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// var done: bool = false;
 /// start A { ref B: done; }
@@ -2588,7 +2588,7 @@ fn ref_cond_bool_var_is_resolved() {
 
 /// Именованное условие (`cond`) в ref разрешается до его значения (не `Unresolved`).
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// var x: [bit;8] = 0;
 /// cond full = x = 255;
@@ -2615,7 +2615,7 @@ fn ref_cond_named_cond_is_resolved() {
 
 /// Безусловный переход (`ref B`) оставляет `Condition::None`.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// start A { ref B; }
 /// state B;
@@ -2636,7 +2636,7 @@ fn ref_no_cond_is_none() {
 
 /// Булев литерал `true` в ref разрешается в `Condition::Bool(true)`.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// start A { ref B: true; }
 /// state B;
@@ -2656,7 +2656,7 @@ fn ref_cond_bool_literal_is_resolved() {
 
 /// Сравнение в ref разрешается в `Condition::Equal`.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// var x: [bit;8] = 0;
 /// start A { ref B: x = 255; }
@@ -2681,7 +2681,7 @@ fn ref_cond_comparison_is_resolved() {
 
 /// Контрпример: арифметика в ref-условии даёт предупреждение «арифметическое вычитание».
 ///
-/// # Контрпример (BuT)
+/// # Контрпример (Lam)
 /// ```but
 /// var x: [bit;8] = 0;
 /// start A { ref B: x - 1; }
@@ -2703,7 +2703,7 @@ fn se11_subtract_in_ref_gives_warning() {
 
 /// Контрпример: побитовое И в ref-условии даёт предупреждение «побитовое И».
 ///
-/// # Контрпример (BuT)
+/// # Контрпример (Lam)
 /// ```but
 /// var x: [bit;8] = 0;
 /// start A { ref B: x & 1; }
@@ -2729,7 +2729,7 @@ fn se11_bitwise_and_in_ref_gives_warning() {
 
 /// Контрпример: числовой литерал в ref-условии даёт предупреждение с указанием числа.
 ///
-/// # Контрпример (BuT)
+/// # Контрпример (Lam)
 /// ```but
 /// start A { ref B: 42; }
 /// state B;
@@ -2755,7 +2755,7 @@ fn se11_resolved_number_literal_in_ref_has_value_in_message() {
 /// Пример файла с разрешёнными условиями — без ошибок и предупреждений.
 #[test]
 fn ref_cond_resolved_file_is_valid() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/ref_cond_resolved.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/ref_cond_resolved.lam")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения семантики");
@@ -2770,7 +2770,7 @@ fn ref_cond_resolved_file_is_valid() {
 /// Контрпример файла с арифметическим условием — одно предупреждение Се11.
 #[test]
 fn ref_cond_arithmetic_file_gives_warning() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/ref_cond_arithmetic.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/ref_cond_arithmetic.lam")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения семантики");
@@ -2794,7 +2794,7 @@ fn ref_cond_arithmetic_file_gives_warning() {
 /// Тест использует `Rc` напрямую (не `.take()`), чтобы родительская
 /// модель оставалась живой и Weak-ссылка могла быть разыменована.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// var flag: bit = false;
 /// ```
@@ -2833,7 +2833,7 @@ fn const_node_has_parent_upper() {
 
 /// Именованное условие хранит ссылку на родительскую модель.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// cond done = true;
 /// ```
@@ -2852,7 +2852,7 @@ fn condition_node_has_parent_upper() {
 
 /// Вложенная переменная ссылается на свою (вложенную) модель, не на корень.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// model Inner { var x: bit = false; start S; }
 /// ```
@@ -2897,9 +2897,9 @@ fn variable_node_name_and_ty_methods() {
 
 // ─── С4: интеграционные тесты локальных переменных в блоках ──────────────────
 
-/// `tests/data/semantic/valid/local_var_in_block.but` — var внутри always — без ошибок.
+/// `tests/data/semantic/valid/local_var_in_block.lam` — var внутри always — без ошибок.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// var flag: bit = false;
 /// start Running {
@@ -2912,12 +2912,12 @@ fn variable_node_name_and_ty_methods() {
 /// ```
 #[test]
 fn example_local_var_in_block_is_valid() {
-    build_file("tests/data/semantic/valid/local_var_in_block.but").unwrap();
+    build_file("tests/data/semantic/valid/local_var_in_block.lam").unwrap();
 }
 
-/// `tests/data/semantic/valid/local_var_in_for.but` — var в инициализаторе for — без ошибок.
+/// `tests/data/semantic/valid/local_var_in_for.lam` — var в инициализаторе for — без ошибок.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// var result: bit = false;
 /// start S {
@@ -2928,12 +2928,12 @@ fn example_local_var_in_block_is_valid() {
 /// ```
 #[test]
 fn example_local_var_in_for_is_valid() {
-    build_file("tests/data/semantic/valid/local_var_in_for.but").unwrap();
+    build_file("tests/data/semantic/valid/local_var_in_for.lam").unwrap();
 }
 
-/// `tests/data/semantic/valid/local_var_nested.but` — вложенные блоки с затенением — без ошибок.
+/// `tests/data/semantic/valid/local_var_nested.lam` — вложенные блоки с затенением — без ошибок.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```but
 /// var x: bit = true;
 /// start S {
@@ -2945,7 +2945,7 @@ fn example_local_var_in_for_is_valid() {
 /// ```
 #[test]
 fn example_local_var_nested_is_valid() {
-    build_file("tests/data/semantic/valid/local_var_nested.but").unwrap();
+    build_file("tests/data/semantic/valid/local_var_nested.lam").unwrap();
 }
 
 /// Переменная через `upper()` позволяет найти другие переменные той же модели.
@@ -3133,61 +3133,61 @@ fn ce5_only_next_no_ref_no_warn() {
     );
 }
 
-/// Файл ce5_terminal_states.but — нет предупреждений.
+/// Файл ce5_terminal_states.lam — нет предупреждений.
 #[test]
 fn example_ce5_terminal_states_valid() {
-    let root = build_file_rc("tests/data/semantic/valid/ce5_terminal_states.but")
+    let root = build_file_rc("tests/data/semantic/valid/ce5_terminal_states.lam")
         .expect("ошибка построения");
     let warns = transition_completeness_warnings(&root);
     assert!(
         warns.is_empty(),
-        "ce5_terminal_states.but не должен давать предупреждений: {:?}",
+        "ce5_terminal_states.lam не должен давать предупреждений: {:?}",
         warns
     );
 }
 
-/// Файл ce5_no_warn_terminal.but — нет предупреждений.
+/// Файл ce5_no_warn_terminal.lam — нет предупреждений.
 #[test]
 fn example_ce5_no_warn_terminal_valid() {
-    let root = build_file_rc("tests/data/semantic/valid/ce5_no_warn_terminal.but")
+    let root = build_file_rc("tests/data/semantic/valid/ce5_no_warn_terminal.lam")
         .expect("ошибка построения");
     let warns = transition_completeness_warnings(&root);
     assert!(
         warns.is_empty(),
-        "ce5_no_warn_terminal.but не должен давать предупреждений: {:?}",
+        "ce5_no_warn_terminal.lam не должен давать предупреждений: {:?}",
         warns
     );
 }
 
-/// Файл ce5_no_terminal.but — предупреждение о нет терминальных.
+/// Файл ce5_no_terminal.lam — предупреждение о нет терминальных.
 #[test]
 fn example_ce5_no_terminal_warns() {
-    let root = build_file_rc("tests/data/semantic/invalid/ce5_no_terminal.but")
+    let root = build_file_rc("tests/data/semantic/invalid/ce5_no_terminal.lam")
         .expect("ошибка построения");
     let warns = transition_completeness_warnings(&root);
     assert!(
         !warns.is_empty(),
-        "ce5_no_terminal.but должен давать предупреждение"
+        "ce5_no_terminal.lam должен давать предупреждение"
     );
 }
 
-/// Файл ce5_double_next.but — ошибка семантики (два next).
+/// Файл ce5_double_next.lam — ошибка семантики (два next).
 #[test]
 fn example_ce5_double_next_error() {
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/ce5_double_next.but")
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/ce5_double_next.lam")
         .expect("файл не найден");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_err(),
-        "ce5_double_next.but должен давать ошибку семантики"
+        "ce5_double_next.lam должен давать ошибку семантики"
     );
 }
 
-/// Файл ce5_next_with_ref.but — предупреждение Ce5.3.
+/// Файл ce5_next_with_ref.lam — предупреждение Ce5.3.
 #[test]
 fn example_ce5_next_with_ref_warns() {
-    let root = build_file_rc("tests/data/semantic/invalid/ce5_next_with_ref.but")
+    let root = build_file_rc("tests/data/semantic/invalid/ce5_next_with_ref.lam")
         .expect("ошибка построения");
     let warns = transition_completeness_warnings(&root);
     let has_warn = warns
@@ -3195,7 +3195,7 @@ fn example_ce5_next_with_ref_warns() {
         .any(|w| w.message.contains("ref") && w.message.contains("next"));
     assert!(
         has_warn,
-        "ce5_next_with_ref.but должен давать предупреждение Ce5.3: {:?}",
+        "ce5_next_with_ref.lam должен давать предупреждение Ce5.3: {:?}",
         warns
     );
 }
@@ -3292,11 +3292,11 @@ fn ce4_enum_nodes_equal() {
     assert_eq!(a, b);
 }
 
-/// Файл ce4_enum_basic.but разбирается без ошибок.
+/// Файл ce4_enum_basic.lam разбирается без ошибок.
 #[test]
 fn example_ce4_enum_basic_valid() {
-    build_file("tests/data/semantic/valid/ce4_enum_basic.but")
-        .expect("ce4_enum_basic.but должен разбираться без ошибок");
+    build_file("tests/data/semantic/valid/ce4_enum_basic.lam")
+        .expect("ce4_enum_basic.lam должен разбираться без ошибок");
 }
 
 /// ModelNode с enums корректно сравнивается (PartialEq включает enums).
@@ -3397,18 +3397,18 @@ fn ce6_explicit_type_not_overwritten_by_function() {
     );
 }
 
-/// Ce6: Файл ce6_type_from_func.but разбирается без ошибок.
+/// Ce6: Файл ce6_type_from_func.lam разбирается без ошибок.
 #[test]
 fn example_ce6_type_from_func_valid() {
-    build_file("tests/data/semantic/valid/ce6_type_from_func.but")
-        .expect("ce6_type_from_func.but должен разбираться без ошибок");
+    build_file("tests/data/semantic/valid/ce6_type_from_func.lam")
+        .expect("ce6_type_from_func.lam должен разбираться без ошибок");
 }
 
-/// Ce6: Файл ce6_type_inference_chain.but разбирается без ошибок.
+/// Ce6: Файл ce6_type_inference_chain.lam разбирается без ошибок.
 #[test]
 fn example_ce6_type_inference_chain_valid() {
-    build_file("tests/data/semantic/valid/ce6_type_inference_chain.but")
-        .expect("ce6_type_inference_chain.but должен разбираться без ошибок");
+    build_file("tests/data/semantic/valid/ce6_type_inference_chain.lam")
+        .expect("ce6_type_inference_chain.lam должен разбираться без ошибок");
 }
 
 // ─── Тесты FE6: Составные типы в параметрах функций ──────────────────────────
@@ -3416,8 +3416,8 @@ fn example_ce6_type_inference_chain_valid() {
 /// FE6: Функция с параметром типа [bit;8] — разбирается без ошибок.
 #[test]
 fn test_fn_array_param() {
-    let node = build_file("tests/data/semantic/valid/fn_array_param.but")
-        .expect("fn_array_param.but должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/fn_array_param.lam")
+        .expect("fn_array_param.lam должен разбираться без ошибок");
     let m = node
         .search_model("M")
         .expect("модель M должна быть найдена");
@@ -3450,11 +3450,11 @@ fn test_fn_alias_param() {
 #[test]
 fn test_unused_variable_warning() {
     use grammar::diagnostics::Level;
-    let _node = build_file("tests/data/semantic/valid/unused_variable.but")
-        .expect("unused_variable.but должен разбираться без ошибок");
+    let _node = build_file("tests/data/semantic/valid/unused_variable.lam")
+        .expect("unused_variable.lam должен разбираться без ошибок");
     let model_rc = {
         let (ast, _) = parse(
-            &std::fs::read_to_string("tests/data/semantic/valid/unused_variable.but").unwrap(),
+            &std::fs::read_to_string("tests/data/semantic/valid/unused_variable.lam").unwrap(),
             0,
         )
         .unwrap();
@@ -3488,7 +3488,7 @@ fn test_unused_variable_warning() {
 #[test]
 fn test_all_vars_used_no_warning() {
     let (ast, _) = parse(
-        &std::fs::read_to_string("tests/data/semantic/valid/all_vars_used.but").unwrap(),
+        &std::fs::read_to_string("tests/data/semantic/valid/all_vars_used.lam").unwrap(),
         0,
     )
     .unwrap();
@@ -3508,7 +3508,7 @@ fn test_all_vars_used_no_warning() {
 fn test_nondeterministic_transitions() {
     use grammar::diagnostics::Level;
     let (ast, _) = parse(
-        &std::fs::read_to_string("tests/data/semantic/valid/nondeterministic_warn.but").unwrap(),
+        &std::fs::read_to_string("tests/data/semantic/valid/nondeterministic_warn.lam").unwrap(),
         0,
     )
     .unwrap();
@@ -3532,7 +3532,7 @@ fn test_nondeterministic_transitions() {
 #[test]
 fn test_deterministic_no_warning() {
     let (ast, _) = parse(
-        &std::fs::read_to_string("tests/data/semantic/valid/deterministic_transitions.but")
+        &std::fs::read_to_string("tests/data/semantic/valid/deterministic_transitions.lam")
             .unwrap(),
         0,
     )
@@ -3551,8 +3551,8 @@ fn test_deterministic_no_warning() {
 /// FE1: Базовое перечисление — разбирается без ошибок, варианты присутствуют в EnumNode.
 #[test]
 fn test_enum_basic() {
-    let node = build_file("tests/data/semantic/valid/enum_basic.but")
-        .expect("enum_basic.but должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/enum_basic.lam")
+        .expect("enum_basic.lam должен разбираться без ошибок");
     // Перечисление находится во вложенной модели M
     let m = node
         .search_model("M")
@@ -3576,8 +3576,8 @@ fn test_enum_basic() {
 #[test]
 fn test_type_alias_inference() {
     use grammar::semantic::type_node::TypeNode;
-    let node = build_file("tests/data/semantic/valid/type_alias_inference.but")
-        .expect("type_alias_inference.but должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/type_alias_inference.lam")
+        .expect("type_alias_inference.lam должен разбираться без ошибок");
     let m = node
         .search_model("M")
         .expect("модель M должна быть найдена");
@@ -3596,8 +3596,8 @@ fn test_type_alias_inference() {
 /// FE1: Перечисление с явными значениями — значения соответствуют объявлению.
 #[test]
 fn test_enum_with_values() {
-    let node = build_file("tests/data/semantic/valid/enum_with_values.but")
-        .expect("enum_with_values.but должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/enum_with_values.lam")
+        .expect("enum_with_values.lam должен разбираться без ошибок");
     let m = node
         .search_model("M")
         .expect("модель M должна быть найдена");
@@ -3616,15 +3616,15 @@ fn test_enum_with_values() {
 
 /// Ce4: переменная с явным типом-перечислением разбирается без ошибок.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```text
 /// enum Direction { North = 0, South = 1, East = 2, West = 3 }
 /// var dir: Direction = 0;
 /// ```
 #[test]
 fn ce4_enum_typed_var_valid() {
-    let node = build_file("tests/data/semantic/valid/enum_typed_var.but")
-        .expect("enum_typed_var.but должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/enum_typed_var.lam")
+        .expect("enum_typed_var.lam должен разбираться без ошибок");
     // Тип переменной dir должен быть TypeNode::Enum("Direction")
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("dir") {
         assert_eq!(
@@ -3639,14 +3639,14 @@ fn ce4_enum_typed_var_valid() {
 
 /// Ce4: переменная с типом необъявленного перечисления → ошибка Ce4.
 ///
-/// # Контр-пример (BuT)
+/// # Контр-пример (Lam)
 /// ```text
 /// var current: Status = 0;   // Status не объявлен → ошибка Ce4
 /// start S;
 /// ```
 #[test]
 fn ce4_undeclared_enum_type_gives_error() {
-    let err = build_file_err("tests/data/semantic/invalid/ce4_undeclared_enum_type.but");
+    let err = build_file_err("tests/data/semantic/invalid/ce4_undeclared_enum_type.lam");
     assert!(
         err.message.contains("Ce4") || err.message.contains("Status"),
         "ошибка должна упоминать Ce4 или имя перечисления: {}",
@@ -3656,14 +3656,14 @@ fn ce4_undeclared_enum_type_gives_error() {
 
 /// Ce4: переменная с enum-типом и недопустимым значением → ошибка NI6.
 ///
-/// # Контр-пример (BuT)
+/// # Контр-пример (Lam)
 /// ```text
 /// enum Color { Red = 0, Green = 1, Blue = 2 }
 /// var c: Color = 99;   // 99 не является вариантом Color → NI6
 /// ```
 #[test]
 fn ce4_enum_typed_var_invalid_value() {
-    let err = build_file_err("tests/data/semantic/invalid/ce4_enum_type_wrong_value.but");
+    let err = build_file_err("tests/data/semantic/invalid/ce4_enum_type_wrong_value.lam");
     assert!(
         err.message.contains("NI6") || err.message.contains("99") || err.message.contains("Color"),
         "ошибка должна упоминать NI6, значение или имя enum: {}",
@@ -3693,7 +3693,7 @@ fn ce4_enum_variant_used_as_initializer() {
 
 /// Ce4: два перечисления в одной модели — оба доступны независимо.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```text
 /// enum Color { Red = 0, Green = 1 }
 /// enum Priority { Low = 0, High = 1 }
@@ -3727,7 +3727,7 @@ fn ce4_two_enums_in_model() {
 /// где объявлен enum (аналогично псевдонимам `type`). Но `search_enum_variant`
 /// поднимается по цепочке `upper` и находит вариант из внешней модели.
 ///
-/// # Пример (BuT)
+/// # Пример (Lam)
 /// ```text
 /// enum Dir { N = 0, S = 1 }
 /// model Inner {
@@ -3886,11 +3886,11 @@ start S;
     );
 }
 
-/// NI3: Интеграционный тест — файл `struct_types.but` разбирается семантически.
+/// NI3: Интеграционный тест — файл `struct_types.lam` разбирается семантически.
 #[test]
 fn test_struct_types_file_semantic() {
-    let node = build_file("tests/data/semantic/valid/struct_types.but")
-        .expect("struct_types.but должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/struct_types.lam")
+        .expect("struct_types.lam должен разбираться без ошибок");
     assert!(
         node.structs.contains_key("Point"),
         "struct Point должен быть в semantic модели"
@@ -3907,8 +3907,8 @@ fn test_struct_types_file_semantic() {
 #[test]
 fn test_ni4_duplicate_condition_warns() {
     use grammar::diagnostics::Level;
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/condition_overlap_eq.but")
-        .expect("файл condition_overlap_eq.but должен существовать");
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/condition_overlap_eq.lam")
+        .expect("файл condition_overlap_eq.lam должен существовать");
     let (ast, _) = parse(&src, 0).unwrap();
     let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
@@ -3927,8 +3927,8 @@ fn test_ni4_duplicate_condition_warns() {
 /// NI4: Перекрывающиеся интервальные условия `level < 10` и `level < 20` — предупреждение NI4.
 #[test]
 fn test_ni4_interval_overlap_warns() {
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/condition_overlap_interval.but")
-        .expect("файл condition_overlap_interval.but должен существовать");
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/condition_overlap_interval.lam")
+        .expect("файл condition_overlap_interval.lam должен существовать");
     let (ast, _) = parse(&src, 0).unwrap();
     let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
@@ -3946,8 +3946,8 @@ fn test_ni4_interval_overlap_warns() {
 /// NI4: Непересекающиеся условия `level < 10` и `level > 20` — предупреждений NI4 нет.
 #[test]
 fn test_ni4_non_overlapping_no_warn() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/no_condition_overlap.but")
-        .expect("файл no_condition_overlap.but должен существовать");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/no_condition_overlap.lam")
+        .expect("файл no_condition_overlap.lam должен существовать");
     let (ast, _) = parse(&src, 0).unwrap();
     let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = grammar::nondeterministic_transition_warnings(model_rc);
@@ -4059,10 +4059,10 @@ fn i5_non_recursive_type_alias_ok() {
     );
 }
 
-/// Ce16: прямая рекурсия из тестового файла `recursive_type_alias.but`.
+/// Ce16: прямая рекурсия из тестового файла `recursive_type_alias.lam`.
 #[test]
 fn i5_file_recursive_type_alias() {
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/recursive_type_alias.but")
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/recursive_type_alias.lam")
         .expect("не удалось прочитать файл");
     let err = build_err(&src);
     assert_eq!(
@@ -4073,11 +4073,11 @@ fn i5_file_recursive_type_alias() {
     );
 }
 
-/// Ce16: взаимная рекурсия из тестового файла `mutual_recursive_type_alias.but`.
+/// Ce16: взаимная рекурсия из тестового файла `mutual_recursive_type_alias.lam`.
 #[test]
 fn i5_file_mutual_recursive_type_alias() {
     let src =
-        std::fs::read_to_string("tests/data/semantic/invalid/mutual_recursive_type_alias.but")
+        std::fs::read_to_string("tests/data/semantic/invalid/mutual_recursive_type_alias.lam")
             .expect("не удалось прочитать файл");
     let err = build_err(&src);
     assert_eq!(
@@ -4088,10 +4088,10 @@ fn i5_file_mutual_recursive_type_alias() {
     );
 }
 
-/// Ce16: корректные псевдонимы из тестового файла `non_recursive_type_alias.but` — OK.
+/// Ce16: корректные псевдонимы из тестового файла `non_recursive_type_alias.lam` — OK.
 #[test]
 fn i5_file_non_recursive_type_alias_ok() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/non_recursive_type_alias.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/non_recursive_type_alias.lam")
         .expect("не удалось прочитать файл");
     let _model = build(&src);
     // Если дошли сюда — нет ошибки Ce16
@@ -4138,18 +4138,18 @@ fn struct_as_var_type_resolves() {
     );
 }
 
-/// NI3: тестовый файл `struct_basic.but` — без ошибок.
+/// NI3: тестовый файл `struct_basic.lam` — без ошибок.
 #[test]
 fn struct_basic_file_ok() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/struct_basic.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/struct_basic.lam")
         .expect("не удалось прочитать файл");
     let _model = build(&src);
 }
 
-/// NI3: тестовый файл `struct_as_var_type.but` — без ошибок.
+/// NI3: тестовый файл `struct_as_var_type.lam` — без ошибок.
 #[test]
 fn struct_as_var_type_file_ok() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/struct_as_var_type.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/struct_as_var_type.lam")
         .expect("не удалось прочитать файл");
     let _model = build(&src);
 }
@@ -4173,10 +4173,10 @@ fn struct_duplicate_field_error() {
     );
 }
 
-/// Ce17: тестовый файл `struct_duplicate_field.but` — ошибка Ce17.
+/// Ce17: тестовый файл `struct_duplicate_field.lam` — ошибка Ce17.
 #[test]
 fn struct_duplicate_field_file_error() {
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/struct_duplicate_field.but")
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/struct_duplicate_field.lam")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
     let result = construct_model(&ast, None, &[]);
@@ -4198,7 +4198,7 @@ fn struct_duplicate_field_file_error() {
 /// Extern-функция в блоке always разрешается без ошибок семантики.
 #[test]
 fn extern_fn_in_always_resolves_ok() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/extern_fn_in_always.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/extern_fn_in_always.lam")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[]);
@@ -4212,7 +4212,7 @@ fn extern_fn_in_always_resolves_ok() {
 /// Extern-функция после локальной переменной разрешается без ошибок.
 #[test]
 fn extern_fn_after_local_var_resolves_ok() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/extern_fn_local_var.but")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/extern_fn_local_var.lam")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[]);

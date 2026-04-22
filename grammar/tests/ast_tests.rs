@@ -233,16 +233,16 @@ fn str_literal(s: &str) -> StringLiteral {
 /// `ImportDefine::Plain` со строкой — literal() возвращает Some.
 #[test]
 fn import_plain_literal_some() {
-    let import = ImportDefine::Plain(ImportPath::Filename(str_literal("foo.but")), loc(0, 10));
+    let import = ImportDefine::Plain(ImportPath::Filename(str_literal("foo.lam")), loc(0, 10));
     assert!(import.literal().is_some());
-    assert_eq!(import.literal().unwrap().string, "foo.but");
+    assert_eq!(import.literal().unwrap().string, "foo.lam");
 }
 
 /// `ImportDefine::GlobalSymbol` со строкой — literal() возвращает Some.
 #[test]
 fn import_global_symbol_literal_some() {
     let import = ImportDefine::GlobalSymbol(
-        ImportPath::Filename(str_literal("bar.but")),
+        ImportPath::Filename(str_literal("bar.lam")),
         Identifier::new("Bar"),
         loc(0, 20),
     );
@@ -253,7 +253,7 @@ fn import_global_symbol_literal_some() {
 #[test]
 fn import_rename_literal_some() {
     let import = ImportDefine::Rename(
-        ImportPath::Filename(str_literal("baz.but")),
+        ImportPath::Filename(str_literal("baz.lam")),
         vec![],
         loc(0, 20),
     );

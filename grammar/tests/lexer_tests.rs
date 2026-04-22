@@ -1,11 +1,11 @@
-//! Интеграционные тесты лексического анализатора BuT.
+//! Интеграционные тесты лексического анализатора Lam.
 //!
 //! Тесты разделены на несколько групп:
 //! - **Позитивные по файлам** — файлы из `tests/data/lexer/valid/` лексируются без ошибок.
 //! - **Негативные по файлам** — файлы из `tests/data/lexer/invalid/` порождают ошибку.
 //! - **Модульные** — проверяют конкретные свойства лексера напрямую.
 //!
-//! При добавлении нового `.but`-файла в директорию тест автоматически его подхватит.
+//! При добавлении нового `.lam`-файла в директорию тест автоматически его подхватит.
 
 use grammar::diagnostics::Location;
 use grammar::parser::lexer::{Lexer, LexicalError, Token};
@@ -70,19 +70,19 @@ fn first_comment_is_doc(input: &str) -> bool {
 
 // ─────────────────────────── Позитивные тесты (по файлам) ────────────────────
 
-/// Проверяет, что все `.but`-файлы из директории `valid` лексируются без ошибок.
+/// Проверяет, что все `.lam`-файлы из директории `valid` лексируются без ошибок.
 #[test]
 fn valid_files_lex_without_errors() {
     let dir = Path::new("tests/data/lexer/valid");
     let entries: Vec<_> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("Не удалось прочитать директорию {:?}: {}", dir, e))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "but"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "lam"))
         .collect();
 
     assert!(
         !entries.is_empty(),
-        "Директория {:?} не содержит .but файлов",
+        "Директория {:?} не содержит .lam файлов",
         dir
     );
 
@@ -103,19 +103,19 @@ fn valid_files_lex_without_errors() {
 
 // ─────────────────── Негативные тесты (контр-примеры по файлам) ──────────────
 
-/// Проверяет, что все `.but`-файлы из директории `invalid` порождают ошибку лексера.
+/// Проверяет, что все `.lam`-файлы из директории `invalid` порождают ошибку лексера.
 #[test]
 fn invalid_files_produce_lex_errors() {
     let dir = Path::new("tests/data/lexer/invalid");
     let entries: Vec<_> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("Не удалось прочитать директорию {:?}: {}", dir, e))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "but"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "lam"))
         .collect();
 
     assert!(
         !entries.is_empty(),
-        "Директория {:?} не содержит .but файлов",
+        "Директория {:?} не содержит .lam файлов",
         dir
     );
 
@@ -135,7 +135,7 @@ fn invalid_files_produce_lex_errors() {
 
 // ───────────────────────── Тесты ключевых слов ───────────────────────────────
 
-/// `is_keyword` возвращает `true` для всех ключевых слов BuT, включая `extern`.
+/// `is_keyword` возвращает `true` для всех ключевых слов Lam, включая `extern`.
 #[test]
 fn is_keyword_returns_true_for_keywords() {
     use grammar::parser::lexer::is_keyword;
@@ -1014,7 +1014,7 @@ fn empty_input_produces_nothing() {
 
 // ──────────────────────────── Тест `pragma` как идентификатора ───────────────
 
-/// `pragma` не является ключевым словом в BuT — распознаётся как идентификатор.
+/// `pragma` не является ключевым словом в Lam — распознаётся как идентификатор.
 #[test]
 fn pragma_is_not_a_keyword_and_lexes_as_identifier() {
     let strings = collect_token_strings("pragma");
@@ -1023,13 +1023,13 @@ fn pragma_is_not_a_keyword_and_lexes_as_identifier() {
     assert_eq!(collect_errors("pragma").len(), 0);
 }
 
-// ─────────────────── Тест полного набора BuT-конструкций ─────────────────────
+// ─────────────────── Тест полного набора Lam-конструкций ─────────────────────
 
 /// Полный пример программы лексируется без ошибок.
 #[test]
 fn complete_but_program_lexes_without_errors() {
     let src = r#"
-/// Пример полной BuT-программы
+/// Пример полной Lam-программы
 type u8 = [bit;8];
 const MAX: u8 = 0xFF;
 out LED: u8 = 00100000;

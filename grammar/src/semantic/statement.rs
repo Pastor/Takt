@@ -1,4 +1,4 @@
-//! Разрешение семантических операторов языка BuT.
+//! Разрешение семантических операторов языка Lam.
 //!
 //! Основная функция [`resolve_statement`] преобразует «сырые» (`Unresolved`)
 //! АСД-операторы в полностью разрешённые семантические варианты.
@@ -508,7 +508,7 @@ mod tests {
 
     /// `loop условие { }` разрешается в `Statement::Loop` с условием.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// var flag: bit = false;
     /// always {
@@ -532,7 +532,7 @@ mod tests {
 
     /// `loop { }` без условия разрешается в `Statement::Loop` с `cond = None`.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// always {
     ///     loop { break; }
@@ -555,7 +555,7 @@ mod tests {
 
     /// `for` с инициализацией, условием и шагом разрешается.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// var i: bit = false;
     /// always {
@@ -580,7 +580,7 @@ mod tests {
 
     /// `for` без инициализации и шага разрешается.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// // С1 (вариант A): for без скобок, все части пусты
     /// for ;; { }
@@ -621,7 +621,7 @@ mod tests {
 
     /// Оператор `if` с `else`-веткой разрешается.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// var x: bit = false;
     /// always {
@@ -659,7 +659,7 @@ mod tests {
     /// `always { var x: bit = false; x = true; }` — локальная переменная
     /// объявляется и используется в том же блоке.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// always { var x: bit = false; x = true; }
     /// start S;
@@ -690,7 +690,7 @@ mod tests {
     /// `always { var x: bit = false; x = true; }` — инициализатор `false`
     /// сохраняется в `Statement::Variable`.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// always { var x: bit = false; x = true; }
     /// start S;
@@ -712,7 +712,7 @@ mod tests {
 
     /// `always { const C: bit = true; C; }` — константа внутри блока разрешается.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// always { const C: bit = true; C; }
     /// start S;
@@ -740,7 +740,7 @@ mod tests {
     ///
     /// Внутри блока `x` ссылается на локальную переменную, после выхода — на model-level.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// var x: bit = true;
     /// always { var x: bit = false; x = false; }
@@ -770,7 +770,7 @@ mod tests {
     /// `{ var inner: bit = false; }` переменная `inner` не должна находиться
     /// в `model.variables`.
     ///
-    /// # Контрпример (BuT)
+    /// # Контрпример (Lam)
     /// ```but
     /// { var inner: bit = false; }
     /// inner = true;   // ошибка: inner вне области видимости
@@ -820,7 +820,7 @@ mod tests {
     /// `for var i: bit = false; i; i = false { }` — переменная из init for
     /// видна в условии и шаге цикла.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// always { for var i: bit = false; i; i = false { } }
     /// start S;
@@ -862,7 +862,7 @@ mod tests {
     /// вместо `params.clone()`, из-за чего параметры функции были невидимы в операторах вида
     /// `value > 100` или `out = value`.
     ///
-    /// # Пример (BuT)
+    /// # Пример (Lam)
     /// ```but
     /// fn clamp_temp(value: u8): u8 {
     ///     if value > 100 { return 100; }

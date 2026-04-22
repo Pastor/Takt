@@ -2,6 +2,6 @@
 //
 // Ожидается: семантическая ошибка — 'NonExistent' не найден.
 
-import { NonExistent } from "shared.but";
+import { NonExistent } from "shared.lam";
 
 start S;
