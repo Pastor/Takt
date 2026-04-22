@@ -1,4 +1,4 @@
-п# Lam — Язык описания автоматных моделей (Language of automata models)
+# Lam — Язык описания автоматных моделей (Language of automata models)
 
 **Lam** (Language of automata models) — предметно-ориентированный язык (DSL) для моделирования
 конечных автоматов (FSM) и компонентных систем. Компилятор реализован на Rust.
@@ -24,6 +24,7 @@
 - [Часть 14. Инструментарий](#часть-14-инструментарий)
 - [Часть 15. Примеры программ](#часть-15-примеры-программ)
 - [Часть 16. Приложения](#часть-16-приложения)
+- [F. Полная грамматика EBNF](#f-полная-грамматика-ebnf)
 
 ---
 
@@ -1064,24 +1065,40 @@ start System = (Init + Startup) + (Run | Halt);
 
 ### B. Грамматика языка (EBNF)
 
-Полная грамматика находится в файле [`Lam.ebnf`](Lam.ebnf).
+Полная грамматика находится в файле [`Lam.ebnf`](Lam.ebnf) (приложение F).
 
 Краткая выдержка:
 
 ```ebnf
 source_unit   = { model_element } ;
+
 model_element = import_define | type_define | variable_define
-              | function_define | enum_define | struct_define | model
-              | condition_define | named_block | ";" ;
-model         = "model" identifier [ "=" expression ]
-                "{" { model_element } "}" ;
-state_define  = state_kind identifier [ "=" expression ]
-                ( "{" { state_element } "}" | ";" ) ;
-state_kind    = "start" | "state" ;
-state_element = named_block
-              | "ref"  identifier [ ":" condition ] ";"
-              | "next" identifier ";"
-              | variable_define | function_define | ";" ;
+              | function_define | enum_define | struct_define
+              | model | state_define | formula_define
+              | inline_formula_define | condition_define
+              | named_block | ";" ;
+
+variable_define
+    = "var"   identifier [ ":" type ] [ "=" expression ] ";"
+    | "const" identifier [ ":" type ] "=" expression ";"
+    | "in"    identifier [ ":" type ] [ "=" expression ] ";"
+    | "out"   identifier [ ":" type ] [ "=" expression ] ";" ;
+
+model        = "model" identifier [ "=" expression ]
+               "{" { model_element } "}" ;
+state_define = state_kind identifier [ "=" expression ]
+               ( "{" { state_element } "}" | ";" ) ;
+state_kind   = "start" | "state" ;
+state_element
+    = named_block
+    | "ref"  identifier [ ":" condition ] ";"
+    | "next" identifier ";"
+    | inline_formula_define | ";" ;
+
+inline_formula_define
+    = ":" condition { "," condition } ";"
+    | ":" "[" "Guard" "]" condition { "," condition } ";"
+    | ":" "[" "LTL"   "]" ltl_expr  { "," ltl_expr  } ";" ;
 ```
 
 ### C. Список ключевых слов и операторов
@@ -1089,8 +1106,7 @@ state_element = named_block
 **Ключевые слова:**
 `as` `assembly` `break` `cond` `const` `continue` `else` `enum` `extern`
 `false` `fn` `for` `formula` `if` `import` `in` `loop` `model` `next`
-`out` `ref` `return` `start` `state` `string` `struct` `template` `true`
-`type` `var`
+`out` `ref` `return` `start` `state` `struct` `true` `type` `var`
 
 **LTL (темпоральная логика):**
 `LTL` `Guard` `X` `F` `G` `U` `R`
@@ -1152,4 +1168,579 @@ BuT/
 ├── extensions/zed-lam/       — расширение для редактора Zed (v0.1.1)
 ├── doc/                      — документация
 └── Lam.ebnf                  — полная грамматика EBNF
+```
+
+### F. Полная грамматика EBNF
+
+Ниже приведено полное содержимое файла [`Lam.ebnf`](Lam.ebnf).
+
+```ebnf
+(* ===========================================================================
+   Lam — язык описания конечных автоматов (Finite-State Machine Description Language)
+   Синтаксическое описание в формате ISO EBNF (ISO/IEC 14977:1996).
+
+   Условные обозначения:
+     rule = ...  ;        — определение правила
+     a b                  — конкатенация (последовательность)
+     a | b                — альтернатива
+     [ a ]                — опциональная конструкция (0 или 1 раз)
+     { a }                — повторение (0 и более раз)
+     ( a | b )            — группировка
+     "текст"              — терминал (строковый литерал)
+     lowercase_name       — нетерминал
+     (* ... *)            — комментарий
+
+   Источник: grammar/src/grammar.lalrpop, grammar/src/parser/lexer.rs
+   =========================================================================== *)
+
+
+(* ===========================================================================
+   ТОЧКА ВХОДА
+   =========================================================================== *)
+
+(* Программа Lam — последовательность элементов верхнего уровня. *)
+source_unit = { model_element } ;
+
+
+(* ===========================================================================
+   ЭЛЕМЕНТЫ ВЕРХНЕГО УРОВНЯ
+   model_element допустим как на верхнем уровне, так и внутри модели.
+   state_element допустим только внутри тела состояния.
+   =========================================================================== *)
+
+model_element
+    = import_define
+    | type_define
+    | variable_define       (* var / const / in / out *)
+    | function_define
+    | model
+    | state_define
+    | formula_define
+    | inline_formula_define
+    | condition_define
+    | named_block
+    | enum_define
+    | struct_define
+    | ";"                   (* одиночная точка с запятой — игнорируется *)
+    ;
+
+(* Примечание: state_element содержит только конструкции управления автоматом.
+   Объявления переменных, функций, типов на уровне состояния НЕ поддерживаются. *)
+
+state_element
+    = named_block
+    | "next" identifier ";"
+    | "ref" identifier [ ":" condition ] ";"
+    | inline_formula_define
+    | ";"
+    ;
+
+
+(* ===========================================================================
+   ИМПОРТ
+   =========================================================================== *)
+
+import_define
+    = "import" import_path ";"
+    | "import" import_path "as" identifier ";"
+    | "import" "*" "as" identifier identifier import_path ";"
+    | "import" "{" import_rename { "," import_rename } "}" identifier import_path ";"
+    ;
+
+(* Примечание: в двух последних формах второй identifier ожидается равным "from".
+   «from» не является ключевым словом — парсер принимает любой идентификатор,
+   но генерирует диагностику SE, если это не "from". *)
+
+import_path
+    = string_literal        (* "путь/к/файлу.lam" *)
+    | identifier_path       (* Module::SubModule *)
+    ;
+
+import_rename
+    = identifier                         (* import { Name } *)
+    | identifier "as" identifier         (* import { OldName as NewName } *)
+    ;
+
+identifier_path = identifier { "::" identifier } ;
+
+
+(* ===========================================================================
+   ПСЕВДОНИМ ТИПА
+   =========================================================================== *)
+
+type_define = "type" identifier "=" type ";" ;
+
+type
+    = identifier                      (* например: bit, u8, MyType *)
+    | "[" type ";" integer "]"        (* массив фиксированной длины: [bit;8] *)
+    ;
+
+
+(* ===========================================================================
+   ПЕРЕМЕННАЯ, КОНСТАНТА, ПОРТ
+   Все четыре формы разбираются единым правилом VariableDefine.
+   «in» и «out» — ключевые слова объявления портов ввода/вывода.
+   =========================================================================== *)
+
+variable_define
+    = "var"   identifier_or_error [ ":" type ] [ "=" expression ] ";"
+    | "const" identifier_or_error [ ":" type ] "=" expression ";"
+    | "in"    identifier_or_error [ ":" type ] [ "=" expression ] ";"
+    | "out"   identifier_or_error [ ":" type ] [ "=" expression ] ";"
+    ;
+
+(* «var»   — изменяемая переменная.
+   «const» — неизменяемая константа; инициализатор обязателен.
+   «in»    — входной порт (чтение из внешнего устройства / MMIO).
+   «out»   — выходной порт (запись во внешнее устройство / MMIO).
+   Инициализатор порта указывает физический адрес: 0xADDR или address-token (0xADDR:bit). *)
+
+
+(* ===========================================================================
+   ФУНКЦИЯ
+   =========================================================================== *)
+
+function_define
+    = [ "extern" ] "fn" identifier_or_error parameter_list
+      [ "->" type ]
+      ( ";" | block_statement )
+    ;
+
+(* «extern fn» — объявление без тела (внешняя функция).
+   «fn»         — определение с телом.
+   «->»         — токен возврата типа. *)
+
+parameter_list
+    = "(" ")"
+    | "(" parameter ")"
+    | "(" parameter "," parameter { "," parameter } ")"
+    ;
+
+parameter
+    = identifier ":" parameter_type_expr   (* именованный: name: Type *)
+    | parameter_type_expr                  (* безымянный: Type *)
+    ;
+
+(* parameter_type_expr расширяет expression составными типами в параметрах: *)
+parameter_type_expr
+    = "[" type ";" integer "]"    (* [bit;8] и т.п. напрямую в параметре *)
+    | expression
+    ;
+
+
+(* ===========================================================================
+   МОДЕЛЬ
+   =========================================================================== *)
+
+model
+    = "model" identifier_or_error [ "=" expression ]
+      "{" { model_element } "}"
+    ;
+
+
+(* ===========================================================================
+   СОСТОЯНИЕ
+   =========================================================================== *)
+
+state_define
+    = state_kind identifier_or_error [ "=" expression ]
+      ( "{" { state_element } "}" | ";" )
+    ;
+
+state_kind
+    = "start"
+    | "state"
+    ;
+
+
+(* ===========================================================================
+   ПЕРЕЧИСЛЕНИЕ
+   =========================================================================== *)
+
+enum_define
+    = "enum" identifier_or_error "{" enum_variant { "," enum_variant } "}"
+    ;
+
+enum_variant
+    = identifier "=" integer     (* с явным значением *)
+    | identifier                 (* без значения *)
+    ;
+
+
+(* ===========================================================================
+   СТРУКТУРА
+   =========================================================================== *)
+
+struct_define
+    = "struct" identifier_or_error "{" [ struct_field { "," struct_field } ] "}"
+    ;
+
+struct_field = identifier ":" type ;
+
+
+(* ===========================================================================
+   УСЛОВИЕ ПЕРЕХОДА
+   Семантика «=» внутри condition — проверка равенства (не присваивание).
+
+   Примечание о разборе: ConditionDefine в грамматике не содержит завершающего
+   «;» — он поглощается как StraySemicolon в model_element. На практике «;»
+   после объявления cond необходимо писать.
+   =========================================================================== *)
+
+condition_define = "cond" identifier_or_error "=" condition ;
+
+(* Приоритет операторов в condition (от низшего к высшему):
+     6  |         — побитовое/логическое ИЛИ
+     5  &         — побитовое/логическое И
+     4  =  !=     — равенство / неравенство
+     3  < > <= >= — сравнение
+     2  + -       — сложение / вычитание
+     1  !         — унарное логическое НЕ
+     0             — первичные *)
+
+condition
+    = condition "|"  condition
+    | condition "&"  condition
+    | condition "="  condition          (* проверка равенства *)
+    | condition "!=" condition
+    | condition "<"  condition
+    | condition ">"  condition
+    | condition "<=" condition
+    | condition ">=" condition
+    | condition "+"  condition
+    | condition "-"  condition
+    | "!" condition
+    | "(" condition ")"
+    | condition "." member
+    | identifier "[" integer "]"
+    | identifier "(" [ condition { "," condition } ] ")"
+    | "true"
+    | "false"
+    | integer
+    | rational
+    | identifier
+    ;
+
+
+(* ===========================================================================
+   ИМЕНОВАННЫЙ БЛОК КОДА
+   Стандартные имена: enter, exit, always. Допускается любое пользовательское имя.
+   =========================================================================== *)
+
+named_block = identifier_or_error block_statement ;
+
+
+(* ===========================================================================
+   ФОРМУЛА
+   Встроенный механизм для внешних DSL / ассемблерных вставок.
+   =========================================================================== *)
+
+formula_define = "formula" [ string_literal ] formula_block ;
+
+formula_block = "{" { formula_statement } "}" ;
+
+formula_statement
+    = formula_block
+    | formula_function
+    ;
+
+formula_function
+    = formula_identifier "(" [ formula_expression { "," formula_expression } ] ")"
+    ;
+
+formula_identifier
+    = identifier
+    | "extern"
+    | "import"
+    | "as"
+    ;
+
+formula_expression
+    = formula_path
+    | formula_function
+    | formula_literal
+    ;
+
+formula_path
+    = formula_identifier
+    | formula_path "." formula_identifier
+    ;
+
+formula_literal
+    = "true"         [ ":" formula_identifier ]
+    | "false"        [ ":" formula_identifier ]
+    | integer        [ ":" formula_identifier ]
+    | string_literal [ ":" formula_identifier ]
+    ;
+
+
+(* ===========================================================================
+   ВСТРОЕННАЯ ФОРМУЛА (INLINE FORMULA / GUARD / LTL)
+   Сокращённый синтаксис для охранных условий и LTL-аннотаций
+   прямо внутри model_element или state_element.
+
+   Формы:
+     : cond1, cond2 ;                    — Guard (список условий)
+     : [Guard] cond1, cond2 ;            — Guard (явная метка)
+     : [LTL] ltl_expr1, ltl_expr2 ;      — LTL-формулы
+   =========================================================================== *)
+
+inline_formula_define
+    = ":" condition { "," condition } ";"
+    | ":" "[" "Guard" "]" condition { "," condition } ";"
+    | ":" "[" "LTL"   "]" ltl_expr  { "," ltl_expr  } ";"
+    ;
+
+
+(* ===========================================================================
+   LTL-ВЫРАЖЕНИЯ
+   Используются только внутри inline_formula_define с меткой [LTL].
+
+   Приоритет (от низшего к высшему):
+     ->   импликация              правоассоциативная
+     |    ИЛИ
+     &    И
+     U R  Until / Release         левоассоциативные
+     ! X F G   унарные
+   =========================================================================== *)
+
+ltl_expr = ltl_implies ;
+
+ltl_implies
+    = ltl_or "->" ltl_implies      (* импликация, правоассоциативная *)
+    | ltl_or
+    ;
+
+ltl_or
+    = ltl_or "|" ltl_and
+    | ltl_and
+    ;
+
+ltl_and
+    = ltl_and "&" ltl_until_release
+    | ltl_until_release
+    ;
+
+ltl_until_release
+    = ltl_until_release "U" ltl_unary    (* Until *)
+    | ltl_until_release "R" ltl_unary    (* Release *)
+    | ltl_unary
+    ;
+
+ltl_unary
+    = "!" ltl_unary      (* отрицание *)
+    | "X" ltl_unary      (* Next *)
+    | "F" ltl_unary      (* Finally *)
+    | "G" ltl_unary      (* Globally *)
+    | ltl_primary
+    ;
+
+ltl_primary
+    = "true"
+    | "false"
+    | identifier
+    | "(" ltl_expr ")"
+    ;
+
+(* Примечание: X, F, G, U, R, LTL, Guard разрешены как идентификаторы в обычном
+   коде и как LTL-операторы только внутри : [LTL] ... ; аннотации. *)
+
+
+(* ===========================================================================
+   ВЫРАЖЕНИЯ
+   Таблица приоритетов (от низшего к высшему):
+     14  =   ?:         присваивание; тернарный оператор  правоассоциативные
+     13  ||             логическое ИЛИ
+     12  &&             логическое И
+     11  ==  !=         равенство
+     10  <  >  <=  >=   сравнение
+      9  |              побитовое ИЛИ
+      8  ^              побитовое исключающее ИЛИ
+      7  &   as         побитовое И; приведение типа
+      6  <<  >>         сдвиги
+      5  +  -           сложение, вычитание
+      4  *  /  %        умножение, деление, остаток
+      3  **             возведение в степень             правоассоциативный
+      2  !  ~  +  -     унарные
+      1  address        адресный литерал 0xADDR[:бит]   единый токен
+      0                 первичные выражения
+   =========================================================================== *)
+
+expression
+    (* Присваивание — правоассоциативное *)
+    = expression "=" expression
+
+    (* Тернарный оператор — правоассоциативный, тот же уровень что «=» *)
+    | expression "?" expression ":" expression
+
+    (* Логические *)
+    | expression "||" expression
+    | expression "&&" expression
+
+    (* Сравнение *)
+    | expression "==" expression
+    | expression "!=" expression
+    | expression "<"  expression
+    | expression ">"  expression
+    | expression "<=" expression
+    | expression ">=" expression
+
+    (* Побитовые *)
+    | expression "|"  expression
+    | expression "^"  expression
+    | expression "&"  expression
+    | expression "<<" expression
+    | expression ">>" expression
+
+    (* Приведение типа *)
+    | expression "as" type
+
+    (* Арифметические *)
+    | expression "+"  expression
+    | expression "-"  expression
+    | expression "*"  expression
+    | expression "/"  expression
+    | expression "%"  expression
+    | expression "**" expression
+
+    (* Унарные *)
+    | "!" expression
+    | "~" expression
+    | "+" expression
+    | "-" expression
+
+    (* Адресный литерал — единый токен лексера вида 0xADDR или 0xADDR:бит *)
+    | address_literal
+
+    (* Инициализатор массива *)
+    | "{" expression { "," expression } "}"
+
+    (* Первичные *)
+    | identifier "(" [ expression { "," expression } ] ")"
+    | identifier "[" integer "]"
+    | identifier "[" [ integer ] ":" [ integer ] "]"
+    | expression "." member
+    | "(" expression ")"
+    | "(" parameter "," parameter { "," parameter } ")"
+    | "true"
+    | "false"
+    | integer
+    | rational
+    | string_literal { string_literal }
+    | identifier
+    ;
+
+(* address_literal — лексический токен: ^0x[0-9a-fA-F_]+(:[0-9]+)?$ *)
+address_literal = (* лексический токен лексера *) ;
+
+(* loop_cond — как expression, но не начинается с «{» *)
+loop_cond = (* expression, первый токен ≠ «{» *) ;
+
+member
+    = identifier
+    | integer
+    ;
+
+
+(* ===========================================================================
+   ОПЕРАТОРЫ
+   =========================================================================== *)
+
+statement
+    = "if" expression block_statement
+    | "if" expression block_statement "else" statement
+    | "loop" block_statement
+    | "loop" loop_cond block_statement
+    | "for" [ simple_statement ] ";" [ expression ] ";" [ expression ]
+      ( block_statement | ";" )
+    | block_statement
+    | "assembly" [ string_literal ] block_statement
+    | "formula"  [ string_literal ] formula_block
+    | inline_formula_define
+    | simple_statement ";"
+    | "continue" ";"
+    | "break" ";"
+    | "return" ";"
+    | "return" expression ";"
+    ;
+
+block_statement = "{" { statement } "}" ;
+
+simple_statement
+    = local_variable_define
+    | expression
+    ;
+
+local_variable_define
+    = "var"   identifier_or_error [ ":" type ] [ "=" expression ]
+    | "const" identifier_or_error [ ":" type ] "=" expression
+    ;
+
+
+(* ===========================================================================
+   ВСПОМОГАТЕЛЬНЫЕ НЕТЕРМИНАЛЫ
+   =========================================================================== *)
+
+identifier_or_error = identifier ;
+
+
+(* ===========================================================================
+   ЛЕКСИЧЕСКИЕ ЭЛЕМЕНТЫ
+   =========================================================================== *)
+
+identifier = ( xid_start | "_" | "$" ) { xid_continue | "$" } ;
+
+(* Ключевые слова:
+   as        assembly  break     cond      const     continue
+   else      enum      extern    false     fn        for
+   formula   if        import    in        loop      model
+   next      out       ref       return    start     state
+   struct    true      type      var
+*)
+
+integer
+    = decimal_integer
+    | hex_integer
+    | "-" decimal_integer
+    ;
+
+decimal_integer = digit { digit | "_" } ;
+hex_integer     = "0x" hex_digit { hex_digit | "_" } ;
+
+rational
+    = decimal_integer "." decimal_integer [ exponent ]
+    | decimal_integer exponent
+    ;
+
+exponent = ( "e" | "E" ) [ "-" ] decimal_integer ;
+
+digit     = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+hex_digit = digit | "a" | "b" | "c" | "d" | "e" | "f"
+                  | "A" | "B" | "C" | "D" | "E" | "F" ;
+
+string_literal
+    = '"'       { string_char } '"'
+    | "'"       { string_char } "'"
+    | "unicode" '"' { string_char } '"'
+    | "unicode" "'" { string_char } "'"
+    ;
+
+string_char  = escaped_char | ordinary_char ;
+escaped_char = "\" , any_char ;
+
+line_comment = "//"  { any_char_except_newline } ( newline | eof ) ;
+doc_comment  = "///" { any_char_except_newline } ( newline | eof ) ;
+
+whitespace = space | tab | newline | carriage_return ;
+
+
+(* ===========================================================================
+   СВОДКА ОПЕРАТОРОВ
+   ===========================================================================
+   Арифметические : +  -  *  /  %  **
+   Побитовые      : &  |  ^  ~  <<  >>
+   Логические     : &&  ||  !
+   Сравнение      : ==  !=  <  <=  >  >=
+   Прочие         : =  ?  .  :  ,  ;  (  )  {  }  [  ]  #  ->  -->
+   =========================================================================== *)
 ```

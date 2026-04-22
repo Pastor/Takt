@@ -1150,24 +1150,40 @@ start System = (Init + Startup) + (Run | Halt);
 
 == B. Грамматика языка (EBNF)
 
-Полная грамматика находится в файле `Lam.ebnf`.
+Полная грамматика находится в файле `Lam.ebnf` (приложение F).
 
 Краткая выдержка:
 
 ```ebnf
 source_unit   = { model_element } ;
+
 model_element = import_define | type_define | variable_define
-              | function_define | enum_define | struct_define | model
-              | condition_define | named_block | ";" ;
-model         = "model" identifier [ "=" expression ]
-                "{" { model_element } "}" ;
-state_define  = state_kind identifier [ "=" expression ]
-                ( "{" { state_element } "}" | ";" ) ;
-state_kind    = "start" | "state" ;
-state_element = named_block
-              | "ref"  identifier [ ":" condition ] ";"
-              | "next" identifier ";"
-              | variable_define | function_define | ";" ;
+              | function_define | enum_define | struct_define
+              | model | state_define | formula_define
+              | inline_formula_define | condition_define
+              | named_block | ";" ;
+
+variable_define
+    = "var"   identifier [ ":" type ] [ "=" expression ] ";"
+    | "const" identifier [ ":" type ] "=" expression ";"
+    | "in"    identifier [ ":" type ] [ "=" expression ] ";"
+    | "out"   identifier [ ":" type ] [ "=" expression ] ";" ;
+
+model        = "model" identifier [ "=" expression ]
+               "{" { model_element } "}" ;
+state_define = state_kind identifier [ "=" expression ]
+               ( "{" { state_element } "}" | ";" ) ;
+state_kind   = "start" | "state" ;
+state_element
+    = named_block
+    | "ref"  identifier [ ":" condition ] ";"
+    | "next" identifier ";"
+    | inline_formula_define | ";" ;
+
+inline_formula_define
+    = ":" condition { "," condition } ";"
+    | ":" "[" "Guard" "]" condition { "," condition } ";"
+    | ":" "[" "LTL"   "]" ltl_expr  { "," ltl_expr  } ";" ;
 ```
 
 == C. Список ключевых слов и операторов
@@ -1175,8 +1191,7 @@ state_element = named_block
 *Ключевые слова:*
 `as` `assembly` `break` `cond` `const` `continue` `else` `enum` `extern`
 `false` `fn` `for` `formula` `if` `import` `in` `loop` `model` `next`
-`out` `ref` `return` `start` `state` `string` `struct` `template` `true`
-`type` `var`
+`out` `ref` `return` `start` `state` `struct` `true` `type` `var`
 
 *LTL (темпоральная логика):*
 `LTL` `Guard` `X` `F` `G` `U` `R`
@@ -1241,3 +1256,20 @@ BuT/
 ├── doc/                      — документация
 └── Lam.ebnf                  — полная грамматика EBNF
 ```
+
+#pagebreak()
+
+== F. Полная грамматика EBNF
+
+Ниже приведено полное содержимое файла `Lam.ebnf` в формате ISO EBNF (ISO/IEC 14977:1996).
+
+// Для раздела EBNF используем шрифт 8pt — текст плотнее, чем код примеров
+#show raw.where(lang: "ebnf"): it => block(
+    fill: luma(245),
+    inset: (x: 10pt, y: 8pt),
+    radius: 4pt,
+    width: 100%,
+    text(size: 8pt, font: ("Fira Code", "DejaVu Sans Mono", "Courier New"), it),
+)
+
+#raw(read("Lam.ebnf"), lang: "ebnf", block: true)
