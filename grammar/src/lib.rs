@@ -227,6 +227,48 @@ pub fn compile_to_c(
     Ok(())
 }
 
+/// Компилирует исходный код Lam в диаграмму состояний PlantUML.
+///
+/// Выполняет полный конвейер: лексический анализ → синтаксический → семантический → генерация `.puml`.
+///
+/// # Параметры
+///
+/// - `filename` — имя входного файла (используется для именования модели и диагностики)
+/// - `source` — исходный код на языке Lam
+/// - `output_path` — путь к выходному каталогу (создаёт `<filename>.puml`)
+/// - `search_paths` — директории для поиска файлов `import`
+///
+/// # Ошибки
+///
+/// Возвращает [`Diagnostic`] при синтаксической или семантической ошибке.
+pub fn compile_to_plantuml(
+    filename: &str,
+    source: &str,
+    output_path: &str,
+    search_paths: &[String],
+) -> Result<(), Diagnostic> {
+    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
+    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+
+    if model.borrow().name.is_none() {
+        let stem = Path::new(filename)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
+            .unwrap_or_else(|| "Root".to_owned());
+        model.borrow_mut().name = Some(stem);
+    }
+
+    generator::generate(
+        generator::Language::PlantUML,
+        &model.borrow(),
+        output_path,
+        false,
+    )?;
+
+    Ok(())
+}
+
 /// Ce13: возвращает предупреждения о неиспользуемых переменных в модели.
 ///
 /// Обходит все выражения, операторы и условия модели и её вложенных моделей,

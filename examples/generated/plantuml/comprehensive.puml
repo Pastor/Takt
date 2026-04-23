@@ -1,0 +1,18 @@
+@startuml
+title Comprehensive
+
+[*] --> Entry
+Entry : Controller
+Entry --> [*]
+
+state Controller {
+    [*] --> Idle
+    Heating --> Cooling
+    Heating --> Idle
+    Idle --> Heating
+    Done --> [*]
+    Cooling --> Done
+    Cooling --> Idle
+}
+
+@enduml

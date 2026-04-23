@@ -35,6 +35,7 @@
 //! # Целевые платформы
 //!
 //! - `c` — генерация C-заголовочного файла (по умолчанию)
+//! - `plantuml` — генерация диаграммы состояний в формате PlantUML
 
 use std::env;
 use std::fs;
@@ -250,7 +251,8 @@ fn print_usage() {
     eprintln!("  --guard-disable        Выключить генерацию проверок Guard-формул");
     eprintln!();
     eprintln!("Целевые платформы:");
-    eprintln!("  c    Генерация C-заголовочного файла");
+    eprintln!("  c         Генерация C-заголовочного файла");
+    eprintln!("  plantuml  Генерация диаграммы состояний PlantUML (.puml)");
     eprintln!();
     eprintln!("Примеры:");
     eprintln!("  lamc compile main.lam");
@@ -332,8 +334,38 @@ fn main() {
                 }
             }
         }
+        "plantuml" => {
+            if let Err(diag) = grammar::compile_to_plantuml(
+                &options.input_file,
+                &source,
+                &options.output_path,
+                &options.include_dirs,
+            ) {
+                eprintln!("Ошибка компиляции: {}", diag.message);
+                process::exit(1);
+            }
+            if !options.quiet {
+                if options.verbose {
+                    eprintln!(
+                        "Скомпилировано: {} → {} (plantuml)",
+                        fs::canonicalize(&options.input_file)
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_else(|_| options.input_file.clone()),
+                        options.output_path,
+                    );
+                } else {
+                    eprintln!(
+                        "Скомпилировано: {} → {}/ (plantuml)",
+                        options.input_file, options.output_path,
+                    );
+                }
+            }
+        }
         t => {
-            eprintln!("Ошибка: неизвестная цель '{}'. Поддерживается: c", t);
+            eprintln!(
+                "Ошибка: неизвестная цель '{}'. Поддерживается: c, plantuml",
+                t
+            );
             process::exit(1);
         }
     }

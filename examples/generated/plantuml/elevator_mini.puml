@@ -1,0 +1,25 @@
+@startuml
+title ElevatorMini
+
+[*] --> Main
+Main : Cabin | Motor
+Main --> [*]
+
+state Motor {
+    [*] --> Idle
+    Down --> Stop
+    Stop --> Idle
+    Idle --> Up
+    Idle --> Down
+    Idle --> Stop
+    Up --> Stop
+}
+
+state Cabin {
+    [*] --> Idle
+    Moving --> AtFloor
+    Idle --> Moving
+    AtFloor --> Idle
+}
+
+@enduml

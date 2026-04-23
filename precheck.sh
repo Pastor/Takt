@@ -24,15 +24,17 @@ $CARGO_CMD build --bin lamc 2>/dev/null
 $CARGO_CMD build --features lsp --bin lam-lsp
 
 LAMC="./target/debug/lamc"
-OUTPUT="examples/generated/c"
+C_OUTPUT="examples/generated/c"
+PLANTUML_OUTPUT="examples/generated/plantuml"
 
 echo "Генерация C-кода из примеров Lam..."
 for lam_file in examples/*.lam; do
   name="$(basename "$lam_file" .lam)"
-  echo "  $lam_file → $OUTPUT/${name}.c / ${name}.h"
-  $LAMC compile "$lam_file" -o "$OUTPUT" || echo "    [предупреждение] ошибка генерации $lam_file"
+  echo "  $lam_file → $C_OUTPUT/${name}.c / ${name}.h"
+  $LAMC compile "$lam_file" -o "$C_OUTPUT" || echo "    [предупреждение] ошибка генерации $lam_file"
+  $LAMC compile "$lam_file" -t plantuml -o "$PLANTUML_OUTPUT" || echo "    [предупреждение] ошибка генерации $lam_file"
 done
-echo "Готово. Файлы в $OUTPUT/"
-cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -S $OUTPUT -B $OUTPUT/cmake-build-debug/
-cd $OUTPUT/cmake-build-debug/ && ninja
+echo "Готово. Файлы в $C_OUTPUT/"
+cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -S $C_OUTPUT -B $C_OUTPUT/cmake-build-debug/
+cd $C_OUTPUT/cmake-build-debug/ && ninja
 cd -

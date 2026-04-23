@@ -1,5 +1,6 @@
 mod c;
 mod indent;
+mod plantuml;
 
 use crate::diagnostics::Diagnostic;
 use crate::semantic::ModelNode;
@@ -12,6 +13,8 @@ pub type Source = (Option<String>, Option<String>);
 pub enum Language {
     /// Генерация C-кода.
     C,
+    /// Генерация диаграммы состояний PlantUML.
+    PlantUML,
 }
 
 /// Интерфейс генератора кода для языка Lam.
@@ -37,6 +40,10 @@ pub fn generate(
     match l {
         Language::C => {
             let generator = c::Generator {};
+            generator.generate(model, output_path, guard_enable)
+        }
+        Language::PlantUML => {
+            let generator = plantuml::Generator {};
             generator.generate(model, output_path, guard_enable)
         }
     }
