@@ -64,15 +64,24 @@ struct GbaNode {
     next: BTreeSet<Rc<Ltl>>,
 }
 
+/// Автомат Бюхи, построенный по LTL-формуле алгоритмом GPVW.
+///
+/// Каждое состояние представлено набором LTL-формул (`BTreeSet<Rc<Ltl>>`),
+/// выполнение которых ожидается в этом состоянии.
 #[derive(Debug)]
 pub struct BuchiAutomaton {
+    /// Множества формул, задающие состояния автомата (индекс = идентификатор состояния).
     pub states: Vec<BTreeSet<Rc<Ltl>>>,
+    /// Множество индексов начальных состояний.
     pub initial_states: BTreeSet<usize>,
+    /// Отношение переходов: из состояния `u` в состояния из `transitions[u]`.
     pub transitions: BTreeMap<usize, BTreeSet<usize>>,
+    /// Множество индексов принимающих состояний.
     pub accepting: BTreeSet<usize>,
 }
 
 impl BuchiAutomaton {
+    /// Выводит структуру автомата в стандартный поток (для отладки).
     pub fn print(&self) {
         println!("=== Автомат Бюхи (GPVW) ===");
         println!("Начальные состояния: {:?}", self.initial_states);
@@ -116,13 +125,16 @@ fn collect_until(f: &Ltl, set: &mut BTreeSet<Rc<Ltl>>) {
     }
 }
 
+type NodeMap = BTreeMap<(BTreeSet<Rc<Ltl>>, BTreeSet<Rc<Ltl>>), usize>;
+
+#[allow(clippy::too_many_arguments)]
 fn expand(
     mut new: BTreeSet<Rc<Ltl>>,
     mut old: BTreeSet<Rc<Ltl>>,
     mut next: BTreeSet<Rc<Ltl>>,
     incoming: BTreeSet<Option<usize>>,
     nodes: &mut Vec<GbaNode>,
-    node_map: &mut BTreeMap<(BTreeSet<Rc<Ltl>>, BTreeSet<Rc<Ltl>>), usize>,
+    node_map: &mut NodeMap,
     transitions: &mut BTreeSet<(usize, usize)>,
     initial_nodes: &mut BTreeSet<usize>,
 ) {
@@ -173,9 +185,7 @@ fn expand(
             transitions,
             initial_nodes,
         );
-    } else if f.as_ref() == &Ltl::False {
-        return;
-    } else {
+    } else if f.as_ref() != &Ltl::False {
         match f.as_ref() {
             Ltl::Atom(_) | Ltl::Not(_) => {
                 let neg_f = match f.as_ref() {
@@ -308,6 +318,12 @@ fn expand(
     }
 }
 
+/// Строит автомат Бюхи для LTL-формулы `phi` по алгоритму GPVW.
+///
+/// Преобразует формулу в негационную нормальную форму (NNF), затем
+/// применяет процедуру `expand` для обхода состояний, и наконец
+/// строит классический автомат Бюхи с принимающими состояниями
+/// по условию прогресса для каждого подформульного Until.
 pub fn build_buchi(phi: &Ltl) -> BuchiAutomaton {
     let nnf_phi = to_nnf(phi);
     let mut nodes = Vec::new();
@@ -351,9 +367,10 @@ pub fn build_buchi(phi: &Ltl) -> BuchiAutomaton {
         };
     }
 
-    for i in 0..n_nodes {
+    ba_states.reserve(n_nodes * (k + 1));
+    for node in &nodes {
         for _ in 0..=k {
-            ba_states.push(nodes[i].old.clone());
+            ba_states.push(node.old.clone());
         }
     }
 

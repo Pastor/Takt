@@ -45,6 +45,7 @@ pub mod lsp;
 pub mod parser;
 /// Модуль семантического анализа и построение семантического дерева
 pub mod semantic;
+/// Модуль проверки формальных свойств (LTL-формулы, автоматы Бюхи).
 pub mod verification;
 
 #[allow(

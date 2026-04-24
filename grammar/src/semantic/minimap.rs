@@ -8,8 +8,12 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
+/// Имя элемента модели с локальной и уникальной формами.
+///
+/// - `local` — имя без пути родителей (например, `"State"`).
+/// - `unique` — полный путь с разделителем `':'` (например, `"Root:Child:State"`).
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Name {
+pub struct Name {
     local: String,
     unique: String,
 }
@@ -24,22 +28,27 @@ impl Name {
     pub fn local(&self) -> &str {
         &self.local
     }
+    /// Возвращает локальное имя в `snake_case` (например, `"my_state"`).
     pub fn local_lowercase_snakecase(&self) -> String {
         normalize_lowercase_snakecase(self.local.clone())
     }
 
+    /// Возвращает уникальное имя с разделителем `':'` (например, `"Root:Child:State"`).
     pub fn unique(&self) -> &str {
         &self.unique
     }
 
+    /// Возвращает уникальное имя в `snake_case` с `'_'` вместо `':'`.
     pub fn unique_lowercase_snakecase(&self) -> String {
         normalize_lowercase_snakecase(self.unique.replace(":", "_"))
     }
 
+    /// Возвращает уникальное имя в `UPPER_SNAKE_CASE`.
     pub fn unique_uppercase_snakecase(&self) -> String {
         self.unique_lowercase_snakecase().to_uppercase()
     }
 
+    /// Возвращает уникальное имя в `CamelCase`.
     pub fn unique_camelcase(&self) -> String {
         normalize_camelcase_name(&self.unique.replace(":", "_"))
     }
@@ -77,11 +86,16 @@ impl From<Rc<RefCell<ModelNode>>> for Name {
     }
 }
 
+/// Структура реализации состояния (`= Expr`), представленная в плоском виде.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum StateExtend {
+pub enum StateExtend {
+    /// Реализация отсутствует или не разрешена.
     None,
+    /// Ссылка на модель с указанным именем.
     Model(Name),
+    /// Последовательная конкатенация нескольких реализаций (`A ; B`).
     Concatenation(Vec<StateExtend>),
+    /// Параллельная композиция нескольких реализаций (`A | B`).
     Parallel(Vec<StateExtend>),
 }
 
@@ -91,21 +105,32 @@ pub(crate) enum StateExtend {
 /// `.c`-источника (I1–I4) и не читаются напрямую в текущей реализации.
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Element {
+pub enum Element {
     /// Вложенная модель со списком состояний и именем стартового состояния.
     Model {
+        /// Имя модели.
         name: Name,
+        /// Все состояния модели.
         states: Vec<Name>,
+        /// Стартовое состояние.
         start: Name,
     },
     /// Состояние с объявлением extend (`=`) и ссылкой на следующее состояние.
     StateExtend {
+        /// Имя состояния.
         name: Name,
+        /// Дерево реализации состояния.
         extend: StateExtend,
+        /// Следующее состояние после завершения реализации.
         next: Name,
     },
     /// Простое состояние со списком переходов.
-    State { name: Name, references: Vec<Name> },
+    State {
+        /// Имя состояния.
+        name: Name,
+        /// Список имён состояний, в которые ведут исходящие переходы.
+        references: Vec<Name>,
+    },
 }
 
 impl Element {
@@ -139,7 +164,8 @@ impl Display for Element {
 /// Снимок семантической карты модели: все достижимые элементы, имена состояний.
 ///
 /// Поле `start` и методы `start()`/`own()` зарезервированы для генератора `.c`-файла (I1–I4).
-pub(crate) struct Map {
+#[derive(Debug)]
+pub struct Map {
     root: Rc<RefCell<ModelNode>>,
     elements: HashMap<Name, Element>,
     model: Element,
@@ -189,28 +215,36 @@ impl Map {
         })
     }
 
-    pub(crate) fn model(&self) -> Element {
+    /// Возвращает элемент корневой модели (вариант [`Element::Model`]).
+    pub fn model(&self) -> Element {
         self.model.clone()
     }
 
+    /// Возвращает [`ModelNode`] по уникальному имени.
+    ///
+    /// Если `name` равно `None`, возвращает корневую модель.
     #[inline]
-    pub(crate) fn model_at(&self, name: Option<String>) -> Option<Rc<RefCell<ModelNode>>> {
+    pub fn model_at(&self, name: Option<String>) -> Option<Rc<RefCell<ModelNode>>> {
         if let Some(name) = name {
             return model_by_unique_name(&name, self.root.clone());
         }
         Some(self.root.clone())
     }
 
+    /// Возвращает [`StateNode`] по уникальному имени вида `"Model:State"`.
+    ///
+    /// Возвращает `None` если имя не передано или состояние не найдено.
     #[inline]
-    pub(crate) fn state_at(&self, name: Option<String>) -> Option<Rc<RefCell<StateNode>>> {
+    pub fn state_at(&self, name: Option<String>) -> Option<Rc<RefCell<StateNode>>> {
         if let Some(name) = name {
             return state_by_unique_name(&name, self.root.clone());
         }
         None
     }
 
+    /// Возвращает все элементы карты, являющиеся вложенными моделями.
     #[inline]
-    pub(crate) fn used_models(&self) -> Vec<Element> {
+    pub fn used_models(&self) -> Vec<Element> {
         self.elements
             .values()
             .filter(|e| matches!(e, Element::Model { .. }))
@@ -218,7 +252,8 @@ impl Map {
             .collect::<Vec<Element>>()
     }
 
-    pub(crate) fn element_at(&self, name: Name) -> Option<Element> {
+    /// Возвращает элемент карты по имени или `None`, если он не найден.
+    pub fn element_at(&self, name: Name) -> Option<Element> {
         self.elements.get(&name).cloned()
     }
 
@@ -232,7 +267,8 @@ impl Map {
         self.model.name().clone()
     }
 
-    pub(crate) fn states(&self) -> Vec<Name> {
+    /// Возвращает список имён всех состояний корневой модели.
+    pub fn states(&self) -> Vec<Name> {
         let Element::Model { states, .. } = self.model.clone() else {
             unreachable!()
         };

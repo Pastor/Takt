@@ -1,0 +1,104 @@
+diff --git a/.gitignore b/.gitignore
+index 6347943..da6b1c1 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -18,3 +18,4 @@ README.pdf
+ /*.svg
+ *.rs.orig
+ /grammar/*.svg
++.temp
+diff --git a/Cargo.toml b/Cargo.toml
+index dfa4b3f..2b4906a 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,5 +1,6 @@
+ [workspace]
+ resolver = "1"
+ members = [
+-    "grammar"
++    "grammar",
++    "simulation"
+ ]
+diff --git a/simulation/Cargo.toml b/simulation/Cargo.toml
+new file mode 100644
+index 0000000..e469fa3
+--- /dev/null
++++ b/simulation/Cargo.toml
+@@ -0,0 +1,23 @@
++[package]
++name = "simulation"
++version = "0.0.1"
++authors = ["Pastor <viruszold@gmail.com>"]
++description = "Lam"
++homepage = "https://but.ru"
++repository = "https://github.com/Pastor/BuT"
++readme = "../README.md"
++keywords = ["Lam", "framework", "simulation"]
++license = "BSD"
++edition = "2024"
++include = ["Cargo.toml", "src/**/*", "README.md", "LICENSE*"]
++
++[[bin]]
++name = "simulation"
++path = "src/bin/simulation.rs"
++
++[dependencies]
++grammar = { path = "../grammar" }
++log = "0.4.29"
++
++[features]
++default = []
+diff --git a/simulation/src/bin/simulation.rs b/simulation/src/bin/simulation.rs
+new file mode 100644
+index 0000000..7b9a2cb
+--- /dev/null
++++ b/simulation/src/bin/simulation.rs
+@@ -0,0 +1,7 @@
++//! Исполняемый файл симулятора Lam-моделей.
++//!
++//! Запускает симуляцию модели, переданной в аргументах командной строки.
++
++fn main() {
++    // TODO: реализовать запуск симуляции
++}
+diff --git a/simulation/src/lib.rs b/simulation/src/lib.rs
+new file mode 100644
+index 0000000..59f34ea
+--- /dev/null
++++ b/simulation/src/lib.rs
+@@ -0,0 +1,35 @@
++//! Крейт симуляции моделей языка Lam.
++//!
++//! Предоставляет инструменты для выполнения (симуляции) моделей,
++//! построенных семантическим анализатором крейта [`grammar`].
++//!
++//! # Использование
++//!
++//! ```rust,ignore
++//! use grammar::parse;
++//! use grammar::semantic::{minimap::Map, tree::construct_model};
++//!
++//! let (ast, _) = parse("start S;", 0).unwrap();
++//! let model = construct_model(&ast, None, &[]).unwrap();
++//! let map = Map::create(model).unwrap();
++//! ```
++
++#[cfg(test)]
++mod tests {
++    use grammar::parse;
++    use grammar::semantic::minimap::Map;
++    use grammar::semantic::tree::construct_model;
++
++    #[test]
++    fn test_access() {
++        let (model, _) = parse("start E;", 0).unwrap();
++        let model = construct_model(&model, None, &[]).unwrap();
++        let map = Map::create(model.clone()).unwrap();
++        let raw = &*model.borrow();
++        assert!(raw.search_state("E").is_some());
++        map.states().iter().for_each(|state| {
++            assert!(raw.search_state(state.local()).is_some());
++        });
++        assert!(map.used_models().is_empty());
++    }
++}

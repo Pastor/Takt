@@ -7,19 +7,19 @@ Main --> [*]
 
 state Cabin {
     [*] --> Idle
-    Moving --> AtFloor
     Idle --> Moving
     AtFloor --> Idle
+    Moving --> AtFloor
 }
 
 state Motor {
     [*] --> Idle
-    Stop --> Idle
+    Down --> Stop
+    Up --> Stop
     Idle --> Up
     Idle --> Down
     Idle --> Stop
-    Down --> Stop
-    Up --> Stop
+    Stop --> Idle
 }
 
 @enduml

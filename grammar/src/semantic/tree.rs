@@ -1183,16 +1183,16 @@ pub fn construct_states(
             }
             // Если состояние не имеет реализации (= Expr), но имеет `next`,
             // конвертируем `next` в безусловный переход (ref с ConditionNode::None).
-            if implements.is_none() {
-                if let Some(ref next_name) = next {
-                    references.push(ReferenceNode {
-                        location: def.loc,
-                        name: next_name.clone(),
-                        cond: ConditionNode::None,
-                        object: Box::new(StateNode::Unresolved),
-                    });
-                    next = None;
-                }
+            if implements.is_none()
+                && let Some(ref next_name) = next
+            {
+                references.push(ReferenceNode {
+                    location: def.loc,
+                    name: next_name.clone(),
+                    cond: ConditionNode::None,
+                    object: Box::new(StateNode::Unresolved),
+                });
+                next = None;
             }
             let kind = match kind {
                 None => {

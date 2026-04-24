@@ -12,6 +12,9 @@ use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::{PortDirection, VariableNode};
 use log::warn;
 
+/// Словарь портов: `(класс порта, направление)` → список `(имя модели, имя порта)`.
+type PortMap = std::collections::HashMap<(PortClass, PortDirection), Vec<(Name, String)>>;
+
 /// Генерирует поля структуры C для extend состояния.
 /// Единичный Model → `{state}`, составной → делегирует в build_concat_item.
 fn build_extend_header(
@@ -217,10 +220,7 @@ fn build_concat_state_enum(
 ///
 /// Возвращает словарь `(PortClass, PortDirection) → Vec<(model_name, port_name)>`.
 /// Порты отсортированы для детерминированной генерации.
-fn collect_ports_by_class(
-    map: &CMap,
-) -> Result<std::collections::HashMap<(PortClass, PortDirection), Vec<(Name, String)>>, Diagnostic>
-{
+fn collect_ports_by_class(map: &CMap) -> Result<PortMap, Diagnostic> {
     use std::collections::HashMap;
     let mut all_models = map.using_models();
     all_models.insert(

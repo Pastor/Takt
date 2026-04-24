@@ -1022,6 +1022,7 @@ impl StateNode {
         }
     }
 
+    /// Возвращает срез формул, связанных с состоянием.
     pub fn formulas(&self) -> &[Formula] {
         match self {
             StateNode::Simple { formulas, .. } | StateNode::Implement { formulas, .. } => formulas,

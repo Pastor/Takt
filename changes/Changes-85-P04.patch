@@ -1,0 +1,142 @@
+diff --git a/grammar/src/generator/c/c_expr.rs b/grammar/src/generator/c/c_expr.rs
+index f8baf43..400e23c 100644
+--- a/grammar/src/generator/c/c_expr.rs
++++ b/grammar/src/generator/c/c_expr.rs
+@@ -178,10 +178,10 @@ pub(super) fn field_name_in_parent(model_rc: &Rc<RefCell<ModelNode>>) -> Option<
+     let parent_rc = model_rc.borrow().upper.as_ref()?.upgrade()?;
+     let parent = parent_rc.borrow();
+     for (state_name, state_node) in &parent.states {
+-        if let StateNode::Implement { implements, .. } = state_node {
+-            if let Some(path) = find_in_extend(implements, model_rc, state_name) {
+-                return Some(path);
+-            }
++        if let StateNode::Implement { implements, .. } = state_node
++            && let Some(path) = find_in_extend(implements, model_rc, state_name)
++        {
++            return Some(path);
+         }
+     }
+     None
+diff --git a/grammar/src/generator/c/c_header.rs b/grammar/src/generator/c/c_header.rs
+index 99f8a94..0f393a1 100644
+--- a/grammar/src/generator/c/c_header.rs
++++ b/grammar/src/generator/c/c_header.rs
+@@ -12,6 +12,9 @@ use crate::semantic::naming::normalize_lowercase_snakecase;
+ use crate::semantic::{PortDirection, VariableNode};
+ use log::warn;
+ 
++/// Словарь портов: `(класс порта, направление)` → список `(имя модели, имя порта)`.
++type PortMap = std::collections::HashMap<(PortClass, PortDirection), Vec<(Name, String)>>;
++
+ /// Генерирует поля структуры C для extend состояния.
+ /// Единичный Model → `{state}`, составной → делегирует в build_concat_item.
+ fn build_extend_header(
+@@ -219,7 +222,7 @@ fn build_concat_state_enum(
+ /// Порты отсортированы для детерминированной генерации.
+ fn collect_ports_by_class(
+     map: &CMap,
+-) -> Result<std::collections::HashMap<(PortClass, PortDirection), Vec<(Name, String)>>, Diagnostic>
++) -> Result<PortMap, Diagnostic>
+ {
+     use std::collections::HashMap;
+     let mut all_models = map.using_models();
+diff --git a/grammar/src/semantic/condition.rs b/grammar/src/semantic/condition.rs
+index c6923fd..757a20e 100644
+--- a/grammar/src/semantic/condition.rs
++++ b/grammar/src/semantic/condition.rs
+@@ -27,14 +27,14 @@ fn resolve_rval_as_enum_variant(
+ ) -> Result<ConditionNode, Diagnostic> {
+     if let ast::Condition::Variable(id) = cond {
+         let name = &id.name;
+-        if let Some((edn, val)) = model.borrow().search_enum_variant(name) {
+-            if edn.name == enum_name {
+-                return Ok(ConditionNode::EnumVariant(
+-                    Rc::new(RefCell::new(edn)),
+-                    name.clone(),
+-                    val,
+-                ));
+-            }
++        if let Some((edn, val)) = model.borrow().search_enum_variant(name)
++            && edn.name == enum_name
++        {
++            return Ok(ConditionNode::EnumVariant(
++                Rc::new(RefCell::new(edn)),
++                name.clone(),
++                val,
++            ));
+         }
+         // Идентификатор не является вариантом enum_name — разрешаем как обычно
+         // (например, это переменная того же типа перечисления).
+diff --git a/grammar/src/semantic/tree.rs b/grammar/src/semantic/tree.rs
+index 2966239..589426b 100644
+--- a/grammar/src/semantic/tree.rs
++++ b/grammar/src/semantic/tree.rs
+@@ -1183,16 +1183,14 @@ pub fn construct_states(
+             }
+             // Если состояние не имеет реализации (= Expr), но имеет `next`,
+             // конвертируем `next` в безусловный переход (ref с ConditionNode::None).
+-            if implements.is_none() {
+-                if let Some(ref next_name) = next {
+-                    references.push(ReferenceNode {
+-                        location: def.loc,
+-                        name: next_name.clone(),
+-                        cond: ConditionNode::None,
+-                        object: Box::new(StateNode::Unresolved),
+-                    });
+-                    next = None;
+-                }
++            if implements.is_none() && let Some(ref next_name) = next {
++                references.push(ReferenceNode {
++                    location: def.loc,
++                    name: next_name.clone(),
++                    cond: ConditionNode::None,
++                    object: Box::new(StateNode::Unresolved),
++                });
++                next = None;
+             }
+             let kind = match kind {
+                 None => {
+diff --git a/grammar/src/semantic/validate.rs b/grammar/src/semantic/validate.rs
+index 25212a4..f27faf7 100644
+--- a/grammar/src/semantic/validate.rs
++++ b/grammar/src/semantic/validate.rs
+@@ -331,27 +331,26 @@ fn validate_expression(
+                 if let ExpressionNode::Variable(v) = expr {
+                     return Some(v.clone());
+                 }
+-                if let ExpressionNode::BitAccess(inner, _) = expr {
+-                    if let ExpressionNode::Variable(v) = inner.as_ref() {
+-                        return Some(v.clone());
+-                    }
++                if let ExpressionNode::BitAccess(inner, _) = expr
++                    && let ExpressionNode::Variable(v) = inner.as_ref()
++                {
++                    return Some(v.clone());
+                 }
+                 None
+             };
+-            if let Some(var_rc) = check_port(left) {
+-                if let VariableNode::Port {
++            if let Some(var_rc) = check_port(left)
++                && let VariableNode::Port {
+                     direction: PortDirection::In,
+                     name,
+                     loc,
+                     ..
+                 } = &*var_rc.borrow()
+-                {
+-                    return Err(Diagnostic::error(
+-                        *loc,
+-                        format!("Запись в входной порт '{}' запрещена", name),
+-                    )
+-                    .with_code("SE-026"));
+-                }
++            {
++                return Err(Diagnostic::error(
++                    *loc,
++                    format!("Запись в входной порт '{}' запрещена", name),
++                )
++                .with_code("SE-026"));
+             }
+             // Для BitAccess как lvalue на out-порт не рекурсируем внутрь
+             // (это запись в порт, а не чтение — SE-027 здесь неприменим).

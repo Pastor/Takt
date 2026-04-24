@@ -178,10 +178,10 @@ pub(super) fn field_name_in_parent(model_rc: &Rc<RefCell<ModelNode>>) -> Option<
     let parent_rc = model_rc.borrow().upper.as_ref()?.upgrade()?;
     let parent = parent_rc.borrow();
     for (state_name, state_node) in &parent.states {
-        if let StateNode::Implement { implements, .. } = state_node {
-            if let Some(path) = find_in_extend(implements, model_rc, state_name) {
-                return Some(path);
-            }
+        if let StateNode::Implement { implements, .. } = state_node
+            && let Some(path) = find_in_extend(implements, model_rc, state_name)
+        {
+            return Some(path);
         }
     }
     None

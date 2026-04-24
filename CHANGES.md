@@ -7,6 +7,26 @@
 
 ## [Не выпущено]
 
+### Добавлено
+
+- Документация (`///`) для всего публичного API: `verification::ltl::Ltl`, `verification::buchi::BuchiAutomaton`,
+  `semantic::formula::Formula`, `semantic::minimap::{Name, StateExtend, Element, Map}` и их методов.
+- Крейт `simulation`: crate-level doc-comment в `lib.rs` и `bin/simulation.rs`.
+- Type alias `PortMap` в `generator/c/c_header.rs` для упрощения сложного возвращаемого типа.
+- Type alias `NodeMap` в `verification/buchi.rs` для типа таблицы узлов GPVW-алгоритма.
+
+### Исправлено
+
+- `semantic/minimap.rs`: видимость `StateExtend` изменена с `pub(crate)` на `pub`
+  (устранено предупреждение `private_interfaces`).
+- `verification/buchi.rs`: устранены предупреждения clippy — `needless_return`,
+  `needless_range_loop`; добавлен `#[allow(clippy::too_many_arguments)]` для `expand`.
+- `bin/snapshot.rs`: убрано лишнее приведение `t_start as f64`; добавлен
+  `#[allow(clippy::too_many_arguments)]` для `rects_intersection_area` и `energy`.
+- `semantic/condition.rs`, `semantic/tree.rs`, `semantic/validate.rs`,
+  `generator/c/c_expr.rs`: схлопнуты вложенные `if let` в цепочки `if let ... && let ...`
+  (устранены предупреждения `collapsible_if`).
+
 ### Изменено
 
 - Улучшена отрисовка рёбер в `snapshot.rs`: добавлено разведение кратных (параллельных и обратных) рёбер

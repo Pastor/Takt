@@ -1,0 +1,23 @@
+[package]
+name = "simulation"
+version = "0.0.1"
+authors = ["Pastor <viruszold@gmail.com>"]
+description = "Lam"
+homepage = "https://but.ru"
+repository = "https://github.com/Pastor/BuT"
+readme = "../README.md"
+keywords = ["Lam", "framework", "simulation"]
+license = "BSD"
+edition = "2024"
+include = ["Cargo.toml", "src/**/*", "README.md", "LICENSE*"]
+
+[[bin]]
+name = "simulation"
+path = "src/bin/simulation.rs"
+
+[dependencies]
+grammar = { path = "../grammar" }
+log = "0.4.29"
+
+[features]
+default = []

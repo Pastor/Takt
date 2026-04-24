@@ -27,14 +27,14 @@ fn resolve_rval_as_enum_variant(
 ) -> Result<ConditionNode, Diagnostic> {
     if let ast::Condition::Variable(id) = cond {
         let name = &id.name;
-        if let Some((edn, val)) = model.borrow().search_enum_variant(name) {
-            if edn.name == enum_name {
-                return Ok(ConditionNode::EnumVariant(
-                    Rc::new(RefCell::new(edn)),
-                    name.clone(),
-                    val,
-                ));
-            }
+        if let Some((edn, val)) = model.borrow().search_enum_variant(name)
+            && edn.name == enum_name
+        {
+            return Ok(ConditionNode::EnumVariant(
+                Rc::new(RefCell::new(edn)),
+                name.clone(),
+                val,
+            ));
         }
         // Идентификатор не является вариантом enum_name — разрешаем как обычно
         // (например, это переменная того же типа перечисления).

@@ -8,12 +8,18 @@ use crate::semantic::ConditionNode;
 use crate::verification::ltl::Ltl;
 use std::rc::Rc;
 
+/// Семантическое представление формулы состояния в языке Lam.
+///
+/// Используется для аннотации состояний и переходов в семантическом дереве.
 #[derive(Debug, Clone)]
 pub enum Formula {
+    /// Формула отсутствует (нет аннотации).
     None,
-    /// Последовательность формул, разделённые запятой
+    /// Последовательность формул, разделённые запятой.
     Formulas(Vec<Formula>),
+    /// LTL-формула из синтаксического дерева.
     LTL(Ltl),
+    /// Охранное условие перехода.
     Guard(ConditionNode),
 }
 
@@ -30,6 +36,10 @@ impl PartialEq for Formula {
 
 impl Eq for Formula {}
 
+/// Преобразует [`ConditionNode`] в [`Formula`].
+///
+/// [`ConditionNode::None`] отображается в [`Formula::None`];
+/// все остальные условия — в [`Formula::Guard`].
 pub fn condition_to_formula(cond: &ConditionNode) -> Formula {
     match cond {
         ConditionNode::None => Formula::None,
@@ -37,6 +47,7 @@ pub fn condition_to_formula(cond: &ConditionNode) -> Formula {
     }
 }
 
+/// Рекурсивно преобразует LTL-узел АСД [`LtlExpr`] в семантическое представление [`Ltl`].
 pub fn ltl_ast_to_semantic(expr: &LtlExpr) -> Ltl {
     match expr {
         LtlExpr::True(_) => Ltl::True,

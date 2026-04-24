@@ -1,19 +1,38 @@
 use std::fmt;
 use std::rc::Rc;
 
+/// Формула линейной темпоральной логики (LTL).
+///
+/// Поддерживаются все стандартные операторы LTL:
+/// - пропозициональные: [`True`](Ltl::True), [`False`](Ltl::False), [`Atom`](Ltl::Atom),
+///   [`Not`](Ltl::Not), [`And`](Ltl::And), [`Or`](Ltl::Or), [`Implies`](Ltl::Implies);
+/// - темпоральные: [`Next`](Ltl::Next), [`Finally`](Ltl::Finally),
+///   [`Globally`](Ltl::Globally), [`Until`](Ltl::Until), [`Release`](Ltl::Release).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Ltl {
+    /// Логическая истина (`true`).
     True,
+    /// Логическая ложь (`false`).
     False,
+    /// Пропозициональный атом — имя переменной или состояния.
     Atom(String),
+    /// Логическое отрицание (`!φ`).
     Not(Rc<Ltl>),
+    /// Логическая конъюнкция (`φ & ψ`).
     And(Rc<Ltl>, Rc<Ltl>),
+    /// Логическая дизъюнкция (`φ | ψ`).
     Or(Rc<Ltl>, Rc<Ltl>),
+    /// Импликация (`φ -> ψ`).
     Implies(Rc<Ltl>, Rc<Ltl>),
+    /// Темпоральный оператор «следующий шаг» (`X φ`).
     Next(Rc<Ltl>),
+    /// Темпоральный оператор «в некоторый будущий момент» (`F φ`).
     Finally(Rc<Ltl>),
+    /// Темпоральный оператор «всегда» (`G φ`).
     Globally(Rc<Ltl>),
+    /// Темпоральный оператор «пока» (`φ U ψ`): `φ` выполнено до тех пор, пока не выполнится `ψ`.
     Until(Rc<Ltl>, Rc<Ltl>),
+    /// Темпоральный оператор «освобождение» (`φ R ψ`): двойственный к `Until`.
     Release(Rc<Ltl>, Rc<Ltl>),
 }
 
@@ -156,6 +175,14 @@ fn parse_implies(s: &str) -> (&str, Ltl) {
     (rest, left)
 }
 
+/// Разбирает LTL-формулу из строки.
+///
+/// Парсер реализован методом рекурсивного спуска с приоритетами:
+/// `!`, `X`, `F`, `G` > `U`, `R` > `&` > `|` > `->`.
+///
+/// # Паника
+/// Паникует при синтаксических ошибках (непарные скобки, неизвестные символы,
+/// остаток непарсенного ввода).
 pub fn parse_ltl(input: &str) -> Ltl {
     let (rest, f) = parse_implies(input);
     if !rest.trim().is_empty() {

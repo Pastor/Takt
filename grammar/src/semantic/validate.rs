@@ -331,27 +331,26 @@ fn validate_expression(
                 if let ExpressionNode::Variable(v) = expr {
                     return Some(v.clone());
                 }
-                if let ExpressionNode::BitAccess(inner, _) = expr {
-                    if let ExpressionNode::Variable(v) = inner.as_ref() {
-                        return Some(v.clone());
-                    }
+                if let ExpressionNode::BitAccess(inner, _) = expr
+                    && let ExpressionNode::Variable(v) = inner.as_ref()
+                {
+                    return Some(v.clone());
                 }
                 None
             };
-            if let Some(var_rc) = check_port(left) {
-                if let VariableNode::Port {
+            if let Some(var_rc) = check_port(left)
+                && let VariableNode::Port {
                     direction: PortDirection::In,
                     name,
                     loc,
                     ..
                 } = &*var_rc.borrow()
-                {
-                    return Err(Diagnostic::error(
-                        *loc,
-                        format!("Запись в входной порт '{}' запрещена", name),
-                    )
-                    .with_code("SE-026"));
-                }
+            {
+                return Err(Diagnostic::error(
+                    *loc,
+                    format!("Запись в входной порт '{}' запрещена", name),
+                )
+                .with_code("SE-026"));
             }
             // Для BitAccess как lvalue на out-порт не рекурсируем внутрь
             // (это запись в порт, а не чтение — SE-027 здесь неприменим).
