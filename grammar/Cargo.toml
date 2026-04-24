@@ -13,6 +13,10 @@ exclude = ["src/grammar.lalrpop"]
 include = ["Cargo.toml", "src/**/*", "src/ast.rs", "README.md", "LICENSE*"]
 
 [[bin]]
+name = "snapshot"
+path = "src/bin/snapshot.rs"
+
+[[bin]]
 name = "lamc"
 path = "src/bin/lamc.rs"
 
@@ -35,6 +39,10 @@ log = "0.4.29"
 serde_json = { version = "1", optional = true }
 lsp-server = { version = "0.7", optional = true }
 lsp-types = { version = "0.97", optional = true }
+svg = "0.18.0"
+petgraph = "0.8.3"
+rand = "0.10.1"
+rand_distr = "0.6.0"
 
 [dev-dependencies]
 serde_json = "1.0.149"

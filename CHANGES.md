@@ -7,10 +7,28 @@
 
 ## [Не выпущено]
 
+### Изменено
+
+- Улучшена отрисовка рёбер в `snapshot.rs`: добавлено разведение кратных (параллельных и обратных) рёбер
+  и ребер из разных источников за счет индивидуальных коэффициентов изгиба и смещения точек входа/выхода.
+
 ### Добавлено
+
+- Добавлен коэффициент искривления рёбер (`CURVE_COEFFICIENT`) в `snapshot.rs`.
+- Добавлен параметр размера стрелки рёбер (`ARROW_SIZE`) в `snapshot.rs`.
+- Добавлен предел приближения объектов (`MIN_DISTANCE`) в `snapshot.rs`, по умолчанию равный `RADIUS`.
+- Белый фон для генерируемого SVG изображения в `snapshot.rs`.
 - Генератор диаграмм состояний PlantUML (`--target plantuml`):
-  - `generator/plantuml/puml_map.rs` — снимок семантической карты модели для PlantUML
-  - `generator/plantuml/mod.rs` — генерация `.puml`-файла из `PumlMap`
-  - `Language::PlantUML` в `generator/mod.rs`
-  - Публичная функция `compile_to_plantuml()` в `lib.rs`
-  - Поддержка `--target plantuml` в CLI (`lamc.rs`)
+    - `generator/plantuml/puml_map.rs` — снимок семантической карты модели для PlantUML
+    - `generator/plantuml/mod.rs` — генерация `.puml`-файла из `PumlMap`
+    - `Language::PlantUML` в `generator/mod.rs`
+    - Публичная функция `compile_to_plantuml()` в `lib.rs`
+    - Поддержка `--target plantuml` в CLI (`lamc.rs`)
+
+### Исправлено
+
+- Исправлены ошибки компиляции в `snapshot.rs` для совместимости с `rand` 0.10.1 и `svg` 0.18.0.
+- Обновлены вызовы генерации случайных чисел (переход на `rng()`, `random()`, `random_range()`).
+- Исправлено использование элементов SVG (`Style`, `Marker`, `Text`, `Definitions`).
+- Устранена неоднозначность типов в вызовах `sample` и `max`.
+- Удалены неиспользуемые импорты.

@@ -15,3 +15,5 @@ extensions/zed-but/extension.wasm
 /*.o
 /grammar/.output
 README.pdf
+/*.svg
+*.rs.orig

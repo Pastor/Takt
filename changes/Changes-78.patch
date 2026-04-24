@@ -1,0 +1,71 @@
+--- grammar/src/bin/snapshot.rs.orig	2026-04-24 23:51:58.898363639 +0300
++++ grammar/src/bin/snapshot.rs	2026-04-24 23:50:51.450828488 +0300
+@@ -1,5 +1,5 @@
+ use svg::Document;
+-use svg::node::element::{Circle, Definitions, Element, Line, Path, Text};
++use svg::node::element::{Circle, Definitions, Line, Marker, Path, Style, Text};
+ 
+ fn main() {
+     let mut document = Document::new()
+@@ -10,7 +10,7 @@
+     // Если шрифт не установлен локально, браузер может загрузить его через @font-face,
+     // но в статическом SVG проще всего положиться на системный шрифт или
+     // добавить резервные семейства.
+-    let style = Element::new("style").set("type", "text/css").add(
++    let style = Style::new(
+         r#"
+         .gost-text {
+             font-family: "GOST 2.304-81 Type A", "GOST type A", "OpenGOST Type A", sans-serif;
+@@ -18,20 +18,21 @@
+             fill: black;
+         }
+         "#,
+-    );
++    )
++    .set("type", "text/css");
+     document = document.add(style);
+ 
+     // ---------- маркер-стрелка ----------
+-    let marker = Element::new("marker")
++    let marker = Marker::new()
+         .set("id", "arrow")
+         .set("viewBox", "0 0 10 10")
+-        .set("refX", "10")
+-        .set("refY", "5")
+-        .set("markerWidth", "8")
+-        .set("markerHeight", "8")
++        .set("refX", 10)
++        .set("refY", 5)
++        .set("markerWidth", 8)
++        .set("markerHeight", 8)
+         .set("orient", "auto")
+         .add(
+-            Element::new("path")
++            Path::new()
+                 .set("d", "M 0 0 L 10 5 L 0 10 z")
+                 .set("fill", "black"),
+         );
+@@ -57,12 +58,11 @@
+         document = document.add(circle);
+ 
+         // Подпись с координатами или именем (пример)
+-        let label = Text::new()
++        let label = Text::new(format!("Круг {:.0}", cx))
+             .set("x", cx) // шрифт ГОСТ часто моноширинный, позиционируем по центру
+             .set("y", cy + r + 14.0)
+             .set("text-anchor", "middle")
+-            .set("class", "gost-text")
+-            .add(format!("Круг {:.0}", cx)); // любой текст
++            .set("class", "gost-text");
+         document = document.add(label);
+     }
+ 
+@@ -93,7 +93,7 @@
+ 
+         let dx = x2 - x1;
+         let dy = y2 - y1;
+-        let dist = (dx * dx + dy * dy).sqrt();
++        let dist = ((dx * dx + dy * dy) as f64).sqrt();
+         if dist < 1e-6 {
+             continue;
+         }

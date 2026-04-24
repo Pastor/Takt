@@ -2,10 +2,10 @@
 title ExtendComplex
 
 [*] --> Start
-Next : F
-Next --> [*]
 Start : A + B + C | D + E
 Start --> Next
+Next : F
+Next --> [*]
 
 state F {
     [*] --> Start
@@ -21,25 +21,8 @@ state C {
 
 state C1 {
     [*] --> Start
-    Start --> End
     End --> [*]
-}
-
-state E {
-    [*] --> Start
-    Start : D + F
     Start --> End
-    End --> [*]
-}
-
-state B {
-    [*] --> Start
-    Start --> [*]
-}
-
-state A {
-    [*] --> Start
-    Start --> [*]
 }
 
 state C2 {
@@ -47,7 +30,24 @@ state C2 {
     Start --> [*]
 }
 
+state B {
+    [*] --> Start
+    Start --> [*]
+}
+
 state D {
+    [*] --> Start
+    Start --> [*]
+}
+
+state E {
+    [*] --> Start
+    End --> [*]
+    Start : D + F
+    Start --> End
+}
+
+state A {
     [*] --> Start
     Start --> [*]
 }

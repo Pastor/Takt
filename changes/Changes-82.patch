@@ -1,0 +1,104 @@
+diff --git a/CHANGES.md b/CHANGES.md
+index 04f439e..cf619d8 100644
+--- a/CHANGES.md
++++ b/CHANGES.md
+@@ -9,6 +9,8 @@
+ 
+ ### Добавлено
+ 
++- Добавлен параметр размера стрелки рёбер (`ARROW_SIZE`) в `snapshot.rs`.
++- Добавлен предел приближения объектов (`MIN_DISTANCE`) в `snapshot.rs`, по умолчанию равный `RADIUS`.
+ - Белый фон для генерируемого SVG изображения в `snapshot.rs`.
+ - Генератор диаграмм состояний PlantUML (`--target plantuml`):
+     - `generator/plantuml/puml_map.rs` — снимок семантической карты модели для PlantUML
+diff --git a/grammar/src/bin/snapshot.rs b/grammar/src/bin/snapshot.rs
+index 270cbed..a67e75b 100644
+--- a/grammar/src/bin/snapshot.rs
++++ b/grammar/src/bin/snapshot.rs
+@@ -11,6 +11,8 @@ use svg::node::element::{Circle, Definitions, Marker, Path, Style, Text};
+ const WIDTH: f64 = 800.0;
+ const HEIGHT: f64 = 600.0;
+ const RADIUS: f64 = 25.0; // радиус всех кружков
++const MIN_DISTANCE: f64 = RADIUS; // минимальное расстояние между узлами
++const ARROW_SIZE: f64 = 8.0; // размер стрелки рёбер
+ 
+ // ------------------------------------------------------------
+ // Структура для хранения позиций узлов во время оптимизации
+@@ -45,6 +47,7 @@ fn energy(
+     positions: &Positions,
+     edges: &[(usize, usize)], // пары индексов узлов
+     radius: f64,
++    min_distance: f64,
+     w_overlap: f64,
+     w_length: f64,
+     w_cross: f64,
+@@ -52,12 +55,12 @@ fn energy(
+ ) -> f64 {
+     let n = positions.len();
+     let mut e = 0.0;
++    let min_d = 2.0 * radius + min_distance;
+ 
+     // 1. Штраф за перекрытия кружков
+     for i in 0..n {
+         for j in (i + 1)..n {
+             let d = dist(positions[i], positions[j]);
+-            let min_d = 2.0 * radius;
+             if d < min_d {
+                 e += w_overlap * (min_d - d).powi(2);
+             }
+@@ -110,6 +113,7 @@ fn optimize_layout(
+     positions: &mut Positions,
+     edges: &[(usize, usize)],
+     radius: f64,
++    min_distance: f64,
+     width: f64,
+     height: f64,
+ ) {
+@@ -125,6 +129,7 @@ fn optimize_layout(
+         positions,
+         edges,
+         radius,
++        min_distance,
+         w_overlap,
+         w_length,
+         w_cross,
+@@ -163,6 +168,7 @@ fn optimize_layout(
+                 positions,
+                 edges,
+                 radius,
++                min_distance,
+                 w_overlap,
+                 w_length,
+                 w_cross,
+@@ -243,7 +249,14 @@ fn main() {
+     // ------------------------------------------------------------
+     // Запуск оптимизации
+     // ------------------------------------------------------------
+-    optimize_layout(&mut positions, &edges_vec, RADIUS, WIDTH, HEIGHT);
++    optimize_layout(
++        &mut positions,
++        &edges_vec,
++        RADIUS,
++        MIN_DISTANCE,
++        WIDTH,
++        HEIGHT,
++    );
+ 
+     // ------------------------------------------------------------
+     // Построение SVG
+@@ -272,8 +285,8 @@ fn main() {
+         .set("viewBox", "0 0 10 10")
+         .set("refX", "10")
+         .set("refY", "5")
+-        .set("markerWidth", "8")
+-        .set("markerHeight", "8")
++        .set("markerWidth", ARROW_SIZE)
++        .set("markerHeight", ARROW_SIZE)
+         .set("orient", "auto")
+         .add(
+             Path::new()
+@@ -348,4 +361,3 @@ fn main() {
+     svg::save("graph.svg", &document).expect("Не удалось сохранить SVG");
+     println!("Граф оптимизирован и сохранён в graph.svg");
+ }
+-

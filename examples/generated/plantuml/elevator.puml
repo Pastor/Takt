@@ -10,12 +10,12 @@ End --> [*]
 
 state Engine {
     [*] --> Idle
-    MovingUp --> DoorOpening
+    DoorOpening --> Idle
     DoorClosing --> Idle
     DoorClosing --> MovingUp
     DoorClosing --> MovingDown
     Idle --> DoorClosing
-    DoorOpening --> Idle
+    MovingUp --> DoorOpening
     MovingDown --> DoorOpening
 }
 

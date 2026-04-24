@@ -1,0 +1,36 @@
+--- grammar/src/bin/snapshot.rs.orig
++++ grammar/src/bin/snapshot.rs
+@@ -1,5 +1,5 @@
+ use svg::Document;
+-use svg::node::element::{Circle, Definitions, Element, Path};
++use svg::node::element::{Circle, Definitions, Marker, Path};
+ 
+ fn main() {
+     let mut document = Document::new()
+@@ -7,7 +7,7 @@
+         .set("xmlns", "http://www.w3.org/2000/svg");
+ 
+     // ---------- маркер-стрелка ----------
+-    let marker = Element::new("marker")
++    let marker = Marker::new()
+         .set("id", "arrow")
+         .set("viewBox", "0 0 10 10") // координаты внутри маркера
+         .set("refX", "10") // остриё стрелки будет в (10, 5)
+@@ -16,7 +16,7 @@
+         .set("markerHeight", "8")
+         .set("orient", "auto") // автоматически поворачивать по направлению линии
+         .add(
+-            Element::new("path")
++            Path::new()
+                 .set("d", "M 0 0 L 10 5 L 0 10 z") // треугольник
+                 .set("fill", "black"),
+         );
+@@ -25,7 +25,7 @@
+ 
+     // ---------- кружки ----------
+     // кортежи: (cx, cy, радиус, цвет)
+-    let circles = vec![
++    let circles: Vec<(f64, f64, f64, &str)> = vec![
+         (100.0, 150.0, 30.0, "lightblue"),
+         (250.0, 80.0, 25.0, "lightgreen"),
+         (400.0, 150.0, 35.0, "lightcoral"),
