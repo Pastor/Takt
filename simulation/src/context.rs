@@ -29,12 +29,19 @@ mod tests {
     fn make_name(state: &str) -> Name {
         let (ast, _) = parse(&format!("start {};", state), 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
-        Map::create(model).unwrap().states().into_iter().next().unwrap()
+        Map::create(model)
+            .unwrap()
+            .states()
+            .into_iter()
+            .next()
+            .unwrap()
     }
 
     #[test]
     fn test_context_not_found() {
-        let ctx = MockContext { vars: HashMap::new() };
+        let ctx = MockContext {
+            vars: HashMap::new(),
+        };
         assert!(ctx.get_variable(&make_name("S")).is_none());
     }
 
@@ -53,7 +60,10 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert(name.clone(), Value::Boolean(false));
         let ctx = MockContext { vars };
-        assert!(matches!(ctx.get_variable(&name), Some(Value::Boolean(false))));
+        assert!(matches!(
+            ctx.get_variable(&name),
+            Some(Value::Boolean(false))
+        ));
     }
 
     #[test]

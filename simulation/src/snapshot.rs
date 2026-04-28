@@ -39,7 +39,12 @@ mod tests {
     fn make_name(state: &str) -> Name {
         let (ast, _) = parse(&format!("start {};", state), 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
-        Map::create(model).unwrap().states().into_iter().next().unwrap()
+        Map::create(model)
+            .unwrap()
+            .states()
+            .into_iter()
+            .next()
+            .unwrap()
     }
 
     /// Создаёт пустой `Snapshot` без переменных и без родителя.
@@ -94,7 +99,10 @@ mod tests {
     fn test_found_boolean() {
         let name = make_name("S");
         let snap = with_var(name.clone(), name.clone(), Value::Boolean(true));
-        assert!(matches!(snap.get_variable(&name), Some(Value::Boolean(true))));
+        assert!(matches!(
+            snap.get_variable(&name),
+            Some(Value::Boolean(true))
+        ));
     }
 
     #[test]
@@ -127,7 +135,11 @@ mod tests {
         let s = make_name("S");
         let t = make_name("T");
         // parent хранит T=99, child не хранит T
-        let parent = Rc::new(RefCell::new(with_var(s.clone(), t.clone(), Value::Number(99))));
+        let parent = Rc::new(RefCell::new(with_var(
+            s.clone(),
+            t.clone(),
+            Value::Number(99),
+        )));
         let child = Snapshot {
             upper: Some(parent),
             states: HashMap::new(),
@@ -143,7 +155,11 @@ mod tests {
         let s = make_name("S");
         let t = make_name("T");
         // parent: T=1, child: T=99 — локальное значение перекрывает
-        let parent = Rc::new(RefCell::new(with_var(s.clone(), t.clone(), Value::Number(1))));
+        let parent = Rc::new(RefCell::new(with_var(
+            s.clone(),
+            t.clone(),
+            Value::Number(1),
+        )));
         let mut child_vars = HashMap::new();
         child_vars.insert(t.clone(), Value::Number(99));
         let child = Snapshot {
@@ -177,7 +193,11 @@ mod tests {
         // grandparent → parent → child: поиск доходит до третьего уровня
         let s = make_name("S");
         let t = make_name("T");
-        let grandparent = Rc::new(RefCell::new(with_var(s.clone(), t.clone(), Value::Number(7))));
+        let grandparent = Rc::new(RefCell::new(with_var(
+            s.clone(),
+            t.clone(),
+            Value::Number(7),
+        )));
         let parent = Rc::new(RefCell::new(Snapshot {
             upper: Some(grandparent),
             states: HashMap::new(),

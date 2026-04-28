@@ -40,7 +40,12 @@ mod tests {
     fn make_name(state: &str) -> Name {
         let (ast, _) = parse(&format!("start {};", state), 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
-        Map::create(model).unwrap().states().into_iter().next().unwrap()
+        Map::create(model)
+            .unwrap()
+            .states()
+            .into_iter()
+            .next()
+            .unwrap()
     }
 
     /// Заглушка `Execution` для заполнения полей `always`/`exits`/`sequence`.

@@ -49,6 +49,15 @@ mod tests {
     }
 
     #[test]
+    fn test_execute_does_not_panic2() {
+        let mut ctx = MockCtx;
+        let always = AlwaysDone {};
+        always.execute(&mut ctx);
+        let never = NeverDone;
+        never.execute(&mut ctx);
+    }
+
+    #[test]
     fn test_execute_does_not_panic() {
         let mut ctx = MockCtx;
         AlwaysDone.execute(&mut ctx);
