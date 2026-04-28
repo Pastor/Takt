@@ -13,6 +13,15 @@
 //! let model = construct_model(&ast, None, &[]).unwrap();
 //! let map = Map::create(model).unwrap();
 //! ```
+// Крейт находится в стадии разработки: модули объявлены, но ещё не задействованы.
+#![allow(dead_code)]
+
+mod context;
+mod execution;
+mod predicate;
+mod snapshot;
+mod state;
+mod value;
 
 #[cfg(test)]
 mod tests {
