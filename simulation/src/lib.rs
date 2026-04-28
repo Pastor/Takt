@@ -14,7 +14,6 @@
 //! let map = Map::create(model).unwrap();
 //! ```
 // Крейт находится в стадии разработки: модули объявлены, но ещё не задействованы.
-#![allow(dead_code)]
 
 mod context;
 mod execution;

@@ -11,11 +11,10 @@ pub(crate) trait Execution {
 mod tests {
     use super::*;
     use crate::value::Value;
-    use grammar::semantic::minimap::Name;
 
     struct MockCtx;
     impl Context for MockCtx {
-        fn get_variable(&self, _: &Name) -> Option<Value> {
+        fn get_variable(&self, _: &str) -> Option<Value> {
             None
         }
     }
