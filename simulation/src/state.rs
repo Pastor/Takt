@@ -63,9 +63,7 @@ impl Machine {
     fn exit(&mut self) {
         // Временно забираем exits, чтобы освободить заимствование self для замыканий
         let exits = match self {
-            Machine::Plain { exits, .. } | Machine::Extend { exits, .. } => {
-                std::mem::take(exits)
-            }
+            Machine::Plain { exits, .. } | Machine::Extend { exits, .. } => std::mem::take(exits),
         };
         for f in &exits {
             f(self as &mut dyn Context);
@@ -96,7 +94,10 @@ impl Machine {
 
         // Тикаем текущее вложенное состояние; RefMut освобождается в конце блока
         let result = {
-            let Machine::Plain { current, states, .. } = &mut *self else {
+            let Machine::Plain {
+                current, states, ..
+            } = &mut *self
+            else {
                 unreachable!()
             };
             let Some(state) = states.get(current.as_str()) else {
@@ -130,7 +131,10 @@ impl Machine {
         };
 
         // Переход: выходим из текущего, меняем current, входим в новое
-        let Machine::Plain { current, states, .. } = &mut *self else {
+        let Machine::Plain {
+            current, states, ..
+        } = &mut *self
+        else {
             unreachable!()
         };
         let cur = current.clone();
@@ -485,9 +489,8 @@ mod tests {
     #[test]
     fn test_transition_predicate_reads_variable() {
         // Переход срабатывает когда переменная "ready" == Number(1)
-        let pred: Predicate = Box::new(|ctx| {
-            matches!(ctx.get_value("ready"), Some(Value::Number(1)))
-        });
+        let pred: Predicate =
+            Box::new(|ctx| matches!(ctx.get_value("ready"), Some(Value::Number(1))));
 
         let mut vars = HashMap::new();
         vars.insert("ready".to_string(), Value::Number(1));
