@@ -4,7 +4,6 @@ use crate::predicate::create_predicate;
 pub(crate) type Predicate = Rc<dyn Fn(&dyn Context) -> bool>;
 pub(crate) type Execution = Box<dyn Fn(&mut dyn Context)>;
 
-use crate::unit::Transition::Final;
 use crate::value::Value;
 use grammar::diagnostics::{Diagnostic, Location};
 use grammar::semantic::extend::Extend;
@@ -22,9 +21,9 @@ enum Transition {
 
 /// Unit — исполняемая единица симуляции.
 ///
-/// Каждый вариант соответствует одному из структурных паттернов:
-/// - [`Plain`](Unit::Plain) — конечный автомат с состояниями и переходами;
-/// - [`Extend`](Unit::Extend) — листовое состояние (tick всегда возвращает Goto);
+/// Варианты:
+/// - [`Plain`](Unit::Plain) — конечный автомат; `states.is_empty()` означает
+///   листовое состояние (tick возвращает Goto без делегирования);
 /// - [`Parallel`](Unit::Parallel) — параллельная композиция;
 /// - [`Sequence`](Unit::Sequence) — последовательная композиция.
 ///
@@ -46,15 +45,6 @@ pub(crate) enum Unit {
         enters: Vec<Execution>,
         exits: Vec<Execution>,
 
-        variables: HashMap<String, Value>,
-    },
-    /// Листовое состояние: tick() немедленно возвращает Goto.
-    /// always не вызывается, enter/exit — вызываются при входе/выходе.
-    Extend {
-        upper: Option<Rc<RefCell<Unit>>>,
-        always: Vec<Execution>,
-        enters: Vec<Execution>,
-        exits: Vec<Execution>,
         variables: HashMap<String, Value>,
     },
     /// Параллельная композиция: все дочерние Unit тикаются одновременно.
@@ -151,26 +141,15 @@ fn from_state_node(state: &StateNode) -> Result<Unit, Diagnostic> {
             Location::Builtin,
             "Неразрешённое состояние".to_string(),
         )),
-        StateNode::Simple { .. } => Ok(Unit::Extend {
-            upper: None,
-            always: vec![],
-            enters: vec![],
-            exits: vec![],
-            variables: HashMap::new(),
-        }),
+        // Простое состояние = листовой Plain (states пуст → tick вернёт Goto)
+        StateNode::Simple { .. } => Ok(leaf_plain()),
         StateNode::Implement { implements, .. } => from_extend(implements),
     }
 }
 
 fn from_extend(extend: &Extend) -> Result<Unit, Diagnostic> {
     match extend {
-        Extend::None | Extend::Unresolved(_) => Ok(Unit::Extend {
-            upper: None,
-            always: vec![],
-            enters: vec![],
-            exits: vec![],
-            variables: HashMap::new(),
-        }),
+        Extend::None | Extend::Unresolved(_) => Ok(leaf_plain()),
         Extend::Model(model) => {
             let borrowed = model.borrow();
             if borrowed.has_states() {
@@ -201,6 +180,21 @@ fn from_extend(extend: &Extend) -> Result<Unit, Diagnostic> {
     }
 }
 
+/// Листовой Plain: пустой states → tick() вернёт Goto.
+fn leaf_plain() -> Unit {
+    Unit::Plain {
+        upper: None,
+        transitions: vec![],
+        state_transitions: HashMap::new(),
+        states: HashMap::new(),
+        current: String::new(),
+        always: vec![],
+        enters: vec![],
+        exits: vec![],
+        variables: HashMap::new(),
+    }
+}
+
 /// Клонирует предикаты заданного состояния из таблицы переходов в активный список.
 fn make_transitions(
     map: &HashMap<String, Vec<(String, Predicate)>>,
@@ -222,7 +216,6 @@ impl Context for Unit {
     fn get_value(&self, name: &str) -> Option<Value> {
         let result = match self {
             Unit::Plain { variables, .. } => variables.get(name).cloned(),
-            Unit::Extend { variables, .. } => variables.get(name).cloned(),
             Unit::Parallel { units, .. } | Unit::Sequence { units, .. } => {
                 units.iter().flat_map(|u| u.borrow().get_value(name)).next()
             }
@@ -230,7 +223,6 @@ impl Context for Unit {
         result.or_else(|| {
             let upper = match self {
                 Unit::Plain { upper, .. }
-                | Unit::Extend { upper, .. }
                 | Unit::Parallel { upper, .. }
                 | Unit::Sequence { upper, .. } => upper.as_ref().map(|u| &**u),
             };
@@ -243,7 +235,6 @@ impl Unit {
     fn enter(&mut self) {
         let enters = match self {
             Unit::Plain { enters, .. } => std::mem::take(enters),
-            Unit::Extend { enters, .. } => std::mem::take(enters),
             Unit::Parallel { units, .. } => {
                 units.iter().for_each(|u| u.borrow_mut().enter());
                 return;
@@ -258,7 +249,6 @@ impl Unit {
         }
         match self {
             Unit::Plain { enters: e, .. } => *e = enters,
-            Unit::Extend { enters: e, .. } => *e = enters,
             Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
         }
     }
@@ -266,7 +256,6 @@ impl Unit {
     fn exit(&mut self) {
         let exits = match self {
             Unit::Plain { exits, .. } => std::mem::take(exits),
-            Unit::Extend { exits, .. } => std::mem::take(exits),
             Unit::Parallel { units, .. } => {
                 units.iter().for_each(|u| u.borrow_mut().exit());
                 return;
@@ -281,29 +270,23 @@ impl Unit {
         }
         match self {
             Unit::Plain { exits: e, .. } => *e = exits,
-            Unit::Extend { exits: e, .. } => *e = exits,
             Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
         }
     }
 
     fn tick(&mut self) -> Result<Transition, Diagnostic> {
-        // Листовое состояние: немедленный Goto, always не вызывается
-        if matches!(self, Unit::Extend { .. }) {
-            return Ok(Transition::Goto);
-        }
-
         if let Unit::Parallel { units, .. } = self {
             if units
                 .iter()
                 .map(|u| u.borrow_mut().tick())
-                .all(|ret| ret.is_ok_and(|v| v == Final))
+                .all(|ret| ret.is_ok_and(|v| v == Transition::Final))
             {
                 return Ok(Transition::Final);
             }
             return Ok(Transition::Processing);
         } else if let Unit::Sequence { units, index, .. } = self {
             let result = units[*index].borrow_mut().tick()?;
-            if result == Final {
+            if result == Transition::Final {
                 if *index + 1 >= units.len() {
                     return Ok(Transition::Final);
                 }
@@ -318,14 +301,14 @@ impl Unit {
         // Временно забираем always, вызываем и возвращаем обратно
         let always = match self {
             Unit::Plain { always, .. } => std::mem::take(always),
-            _ => unreachable!(),
+            Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
         };
         for f in &always {
             f(self as &mut dyn Context);
         }
         match self {
             Unit::Plain { always: a, .. } => *a = always,
-            _ => unreachable!(),
+            Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
         }
 
         // Тикаем текущее вложенное состояние
@@ -336,6 +319,11 @@ impl Unit {
             else {
                 unreachable!()
             };
+            // Пустой states → листовое состояние: сигнализируем Goto
+            if states.is_empty() {
+                return Ok(Transition::Goto);
+            }
+            // Текущее состояние не найдено → конечное состояние (Final)
             let Some(state) = states.get(current.as_str()) else {
                 return Ok(Transition::Final);
             };
@@ -351,7 +339,7 @@ impl Unit {
         // Временно забираем transitions; предикаты читают self через &dyn Context
         let transitions = match self {
             Unit::Plain { transitions, .. } => std::mem::take(transitions),
-            _ => unreachable!(),
+            Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
         };
         let next_name = transitions
             .iter()
@@ -359,7 +347,7 @@ impl Unit {
             .map(|(name, _)| name.clone());
         match self {
             Unit::Plain { transitions: t, .. } => *t = transitions,
-            _ => unreachable!(),
+            Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
         }
 
         let Some(next) = next_name else {
@@ -416,21 +404,15 @@ mod tests {
         (count, Box::new(move |_| c.set(c.get() + 1)))
     }
 
-    /// Создаёт Unit::Extend без действий.
-    fn extend() -> Unit {
-        Unit::Extend {
-            upper: None,
-            always: vec![],
-            enters: vec![],
-            exits: vec![],
-            variables: HashMap::new(),
-        }
+    /// Листовой Plain: states пуст, tick() возвращает Goto.
+    fn leaf() -> Unit {
+        leaf_plain()
     }
 
-    /// Создаёт Unit::Plain с одним дочерним Extend-состоянием и заданными переходами.
-    fn plain_with_extend(name: &str, transitions: Vec<(String, Predicate)>) -> Unit {
+    /// Создаёт Unit::Plain с одним дочерним листовым состоянием и заданными переходами.
+    fn plain_with_leaf(name: &str, transitions: Vec<(String, Predicate)>) -> Unit {
         let mut states = HashMap::new();
-        states.insert(name.to_string(), RefCell::new(extend()));
+        states.insert(name.to_string(), RefCell::new(leaf()));
         Unit::Plain {
             upper: None,
             transitions,
@@ -444,19 +426,23 @@ mod tests {
         }
     }
 
-    // ── Unit::Extend ──────────────────────────────────────────────────────────
+    // ── Листовой Plain (states пуст) ──────────────────────────────────────────
 
     #[test]
-    fn test_extend_tick_returns_goto() {
-        let mut m = extend();
+    fn test_leaf_tick_returns_goto() {
+        let mut m = leaf();
         assert!(matches!(m.tick().unwrap(), Transition::Goto));
     }
 
     #[test]
-    fn test_extend_enter_calls_enters() {
+    fn test_leaf_enter_calls_enters() {
         let (count, exec) = call_counter();
-        let mut m = Unit::Extend {
+        let mut m = Unit::Plain {
             upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
             always: vec![],
             enters: vec![exec],
             exits: vec![],
@@ -467,10 +453,14 @@ mod tests {
     }
 
     #[test]
-    fn test_extend_exit_calls_exits() {
+    fn test_leaf_exit_calls_exits() {
         let (count, exec) = call_counter();
-        let mut m = Unit::Extend {
+        let mut m = Unit::Plain {
             upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
             always: vec![],
             enters: vec![],
             exits: vec![exec],
@@ -481,22 +471,45 @@ mod tests {
     }
 
     #[test]
-    fn test_extend_enter_exit_empty_do_not_panic() {
-        let mut m = extend();
+    fn test_leaf_enter_exit_empty_do_not_panic() {
+        let mut m = leaf();
         m.enter();
         m.exit();
     }
 
-    // ── Unit::Plain: отсутствующее текущее состояние ─────────────────────────
+    #[test]
+    fn test_leaf_always_called_on_tick() {
+        // У листового Plain always вызывается при каждом tick (до проверки states.is_empty)
+        let (count, exec) = call_counter();
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![exec],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        m.tick().unwrap();
+        m.tick().unwrap();
+        assert_eq!(count.get(), 2);
+    }
+
+    // ── Unit::Plain: конечное состояние ──────────────────────────────────────
 
     #[test]
     fn test_plain_missing_current_state_returns_final() {
+        // states непуст, но current не совпадает ни с одним ключом → Final
+        let mut states = HashMap::new();
+        states.insert("B".to_string(), RefCell::new(leaf()));
         let mut m = Unit::Plain {
             upper: None,
-            transitions: vec![("B".to_string(), always_true())],
+            transitions: vec![],
             state_transitions: HashMap::new(),
-            states: HashMap::new(),
-            current: "A".to_string(),
+            states,
+            current: "A".to_string(), // нет в states
             always: vec![],
             enters: vec![],
             exits: vec![],
@@ -511,7 +524,7 @@ mod tests {
     fn test_plain_always_called_each_tick() {
         let (count, exec) = call_counter();
         let mut states = HashMap::new();
-        states.insert("S".to_string(), RefCell::new(extend()));
+        states.insert("S".to_string(), RefCell::new(leaf()));
         let mut m = Unit::Plain {
             upper: None,
             transitions: vec![],
@@ -528,17 +541,17 @@ mod tests {
         assert_eq!(count.get(), 2);
     }
 
-    // ── Unit::Plain: дочерний Extend (Goto) ──────────────────────────────────
+    // ── Unit::Plain: дочерний leaf (Goto) ─────────────────────────────────────
 
     #[test]
     fn test_plain_child_goto_no_transitions_returns_goto() {
-        let mut m = plain_with_extend("S", vec![]);
+        let mut m = plain_with_leaf("S", vec![]);
         assert!(matches!(m.tick().unwrap(), Transition::Goto));
     }
 
     #[test]
     fn test_plain_child_goto_false_predicate_returns_goto() {
-        let mut m = plain_with_extend("S", vec![("T".to_string(), always_false())]);
+        let mut m = plain_with_leaf("S", vec![("T".to_string(), always_false())]);
         assert!(matches!(m.tick().unwrap(), Transition::Goto));
     }
 
@@ -546,18 +559,18 @@ mod tests {
 
     #[test]
     fn test_plain_transition_fires_returns_processing() {
-        let mut m = plain_with_extend("S", vec![("T".to_string(), always_true())]);
+        let mut m = plain_with_leaf("S", vec![("T".to_string(), always_true())]);
         if let Unit::Plain { states, .. } = &mut m {
-            states.insert("T".to_string(), RefCell::new(extend()));
+            states.insert("T".to_string(), RefCell::new(leaf()));
         }
         assert!(matches!(m.tick().unwrap(), Transition::Processing));
     }
 
     #[test]
     fn test_plain_transition_fires_updates_current() {
-        let mut m = plain_with_extend("S", vec![("T".to_string(), always_true())]);
+        let mut m = plain_with_leaf("S", vec![("T".to_string(), always_true())]);
         if let Unit::Plain { states, .. } = &mut m {
-            states.insert("T".to_string(), RefCell::new(extend()));
+            states.insert("T".to_string(), RefCell::new(leaf()));
         }
         m.tick().unwrap();
         if let Unit::Plain { current, .. } = &m {
@@ -573,10 +586,10 @@ mod tests {
             ("T".to_string(), always_false()),
             ("U".to_string(), always_true()),
         ];
-        let mut m = plain_with_extend("S", transitions);
+        let mut m = plain_with_leaf("S", transitions);
         if let Unit::Plain { states, .. } = &mut m {
-            states.insert("T".to_string(), RefCell::new(extend()));
-            states.insert("U".to_string(), RefCell::new(extend()));
+            states.insert("T".to_string(), RefCell::new(leaf()));
+            states.insert("U".to_string(), RefCell::new(leaf()));
         }
         m.tick().unwrap();
         if let Unit::Plain { current, .. } = &m {
@@ -588,7 +601,7 @@ mod tests {
 
     #[test]
     fn test_plain_transition_target_missing_returns_error() {
-        let mut m = plain_with_extend("S", vec![("MISSING".to_string(), always_true())]);
+        let mut m = plain_with_leaf("S", vec![("MISSING".to_string(), always_true())]);
         assert!(m.tick().is_err());
     }
 
@@ -602,8 +615,12 @@ mod tests {
         let mut states: HashMap<String, RefCell<Unit>> = HashMap::new();
         states.insert(
             "S".to_string(),
-            RefCell::new(Unit::Extend {
+            RefCell::new(Unit::Plain {
                 upper: None,
+                transitions: vec![],
+                state_transitions: HashMap::new(),
+                states: HashMap::new(),
+                current: String::new(),
                 always: vec![],
                 enters: vec![],
                 exits: vec![exit_exec],
@@ -612,8 +629,12 @@ mod tests {
         );
         states.insert(
             "T".to_string(),
-            RefCell::new(Unit::Extend {
+            RefCell::new(Unit::Plain {
                 upper: None,
+                transitions: vec![],
+                state_transitions: HashMap::new(),
+                states: HashMap::new(),
+                current: String::new(),
                 always: vec![],
                 enters: vec![enter_exec],
                 exits: vec![],
@@ -642,11 +663,14 @@ mod tests {
 
     #[test]
     fn test_plain_child_final_propagates_without_checking_transitions() {
+        // Внутренний Plain с непустым states, но current не найден → Final
+        let mut inner_states = HashMap::new();
+        inner_states.insert("X".to_string(), RefCell::new(leaf()));
         let inner = Unit::Plain {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
-            states: HashMap::new(),
+            states: inner_states,
             current: "MISSING".to_string(),
             always: vec![],
             enters: vec![],
@@ -674,8 +698,8 @@ mod tests {
     #[test]
     fn test_plain_child_processing_propagates() {
         let mut inner_states = HashMap::new();
-        inner_states.insert("inner_s".to_string(), RefCell::new(extend()));
-        inner_states.insert("inner_t".to_string(), RefCell::new(extend()));
+        inner_states.insert("inner_s".to_string(), RefCell::new(leaf()));
+        inner_states.insert("inner_t".to_string(), RefCell::new(leaf()));
         let inner = Unit::Plain {
             upper: None,
             transitions: vec![("inner_t".to_string(), always_true())],
@@ -715,7 +739,7 @@ mod tests {
             transitions: vec![],
             state_transitions: HashMap::new(),
             states: HashMap::new(),
-            current: "S".to_string(),
+            current: String::new(),
             always: vec![],
             enters: vec![],
             exits: vec![],
@@ -725,22 +749,8 @@ mod tests {
     }
 
     #[test]
-    fn test_extend_get_value_returns_variable() {
-        let mut vars = HashMap::new();
-        vars.insert("flag".to_string(), Value::Boolean(true));
-        let m = Unit::Extend {
-            upper: None,
-            always: vec![],
-            enters: vec![],
-            exits: vec![],
-            variables: vars,
-        };
-        assert!(matches!(m.get_value("flag"), Some(Value::Boolean(true))));
-    }
-
-    #[test]
     fn test_get_value_missing_returns_none() {
-        let m = extend();
+        let m = leaf();
         assert!(m.get_value("unknown").is_none());
     }
 
@@ -755,8 +765,8 @@ mod tests {
         vars.insert("ready".to_string(), Value::Number(1));
 
         let mut states = HashMap::new();
-        states.insert("S".to_string(), RefCell::new(extend()));
-        states.insert("T".to_string(), RefCell::new(extend()));
+        states.insert("S".to_string(), RefCell::new(leaf()));
+        states.insert("T".to_string(), RefCell::new(leaf()));
 
         let mut m = Unit::Plain {
             upper: None,
@@ -782,7 +792,7 @@ mod tests {
 
     #[test]
     fn test_plain_enter_exit_do_not_panic() {
-        let mut m = plain_with_extend("S", vec![]);
+        let mut m = plain_with_leaf("S", vec![]);
         m.enter();
         m.exit();
     }
@@ -790,18 +800,26 @@ mod tests {
     // ── Context: делегирование к родителю через upper ────────────────────────
 
     #[test]
-    fn test_get_value_delegates_to_upper_extend() {
+    fn test_get_value_delegates_to_upper() {
         let mut parent_vars = HashMap::new();
         parent_vars.insert("x".to_string(), Value::Number(99));
-        let parent = Rc::new(RefCell::new(Unit::Extend {
+        let parent = Rc::new(RefCell::new(Unit::Plain {
             upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
             always: vec![],
             enters: vec![],
             exits: vec![],
             variables: parent_vars,
         }));
-        let child = Unit::Extend {
+        let child = Unit::Plain {
             upper: Some(parent),
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
             always: vec![],
             enters: vec![],
             exits: vec![],
@@ -814,8 +832,12 @@ mod tests {
     fn test_get_value_local_shadows_upper() {
         let mut parent_vars = HashMap::new();
         parent_vars.insert("x".to_string(), Value::Number(1));
-        let parent = Rc::new(RefCell::new(Unit::Extend {
+        let parent = Rc::new(RefCell::new(Unit::Plain {
             upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
             always: vec![],
             enters: vec![],
             exits: vec![],
@@ -823,8 +845,12 @@ mod tests {
         }));
         let mut child_vars = HashMap::new();
         child_vars.insert("x".to_string(), Value::Number(42));
-        let child = Unit::Extend {
+        let child = Unit::Plain {
             upper: Some(parent),
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
             always: vec![],
             enters: vec![],
             exits: vec![],
@@ -845,7 +871,7 @@ mod tests {
             transitions: vec![],
             state_transitions: HashMap::new(),
             states: HashMap::new(),
-            current: "S".to_string(),
+            current: String::new(),
             always: vec![],
             enters: vec![e1, e2, e3],
             exits: vec![],
@@ -866,7 +892,7 @@ mod tests {
             transitions: vec![],
             state_transitions: HashMap::new(),
             states: HashMap::new(),
-            current: "S".to_string(),
+            current: String::new(),
             always: vec![],
             enters: vec![],
             exits: vec![e1, e2],
@@ -882,7 +908,7 @@ mod tests {
         let (c1, e1) = call_counter();
         let (c2, e2) = call_counter();
         let mut states = HashMap::new();
-        states.insert("S".to_string(), RefCell::new(extend()));
+        states.insert("S".to_string(), RefCell::new(leaf()));
         let mut m = Unit::Plain {
             upper: None,
             transitions: vec![],
@@ -900,22 +926,6 @@ mod tests {
         assert_eq!(c2.get(), 2);
     }
 
-    #[test]
-    fn test_extend_always_never_called_on_tick() {
-        // Extend.always никогда не выполняется: tick() возвращает Goto немедленно
-        let (count, exec) = call_counter();
-        let mut m = Unit::Extend {
-            upper: None,
-            always: vec![exec],
-            enters: vec![],
-            exits: vec![],
-            variables: HashMap::new(),
-        };
-        m.tick().unwrap();
-        m.tick().unwrap();
-        assert_eq!(count.get(), 0);
-    }
-
     // ── from_model: построение из семантической модели ───────────────────────
 
     use grammar::parse;
@@ -924,19 +934,16 @@ mod tests {
     /// Двусостояниная FSM: A → B (безусловный переход).
     #[test]
     fn test_from_model_two_state_fsm() {
-        // start A { ref B; } — состояние A с безусловным переходом в B
         let src = "start A { ref B; } state B;";
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
         let mut unit = from_model(model).unwrap();
 
-        // Начальное состояние — A
         let Unit::Plain { current, .. } = &unit else {
             panic!("ожидался Unit::Plain");
         };
         assert_eq!(current, "A");
 
-        // После одного тика — переход в B (безусловный)
         let result = unit.tick().unwrap();
         assert!(matches!(result, Transition::Processing));
         let Unit::Plain { current, .. } = &unit else {
@@ -954,7 +961,6 @@ mod tests {
         let mut unit = from_model(model).unwrap();
 
         unit.tick().unwrap(); // A → B
-        // В B нет переходов → Goto
         let result = unit.tick().unwrap();
         assert!(matches!(result, Transition::Goto));
     }
@@ -965,9 +971,6 @@ mod tests {
         let src = "model A { start S; } model B { start S; } start Entry = A + B;";
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
-        let entry = model.borrow().search_model("A").unwrap(); // использован для проверки
-        let _ = entry;
-
         let root = model.borrow();
         let entry_state = root.search_state("Entry").unwrap();
         let state_node = entry_state.borrow();
@@ -996,7 +999,7 @@ mod tests {
         }
     }
 
-    /// Копии при повторном использовании: A + A → Sequence из двух независимых Unit.
+    /// Копии при повторном использовании: A + A → два независимых Unit.
     #[test]
     fn test_from_model_copies_are_independent() {
         let src = "model A { start S; } start Entry = A + A;";
@@ -1007,12 +1010,10 @@ mod tests {
         let state_node = entry_state.borrow();
         if let StateNode::Implement { implements, .. } = &*state_node {
             let unit = from_extend(implements).unwrap();
-            // Должны быть ДВЕ отдельные копии в Sequence
             let Unit::Sequence { units, .. } = &unit else {
                 panic!("ожидался Unit::Sequence");
             };
             assert_eq!(units.len(), 2);
-            // Убеждаемся, что это разные Rc (независимые копии)
             assert!(!Rc::ptr_eq(&units[0], &units[1]));
         } else {
             panic!("Entry должен быть StateNode::Implement");
@@ -1022,25 +1023,19 @@ mod tests {
     /// state_transitions обновляются при смене состояния.
     #[test]
     fn test_state_transitions_updated_on_change() {
-        // Три состояния: A → B (всегда), B → C (всегда)
         let src = "start A { ref B; } state B { ref C; } state C;";
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
         let mut unit = from_model(model).unwrap();
 
         unit.tick().unwrap(); // A → B
-        let Unit::Plain { current, .. } = &unit else {
-            panic!()
-        };
+        let Unit::Plain { current, .. } = &unit else { panic!() };
         assert_eq!(current, "B");
 
         unit.tick().unwrap(); // B → C
-        let Unit::Plain { current, .. } = &unit else {
-            panic!()
-        };
+        let Unit::Plain { current, .. } = &unit else { panic!() };
         assert_eq!(current, "C");
 
-        // В C нет переходов → Goto
         assert!(matches!(unit.tick().unwrap(), Transition::Goto));
     }
 }

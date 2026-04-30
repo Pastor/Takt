@@ -1,5 +1,5 @@
 use crate::context::Context;
-use crate::state::Predicate;
+use crate::unit::Predicate;
 use crate::value::Value;
 use grammar::semantic::minimap::Name;
 use std::cell::RefCell;
