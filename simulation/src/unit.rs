@@ -7,7 +7,7 @@ pub(crate) type Execution = Box<dyn Fn(&mut dyn Context)>;
 use crate::value::Value;
 use grammar::diagnostics::{Diagnostic, Location};
 use grammar::semantic::extend::Extend;
-use grammar::semantic::{ConditionNode, ModelNode, StateNode, StateNodeKind};
+use grammar::semantic::{ConditionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -38,6 +38,9 @@ pub(crate) enum Unit {
         /// Переходы каждого состояния: имя → [(цель, предикат)].
         /// При смене состояния `transitions` обновляется из этой таблицы.
         state_transitions: HashMap<String, Vec<(String, Predicate)>>,
+        /// Безусловный next-переход для состояний с расширением: имя → цель.
+        /// Срабатывает когда дочерний Unit вернул Final.
+        state_nexts: HashMap<String, String>,
         states: HashMap<String, RefCell<Unit>>,
         current: String,
 
@@ -51,12 +54,14 @@ pub(crate) enum Unit {
     Parallel {
         upper: Option<Rc<RefCell<Unit>>>,
         units: Vec<Rc<RefCell<Unit>>>,
+        next: Option<String>,
     },
     /// Последовательная композиция: дочерние Unit выполняются по очереди.
     Sequence {
         upper: Option<Rc<RefCell<Unit>>>,
         units: Vec<Rc<RefCell<Unit>>>,
         index: usize,
+        next: Option<String>,
     },
 }
 
@@ -72,7 +77,7 @@ pub(crate) fn from_model(model: Rc<RefCell<ModelNode>>) -> Result<Unit, Diagnost
     if borrowed.has_states() {
         from_model_plain(&borrowed)
     } else {
-        from_extend(&borrowed.implements)
+        from_extend(&borrowed.implements, None)
     }
 }
 
@@ -100,6 +105,7 @@ fn from_model_plain(model: &ModelNode) -> Result<Unit, Diagnostic> {
 
     let mut states: HashMap<String, RefCell<Unit>> = HashMap::new();
     let mut state_transitions: HashMap<String, Vec<(String, Predicate)>> = HashMap::new();
+    let mut state_nexts: HashMap<String, String> = HashMap::new();
 
     for (name, state_node) in &model.states {
         let unit = from_state_node(state_node)?;
@@ -118,6 +124,14 @@ fn from_model_plain(model: &ModelNode) -> Result<Unit, Diagnostic> {
             })
             .collect();
         state_transitions.insert(name.clone(), trans);
+
+        if let StateNode::Implement {
+            next: Some(next_ref),
+            ..
+        } = state_node
+        {
+            state_nexts.insert(name.clone(), next_ref.name.clone());
+        }
     }
 
     let transitions = make_transitions(&state_transitions, &start_name);
@@ -126,6 +140,7 @@ fn from_model_plain(model: &ModelNode) -> Result<Unit, Diagnostic> {
         upper: None,
         transitions,
         state_transitions,
+        state_nexts,
         states,
         current: start_name,
         always: vec![],
@@ -143,11 +158,16 @@ fn from_state_node(state: &StateNode) -> Result<Unit, Diagnostic> {
         )),
         // Простое состояние = листовой Plain (states пуст → tick вернёт Goto)
         StateNode::Simple { .. } => Ok(leaf_plain()),
-        StateNode::Implement { implements, .. } => from_extend(implements),
+        StateNode::Implement {
+            implements, next, ..
+        } => from_extend(implements, next.clone()),
     }
 }
 
-fn from_extend(extend: &Extend) -> Result<Unit, Diagnostic> {
+fn from_extend(
+    extend: &Extend,
+    next: Option<ReferenceNode<StateNode>>,
+) -> Result<Unit, Diagnostic> {
     match extend {
         Extend::None | Extend::Unresolved(_) => Ok(leaf_plain()),
         Extend::Model(model) => {
@@ -155,27 +175,32 @@ fn from_extend(extend: &Extend) -> Result<Unit, Diagnostic> {
             if borrowed.has_states() {
                 from_model_plain(&borrowed)
             } else {
-                from_extend(&borrowed.implements)
+                from_extend(&borrowed.implements, None)
             }
         }
-        Extend::Parentless(inner) => from_extend(inner),
+        Extend::Parentless(inner) => from_extend(inner, None),
         Extend::Concatenation(items) => {
             let units: Vec<Rc<RefCell<Unit>>> = items
                 .iter()
-                .map(|item| Ok(Rc::new(RefCell::new(from_extend(item)?))))
+                .map(|item| Ok(Rc::new(RefCell::new(from_extend(item, None)?))))
                 .collect::<Result<_, Diagnostic>>()?;
             Ok(Unit::Sequence {
                 upper: None,
                 units,
                 index: 0,
+                next: next.map(|rf| rf.name.clone()),
             })
         }
         Extend::Parallel(items) => {
             let units: Vec<Rc<RefCell<Unit>>> = items
                 .iter()
-                .map(|item| Ok(Rc::new(RefCell::new(from_extend(item)?))))
+                .map(|item| Ok(Rc::new(RefCell::new(from_extend(item, None)?))))
                 .collect::<Result<_, Diagnostic>>()?;
-            Ok(Unit::Parallel { upper: None, units })
+            Ok(Unit::Parallel {
+                upper: None,
+                units,
+                next: next.map(|rf| rf.name.clone()),
+            })
         }
     }
 }
@@ -186,6 +211,7 @@ fn leaf_plain() -> Unit {
         upper: None,
         transitions: vec![],
         state_transitions: HashMap::new(),
+        state_nexts: HashMap::new(),
         states: HashMap::new(),
         current: String::new(),
         always: vec![],
@@ -276,17 +302,22 @@ impl Unit {
 
     fn tick(&mut self) -> Result<Transition, Diagnostic> {
         if let Unit::Parallel { units, .. } = self {
-            if units
+            // Тикаем все ветви; собираем результаты чтобы не прерывать на первом несовпадении
+            let results: Vec<Transition> = units
                 .iter()
                 .map(|u| u.borrow_mut().tick())
-                .all(|ret| ret.is_ok_and(|v| v == Transition::Final))
+                .collect::<Result<_, _>>()?;
+            if results
+                .iter()
+                .all(|r| matches!(r, Transition::Final | Transition::Goto))
             {
                 return Ok(Transition::Final);
             }
             return Ok(Transition::Processing);
         } else if let Unit::Sequence { units, index, .. } = self {
             let result = units[*index].borrow_mut().tick()?;
-            if result == Transition::Final {
+            // Goto — элемент завершился (листовое состояние); Final — FSM исчерпал состояния
+            if matches!(result, Transition::Goto | Transition::Final) {
                 if *index + 1 >= units.len() {
                     return Ok(Transition::Final);
                 }
@@ -332,7 +363,37 @@ impl Unit {
 
         match result {
             Transition::Processing => return Ok(Transition::Processing),
-            Transition::Final => return Ok(Transition::Final),
+            Transition::Final => {
+                // Проверяем безусловный next-переход состояния с расширением
+                let Unit::Plain {
+                    current,
+                    state_nexts,
+                    states,
+                    transitions,
+                    state_transitions,
+                    ..
+                } = &mut *self
+                else {
+                    unreachable!()
+                };
+                if let Some(next_state) = state_nexts.get(current.as_str()).cloned() {
+                    let cur = current.clone();
+                    if let Some(state) = states.get(cur.as_str()) {
+                        state.borrow_mut().exit();
+                    }
+                    *transitions = make_transitions(state_transitions, &next_state);
+                    *current = next_state.clone();
+                    let next_machine = states.get(next_state.as_str()).ok_or_else(|| {
+                        Diagnostic::error(
+                            Location::Builtin,
+                            format!("Состояние '{}' не найдено", next_state),
+                        )
+                    })?;
+                    next_machine.borrow_mut().enter();
+                    return Ok(Transition::Processing);
+                }
+                return Ok(Transition::Final);
+            }
             Transition::Goto => {}
         }
 
@@ -351,6 +412,34 @@ impl Unit {
         }
 
         let Some(next) = next_name else {
+            // Нет условных переходов — проверяем next-переход состояния с расширением
+            let Unit::Plain {
+                current,
+                state_nexts,
+                states,
+                transitions,
+                state_transitions,
+                ..
+            } = &mut *self
+            else {
+                unreachable!()
+            };
+            if let Some(next_state) = state_nexts.get(current.as_str()).cloned() {
+                let cur = current.clone();
+                if let Some(state) = states.get(cur.as_str()) {
+                    state.borrow_mut().exit();
+                }
+                *transitions = make_transitions(state_transitions, &next_state);
+                *current = next_state.clone();
+                let next_machine = states.get(next_state.as_str()).ok_or_else(|| {
+                    Diagnostic::error(
+                        Location::Builtin,
+                        format!("Состояние '{}' не найдено", next_state),
+                    )
+                })?;
+                next_machine.borrow_mut().enter();
+                return Ok(Transition::Processing);
+            }
             return Ok(Transition::Goto);
         };
 
@@ -417,6 +506,7 @@ mod tests {
             upper: None,
             transitions,
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states,
             current: name.to_string(),
             always: vec![],
@@ -441,6 +531,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: HashMap::new(),
             current: String::new(),
             always: vec![],
@@ -459,6 +550,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: HashMap::new(),
             current: String::new(),
             always: vec![],
@@ -485,6 +577,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: HashMap::new(),
             current: String::new(),
             always: vec![exec],
@@ -508,6 +601,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states,
             current: "A".to_string(), // нет в states
             always: vec![],
@@ -529,6 +623,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states,
             current: "S".to_string(),
             always: vec![exec],
@@ -619,6 +714,7 @@ mod tests {
                 upper: None,
                 transitions: vec![],
                 state_transitions: HashMap::new(),
+                state_nexts: HashMap::new(),
                 states: HashMap::new(),
                 current: String::new(),
                 always: vec![],
@@ -633,6 +729,7 @@ mod tests {
                 upper: None,
                 transitions: vec![],
                 state_transitions: HashMap::new(),
+                state_nexts: HashMap::new(),
                 states: HashMap::new(),
                 current: String::new(),
                 always: vec![],
@@ -646,6 +743,7 @@ mod tests {
             upper: None,
             transitions: vec![("T".to_string(), always_true())],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states,
             current: "S".to_string(),
             always: vec![],
@@ -670,6 +768,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: inner_states,
             current: "MISSING".to_string(),
             always: vec![],
@@ -683,6 +782,7 @@ mod tests {
             upper: None,
             transitions: vec![("T".to_string(), always_true())],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states,
             current: "S".to_string(),
             always: vec![],
@@ -704,6 +804,7 @@ mod tests {
             upper: None,
             transitions: vec![("inner_t".to_string(), always_true())],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: inner_states,
             current: "inner_s".to_string(),
             always: vec![],
@@ -718,6 +819,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: outer_states,
             current: "S".to_string(),
             always: vec![],
@@ -738,6 +840,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: HashMap::new(),
             current: String::new(),
             always: vec![],
@@ -772,6 +875,7 @@ mod tests {
             upper: None,
             transitions: vec![("T".to_string(), pred)],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states,
             current: "S".to_string(),
             always: vec![],
@@ -807,6 +911,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: HashMap::new(),
             current: String::new(),
             always: vec![],
@@ -818,6 +923,7 @@ mod tests {
             upper: Some(parent),
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: HashMap::new(),
             current: String::new(),
             always: vec![],
@@ -836,6 +942,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: HashMap::new(),
             current: String::new(),
             always: vec![],
@@ -849,6 +956,7 @@ mod tests {
             upper: Some(parent),
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: HashMap::new(),
             current: String::new(),
             always: vec![],
@@ -870,6 +978,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: HashMap::new(),
             current: String::new(),
             always: vec![],
@@ -891,6 +1000,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states: HashMap::new(),
             current: String::new(),
             always: vec![],
@@ -913,6 +1023,7 @@ mod tests {
             upper: None,
             transitions: vec![],
             state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
             states,
             current: "S".to_string(),
             always: vec![e1, e2],
@@ -975,7 +1086,7 @@ mod tests {
         let entry_state = root.search_state("Entry").unwrap();
         let state_node = entry_state.borrow();
         if let StateNode::Implement { implements, .. } = &*state_node {
-            let unit = from_extend(implements).unwrap();
+            let unit = from_extend(implements, None).unwrap();
             assert!(matches!(unit, Unit::Sequence { .. }));
         } else {
             panic!("Entry должен быть StateNode::Implement");
@@ -992,7 +1103,7 @@ mod tests {
         let entry_state = root.search_state("Entry").unwrap();
         let state_node = entry_state.borrow();
         if let StateNode::Implement { implements, .. } = &*state_node {
-            let unit = from_extend(implements).unwrap();
+            let unit = from_extend(implements, None).unwrap();
             assert!(matches!(unit, Unit::Parallel { .. }));
         } else {
             panic!("Entry должен быть StateNode::Implement");
@@ -1009,7 +1120,7 @@ mod tests {
         let entry_state = root.search_state("Entry").unwrap();
         let state_node = entry_state.borrow();
         if let StateNode::Implement { implements, .. } = &*state_node {
-            let unit = from_extend(implements).unwrap();
+            let unit = from_extend(implements, None).unwrap();
             let Unit::Sequence { units, .. } = &unit else {
                 panic!("ожидался Unit::Sequence");
             };
@@ -1029,13 +1140,119 @@ mod tests {
         let mut unit = from_model(model).unwrap();
 
         unit.tick().unwrap(); // A → B
-        let Unit::Plain { current, .. } = &unit else { panic!() };
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
         assert_eq!(current, "B");
 
         unit.tick().unwrap(); // B → C
-        let Unit::Plain { current, .. } = &unit else { panic!() };
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
         assert_eq!(current, "C");
 
         assert!(matches!(unit.tick().unwrap(), Transition::Goto));
+    }
+
+    // ── next-переход: безусловный переход после завершения расширения ─────────
+
+    /// Простейший next: состояние с одной моделью переходит в End.
+    #[test]
+    fn test_next_after_single_model() {
+        // S = A { next End; } — после завершения A переходим в End
+        let src = "model A { start Start; } start S = A { next End; } state End;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        let Unit::Plain { current, .. } = &unit else {
+            panic!("ожидался Unit::Plain")
+        };
+        assert_eq!(current, "S");
+
+        // tick: A (листовой) → Goto → next срабатывает → переходим в End
+        let result = unit.tick().unwrap();
+        assert!(
+            matches!(result, Transition::Processing),
+            "ожидался Processing после next-перехода"
+        );
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
+        assert_eq!(current, "End");
+    }
+
+    /// Последовательная композиция с next: S = A + B { next End; }.
+    #[test]
+    fn test_next_after_sequence() {
+        let src =
+            "model A { start Start; } model B { start Start; } start S = A + B { next End; } state End;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
+        assert_eq!(current, "S");
+
+        // tick 1: A листовой → Goto → Sequence переходит к B → Processing
+        unit.tick().unwrap();
+
+        // tick 2: B листовой → Goto → Sequence исчерпан → Final → next → End
+        let result = unit.tick().unwrap();
+        assert!(matches!(result, Transition::Processing));
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
+        assert_eq!(current, "End");
+    }
+
+    /// Параллельная композиция с next: S = A | B { next End; }.
+    #[test]
+    fn test_next_after_parallel() {
+        let src =
+            "model A { start Start; } model B { start Start; } start S = A | B { next End; } state End;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        // tick: оба листовых завершаются → Parallel Final → next → End
+        let result = unit.tick().unwrap();
+        assert!(matches!(result, Transition::Processing));
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
+        assert_eq!(current, "End");
+    }
+
+    /// После перехода в End tick() из листового End возвращает Goto.
+    #[test]
+    fn test_next_target_is_leaf_returns_goto() {
+        let src = "model A { start Start; } start S = A { next End; } state End;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        unit.tick().unwrap(); // S → End через next
+        let result = unit.tick().unwrap(); // End листовой
+        assert!(matches!(result, Transition::Goto));
+    }
+
+    /// Без next: конечный внутренний Final пробрасывается наружу.
+    #[test]
+    fn test_no_next_final_propagates() {
+        let src = "model A { start Start; } start S = A;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        // S не имеет next; A листовой → Goto → нет переходов → Goto (S единственное, нет FSM-переходов)
+        let result = unit.tick().unwrap();
+        assert!(
+            matches!(result, Transition::Goto | Transition::Final),
+            "ожидался Goto или Final, получен {:?}",
+            result
+        );
     }
 }
