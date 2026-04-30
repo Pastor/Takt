@@ -3,6 +3,7 @@ use crate::context::Context;
 pub(crate) type Predicate = Box<dyn Fn(&dyn Context) -> bool>;
 pub(crate) type Execution = Box<dyn Fn(&mut dyn Context)>;
 
+use crate::value::Value;
 use grammar::diagnostics::{Diagnostic, Location};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -22,52 +23,86 @@ enum Machine {
         always: Vec<Execution>,
         enters: Vec<Execution>,
         exits: Vec<Execution>,
+
+        variables: HashMap<String, Value>,
     },
     Extend {
         always: Vec<Execution>,
         enters: Vec<Execution>,
         exits: Vec<Execution>,
+
+        variables: HashMap<String, Value>,
     },
 }
 
+impl Context for Machine {
+    fn get_value(&self, name: &str) -> Option<Value> {
+        match self {
+            Machine::Plain { variables, .. } => variables.get(name).cloned(),
+            Machine::Extend { variables, .. } => variables.get(name).cloned(),
+        }
+    }
+}
+
 impl Machine {
-    fn enter(&mut self, _c: &mut dyn Context) {
+    fn enter(&mut self) {
+        // Временно забираем enters, чтобы освободить заимствование self для замыканий
         let enters = match self {
-            Machine::Plain { enters, .. } => enters,
-            Machine::Extend { enters, .. } => enters,
+            Machine::Plain { enters, .. } | Machine::Extend { enters, .. } => {
+                std::mem::take(enters)
+            }
         };
-        enters.iter().for_each(|f| f(_c));
+        for f in &enters {
+            f(self as &mut dyn Context);
+        }
+        match self {
+            Machine::Plain { enters: e, .. } | Machine::Extend { enters: e, .. } => *e = enters,
+        }
     }
 
-    fn exit(&mut self, _c: &mut dyn Context) {
+    fn exit(&mut self) {
+        // Временно забираем exits, чтобы освободить заимствование self для замыканий
         let exits = match self {
-            Machine::Plain { exits, .. } => exits,
-            Machine::Extend { exits, .. } => exits,
+            Machine::Plain { exits, .. } | Machine::Extend { exits, .. } => {
+                std::mem::take(exits)
+            }
         };
-        exits.iter().for_each(|f| f(_c));
+        for f in &exits {
+            f(self as &mut dyn Context);
+        }
+        match self {
+            Machine::Plain { exits: e, .. } | Machine::Extend { exits: e, .. } => *e = exits,
+        }
     }
 
-    fn tick(&mut self, c: &mut dyn Context) -> Result<Transition, Diagnostic> {
-        let Machine::Plain {
-            transitions,
-            states,
-            current,
-            always,
-            ..
-        } = self
-        else {
-            // Machine::Extend: делегирует другой модели; без подмодели — проверяем переходы
+    fn tick(&mut self) -> Result<Transition, Diagnostic> {
+        // Extend: нет внутренней логики — сигнализируем о готовности к переходам
+        if matches!(self, Machine::Extend { .. }) {
             return Ok(Transition::Goto);
+        }
+
+        // Временно забираем always, вызываем и возвращаем обратно
+        let always = match self {
+            Machine::Plain { always, .. } => std::mem::take(always),
+            Machine::Extend { .. } => unreachable!(),
         };
-        always.iter().for_each(|f| f(c));
+        for f in &always {
+            f(self as &mut dyn Context);
+        }
+        match self {
+            Machine::Plain { always: a, .. } => *a = always,
+            Machine::Extend { .. } => unreachable!(),
+        }
 
         // Тикаем текущее вложенное состояние; RefMut освобождается в конце блока
         let result = {
+            let Machine::Plain { current, states, .. } = &mut *self else {
+                unreachable!()
+            };
             let Some(state) = states.get(current.as_str()) else {
-                // Текущее состояние не найдено — машина завершена
                 return Ok(Transition::Final);
             };
-            state.borrow_mut().tick(c)?
+            state.borrow_mut().tick()?
         };
 
         match result {
@@ -76,29 +111,37 @@ impl Machine {
             Transition::Goto => {}
         }
 
-        // Ищем первый переход, чей предикат истинен
+        // Временно забираем transitions; предикаты читают self через &dyn Context
+        let transitions = match self {
+            Machine::Plain { transitions, .. } => std::mem::take(transitions),
+            Machine::Extend { .. } => unreachable!(),
+        };
         let next_name = transitions
             .iter()
-            .find(|(_, predicate)| predicate(c))
+            .find(|(_, predicate)| predicate(&*self))
             .map(|(name, _)| name.clone());
+        match self {
+            Machine::Plain { transitions: t, .. } => *t = transitions,
+            Machine::Extend { .. } => unreachable!(),
+        }
 
         let Some(next) = next_name else {
             return Ok(Transition::Goto);
         };
 
-        // Выходим из текущего состояния (borrow ограничен блоком)
-        if let Some(state) = states.get(current.as_str()) {
-            state.borrow_mut().exit(c);
+        // Переход: выходим из текущего, меняем current, входим в новое
+        let Machine::Plain { current, states, .. } = &mut *self else {
+            unreachable!()
+        };
+        let cur = current.clone();
+        if let Some(state) = states.get(cur.as_str()) {
+            state.borrow_mut().exit();
         }
-
-        // Обновляем текущее состояние через мутабельную ссылку на поле
         *current = next.clone();
-
-        // Входим в новое состояние
         let next_machine = states.get(next.as_str()).ok_or_else(|| {
             Diagnostic::error(Location::Builtin, "Состояние не найдено".to_string())
         })?;
-        next_machine.borrow_mut().enter(c);
+        next_machine.borrow_mut().enter();
 
         Ok(Transition::Processing)
     }
@@ -107,18 +150,9 @@ impl Machine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::value::Value;
     use std::cell::Cell;
     use std::collections::HashMap;
     use std::rc::Rc;
-
-    struct MockCtx;
-
-    impl Context for MockCtx {
-        fn get_variable(&self, _name: &str) -> Option<Value> {
-            None
-        }
-    }
 
     fn always_true() -> Predicate {
         Box::new(|_| true)
@@ -141,6 +175,7 @@ mod tests {
             always: vec![],
             enters: vec![],
             exits: vec![],
+            variables: HashMap::new(),
         }
     }
 
@@ -155,6 +190,7 @@ mod tests {
             always: vec![],
             enters: vec![],
             exits: vec![],
+            variables: HashMap::new(),
         }
     }
 
@@ -163,7 +199,7 @@ mod tests {
     #[test]
     fn test_extend_tick_returns_goto() {
         let mut m = extend();
-        assert!(matches!(m.tick(&mut MockCtx).unwrap(), Transition::Goto));
+        assert!(matches!(m.tick().unwrap(), Transition::Goto));
     }
 
     #[test]
@@ -173,8 +209,9 @@ mod tests {
             always: vec![],
             enters: vec![exec],
             exits: vec![],
+            variables: HashMap::new(),
         };
-        m.enter(&mut MockCtx);
+        m.enter();
         assert_eq!(count.get(), 1);
     }
 
@@ -185,16 +222,17 @@ mod tests {
             always: vec![],
             enters: vec![],
             exits: vec![exec],
+            variables: HashMap::new(),
         };
-        m.exit(&mut MockCtx);
+        m.exit();
         assert_eq!(count.get(), 1);
     }
 
     #[test]
     fn test_extend_enter_exit_empty_do_not_panic() {
         let mut m = extend();
-        m.enter(&mut MockCtx);
-        m.exit(&mut MockCtx);
+        m.enter();
+        m.exit();
     }
 
     // ── Machine::Plain: отсутствующее текущее состояние ─────────────────────
@@ -208,8 +246,9 @@ mod tests {
             always: vec![],
             enters: vec![],
             exits: vec![],
+            variables: HashMap::new(),
         };
-        assert!(matches!(m.tick(&mut MockCtx).unwrap(), Transition::Final));
+        assert!(matches!(m.tick().unwrap(), Transition::Final));
     }
 
     // ── Machine::Plain: always выполняется каждый тик ───────────────────────
@@ -226,9 +265,10 @@ mod tests {
             always: vec![exec],
             enters: vec![],
             exits: vec![],
+            variables: HashMap::new(),
         };
-        m.tick(&mut MockCtx).unwrap();
-        m.tick(&mut MockCtx).unwrap();
+        m.tick().unwrap();
+        m.tick().unwrap();
         assert_eq!(count.get(), 2);
     }
 
@@ -238,14 +278,14 @@ mod tests {
     fn test_plain_child_goto_no_transitions_returns_goto() {
         // Extend возвращает Goto; переходов нет → Plain тоже возвращает Goto
         let mut m = plain_with_extend("S", vec![]);
-        assert!(matches!(m.tick(&mut MockCtx).unwrap(), Transition::Goto));
+        assert!(matches!(m.tick().unwrap(), Transition::Goto));
     }
 
     #[test]
     fn test_plain_child_goto_false_predicate_returns_goto() {
         // Предикат ложен → переход не срабатывает → Goto
         let mut m = plain_with_extend("S", vec![("T".to_string(), always_false())]);
-        assert!(matches!(m.tick(&mut MockCtx).unwrap(), Transition::Goto));
+        assert!(matches!(m.tick().unwrap(), Transition::Goto));
     }
 
     // ── Machine::Plain: срабатывание перехода ────────────────────────────────
@@ -256,10 +296,7 @@ mod tests {
         if let Machine::Plain { states, .. } = &mut m {
             states.insert("T".to_string(), RefCell::new(extend()));
         }
-        assert!(matches!(
-            m.tick(&mut MockCtx).unwrap(),
-            Transition::Processing
-        ));
+        assert!(matches!(m.tick().unwrap(), Transition::Processing));
     }
 
     #[test]
@@ -268,7 +305,7 @@ mod tests {
         if let Machine::Plain { states, .. } = &mut m {
             states.insert("T".to_string(), RefCell::new(extend()));
         }
-        m.tick(&mut MockCtx).unwrap();
+        m.tick().unwrap();
         if let Machine::Plain { current, .. } = &m {
             assert_eq!(current, "T");
         } else {
@@ -288,7 +325,7 @@ mod tests {
             states.insert("T".to_string(), RefCell::new(extend()));
             states.insert("U".to_string(), RefCell::new(extend()));
         }
-        m.tick(&mut MockCtx).unwrap();
+        m.tick().unwrap();
         if let Machine::Plain { current, .. } = &m {
             assert_eq!(current, "U");
         } else {
@@ -300,7 +337,7 @@ mod tests {
     fn test_plain_transition_target_missing_returns_error() {
         // Переход в несуществующее состояние → Err
         let mut m = plain_with_extend("S", vec![("MISSING".to_string(), always_true())]);
-        assert!(m.tick(&mut MockCtx).is_err());
+        assert!(m.tick().is_err());
     }
 
     // ── exits/enters при переходе ─────────────────────────────────────────────
@@ -317,6 +354,7 @@ mod tests {
                 always: vec![],
                 enters: vec![],
                 exits: vec![exit_exec],
+                variables: HashMap::new(),
             }),
         );
         states.insert(
@@ -325,6 +363,7 @@ mod tests {
                 always: vec![],
                 enters: vec![enter_exec],
                 exits: vec![],
+                variables: HashMap::new(),
             }),
         );
 
@@ -335,9 +374,10 @@ mod tests {
             always: vec![],
             enters: vec![],
             exits: vec![],
+            variables: HashMap::new(),
         };
 
-        m.tick(&mut MockCtx).unwrap();
+        m.tick().unwrap();
         assert_eq!(exit_count.get(), 1, "exit состояния S должен вызваться");
         assert_eq!(enter_count.get(), 1, "enter состояния T должен вызваться");
     }
@@ -355,6 +395,7 @@ mod tests {
             always: vec![],
             enters: vec![],
             exits: vec![],
+            variables: HashMap::new(),
         };
         let mut states = HashMap::new();
         states.insert("S".to_string(), RefCell::new(inner));
@@ -365,8 +406,9 @@ mod tests {
             always: vec![],
             enters: vec![],
             exits: vec![],
+            variables: HashMap::new(),
         };
-        assert!(matches!(m.tick(&mut MockCtx).unwrap(), Transition::Final));
+        assert!(matches!(m.tick().unwrap(), Transition::Final));
     }
 
     // ── Machine::Plain: Processing от дочернего ──────────────────────────────
@@ -384,6 +426,7 @@ mod tests {
             always: vec![],
             enters: vec![],
             exits: vec![],
+            variables: HashMap::new(),
         };
 
         let mut outer_states = HashMap::new();
@@ -395,11 +438,80 @@ mod tests {
             always: vec![],
             enters: vec![],
             exits: vec![],
+            variables: HashMap::new(),
         };
-        assert!(matches!(
-            m.tick(&mut MockCtx).unwrap(),
-            Transition::Processing
-        ));
+        assert!(matches!(m.tick().unwrap(), Transition::Processing));
+    }
+
+    // ── Context: доступ к переменным ─────────────────────────────────────────
+
+    #[test]
+    fn test_plain_get_value_returns_variable() {
+        let mut vars = HashMap::new();
+        vars.insert("x".to_string(), Value::Number(42));
+        let m = Machine::Plain {
+            transitions: vec![],
+            states: HashMap::new(),
+            current: "S".to_string(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: vars,
+        };
+        assert!(matches!(m.get_value("x"), Some(Value::Number(42))));
+    }
+
+    #[test]
+    fn test_extend_get_value_returns_variable() {
+        let mut vars = HashMap::new();
+        vars.insert("flag".to_string(), Value::Boolean(true));
+        let m = Machine::Extend {
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: vars,
+        };
+        assert!(matches!(m.get_value("flag"), Some(Value::Boolean(true))));
+    }
+
+    #[test]
+    fn test_get_value_missing_returns_none() {
+        let m = extend();
+        assert!(m.get_value("unknown").is_none());
+    }
+
+    // ── Предикат читает переменную через Context ──────────────────────────────
+
+    #[test]
+    fn test_transition_predicate_reads_variable() {
+        // Переход срабатывает когда переменная "ready" == Number(1)
+        let pred: Predicate = Box::new(|ctx| {
+            matches!(ctx.get_value("ready"), Some(Value::Number(1)))
+        });
+
+        let mut vars = HashMap::new();
+        vars.insert("ready".to_string(), Value::Number(1));
+
+        let mut states = HashMap::new();
+        states.insert("S".to_string(), RefCell::new(extend()));
+        states.insert("T".to_string(), RefCell::new(extend()));
+
+        let mut m = Machine::Plain {
+            transitions: vec![("T".to_string(), pred)],
+            states,
+            current: "S".to_string(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: vars,
+        };
+
+        m.tick().unwrap();
+        if let Machine::Plain { current, .. } = &m {
+            assert_eq!(current, "T");
+        } else {
+            panic!("ожидался Machine::Plain");
+        }
     }
 
     // ── enter/exit не паникуют ────────────────────────────────────────────────
@@ -407,7 +519,7 @@ mod tests {
     #[test]
     fn test_plain_enter_exit_do_not_panic() {
         let mut m = plain_with_extend("S", vec![]);
-        m.enter(&mut MockCtx);
-        m.exit(&mut MockCtx);
+        m.enter();
+        m.exit();
     }
 }

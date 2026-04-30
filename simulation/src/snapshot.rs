@@ -16,11 +16,11 @@ struct Snapshot {
 }
 
 impl Context for Snapshot {
-    fn get_variable(&self, name: &str) -> Option<Value> {
+    fn get_value(&self, name: &str) -> Option<Value> {
         if let Some(value) = self.variables.get(name) {
             Some(value.clone())
         } else if let Some(upper) = &self.upper {
-            upper.borrow().get_variable(name)
+            upper.borrow().get_value(name)
         } else {
             None
         }
@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn test_not_found_in_empty_snapshot() {
         let name = make_name("S");
-        assert!(empty(name.clone()).get_variable("S").is_none());
+        assert!(empty(name.clone()).get_value("S").is_none());
     }
 
     #[test]
@@ -83,28 +83,28 @@ mod tests {
         // Контрпример: сохранено S, запрашиваем T
         let s = make_name("S");
         let snap = with_var(s.clone(), "S", Value::Number(1));
-        assert!(snap.get_variable("T").is_none());
+        assert!(snap.get_value("T").is_none());
     }
 
     #[test]
     fn test_found_number() {
         let name = make_name("S");
         let snap = with_var(name.clone(), "S", Value::Number(42));
-        assert!(matches!(snap.get_variable("S"), Some(Value::Number(42))));
+        assert!(matches!(snap.get_value("S"), Some(Value::Number(42))));
     }
 
     #[test]
     fn test_found_boolean() {
         let name = make_name("S");
         let snap = with_var(name.clone(), "S", Value::Boolean(true));
-        assert!(matches!(snap.get_variable("S"), Some(Value::Boolean(true))));
+        assert!(matches!(snap.get_value("S"), Some(Value::Boolean(true))));
     }
 
     #[test]
     fn test_found_real() {
         let name = make_name("S");
         let snap = with_var(name.clone(), "S", Value::Real(2.71));
-        let Some(Value::Real(v)) = snap.get_variable("S") else {
+        let Some(Value::Real(v)) = snap.get_value("S") else {
             panic!("ожидалось Some(Real)");
         };
         assert!((v - 2.71).abs() < 1e-9);
@@ -115,10 +115,10 @@ mod tests {
         // Два вызова возвращают независимые значения
         let name = make_name("S");
         let mut snap = with_var(name.clone(), "S", Value::Number(10));
-        let v1 = snap.get_variable("S").unwrap();
+        let v1 = snap.get_value("S").unwrap();
         // Перезаписываем переменную
         snap.variables.insert("S".to_string(), Value::Number(99));
-        let v2 = snap.get_variable("S").unwrap();
+        let v2 = snap.get_value("S").unwrap();
         assert!(matches!(v1, Value::Number(10)));
         assert!(matches!(v2, Value::Number(99)));
     }
@@ -137,7 +137,7 @@ mod tests {
             variables: HashMap::new(),
             ports: HashMap::new(),
         };
-        assert!(matches!(child.get_variable("T"), Some(Value::Number(99))));
+        assert!(matches!(child.get_value("T"), Some(Value::Number(99))));
     }
 
     #[test]
@@ -154,7 +154,7 @@ mod tests {
             variables: child_vars,
             ports: HashMap::new(),
         };
-        assert!(matches!(child.get_variable("T"), Some(Value::Number(99))));
+        assert!(matches!(child.get_value("T"), Some(Value::Number(99))));
     }
 
     #[test]
@@ -169,7 +169,7 @@ mod tests {
             variables: HashMap::new(),
             ports: HashMap::new(),
         };
-        assert!(child.get_variable("T").is_none());
+        assert!(child.get_value("T").is_none());
     }
 
     #[test]
@@ -191,6 +191,6 @@ mod tests {
             variables: HashMap::new(),
             ports: HashMap::new(),
         };
-        assert!(matches!(child.get_variable("T"), Some(Value::Number(7))));
+        assert!(matches!(child.get_value("T"), Some(Value::Number(7))));
     }
 }

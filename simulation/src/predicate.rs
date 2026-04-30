@@ -44,7 +44,7 @@ fn flat(cond: &ConditionNode, context: &dyn Context) -> Result<ConditionNode, Di
                 ));
             };
             let var = &*var.borrow();
-            let Some(value) = context.get_variable(var.name()) else {
+            let Some(value) = context.get_value(var.name()) else {
                 return Err(Diagnostic::error(
                     Location::Builtin,
                     format!("Variable '{}' not found", var.name()),
@@ -171,7 +171,7 @@ fn flat(cond: &ConditionNode, context: &dyn Context) -> Result<ConditionNode, Di
         ConditionNode::Bool(b) => Ok(ConditionNode::Bool(*b)),
         ConditionNode::Variable(var, _) => {
             let var = &*var.borrow();
-            let Some(value) = context.get_variable(var.name()) else {
+            let Some(value) = context.get_value(var.name()) else {
                 return Err(Diagnostic::error(
                     Location::Builtin,
                     format!("Variable '{}' not found", var.name()),

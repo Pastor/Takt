@@ -14,7 +14,7 @@ mod tests {
 
     struct MockCtx;
     impl Context for MockCtx {
-        fn get_variable(&self, _: &str) -> Option<Value> {
+        fn get_value(&self, _: &str) -> Option<Value> {
             None
         }
     }

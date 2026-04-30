@@ -3,7 +3,7 @@ use crate::value::Value;
 /// Контекст выполнения: предоставляет доступ к переменным текущей области видимости.
 pub(crate) trait Context {
     /// Возвращает клонированное значение переменной или `None`, если переменная не найдена.
-    fn get_variable(&self, name: &str) -> Option<Value>;
+    fn get_value(&self, name: &str) -> Option<Value>;
 }
 
 #[cfg(test)]
@@ -17,7 +17,7 @@ mod tests {
     }
 
     impl Context for MockContext {
-        fn get_variable(&self, name: &str) -> Option<Value> {
+        fn get_value(&self, name: &str) -> Option<Value> {
             self.vars.get(name).cloned()
         }
     }
@@ -27,7 +27,7 @@ mod tests {
         let ctx = MockContext {
             vars: HashMap::new(),
         };
-        assert!(ctx.get_variable("S").is_none());
+        assert!(ctx.get_value("S").is_none());
     }
 
     #[test]
@@ -35,7 +35,7 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("S".to_string(), Value::Number(5));
         let ctx = MockContext { vars };
-        assert!(matches!(ctx.get_variable("S"), Some(Value::Number(5))));
+        assert!(matches!(ctx.get_value("S"), Some(Value::Number(5))));
     }
 
     #[test]
@@ -43,7 +43,7 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("S".to_string(), Value::Boolean(false));
         let ctx = MockContext { vars };
-        assert!(matches!(ctx.get_variable("S"), Some(Value::Boolean(false))));
+        assert!(matches!(ctx.get_value("S"), Some(Value::Boolean(false))));
     }
 
     #[test]
@@ -52,7 +52,7 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("S".to_string(), Value::Number(1));
         let ctx = MockContext { vars };
-        assert!(ctx.get_variable("T").is_none());
+        assert!(ctx.get_value("T").is_none());
     }
 
     #[test]
@@ -61,6 +61,6 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("S".to_string(), Value::Number(99));
         let ctx: Box<dyn Context> = Box::new(MockContext { vars });
-        assert!(matches!(ctx.get_variable("S"), Some(Value::Number(99))));
+        assert!(matches!(ctx.get_value("S"), Some(Value::Number(99))));
     }
 }
