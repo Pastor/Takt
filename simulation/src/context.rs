@@ -43,10 +43,7 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("S".to_string(), Value::Boolean(false));
         let ctx = MockContext { vars };
-        assert!(matches!(
-            ctx.get_variable("S"),
-            Some(Value::Boolean(false))
-        ));
+        assert!(matches!(ctx.get_variable("S"), Some(Value::Boolean(false))));
     }
 
     #[test]

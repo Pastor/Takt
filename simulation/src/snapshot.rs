@@ -97,10 +97,7 @@ mod tests {
     fn test_found_boolean() {
         let name = make_name("S");
         let snap = with_var(name.clone(), "S", Value::Boolean(true));
-        assert!(matches!(
-            snap.get_variable("S"),
-            Some(Value::Boolean(true))
-        ));
+        assert!(matches!(snap.get_variable("S"), Some(Value::Boolean(true))));
     }
 
     #[test]
