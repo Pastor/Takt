@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::predicate::create_predicate;
 
-pub(crate) type Predicate = Box<dyn Fn(&dyn Context) -> bool>;
+pub(crate) type Predicate = Rc<dyn Fn(&dyn Context) -> bool>;
 pub(crate) type Execution = Box<dyn Fn(&mut dyn Context)>;
 
 use crate::unit::Transition::Final;
@@ -36,9 +36,9 @@ pub(crate) enum Unit {
         upper: Option<Rc<RefCell<Unit>>>,
         /// Активные переходы для текущего состояния.
         transitions: Vec<(String, Predicate)>,
-        /// Переходы каждого состояния: имя → [(цель, условие)].
+        /// Переходы каждого состояния: имя → [(цель, предикат)].
         /// При смене состояния `transitions` обновляется из этой таблицы.
-        state_transitions: HashMap<String, Vec<(String, ConditionNode)>>,
+        state_transitions: HashMap<String, Vec<(String, Predicate)>>,
         states: HashMap<String, RefCell<Unit>>,
         current: String,
 
@@ -109,16 +109,23 @@ fn from_model_plain(model: &ModelNode) -> Result<Unit, Diagnostic> {
         })?;
 
     let mut states: HashMap<String, RefCell<Unit>> = HashMap::new();
-    let mut state_transitions: HashMap<String, Vec<(String, ConditionNode)>> = HashMap::new();
+    let mut state_transitions: HashMap<String, Vec<(String, Predicate)>> = HashMap::new();
 
     for (name, state_node) in &model.states {
         let unit = from_state_node(state_node)?;
         states.insert(name.clone(), RefCell::new(unit));
 
-        let trans: Vec<(String, ConditionNode)> = state_node
+        let trans: Vec<(String, Predicate)> = state_node
             .references()
             .iter()
-            .map(|r| (r.name.clone(), r.cond.clone()))
+            .map(|r| {
+                let pred: Predicate = if matches!(r.cond, ConditionNode::None) {
+                    Rc::new(|_: &dyn Context| true)
+                } else {
+                    create_predicate(&r.cond)
+                };
+                (r.name.clone(), pred)
+            })
             .collect();
         state_transitions.insert(name.clone(), trans);
     }
@@ -194,23 +201,16 @@ fn from_extend(extend: &Extend) -> Result<Unit, Diagnostic> {
     }
 }
 
-/// Строит активный список предикатов для заданного состояния из таблицы переходов.
+/// Клонирует предикаты заданного состояния из таблицы переходов в активный список.
 fn make_transitions(
-    map: &HashMap<String, Vec<(String, ConditionNode)>>,
+    map: &HashMap<String, Vec<(String, Predicate)>>,
     state: &str,
 ) -> Vec<(String, Predicate)> {
     map.get(state)
-        .map(|conds| {
-            conds
+        .map(|preds| {
+            preds
                 .iter()
-                .map(|(target, cond)| {
-                    let pred: Predicate = if matches!(cond, ConditionNode::None) {
-                        Box::new(|_: &dyn Context| true)
-                    } else {
-                        create_predicate(cond)
-                    };
-                    (target.clone(), pred)
-                })
+                .map(|(target, pred)| (target.clone(), Rc::clone(pred)))
                 .collect()
         })
         .unwrap_or_default()
@@ -402,11 +402,11 @@ mod tests {
     use std::rc::Rc;
 
     fn always_true() -> Predicate {
-        Box::new(|_| true)
+        Rc::new(|_: &dyn Context| true)
     }
 
     fn always_false() -> Predicate {
-        Box::new(|_| false)
+        Rc::new(|_: &dyn Context| false)
     }
 
     /// Счётчик вызовов через Rc<Cell>, доступный из Fn-замыкания.
@@ -749,7 +749,7 @@ mod tests {
     #[test]
     fn test_transition_predicate_reads_variable() {
         let pred: Predicate =
-            Box::new(|ctx| matches!(ctx.get_value("ready"), Some(Value::Number(1))));
+            Rc::new(|ctx: &dyn Context| matches!(ctx.get_value("ready"), Some(Value::Number(1))));
 
         let mut vars = HashMap::new();
         vars.insert("ready".to_string(), Value::Number(1));
