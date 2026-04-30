@@ -1,13 +1,14 @@
 use crate::context::Context;
-use crate::state::Predicate;
+use crate::unit::Predicate;
 use crate::value::Value;
 use grammar::diagnostics::{Diagnostic, Location};
 use grammar::parser::ast::Member;
 use grammar::semantic::ConditionNode;
+use std::rc::Rc;
 
 pub(crate) fn create_predicate(cond: &ConditionNode) -> Predicate {
     let cond = cond.clone();
-    Box::new(move |c| match flat(&cond, c) {
+    Rc::new(move |c| match flat(&cond, c) {
         Ok(ConditionNode::Bool(b)) => b,
         _ => panic!(),
     })
