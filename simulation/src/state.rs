@@ -7,6 +7,7 @@ use crate::value::Value;
 use grammar::diagnostics::{Diagnostic, Location};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 enum Transition {
     Processing,
@@ -16,6 +17,7 @@ enum Transition {
 
 enum Machine {
     Plain {
+        upper: Option<Rc<RefCell<Machine>>>,
         transitions: Vec<(String, Predicate)>,
         states: HashMap<String, RefCell<Machine>>,
         current: String,
@@ -27,6 +29,7 @@ enum Machine {
         variables: HashMap<String, Value>,
     },
     Extend {
+        upper: Option<Rc<RefCell<Machine>>>,
         always: Vec<Execution>,
         enters: Vec<Execution>,
         exits: Vec<Execution>,
@@ -37,10 +40,17 @@ enum Machine {
 
 impl Context for Machine {
     fn get_value(&self, name: &str) -> Option<Value> {
-        match self {
+        let result = match self {
             Machine::Plain { variables, .. } => variables.get(name).cloned(),
             Machine::Extend { variables, .. } => variables.get(name).cloned(),
-        }
+        };
+        result.or_else(|| {
+            let upper = match self {
+                Machine::Plain { upper, .. } => upper.as_ref().map(|u| &**u),
+                Machine::Extend { upper, .. } => upper.as_ref().map(|u| &**u),
+            };
+            upper.and_then(|u| u.borrow().get_value(name))
+        })
     }
 }
 
@@ -176,6 +186,7 @@ mod tests {
     /// Создаёт Machine::Extend без действий.
     fn extend() -> Machine {
         Machine::Extend {
+            upper: None,
             always: vec![],
             enters: vec![],
             exits: vec![],
@@ -188,6 +199,7 @@ mod tests {
         let mut states = HashMap::new();
         states.insert(name.to_string(), RefCell::new(extend()));
         Machine::Plain {
+            upper: None,
             transitions,
             states,
             current: name.to_string(),
@@ -210,6 +222,7 @@ mod tests {
     fn test_extend_enter_calls_enters() {
         let (count, exec) = call_counter();
         let mut m = Machine::Extend {
+            upper: None,
             always: vec![],
             enters: vec![exec],
             exits: vec![],
@@ -223,6 +236,7 @@ mod tests {
     fn test_extend_exit_calls_exits() {
         let (count, exec) = call_counter();
         let mut m = Machine::Extend {
+            upper: None,
             always: vec![],
             enters: vec![],
             exits: vec![exec],
@@ -244,6 +258,7 @@ mod tests {
     #[test]
     fn test_plain_missing_current_state_returns_final() {
         let mut m = Machine::Plain {
+            upper: None,
             transitions: vec![("B".to_string(), always_true())],
             states: HashMap::new(),
             current: "A".to_string(),
@@ -263,6 +278,7 @@ mod tests {
         let mut states = HashMap::new();
         states.insert("S".to_string(), RefCell::new(extend()));
         let mut m = Machine::Plain {
+            upper: None,
             transitions: vec![],
             states,
             current: "S".to_string(),
@@ -355,6 +371,7 @@ mod tests {
         states.insert(
             "S".to_string(),
             RefCell::new(Machine::Extend {
+                upper: None,
                 always: vec![],
                 enters: vec![],
                 exits: vec![exit_exec],
@@ -364,6 +381,7 @@ mod tests {
         states.insert(
             "T".to_string(),
             RefCell::new(Machine::Extend {
+                upper: None,
                 always: vec![],
                 enters: vec![enter_exec],
                 exits: vec![],
@@ -372,6 +390,7 @@ mod tests {
         );
 
         let mut m = Machine::Plain {
+            upper: None,
             transitions: vec![("T".to_string(), always_true())],
             states,
             current: "S".to_string(),
@@ -393,6 +412,7 @@ mod tests {
         // Дочерний Plain с отсутствующим состоянием → Final → родитель тоже Final,
         // даже если у него есть переход с истинным предикатом
         let inner = Machine::Plain {
+            upper: None,
             transitions: vec![],
             states: HashMap::new(),
             current: "MISSING".to_string(),
@@ -404,6 +424,7 @@ mod tests {
         let mut states = HashMap::new();
         states.insert("S".to_string(), RefCell::new(inner));
         let mut m = Machine::Plain {
+            upper: None,
             transitions: vec![("T".to_string(), always_true())],
             states,
             current: "S".to_string(),
@@ -424,6 +445,7 @@ mod tests {
         inner_states.insert("inner_s".to_string(), RefCell::new(extend()));
         inner_states.insert("inner_t".to_string(), RefCell::new(extend()));
         let inner = Machine::Plain {
+            upper: None,
             transitions: vec![("inner_t".to_string(), always_true())],
             states: inner_states,
             current: "inner_s".to_string(),
@@ -436,6 +458,7 @@ mod tests {
         let mut outer_states = HashMap::new();
         outer_states.insert("S".to_string(), RefCell::new(inner));
         let mut m = Machine::Plain {
+            upper: None,
             transitions: vec![],
             states: outer_states,
             current: "S".to_string(),
@@ -454,6 +477,7 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("x".to_string(), Value::Number(42));
         let m = Machine::Plain {
+            upper: None,
             transitions: vec![],
             states: HashMap::new(),
             current: "S".to_string(),
@@ -470,6 +494,7 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("flag".to_string(), Value::Boolean(true));
         let m = Machine::Extend {
+            upper: None,
             always: vec![],
             enters: vec![],
             exits: vec![],
@@ -500,6 +525,7 @@ mod tests {
         states.insert("T".to_string(), RefCell::new(extend()));
 
         let mut m = Machine::Plain {
+            upper: None,
             transitions: vec![("T".to_string(), pred)],
             states,
             current: "S".to_string(),
@@ -524,5 +550,134 @@ mod tests {
         let mut m = plain_with_extend("S", vec![]);
         m.enter();
         m.exit();
+    }
+
+    // ── Context: делегирование к родителю через upper ────────────────────────
+
+    #[test]
+    fn test_get_value_delegates_to_upper_extend() {
+        // Переменная "x" задана в родителе, дочерний Extend делегирует поиск вверх
+        let mut parent_vars = HashMap::new();
+        parent_vars.insert("x".to_string(), Value::Number(99));
+        let parent = Rc::new(RefCell::new(Machine::Extend {
+            upper: None,
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: parent_vars,
+        }));
+        let child = Machine::Extend {
+            upper: Some(parent),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        assert!(matches!(child.get_value("x"), Some(Value::Number(99))));
+    }
+
+    #[test]
+    fn test_get_value_local_shadows_upper() {
+        // Контрпример: локальная переменная перекрывает значение из родителя
+        let mut parent_vars = HashMap::new();
+        parent_vars.insert("x".to_string(), Value::Number(1));
+        let parent = Rc::new(RefCell::new(Machine::Extend {
+            upper: None,
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: parent_vars,
+        }));
+        let mut child_vars = HashMap::new();
+        child_vars.insert("x".to_string(), Value::Number(42));
+        let child = Machine::Extend {
+            upper: Some(parent),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: child_vars,
+        };
+        assert!(matches!(child.get_value("x"), Some(Value::Number(42))));
+    }
+
+    // ── Множественные enters/exits/always ────────────────────────────────────
+
+    #[test]
+    fn test_plain_multiple_enters_all_called() {
+        let (c1, e1) = call_counter();
+        let (c2, e2) = call_counter();
+        let (c3, e3) = call_counter();
+        let mut m = Machine::Plain {
+            upper: None,
+            transitions: vec![],
+            states: HashMap::new(),
+            current: "S".to_string(),
+            always: vec![],
+            enters: vec![e1, e2, e3],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        m.enter();
+        assert_eq!(c1.get(), 1);
+        assert_eq!(c2.get(), 1);
+        assert_eq!(c3.get(), 1);
+    }
+
+    #[test]
+    fn test_plain_multiple_exits_all_called() {
+        let (c1, e1) = call_counter();
+        let (c2, e2) = call_counter();
+        let mut m = Machine::Plain {
+            upper: None,
+            transitions: vec![],
+            states: HashMap::new(),
+            current: "S".to_string(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![e1, e2],
+            variables: HashMap::new(),
+        };
+        m.exit();
+        assert_eq!(c1.get(), 1);
+        assert_eq!(c2.get(), 1);
+    }
+
+    #[test]
+    fn test_plain_multiple_always_all_called_each_tick() {
+        let (c1, e1) = call_counter();
+        let (c2, e2) = call_counter();
+        let mut states = HashMap::new();
+        states.insert("S".to_string(), RefCell::new(extend()));
+        let mut m = Machine::Plain {
+            upper: None,
+            transitions: vec![],
+            states,
+            current: "S".to_string(),
+            always: vec![e1, e2],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        m.tick().unwrap();
+        m.tick().unwrap();
+        // оба замыкания вызываются на каждом тике
+        assert_eq!(c1.get(), 2);
+        assert_eq!(c2.get(), 2);
+    }
+
+    #[test]
+    fn test_extend_always_never_called_on_tick() {
+        // Extend.always никогда не выполняется: tick() возвращает Goto немедленно
+        let (count, exec) = call_counter();
+        let mut m = Machine::Extend {
+            upper: None,
+            always: vec![exec],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        m.tick().unwrap();
+        m.tick().unwrap();
+        assert_eq!(count.get(), 0);
     }
 }
