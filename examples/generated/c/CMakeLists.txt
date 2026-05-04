@@ -23,3 +23,9 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/comprehensive.c")
     add_executable(comprehensive comprehensive_main.c comprehensive.c)
     target_link_libraries(comprehensive m)
 endif()
+
+# Stacker — симулятор штабелятора с позитивными и негативными сценариями
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/stacker.c")
+    add_executable(stacker stacker_main.c stacker.c)
+    target_link_libraries(stacker m)
+endif()
