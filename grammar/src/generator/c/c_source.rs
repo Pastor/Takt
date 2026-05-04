@@ -926,15 +926,16 @@ state End;";
         );
     }
 
-    /// Чтение бита порта в условии `ref`: `BTN.0` → `(((*main->read_numeric)(ROOT_BTN, ...) >> 0) & 1u)`
+    /// Чтение бита порта в условии `ref`: `BTN.0` → `(((*model->read_numeric)(ROOT_BTN, ...) >> 0) & 1u)`
+    /// Корневая модель: используется `model->` (не `main->`).
     #[test]
     fn test_bit_access_port_read_in_condition() {
         let src =
             "type u8 = [bit;8]; in BTN: u8 = 0x200000; start S { ref Done: BTN.0; } state Done;";
         let code = generate_source_str(src);
         assert!(
-            code.contains("(((*main->read_numeric)(ROOT_BTN, main->userdata) >> 0) & 1u)"),
-            "ожидается (((*main->read_numeric)(ROOT_BTN, ...) >> 0) & 1u) в условии:\n{code}"
+            code.contains("(((*model->read_numeric)(ROOT_BTN, model->userdata) >> 0) & 1u)"),
+            "ожидается (((*model->read_numeric)(ROOT_BTN, ...) >> 0) & 1u) в условии:\n{code}"
         );
     }
 
@@ -960,25 +961,27 @@ state End;";
         );
     }
 
-    /// Чтение бита порта в `always`: `x = BTN.0` → `(((*main->read_numeric)(ROOT_BTN, ...) >> 0) & 1u)`
+    /// Чтение бита порта в `always`: `x = BTN.0` → `(((*model->read_numeric)(ROOT_BTN, ...) >> 0) & 1u)`
+    /// Корневая модель: tick получает `model`, поэтому используется `model->`.
     #[test]
     fn test_bit_access_port_read_in_always() {
         let src = "type u8 = [bit;8]; in BTN: u8 = 0x200000; var x: u8 = 0; start S { always { x = BTN.0; } ref Done: true; } state Done;";
         let code = generate_source_str(src);
         assert!(
-            code.contains("(((*main->read_numeric)(ROOT_BTN, main->userdata) >> 0) & 1u)"),
-            "ожидается (((*main->read_numeric)(ROOT_BTN, ...) >> 0) & 1u) при чтении порта:\n{code}"
+            code.contains("(((*model->read_numeric)(ROOT_BTN, model->userdata) >> 0) & 1u)"),
+            "ожидается (((*model->read_numeric)(ROOT_BTN, ...) >> 0) & 1u) при чтении порта:\n{code}"
         );
     }
 
     /// Запись бита порта: `LED.7 = true` → read-modify-write через write_numeric
+    /// Корневая модель: используется `model->` (не `main->`).
     #[test]
     fn test_bit_access_port_write_in_always() {
         let src = "type u8 = [bit;8]; out LED: u8 = 0x100000; start S { always { LED.7 = true; } ref Done: true; } state Done;";
         let code = generate_source_str(src);
         assert!(
             code.contains("write_numeric)(ROOT_LED,")
-                && code.contains("read_numeric)(ROOT_LED, main->userdata) & ~(1LL << 7)")
+                && code.contains("read_numeric)(ROOT_LED, model->userdata) & ~(1LL << 7)")
                 && code.contains("(true & 1LL) << 7)"),
             "ожидается read-modify-write через write_numeric/read_numeric для LED.7 = true:\n{code}"
         );
@@ -1047,6 +1050,36 @@ start Main {
         assert!(
             !c_source.contains("Main_double(main"),
             "Недопустимый вызов Main_double(main, ...) в tick корневой модели:\n{}",
+            c_source
+        );
+    }
+
+    #[test]
+    fn test_port_read_in_local_fn_uses_model_not_main() {
+        // В локальной функции (has_model=false) первый параметр — `const Root *model`.
+        // Чтение порта должно генерировать `(*model->read_bit)(...)`, а не `(*main->read_bit)(...)`.
+        let src = r#"
+in sensor: bit = 0x0:0;
+var v: bit = 0;
+fn read_port() -> bit { return sensor; }
+start Main { always { v = read_port(); } }
+"#;
+        let (ast, _) = parse(src, 0).expect("ошибка разбора");
+        let model_rc = semantic::tree::construct_model(&ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some("Main".to_string());
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
+        let c_source = generate_source("test", &map).unwrap();
+        // Функция read_port вызывается в always, поэтому попадёт в UsageSet
+        // Порт внутри локальной функции должен использовать `model`, а не `main`
+        assert!(
+            !c_source.contains("(*main->"),
+            "Чтение порта в локальной функции не должно использовать `main`:\n{}",
+            c_source
+        );
+        assert!(
+            c_source.contains("(*model->"),
+            "Чтение порта в локальной функции должно использовать `model`:\n{}",
             c_source
         );
     }

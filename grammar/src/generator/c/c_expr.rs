@@ -196,7 +196,9 @@ pub(super) fn field_name_in_parent(model_rc: &Rc<RefCell<ModelNode>>) -> Option<
 pub(super) fn resolve_variable_c_expr(
     var: &VariableNode,
     params: &[(String, TypeNode)],
-    _map: &CMap,
+    map: &CMap,
+    owner: &Element,
+    has_model: bool,
 ) -> Result<String, Diagnostic> {
     match var {
         VariableNode::Simple {
@@ -270,17 +272,24 @@ pub(super) fn resolve_variable_c_expr(
                 model_name.unique_uppercase_snakecase(),
                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
             );
+            // В локальных функциях (has_model=false) первый параметр — `const Root *model`.
+            // В tick/init корневой модели — тоже `model`. В tick/init подмодели — `main`.
+            let ptr = if has_model && !owner.name().eq(&map.root_name()) {
+                "main"
+            } else {
+                "model"
+            };
             match cls {
                 PortClass::Rational => Ok(format!(
-                    "(*main->{read_float})({variant}, main->userdata)",
+                    "(*{ptr}->{read_float})({variant}, {ptr}->userdata)",
                     read_float = FUNCTION_PORT_READ_FLOAT
                 )),
                 PortClass::Numeric => Ok(format!(
-                    "(*main->{read_numeric})({variant}, main->userdata)",
+                    "(*{ptr}->{read_numeric})({variant}, {ptr}->userdata)",
                     read_numeric = FUNCTION_PORT_READ_NUMERIC
                 )),
                 PortClass::Bit => Ok(format!(
-                    "(*main->{read_bit})({variant}, main->userdata)",
+                    "(*{ptr}->{read_bit})({variant}, {ptr}->userdata)",
                     read_bit = FUNCTION_PORT_READ_BIT
                 )),
             }
@@ -650,7 +659,7 @@ pub(super) fn generate_condition_expr(
             {
                 return Ok(s);
             }
-            resolve_variable_c_expr(&var, &[], map)
+            resolve_variable_c_expr(&var, &[], map, owner, true)
         }
         ConditionNode::EnumVariant(_, _, value) => Ok(value.to_string()),
         ConditionNode::ArraySubscript(var_rc, idx) => {
@@ -661,7 +670,7 @@ pub(super) fn generate_condition_expr(
             {
                 return Ok(format!("{}[{}]", s, idx));
             }
-            let base = resolve_variable_c_expr(&var, &[], map)?;
+            let base = resolve_variable_c_expr(&var, &[], map, owner, true)?;
             Ok(format!("{}[{}]", base, idx))
         }
         ConditionNode::BitAccess(inner, member) => {
@@ -693,13 +702,19 @@ pub(super) fn generate_condition_expr(
                                 model_name.unique_uppercase_snakecase(),
                                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
                             );
+                            // В условиях всегда has_model=true; ptr зависит от owner
+                            let ptr = if owner.name().eq(&map.root_name()) {
+                                "model"
+                            } else {
+                                "main"
+                            };
                             return match cls {
                                 PortClass::Bit => Ok(format!(
-                                    "(*main->{read_bit})({variant}, main->userdata)",
+                                    "(*{ptr}->{read_bit})({variant}, {ptr}->userdata)",
                                     read_bit = FUNCTION_PORT_READ_BIT
                                 )),
                                 PortClass::Numeric => Ok(format!(
-                                    "(((*main->{read_numeric})({variant}, main->userdata) >> {n}) & 1u)",
+                                    "(((*{ptr}->{read_numeric})({variant}, {ptr}->userdata) >> {n}) & 1u)",
                                     read_numeric = FUNCTION_PORT_READ_NUMERIC
                                 )),
                                 PortClass::Rational => Err(Diagnostic::error(
@@ -1095,22 +1110,27 @@ pub(super) fn generate_expr(
                         let mut tmp = Printer::new(4, &mut rhs_str);
                         generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
                     }
+                    let ptr = if has_model && !owner.name().eq(&map.root_name()) {
+                        "main"
+                    } else {
+                        "model"
+                    };
                     match cls {
                         PortClass::Rational => {
                             printer.print(&format!(
-                                "(*main->{write_float})({variant}, {rhs_str}, main->userdata)",
+                                "(*{ptr}->{write_float})({variant}, {rhs_str}, {ptr}->userdata)",
                                 write_float = FUNCTION_PORT_WRITE_FLOAT
                             ));
                         }
                         PortClass::Numeric => {
                             printer.print(&format!(
-                                "(*main->{write_numeric})({variant}, {rhs_str}, main->userdata)",
+                                "(*{ptr}->{write_numeric})({variant}, {rhs_str}, {ptr}->userdata)",
                                 write_numeric = FUNCTION_PORT_WRITE_NUMERIC
                             ));
                         }
                         PortClass::Bit => {
                             printer.print(&format!(
-                                "(*main->{write_bit})({variant}, {rhs_str}, main->userdata)",
+                                "(*{ptr}->{write_bit})({variant}, {rhs_str}, {ptr}->userdata)",
                                 write_bit = FUNCTION_PORT_WRITE_BIT
                             ));
                         }
@@ -1151,18 +1171,23 @@ pub(super) fn generate_expr(
                             let mut tmp = Printer::new(4, &mut rhs_str);
                             generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
                         }
+                        let ptr = if has_model && !owner.name().eq(&map.root_name()) {
+                            "main"
+                        } else {
+                            "model"
+                        };
                         match cls {
                             PortClass::Bit => {
                                 printer.print(&format!(
-                                    "(*main->{write_bit})({variant}, {rhs_str}, main->userdata)",
+                                    "(*{ptr}->{write_bit})({variant}, {rhs_str}, {ptr}->userdata)",
                                     write_bit = FUNCTION_PORT_WRITE_BIT
                                 ));
                             }
                             PortClass::Numeric => {
                                 printer.print(&format!(
-                                    "(*main->{write_numeric})({variant}, \
-                                    ((*main->{read_numeric})({variant}, main->userdata) \
-                                    & ~(1LL << {n})) | (({rhs_str} & 1LL) << {n}), main->userdata)",
+                                    "(*{ptr}->{write_numeric})({variant}, \
+                                    ((*{ptr}->{read_numeric})({variant}, {ptr}->userdata) \
+                                    & ~(1LL << {n})) | (({rhs_str} & 1LL) << {n}), {ptr}->userdata)",
                                     write_numeric = FUNCTION_PORT_WRITE_NUMERIC,
                                     read_numeric = FUNCTION_PORT_READ_NUMERIC,
                                 ));
@@ -1208,9 +1233,9 @@ pub(super) fn generate_expr(
             let var = var_rc.borrow();
             let var_expr = if let VariableNode::Simple { upper, .. } = &*var {
                 resolve_simple_var_in_context(var.name(), upper, &params, owner, map, has_model)
-                    .map_or_else(|| resolve_variable_c_expr(&*var, &params, map), Ok)?
+                    .map_or_else(|| resolve_variable_c_expr(&*var, &params, map, owner, has_model), Ok)?
             } else {
-                resolve_variable_c_expr(&*var, &params, map)?
+                resolve_variable_c_expr(&*var, &params, map, owner, has_model)?
             };
             printer.print(&format!("{}[{}]", var_expr, idx));
         }
@@ -1224,10 +1249,10 @@ pub(super) fn generate_expr(
                     normalize_lowercase_snakecase(var.name().to_string())
                 } else {
                     resolve_simple_var_in_context(var.name(), upper, &params, owner, map, has_model)
-                        .map_or_else(|| resolve_variable_c_expr(&*var, &params, map), Ok)?
+                        .map_or_else(|| resolve_variable_c_expr(&*var, &params, map, owner, has_model), Ok)?
                 }
             } else {
-                resolve_variable_c_expr(&*var, &params, map)?
+                resolve_variable_c_expr(&*var, &params, map, owner, has_model)?
             };
             printer.print(&var_expr);
         }
@@ -1306,16 +1331,21 @@ pub(super) fn generate_expr(
                                 model_name.unique_uppercase_snakecase(),
                                 normalize_lowercase_snakecase(name.clone()).to_uppercase()
                             );
+                            let ptr = if has_model && !owner.name().eq(&map.root_name()) {
+                                "main"
+                            } else {
+                                "model"
+                            };
                             match cls {
                                 PortClass::Bit => {
                                     printer.print(&format!(
-                                        "(*main->{read_bit})({variant}, main->userdata)",
+                                        "(*{ptr}->{read_bit})({variant}, {ptr}->userdata)",
                                         read_bit = FUNCTION_PORT_READ_BIT
                                     ));
                                 }
                                 PortClass::Numeric => {
                                     printer.print(&format!(
-                                        "(((*main->{read_numeric})({variant}, main->userdata) >> {n}) & 1u)",
+                                        "(((*{ptr}->{read_numeric})({variant}, {ptr}->userdata) >> {n}) & 1u)",
                                         read_numeric = FUNCTION_PORT_READ_NUMERIC
                                     ));
                                 }
