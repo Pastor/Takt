@@ -285,6 +285,7 @@ fn usage_from_condition(cond: &ConditionNode, set: &mut UsageSet) {
                 VariableNode::Unresolved => {}
             }
         }
+        ConditionNode::BitAccess(inner, _) => usage_from_condition(inner, set),
         _ => {}
     }
 }
@@ -565,7 +566,7 @@ fn collect_from_condition(cond: &ConditionNode, used: &mut HashSet<String>) {
                 used.insert(name.clone());
             }
         }
-        ConditionNode::BitAccess(_, _) => {}
+        ConditionNode::BitAccess(inner, _) => collect_from_condition(inner, used),
         _ => {}
     }
 }

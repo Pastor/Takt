@@ -4263,6 +4263,44 @@ fn test_inline_formula_model_resolved() {
     );
 }
 
+
+// ─── Bug #4: переменная в BitAccess-условии ошибочно считается неиспользуемой ──
+
+/// Bug #4: переменная, используемая только через битовый доступ в условии
+/// перехода (`x.0`), НЕ должна получать предупреждение Ce13.
+///
+/// До исправления `collect_from_condition` (и `usage_from_condition`) обрабатывали
+/// `ConditionNode::BitAccess(_, _) => {}` — внутренний узел полностью
+/// игнорировался, поэтому переменная `flag`, упоминаемая только как `flag.0`
+/// в условии, не попадала в множество используемых.
+#[test]
+fn test_var_used_in_condition_bitaccess_no_unused_warning() {
+    let src = r#"
+        var flag: bit = 0;
+        cond bit_set = flag.0;
+        start S { ref Done: bit_set; }
+        state Done;
+    "#;
+    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
+    let model_rc = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = grammar::unused_variable_warnings(model_rc);
+    let warned_names: Vec<String> = warnings
+        .iter()
+        .filter_map(|w| {
+            if w.code.as_deref() == Some("SE-036") {
+                Some(w.message.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(
+        !warned_names.iter().any(|m| m.contains("flag")),
+        "flag используется в условии через BitAccess — предупреждения быть не должно, получено: {:?}",
+        warned_names
+    );
+}
+
 /// Встроенная формула на уровне состояния разрешается и попадает в `state.formulas`.
 #[test]
 fn test_inline_formula_state_resolved() {
