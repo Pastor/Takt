@@ -983,4 +983,71 @@ state End;";
             "ожидается read-modify-write через write_numeric/read_numeric для LED.7 = true:\n{code}"
         );
     }
+
+    /// Локальная функция, вызываемая из always-блока корневой модели,
+    /// должна получать `model` как первый аргумент, а не `main`
+    /// (в tick корневой модели нет параметра `main`).
+    #[test]
+    fn test_sub_model_local_fn_args_use_model_not_main() {
+        // В локальной функции Sub_compute (has_model=false), первый параметр — `const Main *model`.
+        // При вызове Main_process(root_val), root_val принадлежит Main.
+        // Должно генерироваться `model->root_val`, а не несуществующий `main->root_val`.
+        let src = r#"
+var root_val: bit = 0;
+var result: bit = 0;
+fn process(x: bit) -> bit { return x; }
+model Sub {
+    fn compute() -> bit { return process(root_val); }
+    start S { always { result = compute(); } }
+}
+start Main = Sub;
+"#;
+        let (ast, _) = parse(src, 0).expect("ошибка разбора");
+        let model_rc = semantic::tree::construct_model(&ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some("Main".to_string());
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
+        let c_source = generate_source("test", &map).unwrap();
+        // Sub_compute вызывает Main_process(model, root_val).
+        // root_val в теле Sub_compute должен быть `model->root_val`, а не `main->root_val`
+        assert!(
+            !c_source.contains("main->root_val"),
+            "root_val в аргументе локальной функции Sub не должен использовать `main`:\n{}",
+            c_source
+        );
+        assert!(
+            c_source.contains("model->root_val"),
+            "root_val в аргументе локальной функции Sub должен использовать `model`:\n{}",
+            c_source
+        );
+    }
+
+    #[test]
+    fn test_local_fn_call_in_root_tick_uses_model_not_main() {
+        let src = r#"
+type u8 = [bit;8];
+fn double(x: u8) -> u8 { return x + x; }
+var y: u8 = 0;
+start Main {
+    always { y = double(y); }
+}
+"#;
+        let (ast, _) = parse(src, 0).expect("ошибка разбора");
+        let model_rc = semantic::tree::construct_model(&ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some("Main".to_string());
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
+        let c_source = generate_source("test", &map).unwrap();
+        // Вызов должен передавать `model` (корневой указатель), а не несуществующий `main`
+        assert!(
+            c_source.contains("Main_double(model"),
+            "Ожидался вызов Main_double(model, ...), но получили:\n{}",
+            c_source
+        );
+        assert!(
+            !c_source.contains("Main_double(main"),
+            "Недопустимый вызов Main_double(main, ...) в tick корневой модели:\n{}",
+            c_source
+        );
+    }
 }

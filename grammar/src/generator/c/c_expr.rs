@@ -766,12 +766,13 @@ fn generate_args(
     owner: &Element,
     params: &[(String, TypeNode)],
     args: &[ExpressionNode],
+    has_model: bool,
 ) -> Result<Vec<String>, Diagnostic> {
     let mut result = Vec::new();
     for arg in args {
         let mut s = String::new();
         let mut tmp = Printer::new(4, &mut s);
-        generate_stmt_expression(&mut tmp, map, owner, params.to_vec(), arg, true)?;
+        generate_stmt_expression(&mut tmp, map, owner, params.to_vec(), arg, has_model)?;
         result.push(s);
     }
     Ok(result)
@@ -803,7 +804,7 @@ fn generate_function_call(
                     })?;
             let model_name = Name::from(model_rc);
             let func_name = format!("{}_{}", model_name.unique_camelcase(), name);
-            let arg_strs = generate_args(map, owner, &params, args)?;
+            let arg_strs = generate_args(map, owner, &params, args, has_model)?;
             // В корневой модели (или вне контекста tick/init) первый аргумент — `model`,
             // в подмоделях — `main` (указатель на корневую модель)
             let first_arg = if !has_model || owner.name().eq(&map.root_name()) {
@@ -816,12 +817,12 @@ fn generate_function_call(
             printer.print(&format!("{}({})", func_name, all_args.join(", ")));
         }
         FunctionDefinitionNode::External { name, .. } => {
-            let arg_strs = generate_args(map, owner, &params, args)?;
+            let arg_strs = generate_args(map, owner, &params, args, has_model)?;
             printer.print(&format!("{}({})", name, arg_strs.join(", ")));
         }
         FunctionDefinitionNode::Builtin(builtin_name, _, _) => match *builtin_name {
             "min" => {
-                let arg_strs = generate_args(map, owner, &params, args)?;
+                let arg_strs = generate_args(map, owner, &params, args, has_model)?;
                 if arg_strs.len() >= 2 {
                     printer.print(&format!(
                         "((({a}) < ({b})) ? ({a}) : ({b}))",
@@ -831,7 +832,7 @@ fn generate_function_call(
                 }
             }
             "max" => {
-                let arg_strs = generate_args(map, owner, &params, args)?;
+                let arg_strs = generate_args(map, owner, &params, args, has_model)?;
                 if arg_strs.len() >= 2 {
                     printer.print(&format!(
                         "((({a}) > ({b})) ? ({a}) : ({b}))",
@@ -841,13 +842,13 @@ fn generate_function_call(
                 }
             }
             "abs" => {
-                let arg_strs = generate_args(map, owner, &params, args)?;
+                let arg_strs = generate_args(map, owner, &params, args, has_model)?;
                 if !arg_strs.is_empty() {
                     printer.print(&format!("((({x}) < 0) ? -({x}) : ({x}))", x = arg_strs[0]));
                 }
             }
             "clamp" => {
-                let arg_strs = generate_args(map, owner, &params, args)?;
+                let arg_strs = generate_args(map, owner, &params, args, has_model)?;
                 if arg_strs.len() >= 3 {
                     printer.print(&format!(
                         "((({x}) < ({lo})) ? ({lo}) : ((({x}) > ({hi})) ? ({hi}) : ({x})))",
