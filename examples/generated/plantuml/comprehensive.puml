@@ -7,10 +7,10 @@ Entry --> [*]
 
 state Controller {
     [*] --> Idle
-    Done --> [*]
-    Idle --> Heating
     Cooling --> Done
     Cooling --> Idle
+    Idle --> Heating
+    Done --> [*]
     Heating --> Cooling
     Heating --> Idle
 }

@@ -1,0 +1,24 @@
+@startuml
+title Stacker
+
+[*] --> Idle
+Idle --> DispatchTask
+TakingAtPickup --> MovingToCell
+DeliveringLoad --> Completing
+DispatchTask --> MovingToPickup
+DispatchTask --> MovingToStorage
+MovingToCell --> PlacingInCell
+MovingToCell --> EmergencyCharge
+MovingToStorage --> TakingFromCell
+MovingToStorage --> EmergencyCharge
+TakingFromCell --> MovingToDropoff
+EmergencyCharge --> Idle
+PlacingInCell --> Completing
+MovingToDropoff --> DeliveringLoad
+MovingToDropoff --> EmergencyCharge
+MovingToPickup --> TakingAtPickup
+MovingToPickup --> EmergencyCharge
+Completing --> DispatchTask
+Completing --> Idle
+
+@enduml
