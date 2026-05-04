@@ -790,6 +790,7 @@ fn generate_function_call(
     params: Vec<(String, TypeNode)>,
     fun_def: &FunctionDefinitionNode,
     args: &[ExpressionNode],
+    has_model: bool,
 ) -> Result<(), Diagnostic> {
     match fun_def {
         FunctionDefinitionNode::Local { upper, name, .. } => {
@@ -803,7 +804,14 @@ fn generate_function_call(
             let model_name = Name::from(model_rc);
             let func_name = format!("{}_{}", model_name.unique_camelcase(), name);
             let arg_strs = generate_args(map, owner, &params, args)?;
-            let mut all_args = vec!["main".to_string()];
+            // В корневой модели (или вне контекста tick/init) первый аргумент — `model`,
+            // в подмоделях — `main` (указатель на корневую модель)
+            let first_arg = if !has_model || owner.name().eq(&map.root_name()) {
+                "model"
+            } else {
+                "main"
+            };
+            let mut all_args = vec![first_arg.to_string()];
             all_args.extend(arg_strs);
             printer.print(&format!("{}({})", func_name, all_args.join(", ")));
         }
@@ -1231,7 +1239,7 @@ pub(super) fn generate_expr(
 
         ExpressionNode::Function(fun_rc, args) => {
             let fun = fun_rc.borrow();
-            generate_function_call(printer, map, owner, params, &*fun, args)?;
+            generate_function_call(printer, map, owner, params, &*fun, args, has_model)?;
         }
 
         ExpressionNode::Initializer(elems) => {
