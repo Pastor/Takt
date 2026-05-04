@@ -1233,7 +1233,10 @@ pub(super) fn generate_expr(
             let var = var_rc.borrow();
             let var_expr = if let VariableNode::Simple { upper, .. } = &*var {
                 resolve_simple_var_in_context(var.name(), upper, &params, owner, map, has_model)
-                    .map_or_else(|| resolve_variable_c_expr(&*var, &params, map, owner, has_model), Ok)?
+                    .map_or_else(
+                        || resolve_variable_c_expr(&*var, &params, map, owner, has_model),
+                        Ok,
+                    )?
             } else {
                 resolve_variable_c_expr(&*var, &params, map, owner, has_model)?
             };
@@ -1249,7 +1252,10 @@ pub(super) fn generate_expr(
                     normalize_lowercase_snakecase(var.name().to_string())
                 } else {
                     resolve_simple_var_in_context(var.name(), upper, &params, owner, map, has_model)
-                        .map_or_else(|| resolve_variable_c_expr(&*var, &params, map, owner, has_model), Ok)?
+                        .map_or_else(
+                            || resolve_variable_c_expr(&*var, &params, map, owner, has_model),
+                            Ok,
+                        )?
                 }
             } else {
                 resolve_variable_c_expr(&*var, &params, map, owner, has_model)?
