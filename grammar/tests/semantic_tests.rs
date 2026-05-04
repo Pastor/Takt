@@ -3501,6 +3501,45 @@ fn test_all_vars_used_no_warning() {
     );
 }
 
+// ─── Bug #5: переменная родительской модели, используемая в подмодели ───────
+
+/// Bug #5: переменная, объявленная в корневой (родительской) модели и
+/// используемая только в коде подмодели, не должна получать предупреждение
+/// Ce13 «переменная объявлена, но нигде не используется».
+///
+/// До исправления `check_model_unused` строил множество `used` только из
+/// кода текущего уровня модели. Код вложенных моделей (их `always`-блоки,
+/// тела функций и т.д.) не сканировался, поэтому переменная родительской
+/// модели, которую использует подмодель, ошибочно считалась неиспользуемой.
+#[test]
+fn test_parent_var_used_in_submodel_no_unused_warning() {
+    let src = r#"
+        var shared: bit = 0;
+        model Sub {
+            start S { always { shared = 1; } }
+        }
+        start Main = Sub;
+    "#;
+    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
+    let model_rc = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = grammar::unused_variable_warnings(model_rc);
+    let warned_names: Vec<String> = warnings
+        .iter()
+        .filter_map(|w| {
+            if w.code.as_deref() == Some("SE-036") {
+                Some(w.message.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(
+        !warned_names.iter().any(|m| m.contains("shared")),
+        "shared используется в подмодели Sub — предупреждения быть не должно, получено: {:?}",
+        warned_names
+    );
+}
+
 // ─── Тесты FE4: Проверка детерминированности переходов (Ce14) ─────────────────
 
 /// FE4: Два безусловных перехода из одного состояния — предупреждение Ce14.

@@ -346,37 +346,44 @@ pub fn check_unused_variables(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> 
     warnings
 }
 
-fn check_model_unused(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnostic>) {
+/// Рекурсивно собирает все имена, используемые в `model` и во всех её вложенных моделях.
+///
+/// Вложенные модели могут обращаться к переменным родительской модели
+/// (семантика видимости BuT: подмодель видит переменные родителя).
+/// Чтобы не считать такие переменные неиспользуемыми, сбор использований
+/// охватывает всё дерево моделей, начиная с `model`.
+fn collect_from_model_tree(model: &Rc<RefCell<ModelNode>>, used: &mut HashSet<String>) {
     let borrowed = model.borrow();
+    for var in borrowed.variables.values() {
+        collect_from_var(var, used);
+    }
+    for func in borrowed.functions.values() {
+        collect_from_func(func, used);
+    }
+    for cond in borrowed.conditions.values() {
+        collect_from_condition_node(cond, used);
+    }
+    for block in &borrowed.named_blocks {
+        collect_from_named_block(block, used);
+    }
+    let states: Vec<_> = borrowed.states.values().cloned().collect();
+    let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
+    drop(borrowed);
+    for state in &states {
+        collect_from_state(state, used);
+    }
+    for nested_model in &nested {
+        collect_from_model_tree(nested_model, used);
+    }
+}
+
+fn check_model_unused(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnostic>) {
     let mut used: HashSet<String> = HashSet::new();
 
-    // Собираем использования из инициализаторов переменных
-    for var in borrowed.variables.values() {
-        collect_from_var(var, &mut used);
-    }
-
-    // Собираем использования из тел функций
-    for func in borrowed.functions.values() {
-        collect_from_func(func, &mut used);
-    }
-
-    // Собираем использования из именованных условий
-    for cond in borrowed.conditions.values() {
-        collect_from_condition_node(cond, &mut used);
-    }
-
-    // Собираем использования из именованных блоков модели
-    for block in &borrowed.named_blocks {
-        collect_from_named_block(block, &mut used);
-    }
-
-    // Собираем использования из состояний
-    let states: Vec<_> = borrowed.states.values().cloned().collect();
-    drop(borrowed);
-
-    for state in &states {
-        collect_from_state(state, &mut used);
-    }
+    // Собираем использования из кода текущей модели И всех вложенных моделей.
+    // Подмодели могут обращаться к переменным родительской модели, поэтому
+    // сканирование только текущего уровня приводит к ложным предупреждениям.
+    collect_from_model_tree(&model, &mut used);
 
     // Проверяем каждую простую переменную (var)
     let borrowed = model.borrow();
