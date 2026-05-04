@@ -38,3 +38,19 @@ echo "Готово. Файлы в $C_OUTPUT/"
 cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -S $C_OUTPUT -B $C_OUTPUT/cmake-build-debug/
 cd $C_OUTPUT/cmake-build-debug/ && ninja
 cd -
+
+BUILD_DIR="$SCRIPT_DIR/$C_OUTPUT/cmake-build-debug"
+if [ -x "$BUILD_DIR/stacker" ]; then
+  echo "Запуск симуляции stacker..."
+  "$BUILD_DIR/stacker" > /tmp/stacker_sim.log
+  echo "  лог: /tmp/stacker_sim.log ($(wc -l < /tmp/stacker_sim.log) строк)"
+
+  if command -v python3 &>/dev/null; then
+    echo "Формирование GIF-анимаций..."
+    python3 "$SCRIPT_DIR/$C_OUTPUT/stacker_visualize.py" /tmp/stacker_sim.log
+  else
+    echo "  [пропуск] python3 не найден — GIF не сформированы"
+  fi
+else
+  echo "  [пропуск] stacker не собран — симуляция пропущена"
+fi

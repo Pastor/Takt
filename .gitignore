@@ -19,3 +19,4 @@ README.pdf
 *.rs.orig
 /grammar/*.svg
 .temp
+/cmake-build-debug
