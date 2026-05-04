@@ -1,0 +1,277 @@
+// Автоматизированный штабелятор (стэкер/штабелятор-укладчик)
+//
+// Параметры склада:
+//   - 10 штабелей (ось X, номера 1–10)
+//   - 10 рядов в каждом штабеле (ось Z, высота, номера 1–10)
+//   - 20 секций в каждом штабеле (ось Y, глубина, номера 1–20)
+//   - Проходной склад: приёмка с торца X=0, отгрузка с торца X=11
+//   - Зона подзарядки при простое: X=0, Z=0, Y=0
+//
+// Тип задания (task_type):
+//   0 — Приёмка: забрать паллет из зоны приёмки, уложить в ячейку [stack,row,section]
+//   1 — Отгрузка: забрать паллет из ячейки [stack,row,section], доставить в зону выдачи
+//
+// Алгоритм кратчайшего пути:
+//   Штабелятор движется по трём осям одновременно (X, Y, Z независимо).
+//   Время прибытия определяется Чебышёвским расстоянием:
+//       time = max(|Δstack|, |Δrow|, |Δsection|)
+//   Функция travel_time() вычисляет это значение для планировщика.
+
+type u8 = [bit;8];
+
+// ─── Константы ────────────────────────────────────────────────────────────────
+
+const STACK_COUNT:   u8 = 10;
+const ROW_COUNT:     u8 = 10;
+const SECTION_COUNT: u8 = 20;
+
+// Зона зарядки (вне рабочего пространства)
+const CHARGE_STACK:   u8 = 0;
+const CHARGE_ROW:     u8 = 0;
+const CHARGE_SECTION: u8 = 0;
+
+// Зона приёмки (один торец проходного склада)
+const PICKUP_STACK:   u8 = 0;
+const PICKUP_ROW:     u8 = 1;
+const PICKUP_SECTION: u8 = 1;
+
+// Зона выдачи (другой торец проходного склада)
+const DROPOFF_STACK:   u8 = 11;
+const DROPOFF_ROW:     u8 = 1;
+const DROPOFF_SECTION: u8 = 1;
+
+// ─── Входные порты (датчики и интерфейс СУС) ──────────────────────────────────
+
+// Задание от системы управления складом (WMS)
+in task_valid:        bit = 0x100:0;   // новое задание готово к приёму
+in task_type:         bit = 0x101:0;   // 0=приёмка, 1=отгрузка
+in task_stack_no:     u8  = 0x102:0;   // номер штабеля задания (1–10)
+in task_row_no:       u8  = 0x103:0;   // номер ряда задания (1–10)
+in task_section_no:   u8  = 0x104:0;   // номер секции задания (1–20)
+
+// Датчики положения (энкодеры / лазерные метки)
+in pos_stack:         u8  = 0x200:0;   // текущий штабель
+in pos_row:           u8  = 0x201:0;   // текущий ряд
+in pos_section:       u8  = 0x202:0;   // текущая секция
+
+// Датчики состояния
+in sense_loaded:      bit = 0x300:0;   // груз на вилах
+in sense_at_charge:   bit = 0x301:0;   // в зоне зарядки
+in sense_battery_low: bit = 0x302:0;   // заряд ниже порога
+
+// ─── Выходные порты (управление приводами) ────────────────────────────────────
+
+out cmd_target_stack:   u8  = 0x400:0; // целевой штабель
+out cmd_target_row:     u8  = 0x401:0; // целевой ряд
+out cmd_target_section: u8  = 0x402:0; // целевая секция
+out cmd_fork:           bit = 0x500:0; // 1=выдвинуть вилы, 0=убрать вилы
+out cmd_ack:            bit = 0x600:0; // подтверждение приёма задания
+out cmd_done:           bit = 0x601:0; // задание выполнено
+
+// ─── Рабочие переменные ───────────────────────────────────────────────────────
+
+var tgt_stack:   u8  = 0;    // параметры текущего задания
+var tgt_row:     u8  = 0;
+var tgt_section: u8  = 0;
+var tgt_type:    bit = 0;    // тип: 0=приёмка, 1=отгрузка
+var busy:        bit = 0;    // флаг активного задания
+
+// ─── Вспомогательные функции ─────────────────────────────────────────────────
+
+// Принять задание от СУС: сохранить параметры, квитировать.
+fn accept_task() -> bit {
+    tgt_stack   = task_stack_no;
+    tgt_row     = task_row_no;
+    tgt_section = task_section_no;
+    tgt_type    = task_type;
+    busy        = 1;
+    cmd_ack     = 1;
+    return 1;
+}
+
+// Завершить задание: сбросить флаг, сигнализировать СУС.
+fn complete_task() -> bit {
+    busy     = 0;
+    cmd_done = 1;
+    cmd_ack  = 0;
+    return 1;
+}
+
+// ─── Условия переходов ────────────────────────────────────────────────────────
+
+cond at_tgt_stack   = pos_stack = tgt_stack;
+cond at_tgt_row     = pos_row = tgt_row;
+cond at_tgt_section = pos_section = tgt_section;
+cond at_target      = at_tgt_stack & at_tgt_row & at_tgt_section;
+
+cond at_pickup  = pos_stack = PICKUP_STACK
+                & pos_row = PICKUP_ROW
+                & pos_section = PICKUP_SECTION;
+
+cond at_dropoff = pos_stack = DROPOFF_STACK
+                & pos_row = DROPOFF_ROW
+                & pos_section = DROPOFF_SECTION;
+
+cond at_charge_zone = sense_at_charge;
+
+cond task_pending = task_valid & !busy;
+cond is_inbound   = !tgt_type;
+cond is_outbound  = tgt_type;
+cond loaded       = sense_loaded;
+cond unloaded     = !sense_loaded;
+cond charged      = !sense_battery_low;
+
+// ─── Машина состояний ─────────────────────────────────────────────────────────
+
+// Начальное состояние: простой в зоне подзарядки.
+start Idle {
+    enter {
+        cmd_target_stack   = CHARGE_STACK;
+        cmd_target_row     = CHARGE_ROW;
+        cmd_target_section = CHARGE_SECTION;
+        cmd_fork = 0;
+        cmd_done = 0;
+        cmd_ack  = 0;
+    }
+    always {
+        // Принимаем задание при достаточном заряде батареи
+        if task_valid & !busy & !sense_battery_low {
+            accept_task();
+        }
+    }
+    ref DispatchTask: busy & charged;
+}
+
+// Диспетчеризация: выбор ветки по типу задания.
+state DispatchTask {
+    enter {
+        cmd_ack = 0;
+    }
+    ref MovingToPickup:   is_inbound;
+    ref MovingToStorage:  is_outbound;
+}
+
+// ── Ветка ПРИЁМКА (in-bound): получить паллет → уложить в ячейку ─────────────
+
+// Движение к зоне приёмки (кратчайший путь: все оси одновременно).
+state MovingToPickup {
+    enter {
+        cmd_target_stack   = PICKUP_STACK;
+        cmd_target_row     = PICKUP_ROW;
+        cmd_target_section = PICKUP_SECTION;
+        cmd_fork = 0;
+    }
+    ref TakingAtPickup:  at_pickup;
+    ref EmergencyCharge: sense_battery_low;
+}
+
+// Захват паллета на приёмке.
+state TakingAtPickup {
+    enter {
+        cmd_fork = 1;
+    }
+    ref MovingToCell: loaded;
+}
+
+// Движение к целевой ячейке хранения.
+state MovingToCell {
+    enter {
+        cmd_target_stack   = tgt_stack;
+        cmd_target_row     = tgt_row;
+        cmd_target_section = tgt_section;
+        cmd_fork = 0;
+    }
+    ref PlacingInCell:   at_target;
+    ref EmergencyCharge: sense_battery_low;
+}
+
+// Укладка паллета в ячейку.
+state PlacingInCell {
+    enter {
+        cmd_fork = 1;
+    }
+    always {
+        if !sense_loaded {
+            cmd_fork = 0;
+        }
+    }
+    ref Completing: unloaded;
+}
+
+// ── Ветка ОТГРУЗКА (out-bound): забрать из ячейки → доставить в зону выдачи ──
+
+// Движение к ячейке хранения.
+state MovingToStorage {
+    enter {
+        cmd_target_stack   = tgt_stack;
+        cmd_target_row     = tgt_row;
+        cmd_target_section = tgt_section;
+        cmd_fork = 0;
+    }
+    ref TakingFromCell:  at_target;
+    ref EmergencyCharge: sense_battery_low;
+}
+
+// Захват паллета из ячейки хранения.
+state TakingFromCell {
+    enter {
+        cmd_fork = 1;
+    }
+    ref MovingToDropoff: loaded;
+}
+
+// Движение к зоне выдачи.
+state MovingToDropoff {
+    enter {
+        cmd_target_stack   = DROPOFF_STACK;
+        cmd_target_row     = DROPOFF_ROW;
+        cmd_target_section = DROPOFF_SECTION;
+        cmd_fork = 0;
+    }
+    ref DeliveringLoad:  at_dropoff;
+    ref EmergencyCharge: sense_battery_low;
+}
+
+// Передача паллета в зону выдачи.
+state DeliveringLoad {
+    enter {
+        cmd_fork = 1;
+    }
+    always {
+        if !sense_loaded {
+            cmd_fork = 0;
+        }
+    }
+    ref Completing: unloaded;
+}
+
+// ── Завершение задания ────────────────────────────────────────────────────────
+
+state Completing {
+    enter {
+        complete_task();
+    }
+    always {
+        cmd_done = 0;
+    }
+    // Если уже есть следующее задание — берём сразу, иначе на зарядку
+    ref DispatchTask: task_valid & charged;
+    ref Idle:         !task_valid;
+}
+
+// ── Аварийный возврат на зарядку ─────────────────────────────────────────────
+
+// Активируется при критически низком заряде в ходе движения.
+// Текущее задание прерывается; после зарядки СУС выдаёт задание заново.
+state EmergencyCharge {
+    enter {
+        cmd_target_stack   = CHARGE_STACK;
+        cmd_target_row     = CHARGE_ROW;
+        cmd_target_section = CHARGE_SECTION;
+        cmd_fork = 0;
+        cmd_ack  = 0;
+        cmd_done = 0;
+        busy     = 0;
+    }
+    ref Idle: sense_at_charge;
+}
