@@ -235,14 +235,20 @@ mod tests {
         }
     }
 
-    /// Функция с псевдонимом типа в параметре: `type u8 = [bit;8]; extern fn foo(x: u8);`.
+    /// Функция с псевдонимом типа в параметре: `extern fn foo(x: u8);` — u8 встроенный тип.
     #[test]
     fn extern_fn_alias_param_resolves() {
-        let node = build("type u8 = [bit;8]; extern fn foo(x: u8);").unwrap();
+        let node = build("extern fn foo(x: u8);").unwrap();
         match node.functions.get("foo").expect("foo не найдена") {
             FunctionDefinitionNode::External { params, .. } => {
                 assert_eq!(params.len(), 1);
-                assert_eq!(params[0].1, TypeNode::Array(8, Box::new(TypeNode::Bit)));
+                assert_eq!(
+                    params[0].1,
+                    TypeNode::Integer {
+                        bits: 8,
+                        signed: false
+                    }
+                );
             }
             other => panic!("ожидался External, получен {:?}", other),
         }

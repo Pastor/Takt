@@ -164,6 +164,40 @@ fn type_alias_resolves_through_map() {
     }
 }
 
+/// Встроенный тип `u8` (без переопределения) даёт `Integer { bits:8, signed:false }`.
+#[test]
+fn builtin_u8_gives_integer_type() {
+    let node = build("var x: u8 = 0; start S;");
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
+        assert_eq!(
+            ty,
+            grammar::semantic::type_node::TypeNode::Integer {
+                bits: 8,
+                signed: false
+            },
+        );
+    } else {
+        panic!("переменная x не найдена");
+    }
+}
+
+/// Встроенный тип `i32` даёт `Integer { bits:32, signed:true }`.
+#[test]
+fn builtin_i32_gives_integer_type() {
+    let node = build("var x: i32 = 0; start S;");
+    if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
+        assert_eq!(
+            ty,
+            grammar::semantic::type_node::TypeNode::Integer {
+                bits: 32,
+                signed: true
+            },
+        );
+    } else {
+        panic!("переменная x не найдена");
+    }
+}
+
 /// Встроенный псевдоним `bool` разрешается в `TypeNode::Bool`.
 #[test]
 fn type_alias_bool_resolves_to_bit() {

@@ -57,22 +57,62 @@ pub(crate) fn construct_type(
         Type::Bit => Ok(TypeNode::Bit),
         Type::Bool => Ok(TypeNode::Bool),
         Type::Rational => Ok(TypeNode::Rational),
-        Type::Alias(def) => match def.name.as_str() {
-            "bit" => Ok(TypeNode::Bit),
-            "bool" => Ok(TypeNode::Bool),
-            "float" => Ok(TypeNode::Rational),
-            "unit" => Ok(TypeNode::Unit),
-            local => {
-                let rc = model.borrow().search_type(local).ok_or_else(|| {
-                    Diagnostic::declaration_error(
-                        def.loc,
-                        format!("Локальный тип '{}' не найден", local),
-                    )
-                    .with_code("SE-034")
-                })?;
-                Ok(rc.borrow().clone())
+        Type::Alias(def) => {
+            // Примитивные типы: «bit», «bool», «float», «unit» — жёстко связаны.
+            match def.name.as_str() {
+                "bit" => return Ok(TypeNode::Bit),
+                "bool" => return Ok(TypeNode::Bool),
+                "float" => return Ok(TypeNode::Rational),
+                "unit" => return Ok(TypeNode::Unit),
+                _ => {}
             }
-        },
+            // Пользовательский псевдоним в таблице типов модели берёт приоритет
+            // над встроенными именами (u8, i32 и пр.), что позволяет переопределять
+            // встроенные типы на уровне модели для обратной совместимости.
+            if let Some(rc) = model.borrow().search_type(&def.name) {
+                return Ok(rc.borrow().clone());
+            }
+            // Встроенные целочисленные типы
+            match def.name.as_str() {
+                "u8" => Ok(TypeNode::Integer {
+                    bits: 8,
+                    signed: false,
+                }),
+                "u16" => Ok(TypeNode::Integer {
+                    bits: 16,
+                    signed: false,
+                }),
+                "u32" => Ok(TypeNode::Integer {
+                    bits: 32,
+                    signed: false,
+                }),
+                "u64" => Ok(TypeNode::Integer {
+                    bits: 64,
+                    signed: false,
+                }),
+                "i8" => Ok(TypeNode::Integer {
+                    bits: 8,
+                    signed: true,
+                }),
+                "i16" => Ok(TypeNode::Integer {
+                    bits: 16,
+                    signed: true,
+                }),
+                "i32" => Ok(TypeNode::Integer {
+                    bits: 32,
+                    signed: true,
+                }),
+                "i64" => Ok(TypeNode::Integer {
+                    bits: 64,
+                    signed: true,
+                }),
+                local => Err(Diagnostic::declaration_error(
+                    def.loc,
+                    format!("Локальный тип '{}' не найден", local),
+                )
+                .with_code("SE-034")),
+            }
+        }
         Type::Array {
             element_type,
             element_count,
@@ -229,14 +269,14 @@ mod tests {
     ///
     /// # Пример (Lam)
     /// ```but
-    /// type u8 = [bit;8];
-    /// var x: u8 = 0;   // alias "u8" → Array(8, Bit)
+    /// type byte8 = [bit;8];
+    /// var x: byte8 = 0;   // alias "byte8" → Array(8, Bit)
     /// ```
     #[test]
     fn local_alias_resolves_from_map() {
         let mut map = HashMap::new();
         map.insert(
-            "u8".to_string(),
+            "byte8".to_string(),
             TypeNode::Array(8, Box::new(TypeNode::Bit)),
         );
         let model = Rc::new(RefCell::new(ModelNode {
@@ -244,8 +284,34 @@ mod tests {
             ..Default::default()
         }));
         assert_eq!(
-            construct_type(Some(alias("u8")), model).unwrap(),
+            construct_type(Some(alias("byte8")), model).unwrap(),
             TypeNode::Array(8, Box::new(TypeNode::Bit))
+        );
+    }
+
+    /// Встроенный псевдоним `u8` разрешается в `Integer { bits: 8, signed: false }`.
+    #[test]
+    fn builtin_u8_resolves_to_integer() {
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        assert_eq!(
+            construct_type(Some(alias("u8")), model).unwrap(),
+            TypeNode::Integer {
+                bits: 8,
+                signed: false
+            }
+        );
+    }
+
+    /// Встроенный псевдоним `i32` разрешается в `Integer { bits: 32, signed: true }`.
+    #[test]
+    fn builtin_i32_resolves_to_integer() {
+        let model = Rc::new(RefCell::new(ModelNode::default()));
+        assert_eq!(
+            construct_type(Some(alias("i32")), model).unwrap(),
+            TypeNode::Integer {
+                bits: 32,
+                signed: true
+            }
         );
     }
 
@@ -423,4 +489,13 @@ pub enum TypeNode {
     ///
     /// Хранит имя структуры.
     Struct(String),
+    /// Встроенный целочисленный тип: `u8`/`i8`…`u64`/`i64`.
+    ///
+    /// `bits` — разрядность (8, 16, 32, 64); `signed` — знаковость.
+    Integer {
+        /// Ширина в битах: 8, 16, 32 или 64.
+        bits: u8,
+        /// `true` → знаковый (`int{bits}_t`), `false` → беззнаковый (`uint{bits}_t`).
+        signed: bool,
+    },
 }
