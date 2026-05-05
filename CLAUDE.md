@@ -67,17 +67,6 @@ the semantic pipeline. Do NOT add `reference.rs`/`resolve_state_references` — 
 - `grammar/tests/semantic_tests.rs` — semantic integration tests
 - `grammar/tests/lsp_tests.rs` — LSP integration tests
 
-## Development rules
-
-- **Language**: Russian in comments, commit messages, docstrings, and changelog.
-- **TDD**: write a failing test first, then minimal code to pass, then refactor.
-- **Patch size**: group changes logically, max 300 lines per patch; create `changes/Changes-XX[-PYY].patch`.
-- **Changelog**: prepend to `CHANGES.md` using [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
-- Run `./precheck.sh` before committing.
-- Use meaningful commit messages that describe the changes made.
-- Use consistent naming conventions and follow established coding standards.
-- Document your code with comments and docstrings to improve readability and maintainability.
-
 ## Testing conventions
 
 - Use `tempfile` for temporary files, `rstest` for parameterized tests.
@@ -94,8 +83,16 @@ the semantic pipeline. Do NOT add `reference.rs`/`resolve_state_references` — 
 4. Extend C generator in `generator/c/` if needed.
 5. Add test fixtures to `tests/data/semantic/valid/` and/or `invalid/`.
 
-## Добавление
+## Development rules
 
+- **Language**: Russian in comments, commit messages, docstrings, and changelog.
+- **TDD**: write a failing test first, then minimal code to pass, then refactor.
+- **Patch size**: group changes logically, max 300 lines per patch; create `changes/Changes-XX[-PYY].patch`.
+- **Changelog**: prepend to `CHANGES.md` using [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
+- Run `./precheck.sh` before committing.
+- Use meaningful commit messages that describe the changes made.
+- Use consistent naming conventions and follow established coding standards.
+- Document your code with comments and docstrings to improve readability and maintainability.
 - Читай TASKS.md первым, перечисли все задачи, выполняй последовательно. После каждой задачи запускай cargo test перед
   переходом к следующей.
 - Всегда запускай cargo test после изменения Rust-файлов. При написании новых тестов верифицируй ожидаемые значения по
@@ -109,7 +106,7 @@ the semantic pipeline. Do NOT add `reference.rs`/`resolve_state_references` — 
 - При написании новых тестов сначала запускай небольшой зонд для захвата реальных выходных значений, затем пиши
   assertions против этих захваченных значений. Не угадывай ожидаемые строки/адреса.
 - Настрой CI-воркфлоу `.claude/ci-repair.sh`: (1) запускает `cargo test --no-fail-fast`, захватывает сбои в JSON, (2)
-  для каждого сбоя вызывает `claude -p` с фокусированным промптом (только падающий тест + релевантные файлы + ошибка), 
+  для каждого сбоя вызывает `claude -p` с фокусированным промптом (только падающий тест + релевантные файлы + ошибка),
   (3) агент исправляет, перезапускает тест, пишет патч в `.claude/patches/<name>.patch`, (4) применяет патчи, запускает
   полный тест-сьют, создаёт `gh pr create --draft`. Добавь `.claude/state.json` для возобновления прерванных запусков.
   Покажи скрипт и пробный прогон.
