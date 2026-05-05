@@ -724,9 +724,28 @@ ClosedStatement: Statement = {
     }
 }
 
+// Образец в ветке match: конкретное значение или `_` (wildcard).
+MatchPattern: MatchPattern = {
+    <l:@L> "_" <r:@R> => MatchPattern::Wildcard(Location::Source(file_no, l, r)),
+    <e:LoopCond> => MatchPattern::Value(e),
+}
+
+// Одна ветка match: `образец (, образец)* => { тело }`.
+MatchArm: MatchArm = {
+    <l:@L> <pats:CommaOne<MatchPattern>> "=>" <body:BlockStatement> <r:@R> => MatchArm {
+        loc: Location::Source(file_no, l, r),
+        patterns: pats,
+        body: Box::new(body),
+    },
+}
+
 Statement: Statement = {
     OpenStatement,
     ClosedStatement,
+    // Оператор match: `match выражение { ветки }`.
+    <l:@L> "match" <e:LoopCond> "{" <arms:MatchArm*> "}" <r:@R> => {
+        Statement::Match(Location::Source(file_no, l, r), Box::new(e), arms)
+    },
     <l:@L> <false_token:!> <r:@R> => {
         parser_errors.push(false_token);
         Statement::Error(Location::Source(file_no, l, r))
@@ -915,6 +934,9 @@ extern {
         "fn" => Token::Function,
         "return" => Token::Return,
         "if" => Token::If,
+        "match" => Token::Match,
+        "_" => Token::Wildcard,
+        "=>" => Token::FatArrow,
         "for" => Token::For,
         "loop" => Token::Loop,
         "while" => Token::While,

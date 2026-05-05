@@ -19,7 +19,7 @@ use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
     ConditionDefinitionNode, ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode,
-    ModelNode, StateNode, StatementNode, VariableNode,
+    MatchArmNode, MatchPatternNode, ModelNode, StateNode, StatementNode, VariableNode,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -1696,6 +1696,40 @@ pub(super) fn generate_code_block(
                     generate_formula_check(printer, map, owner, formula)?;
                 }
             }
+        }
+
+        StatementNode::Match { expr, arms } => {
+            printer.ident("switch (");
+            generate_stmt_expression(printer, map, owner, params.clone(), expr, has_model)?;
+            printer.print(") {").nl();
+            for MatchArmNode { patterns, body } in arms {
+                let has_wildcard = patterns
+                    .iter()
+                    .any(|p| matches!(p, MatchPatternNode::Wildcard));
+                if has_wildcard {
+                    printer.ident("default:").nl();
+                } else {
+                    for pat in patterns {
+                        if let MatchPatternNode::Value(val_expr) = pat {
+                            printer.ident("case ");
+                            generate_stmt_expression(
+                                printer,
+                                map,
+                                owner,
+                                params.clone(),
+                                val_expr,
+                                has_model,
+                            )?;
+                            printer.print(":").nl();
+                        }
+                    }
+                }
+                printer.ident("{").nl().up();
+                generate_code_block(printer, map, owner, params.clone(), body, has_model)?;
+                printer.ident("break;").nl();
+                printer.down().ident("}").nl();
+            }
+            printer.ident("}").nl();
         }
     }
     Ok(())
