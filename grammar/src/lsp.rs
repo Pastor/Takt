@@ -53,13 +53,18 @@ const BUT_KEYWORDS: &[(&str, &str)] = &[
     ("type", "псевдоним типа"),
     ("fn", "объявление функции"),
     ("extern", "объявление внешней функции"),
-    ("port", "объявление порта ввода-вывода"),
+    ("in", "входной порт"),
+    ("out", "выходной порт"),
+    ("inout", "двунаправленный порт"),
     ("enum", "объявление перечисления"),
+    ("struct", "объявление структуры"),
     ("cond", "именованное условие перехода"),
     ("if", "условный оператор"),
     ("else", "ветка условного оператора"),
     ("loop", "цикл с опциональным условием"),
+    ("while", "цикл с условием (синоним loop)"),
     ("for", "цикл со счётчиком"),
+    ("match", "оператор выбора по образцу"),
     ("break", "выход из цикла"),
     ("continue", "переход к следующей итерации цикла"),
     ("return", "возврат из функции"),
@@ -70,10 +75,46 @@ const BUT_KEYWORDS: &[(&str, &str)] = &[
     ("assembly", "ассемблерная вставка"),
     ("true", "булев литерал истина"),
     ("false", "булев литерал ложь"),
-    ("bit", "1-битный примитивный тип"),
-    ("bool", "булев тип"),
-    ("float", "тип числа с плавающей точкой"),
-    ("unit", "пустой тип (возвращаемый тип процедур)"),
+];
+
+/// Встроенные типы языка Lam: примитивные и целочисленные.
+///
+/// Используются для подсветки идентификаторов-типов (`TT_TYPE`) в semantic tokens,
+/// для генерации элементов автодополнения с видом `TYPE` и для hover-подсказок.
+const BUT_BUILTIN_TYPES: &[(&str, &str)] = &[
+    ("bit", "встроенный 1-битный примитивный тип (0 или 1)"),
+    ("bool", "встроенный булев тип (true или false)"),
+    ("float", "встроенный тип числа с плавающей точкой"),
+    (
+        "unit",
+        "встроенный пустой тип (возвращаемый тип процедур без значения)",
+    ),
+    (
+        "u8",
+        "встроенный 8-битный беззнаковый целочисленный тип [0 … 255]",
+    ),
+    (
+        "u16",
+        "встроенный 16-битный беззнаковый целочисленный тип [0 … 65 535]",
+    ),
+    (
+        "u32",
+        "встроенный 32-битный беззнаковый целочисленный тип [0 … 4 294 967 295]",
+    ),
+    ("u64", "встроенный 64-битный беззнаковый целочисленный тип"),
+    (
+        "i8",
+        "встроенный 8-битный знаковый целочисленный тип [−128 … 127]",
+    ),
+    (
+        "i16",
+        "встроенный 16-битный знаковый целочисленный тип [−32 768 … 32 767]",
+    ),
+    (
+        "i32",
+        "встроенный 32-битный знаковый целочисленный тип [−2 147 483 648 … 2 147 483 647]",
+    ),
+    ("i64", "встроенный 64-битный знаковый целочисленный тип"),
 ];
 
 /// Собирает диагностику из исходного кода Lam.
@@ -619,6 +660,16 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
         });
     }
 
+    // Добавляем встроенные типы
+    for (type_name, description) in BUT_BUILTIN_TYPES {
+        items.push(CompletionItem {
+            label: type_name.to_string(),
+            kind: Some(CompletionItemKind::TYPE_PARAMETER),
+            detail: Some(description.to_string()),
+            ..Default::default()
+        });
+    }
+
     // Добавляем идентификаторы из семантической модели
     if let Ok((ast, _)) = crate::parse(source, 0) {
         if let Ok(model) = semantic::tree::construct_model(&ast, None, &[]) {
@@ -1061,6 +1112,12 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
             }
             hover_text = text;
         }
+        // Встроенный тип (u8, i32, bit, bool и т.д.)
+        else if let Some((_, description)) =
+            BUT_BUILTIN_TYPES.iter().find(|(t, _)| *t == word.as_str())
+        {
+            hover_text = format!("```but\n{}\n```\n\n{}", word, description);
+        }
     }
 
     if hover_text.is_empty() {
@@ -1339,7 +1396,10 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
     for (start, token, end) in token_results {
         let tt = match token {
             Token::Identifier(name) => {
-                if let Some(ref b) = borrowed_model {
+                // Встроенные типы имеют приоритет над пользовательскими именами
+                if BUT_BUILTIN_TYPES.iter().any(|(t, _)| *t == name) {
+                    TT_TYPE
+                } else if let Some(ref b) = borrowed_model {
                     if b.search_func(name).is_some() {
                         TT_FUNCTION
                     } else if b.types.contains_key(name) || b.enums.contains_key(name) {
@@ -1362,11 +1422,16 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             | Token::Constant
             | Token::PortIn
             | Token::PortOut
+            | Token::PortInOut
             | Token::Function
             | Token::Extern
             | Token::Enum
+            | Token::Struct
             | Token::Type
             | Token::Loop
+            | Token::While
+            | Token::Match
+            | Token::Wildcard
             | Token::Continue
             | Token::Break
             | Token::Return
@@ -1375,6 +1440,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             | Token::For
             | Token::Import
             | Token::As
+            | Token::From
             | Token::Assembly
             | Token::Formula
             | Token::Condition
