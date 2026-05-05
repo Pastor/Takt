@@ -441,8 +441,8 @@ pub struct NamedArgument {
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Condition {
-    /// Доступ к элементу массива: `id[n]`.
-    ArraySubscript(Location, Identifier, i64),
+    /// Доступ к элементу массива: `id[индекс]`.
+    ArraySubscript(Location, Identifier, Box<Condition>),
     /// Скобки: `(условие)`.
     Parenthesis(Location, Box<Condition>),
     /// Доступ к биту: `условие.член`.
@@ -528,8 +528,8 @@ pub enum Member {
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Expression {
-    /// Доступ к элементу массива: `id[n]`.
-    ArraySubscript(Location, Identifier, i64),
+    /// Доступ к элементу массива: `id[индекс]`.
+    ArraySubscript(Location, Identifier, Box<Expression>),
     /// Срез массива: `id[начало:конец]`.
     ArraySlice(Location, Identifier, Option<i64>, Option<i64>),
     /// Скобки: `(выражение)`.

@@ -1175,8 +1175,8 @@ pub enum ConditionNode {
     None,
     /// Заглушка для условия, которое ещё не было разрешено.
     Unresolved(ast::Condition),
-    /// Доступ к элементу массива: `id[n]`.
-    ArraySubscript(Rc<RefCell<VariableNode>>, i64),
+    /// Доступ к элементу массива: `id[индекс]`.
+    ArraySubscript(Rc<RefCell<VariableNode>>, Box<ConditionNode>),
     /// Скобки: `(условие)`.
     Parenthesis(Box<ConditionNode>),
     /// Доступ к биту: `условие.член`.
@@ -1292,8 +1292,8 @@ pub enum ExpressionNode {
     None,
     /// «Сырое» АСД-выражение, ожидающее семантического понижения.
     Unresolved(ast::Expression),
-    /// Доступ к элементу массива: `id[n]`.
-    ArraySubscript(Rc<RefCell<VariableNode>>, i64),
+    /// Доступ к элементу массива: `id[индекс]`.
+    ArraySubscript(Rc<RefCell<VariableNode>>, Box<ExpressionNode>),
     /// Срез массива: `id[начало:конец]`.
     ArraySlice(Rc<RefCell<VariableNode>>, Option<i64>, Option<i64>),
     /// Скобки: `(выражение)`.

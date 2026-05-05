@@ -529,7 +529,7 @@ fn expression_loc_all_variants() {
     let b = num(2);
 
     let variants: Vec<Expression> = vec![
-        Expression::ArraySubscript(l, Identifier::new("x"), 0),
+        Expression::ArraySubscript(l, Identifier::new("x"), Box::new(Expression::Number(l, 0))),
         Expression::ArraySlice(l, Identifier::new("x"), None, None),
         Expression::Parenthesis(l, Box::new(a.clone())),
         Expression::BitAccess(l, Box::new(a.clone()), Member::Number(0)),
