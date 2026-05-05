@@ -505,6 +505,28 @@ pub fn generate_header(filename: &str, map: &CMap) -> Result<String, Diagnostic>
         printer.nl();
     }
 
+    // Генерируем typedef struct для пользовательских структур
+    if let Some(model_rc) = map.root_model_node() {
+        let model = model_rc.borrow();
+        let mut structs: Vec<_> = model.structs.values().collect();
+        structs.sort_by_key(|s| &s.name);
+        if !structs.is_empty() {
+            for s in structs {
+                printer
+                    .print(&format!("typedef struct {} {{", s.name))
+                    .nl()
+                    .up();
+                for (field_name, field_ty) in &s.fields {
+                    let c_decl = c::get_typed_variable(field_ty, Some(field_name.clone()), &*model)
+                        .unwrap_or_else(|| format!("/* unsupported */ {}", field_name));
+                    printer.ident(&format!("{};", c_decl)).nl();
+                }
+                printer.down().print(&format!("}} {};", s.name)).nl();
+            }
+            printer.nl();
+        }
+    }
+
     // Генерируем enum типы для портов — до struct, чтобы можно было использовать в сигнатурах
     generate_port_enums(&mut printer, map)?;
 
@@ -753,6 +775,30 @@ state Mid = Eng + (Eng | Eng) + Eng;
         assert!(
             header.contains("TEST_MID_ENG2"),
             "ожидался TEST_MID_ENG2:\n{header}"
+        );
+    }
+
+    /// Struct с полями генерирует `typedef struct Name { ... } Name;` в заголовке.
+    #[test]
+    fn struct_typedef_in_header() {
+        let src = r#"
+struct Point { x: [bit;16], y: [bit;16] }
+var pos: Point = 0;
+start Main { always { pos.x = 1; } }
+        "#;
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model.borrow_mut().name = Some("Test".to_string());
+        let model = model.borrow();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
+        let header = generate_header(map.get_filename(), &map).unwrap();
+        assert!(
+            header.contains("typedef struct Point"),
+            "ожидался typedef struct Point:\n{header}"
+        );
+        assert!(
+            header.contains("} Point;"),
+            "ожидалось закрытие }} Point;:\n{header}"
         );
     }
 }
