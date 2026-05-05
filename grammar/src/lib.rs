@@ -364,6 +364,16 @@ pub fn unreachable_state_warnings(
     semantic::validate::check_unreachable_states(model)
 }
 
+/// SE-047: предупреждения об очевидно константных условиях переходов.
+///
+/// Проверяет условия `ref`/`next` переходов на наличие сравнений литералов,
+/// результат которых известен статически (например, `1 = 0` — всегда ложно).
+pub fn constant_condition_warnings(
+    model: &std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+) -> Vec<Diagnostic> {
+    semantic::validate::check_constant_conditions(model)
+}
+
 /// SE-044: предупреждения о лишних точках с запятой в АСД модели.
 ///
 /// Обходит все элементы модели и состояний (рекурсивно), генерируя

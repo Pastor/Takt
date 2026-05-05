@@ -4651,3 +4651,47 @@ fn match_switch_fixture_is_valid() {
         result
     );
 }
+
+// ─── Задача 18: Анализ константных условий ────────────────────────────────────
+
+/// SE-047: переход с `1 = 0` — всегда ложно → предупреждение.
+#[test]
+fn constant_condition_always_false_warns() {
+    let src = "start S { ref S: 1 = 0; }";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let model = construct_model(&ast, None, &[]).expect("ошибка семантики");
+    let warnings = grammar::constant_condition_warnings(&model);
+    assert!(
+        warnings.iter().any(|d| d.code.as_deref() == Some("SE-047")),
+        "ожидалось SE-047 для `1 = 0`, получено: {:?}",
+        warnings
+    );
+}
+
+/// SE-047: переход с `1 = 1` — всегда истинно → предупреждение.
+#[test]
+fn constant_condition_always_true_warns() {
+    let src = "start S { ref S: 1 = 1; }";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let model = construct_model(&ast, None, &[]).expect("ошибка семантики");
+    let warnings = grammar::constant_condition_warnings(&model);
+    assert!(
+        warnings.iter().any(|d| d.code.as_deref() == Some("SE-047")),
+        "ожидалось SE-047 для `1 = 1`, получено: {:?}",
+        warnings
+    );
+}
+
+/// SE-047: переход с переменной в условии — не предупреждение.
+#[test]
+fn constant_condition_with_variable_no_warn() {
+    let src = "var x: bit = 0; start S { ref S: x = 1; }";
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let model = construct_model(&ast, None, &[]).expect("ошибка семантики");
+    let warnings = grammar::constant_condition_warnings(&model);
+    assert!(
+        !warnings.iter().any(|d| d.code.as_deref() == Some("SE-047")),
+        "SE-047 не должен выдаваться для `x = 1`, получено: {:?}",
+        warnings
+    );
+}
