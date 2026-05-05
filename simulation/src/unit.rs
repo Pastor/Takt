@@ -1185,8 +1185,7 @@ mod tests {
     /// Последовательная композиция с next: S = A + B { next End; }.
     #[test]
     fn test_next_after_sequence() {
-        let src =
-            "model A { start Start; } model B { start Start; } start S = A + B { next End; } state End;";
+        let src = "model A { start Start; } model B { start Start; } start S = A + B { next End; } state End;";
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
         let mut unit = from_model(model).unwrap();
@@ -1211,8 +1210,7 @@ mod tests {
     /// Параллельная композиция с next: S = A | B { next End; }.
     #[test]
     fn test_next_after_parallel() {
-        let src =
-            "model A { start Start; } model B { start Start; } start S = A | B { next End; } state End;";
+        let src = "model A { start Start; } model B { start Start; } start S = A | B { next End; } state End;";
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
         let mut unit = from_model(model).unwrap();
