@@ -20,3 +20,4 @@ README.pdf
 /grammar/*.svg
 .temp
 /cmake-build-debug
+venv

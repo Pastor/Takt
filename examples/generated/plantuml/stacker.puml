@@ -5,41 +5,41 @@ title Stacker
 Stacker : CommandReceiver | MovementController | LiftController
 Stacker --> [*]
 
+state MovementController {
+    [*] --> MovementIdle
+    TaskCompleting --> MovementIdle
+    WaitingForkAtStorage --> MovingToDropoff
+    MovementIdle --> DispatchMove
+    WaitingForkAtDropoff --> TaskCompleting
+    MovingToCell --> WaitingForkAtCell
+    MovingToCell --> EmergencyCharge
+    WaitingForkAtPickup --> MovingToCell
+    MovingToDropoff --> WaitingForkAtDropoff
+    MovingToDropoff --> EmergencyCharge
+    EmergencyCharge --> MovementIdle
+    MovingToStorage --> WaitingForkAtStorage
+    MovingToStorage --> EmergencyCharge
+    WaitingForkAtCell --> TaskCompleting
+    DispatchMove --> MovingToPickup
+    DispatchMove --> MovingToStorage
+    MovingToPickup --> WaitingForkAtPickup
+    MovingToPickup --> EmergencyCharge
+}
+
 state LiftController {
     [*] --> LiftIdle
+    LiftIdle --> LiftOperating
     LiftOperating --> LiftDone
     LiftOperating --> LiftDone
     LiftOperating --> LiftIdle
-    LiftIdle --> LiftOperating
     LiftDone --> LiftIdle
 }
 
 state CommandReceiver {
     [*] --> WaitingForTask
+    TaskActive --> WaitingForTask
     WaitingForTask --> AcceptingTask
     AcceptingTask --> TaskActive
-    TaskActive --> WaitingForTask
-}
-
-state MovementController {
-    [*] --> MovementIdle
-    EmergencyCharge --> MovementIdle
-    MovingToCell --> WaitingForkAtCell
-    MovingToCell --> EmergencyCharge
-    MovingToDropoff --> WaitingForkAtDropoff
-    MovingToDropoff --> EmergencyCharge
-    MovingToPickup --> WaitingForkAtPickup
-    MovingToPickup --> EmergencyCharge
-    MovementIdle --> DispatchMove
-    WaitingForkAtStorage --> MovingToDropoff
-    WaitingForkAtDropoff --> TaskCompleting
-    TaskCompleting --> MovementIdle
-    DispatchMove --> MovingToPickup
-    DispatchMove --> MovingToStorage
-    WaitingForkAtCell --> TaskCompleting
-    WaitingForkAtPickup --> MovingToCell
-    MovingToStorage --> WaitingForkAtStorage
-    MovingToStorage --> EmergencyCharge
 }
 
 @enduml
