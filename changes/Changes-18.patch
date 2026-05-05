@@ -1,379 +1,177 @@
-diff --git a/grammar/src/semantic/validate.rs b/grammar/src/semantic/validate.rs
-index bf3ec84..4b04827 100644
---- a/grammar/src/semantic/validate.rs
-+++ b/grammar/src/semantic/validate.rs
-@@ -2139,13 +2139,168 @@ mod tests_ce4_declarations {
- /// # Возвращаемое значение
- ///
- /// Вектор [`Diagnostic`] уровня Warning для каждого состояния
--/// с более чем одним безусловным переходом.
-+/// с более чем одним безусловным переходом или с перекрывающимися условиями.
- pub fn check_nondeterministic_transitions(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
-     let mut warnings = Vec::new();
-     check_nondeterministic_model(model, &mut warnings);
-     warnings
- }
- 
-+// ─── NI4: Интервальный анализ перекрытия условий ────────────────────────────
-+
-+/// Одностороннее ограничение переменной относительно целочисленного литерала.
-+///
-+/// Используется для обнаружения попарного перекрытия условий переходов (NI4).
-+#[derive(Debug, Clone, PartialEq, Eq)]
-+enum Constraint {
-+    /// `var = n`
-+    Eq(i64),
-+    /// `var != n`
-+    Ne(i64),
-+    /// `var < n`
-+    Lt(i64),
-+    /// `var <= n`
-+    Le(i64),
-+    /// `var > n`
-+    Gt(i64),
-+    /// `var >= n`
-+    Ge(i64),
-+}
-+
-+/// Извлекает из условия вида `var OP number` пару `(имя-переменной, Constraint)`.
-+///
-+/// Поддерживает только простые атомарные условия на одну переменную.
-+/// Возвращает `None` для составных условий (AND, OR, NOT и т.д.).
-+///
-+/// Идентификация переменной выполняется по имени, а не по указателю `Rc`,
-+/// потому что `resolve_condition` создаёт новый `Rc` при каждом обращении
-+/// к одной и той же переменной.
-+fn extract_simple_constraint(cond: &ConditionNode) -> Option<(String, Constraint)> {
-+    /// Извлекает имя переменной из узла `ConditionNode::Variable`.
-+    fn var_name(node: &ConditionNode) -> Option<String> {
-+        if let ConditionNode::Variable(v, _) = node {
-+            Some(v.borrow().name().to_owned())
-+        } else {
-+            None
-+        }
-+    }
-+
-+    match cond {
-+        ConditionNode::Equal(l, r) => match (l.as_ref(), r.as_ref()) {
-+            (var, ConditionNode::Number(n)) => {
-+                var_name(var).map(|name| (name, Constraint::Eq(*n)))
-+            }
-+            (ConditionNode::Number(n), var) => {
-+                var_name(var).map(|name| (name, Constraint::Eq(*n)))
-+            }
-+            _ => None,
-+        },
-+        ConditionNode::NotEqual(l, r) => match (l.as_ref(), r.as_ref()) {
-+            (var, ConditionNode::Number(n)) => {
-+                var_name(var).map(|name| (name, Constraint::Ne(*n)))
-+            }
-+            (ConditionNode::Number(n), var) => {
-+                var_name(var).map(|name| (name, Constraint::Ne(*n)))
-+            }
-+            _ => None,
-+        },
-+        ConditionNode::Less(l, r) => match (l.as_ref(), r.as_ref()) {
-+            (var, ConditionNode::Number(n)) => {
-+                var_name(var).map(|name| (name, Constraint::Lt(*n)))
-+            }
-+            (ConditionNode::Number(n), var) => {
-+                // n < var  →  var > n
-+                var_name(var).map(|name| (name, Constraint::Gt(*n)))
-+            }
-+            _ => None,
-+        },
-+        ConditionNode::LessEqual(l, r) => match (l.as_ref(), r.as_ref()) {
-+            (var, ConditionNode::Number(n)) => {
-+                var_name(var).map(|name| (name, Constraint::Le(*n)))
-+            }
-+            (ConditionNode::Number(n), var) => {
-+                // n <= var  →  var >= n
-+                var_name(var).map(|name| (name, Constraint::Ge(*n)))
-+            }
-+            _ => None,
-+        },
-+        ConditionNode::More(l, r) => match (l.as_ref(), r.as_ref()) {
-+            (var, ConditionNode::Number(n)) => {
-+                var_name(var).map(|name| (name, Constraint::Gt(*n)))
-+            }
-+            (ConditionNode::Number(n), var) => {
-+                // n > var  →  var < n
-+                var_name(var).map(|name| (name, Constraint::Lt(*n)))
-+            }
-+            _ => None,
-+        },
-+        ConditionNode::MoreEqual(l, r) => match (l.as_ref(), r.as_ref()) {
-+            (var, ConditionNode::Number(n)) => {
-+                var_name(var).map(|name| (name, Constraint::Ge(*n)))
-+            }
-+            (ConditionNode::Number(n), var) => {
-+                // n >= var  →  var <= n
-+                var_name(var).map(|name| (name, Constraint::Le(*n)))
-+            }
-+            _ => None,
-+        },
-+        // Скобки — прозрачны
-+        ConditionNode::Parenthesis(inner) => extract_simple_constraint(inner),
-+        _ => None,
-+    }
-+}
-+
-+/// Проверяет, могут ли два ограничения одновременно выполняться.
-+///
-+/// Возвращает `true`, если существует целое число, удовлетворяющее обоим.
-+fn constraints_overlap(a: &Constraint, b: &Constraint) -> bool {
-+    use Constraint::*;
-+    match (a, b) {
-+        // Eq vs *
-+        (Eq(x), Eq(y))   => x == y,
-+        (Eq(x), Ne(y))   => x != y,
-+        (Eq(x), Lt(y))   => x < y,
-+        (Eq(x), Le(y))   => x <= y,
-+        (Eq(x), Gt(y))   => x > y,
-+        (Eq(x), Ge(y))   => x >= y,
-+        // Ne vs *
-+        (Ne(x), Eq(y))   => x != y,
-+        (Ne(x), Ne(_y))  => *x != i64::MAX, // всегда истинно (хотя бы одно значение)
-+        (Ne(_), Lt(_))   => true,            // всегда есть значение ≠ x и < y
-+        (Ne(_), Le(_))   => true,
-+        (Ne(_), Gt(_))   => true,
-+        (Ne(_), Ge(_))   => true,
-+        // Lt vs *
-+        (Lt(x), Eq(y))   => *y < *x,
-+        (Lt(_), Ne(_))   => true,
-+        (Lt(_), Lt(_))   => true,                    // (-∞, x-1] ∩ (-∞, y-1] всегда непусто
-+        (Lt(_), Le(_))   => true,                    // (-∞, x-1] ∩ (-∞, y] всегда непусто
-+        (Lt(x), Gt(y))   => *y + 1 < *x,            // (y, ∞) ∩ (-∞, x-1): нужно y+1 < x
-+        (Lt(x), Ge(y))   => *y < *x,                // [y, ∞) ∩ (-∞, x-1): нужно y < x
-+        // Le vs *
-+        (Le(x), Eq(y))   => *y <= *x,
-+        (Le(_), Ne(_))   => true,
-+        (Le(_), Lt(_))   => true,                    // (-∞, x] ∩ (-∞, y-1] всегда непусто
-+        (Le(_), Le(_))   => true,                    // (-∞, x] ∩ (-∞, y] всегда непусто
-+        (Le(x), Gt(y))   => *y < *x,                // нужно y < x (хотя бы y+1 <= x)
-+        (Le(x), Ge(y))   => *y <= *x,
-+        // Gt vs *
-+        (Gt(x), Eq(y))   => *y > *x,
-+        (Gt(_), Ne(_))   => true,
-+        (Gt(x), Lt(y))   => *x + 1 < *y,
-+        (Gt(x), Le(y))   => *x < *y,
-+        (Gt(_), Gt(_))   => true,                    // (x, ∞) ∩ (y, ∞) всегда непусто
-+        (Gt(_), Ge(_))   => true,                    // (x, ∞) ∩ [y, ∞) всегда непусто
-+        // Ge vs *
-+        (Ge(x), Eq(y))   => *y >= *x,
-+        (Ge(_), Ne(_))   => true,
-+        (Ge(x), Lt(y))   => *x < *y,
-+        (Ge(x), Le(y))   => *x <= *y,
-+        (Ge(_), Gt(_))   => true,                    // [x, ∞) ∩ (y, ∞) всегда непусто
-+        (Ge(_), Ge(_))   => true,                    // [x, ∞) ∩ [y, ∞) всегда непусто
-+    }
-+}
-+
- fn check_nondeterministic_model(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnostic>) {
-     let borrowed = model.borrow();
-     let model_name = borrowed.name.clone().unwrap_or_default();
-@@ -2157,18 +2312,19 @@ fn check_nondeterministic_model(model: Rc<RefCell<ModelNode>>, warnings: &mut Ve
-             StateNode::Unresolved => continue,
-         };
- 
--        // Подсчёт безусловных переходов (Condition::None)
-+        let prefix = if model_name.is_empty() {
-+            format!("состояние '{}'", state_name)
-+        } else {
-+            format!("модель '{}', состояние '{}'", model_name, state_name)
-+        };
-+
-+        // Ce14: Подсчёт безусловных переходов (Condition::None)
-         let unconditional_count = references
-             .iter()
-             .filter(|r| matches!(r.cond, ConditionNode::None))
-             .count();
- 
-         if unconditional_count > 1 {
--            let prefix = if model_name.is_empty() {
--                format!("состояние '{}'", state_name)
--            } else {
--                format!("модель '{}', состояние '{}'", model_name, state_name)
--            };
-             warnings.push(Diagnostic::warning(
-                 Location::Builtin,
-                 format!(
-@@ -2177,6 +2333,50 @@ fn check_nondeterministic_model(model: Rc<RefCell<ModelNode>>, warnings: &mut Ve
-                 ),
-             ));
-         }
-+
-+        // NI4: Анализ структурного и интервального перекрытия условных переходов
-+        let conditional: Vec<_> = references
-+            .iter()
-+            .filter(|r| !matches!(r.cond, ConditionNode::None))
-+            .collect();
-+
-+        for i in 0..conditional.len() {
-+            for j in (i + 1)..conditional.len() {
-+                let cond_i = &conditional[i].cond;
-+                let cond_j = &conditional[j].cond;
-+
-+                // Структурно одинаковые условия — гарантированное перекрытие
-+                if cond_i == cond_j {
-+                    warnings.push(Diagnostic::warning(
-+                        conditional[i].location.clone(),
-+                        format!(
-+                            "NI4: {}: переходы в '{}' и '{}' имеют одинаковое условие — \
-+                             гарантированное недетерминированное поведение",
-+                            prefix, conditional[i].name, conditional[j].name
-+                        ),
-+                    ));
-+                    continue;
-+                }
-+
-+                // Интервальный анализ простых атомарных условий
-+                if let (Some((var_i, constr_i)), Some((var_j, constr_j))) = (
-+                    extract_simple_constraint(cond_i),
-+                    extract_simple_constraint(cond_j),
-+                ) {
-+                    // Условия на одну и ту же переменную
-+                    if var_i == var_j && constraints_overlap(&constr_i, &constr_j) {
-+                        warnings.push(Diagnostic::warning(
-+                            conditional[i].location.clone(),
-+                            format!(
-+                                "NI4: {}: условия переходов в '{}' и '{}' могут одновременно \
-+                                 выполняться — возможное перекрытие",
-+                                prefix, conditional[i].name, conditional[j].name
-+                            ),
-+                        ));
-+                    }
-+                }
-+            }
-+        }
-     }
- 
-     // Рекурсивно для вложенных моделей
-diff --git a/grammar/tests/semantic_tests.rs b/grammar/tests/semantic_tests.rs
-index ccfa340..488ebed 100644
---- a/grammar/tests/semantic_tests.rs
-+++ b/grammar/tests/semantic_tests.rs
-@@ -3773,3 +3773,123 @@ fn ce4_enum_declared_inside_model_local_to_it() {
-         "enum Status не должен быть виден в корневой модели напрямую"
-     );
- }
-+
-+// ─── Тесты NI4: Анализ перекрытия условий переходов ──────────────────────────
-+
-+/// NI4: Одинаковые условия `level = 5` на два разных перехода — предупреждение NI4.
-+#[test]
-+fn test_ni4_duplicate_condition_warns() {
-+    use grammar::diagnostics::Level;
-+    let src = std::fs::read_to_string(
-+        "tests/data/semantic/invalid/condition_overlap_eq.but",
-+    )
-+    .expect("файл condition_overlap_eq.but должен существовать");
-+    let (ast, _) = grammar::parse(&src, 0).unwrap();
-+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
-+    let ni4_warnings: Vec<_> = warnings
-+        .iter()
-+        .filter(|w| w.message.contains("NI4"))
-+        .collect();
-+    assert!(
-+        !ni4_warnings.is_empty(),
-+        "ожидалось предупреждение NI4 для одинаковых условий, получено: {:?}",
-+        warnings
-+    );
-+    assert_eq!(ni4_warnings[0].level, Level::Warning);
-+}
-+
-+/// NI4: Перекрывающиеся интервальные условия `level < 10` и `level < 20` — предупреждение NI4.
-+#[test]
-+fn test_ni4_interval_overlap_warns() {
-+    let src = std::fs::read_to_string(
-+        "tests/data/semantic/invalid/condition_overlap_interval.but",
-+    )
-+    .expect("файл condition_overlap_interval.but должен существовать");
-+    let (ast, _) = grammar::parse(&src, 0).unwrap();
-+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
-+    let ni4_warnings: Vec<_> = warnings
-+        .iter()
-+        .filter(|w| w.message.contains("NI4"))
-+        .collect();
-+    assert!(
-+        !ni4_warnings.is_empty(),
-+        "ожидалось предупреждение NI4 для перекрывающихся условий level<10 и level<20, получено: {:?}",
-+        warnings
-+    );
-+}
-+
-+/// NI4: Непересекающиеся условия `level < 10` и `level > 20` — предупреждений NI4 нет.
-+#[test]
-+fn test_ni4_non_overlapping_no_warn() {
-+    let src = std::fs::read_to_string(
-+        "tests/data/semantic/valid/no_condition_overlap.but",
-+    )
-+    .expect("файл no_condition_overlap.but должен существовать");
-+    let (ast, _) = grammar::parse(&src, 0).unwrap();
-+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
-+    let ni4_warnings: Vec<_> = warnings
-+        .iter()
-+        .filter(|w| w.message.contains("NI4"))
-+        .collect();
-+    assert!(
-+        ni4_warnings.is_empty(),
-+        "непересекающиеся условия level<10 и level>20 не должны давать предупреждений NI4: {:?}",
-+        ni4_warnings
-+    );
-+}
-+
-+/// NI4: Условия `x = 3` и `x < 10` перекрываются (3 < 10) — предупреждение NI4.
-+#[test]
-+fn test_ni4_eq_lt_overlap_warns() {
-+    let src = r#"
-+var x: [bit;8] = 0;
-+start S {
-+    ref A: x = 3;
-+    ref B: x < 10;
-+}
-+state A { ref S: x != 3; }
-+state B { ref S: x >= 10; }
-+"#;
-+    let (ast, _) = grammar::parse(src, 0).unwrap();
-+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
-+    let ni4_warnings: Vec<_> = warnings
-+        .iter()
-+        .filter(|w| w.message.contains("NI4"))
-+        .collect();
-+    assert!(
-+        !ni4_warnings.is_empty(),
-+        "x=3 и x<10 перекрываются (3 < 10) — ожидалось NI4, получено: {:?}",
-+        warnings
-+    );
-+}
-+
-+/// NI4: Условия `x = 15` и `x < 10` не перекрываются (15 ≥ 10) — предупреждений NI4 нет.
-+#[test]
-+fn test_ni4_eq_lt_no_overlap_no_warn() {
-+    let src = r#"
-+var x: [bit;8] = 0;
-+start S {
-+    ref A: x = 15;
-+    ref B: x < 10;
-+}
-+state A { ref S: x != 15; }
-+state B { ref S: x >= 10; }
-+"#;
-+    let (ast, _) = grammar::parse(src, 0).unwrap();
-+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
-+    let ni4_warnings: Vec<_> = warnings
-+        .iter()
-+        .filter(|w| w.message.contains("NI4"))
-+        .collect();
-+    assert!(
-+        ni4_warnings.is_empty(),
-+        "x=15 и x<10 не перекрываются — не должно быть NI4, получено: {:?}",
-+        ni4_warnings
-+    );
-+}
-+
+grammar/src/lib.rs               |  10 +++
+ grammar/src/semantic/validate.rs | 137 +++++++++++++++++++++++++++++++++++++++
+ grammar/tests/semantic_tests.rs  |  44 +++++++++++++
+ 3 files changed, 191 insertions(+)
+
+--- Changes ---
+
+grammar/src/lib.rs
+  @@ -364,6 +364,16 @@ pub fn unreachable_state_warnings(
+  +/// SE-047: предупреждения об очевидно константных условиях переходов.
+  +///
+  +/// Проверяет условия `ref`/`next` переходов на наличие сравнений литералов,
+  +/// результат которых известен статически (например, `1 = 0` — всегда ложно).
+  +pub fn constant_condition_warnings(
+  +    model: &std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+  +) -> Vec<Diagnostic> {
+  +    semantic::validate::check_constant_conditions(model)
+  +}
+  +
+   /// SE-044: предупреждения о лишних точках с запятой в АСД модели.
+   ///
+   /// Обходит все элементы модели и состояний (рекурсивно), генерируя
+  +10 -0
+
+grammar/src/semantic/validate.rs
+  @@ -3388,3 +3388,140 @@ fn get_reachable_targets(state: &StateNode) -> Vec<String> {
+  +
+  +// ─── SE-047: Анализ константных условий ──────────────────────────────────────
+  +
+  +/// SE-047: предупреждения об очевидно константных условиях переходов.
+  +///
+  +/// Обнаруживает сравнения двух числовых/булевых литералов, результат
+  +/// которых известен в compile-time:
+  +/// - `1 = 0` — всегда ложно (переход никогда не произойдёт);
+  +/// - `1 = 1` — всегда истинно (переход безусловный);
+  +/// - `x = 5 & x = 6` — второе сравнение с той же переменной делает
+  +///   конъюнкцию всегда ложной.
+  +pub fn check_constant_conditions(model: &Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+  +    let mut diags = Vec::new();
+  +    collect_constant_condition_warnings(model, &mut diags);
+  +    diags
+  +}
+  +
+  +fn collect_constant_condition_warnings(
+  +    model: &Rc<RefCell<ModelNode>>,
+  +    out: &mut Vec<Diagnostic>,
+  +) {
+  +    let borrowed = model.borrow();
+  +
+  +    for state in borrowed.states.values() {
+  +        match state {
+  +            StateNode::Simple { references, .. } => {
+  +                for r in references {
+  +                    eval_condition_const(&r.cond, r.location, out);
+  +                }
+  +            }
+  +            StateNode::Implement {
+  +                references, next, ..
+  +            } => {
+  +                for r in references {
+  +                    eval_condition_const(&r.cond, r.location, out);
+  +                }
+  +                if let Some(nr) = next {
+  +                    eval_condition_const(&nr.cond, nr.location, out);
+  +                }
+  +            }
+  +            StateNode::Unresolved => {}
+  +        }
+  +    }
+  +
+  +    let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
+  +    drop(borrowed);
+  +    for m in nested {
+  +        collect_constant_condition_warnings(&m, out);
+  +    }
+  +}
+  +
+  +/// Вычисляет условие и, если оно константно, добавляет предупреждение.
+  +fn eval_condition_const(cond: &ConditionNode, loc: Location, out: &mut Vec<Diagnostic>) {
+  +    match eval_const_value(cond) {
+  +        Some(true) => {
+  +            out.push(
+  +                Diagnostic::warning(
+  +                    loc,
+  +                    "условие перехода всегда истинно — переход безусловный".to_string(),
+  +                )
+  +                .with_code("SE-047"),
+  +            );
+  +        }
+  +        Some(false) => {
+  +            out.push(
+  +                Diagnostic::warning(
+  +                    loc,
+  +                    "условие перехода всегда ложно — переход недостижим".to_string(),
+  +                )
+  +                .with_code("SE-047"),
+  +            );
+  +        }
+  +        None => {}
+  +    }
+  +}
+  +
+  +/// Пытается вычислить булево значение условия из одних литералов.
+  +/// Возвращает `Some(true/false)` только если результат очевиден статически.
+  +fn eval_const_value(cond: &ConditionNode) -> Option<bool> {
+  +    match cond {
+  +        ConditionNode::Bool(b) => Some(*b),
+  +        ConditionNode::Number(n) => Some(*n != 0),
+  +
+  +        ConditionNode::Equal(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+  +            (Some(a), Some(b)) => Some(a == b),
+  +            _ => None,
+  +        },
+  +        ConditionNode::NotEqual(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+  +            (Some(a), Some(b)) => Some(a != b),
+  +            _ => None,
+  +        },
+  +        ConditionNode::Less(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+  +            (Some(a), Some(b)) => Some(a < b),
+  +            _ => None,
+  +        },
+  +        ConditionNode::More(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+  +            (Some(a), Some(b)) => Some(a > b),
+  +            _ => None,
+  +        },
+  +        ConditionNode::LessEqual(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+  ... (37 lines truncated)
+  +137 -0
+
+grammar/tests/semantic_tests.rs
+  @@ -4651,3 +4651,47 @@ fn match_switch_fixture_is_valid() {
+  +
+  +// ─── Задача 18: Анализ константных условий ────────────────────────────────────
+  +
+  +/// SE-047: переход с `1 = 0` — всегда ложно → предупреждение.
+  +#[test]
+  +fn constant_condition_always_false_warns() {
+  +    let src = "start S { ref S: 1 = 0; }";
+  +    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+  +    let model = construct_model(&ast, None, &[]).expect("ошибка семантики");
+  +    let warnings = grammar::constant_condition_warnings(&model);
+  +    assert!(
+  +        warnings.iter().any(|d| d.code.as_deref() == Some("SE-047")),
+  +        "ожидалось SE-047 для `1 = 0`, получено: {:?}",
+  +        warnings
+  +    );
+  +}
+  +
+  +/// SE-047: переход с `1 = 1` — всегда истинно → предупреждение.
+  +#[test]
+  +fn constant_condition_always_true_warns() {
+  +    let src = "start S { ref S: 1 = 1; }";
+  +    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+  +    let model = construct_model(&ast, None, &[]).expect("ошибка семантики");
+  +    let warnings = grammar::constant_condition_warnings(&model);
+  +    assert!(
+  +        warnings.iter().any(|d| d.code.as_deref() == Some("SE-047")),
+  +        "ожидалось SE-047 для `1 = 1`, получено: {:?}",
+  +        warnings
+  +    );
+  +}
+  +
+  +/// SE-047: переход с переменной в условии — не предупреждение.
+  +#[test]
+  +fn constant_condition_with_variable_no_warn() {
+  +    let src = "var x: bit = 0; start S { ref S: x = 1; }";
+  +    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+  +    let model = construct_model(&ast, None, &[]).expect("ошибка семантики");
+  +    let warnings = grammar::constant_condition_warnings(&model);
+  +    assert!(
+  +        !warnings.iter().any(|d| d.code.as_deref() == Some("SE-047")),
+  +        "SE-047 не должен выдаваться для `x = 1`, получено: {:?}",
+  +        warnings
+  +    );
+  +}
+  +44 -0
+[full diff: rtk git diff --no-compact]
