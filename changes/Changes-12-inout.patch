@@ -1,0 +1,105 @@
+grammar/src/generator/c/c_header.rs | 17 ++++++++++++++++-
+ grammar/src/generator/c/mod.rs      |  1 +
+ grammar/src/grammar.lalrpop         | 11 +++++++++--
+ grammar/src/parser/ast.rs           |  2 ++
+ grammar/src/parser/lexer.rs         |  4 ++++
+ grammar/tests/semantic_tests.rs     |  7 +++++++
+ 6 files changed, 39 insertions(+), 3 deletions(-)
+
+--- Changes ---
+
+grammar/src/generator/c/c_header.rs
+  @@ -260,7 +260,22 @@ fn collect_ports_by_class(map: &CMap) -> Result<PortMap, Diagnostic> {
+  -            result.entry((cls, dir)).or_default().push((mname, pname));
+  +            match dir {
+  +                PortDirection::InOut => {
+  +                    // двунаправленный порт появляется в обоих enum-ах
+  +                    result
+  +                        .entry((cls, PortDirection::In))
+  +                        .or_default()
+  +                        .push((mname.clone(), pname.clone()));
+  +                    result
+  +                        .entry((cls, PortDirection::Out))
+  +                        .or_default()
+  +                        .push((mname, pname));
+  +                }
+  +                _ => {
+  +                    result.entry((cls, dir)).or_default().push((mname, pname));
+  +                }
+  +            }
+           }
+       }
+       Ok(result)
+  +16 -1
+
+grammar/src/generator/c/mod.rs
+  @@ -90,6 +90,7 @@ impl PortClass {
+  +            PortDirection::InOut => "InOut",
+           };
+           format!("{}_{}_{}", root_camelcase, dir_str, self.enum_name())
+       }
+  +1 -0
+
+grammar/src/grammar.lalrpop
+  @@ -134,6 +134,12 @@ VariableDefine: Box<VariableDefine> = {
+  +    <l:@L> "inout" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
+  +        Box::new(VariableDefine::Port {
+  +            loc: Location::Source(file_no, l, r), typ, name, initializer: e,
+  +            direction: PortDirection::InOut,
+  +        })
+  +    },
+   }
+   
+   // Объявление переменной/константы ВНУТРИ блока оператора.
+  @@ -900,8 +906,9 @@ extern {
+  -        "in"   => Token::PortIn,
+  -        "out"  => Token::PortOut,
+  +        "in"    => Token::PortIn,
+  +        "out"   => Token::PortOut,
+  +        "inout" => Token::PortInOut,
+           "extern" => Token::Extern,
+           "true" => Token::True,
+           "false" => Token::False,
+  +9 -2
+
+grammar/src/parser/ast.rs
+  @@ -182,6 +182,8 @@ pub enum PortDirection {
+  +    /// Двунаправленный порт — FSM может и читать, и писать.
+  +    InOut,
+   }
+   
+   /// Описание (`var` или `const` или `in`/`out`-порта).
+  +2 -0
+
+grammar/src/parser/lexer.rs
+  @@ -174,6 +174,8 @@ pub enum Token<'input> {
+  +    /// Ключевое слово `inout` (двунаправленный порт).
+  +    PortInOut,
+   
+       /// Стрелка `-->` (не используется в текущей грамматике).
+       PeirceArrow,
+  @@ -296,6 +298,7 @@ impl<'input> fmt::Display for Token<'input> {
+  +            Token::PortInOut => write!(f, "inout"),
+               Token::Variable => write!(f, "var"),
+               Token::Next => write!(f, "next"),
+               Token::Extern => write!(f, "extern"),
+  @@ -454,6 +457,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
+  +    "inout"    => Token::PortInOut,
+       "model"    => Token::Model,
+       "state"    => Token::State,
+       "start"    => Token::Start,
+  +4 -0
+
+grammar/tests/semantic_tests.rs
+  @@ -1172,6 +1172,13 @@ fn array_subscript_variable_index_in_cond() {
+  +/// `inout` порт объявляется без ошибок и виден в семантическом дереве.
+  +#[test]
+  +fn inout_port_is_valid() {
+  +    let node = build("inout sensor: bit = 0x100:0; start S;");
+  +    assert!(node.search_var("sensor").is_some());
+  +}
+  +
+   /// `while cond { body }` — синоним loop, строится без ошибок.
+   #[test]
+   fn while_loop_is_valid() {
+  +7 -0

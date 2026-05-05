@@ -90,6 +90,7 @@ impl PortClass {
         let dir_str = match dir {
             PortDirection::In => "In",
             PortDirection::Out => "Out",
+            PortDirection::InOut => "InOut",
         };
         format!("{}_{}_{}", root_camelcase, dir_str, self.enum_name())
     }

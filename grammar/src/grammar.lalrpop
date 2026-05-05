@@ -134,6 +134,12 @@ VariableDefine: Box<VariableDefine> = {
             direction: PortDirection::Out,
         })
     },
+    <l:@L> "inout" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
+        Box::new(VariableDefine::Port {
+            loc: Location::Source(file_no, l, r), typ, name, initializer: e,
+            direction: PortDirection::InOut,
+        })
+    },
 }
 
 // Объявление переменной/константы ВНУТРИ блока оператора.
@@ -900,8 +906,9 @@ extern {
         "type" => Token::Type,
         "cond" => Token::Condition,
         "const" => Token::Constant,
-        "in"   => Token::PortIn,
-        "out"  => Token::PortOut,
+        "in"    => Token::PortIn,
+        "out"   => Token::PortOut,
+        "inout" => Token::PortInOut,
         "extern" => Token::Extern,
         "true" => Token::True,
         "false" => Token::False,
