@@ -704,6 +704,10 @@ ClosedStatement: Statement = {
     <l:@L> "loop" <e:LoopCond> <b:BlockStatement> <r:@R> => {
         Statement::Loop(Location::Source(file_no, l, r), Some(e), Box::new(b))
     },
+    // `while условие { тело }` — синоним `loop условие { тело }`
+    <l:@L> "while" <e:LoopCond> <b:BlockStatement> <r:@R> => {
+        Statement::Loop(Location::Source(file_no, l, r), Some(e), Box::new(b))
+    },
     // С1 (вариант A): for без скобок вокруг заголовка; тело — обязательный блок в {}.
     <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> <block:BlockStatement> <r:@R> => {
         Statement::For(Location::Source(file_no, l, r), b.map(Box::new), c.map(Box::new), n.map(Box::new), Some(Box::new(block)))
@@ -906,6 +910,7 @@ extern {
         "if" => Token::If,
         "for" => Token::For,
         "loop" => Token::Loop,
+        "while" => Token::While,
         "else" => Token::Else,
         "continue" => Token::Continue,
         "break" => Token::Break,

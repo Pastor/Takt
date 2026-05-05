@@ -1172,6 +1172,13 @@ fn array_subscript_variable_index_in_cond() {
     assert!(node.search_cond("c").is_some());
 }
 
+/// `while cond { body }` — синоним loop, строится без ошибок.
+#[test]
+fn while_loop_is_valid() {
+    let node = build("var x: bit = 0; start S { always { while x { x = 0; } } }");
+    assert!(node.search_var("x").is_some());
+}
+
 /// `example_rename_import_missing.lam` — должна возникнуть ошибка.
 #[test]
 fn example_rename_import_missing_is_error() {

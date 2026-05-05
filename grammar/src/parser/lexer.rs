@@ -65,6 +65,8 @@ pub enum Token<'input> {
     Type,
     /// Ключевое слово `loop`.
     Loop,
+    /// Ключевое слово `while`.
+    While,
     /// Ключевое слово `continue`.
     Continue,
     /// Ключевое слово `break`.
@@ -273,6 +275,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Type => write!(f, "type"),
             Token::Constant => write!(f, "const"),
             Token::Loop => write!(f, "loop"),
+            Token::While => write!(f, "while"),
             Token::Continue => write!(f, "continue"),
             Token::Break => write!(f, "break"),
             Token::Return => write!(f, "return"),
@@ -441,6 +444,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "if"       => Token::If,
     "import"   => Token::Import,
     "loop"     => Token::Loop,
+    "while"    => Token::While,
     "return"   => Token::Return,
     "string"   => Token::String,
     "true"     => Token::True,
