@@ -1072,4 +1072,42 @@ mod diagnostic_location_tests {
             );
         }
     }
+
+    /// Hover над переменной с типом `u8` показывает «u8», а не Debug-строку «Integer { bits: 8, signed: false }».
+    #[test]
+    fn hover_var_u8_shows_u8_not_debug() {
+        let src = "var speed: u8 = 0;\nstart S;";
+        // Позиция 4 — «s» в «speed»
+        let h = hover_info(src, lsp_types::Position::new(0, 4));
+        assert!(h.is_some(), "hover над переменной должен вернуть результат");
+        if let lsp_types::HoverContents::Markup(mc) = h.unwrap().contents {
+            assert!(
+                mc.value.contains("u8"),
+                "hover должен содержать 'u8': {}",
+                mc.value
+            );
+            assert!(
+                !mc.value.contains("Integer"),
+                "hover не должен содержать Debug-имя 'Integer': {}",
+                mc.value
+            );
+        }
+    }
+
+    /// `collect_diagnostics` не выдаёт SE-034 для встроенных целочисленных типов `u8`…`i64`.
+    #[test]
+    fn collect_diagnostics_builtin_integer_types_no_error() {
+        // const-переменные не генерируют предупреждения об использовании
+        let src = "const A: u8 = 10;\nconst B: i32 = -5;\nconst C: u64 = 0;\nstart S;";
+        let diags = collect_diagnostics(src);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Some(lsp_types::DiagnosticSeverity::ERROR))
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "встроенные целочисленные типы не должны давать ошибок SE-034: {:?}",
+            errors
+        );
+    }
 }
