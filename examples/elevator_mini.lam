@@ -10,9 +10,6 @@
 //   current_floor : u8       — текущий этаж (обновляется по датчикам нижней зоны этажа)
 //   target_floor  : u8       — целевой этаж (0 = нет задания)
 
-type u8  = [bit; 8];
-type u16 = [bit; 16];
-
 enum Command {
     Up,
     Down,

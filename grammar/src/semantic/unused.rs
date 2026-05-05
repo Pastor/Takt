@@ -224,6 +224,12 @@ fn usage_from_stmt(stmt: &StatementNode, set: &mut UsageSet) {
         }
         StatementNode::Variable(_, _, Some(e)) => usage_from_expr(e, set),
         StatementNode::Return(Some(e)) => usage_from_expr(e, set),
+        StatementNode::Match { expr, arms } => {
+            usage_from_expr(expr, set);
+            for arm in arms {
+                usage_from_stmt(&arm.body, set);
+            }
+        }
         _ => {}
     }
 }
@@ -530,6 +536,12 @@ fn collect_from_stmt(stmt: &StatementNode, used: &mut HashSet<String>) {
         }
         StatementNode::Variable(_, _, Some(e)) => collect_from_expr(e, used),
         StatementNode::Return(Some(e)) => collect_from_expr(e, used),
+        StatementNode::Match { expr, arms } => {
+            collect_from_expr(expr, used);
+            for arm in arms {
+                collect_from_stmt(&arm.body, used);
+            }
+        }
         _ => {}
     }
 }

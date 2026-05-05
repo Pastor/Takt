@@ -3405,10 +3405,7 @@ pub fn check_constant_conditions(model: &Rc<RefCell<ModelNode>>) -> Vec<Diagnost
     diags
 }
 
-fn collect_constant_condition_warnings(
-    model: &Rc<RefCell<ModelNode>>,
-    out: &mut Vec<Diagnostic>,
-) {
+fn collect_constant_condition_warnings(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
     let borrowed = model.borrow();
 
     for state in borrowed.states.values() {

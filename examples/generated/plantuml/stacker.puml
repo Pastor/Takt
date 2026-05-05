@@ -16,30 +16,30 @@ state LiftController {
 
 state CommandReceiver {
     [*] --> WaitingForTask
-    TaskActive --> WaitingForTask
-    AcceptingTask --> TaskActive
     WaitingForTask --> AcceptingTask
+    AcceptingTask --> TaskActive
+    TaskActive --> WaitingForTask
 }
 
 state MovementController {
     [*] --> MovementIdle
     EmergencyCharge --> MovementIdle
-    MovingToPickup --> WaitingForkAtPickup
-    MovingToPickup --> EmergencyCharge
-    WaitingForkAtDropoff --> TaskCompleting
-    MovementIdle --> DispatchMove
-    WaitingForkAtPickup --> MovingToCell
-    WaitingForkAtCell --> TaskCompleting
     MovingToCell --> WaitingForkAtCell
     MovingToCell --> EmergencyCharge
-    TaskCompleting --> MovementIdle
     MovingToDropoff --> WaitingForkAtDropoff
     MovingToDropoff --> EmergencyCharge
-    MovingToStorage --> WaitingForkAtStorage
-    MovingToStorage --> EmergencyCharge
+    MovingToPickup --> WaitingForkAtPickup
+    MovingToPickup --> EmergencyCharge
+    MovementIdle --> DispatchMove
+    WaitingForkAtStorage --> MovingToDropoff
+    WaitingForkAtDropoff --> TaskCompleting
+    TaskCompleting --> MovementIdle
     DispatchMove --> MovingToPickup
     DispatchMove --> MovingToStorage
-    WaitingForkAtStorage --> MovingToDropoff
+    WaitingForkAtCell --> TaskCompleting
+    WaitingForkAtPickup --> MovingToCell
+    MovingToStorage --> WaitingForkAtStorage
+    MovingToStorage --> EmergencyCharge
 }
 
 @enduml
