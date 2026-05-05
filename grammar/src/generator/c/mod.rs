@@ -182,6 +182,13 @@ pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
             };
             Some(format!("uint{}_t", bits))
         }
+        TypeNode::Integer { bits, signed } => {
+            if *signed {
+                Some(format!("int{}_t", bits))
+            } else {
+                Some(format!("uint{}_t", bits))
+            }
+        }
         TypeNode::BuiltinModel
         | TypeNode::BuiltinState
         | TypeNode::BuiltinNumeric
