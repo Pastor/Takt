@@ -1,0 +1,20 @@
+// Пример: оператор match/switch.
+//
+// Проверяет:
+// - match с числовыми паттернами
+// - match с несколькими паттернами в одной ветке
+// - wildcard (_) как default-ветка
+
+model Counter {
+    var x: bit = 0;
+
+    start Idle {
+        always {
+            match x {
+                0 => { x = 1; }
+                1 | 2 => { x = 0; }
+                _ => { x = 0; }
+            }
+        }
+    }
+}

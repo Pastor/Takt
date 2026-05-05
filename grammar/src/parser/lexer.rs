@@ -134,6 +134,12 @@ pub enum Token<'input> {
     For,
     /// Ключевое слово `if`.
     If,
+    /// Ключевое слово `match`.
+    Match,
+    /// Подстановочный образец `_` в ветке `match`.
+    Wildcard,
+    /// Толстая стрелка `=>` (разделитель образца и тела в `match`).
+    FatArrow,
 
     /// Оператор сдвига вправо `>>`.
     ShiftRight,
@@ -286,6 +292,9 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Else => write!(f, "else"),
             Token::For => write!(f, "for"),
             Token::If => write!(f, "if"),
+            Token::Match => write!(f, "match"),
+            Token::Wildcard => write!(f, "_"),
+            Token::FatArrow => write!(f, "=>"),
             Token::As => write!(f, "as"),
             Token::Assembly => write!(f, "assembly"),
             Token::Formula => write!(f, "formula"),
@@ -445,6 +454,8 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "for"      => Token::For,
     "fn"       => Token::Function,
     "if"       => Token::If,
+    "match"    => Token::Match,
+    "_"        => Token::Wildcard,
     "import"   => Token::Import,
     "loop"     => Token::Loop,
     "while"    => Token::While,
@@ -884,6 +895,10 @@ impl<'input> Lexer<'input> {
                         Some((_, '=')) => {
                             self.chars.next();
                             Some((i, Token::Equal, i + 2))
+                        }
+                        Some((_, '>')) => {
+                            self.chars.next();
+                            Some((i, Token::FatArrow, i + 2))
                         }
                         _ => Some((i, Token::Assign, i + 1)),
                     };

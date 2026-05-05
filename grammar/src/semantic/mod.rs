@@ -754,6 +754,37 @@ pub enum StatementNode {
     Break,
     /// Встроенная формула: `: условие1[, условие2, …];`
     InlineFormula(Vec<Formula>),
+    /// Оператор `match`: `match expr { patterns => body, … }`.
+    Match {
+        /// Разбираемое выражение.
+        expr: Box<ExpressionNode>,
+        /// Ветки оператора.
+        arms: Vec<MatchArmNode>,
+    },
+}
+
+/// Семантическая ветка оператора `match`.
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
+pub struct MatchArmNode {
+    /// Образцы (хотя бы один).
+    pub patterns: Vec<MatchPatternNode>,
+    /// Тело ветки.
+    pub body: Box<StatementNode>,
+}
+
+/// Семантический образец ветки `match`.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum MatchPatternNode {
+    /// Конкретное значение.
+    Value(Box<ExpressionNode>),
+    /// Подстановочный образец `_`.
+    Wildcard,
+}
+
+impl Default for MatchPatternNode {
+    fn default() -> Self {
+        Self::Wildcard
+    }
 }
 
 /// Семантический узел переменной.

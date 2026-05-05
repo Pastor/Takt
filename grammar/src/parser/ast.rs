@@ -1024,6 +1024,30 @@ pub enum Statement {
     StraySemicolon(Location),
     /// Встроенная формула в блоке кода: `: [Type] условие1[, условие2, …];`
     InlineFormula(Box<InlineFormulaDefine>),
+    /// Оператор `match`: `match выражение { образец => тело, … }`.
+    Match(Location, Box<Expression>, Vec<MatchArm>),
+}
+
+/// Ветка оператора `match`: `образцы => тело`.
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct MatchArm {
+    /// Местоположение ветки.
+    pub loc: Location,
+    /// Образцы (хотя бы один).
+    pub patterns: Vec<MatchPattern>,
+    /// Тело ветки.
+    pub body: Box<Statement>,
+}
+
+/// Образец в ветке `match`.
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub enum MatchPattern {
+    /// Конкретное значение: `42`, `Color::Red`, переменная.
+    Value(Expression),
+    /// Подстановочный образец `_` (совпадает с любым значением).
+    Wildcard(Location),
 }
 
 impl Statement {

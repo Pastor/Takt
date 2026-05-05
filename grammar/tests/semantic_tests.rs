@@ -4611,3 +4611,43 @@ fn test_cond_define_semicolon_consumed_not_stray() {
         "StraySemicolon после cond не должен появляться"
     );
 }
+
+/// `match` с числовыми паттернами и wildcard разрешается без ошибок.
+#[test]
+fn match_statement_is_valid() {
+    let src = r#"
+        model M {
+            var x: bit = 0;
+            start S {
+                always {
+                    match x {
+                        0 => { x = 1; }
+                        1 | 2 => { x = 0; }
+                        _ => { x = 0; }
+                    }
+                }
+            }
+        }
+    "#;
+    let (ast, _) = parse(src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[]);
+    assert!(
+        result.is_ok(),
+        "match должен разрешаться без ошибок: {:?}",
+        result
+    );
+}
+
+/// fixture `match_switch.lam` проходит семантический анализ без ошибок.
+#[test]
+fn match_switch_fixture_is_valid() {
+    let src = std::fs::read_to_string("tests/data/semantic/valid/match_switch.lam")
+        .expect("файл не найден");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора");
+    let result = construct_model(&ast, None, &[]);
+    assert!(
+        result.is_ok(),
+        "match_switch.lam должен проходить анализ: {:?}",
+        result
+    );
+}

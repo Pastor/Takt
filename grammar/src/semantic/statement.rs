@@ -30,7 +30,9 @@ use crate::parser::ast;
 use crate::semantic::condition::resolve_condition;
 use crate::semantic::expression::construct_expression;
 use crate::semantic::type_node::{TypeNode, construct_type};
-use crate::semantic::{ExpressionNode, Formula, ModelNode, StatementNode, VariableNode};
+use crate::semantic::{
+    ExpressionNode, Formula, MatchArmNode, MatchPatternNode, ModelNode, StatementNode, VariableNode,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -265,6 +267,39 @@ fn resolve_ast_statement(
                     Ok(StatementNode::InlineFormula(Vec::new()))
                 }
             }
+        }
+
+        // ── Оператор match ─────────────────────────────────────────────────────
+        ast::Statement::Match(_, expr, ast_arms) => {
+            let resolved_expr = construct_expression(*expr.clone(), params.clone(), model.clone())?;
+            let mut arms: Vec<MatchArmNode> = Vec::new();
+            for arm in ast_arms {
+                let mut patterns: Vec<MatchPatternNode> = Vec::new();
+                for pat in &arm.patterns {
+                    let pat_node = match pat {
+                        ast::MatchPattern::Wildcard(_) => MatchPatternNode::Wildcard,
+                        ast::MatchPattern::Value(e) => {
+                            let pexpr =
+                                construct_expression(e.clone(), params.clone(), model.clone())?;
+                            MatchPatternNode::Value(Box::new(pexpr))
+                        }
+                    };
+                    patterns.push(pat_node);
+                }
+                let body_node = resolve_statement(
+                    &StatementNode::Unresolved(*arm.body.clone()),
+                    params.clone(),
+                    model.clone(),
+                )?;
+                arms.push(MatchArmNode {
+                    patterns,
+                    body: Box::new(body_node),
+                });
+            }
+            Ok(StatementNode::Match {
+                expr: Box::new(resolved_expr),
+                arms,
+            })
         }
 
         // ── Прочие варианты: оставляем как Unresolved ─────────────────────────
