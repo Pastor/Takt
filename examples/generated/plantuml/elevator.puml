@@ -10,13 +10,13 @@ Middle --> End
 
 state Engine {
     [*] --> Idle
-    DoorOpening --> Idle
-    MovingUp --> DoorOpening
-    Idle --> DoorClosing
-    MovingDown --> DoorOpening
     DoorClosing --> Idle
     DoorClosing --> MovingUp
     DoorClosing --> MovingDown
+    MovingUp --> DoorOpening
+    Idle --> DoorClosing
+    MovingDown --> DoorOpening
+    DoorOpening --> Idle
 }
 
 @enduml
