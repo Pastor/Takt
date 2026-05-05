@@ -663,15 +663,16 @@ pub(super) fn generate_condition_expr(
         }
         ConditionNode::EnumVariant(_, _, value) => Ok(value.to_string()),
         ConditionNode::ArraySubscript(var_rc, idx) => {
+            let idx_str = generate_condition_expr(idx, map, owner)?;
             let var = var_rc.borrow();
             if let VariableNode::Simple { upper, .. } = &*var
                 && let Some(s) =
                     resolve_simple_var_in_context(var.name(), upper, &[], owner, map, true)
             {
-                return Ok(format!("{}[{}]", s, idx));
+                return Ok(format!("{}[{}]", s, idx_str));
             }
             let base = resolve_variable_c_expr(&var, &[], map, owner, true)?;
-            Ok(format!("{}[{}]", base, idx))
+            Ok(format!("{}[{}]", base, idx_str))
         }
         ConditionNode::BitAccess(inner, member) => {
             match member {
@@ -1230,6 +1231,12 @@ pub(super) fn generate_expr(
         }
 
         ExpressionNode::ArraySubscript(var_rc, idx) => {
+            let idx_str = {
+                let mut buf = String::new();
+                let mut p = Printer::new(0, &mut buf);
+                generate_expr(&mut p, map, owner, params.clone(), idx, 0, has_model)?;
+                buf
+            };
             let var = var_rc.borrow();
             let var_expr = if let VariableNode::Simple { upper, .. } = &*var {
                 resolve_simple_var_in_context(var.name(), upper, &params, owner, map, has_model)
@@ -1240,7 +1247,7 @@ pub(super) fn generate_expr(
             } else {
                 resolve_variable_c_expr(&*var, &params, map, owner, has_model)?
             };
-            printer.print(&format!("{}[{}]", var_expr, idx));
+            printer.print(&format!("{}[{}]", var_expr, idx_str));
         }
 
         ExpressionNode::Variable(var_rc) => {

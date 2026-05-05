@@ -198,6 +198,8 @@ pub enum Token<'input> {
     Enum,
     /// Ключевое слово `struct`.
     Struct,
+    /// Ключевое слово `from`.
+    From,
     /// LTL оператор Next (X)
     LtlNext,
     /// LTL оператор Finally (F)
@@ -296,6 +298,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Extern => write!(f, "extern"),
             Token::Enum => write!(f, "enum"),
             Token::Struct => write!(f, "struct"),
+            Token::From => write!(f, "from"),
             Token::LtlNext => write!(f, "X"),
             Token::LtlFinally => write!(f, "F"),
             Token::LtlGlobally => write!(f, "G"),
@@ -458,6 +461,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "extern"   => Token::Extern,
     "enum"     => Token::Enum,
     "struct"   => Token::Struct,
+    "from"     => Token::From,
     "X"        => Token::LtlNext,
     "F"        => Token::LtlFinally,
     "G"        => Token::LtlGlobally,

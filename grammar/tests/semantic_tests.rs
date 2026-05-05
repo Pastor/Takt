@@ -1158,6 +1158,20 @@ fn example_non_array_subscript_is_error() {
     );
 }
 
+/// ArraySubscript с индексом-переменной — строится без ошибок.
+#[test]
+fn array_subscript_variable_index() {
+    let node = build("var buf: [bit;8] = 0; var i: bit = 0; var x: bit = buf[i];");
+    assert!(node.search_var("x").is_some());
+}
+
+/// ArraySubscript с индексом-переменной в условии cond — строится без ошибок.
+#[test]
+fn array_subscript_variable_index_in_cond() {
+    let node = build("var buf: [bit;8] = 0; var i: bit = 0; cond c = buf[i];");
+    assert!(node.search_cond("c").is_some());
+}
+
 /// `example_rename_import_missing.lam` — должна возникнуть ошибка.
 #[test]
 fn example_rename_import_missing_is_error() {
@@ -4360,4 +4374,192 @@ fn test_inline_formula_state_resolved() {
     } else {
         panic!("ожидался Simple state");
     }
+}
+
+// ─── Задача 17: диагностика недостижимых состояний ───────────────────────────
+
+/// Изолированное состояние без входящих переходов генерирует предупреждение SE-046.
+#[test]
+fn test_unreachable_state_generates_warning() {
+    let src = "start A { ref B; } state B; state Orphan;";
+    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
+    let model = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = grammar::unreachable_state_warnings(model);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "ожидалось 1 предупреждение SE-046, получено: {:?}",
+        warnings
+    );
+    assert_eq!(warnings[0].code.as_deref(), Some("SE-046"));
+    assert!(warnings[0].message.contains("Orphan"));
+}
+
+/// Модель без недостижимых состояний не генерирует предупреждений.
+#[test]
+fn test_all_reachable_states_no_warning() {
+    let src = "start A { ref B: true; } state B { ref A: true; }";
+    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
+    let model = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = grammar::unreachable_state_warnings(model);
+    assert!(
+        warnings.is_empty(),
+        "предупреждений быть не должно: {:?}",
+        warnings
+    );
+}
+
+/// Несколько недостижимых состояний — несколько предупреждений.
+#[test]
+fn test_multiple_unreachable_states() {
+    let src = "start A; state Ghost1; state Ghost2;";
+    let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
+    let model = construct_model(&ast, None, &[]).expect("ошибка построения");
+    let warnings = grammar::unreachable_state_warnings(model);
+    assert_eq!(
+        warnings.len(),
+        2,
+        "ожидалось 2 предупреждения SE-046, получено: {:?}",
+        warnings
+    );
+}
+
+// ─── Задача 13: `from` как ключевое слово ────────────────────────────────────
+
+/// `from` больше не является допустимым идентификатором — разбор должен выдать ошибку.
+#[test]
+fn test_from_is_reserved_keyword_not_identifier() {
+    let result = grammar::parse("var from: bit = 0; start S;", 0);
+    assert!(
+        result.is_err(),
+        "ожидалась ошибка разбора — 'from' зарезервировано"
+    );
+}
+
+/// Синтаксис `import {{ A }} from \"file\"` разбирается без ошибок.
+#[test]
+fn test_import_from_keyword_parses_correctly() {
+    use grammar::parser::ast::ModelElement;
+    // Создаём минимальный импорт (файл не существует, проверяем только АСД)
+    let (ast, errs) = grammar::parse(r#"import { A } from "shared.lam";"#, 0)
+        .expect("ошибка разбора import from");
+    assert!(errs.is_empty(), "ошибок разбора быть не должно: {:?}", errs);
+    let has_import = ast
+        .elements
+        .iter()
+        .any(|e| matches!(e, ModelElement::Import(_)));
+    assert!(has_import, "ожидался элемент Import в АСД");
+}
+
+// ─── Задача 14: предупреждение о неизвестных именованных блоках ──────────────
+
+/// Блок с опечаткой в имени генерирует предупреждение SE-045.
+#[test]
+fn test_unknown_named_block_typo_generates_warning() {
+    let (ast, _) = grammar::parse("start S { enteer { } } state Done;", 0).expect("ошибка разбора");
+    let warnings = grammar::unknown_named_block_warnings(&ast);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "ожидалось 1 предупреждение SE-045, получено: {:?}",
+        warnings
+    );
+    assert_eq!(warnings[0].code.as_deref(), Some("SE-045"));
+    assert!(warnings[0].message.contains("enteer"));
+}
+
+/// Корректные блоки `enter`, `exit`, `always` не генерируют предупреждений.
+#[test]
+fn test_known_named_blocks_no_warning() {
+    let (ast, _) =
+        grammar::parse("start S { enter { } exit { } always { } }", 0).expect("ошибка разбора");
+    let warnings = grammar::unknown_named_block_warnings(&ast);
+    assert!(
+        warnings.is_empty(),
+        "известные блоки не должны предупреждать: {:?}",
+        warnings
+    );
+}
+
+/// Неизвестный блок на уровне модели тоже предупреждает.
+#[test]
+fn test_unknown_named_block_at_model_level_generates_warning() {
+    let (ast, _) = grammar::parse("tick { } start S;", 0).expect("ошибка разбора");
+    let warnings = grammar::unknown_named_block_warnings(&ast);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "ожидалось 1 предупреждение SE-045 на уровне модели, получено: {:?}",
+        warnings
+    );
+    assert_eq!(warnings[0].code.as_deref(), Some("SE-045"));
+}
+
+// ─── Задача 16: предупреждение о лишней точке с запятой ──────────────────────
+
+/// Двойная точка с запятой `;;` на уровне модели генерирует предупреждение SE-044.
+#[test]
+fn test_stray_semicolon_at_model_level_generates_warning() {
+    let (ast, _) = grammar::parse("start S;; state Done;", 0).expect("ошибка разбора");
+    let warnings = grammar::stray_semicolon_warnings(&ast);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "ожидалось 1 предупреждение SE-044, получено: {:?}",
+        warnings
+    );
+    assert_eq!(warnings[0].code.as_deref(), Some("SE-044"));
+    assert!(warnings[0].message.contains("точка с запятой"));
+}
+
+/// Двойная точка с запятой `;;` внутри состояния генерирует предупреждение SE-044.
+#[test]
+fn test_stray_semicolon_inside_state_generates_warning() {
+    let (ast, _) = grammar::parse("start S { ref Done;; } state Done;", 0).expect("ошибка разбора");
+    let warnings = grammar::stray_semicolon_warnings(&ast);
+    assert_eq!(
+        warnings.len(),
+        1,
+        "ожидалось 1 предупреждение SE-044 внутри состояния, получено: {:?}",
+        warnings
+    );
+    assert_eq!(warnings[0].code.as_deref(), Some("SE-044"));
+}
+
+/// Корректный код без лишних `;` не генерирует предупреждений.
+#[test]
+fn test_no_stray_semicolon_no_warning() {
+    let (ast, _) = grammar::parse("cond x = true; start S { ref Done: x; } state Done;", 0)
+        .expect("ошибка разбора");
+    let warnings = grammar::stray_semicolon_warnings(&ast);
+    assert!(
+        warnings.is_empty(),
+        "предупреждений быть не должно, получено: {:?}",
+        warnings
+    );
+}
+
+// ─── Задача 1: cond требует завершающего `;` ──────────────────────────────────
+
+/// Объявление `cond` с `;` разбирается как один элемент модели (не порождает StraySemicolon).
+#[test]
+fn test_cond_define_semicolon_consumed_not_stray() {
+    use grammar::parser::ast::ModelElement;
+    let (ast, errs) = grammar::parse("cond x = true; start S;", 0).expect("ошибка разбора");
+    assert!(errs.is_empty(), "ошибок разбора быть не должно");
+    let cond_count = ast
+        .elements
+        .iter()
+        .filter(|e| matches!(e, ModelElement::Condition(_)))
+        .count();
+    let stray_count = ast
+        .elements
+        .iter()
+        .filter(|e| matches!(e, ModelElement::StraySemicolon(_)))
+        .count();
+    assert_eq!(cond_count, 1, "ожидался 1 элемент Condition");
+    assert_eq!(
+        stray_count, 0,
+        "StraySemicolon после cond не должен появляться"
+    );
 }

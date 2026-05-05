@@ -570,7 +570,14 @@ pub(crate) fn ast_condition_summary(
         AC::Subtract(_, _, _) => "арифметическое вычитание".to_string(),
         AC::And(_, _, _) => "побитовое И".to_string(),
         AC::Or(_, _, _) => "побитовое ИЛИ".to_string(),
-        AC::ArraySubscript(_, id, idx) => format!("элемент массива '{}[{}]'", id.name, idx),
+        AC::ArraySubscript(_, id, idx) => {
+            let idx_str = match idx.as_ref() {
+                AC::Number(_, n) => n.to_string(),
+                AC::Variable(v) => v.name.clone(),
+                _ => "expr".to_string(),
+            };
+            format!("элемент массива '{}[{}]'", id.name, idx_str)
+        }
         AC::BitAccess(_, _, _) => "доступ к битовому полю".to_string(),
         // Остальные варианты сюда попасть не должны (они булевые)
         _ => "числовое выражение".to_string(),
@@ -684,7 +691,11 @@ fn semantic_condition_summary(cond: &ConditionNode) -> String {
                 | VariableNode::Const { name, .. } => name.clone(),
                 VariableNode::Unresolved => "?".to_string(),
             };
-            format!("элемент массива '{}[{}]'", name, idx)
+            let idx_str = match idx.as_ref() {
+                ConditionNode::Number(n) => n.to_string(),
+                _ => "expr".to_string(),
+            };
+            format!("элемент массива '{}[{}]'", name, idx_str)
         }
         ConditionNode::BitAccess(_, _) => "доступ к битовому полю".to_string(),
         _ => "числовое выражение".to_string(),
@@ -1768,7 +1779,7 @@ mod tests {
     /// `ArraySubscript` → числовое.
     #[test]
     fn ast_cond_array_subscript_is_false() {
-        let cond = AC::ArraySubscript(loc(), id("arr"), 0);
+        let cond = AC::ArraySubscript(loc(), id("arr"), Box::new(AC::Number(loc(), 0)));
         assert!(!is_boolean_ast_condition(&cond, &empty_model()));
     }
 
@@ -1896,7 +1907,7 @@ mod tests {
     /// Summary для элемента массива содержит имя и индекс.
     #[test]
     fn ast_summary_array_subscript() {
-        let cond = AC::ArraySubscript(loc(), id("buf"), 3);
+        let cond = AC::ArraySubscript(loc(), id("buf"), Box::new(AC::Number(loc(), 3)));
         let s = ast_condition_summary(&cond, &empty_model());
         assert!(s.contains("buf"), "имя массива в summary: '{}'", s);
         assert!(s.contains('3'), "индекс в summary: '{}'", s);
@@ -3274,4 +3285,106 @@ pub fn check_struct_field_types(model: Rc<RefCell<ModelNode>>) -> Option<Diagnos
     }
 
     None
+}
+
+// ─── SE-046: недостижимые состояния ──────────────────────────────────────────
+
+/// Предупреждает о состояниях, недостижимых из начального состояния.
+///
+/// Обходит граф переходов (BFS) начиная со стартового состояния.
+/// Состояние считается недостижимым, если на него нет ни одного перехода
+/// `ref` или `next` из любого достижимого состояния.
+///
+/// Функция рекурсивно обходит все вложенные модели.
+pub fn check_unreachable_states(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    collect_unreachable_states(&model, &mut diags);
+    diags
+}
+
+fn collect_unreachable_states(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
+    let borrowed = model.borrow();
+
+    let states = &borrowed.states;
+    if states.is_empty() {
+        drop(borrowed);
+        let nested: Vec<_> = model.borrow().models.values().map(Rc::clone).collect();
+        for m in nested {
+            collect_unreachable_states(&m, out);
+        }
+        return;
+    }
+
+    // Имя стартового состояния
+    let start_name = states
+        .values()
+        .find(|s| s.kind() == StateNodeKind::Start)
+        .map(|s| get_state_name(s).to_string());
+
+    if let Some(start) = start_name {
+        let mut reachable = std::collections::HashSet::new();
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(start.clone());
+        reachable.insert(start);
+
+        while let Some(current) = queue.pop_front() {
+            if let Some(state) = states.get(&current) {
+                for target in get_reachable_targets(state) {
+                    if !reachable.contains(&target) {
+                        reachable.insert(target.clone());
+                        queue.push_back(target);
+                    }
+                }
+            }
+        }
+
+        for (name, state) in states {
+            if !reachable.contains(name.as_str()) {
+                let loc = get_state_loc(state);
+                out.push(
+                    Diagnostic::warning(
+                        loc,
+                        format!("состояние '{}' недостижимо из начального состояния", name),
+                    )
+                    .with_code("SE-046"),
+                );
+            }
+        }
+    }
+
+    drop(borrowed);
+    let nested: Vec<_> = model.borrow().models.values().map(Rc::clone).collect();
+    for m in nested {
+        collect_unreachable_states(&m, out);
+    }
+}
+
+fn get_state_name(state: &StateNode) -> &str {
+    match state {
+        StateNode::Simple { name, .. } | StateNode::Implement { name, .. } => name.as_str(),
+        StateNode::Unresolved => "",
+    }
+}
+
+fn get_state_loc(state: &StateNode) -> Location {
+    match state {
+        StateNode::Simple { loc, .. } | StateNode::Implement { loc, .. } => *loc,
+        StateNode::Unresolved => Location::Builtin,
+    }
+}
+
+fn get_reachable_targets(state: &StateNode) -> Vec<String> {
+    match state {
+        StateNode::Simple { references, .. } => references.iter().map(|r| r.name.clone()).collect(),
+        StateNode::Implement {
+            references, next, ..
+        } => {
+            let mut targets: Vec<String> = references.iter().map(|r| r.name.clone()).collect();
+            if let Some(n) = next {
+                targets.push(n.name.clone());
+            }
+            targets
+        }
+        StateNode::Unresolved => vec![],
+    }
 }

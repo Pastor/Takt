@@ -1,4 +1,3 @@
-use lalrpop_util::ParseError;
 use super::parser::ast::*;
 use super::diagnostics::Location;
 use super::parser::lexer::{Token, LexicalError};
@@ -18,29 +17,11 @@ ImportPath: ImportPath = {
 Import: ModelElement = {
     <l:@L> "import" <s:ImportPath> <r:@R> ";" => ModelElement::Import(ImportDefine::Plain(s, Location::Source(file_no, l, r))),
     <l:@L> "import" <s:ImportPath> "as" <id:Identifier> <r:@R> ";" => ModelElement::Import(ImportDefine::GlobalSymbol(s, id, Location::Source(file_no, l, r))),
-    <l:@L> "import" "*" "as" <id:Identifier> <from:Identifier> <s:ImportPath> <r:@R> ";" => {
-        if from.name != "from" {
-            let error = ErrorRecovery {
-                error: ParseError::User {
-                    error: LexicalError::ExpectedFrom(from.loc, from.name)
-                },
-                dropped_tokens: Vec::new(),
-            };
-            parser_errors.push(error);
-        }
+    <l:@L> "import" "*" "as" <id:Identifier> "from" <s:ImportPath> <r:@R> ";" => {
         ModelElement::Import(ImportDefine::GlobalSymbol(s, id, Location::Source(file_no, l, r)))
     },
-    <l:@L> "import" "{" <rename:CommaOne<ImportRename>> "}" <from:Identifier> <s:ImportPath> <r:@R> ";" =>? {
-        if from.name != "from" {
-            let error = ErrorRecovery {
-                error: ParseError::User {
-                    error: LexicalError::ExpectedFrom(from.loc, from.name),
-                },
-                dropped_tokens: Vec::new(),
-            };
-            parser_errors.push(error);
-        }
-        Ok(ModelElement::Import(ImportDefine::Rename(s,rename,Location::Source(file_no, l, r))))
+    <l:@L> "import" "{" <rename:CommaOne<ImportRename>> "}" "from" <s:ImportPath> <r:@R> ";" => {
+        ModelElement::Import(ImportDefine::Rename(s,rename,Location::Source(file_no, l, r)))
     },
 }
 
@@ -125,7 +106,7 @@ IdentifierOrError: Option<Identifier> = {
     }
 }
 ConditionDefine: ConditionDefine = {
-    <l:@L> "cond" <name:IdentifierOrError> "=" <c:Condition> <r:@R> => ConditionDefine {
+    <l:@L> "cond" <name:IdentifierOrError> "=" <c:Condition> <r:@R> ";" => ConditionDefine {
         loc: Location::Source(file_no, l, r), name: name, value: c
     },
 }
@@ -391,7 +372,8 @@ Condition0: Condition = {
   },
   <a:@L> "(" <e:Condition> ")" <b:@R> => Condition::Parenthesis(Location::Source(file_no, a, b), Box::new(e)),
   <a:@L> <e:Condition0> "." <i:Member> <b:@R> => Condition::BitAccess(Location::Source(file_no, a, b), Box::new(e), i),
-  <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Condition::ArraySubscript(Location::Source(file_no, a, b), i, n),
+  <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Condition::ArraySubscript(Location::Source(file_no, a, b), i, Box::new(Condition::Number(Location::Source(file_no, a, b), n))),
+  <a:@L> <i:Identifier> "[" <idx:Identifier> "]" <b:@R> => Condition::ArraySubscript(Location::Source(file_no, a, b), i, Box::new(Condition::Variable(idx))),
   ConditionExpression,
 }
 
@@ -635,7 +617,8 @@ Precedence0: Expression = {
       Expression::List(Location::Source(file_no, l, r), a)
   },
   <a:@L> <e:Precedence0> "." <i:Member> <b:@R> => Expression::BitAccess(Location::Source(file_no, a, b), Box::new(e), i),
-  <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Expression::ArraySubscript(Location::Source(file_no, a, b), i, n),
+  <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Expression::ArraySubscript(Location::Source(file_no, a, b), i, Box::new(Expression::Number(Location::Source(file_no, a, b), n))),
+  <a:@L> <i:Identifier> "[" <idx:Identifier> "]" <b:@R> => Expression::ArraySubscript(Location::Source(file_no, a, b), i, Box::new(Expression::Variable(idx))),
   <a:@L> <i:Identifier> "[" <l:number?> ":" <r:number?> "]" <b:@R> => Expression::ArraySlice(Location::Source(file_no, a, b), i, l, r),
   LiteralExpression,
 }
@@ -939,6 +922,7 @@ extern {
         "var" => Token::Variable,
         "enum" => Token::Enum,
         "struct" => Token::Struct,
+        "from" => Token::From,
         "X" => Token::LtlNext,
         "F" => Token::LtlFinally,
         "G" => Token::LtlGlobally,

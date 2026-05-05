@@ -61,16 +61,17 @@ pub fn resolve_condition(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<ConditionNode, Diagnostic> {
     match cond {
-        ast::Condition::ArraySubscript(_, id, num) => {
+        ast::Condition::ArraySubscript(_, id, idx_cond) => {
             let name = id.name.clone();
             let var = model.borrow().search_var(&name);
             if let Some(var) = var
                 && let VariableNode::Simple { ty, .. } = var.clone()
                 && let TypeNode::Array(..) = ty
             {
+                let resolved_idx = resolve_condition(idx_cond, model.clone())?;
                 return Ok(ConditionNode::ArraySubscript(
                     Rc::new(RefCell::new(var)),
-                    *num,
+                    Box::new(resolved_idx),
                 ));
             }
             Err(format!("Массив '{}' не найден", &name).as_str().into())
@@ -557,7 +558,7 @@ mod tests {
     fn array_subscript_on_array_resolves() {
         let node = build("var buf: [bit; 8]; cond c = buf[3];").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), ConditionNode::ArraySubscript(_, 3)),
+            matches!(cond_val(&node, "c"), ConditionNode::ArraySubscript(_, ref idx) if matches!(**idx, ConditionNode::Number(3))),
             "ожидалось ArraySubscript(_, 3)"
         );
     }

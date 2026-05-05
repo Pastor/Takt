@@ -1,829 +1,145 @@
-diff --git a/grammar/src/generator/c/mod.rs b/grammar/src/generator/c/mod.rs
-index ce2207f..bf41846 100644
---- a/grammar/src/generator/c/mod.rs
-+++ b/grammar/src/generator/c/mod.rs
-@@ -61,6 +61,14 @@ impl Generator {
-                     name.clone().unwrap_or_default()
-                 )
-             }
-+            // NI3: структурный тип представляется как struct в C
-+            TypeNode::Struct(struct_name) => {
-+                format!(
-+                    "struct {} {}",
-+                    struct_name,
-+                    name.clone().unwrap_or_default()
-+                )
-+            }
-             TypeNode::BuiltinModel
-             | TypeNode::BuiltinState
-             | TypeNode::BuiltinNumeric
-diff --git a/grammar/src/grammar.lalrpop b/grammar/src/grammar.lalrpop
-index a920c3c..90086c6 100644
---- a/grammar/src/grammar.lalrpop
-+++ b/grammar/src/grammar.lalrpop
-@@ -2,6 +2,7 @@ use lalrpop_util::ParseError;
- use super::parser::ast::*;
- use super::diagnostics::Location;
- use super::parser::lexer::{Token, LexicalError};
-+use super::parser::parse_address_literal;
- use lalrpop_util::ErrorRecovery;
- grammar<'input, 'err>(input: &'input str, file_no: u64 , parser_errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, LexicalError>> );
- 
-@@ -65,6 +66,7 @@ ModelElement: ModelElement = {
-     ConditionDefine => ModelElement::Condition(Box::new(<>)),
-     NamedBlockCodeDefine => ModelElement::NamedBlockCode(<>),
-     <e:EnumDefine> => ModelElement::Enum(e),
-+    <s:StructDefine> => ModelElement::Struct(s),
-     <l:@L> ";" <r:@R> => ModelElement::StraySemicolon(Location::Source(file_no, l, r)),
- }
- 
-@@ -201,6 +203,32 @@ EnumDefine: Box<EnumDefine> = {
-     },
- }
- 
-+StructField: StructField = {
-+    <l:@L> <name:Identifier> ":" <ty:Type> <r:@R> => StructField {
-+        loc: Location::Source(file_no, l, r),
-+        name,
-+        ty,
-+    },
-+}
-+
-+StructDefine: Box<StructDefine> = {
-+    <l:@L> "struct" <name:IdentifierOrError> "{" <fields:Comma<StructField>> "}" <r:@R> => {
-+        Box::new(StructDefine {
-+            loc: Location::Source(file_no, l, r),
-+            name,
-+            fields,
-+        })
-+    },
-+    <l:@L> "struct" <name:IdentifierOrError> "{" <false_token:!> "}" <r:@R> => {
-+        parser_errors.push(false_token);
-+        Box::new(StructDefine {
-+            loc: Location::Source(file_no, l, r),
-+            name,
-+            fields: Vec::new(),
-+        })
-+    },
-+}
-+
- BlockStatementOrSemiColon: Option<Statement> = {
-     <@L> <@R> ";" => None,
-     BlockStatement => Some(<>),
-@@ -336,6 +364,8 @@ LoopCond: Expression = { LoopCondP14 }
- 
- LoopCondP14: Expression = {
-     <a:@L> <l:LoopCondP13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-+    // Тернарный оператор в контексте loop-условия (правоассоциативный)
-+    <a:@L> <c:LoopCondP13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
-     LoopCondP13,
- }
- 
-@@ -414,9 +444,13 @@ LoopCondP2: Expression = {
- // LoopCondP1: как Precedence1, но БЕЗ инициализатора массива `{ expr, ... }`.
- // Именно это устраняет конфликт LR(1): '{' всегда начинает тело цикла, а не условие.
- LoopCondP1: Expression = {
--    <l:@L> <n:number> ":" <bit:number> <r:@R> => Expression::Address(Location::Source(file_no, l, r), n, bit),
--    <l:@L> <n:number>                  <r:@R> => Expression::Number(Location::Source(file_no, l, r), n),
--    <l:@L> <n:rational>                <r:@R> => Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1),
-+    // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта)
-+    <l:@L> <a:address> <r:@R> => {
-+        let (addr_val, bit_val) = parse_address_literal(a);
-+        Expression::Address(Location::Source(file_no, l, r), addr_val, bit_val)
-+    },
-+    <l:@L> <n:number>   <r:@R> => Expression::Number(Location::Source(file_no, l, r), n),
-+    <l:@L> <n:rational> <r:@R> => Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1),
-     // инициализатор массива '{...}' здесь намеренно отсутствует
-     Precedence0
- }
-@@ -427,6 +461,8 @@ Expression: Expression = {
- 
- Precedence14: Expression = {
-     <a:@L> <l:Precedence13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-+    // Тернарный оператор: cond ? then : else (правоассоциативный, ниже присваивания)
-+    <a:@L> <c:Precedence13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
-     Precedence13,
- }
- 
-@@ -503,8 +539,10 @@ Precedence2: Expression = {
- }
- 
- Precedence1: Expression = {
--    <l:@L> <n:number> ":" <bit:number> <r:@R> => {
--        Expression::Address(Location::Source(file_no, l, r), n, bit)
-+    // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта с тернарным `?:`)
-+    <l:@L> <a:address> <r:@R> => {
-+        let (addr_val, bit_val) = parse_address_literal(a);
-+        Expression::Address(Location::Source(file_no, l, r), addr_val, bit_val)
-     },
-     <l:@L> <n:number> <r:@R> => {
-         Expression::Number(Location::Source(file_no, l, r), n)
-@@ -767,6 +805,7 @@ extern {
-         identifier => Token::Identifier(<&'input str>),
-         string => Token::StringLiteral(<bool>, <&'input str>),
-         number => Token::Number(<i64>),
-+        address => Token::AddressLiteral(<&'input str>),
-         rational => Token::RationalNumber(<&'input str>, <bool>),
-         "->" => Token::PeirceArrow,
-         "#" => Token::Sharp,
-@@ -801,6 +840,7 @@ extern {
-         "[" => Token::OpenBracket,
-         "]" => Token::CloseBracket,
-         "." => Token::Member,
-+        "?" => Token::Question,
-         "," => Token::Comma,
-         "import" => Token::Import,
-         "type" => Token::Type,
-@@ -828,5 +868,6 @@ extern {
-         "next" => Token::Next,
-         "var" => Token::Variable,
-         "enum" => Token::Enum,
-+        "struct" => Token::Struct,
-     }
- }
-diff --git a/grammar/src/parser/ast.rs b/grammar/src/parser/ast.rs
-index 70fec72..f616568 100644
---- a/grammar/src/parser/ast.rs
-+++ b/grammar/src/parser/ast.rs
-@@ -160,6 +160,8 @@ pub enum Type {
-     },
-     /// Перечисление типов.
-     Enum(String),
-+    /// Структурный тип (ссылка по имени).
-+    Struct(String),
-     /// Функциональный тип `(параметры) -> возврат`.
-     Function {
-         /// Список входных параметров.
-@@ -254,6 +256,8 @@ pub enum ModelElement {
-     StraySemicolon(Location),
-     /// Перечисление.
-     Enum(Box<EnumDefine>),
-+    /// Структурный тип.
-+    Struct(Box<StructDefine>),
- }
- 
- /// Вид состояния автомата.
-@@ -352,6 +356,32 @@ pub struct EnumDefine {
- 
- impl Eq for EnumDefine {}
- 
-+/// Определение структурного типа: `struct Имя { поле: Тип, ... }`.
-+#[derive(Debug, PartialEq, Clone)]
-+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-+pub struct StructDefine {
-+    /// Местоположение в исходном коде.
-+    pub loc: Location,
-+    /// Имя структуры.
-+    pub name: Option<Identifier>,
-+    /// Поля структуры.
-+    pub fields: Vec<StructField>,
-+}
-+
-+impl Eq for StructDefine {}
-+
-+/// Поле структуры: `имя: Тип`.
-+#[derive(Debug, PartialEq, Eq, Clone)]
-+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-+pub struct StructField {
-+    /// Местоположение поля в исходном коде.
-+    pub loc: Location,
-+    /// Имя поля.
-+    pub name: Identifier,
-+    /// Тип поля.
-+    pub ty: Type,
-+}
-+
- /// Определение псевдонима типа: `type Имя = Тип`.
- #[derive(Debug, PartialEq, Eq, Clone)]
- #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
-diff --git a/grammar/src/parser/lexer.rs b/grammar/src/parser/lexer.rs
-index 95edcfc..0ef1c72 100644
---- a/grammar/src/parser/lexer.rs
-+++ b/grammar/src/parser/lexer.rs
-@@ -151,6 +151,8 @@ pub enum Token<'input> {
-     Member,
-     /// Двоеточие `:`.
-     Colon,
-+    /// Символ вопроса `?` (тернарный оператор).
-+    Question,
-     /// Символ `[`.
-     OpenBracket,
-     /// Символ `]`.
-@@ -192,6 +194,8 @@ pub enum Token<'input> {
-     Extern,
-     /// Ключевое слово `enum`.
-     Enum,
-+    /// Ключевое слово `struct`.
-+    Struct,
- }
- 
- impl<'input> fmt::Display for Token<'input> {
-@@ -236,6 +240,7 @@ impl<'input> fmt::Display for Token<'input> {
-             Token::MoreEqual => write!(f, ">="),
-             Token::Member => write!(f, "."),
-             Token::Colon => write!(f, ":"),
-+            Token::Question => write!(f, "?"),
-             Token::OpenBracket => write!(f, "["),
-             Token::CloseBracket => write!(f, "]"),
-             Token::ShiftRight => write!(f, ">>"),
-@@ -271,6 +276,7 @@ impl<'input> fmt::Display for Token<'input> {
-             Token::Next => write!(f, "next"),
-             Token::Extern => write!(f, "extern"),
-             Token::Enum => write!(f, "enum"),
-+            Token::Struct => write!(f, "struct"),
-         }
-     }
- }
-@@ -409,6 +415,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
-     "next"     => Token::Next,
-     "extern"   => Token::Extern,
-     "enum"     => Token::Enum,
-+    "struct"   => Token::Struct,
- };
- 
- impl<'input> Lexer<'input> {
-@@ -488,9 +495,29 @@ impl<'input> Lexer<'input> {
-                 // Удаляем разделители `_` перед разбором hex-числа
-                 let hex_raw = &self.input[start + 2..=end];
-                 let hex: String = hex_raw.chars().filter(|&c| c != '_').collect();
-+                let hex_val = i64::from_str_radix(&hex, 16).unwrap();
-+
-+                // Проверяем, является ли это адресным литералом `0xNNNN:bit`
-+                // (токен AddressLiteral, чтобы избежать LR(1)-конфликта с тернарным `?:`)
-+                if matches!(self.chars.peek(), Some((_, ':'))) {
-+                    if matches!(self.chars.peek_nth(1), Some((_, '0'..='9'))) {
-+                        self.chars.next(); // потребляем ':'
-+                        let mut bit_end = end + 1;
-+                        while let Some((i, ch)) = self.chars.peek() {
-+                            if ch.is_ascii_digit() {
-+                                bit_end = *i;
-+                                self.chars.next();
-+                            } else {
-+                                break;
-+                            }
-+                        }
-+                        return Ok((start, Token::AddressLiteral(&self.input[start..=bit_end]), bit_end + 1));
-+                    }
-+                }
-+
-                 return Ok((
-                     start,
--                    Token::Number(i64::from_str_radix(&hex, 16).unwrap()),
-+                    Token::Number(hex_val),
-                     end + 1,
-                 ));
-             }
-@@ -894,6 +921,7 @@ impl<'input> Lexer<'input> {
-                 Some((i, '[')) => return Some((i, Token::OpenBracket, i + 1)),
-                 Some((i, ']')) => return Some((i, Token::CloseBracket, i + 1)),
-                 Some((i, ':')) => return Some((i, Token::Colon, i + 1)),
-+                Some((i, '?')) => return Some((i, Token::Question, i + 1)),
-                 Some((i, '~')) => return Some((i, Token::BitwiseNot, i + 1)),
-                 // Пробельные символы игнорируются
-                 Some((_, ch)) if ch.is_whitespace() => (),
-diff --git a/grammar/src/semantic/docs.rs b/grammar/src/semantic/docs.rs
-index de9d3fa..e9c49a1 100644
---- a/grammar/src/semantic/docs.rs
-+++ b/grammar/src/semantic/docs.rs
-@@ -92,6 +92,7 @@ fn element_start(element: &ModelElement) -> Option<usize> {
-         ModelElement::Formula(f) => Some(f.loc.start()),
-         ModelElement::StraySemicolon(loc) => Some(loc.start()),
-         ModelElement::Enum(e) => Some(e.loc.start()),
-+        ModelElement::Struct(s) => Some(s.loc.start()),
-     }
- }
- 
-diff --git a/grammar/src/semantic/mod.rs b/grammar/src/semantic/mod.rs
-index 96bee3a..abcf2af 100644
---- a/grammar/src/semantic/mod.rs
-+++ b/grammar/src/semantic/mod.rs
-@@ -13,6 +13,7 @@ mod builtin;
- mod condition;
- pub(crate) mod docs;
- pub mod enum_node;
-+pub mod struct_node;
- mod expression;
- mod function;
- mod import;
-@@ -31,6 +32,7 @@ use crate::diagnostics::Location;
- use crate::parser::ast;
- use crate::parser::ast::{Member, NamedArgument, ParameterList, Type};
- pub use crate::semantic::enum_node::EnumDefinitionNode;
-+pub use crate::semantic::struct_node::StructDefinitionNode;
- use std::cell::RefCell;
- use std::collections::HashMap;
- use std::fmt::Debug;
-@@ -70,6 +72,8 @@ pub struct ModelNode {
-     pub conditions: HashMap<String, ConditionDefinitionNode>,
-     /// Объявленные перечисления (Ce4).
-     pub enums: HashMap<String, EnumDefinitionNode>,
-+    /// Объявленные структурные типы (NI3).
-+    pub structs: HashMap<String, StructDefinitionNode>,
-     /// Состояния модели: имя → узел состояния.
-     pub states: HashMap<String, StateNode>,
-     /// Информация о реализации (зарезервировано).
-@@ -248,6 +252,17 @@ impl ModelNode {
-         None
-     }
- 
-+    /// Ищет структурный тип по имени, включая родительские модели (NI3).
-+    pub fn search_struct(&self, name: &str) -> Option<StructDefinitionNode> {
-+        if let Some(s) = self.structs.get(name) {
-+            Some(s.clone())
-+        } else if let Some(model) = self.upper.as_ref().and_then(|w| w.upgrade()) {
-+            model.borrow().search_struct(name)
-+        } else {
-+            None
-+        }
-+    }
-+
-     /// Возвращает список всех именованных блоков с заданным именем.
-     pub fn get_named_blocks(&self, name: &str) -> Vec<&NamedCodeBlockDefinitionNode> {
-         self.named_blocks
-diff --git a/grammar/src/semantic/tree.rs b/grammar/src/semantic/tree.rs
-index bb167e6..5e022eb 100644
---- a/grammar/src/semantic/tree.rs
-+++ b/grammar/src/semantic/tree.rs
-@@ -469,6 +469,46 @@ fn construct_model_stage0(
-                     .type_locs
-                     .insert(enum_name.clone(), enum_loc);
-             }
-+        } else if let ModelElement::Struct(s) = element {
-+            // NI3: Обработка структурных типов.
-+            let struct_name = s
-+                .name
-+                .as_ref()
-+                .map(|id| id.name.clone())
-+                .unwrap_or_default();
-+            let struct_loc = s.name.as_ref().map(|id| id.loc).unwrap_or(s.loc);
-+
-+            // Разрешаем типы полей в контексте текущей модели.
-+            let mut field_pairs: Vec<(String, TypeNode)> = Vec::new();
-+            for field in &s.fields {
-+                let field_ty =
-+                    crate::semantic::type_node::construct_type(Some(field.ty.clone()), model_node.clone())
-+                        .unwrap_or(TypeNode::Unsupported);
-+                field_pairs.push((field.name.name.clone(), field_ty));
-+            }
-+
-+            let mut struct_node = crate::semantic::StructDefinitionNode {
-+                name: struct_name.clone(),
-+                fields: field_pairs,
-+                loc: struct_loc,
-+            };
-+            struct_node.loc = struct_loc;
-+
-+            model_node
-+                .borrow_mut()
-+                .structs
-+                .insert(struct_name.clone(), struct_node);
-+            // Регистрируем структуру в таблице типов для разрешения `var p: Point = ...;`
-+            if !struct_name.is_empty() {
-+                model_node
-+                    .borrow_mut()
-+                    .types
-+                    .insert(struct_name.clone(), TypeNode::Struct(struct_name.clone()));
-+                model_node
-+                    .borrow_mut()
-+                    .type_locs
-+                    .insert(struct_name.clone(), struct_loc);
-+            }
-         }
-     }
-     model_node.borrow_mut().models = models;
-diff --git a/grammar/src/semantic/type_node.rs b/grammar/src/semantic/type_node.rs
-index d9073d9..05e4eee 100644
---- a/grammar/src/semantic/type_node.rs
-+++ b/grammar/src/semantic/type_node.rs
-@@ -85,6 +85,8 @@ pub(crate) fn construct_type(
-         // Type::Enum используется только в парсере как узел грамматики;
-         // в качестве типа переменной не поддерживается на уровне семантики.
-         Type::Enum(name) => Ok(TypeNode::Enum(name.clone())),
-+        // Type::Struct — ссылка на объявленный структурный тип.
-+        Type::Struct(name) => Ok(TypeNode::Struct(name.clone())),
-     }
- }
- 
-@@ -379,6 +381,7 @@ mod tests {
- /// - [`Rational`](TypeNode::Rational) — вещественное число (`float`).
- /// - [`Array`](TypeNode::Array) — массив фиксированного размера `(N, элемент)`.
- /// - [`Enum`](TypeNode::Enum) — перечисление (Ce4).
-+/// - [`Struct`](TypeNode::Struct) — структурный тип (NI3).
- /// - [`Unsupported`](TypeNode::Unsupported) — неподдерживаемый тип (например, функциональный).
- #[derive(Default, Debug, PartialEq, Eq, Clone)]
- pub enum TypeNode {
-@@ -415,4 +418,8 @@ pub enum TypeNode {
-     /// Используется для параметров и возвращаемых значений математических
-     /// встроенных функций (`min`, `max`, `abs`).
-     BuiltinNumeric,
-+    /// Структурный тип (NI3): именованная структура с полями.
-+    ///
-+    /// Хранит имя структуры.
-+    Struct(String),
- }
-diff --git a/grammar/tests/parser_tests.rs b/grammar/tests/parser_tests.rs
-index 6394686..5f3c0ee 100644
---- a/grammar/tests/parser_tests.rs
-+++ b/grammar/tests/parser_tests.rs
-@@ -1601,4 +1601,156 @@ fn expression_loc_method() {
-         Expression::Assign(loc.clone(), inner.clone(), inner.clone()).loc(),
-         loc
-     );
-+    assert_eq!(
-+        Expression::ConditionalOperator(loc.clone(), inner.clone(), inner.clone(), inner.clone())
-+            .loc(),
-+        loc
-+    );
-+}
-+
-+// ─────────────────────────────── Тернарный оператор ─────────────────────────
-+
-+/// Простой тернарный оператор `flag ? true : false` разбирается без ошибок.
-+#[test]
-+fn ternary_simple_parses() {
-+    let src = "var flag: bit = true; var r: bit = flag ? true : false; start S;";
-+    must_parse(src);
-+}
-+
-+/// Вложенный тернарный оператор (правоассоциативный) разбирается корректно.
-+#[test]
-+fn ternary_nested_right_associative() {
-+    // a ? b ? 1 : 2 : 3  →  a ? (b ? 1 : 2) : 3
-+    let src = "var a: bit = true; var b: bit = false; var z: bit = a ? b ? true : false : false; start S;";
-+    must_parse(src);
-+}
-+
-+/// Тернарный оператор с выражением в условии.
-+#[test]
-+fn ternary_condition_expression() {
-+    let src = "var x: bit = true; var y: bit = x ? false : true; start S;";
-+    must_parse(src);
-+}
-+
-+/// Тернарный оператор в теле автомата (`always`-блок).
-+#[test]
-+fn ternary_in_always_block() {
-+    let src = r#"
-+var flag: bit = true;
-+start Idle {
-+    always {
-+        var r: bit = flag ? true : false;
-+    }
-+    ref Idle: flag = 0;
-+}
-+"#;
-+    must_parse(src);
-+}
-+
-+/// Тернарный оператор в выражении внутри `always`-блока с присваиванием.
-+#[test]
-+fn ternary_in_assignment_expression() {
-+    let src = r#"
-+var a: bit = true;
-+var b: bit = false;
-+start S {
-+    always {
-+        a = b ? true : false;
-+    }
-+    ref S: a = 0;
-+}
-+"#;
-+    must_parse(src);
-+}
-+
-+/// Интеграционный тест: файл `ternary_operator.but` разбирается без ошибок.
-+#[test]
-+fn ternary_operator_file_parses() {
-+    let path = Path::new("tests/data/parser/valid/ternary_operator.but");
-+    let src = fs::read_to_string(path).expect("не удалось прочитать файл");
-+    must_parse(&src);
-+}
-+
-+/// Контр-пример: незакрытый тернарный оператор (без `else`) — ошибка парсера.
-+#[test]
-+fn ternary_missing_else_branch_is_error() {
-+    // `flag ? true` без `: else` не является корректным тернарным выражением
-+    let src = "var flag: bit = true; var r: bit = flag ? true; start S;";
-+    let result = grammar::parse(src, 0);
-+    assert!(result.is_err(), "ожидалась ошибка парсера для неполного тернарного оператора");
-+}
-+
-+/// Контр-пример: тернарный оператор без условия — ошибка парсера.
-+#[test]
-+fn ternary_missing_condition_is_error() {
-+    let src = "var r: bit = ? true : false; start S;";
-+    let result = grammar::parse(src, 0);
-+    assert!(result.is_err(), "ожидалась ошибка парсера для тернарного оператора без условия");
-+}
-+
-+// ─────────────────────────────── Структурные типы (NI3) ──────────────────────
-+
-+/// Простая структура с двумя полями разбирается без ошибок.
-+#[test]
-+fn struct_simple_parses() {
-+    let src = r#"
-+struct Point { x: [bit;16], y: [bit;16] }
-+start S;
-+"#;
-+    must_parse(src);
-+}
-+
-+/// Структура с одним полем разбирается корректно.
-+#[test]
-+fn struct_single_field_parses() {
-+    let src = "struct Wrapper { value: bit } start S;";
-+    must_parse(src);
-+}
-+
-+/// Несколько структур в одном файле.
-+#[test]
-+fn multiple_structs_parse() {
-+    let src = r#"
-+struct A { x: bit }
-+struct B { y: [bit;8] }
-+start S;
-+"#;
-+    must_parse(src);
-+}
-+
-+/// Переменная типа структуры разбирается.
-+#[test]
-+fn struct_variable_declaration_parses() {
-+    let src = r#"
-+struct Vec2 { x: [bit;16], y: [bit;16] }
-+var v: Vec2 = 0;
-+start S;
-+"#;
-+    must_parse(src);
-+}
-+
-+/// Интеграционный тест: файл `struct_types.but` разбирается без ошибок.
-+#[test]
-+fn struct_types_file_parses() {
-+    let path = Path::new("tests/data/parser/valid/struct_types.but");
-+    let src = fs::read_to_string(path).expect("не удалось прочитать файл");
-+    must_parse(&src);
-+}
-+
-+/// Контр-пример: структура без закрывающей скобки — ошибка парсера.
-+#[test]
-+fn struct_missing_closing_brace_is_error() {
-+    let src = "struct Bad { x: bit start S;";
-+    let result = grammar::parse(src, 0);
-+    assert!(result.is_err(), "ожидалась ошибка для структуры без закрывающей скобки");
-+}
-+
-+/// Контр-пример: структура без имени — ошибка парсера.
-+#[test]
-+fn struct_anonymous_parses_with_recovery() {
-+    // LALRPOP использует IdentifierOrError, поэтому анонимная структура
-+    // разбирается с восстановлением после ошибки
-+    let src = "struct { x: bit } start S;";
-+    // Принимаем как ошибку или успех с диагностикой — не panic
-+    let _ = grammar::parse(src, 0);
- }
-diff --git a/grammar/tests/semantic_tests.rs b/grammar/tests/semantic_tests.rs
-index ccfa340..fc2d312 100644
---- a/grammar/tests/semantic_tests.rs
-+++ b/grammar/tests/semantic_tests.rs
-@@ -736,6 +736,12 @@ fn build_file(
-     construct_model(&ast, None, &[]).map(|m| m.take())
- }
- 
-+/// Строит семантическую модель из исходного кода BuT.
-+fn build_from_src(src: &str) -> Result<grammar::semantic::ModelNode, grammar::diagnostics::Diagnostic> {
-+    let (ast, _) = parse(src, 0).expect("ошибка разбора исходного кода");
-+    construct_model(&ast, None, &[]).map(|m| m.take())
-+}
-+
- /// Разбирает BuT-файл и ожидает семантическую ошибку.
- fn build_file_err(path: &str) -> grammar::diagnostics::Diagnostic {
-     let src = std::fs::read_to_string(path)
-@@ -3773,3 +3779,227 @@ fn ce4_enum_declared_inside_model_local_to_it() {
-         "enum Status не должен быть виден в корневой модели напрямую"
-     );
- }
-+
-+// ─── Тесты NI3: Структурные типы ─────────────────────────────────────────────
-+
-+/// NI3: Объявление структуры добавляет её в `model.structs`.
-+#[test]
-+fn test_struct_registers_in_model() {
-+    let src = r#"
-+struct Point { x: [bit;16], y: [bit;16] }
-+start S;
-+"#;
-+    let node = build_from_src(src).expect("должен разобраться без ошибок");
-+    assert!(
-+        node.structs.contains_key("Point"),
-+        "struct Point должен быть в model.structs, есть: {:?}",
-+        node.structs.keys().collect::<Vec<_>>()
-+    );
-+}
-+
-+/// NI3: Поля структуры хранят корректные типы.
-+#[test]
-+fn test_struct_fields_have_correct_types() {
-+    use grammar::semantic::type_node::TypeNode;
-+    let src = r#"
-+struct Vec2 { x: [bit;16], y: [bit;16] }
-+start S;
-+"#;
-+    let node = build_from_src(src).expect("должен разобраться без ошибок");
-+    let s = node.structs.get("Vec2").expect("Vec2 должен быть в structs");
-+    assert_eq!(s.fields.len(), 2);
-+    assert_eq!(s.fields[0].0, "x");
-+    assert_eq!(s.fields[0].1, TypeNode::Array(16, Box::new(TypeNode::Bit)));
-+    assert_eq!(s.fields[1].0, "y");
-+    assert_eq!(s.fields[1].1, TypeNode::Array(16, Box::new(TypeNode::Bit)));
-+}
-+
-+/// NI3: Переменная структурного типа имеет TypeNode::Struct.
-+#[test]
-+fn test_struct_variable_type() {
-+    use grammar::semantic::type_node::TypeNode;
-+    let src = r#"
-+struct Flags { active: bit, ready: bit }
-+var ctrl: Flags = 0;
-+start S;
-+"#;
-+    let node = build_from_src(src).expect("должен разобраться без ошибок");
-+    let var_node = node.variables.get("ctrl").expect("ctrl должен быть в переменных");
-+    assert_eq!(
-+        var_node.ty(),
-+        &TypeNode::Struct("Flags".to_string()),
-+        "тип переменной ctrl должен быть TypeNode::Struct"
-+    );
-+}
-+
-+/// NI3: Структура регистрируется также в таблице псевдонимов типов.
-+#[test]
-+fn test_struct_in_types_map() {
-+    use grammar::semantic::type_node::TypeNode;
-+    let src = r#"
-+struct Config { value: [bit;8] }
-+start S;
-+"#;
-+    let node = build_from_src(src).expect("должен разобраться без ошибок");
-+    assert!(
-+        node.types.contains_key("Config"),
-+        "Config должен быть в types"
-+    );
-+    assert_eq!(
-+        node.types.get("Config"),
-+        Some(&TypeNode::Struct("Config".to_string()))
-+    );
-+}
-+
-+/// NI3: `search_struct` находит структуру в текущем контексте.
-+#[test]
-+fn test_search_struct() {
-+    let src = r#"
-+struct MyStruct { field: bit }
-+start S;
-+"#;
-+    let node = build_from_src(src).expect("должен разобраться без ошибок");
-+    assert!(
-+        node.search_struct("MyStruct").is_some(),
-+        "search_struct должен найти MyStruct"
-+    );
-+    assert!(
-+        node.search_struct("Unknown").is_none(),
-+        "search_struct не должен находить несуществующую структуру"
-+    );
-+}
-+
-+/// NI3: Интеграционный тест — файл `struct_types.but` разбирается семантически.
-+#[test]
-+fn test_struct_types_file_semantic() {
-+    let node = build_file("tests/data/semantic/valid/struct_types.but")
-+        .expect("struct_types.but должен разбираться без ошибок");
-+    assert!(
-+        node.structs.contains_key("Point"),
-+        "struct Point должен быть в semantic модели"
-+    );
-+    assert!(
-+        node.structs.contains_key("Flags"),
-+        "struct Flags должен быть в semantic модели"
-+    );
-+}
-+
-+// ─── Тесты NI4: Анализ перекрытия условий переходов ──────────────────────────
-+
-+/// NI4: Одинаковые условия `level = 5` на два разных перехода — предупреждение NI4.
-+#[test]
-+fn test_ni4_duplicate_condition_warns() {
-+    use grammar::diagnostics::Level;
-+    let src = std::fs::read_to_string(
-+        "tests/data/semantic/invalid/condition_overlap_eq.but",
-+    )
-+    .expect("файл condition_overlap_eq.but должен существовать");
-+    let (ast, _) = grammar::parse(&src, 0).unwrap();
-+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
-+    let ni4_warnings: Vec<_> = warnings
-+        .iter()
-+        .filter(|w| w.message.contains("NI4"))
-+        .collect();
-+    assert!(
-+        !ni4_warnings.is_empty(),
-+        "ожидалось предупреждение NI4 для одинаковых условий, получено: {:?}",
-+        warnings
-+    );
-+    assert_eq!(ni4_warnings[0].level, Level::Warning);
-+}
-+
-+/// NI4: Перекрывающиеся интервальные условия `level < 10` и `level < 20` — предупреждение NI4.
-+#[test]
-+fn test_ni4_interval_overlap_warns() {
-+    let src = std::fs::read_to_string(
-+        "tests/data/semantic/invalid/condition_overlap_interval.but",
-+    )
-+    .expect("файл condition_overlap_interval.but должен существовать");
-+    let (ast, _) = grammar::parse(&src, 0).unwrap();
-+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
-+    let ni4_warnings: Vec<_> = warnings
-+        .iter()
-+        .filter(|w| w.message.contains("NI4"))
-+        .collect();
-+    assert!(
-+        !ni4_warnings.is_empty(),
-+        "ожидалось предупреждение NI4 для перекрывающихся условий level<10 и level<20, получено: {:?}",
-+        warnings
-+    );
-+}
-+
-+/// NI4: Непересекающиеся условия `level < 10` и `level > 20` — предупреждений NI4 нет.
-+#[test]
-+fn test_ni4_non_overlapping_no_warn() {
-+    let src = std::fs::read_to_string(
-+        "tests/data/semantic/valid/no_condition_overlap.but",
-+    )
-+    .expect("файл no_condition_overlap.but должен существовать");
-+    let (ast, _) = grammar::parse(&src, 0).unwrap();
-+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
-+    let ni4_warnings: Vec<_> = warnings
-+        .iter()
-+        .filter(|w| w.message.contains("NI4"))
-+        .collect();
-+    assert!(
-+        ni4_warnings.is_empty(),
-+        "непересекающиеся условия level<10 и level>20 не должны давать предупреждений NI4: {:?}",
-+        ni4_warnings
-+    );
-+}
-+
-+/// NI4: Условия `x = 3` и `x < 10` перекрываются (3 < 10) — предупреждение NI4.
-+#[test]
-+fn test_ni4_eq_lt_overlap_warns() {
-+    let src = r#"
-+var x: [bit;8] = 0;
-+start S {
-+    ref A: x = 3;
-+    ref B: x < 10;
-+}
-+state A { ref S: x != 3; }
-+state B { ref S: x >= 10; }
-+"#;
-+    let (ast, _) = grammar::parse(src, 0).unwrap();
-+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
-+    let ni4_warnings: Vec<_> = warnings
-+        .iter()
-+        .filter(|w| w.message.contains("NI4"))
-+        .collect();
-+    assert!(
-+        !ni4_warnings.is_empty(),
-+        "x=3 и x<10 перекрываются (3 < 10) — ожидалось NI4, получено: {:?}",
-+        warnings
-+    );
-+}
-+
-+/// NI4: Условия `x = 15` и `x < 10` не перекрываются (15 ≥ 10) — предупреждений NI4 нет.
-+#[test]
-+fn test_ni4_eq_lt_no_overlap_no_warn() {
-+    let src = r#"
-+var x: [bit;8] = 0;
-+start S {
-+    ref A: x = 15;
-+    ref B: x < 10;
-+}
-+state A { ref S: x != 15; }
-+state B { ref S: x >= 10; }
-+"#;
-+    let (ast, _) = grammar::parse(src, 0).unwrap();
-+    let model_rc = grammar::semantic::tree::construct_model(&ast, None, &[]).unwrap();
-+    let warnings = grammar::nondeterministic_transition_warnings(model_rc);
-+    let ni4_warnings: Vec<_> = warnings
-+        .iter()
-+        .filter(|w| w.message.contains("NI4"))
-+        .collect();
-+    assert!(
-+        ni4_warnings.is_empty(),
-+        "x=15 и x<10 не перекрываются — не должно быть NI4, получено: {:?}",
-+        ni4_warnings
-+    );
-+}
-+
+grammar/src/semantic/validate.rs | 121 +++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 117 insertions(+), 4 deletions(-)
+
+--- Changes ---
+
+grammar/src/semantic/validate.rs
+  @@ -570,7 +570,14 @@ pub(crate) fn ast_condition_summary(
+  -        AC::ArraySubscript(_, id, idx) => format!("элемент массива '{}[{}]'", id.name, idx),
+  +        AC::ArraySubscript(_, id, idx) => {
+  +            let idx_str = match idx.as_ref() {
+  +                AC::Number(_, n) => n.to_string(),
+  +                AC::Variable(v) => v.name.clone(),
+  +                _ => "expr".to_string(),
+  +            };
+  +            format!("элемент массива '{}[{}]'", id.name, idx_str)
+  +        }
+           AC::BitAccess(_, _, _) => "доступ к битовому полю".to_string(),
+           // Остальные варианты сюда попасть не должны (они булевые)
+           _ => "числовое выражение".to_string(),
+  @@ -684,7 +691,11 @@ fn semantic_condition_summary(cond: &ConditionNode) -> String {
+  -            format!("элемент массива '{}[{}]'", name, idx)
+  +            let idx_str = match idx.as_ref() {
+  +                ConditionNode::Number(n) => n.to_string(),
+  +                _ => "expr".to_string(),
+  +            };
+  +            format!("элемент массива '{}[{}]'", name, idx_str)
+           }
+           ConditionNode::BitAccess(_, _) => "доступ к битовому полю".to_string(),
+           _ => "числовое выражение".to_string(),
+  @@ -1768,7 +1779,7 @@ mod tests {
+  -        let cond = AC::ArraySubscript(loc(), id("arr"), 0);
+  +        let cond = AC::ArraySubscript(loc(), id("arr"), Box::new(AC::Number(loc(), 0)));
+           assert!(!is_boolean_ast_condition(&cond, &empty_model()));
+       }
+   
+  @@ -1896,7 +1907,7 @@ mod tests {
+  -        let cond = AC::ArraySubscript(loc(), id("buf"), 3);
+  +        let cond = AC::ArraySubscript(loc(), id("buf"), Box::new(AC::Number(loc(), 3)));
+           let s = ast_condition_summary(&cond, &empty_model());
+           assert!(s.contains("buf"), "имя массива в summary: '{}'", s);
+           assert!(s.contains('3'), "индекс в summary: '{}'", s);
+  @@ -3275,3 +3286,105 @@ pub fn check_struct_field_types(model: Rc<RefCell<ModelNode>>) -> Option<Diagnos
+  +
+  +// ─── SE-046: недостижимые состояния ──────────────────────────────────────────
+  +
+  +/// Предупреждает о состояниях, недостижимых из начального состояния.
+  +///
+  +/// Обходит граф переходов (BFS) начиная со стартового состояния.
+  +/// Состояние считается недостижимым, если на него нет ни одного перехода
+  +/// `ref` или `next` из любого достижимого состояния.
+  +///
+  +/// Функция рекурсивно обходит все вложенные модели.
+  +pub fn check_unreachable_states(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+  +    let mut diags = Vec::new();
+  +    collect_unreachable_states(&model, &mut diags);
+  +    diags
+  +}
+  +
+  +fn collect_unreachable_states(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
+  +    let borrowed = model.borrow();
+  +
+  +    let states = &borrowed.states;
+  +    if states.is_empty() {
+  +        drop(borrowed);
+  +        let nested: Vec<_> = model.borrow().models.values().map(Rc::clone).collect();
+  +        for m in nested {
+  +            collect_unreachable_states(&m, out);
+  +        }
+  +        return;
+  +    }
+  +
+  +    // Имя стартового состояния
+  +    let start_name = states
+  +        .values()
+  +        .find(|s| s.kind() == StateNodeKind::Start)
+  +        .map(|s| get_state_name(s).to_string());
+  +
+  +    if let Some(start) = start_name {
+  +        let mut reachable = std::collections::HashSet::new();
+  +        let mut queue = std::collections::VecDeque::new();
+  +        queue.push_back(start.clone());
+  +        reachable.insert(start);
+  +
+  +        while let Some(current) = queue.pop_front() {
+  +            if let Some(state) = states.get(&current) {
+  +                for target in get_reachable_targets(state) {
+  +                    if !reachable.contains(&target) {
+  +                        reachable.insert(target.clone());
+  +                        queue.push_back(target);
+  +                    }
+  +                }
+  +            }
+  +        }
+  +
+  +        for (name, state) in states {
+  +            if !reachable.contains(name.as_str()) {
+  +                let loc = get_state_loc(state);
+  +                out.push(
+  +                    Diagnostic::warning(
+  +                        loc,
+  +                        format!("состояние '{}' недостижимо из начального состояния", name),
+  +                    )
+  +                    .with_code("SE-046"),
+  +                );
+  +            }
+  +        }
+  +    }
+  +
+  +    drop(borrowed);
+  +    let nested: Vec<_> = model.borrow().models.values().map(Rc::clone).collect();
+  +    for m in nested {
+  +        collect_unreachable_states(&m, out);
+  +    }
+  +}
+  +
+  +fn get_state_name(state: &StateNode) -> &str {
+  +    match state {
+  +        StateNode::Simple { name, .. } | StateNode::Implement { name, .. } => name.as_str(),
+  +        StateNode::Unresolved => "",
+  +    }
+  +}
+  +
+  +fn get_state_loc(state: &StateNode) -> Location {
+  +    match state {
+  +        StateNode::Simple { loc, .. } | StateNode::Implement { loc, .. } => *loc,
+  +        StateNode::Unresolved => Location::Builtin,
+  +    }
+  +}
+  +
+  +fn get_reachable_targets(state: &StateNode) -> Vec<String> {
+  +    match state {
+  +        StateNode::Simple { references, .. } => references.iter().map(|r| r.name.clone()).collect(),
+  +        StateNode::Implement {
+  +            references, next, ..
+  +        } => {
+  +            let mut targets: Vec<String> = references.iter().map(|r| r.name.clone()).collect();
+  +            if let Some(n) = next {
+  +                targets.push(n.name.clone());
+  +            }
+  +            targets
+  +        }
+  +        StateNode::Unresolved => vec![],
+  ... (2 lines truncated)
+  +117 -4
+[full diff: rtk git diff --no-compact]

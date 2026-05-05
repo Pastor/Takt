@@ -107,23 +107,26 @@ pub fn construct_expression(
         //
         // Если тип переменной ещё не выведен (`TypeNode::Inference`), структурная
         // проверка пропускается — она будет повторно вычислена после вывода типов.
-        ast::Expression::ArraySubscript(_, id, n) => {
+        ast::Expression::ArraySubscript(_, id, idx_expr) => {
             let var = model.borrow().search_var(&id.name).ok_or_else(|| {
                 Diagnostic::from(format!("Переменная '{}' не найдена", &id.name).as_str())
                     .with_code("SE-003")
             })?;
-            // Проверяем тип и границы (если тип известен)
+            // Проверяем тип (для динамических индексов проверку границ пропускаем)
             match var_type(&var) {
                 TypeNode::Array(size, _) => {
-                    if n < 0 || n >= size as i64 {
-                        return Err(Diagnostic::from(
-                            format!(
-                                "Индекс {} выходит за границы массива '{}' (размер {})",
-                                n, &id.name, size
+                    // Статическая проверка границ только для числовых литералов
+                    if let ast::Expression::Number(_, n) = idx_expr.as_ref() {
+                        if *n < 0 || *n >= size as i64 {
+                            return Err(Diagnostic::from(
+                                format!(
+                                    "Индекс {} выходит за границы массива '{}' (размер {})",
+                                    n, &id.name, size
+                                )
+                                .as_str(),
                             )
-                            .as_str(),
-                        )
-                        .with_code("SE-028"));
+                            .with_code("SE-028"));
+                        }
                     }
                 }
                 TypeNode::Inference => {} // тип ещё не выведен — пропускаем проверку
@@ -134,9 +137,10 @@ pub fn construct_expression(
                     .with_code("SE-030"));
                 }
             }
+            let resolved_idx = construct_expression(*idx_expr.clone(), vec![], model.clone())?;
             Ok(ExpressionNode::ArraySubscript(
                 Rc::new(RefCell::new(var)),
-                n,
+                Box::new(resolved_idx),
             ))
         }
         ast::Expression::ArraySlice(_, id, start, end) => {
@@ -743,7 +747,7 @@ mod tests {
     fn array_subscript_in_var_initializer() {
         let node = build("var buf: [bit;8] = 0; var x: bit = buf[3];").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, 3)),
+            matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(3))),
             "инициализатор x должен быть ArraySubscript(buf, 3)"
         );
     }
@@ -765,7 +769,7 @@ mod tests {
     fn array_subscript_valid_index() {
         let node = build("var buf: [bit;8] = 0; var x: bit = buf[0];").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, 0)),
+            matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(0))),
             "x должен быть ArraySubscript(buf, 0)"
         );
     }
@@ -775,7 +779,7 @@ mod tests {
     fn array_subscript_last_valid_index() {
         let node = build("var buf: [bit;8] = 0; var x: bit = buf[7];").unwrap();
         assert!(
-            matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, 7)),
+            matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(7))),
             "x должен быть ArraySubscript(buf, 7)"
         );
     }
@@ -1274,7 +1278,10 @@ mod tests {
         let expr = ast::Expression::ArraySubscript(
             crate::diagnostics::Location::default(),
             ast::Identifier::new("no_such_var"),
-            0,
+            Box::new(ast::Expression::Number(
+                crate::diagnostics::Location::default(),
+                0,
+            )),
         );
         let result = construct_expression(expr, vec![], model);
         assert!(

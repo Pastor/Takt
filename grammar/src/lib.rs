@@ -354,6 +354,104 @@ pub fn enum_type_safety_errors(
     semantic::validate::check_enum_type_safety(model)
 }
 
+/// SE-046: предупреждения о недостижимых состояниях в модели.
+///
+/// Обходит граф переходов BFS от стартового состояния.
+/// Состояние, не достижимое ни по одному `ref`/`next`-переходу, генерирует предупреждение.
+pub fn unreachable_state_warnings(
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+) -> Vec<Diagnostic> {
+    semantic::validate::check_unreachable_states(model)
+}
+
+/// SE-044: предупреждения о лишних точках с запятой в АСД модели.
+///
+/// Обходит все элементы модели и состояний (рекурсивно), генерируя
+/// предупреждение для каждого [`ast::ModelElement::StraySemicolon`]
+/// и [`ast::StateElement::StraySemicolon`].
+pub fn stray_semicolon_warnings(model: &ast::Model) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    collect_stray_semicolons_model(model, &mut diags);
+    diags
+}
+
+/// SE-045: предупреждения об именованных блоках с неизвестным именем.
+///
+/// Допустимые имена: `enter`, `exit`, `always`. Любое другое имя генерирует
+/// предупреждение — вероятнее всего это опечатка.
+pub fn unknown_named_block_warnings(model: &ast::Model) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    collect_unknown_named_blocks_model(model, &mut diags);
+    diags
+}
+
+const KNOWN_NAMED_BLOCKS: &[&str] = &["enter", "exit", "always"];
+
+fn collect_unknown_named_blocks_model(model: &ast::Model, out: &mut Vec<Diagnostic>) {
+    for element in &model.elements {
+        match element {
+            ast::ModelElement::NamedBlockCode(def) => {
+                check_named_block_def(def, out);
+            }
+            ast::ModelElement::State(state) => {
+                for se in &state.elements {
+                    if let ast::StateElement::NamedBlockCode(def) = se {
+                        check_named_block_def(def, out);
+                    }
+                }
+            }
+            ast::ModelElement::Model(nested) => {
+                collect_unknown_named_blocks_model(nested, out);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn check_named_block_def(def: &ast::NamedBlockCodeDefine, out: &mut Vec<Diagnostic>) {
+    if let Some(name_id) = &def.name {
+        if !KNOWN_NAMED_BLOCKS.contains(&name_id.name.as_str()) {
+            out.push(
+                Diagnostic::warning(
+                    name_id.loc,
+                    format!(
+                        "неизвестный именованный блок '{}'; допустимые имена: enter, exit, always",
+                        name_id.name
+                    ),
+                )
+                .with_code("SE-045"),
+            );
+        }
+    }
+}
+
+fn collect_stray_semicolons_model(model: &ast::Model, out: &mut Vec<Diagnostic>) {
+    for element in &model.elements {
+        match element {
+            ast::ModelElement::StraySemicolon(loc) => {
+                out.push(
+                    Diagnostic::warning(*loc, "лишняя точка с запятой".to_string())
+                        .with_code("SE-044"),
+                );
+            }
+            ast::ModelElement::State(state) => {
+                for se in &state.elements {
+                    if let ast::StateElement::StraySemicolon(loc) = se {
+                        out.push(
+                            Diagnostic::warning(*loc, "лишняя точка с запятой".to_string())
+                                .with_code("SE-044"),
+                        );
+                    }
+                }
+            }
+            ast::ModelElement::Model(nested) => {
+                collect_stray_semicolons_model(nested, out);
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
