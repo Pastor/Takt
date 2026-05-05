@@ -260,7 +260,22 @@ fn collect_ports_by_class(map: &CMap) -> Result<PortMap, Diagnostic> {
             .collect();
         ports.sort_by(|(_, a, _, _), (_, b, _, _)| a.cmp(b));
         for (mname, pname, cls, dir) in ports {
-            result.entry((cls, dir)).or_default().push((mname, pname));
+            match dir {
+                PortDirection::InOut => {
+                    // двунаправленный порт появляется в обоих enum-ах
+                    result
+                        .entry((cls, PortDirection::In))
+                        .or_default()
+                        .push((mname.clone(), pname.clone()));
+                    result
+                        .entry((cls, PortDirection::Out))
+                        .or_default()
+                        .push((mname, pname));
+                }
+                _ => {
+                    result.entry((cls, dir)).or_default().push((mname, pname));
+                }
+            }
         }
     }
     Ok(result)

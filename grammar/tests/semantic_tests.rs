@@ -1172,6 +1172,13 @@ fn array_subscript_variable_index_in_cond() {
     assert!(node.search_cond("c").is_some());
 }
 
+/// `inout` порт объявляется без ошибок и виден в семантическом дереве.
+#[test]
+fn inout_port_is_valid() {
+    let node = build("inout sensor: bit = 0x100:0; start S;");
+    assert!(node.search_var("sensor").is_some());
+}
+
 /// `while cond { body }` — синоним loop, строится без ошибок.
 #[test]
 fn while_loop_is_valid() {

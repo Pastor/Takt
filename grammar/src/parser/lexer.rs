@@ -174,6 +174,8 @@ pub enum Token<'input> {
     PortIn,
     /// Ключевое слово `out` (выходной порт).
     PortOut,
+    /// Ключевое слово `inout` (двунаправленный порт).
+    PortInOut,
 
     /// Стрелка `-->` (не используется в текущей грамматике).
     PeirceArrow,
@@ -296,6 +298,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Condition => write!(f, "cond"),
             Token::PortIn => write!(f, "in"),
             Token::PortOut => write!(f, "out"),
+            Token::PortInOut => write!(f, "inout"),
             Token::Variable => write!(f, "var"),
             Token::Next => write!(f, "next"),
             Token::Extern => write!(f, "extern"),
@@ -454,6 +457,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "formula"  => Token::Formula,
     "in"       => Token::PortIn,
     "out"      => Token::PortOut,
+    "inout"    => Token::PortInOut,
     "model"    => Token::Model,
     "state"    => Token::State,
     "start"    => Token::Start,
