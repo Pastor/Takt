@@ -9,10 +9,10 @@ state Controller {
     [*] --> Idle
     Cooling --> Done
     Cooling --> Idle
-    Idle --> Heating
-    Done --> [*]
     Heating --> Cooling
     Heating --> Idle
+    Idle --> Heating
+    Done --> [*]
 }
 
 @enduml
