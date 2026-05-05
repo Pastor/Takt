@@ -678,7 +678,7 @@ fn semantic_condition_summary(cond: &ConditionNode) -> String {
                 | VariableNode::Const { name, ty, .. } => (name.clone(), ty.clone()),
                 VariableNode::Unresolved => return "переменная (неизвестный тип)".to_string(),
             };
-            format!("переменная '{}' типа {:?}", name_str, ty)
+            format!("переменная '{}' типа {}", name_str, ty)
         }
         ConditionNode::Add(_, _) => "арифметическое сложение".to_string(),
         ConditionNode::Subtract(_, _) => "арифметическое вычитание".to_string(),

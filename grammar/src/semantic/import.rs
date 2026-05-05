@@ -66,10 +66,24 @@ pub(crate) fn read_import_file(
         .collect();
 
     if found.is_empty() {
+        let path_str = match path {
+            ImportPath::Filename(sl) => sl.string.clone(),
+            ImportPath::Path(id_path) => id_path
+                .identifiers
+                .iter()
+                .map(|i| i.name.as_str())
+                .collect::<Vec<_>>()
+                .join("::"),
+        };
+        let paths_str = if search_paths.is_empty() {
+            "(пути не заданы)".to_string()
+        } else {
+            search_paths.join(", ")
+        };
         return Err(Diagnostic::from(
             format!(
-                "Файл импорта не найден: «{:?}». Пути поиска: {:?}",
-                path, search_paths
+                "Файл импорта не найден: «{}». Пути поиска: {}",
+                path_str, paths_str
             )
             .as_str(),
         )

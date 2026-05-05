@@ -688,9 +688,9 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             // Имена переменных и их типы
             for (name, var) in &borrowed.variables {
                 let detail = match var {
-                    VariableNode::Simple { ty, .. } => Some(format!("{:?}", ty)),
-                    VariableNode::Const { ty, .. } => Some(format!("const: {:?}", ty)),
-                    VariableNode::Port { ty, .. } => Some(format!("port: {:?}", ty)),
+                    VariableNode::Simple { ty, .. } => Some(format!("{}", ty)),
+                    VariableNode::Const { ty, .. } => Some(format!("const: {}", ty)),
+                    VariableNode::Port { ty, .. } => Some(format!("port: {}", ty)),
                     VariableNode::Unresolved => None,
                 };
                 items.push(CompletionItem {
@@ -704,12 +704,12 @@ pub fn completion_items(source: &str) -> Vec<CompletionItem> {
             // Имена функций
             for (name, func) in &borrowed.functions {
                 let detail = match func {
-                    FunctionDefinitionNode::Local { ret, .. } => Some(format!("fn -> {:?}", ret)),
+                    FunctionDefinitionNode::Local { ret, .. } => Some(format!("fn -> {}", ret)),
                     FunctionDefinitionNode::External { ret, .. } => {
-                        Some(format!("extern fn -> {:?}", ret))
+                        Some(format!("extern fn -> {}", ret))
                     }
                     FunctionDefinitionNode::Builtin(_, _, ret) => {
-                        Some(format!("builtin fn -> {:?}", ret))
+                        Some(format!("builtin fn -> {}", ret))
                     }
                     _ => None,
                 };
@@ -879,9 +879,9 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     // Вспомогательные функции для формирования hover-текста
     let make_var_hover = |var: &VariableNode, word: &str, doc: &[String]| {
         let (type_str, kind_str) = match var {
-            VariableNode::Simple { ty, .. } => (format!("{:?}", ty), "var"),
-            VariableNode::Const { ty, .. } => (format!("{:?}", ty), "const"),
-            VariableNode::Port { ty, .. } => (format!("{:?}", ty), "port"),
+            VariableNode::Simple { ty, .. } => (format!("{}", ty), "var"),
+            VariableNode::Const { ty, .. } => (format!("{}", ty), "const"),
+            VariableNode::Port { ty, .. } => (format!("{}", ty), "port"),
             VariableNode::Unresolved => ("?".to_string(), "var"),
         };
         let mut text = format!("```but\n{} {}: {}\n```", kind_str, word, type_str);
@@ -897,19 +897,19 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
             FunctionDefinitionNode::Local { params, ret, .. } => {
                 let ps: Vec<String> = params
                     .iter()
-                    .map(|(n, t)| format!("{}: {:?}", n, t))
+                    .map(|(n, t)| format!("{}: {}", n, t))
                     .collect();
-                format!("fn {}({}) -> {:?}", word, ps.join(", "), ret)
+                format!("fn {}({}) -> {}", word, ps.join(", "), ret)
             }
             FunctionDefinitionNode::External { params, ret, .. } => {
                 let ps: Vec<String> = params
                     .iter()
-                    .map(|(n, t)| format!("{}: {:?}", n, t))
+                    .map(|(n, t)| format!("{}: {}", n, t))
                     .collect();
-                format!("extern fn {}({}) -> {:?}", word, ps.join(", "), ret)
+                format!("extern fn {}({}) -> {}", word, ps.join(", "), ret)
             }
             FunctionDefinitionNode::Builtin(name, params, ret) => {
-                format!("builtin fn {}({} params) -> {:?}", name, params.len(), ret)
+                format!("builtin fn {}({} params) -> {}", name, params.len(), ret)
             }
             _ => format!("fn {}", word),
         };
@@ -955,7 +955,7 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
             SemanticNodeKind::TypeAlias => {
                 // types.get() возвращает &TypeNode напрямую, что правильно для форматирования
                 if let Some(ty) = node_model.types.get(&word) {
-                    let mut text = format!("```but\ntype {} = {:?}\n```", word, ty);
+                    let mut text = format!("```but\ntype {} = {}\n```", word, ty);
                     if !doc.is_empty() {
                         text.push_str("\n\n");
                         text.push_str(&doc.join("\n"));
@@ -964,8 +964,8 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
                 }
             }
             SemanticNodeKind::Condition => {
-                if let Some(cond) = node_model.search_cond(&word) {
-                    let mut text = format!("```but\ncond {} = {:?}\n```", word, cond.value);
+                if node_model.search_cond(&word).is_some() {
+                    let mut text = format!("```but\ncond {}\n```", word);
                     if !doc.is_empty() {
                         text.push_str("\n\n");
                         text.push_str(&doc.join("\n"));
@@ -1056,7 +1056,7 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
         }
         // Ищем псевдоним типа
         else if let Some(ty) = borrowed.types.get(&word) {
-            let mut text = format!("```but\ntype {} = {:?}\n```", word, ty);
+            let mut text = format!("```but\ntype {} = {}\n```", word, ty);
             if !doc.is_empty() {
                 text.push_str("\n\n");
                 text.push_str(&doc.join("\n"));
@@ -1064,8 +1064,8 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
             hover_text = text;
         }
         // Ищем именованное условие
-        else if let Some(cond) = borrowed.search_cond(&word) {
-            let mut text = format!("```but\ncond {} = {:?}\n```", word, cond.value);
+        else if borrowed.search_cond(&word).is_some() {
+            let mut text = format!("```but\ncond {}\n```", word);
             if !doc.is_empty() {
                 text.push_str("\n\n");
                 text.push_str(&doc.join("\n"));

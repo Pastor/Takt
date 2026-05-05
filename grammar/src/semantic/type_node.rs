@@ -34,6 +34,7 @@ use crate::diagnostics::Diagnostic;
 use crate::parser::ast::Type;
 use crate::semantic::ModelNode;
 use std::cell::RefCell;
+use std::fmt;
 use std::rc::Rc;
 
 /// Строит [`TypeNode`] из опционального АСД-типа [`Type`].
@@ -436,6 +437,34 @@ mod tests {
             TypeNode::Enum("Color".to_string())
         );
     }
+
+    /// `Display` показывает читаемые имена типов, а не Rust-Debug.
+    #[test]
+    fn type_node_display() {
+        assert_eq!(TypeNode::Bit.to_string(), "bit");
+        assert_eq!(TypeNode::Bool.to_string(), "bool");
+        assert_eq!(TypeNode::Rational.to_string(), "float");
+        assert_eq!(TypeNode::Unit.to_string(), "unit");
+        assert_eq!(
+            TypeNode::Integer { bits: 8, signed: false }.to_string(),
+            "u8"
+        );
+        assert_eq!(
+            TypeNode::Integer { bits: 16, signed: true }.to_string(),
+            "i16"
+        );
+        assert_eq!(
+            TypeNode::Integer { bits: 64, signed: false }.to_string(),
+            "u64"
+        );
+        assert_eq!(
+            TypeNode::Array(8, Box::new(TypeNode::Bit)).to_string(),
+            "[bit;8]"
+        );
+        assert_eq!(TypeNode::Enum("Color".to_string()).to_string(), "Color");
+        assert_eq!(TypeNode::Struct("Packet".to_string()).to_string(), "Packet");
+        assert_eq!(TypeNode::Inference.to_string(), "_");
+    }
 }
 
 /// Семантический узел типа данных.
@@ -498,4 +527,29 @@ pub enum TypeNode {
         /// `true` → знаковый (`int{bits}_t`), `false` → беззнаковый (`uint{bits}_t`).
         signed: bool,
     },
+}
+
+impl fmt::Display for TypeNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeNode::Bit => write!(f, "bit"),
+            TypeNode::Bool => write!(f, "bool"),
+            TypeNode::Rational => write!(f, "float"),
+            TypeNode::Unit => write!(f, "unit"),
+            TypeNode::Integer { bits, signed } => {
+                write!(f, "{}{}", if *signed { "i" } else { "u" }, bits)
+            }
+            TypeNode::Array(n, elem) => write!(f, "[{};{}]", elem, n),
+            TypeNode::Enum(name) => write!(f, "{}", name),
+            TypeNode::Struct(name) => write!(f, "{}", name),
+            TypeNode::Address(addr, Some(bit)) => write!(f, "0x{:X}:{}", addr, bit),
+            TypeNode::Address(addr, None) => write!(f, "0x{:X}", addr),
+            TypeNode::BuiltinString => write!(f, "string"),
+            TypeNode::BuiltinModel => write!(f, "model"),
+            TypeNode::BuiltinState => write!(f, "state"),
+            TypeNode::BuiltinNumeric => write!(f, "numeric"),
+            TypeNode::Inference => write!(f, "_"),
+            TypeNode::Unsupported => write!(f, "?"),
+        }
+    }
 }
