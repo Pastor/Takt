@@ -120,4 +120,9 @@ impl CMap {
     pub fn states(&self) -> Vec<Name> {
         self.map.states()
     }
+
+    /// Возвращает корневую модель (только для чтения, для генерации типов).
+    pub(crate) fn root_model_node(&self) -> Option<Rc<RefCell<crate::semantic::ModelNode>>> {
+        self.map.model_at(None)
+    }
 }
