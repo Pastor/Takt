@@ -446,15 +446,27 @@ mod tests {
         assert_eq!(TypeNode::Rational.to_string(), "float");
         assert_eq!(TypeNode::Unit.to_string(), "unit");
         assert_eq!(
-            TypeNode::Integer { bits: 8, signed: false }.to_string(),
+            TypeNode::Integer {
+                bits: 8,
+                signed: false
+            }
+            .to_string(),
             "u8"
         );
         assert_eq!(
-            TypeNode::Integer { bits: 16, signed: true }.to_string(),
+            TypeNode::Integer {
+                bits: 16,
+                signed: true
+            }
+            .to_string(),
             "i16"
         );
         assert_eq!(
-            TypeNode::Integer { bits: 64, signed: false }.to_string(),
+            TypeNode::Integer {
+                bits: 64,
+                signed: false
+            }
+            .to_string(),
             "u64"
         );
         assert_eq!(
