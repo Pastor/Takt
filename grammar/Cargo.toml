@@ -26,10 +26,10 @@ path = "src/bin/lam_lsp.rs"
 required-features = ["lsp"]
 
 [build-dependencies]
-lalrpop = { git = "https://github.com/lalrpop/lalrpop.git", package = "lalrpop", version = "^0.23.1", features = ["lexer"] }
+lalrpop = { git = "https://github.com/lalrpop/lalrpop.git", version = "^0.23.1", features = ["lexer"] }
 
 [dependencies]
-lalrpop-util = { git = "https://github.com/lalrpop/lalrpop.git", package = "lalrpop-util", version = "^0.23.1" }
+lalrpop-util = { git = "https://github.com/lalrpop/lalrpop.git", version = "^0.23.1" }
 thiserror = "2.0.18"
 phf = { version = "0.13.1", features = ["macros"] }
 unicode-xid = "0.2"
