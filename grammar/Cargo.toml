@@ -1,6 +1,6 @@
 [package]
 name = "grammar"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Pastor <viruszold@gmail.com>"]
 description = "Lam"
 homepage = "https://but.ru"
