@@ -8,8 +8,30 @@ use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub(crate) type Predicate = Rc<dyn Fn(&dyn Context) -> bool>;
-pub(crate) type Execution = Rc<(String, dyn Fn(&mut dyn Context))>;
+/// Предикат перехода: именованное условие с функцией-проверкой.
+///
+/// `name` — отображается как метка ребра в SVG-графе.
+/// Клонирование дёшево (`Rc` под капотом).
+#[derive(Clone)]
+pub(crate) struct Predicate {
+    pub(crate) name: String,
+    func: Rc<dyn Fn(&dyn Context) -> bool>,
+}
+
+impl Predicate {
+    pub(crate) fn new(name: impl Into<String>, f: impl Fn(&dyn Context) -> bool + 'static) -> Self {
+        Self {
+            name: name.into(),
+            func: Rc::new(f),
+        }
+    }
+
+    pub(crate) fn evaluate(&self, ctx: &dyn Context) -> bool {
+        (self.func)(ctx)
+    }
+}
+
+pub(crate) type Execution = Rc<dyn Fn(&mut dyn Context)>;
 type Executions = HashMap<String, Vec<Execution>>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -105,9 +127,13 @@ impl Unit {
         }
 
         // Шаг 3: ищем первый сработавший переход (predicate берёт &dyn Context)
-        let next_state = transitions
-            .iter()
-            .find_map(|(name, pred)| if pred(self) { Some(name.clone()) } else { None });
+        let next_state = transitions.iter().find_map(|(name, pred)| {
+            if pred.evaluate(self) {
+                Some(name.clone())
+            } else {
+                None
+            }
+        });
 
         if let Some(next) = next_state {
             // Шаг 4: исполнители выхода из текущего состояния
@@ -124,7 +150,7 @@ impl Unit {
                 unreachable!()
             };
             for f in &exit_fns {
-                f.1(self);
+                f(self);
             }
 
             // Шаг 5: исполнители входа в следующее состояние
@@ -141,7 +167,7 @@ impl Unit {
                 unreachable!()
             };
             for f in &enter_fns {
-                f.1(self);
+                f(self);
             }
 
             // Шаг 6: переход в новое состояние
@@ -203,7 +229,7 @@ impl Unit {
         };
         // Шаг 2: вызываем — self свободен от заимствования
         for f in &unit_fns {
-            f.1(self);
+            f(self);
         }
         // Шаг 3: для Node — функции уровня текущего состояния
         let state_fns: Vec<Execution> = match self {
@@ -219,7 +245,7 @@ impl Unit {
             _ => vec![],
         };
         for f in &state_fns {
-            f.1(self);
+            f(self);
         }
         // Шаг 4: рекурсия в дочерние
         match self {
@@ -654,7 +680,7 @@ mod tests {
 
     /// Узел в состоянии `from` с одним переходом в `to`; предикат всегда `cond`.
     fn node_with_transition(from: &str, to: &str, cond: bool) -> Unit {
-        let pred: Predicate = Rc::new(move |_| cond);
+        let pred = Predicate::new("cond", move |_| cond);
         let mut st = HashMap::new();
         st.insert(from.to_string(), vec![(to.to_string(), pred)]);
         st.insert(to.to_string(), vec![]);
@@ -739,7 +765,7 @@ mod tests {
     // После tick() состояние должно быть "B" (первый по порядку), а не "C".
     #[test]
     fn test_tick_node_only_first_matching_transition_taken() {
-        let pred: Predicate = Rc::new(|_| true);
+        let pred = Predicate::new("always", |_| true);
         let mut st = HashMap::new();
         st.insert(
             "A".to_string(),

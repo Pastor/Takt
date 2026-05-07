@@ -426,6 +426,9 @@ pub(super) mod graph {
     /// Вызывается из [`unit_to_graph`]. Для `Unit::Node` сначала создаются все узлы,
     /// затем рёбра — чтобы переходы к ещё не добавленным состояниям не терялись.
     /// Если целевое состояние перехода отсутствует в `state_transitions`, ребро пропускается.
+    ///
+    /// Метка ребра — `String` из кортежа `Predicate = Rc<(String, dyn Fn)>`,
+    /// то есть имя предиката (`pred.0`).
     fn populate_graph(unit: &Unit, graph: &mut Graph<String, String>) {
         match unit {
             Unit::None => {}
@@ -438,9 +441,9 @@ pub(super) mod graph {
                     node_map.insert(name.clone(), idx);
                 }
                 for (from, transitions) in state_transitions {
-                    for (to, _pred) in transitions {
+                    for (to, pred) in transitions {
                         if let (Some(&fi), Some(&ti)) = (node_map.get(from), node_map.get(to)) {
-                            graph.add_edge(fi, ti, String::new());
+                            graph.add_edge(fi, ti, pred.name.clone());
                         }
                     }
                 }
@@ -816,8 +819,8 @@ pub(super) mod graph {
 
         #[test]
         fn test_unit_to_graph_transitions_become_edges() {
-            use std::rc::Rc;
-            let pred: crate::unit::Predicate = Rc::new(|_: &dyn crate::context::Context| true);
+            let pred =
+                crate::unit::Predicate::new("is_ready", |_: &dyn crate::context::Context| true);
             let mut transitions = HashMap::new();
             transitions.insert("A".to_string(), vec![("B".to_string(), pred)]);
             transitions.insert("B".to_string(), vec![]);
@@ -825,6 +828,11 @@ pub(super) mod graph {
             let g = unit_to_graph(&unit);
             assert_eq!(g.node_count(), 2);
             assert_eq!(g.edge_count(), 1);
+            let label = g.edge_references().next().unwrap().weight();
+            assert_eq!(
+                label, "is_ready",
+                "метка ребра должна совпадать с именем предиката"
+            );
         }
 
         #[test]
@@ -1018,8 +1026,7 @@ mod tests {
     #[test]
     fn test_create_viewport_node_unit_returns_ok() {
         use std::collections::HashMap;
-        use std::rc::Rc;
-        let pred: crate::unit::Predicate = Rc::new(|_: &dyn crate::context::Context| true);
+        let pred = crate::unit::Predicate::new("cond", |_: &dyn crate::context::Context| true);
         let mut transitions = HashMap::new();
         transitions.insert("A".to_string(), vec![("B".to_string(), pred)]);
         transitions.insert("B".to_string(), vec![]);

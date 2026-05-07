@@ -4,14 +4,23 @@ use crate::value::Value;
 use grammar::diagnostics::{Diagnostic, Location};
 use grammar::parser::ast::Member;
 use grammar::semantic::ConditionNode;
-use std::rc::Rc;
 
 pub(crate) fn create_predicate(cond: &ConditionNode) -> Predicate {
+    let name = condition_label(cond);
     let cond = cond.clone();
-    Rc::new(move |c| match flat(&cond, c) {
+    Predicate::new(name, move |c: &dyn Context| match flat(&cond, c) {
         Ok(ConditionNode::Bool(b)) => b,
         _ => panic!(),
     })
+}
+
+/// Возвращает короткое текстовое представление условия для отображения на ребре графа.
+fn condition_label(cond: &ConditionNode) -> String {
+    match cond {
+        ConditionNode::None => String::new(),
+        ConditionNode::Bool(b) => b.to_string(),
+        _ => format!("{cond:?}"),
+    }
 }
 
 pub fn test(cond: &ConditionNode, context: &dyn Context) -> Result<bool, Diagnostic> {
