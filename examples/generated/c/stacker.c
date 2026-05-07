@@ -71,20 +71,6 @@ void StackerCommandReceiver_tick(StackerCommandReceiver *model, Stacker *main) {
             model->state = STACKER_COMMAND_RECEIVER_WAITING_FOR_TASK;
             break;
         }
-        case STACKER_COMMAND_RECEIVER_WAITING_FOR_TASK: {
-            if ((*main->read_bit)(STACKER_TASK_VALID, main->userdata) && !(main->busy) && !((*main->read_bit)(STACKER_SENSE_BATTERY_LOW, main->userdata))) {
-                main->tgt_stack = (*main->read_numeric)(STACKER_TASK_STACK_NO, main->userdata);
-                main->tgt_row = (*main->read_numeric)(STACKER_TASK_ROW_NO, main->userdata);
-                main->tgt_section = (*main->read_numeric)(STACKER_TASK_SECTION_NO, main->userdata);
-                main->tgt_type = (*main->read_bit)(STACKER_TASK_TYPE, main->userdata);
-                main->eta = Stacker_travel_time(main, (*main->read_numeric)(STACKER_TASK_STACK_NO, main->userdata), (*main->read_numeric)(STACKER_TASK_ROW_NO, main->userdata), (*main->read_numeric)(STACKER_TASK_SECTION_NO, main->userdata));
-                main->busy = 1;
-                (*main->write_bit)(STACKER_CMD_ACK, 1, main->userdata);
-                model->state = STACKER_COMMAND_RECEIVER_ACCEPTING_TASK;
-                break;
-            }
-            break;
-        }
         case STACKER_COMMAND_RECEIVER_TASK_ACTIVE: {
             if (!(main->busy)) {
                 (*main->write_bit)(STACKER_CMD_ACK, 0, main->userdata);
@@ -97,6 +83,20 @@ void StackerCommandReceiver_tick(StackerCommandReceiver *model, Stacker *main) {
             (*main->write_bit)(STACKER_CMD_ACK, 0, main->userdata);
             model->state = STACKER_COMMAND_RECEIVER_TASK_ACTIVE;
             break;
+            break;
+        }
+        case STACKER_COMMAND_RECEIVER_WAITING_FOR_TASK: {
+            if ((*main->read_bit)(STACKER_TASK_VALID, main->userdata) && !(main->busy) && !((*main->read_bit)(STACKER_SENSE_BATTERY_LOW, main->userdata))) {
+                main->tgt_stack = (*main->read_numeric)(STACKER_TASK_STACK_NO, main->userdata);
+                main->tgt_row = (*main->read_numeric)(STACKER_TASK_ROW_NO, main->userdata);
+                main->tgt_section = (*main->read_numeric)(STACKER_TASK_SECTION_NO, main->userdata);
+                main->tgt_type = (*main->read_bit)(STACKER_TASK_TYPE, main->userdata);
+                main->eta = Stacker_travel_time(main, (*main->read_numeric)(STACKER_TASK_STACK_NO, main->userdata), (*main->read_numeric)(STACKER_TASK_ROW_NO, main->userdata), (*main->read_numeric)(STACKER_TASK_SECTION_NO, main->userdata));
+                main->busy = 1;
+                (*main->write_bit)(STACKER_CMD_ACK, 1, main->userdata);
+                model->state = STACKER_COMMAND_RECEIVER_ACCEPTING_TASK;
+                break;
+            }
             break;
         }
         case STACKER_COMMAND_RECEIVER_END: {
@@ -131,14 +131,6 @@ void StackerLiftController_tick(StackerLiftController *model, Stacker *main) {
             model->state = STACKER_LIFT_CONTROLLER_LIFT_IDLE;
             break;
         }
-        case STACKER_LIFT_CONTROLLER_LIFT_IDLE: {
-            if (main->lift_request) {
-                (*main->write_bit)(STACKER_CMD_FORK, 1, main->userdata);
-                model->state = STACKER_LIFT_CONTROLLER_LIFT_OPERATING;
-                break;
-            }
-            break;
-        }
         case STACKER_LIFT_CONTROLLER_LIFT_DONE: {
             if (!(main->lift_request)) {
                 (*main->write_bit)(STACKER_CMD_FORK, 0, main->userdata);
@@ -163,6 +155,14 @@ void StackerLiftController_tick(StackerLiftController *model, Stacker *main) {
             if (!(main->lift_request)) {
                 (*main->write_bit)(STACKER_CMD_FORK, 0, main->userdata);
                 model->state = STACKER_LIFT_CONTROLLER_LIFT_IDLE;
+                break;
+            }
+            break;
+        }
+        case STACKER_LIFT_CONTROLLER_LIFT_IDLE: {
+            if (main->lift_request) {
+                (*main->write_bit)(STACKER_CMD_FORK, 1, main->userdata);
+                model->state = STACKER_LIFT_CONTROLLER_LIFT_OPERATING;
                 break;
             }
             break;
@@ -202,25 +202,6 @@ void StackerMovementController_tick(StackerMovementController *model, Stacker *m
             model->state = STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE;
             break;
         }
-        case STACKER_MOVEMENT_CONTROLLER_DISPATCH_MOVE: {
-            if (!(main->tgt_type)) {
-                (*main->write_numeric)(STACKER_CMD_TARGET_STACK, CONST_STACKER_PICKUP_STACK, main->userdata);
-                (*main->write_numeric)(STACKER_CMD_TARGET_ROW, CONST_STACKER_PICKUP_ROW, main->userdata);
-                (*main->write_numeric)(STACKER_CMD_TARGET_SECTION, CONST_STACKER_PICKUP_SECTION, main->userdata);
-                model->state = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP;
-                break;
-            }
-            if (main->tgt_type) {
-                main->lift_request = 0;
-                main->lift_done = 0;
-                (*main->write_numeric)(STACKER_CMD_TARGET_STACK, main->tgt_stack, main->userdata);
-                (*main->write_numeric)(STACKER_CMD_TARGET_ROW, main->tgt_row, main->userdata);
-                (*main->write_numeric)(STACKER_CMD_TARGET_SECTION, main->tgt_section, main->userdata);
-                model->state = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_STORAGE;
-                break;
-            }
-            break;
-        }
         case STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_STORAGE: {
             if (main->lift_done) {
                 main->lift_request = 0;
@@ -233,18 +214,22 @@ void StackerMovementController_tick(StackerMovementController *model, Stacker *m
             }
             break;
         }
-        case STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE: {
-            if (main->busy && !((*main->read_bit)(STACKER_SENSE_BATTERY_LOW, main->userdata))) {
-                model->state = STACKER_MOVEMENT_CONTROLLER_DISPATCH_MOVE;
+        case STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_DROPOFF: {
+            if (main->lift_done) {
+                main->lift_request = 0;
+                main->lift_done = 0;
+                main->busy = 0;
+                (*main->write_bit)(STACKER_CMD_DONE, 1, main->userdata);
+                model->state = STACKER_MOVEMENT_CONTROLLER_TASK_COMPLETING;
                 break;
             }
             break;
         }
-        case STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP: {
-            if ((*main->read_numeric)(STACKER_POS_STACK, main->userdata) == CONST_STACKER_PICKUP_STACK && (*main->read_numeric)(STACKER_POS_ROW, main->userdata) == CONST_STACKER_PICKUP_ROW && (*main->read_numeric)(STACKER_POS_SECTION, main->userdata) == CONST_STACKER_PICKUP_SECTION) {
+        case STACKER_MOVEMENT_CONTROLLER_MOVING_TO_CELL: {
+            if ((*main->read_numeric)(STACKER_POS_STACK, main->userdata) == main->tgt_stack && (*main->read_numeric)(STACKER_POS_ROW, main->userdata) == main->tgt_row && (*main->read_numeric)(STACKER_POS_SECTION, main->userdata) == main->tgt_section) {
                 main->lift_request = 1;
-                main->lift_op = 0;
-                model->state = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_PICKUP;
+                main->lift_op = 1;
+                model->state = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_CELL;
                 break;
             }
             if ((*main->read_bit)(STACKER_SENSE_BATTERY_LOW, main->userdata)) {
@@ -282,11 +267,11 @@ void StackerMovementController_tick(StackerMovementController *model, Stacker *m
             }
             break;
         }
-        case STACKER_MOVEMENT_CONTROLLER_MOVING_TO_CELL: {
+        case STACKER_MOVEMENT_CONTROLLER_MOVING_TO_STORAGE: {
             if ((*main->read_numeric)(STACKER_POS_STACK, main->userdata) == main->tgt_stack && (*main->read_numeric)(STACKER_POS_ROW, main->userdata) == main->tgt_row && (*main->read_numeric)(STACKER_POS_SECTION, main->userdata) == main->tgt_section) {
                 main->lift_request = 1;
-                main->lift_op = 1;
-                model->state = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_CELL;
+                main->lift_op = 0;
+                model->state = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_STORAGE;
                 break;
             }
             if ((*main->read_bit)(STACKER_SENSE_BATTERY_LOW, main->userdata)) {
@@ -299,6 +284,44 @@ void StackerMovementController_tick(StackerMovementController *model, Stacker *m
                 (*main->write_bit)(STACKER_CMD_DONE, 0, main->userdata);
                 main->busy = 0;
                 model->state = STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE;
+                break;
+            }
+            break;
+        }
+        case STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_PICKUP: {
+            if (main->lift_done) {
+                main->lift_request = 0;
+                main->lift_done = 0;
+                (*main->write_numeric)(STACKER_CMD_TARGET_STACK, main->tgt_stack, main->userdata);
+                (*main->write_numeric)(STACKER_CMD_TARGET_ROW, main->tgt_row, main->userdata);
+                (*main->write_numeric)(STACKER_CMD_TARGET_SECTION, main->tgt_section, main->userdata);
+                model->state = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_CELL;
+                break;
+            }
+            break;
+        }
+        case STACKER_MOVEMENT_CONTROLLER_DISPATCH_MOVE: {
+            if (!(main->tgt_type)) {
+                (*main->write_numeric)(STACKER_CMD_TARGET_STACK, CONST_STACKER_PICKUP_STACK, main->userdata);
+                (*main->write_numeric)(STACKER_CMD_TARGET_ROW, CONST_STACKER_PICKUP_ROW, main->userdata);
+                (*main->write_numeric)(STACKER_CMD_TARGET_SECTION, CONST_STACKER_PICKUP_SECTION, main->userdata);
+                model->state = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP;
+                break;
+            }
+            if (main->tgt_type) {
+                main->lift_request = 0;
+                main->lift_done = 0;
+                (*main->write_numeric)(STACKER_CMD_TARGET_STACK, main->tgt_stack, main->userdata);
+                (*main->write_numeric)(STACKER_CMD_TARGET_ROW, main->tgt_row, main->userdata);
+                (*main->write_numeric)(STACKER_CMD_TARGET_SECTION, main->tgt_section, main->userdata);
+                model->state = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_STORAGE;
+                break;
+            }
+            break;
+        }
+        case STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE: {
+            if (main->busy && !((*main->read_bit)(STACKER_SENSE_BATTERY_LOW, main->userdata))) {
+                model->state = STACKER_MOVEMENT_CONTROLLER_DISPATCH_MOVE;
                 break;
             }
             break;
@@ -324,19 +347,7 @@ void StackerMovementController_tick(StackerMovementController *model, Stacker *m
             }
             break;
         }
-        case STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_PICKUP: {
-            if (main->lift_done) {
-                main->lift_request = 0;
-                main->lift_done = 0;
-                (*main->write_numeric)(STACKER_CMD_TARGET_STACK, main->tgt_stack, main->userdata);
-                (*main->write_numeric)(STACKER_CMD_TARGET_ROW, main->tgt_row, main->userdata);
-                (*main->write_numeric)(STACKER_CMD_TARGET_SECTION, main->tgt_section, main->userdata);
-                model->state = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_CELL;
-                break;
-            }
-            break;
-        }
-        case STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_DROPOFF: {
+        case STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_CELL: {
             if (main->lift_done) {
                 main->lift_request = 0;
                 main->lift_done = 0;
@@ -347,11 +358,11 @@ void StackerMovementController_tick(StackerMovementController *model, Stacker *m
             }
             break;
         }
-        case STACKER_MOVEMENT_CONTROLLER_MOVING_TO_STORAGE: {
-            if ((*main->read_numeric)(STACKER_POS_STACK, main->userdata) == main->tgt_stack && (*main->read_numeric)(STACKER_POS_ROW, main->userdata) == main->tgt_row && (*main->read_numeric)(STACKER_POS_SECTION, main->userdata) == main->tgt_section) {
+        case STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP: {
+            if ((*main->read_numeric)(STACKER_POS_STACK, main->userdata) == CONST_STACKER_PICKUP_STACK && (*main->read_numeric)(STACKER_POS_ROW, main->userdata) == CONST_STACKER_PICKUP_ROW && (*main->read_numeric)(STACKER_POS_SECTION, main->userdata) == CONST_STACKER_PICKUP_SECTION) {
                 main->lift_request = 1;
                 main->lift_op = 0;
-                model->state = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_STORAGE;
+                model->state = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_PICKUP;
                 break;
             }
             if ((*main->read_bit)(STACKER_SENSE_BATTERY_LOW, main->userdata)) {
@@ -364,17 +375,6 @@ void StackerMovementController_tick(StackerMovementController *model, Stacker *m
                 (*main->write_bit)(STACKER_CMD_DONE, 0, main->userdata);
                 main->busy = 0;
                 model->state = STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE;
-                break;
-            }
-            break;
-        }
-        case STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_CELL: {
-            if (main->lift_done) {
-                main->lift_request = 0;
-                main->lift_done = 0;
-                main->busy = 0;
-                (*main->write_bit)(STACKER_CMD_DONE, 1, main->userdata);
-                model->state = STACKER_MOVEMENT_CONTROLLER_TASK_COMPLETING;
                 break;
             }
             break;
@@ -400,14 +400,14 @@ void Stacker_init(Stacker *model) {
     assert(0 != model);
     model->state = STACKER_INIT;
     model->tgt_type = 0;
-    model->lift_request = 0;
     model->tgt_stack = 0;
-    model->lift_done = 0;
     model->tgt_section = 0;
-    model->tgt_row = 0;
     model->eta = 0;
-    model->busy = 0;
+    model->tgt_row = 0;
     model->lift_op = 0;
+    model->busy = 0;
+    model->lift_request = 0;
+    model->lift_done = 0;
 }
 
 /// Функция обработки модели stacker (Stacker)
