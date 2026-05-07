@@ -5,25 +5,11 @@ title Stacker
 Stacker : CommandReceiver | MovementController | LiftController
 Stacker --> [*]
 
-state MovementController {
-    [*] --> MovementIdle
-    MovingToDropoff --> WaitingForkAtDropoff
-    MovingToDropoff --> EmergencyCharge
-    TaskCompleting --> MovementIdle
-    WaitingForkAtStorage --> MovingToDropoff
-    WaitingForkAtCell --> TaskCompleting
-    MovingToPickup --> WaitingForkAtPickup
-    MovingToPickup --> EmergencyCharge
-    DispatchMove --> MovingToPickup
-    DispatchMove --> MovingToStorage
-    MovingToCell --> WaitingForkAtCell
-    MovingToCell --> EmergencyCharge
-    MovingToStorage --> WaitingForkAtStorage
-    MovingToStorage --> EmergencyCharge
-    WaitingForkAtDropoff --> TaskCompleting
-    WaitingForkAtPickup --> MovingToCell
-    MovementIdle --> DispatchMove
-    EmergencyCharge --> MovementIdle
+state CommandReceiver {
+    [*] --> WaitingForTask
+    AcceptingTask --> TaskActive
+    WaitingForTask --> AcceptingTask
+    TaskActive --> WaitingForTask
 }
 
 state LiftController {
@@ -35,11 +21,25 @@ state LiftController {
     LiftDone --> LiftIdle
 }
 
-state CommandReceiver {
-    [*] --> WaitingForTask
-    AcceptingTask --> TaskActive
-    TaskActive --> WaitingForTask
-    WaitingForTask --> AcceptingTask
+state MovementController {
+    [*] --> MovementIdle
+    TaskCompleting --> MovementIdle
+    WaitingForkAtDropoff --> TaskCompleting
+    DispatchMove --> MovingToPickup
+    DispatchMove --> MovingToStorage
+    MovingToStorage --> WaitingForkAtStorage
+    MovingToStorage --> EmergencyCharge
+    WaitingForkAtPickup --> MovingToCell
+    MovingToCell --> WaitingForkAtCell
+    MovingToCell --> EmergencyCharge
+    WaitingForkAtCell --> TaskCompleting
+    MovingToDropoff --> WaitingForkAtDropoff
+    MovingToDropoff --> EmergencyCharge
+    EmergencyCharge --> MovementIdle
+    WaitingForkAtStorage --> MovingToDropoff
+    MovingToPickup --> WaitingForkAtPickup
+    MovingToPickup --> EmergencyCharge
+    MovementIdle --> DispatchMove
 }
 
 @enduml
