@@ -4,19 +4,19 @@ title Elevator
 [*] --> Main
 Middle : Engine + Engine | Engine + Engine + Engine + Engine
 Middle --> End
+End --> [*]
 Main : Engine
 Main --> Middle
-End --> [*]
 
 state Engine {
     [*] --> Idle
     DoorOpening --> Idle
-    Idle --> DoorClosing
+    MovingUp --> DoorOpening
     MovingDown --> DoorOpening
     DoorClosing --> Idle
     DoorClosing --> MovingUp
     DoorClosing --> MovingDown
-    MovingUp --> DoorOpening
+    Idle --> DoorClosing
 }
 
 @enduml

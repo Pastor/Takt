@@ -236,7 +236,7 @@ fn make_transitions(
         .unwrap_or_default()
 }
 
-// ── Реализации Context, enter, exit, tick ────────────────────────────────────
+// ── Реализации ConteFxt, enter, exit, tick ────────────────────────────────────
 
 impl Context for Unit {
     fn get_value(&self, name: &str) -> Option<Value> {
