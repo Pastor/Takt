@@ -8,11 +8,11 @@ Entry --> [*]
 state Controller {
     [*] --> Idle
     Done --> [*]
+    Heating --> Cooling
+    Heating --> Idle
     Idle --> Heating
     Cooling --> Done
     Cooling --> Idle
-    Heating --> Cooling
-    Heating --> Idle
 }
 
 @enduml
