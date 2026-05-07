@@ -1,846 +1,1256 @@
 use crate::context::Context;
+use crate::predicate::create_predicate;
+
+pub(crate) type Predicate = Rc<dyn Fn(&dyn Context) -> bool>;
+pub(crate) type Execution = Box<dyn Fn(&mut dyn Context)>;
+
 use crate::value::Value;
+use grammar::diagnostics::{Diagnostic, Location};
+use grammar::semantic::extend::Extend;
+use grammar::semantic::{ConditionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind};
 use std::cell::RefCell;
-use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub(crate) type Predicate = Rc<dyn Fn(&dyn Context) -> bool>;
-pub(crate) type Execution = Rc<dyn Fn(&mut dyn Context)>;
-type Executions = HashMap<String, Vec<Execution>>;
-
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub(crate) enum TickResult {
-    Transition(String),
+#[derive(Debug, PartialEq, Eq)]
+enum Transition {
     Processing,
-    Terminated,
+    Goto,
+    Final,
 }
 
-#[derive(Clone, Default)]
-pub enum Unit {
-    #[default]
-    None,
-    Node {
-        context: Option<Rc<RefCell<dyn Context>>>,
-
+/// Unit — исполняемая единица симуляции.
+///
+/// Варианты:
+/// - [`Plain`](Unit::Plain) — конечный автомат; `states.is_empty()` означает
+///   листовое состояние (tick возвращает Goto без делегирования);
+/// - [`Parallel`](Unit::Parallel) — параллельная композиция;
+/// - [`Sequence`](Unit::Sequence) — последовательная композиция.
+///
+/// При построении из семантической модели все вхождения одного ModelNode
+/// превращаются в независимые копии, чтобы параллельные и повторные
+/// использования не делили общее состояние симуляции.
+pub(crate) enum Unit {
+    Plain {
+        upper: Option<Rc<RefCell<Unit>>>,
+        /// Активные переходы для текущего состояния.
+        transitions: Vec<(String, Predicate)>,
+        /// Переходы каждого состояния: имя → [(цель, предикат)].
+        /// При смене состояния `transitions` обновляется из этой таблицы.
         state_transitions: HashMap<String, Vec<(String, Predicate)>>,
-        state_executions: HashMap<String, Executions>,
-        state: Option<String>,
+        /// Безусловный next-переход для состояний с расширением: имя → цель.
+        /// Срабатывает когда дочерний Unit вернул Final.
+        state_nexts: HashMap<String, String>,
+        states: HashMap<String, RefCell<Unit>>,
+        current: String,
+
+        always: Vec<Execution>,
+        enters: Vec<Execution>,
+        exits: Vec<Execution>,
 
         variables: HashMap<String, Value>,
-        executions: Executions,
     },
+    /// Параллельная композиция: все дочерние Unit тикаются одновременно.
     Parallel {
+        upper: Option<Rc<RefCell<Unit>>>,
         units: Vec<Rc<RefCell<Unit>>>,
-        executions: Executions,
+        next: Option<String>,
     },
-    Sequential {
+    /// Последовательная композиция: дочерние Unit выполняются по очереди.
+    Sequence {
+        upper: Option<Rc<RefCell<Unit>>>,
         units: Vec<Rc<RefCell<Unit>>>,
         index: usize,
-        executions: Executions,
+        next: Option<String>,
     },
 }
+
+// ── Построение Unit из семантической модели ──────────────────────────────────
+
+/// Строит [`Unit`] из корневой семантической модели.
+///
+/// Каждое вхождение модели в композиции (`+` / `|`) порождает независимую
+/// копию, поэтому одна и та же модель может использоваться многократно
+/// без пересечения состояний симуляции.
+pub(crate) fn from_model(model: Rc<RefCell<ModelNode>>) -> Result<Unit, Diagnostic> {
+    let borrowed = model.borrow();
+    if borrowed.has_states() {
+        from_model_plain(&borrowed)
+    } else {
+        from_extend(&borrowed.implements, None)
+    }
+}
+
+fn from_model_plain(model: &ModelNode) -> Result<Unit, Diagnostic> {
+    let start_name = model
+        .states
+        .iter()
+        .find_map(|(name, state)| match state {
+            StateNode::Simple {
+                kind: StateNodeKind::Start,
+                ..
+            }
+            | StateNode::Implement {
+                kind: StateNodeKind::Start,
+                ..
+            } => Some(name.clone()),
+            _ => None,
+        })
+        .ok_or_else(|| {
+            Diagnostic::error(
+                Location::Builtin,
+                "Нет начального состояния в модели".to_string(),
+            )
+        })?;
+
+    let mut states: HashMap<String, RefCell<Unit>> = HashMap::new();
+    let mut state_transitions: HashMap<String, Vec<(String, Predicate)>> = HashMap::new();
+    let mut state_nexts: HashMap<String, String> = HashMap::new();
+
+    for (name, state_node) in &model.states {
+        let unit = from_state_node(state_node)?;
+        states.insert(name.clone(), RefCell::new(unit));
+
+        let trans: Vec<(String, Predicate)> = state_node
+            .references()
+            .iter()
+            .map(|r| {
+                let pred: Predicate = if matches!(r.cond, ConditionNode::None) {
+                    Rc::new(|_: &dyn Context| true)
+                } else {
+                    create_predicate(&r.cond)
+                };
+                (r.name.clone(), pred)
+            })
+            .collect();
+        state_transitions.insert(name.clone(), trans);
+
+        if let StateNode::Implement {
+            next: Some(next_ref),
+            ..
+        } = state_node
+        {
+            state_nexts.insert(name.clone(), next_ref.name.clone());
+        }
+    }
+
+    let transitions = make_transitions(&state_transitions, &start_name);
+
+    Ok(Unit::Plain {
+        upper: None,
+        transitions,
+        state_transitions,
+        state_nexts,
+        states,
+        current: start_name,
+        always: vec![],
+        enters: vec![],
+        exits: vec![],
+        variables: HashMap::new(),
+    })
+}
+
+fn from_state_node(state: &StateNode) -> Result<Unit, Diagnostic> {
+    match state {
+        StateNode::Unresolved => Err(Diagnostic::error(
+            Location::Builtin,
+            "Неразрешённое состояние".to_string(),
+        )),
+        // Простое состояние = листовой Plain (states пуст → tick вернёт Goto)
+        StateNode::Simple { .. } => Ok(leaf_plain()),
+        StateNode::Implement {
+            implements, next, ..
+        } => from_extend(implements, next.clone()),
+    }
+}
+
+fn from_extend(
+    extend: &Extend,
+    next: Option<ReferenceNode<StateNode>>,
+) -> Result<Unit, Diagnostic> {
+    match extend {
+        Extend::None | Extend::Unresolved(_) => Ok(leaf_plain()),
+        Extend::Model(model) => {
+            let borrowed = model.borrow();
+            if borrowed.has_states() {
+                from_model_plain(&borrowed)
+            } else {
+                from_extend(&borrowed.implements, None)
+            }
+        }
+        Extend::Parentless(inner) => from_extend(inner, None),
+        Extend::Concatenation(items) => {
+            let units: Vec<Rc<RefCell<Unit>>> = items
+                .iter()
+                .map(|item| Ok(Rc::new(RefCell::new(from_extend(item, None)?))))
+                .collect::<Result<_, Diagnostic>>()?;
+            Ok(Unit::Sequence {
+                upper: None,
+                units,
+                index: 0,
+                next: next.map(|rf| rf.name.clone()),
+            })
+        }
+        Extend::Parallel(items) => {
+            let units: Vec<Rc<RefCell<Unit>>> = items
+                .iter()
+                .map(|item| Ok(Rc::new(RefCell::new(from_extend(item, None)?))))
+                .collect::<Result<_, Diagnostic>>()?;
+            Ok(Unit::Parallel {
+                upper: None,
+                units,
+                next: next.map(|rf| rf.name.clone()),
+            })
+        }
+    }
+}
+
+/// Листовой Plain: пустой states → tick() вернёт Goto.
+fn leaf_plain() -> Unit {
+    Unit::Plain {
+        upper: None,
+        transitions: vec![],
+        state_transitions: HashMap::new(),
+        state_nexts: HashMap::new(),
+        states: HashMap::new(),
+        current: String::new(),
+        always: vec![],
+        enters: vec![],
+        exits: vec![],
+        variables: HashMap::new(),
+    }
+}
+
+/// Клонирует предикаты заданного состояния из таблицы переходов в активный список.
+fn make_transitions(
+    map: &HashMap<String, Vec<(String, Predicate)>>,
+    state: &str,
+) -> Vec<(String, Predicate)> {
+    map.get(state)
+        .map(|preds| {
+            preds
+                .iter()
+                .map(|(target, pred)| (target.clone(), Rc::clone(pred)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+// ── Реализации ConteFxt, enter, exit, tick ────────────────────────────────────
 
 impl Context for Unit {
     fn get_value(&self, name: &str) -> Option<Value> {
-        match self {
-            Unit::None => None,
-            Unit::Node {
-                context, variables, ..
-            } => {
-                if let Some(v) = variables.get(name) {
-                    return Some(v.clone());
-                }
-                context
-                    .as_ref()
-                    .and_then(|ctx| ctx.borrow().get_value(name))
+        let result = match self {
+            Unit::Plain { variables, .. } => variables.get(name).cloned(),
+            Unit::Parallel { units, .. } | Unit::Sequence { units, .. } => {
+                units.iter().flat_map(|u| u.borrow().get_value(name)).next()
             }
-            Unit::Parallel { units, .. } => {
-                units.iter().find_map(|unit| unit.borrow().get_value(name))
-            }
-            Unit::Sequential { units, index, .. } => {
-                units.get(*index).and_then(|u| u.borrow().get_value(name))
-            }
-        }
+        };
+        result.or_else(|| {
+            let upper = match self {
+                Unit::Plain { upper, .. }
+                | Unit::Parallel { upper, .. }
+                | Unit::Sequence { upper, .. } => upper.as_ref().map(|u| &**u),
+            };
+            upper.and_then(|u| u.borrow().get_value(name))
+        })
     }
-}
-
-fn merge_executions(mut a: Executions, b: Executions) -> Executions {
-    for (k, v) in b {
-        a.entry(k).or_default().extend(v);
-    }
-    a
 }
 
 impl Unit {
-    pub fn tick(&mut self) -> TickResult {
-        self.execution("always");
-        match self {
-            Unit::None => TickResult::Terminated,
-            Unit::Node { .. } => self.tick_node(),
-            Unit::Parallel { .. } => self.tick_parallel(),
-            Unit::Sequential { .. } => self.tick_sequential(),
-        }
-    }
-
-    fn tick_node(&mut self) -> TickResult {
-        // Шаг 1: клонируем имя текущего состояния
-        let state_name: String = if let Unit::Node { state: Some(s), .. } = self {
-            s.clone()
-        } else {
-            // state: None — узел не инициализирован или завершён
-            return TickResult::Terminated;
-        };
-
-        // Шаг 2: клонируем список переходов (Rc-предикаты)
-        let transitions: Vec<(String, Predicate)> = if let Unit::Node {
-            state_transitions, ..
-        } = self
-        {
-            state_transitions
-                .get(&state_name)
-                .cloned()
-                .unwrap_or_default()
-        } else {
-            unreachable!()
-        };
-
-        if transitions.is_empty() {
-            return TickResult::Terminated;
-        }
-
-        // Шаг 3: ищем первый сработавший переход (predicate берёт &dyn Context)
-        let next_state = transitions
-            .iter()
-            .find_map(|(name, pred)| if pred(self) { Some(name.clone()) } else { None });
-
-        if let Some(next) = next_state {
-            // Шаг 4: исполнители выхода из текущего состояния
-            let exit_fns: Vec<Execution> = if let Unit::Node {
-                state_executions, ..
-            } = self
-            {
-                state_executions
-                    .get(&state_name)
-                    .and_then(|m| m.get("exit"))
-                    .cloned()
-                    .unwrap_or_default()
-            } else {
-                unreachable!()
-            };
-            for f in &exit_fns {
-                f(self);
-            }
-
-            // Шаг 5: исполнители входа в следующее состояние
-            let enter_fns: Vec<Execution> = if let Unit::Node {
-                state_executions, ..
-            } = self
-            {
-                state_executions
-                    .get(&next)
-                    .and_then(|m| m.get("enter"))
-                    .cloned()
-                    .unwrap_or_default()
-            } else {
-                unreachable!()
-            };
-            for f in &enter_fns {
-                f(self);
-            }
-
-            // Шаг 6: переход в новое состояние
-            if let Unit::Node { state, .. } = self {
-                *state = Some(next);
-            }
-        }
-
-        TickResult::Processing
-    }
-
-    fn tick_parallel(&mut self) -> TickResult {
-        // Тикаем ВСЕ дочерние и собираем результаты — нельзя прерываться раньше
-        let results: Vec<TickResult> = if let Unit::Parallel { units, .. } = self {
-            units.iter().map(|u| u.borrow_mut().tick()).collect()
-        } else {
-            unreachable!()
-        };
-        if results.iter().all(|r| *r == TickResult::Terminated) {
-            TickResult::Terminated
-        } else {
-            TickResult::Processing
-        }
-    }
-
-    fn tick_sequential(&mut self) -> TickResult {
-        let (index, len) = if let Unit::Sequential { units, index, .. } = self {
-            (*index, units.len())
-        } else {
-            unreachable!()
-        };
-        if index >= len {
-            return TickResult::Terminated;
-        }
-        let child_result = if let Unit::Sequential { units, index, .. } = self {
-            units[*index].borrow_mut().tick()
-        } else {
-            unreachable!()
-        };
-        match child_result {
-            TickResult::Transition(_) => unreachable!(),
-            TickResult::Processing => TickResult::Processing,
-            TickResult::Terminated => {
-                if let Unit::Sequential { index, .. } = self {
-                    *index += 1;
-                }
-                TickResult::Processing
-            }
-        }
-    }
-
-    pub fn execution(&mut self, name: &str) {
-        // Шаг 1: клонируем Rc-ссылки на функции уровня unit, не удерживая заимствование self
-        let unit_fns: Vec<Execution> = match self {
-            Unit::Node { executions, .. } => executions.get(name).cloned().unwrap_or_default(),
-            Unit::Parallel { executions, .. } | Unit::Sequential { executions, .. } => {
-                executions.get(name).cloned().unwrap_or_default()
-            }
-            Unit::None => vec![],
-        };
-        // Шаг 2: вызываем — self свободен от заимствования
-        for f in &unit_fns {
-            f(self);
-        }
-        // Шаг 3: для Node — функции уровня текущего состояния
-        let state_fns: Vec<Execution> = match self {
-            Unit::Node {
-                state: Some(s),
-                state_executions,
-                ..
-            } => state_executions
-                .get(s.as_str())
-                .and_then(|m| m.get(name))
-                .cloned()
-                .unwrap_or_default(),
-            _ => vec![],
-        };
-        for f in &state_fns {
-            f(self);
-        }
-        // Шаг 4: рекурсия в дочерние
-        match self {
+    fn enter(&mut self) {
+        let enters = match self {
+            Unit::Plain { enters, .. } => std::mem::take(enters),
             Unit::Parallel { units, .. } => {
-                let units = units.clone();
-                units.iter().for_each(|u| u.borrow_mut().execution(name));
+                units.iter().for_each(|u| u.borrow_mut().enter());
+                return;
             }
-            Unit::Sequential { units, index, .. } => {
-                if *index < units.len() {
-                    units[*index].clone().borrow_mut().execution(name);
-                }
+            Unit::Sequence { units, index, .. } => {
+                units.get(*index).unwrap().borrow_mut().enter();
+                return;
             }
-            _ => {}
+        };
+        for f in &enters {
+            f(self as &mut dyn Context);
+        }
+        match self {
+            Unit::Plain { enters: e, .. } => *e = enters,
+            Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
         }
     }
 
-    pub fn is_terminal(&self) -> bool {
+    fn exit(&mut self) {
+        let exits = match self {
+            Unit::Plain { exits, .. } => std::mem::take(exits),
+            Unit::Parallel { units, .. } => {
+                units.iter().for_each(|u| u.borrow_mut().exit());
+                return;
+            }
+            Unit::Sequence { units, index, .. } => {
+                units.get(*index).unwrap().borrow_mut().exit();
+                return;
+            }
+        };
+        for f in &exits {
+            f(self as &mut dyn Context);
+        }
         match self {
-            Unit::None => true,
-            Unit::Node {
-                state: current_state,
+            Unit::Plain { exits: e, .. } => *e = exits,
+            Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
+        }
+    }
+
+    fn tick(&mut self) -> Result<Transition, Diagnostic> {
+        if let Unit::Parallel { units, .. } = self {
+            // Тикаем все ветви; собираем результаты чтобы не прерывать на первом несовпадении
+            let results: Vec<Transition> = units
+                .iter()
+                .map(|u| u.borrow_mut().tick())
+                .collect::<Result<_, _>>()?;
+            if results
+                .iter()
+                .all(|r| matches!(r, Transition::Final | Transition::Goto))
+            {
+                return Ok(Transition::Final);
+            }
+            return Ok(Transition::Processing);
+        } else if let Unit::Sequence { units, index, .. } = self {
+            let result = units[*index].borrow_mut().tick()?;
+            // Goto — элемент завершился (листовое состояние); Final — FSM исчерпал состояния
+            if matches!(result, Transition::Goto | Transition::Final) {
+                if *index + 1 >= units.len() {
+                    return Ok(Transition::Final);
+                }
+                units[*index].borrow_mut().exit();
+                *index += 1;
+                units[*index].borrow_mut().enter();
+                return Ok(Transition::Processing);
+            }
+            return Ok(Transition::Processing);
+        }
+
+        // Временно забираем always, вызываем и возвращаем обратно
+        let always = match self {
+            Unit::Plain { always, .. } => std::mem::take(always),
+            Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
+        };
+        for f in &always {
+            f(self as &mut dyn Context);
+        }
+        match self {
+            Unit::Plain { always: a, .. } => *a = always,
+            Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
+        }
+
+        // Тикаем текущее вложенное состояние
+        let result = {
+            let Unit::Plain {
+                current, states, ..
+            } = &mut *self
+            else {
+                unreachable!()
+            };
+            // Пустой states → листовое состояние: сигнализируем Goto
+            if states.is_empty() {
+                return Ok(Transition::Goto);
+            }
+            // Текущее состояние не найдено → конечное состояние (Final)
+            let Some(state) = states.get(current.as_str()) else {
+                return Ok(Transition::Final);
+            };
+            state.borrow_mut().tick()?
+        };
+
+        match result {
+            Transition::Processing => return Ok(Transition::Processing),
+            Transition::Final => {
+                // Проверяем безусловный next-переход состояния с расширением
+                let Unit::Plain {
+                    current,
+                    state_nexts,
+                    states,
+                    transitions,
+                    state_transitions,
+                    ..
+                } = &mut *self
+                else {
+                    unreachable!()
+                };
+                if let Some(next_state) = state_nexts.get(current.as_str()).cloned() {
+                    let cur = current.clone();
+                    if let Some(state) = states.get(cur.as_str()) {
+                        state.borrow_mut().exit();
+                    }
+                    *transitions = make_transitions(state_transitions, &next_state);
+                    *current = next_state.clone();
+                    let next_machine = states.get(next_state.as_str()).ok_or_else(|| {
+                        Diagnostic::error(
+                            Location::Builtin,
+                            format!("Состояние '{}' не найдено", next_state),
+                        )
+                    })?;
+                    next_machine.borrow_mut().enter();
+                    return Ok(Transition::Processing);
+                }
+                return Ok(Transition::Final);
+            }
+            Transition::Goto => {}
+        }
+
+        // Временно забираем transitions; предикаты читают self через &dyn Context
+        let transitions = match self {
+            Unit::Plain { transitions, .. } => std::mem::take(transitions),
+            Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
+        };
+        let next_name = transitions
+            .iter()
+            .find(|(_, predicate)| predicate(&*self))
+            .map(|(name, _)| name.clone());
+        match self {
+            Unit::Plain { transitions: t, .. } => *t = transitions,
+            Unit::Parallel { .. } | Unit::Sequence { .. } => unreachable!(),
+        }
+
+        let Some(next) = next_name else {
+            // Нет условных переходов — проверяем next-переход состояния с расширением
+            let Unit::Plain {
+                current,
+                state_nexts,
+                states,
+                transitions,
                 state_transitions,
                 ..
-            } => {
-                let Some(state_name) = current_state else {
-                    // Нет активного состояния — терминально если нет возможных переходов
-                    return state_transitions.is_empty();
-                };
-                // FIXME: unit2 не содержит state_nexts — состояния с вложенными моделями
-                //        (без явных переходов, но с continuation) будут ошибочно считаться терминальными.
-                state_transitions
-                    .get(state_name)
-                    .map_or(true, |t| t.is_empty())
-            }
-            Unit::Parallel { units, .. } | Unit::Sequential { units, .. } => {
-                units.iter().all(|u| u.borrow().is_terminal())
-            }
-        }
-    }
-
-    pub fn union(&self, other: &Self) -> Self {
-        match self.clone() {
-            Unit::None => other.clone(),
-            Unit::Node { .. } => self.union_parallel(other),
-            Unit::Parallel {
-                mut units,
-                executions,
-                ..
-            } => {
-                if let Unit::Parallel {
-                    units: other_units,
-                    executions: other_executions,
-                    ..
-                } = other
-                {
-                    units.append(&mut other_units.clone());
-                    Unit::Parallel {
-                        units,
-                        executions: merge_executions(executions, other_executions.clone()),
-                    }
-                } else {
-                    units.push(Rc::new(RefCell::new(other.clone())));
-                    Unit::Parallel { units, executions }
+            } = &mut *self
+            else {
+                unreachable!()
+            };
+            if let Some(next_state) = state_nexts.get(current.as_str()).cloned() {
+                let cur = current.clone();
+                if let Some(state) = states.get(cur.as_str()) {
+                    state.borrow_mut().exit();
                 }
+                *transitions = make_transitions(state_transitions, &next_state);
+                *current = next_state.clone();
+                let next_machine = states.get(next_state.as_str()).ok_or_else(|| {
+                    Diagnostic::error(
+                        Location::Builtin,
+                        format!("Состояние '{}' не найдено", next_state),
+                    )
+                })?;
+                next_machine.borrow_mut().enter();
+                return Ok(Transition::Processing);
             }
-            Unit::Sequential { .. } => self.union_parallel(other),
-        }
-    }
+            return Ok(Transition::Goto);
+        };
 
-    fn union_parallel(&self, other: &Unit) -> Unit {
-        if let Unit::Parallel {
-            units: other_units,
-            executions,
+        // Переход: выходим из текущего, обновляем transitions и current, входим в новое
+        let Unit::Plain {
+            current,
+            states,
+            transitions,
+            state_transitions,
             ..
-        } = other
-        {
-            let mut units = other_units.clone();
-            units.insert(0, Rc::new(RefCell::new(self.clone())));
-            Unit::Parallel {
-                units,
-                executions: executions.clone(),
-            }
-        } else {
-            Unit::Parallel {
-                units: vec![
-                    Rc::new(RefCell::new(self.clone())),
-                    Rc::new(RefCell::new(other.clone())),
-                ],
-                executions: HashMap::new(),
-            }
+        } = &mut *self
+        else {
+            unreachable!()
+        };
+        let cur = current.clone();
+        if let Some(state) = states.get(cur.as_str()) {
+            state.borrow_mut().exit();
         }
-    }
+        *transitions = make_transitions(state_transitions, &next);
+        *current = next.clone();
+        let next_machine = states.get(next.as_str()).ok_or_else(|| {
+            Diagnostic::error(Location::Builtin, "Состояние не найдено".to_string())
+        })?;
+        next_machine.borrow_mut().enter();
 
-    pub fn add(&self, other: &Self) -> Self {
-        match self.clone() {
-            Unit::None => other.clone(),
-            Unit::Node { .. } => {
-                let (mut units, executions) = if let Unit::Sequential {
-                    units, executions, ..
-                } = other.clone()
-                {
-                    (units, executions)
-                } else {
-                    (vec![Rc::new(RefCell::new(other.clone()))], HashMap::new())
-                };
-                units.insert(0, Rc::new(RefCell::new(self.clone())));
-                Unit::Sequential {
-                    units,
-                    index: 0,
-                    executions,
-                }
-            }
-            Unit::Parallel { .. } => {
-                let units = vec![
-                    Rc::new(RefCell::new(self.clone())),
-                    Rc::new(RefCell::new(other.clone())),
-                ];
-                Unit::Sequential {
-                    units,
-                    index: 0,
-                    executions: HashMap::new(),
-                }
-            }
-            Unit::Sequential {
-                mut units,
-                mut executions,
-                ..
-            } => {
-                if let Unit::Sequential {
-                    units: mut other_units,
-                    executions: other_executions,
-                    ..
-                } = other.clone()
-                {
-                    units.append(&mut other_units);
-                    other_executions.into_iter().for_each(|(k, v)| {
-                        executions.entry(k).or_default().extend(v);
-                    });
-                } else {
-                    units.push(Rc::new(RefCell::new(other.clone())));
-                }
-                Unit::Sequential {
-                    units,
-                    index: 0,
-                    executions,
-                }
-            }
-        }
+        Ok(Transition::Processing)
     }
 }
+
+// ── Тесты ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
     use std::collections::HashMap;
+    use std::rc::Rc;
 
-    struct MockCtx(HashMap<String, Value>);
-
-    impl Context for MockCtx {
-        fn get_value(&self, name: &str) -> Option<Value> {
-            self.0.get(name).cloned()
-        }
+    fn always_true() -> Predicate {
+        Rc::new(|_: &dyn Context| true)
     }
 
-    fn ctx_with(key: &str, val: Value) -> Rc<RefCell<dyn Context>> {
-        let mut m = HashMap::new();
-        m.insert(key.to_string(), val);
-        Rc::new(RefCell::new(MockCtx(m)))
+    fn always_false() -> Predicate {
+        Rc::new(|_: &dyn Context| false)
     }
 
-    fn node() -> Unit {
-        Unit::Node {
-            context: None,
-            variables: HashMap::new(),
-            executions: HashMap::new(),
-            state: None,
+    /// Счётчик вызовов через Rc<Cell>, доступный из Fn-замыкания.
+    fn call_counter() -> (Rc<Cell<u32>>, Execution) {
+        let count = Rc::new(Cell::new(0u32));
+        let c = count.clone();
+        (count, Box::new(move |_| c.set(c.get() + 1)))
+    }
+
+    /// Листовой Plain: states пуст, tick() возвращает Goto.
+    fn leaf() -> Unit {
+        leaf_plain()
+    }
+
+    /// Создаёт Unit::Plain с одним дочерним листовым состоянием и заданными переходами.
+    fn plain_with_leaf(name: &str, transitions: Vec<(String, Predicate)>) -> Unit {
+        let mut states = HashMap::new();
+        states.insert(name.to_string(), RefCell::new(leaf()));
+        Unit::Plain {
+            upper: None,
+            transitions,
             state_transitions: HashMap::new(),
-            state_executions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states,
+            current: name.to_string(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
         }
     }
 
-    fn node_with(key: &str, val: Value) -> Unit {
-        Unit::Node {
-            context: Some(ctx_with(key, val)),
-            variables: HashMap::new(),
-            executions: HashMap::new(),
-            state: None,
+    // ── Листовой Plain (states пуст) ──────────────────────────────────────────
+
+    #[test]
+    fn test_leaf_tick_returns_goto() {
+        let mut m = leaf();
+        assert!(matches!(m.tick().unwrap(), Transition::Goto));
+    }
+
+    #[test]
+    fn test_leaf_enter_calls_enters() {
+        let (count, exec) = call_counter();
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
             state_transitions: HashMap::new(),
-            state_executions: HashMap::new(),
-        }
-    }
-
-    fn parallel(units: Vec<Unit>) -> Unit {
-        Unit::Parallel {
-            units: units
-                .into_iter()
-                .map(|u| Rc::new(RefCell::new(u)))
-                .collect(),
-            executions: HashMap::new(),
-        }
-    }
-
-    fn sequential(units: Vec<Unit>) -> Unit {
-        Unit::Sequential {
-            units: units
-                .into_iter()
-                .map(|u| Rc::new(RefCell::new(u)))
-                .collect(),
-            index: 0,
-            executions: HashMap::new(),
-        }
-    }
-
-    fn len(u: &Unit) -> usize {
-        match u {
-            Unit::Parallel { units, .. } | Unit::Sequential { units, .. } => units.len(),
-            _ => 0,
-        }
-    }
-
-    // ── union ────────────────────────────────────────────────────────────────
-
-    // unit::union: нейтральный элемент — None | X == X.
-    // Создаём None.union(node) и проверяем, что результат — сам Node, без обёртки.
-    #[test]
-    fn test_union_none_with_node() {
-        let result = Unit::None.union(&node());
-        assert!(matches!(result, Unit::Node { .. }));
-    }
-
-    // unit::union: два Node объединяются в Parallel с двумя дочерними.
-    // Проверяем вариант результата и количество дочерних.
-    #[test]
-    fn test_union_node_with_node() {
-        let result = node().union(&node());
-        assert!(matches!(result, Unit::Parallel { .. }));
-        assert_eq!(len(&result), 2);
-    }
-
-    // unit::union: Node | Parallel([a, b]) — self вставляется в начало существующего Parallel.
-    // Ожидаем Parallel из трёх элементов: [Node, a, b].
-    #[test]
-    fn test_union_node_with_parallel() {
-        let result = node().union(&parallel(vec![node(), node()]));
-        assert!(matches!(result, Unit::Parallel { .. }));
-        assert_eq!(len(&result), 3);
-    }
-
-    // unit::union: Parallel([a]) | Parallel([b, c]) — списки units объединяются в один Parallel.
-    // Ожидаем три элемента: [a, b, c].
-    #[test]
-    fn test_union_parallel_with_parallel() {
-        let result = parallel(vec![node()]).union(&parallel(vec![node(), node()]));
-        assert!(matches!(result, Unit::Parallel { .. }));
-        assert_eq!(len(&result), 3);
-    }
-
-    // unit::union: Parallel([a]) | Node — Node добавляется в конец существующего Parallel.
-    // Ожидаем два элемента.
-    #[test]
-    fn test_union_parallel_with_node() {
-        let result = parallel(vec![node()]).union(&node());
-        assert!(matches!(result, Unit::Parallel { .. }));
-        assert_eq!(len(&result), 2);
-    }
-
-    // unit::union: Sequential | Node — Sequential оборачивается в новый Parallel.
-    // Ожидаем Parallel из двух элементов: [Sequential, Node].
-    #[test]
-    fn test_union_sequential_with_node() {
-        let result = sequential(vec![node()]).union(&node());
-        assert!(matches!(result, Unit::Parallel { .. }));
-        assert_eq!(len(&result), 2);
-    }
-
-    // unit::union: Sequential | Parallel([a, b]) — Sequential вставляется в начало Parallel.
-    // Ожидаем Parallel из трёх элементов: [Sequential, a, b].
-    #[test]
-    fn test_union_sequential_with_parallel() {
-        let result = sequential(vec![node()]).union(&parallel(vec![node(), node()]));
-        assert!(matches!(result, Unit::Parallel { .. }));
-        assert_eq!(len(&result), 3);
-    }
-
-    // ── add ──────────────────────────────────────────────────────────────────
-
-    // unit::add: нейтральный элемент — None + X == X.
-    // Создаём None.add(node) и проверяем, что результат — сам Node.
-    #[test]
-    fn test_add_none_with_node() {
-        let result = Unit::None.add(&node());
-        assert!(matches!(result, Unit::Node { .. }));
-    }
-
-    // unit::add: два Node формируют Sequential из двух элементов.
-    // Проверяем вариант результата и количество дочерних.
-    #[test]
-    fn test_add_node_with_node() {
-        let result = node().add(&node());
-        assert!(matches!(result, Unit::Sequential { .. }));
-        assert_eq!(len(&result), 2);
-    }
-
-    // unit::add: Node + Sequential([a, b]) — выравнивание: Node вставляется в начало,
-    // результат Sequential([Node, a, b]) из трёх элементов, без вложенности.
-    #[test]
-    fn test_add_node_with_sequential() {
-        let result = node().add(&sequential(vec![node(), node()]));
-        assert!(matches!(result, Unit::Sequential { .. }));
-        assert_eq!(len(&result), 3);
-    }
-
-    // unit::add: Sequential([a]) + Sequential([b, c]) — конкатенация списков units.
-    // Результат Sequential([a, b, c]) из трёх элементов.
-    #[test]
-    fn test_add_sequential_with_sequential() {
-        let result = sequential(vec![node()]).add(&sequential(vec![node(), node()]));
-        assert!(matches!(result, Unit::Sequential { .. }));
-        assert_eq!(len(&result), 3);
-    }
-
-    // unit::add: Parallel + Node — Parallel не выравнивается, оборачивается целиком.
-    // Результат Sequential([Parallel, Node]) из двух элементов.
-    #[test]
-    fn test_add_parallel_with_node() {
-        let result = parallel(vec![node(), node()]).add(&node());
-        assert!(matches!(result, Unit::Sequential { .. }));
-        assert_eq!(len(&result), 2);
-    }
-
-    // ── Context ──────────────────────────────────────────────────────────────
-
-    // get_value: Unit::None не содержит переменных — всегда возвращает None.
-    #[test]
-    fn test_context_none_returns_none() {
-        assert!(Unit::None.get_value("x").is_none());
-    }
-
-    // get_value: Node без внешнего контекста и без variables — возвращает None.
-    #[test]
-    fn test_context_node_without_ctx_returns_none() {
-        assert!(node().get_value("x").is_none());
-    }
-
-    // get_value: Node с внешним контекстом, содержащим переменную "x".
-    // Проверяем, что значение корректно делегируется из context.
-    #[test]
-    fn test_context_node_with_ctx_returns_value() {
-        let u = node_with("x", Value::Number(42));
-        assert!(matches!(u.get_value("x"), Some(Value::Number(42))));
-    }
-
-    // get_value: контрпример — запрашиваем ключ "y", в контексте есть только "x".
-    // Проверяем, что чужой ключ не возвращается.
-    #[test]
-    fn test_context_node_wrong_key_returns_none() {
-        let u = node_with("x", Value::Number(1));
-        assert!(u.get_value("y").is_none());
-    }
-
-    // get_value: Parallel ищет переменную во всех дочерних узлах.
-    // Переменная "a" есть только у первого ребёнка — проверяем, что она находится.
-    #[test]
-    fn test_context_parallel_finds_in_children() {
-        let u = parallel(vec![node_with("a", Value::Boolean(true)), node()]);
-        assert!(matches!(u.get_value("a"), Some(Value::Boolean(true))));
-    }
-
-    // get_value: контрпример для Parallel — запрашиваем ключ "b", которого нет ни у кого.
-    #[test]
-    fn test_context_parallel_missing_returns_none() {
-        let u = parallel(vec![node_with("a", Value::Number(1))]);
-        assert!(u.get_value("b").is_none());
-    }
-
-    // get_value: Sequential предоставляет контекст только активного (index=0) дочернего узла.
-    // Переменная "b" из узла index=1 недоступна, пока index не продвинут.
-    #[test]
-    fn test_context_sequential_reads_active_index() {
-        let u = sequential(vec![
-            node_with("a", Value::Number(10)),
-            node_with("b", Value::Number(20)),
-        ]);
-        assert!(matches!(u.get_value("a"), Some(Value::Number(10))));
-        assert!(u.get_value("b").is_none());
-    }
-
-    // ── is_terminal ──────────────────────────────────────────────────────────
-
-    // is_terminal: Unit::None считается терминальным — это нейтральный пустой элемент.
-    #[test]
-    fn test_is_terminal_none() {
-        assert!(Unit::None.is_terminal());
-    }
-
-    // is_terminal: Node с state: None и без переходов считается терминальным
-    // (нет активного состояния + нет возможных переходов → выполнение завершено).
-    #[test]
-    fn test_is_terminal_node() {
-        assert!(node().is_terminal());
-    }
-
-    // is_terminal: Parallel терминален только если все дочерние терминальны.
-    // Оба ребёнка (node() и None) терминальны — ожидаем true.
-    #[test]
-    fn test_is_terminal_parallel_all_terminal() {
-        assert!(parallel(vec![node(), Unit::None]).is_terminal());
-    }
-
-    // is_terminal: Sequential терминален только если все дочерние терминальны.
-    // Оба node() терминальны — ожидаем true.
-    #[test]
-    fn test_is_terminal_sequential_all_terminal() {
-        assert!(sequential(vec![node(), node()]).is_terminal());
-    }
-
-    // ── tick: вспомогательные конструкторы ───────────────────────────────────
-
-    /// Узел в именованном терминальном состоянии (нет исходящих переходов).
-    fn node_terminal(name: &str) -> Unit {
-        let mut st = HashMap::new();
-        st.insert(name.to_string(), vec![]);
-        Unit::Node {
-            context: None,
+            state_nexts: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![],
+            enters: vec![exec],
+            exits: vec![],
             variables: HashMap::new(),
-            executions: HashMap::new(),
-            state: Some(name.to_string()),
-            state_transitions: st,
-            state_executions: HashMap::new(),
-        }
+        };
+        m.enter();
+        assert_eq!(count.get(), 1);
     }
 
-    /// Узел в состоянии `from` с одним переходом в `to`; предикат всегда `cond`.
-    fn node_with_transition(from: &str, to: &str, cond: bool) -> Unit {
-        let pred: Predicate = Rc::new(move |_| cond);
-        let mut st = HashMap::new();
-        st.insert(from.to_string(), vec![(to.to_string(), pred)]);
-        st.insert(to.to_string(), vec![]);
-        Unit::Node {
-            context: None,
+    #[test]
+    fn test_leaf_exit_calls_exits() {
+        let (count, exec) = call_counter();
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![exec],
             variables: HashMap::new(),
-            executions: HashMap::new(),
-            state: Some(from.to_string()),
-            state_transitions: st,
-            state_executions: HashMap::new(),
+        };
+        m.exit();
+        assert_eq!(count.get(), 1);
+    }
+
+    #[test]
+    fn test_leaf_enter_exit_empty_do_not_panic() {
+        let mut m = leaf();
+        m.enter();
+        m.exit();
+    }
+
+    #[test]
+    fn test_leaf_always_called_on_tick() {
+        // У листового Plain always вызывается при каждом tick (до проверки states.is_empty)
+        let (count, exec) = call_counter();
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![exec],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        m.tick().unwrap();
+        m.tick().unwrap();
+        assert_eq!(count.get(), 2);
+    }
+
+    // ── Unit::Plain: конечное состояние ──────────────────────────────────────
+
+    #[test]
+    fn test_plain_missing_current_state_returns_final() {
+        // states непуст, но current не совпадает ни с одним ключом → Final
+        let mut states = HashMap::new();
+        states.insert("B".to_string(), RefCell::new(leaf()));
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states,
+            current: "A".to_string(), // нет в states
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        assert!(matches!(m.tick().unwrap(), Transition::Final));
+    }
+
+    // ── Unit::Plain: always выполняется каждый тик ────────────────────────────
+
+    #[test]
+    fn test_plain_always_called_each_tick() {
+        let (count, exec) = call_counter();
+        let mut states = HashMap::new();
+        states.insert("S".to_string(), RefCell::new(leaf()));
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states,
+            current: "S".to_string(),
+            always: vec![exec],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        m.tick().unwrap();
+        m.tick().unwrap();
+        assert_eq!(count.get(), 2);
+    }
+
+    // ── Unit::Plain: дочерний leaf (Goto) ─────────────────────────────────────
+
+    #[test]
+    fn test_plain_child_goto_no_transitions_returns_goto() {
+        let mut m = plain_with_leaf("S", vec![]);
+        assert!(matches!(m.tick().unwrap(), Transition::Goto));
+    }
+
+    #[test]
+    fn test_plain_child_goto_false_predicate_returns_goto() {
+        let mut m = plain_with_leaf("S", vec![("T".to_string(), always_false())]);
+        assert!(matches!(m.tick().unwrap(), Transition::Goto));
+    }
+
+    // ── Unit::Plain: срабатывание перехода ───────────────────────────────────
+
+    #[test]
+    fn test_plain_transition_fires_returns_processing() {
+        let mut m = plain_with_leaf("S", vec![("T".to_string(), always_true())]);
+        if let Unit::Plain { states, .. } = &mut m {
+            states.insert("T".to_string(), RefCell::new(leaf()));
+        }
+        assert!(matches!(m.tick().unwrap(), Transition::Processing));
+    }
+
+    #[test]
+    fn test_plain_transition_fires_updates_current() {
+        let mut m = plain_with_leaf("S", vec![("T".to_string(), always_true())]);
+        if let Unit::Plain { states, .. } = &mut m {
+            states.insert("T".to_string(), RefCell::new(leaf()));
+        }
+        m.tick().unwrap();
+        if let Unit::Plain { current, .. } = &m {
+            assert_eq!(current, "T");
+        } else {
+            panic!("ожидался Unit::Plain");
         }
     }
 
-    fn current_state(u: &Unit) -> Option<&str> {
-        match u {
-            Unit::Node { state, .. } => state.as_deref(),
-            _ => None,
+    #[test]
+    fn test_plain_transition_skips_false_takes_first_true() {
+        let transitions = vec![
+            ("T".to_string(), always_false()),
+            ("U".to_string(), always_true()),
+        ];
+        let mut m = plain_with_leaf("S", transitions);
+        if let Unit::Plain { states, .. } = &mut m {
+            states.insert("T".to_string(), RefCell::new(leaf()));
+            states.insert("U".to_string(), RefCell::new(leaf()));
+        }
+        m.tick().unwrap();
+        if let Unit::Plain { current, .. } = &m {
+            assert_eq!(current, "U");
+        } else {
+            panic!("ожидался Unit::Plain");
         }
     }
 
-    // ── tick: Unit::None ─────────────────────────────────────────────────────
-
-    // tick: Unit::None всегда возвращает Terminated — пустой узел не имеет работы.
     #[test]
-    fn test_tick_none_is_terminated() {
-        assert_eq!(Unit::None.tick(), TickResult::Terminated);
+    fn test_plain_transition_target_missing_returns_error() {
+        let mut m = plain_with_leaf("S", vec![("MISSING".to_string(), always_true())]);
+        assert!(m.tick().is_err());
     }
 
-    // ── tick: Unit::Node ─────────────────────────────────────────────────────
+    // ── exits/enters при переходе ─────────────────────────────────────────────
 
-    // tick/Node: узел без активного состояния (state: None) считается завершённым.
-    // Вызываем tick() и ожидаем Terminated — нет состояния, нечего выполнять.
     #[test]
-    fn test_tick_node_no_state_is_terminated() {
-        assert_eq!(node().tick(), TickResult::Terminated);
-    }
+    fn test_plain_transition_calls_exit_then_enter() {
+        let (exit_count, exit_exec) = call_counter();
+        let (enter_count, enter_exec) = call_counter();
 
-    // tick/Node: узел в терминальном состоянии (переходов нет) возвращает Terminated.
-    // Создаём узел в состоянии "S" без исходящих переходов и вызываем tick().
-    #[test]
-    fn test_tick_node_terminal_state_is_terminated() {
-        let mut u = node_terminal("S");
-        assert_eq!(u.tick(), TickResult::Terminated);
-    }
-
-    // tick/Node: при срабатывании перехода возвращается Processing (работа продолжается).
-    // Узел A→B с предикатом true: после tick() ещё не завершён — в B ещё не были.
-    #[test]
-    fn test_tick_node_active_transition_returns_processing() {
-        let mut u = node_with_transition("A", "B", true);
-        assert_eq!(u.tick(), TickResult::Processing);
-    }
-
-    // tick/Node: срабатывание перехода обновляет поле state.
-    // После tick() состояние должно смениться с "A" на "B".
-    #[test]
-    fn test_tick_node_active_transition_updates_state() {
-        let mut u = node_with_transition("A", "B", true);
-        u.tick();
-        assert_eq!(current_state(&u), Some("B"));
-    }
-
-    // tick/Node: если предикат не выполнен, состояние не меняется.
-    // Контрпример: узел A→B с предикатом false — после tick() остаётся в "A".
-    #[test]
-    fn test_tick_node_inactive_predicate_stays_in_same_state() {
-        let mut u = node_with_transition("A", "B", false);
-        u.tick();
-        assert_eq!(current_state(&u), Some("A"));
-    }
-
-    // tick/Node: если предикат не выполнен, tick() возвращает Processing.
-    // Узел остаётся в активном состоянии с незавершёнными переходами.
-    #[test]
-    fn test_tick_node_inactive_predicate_returns_processing() {
-        let mut u = node_with_transition("A", "B", false);
-        assert_eq!(u.tick(), TickResult::Processing);
-    }
-
-    // tick/Node: детерминизм — при нескольких срабатывающих переходах берётся только первый.
-    // Из состояния "A" есть переходы A→B и A→C, оба с предикатом true.
-    // После tick() состояние должно быть "B" (первый по порядку), а не "C".
-    #[test]
-    fn test_tick_node_only_first_matching_transition_taken() {
-        let pred: Predicate = Rc::new(|_| true);
-        let mut st = HashMap::new();
-        st.insert(
-            "A".to_string(),
-            vec![
-                ("B".to_string(), pred.clone()),
-                ("C".to_string(), pred.clone()),
-            ],
+        let mut states: HashMap<String, RefCell<Unit>> = HashMap::new();
+        states.insert(
+            "S".to_string(),
+            RefCell::new(Unit::Plain {
+                upper: None,
+                transitions: vec![],
+                state_transitions: HashMap::new(),
+                state_nexts: HashMap::new(),
+                states: HashMap::new(),
+                current: String::new(),
+                always: vec![],
+                enters: vec![],
+                exits: vec![exit_exec],
+                variables: HashMap::new(),
+            }),
         );
-        st.insert("B".to_string(), vec![]);
-        st.insert("C".to_string(), vec![]);
-        let mut u = Unit::Node {
-            context: None,
+        states.insert(
+            "T".to_string(),
+            RefCell::new(Unit::Plain {
+                upper: None,
+                transitions: vec![],
+                state_transitions: HashMap::new(),
+                state_nexts: HashMap::new(),
+                states: HashMap::new(),
+                current: String::new(),
+                always: vec![],
+                enters: vec![enter_exec],
+                exits: vec![],
+                variables: HashMap::new(),
+            }),
+        );
+
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![("T".to_string(), always_true())],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states,
+            current: "S".to_string(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
             variables: HashMap::new(),
-            executions: HashMap::new(),
-            state: Some("A".to_string()),
-            state_transitions: st,
-            state_executions: HashMap::new(),
         };
-        u.tick();
-        assert_eq!(current_state(&u), Some("B"));
+
+        m.tick().unwrap();
+        assert_eq!(exit_count.get(), 1, "exit состояния S должен вызваться");
+        assert_eq!(enter_count.get(), 1, "enter состояния T должен вызваться");
     }
 
-    // tick/Node: полный цикл — переход в терминальное состояние и обнаружение завершения.
-    // tick 1: A→B (Processing); tick 2: B терминальный (Terminated).
-    #[test]
-    fn test_tick_node_reaches_terminal_after_transition() {
-        let mut u = node_with_transition("A", "B", true);
-        u.tick();
-        assert_eq!(u.tick(), TickResult::Terminated);
-    }
+    // ── Unit::Plain: дочерний Final не запускает переходы ────────────────────
 
-    // ── tick: Unit::Parallel ─────────────────────────────────────────────────
-
-    // tick/Parallel: все дочерние терминальны — Parallel возвращает Terminated.
-    // node() (state: None) и Unit::None оба терминальны.
     #[test]
-    fn test_tick_parallel_all_terminated() {
-        let mut u = parallel(vec![node(), Unit::None]);
-        assert_eq!(u.tick(), TickResult::Terminated);
-    }
-
-    // tick/Parallel: хотя бы один дочерний не завершён — Parallel возвращает Processing.
-    // Unit::None терминален, но второй узел ещё в процессе перехода.
-    #[test]
-    fn test_tick_parallel_one_active_returns_processing() {
-        let mut u = parallel(vec![Unit::None, node_with_transition("A", "B", true)]);
-        assert_eq!(u.tick(), TickResult::Processing);
-    }
-
-    // tick/Parallel: все дочерние тикаются за один вызов, без раннего прерывания.
-    // Оба узла должны совершить переход за один tick(), даже если первый уже «готов».
-    // Проверяем состояния обоих дочерних после одного tick().
-    #[test]
-    fn test_tick_parallel_all_units_are_ticked() {
-        let mut u = parallel(vec![
-            node_with_transition("A", "B", true),
-            node_with_transition("X", "Y", true),
-        ]);
-        u.tick();
-        let Unit::Parallel { units, .. } = &u else {
-            panic!("ожидался Parallel")
+    fn test_plain_child_final_propagates_without_checking_transitions() {
+        // Внутренний Plain с непустым states, но current не найден → Final
+        let mut inner_states = HashMap::new();
+        inner_states.insert("X".to_string(), RefCell::new(leaf()));
+        let inner = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: inner_states,
+            current: "MISSING".to_string(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
         };
-        assert_eq!(current_state(&units[0].borrow()), Some("B"));
-        assert_eq!(current_state(&units[1].borrow()), Some("Y"));
+        let mut states = HashMap::new();
+        states.insert("S".to_string(), RefCell::new(inner));
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![("T".to_string(), always_true())],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states,
+            current: "S".to_string(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        assert!(matches!(m.tick().unwrap(), Transition::Final));
     }
 
-    // ── tick: Unit::Sequential ───────────────────────────────────────────────
+    // ── Unit::Plain: Processing от дочернего ─────────────────────────────────
 
-    // tick/Sequential: пустой список дочерних — сразу Terminated.
     #[test]
-    fn test_tick_sequential_empty_is_terminated() {
-        let mut u = sequential(vec![]);
-        assert_eq!(u.tick(), TickResult::Terminated);
+    fn test_plain_child_processing_propagates() {
+        let mut inner_states = HashMap::new();
+        inner_states.insert("inner_s".to_string(), RefCell::new(leaf()));
+        inner_states.insert("inner_t".to_string(), RefCell::new(leaf()));
+        let inner = Unit::Plain {
+            upper: None,
+            transitions: vec![("inner_t".to_string(), always_true())],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: inner_states,
+            current: "inner_s".to_string(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+
+        let mut outer_states = HashMap::new();
+        outer_states.insert("S".to_string(), RefCell::new(inner));
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: outer_states,
+            current: "S".to_string(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        assert!(matches!(m.tick().unwrap(), Transition::Processing));
     }
 
-    // tick/Sequential: последовательное продвижение через дочерние.
-    // node() с state: None завершается немедленно, поэтому каждый tick продвигает index.
-    // При двух дочерних нужно три тика: два для продвижения index и один для Terminated.
+    // ── Context: доступ к переменным ─────────────────────────────────────────
+
     #[test]
-    fn test_tick_sequential_advances_through_children() {
-        let mut u = sequential(vec![node(), node()]);
-        assert_eq!(u.tick(), TickResult::Processing); // child[0] завершился → index 0→1
-        assert_eq!(u.tick(), TickResult::Processing); // child[1] завершился → index 1→2
-        assert_eq!(u.tick(), TickResult::Terminated); // index ≥ len
+    fn test_plain_get_value_returns_variable() {
+        let mut vars = HashMap::new();
+        vars.insert("x".to_string(), Value::Number(42));
+        let m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: vars,
+        };
+        assert!(matches!(m.get_value("x"), Some(Value::Number(42))));
     }
 
-    // tick/Sequential: ожидание активного дочернего перед продвижением к следующему.
-    // Первый ребёнок проходит A→B (два тика), затем завершается; второй завершается сразу.
-    // Итого четыре тика до Terminated Sequential.
     #[test]
-    fn test_tick_sequential_waits_for_child() {
-        let mut u = sequential(vec![node_with_transition("A", "B", true), node()]);
-        assert_eq!(u.tick(), TickResult::Processing); // child[0]: A→B, Processing
-        assert_eq!(u.tick(), TickResult::Processing); // child[0]: B терминальный → index 0→1
-        assert_eq!(u.tick(), TickResult::Processing); // child[1]: Terminated → index 1→2
-        assert_eq!(u.tick(), TickResult::Terminated); // index ≥ len
+    fn test_get_value_missing_returns_none() {
+        let m = leaf();
+        assert!(m.get_value("unknown").is_none());
+    }
+
+    // ── Предикат читает переменную через Context ──────────────────────────────
+
+    #[test]
+    fn test_transition_predicate_reads_variable() {
+        let pred: Predicate =
+            Rc::new(|ctx: &dyn Context| matches!(ctx.get_value("ready"), Some(Value::Number(1))));
+
+        let mut vars = HashMap::new();
+        vars.insert("ready".to_string(), Value::Number(1));
+
+        let mut states = HashMap::new();
+        states.insert("S".to_string(), RefCell::new(leaf()));
+        states.insert("T".to_string(), RefCell::new(leaf()));
+
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![("T".to_string(), pred)],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states,
+            current: "S".to_string(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: vars,
+        };
+
+        m.tick().unwrap();
+        if let Unit::Plain { current, .. } = &m {
+            assert_eq!(current, "T");
+        } else {
+            panic!("ожидался Unit::Plain");
+        }
+    }
+
+    // ── enter/exit не паникуют ────────────────────────────────────────────────
+
+    #[test]
+    fn test_plain_enter_exit_do_not_panic() {
+        let mut m = plain_with_leaf("S", vec![]);
+        m.enter();
+        m.exit();
+    }
+
+    // ── Context: делегирование к родителю через upper ────────────────────────
+
+    #[test]
+    fn test_get_value_delegates_to_upper() {
+        let mut parent_vars = HashMap::new();
+        parent_vars.insert("x".to_string(), Value::Number(99));
+        let parent = Rc::new(RefCell::new(Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: parent_vars,
+        }));
+        let child = Unit::Plain {
+            upper: Some(parent),
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        assert!(matches!(child.get_value("x"), Some(Value::Number(99))));
+    }
+
+    #[test]
+    fn test_get_value_local_shadows_upper() {
+        let mut parent_vars = HashMap::new();
+        parent_vars.insert("x".to_string(), Value::Number(1));
+        let parent = Rc::new(RefCell::new(Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: parent_vars,
+        }));
+        let mut child_vars = HashMap::new();
+        child_vars.insert("x".to_string(), Value::Number(42));
+        let child = Unit::Plain {
+            upper: Some(parent),
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![],
+            variables: child_vars,
+        };
+        assert!(matches!(child.get_value("x"), Some(Value::Number(42))));
+    }
+
+    // ── Множественные enters/exits/always ─────────────────────────────────────
+
+    #[test]
+    fn test_plain_multiple_enters_all_called() {
+        let (c1, e1) = call_counter();
+        let (c2, e2) = call_counter();
+        let (c3, e3) = call_counter();
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![],
+            enters: vec![e1, e2, e3],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        m.enter();
+        assert_eq!(c1.get(), 1);
+        assert_eq!(c2.get(), 1);
+        assert_eq!(c3.get(), 1);
+    }
+
+    #[test]
+    fn test_plain_multiple_exits_all_called() {
+        let (c1, e1) = call_counter();
+        let (c2, e2) = call_counter();
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states: HashMap::new(),
+            current: String::new(),
+            always: vec![],
+            enters: vec![],
+            exits: vec![e1, e2],
+            variables: HashMap::new(),
+        };
+        m.exit();
+        assert_eq!(c1.get(), 1);
+        assert_eq!(c2.get(), 1);
+    }
+
+    #[test]
+    fn test_plain_multiple_always_all_called_each_tick() {
+        let (c1, e1) = call_counter();
+        let (c2, e2) = call_counter();
+        let mut states = HashMap::new();
+        states.insert("S".to_string(), RefCell::new(leaf()));
+        let mut m = Unit::Plain {
+            upper: None,
+            transitions: vec![],
+            state_transitions: HashMap::new(),
+            state_nexts: HashMap::new(),
+            states,
+            current: "S".to_string(),
+            always: vec![e1, e2],
+            enters: vec![],
+            exits: vec![],
+            variables: HashMap::new(),
+        };
+        m.tick().unwrap();
+        m.tick().unwrap();
+        assert_eq!(c1.get(), 2);
+        assert_eq!(c2.get(), 2);
+    }
+
+    // ── from_model: построение из семантической модели ───────────────────────
+
+    use grammar::parse;
+    use grammar::semantic::tree::construct_model;
+
+    /// Двусостояниная FSM: A → B (безусловный переход).
+    #[test]
+    fn test_from_model_two_state_fsm() {
+        let src = "start A { ref B; } state B;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        let Unit::Plain { current, .. } = &unit else {
+            panic!("ожидался Unit::Plain");
+        };
+        assert_eq!(current, "A");
+
+        let result = unit.tick().unwrap();
+        assert!(matches!(result, Transition::Processing));
+        let Unit::Plain { current, .. } = &unit else {
+            panic!("ожидался Unit::Plain");
+        };
+        assert_eq!(current, "B");
+    }
+
+    /// Конечное состояние B: tick() из B возвращает Goto (нет переходов).
+    #[test]
+    fn test_from_model_final_state_returns_goto() {
+        let src = "start A { ref B; } state B;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        unit.tick().unwrap(); // A → B
+        let result = unit.tick().unwrap();
+        assert!(matches!(result, Transition::Goto));
+    }
+
+    /// Последовательная композиция A + B → Unit::Sequence.
+    #[test]
+    fn test_from_model_concatenation_builds_sequence() {
+        let src = "model A { start S; } model B { start S; } start Entry = A + B;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let root = model.borrow();
+        let entry_state = root.search_state("Entry").unwrap();
+        let state_node = entry_state.borrow();
+        if let StateNode::Implement { implements, .. } = &*state_node {
+            let unit = from_extend(implements, None).unwrap();
+            assert!(matches!(unit, Unit::Sequence { .. }));
+        } else {
+            panic!("Entry должен быть StateNode::Implement");
+        }
+    }
+
+    /// Параллельная композиция A | B → Unit::Parallel.
+    #[test]
+    fn test_from_model_parallel_builds_parallel() {
+        let src = "model A { start S; } model B { start S; } start Entry = A | B;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let root = model.borrow();
+        let entry_state = root.search_state("Entry").unwrap();
+        let state_node = entry_state.borrow();
+        if let StateNode::Implement { implements, .. } = &*state_node {
+            let unit = from_extend(implements, None).unwrap();
+            assert!(matches!(unit, Unit::Parallel { .. }));
+        } else {
+            panic!("Entry должен быть StateNode::Implement");
+        }
+    }
+
+    /// Копии при повторном использовании: A + A → два независимых Unit.
+    #[test]
+    fn test_from_model_copies_are_independent() {
+        let src = "model A { start S; } start Entry = A + A;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let root = model.borrow();
+        let entry_state = root.search_state("Entry").unwrap();
+        let state_node = entry_state.borrow();
+        if let StateNode::Implement { implements, .. } = &*state_node {
+            let unit = from_extend(implements, None).unwrap();
+            let Unit::Sequence { units, .. } = &unit else {
+                panic!("ожидался Unit::Sequence");
+            };
+            assert_eq!(units.len(), 2);
+            assert!(!Rc::ptr_eq(&units[0], &units[1]));
+        } else {
+            panic!("Entry должен быть StateNode::Implement");
+        }
+    }
+
+    /// state_transitions обновляются при смене состояния.
+    #[test]
+    fn test_state_transitions_updated_on_change() {
+        let src = "start A { ref B; } state B { ref C; } state C;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        unit.tick().unwrap(); // A → B
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
+        assert_eq!(current, "B");
+
+        unit.tick().unwrap(); // B → C
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
+        assert_eq!(current, "C");
+
+        assert!(matches!(unit.tick().unwrap(), Transition::Goto));
+    }
+
+    // ── next-переход: безусловный переход после завершения расширения ─────────
+
+    /// Простейший next: состояние с одной моделью переходит в End.
+    #[test]
+    fn test_next_after_single_model() {
+        // S = A { next End; } — после завершения A переходим в End
+        let src = "model A { start Start; } start S = A { next End; } state End;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        let Unit::Plain { current, .. } = &unit else {
+            panic!("ожидался Unit::Plain")
+        };
+        assert_eq!(current, "S");
+
+        // tick: A (листовой) → Goto → next срабатывает → переходим в End
+        let result = unit.tick().unwrap();
+        assert!(
+            matches!(result, Transition::Processing),
+            "ожидался Processing после next-перехода"
+        );
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
+        assert_eq!(current, "End");
+    }
+
+    /// Последовательная композиция с next: S = A + B { next End; }.
+    #[test]
+    fn test_next_after_sequence() {
+        let src = "model A { start Start; } model B { start Start; } start S = A + B { next End; } state End;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
+        assert_eq!(current, "S");
+
+        // tick 1: A листовой → Goto → Sequence переходит к B → Processing
+        unit.tick().unwrap();
+
+        // tick 2: B листовой → Goto → Sequence исчерпан → Final → next → End
+        let result = unit.tick().unwrap();
+        assert!(matches!(result, Transition::Processing));
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
+        assert_eq!(current, "End");
+    }
+
+    /// Параллельная композиция с next: S = A | B { next End; }.
+    #[test]
+    fn test_next_after_parallel() {
+        let src = "model A { start Start; } model B { start Start; } start S = A | B { next End; } state End;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        // tick: оба листовых завершаются → Parallel Final → next → End
+        let result = unit.tick().unwrap();
+        assert!(matches!(result, Transition::Processing));
+        let Unit::Plain { current, .. } = &unit else {
+            panic!()
+        };
+        assert_eq!(current, "End");
+    }
+
+    /// После перехода в End tick() из листового End возвращает Goto.
+    #[test]
+    fn test_next_target_is_leaf_returns_goto() {
+        let src = "model A { start Start; } start S = A { next End; } state End;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        unit.tick().unwrap(); // S → End через next
+        let result = unit.tick().unwrap(); // End листовой
+        assert!(matches!(result, Transition::Goto));
+    }
+
+    /// Без next: конечный внутренний Final пробрасывается наружу.
+    #[test]
+    fn test_no_next_final_propagates() {
+        let src = "model A { start Start; } start S = A;";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = from_model(model).unwrap();
+
+        // S не имеет next; A листовой → Goto → нет переходов → Goto (S единственное, нет FSM-переходов)
+        let result = unit.tick().unwrap();
+        assert!(
+            matches!(result, Transition::Goto | Transition::Final),
+            "ожидался Goto или Final, получен {:?}",
+            result
+        );
     }
 }
