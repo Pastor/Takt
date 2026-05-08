@@ -23,16 +23,6 @@ fn condition_label(cond: &ConditionNode) -> String {
     }
 }
 
-pub fn test(cond: &ConditionNode, context: &dyn Context) -> Result<bool, Diagnostic> {
-    match flat(cond, context)? {
-        ConditionNode::Bool(b) => Ok(b),
-        _ => Err(Diagnostic::error(
-            Location::Builtin,
-            "Invalid condition".to_string(),
-        )),
-    }
-}
-
 fn flat(cond: &ConditionNode, context: &dyn Context) -> Result<ConditionNode, Diagnostic> {
     match cond {
         ConditionNode::None => Ok(ConditionNode::None),

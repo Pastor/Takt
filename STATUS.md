@@ -15,6 +15,8 @@
 | 10 | `match`/`switch` — полная реализация (лексер, грамматика, AST, семантика, C-генератор) | `lexer.rs`, `grammar.lalrpop`, `ast.rs`, `semantic/mod.rs`, `statement.rs`, `c_expr.rs` | ✅ |
 | 18 | SE-047: анализ константных условий переходов | `validate.rs`, `lib.rs` | ✅ |
 
+| TASKS.md §1 | builder.rs: построение дерева Unit + ModelNodeContext с иерархическим контекстом (Rc&lt;RefCell&lt;ModelNode&gt;&gt;, lazy copy, parent chain) | `simulation/src/unit/builder.rs` | ✅ (118 тестов simulation, 1302 workspace) |
+
 ## Пропущенные задачи (высокий риск)
 
 - 11: Адрес порта отдельно от объявления — архитектурное изменение, поломка существующих `.lam` файлов
