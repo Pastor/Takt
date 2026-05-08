@@ -52,10 +52,10 @@ impl SimulationRunner {
         port_names: PortNames,
     ) -> Self {
         let (gif_recorder, gif_frame_size) = if let Some(gif_path) = gif_output {
-            use crate::unit::viewport::LEGEND_WIDTH;
+            use crate::unit::viewport::{LEGEND_WIDTH, SYMBOL_LEGEND_WIDTH};
             let cfg = Configuration::default();
-            // GIF-холст должен включать панель легенды (capture_frame всегда её передаёт).
-            let size = ((cfg.width + LEGEND_WIDTH) as u32, cfg.height as u32);
+            // GIF-холст: граф + легенда символов (Sn/Pn) + легенда портов.
+            let size = ((cfg.width + SYMBOL_LEGEND_WIDTH + LEGEND_WIDTH) as u32, cfg.height as u32);
             let recorder = GifRecorder::new(gif_path, 50);
             (Some(recorder), Some(size))
         } else {

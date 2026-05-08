@@ -93,9 +93,17 @@ impl Viewport {
 /// Раскладка (positions) зависит только от структуры модели и не меняется
 /// в ходе симуляции, поэтому её достаточно вычислить один раз.
 pub(crate) struct CachedLayout {
+    /// Полные имена состояний — используются для сопоставления с active_states.
     pub(crate) node_labels: Vec<String>,
+    /// Краткие псевдонимы состояний S1..Sn — отображаются в кружках графа.
+    pub(crate) node_aliases: Vec<String>,
+    /// Рёбра с краткими метками P1..Pm.
     pub(crate) edges_vec: Vec<(usize, usize, String)>,
     pub(crate) positions: Positions,
+    /// Легенда состояний: (псевдоним, полное имя).
+    pub(crate) state_legend: Vec<(String, String)>,
+    /// Легенда переходов: (псевдоним, полное имя предиката).
+    pub(crate) pred_legend: Vec<(String, String)>,
 }
 
 /// Вычисляет раскладку графа для `unit`.
@@ -104,8 +112,36 @@ pub(crate) struct CachedLayout {
 /// затем передавать результат в [`render_from_layout`] для каждого кадра.
 pub(crate) fn compute_layout(unit: &Unit, cfg: &Configuration) -> CachedLayout {
     let g = graph::unit_to_graph(unit);
-    let (node_labels, edges_vec, positions) = graph::calculate_graph(g, cfg);
-    CachedLayout { node_labels, edges_vec, positions }
+    let (node_labels, edges_vec_orig, positions) = graph::calculate_graph(g, cfg);
+
+    // Псевдонимы состояний S1..Sn в порядке node_labels
+    let node_aliases: Vec<String> = (1..=node_labels.len()).map(|i| format!("S{i}")).collect();
+    let state_legend: Vec<(String, String)> = node_aliases
+        .iter()
+        .zip(node_labels.iter())
+        .map(|(a, n)| (a.clone(), n.clone()))
+        .collect();
+
+    // Псевдонимы предикатов P1..Pm — уникальные метки в порядке первого появления
+    let mut pred_order: Vec<String> = Vec::new();
+    let mut pred_map: std::collections::HashMap<String, String> = Default::default();
+    for (_, _, label) in &edges_vec_orig {
+        if !pred_map.contains_key(label) {
+            let alias = format!("P{}", pred_order.len() + 1);
+            pred_map.insert(label.clone(), alias);
+            pred_order.push(label.clone());
+        }
+    }
+    let pred_legend: Vec<(String, String)> =
+        pred_order.iter().map(|full| (pred_map[full].clone(), full.clone())).collect();
+
+    // Заменяем метки рёбер на псевдонимы
+    let edges_vec: Vec<(usize, usize, String)> = edges_vec_orig
+        .into_iter()
+        .map(|(u, v, label)| (u, v, pred_map[&label].clone()))
+        .collect();
+
+    CachedLayout { node_labels, node_aliases, edges_vec, positions, state_legend, pred_legend }
 }
 
 /// Отрисовывает кадр из заранее вычисленной раскладки.
@@ -120,12 +156,15 @@ pub(crate) fn render_from_layout(
     match cfg.format {
         Format::SVG => {
             let document = create_svg(
-                layout.node_labels.clone(),
+                &layout.node_labels,
+                &layout.node_aliases,
                 &layout.edges_vec,
                 &layout.positions,
                 cfg,
                 active_states,
                 legend,
+                &layout.state_legend,
+                &layout.pred_legend,
             );
             Ok(Viewport::SVG(document))
         }
@@ -197,20 +236,23 @@ fn rects_intersection_area(
 /// - `positions` — координаты центров узлов, соответствующие `node_labels`.
 /// - `cfg` — конфигурация с размерами холста и параметрами отрисовки.
 pub(crate) const LEGEND_WIDTH: f64 = 190.0;
+pub(crate) const SYMBOL_LEGEND_WIDTH: f64 = 250.0;
 
+#[allow(clippy::too_many_arguments)]
 fn create_svg(
-    node_labels: Vec<String>,
+    node_labels: &[String],
+    node_aliases: &[String],
     edges_vec: &Vec<(usize, usize, String)>,
     positions: &Positions,
     cfg: &Configuration,
     active_states: &[&str],
     legend: Option<&LegendData>,
+    state_legend: &[(String, String)],
+    pred_legend: &[(String, String)],
 ) -> Document {
-    let total_width = if legend.is_some() {
-        cfg.width + LEGEND_WIDTH
-    } else {
-        cfg.width
-    };
+    let has_symbols = !state_legend.is_empty() || !pred_legend.is_empty();
+    let sym_width = if has_symbols { SYMBOL_LEGEND_WIDTH } else { 0.0 };
+    let total_width = cfg.width + sym_width + if legend.is_some() { LEGEND_WIDTH } else { 0.0 };
     let mut document = Document::new()
         .set("viewBox", (0, 0, total_width, cfg.height))
         .set("xmlns", "http://www.w3.org/2000/svg");
@@ -422,9 +464,10 @@ fn create_svg(
     }
 
     // ── Отрисовка узлов ───────────────────────────────────────────────────────
-    for (i, label) in node_labels.iter().enumerate() {
+    for (i, full_label) in node_labels.iter().enumerate() {
+        let display_label = node_aliases.get(i).unwrap_or(full_label);
         let (cx, cy) = positions[i];
-        let is_active = active_states.contains(&label.as_str());
+        let is_active = active_states.contains(&full_label.as_str());
         let fill = if is_active { "#FFE066" } else { "#cce5ff" };
         let stroke_w = if is_active { 3 } else { 2 };
         document = document.add(
@@ -437,16 +480,76 @@ fn create_svg(
                 .set("stroke-width", stroke_w),
         );
         document = document.add(
-            Text::new(label.clone())
+            Text::new(display_label.clone())
                 .set("x", cx)
                 .set("y", cy)
                 .set("class", "gost-text"),
         );
     }
 
-    // ── Легенда ───────────────────────────────────────────────────────────────
-    if let Some(leg) = legend {
+    // ── Легенда символов (состояния + переходы) ──────────────────────────────
+    if has_symbols {
         let lx = cfg.width + 5.0;
+        let line_h = 13.0;
+        let pad = 5.0;
+        let font_size = "9px";
+
+        let sym_sections: &[(&str, &[(String, String)])] =
+            &[("СОСТОЯНИЯ:", state_legend), ("ПЕРЕХОДЫ:", pred_legend)];
+        let n_lines: usize = sym_sections.iter().map(|(_, v)| v.len() + 1).sum();
+        let box_h = (n_lines as f64 * line_h + 2.0 * pad).min(cfg.height - pad * 2.0);
+
+        document = document.add(
+            Rectangle::new()
+                .set("x", lx)
+                .set("y", pad)
+                .set("width", SYMBOL_LEGEND_WIDTH - 10.0)
+                .set("height", box_h)
+                .set("fill", "#f8f8f8")
+                .set("stroke", "#bbb")
+                .set("stroke-width", 1)
+                .set("rx", 4)
+                .set("ry", 4),
+        );
+
+        let mut y = pad + line_h;
+        for (header, entries) in sym_sections {
+            if y + line_h > cfg.height - pad {
+                break;
+            }
+            document = document.add(
+                Text::new(*header)
+                    .set("x", lx + pad)
+                    .set("y", y)
+                    .set("font-family", "monospace")
+                    .set("font-size", font_size)
+                    .set("font-weight", "bold")
+                    .set("fill", "#555")
+                    .set("dominant-baseline", "middle"),
+            );
+            y += line_h;
+            for (alias, full_name) in *entries {
+                if y + line_h > cfg.height - pad {
+                    break;
+                }
+                let text = format!("{alias} — {full_name}");
+                document = document.add(
+                    Text::new(text)
+                        .set("x", lx + pad)
+                        .set("y", y)
+                        .set("font-family", "monospace")
+                        .set("font-size", font_size)
+                        .set("fill", "#333")
+                        .set("dominant-baseline", "middle"),
+                );
+                y += line_h;
+            }
+        }
+    }
+
+    // ── Легенда портов и переменных ───────────────────────────────────────────
+    if let Some(leg) = legend {
+        let lx = cfg.width + sym_width + 5.0;
         let line_h = 15.0;
         let pad = 5.0;
 
