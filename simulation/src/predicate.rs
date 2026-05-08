@@ -10,7 +10,8 @@ pub(crate) fn create_predicate(cond: &ConditionNode) -> Predicate {
     let cond = cond.clone();
     Predicate::new(name, move |c: &dyn Context| match flat(&cond, c) {
         Ok(ConditionNode::Bool(b)) => b,
-        _ => panic!(),
+        Ok(ConditionNode::Number(n)) => n != 0,
+        Ok(_) | Err(_) => false,
     })
 }
 
@@ -69,7 +70,14 @@ fn flat(cond: &ConditionNode, context: &dyn Context) -> Result<ConditionNode, Di
         ConditionNode::Function(fun, params, _) => {
             unimplemented!()
         }
-        ConditionNode::Not(cond) => Ok(ConditionNode::Not(Box::new(flat(cond, context)?))),
+        ConditionNode::Not(cond) => {
+            let inner = flat(cond, context)?;
+            match inner {
+                ConditionNode::Bool(b) => Ok(ConditionNode::Bool(!b)),
+                ConditionNode::Number(n) => Ok(ConditionNode::Bool(n == 0)),
+                _ => Ok(ConditionNode::Not(Box::new(inner))),
+            }
+        }
         ConditionNode::Add(left, right) => {
             let left = flat(left, context)?;
             let left = extract_number(left)?;
@@ -97,28 +105,24 @@ fn flat(cond: &ConditionNode, context: &dyn Context) -> Result<ConditionNode, Di
         ConditionNode::And(left, right) => {
             let left = flat(left, context)?;
             let right = flat(right, context)?;
-            if let ConditionNode::Bool(left) = left
-                && let ConditionNode::Bool(right) = right
-            {
-                return Ok(ConditionNode::Bool(left && right));
+            match (to_bool(&left), to_bool(&right)) {
+                (Some(l), Some(r)) => Ok(ConditionNode::Bool(l && r)),
+                _ => Err(Diagnostic::error(
+                    Location::Builtin,
+                    "Invalid operand".to_string(),
+                )),
             }
-            Err(Diagnostic::error(
-                Location::Builtin,
-                "Invalid operand".to_string(),
-            ))
         }
         ConditionNode::Or(left, right) => {
             let left = flat(left, context)?;
             let right = flat(right, context)?;
-            if let ConditionNode::Bool(left) = left
-                && let ConditionNode::Bool(right) = right
-            {
-                return Ok(ConditionNode::Bool(left || right));
+            match (to_bool(&left), to_bool(&right)) {
+                (Some(l), Some(r)) => Ok(ConditionNode::Bool(l || r)),
+                _ => Err(Diagnostic::error(
+                    Location::Builtin,
+                    "Invalid operand".to_string(),
+                )),
             }
-            Err(Diagnostic::error(
-                Location::Builtin,
-                "Invalid operand".to_string(),
-            ))
         }
         ConditionNode::Less(left, right) => {
             let left = flat(left, context)?;
@@ -160,8 +164,16 @@ fn flat(cond: &ConditionNode, context: &dyn Context) -> Result<ConditionNode, Di
             }
             Ok(ConditionNode::Bool(left.0.unwrap() >= right.0.unwrap()))
         }
-        ConditionNode::Equal(left, right) => unimplemented!(),
-        ConditionNode::NotEqual(left, right) => unimplemented!(),
+        ConditionNode::Equal(left, right) => {
+            let left = flat(left, context)?;
+            let right = flat(right, context)?;
+            Ok(ConditionNode::Bool(condition_nodes_equal(&left, &right)))
+        }
+        ConditionNode::NotEqual(left, right) => {
+            let left = flat(left, context)?;
+            let right = flat(right, context)?;
+            Ok(ConditionNode::Bool(!condition_nodes_equal(&left, &right)))
+        }
         ConditionNode::Number(n) => Ok(ConditionNode::Number(*n)),
         ConditionNode::Rational(n, neg) => Ok(ConditionNode::Rational(n.clone(), *neg)),
         ConditionNode::String(_) => Err(Diagnostic::error(
@@ -199,6 +211,51 @@ fn flat(cond: &ConditionNode, context: &dyn Context) -> Result<ConditionNode, Di
             Location::Builtin,
             "Enum variant comparison not supported".to_string(),
         )),
+    }
+}
+
+fn condition_nodes_equal(a: &ConditionNode, b: &ConditionNode) -> bool {
+    match (a, b) {
+        (ConditionNode::Bool(x), ConditionNode::Bool(y)) => x == y,
+        (ConditionNode::Number(x), ConditionNode::Number(y)) => x == y,
+        (ConditionNode::Number(x), ConditionNode::Rational(y, neg)) => {
+            let y: f64 = if *neg {
+                -y.parse().unwrap_or(0.0)
+            } else {
+                y.parse().unwrap_or(0.0)
+            };
+            (*x as f64) == y
+        }
+        (ConditionNode::Rational(x, neg_x), ConditionNode::Rational(y, neg_y)) => {
+            let xv: f64 = if *neg_x {
+                -x.parse().unwrap_or(0.0)
+            } else {
+                x.parse().unwrap_or(0.0)
+            };
+            let yv: f64 = if *neg_y {
+                -y.parse().unwrap_or(0.0)
+            } else {
+                y.parse().unwrap_or(0.0)
+            };
+            xv == yv
+        }
+        (ConditionNode::Rational(x, neg), ConditionNode::Number(y)) => {
+            let xv: f64 = if *neg {
+                -x.parse().unwrap_or(0.0)
+            } else {
+                x.parse().unwrap_or(0.0)
+            };
+            xv == (*y as f64)
+        }
+        _ => false,
+    }
+}
+
+fn to_bool(node: &ConditionNode) -> Option<bool> {
+    match node {
+        ConditionNode::Bool(b) => Some(*b),
+        ConditionNode::Number(n) => Some(*n != 0),
+        _ => None,
     }
 }
 

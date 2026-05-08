@@ -10,9 +10,9 @@ use std::path::PathBuf;
 
 /// Упорядоченные имена портов модели (по направлению).
 pub struct PortNames {
-    pub r#in: Vec<String>,
-    pub out: Vec<String>,
-    pub inout: Vec<String>,
+    pub in_ports: Vec<String>,
+    pub out_ports: Vec<String>,
+    pub inout_ports: Vec<String>,
     pub vars: Vec<String>,
 }
 
@@ -135,7 +135,7 @@ impl SimulationRunner {
         if let Some(in_vals) = &step.in_ports {
             for (i, json_val) in in_vals.iter().enumerate() {
                 if let (Some(name), Some(value)) =
-                    (self.port_names.r#in.get(i), json_to_value(json_val))
+                    (self.port_names.in_ports.get(i), json_to_value(json_val))
                 {
                     let name = name.clone();
                     self.unit.set_value(&name, value);
@@ -145,7 +145,7 @@ impl SimulationRunner {
         if let Some(inout_vals) = &step.inout {
             for (i, json_val) in inout_vals.iter().enumerate() {
                 if let (Some(name), Some(value)) =
-                    (self.port_names.inout.get(i), json_to_value(json_val))
+                    (self.port_names.inout_ports.get(i), json_to_value(json_val))
                 {
                     let name = name.clone();
                     self.unit.set_value(&name, value);
@@ -157,7 +157,7 @@ impl SimulationRunner {
     fn check_guard(&self, guard: &Guard, step_no: usize) -> Result<(), String> {
         if let Some(out_vals) = &guard.out {
             for (i, expected_json) in out_vals.iter().enumerate() {
-                let Some(name) = self.port_names.out.get(i) else {
+                let Some(name) = self.port_names.out_ports.get(i) else {
                     continue;
                 };
                 let Some(expected) = json_to_value(expected_json) else {
@@ -174,7 +174,7 @@ impl SimulationRunner {
         }
         if let Some(inout_vals) = &guard.inout {
             for (i, expected_json) in inout_vals.iter().enumerate() {
-                let Some(name) = self.port_names.inout.get(i) else {
+                let Some(name) = self.port_names.inout_ports.get(i) else {
                     continue;
                 };
                 let Some(expected) = json_to_value(expected_json) else {
@@ -271,9 +271,9 @@ fn build_legend(unit: &Unit, port_names: &PortNames) -> LegendData {
             .collect()
     };
     LegendData {
-        in_ports: to_entries(&port_names.r#in),
-        out_ports: to_entries(&port_names.out),
-        inout_ports: to_entries(&port_names.inout),
+        in_ports: to_entries(&port_names.in_ports),
+        out_ports: to_entries(&port_names.out_ports),
+        inout_ports: to_entries(&port_names.inout_ports),
         vars: to_entries(&port_names.vars),
     }
 }

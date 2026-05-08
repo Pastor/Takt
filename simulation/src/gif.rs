@@ -32,7 +32,12 @@ impl GifRecorder {
     }
 
     /// Добавляет кадр из SVG-документа Viewport.
-    pub(crate) fn add_frame(&mut self, viewport: &Viewport, width: u32, height: u32) -> Result<(), String> {
+    pub(crate) fn add_frame(
+        &mut self,
+        viewport: &Viewport,
+        width: u32,
+        height: u32,
+    ) -> Result<(), String> {
         let svg_str = viewport_to_string(viewport)?;
         let pixmap = render_svg(&svg_str, width, height)?;
         self.frames.push(RgbaFrame {
@@ -48,8 +53,13 @@ impl GifRecorder {
         if self.frames.is_empty() {
             return Ok(());
         }
-        let file = std::fs::File::create(&self.output_path)
-            .map_err(|e| format!("Не удалось создать GIF {}: {}", self.output_path.display(), e))?;
+        let file = std::fs::File::create(&self.output_path).map_err(|e| {
+            format!(
+                "Не удалось создать GIF {}: {}",
+                self.output_path.display(),
+                e
+            )
+        })?;
         let w = self.frames[0].width;
         let h = self.frames[0].height;
         let mut encoder = gif::Encoder::new(file, w, h, &[])
@@ -106,7 +116,7 @@ fn rgba_to_gif_frame(rgba: &[u8], width: u16, height: u16, delay: u16) -> gif::F
     for i in 0..pixel_count {
         let base = i * 4;
         if base + 2 < rgba.len() {
-            rgb.push(rgba[base]);     // R
+            rgb.push(rgba[base]); // R
             rgb.push(rgba[base + 1]); // G
             rgb.push(rgba[base + 2]); // B
         }

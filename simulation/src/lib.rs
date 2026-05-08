@@ -13,14 +13,22 @@
 //! let model = construct_model(&ast, None, &[]).unwrap();
 //! let map = Map::create(model).unwrap();
 //! ```
-// Крейт находится в стадии разработки: модули объявлены, но ещё не задействованы.
-
 mod context;
 mod execution;
+pub(crate) mod gif;
+pub mod json_input;
 mod predicate;
+pub mod runner;
 mod snapshot;
 mod unit;
 mod value;
+
+/// Строит дерево симуляции из семантической модели.
+pub fn build_unit(
+    model: std::rc::Rc<std::cell::RefCell<grammar::semantic::ModelNode>>,
+) -> Result<unit::Unit, grammar::diagnostics::Diagnostic> {
+    unit::builder::build(model)
+}
 
 #[cfg(test)]
 mod tests {

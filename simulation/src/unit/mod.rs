@@ -1,5 +1,5 @@
-mod builder;
-mod viewport;
+pub(crate) mod builder;
+pub(crate) mod viewport;
 
 use crate::context::Context;
 use crate::value::Value;
@@ -84,6 +84,25 @@ impl Context for Unit {
             }
             Unit::Sequential { units, index, .. } => {
                 units.get(*index).and_then(|u| u.borrow().get_value(name))
+            }
+        }
+    }
+
+    fn set_value(&mut self, name: &str, value: Value) {
+        match self {
+            Unit::None => {}
+            Unit::Node { variables, .. } => {
+                variables.insert(name.to_string(), value);
+            }
+            Unit::Parallel { units, .. } => {
+                for unit in units.iter() {
+                    unit.borrow_mut().set_value(name, value.clone());
+                }
+            }
+            Unit::Sequential { units, index, .. } => {
+                if let Some(u) = units.get(*index) {
+                    u.borrow_mut().set_value(name, value);
+                }
             }
         }
     }
@@ -262,6 +281,14 @@ impl Unit {
         }
     }
 
+    /// Возвращает имя текущего активного состояния (только для Unit::Node).
+    pub fn current_state(&self) -> Option<&str> {
+        match self {
+            Unit::Node { state, .. } => state.as_deref(),
+            _ => None,
+        }
+    }
+
     pub fn is_terminal(&self) -> bool {
         match self {
             Unit::None => true,
@@ -407,6 +434,10 @@ mod tests {
     impl Context for MockCtx {
         fn get_value(&self, name: &str) -> Option<Value> {
             self.0.get(name).cloned()
+        }
+
+        fn set_value(&mut self, name: &str, value: Value) {
+            self.0.insert(name.to_string(), value);
         }
     }
 

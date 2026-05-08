@@ -25,6 +25,10 @@ impl Context for Snapshot {
             None
         }
     }
+
+    fn set_value(&mut self, name: &str, value: Value) {
+        self.variables.insert(name.to_string(), value);
+    }
 }
 
 #[cfg(test)]
