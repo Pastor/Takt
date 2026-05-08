@@ -28,6 +28,7 @@ struct RgbFrame {
     width: u16,
     height: u16,
     data: Vec<u8>,
+    delay: u16,
 }
 
 impl GifRecorder {
@@ -47,12 +48,13 @@ impl GifRecorder {
 
     /// Добавляет кадр из SVG-документа Viewport.
     ///
-    /// Возвращает детальный тайминг: (сериализация SVG мс, парсинг+шейпинг мс, рендер пикселей мс, квантизация мс).
+    /// `delay_override` — задержка в единицах 1/100 с; `None` → использовать `frame_delay`.
     pub(crate) fn add_frame(
         &mut self,
         viewport: &Viewport,
         width: u32,
         height: u32,
+        delay_override: Option<u16>,
     ) -> Result<FrameTiming, String> {
         let t = std::time::Instant::now();
         let svg_str = viewport_to_string(viewport)?;
@@ -88,6 +90,7 @@ impl GifRecorder {
             width: width as u16,
             height: height as u16,
             data: rgb,
+            delay: delay_override.unwrap_or(self.frame_delay),
         });
 
         Ok(FrameTiming {
@@ -126,7 +129,7 @@ impl GifRecorder {
                 &frame_data.data,
                 10,
             );
-            frame.delay = self.frame_delay;
+            frame.delay = frame_data.delay;
             encoder
                 .write_frame(&frame)
                 .map_err(|e| format!("Ошибка записи кадра GIF: {e}"))?;

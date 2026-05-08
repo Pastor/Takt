@@ -104,12 +104,12 @@ impl SimulationRunner {
 
             // Записываем кадры в GIF (если нужно)
             if self.gif_recorder.is_some() {
-                // Сначала кадр подсветки сработавшего перехода (если переход был)
-                let last_tr = self.unit.take_last_transition();
-                if let Some((from, to, _pred)) = last_tr {
-                    self.capture_frame_with_highlight(Some((&from, &to)))?;
+                // Highlight-кадры для каждого сработавшего перехода (включая параллельные)
+                let transitions = self.unit.take_last_transitions();
+                for (from, to, _pred) in &transitions {
+                    self.capture_frame_with_highlight(Some((from.as_str(), to.as_str())))?;
                 }
-                // Затем обычный кадр с новым активным состоянием
+                // Обычный кадр с новым активным состоянием
                 self.capture_frame()?;
             }
 
@@ -309,8 +309,10 @@ impl SimulationRunner {
         .map_err(|d| format!("Ошибка viewport: {}", d.message))?;
         let vp_ms = t_vp.elapsed().as_millis();
 
+        // Highlight-кадры показываются дольше (150 cs = 1.5 с) чтобы их было видно.
+        let delay = if highlighted_edge.is_some() { Some(150u16) } else { None };
         let frame_timing = if let Some(rec) = &mut self.gif_recorder {
-            Some(rec.add_frame(&viewport, w, h)?)
+            Some(rec.add_frame(&viewport, w, h, delay)?)
         } else {
             None
         };
