@@ -5,7 +5,7 @@ use crate::value::Value;
 use grammar::diagnostics::{Diagnostic, Location};
 use grammar::semantic::extend::Extend;
 use grammar::semantic::{
-    ConditionNode, ExpressionNode, ModelNode, StateNode, StateNodeKind, VariableNode,
+    ConditionNode, ExpressionNode, ModelNode, StateNode, StateNodeKind, StatementNode, VariableNode,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -24,23 +24,36 @@ type Executions = HashMap<String, Vec<Execution>>;
 /// 3. Копирует результат в кэш (ленивая инициализация).
 /// 4. Если в текущей модели не найдено — поднимается к `parent` (ModelNode.upper).
 ///
-/// Это гарантирует, что runtime-изменения идут в кэш, а не в ModelNode-эталон.
+/// Для параллельных моделей `parent` является общим (`Rc`) — изменения одной
+/// подмодели сразу видны остальным через общий родительский контекст.
 struct ModelNodeContext {
     model: Rc<RefCell<ModelNode>>,
     cache: RefCell<HashMap<String, Value>>,
-    parent: Option<Box<ModelNodeContext>>,
+    parent: Option<Rc<RefCell<dyn Context>>>,
 }
 
 impl ModelNodeContext {
     fn new(model: Rc<RefCell<ModelNode>>) -> Self {
-        let parent = {
-            let borrowed = model.borrow();
-            borrowed
-                .upper
-                .as_ref()
-                .and_then(|w| w.upgrade())
-                .map(|parent_rc| Box::new(ModelNodeContext::new(parent_rc)))
-        };
+        let parent = model
+            .borrow()
+            .upper
+            .as_ref()
+            .and_then(|w| w.upgrade())
+            .map(|parent_rc| {
+                Rc::new(RefCell::new(ModelNodeContext::new(parent_rc)))
+                    as Rc<RefCell<dyn Context>>
+            });
+        Self {
+            model,
+            cache: RefCell::new(HashMap::new()),
+            parent,
+        }
+    }
+
+    fn new_with_parent(
+        model: Rc<RefCell<ModelNode>>,
+        parent: Option<Rc<RefCell<dyn Context>>>,
+    ) -> Self {
         Self {
             model,
             cache: RefCell::new(HashMap::new()),
@@ -51,11 +64,9 @@ impl ModelNodeContext {
 
 impl Context for ModelNodeContext {
     fn get_value(&self, name: &str) -> Option<Value> {
-        // Шаг 1: проверяем кэш.
         if let Some(v) = self.cache.borrow().get(name) {
             return Some(v.clone());
         }
-        // Шаг 2: запрашиваем переменную напрямую из ModelNode.
         let value = {
             let borrowed = self.model.borrow();
             borrowed
@@ -64,14 +75,22 @@ impl Context for ModelNodeContext {
                 .and_then(|var| eval_expr(var_expr(var)))
         };
         if let Some(value) = value {
-            // Шаг 3: копируем в кэш — последующие изменения идут сюда, ModelNode остаётся нетронутым.
             self.cache
                 .borrow_mut()
                 .insert(name.to_string(), value.clone());
             return Some(value);
         }
-        // Шаг 4: поднимаемся к родительской модели (ModelNode.upper).
-        self.parent.as_ref().and_then(|p| p.get_value(name))
+        self.parent.as_ref().and_then(|p| p.borrow().get_value(name))
+    }
+
+    fn set_value(&mut self, name: &str, value: Value) {
+        if self.model.borrow().variables.contains_key(name) {
+            self.cache.borrow_mut().insert(name.to_string(), value);
+        } else if let Some(parent) = &self.parent {
+            parent.borrow_mut().set_value(name, value);
+        } else {
+            self.cache.borrow_mut().insert(name.to_string(), value);
+        }
     }
 }
 
@@ -103,29 +122,171 @@ fn eval_expr(expr: &ExpressionNode) -> Option<Value> {
             let values: Option<Vec<Value>> = items.iter().map(eval_expr).collect();
             Some(Value::Array(values?))
         }
+        // Адресные порты (bit = 0x600:0) инициализируются нулём по умолчанию
+        ExpressionNode::Address(_, _) => Some(Value::Number(0)),
         _ => None,
+    }
+}
+
+// ── Выполнение выражений в runtime ───────────────────────────────────────────
+
+/// Вычисляет выражение в runtime-контексте (для тел enter/exit/always блоков).
+fn eval_expression_rt(expr: &ExpressionNode, ctx: &dyn Context) -> Option<Value> {
+    match expr {
+        ExpressionNode::Number(n) => Some(Value::Number(*n)),
+        ExpressionNode::Bool(b) => Some(Value::Boolean(*b)),
+        ExpressionNode::Rational(s, neg) => {
+            let v: f64 = s.parse().ok()?;
+            Some(Value::Real(if *neg { -v } else { v }))
+        }
+        ExpressionNode::Variable(var_rc) => ctx.get_value(var_rc.borrow().name()),
+        ExpressionNode::Address(_, _) => Some(Value::Number(0)),
+        ExpressionNode::Negate(inner) => match eval_expression_rt(inner, ctx)? {
+            Value::Number(n) => Some(Value::Number(-n)),
+            Value::Real(f) => Some(Value::Real(-f)),
+            _ => None,
+        },
+        ExpressionNode::Parenthesis(inner) => eval_expression_rt(inner, ctx),
+        _ => None,
+    }
+}
+
+/// Компилирует оператор в список исполнителей (closures).
+///
+/// `write_ctx` — контекст для записи (ModelNodeContext цепочка, делегирует в shared parent).
+/// `ctx` в замыканиях — юнит-контекст для чтения (содержит значения входных портов).
+fn compile_statement(stmt: &StatementNode, write_ctx: Rc<RefCell<dyn Context>>) -> Vec<Execution> {
+    match stmt {
+        StatementNode::None | StatementNode::Unresolved(_) => vec![],
+        StatementNode::Block(stmts) => stmts
+            .iter()
+            .flat_map(|s| compile_statement(s, write_ctx.clone()))
+            .collect(),
+        StatementNode::Expression(expr) => compile_expression(expr, write_ctx),
+        StatementNode::If { cond, then_, else_ } => {
+            compile_if(cond, then_, else_.as_deref(), write_ctx)
+        }
+        _ => vec![],
+    }
+}
+
+/// Компилирует `if (cond) { then } [else { else }]` в исполнитель.
+fn compile_if(
+    cond: &ExpressionNode,
+    then_: &StatementNode,
+    else_: Option<&StatementNode>,
+    write_ctx: Rc<RefCell<dyn Context>>,
+) -> Vec<Execution> {
+    let cond_clone = cond.clone();
+    let then_fns = compile_statement(then_, write_ctx.clone());
+    let else_fns = else_
+        .map(|s| compile_statement(s, write_ctx))
+        .unwrap_or_default();
+
+    if then_fns.is_empty() && else_fns.is_empty() {
+        return vec![];
+    }
+
+    let f: Execution = Rc::new(move |ctx: &mut dyn Context| {
+        let cond_val = eval_expression_rt(&cond_clone, ctx);
+        let branch_true = match &cond_val {
+            Some(Value::Boolean(b)) => *b,
+            Some(Value::Number(n)) => *n != 0,
+            _ => false,
+        };
+        if branch_true {
+            for f in &then_fns {
+                f(ctx);
+            }
+        } else {
+            for f in &else_fns {
+                f(ctx);
+            }
+        }
+    });
+    vec![f]
+}
+
+/// Компилирует выражение в список исполнителей.
+///
+/// Запись идёт в `write_ctx` (ModelNodeContext), чтение — из `ctx` (юнит-контекст).
+fn compile_expression(expr: &ExpressionNode, write_ctx: Rc<RefCell<dyn Context>>) -> Vec<Execution> {
+    match expr {
+        ExpressionNode::Assign(lhs, rhs) => {
+            if let ExpressionNode::Variable(var_rc) = lhs.as_ref() {
+                let name = var_rc.borrow().name().to_string();
+                let rhs_clone = (**rhs).clone();
+                let write_ctx_clone = write_ctx.clone();
+                let f: Execution = Rc::new(move |ctx: &mut dyn Context| {
+                    if let Some(value) = eval_expression_rt(&rhs_clone, ctx) {
+                        write_ctx_clone.borrow_mut().set_value(&name, value);
+                    }
+                });
+                vec![f]
+            } else {
+                vec![]
+            }
+        }
+        _ => vec![],
     }
 }
 
 // ── Точка входа ───────────────────────────────────────────────────────────────
 
 /// Строит дерево [`Unit`] из семантической модели.
-///
-/// - Модель с состояниями (`has_states()`) → [`Unit::Node`]
-/// - Иначе: делегирует в `build_extend` по полю `implements`
-pub(crate) fn build(model: Rc<RefCell<ModelNode>>) -> Result<Unit, Diagnostic> {
+pub fn build(model: Rc<RefCell<ModelNode>>) -> Result<Unit, Diagnostic> {
+    build_impl(model, None)
+}
+
+fn build_impl(
+    model: Rc<RefCell<ModelNode>>,
+    shared_parent: Option<Rc<RefCell<dyn Context>>>,
+) -> Result<Unit, Diagnostic> {
     let has_states = model.borrow().has_states();
     if has_states {
-        build_node(model)
+        // Если модель содержит ровно одно состояние-реализацию без переходов
+        // (например, `start Stacker = CR | MC | LC;`), делегируем в build_extend.
+        let single_compound = {
+            let borrowed = model.borrow();
+            if borrowed.states.len() == 1 {
+                borrowed.states.values().next().and_then(|state| {
+                    if let StateNode::Implement {
+                        implements,
+                        references,
+                        next,
+                        ..
+                    } = state
+                    {
+                        if references.is_empty() && next.is_none() {
+                            Some(implements.clone())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+            } else {
+                None
+            }
+        };
+        if let Some(implements) = single_compound {
+            build_extend(&implements, shared_parent)
+        } else {
+            build_node(model, shared_parent)
+        }
     } else {
         let extends = model.borrow().implements.clone();
-        build_extend(&extends)
+        build_extend(&extends, shared_parent)
     }
 }
 
 // ── Unit::Node ────────────────────────────────────────────────────────────────
 
-fn build_node(model: Rc<RefCell<ModelNode>>) -> Result<Unit, Diagnostic> {
+fn build_node(
+    model: Rc<RefCell<ModelNode>>,
+    shared_parent: Option<Rc<RefCell<dyn Context>>>,
+) -> Result<Unit, Diagnostic> {
     let start_name = {
         let borrowed = model.borrow();
         borrowed
@@ -150,7 +311,6 @@ fn build_node(model: Rc<RefCell<ModelNode>>) -> Result<Unit, Diagnostic> {
             })
     }?;
 
-    // Снимок состояний: освобождаем borrow перед созданием контекста.
     let states_snapshot: Vec<(String, StateNode)> = {
         let borrowed = model.borrow();
         borrowed
@@ -160,19 +320,39 @@ fn build_node(model: Rc<RefCell<ModelNode>>) -> Result<Unit, Diagnostic> {
             .collect()
     };
 
+    // Контекст: используем общий родительский если передан, иначе строим иерархию.
+    let ctx_rc: Rc<RefCell<dyn Context>> = Rc::new(RefCell::new(if let Some(shared) =
+        shared_parent
+    {
+        ModelNodeContext::new_with_parent(model.clone(), Some(shared))
+    } else {
+        ModelNodeContext::new(model.clone())
+    }));
+
     let mut state_transitions: HashMap<String, Vec<(String, Predicate)>> = HashMap::new();
     let mut state_executions: HashMap<String, Executions> = HashMap::new();
 
     for (name, state_node) in &states_snapshot {
         state_transitions.insert(name.clone(), build_transitions(state_node)?);
-        state_executions.insert(name.clone(), HashMap::new());
+
+        let mut execs: Executions = HashMap::new();
+        for block in state_node.named_blocks() {
+            let kind = block.name();
+            if kind.is_empty() {
+                continue;
+            }
+            if let Some(body) = block.statement() {
+                let fns = compile_statement(body, ctx_rc.clone());
+                if !fns.is_empty() {
+                    execs.entry(kind.to_string()).or_default().extend(fns);
+                }
+            }
+        }
+        state_executions.insert(name.clone(), execs);
     }
 
-    // Контекст: прямая ссылка на ModelNode, иерархия через ModelNode.upper.
-    let ctx: Rc<RefCell<dyn Context>> = Rc::new(RefCell::new(ModelNodeContext::new(model)));
-
     Ok(Unit::Node {
-        context: Some(ctx),
+        context: Some(ctx_rc),
         state_transitions,
         state_executions,
         state: Some(start_name),
@@ -186,7 +366,6 @@ fn build_transitions(state: &StateNode) -> Result<Vec<(String, Predicate)>, Diag
         .references()
         .iter()
         .map(|r| {
-            // create_predicate паникует при ConditionNode::None — создаём предикат вручную.
             let pred = if matches!(r.cond, ConditionNode::None) {
                 Predicate::new("Always", |_| true)
             } else {
@@ -199,19 +378,44 @@ fn build_transitions(state: &StateNode) -> Result<Vec<(String, Predicate)>, Diag
 
 // ── Unit из Extend ────────────────────────────────────────────────────────────
 
-fn build_extend(extend: &Extend) -> Result<Unit, Diagnostic> {
+fn build_extend(
+    extend: &Extend,
+    shared_parent: Option<Rc<RefCell<dyn Context>>>,
+) -> Result<Unit, Diagnostic> {
     match extend {
         Extend::None | Extend::Unresolved(_) => Ok(Unit::None),
-        Extend::Model(rc) => build(Rc::clone(rc)),
-        Extend::Parentless(inner) => build_extend(inner),
-        // Concatenation → Sequential: Unit::None.add(&u) == u (нейтральный элемент).
-        Extend::Concatenation(items) => items
-            .iter()
-            .try_fold(Unit::None, |acc, item| Ok(acc.add(&build_extend(item)?))),
-        // Parallel: Unit::None.union(&u) == u (нейтральный элемент).
-        Extend::Parallel(items) => items
-            .iter()
-            .try_fold(Unit::None, |acc, item| Ok(acc.union(&build_extend(item)?))),
+        Extend::Model(rc) => build_impl(Rc::clone(rc), shared_parent),
+        Extend::Parentless(inner) => build_extend(inner, shared_parent),
+        Extend::Concatenation(items) => items.iter().try_fold(Unit::None, |acc, item| {
+            Ok(acc.add(&build_extend(item, shared_parent.clone())?))
+        }),
+        Extend::Parallel(items) => {
+            // Все параллельные подмодели разделяют один общий родительский контекст —
+            // это позволяет передавать shared-переменные (busy, tgt_*, lift_*) между ними.
+            let shared: Option<Rc<RefCell<dyn Context>>> = if shared_parent.is_some() {
+                shared_parent
+            } else {
+                items
+                    .first()
+                    .and_then(|first| extract_parent_model(first))
+                    .map(|parent_model| {
+                        Rc::new(RefCell::new(ModelNodeContext::new(parent_model)))
+                            as Rc<RefCell<dyn Context>>
+                    })
+            };
+            items.iter().try_fold(Unit::None, |acc, item| {
+                Ok(acc.union(&build_extend(item, shared.clone())?))
+            })
+        }
+    }
+}
+
+/// Извлекает родительскую модель из Extend (нужна для построения shared-контекста).
+fn extract_parent_model(extend: &Extend) -> Option<Rc<RefCell<ModelNode>>> {
+    match extend {
+        Extend::Model(rc) => rc.borrow().upper.as_ref()?.upgrade(),
+        Extend::Parentless(inner) => extract_parent_model(inner),
+        _ => None,
     }
 }
 
@@ -225,7 +429,6 @@ mod tests {
 
     // ── ModelNodeContext ──────────────────────────────────────────────────────
 
-    /// get_value возвращает None для переменной, которой нет ни в модели, ни в родителе.
     #[test]
     fn test_model_node_context_missing_returns_none() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
@@ -233,7 +436,6 @@ mod tests {
         assert!(ctx.get_value("x").is_none());
     }
 
-    /// get_value читает Number из ModelNode напрямую (не из копии).
     #[test]
     fn test_model_node_context_number_var() {
         let (ast, _) = parse("var x: u8 = 42;", 0).unwrap();
@@ -242,7 +444,6 @@ mod tests {
         assert!(matches!(ctx.get_value("x"), Some(Value::Number(42))));
     }
 
-    /// get_value читает Boolean из ModelNode напрямую.
     #[test]
     fn test_model_node_context_bool_var() {
         let (ast, _) = parse("var flag: bool = false;", 0).unwrap();
@@ -251,35 +452,52 @@ mod tests {
         assert!(matches!(ctx.get_value("flag"), Some(Value::Boolean(false))));
     }
 
-    /// Кэш перекрывает значение из ModelNode (ленивое копирование работает).
     #[test]
     fn test_model_node_context_cache_takes_priority() {
         let (ast, _) = parse("var x: u8 = 10;", 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let ctx = ModelNodeContext::new(Rc::clone(&model_rc));
         assert!(matches!(ctx.get_value("x"), Some(Value::Number(10))));
-        // Подменяем кэш — имитация runtime-изменения.
         ctx.cache
             .borrow_mut()
             .insert("x".to_string(), Value::Number(99));
         assert!(matches!(ctx.get_value("x"), Some(Value::Number(99))));
-        // ModelNode не изменён: исходное значение сохранено.
         assert!(model_rc.borrow().variables.contains_key("x"));
     }
 
-    /// Иерархия: переменная из родительской модели доступна через цепочку parent.
     #[test]
     fn test_model_node_context_parent_hierarchy() {
         let (ast, _) = parse("var outer_var: u8 = 77; model Inner { start S; }", 0).unwrap();
         let root_rc = construct_model(&ast, None, &[]).unwrap();
         let inner_rc = root_rc.borrow().search_model("Inner").unwrap();
-        // Inner.upper должен указывать на root.
         let ctx = ModelNodeContext::new(Rc::clone(&inner_rc));
-        // Переменной outer_var нет в Inner → должна найтись в parent (root).
         let val = ctx.get_value("outer_var");
         assert!(
             matches!(val, Some(Value::Number(77))),
             "переменная из родительской модели должна быть доступна через иерархию контекста"
+        );
+    }
+
+    #[test]
+    fn test_model_node_context_set_value_delegates_to_parent() {
+        let (ast, _) = parse("var shared: u8 = 0; model Inner { start S; }", 0).unwrap();
+        let root_rc = construct_model(&ast, None, &[]).unwrap();
+        let inner_rc = root_rc.borrow().search_model("Inner").unwrap();
+
+        // Создаём shared parent context (как при построении Parallel)
+        let shared_parent: Rc<RefCell<dyn Context>> =
+            Rc::new(RefCell::new(ModelNodeContext::new(Rc::clone(&root_rc))));
+
+        let mut inner_ctx =
+            ModelNodeContext::new_with_parent(inner_rc, Some(shared_parent.clone()));
+
+        // Записываем через inner_ctx — должно делегироваться в shared_parent
+        inner_ctx.set_value("shared", Value::Number(42));
+
+        // Читаем через shared_parent — должно вернуть 42
+        assert!(
+            matches!(shared_parent.borrow().get_value("shared"), Some(Value::Number(42))),
+            "set_value должен делегировать в shared parent для не-локальных переменных"
         );
     }
 
@@ -316,14 +534,12 @@ mod tests {
 
     // ── build ─────────────────────────────────────────────────────────────────
 
-    /// Пустая модель → Unit::None.
     #[test]
     fn test_build_empty_model_returns_none() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
         assert!(matches!(build(model).unwrap(), Unit::None));
     }
 
-    /// "start S;" → Unit::Node { state: Some("S") }.
     #[test]
     fn test_build_single_state_model() {
         let (ast, _) = parse("start S;", 0).unwrap();
@@ -335,7 +551,6 @@ mod tests {
         assert_eq!(s, "S");
     }
 
-    /// ModelNode без start-состояния → build_node → Err.
     #[test]
     fn test_build_model_without_start_state_returns_err() {
         let mut model = ModelNode::default();
@@ -354,7 +569,6 @@ mod tests {
         assert!(build(Rc::new(RefCell::new(model))).is_err());
     }
 
-    /// Безусловный `ref B` → Predicate всегда true.
     #[test]
     fn test_build_unconditional_transition() {
         let (ast, _) = parse("start A { ref B; } state B;", 0).unwrap();
@@ -372,7 +586,6 @@ mod tests {
         assert!(trans[0].1.evaluate(&Unit::None));
     }
 
-    /// Переменная из ModelNode доступна через context при get_value (Unit::Node.variables пуст).
     #[test]
     fn test_build_node_has_context_with_variable() {
         let (ast, _) = parse("var x: u8 = 5; start S;", 0).unwrap();
@@ -381,7 +594,6 @@ mod tests {
         assert!(matches!(result.get_value("x"), Some(Value::Number(5))));
     }
 
-    /// Запись в Unit::Node.variables перекрывает значение из context.
     #[test]
     fn test_build_node_variables_shadow_context() {
         let (ast, _) = parse("var x: u8 = 5; start S;", 0).unwrap();
@@ -393,7 +605,6 @@ mod tests {
         assert!(matches!(result.get_value("x"), Some(Value::Number(99))));
     }
 
-    /// Extend::Concatenation → Unit::Sequential с двумя дочерними.
     #[test]
     fn test_build_concatenation_produces_sequential() {
         let src = "model A { start S; } model B { start S; } start Entry = A + B;";
@@ -404,14 +615,13 @@ mod tests {
         let StateNode::Implement { implements, .. } = &*entry_ref else {
             panic!("Entry должен быть Implement");
         };
-        let result = build_extend(implements).unwrap();
+        let result = build_extend(implements, None).unwrap();
         let Unit::Sequential { units, .. } = &result else {
             panic!("ожидался Unit::Sequential");
         };
         assert_eq!(units.len(), 2);
     }
 
-    /// Extend::Parallel → Unit::Parallel с двумя дочерними.
     #[test]
     fn test_build_parallel_produces_parallel() {
         let src = "model A { start S; } model B { start S; } start Entry = A | B;";
@@ -422,10 +632,131 @@ mod tests {
         let StateNode::Implement { implements, .. } = &*entry_ref else {
             panic!("Entry должен быть Implement");
         };
-        let result = build_extend(implements).unwrap();
+        let result = build_extend(implements, None).unwrap();
         let Unit::Parallel { units, .. } = &result else {
             panic!("ожидался Unit::Parallel");
         };
         assert_eq!(units.len(), 2);
+    }
+
+    /// Enter-блок корректно записывает переменную через shared-контекст.
+    #[test]
+    fn test_build_enter_block_executes_on_transition() {
+        let src = "var x: u8 = 0; start A { ref B; } state B { enter { x = 99; } }";
+        let (ast, _) = parse(src, 0).unwrap();
+        let model_rc = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = build(model_rc).unwrap();
+
+        // До тика: x = 0 (дефолт)
+        assert!(matches!(unit.get_value("x"), Some(Value::Number(0))));
+
+        // Тик: A → B (enter { x = 99; } должен выполниться)
+        unit.tick();
+
+        // После тика: x = 99
+        assert!(
+            matches!(unit.get_value("x"), Some(Value::Number(99))),
+            "enter-блок должен установить x=99 при входе в состояние B"
+        );
+    }
+
+    /// Shared-переменные доступны между параллельными моделями.
+    #[test]
+    fn test_build_parallel_shared_variable() {
+        // Модель A устанавливает shared в 1 при входе в B.
+        // Модель B читает shared через свой контекст.
+        let src = r#"
+            var shared: u8 = 0;
+            model A { start Idle { ref Done; } state Done { enter { shared = 7; } } }
+            model B { start Check { ref End: shared = 7; } state End; }
+            start Root = A | B;
+        "#;
+        let (ast, _) = parse(src, 0).unwrap();
+        let model_rc = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = build(model_rc).unwrap();
+
+        // Тик 1: A: Idle→Done (enter shared=7), B: Check (shared=7 → End)
+        // A тикает первым, B тикает вторым и видит shared=7
+        unit.tick();
+
+        // shared должен быть 7
+        assert!(
+            matches!(unit.get_value("shared"), Some(Value::Number(7))),
+            "shared-переменная должна быть доступна между параллельными моделями"
+        );
+    }
+
+    #[test]
+    fn test_enter_writes_output_port_via_context() {
+        let src = r#"
+            out cmd_ack: bit = 0;
+            in task_valid: bit = 0;
+            var busy: bit = 0;
+            model CR {
+                start Waiting { ref Accepting: task_valid; }
+                state Accepting { enter { cmd_ack = 1; busy = 1; } next Done; }
+                state Done;
+            }
+            start Main = CR;
+        "#;
+        let (ast, _) = parse(src, 0).unwrap();
+        let model_rc = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = build(model_rc).unwrap();
+
+        // Устанавливаем task_valid=1
+        unit.set_value("task_valid", Value::Number(1));
+
+        // До тика: cmd_ack должен быть 0 (дефолт)
+        assert!(
+            matches!(unit.get_value("cmd_ack"), Some(Value::Number(0)) | None),
+            "cmd_ack должен быть 0 до тика, получено {:?}", unit.get_value("cmd_ack")
+        );
+
+        // Тик: Waiting→Accepting (enter: cmd_ack=1, busy=1)
+        unit.tick();
+
+        // После тика: cmd_ack = 1
+        assert!(
+            matches!(unit.get_value("cmd_ack"), Some(Value::Number(1))),
+            "cmd_ack должен быть 1 после тика, получено {:?}", unit.get_value("cmd_ack")
+        );
+        assert!(
+            matches!(unit.get_value("busy"), Some(Value::Number(1))),
+            "busy должен быть 1 после тика, получено {:?}", unit.get_value("busy")
+        );
+    }
+
+    /// Параллельная модель с Address-портами: enter-блок CR пишет cmd_ack=1.
+    #[test]
+    fn test_parallel_address_port_enter_write() {
+        let src = r#"
+            out cmd_ack: bit = 0x600:0;
+            in task_valid: bit = 0x100:0;
+            var busy: bit = 0;
+            model CR {
+                start Waiting { ref Accepting: task_valid; }
+                state Accepting { enter { cmd_ack = 1; busy = 1; } }
+            }
+            model MC {
+                start Idle { ref Active: busy; }
+                state Active;
+            }
+            start Main = CR | MC;
+        "#;
+        let (ast, _) = parse(src, 0).unwrap();
+        let model_rc = construct_model(&ast, None, &[]).unwrap();
+        let mut unit = build(model_rc).unwrap();
+
+        unit.set_value("task_valid", Value::Number(1));
+        unit.tick();
+
+        assert!(
+            matches!(unit.get_value("cmd_ack"), Some(Value::Number(1))),
+            "cmd_ack должен быть 1 после тика, получено {:?}", unit.get_value("cmd_ack")
+        );
+        assert!(
+            matches!(unit.get_value("busy"), Some(Value::Number(1))),
+            "busy должен быть 1 после тика, получено {:?}", unit.get_value("busy")
+        );
     }
 }
