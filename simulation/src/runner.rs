@@ -299,6 +299,8 @@ impl SimulationRunner {
 
         let active = self.unit.active_states();
         let active_refs: Vec<&str> = active.iter().map(String::as_str).collect();
+        let reachable = self.unit.reachable_from_active();
+        let reachable_refs: Vec<&str> = reachable.iter().map(String::as_str).collect();
         let legend = build_legend(&self.unit, &self.port_names);
 
         let t_vp = std::time::Instant::now();
@@ -306,6 +308,7 @@ impl SimulationRunner {
             self.cached_layout.as_ref().unwrap(),
             &self.gif_config,
             &active_refs,
+            &reachable_refs,
             Some(&legend),
             self.model_name.as_deref(),
             highlighted_edge,

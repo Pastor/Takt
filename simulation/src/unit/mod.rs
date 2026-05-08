@@ -233,6 +233,27 @@ impl Unit {
         }
     }
 
+    /// Возвращает имена состояний, достижимых из активных за один переход.
+    pub fn reachable_from_active(&self) -> Vec<String> {
+        match self {
+            Unit::Node { state, state_transitions, .. } => {
+                let current = match state {
+                    Some(s) => s,
+                    None => return vec![],
+                };
+                state_transitions
+                    .get(current)
+                    .map(|ts| ts.iter().map(|(to, _)| to.clone()).collect())
+                    .unwrap_or_default()
+            }
+            Unit::Parallel { units, .. } | Unit::Sequential { units, .. } => units
+                .iter()
+                .flat_map(|u| u.borrow().reachable_from_active())
+                .collect(),
+            Unit::None => vec![],
+        }
+    }
+
     fn tick_parallel(&mut self) -> TickResult {
         // Тикаем ВСЕ дочерние и собираем результаты — нельзя прерываться раньше
         let results: Vec<TickResult> = if let Unit::Parallel { units, .. } = self {
