@@ -11,6 +11,7 @@ use grammar::semantic::tree::construct_model;
 use simulation::build_unit;
 use simulation::json_input::load_sim_steps;
 use simulation::runner::{PortNames, RunResult, SimulationRunner};
+use simulation::state_io;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -37,6 +38,14 @@ struct Args {
     /// JSON-файл с входными данными и проверками
     #[arg(short = 's', long = "sim-file", value_name = "FILE")]
     sim_file: Option<PathBuf>,
+
+    /// Загрузить состояние модели из JSON-файла перед симуляцией
+    #[arg(long = "load-state", value_name = "FILE")]
+    load_state: Option<PathBuf>,
+
+    /// Сохранить состояние модели в JSON-файл после симуляции
+    #[arg(long = "save-state", value_name = "FILE")]
+    save_state: Option<PathBuf>,
 }
 
 // ── Точка входа ───────────────────────────────────────────────────────────────
@@ -78,11 +87,18 @@ fn run(args: Args) -> Result<RunResult, String> {
     let model_rc = construct_model(&ast, None, &search_paths)
         .map_err(|d| format!("Семантическая ошибка: {}", d.message))?;
 
-    // 4. Извлекаем имена портов из модели
+    // 4. Извлекаем имена портов и имя модели
     let port_names = extract_port_names(&model_rc.borrow());
+    let model_name = model_rc.borrow().name.clone();
 
     // 5. Строим Unit
-    let unit = build_unit(model_rc).map_err(|d| format!("Ошибка построения: {}", d.message))?;
+    let mut unit = build_unit(model_rc).map_err(|d| format!("Ошибка построения: {}", d.message))?;
+
+    // 5а. Загружаем сохранённое состояние (если указано)
+    if let Some(path) = &args.load_state {
+        state_io::load_from_file(&mut unit, path)?;
+        println!("Состояние загружено из {}", path.display());
+    }
 
     // 6. Загружаем шаги симуляции (если указан файл)
     let sim_steps = if let Some(path) = &args.sim_file {
@@ -98,11 +114,18 @@ fn run(args: Args) -> Result<RunResult, String> {
         args.steps,
         args.gif_output.as_ref(),
         port_names,
+        model_name,
     );
 
     let result = runner.run()?;
 
-    // 8. Сохраняем GIF
+    // 9. Сохраняем состояние модели до потребления runner (если указано)
+    if let Some(path) = &args.save_state {
+        state_io::save_to_file(runner.unit(), path)?;
+        println!("Состояние сохранено в {}", path.display());
+    }
+
+    // 8. Сохраняем GIF (потребляет runner)
     runner.save_gif()?;
 
     Ok(result)

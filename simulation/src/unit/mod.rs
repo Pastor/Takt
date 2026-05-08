@@ -53,6 +53,8 @@ pub enum Unit {
 
         variables: HashMap<String, Value>,
         executions: Executions,
+        /// Последний сработавший переход: (из, в, имя_предиката).
+        last_transition: Option<(String, String, String)>,
     },
     Parallel {
         units: Vec<Rc<RefCell<Unit>>>,
@@ -146,15 +148,22 @@ impl Unit {
         }
 
         // Шаг 3: ищем первый сработавший переход (predicate берёт &dyn Context)
-        let next_state = transitions.iter().find_map(|(name, pred)| {
+        let fired = transitions.iter().find_map(|(name, pred)| {
             if pred.evaluate(self) {
-                Some(name.clone())
+                Some((name.clone(), pred.name.clone()))
             } else {
                 None
             }
         });
 
-        if let Some(next) = next_state {
+        if let Unit::Node {
+            last_transition, ..
+        } = self
+        {
+            *last_transition = None;
+        }
+
+        if let Some((next, pred_name)) = fired {
             // Шаг 4: исполнители выхода из текущего состояния
             let exit_fns: Vec<Execution> = if let Unit::Node {
                 state_executions, ..
@@ -189,13 +198,29 @@ impl Unit {
                 f(self);
             }
 
-            // Шаг 6: переход в новое состояние
-            if let Unit::Node { state, .. } = self {
+            // Шаг 6: переход в новое состояние + запись последнего перехода
+            if let Unit::Node {
+                state,
+                last_transition,
+                ..
+            } = self
+            {
+                last_transition.replace((state_name, next.clone(), pred_name));
                 *state = Some(next);
             }
         }
 
         TickResult::Processing
+    }
+
+    /// Извлекает и сбрасывает последний сработавший переход: (из, в, имя_предиката).
+    pub fn take_last_transition(&mut self) -> Option<(String, String, String)> {
+        match self {
+            Unit::Node {
+                last_transition, ..
+            } => last_transition.take(),
+            _ => None,
+        }
     }
 
     fn tick_parallel(&mut self) -> TickResult {
@@ -486,6 +511,7 @@ mod tests {
             state: None,
             state_transitions: HashMap::new(),
             state_executions: HashMap::new(),
+            last_transition: None,
         }
     }
 
@@ -497,6 +523,7 @@ mod tests {
             state: None,
             state_transitions: HashMap::new(),
             state_executions: HashMap::new(),
+            last_transition: None,
         }
     }
 
@@ -737,6 +764,7 @@ mod tests {
             state: Some(name.to_string()),
             state_transitions: st,
             state_executions: HashMap::new(),
+            last_transition: None,
         }
     }
 
@@ -753,6 +781,7 @@ mod tests {
             state: Some(from.to_string()),
             state_transitions: st,
             state_executions: HashMap::new(),
+            last_transition: None,
         }
     }
 
@@ -845,6 +874,7 @@ mod tests {
             state: Some("A".to_string()),
             state_transitions: st,
             state_executions: HashMap::new(),
+            last_transition: None,
         };
         u.tick();
         assert_eq!(current_state(&u), Some("B"));

@@ -1,7 +1,9 @@
 use crate::context::Context;
 use crate::gif::GifRecorder;
 use crate::json_input::{Guard, SimStep, json_to_value};
-use crate::unit::viewport::{CachedLayout, Configuration, LegendData, compute_layout, render_from_layout};
+use crate::unit::viewport::{
+    CachedLayout, Configuration, LEGEND_WIDTH, LegendData, compute_layout, render_from_layout,
+};
 use crate::unit::{TickResult, Unit};
 use crate::value::Value;
 use std::path::PathBuf;
@@ -39,6 +41,7 @@ pub struct SimulationRunner {
     gif_recorder: Option<GifRecorder>,
     gif_frame_size: Option<(u32, u32)>,
     port_names: PortNames,
+    model_name: Option<String>,
     // Раскладка графа вычисляется один раз перед первым кадром GIF.
     cached_layout: Option<CachedLayout>,
 }
@@ -50,12 +53,11 @@ impl SimulationRunner {
         max_steps: Option<usize>,
         gif_output: Option<&PathBuf>,
         port_names: PortNames,
+        model_name: Option<String>,
     ) -> Self {
         let (gif_recorder, gif_frame_size) = if let Some(gif_path) = gif_output {
-            use crate::unit::viewport::{LEGEND_WIDTH, SYMBOL_LEGEND_WIDTH};
             let cfg = Configuration::default();
-            // GIF-холст: граф + легенда символов (Sn/Pn) + легенда портов.
-            let size = ((cfg.width + SYMBOL_LEGEND_WIDTH + LEGEND_WIDTH) as u32, cfg.height as u32);
+            let size = ((cfg.width + LEGEND_WIDTH) as u32, cfg.height as u32);
             let recorder = GifRecorder::new(gif_path, 50);
             (Some(recorder), Some(size))
         } else {
@@ -68,6 +70,7 @@ impl SimulationRunner {
             gif_recorder,
             gif_frame_size,
             port_names,
+            model_name,
             cached_layout: None,
         }
     }
@@ -99,8 +102,14 @@ impl SimulationRunner {
             // Выводим информацию о шаге
             self.print_step(completed);
 
-            // Записываем кадр в GIF (если нужно)
+            // Записываем кадры в GIF (если нужно)
             if self.gif_recorder.is_some() {
+                // Сначала кадр подсветки сработавшего перехода (если переход был)
+                let last_tr = self.unit.take_last_transition();
+                if let Some((from, to, _pred)) = last_tr {
+                    self.capture_frame_with_highlight(Some((&from, &to)))?;
+                }
+                // Затем обычный кадр с новым активным состоянием
                 self.capture_frame()?;
             }
 
@@ -127,6 +136,11 @@ impl SimulationRunner {
             recorder.save()?;
         }
         Ok(())
+    }
+
+    /// Возвращает ссылку на Unit для чтения состояния после завершения симуляции.
+    pub fn unit(&self) -> &Unit {
+        &self.unit
     }
 
     // ── Вспомогательные методы ────────────────────────────────────────────────
@@ -243,6 +257,27 @@ impl SimulationRunner {
     }
 
     fn capture_frame(&mut self) -> Result<(), String> {
+        self.capture_frame_impl(None)
+    }
+
+    fn capture_frame_with_highlight(&mut self, edge: Option<(&str, &str)>) -> Result<(), String> {
+        // Гарантируем, что раскладка вычислена до поиска индексов
+        if self.cached_layout.is_none() && self.gif_frame_size.is_some() {
+            self.cached_layout = Some(compute_layout(&self.unit, &Configuration::default()));
+        }
+        let highlighted = edge.and_then(|(from, to)| {
+            let layout = self.cached_layout.as_ref()?;
+            let fi = layout.node_labels.iter().position(|n| n == from)?;
+            let ti = layout.node_labels.iter().position(|n| n == to)?;
+            Some((fi, ti))
+        });
+        self.capture_frame_impl(highlighted)
+    }
+
+    fn capture_frame_impl(
+        &mut self,
+        highlighted_edge: Option<(usize, usize)>,
+    ) -> Result<(), String> {
         let (w, h) = match self.gif_frame_size {
             Some(s) => s,
             None => return Ok(()),
@@ -268,6 +303,8 @@ impl SimulationRunner {
             &Configuration::default(),
             &active_refs,
             Some(&legend),
+            self.model_name.as_deref(),
+            highlighted_edge,
         )
         .map_err(|d| format!("Ошибка viewport: {}", d.message))?;
         let vp_ms = t_vp.elapsed().as_millis();

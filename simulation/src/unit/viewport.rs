@@ -95,15 +95,9 @@ impl Viewport {
 pub(crate) struct CachedLayout {
     /// Полные имена состояний — используются для сопоставления с active_states.
     pub(crate) node_labels: Vec<String>,
-    /// Краткие псевдонимы состояний S1..Sn — отображаются в кружках графа.
-    pub(crate) node_aliases: Vec<String>,
-    /// Рёбра с краткими метками P1..Pm.
+    /// Рёбра с полными именами предикатов.
     pub(crate) edges_vec: Vec<(usize, usize, String)>,
     pub(crate) positions: Positions,
-    /// Легенда состояний: (псевдоним, полное имя).
-    pub(crate) state_legend: Vec<(String, String)>,
-    /// Легенда переходов: (псевдоним, полное имя предиката).
-    pub(crate) pred_legend: Vec<(String, String)>,
 }
 
 /// Вычисляет раскладку графа для `unit`.
@@ -112,59 +106,37 @@ pub(crate) struct CachedLayout {
 /// затем передавать результат в [`render_from_layout`] для каждого кадра.
 pub(crate) fn compute_layout(unit: &Unit, cfg: &Configuration) -> CachedLayout {
     let g = graph::unit_to_graph(unit);
-    let (node_labels, edges_vec_orig, positions) = graph::calculate_graph(g, cfg);
-
-    // Псевдонимы состояний S1..Sn в порядке node_labels
-    let node_aliases: Vec<String> = (1..=node_labels.len()).map(|i| format!("S{i}")).collect();
-    let state_legend: Vec<(String, String)> = node_aliases
-        .iter()
-        .zip(node_labels.iter())
-        .map(|(a, n)| (a.clone(), n.clone()))
-        .collect();
-
-    // Псевдонимы предикатов P1..Pm — уникальные метки в порядке первого появления
-    let mut pred_order: Vec<String> = Vec::new();
-    let mut pred_map: std::collections::HashMap<String, String> = Default::default();
-    for (_, _, label) in &edges_vec_orig {
-        if !pred_map.contains_key(label) {
-            let alias = format!("P{}", pred_order.len() + 1);
-            pred_map.insert(label.clone(), alias);
-            pred_order.push(label.clone());
-        }
+    let (node_labels, edges_vec, positions) = graph::calculate_graph(g, cfg);
+    CachedLayout {
+        node_labels,
+        edges_vec,
+        positions,
     }
-    let pred_legend: Vec<(String, String)> =
-        pred_order.iter().map(|full| (pred_map[full].clone(), full.clone())).collect();
-
-    // Заменяем метки рёбер на псевдонимы
-    let edges_vec: Vec<(usize, usize, String)> = edges_vec_orig
-        .into_iter()
-        .map(|(u, v, label)| (u, v, pred_map[&label].clone()))
-        .collect();
-
-    CachedLayout { node_labels, node_aliases, edges_vec, positions, state_legend, pred_legend }
 }
 
 /// Отрисовывает кадр из заранее вычисленной раскладки.
 ///
-/// Дешёвая операция: только SVG-генерация, без повторного расчёта позиций.
+/// `highlighted_edge` — индексы рёбра `(from_idx, to_idx)`, которое нужно подсветить;
+/// `None` означает обычный кадр без подсветки.
 pub(crate) fn render_from_layout(
     layout: &CachedLayout,
     cfg: &Configuration,
     active_states: &[&str],
     legend: Option<&LegendData>,
+    model_name: Option<&str>,
+    highlighted_edge: Option<(usize, usize)>,
 ) -> Result<Viewport, Diagnostic> {
     match cfg.format {
         Format::SVG => {
             let document = create_svg(
                 &layout.node_labels,
-                &layout.node_aliases,
                 &layout.edges_vec,
                 &layout.positions,
                 cfg,
                 active_states,
                 legend,
-                &layout.state_legend,
-                &layout.pred_legend,
+                model_name,
+                highlighted_edge,
             );
             Ok(Viewport::SVG(document))
         }
@@ -183,7 +155,7 @@ pub(crate) fn create_viewport(
     legend: Option<&LegendData>,
 ) -> Result<Viewport, Diagnostic> {
     let layout = compute_layout(unit, &configuration);
-    render_from_layout(&layout, &configuration, active_states, legend)
+    render_from_layout(&layout, &configuration, active_states, legend, None, None)
 }
 
 // ── Геометрические вспомогательные функции для SVG ───────────────────────────
@@ -236,23 +208,18 @@ fn rects_intersection_area(
 /// - `positions` — координаты центров узлов, соответствующие `node_labels`.
 /// - `cfg` — конфигурация с размерами холста и параметрами отрисовки.
 pub(crate) const LEGEND_WIDTH: f64 = 190.0;
-pub(crate) const SYMBOL_LEGEND_WIDTH: f64 = 250.0;
 
-#[allow(clippy::too_many_arguments)]
 fn create_svg(
     node_labels: &[String],
-    node_aliases: &[String],
     edges_vec: &Vec<(usize, usize, String)>,
     positions: &Positions,
     cfg: &Configuration,
     active_states: &[&str],
     legend: Option<&LegendData>,
-    state_legend: &[(String, String)],
-    pred_legend: &[(String, String)],
+    model_name: Option<&str>,
+    highlighted_edge: Option<(usize, usize)>,
 ) -> Document {
-    let has_symbols = !state_legend.is_empty() || !pred_legend.is_empty();
-    let sym_width = if has_symbols { SYMBOL_LEGEND_WIDTH } else { 0.0 };
-    let total_width = cfg.width + sym_width + if legend.is_some() { LEGEND_WIDTH } else { 0.0 };
+    let total_width = cfg.width + if legend.is_some() { LEGEND_WIDTH } else { 0.0 };
     let mut document = Document::new()
         .set("viewBox", (0, 0, total_width, cfg.height))
         .set("xmlns", "http://www.w3.org/2000/svg");
@@ -312,6 +279,7 @@ fn create_svg(
 
     // ── Отрисовка рёбер ───────────────────────────────────────────────────────
     for (idx, (i, j, edge_label)) in edges_vec.iter().enumerate() {
+        let is_highlighted = highlighted_edge.map_or(false, |(hi, hj)| *i == hi && *j == hj);
         let multiplicity = edge_multiplicities[idx];
         let (x1, y1) = positions[*i];
         let (x2, y2) = positions[*j];
@@ -344,6 +312,11 @@ fn create_svg(
         let cp_x = mid_x - uy * d * curve_factor;
         let cp_y = mid_y + ux * d * curve_factor;
 
+        let (edge_stroke, edge_width) = if is_highlighted {
+            ("#FF8C00", 3.5_f64)
+        } else {
+            ("#444", 2.0_f64)
+        };
         document = document.add(
             Path::new()
                 .set(
@@ -354,8 +327,8 @@ fn create_svg(
                     ),
                 )
                 .set("fill", "none")
-                .set("stroke", "#444")
-                .set("stroke-width", 2.0)
+                .set("stroke", edge_stroke)
+                .set("stroke-width", edge_width)
                 .set("marker-end", "url(#arrow)"),
         );
 
@@ -446,13 +419,18 @@ fn create_svg(
                     .set("stroke-dasharray", "3,2"),
             );
         }
+        let (bg_fill, bg_stroke) = if is_highlighted {
+            ("#FFF3CD", "#FF8C00")
+        } else {
+            ("white", "#aaa")
+        };
         let bg = Rectangle::new()
             .set("x", label_x - box_w / 2.0)
             .set("y", label_y - box_h / 2.0)
             .set("width", box_w)
             .set("height", box_h)
-            .set("fill", "white")
-            .set("stroke", "#aaa")
+            .set("fill", bg_fill)
+            .set("stroke", bg_stroke)
             .set("stroke-width", 1.0)
             .set("rx", 2.0)
             .set("ry", 2.0);
@@ -465,7 +443,6 @@ fn create_svg(
 
     // ── Отрисовка узлов ───────────────────────────────────────────────────────
     for (i, full_label) in node_labels.iter().enumerate() {
-        let display_label = node_aliases.get(i).unwrap_or(full_label);
         let (cx, cy) = positions[i];
         let is_active = active_states.contains(&full_label.as_str());
         let fill = if is_active { "#FFE066" } else { "#cce5ff" };
@@ -480,76 +457,31 @@ fn create_svg(
                 .set("stroke-width", stroke_w),
         );
         document = document.add(
-            Text::new(display_label.clone())
+            Text::new(full_label.clone())
                 .set("x", cx)
                 .set("y", cy)
                 .set("class", "gost-text"),
         );
     }
 
-    // ── Легенда символов (состояния + переходы) ──────────────────────────────
-    if has_symbols {
-        let lx = cfg.width + 5.0;
-        let line_h = 13.0;
-        let pad = 5.0;
-        let font_size = "9px";
-
-        let sym_sections: &[(&str, &[(String, String)])] =
-            &[("СОСТОЯНИЯ:", state_legend), ("ПЕРЕХОДЫ:", pred_legend)];
-        let n_lines: usize = sym_sections.iter().map(|(_, v)| v.len() + 1).sum();
-        let box_h = (n_lines as f64 * line_h + 2.0 * pad).min(cfg.height - pad * 2.0);
-
+    // ── Имя модели ────────────────────────────────────────────────────────────
+    if let Some(name) = model_name {
         document = document.add(
-            Rectangle::new()
-                .set("x", lx)
-                .set("y", pad)
-                .set("width", SYMBOL_LEGEND_WIDTH - 10.0)
-                .set("height", box_h)
-                .set("fill", "#f8f8f8")
-                .set("stroke", "#bbb")
-                .set("stroke-width", 1)
-                .set("rx", 4)
-                .set("ry", 4),
+            Text::new(name)
+                .set("x", cfg.width / 2.0)
+                .set("y", 16.0)
+                .set("font-family", "monospace")
+                .set("font-size", "14px")
+                .set("font-weight", "bold")
+                .set("fill", "#333")
+                .set("text-anchor", "middle")
+                .set("dominant-baseline", "middle"),
         );
-
-        let mut y = pad + line_h;
-        for (header, entries) in sym_sections {
-            if y + line_h > cfg.height - pad {
-                break;
-            }
-            document = document.add(
-                Text::new(*header)
-                    .set("x", lx + pad)
-                    .set("y", y)
-                    .set("font-family", "monospace")
-                    .set("font-size", font_size)
-                    .set("font-weight", "bold")
-                    .set("fill", "#555")
-                    .set("dominant-baseline", "middle"),
-            );
-            y += line_h;
-            for (alias, full_name) in *entries {
-                if y + line_h > cfg.height - pad {
-                    break;
-                }
-                let text = format!("{alias} — {full_name}");
-                document = document.add(
-                    Text::new(text)
-                        .set("x", lx + pad)
-                        .set("y", y)
-                        .set("font-family", "monospace")
-                        .set("font-size", font_size)
-                        .set("fill", "#333")
-                        .set("dominant-baseline", "middle"),
-                );
-                y += line_h;
-            }
-        }
     }
 
-    // ── Легенда портов и переменных ───────────────────────────────────────────
+    // ── Легенда портов, переменных и цветов ───────────────────────────────────
     if let Some(leg) = legend {
-        let lx = cfg.width + sym_width + 5.0;
+        let lx = cfg.width + 5.0;
         let line_h = 15.0;
         let pad = 5.0;
 
@@ -567,7 +499,8 @@ fn create_svg(
             all_lines.push(("VARS:", &leg.vars));
         }
 
-        let n_lines: usize = all_lines.iter().map(|(_, v)| v.len() + 1).sum();
+        // +1 заголовок ЦВЕТА: + 2 записи (активное, неактивное)
+        let n_lines: usize = all_lines.iter().map(|(_, v)| v.len() + 1).sum::<usize>() + 3;
         let box_h = n_lines as f64 * line_h + 2.0 * pad;
 
         document = document.add(
@@ -584,6 +517,44 @@ fn create_svg(
         );
 
         let mut y = pad + line_h;
+
+        // ── Цветовые обозначения ──────────────────────────────────────────────
+        document = document.add(
+            Text::new("ЦВЕТА:")
+                .set("x", lx + pad)
+                .set("y", y)
+                .set("font-family", "monospace")
+                .set("font-size", "10px")
+                .set("font-weight", "bold")
+                .set("fill", "#555")
+                .set("dominant-baseline", "middle"),
+        );
+        y += line_h;
+
+        for (color, label) in [("#FFE066", "активное"), ("#cce5ff", "неактивное")]
+        {
+            document = document.add(
+                Circle::new()
+                    .set("cx", lx + pad + 5.0)
+                    .set("cy", y)
+                    .set("r", 4.0)
+                    .set("fill", color)
+                    .set("stroke", "#555")
+                    .set("stroke-width", 1),
+            );
+            document = document.add(
+                Text::new(label)
+                    .set("x", lx + pad + 13.0)
+                    .set("y", y)
+                    .set("font-family", "monospace")
+                    .set("font-size", "10px")
+                    .set("fill", "#333")
+                    .set("dominant-baseline", "middle"),
+            );
+            y += line_h;
+        }
+
+        // ── Порты и переменные ────────────────────────────────────────────────
         for (header, entries) in &all_lines {
             document = document.add(
                 Text::new(*header)
@@ -798,7 +769,8 @@ pub(super) mod graph {
                 let sigma = 15.0 * (t / t_start).max(0.01);
                 let dx: f64 = rng.sample::<f64, _>(rand_distr::StandardNormal) * sigma;
                 let dy: f64 = rng.sample::<f64, _>(rand_distr::StandardNormal) * sigma;
-                let new_pos = clamp_to_canvas(old_pos.0 + dx, old_pos.1 + dy, radius, width, height);
+                let new_pos =
+                    clamp_to_canvas(old_pos.0 + dx, old_pos.1 + dy, radius, width, height);
 
                 if (new_pos.0 - old_pos.0).abs() < 1e-6 && (new_pos.1 - old_pos.1).abs() < 1e-6 {
                     continue; // смещение подавлено зажимом — пропускаем
@@ -904,7 +876,7 @@ pub(super) mod graph {
         delta
     }
 
-/// Зажимает координаты точки так, чтобы кружок радиуса `radius` не выходил за холст.
+    /// Зажимает координаты точки так, чтобы кружок радиуса `radius` не выходил за холст.
     ///
     /// Допустимая область для центра: `[radius, width - radius] × [radius, height - radius]`.
     fn clamp_to_canvas(x: f64, y: f64, radius: f64, width: f64, height: f64) -> (f64, f64) {
@@ -1195,6 +1167,7 @@ pub(super) mod graph {
                 state: None,
                 state_transitions,
                 state_executions: HashMap::new(),
+                last_transition: None,
             }
         }
     }
@@ -1283,6 +1256,7 @@ mod tests {
             state: Some("A".to_string()),
             state_transitions: transitions,
             state_executions: HashMap::new(),
+            last_transition: None,
         };
         let result = create_viewport(&unit, Configuration::default(), &["A"], None);
         assert!(result.is_ok());
