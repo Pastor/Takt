@@ -648,7 +648,7 @@ pub(super) mod graph {
     /// с дисперсией, пропорциональной текущей температуре. Новое состояние принимается,
     /// если оно снижает энергию или с вероятностью `exp(-ΔE / T)`.
     ///
-    /// Функция энергии [`energy`] штрафует за:
+    /// Функция энергии [`delta_energy`] штрафует за:
     /// 1. Перекрытие кружков узлов.
     /// 2. Большую суммарную длину рёбер.
     /// 3. Пересечения рёбер.
@@ -667,22 +667,19 @@ pub(super) mod graph {
             return;
         }
 
+        // Предвычисляем список рёбер, инцидентных каждому узлу, чтобы не
+        // перебирать все рёбра при каждом вычислении delta_energy.
+        let mut incident: Vec<Vec<usize>> = vec![Vec::new(); n];
+        for (ei, &(u, v)) in edges.iter().enumerate() {
+            incident[u].push(ei);
+            incident[v].push(ei);
+        }
+
         let mut rng = rand::rng();
         let w_overlap = 1e6;
         let w_length = 1.0;
         let w_cross = 1.0;
         let cross_penalty = 500.0; // штраф за одно пересечение рёбер
-
-        let mut current_energy = energy(
-            positions,
-            edges,
-            radius,
-            min_distance,
-            w_overlap,
-            w_length,
-            w_cross,
-            cross_penalty,
-        );
 
         let t_start: f64 = 500.0;
         let t_end = 0.1;
@@ -693,21 +690,26 @@ pub(super) mod graph {
         while t > t_end {
             for _ in 0..iterations_per_t {
                 let idx = rng.random_range(0..n);
-                let (old_x, old_y) = positions[idx];
+                let old_pos = positions[idx];
 
                 let sigma = 15.0 * (t / t_start).max(0.01);
                 let dx: f64 = rng.sample::<f64, _>(rand_distr::StandardNormal) * sigma;
                 let dy: f64 = rng.sample::<f64, _>(rand_distr::StandardNormal) * sigma;
-                let (new_x, new_y) = clamp_to_canvas(old_x + dx, old_y + dy, radius, width, height);
+                let new_pos = clamp_to_canvas(old_pos.0 + dx, old_pos.1 + dy, radius, width, height);
 
-                if (new_x - old_x).abs() < 1e-6 && (new_y - old_y).abs() < 1e-6 {
+                if (new_pos.0 - old_pos.0).abs() < 1e-6 && (new_pos.1 - old_pos.1).abs() < 1e-6 {
                     continue; // смещение подавлено зажимом — пропускаем
                 }
 
-                positions[idx] = (new_x, new_y);
-                let new_energy = energy(
+                // Инкрементальная дельта-энергия: пересчитываем только вклад
+                // перемещённого узла — O(n) вместо O(n²) полного пересчёта.
+                let delta = delta_energy(
                     positions,
+                    idx,
+                    old_pos,
+                    new_pos,
                     edges,
+                    &incident,
                     radius,
                     min_distance,
                     w_overlap,
@@ -715,29 +717,27 @@ pub(super) mod graph {
                     w_cross,
                     cross_penalty,
                 );
-                let delta = new_energy - current_energy;
 
                 if delta < 0.0 || rng.random::<f64>() < (-delta / t).exp() {
-                    current_energy = new_energy;
-                } else {
-                    positions[idx] = (old_x, old_y); // откат
+                    positions[idx] = new_pos;
                 }
             }
             t *= alpha;
         }
     }
 
-    /// Вычисляет полную энергию конфигурации узлов.
+    /// Вычисляет изменение энергии при перемещении узла `idx` из `old_pos` в `new_pos`.
     ///
-    /// Состоит из трёх слагаемых:
-    /// 1. **Перекрытие**: `w_overlap * (min_d - d)²` для каждой пары узлов с `d < min_d`.
-    /// 2. **Длина рёбер**: `w_length * d²` — притяжение связанных узлов.
-    /// 3. **Пересечения рёбер**: `w_cross * cross_penalty` за каждое пересечение.
-    ///    Рёбра с общей вершиной при подсчёте пересечений пропускаются.
+    /// Работает за O(n + degree × m) вместо O(n² + m²) полного пересчёта:
+    /// перебираются только пары, в которых участвует перемещённый узел.
     #[allow(clippy::too_many_arguments)]
-    fn energy(
+    fn delta_energy(
         positions: &Positions,
+        idx: usize,
+        old_pos: (f64, f64),
+        new_pos: (f64, f64),
         edges: &[(usize, usize)],
+        incident: &[Vec<usize>],
         radius: f64,
         min_distance: f64,
         w_overlap: f64,
@@ -746,43 +746,62 @@ pub(super) mod graph {
         cross_penalty: f64,
     ) -> f64 {
         let n = positions.len();
-        let mut e = 0.0;
         let min_d = 2.0 * radius + min_distance;
+        let mut delta = 0.0;
 
-        for i in 0..n {
-            for j in (i + 1)..n {
-                let d = dist(positions[i], positions[j]);
-                if d < min_d {
-                    e += w_overlap * (min_d - d).powi(2);
-                }
+        // Перекрытие: пары (idx, j) для всех j ≠ idx
+        for j in 0..n {
+            if j == idx {
+                continue;
+            }
+            let pj = positions[j];
+            let old_d = dist(old_pos, pj);
+            if old_d < min_d {
+                delta -= w_overlap * (min_d - old_d).powi(2);
+            }
+            let new_d = dist(new_pos, pj);
+            if new_d < min_d {
+                delta += w_overlap * (min_d - new_d).powi(2);
             }
         }
 
-        for &(i, j) in edges {
-            e += w_length * dist(positions[i], positions[j]).powi(2);
+        // Длина рёбер: только рёбра, инцидентные idx
+        for &ei in &incident[idx] {
+            let (u, v) = edges[ei];
+            let other = if u == idx { positions[v] } else { positions[u] };
+            delta -= w_length * dist(old_pos, other).powi(2);
+            delta += w_length * dist(new_pos, other).powi(2);
         }
 
-        let m = edges.len();
-        let segs: Vec<_> = edges
-            .iter()
-            .map(|&(u, v)| (positions[u], positions[v]))
-            .collect();
-        for i in 0..m {
-            for j in (i + 1)..m {
-                let (u1, v1) = edges[i];
-                let (u2, v2) = edges[j];
-                if u1 == u2 || u1 == v2 || v1 == u2 || v1 == v2 {
+        // Пересечения: рёбра, инцидентные idx, против остальных рёбер
+        for &ei in &incident[idx] {
+            let (u1, v1) = edges[ei];
+            let other_node = if u1 == idx { v1 } else { u1 };
+            let p_other = positions[other_node];
+
+            for (ej, &(u2, v2)) in edges.iter().enumerate() {
+                if ej == ei {
                     continue;
                 }
-                if segments_intersect(segs[i].0, segs[i].1, segs[j].0, segs[j].1) {
-                    e += w_cross * cross_penalty;
+                // Пропускаем рёбра, разделяющие вершину с ei
+                if u2 == u1 || u2 == v1 || v2 == u1 || v2 == v1 {
+                    continue;
+                }
+                let q1 = positions[u2];
+                let q2 = positions[v2];
+                if segments_intersect(old_pos, p_other, q1, q2) {
+                    delta -= w_cross * cross_penalty;
+                }
+                if segments_intersect(new_pos, p_other, q1, q2) {
+                    delta += w_cross * cross_penalty;
                 }
             }
         }
-        e
+
+        delta
     }
 
-    /// Зажимает координаты точки так, чтобы кружок радиуса `radius` не выходил за холст.
+/// Зажимает координаты точки так, чтобы кружок радиуса `radius` не выходил за холст.
     ///
     /// Допустимая область для центра: `[radius, width - radius] × [radius, height - radius]`.
     fn clamp_to_canvas(x: f64, y: f64, radius: f64, width: f64, height: f64) -> (f64, f64) {
