@@ -4,6 +4,16 @@ use svg::node::element::{Circle, Definitions, Group, Line, Marker, Path, Rectang
 use crate::unit::Unit;
 use grammar::diagnostics::Diagnostic;
 
+// ── Данные легенды ────────────────────────────────────────────────────────────
+
+/// Данные для отображения легенды портов и переменных на кадре симуляции.
+pub(crate) struct LegendData {
+    pub in_ports: Vec<(String, String)>,
+    pub out_ports: Vec<(String, String)>,
+    pub inout_ports: Vec<(String, String)>,
+    pub vars: Vec<(String, String)>,
+}
+
 // ── Общий тип позиций ─────────────────────────────────────────────────────────
 
 /// Вектор позиций узлов: каждая запись — координаты центра (x, y).
@@ -90,12 +100,21 @@ impl Viewport {
 pub(crate) fn create_viewport(
     unit: &Unit,
     configuration: Configuration,
+    current_state: Option<&str>,
+    legend: Option<&LegendData>,
 ) -> Result<Viewport, Diagnostic> {
     let graph = graph::unit_to_graph(unit);
     let (node_labels, mut edges_vec, mut positions) = graph::calculate_graph(graph, &configuration);
     match configuration.format {
         Format::SVG => {
-            let document = create_svg(node_labels, &mut edges_vec, &mut positions, &configuration);
+            let document = create_svg(
+                node_labels,
+                &mut edges_vec,
+                &mut positions,
+                &configuration,
+                current_state,
+                legend,
+            );
             Ok(Viewport::SVG(document))
         }
     }
@@ -150,14 +169,23 @@ fn rects_intersection_area(
 /// - `edges_vec` — рёбра `(индекс_источника, индекс_цели, подпись)`.
 /// - `positions` — координаты центров узлов, соответствующие `node_labels`.
 /// - `cfg` — конфигурация с размерами холста и параметрами отрисовки.
+const LEGEND_WIDTH: f64 = 190.0;
+
 fn create_svg(
     node_labels: Vec<String>,
     edges_vec: &mut Vec<(usize, usize, String)>,
     positions: &mut Positions,
     cfg: &Configuration,
+    current_state: Option<&str>,
+    legend: Option<&LegendData>,
 ) -> Document {
+    let total_width = if legend.is_some() {
+        cfg.width + LEGEND_WIDTH
+    } else {
+        cfg.width
+    };
     let mut document = Document::new()
-        .set("viewBox", (0, 0, cfg.width, cfg.height))
+        .set("viewBox", (0, 0, total_width, cfg.height))
         .set("xmlns", "http://www.w3.org/2000/svg");
 
     document = document.add(Style::new(
@@ -369,14 +397,17 @@ fn create_svg(
     // ── Отрисовка узлов ───────────────────────────────────────────────────────
     for (i, label) in node_labels.iter().enumerate() {
         let (cx, cy) = positions[i];
+        let is_active = current_state.map_or(false, |s| s == label.as_str());
+        let fill = if is_active { "#FFE066" } else { "#cce5ff" };
+        let stroke_w = if is_active { 3 } else { 2 };
         document = document.add(
             Circle::new()
                 .set("cx", cx)
                 .set("cy", cy)
                 .set("r", cfg.radius)
-                .set("fill", "#cce5ff")
+                .set("fill", fill)
                 .set("stroke", "#333")
-                .set("stroke-width", 2),
+                .set("stroke-width", stroke_w),
         );
         document = document.add(
             Text::new(label.clone())
@@ -385,6 +416,72 @@ fn create_svg(
                 .set("class", "gost-text"),
         );
     }
+
+    // ── Легенда ───────────────────────────────────────────────────────────────
+    if let Some(leg) = legend {
+        let lx = cfg.width + 5.0;
+        let line_h = 15.0;
+        let pad = 5.0;
+
+        let mut all_lines: Vec<(&str, &[(String, String)])> = vec![];
+        if !leg.in_ports.is_empty() {
+            all_lines.push(("IN:", &leg.in_ports));
+        }
+        if !leg.out_ports.is_empty() {
+            all_lines.push(("OUT:", &leg.out_ports));
+        }
+        if !leg.inout_ports.is_empty() {
+            all_lines.push(("INOUT:", &leg.inout_ports));
+        }
+        if !leg.vars.is_empty() {
+            all_lines.push(("VARS:", &leg.vars));
+        }
+
+        let n_lines: usize = all_lines.iter().map(|(_, v)| v.len() + 1).sum();
+        let box_h = n_lines as f64 * line_h + 2.0 * pad;
+
+        document = document.add(
+            Rectangle::new()
+                .set("x", lx)
+                .set("y", pad)
+                .set("width", LEGEND_WIDTH - 10.0)
+                .set("height", box_h)
+                .set("fill", "#f8f8f8")
+                .set("stroke", "#bbb")
+                .set("stroke-width", 1)
+                .set("rx", 4)
+                .set("ry", 4),
+        );
+
+        let mut y = pad + line_h;
+        for (header, entries) in &all_lines {
+            document = document.add(
+                Text::new(*header)
+                    .set("x", lx + pad)
+                    .set("y", y)
+                    .set("font-family", "monospace")
+                    .set("font-size", "10px")
+                    .set("font-weight", "bold")
+                    .set("fill", "#555")
+                    .set("dominant-baseline", "middle"),
+            );
+            y += line_h;
+            for (name, value) in *entries {
+                let text = format!("  {}={}", name, value);
+                document = document.add(
+                    Text::new(text)
+                        .set("x", lx + pad)
+                        .set("y", y)
+                        .set("font-family", "monospace")
+                        .set("font-size", "10px")
+                        .set("fill", "#333")
+                        .set("dominant-baseline", "middle"),
+                );
+                y += line_h;
+            }
+        }
+    }
+
     document
 }
 
@@ -1019,7 +1116,7 @@ mod tests {
 
     #[test]
     fn test_create_viewport_empty_unit_returns_ok() {
-        let result = create_viewport(&Unit::None, Configuration::default());
+        let result = create_viewport(&Unit::None, Configuration::default(), None, None);
         assert!(result.is_ok(), "ожидался Ok, получено Err");
     }
 
@@ -1038,7 +1135,7 @@ mod tests {
             state_transitions: transitions,
             state_executions: HashMap::new(),
         };
-        let result = create_viewport(&unit, Configuration::default());
+        let result = create_viewport(&unit, Configuration::default(), Some("A"), None);
         assert!(result.is_ok());
     }
 }

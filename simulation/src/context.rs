@@ -4,6 +4,8 @@ use crate::value::Value;
 pub(crate) trait Context {
     /// Возвращает клонированное значение переменной или `None`, если переменная не найдена.
     fn get_value(&self, name: &str) -> Option<Value>;
+    /// Устанавливает значение переменной в текущей области видимости.
+    fn set_value(&mut self, name: &str, value: Value);
 }
 
 #[cfg(test)]
@@ -19,6 +21,10 @@ mod tests {
     impl Context for MockContext {
         fn get_value(&self, name: &str) -> Option<Value> {
             self.vars.get(name).cloned()
+        }
+
+        fn set_value(&mut self, name: &str, value: Value) {
+            self.vars.insert(name.to_string(), value);
         }
     }
 

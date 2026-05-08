@@ -17,6 +17,8 @@ mod tests {
         fn get_value(&self, _: &str) -> Option<Value> {
             None
         }
+
+        fn set_value(&mut self, _: &str, _: Value) {}
     }
 
     /// Реализация, которая всегда завершена.

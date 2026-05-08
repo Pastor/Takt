@@ -7,39 +7,39 @@ Stacker --> [*]
 
 state LiftController {
     [*] --> LiftIdle
-    LiftDone --> LiftIdle
     LiftIdle --> LiftOperating
     LiftOperating --> LiftDone
     LiftOperating --> LiftDone
     LiftOperating --> LiftIdle
-}
-
-state CommandReceiver {
-    [*] --> WaitingForTask
-    WaitingForTask --> AcceptingTask
-    TaskActive --> WaitingForTask
-    AcceptingTask --> TaskActive
+    LiftDone --> LiftIdle
 }
 
 state MovementController {
     [*] --> MovementIdle
-    MovingToPickup --> WaitingForkAtPickup
-    MovingToPickup --> EmergencyCharge
+    MovementIdle --> DispatchMove
     WaitingForkAtCell --> TaskCompleting
     WaitingForkAtStorage --> MovingToDropoff
-    MovingToDropoff --> WaitingForkAtDropoff
-    MovingToDropoff --> EmergencyCharge
-    MovingToCell --> WaitingForkAtCell
-    MovingToCell --> EmergencyCharge
-    DispatchMove --> MovingToPickup
-    DispatchMove --> MovingToStorage
-    WaitingForkAtDropoff --> TaskCompleting
-    TaskCompleting --> MovementIdle
-    WaitingForkAtPickup --> MovingToCell
     MovingToStorage --> WaitingForkAtStorage
     MovingToStorage --> EmergencyCharge
-    MovementIdle --> DispatchMove
+    TaskCompleting --> MovementIdle
+    DispatchMove --> MovingToPickup
+    DispatchMove --> MovingToStorage
+    MovingToDropoff --> WaitingForkAtDropoff
+    MovingToDropoff --> EmergencyCharge
     EmergencyCharge --> MovementIdle
+    MovingToPickup --> WaitingForkAtPickup
+    MovingToPickup --> EmergencyCharge
+    WaitingForkAtDropoff --> TaskCompleting
+    MovingToCell --> WaitingForkAtCell
+    MovingToCell --> EmergencyCharge
+    WaitingForkAtPickup --> MovingToCell
+}
+
+state CommandReceiver {
+    [*] --> WaitingForTask
+    AcceptingTask --> TaskActive
+    TaskActive --> WaitingForTask
+    WaitingForTask --> AcceptingTask
 }
 
 @enduml
