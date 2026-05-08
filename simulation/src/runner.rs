@@ -250,14 +250,19 @@ impl SimulationRunner {
 
         // Раскладка вычисляется один раз: имитация отжига дорогая, но структура
         // модели не меняется в ходе симуляции.
-        if self.cached_layout.is_none() {
+        let layout_ms = if self.cached_layout.is_none() {
+            let t = std::time::Instant::now();
             self.cached_layout = Some(compute_layout(&self.unit, &Configuration::default()));
-        }
+            Some(t.elapsed().as_millis())
+        } else {
+            None
+        };
 
         let active = self.unit.active_states();
         let active_refs: Vec<&str> = active.iter().map(String::as_str).collect();
         let legend = build_legend(&self.unit, &self.port_names);
 
+        let t_vp = std::time::Instant::now();
         let viewport = render_from_layout(
             self.cached_layout.as_ref().unwrap(),
             &Configuration::default(),
@@ -265,10 +270,21 @@ impl SimulationRunner {
             Some(&legend),
         )
         .map_err(|d| format!("Ошибка viewport: {}", d.message))?;
+        let vp_ms = t_vp.elapsed().as_millis();
 
+        let t_rast = std::time::Instant::now();
         if let Some(rec) = &mut self.gif_recorder {
             rec.add_frame(&viewport, w, h)?;
         }
+        let rast_ms = t_rast.elapsed().as_millis();
+
+        // Вывод тайминга GIF-кадра
+        if let Some(lms) = layout_ms {
+            println!("           GIF:  раскладка={lms} мс  viewport={vp_ms} мс  растеризация={rast_ms} мс");
+        } else {
+            println!("           GIF:  viewport={vp_ms} мс  растеризация={rast_ms} мс");
+        }
+
         Ok(())
     }
 }
