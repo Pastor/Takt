@@ -16,6 +16,9 @@
 | 18 | SE-047: анализ константных условий переходов | `validate.rs`, `lib.rs` | ✅ |
 
 | TASKS.md §1 | builder.rs: построение дерева Unit + ModelNodeContext с иерархическим контекстом (Rc&lt;RefCell&lt;ModelNode&gt;&gt;, lazy copy, parent chain) | `simulation/src/unit/builder.rs` | ✅ (118 тестов simulation, 1302 workspace) |
+| TASKS.md §3 | GIF: имя модели сверху, удалена символьная легенда (Sn/Pn), полные имена на рёбрах/узлах, цветовая легенда | `viewport.rs`, `runner.rs`, `bin/simulation.rs` | ✅ (1329 тестов) |
+| TASKS.md §1 | GIF: highlight-кадр сработавшего перехода (оранжевое ребро + метка); `last_transition` в Unit::Node | `unit/mod.rs`, `viewport.rs`, `runner.rs` | ✅ (1329 тестов) |
+| TASKS.md §2 | Сохранение/загрузка состояния: `state_io.rs`, CLI `--save-state`/`--load-state` | `state_io.rs`, `lib.rs`, `bin/simulation.rs` | ✅ (1329 тестов) |
 
 ## Пропущенные задачи (высокий риск)
 

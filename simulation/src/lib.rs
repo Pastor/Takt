@@ -20,6 +20,7 @@ pub mod json_input;
 mod predicate;
 pub mod runner;
 mod snapshot;
+pub mod state_io;
 mod unit;
 mod value;
 

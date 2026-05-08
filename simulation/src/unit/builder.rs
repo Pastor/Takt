@@ -40,8 +40,7 @@ impl ModelNodeContext {
             .as_ref()
             .and_then(|w| w.upgrade())
             .map(|parent_rc| {
-                Rc::new(RefCell::new(ModelNodeContext::new(parent_rc)))
-                    as Rc<RefCell<dyn Context>>
+                Rc::new(RefCell::new(ModelNodeContext::new(parent_rc))) as Rc<RefCell<dyn Context>>
             });
         Self {
             model,
@@ -80,7 +79,9 @@ impl Context for ModelNodeContext {
                 .insert(name.to_string(), value.clone());
             return Some(value);
         }
-        self.parent.as_ref().and_then(|p| p.borrow().get_value(name))
+        self.parent
+            .as_ref()
+            .and_then(|p| p.borrow().get_value(name))
     }
 
     fn set_value(&mut self, name: &str, value: Value) {
@@ -210,7 +211,10 @@ fn compile_if(
 /// Компилирует выражение в список исполнителей.
 ///
 /// Запись идёт в `write_ctx` (ModelNodeContext), чтение — из `ctx` (юнит-контекст).
-fn compile_expression(expr: &ExpressionNode, write_ctx: Rc<RefCell<dyn Context>>) -> Vec<Execution> {
+fn compile_expression(
+    expr: &ExpressionNode,
+    write_ctx: Rc<RefCell<dyn Context>>,
+) -> Vec<Execution> {
     match expr {
         ExpressionNode::Assign(lhs, rhs) => {
             if let ExpressionNode::Variable(var_rc) = lhs.as_ref() {
@@ -321,13 +325,12 @@ fn build_node(
     };
 
     // Контекст: используем общий родительский если передан, иначе строим иерархию.
-    let ctx_rc: Rc<RefCell<dyn Context>> = Rc::new(RefCell::new(if let Some(shared) =
-        shared_parent
-    {
-        ModelNodeContext::new_with_parent(model.clone(), Some(shared))
-    } else {
-        ModelNodeContext::new(model.clone())
-    }));
+    let ctx_rc: Rc<RefCell<dyn Context>> =
+        Rc::new(RefCell::new(if let Some(shared) = shared_parent {
+            ModelNodeContext::new_with_parent(model.clone(), Some(shared))
+        } else {
+            ModelNodeContext::new(model.clone())
+        }));
 
     let mut state_transitions: HashMap<String, Vec<(String, Predicate)>> = HashMap::new();
     let mut state_executions: HashMap<String, Executions> = HashMap::new();
@@ -358,6 +361,7 @@ fn build_node(
         state: Some(start_name),
         variables: HashMap::new(),
         executions: HashMap::new(),
+        last_transition: None,
     })
 }
 
@@ -496,7 +500,10 @@ mod tests {
 
         // Читаем через shared_parent — должно вернуть 42
         assert!(
-            matches!(shared_parent.borrow().get_value("shared"), Some(Value::Number(42))),
+            matches!(
+                shared_parent.borrow().get_value("shared"),
+                Some(Value::Number(42))
+            ),
             "set_value должен делегировать в shared parent для не-локальных переменных"
         );
     }
@@ -709,7 +716,8 @@ mod tests {
         // До тика: cmd_ack должен быть 0 (дефолт)
         assert!(
             matches!(unit.get_value("cmd_ack"), Some(Value::Number(0)) | None),
-            "cmd_ack должен быть 0 до тика, получено {:?}", unit.get_value("cmd_ack")
+            "cmd_ack должен быть 0 до тика, получено {:?}",
+            unit.get_value("cmd_ack")
         );
 
         // Тик: Waiting→Accepting (enter: cmd_ack=1, busy=1)
@@ -718,11 +726,13 @@ mod tests {
         // После тика: cmd_ack = 1
         assert!(
             matches!(unit.get_value("cmd_ack"), Some(Value::Number(1))),
-            "cmd_ack должен быть 1 после тика, получено {:?}", unit.get_value("cmd_ack")
+            "cmd_ack должен быть 1 после тика, получено {:?}",
+            unit.get_value("cmd_ack")
         );
         assert!(
             matches!(unit.get_value("busy"), Some(Value::Number(1))),
-            "busy должен быть 1 после тика, получено {:?}", unit.get_value("busy")
+            "busy должен быть 1 после тика, получено {:?}",
+            unit.get_value("busy")
         );
     }
 
@@ -752,11 +762,13 @@ mod tests {
 
         assert!(
             matches!(unit.get_value("cmd_ack"), Some(Value::Number(1))),
-            "cmd_ack должен быть 1 после тика, получено {:?}", unit.get_value("cmd_ack")
+            "cmd_ack должен быть 1 после тика, получено {:?}",
+            unit.get_value("cmd_ack")
         );
         assert!(
             matches!(unit.get_value("busy"), Some(Value::Number(1))),
-            "busy должен быть 1 после тика, получено {:?}", unit.get_value("busy")
+            "busy должен быть 1 после тика, получено {:?}",
+            unit.get_value("busy")
         );
     }
 }
