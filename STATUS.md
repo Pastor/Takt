@@ -20,6 +20,8 @@
 | TASKS.md §1 | GIF: highlight-кадр сработавшего перехода (оранжевое ребро + метка); `last_transition` в Unit::Node | `unit/mod.rs`, `viewport.rs`, `runner.rs` | ✅ (1329 тестов) |
 | TASKS.md §2 | Сохранение/загрузка состояния: `state_io.rs`, CLI `--save-state`/`--load-state` | `state_io.rs`, `lib.rs`, `bin/simulation.rs` | ✅ (1329 тестов) |
 
+| predicate.rs | Читаемые метки рёбер: `condition_label()` генерирует `button != 0` вместо Debug-строки | `predicate.rs` | ✅ (1329 тестов) |
+
 ## Пропущенные задачи (высокий риск)
 
 - 11: Адрес порта отдельно от объявления — архитектурное изменение, поломка существующих `.lam` файлов
