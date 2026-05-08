@@ -96,6 +96,9 @@ impl SimulationRunner {
             let tick_result = self.unit.tick();
             completed += 1;
 
+            // Выводим информацию о шаге
+            self.print_step(completed);
+
             // Записываем кадр в GIF (если нужно)
             if self.gif_recorder.is_some() {
                 self.capture_frame()?;
@@ -127,6 +130,42 @@ impl SimulationRunner {
     }
 
     // ── Вспомогательные методы ────────────────────────────────────────────────
+
+    fn print_step(&self, step_no: usize) {
+        let states = self.unit.active_states();
+        let states_str = if states.is_empty() {
+            "—".to_string()
+        } else {
+            states.join(", ")
+        };
+
+        let fmt_group = |names: &[String]| -> String {
+            names
+                .iter()
+                .filter_map(|n| {
+                    self.unit
+                        .get_value(n)
+                        .map(|v| format!("{}={}", n, format_value(&v)))
+                })
+                .collect::<Vec<_>>()
+                .join("  ")
+        };
+
+        print!("Шаг {:3}:  [{}]", step_no, states_str);
+
+        for (label, names) in [
+            ("in", self.port_names.in_ports.as_slice()),
+            ("out", self.port_names.out_ports.as_slice()),
+            ("inout", self.port_names.inout_ports.as_slice()),
+            ("vars", self.port_names.vars.as_slice()),
+        ] {
+            let s = fmt_group(names);
+            if !s.is_empty() {
+                print!("  {}:{}", label, s);
+            }
+        }
+        println!();
+    }
 
     fn apply_step_inputs(&mut self, step: &SimStep) {
         if let Some(in_vals) = &step.in_ports {
