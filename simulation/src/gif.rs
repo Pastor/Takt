@@ -92,7 +92,14 @@ fn viewport_to_string(viewport: &Viewport) -> Result<String, String> {
 }
 
 fn render_svg(svg_str: &str, width: u32, height: u32) -> Result<Vec<u8>, String> {
-    let options = resvg::usvg::Options::default();
+    // fontdb::Database::new() пуст по умолчанию — без шрифтов usvg
+    // молча удаляет все <text>-элементы из дерева рендеринга.
+    let mut fontdb = resvg::usvg::fontdb::Database::new();
+    fontdb.load_system_fonts();
+    let options = resvg::usvg::Options {
+        fontdb: std::sync::Arc::new(fontdb),
+        ..Default::default()
+    };
     let tree = resvg::usvg::Tree::from_str(svg_str, &options)
         .map_err(|e| format!("Ошибка парсинга SVG: {e}"))?;
 

@@ -289,6 +289,16 @@ impl Unit {
         }
     }
 
+    /// Рекурсивно собирает имена всех активных состояний по дереву Unit.
+    ///
+    /// Для Sequential возвращает состояние текущего активного дочернего Unit.
+    /// Для Parallel — состояния всех дочерних Units.
+    pub fn active_states(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        collect_active_states(self, &mut out);
+        out
+    }
+
     pub fn is_terminal(&self) -> bool {
         match self {
             Unit::None => true,
@@ -419,6 +429,27 @@ impl Unit {
                     index: 0,
                     executions,
                 }
+            }
+        }
+    }
+}
+
+fn collect_active_states(unit: &Unit, out: &mut Vec<String>) {
+    match unit {
+        Unit::None => {}
+        Unit::Node { state, .. } => {
+            if let Some(s) = state {
+                out.push(s.clone());
+            }
+        }
+        Unit::Parallel { units, .. } => {
+            for u in units {
+                collect_active_states(&u.borrow(), out);
+            }
+        }
+        Unit::Sequential { units, index, .. } => {
+            if let Some(u) = units.get(*index) {
+                collect_active_states(&u.borrow(), out);
             }
         }
     }
