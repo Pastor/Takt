@@ -95,6 +95,8 @@ impl Viewport {
 pub(crate) struct CachedLayout {
     /// Полные имена состояний — используются для сопоставления с active_states.
     pub(crate) node_labels: Vec<String>,
+    /// Краткие псевдонимы S1/S2/... — отображаются в кружках на графе.
+    pub(crate) node_aliases: Vec<String>,
     /// Рёбра с полными именами предикатов.
     pub(crate) edges_vec: Vec<(usize, usize, String)>,
     pub(crate) positions: Positions,
@@ -107,8 +109,10 @@ pub(crate) struct CachedLayout {
 pub(crate) fn compute_layout(unit: &Unit, cfg: &Configuration) -> CachedLayout {
     let g = graph::unit_to_graph(unit);
     let (node_labels, edges_vec, positions) = graph::calculate_graph(g, cfg);
+    let node_aliases: Vec<String> = (1..=node_labels.len()).map(|i| format!("S{i}")).collect();
     CachedLayout {
         node_labels,
+        node_aliases,
         edges_vec,
         positions,
     }
@@ -130,6 +134,7 @@ pub(crate) fn render_from_layout(
         Format::SVG => {
             let document = create_svg(
                 &layout.node_labels,
+                &layout.node_aliases,
                 &layout.edges_vec,
                 &layout.positions,
                 cfg,
@@ -211,6 +216,7 @@ pub(crate) const LEGEND_WIDTH: f64 = 190.0;
 
 fn create_svg(
     node_labels: &[String],
+    node_aliases: &[String],
     edges_vec: &Vec<(usize, usize, String)>,
     positions: &Positions,
     cfg: &Configuration,
@@ -244,21 +250,37 @@ fn create_svg(
     ));
 
     document = document.add(
-        Definitions::new().add(
-            Marker::new()
-                .set("id", "arrow")
-                .set("viewBox", "0 0 10 10")
-                .set("refX", "10")
-                .set("refY", "5")
-                .set("markerWidth", cfg.arrow_size)
-                .set("markerHeight", cfg.arrow_size)
-                .set("orient", "auto")
-                .add(
-                    Path::new()
-                        .set("d", "M 0 0 L 10 5 L 0 10 z")
-                        .set("fill", "black"),
-                ),
-        ),
+        Definitions::new()
+            .add(
+                Marker::new()
+                    .set("id", "arrow")
+                    .set("viewBox", "0 0 10 10")
+                    .set("refX", "10")
+                    .set("refY", "5")
+                    .set("markerWidth", cfg.arrow_size)
+                    .set("markerHeight", cfg.arrow_size)
+                    .set("orient", "auto")
+                    .add(
+                        Path::new()
+                            .set("d", "M 0 0 L 10 5 L 0 10 z")
+                            .set("fill", "black"),
+                    ),
+            )
+            .add(
+                Marker::new()
+                    .set("id", "arrow-hl")
+                    .set("viewBox", "0 0 10 10")
+                    .set("refX", "10")
+                    .set("refY", "5")
+                    .set("markerWidth", cfg.arrow_size)
+                    .set("markerHeight", cfg.arrow_size)
+                    .set("orient", "auto")
+                    .add(
+                        Path::new()
+                            .set("d", "M 0 0 L 10 5 L 0 10 z")
+                            .set("fill", "#FF8C00"),
+                    ),
+            ),
     );
 
     // Центры узлов сохраняются для проверки перекрытий подписей рёбер
@@ -312,10 +334,10 @@ fn create_svg(
         let cp_x = mid_x - uy * d * curve_factor;
         let cp_y = mid_y + ux * d * curve_factor;
 
-        let (edge_stroke, edge_width) = if is_highlighted {
-            ("#FF8C00", 3.5_f64)
+        let (edge_stroke, edge_width, arrow_marker) = if is_highlighted {
+            ("#FF8C00", 3.5_f64, "url(#arrow-hl)")
         } else {
-            ("#444", 2.0_f64)
+            ("#444", 2.0_f64, "url(#arrow)")
         };
         document = document.add(
             Path::new()
@@ -329,116 +351,102 @@ fn create_svg(
                 .set("fill", "none")
                 .set("stroke", edge_stroke)
                 .set("stroke-width", edge_width)
-                .set("marker-end", "url(#arrow)"),
+                .set("marker-end", arrow_marker),
         );
 
-        // ── Подпись ребра ─────────────────────────────────────────────────────
-        // Середина кривой Безье при t=0.5: B(0.5) = 0.25·P0 + 0.5·P1 + 0.25·P2
-        let bez_mid_x = 0.25 * start_x + 0.5 * cp_x + 0.25 * end_x;
-        let bez_mid_y = 0.25 * start_y + 0.5 * cp_y + 0.25 * end_y;
+        // ── Подпись ребра: только для подсвеченного перехода ──────────────────
+        if is_highlighted {
+            let bez_mid_x = 0.25 * start_x + 0.5 * cp_x + 0.25 * end_x;
+            let bez_mid_y = 0.25 * start_y + 0.5 * cp_y + 0.25 * end_y;
 
-        let box_w = edge_label.chars().count() as f64 * cfg.edge_label_char_width + 8.0;
-        let box_h = cfg.edge_label_font_size + 4.0;
+            let box_w = edge_label.chars().count() as f64 * cfg.edge_label_char_width + 8.0;
+            let box_h = cfg.edge_label_font_size + 4.0;
 
-        // Жадный поиск лучшей позиции для подписи: концентрические кольца вокруг mid.
-        // Для каждого кандидата вычисляется штраф за выход за холст, перекрытие с узлами
-        // и перекрытие с уже размещёнными подписями. Выбирается позиция с минимальным штрафом.
-        let search_radii: &[f64] = &[0.0, 15.0, 30.0, 50.0, 70.0, 90.0, 115.0, 145.0, 180.0];
-        const N_ANGLES: usize = 16; // шаг 22.5°
+            let search_radii: &[f64] = &[0.0, 15.0, 30.0, 50.0, 70.0, 90.0, 115.0, 145.0, 180.0];
+            const N_ANGLES: usize = 16;
 
-        let mut best_center = (bez_mid_x, bez_mid_y);
-        let mut best_score = f64::MAX;
+            let mut best_center = (bez_mid_x, bez_mid_y);
+            let mut best_score = f64::MAX;
 
-        'search: for &r in search_radii {
-            let n = if r < 1.0 { 1 } else { N_ANGLES };
-            for k in 0..n {
-                let angle = (k as f64) * std::f64::consts::TAU / (n as f64);
-                let cx = bez_mid_x + r * angle.cos();
-                let cy = bez_mid_y + r * angle.sin();
+            'search: for &r in search_radii {
+                let n = if r < 1.0 { 1 } else { N_ANGLES };
+                for k in 0..n {
+                    let angle = (k as f64) * std::f64::consts::TAU / (n as f64);
+                    let cx = bez_mid_x + r * angle.cos();
+                    let cy = bez_mid_y + r * angle.sin();
 
-                let bx1 = cx - box_w / 2.0 - cfg.label_margin;
-                let by1 = cy - box_h / 2.0 - cfg.label_margin;
-                let bx2 = cx + box_w / 2.0 + cfg.label_margin;
-                let by2 = cy + box_h / 2.0 + cfg.label_margin;
+                    let bx1 = cx - box_w / 2.0 - cfg.label_margin;
+                    let by1 = cy - box_h / 2.0 - cfg.label_margin;
+                    let bx2 = cx + box_w / 2.0 + cfg.label_margin;
+                    let by2 = cy + box_h / 2.0 + cfg.label_margin;
 
-                let mut score = r; // предпочесть ближние позиции
-
-                if bx1 < 0.0 || bx2 > cfg.width || by1 < 0.0 || by2 > cfg.height {
-                    score += 1e8;
-                }
-                for &(nx, ny) in &node_circles {
-                    if rect_overlaps_circle(
-                        bx1,
-                        by1,
-                        bx2,
-                        by2,
-                        nx,
-                        ny,
-                        cfg.radius + cfg.label_margin,
-                    ) {
-                        score += 1e5;
+                    let mut score = r;
+                    if bx1 < 0.0 || bx2 > cfg.width || by1 < 0.0 || by2 > cfg.height {
+                        score += 1e8;
                     }
-                }
-                for &(lx1, ly1, lx2, ly2) in &placed_boxes {
-                    let area = rects_intersection_area(bx1, by1, bx2, by2, lx1, ly1, lx2, ly2);
-                    if area > 0.0 {
-                        score += 500.0 * area;
+                    for &(nx, ny) in &node_circles {
+                        if rect_overlaps_circle(
+                            bx1, by1, bx2, by2, nx, ny, cfg.radius + cfg.label_margin,
+                        ) {
+                            score += 1e5;
+                        }
                     }
-                }
-
-                if score < best_score {
-                    best_score = score;
-                    best_center = (cx, cy);
-                }
-                if score < 1.0 {
-                    break 'search;
+                    for &(lx1, ly1, lx2, ly2) in &placed_boxes {
+                        let area =
+                            rects_intersection_area(bx1, by1, bx2, by2, lx1, ly1, lx2, ly2);
+                        if area > 0.0 {
+                            score += 500.0 * area;
+                        }
+                    }
+                    if score < best_score {
+                        best_score = score;
+                        best_center = (cx, cy);
+                    }
+                    if score < 1.0 {
+                        break 'search;
+                    }
                 }
             }
-        }
 
-        let (label_x, label_y) = best_center;
-        placed_boxes.push((
-            label_x - box_w / 2.0,
-            label_y - box_h / 2.0,
-            label_x + box_w / 2.0,
-            label_y + box_h / 2.0,
-        ));
+            let (label_x, label_y) = best_center;
+            placed_boxes.push((
+                label_x - box_w / 2.0,
+                label_y - box_h / 2.0,
+                label_x + box_w / 2.0,
+                label_y + box_h / 2.0,
+            ));
 
-        // Лидерная линия — только если подпись сдвинута от середины ребра
-        let mut grp = Group::new();
-        let lead_dist = ((label_x - bez_mid_x).powi(2) + (label_y - bez_mid_y).powi(2)).sqrt();
-        if lead_dist > 5.0 {
-            grp = grp.add(
-                Line::new()
-                    .set("x1", bez_mid_x)
-                    .set("y1", bez_mid_y)
-                    .set("x2", label_x)
-                    .set("y2", label_y)
-                    .set("stroke", "#888")
-                    .set("stroke-width", 1.0)
-                    .set("stroke-dasharray", "3,2"),
-            );
+            let mut grp = Group::new();
+            let lead_dist =
+                ((label_x - bez_mid_x).powi(2) + (label_y - bez_mid_y).powi(2)).sqrt();
+            if lead_dist > 5.0 {
+                grp = grp.add(
+                    Line::new()
+                        .set("x1", bez_mid_x)
+                        .set("y1", bez_mid_y)
+                        .set("x2", label_x)
+                        .set("y2", label_y)
+                        .set("stroke", "#FF8C00")
+                        .set("stroke-width", 1.0)
+                        .set("stroke-dasharray", "3,2"),
+                );
+            }
+            let bg = Rectangle::new()
+                .set("x", label_x - box_w / 2.0)
+                .set("y", label_y - box_h / 2.0)
+                .set("width", box_w)
+                .set("height", box_h)
+                .set("fill", "#FFF3CD")
+                .set("stroke", "#FF8C00")
+                .set("stroke-width", 1.5)
+                .set("rx", 2.0)
+                .set("ry", 2.0);
+            let lbl = Text::new(edge_label.clone())
+                .set("x", label_x)
+                .set("y", label_y)
+                .set("class", "edge-label");
+            document = document.add(grp.add(bg).add(lbl));
         }
-        let (bg_fill, bg_stroke) = if is_highlighted {
-            ("#FFF3CD", "#FF8C00")
-        } else {
-            ("white", "#aaa")
-        };
-        let bg = Rectangle::new()
-            .set("x", label_x - box_w / 2.0)
-            .set("y", label_y - box_h / 2.0)
-            .set("width", box_w)
-            .set("height", box_h)
-            .set("fill", bg_fill)
-            .set("stroke", bg_stroke)
-            .set("stroke-width", 1.0)
-            .set("rx", 2.0)
-            .set("ry", 2.0);
-        let lbl = Text::new(edge_label.clone())
-            .set("x", label_x)
-            .set("y", label_y)
-            .set("class", "edge-label");
-        document = document.add(grp.add(bg).add(lbl));
     }
 
     // ── Отрисовка узлов ───────────────────────────────────────────────────────
@@ -447,6 +455,7 @@ fn create_svg(
         let is_active = active_states.contains(&full_label.as_str());
         let fill = if is_active { "#FFE066" } else { "#cce5ff" };
         let stroke_w = if is_active { 3 } else { 2 };
+        let alias = node_aliases.get(i).map(String::as_str).unwrap_or(full_label.as_str());
         document = document.add(
             Circle::new()
                 .set("cx", cx)
@@ -457,7 +466,7 @@ fn create_svg(
                 .set("stroke-width", stroke_w),
         );
         document = document.add(
-            Text::new(full_label.clone())
+            Text::new(alias)
                 .set("x", cx)
                 .set("y", cy)
                 .set("class", "gost-text"),
@@ -499,8 +508,10 @@ fn create_svg(
             all_lines.push(("VARS:", &leg.vars));
         }
 
-        // +1 заголовок ЦВЕТА: + 2 записи (активное, неактивное)
-        let n_lines: usize = all_lines.iter().map(|(_, v)| v.len() + 1).sum::<usize>() + 3;
+        // СОСТОЯНИЯ: + N псевдонимов; ЦВЕТА: + 2 записи
+        let n_lines: usize = all_lines.iter().map(|(_, v)| v.len() + 1).sum::<usize>()
+            + 3  // ЦВЕТА: + 2 строки цвета
+            + 1 + node_labels.len(); // СОСТОЯНИЯ: + N строк
         let box_h = n_lines as f64 * line_h + 2.0 * pad;
 
         document = document.add(
@@ -517,6 +528,32 @@ fn create_svg(
         );
 
         let mut y = pad + line_h;
+
+        // ── Псевдонимы состояний ──────────────────────────────────────────────
+        document = document.add(
+            Text::new("СОСТОЯНИЯ:")
+                .set("x", lx + pad)
+                .set("y", y)
+                .set("font-family", "monospace")
+                .set("font-size", "10px")
+                .set("font-weight", "bold")
+                .set("fill", "#555")
+                .set("dominant-baseline", "middle"),
+        );
+        y += line_h;
+        for (alias, full) in node_aliases.iter().zip(node_labels.iter()) {
+            let text = format!("  {alias} = {full}");
+            document = document.add(
+                Text::new(text)
+                    .set("x", lx + pad)
+                    .set("y", y)
+                    .set("font-family", "monospace")
+                    .set("font-size", "10px")
+                    .set("fill", "#333")
+                    .set("dominant-baseline", "middle"),
+            );
+            y += line_h;
+        }
 
         // ── Цветовые обозначения ──────────────────────────────────────────────
         document = document.add(
