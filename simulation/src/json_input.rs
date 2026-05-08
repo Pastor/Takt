@@ -103,7 +103,10 @@ mod tests {
     #[test]
     fn test_json_to_value_null_is_none() {
         let v = serde_json::Value::Null;
-        assert!(json_to_value(&v).is_none(), "null должен означать 'не проверять'");
+        assert!(
+            json_to_value(&v).is_none(),
+            "null должен означать 'не проверять'"
+        );
     }
 
     #[test]

@@ -90,7 +90,12 @@ impl GifRecorder {
             data: rgb,
         });
 
-        Ok(FrameTiming { serial_ms, parse_ms, render_ms, quant_ms })
+        Ok(FrameTiming {
+            serial_ms,
+            parse_ms,
+            render_ms,
+            quant_ms,
+        })
     }
 
     /// Сохраняет все накопленные кадры в GIF-файл.
@@ -168,7 +173,10 @@ mod tests {
     fn test_render_tree_produces_rgba() {
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="red"/></svg>"#;
         let fontdb = Arc::new(resvg::usvg::fontdb::Database::new());
-        let options = resvg::usvg::Options { fontdb, ..Default::default() };
+        let options = resvg::usvg::Options {
+            fontdb,
+            ..Default::default()
+        };
         let tree = resvg::usvg::Tree::from_str(svg, &options).unwrap();
         let result = render_tree(&tree, 10, 10);
         assert!(result.is_ok());
@@ -178,7 +186,12 @@ mod tests {
 
     #[test]
     fn test_frame_timing_fields() {
-        let t = FrameTiming { serial_ms: 1, parse_ms: 2, render_ms: 3, quant_ms: 4 };
+        let t = FrameTiming {
+            serial_ms: 1,
+            parse_ms: 2,
+            render_ms: 3,
+            quant_ms: 4,
+        };
         assert_eq!(t.serial_ms + t.parse_ms + t.render_ms + t.quant_ms, 10);
     }
 }
