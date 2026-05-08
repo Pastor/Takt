@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Bash(cargo check:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo doc:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(cargo publish:*)",
+      "Bash(cargo fmt -- --check && cargo fmt)",
+      "Bash(git push --force)"
+    ]
+  },
+  "instructions": "Следуй CLAUDE.md. Держи код идиоматичным, без unwrap(). Предпочитай композицию наследованию. Используй аннотации типов для улучшения читаемости и поддержки. Используй типажи для определения поведения и интерфейсов."
+}
