@@ -272,17 +272,23 @@ impl SimulationRunner {
         .map_err(|d| format!("Ошибка viewport: {}", d.message))?;
         let vp_ms = t_vp.elapsed().as_millis();
 
-        let t_rast = std::time::Instant::now();
-        if let Some(rec) = &mut self.gif_recorder {
-            rec.add_frame(&viewport, w, h)?;
-        }
-        let rast_ms = t_rast.elapsed().as_millis();
+        let frame_timing = if let Some(rec) = &mut self.gif_recorder {
+            Some(rec.add_frame(&viewport, w, h)?)
+        } else {
+            None
+        };
 
         // Вывод тайминга GIF-кадра
-        if let Some(lms) = layout_ms {
-            println!("           GIF:  раскладка={lms} мс  viewport={vp_ms} мс  растеризация={rast_ms} мс");
-        } else {
-            println!("           GIF:  viewport={vp_ms} мс  растеризация={rast_ms} мс");
+        if let Some(ft) = frame_timing {
+            let rast_detail = format!(
+                "svg={} мс  usvg={} мс  render={} мс  quant={} мс",
+                ft.serial_ms, ft.parse_ms, ft.render_ms, ft.quant_ms
+            );
+            if let Some(lms) = layout_ms {
+                println!("           GIF:  раскладка={lms} мс  viewport={vp_ms} мс  {rast_detail}");
+            } else {
+                println!("           GIF:  viewport={vp_ms} мс  {rast_detail}");
+            }
         }
 
         Ok(())
