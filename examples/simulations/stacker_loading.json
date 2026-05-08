@@ -1,0 +1,80 @@
+[
+  {
+    "_step": "1 — Приёмка задания: task_type=0, цель [stack=5,row=3,section=7]",
+    "in_ports": [0, 0, 0, 1, 0, 0, 3, 7, 5, 0, 1],
+    "guard": {
+      "out": [1, null, null, null, null, null],
+      "vars": {"busy": 1, "tgt_stack": 5, "tgt_row": 3, "tgt_section": 7, "tgt_type": 0}
+    }
+  },
+  {
+    "_step": "2 — CR→TaskActive, MC→MovingToPickup",
+    "in_ports": [0, 0, 0, 1, 0, 0, 3, 7, 5, 0, 1],
+    "guard": {
+      "out": [0, null, null, 1, 1, 0]
+    }
+  },
+  {
+    "_step": "3 — Прибытие в зону приёмки (pos=0,1,1), вилы выдвигаются",
+    "in_ports": [1, 1, 0, 0, 0, 0, 3, 7, 5, 0, 1],
+    "guard": {
+      "out": [null, null, 1, null, null, null],
+      "vars": {"lift_request": 1, "lift_op": 0}
+    }
+  },
+  {
+    "_step": "4 — Ожидание захвата паллета (sense_loaded ещё 0)",
+    "in_ports": [1, 1, 0, 0, 0, 0, 3, 7, 5, 0, 1]
+  },
+  {
+    "_step": "5 — Паллет захвачен (sense_loaded=1), LiftController→LiftDone",
+    "in_ports": [1, 1, 0, 0, 0, 1, 3, 7, 5, 0, 1],
+    "guard": {
+      "out": [null, null, 0, null, null, null],
+      "vars": {"lift_done": 1}
+    }
+  },
+  {
+    "_step": "6 — MC→MovingToCell (цель хранения [5,3,7]), LC→LiftIdle",
+    "in_ports": [1, 1, 0, 0, 0, 1, 3, 7, 5, 0, 1],
+    "guard": {
+      "out": [null, null, 0, 3, 7, 5],
+      "vars": {"lift_request": 0, "lift_done": 0}
+    }
+  },
+  {
+    "_step": "7 — Прибытие в ячейку хранения (pos=5,3,7), укладка начинается",
+    "in_ports": [3, 7, 5, 0, 0, 1, 3, 7, 5, 0, 1],
+    "guard": {
+      "out": [null, null, 1, null, null, null],
+      "vars": {"lift_request": 1, "lift_op": 1}
+    }
+  },
+  {
+    "_step": "8 — Ожидание завершения укладки (sense_loaded ещё 1)",
+    "in_ports": [3, 7, 5, 0, 0, 1, 3, 7, 5, 0, 1]
+  },
+  {
+    "_step": "9 — Паллет уложен (sense_loaded=0), LiftController→LiftDone",
+    "in_ports": [3, 7, 5, 0, 0, 0, 3, 7, 5, 0, 1],
+    "guard": {
+      "out": [null, null, 0, null, null, null],
+      "vars": {"lift_done": 1}
+    }
+  },
+  {
+    "_step": "10 — MC→TaskCompleting (busy=0, cmd_done=1), LC→LiftIdle",
+    "in_ports": [3, 7, 5, 0, 0, 0, 3, 7, 5, 0, 1],
+    "guard": {
+      "out": [null, 1, 0, null, null, null],
+      "vars": {"busy": 0}
+    }
+  },
+  {
+    "_step": "11 — CR→WaitingForTask, MC→MovementIdle — задание выполнено",
+    "in_ports": [0, 0, 0, 1, 0, 0, 3, 7, 5, 0, 0],
+    "guard": {
+      "out": [0, 0, 0, 0, 0, 0]
+    }
+  }
+]

@@ -1,0 +1,279 @@
+use crate::context::Context;
+use crate::gif::GifRecorder;
+use crate::json_input::{Guard, SimStep, json_to_value};
+use crate::unit::viewport::{Configuration, LegendData, create_viewport};
+use crate::unit::{TickResult, Unit};
+use crate::value::Value;
+use std::path::PathBuf;
+
+// ── Имена портов из модели ───────────────────────────────────────────────────
+
+/// Упорядоченные имена портов модели (по направлению).
+pub struct PortNames {
+    pub r#in: Vec<String>,
+    pub out: Vec<String>,
+    pub inout: Vec<String>,
+    pub vars: Vec<String>,
+}
+
+// ── Результат симуляции ──────────────────────────────────────────────────────
+
+#[derive(Debug)]
+pub enum RunResult {
+    /// Модель достигла терминального состояния.
+    Terminated { steps: usize },
+    /// Выполнено заданное количество шагов.
+    StepsReached { steps: usize },
+    /// Шагов в JSON меньше, чем запрошено — симуляция прервана.
+    StepsExhausted { completed: usize, requested: usize },
+    /// Guard не выполнен на шаге `step` (нумерация с 1).
+    GuardFailed { step: usize, details: String },
+}
+
+// ── Бегун симуляции ──────────────────────────────────────────────────────────
+
+pub struct SimulationRunner {
+    unit: Unit,
+    sim_steps: Vec<SimStep>,
+    max_steps: Option<usize>,
+    gif_recorder: Option<GifRecorder>,
+    gif_frame_size: Option<(u32, u32)>,
+    port_names: PortNames,
+}
+
+impl SimulationRunner {
+    pub fn new(
+        unit: Unit,
+        sim_steps: Vec<SimStep>,
+        max_steps: Option<usize>,
+        gif_output: Option<&PathBuf>,
+        port_names: PortNames,
+    ) -> Self {
+        let (gif_recorder, gif_frame_size) = if let Some(gif_path) = gif_output {
+            let cfg = Configuration::default();
+            let size = (cfg.width as u32, cfg.height as u32);
+            let recorder = GifRecorder::new(gif_path, 50);
+            (Some(recorder), Some(size))
+        } else {
+            (None, None)
+        };
+        Self {
+            unit,
+            sim_steps,
+            max_steps,
+            gif_recorder,
+            gif_frame_size,
+            port_names,
+        }
+    }
+
+    /// Запускает главный цикл симуляции.
+    pub fn run(&mut self) -> Result<RunResult, String> {
+        let limit = self.max_steps.unwrap_or(usize::MAX);
+        let mut completed = 0usize;
+
+        for step_no in 0..limit {
+            // Клонируем данные шага до любых мутабельных операций
+            let sim_step: Option<SimStep> = if self.sim_steps.is_empty() {
+                None
+            } else if step_no < self.sim_steps.len() {
+                Some(self.sim_steps[step_no].clone())
+            } else {
+                eprintln!(
+                    "Предупреждение: шагов в JSON ({}) меньше, чем запрошено ({}). Симуляция прервана.",
+                    self.sim_steps.len(),
+                    limit
+                );
+                return Ok(RunResult::StepsExhausted {
+                    completed,
+                    requested: limit,
+                });
+            };
+
+            // Применяем входные порты
+            if let Some(step) = &sim_step {
+                self.apply_step_inputs(step);
+            }
+
+            // Выполняем шаг
+            let tick_result = self.unit.tick();
+            completed += 1;
+
+            // Записываем кадр в GIF (если нужно)
+            if self.gif_recorder.is_some() {
+                self.capture_frame()?;
+            }
+
+            // Проверяем guard
+            if let Some(step) = &sim_step {
+                if let Some(guard) = &step.guard {
+                    let guard = guard.clone();
+                    self.check_guard(&guard, step_no + 1)?;
+                }
+            }
+
+            // Проверяем терминальность
+            if tick_result == TickResult::Terminated {
+                return Ok(RunResult::Terminated { steps: completed });
+            }
+        }
+
+        Ok(RunResult::StepsReached { steps: completed })
+    }
+
+    /// Сохраняет GIF-файл (вызывается после завершения run).
+    pub fn save_gif(self) -> Result<(), String> {
+        if let Some(recorder) = self.gif_recorder {
+            recorder.save()?;
+        }
+        Ok(())
+    }
+
+    // ── Вспомогательные методы ────────────────────────────────────────────────
+
+    fn apply_step_inputs(&mut self, step: &SimStep) {
+        if let Some(in_vals) = &step.in_ports {
+            for (i, json_val) in in_vals.iter().enumerate() {
+                if let (Some(name), Some(value)) =
+                    (self.port_names.r#in.get(i), json_to_value(json_val))
+                {
+                    let name = name.clone();
+                    self.unit.set_value(&name, value);
+                }
+            }
+        }
+        if let Some(inout_vals) = &step.inout {
+            for (i, json_val) in inout_vals.iter().enumerate() {
+                if let (Some(name), Some(value)) =
+                    (self.port_names.inout.get(i), json_to_value(json_val))
+                {
+                    let name = name.clone();
+                    self.unit.set_value(&name, value);
+                }
+            }
+        }
+    }
+
+    fn check_guard(&self, guard: &Guard, step_no: usize) -> Result<(), String> {
+        if let Some(out_vals) = &guard.out {
+            for (i, expected_json) in out_vals.iter().enumerate() {
+                let Some(name) = self.port_names.out.get(i) else {
+                    continue;
+                };
+                let Some(expected) = json_to_value(expected_json) else {
+                    continue;
+                };
+                let actual = self.unit.get_value(name);
+                if !values_match(&actual, &expected) {
+                    return Err(format!(
+                        "Guard шага {step_no}: out[{i}] ({name}): ожидалось {:?}, получено {:?}",
+                        expected, actual
+                    ));
+                }
+            }
+        }
+        if let Some(inout_vals) = &guard.inout {
+            for (i, expected_json) in inout_vals.iter().enumerate() {
+                let Some(name) = self.port_names.inout.get(i) else {
+                    continue;
+                };
+                let Some(expected) = json_to_value(expected_json) else {
+                    continue;
+                };
+                let actual = self.unit.get_value(name);
+                if !values_match(&actual, &expected) {
+                    return Err(format!(
+                        "Guard шага {step_no}: inout[{i}] ({name}): ожидалось {:?}, получено {:?}",
+                        expected, actual
+                    ));
+                }
+            }
+        }
+        if let Some(vars) = &guard.vars {
+            for (var_name, expected_json) in vars {
+                let Some(expected) = json_to_value(expected_json) else {
+                    continue;
+                };
+                let actual = self.unit.get_value(var_name);
+                if !values_match(&actual, &expected) {
+                    return Err(format!(
+                        "Guard шага {step_no}: vars[{var_name}]: ожидалось {:?}, получено {:?}",
+                        expected, actual
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn capture_frame(&mut self) -> Result<(), String> {
+        let (w, h) = match self.gif_frame_size {
+            Some(s) => s,
+            None => return Ok(()),
+        };
+        let current_state = self.unit.current_state().map(String::from);
+        let legend = build_legend(&self.unit, &self.port_names);
+
+        let viewport = create_viewport(
+            &self.unit,
+            Configuration::default(),
+            current_state.as_deref(),
+            Some(&legend),
+        )
+        .map_err(|d| format!("Ошибка viewport: {}", d.message))?;
+
+        if let Some(rec) = &mut self.gif_recorder {
+            rec.add_frame(&viewport, w, h)?;
+        }
+        Ok(())
+    }
+}
+
+// ── Вспомогательные функции ───────────────────────────────────────────────────
+
+fn values_match(actual: &Option<Value>, expected: &Value) -> bool {
+    match actual {
+        None => false,
+        Some(v) => match (v, expected) {
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::Real(a), Value::Real(b)) => (a - b).abs() < 1e-9,
+            (Value::Boolean(a), Value::Boolean(b)) => a == b,
+            (Value::Number(a), Value::Real(b)) => (*a as f64 - b).abs() < 1e-9,
+            (Value::Real(a), Value::Number(b)) => (a - *b as f64).abs() < 1e-9,
+            _ => false,
+        },
+    }
+}
+
+fn format_value(v: &Value) -> String {
+    match v {
+        Value::Number(n) => n.to_string(),
+        Value::Real(f) => format!("{f:.4}"),
+        Value::Boolean(b) => b.to_string(),
+        Value::Array(arr) => format!(
+            "[{}]",
+            arr.iter().map(format_value).collect::<Vec<_>>().join(",")
+        ),
+    }
+}
+
+fn build_legend(unit: &Unit, port_names: &PortNames) -> LegendData {
+    let to_entries = |names: &[String]| -> Vec<(String, String)> {
+        names
+            .iter()
+            .map(|n| {
+                let v = unit
+                    .get_value(n)
+                    .map(|v| format_value(&v))
+                    .unwrap_or_else(|| "?".to_string());
+                (n.clone(), v)
+            })
+            .collect()
+    };
+    LegendData {
+        in_ports: to_entries(&port_names.r#in),
+        out_ports: to_entries(&port_names.out),
+        inout_ports: to_entries(&port_names.inout),
+        vars: to_entries(&port_names.vars),
+    }
+}
