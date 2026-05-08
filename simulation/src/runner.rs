@@ -52,8 +52,10 @@ impl SimulationRunner {
         port_names: PortNames,
     ) -> Self {
         let (gif_recorder, gif_frame_size) = if let Some(gif_path) = gif_output {
+            use crate::unit::viewport::LEGEND_WIDTH;
             let cfg = Configuration::default();
-            let size = (cfg.width as u32, cfg.height as u32);
+            // GIF-холст должен включать панель легенды (capture_frame всегда её передаёт).
+            let size = ((cfg.width + LEGEND_WIDTH) as u32, cfg.height as u32);
             let recorder = GifRecorder::new(gif_path, 50);
             (Some(recorder), Some(size))
         } else {
@@ -213,13 +215,14 @@ impl SimulationRunner {
             self.cached_layout = Some(compute_layout(&self.unit, &Configuration::default()));
         }
 
-        let current_state = self.unit.current_state().map(String::from);
+        let active = self.unit.active_states();
+        let active_refs: Vec<&str> = active.iter().map(String::as_str).collect();
         let legend = build_legend(&self.unit, &self.port_names);
 
         let viewport = render_from_layout(
             self.cached_layout.as_ref().unwrap(),
             &Configuration::default(),
-            current_state.as_deref(),
+            &active_refs,
             Some(&legend),
         )
         .map_err(|d| format!("Ошибка viewport: {}", d.message))?;

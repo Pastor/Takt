@@ -114,7 +114,7 @@ pub(crate) fn compute_layout(unit: &Unit, cfg: &Configuration) -> CachedLayout {
 pub(crate) fn render_from_layout(
     layout: &CachedLayout,
     cfg: &Configuration,
-    current_state: Option<&str>,
+    active_states: &[&str],
     legend: Option<&LegendData>,
 ) -> Result<Viewport, Diagnostic> {
     match cfg.format {
@@ -124,7 +124,7 @@ pub(crate) fn render_from_layout(
                 &layout.edges_vec,
                 &layout.positions,
                 cfg,
-                current_state,
+                active_states,
                 legend,
             );
             Ok(Viewport::SVG(document))
@@ -134,16 +134,17 @@ pub(crate) fn render_from_layout(
 
 /// Создаёт [`Viewport`] из симуляционного [`Unit`].
 ///
+/// `active_states` — срез имён состояний, которые нужно подсветить.
 /// Каждый вызов пересчитывает раскладку. Для GIF-записи используйте
 /// [`compute_layout`] + [`render_from_layout`].
 pub(crate) fn create_viewport(
     unit: &Unit,
     configuration: Configuration,
-    current_state: Option<&str>,
+    active_states: &[&str],
     legend: Option<&LegendData>,
 ) -> Result<Viewport, Diagnostic> {
     let layout = compute_layout(unit, &configuration);
-    render_from_layout(&layout, &configuration, current_state, legend)
+    render_from_layout(&layout, &configuration, active_states, legend)
 }
 
 // ── Геометрические вспомогательные функции для SVG ───────────────────────────
@@ -195,14 +196,14 @@ fn rects_intersection_area(
 /// - `edges_vec` — рёбра `(индекс_источника, индекс_цели, подпись)`.
 /// - `positions` — координаты центров узлов, соответствующие `node_labels`.
 /// - `cfg` — конфигурация с размерами холста и параметрами отрисовки.
-const LEGEND_WIDTH: f64 = 190.0;
+pub(crate) const LEGEND_WIDTH: f64 = 190.0;
 
 fn create_svg(
     node_labels: Vec<String>,
     edges_vec: &Vec<(usize, usize, String)>,
     positions: &Positions,
     cfg: &Configuration,
-    current_state: Option<&str>,
+    active_states: &[&str],
     legend: Option<&LegendData>,
 ) -> Document {
     let total_width = if legend.is_some() {
@@ -423,7 +424,7 @@ fn create_svg(
     // ── Отрисовка узлов ───────────────────────────────────────────────────────
     for (i, label) in node_labels.iter().enumerate() {
         let (cx, cy) = positions[i];
-        let is_active = current_state.map_or(false, |s| s == label.as_str());
+        let is_active = active_states.contains(&label.as_str());
         let fill = if is_active { "#FFE066" } else { "#cce5ff" };
         let stroke_w = if is_active { 3 } else { 2 };
         document = document.add(
@@ -1142,7 +1143,7 @@ mod tests {
 
     #[test]
     fn test_create_viewport_empty_unit_returns_ok() {
-        let result = create_viewport(&Unit::None, Configuration::default(), None, None);
+        let result = create_viewport(&Unit::None, Configuration::default(), &[], None);
         assert!(result.is_ok(), "ожидался Ok, получено Err");
     }
 
@@ -1161,7 +1162,7 @@ mod tests {
             state_transitions: transitions,
             state_executions: HashMap::new(),
         };
-        let result = create_viewport(&unit, Configuration::default(), Some("A"), None);
+        let result = create_viewport(&unit, Configuration::default(), &["A"], None);
         assert!(result.is_ok());
     }
 }
