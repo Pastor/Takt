@@ -88,36 +88,62 @@ impl Viewport {
 
 // ── Публичный API ─────────────────────────────────────────────────────────────
 
-/// Создаёт [`Viewport`] из симуляционного [`Unit`].
+/// Кэшированный результат вычисления раскладки графа.
 ///
-/// Алгоритм:
-/// 1. Преобразует дерево `Unit` в ориентированный граф состояний.
-/// 2. Размещает узлы методом имитации отжига для минимизации перекрытий и пересечений рёбер.
-/// 3. Отрисовывает граф в заданном формате.
+/// Раскладка (positions) зависит только от структуры модели и не меняется
+/// в ходе симуляции, поэтому её достаточно вычислить один раз.
+pub(crate) struct CachedLayout {
+    pub(crate) node_labels: Vec<String>,
+    pub(crate) edges_vec: Vec<(usize, usize, String)>,
+    pub(crate) positions: Positions,
+}
+
+/// Вычисляет раскладку графа для `unit`.
 ///
-/// # Ошибки
-/// Возвращает [`Diagnostic`], если во время отрисовки возникло критическое несоответствие.
-pub(crate) fn create_viewport(
-    unit: &Unit,
-    configuration: Configuration,
+/// Дорогостоящий шаг (имитация отжига): вызывать один раз перед записью GIF,
+/// затем передавать результат в [`render_from_layout`] для каждого кадра.
+pub(crate) fn compute_layout(unit: &Unit, cfg: &Configuration) -> CachedLayout {
+    let g = graph::unit_to_graph(unit);
+    let (node_labels, edges_vec, positions) = graph::calculate_graph(g, cfg);
+    CachedLayout { node_labels, edges_vec, positions }
+}
+
+/// Отрисовывает кадр из заранее вычисленной раскладки.
+///
+/// Дешёвая операция: только SVG-генерация, без повторного расчёта позиций.
+pub(crate) fn render_from_layout(
+    layout: &CachedLayout,
+    cfg: &Configuration,
     current_state: Option<&str>,
     legend: Option<&LegendData>,
 ) -> Result<Viewport, Diagnostic> {
-    let graph = graph::unit_to_graph(unit);
-    let (node_labels, mut edges_vec, mut positions) = graph::calculate_graph(graph, &configuration);
-    match configuration.format {
+    match cfg.format {
         Format::SVG => {
             let document = create_svg(
-                node_labels,
-                &mut edges_vec,
-                &mut positions,
-                &configuration,
+                layout.node_labels.clone(),
+                &layout.edges_vec,
+                &layout.positions,
+                cfg,
                 current_state,
                 legend,
             );
             Ok(Viewport::SVG(document))
         }
     }
+}
+
+/// Создаёт [`Viewport`] из симуляционного [`Unit`].
+///
+/// Каждый вызов пересчитывает раскладку. Для GIF-записи используйте
+/// [`compute_layout`] + [`render_from_layout`].
+pub(crate) fn create_viewport(
+    unit: &Unit,
+    configuration: Configuration,
+    current_state: Option<&str>,
+    legend: Option<&LegendData>,
+) -> Result<Viewport, Diagnostic> {
+    let layout = compute_layout(unit, &configuration);
+    render_from_layout(&layout, &configuration, current_state, legend)
 }
 
 // ── Геометрические вспомогательные функции для SVG ───────────────────────────
@@ -173,8 +199,8 @@ const LEGEND_WIDTH: f64 = 190.0;
 
 fn create_svg(
     node_labels: Vec<String>,
-    edges_vec: &mut Vec<(usize, usize, String)>,
-    positions: &mut Positions,
+    edges_vec: &Vec<(usize, usize, String)>,
+    positions: &Positions,
     cfg: &Configuration,
     current_state: Option<&str>,
     legend: Option<&LegendData>,
@@ -234,7 +260,7 @@ fn create_svg(
     let mut connection_counts: std::collections::HashMap<(usize, usize), usize> =
         std::collections::HashMap::new();
     let mut edge_multiplicities = Vec::with_capacity(edges_vec.len());
-    for &mut (i, j, _) in &mut *edges_vec {
+    for &(i, j, _) in edges_vec.iter() {
         let key = if i < j { (i, j) } else { (j, i) };
         let count = connection_counts.entry(key).or_insert(0);
         edge_multiplicities.push(*count);

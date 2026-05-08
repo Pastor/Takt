@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::gif::GifRecorder;
 use crate::json_input::{Guard, SimStep, json_to_value};
-use crate::unit::viewport::{Configuration, LegendData, create_viewport};
+use crate::unit::viewport::{CachedLayout, Configuration, LegendData, compute_layout, render_from_layout};
 use crate::unit::{TickResult, Unit};
 use crate::value::Value;
 use std::path::PathBuf;
@@ -39,6 +39,8 @@ pub struct SimulationRunner {
     gif_recorder: Option<GifRecorder>,
     gif_frame_size: Option<(u32, u32)>,
     port_names: PortNames,
+    // Раскладка графа вычисляется один раз перед первым кадром GIF.
+    cached_layout: Option<CachedLayout>,
 }
 
 impl SimulationRunner {
@@ -64,6 +66,7 @@ impl SimulationRunner {
             gif_recorder,
             gif_frame_size,
             port_names,
+            cached_layout: None,
         }
     }
 
@@ -203,12 +206,19 @@ impl SimulationRunner {
             Some(s) => s,
             None => return Ok(()),
         };
+
+        // Раскладка вычисляется один раз: имитация отжига дорогая, но структура
+        // модели не меняется в ходе симуляции.
+        if self.cached_layout.is_none() {
+            self.cached_layout = Some(compute_layout(&self.unit, &Configuration::default()));
+        }
+
         let current_state = self.unit.current_state().map(String::from);
         let legend = build_legend(&self.unit, &self.port_names);
 
-        let viewport = create_viewport(
-            &self.unit,
-            Configuration::default(),
+        let viewport = render_from_layout(
+            self.cached_layout.as_ref().unwrap(),
+            &Configuration::default(),
             current_state.as_deref(),
             Some(&legend),
         )
