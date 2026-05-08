@@ -214,12 +214,22 @@ impl Unit {
     }
 
     /// Извлекает и сбрасывает последний сработавший переход: (из, в, имя_предиката).
+    /// Для составных Unit (Parallel/Sequential) рекурсивно собирает из всех дочерних.
     pub fn take_last_transition(&mut self) -> Option<(String, String, String)> {
+        self.take_last_transitions().into_iter().next()
+    }
+
+    /// Рекурсивно извлекает все сработавшие переходы из этого узла и его потомков.
+    pub fn take_last_transitions(&mut self) -> Vec<(String, String, String)> {
         match self {
-            Unit::Node {
-                last_transition, ..
-            } => last_transition.take(),
-            _ => None,
+            Unit::Node { last_transition, .. } => {
+                last_transition.take().map(|t| vec![t]).unwrap_or_default()
+            }
+            Unit::Parallel { units, .. } | Unit::Sequential { units, .. } => units
+                .iter()
+                .flat_map(|u| u.borrow_mut().take_last_transitions())
+                .collect(),
+            Unit::None => vec![],
         }
     }
 

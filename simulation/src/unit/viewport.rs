@@ -226,6 +226,7 @@ fn create_svg(
     highlighted_edge: Option<(usize, usize)>,
 ) -> Document {
     let total_width = cfg.width + if legend.is_some() { LEGEND_WIDTH } else { 0.0 };
+    let is_highlight_frame = highlighted_edge.is_some();
     let mut document = Document::new()
         .set("viewBox", (0, 0, total_width, cfg.height))
         .set("xmlns", "http://www.w3.org/2000/svg");
@@ -282,6 +283,20 @@ fn create_svg(
                     ),
             ),
     );
+
+    // В highlight-кадре: толстая оранжевая рамка вокруг области графа
+    if is_highlight_frame {
+        document = document.add(
+            Rectangle::new()
+                .set("x", 1)
+                .set("y", 1)
+                .set("width", cfg.width - 2.0)
+                .set("height", cfg.height - 2.0)
+                .set("fill", "none")
+                .set("stroke", "#FF8C00")
+                .set("stroke-width", 6),
+        );
+    }
 
     // Центры узлов сохраняются для проверки перекрытий подписей рёбер
     let node_circles: Vec<(f64, f64)> = positions.clone();
@@ -473,8 +488,42 @@ fn create_svg(
         );
     }
 
-    // ── Имя модели ────────────────────────────────────────────────────────────
-    if let Some(name) = model_name {
+    // ── Шапка: имя модели или переход ────────────────────────────────────────
+    if let Some((hi, hj)) = highlighted_edge {
+        // Highlight-кадр: полноширинная оранжевая шапка на 30 пикселей
+        let from_alias = node_aliases.get(hi).map(String::as_str).unwrap_or("");
+        let to_alias = node_aliases.get(hj).map(String::as_str).unwrap_or("");
+        let edge_label = edges_vec
+            .iter()
+            .find(|(i, j, _)| *i == hi && *j == hj)
+            .map(|(_, _, lbl)| lbl.as_str())
+            .unwrap_or("");
+        let transition_text = if edge_label.is_empty() {
+            format!("{from_alias} → {to_alias}")
+        } else {
+            format!("{from_alias} → {to_alias}:  {edge_label}")
+        };
+        document = document.add(
+            Rectangle::new()
+                .set("x", 0)
+                .set("y", 0)
+                .set("width", cfg.width)
+                .set("height", 30)
+                .set("fill", "#FF8C00"),
+        );
+        document = document.add(
+            Text::new(transition_text)
+                .set("x", cfg.width / 2.0)
+                .set("y", 15)
+                .set("font-family", "monospace")
+                .set("font-size", "14px")
+                .set("font-weight", "bold")
+                .set("fill", "white")
+                .set("text-anchor", "middle")
+                .set("dominant-baseline", "middle"),
+        );
+    } else if let Some(name) = model_name {
+        // Обычный кадр: имя модели тёмным текстом
         document = document.add(
             Text::new(name)
                 .set("x", cfg.width / 2.0)
@@ -1297,5 +1346,39 @@ mod tests {
         };
         let result = create_viewport(&unit, Configuration::default(), &["A"], None);
         assert!(result.is_ok());
+    }
+}
+
+#[cfg(test)]
+mod test_highlight {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn make_node(t: HashMap<String, Vec<(String, crate::unit::Predicate)>>) -> Unit {
+        Unit::Node {
+            context: None, variables: HashMap::new(), executions: HashMap::new(),
+            state: Some("Off".to_string()), state_transitions: t,
+            state_executions: HashMap::new(), last_transition: None,
+        }
+    }
+
+    #[test]
+    fn test_highlight_frame_contains_orange_bg() {
+        let pred = crate::unit::Predicate::new("btn", |_: &dyn crate::context::Context| true);
+        let mut t = HashMap::new();
+        t.insert("Off".to_string(), vec![("On".to_string(), pred)]);
+        t.insert("On".to_string(), vec![]);
+        let unit = make_node(t);
+        let layout = compute_layout(&unit, &Configuration::default());
+        let fi = layout.node_labels.iter().position(|n| n == "Off").unwrap();
+        let ti = layout.node_labels.iter().position(|n| n == "On").unwrap();
+        let vp = render_from_layout(&layout, &Configuration::default(), &["On"],
+            None, None, Some((fi, ti))).unwrap();
+        let Viewport::SVG(doc) = vp;
+        let svg_str = doc.to_string();
+        std::fs::write("/tmp/highlight_test.svg", &svg_str).unwrap();
+        println!("SVG saved to /tmp/highlight_test.svg");
+        assert!(svg_str.contains("FFF3DC") || svg_str.contains("FF8C00"),
+            "SVG should contain orange colors: {}", &svg_str[..500]);
     }
 }
