@@ -69,26 +69,18 @@ impl SimulationRunner {
 
     /// Запускает главный цикл симуляции.
     pub fn run(&mut self) -> Result<RunResult, String> {
-        let limit = self.max_steps.unwrap_or(usize::MAX);
+        // Если загружен файл сценария, он определяет лимит шагов;
+        // -n может только уменьшить это число, но не увеличить.
+        let sim_len = self.sim_steps.len();
+        let limit = if sim_len > 0 {
+            self.max_steps.map_or(sim_len, |n| n.min(sim_len))
+        } else {
+            self.max_steps.unwrap_or(usize::MAX)
+        };
         let mut completed = 0usize;
 
         for step_no in 0..limit {
-            // Клонируем данные шага до любых мутабельных операций
-            let sim_step: Option<SimStep> = if self.sim_steps.is_empty() {
-                None
-            } else if step_no < self.sim_steps.len() {
-                Some(self.sim_steps[step_no].clone())
-            } else {
-                eprintln!(
-                    "Предупреждение: шагов в JSON ({}) меньше, чем запрошено ({}). Симуляция прервана.",
-                    self.sim_steps.len(),
-                    limit
-                );
-                return Ok(RunResult::StepsExhausted {
-                    completed,
-                    requested: limit,
-                });
-            };
+            let sim_step: Option<SimStep> = self.sim_steps.get(step_no).cloned();
 
             // Применяем входные порты
             if let Some(step) = &sim_step {
