@@ -21,3 +21,4 @@ README.pdf
 .temp
 /cmake-build-debug
 venv
+.DS_Store
