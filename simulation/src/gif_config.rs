@@ -64,8 +64,7 @@ impl GifConfig {
     pub fn from_file(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| format!("Не удалось прочитать {}: {e}", path.display()))?;
-        serde_json::from_str(&text)
-            .map_err(|e| format!("Ошибка парсинга {}: {e}", path.display()))
+        serde_json::from_str(&text).map_err(|e| format!("Ошибка парсинга {}: {e}", path.display()))
     }
 }
 

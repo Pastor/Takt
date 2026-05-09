@@ -172,7 +172,12 @@ fn create_svg(
     model_name: Option<&str>,
     highlighted_edge: Option<(usize, usize)>,
 ) -> Document {
-    let total_width = cfg.canvas.width + if legend.is_some() { cfg.legend.width } else { 0.0 };
+    let total_width = cfg.canvas.width
+        + if legend.is_some() {
+            cfg.legend.width
+        } else {
+            0.0
+        };
     let is_highlight_frame = highlighted_edge.is_some();
     let mut document = Document::new()
         .set("viewBox", (0, 0, total_width, cfg.canvas.height))
@@ -299,9 +304,8 @@ fn create_svg(
         // Коэффициент изгиба: базовый + добавка за кратность + малый шум по индексу узла.
         let mid_x = (start_x + end_x) / 2.0;
         let mid_y = (start_y + end_y) / 2.0;
-        let curve_factor = cfg.edge.curve_coefficient
-            + (multiplicity as f64) * 0.10
-            + (*i as f64 * 0.01) % 0.04;
+        let curve_factor =
+            cfg.edge.curve_coefficient + (multiplicity as f64) * 0.10 + (*i as f64 * 0.01) % 0.04;
         let cp_x = mid_x - uy * d * curve_factor;
         let cp_y = mid_y + ux * d * curve_factor;
 
@@ -358,11 +362,7 @@ fn create_svg(
                     let by2 = cy + box_h / 2.0 + cfg.edge_label.margin;
 
                     let mut score = r;
-                    if bx1 < 0.0
-                        || bx2 > cfg.canvas.width
-                        || by1 < 0.0
-                        || by2 > cfg.canvas.height
-                    {
+                    if bx1 < 0.0 || bx2 > cfg.canvas.width || by1 < 0.0 || by2 > cfg.canvas.height {
                         score += 1e8;
                     }
                     for &(nx, ny) in &node_circles {
@@ -1303,7 +1303,12 @@ mod tests {
 
     #[test]
     fn test_create_viewport_empty_unit_returns_ok() {
-        let result = create_viewport(&Unit::None, crate::gif_config::GifConfig::default(), &[], None);
+        let result = create_viewport(
+            &Unit::None,
+            crate::gif_config::GifConfig::default(),
+            &[],
+            None,
+        );
         assert!(result.is_ok(), "ожидался Ok, получено Err");
     }
 

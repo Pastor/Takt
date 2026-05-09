@@ -14,12 +14,12 @@ state Cabin {
 
 state Motor {
     [*] --> Idle
-    Stop --> Idle
     Idle --> Up
     Idle --> Down
     Idle --> Stop
-    Up --> Stop
+    Stop --> Idle
     Down --> Stop
+    Up --> Stop
 }
 
 @enduml
