@@ -15,6 +15,7 @@
 //! ```
 mod context;
 mod execution;
+pub mod gif_config;
 pub(crate) mod gif;
 pub mod json_input;
 mod predicate;

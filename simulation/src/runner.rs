@@ -1,9 +1,8 @@
 use crate::context::Context;
 use crate::gif::GifRecorder;
+use crate::gif_config::GifConfig;
 use crate::json_input::{Guard, SimStep, json_to_value};
-use crate::unit::viewport::{
-    CachedLayout, Configuration, LEGEND_WIDTH, LegendData, compute_layout, render_from_layout,
-};
+use crate::unit::viewport::{CachedLayout, LegendData, compute_layout, render_from_layout};
 use crate::unit::{TickResult, Unit};
 use crate::value::Value;
 use std::path::PathBuf;
@@ -42,6 +41,7 @@ pub struct SimulationRunner {
     gif_frame_size: Option<(u32, u32)>,
     port_names: PortNames,
     model_name: Option<String>,
+    gif_config: GifConfig,
     // Раскладка графа вычисляется один раз перед первым кадром GIF.
     cached_layout: Option<CachedLayout>,
 }
@@ -54,11 +54,14 @@ impl SimulationRunner {
         gif_output: Option<&PathBuf>,
         port_names: PortNames,
         model_name: Option<String>,
+        gif_config: GifConfig,
     ) -> Self {
         let (gif_recorder, gif_frame_size) = if let Some(gif_path) = gif_output {
-            let cfg = Configuration::default();
-            let size = ((cfg.width + LEGEND_WIDTH) as u32, cfg.height as u32);
-            let recorder = GifRecorder::new(gif_path, 50);
+            let size = (
+                (gif_config.canvas.width + gif_config.legend.width) as u32,
+                gif_config.canvas.height as u32,
+            );
+            let recorder = GifRecorder::new(gif_path, gif_config.canvas.frame_delay_cs);
             (Some(recorder), Some(size))
         } else {
             (None, None)
@@ -71,6 +74,7 @@ impl SimulationRunner {
             gif_frame_size,
             port_names,
             model_name,
+            gif_config,
             cached_layout: None,
         }
     }
@@ -263,7 +267,7 @@ impl SimulationRunner {
     fn capture_frame_with_highlight(&mut self, edge: Option<(&str, &str)>) -> Result<(), String> {
         // Гарантируем, что раскладка вычислена до поиска индексов
         if self.cached_layout.is_none() && self.gif_frame_size.is_some() {
-            self.cached_layout = Some(compute_layout(&self.unit, &Configuration::default()));
+            self.cached_layout = Some(compute_layout(&self.unit, &self.gif_config));
         }
         let highlighted = edge.and_then(|(from, to)| {
             let layout = self.cached_layout.as_ref()?;
@@ -287,7 +291,7 @@ impl SimulationRunner {
         // модели не меняется в ходе симуляции.
         let layout_ms = if self.cached_layout.is_none() {
             let t = std::time::Instant::now();
-            self.cached_layout = Some(compute_layout(&self.unit, &Configuration::default()));
+            self.cached_layout = Some(compute_layout(&self.unit, &self.gif_config));
             Some(t.elapsed().as_millis())
         } else {
             None
@@ -300,7 +304,7 @@ impl SimulationRunner {
         let t_vp = std::time::Instant::now();
         let viewport = render_from_layout(
             self.cached_layout.as_ref().unwrap(),
-            &Configuration::default(),
+            &self.gif_config,
             &active_refs,
             Some(&legend),
             self.model_name.as_deref(),
@@ -309,8 +313,12 @@ impl SimulationRunner {
         .map_err(|d| format!("Ошибка viewport: {}", d.message))?;
         let vp_ms = t_vp.elapsed().as_millis();
 
-        // Highlight-кадры показываются дольше (150 cs = 1.5 с) чтобы их было видно.
-        let delay = if highlighted_edge.is_some() { Some(150u16) } else { None };
+        // Highlight-кадры показываются дольше — задержка из конфигурации.
+        let delay = if highlighted_edge.is_some() {
+            Some(self.gif_config.canvas.highlight_frame_delay_cs)
+        } else {
+            None
+        };
         let frame_timing = if let Some(rec) = &mut self.gif_recorder {
             Some(rec.add_frame(&viewport, w, h, delay)?)
         } else {
