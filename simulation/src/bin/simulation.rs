@@ -9,6 +9,7 @@ use grammar::parser::ast::PortDirection;
 use grammar::semantic::VariableNode;
 use grammar::semantic::tree::construct_model;
 use simulation::build_unit;
+use simulation::gif_config::GifConfig;
 use simulation::json_input::load_sim_steps;
 use simulation::runner::{PortNames, RunResult, SimulationRunner};
 use simulation::state_io;
@@ -46,6 +47,11 @@ struct Args {
     /// Сохранить состояние модели в JSON-файл после симуляции
     #[arg(long = "save-state", value_name = "FILE")]
     save_state: Option<PathBuf>,
+
+    /// Путь к JSON-файлу с настройками генерации GIF
+    /// (см. examples/gif-configs/*.json)
+    #[arg(long = "gif-config", value_name = "FILE")]
+    gif_config: Option<PathBuf>,
 }
 
 // ── Точка входа ───────────────────────────────────────────────────────────────
@@ -107,6 +113,12 @@ fn run(args: Args) -> Result<RunResult, String> {
         vec![]
     };
 
+    // 6а. Загружаем конфигурацию GIF (если указан --gif-config)
+    let gif_config = match &args.gif_config {
+        Some(path) => GifConfig::from_file(path)?,
+        None => GifConfig::default(),
+    };
+
     // 7. Создаём и запускаем runner
     let mut runner = SimulationRunner::new(
         unit,
@@ -115,6 +127,7 @@ fn run(args: Args) -> Result<RunResult, String> {
         args.gif_output.as_ref(),
         port_names,
         model_name,
+        gif_config,
     );
 
     let result = runner.run()?;

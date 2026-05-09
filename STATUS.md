@@ -21,6 +21,7 @@
 | TASKS.md §2 | Сохранение/загрузка состояния: `state_io.rs`, CLI `--save-state`/`--load-state` | `state_io.rs`, `lib.rs`, `bin/simulation.rs` | ✅ (1329 тестов) |
 
 | predicate.rs | Читаемые метки рёбер: `condition_label()` генерирует `button != 0` вместо Debug-строки | `predicate.rs` | ✅ (1329 тестов) |
+| TASKS.md §4 | Параметры GIF вынесены в `gif_config::GifConfig` (serde JSON); CLI `--gif-config FILE`; примеры в `examples/gif-configs/` (default, dark, compact, large, monochrome) | `gif_config.rs`, `viewport.rs`, `runner.rs`, `bin/simulation.rs`, `lib.rs`, `examples/gif-configs/*.json` | ✅ (1335 тестов) |
 
 ## Пропущенные задачи (высокий риск)
 
