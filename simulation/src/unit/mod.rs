@@ -222,9 +222,9 @@ impl Unit {
     /// Рекурсивно извлекает все сработавшие переходы из этого узла и его потомков.
     pub fn take_last_transitions(&mut self) -> Vec<(String, String, String)> {
         match self {
-            Unit::Node { last_transition, .. } => {
-                last_transition.take().map(|t| vec![t]).unwrap_or_default()
-            }
+            Unit::Node {
+                last_transition, ..
+            } => last_transition.take().map(|t| vec![t]).unwrap_or_default(),
             Unit::Parallel { units, .. } | Unit::Sequential { units, .. } => units
                 .iter()
                 .flat_map(|u| u.borrow_mut().take_last_transitions())

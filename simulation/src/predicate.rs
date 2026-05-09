@@ -22,7 +22,11 @@ fn condition_label(cond: &ConditionNode) -> String {
         ConditionNode::Bool(b) => b.to_string(),
         ConditionNode::Number(n) => n.to_string(),
         ConditionNode::Rational(s, neg) => {
-            if *neg { format!("-{s}") } else { s.clone() }
+            if *neg {
+                format!("-{s}")
+            } else {
+                s.clone()
+            }
         }
         ConditionNode::Variable(var, _) => var.borrow().name().to_string(),
         ConditionNode::Not(c) => format!("!{}", condition_label(c)),
@@ -33,10 +37,16 @@ fn condition_label(cond: &ConditionNode) -> String {
         ConditionNode::Or(l, r) => format!("{} | {}", condition_label(l), condition_label(r)),
         ConditionNode::Less(l, r) => format!("{} < {}", condition_label(l), condition_label(r)),
         ConditionNode::More(l, r) => format!("{} > {}", condition_label(l), condition_label(r)),
-        ConditionNode::LessEqual(l, r) => format!("{} <= {}", condition_label(l), condition_label(r)),
-        ConditionNode::MoreEqual(l, r) => format!("{} >= {}", condition_label(l), condition_label(r)),
+        ConditionNode::LessEqual(l, r) => {
+            format!("{} <= {}", condition_label(l), condition_label(r))
+        }
+        ConditionNode::MoreEqual(l, r) => {
+            format!("{} >= {}", condition_label(l), condition_label(r))
+        }
         ConditionNode::Equal(l, r) => format!("{} = {}", condition_label(l), condition_label(r)),
-        ConditionNode::NotEqual(l, r) => format!("{} != {}", condition_label(l), condition_label(r)),
+        ConditionNode::NotEqual(l, r) => {
+            format!("{} != {}", condition_label(l), condition_label(r))
+        }
         ConditionNode::BitAccess(c, m) => format!("{}.{m:?}", condition_label(c)),
         ConditionNode::ArraySubscript(v, idx) => {
             format!("{}[{}]", v.borrow().name(), condition_label(idx))
@@ -47,9 +57,7 @@ fn condition_label(cond: &ConditionNode) -> String {
             format!("{}({})", name, arg_labels.join(", "))
         }
         ConditionNode::State(s) => s.borrow().name().to_string(),
-        ConditionNode::Model(m) => {
-            m.borrow().name.clone().unwrap_or_else(|| "?".to_string())
-        }
+        ConditionNode::Model(m) => m.borrow().name.clone().unwrap_or_else(|| "?".to_string()),
         ConditionNode::EnumVariant(_, name, _) => name.clone(),
         ConditionNode::String(parts) => parts.join(""),
         ConditionNode::Unresolved(_) => "?".to_string(),
