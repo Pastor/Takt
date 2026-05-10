@@ -236,7 +236,11 @@ impl Unit {
     /// Возвращает имена состояний, достижимых из активных за один переход.
     pub fn reachable_from_active(&self) -> Vec<String> {
         match self {
-            Unit::Node { state, state_transitions, .. } => {
+            Unit::Node {
+                state,
+                state_transitions,
+                ..
+            } => {
                 let current = match state {
                     Some(s) => s,
                     None => return vec![],

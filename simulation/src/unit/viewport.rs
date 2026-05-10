@@ -1,7 +1,7 @@
 use svg::Document;
 use svg::node::element::{Circle, Definitions, Group, Line, Marker, Path, Rectangle, Style, Text};
 
-use crate::gif_config::GifConfig;
+use crate::graphics_config::GraphicsConfig;
 use crate::unit::Unit;
 use grammar::diagnostics::Diagnostic;
 
@@ -57,7 +57,7 @@ pub(crate) struct CachedLayout {
 ///
 /// Дорогостоящий шаг (имитация отжига): вызывать один раз перед записью GIF,
 /// затем передавать результат в [`render_from_layout`] для каждого кадра.
-pub(crate) fn compute_layout(unit: &Unit, cfg: &GifConfig) -> CachedLayout {
+pub(crate) fn compute_layout(unit: &Unit, cfg: &GraphicsConfig) -> CachedLayout {
     let g = graph::unit_to_graph(unit);
     let (node_labels, edges_vec, positions) = graph::calculate_graph(g, cfg);
     let node_aliases: Vec<String> = (1..=node_labels.len()).map(|i| format!("S{i}")).collect();
@@ -75,7 +75,7 @@ pub(crate) fn compute_layout(unit: &Unit, cfg: &GifConfig) -> CachedLayout {
 /// `None` означает обычный кадр без подсветки.
 pub(crate) fn render_from_layout(
     layout: &CachedLayout,
-    cfg: &GifConfig,
+    cfg: &GraphicsConfig,
     active_states: &[&str],
     legend: Option<&LegendData>,
     model_name: Option<&str>,
@@ -103,7 +103,7 @@ pub(crate) fn render_from_layout(
 #[allow(dead_code)]
 pub(crate) fn create_viewport(
     unit: &Unit,
-    configuration: GifConfig,
+    configuration: GraphicsConfig,
     active_states: &[&str],
     legend: Option<&LegendData>,
 ) -> Result<Viewport, Diagnostic> {
@@ -166,7 +166,7 @@ fn create_svg(
     node_aliases: &[String],
     edges_vec: &Vec<(usize, usize, String)>,
     positions: &Positions,
-    cfg: &GifConfig,
+    cfg: &GraphicsConfig,
     active_states: &[&str],
     legend: Option<&LegendData>,
     model_name: Option<&str>,
@@ -673,7 +673,7 @@ pub(super) mod graph {
     use std::collections::HashMap;
 
     use super::Positions;
-    use crate::gif_config::GifConfig;
+    use crate::graphics_config::GraphicsConfig;
     use crate::unit::Unit;
 
     // ── Преобразование Unit → Graph ───────────────────────────────────────────
@@ -743,7 +743,7 @@ pub(super) mod graph {
     /// × `[cfg.radius, cfg.height - cfg.radius]`.
     pub(super) fn calculate_graph(
         graph: Graph<String, String>,
-        cfg: &GifConfig,
+        cfg: &GraphicsConfig,
     ) -> (Vec<String>, Vec<(usize, usize, String)>, Positions) {
         let nodes: Vec<(NodeIndex, String)> = graph
             .node_indices()
@@ -796,7 +796,7 @@ pub(super) mod graph {
     /// 3. Пересечения рёбер.
     ///
     /// Для пустого графа функция завершается немедленно.
-    fn optimize_layout(positions: &mut Positions, edges: &[(usize, usize)], cfg: &GifConfig) {
+    fn optimize_layout(positions: &mut Positions, edges: &[(usize, usize)], cfg: &GraphicsConfig) {
         let n = positions.len();
         if n == 0 {
             return;
@@ -1168,7 +1168,7 @@ pub(super) mod graph {
 
         #[test]
         fn test_calculate_graph_empty_returns_empty() {
-            let cfg = crate::gif_config::GifConfig::default();
+            let cfg = crate::graphics_config::GraphicsConfig::default();
             let g: Graph<String, String> = Graph::new();
             let (labels, edges, positions) = calculate_graph(g, &cfg);
             assert!(labels.is_empty());
@@ -1178,7 +1178,7 @@ pub(super) mod graph {
 
         #[test]
         fn test_calculate_graph_counts_match() {
-            let cfg = crate::gif_config::GifConfig::default();
+            let cfg = crate::graphics_config::GraphicsConfig::default();
             let mut g: Graph<String, String> = Graph::new();
             let a = g.add_node("A".to_string());
             let b = g.add_node("B".to_string());
@@ -1191,7 +1191,7 @@ pub(super) mod graph {
 
         #[test]
         fn test_calculate_graph_positions_within_bounds() {
-            let cfg = crate::gif_config::GifConfig::default();
+            let cfg = crate::graphics_config::GraphicsConfig::default();
             let mut g: Graph<String, String> = Graph::new();
             for name in ["A", "B", "C", "D"] {
                 g.add_node(name.to_string());
@@ -1211,7 +1211,7 @@ pub(super) mod graph {
 
         #[test]
         fn test_calculate_graph_labels_contain_all_nodes() {
-            let cfg = crate::gif_config::GifConfig::default();
+            let cfg = crate::graphics_config::GraphicsConfig::default();
             let mut g: Graph<String, String> = Graph::new();
             g.add_node("Alpha".to_string());
             g.add_node("Beta".to_string());
@@ -1305,7 +1305,7 @@ mod tests {
     fn test_create_viewport_empty_unit_returns_ok() {
         let result = create_viewport(
             &Unit::None,
-            crate::gif_config::GifConfig::default(),
+            crate::graphics_config::GraphicsConfig::default(),
             &[],
             None,
         );
@@ -1328,7 +1328,12 @@ mod tests {
             state_executions: HashMap::new(),
             last_transition: None,
         };
-        let result = create_viewport(&unit, crate::gif_config::GifConfig::default(), &["A"], None);
+        let result = create_viewport(
+            &unit,
+            crate::graphics_config::GraphicsConfig::default(),
+            &["A"],
+            None,
+        );
         assert!(result.is_ok());
     }
 }
@@ -1357,12 +1362,12 @@ mod test_highlight {
         t.insert("Off".to_string(), vec![("On".to_string(), pred)]);
         t.insert("On".to_string(), vec![]);
         let unit = make_node(t);
-        let layout = compute_layout(&unit, &crate::gif_config::GifConfig::default());
+        let layout = compute_layout(&unit, &crate::graphics_config::GraphicsConfig::default());
         let fi = layout.node_labels.iter().position(|n| n == "Off").unwrap();
         let ti = layout.node_labels.iter().position(|n| n == "On").unwrap();
         let vp = render_from_layout(
             &layout,
-            &crate::gif_config::GifConfig::default(),
+            &crate::graphics_config::GraphicsConfig::default(),
             &["On"],
             None,
             None,
