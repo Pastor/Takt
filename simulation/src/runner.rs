@@ -107,9 +107,11 @@ impl SimulationRunner {
                         gif_config.canvas.frame_delay_cs,
                     ))
                 }
-                OutputMode::Svg => {
-                    GraphicsRecorder::Svg(SvgRecorder::new(dir.clone(), input_stem.to_string()))
-                }
+                OutputMode::Svg => GraphicsRecorder::Svg(SvgRecorder::new(
+                    dir.clone(),
+                    input_stem.to_string(),
+                    &gif_config,
+                )),
             };
             (Some(recorder), Some(size))
         } else {
@@ -351,6 +353,11 @@ impl SimulationRunner {
         let legend = build_legend(&self.unit, &self.port_names);
 
         let t_vp = std::time::Instant::now();
+        let is_svg = self
+            .graphics_recorder
+            .as_ref()
+            .map(|r| r.is_svg())
+            .unwrap_or(false);
         let viewport = render_from_layout(
             self.cached_layout.as_ref().unwrap(),
             &self.gif_config,
@@ -358,6 +365,7 @@ impl SimulationRunner {
             Some(&legend),
             self.model_name.as_deref(),
             highlighted_edge,
+            is_svg,
         )
         .map_err(|d| format!("Ошибка viewport: {}", d.message))?;
         let vp_ms = t_vp.elapsed().as_millis();
