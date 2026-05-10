@@ -16,12 +16,13 @@
 mod context;
 mod execution;
 pub(crate) mod gif;
-pub mod gif_config;
+pub mod graphics_config;
 pub mod json_input;
 mod predicate;
 pub mod runner;
 mod snapshot;
 pub mod state_io;
+pub(crate) mod svg;
 mod unit;
 mod value;
 

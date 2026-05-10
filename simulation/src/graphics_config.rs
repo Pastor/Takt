@@ -1,9 +1,9 @@
 //! Конфигурация генерации GIF-анимации симуляции.
 //!
 //! Все параметры вёрстки кадров (размеры, цвета, отступы, шрифты, поведение
-//! раскладки графа) собраны в [`GifConfig`]. Конфигурация сериализуется
+//! раскладки графа) собраны в [`GraphicsConfig`]. Конфигурация сериализуется
 //! из/в JSON (через `serde`) и загружается из файла методом
-//! [`GifConfig::from_file`].
+//! [`GraphicsConfig::from_file`].
 //!
 //! Структура разбита на логические группы (canvas/node/edge/legend/...) —
 //! при отсутствии группы или поля в JSON используются значения по умолчанию,
@@ -12,17 +12,32 @@
 use serde::Deserialize;
 use std::path::Path;
 
+// ── Режим сохранения графики ──────────────────────────────────────────────────
+
+/// Режим сохранения графики симуляции.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputMode {
+    /// Анимированный GIF-файл (по умолчанию).
+    #[default]
+    Gif,
+    /// Серия SVG-файлов (по одному на кадр).
+    Svg,
+}
+
 // ── Корневая конфигурация ─────────────────────────────────────────────────────
 
-/// Полная конфигурация генерации GIF.
+/// Полная конфигурация генерации графики симуляции.
 ///
-/// Создаётся через [`GifConfig::default`] либо загружается из JSON-файла
-/// методом [`GifConfig::from_file`]. Все вложенные группы помечены
+/// Создаётся через [`GraphicsConfig::default`] либо загружается из JSON-файла
+/// методом [`GraphicsConfig::from_file`]. Все вложенные группы помечены
 /// `#[serde(default)]`, поэтому в файле допустимо указывать только те поля,
 /// которые нужно переопределить.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
-pub struct GifConfig {
+pub struct GraphicsConfig {
+    /// Режим сохранения: "gif" (по умолчанию) или "svg".
+    pub output_mode: OutputMode,
     /// Параметры холста (ширина, высота, тайминги кадров).
     pub canvas: CanvasConfig,
     /// Параметры узлов состояний.
@@ -41,9 +56,10 @@ pub struct GifConfig {
     pub layout: LayoutConfig,
 }
 
-impl Default for GifConfig {
+impl Default for GraphicsConfig {
     fn default() -> Self {
         Self {
+            output_mode: OutputMode::default(),
             canvas: CanvasConfig::default(),
             node: NodeConfig::default(),
             edge: EdgeConfig::default(),
@@ -56,7 +72,7 @@ impl Default for GifConfig {
     }
 }
 
-impl GifConfig {
+impl GraphicsConfig {
     /// Загружает конфигурацию из JSON-файла.
     ///
     /// Отсутствующие поля заменяются значениями по умолчанию. Возвращает
@@ -358,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_default_config_round_trip() {
-        let cfg = GifConfig::default();
+        let cfg = GraphicsConfig::default();
         // Базовая проверка: значения по умолчанию совпадают с исходными «зашитыми».
         assert_eq!(cfg.canvas.width, 800.0);
         assert_eq!(cfg.canvas.height, 600.0);
@@ -371,7 +387,7 @@ mod tests {
     fn test_load_partial_json_uses_defaults() {
         let mut f = tempfile::NamedTempFile::new().unwrap();
         writeln!(f, r#"{{ "canvas": {{ "width": 1024, "height": 768 }} }}"#).unwrap();
-        let cfg = GifConfig::from_file(f.path()).unwrap();
+        let cfg = GraphicsConfig::from_file(f.path()).unwrap();
         assert_eq!(cfg.canvas.width, 1024.0);
         assert_eq!(cfg.canvas.height, 768.0);
         // Остальные группы получили дефолты.
@@ -389,7 +405,7 @@ mod tests {
             "legend": {"width": 220, "active_label": "ON"}
         }"##;
         f.write_all(json.as_bytes()).unwrap();
-        let cfg = GifConfig::from_file(f.path()).unwrap();
+        let cfg = GraphicsConfig::from_file(f.path()).unwrap();
         assert_eq!(cfg.canvas.width, 640.0);
         assert_eq!(cfg.canvas.frame_delay_cs, 30);
         assert_eq!(cfg.canvas.highlight_frame_delay_cs, 200);
@@ -404,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_load_missing_file_returns_err() {
-        let res = GifConfig::from_file(Path::new("/nonexistent/path/cfg.json"));
+        let res = GraphicsConfig::from_file(Path::new("/nonexistent/path/cfg.json"));
         assert!(res.is_err());
     }
 
@@ -412,8 +428,32 @@ mod tests {
     fn test_load_invalid_json_returns_err() {
         let mut f = tempfile::NamedTempFile::new().unwrap();
         writeln!(f, "{{ not json }}").unwrap();
-        let res = GifConfig::from_file(f.path());
+        let res = GraphicsConfig::from_file(f.path());
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_output_mode_default_is_gif() {
+        let cfg = GraphicsConfig::default();
+        assert_eq!(cfg.output_mode, OutputMode::Gif);
+    }
+
+    #[test]
+    fn test_output_mode_svg_from_json() {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        writeln!(f, r#"{{ "output_mode": "svg" }}"#).unwrap();
+        let cfg = GraphicsConfig::from_file(f.path()).unwrap();
+        assert_eq!(cfg.output_mode, OutputMode::Svg);
+        // Остальные поля — дефолт.
+        assert_eq!(cfg.canvas.width, 800.0);
+    }
+
+    #[test]
+    fn test_output_mode_gif_explicit_from_json() {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        writeln!(f, r#"{{ "output_mode": "gif" }}"#).unwrap();
+        let cfg = GraphicsConfig::from_file(f.path()).unwrap();
+        assert_eq!(cfg.output_mode, OutputMode::Gif);
     }
 
     /// Все JSON-пресеты в `examples/gif-configs/` должны корректно загружаться.
@@ -425,11 +465,11 @@ mod tests {
             .parent()
             .unwrap()
             .join("examples")
-            .join("gif-configs");
+            .join("graphics-configs");
         for name in ["default", "dark", "compact", "large", "monochrome"] {
             let path = presets_dir.join(format!("{name}.json"));
             assert!(path.exists(), "пресет не найден: {}", path.display());
-            let cfg = GifConfig::from_file(&path)
+            let cfg = GraphicsConfig::from_file(&path)
                 .unwrap_or_else(|e| panic!("не удалось загрузить {name}: {e}"));
             // Базовая проверка корректности — все обязательные поля присутствуют.
             assert!(cfg.canvas.width > 0.0);
