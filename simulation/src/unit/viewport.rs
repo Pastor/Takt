@@ -80,6 +80,7 @@ pub(crate) fn render_from_layout(
     legend: Option<&LegendData>,
     model_name: Option<&str>,
     highlighted_edge: Option<(usize, usize)>,
+    is_svg: bool,
 ) -> Result<Viewport, Diagnostic> {
     let document = create_svg(
         &layout.node_labels,
@@ -91,6 +92,7 @@ pub(crate) fn render_from_layout(
         legend,
         model_name,
         highlighted_edge,
+        is_svg,
     );
     Ok(Viewport::SVG(document))
 }
@@ -108,7 +110,15 @@ pub(crate) fn create_viewport(
     legend: Option<&LegendData>,
 ) -> Result<Viewport, Diagnostic> {
     let layout = compute_layout(unit, &configuration);
-    render_from_layout(&layout, &configuration, active_states, legend, None, None)
+    render_from_layout(
+        &layout,
+        &configuration,
+        active_states,
+        legend,
+        None,
+        None,
+        false,
+    )
 }
 
 // ── Геометрические вспомогательные функции для SVG ───────────────────────────
@@ -171,14 +181,18 @@ fn create_svg(
     legend: Option<&LegendData>,
     model_name: Option<&str>,
     highlighted_edge: Option<(usize, usize)>,
+    is_svg: bool,
 ) -> Document {
-    let total_width = cfg.canvas.width
-        + if legend.is_some() {
-            cfg.legend.width
-        } else {
-            0.0
-        };
+    // Легенда разбивается на два независимых блока: слева — состояния, справа — порты.
+    // Граф рисуется по центру через <g transform="translate(left_w, 0)">.
+    let leg_w = if legend.is_some() {
+        cfg.legend.width
+    } else {
+        0.0
+    };
+    let total_width = leg_w + cfg.canvas.width + leg_w;
     let is_highlight_frame = highlighted_edge.is_some();
+
     let mut document = Document::new()
         .set("viewBox", (0, 0, total_width, cfg.canvas.height))
         .set("xmlns", "http://www.w3.org/2000/svg");
@@ -243,10 +257,31 @@ fn create_svg(
             ),
     );
 
-    // В highlight-кадре: толстая цветная рамка вокруг области графа
-    if is_highlight_frame {
+    // Фон (SVG-режим): покрывает всю ширину включая панели легенды.
+    if is_svg {
+        if let Some(ref bg) = cfg.canvas.svg_background {
+            document = document.add(
+                Rectangle::new()
+                    .set("x", 0)
+                    .set("y", 0)
+                    .set("width", total_width)
+                    .set("height", cfg.canvas.height)
+                    .set("fill", bg.as_str()),
+            );
+        }
+    }
+
+    // ── Граф (рёбра + узлы + шапка) в сдвинутой группе ──────────────────────
+    // Координаты внутри группы — те же [0, canvas.width] × [0, canvas.height].
+    let mut graph = Group::new();
+    if leg_w > 0.0 {
+        graph = graph.set("transform", format!("translate({leg_w}, 0)"));
+    }
+
+    // Highlight-рамка (только GIF).
+    if is_highlight_frame && !is_svg {
         let inset = cfg.highlight.border_inset;
-        document = document.add(
+        graph = graph.add(
             Rectangle::new()
                 .set("x", inset)
                 .set("y", inset)
@@ -258,12 +293,11 @@ fn create_svg(
         );
     }
 
-    // Центры узлов сохраняются для проверки перекрытий подписей рёбер
+    // Центры узлов сохраняются для проверки перекрытий подписей рёбер.
     let node_circles: Vec<(f64, f64)> = positions.clone();
     let mut placed_boxes: Vec<(f64, f64, f64, f64)> = Vec::new();
 
     // Подсчёт кратности: сколько раз встречается пара (min(i,j), max(i,j)).
-    // Кратные рёбра между одной парой узлов получают разный изгиб.
     let mut connection_counts: std::collections::HashMap<(usize, usize), usize> =
         std::collections::HashMap::new();
     let mut edge_multiplicities = Vec::with_capacity(edges_vec.len());
@@ -274,7 +308,7 @@ fn create_svg(
         *count += 1;
     }
 
-    // ── Отрисовка рёбер ───────────────────────────────────────────────────────
+    // ── Рёбра ────────────────────────────────────────────────────────────────
     for (idx, (i, j, edge_label)) in edges_vec.iter().enumerate() {
         let is_highlighted = highlighted_edge.map_or(false, |(hi, hj)| *i == hi && *j == hj);
         let multiplicity = edge_multiplicities[idx];
@@ -285,36 +319,36 @@ fn create_svg(
         let dy = y2 - y1;
         let d = (dx * dx + dy * dy).sqrt();
         if d < 1e-6 {
-            continue; // вырожденное ребро — узлы в одной точке
+            continue;
         }
-        let ux = dx / d; // единичный вектор по направлению ребра
+        let ux = dx / d;
         let uy = dy / d;
 
-        // Смещение точек входа/выхода от центров кружков: разные источники в одном узле
-        // не сливаются в одну точку благодаря синусоидальному сдвигу по индексу.
-        let entry_offset = (*i as f64 * 0.5).sin() * 5.0;
-        let exit_offset = (*j as f64 * 0.5).sin() * 5.0;
+        // Канонический перпендикуляр: встречные рёбра (A→B и B→A) получают
+        // противоположные смещения и не наслаиваются.
+        let (cpx, cpy) = if *i <= *j { (-uy, ux) } else { (uy, -ux) };
+        let perp_sign = if multiplicity % 2 == 0 { 1.0 } else { -1.0 };
+        let perp_mag = perp_sign * (3.0 + (multiplicity as f64 / 2.0).floor() * 5.0);
 
-        let start_x = x1 + ux * cfg.node.radius + uy * entry_offset;
-        let start_y = y1 + uy * cfg.node.radius - ux * entry_offset;
-        let end_x = x2 - ux * cfg.node.radius + uy * exit_offset;
-        let end_y = y2 - uy * cfg.node.radius - ux * exit_offset;
+        let start_x = x1 + ux * cfg.node.radius + cpx * perp_mag;
+        let start_y = y1 + uy * cfg.node.radius + cpy * perp_mag;
+        let end_x = x2 - ux * cfg.node.radius + cpx * perp_mag;
+        let end_y = y2 - uy * cfg.node.radius + cpy * perp_mag;
 
-        // Контрольная точка квадратичной кривой Безье — перпендикуляр к середине ребра.
-        // Коэффициент изгиба: базовый + добавка за кратность + малый шум по индексу узла.
         let mid_x = (start_x + end_x) / 2.0;
         let mid_y = (start_y + end_y) / 2.0;
-        let curve_factor =
-            cfg.edge.curve_coefficient + (multiplicity as f64) * 0.10 + (*i as f64 * 0.01) % 0.04;
+        let curve_factor = cfg.edge.curve_coefficient;
         let cp_x = mid_x - uy * d * curve_factor;
         let cp_y = mid_y + ux * d * curve_factor;
 
+        // В SVG-режиме подсвеченное ребро — оранжевое, но обычной толщины.
         let (edge_stroke, edge_width, arrow_marker) = if is_highlighted {
-            (
-                cfg.edge.highlight_stroke.as_str(),
-                cfg.edge.highlight_stroke_width,
-                "url(#arrow-hl)",
-            )
+            let width = if is_svg {
+                cfg.edge.stroke_width
+            } else {
+                cfg.edge.highlight_stroke_width
+            };
+            (cfg.edge.highlight_stroke.as_str(), width, "url(#arrow-hl)")
         } else {
             (
                 cfg.edge.stroke.as_str(),
@@ -322,7 +356,7 @@ fn create_svg(
                 "url(#arrow)",
             )
         };
-        document = document.add(
+        graph = graph.add(
             Path::new()
                 .set(
                     "d",
@@ -337,14 +371,13 @@ fn create_svg(
                 .set("marker-end", arrow_marker),
         );
 
-        // ── Подпись ребра: только для подсвеченного перехода ──────────────────
+        // Подпись только для подсвеченного ребра.
         if is_highlighted {
             let bez_mid_x = 0.25 * start_x + 0.5 * cp_x + 0.25 * end_x;
             let bez_mid_y = 0.25 * start_y + 0.5 * cp_y + 0.25 * end_y;
 
             let box_w = edge_label.chars().count() as f64 * cfg.edge_label.char_width + 8.0;
             let box_h = cfg.edge_label.font_size + 4.0;
-
             let n_angles = cfg.edge_label.search_angles.max(1);
             let mut best_center = (bez_mid_x, bez_mid_y);
             let mut best_score = f64::MAX;
@@ -355,7 +388,6 @@ fn create_svg(
                     let angle = (k as f64) * std::f64::consts::TAU / (n as f64);
                     let cx = bez_mid_x + r * angle.cos();
                     let cy = bez_mid_y + r * angle.sin();
-
                     let bx1 = cx - box_w / 2.0 - cfg.edge_label.margin;
                     let by1 = cy - box_h / 2.0 - cfg.edge_label.margin;
                     let bx2 = cx + box_w / 2.0 + cfg.edge_label.margin;
@@ -430,11 +462,11 @@ fn create_svg(
                 .set("x", label_x)
                 .set("y", label_y)
                 .set("class", "edge-label");
-            document = document.add(grp.add(bg).add(lbl));
+            graph = graph.add(grp.add(bg).add(lbl));
         }
     }
 
-    // ── Отрисовка узлов ───────────────────────────────────────────────────────
+    // ── Узлы ─────────────────────────────────────────────────────────────────
     for (i, full_label) in node_labels.iter().enumerate() {
         let (cx, cy) = positions[i];
         let is_active = active_states.contains(&full_label.as_str());
@@ -452,7 +484,7 @@ fn create_svg(
             .get(i)
             .map(String::as_str)
             .unwrap_or(full_label.as_str());
-        document = document.add(
+        graph = graph.add(
             Circle::new()
                 .set("cx", cx)
                 .set("cy", cy)
@@ -461,7 +493,7 @@ fn create_svg(
                 .set("stroke", cfg.node.stroke.as_str())
                 .set("stroke-width", stroke_w),
         );
-        document = document.add(
+        graph = graph.add(
             Text::new(alias)
                 .set("x", cx)
                 .set("y", cy)
@@ -469,41 +501,55 @@ fn create_svg(
         );
     }
 
-    // ── Шапка: имя модели или переход ────────────────────────────────────────
+    // ── Шапка: имя модели (SVG) или переход (GIF) ────────────────────────────
     if let Some((hi, hj)) = highlighted_edge {
-        let from_alias = node_aliases.get(hi).map(String::as_str).unwrap_or("");
-        let to_alias = node_aliases.get(hj).map(String::as_str).unwrap_or("");
-        let edge_label = edges_vec
-            .iter()
-            .find(|(i, j, _)| *i == hi && *j == hj)
-            .map(|(_, _, lbl)| lbl.as_str())
-            .unwrap_or("");
-        let transition_text = if edge_label.is_empty() {
-            format!("{from_alias} → {to_alias}")
-        } else {
-            format!("{from_alias} → {to_alias}:  {edge_label}")
-        };
-        document = document.add(
-            Rectangle::new()
-                .set("x", 0)
-                .set("y", 0)
-                .set("width", cfg.canvas.width)
-                .set("height", cfg.highlight.header_height)
-                .set("fill", cfg.highlight.header_bg_color.as_str()),
-        );
-        document = document.add(
-            Text::new(transition_text)
-                .set("x", cfg.canvas.width / 2.0)
-                .set("y", cfg.highlight.header_height / 2.0)
-                .set("font-family", cfg.highlight.header_font_family.as_str())
-                .set("font-size", format!("{}px", cfg.highlight.header_font_size))
-                .set("font-weight", cfg.highlight.header_font_weight.as_str())
-                .set("fill", cfg.highlight.header_text_color.as_str())
-                .set("text-anchor", "middle")
-                .set("dominant-baseline", "middle"),
-        );
+        if !is_svg {
+            let from_alias = node_aliases.get(hi).map(String::as_str).unwrap_or("");
+            let to_alias = node_aliases.get(hj).map(String::as_str).unwrap_or("");
+            let edge_label = edges_vec
+                .iter()
+                .find(|(i, j, _)| *i == hi && *j == hj)
+                .map(|(_, _, lbl)| lbl.as_str())
+                .unwrap_or("");
+            let transition_text = if edge_label.is_empty() {
+                format!("{from_alias} → {to_alias}")
+            } else {
+                format!("{from_alias} → {to_alias}:  {edge_label}")
+            };
+            graph = graph.add(
+                Rectangle::new()
+                    .set("x", 0)
+                    .set("y", 0)
+                    .set("width", cfg.canvas.width)
+                    .set("height", cfg.highlight.header_height)
+                    .set("fill", cfg.highlight.header_bg_color.as_str()),
+            );
+            graph = graph.add(
+                Text::new(transition_text)
+                    .set("x", cfg.canvas.width / 2.0)
+                    .set("y", cfg.highlight.header_height / 2.0)
+                    .set("font-family", cfg.highlight.header_font_family.as_str())
+                    .set("font-size", format!("{}px", cfg.highlight.header_font_size))
+                    .set("font-weight", cfg.highlight.header_font_weight.as_str())
+                    .set("fill", cfg.highlight.header_text_color.as_str())
+                    .set("text-anchor", "middle")
+                    .set("dominant-baseline", "middle"),
+            );
+        } else if let Some(name) = model_name {
+            graph = graph.add(
+                Text::new(name)
+                    .set("x", cfg.canvas.width / 2.0)
+                    .set("y", cfg.model_name.y_offset)
+                    .set("font-family", cfg.model_name.font_family.as_str())
+                    .set("font-size", format!("{}px", cfg.model_name.font_size))
+                    .set("font-weight", cfg.model_name.font_weight.as_str())
+                    .set("fill", cfg.model_name.color.as_str())
+                    .set("text-anchor", "middle")
+                    .set("dominant-baseline", "middle"),
+            );
+        }
     } else if let Some(name) = model_name {
-        document = document.add(
+        graph = graph.add(
             Text::new(name)
                 .set("x", cfg.canvas.width / 2.0)
                 .set("y", cfg.model_name.y_offset)
@@ -516,39 +562,25 @@ fn create_svg(
         );
     }
 
-    // ── Легенда портов, переменных и цветов ───────────────────────────────────
+    document = document.add(graph);
+
+    // ── Левая легенда: состояния + цвета ─────────────────────────────────────
     if let Some(leg) = legend {
-        let lx = cfg.canvas.width + cfg.legend.padding;
-        let line_h = cfg.legend.line_height;
         let pad = cfg.legend.padding;
+        let line_h = cfg.legend.line_height;
         let font_size = format!("{}px", cfg.legend.font_size);
+        let inner_w = cfg.legend.width - 2.0 * pad;
 
-        let mut all_lines: Vec<(&str, &[(String, String)])> = vec![];
-        if !leg.in_ports.is_empty() {
-            all_lines.push((cfg.legend.in_header.as_str(), &leg.in_ports));
-        }
-        if !leg.out_ports.is_empty() {
-            all_lines.push((cfg.legend.out_header.as_str(), &leg.out_ports));
-        }
-        if !leg.inout_ports.is_empty() {
-            all_lines.push((cfg.legend.inout_header.as_str(), &leg.inout_ports));
-        }
-        if !leg.vars.is_empty() {
-            all_lines.push((cfg.legend.vars_header.as_str(), &leg.vars));
-        }
-
-        // СОСТОЯНИЯ: + N псевдонимов; ЦВЕТА: + 2 записи
-        let n_lines: usize = all_lines.iter().map(|(_, v)| v.len() + 1).sum::<usize>()
-            + 3  // ЦВЕТА: + 2 строки цвета
-            + 1 + node_labels.len(); // СОСТОЯНИЯ: + N строк
-        let box_h = n_lines as f64 * line_h + 2.0 * pad;
+        // Высота левого блока: СОСТОЯНИЯ + N строк + ЦВЕТА + 2 строки.
+        let left_lines = 1 + node_labels.len() + 1 + 2;
+        let left_box_h = left_lines as f64 * line_h + 2.0 * pad;
 
         document = document.add(
             Rectangle::new()
-                .set("x", lx)
+                .set("x", pad)
                 .set("y", pad)
-                .set("width", cfg.legend.width - 2.0 * pad)
-                .set("height", box_h)
+                .set("width", inner_w)
+                .set("height", left_box_h)
                 .set("fill", cfg.legend.bg_fill.as_str())
                 .set("stroke", cfg.legend.bg_stroke.as_str())
                 .set("stroke-width", cfg.legend.bg_stroke_width)
@@ -556,12 +588,13 @@ fn create_svg(
                 .set("ry", cfg.legend.bg_radius),
         );
 
+        let lx = pad + pad; // отступ внутри рамки
         let mut y = pad + line_h;
 
-        // ── Псевдонимы состояний ──────────────────────────────────────────────
+        // СОСТОЯНИЯ
         document = document.add(
             Text::new(cfg.legend.state_header.as_str())
-                .set("x", lx + pad)
+                .set("x", lx)
                 .set("y", y)
                 .set("font-family", cfg.legend.font_family.as_str())
                 .set("font-size", font_size.clone())
@@ -571,10 +604,9 @@ fn create_svg(
         );
         y += line_h;
         for (alias, full) in node_aliases.iter().zip(node_labels.iter()) {
-            let text = format!("  {alias} = {full}");
             document = document.add(
-                Text::new(text)
-                    .set("x", lx + pad)
+                Text::new(format!("{alias}={full}"))
+                    .set("x", lx)
                     .set("y", y)
                     .set("font-family", cfg.legend.font_family.as_str())
                     .set("font-size", font_size.clone())
@@ -584,10 +616,10 @@ fn create_svg(
             y += line_h;
         }
 
-        // ── Цветовые обозначения ──────────────────────────────────────────────
+        // ЦВЕТА
         document = document.add(
             Text::new(cfg.legend.colors_header.as_str())
-                .set("x", lx + pad)
+                .set("x", lx)
                 .set("y", y)
                 .set("font-family", cfg.legend.font_family.as_str())
                 .set("font-size", font_size.clone())
@@ -596,7 +628,6 @@ fn create_svg(
                 .set("dominant-baseline", "middle"),
         );
         y += line_h;
-
         for (color, label) in [
             (
                 cfg.node.active_fill.as_str(),
@@ -609,7 +640,7 @@ fn create_svg(
         ] {
             document = document.add(
                 Circle::new()
-                    .set("cx", lx + pad + cfg.legend.swatch_radius + 1.0)
+                    .set("cx", lx + cfg.legend.swatch_radius + 1.0)
                     .set("cy", y)
                     .set("r", cfg.legend.swatch_radius)
                     .set("fill", color)
@@ -618,7 +649,7 @@ fn create_svg(
             );
             document = document.add(
                 Text::new(label)
-                    .set("x", lx + pad + 2.0 * cfg.legend.swatch_radius + 5.0)
+                    .set("x", lx + 2.0 * cfg.legend.swatch_radius + 5.0)
                     .set("y", y)
                     .set("font-family", cfg.legend.font_family.as_str())
                     .set("font-size", font_size.clone())
@@ -628,31 +659,65 @@ fn create_svg(
             y += line_h;
         }
 
-        // ── Порты и переменные ────────────────────────────────────────────────
-        for (header, entries) in &all_lines {
+        // ── Правая легенда: порты и переменные ───────────────────────────────
+        let mut port_sections: Vec<(&str, &[(String, String)])> = vec![];
+        if !leg.in_ports.is_empty() {
+            port_sections.push((cfg.legend.in_header.as_str(), &leg.in_ports));
+        }
+        if !leg.out_ports.is_empty() {
+            port_sections.push((cfg.legend.out_header.as_str(), &leg.out_ports));
+        }
+        if !leg.inout_ports.is_empty() {
+            port_sections.push((cfg.legend.inout_header.as_str(), &leg.inout_ports));
+        }
+        if !leg.vars.is_empty() {
+            port_sections.push((cfg.legend.vars_header.as_str(), &leg.vars));
+        }
+
+        if !port_sections.is_empty() {
+            let right_lines: usize = port_sections.iter().map(|(_, v)| 1 + v.len()).sum();
+            let right_box_h = right_lines as f64 * line_h + 2.0 * pad;
+            let rx_box = leg_w + cfg.canvas.width + pad; // x левого края правого блока
+            let rx = rx_box + pad; // x контента внутри блока
+
             document = document.add(
-                Text::new(*header)
-                    .set("x", lx + pad)
-                    .set("y", y)
-                    .set("font-family", cfg.legend.font_family.as_str())
-                    .set("font-size", font_size.clone())
-                    .set("font-weight", "bold")
-                    .set("fill", cfg.legend.header_color.as_str())
-                    .set("dominant-baseline", "middle"),
+                Rectangle::new()
+                    .set("x", rx_box)
+                    .set("y", pad)
+                    .set("width", inner_w)
+                    .set("height", right_box_h)
+                    .set("fill", cfg.legend.bg_fill.as_str())
+                    .set("stroke", cfg.legend.bg_stroke.as_str())
+                    .set("stroke-width", cfg.legend.bg_stroke_width)
+                    .set("rx", cfg.legend.bg_radius)
+                    .set("ry", cfg.legend.bg_radius),
             );
-            y += line_h;
-            for (name, value) in *entries {
-                let text = format!("  {}={}", name, value);
+
+            let mut y_r = pad + line_h;
+            for (header, entries) in &port_sections {
                 document = document.add(
-                    Text::new(text)
-                        .set("x", lx + pad)
-                        .set("y", y)
+                    Text::new(*header)
+                        .set("x", rx)
+                        .set("y", y_r)
                         .set("font-family", cfg.legend.font_family.as_str())
                         .set("font-size", font_size.clone())
-                        .set("fill", cfg.legend.value_color.as_str())
+                        .set("font-weight", "bold")
+                        .set("fill", cfg.legend.header_color.as_str())
                         .set("dominant-baseline", "middle"),
                 );
-                y += line_h;
+                y_r += line_h;
+                for (name, value) in *entries {
+                    document = document.add(
+                        Text::new(format!("{name}={value}"))
+                            .set("x", rx)
+                            .set("y", y_r)
+                            .set("font-family", cfg.legend.font_family.as_str())
+                            .set("font-size", font_size.clone())
+                            .set("fill", cfg.legend.value_color.as_str())
+                            .set("dominant-baseline", "middle"),
+                    );
+                    y_r += line_h;
+                }
             }
         }
     }
@@ -1372,6 +1437,7 @@ mod test_highlight {
             None,
             None,
             Some((fi, ti)),
+            false, // GIF-режим — оранжевая шапка должна быть
         )
         .unwrap();
         let Viewport::SVG(doc) = vp;

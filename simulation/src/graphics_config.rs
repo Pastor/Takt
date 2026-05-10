@@ -86,6 +86,10 @@ impl GraphicsConfig {
 
 // ── Холст и тайминги ──────────────────────────────────────────────────────────
 
+fn default_svg_background() -> Option<String> {
+    Some("white".to_string())
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
 pub struct CanvasConfig {
@@ -95,6 +99,9 @@ pub struct CanvasConfig {
     pub frame_delay_cs: u16,
     /// Задержка для highlight-кадра — обычно длиннее, чтобы переход успели разглядеть.
     pub highlight_frame_delay_cs: u16,
+    /// Цвет фона SVG-кадра. `None` — фон не рисуется. По умолчанию белый.
+    #[serde(default = "default_svg_background")]
+    pub svg_background: Option<String>,
 }
 
 impl Default for CanvasConfig {
@@ -104,6 +111,7 @@ impl Default for CanvasConfig {
             height: 600.0,
             frame_delay_cs: 50,
             highlight_frame_delay_cs: 150,
+            svg_background: default_svg_background(),
         }
     }
 }
@@ -454,6 +462,37 @@ mod tests {
         writeln!(f, r#"{{ "output_mode": "gif" }}"#).unwrap();
         let cfg = GraphicsConfig::from_file(f.path()).unwrap();
         assert_eq!(cfg.output_mode, OutputMode::Gif);
+    }
+
+    #[test]
+    fn test_svg_background_default_is_white() {
+        let cfg = GraphicsConfig::default();
+        assert_eq!(cfg.canvas.svg_background, Some("white".to_string()));
+    }
+
+    #[test]
+    fn test_svg_background_null_from_json() {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        writeln!(f, r#"{{ "canvas": {{ "svg_background": null }} }}"#).unwrap();
+        let cfg = GraphicsConfig::from_file(f.path()).unwrap();
+        assert_eq!(cfg.canvas.svg_background, None);
+    }
+
+    #[test]
+    fn test_svg_background_custom_color_from_json() {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        writeln!(f, r##"{{ "canvas": {{ "svg_background": "#f0f0f0" }} }}"##).unwrap();
+        let cfg = GraphicsConfig::from_file(f.path()).unwrap();
+        assert_eq!(cfg.canvas.svg_background, Some("#f0f0f0".to_string()));
+    }
+
+    #[test]
+    fn test_svg_background_absent_from_json_uses_default() {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        writeln!(f, r#"{{ "canvas": {{ "width": 1024 }} }}"#).unwrap();
+        let cfg = GraphicsConfig::from_file(f.path()).unwrap();
+        // Поле отсутствует → используется default_svg_background() = Some("white")
+        assert_eq!(cfg.canvas.svg_background, Some("white".to_string()));
     }
 
     /// Все JSON-пресеты в `examples/gif-configs/` должны корректно загружаться.

@@ -5,32 +5,32 @@ title Stacker
 Stacker : CommandReceiver | MovementController | LiftController
 Stacker --> [*]
 
-state CommandReceiver {
-    [*] --> WaitingForTask
-    AcceptingTask --> TaskActive
-    WaitingForTask --> AcceptingTask
-    TaskActive --> WaitingForTask
-}
-
 state MovementController {
     [*] --> MovementIdle
+    MovementIdle --> DispatchMove
     MovingToStorage --> WaitingForkAtStorage
     MovingToStorage --> EmergencyCharge
-    DispatchMove --> MovingToPickup
-    DispatchMove --> MovingToStorage
-    WaitingForkAtCell --> TaskCompleting
-    MovingToDropoff --> WaitingForkAtDropoff
-    MovingToDropoff --> EmergencyCharge
-    MovementIdle --> DispatchMove
-    WaitingForkAtDropoff --> TaskCompleting
-    EmergencyCharge --> MovementIdle
     MovingToPickup --> WaitingForkAtPickup
     MovingToPickup --> EmergencyCharge
-    WaitingForkAtStorage --> MovingToDropoff
-    TaskCompleting --> MovementIdle
+    MovingToDropoff --> WaitingForkAtDropoff
+    MovingToDropoff --> EmergencyCharge
+    WaitingForkAtCell --> TaskCompleting
     WaitingForkAtPickup --> MovingToCell
+    EmergencyCharge --> MovementIdle
+    WaitingForkAtDropoff --> TaskCompleting
+    TaskCompleting --> MovementIdle
     MovingToCell --> WaitingForkAtCell
     MovingToCell --> EmergencyCharge
+    DispatchMove --> MovingToPickup
+    DispatchMove --> MovingToStorage
+    WaitingForkAtStorage --> MovingToDropoff
+}
+
+state CommandReceiver {
+    [*] --> WaitingForTask
+    TaskActive --> WaitingForTask
+    AcceptingTask --> TaskActive
+    WaitingForTask --> AcceptingTask
 }
 
 state LiftController {
