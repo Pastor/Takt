@@ -346,8 +346,8 @@ impl Unit {
                     // Нет активного состояния — терминально если нет возможных переходов
                     return state_transitions.is_empty();
                 };
-                // FIXME: unit2 не содержит state_nexts — состояния с вложенными моделями
-                //        (без явных переходов, но с continuation) будут ошибочно считаться терминальными.
+                // FIXME: состояния с вложенными моделями (без явных переходов, но с continuation)
+                //        будут ошибочно считаться терминальными.
                 state_transitions
                     .get(state_name)
                     .map_or(true, |t| t.is_empty())
