@@ -15,11 +15,12 @@
 //! ```
 mod context;
 pub(crate) mod gif;
-pub mod gif_config;
+pub mod graphics_config;
 pub mod json_input;
 mod predicate;
 pub mod runner;
 pub mod state_io;
+pub(crate) mod svg;
 mod unit;
 mod value;
 
