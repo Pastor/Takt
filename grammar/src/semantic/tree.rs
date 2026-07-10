@@ -299,7 +299,7 @@ fn construct_model_stage0(
                             upper: Some(Rc::downgrade(&model_node)),
                             loc,
                             name: name.clone(),
-                            ty: construct_type(typ, model_node.clone())?,
+                            ty: construct_type(typ, Rc::clone(&model_node))?,
                             expr: initializer
                                 .map(ExpressionNode::Unresolved)
                                 .unwrap_or(ExpressionNode::None),
@@ -314,7 +314,7 @@ fn construct_model_stage0(
                     direction,
                 } => {
                     let name = extract_name(name.clone(), loc)?;
-                    let type_node = construct_type(typ, model_node.clone())?;
+                    let type_node = construct_type(typ, Rc::clone(&model_node))?;
                     if type_node == TypeNode::Inference {
                         return Err(Diagnostic::error(
                             loc,
@@ -357,7 +357,7 @@ fn construct_model_stage0(
                             upper: Some(Rc::downgrade(&model_node)),
                             loc,
                             name: name.clone(),
-                            ty: construct_type(typ, model_node.clone())?,
+                            ty: construct_type(typ, Rc::clone(&model_node))?,
                             expr: ExpressionNode::Unresolved(initializer),
                         },
                     )
@@ -368,7 +368,7 @@ fn construct_model_stage0(
             let typ = def.ty.clone();
             // Вычисляем тип ДО borrow_mut, чтобы construct_type мог безопасно вызвать
             // model_node.borrow() (search_type) без конфликта с borrow_mut.
-            let resolved_type = construct_type(Some(typ.clone()), model_node.clone())?;
+            let resolved_type = construct_type(Some(typ.clone()), Rc::clone(&model_node))?;
             // Сохраняем сырой АСД-тип для последующей проверки циклических псевдонимов (Ce16)
             {
                 let mut bm = model_node.borrow_mut();
@@ -521,7 +521,7 @@ fn construct_model_stage0(
             // Разрешаем типы полей в контексте текущей модели.
             let mut field_pairs: Vec<(String, TypeNode)> = Vec::new();
             for field in &s.fields {
-                let field_ty = construct_type(Some(field.ty.clone()), model_node.clone())
+                let field_ty = construct_type(Some(field.ty.clone()), Rc::clone(&model_node))
                     .unwrap_or(TypeNode::Unsupported);
                 field_pairs.push((field.name.name.clone(), field_ty));
             }
@@ -570,7 +570,7 @@ fn construct_model_stage0(
         }
     }
     model_node.borrow_mut().models = models;
-    model_node.borrow_mut().states = construct_states(model, model_node.clone())?;
+    model_node.borrow_mut().states = construct_states(model, Rc::clone(&model_node))?;
     model_node.borrow_mut().variables = variables;
     model_node.borrow_mut().conditions = conditions;
     model_node.borrow_mut().named_blocks = named_blocks;
