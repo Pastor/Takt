@@ -125,7 +125,7 @@ impl ModelNode {
         let model = ModelNode {
             name: Some(name.to_string()),
             loc: Location::Codegen,
-            upper: parent.clone().map(|p| Rc::downgrade(&p)),
+            upper: parent.as_ref().map(Rc::downgrade),
             models: Default::default(),
             named_blocks: vec![],
             functions: Default::default(),
@@ -144,11 +144,11 @@ impl ModelNode {
             formulas: Vec::new(),
         };
         let model = Rc::new(RefCell::new(model));
-        if let Some(parent) = parent.clone() {
+        if let Some(parent) = &parent {
             parent
                 .borrow_mut()
                 .models
-                .insert(name.to_string(), model.clone());
+                .insert(name.to_string(), Rc::clone(&model));
         }
         model
     }
