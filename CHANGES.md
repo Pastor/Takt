@@ -9,11 +9,34 @@
 
 ### Добавлено
 
+- Внедрён единый процесс разработки через жизненный цикл фич (фича 0017):
+  `FEATURES.md` (витрина незакрытых фич, три блока по правилам 10/17/21) и реестры
+  стадий `docs/{features,adr,analyze,development,tests,reports,fixes}/README.md`
+  (заголовки таблиц согласованы с `scripts/new-feature.sh --register`).
+- Реконструирована история проекта в карточки фич `docs/features/`: `0001`–`0016`
+  (статус `ГОТОВО`); открытые фичи `0018`–`0020` из бывших `TODO.md`/`STATUS.md`.
 - Документация (`///`) для всего публичного API: `verification::ltl::Ltl`, `verification::buchi::BuchiAutomaton`,
   `semantic::formula::Formula`, `semantic::minimap::{Name, StateExtend, Element, Map}` и их методов.
 - Крейт `simulation`: crate-level doc-comment в `lib.rs` и `bin/simulation.rs`.
 - Type alias `PortMap` в `generator/c/c_header.rs` для упрощения сложного возвращаемого типа.
 - Type alias `NodeMap` в `verification/buchi.rs` для типа таблицы узлов GPVW-алгоритма.
+
+### Изменено
+
+- `docs/RULE.md` — содержит только правила (эталон процесса); секция контекста
+  удалена. Процесс управления работой — исключительно через жизненный цикл фич.
+- `CLAUDE.md` — переписан как контекст-only (архитектура, ключевые файлы,
+  инварианты) со ссылкой на `docs/RULE.md` (правила) и `docs/CODE.md` (Rust-код);
+  `AGENTS.md` остаётся симлинком на `CLAUDE.md`.
+- Скрипты перенесены в `scripts/`: `precheck.sh`, `run_simulations.sh` — пути
+  внутри исправлены на корень репозитория (работают из любого каталога).
+- `PLAN.md` перенесён в `docs/analyze/0018-code-guidelines.md` (анализ фичи 0018).
+
+### Удалено
+
+- Плоские списки задач `TASKS.md`, `STATUS.md`, `TODO.md` — содержимое перенесено
+  в карточки фич (`docs/features/`).
+- Каталог `changes/` с ручными патчами — процесс перешёл на карточки фич + коммиты.
 
 ### Исправлено
 

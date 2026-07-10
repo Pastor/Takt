@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Запускает все симуляции из examples/simulations/ по очереди.
 # Для каждого файла вида <модель>_<сценарий>.json ищет examples/<модель>.lam.
+# Запускать из любого каталога.
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SIM_DIR="$SCRIPT_DIR/examples/simulations"
-BINARY="$SCRIPT_DIR/target/debug/simulation"
+# Корень репозитория = каталог этого скрипта /..
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SIM_DIR="$ROOT/examples/simulations"
+BINARY="$ROOT/target/debug/simulation"
 
 if [[ ! -x "$BINARY" ]]; then
   echo "Бинарник не найден: $BINARY"
@@ -26,9 +28,9 @@ for sim_file in "$SIM_DIR"/*.json; do
 
   # Имя модели — часть до первого подчёркивания: stacker
   model="${base%%_*}"
-  lam_file="$SCRIPT_DIR/examples/${model}.lam"
-  output_path="$SCRIPT_DIR/examples/simulations/graphics"
-  config_file="$SCRIPT_DIR/examples/graphics-configs/default_svg.json"
+  lam_file="$ROOT/examples/${model}.lam"
+  output_path="$ROOT/examples/simulations/graphics"
+  config_file="$ROOT/examples/graphics-configs/default_svg.json"
 
   if [[ ! -f "$lam_file" ]]; then
     echo "[ ПРОПУСК ] $base  (не найден ${model}.lam)"
