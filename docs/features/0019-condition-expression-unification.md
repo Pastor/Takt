@@ -1,9 +1,21 @@
 # Фича 0019: Унификация грамматик Condition/Expression
 
 - **Номер:** 0019
-- **Статус:** СОЗДАНА
+- **Статус:** РАЗРАБОТКА
 - **Зависит от:** нет
 - **Крейт:** `grammar`
+
+## Ссылки на артефакты (правило 17)
+
+| Стадия | Артефакт |
+|---|---|
+| Архитектура (ADR) | [`docs/adr/0019-condition-expression-unification.md`](../adr/0019-condition-expression-unification.md) |
+| Анализ | [`docs/analyze/0019-condition-expression-unification.md`](../analyze/0019-condition-expression-unification.md) |
+| Разработка 0019-01 | [`docs/development/0019-01-loopcond-dedup.md`](../development/0019-01-loopcond-dedup.md) (ЗАПЛАНИРОВАНО) |
+
+> Доведена до стадии «Разработка»: ADR + анализ готовы, реализация не начата.
+> Ключевое решение ADR: полное слияние отвергнуто (ломает инвариант `=`/`==` и
+> совместимость); объём сужен до устранения дубликата `LoopCond`.
 
 ## Краткое описание
 

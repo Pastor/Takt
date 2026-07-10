@@ -9,3 +9,6 @@
 
 | ADR | Заголовок | Статус | Фича |
 |-----|-----------|--------|------|
+| [0019](./0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | Accepted | фича 0019 |
+| [0020](./0020-port-address-decl.md) | Адрес порта отдельно от объявления | Accepted | фича 0020 |
+

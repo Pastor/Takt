@@ -21,8 +21,8 @@
 
 | № | Фича | Зависит от | Статус |
 |---|------|------------|--------|
-| [0019](docs/features/0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | нет | СОЗДАНА |
-| [0020](docs/features/0020-port-address-decl.md) | Адрес порта отдельно от объявления | нет | СОЗДАНА |
+| [0019](docs/features/0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | нет | РАЗРАБОТКА |
+| [0020](docs/features/0020-port-address-decl.md) | Адрес порта отдельно от объявления | нет | РАЗРАБОТКА |
 
 ## 2. Кандидаты в фичи
 
