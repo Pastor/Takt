@@ -99,15 +99,15 @@ fn flat(cond: &ConditionNode, context: &dyn Context) -> Result<ConditionNode, Di
             };
             match value {
                 Value::Number(n) => Ok(ConditionNode::Bool(n & (1 << bit) != 0)),
-                Value::Real(n) => Ok(ConditionNode::Bool(false)),
+                Value::Real(_) => Ok(ConditionNode::Bool(false)),
                 Value::Boolean(n) => Ok(ConditionNode::Bool(n)),
-                Value::Array(n) => Err(Diagnostic::error(
+                Value::Array(_) => Err(Diagnostic::error(
                     Location::Builtin,
                     format!("Cannot access bit of array variable '{}'", var.name()),
                 )),
             }
         }
-        ConditionNode::Function(fun, params, _) => {
+        ConditionNode::Function(_fun, _params, _) => {
             unimplemented!()
         }
         ConditionNode::Not(cond) => {
