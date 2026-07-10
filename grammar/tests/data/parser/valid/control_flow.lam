@@ -5,36 +5,36 @@
 type u8 = [bit;8];
 
 model M {
-    var i: u8 = 0;
-    var j: u8 = 0;
+    var i: u8 := 0;
+    var j: u8 := 0;
     start S {
         always {
             // if без скобок
-            if i = 0 {
-                i = 1;
+            if i := 0 {
+                i := 1;
             }
 
             // if-else
             if i > 5 {
-                i = 0;
+                i := 0;
             } else {
-                i = i + 1;
+                i := i + 1;
             }
 
             // Цикл loop с условием (аналог while)
             loop i < 10 {
-                i = i + 1;
+                i := i + 1;
             }
 
             // Бесконечный цикл loop
             loop {
-                j = j + 1;
+                j := j + 1;
                 if j > 5 { break; }
             }
 
             // Цикл for
-            for i = 0; i < 10; i = i + 1 {
-                j = j + i;
+            for i := 0; i < 10; i := i + 1 {
+                j := j + i;
             }
         }
     }

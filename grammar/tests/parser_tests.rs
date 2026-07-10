@@ -287,7 +287,7 @@ fn parse_ref_with_bool_condition() {
 #[test]
 fn parse_ref_with_complex_condition() {
     let src = r#"
-        var x: bit = false;
+        var x: bit := false;
         model M { start S { ref E: x > 0; } state E; }
     "#;
     must_parse(src);
@@ -340,7 +340,7 @@ fn parse_type_alias_array() {
 /// `var x: bit = false` на верхнем уровне.
 #[test]
 fn parse_mutable_variable() {
-    let root = must_parse("var x: bit = false; model M { start S; }");
+    let root = must_parse("var x: bit := false; model M { start S; }");
     let var = root.elements.iter().find_map(|e| {
         if let ModelElement::Variable(v) = e {
             Some(v.as_ref())
@@ -358,7 +358,7 @@ fn parse_mutable_variable() {
 /// `const MAX: u8 = 255`.
 #[test]
 fn parse_const_variable() {
-    let root = must_parse("type u8 = [bit;8]; const MAX: u8 = 255; model M { start S; }");
+    let root = must_parse("type u8 = [bit;8]; const MAX: u8 := 255; model M { start S; }");
     let cst = root.elements.iter().find_map(|e| {
         if let ModelElement::Variable(v) = e {
             Some(v.as_ref())
@@ -378,7 +378,7 @@ fn parse_const_variable() {
 /// `port A: bit = 0x00548835:4`.
 #[test]
 fn parse_port_with_address() {
-    let root = must_parse("in A: bit = 0x00548835:4; model M { start S; }");
+    let root = must_parse("in A: bit := 0x00548835:4; model M { start S; }");
     let port = root.elements.iter().find_map(|e| {
         if let ModelElement::Variable(v) = e {
             Some(v.as_ref())
@@ -398,7 +398,7 @@ fn parse_port_with_address() {
 /// `cond IsZero = x = 0`.
 #[test]
 fn parse_condition_equality() {
-    let root = must_parse("var x: bit = false; cond IsZero = x = 0; model M { start S; }");
+    let root = must_parse("var x: bit := false; cond IsZero = x = 0; model M { start S; }");
     let cond = root.elements.iter().find_map(|e| {
         if let ModelElement::Condition(c) = e {
             Some(c.as_ref())
@@ -417,8 +417,8 @@ fn parse_condition_equality() {
 #[test]
 fn parse_condition_complex() {
     let src = r#"
-        var a: bit = false;
-        var b: bit = false;
+        var a: bit := false;
+        var b: bit := false;
         cond Both = a = 1 | b = 1;
         model M { start S; }
     "#;
@@ -497,11 +497,11 @@ fn parse_loop_with_condition() {
     let m = first_named_model(
         r#"
         model M {
-            var i: [bit;8] = 0;
+            var i: [bit;8] := 0;
             start S {
                 always {
                     loop i < 10 {
-                        i = i + 1;
+                        i := i + 1;
                     }
                 }
             }
@@ -517,11 +517,11 @@ fn parse_loop_infinite() {
     let m = first_named_model(
         r#"
         model M {
-            var x: [bit;8] = 0;
+            var x: [bit;8] := 0;
             start S {
                 always {
                     loop {
-                        x = x + 1;
+                        x := x + 1;
                         break;
                     }
                 }
@@ -538,15 +538,15 @@ fn parse_nested_loop() {
     must_parse(
         r#"
         model M {
-            var i: [bit;8] = 0;
-            var j: [bit;8] = 0;
+            var i: [bit;8] := 0;
+            var j: [bit;8] := 0;
             start S {
                 always {
                     loop i < 5 {
                         loop j < 3 {
-                            j = j + 1;
+                            j := j + 1;
                         }
-                        i = i + 1;
+                        i := i + 1;
                     }
                 }
             }
@@ -561,12 +561,12 @@ fn parse_loop_complex_condition() {
     must_parse(
         r#"
         model M {
-            var a: [bit;8] = 0;
-            var b: [bit;8] = 0;
+            var a: [bit;8] := 0;
+            var b: [bit;8] := 0;
             start S {
                 always {
                     loop a > 0 && b < 10 {
-                        a = a - 1;
+                        a := a - 1;
                     }
                 }
             }
@@ -581,11 +581,11 @@ fn parse_loop_infinite_with_break() {
     must_parse(
         r#"
         model M {
-            var x: [bit;8] = 0;
+            var x: [bit;8] := 0;
             start S {
                 always {
                     loop {
-                        x = x + 1;
+                        x := x + 1;
                         if x > 100 { break; }
                     }
                 }
@@ -601,10 +601,10 @@ fn parse_for_loop_without_parens() {
     let m = first_named_model(
         r#"
         model M {
-            var i: [bit;8] = 0;
+            var i: [bit;8] := 0;
             start S {
                 always {
-                    for i = 0; i < 10; i = i + 1 { }
+                    for i := 0; i < 10; i := i + 1 { }
                 }
             }
         }
@@ -619,11 +619,11 @@ fn parse_for_only_condition_without_parens() {
     must_parse(
         r#"
         model M {
-            var i: [bit;8] = 0;
+            var i: [bit;8] := 0;
             start S {
                 always {
                     for ; i < 10; {
-                        i = i + 1;
+                        i := i + 1;
                     }
                 }
             }
@@ -641,15 +641,15 @@ fn parse_arithmetic_expressions_in_always() {
     let m = first_named_model(
         r#"
         model M {
-            var a: [bit;8] = 0;
+            var a: [bit;8] := 0;
             start S {
                 always {
-                    a = 1 + 2;
-                    a = 10 - 3;
-                    a = 4 * 5;
-                    a = 20 / 4;
-                    a = 10 % 3;
-                    a = 2 ** 8;
+                    a := 1 + 2;
+                    a := 10 - 3;
+                    a := 4 * 5;
+                    a := 20 / 4;
+                    a := 10 % 3;
+                    a := 2 ** 8;
                 }
             }
         }
@@ -664,15 +664,15 @@ fn parse_bitwise_expressions_in_always() {
     let m = first_named_model(
         r#"
         model M {
-            var a: [bit;8] = 0;
+            var a: [bit;8] := 0;
             start S {
                 always {
-                    a = 0xFF & 0x0F;
-                    a = 0xF0 | 0x0F;
-                    a = 0xAA ^ 0x55;
-                    a = ~a;
-                    a = 1 << 4;
-                    a = 256 >> 4;
+                    a := 0xFF & 0x0F;
+                    a := 0xF0 | 0x0F;
+                    a := 0xAA ^ 0x55;
+                    a := ~a;
+                    a := 1 << 4;
+                    a := 256 >> 4;
                 }
             }
         }
@@ -693,7 +693,7 @@ fn parse_initializer_expression() {
     let root = must_parse(
         r#"
         type u8 = [bit;8];
-        const VALS: u8 = { 0, 1, 2, 3 };
+        const VALS: u8 := { 0, 1, 2, 3 };
         model M { start S; }
     "#,
     );
@@ -707,11 +707,11 @@ fn parse_bit_access() {
         r#"
         type u8 = [bit;8];
         model M {
-            var x: u8 = 0;
+            var x: u8 := 0;
             start S {
                 always {
-                    x.0 = true;
-                    x.7 = false;
+                    x.0 := true;
+                    x.7 := false;
                 }
             }
         }
@@ -728,11 +728,11 @@ fn parse_cast_expression() {
         type u8  = [bit;8];
         type u16 = [bit;16];
         model M {
-            var x: u8  = 0;
-            var y: u16 = 0;
+            var x: u8  := 0;
+            var y: u16 := 0;
             start S {
                 always {
-                    y = x as u16;
+                    y := x as u16;
                 }
             }
         }
@@ -1093,11 +1093,11 @@ fn parse_continue_in_loop() {
     must_parse(
         r#"
         model M {
-            var i: [bit;8] = 0;
+            var i: [bit;8] := 0;
             start S {
                 always {
                     loop i < 10 {
-                        i = i + 1;
+                        i := i + 1;
                         continue;
                     }
                 }
@@ -1113,7 +1113,7 @@ fn parse_break_in_loop() {
     must_parse(
         r#"
         model M {
-            var i: [bit;8] = 0;
+            var i: [bit;8] := 0;
             start S {
                 always {
                     loop i < 10 {
@@ -1159,10 +1159,10 @@ fn parse_for_loop_without_body() {
     must_parse(
         r#"
         model M {
-            var i: [bit;8] = 0;
+            var i: [bit;8] := 0;
             start S {
                 always {
-                    for i = 0; i < 10; i = i + 1;
+                    for i := 0; i < 10; i := i + 1;
                 }
             }
         }
@@ -1176,12 +1176,12 @@ fn parse_if_in_for_with_braces() {
     must_parse(
         r#"
         model M {
-            var i: [bit;8] = 0;
-            var x: [bit;8] = 0;
+            var i: [bit;8] := 0;
+            var x: [bit;8] := 0;
             start S {
                 always {
-                    for i = 0; i < 10; i = i + 1 {
-                        if x > 5 { x = 0; }
+                    for i := 0; i < 10; i := i + 1 {
+                        if x > 5 { x := 0; }
                     }
                 }
             }
@@ -1224,11 +1224,11 @@ fn parse_array_slice_expression() {
     must_parse(
         r#"
         type u8 = [bit;8];
-        var arr: u8 = 0;
+        var arr: u8 := 0;
         model M {
             start S {
                 always {
-                    arr[0:3] = 0;
+                    arr[0:3] := 0;
                 }
             }
         }
@@ -1510,15 +1510,15 @@ fn parse_nested_if_else() {
     must_parse(
         r#"
         model M {
-            var x: [bit;8] = 0;
+            var x: [bit;8] := 0;
             start S {
                 always {
                     if x > 10 {
-                        x = 10;
+                        x := 10;
                     } else if x < 0 {
-                        x = 0;
+                        x := 0;
                     } else {
-                        x = x + 1;
+                        x := x + 1;
                     }
                 }
             }
@@ -1549,7 +1549,7 @@ fn parse_negative_number_as_initializer() {
     must_parse(
         r#"
         type u8 = [bit;8];
-        const NEG: u8 = -1;
+        const NEG: u8 := -1;
         model M { start S; }
     "#,
     );
@@ -1613,7 +1613,7 @@ fn expression_loc_method() {
 /// Простой тернарный оператор `flag ? true : false` разбирается без ошибок.
 #[test]
 fn ternary_simple_parses() {
-    let src = "var flag: bit = true; var r: bit = flag ? true : false; start S;";
+    let src = "var flag: bit := true; var r: bit := flag ? true : false; start S;";
     must_parse(src);
 }
 
@@ -1621,14 +1621,14 @@ fn ternary_simple_parses() {
 #[test]
 fn ternary_nested_right_associative() {
     // a ? b ? 1 : 2 : 3  →  a ? (b ? 1 : 2) : 3
-    let src = "var a: bit = true; var b: bit = false; var z: bit = a ? b ? true : false : false; start S;";
+    let src = "var a: bit := true; var b: bit := false; var z: bit := a ? b ? true : false : false; start S;";
     must_parse(src);
 }
 
 /// Тернарный оператор с выражением в условии.
 #[test]
 fn ternary_condition_expression() {
-    let src = "var x: bit = true; var y: bit = x ? false : true; start S;";
+    let src = "var x: bit := true; var y: bit := x ? false : true; start S;";
     must_parse(src);
 }
 
@@ -1636,10 +1636,10 @@ fn ternary_condition_expression() {
 #[test]
 fn ternary_in_always_block() {
     let src = r#"
-var flag: bit = true;
+var flag: bit := true;
 start Idle {
     always {
-        var r: bit = flag ? true : false;
+        var r: bit := flag ? true : false;
     }
     ref Idle: flag = 0;
 }
@@ -1651,11 +1651,11 @@ start Idle {
 #[test]
 fn ternary_in_assignment_expression() {
     let src = r#"
-var a: bit = true;
-var b: bit = false;
+var a: bit := true;
+var b: bit := false;
 start S {
     always {
-        a = b ? true : false;
+        a := b ? true : false;
     }
     ref S: a = 0;
 }
@@ -1729,7 +1729,7 @@ start S;
 fn struct_variable_declaration_parses() {
     let src = r#"
 struct Vec2 { x: [bit;16], y: [bit;16] }
-var v: Vec2 = 0;
+var v: Vec2 := 0;
 start S;
 "#;
     must_parse(src);
@@ -1769,7 +1769,7 @@ fn struct_anonymous_parses_with_recovery() {
 /// Встроенная формула в теле модели разбирается как `ModelElement::InlineFormula`.
 #[test]
 fn test_inline_formula_in_model_parsed() {
-    let src = "model M { var temperature: bit = false; : temperature; }";
+    let src = "model M { var temperature: bit := false; : temperature; }";
     let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
     let m = ast
         .elements
@@ -1808,7 +1808,7 @@ fn test_inline_formula_in_state_parsed() {
 /// Встроенная формула в блоке `always` разбирается без ошибок.
 #[test]
 fn test_inline_formula_in_always_parsed() {
-    let src = "model M { always { var i: bit = false; : i, true; } start S; }";
+    let src = "model M { always { var i: bit := false; : i, true; } start S; }";
     let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
     assert!(!ast.elements.is_empty());
 }

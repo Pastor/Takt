@@ -13,11 +13,11 @@ extern fn log_count(n: u8);
 
 /// Модель управляющего контроллера температуры
 model Controller {
-    var temperature: u8 = 0;
-    var count: u8 = 0;
-    var mode: Mode = Auto;
-    const MAX_TEMP: u8 = 100;
-    const MAX_COUNT: u8 = 10;
+    var temperature: u8 := 0;
+    var count: u8 := 0;
+    var mode: Mode := Auto;
+    const MAX_TEMP: u8 := 100;
+    const MAX_COUNT: u8 := 10;
 
     /// Ограничивает значение диапазоном [0, MAX_TEMP]
     fn clamp_temp(value: u8) -> u8 {
@@ -34,32 +34,32 @@ model Controller {
     /// Начальное состояние
     start Idle {
         enter {
-            count = 0;
-            temperature = 0;
+            count := 0;
+            temperature := 0;
         }
         always {
-            var delta: u8 = 1;
-            temperature = temperature + delta;
+            var delta: u8 := 1;
+            temperature := temperature + delta;
             log_temp(temperature);
         }
-        exit { count = increment(count); }
+        exit { count := increment(count); }
         ref Heating: temperature > 10;
     }
 
     /// Состояние нагрева — демонстрация while и match
     state Heating {
         enter {
-            var boost: u8 = 5;
-            temperature = temperature + boost;
+            var boost: u8 := 5;
+            temperature := temperature + boost;
         }
         always {
             while count < 3 {
-                count = count + 1;
+                count := count + 1;
             }
             match mode {
                 Auto      => { log_temp(temperature); }
                 Manual    => { log_count(count); }
-                _         => { count = 0; }
+                _         => { count := 0; }
             }
         }
         ref Cooling: temperature > MAX_TEMP;
@@ -69,8 +69,8 @@ model Controller {
     /// Состояние охлаждения
     state Cooling {
         always {
-            for var i: u8 = 0; i < 3; i = i + 1 {
-                if temperature > 0 { temperature = temperature - 1; }
+            for var i: u8 := 0; i < 3; i := i + 1 {
+                if temperature > 0 { temperature := temperature - 1; }
             }
             log_count(count);
         }
@@ -81,8 +81,8 @@ model Controller {
     /// Конечное состояние — работа завершена (нет переходов)
     state Done {
         enter {
-            temperature = 0;
-            count = 0;
+            temperature := 0;
+            count := 0;
         }
     }
 }

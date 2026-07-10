@@ -6,8 +6,8 @@
 type u8 = [bit;8];
 
 model Controller {
-    var temperature: u8 = 0;
-    const MAX_TEMP: u8 = 100;
+    var temperature: u8 := 0;
+    const MAX_TEMP: u8 := 100;
 
     /// Ограничивает значение диапазоном [temperature, MAX_TEMP]
     fn clamp_temp(value: u8) -> u8 {

@@ -607,7 +607,7 @@ mod tests {
     /// `var x = false;` → тип `Bool`.
     #[test]
     fn infer_bool_initializer() {
-        let node = build("var x = false;").unwrap();
+        let node = build("var x := false;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Bool);
         } else {
@@ -618,7 +618,7 @@ mod tests {
     /// `var x = 3.14;` → тип `Rational`.
     #[test]
     fn infer_rational_initializer() {
-        let node = build("var x = 3.14;").unwrap();
+        let node = build("var x := 3.14;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Rational);
         } else {
@@ -629,7 +629,7 @@ mod tests {
     /// `const C = false;` → тип `Bool`.
     #[test]
     fn infer_const_bool() {
-        let node = build("const C = false;").unwrap();
+        let node = build("const C := false;").unwrap();
         if let Some(VariableNode::Const { ty, .. }) = node.search_var("C") {
             assert_eq!(ty, TypeNode::Bool);
         } else {
@@ -640,7 +640,7 @@ mod tests {
     /// Переменная с явным типом не перезаписывается выводом типа.
     #[test]
     fn explicit_type_not_overwritten() {
-        let node = build("var x: [bit;8] = false;").unwrap();
+        let node = build("var x: [bit;8] := false;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)));
         } else {
@@ -651,7 +651,7 @@ mod tests {
     /// Вывод типа из другой переменной: `var b: bit; var a = b;` → `a: Bit`.
     #[test]
     fn infer_type_from_variable() {
-        let node = build("var b: bit = false; var a = b;").unwrap();
+        let node = build("var b: bit := false; var a := b;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("a") {
             assert_eq!(ty, TypeNode::Bit);
         } else {
@@ -662,7 +662,7 @@ mod tests {
     /// Вывод типа: `var x = 1 + 2;` → `Array(8, Bit)` (оба операнда числовые литералы ≤255).
     #[test]
     fn infer_type_from_add_numbers() {
-        let node = build("var x = 1 + 2;").unwrap();
+        let node = build("var x := 1 + 2;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)));
         } else {
@@ -904,7 +904,7 @@ mod tests {
     /// `var x = 1 + 3.14;` → тип `Rational` (расширение через сложение).
     #[test]
     fn infer_type_from_add_rational() {
-        let node = build("var x = 1 + 3.14;").unwrap();
+        let node = build("var x := 1 + 3.14;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Rational);
         } else {
@@ -915,7 +915,7 @@ mod tests {
     /// `const C = 1;` → тип `Array(8, Bit)` (числовой литерал ≤255 → [bit;8]).
     #[test]
     fn infer_const_number() {
-        let node = build("const C = 1;").unwrap();
+        let node = build("const C := 1;").unwrap();
         if let Some(VariableNode::Const { ty, .. }) = node.search_var("C") {
             assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)));
         } else {
@@ -926,7 +926,7 @@ mod tests {
     /// `const C = 42;` → тип `Array(8, Bit)` (42 ≤ 255 → [bit;8]).
     #[test]
     fn infer_const_number_42_is_array8() {
-        let node = build("const C = 42;").unwrap();
+        let node = build("const C := 42;").unwrap();
         if let Some(VariableNode::Const { ty, .. }) = node.search_var("C") {
             assert_eq!(ty, TypeNode::Array(8, Box::new(TypeNode::Bit)));
         } else {
@@ -1141,7 +1141,7 @@ mod tests {
     /// `var x = 256;` → тип `Array(16, Bit)`.
     #[test]
     fn infer_number_256_is_array16() {
-        let node = build("var x = 256;").unwrap();
+        let node = build("var x := 256;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Array(16, Box::new(TypeNode::Bit)));
         } else {
@@ -1152,7 +1152,7 @@ mod tests {
     /// `var x = 65536;` → тип `Array(32, Bit)`.
     #[test]
     fn infer_number_65536_is_array32() {
-        let node = build("var x = 65536;").unwrap();
+        let node = build("var x := 65536;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(ty, TypeNode::Array(32, Box::new(TypeNode::Bit)));
         } else {

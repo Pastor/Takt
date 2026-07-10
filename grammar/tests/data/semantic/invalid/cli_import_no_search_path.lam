@@ -11,5 +11,5 @@
 
 import "std.lam";
 
-var x: u8 = 0;
+var x: u8 := 0;
 start S;

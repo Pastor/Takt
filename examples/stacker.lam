@@ -28,67 +28,67 @@
 
 // ─── Константы ────────────────────────────────────────────────────────────────
 
-const STACK_COUNT:   u8 = 10;
-const ROW_COUNT:     u8 = 10;
-const SECTION_COUNT: u8 = 20;
+const STACK_COUNT:   u8 := 10;
+const ROW_COUNT:     u8 := 10;
+const SECTION_COUNT: u8 := 20;
 
 // Зона зарядки (вне рабочего пространства)
-const CHARGE_STACK:   u8 = 0;
-const CHARGE_ROW:     u8 = 0;
-const CHARGE_SECTION: u8 = 0;
+const CHARGE_STACK:   u8 := 0;
+const CHARGE_ROW:     u8 := 0;
+const CHARGE_SECTION: u8 := 0;
 
 // Зона приёмки (один торец проходного склада)
-const PICKUP_STACK:   u8 = 0;
-const PICKUP_ROW:     u8 = 1;
-const PICKUP_SECTION: u8 = 1;
+const PICKUP_STACK:   u8 := 0;
+const PICKUP_ROW:     u8 := 1;
+const PICKUP_SECTION: u8 := 1;
 
 // Зона выдачи (другой торец проходного склада)
-const DROPOFF_STACK:   u8 = 11;
-const DROPOFF_ROW:     u8 = 1;
-const DROPOFF_SECTION: u8 = 1;
+const DROPOFF_STACK:   u8 := 11;
+const DROPOFF_ROW:     u8 := 1;
+const DROPOFF_SECTION: u8 := 1;
 
 // ─── Входные порты (датчики и интерфейс СУС) ──────────────────────────────────
 
 // Задание от системы управления складом (WMS)
-in task_valid:        bit = 0x100:0;   // новое задание готово к приёму
-in task_type:         bit = 0x101:0;   // 0=приёмка, 1=отгрузка
-in task_stack_no:     u8  = 0x102:0;   // номер штабеля задания (1–10)
-in task_row_no:       u8  = 0x103:0;   // номер ряда задания (1–10)
-in task_section_no:   u8  = 0x104:0;   // номер секции задания (1–20)
+in task_valid:        bit := 0x100:0;   // новое задание готово к приёму
+in task_type:         bit := 0x101:0;   // 0=приёмка, 1=отгрузка
+in task_stack_no:     u8  := 0x102:0;   // номер штабеля задания (1–10)
+in task_row_no:       u8  := 0x103:0;   // номер ряда задания (1–10)
+in task_section_no:   u8  := 0x104:0;   // номер секции задания (1–20)
 
 // Датчики положения (энкодеры / лазерные метки)
-in pos_stack:         u8  = 0x200:0;   // текущий штабель
-in pos_row:           u8  = 0x201:0;   // текущий ряд
-in pos_section:       u8  = 0x202:0;   // текущая секция
+in pos_stack:         u8  := 0x200:0;   // текущий штабель
+in pos_row:           u8  := 0x201:0;   // текущий ряд
+in pos_section:       u8  := 0x202:0;   // текущая секция
 
 // Датчики состояния
-in sense_loaded:      bit = 0x300:0;   // груз на вилах
-in sense_at_charge:   bit = 0x301:0;   // в зоне зарядки
-in sense_battery_low: bit = 0x302:0;   // заряд ниже порога
+in sense_loaded:      bit := 0x300:0;   // груз на вилах
+in sense_at_charge:   bit := 0x301:0;   // в зоне зарядки
+in sense_battery_low: bit := 0x302:0;   // заряд ниже порога
 
 // ─── Выходные порты (управление приводами) ────────────────────────────────────
 
-out cmd_target_stack:   u8  = 0x400:0; // целевой штабель
-out cmd_target_row:     u8  = 0x401:0; // целевой ряд
-out cmd_target_section: u8  = 0x402:0; // целевая секция
-out cmd_fork:           bit = 0x500:0; // 1=выдвинуть вилы, 0=убрать вилы
-out cmd_ack:            bit = 0x600:0; // подтверждение приёма задания
-out cmd_done:           bit = 0x601:0; // задание выполнено
+out cmd_target_stack:   u8  := 0x400:0; // целевой штабель
+out cmd_target_row:     u8  := 0x401:0; // целевой ряд
+out cmd_target_section: u8  := 0x402:0; // целевая секция
+out cmd_fork:           bit := 0x500:0; // 1=выдвинуть вилы, 0=убрать вилы
+out cmd_ack:            bit := 0x600:0; // подтверждение приёма задания
+out cmd_done:           bit := 0x601:0; // задание выполнено
 
 // ─── Рабочие переменные ───────────────────────────────────────────────────────
 
-var tgt_stack:   u8  = 0;    // параметры текущего задания
-var tgt_row:     u8  = 0;
-var tgt_section: u8  = 0;
-var tgt_type:    bit = 0;    // тип: 0=приёмка, 1=отгрузка
-var busy:        bit = 0;    // флаг активного задания
-var eta:         u8  = 0;    // расчётное время прибытия к цели (в тактах)
+var tgt_stack:   u8  := 0;    // параметры текущего задания
+var tgt_row:     u8  := 0;
+var tgt_section: u8  := 0;
+var tgt_type:    bit := 0;    // тип: 0=приёмка, 1=отгрузка
+var busy:        bit := 0;    // флаг активного задания
+var eta:         u8  := 0;    // расчётное время прибытия к цели (в тактах)
 
 // ─── Координационные переменные (внутренний интерфейс между моделями) ─────────
 
-var lift_request: bit = 0;   // запрос операции вилами (MovementController → LiftController)
-var lift_op:      bit = 0;   // тип операции: 0=захват (ждём loaded), 1=укладка (ждём unloaded)
-var lift_done:    bit = 0;   // подтверждение завершения (LiftController → MovementController)
+var lift_request: bit := 0;   // запрос операции вилами (MovementController → LiftController)
+var lift_op:      bit := 0;   // тип операции: 0=захват (ждём loaded), 1=укладка (ждём unloaded)
+var lift_done:    bit := 0;   // подтверждение завершения (LiftController → MovementController)
 
 // ─── Функции поиска кратчайшего пути ─────────────────────────────────────────
 //
@@ -114,19 +114,19 @@ fn max2(a: u8, b: u8) -> u8 {
 // Время движения от текущей позиции (pos_stack, pos_row, pos_section)
 // до целевой ячейки. Возвращает число тактов по метрике Чебышёва.
 fn travel_time(to_stack: u8, to_row: u8, to_section: u8) -> u8 {
-    var ds: u8 = 0;
-    var dr: u8 = 0;
-    var dy: u8 = 0;
-    var t:  u8 = 0;
-    if pos_stack > to_stack { ds = pos_stack - to_stack; }
-    else                    { ds = to_stack - pos_stack; }
-    if pos_row > to_row     { dr = pos_row - to_row; }
-    else                    { dr = to_row - pos_row; }
-    if pos_section > to_section { dy = pos_section - to_section; }
-    else                        { dy = to_section - pos_section; }
-    t = ds;
-    if dr > t { t = dr; }
-    if dy > t { t = dy; }
+    var ds: u8 := 0;
+    var dr: u8 := 0;
+    var dy: u8 := 0;
+    var t:  u8 := 0;
+    if pos_stack > to_stack { ds := pos_stack - to_stack; }
+    else                    { ds := to_stack - pos_stack; }
+    if pos_row > to_row     { dr := pos_row - to_row; }
+    else                    { dr := to_row - pos_row; }
+    if pos_section > to_section { dy := pos_section - to_section; }
+    else                        { dy := to_section - pos_section; }
+    t := ds;
+    if dr > t { t := dr; }
+    if dy > t { t := dy; }
     return t;
 }
 
@@ -162,27 +162,27 @@ cond charged      = !sense_battery_low;
 model CommandReceiver {
     // Ожидание нового задания (батарея достаточно заряжена)
     start WaitingForTask {
-        enter { cmd_ack = 0; }
+        enter { cmd_ack := 0; }
         ref AcceptingTask: task_valid & !busy & !sense_battery_low;
     }
 
     // Фиксация задания: сохранение параметров, вычисление ETA, подтверждение приёма (cmd_ack=1)
     state AcceptingTask {
         enter {
-            tgt_stack   = task_stack_no;
-            tgt_row     = task_row_no;
-            tgt_section = task_section_no;
-            tgt_type    = task_type;
-            eta         = travel_time(task_stack_no, task_row_no, task_section_no);
-            busy        = 1;
-            cmd_ack     = 1;
+            tgt_stack   := task_stack_no;
+            tgt_row     := task_row_no;
+            tgt_section := task_section_no;
+            tgt_type    := task_type;
+            eta         := travel_time(task_stack_no, task_row_no, task_section_no);
+            busy        := 1;
+            cmd_ack     := 1;
         }
         next TaskActive;
     }
 
     // Задание принято к исполнению; ждём завершения (busy опускает MovementController)
     state TaskActive {
-        enter { cmd_ack = 0; }
+        enter { cmd_ack := 0; }
         ref WaitingForTask: !busy;
     }
 }
@@ -198,10 +198,10 @@ model MovementController {
     // Простой у зарядки, ожидание задания
     start MovementIdle {
         enter {
-            cmd_target_stack   = CHARGE_STACK;
-            cmd_target_row     = CHARGE_ROW;
-            cmd_target_section = CHARGE_SECTION;
-            cmd_done = 0;
+            cmd_target_stack   := CHARGE_STACK;
+            cmd_target_row     := CHARGE_ROW;
+            cmd_target_section := CHARGE_SECTION;
+            cmd_done := 0;
         }
         ref DispatchMove: busy & charged;
     }
@@ -217,9 +217,9 @@ model MovementController {
     // Движение к зоне приёмки (все три оси одновременно)
     state MovingToPickup {
         enter {
-            cmd_target_stack   = PICKUP_STACK;
-            cmd_target_row     = PICKUP_ROW;
-            cmd_target_section = PICKUP_SECTION;
+            cmd_target_stack   := PICKUP_STACK;
+            cmd_target_row     := PICKUP_ROW;
+            cmd_target_section := PICKUP_SECTION;
         }
         ref WaitingForkAtPickup: at_pickup;
         ref EmergencyCharge:     sense_battery_low;
@@ -227,18 +227,18 @@ model MovementController {
 
     // Ожидание захвата паллета на приёмке (запрос к LiftController, op=захват)
     state WaitingForkAtPickup {
-        enter { lift_request = 1; lift_op = 0; }
+        enter { lift_request := 1; lift_op := 0; }
         ref MovingToCell: lift_done;
     }
 
     // Движение к целевой ячейке хранения
     state MovingToCell {
         enter {
-            lift_request       = 0;
-            lift_done          = 0;
-            cmd_target_stack   = tgt_stack;
-            cmd_target_row     = tgt_row;
-            cmd_target_section = tgt_section;
+            lift_request       := 0;
+            lift_done          := 0;
+            cmd_target_stack   := tgt_stack;
+            cmd_target_row     := tgt_row;
+            cmd_target_section := tgt_section;
         }
         ref WaitingForkAtCell: at_target;
         ref EmergencyCharge:   sense_battery_low;
@@ -246,7 +246,7 @@ model MovementController {
 
     // Ожидание укладки паллета в ячейку (запрос к LiftController, op=укладка)
     state WaitingForkAtCell {
-        enter { lift_request = 1; lift_op = 1; }
+        enter { lift_request := 1; lift_op := 1; }
         ref TaskCompleting: lift_done;
     }
 
@@ -255,11 +255,11 @@ model MovementController {
     // Движение к ячейке хранения
     state MovingToStorage {
         enter {
-            lift_request       = 0;
-            lift_done          = 0;
-            cmd_target_stack   = tgt_stack;
-            cmd_target_row     = tgt_row;
-            cmd_target_section = tgt_section;
+            lift_request       := 0;
+            lift_done          := 0;
+            cmd_target_stack   := tgt_stack;
+            cmd_target_row     := tgt_row;
+            cmd_target_section := tgt_section;
         }
         ref WaitingForkAtStorage: at_target;
         ref EmergencyCharge:      sense_battery_low;
@@ -267,18 +267,18 @@ model MovementController {
 
     // Ожидание захвата паллета из ячейки (запрос к LiftController, op=захват)
     state WaitingForkAtStorage {
-        enter { lift_request = 1; lift_op = 0; }
+        enter { lift_request := 1; lift_op := 0; }
         ref MovingToDropoff: lift_done;
     }
 
     // Движение к зоне выдачи
     state MovingToDropoff {
         enter {
-            lift_request       = 0;
-            lift_done          = 0;
-            cmd_target_stack   = DROPOFF_STACK;
-            cmd_target_row     = DROPOFF_ROW;
-            cmd_target_section = DROPOFF_SECTION;
+            lift_request       := 0;
+            lift_done          := 0;
+            cmd_target_stack   := DROPOFF_STACK;
+            cmd_target_row     := DROPOFF_ROW;
+            cmd_target_section := DROPOFF_SECTION;
         }
         ref WaitingForkAtDropoff: at_dropoff;
         ref EmergencyCharge:      sense_battery_low;
@@ -286,7 +286,7 @@ model MovementController {
 
     // Ожидание передачи паллета в зону выдачи (запрос к LiftController, op=укладка)
     state WaitingForkAtDropoff {
-        enter { lift_request = 1; lift_op = 1; }
+        enter { lift_request := 1; lift_op := 1; }
         ref TaskCompleting: lift_done;
     }
 
@@ -294,12 +294,12 @@ model MovementController {
 
     state TaskCompleting {
         enter {
-            lift_request = 0;
-            lift_done    = 0;
-            busy         = 0;
-            cmd_done     = 1;
+            lift_request := 0;
+            lift_done    := 0;
+            busy         := 0;
+            cmd_done     := 1;
         }
-        always { cmd_done = 0; }
+        always { cmd_done := 0; }
         next MovementIdle;
     }
 
@@ -307,14 +307,14 @@ model MovementController {
     // Прерывает текущее задание; СУС повторно выдаёт задание после зарядки.
     state EmergencyCharge {
         enter {
-            cmd_target_stack   = CHARGE_STACK;
-            cmd_target_row     = CHARGE_ROW;
-            cmd_target_section = CHARGE_SECTION;
-            lift_request = 0;
-            lift_done    = 0;
-            cmd_ack      = 0;
-            cmd_done     = 0;
-            busy         = 0;
+            cmd_target_stack   := CHARGE_STACK;
+            cmd_target_row     := CHARGE_ROW;
+            cmd_target_section := CHARGE_SECTION;
+            lift_request := 0;
+            lift_done    := 0;
+            cmd_ack      := 0;
+            cmd_done     := 0;
+            busy         := 0;
         }
         ref MovementIdle: sense_at_charge;
     }
@@ -330,13 +330,13 @@ model MovementController {
 model LiftController {
     // Вилы убраны, ожидание запроса
     start LiftIdle {
-        enter { cmd_fork = 0; }
+        enter { cmd_fork := 0; }
         ref LiftOperating: lift_request;
     }
 
     // Вилы выдвинуты, ожидание целевого состояния груза
     state LiftOperating {
-        enter { cmd_fork = 1; }
+        enter { cmd_fork := 1; }
         ref LiftDone: lift_request & !lift_op & loaded;   // захват: паллет на вилах
         ref LiftDone: lift_request & lift_op & unloaded;  // укладка/выдача: вилы свободны
         ref LiftIdle: !lift_request;                       // отмена запроса (напр. аварийная зарядка)
@@ -344,7 +344,7 @@ model LiftController {
 
     // Операция завершена: убрать вилы, уведомить MovementController
     state LiftDone {
-        enter { cmd_fork = 0; lift_done = 1; }
+        enter { cmd_fork := 0; lift_done := 1; }
         ref LiftIdle: !lift_request;
     }
 }

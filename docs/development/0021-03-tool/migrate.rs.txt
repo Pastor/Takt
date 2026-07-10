@@ -1,0 +1,325 @@
+//! Мигратор синтаксиса Lam для фичи 0021 (задача 0021-03).
+//!
+//! Режимы:
+//!   migrate <файл.lam> [...]          — миграция .lam-файлов
+//!   migrate --rust <файл.rs> [...]    — миграция Lam-строк-литералов внутри .rs
+//!
+//! Разбирает Lam-исходник СТАРЫМ парсером (этот worktree до 0021-01), получает
+//! точные позиции операторов из грамматики (`parse_ops`) и точечно заменяет:
+//! присваивание `=` → `:=`, равенство `==` → `=`. Всё прочее (комментарии,
+//! строки, `<=`/`>=`, определения имён, равенство в условиях) не затрагивается.
+//! В режиме --rust строки, не парсящиеся как Lam, пропускаются.
+
+use std::fs;
+use std::process::ExitCode;
+
+/// Возвращает список правок (start, end, replacement) для Lam-исходника `src`.
+fn lam_edits(src: &str) -> Option<Vec<(usize, usize, &'static str)>> {
+    let ops = match grammar::parse_ops(src, 0) {
+        Ok((_, _, ops)) => ops,
+        Err(_) => return None, // не Lam или не парсится — пропуск
+    };
+    let mut edits: Vec<(usize, usize, &'static str)> = ops
+        .into_iter()
+        .filter_map(|(s, e, kind)| match kind {
+            0 => Some((s, e, ":=")), // присваивание = → :=
+            1 => Some((s, e, "=")),  // равенство == → =
+            _ => None,
+        })
+        .collect();
+    edits.sort_by(|a, b| b.0.cmp(&a.0));
+    Some(edits)
+}
+
+/// Применяет правки (отсортированы по убыванию start) к копии строки.
+fn apply(src: &str, edits: &[(usize, usize, &str)]) -> String {
+    let mut out = src.to_string();
+    for (s, e, repl) in edits {
+        out.replace_range(*s..*e, repl);
+    }
+    out
+}
+
+fn migrate_lam_files(paths: &[String]) -> (usize, usize, usize) {
+    let (mut changed, mut untouched, mut skipped) = (0, 0, 0);
+    for path in paths {
+        let src = match fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("ПРОПУСК (чтение) {path}: {e}");
+                skipped += 1;
+                continue;
+            }
+        };
+        match lam_edits(&src) {
+            None => {
+                eprintln!("ПРОПУСК (разбор) {path}");
+                skipped += 1;
+            }
+            Some(edits) if edits.is_empty() => untouched += 1,
+            Some(edits) => {
+                let out = apply(&src, &edits);
+                if fs::write(path, &out).is_err() {
+                    skipped += 1;
+                } else {
+                    changed += 1;
+                }
+            }
+        }
+    }
+    (changed, untouched, skipped)
+}
+
+/// Разэкранирует содержимое обычного строкового литерала Rust [start,end) и
+/// строит карту: для каждого логического байта — его смещение в файле.
+/// Обрабатывает `\<перенос>` (продолжение строки) и стандартные экраны.
+fn unescape_with_map(bytes: &[u8], start: usize, end: usize) -> (Vec<u8>, Vec<usize>) {
+    let mut logical = Vec::new();
+    let mut map = Vec::new();
+    let mut p = start;
+    while p < end {
+        if bytes[p] == b'\\' && p + 1 < end {
+            let e = bytes[p + 1];
+            match e {
+                // Продолжение строки: убрать `\`, перенос и ведущие пробелы.
+                b'\n' | b'\r' => {
+                    p += 1;
+                    while p < end && matches!(bytes[p], b' ' | b'\t' | b'\r' | b'\n') {
+                        p += 1;
+                    }
+                }
+                b'n' => {
+                    logical.push(b'\n');
+                    map.push(p);
+                    p += 2;
+                }
+                b't' => {
+                    logical.push(b'\t');
+                    map.push(p);
+                    p += 2;
+                }
+                b'r' => {
+                    logical.push(b'\r');
+                    map.push(p);
+                    p += 2;
+                }
+                b'\\' => {
+                    logical.push(b'\\');
+                    map.push(p);
+                    p += 2;
+                }
+                b'"' => {
+                    logical.push(b'"');
+                    map.push(p);
+                    p += 2;
+                }
+                b'\'' => {
+                    logical.push(b'\'');
+                    map.push(p);
+                    p += 2;
+                }
+                b'0' => {
+                    logical.push(b'\0');
+                    map.push(p);
+                    p += 2;
+                }
+                _ => {
+                    logical.push(e);
+                    map.push(p + 1);
+                    p += 2;
+                }
+            }
+        } else {
+            logical.push(bytes[p]);
+            map.push(p);
+            p += 1;
+        }
+    }
+    (logical, map)
+}
+
+/// Находит строковые литералы Rust и мигрирует те, что являются Lam.
+/// Возвращает (число мигрированных строк, число проверенных строк).
+fn migrate_rust_string(content: &str) -> (String, usize, usize) {
+    let bytes = content.as_bytes();
+    let n = bytes.len();
+    // Собираем правки на уровне ФАЙЛА: (start, end, new_text).
+    let mut file_edits: Vec<(usize, usize, String)> = Vec::new();
+    let mut migrated = 0usize;
+    let mut checked = 0usize;
+    let mut i = 0usize;
+    while i < n {
+        let c = bytes[i];
+        // Комментарии
+        if c == b'/' && i + 1 < n && bytes[i + 1] == b'/' {
+            i += 2;
+            while i < n && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if c == b'/' && i + 1 < n && bytes[i + 1] == b'*' {
+            i += 2;
+            while i + 1 < n && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            i += 2;
+            continue;
+        }
+        // Символьный литерал / lifetime: пропускаем осторожно
+        if c == b'\'' {
+            // char '\x' или 'x' — иначе одиночный ' (lifetime)
+            if i + 2 < n && bytes[i + 1] == b'\\' {
+                i += 2;
+                while i < n && bytes[i] != b'\'' {
+                    i += 1;
+                }
+                i += 1;
+                continue;
+            } else if i + 2 < n && bytes[i + 2] == b'\'' {
+                i += 3;
+                continue;
+            } else {
+                i += 1;
+                continue;
+            }
+        }
+        // Сырой строковый литерал: r#*"
+        if c == b'r' && i + 1 < n && (bytes[i + 1] == b'"' || bytes[i + 1] == b'#') {
+            let mut j = i + 1;
+            let mut hashes = 0usize;
+            while j < n && bytes[j] == b'#' {
+                hashes += 1;
+                j += 1;
+            }
+            if j < n && bytes[j] == b'"' {
+                let content_start = j + 1;
+                // ищем закрывающую " + hashes '#'
+                let mut k = content_start;
+                let closing_ok = |k: usize| -> bool {
+                    if bytes[k] != b'"' {
+                        return false;
+                    }
+                    for h in 0..hashes {
+                        if k + 1 + h >= n || bytes[k + 1 + h] != b'#' {
+                            return false;
+                        }
+                    }
+                    true
+                };
+                while k < n && !closing_ok(k) {
+                    k += 1;
+                }
+                if k < n {
+                    let content_end = k;
+                    let s = &content[content_start..content_end];
+                    checked += 1;
+                    if let Some(edits) = lam_edits(s) {
+                        if !edits.is_empty() {
+                            for (es, ee, repl) in edits {
+                                file_edits.push((
+                                    content_start + es,
+                                    content_start + ee,
+                                    repl.to_string(),
+                                ));
+                            }
+                            migrated += 1;
+                        }
+                    }
+                    i = k + 1 + hashes;
+                    continue;
+                }
+            }
+            i += 1;
+            continue;
+        }
+        // Обычный строковый литерал "..." (с учётом экранов и \<перенос>)
+        if c == b'"' {
+            let content_start = i + 1;
+            let mut k = content_start;
+            while k < n {
+                if bytes[k] == b'\\' {
+                    k += 2;
+                    continue;
+                }
+                if bytes[k] == b'"' {
+                    break;
+                }
+                k += 1;
+            }
+            if k < n {
+                let content_end = k;
+                // Строим логическую строку и карту логич.байт → офсет в файле.
+                let (logical, map) = unescape_with_map(bytes, content_start, content_end);
+                checked += 1;
+                if let Ok(s) = std::str::from_utf8(&logical) {
+                    if let Some(edits) = lam_edits(s) {
+                        if !edits.is_empty() {
+                            for (es, ee, repl) in edits {
+                                // операторы ASCII и не пересекают экраны:
+                                // [map[es], map[ee-1]+1) — их сырой диапазон
+                                let raw_s = map[es];
+                                let raw_e = map[ee - 1] + 1;
+                                file_edits.push((raw_s, raw_e, repl.to_string()));
+                            }
+                            migrated += 1;
+                        }
+                    }
+                }
+                i = content_end + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+
+    file_edits.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut out = content.to_string();
+    for (s, e, repl) in file_edits {
+        out.replace_range(s..e, &repl);
+    }
+    (out, migrated, checked)
+}
+
+fn main() -> ExitCode {
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args.is_empty() {
+        eprintln!("Использование: migrate [--rust] <файл> [...]");
+        return ExitCode::from(2);
+    }
+
+    if args[0] == "--rust" {
+        args.remove(0);
+        let mut total_mig = 0usize;
+        let mut files_changed = 0usize;
+        for path in &args {
+            let content = match fs::read_to_string(path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("ПРОПУСК (чтение) {path}: {e}");
+                    continue;
+                }
+            };
+            let (out, migrated, _checked) = migrate_rust_string(&content);
+            if migrated > 0 && out != content {
+                if fs::write(path, &out).is_err() {
+                    eprintln!("ОШИБКА (запись) {path}");
+                    continue;
+                }
+                files_changed += 1;
+                total_mig += migrated;
+                println!("{path}: мигрировано строк-сниппетов {migrated}");
+            }
+        }
+        println!("Итого .rs: файлов изменено {files_changed}, сниппетов {total_mig}");
+        return ExitCode::SUCCESS;
+    }
+
+    let (changed, untouched, skipped) = migrate_lam_files(&args);
+    println!("Миграция .lam: изменено {changed}, без изменений {untouched}, пропущено {skipped}");
+    if skipped > 0 {
+        ExitCode::from(2)
+    } else {
+        ExitCode::SUCCESS
+    }
+}

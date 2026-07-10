@@ -442,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_model_node_context_number_var() {
-        let (ast, _) = parse("var x: u8 = 42;", 0).unwrap();
+        let (ast, _) = parse("var x: u8 := 42;", 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let ctx = ModelNodeContext::new(Rc::clone(&model_rc));
         assert!(matches!(ctx.get_value("x"), Some(Value::Number(42))));
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn test_model_node_context_bool_var() {
-        let (ast, _) = parse("var flag: bool = false;", 0).unwrap();
+        let (ast, _) = parse("var flag: bool := false;", 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let ctx = ModelNodeContext::new(Rc::clone(&model_rc));
         assert!(matches!(ctx.get_value("flag"), Some(Value::Boolean(false))));
@@ -458,7 +458,7 @@ mod tests {
 
     #[test]
     fn test_model_node_context_cache_takes_priority() {
-        let (ast, _) = parse("var x: u8 = 10;", 0).unwrap();
+        let (ast, _) = parse("var x: u8 := 10;", 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let ctx = ModelNodeContext::new(Rc::clone(&model_rc));
         assert!(matches!(ctx.get_value("x"), Some(Value::Number(10))));
@@ -471,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_model_node_context_parent_hierarchy() {
-        let (ast, _) = parse("var outer_var: u8 = 77; model Inner { start S; }", 0).unwrap();
+        let (ast, _) = parse("var outer_var: u8 := 77; model Inner { start S; }", 0).unwrap();
         let root_rc = construct_model(&ast, None, &[]).unwrap();
         let inner_rc = root_rc.borrow().search_model("Inner").unwrap();
         let ctx = ModelNodeContext::new(Rc::clone(&inner_rc));
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn test_model_node_context_set_value_delegates_to_parent() {
-        let (ast, _) = parse("var shared: u8 = 0; model Inner { start S; }", 0).unwrap();
+        let (ast, _) = parse("var shared: u8 := 0; model Inner { start S; }", 0).unwrap();
         let root_rc = construct_model(&ast, None, &[]).unwrap();
         let inner_rc = root_rc.borrow().search_model("Inner").unwrap();
 
@@ -595,7 +595,7 @@ mod tests {
 
     #[test]
     fn test_build_node_has_context_with_variable() {
-        let (ast, _) = parse("var x: u8 = 5; start S;", 0).unwrap();
+        let (ast, _) = parse("var x: u8 := 5; start S;", 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let result = build(model_rc).unwrap();
         assert!(matches!(result.get_value("x"), Some(Value::Number(5))));
@@ -603,7 +603,7 @@ mod tests {
 
     #[test]
     fn test_build_node_variables_shadow_context() {
-        let (ast, _) = parse("var x: u8 = 5; start S;", 0).unwrap();
+        let (ast, _) = parse("var x: u8 := 5; start S;", 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let mut result = build(model_rc).unwrap();
         if let Unit::Node { variables, .. } = &mut result {
@@ -649,7 +649,7 @@ mod tests {
     /// Enter-блок корректно записывает переменную через shared-контекст.
     #[test]
     fn test_build_enter_block_executes_on_transition() {
-        let src = "var x: u8 = 0; start A { ref B; } state B { enter { x = 99; } }";
+        let src = "var x: u8 := 0; start A { ref B; } state B { enter { x := 99; } }";
         let (ast, _) = parse(src, 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let mut unit = build(model_rc).unwrap();
@@ -673,8 +673,8 @@ mod tests {
         // Модель A устанавливает shared в 1 при входе в B.
         // Модель B читает shared через свой контекст.
         let src = r#"
-            var shared: u8 = 0;
-            model A { start Idle { ref Done; } state Done { enter { shared = 7; } } }
+            var shared: u8 := 0;
+            model A { start Idle { ref Done; } state Done { enter { shared := 7; } } }
             model B { start Check { ref End: shared = 7; } state End; }
             start Root = A | B;
         "#;
@@ -696,12 +696,12 @@ mod tests {
     #[test]
     fn test_enter_writes_output_port_via_context() {
         let src = r#"
-            out cmd_ack: bit = 0;
-            in task_valid: bit = 0;
-            var busy: bit = 0;
+            out cmd_ack: bit := 0;
+            in task_valid: bit := 0;
+            var busy: bit := 0;
             model CR {
                 start Waiting { ref Accepting: task_valid; }
-                state Accepting { enter { cmd_ack = 1; busy = 1; } next Done; }
+                state Accepting { enter { cmd_ack := 1; busy := 1; } next Done; }
                 state Done;
             }
             start Main = CR;
@@ -740,12 +740,12 @@ mod tests {
     #[test]
     fn test_parallel_address_port_enter_write() {
         let src = r#"
-            out cmd_ack: bit = 0x600:0;
-            in task_valid: bit = 0x100:0;
-            var busy: bit = 0;
+            out cmd_ack: bit := 0x600:0;
+            in task_valid: bit := 0x100:0;
+            var busy: bit := 0;
             model CR {
                 start Waiting { ref Accepting: task_valid; }
-                state Accepting { enter { cmd_ack = 1; busy = 1; } }
+                state Accepting { enter { cmd_ack := 1; busy := 1; } }
             }
             model MC {
                 start Idle { ref Active: busy; }

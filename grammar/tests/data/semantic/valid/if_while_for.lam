@@ -5,42 +5,42 @@
 // Проверяет корректное разрешение операторов управления потоком
 // внутри именованных блоков состояний.
 
-var counter: [bit; 8] = 0;
-var flag: bit = false;
-var i: [bit; 8] = 0;
+var counter: [bit; 8] := 0;
+var flag: bit := false;
+var i: [bit; 8] := 0;
 
 start Running {
     always {
         // if без скобок
         if flag {
-            counter = counter;
+            counter := counter;
         }
         if flag {
-            counter = counter;
+            counter := counter;
         } else {
-            flag = false;
+            flag := false;
         }
 
         // loop с условием (аналог while)
         loop counter < 10 {
-            counter = counter;
+            counter := counter;
         }
 
         // бесконечный loop с break
         loop {
-            counter = counter;
+            counter := counter;
             break;
         }
 
         // for без скобок, тело в {}
-        for i = 0; i < 5; i = i + 1 {
-            counter = counter;
+        for i := 0; i < 5; i := i + 1 {
+            counter := counter;
         }
     }
 }
 
 state Done {
     enter {
-        counter = counter;
+        counter := counter;
     }
 }

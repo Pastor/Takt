@@ -1,9 +1,9 @@
 // Модель с несколькими состояниями и переходами (позитивный тест парсера)
 type u8 = [bit;8];
 
-in  Counter: u8 = 0x00100000;
+in  Counter: u8 := 0x00100000;
 
-var count: u8 = 0;
+var count: u8 := 0;
 
 cond IsMax = count = 255;
 cond IsZero = count = 0;
@@ -12,19 +12,19 @@ model Counter {
     start Idle {
         ref Running: true;
         enter {
-            count = 0;
+            count := 0;
         }
     }
     state Running {
         ref Overflow: IsMax;
         always {
-            count = count + 1;
+            count := count + 1;
         }
     }
     state Overflow {
         next Idle;
         enter {
-            count = 0;
+            count := 0;
         }
     }
 }

@@ -1,25 +1,25 @@
-var x: u8 = 1;
-var y: u8 = 2;
-const ENABLED: bool = true;
+var x: u8 := 1;
+var y: u8 := 2;
+const ENABLED: bool := true;
 struct Coord {
   x: [bit; 32],
   y: [bit; 32],
   z: [bit; 32]
 }
-const c: Coord = {0, 0, 0};
+const c: Coord := {0, 0, 0};
 enum Constant {
     X, Y, Z
 }
-out IDLE: bit = 0x44533932:1;
-out WORK: bit = 0x44533932:2;
-in  WAIT: bit = 0x44533932:33;
+out IDLE: bit := 0x44533932:1;
+out WORK: bit := 0x44533932:2;
+in  WAIT: bit := 0x44533932:33;
 
 fn is_collected(c: Constant, v: u8) -> bool {
-    if c == X && v == 1 {
+    if c = X && v = 1 {
         return true;
-    } else if c == Y && v == 2 {
+    } else if c = Y && v = 2 {
         return true;
-    } else if x.2 == 0 {
+    } else if x.2 = 0 {
         return true;
     }
     return false;
@@ -34,11 +34,11 @@ model B {
   start Start {
     always {
         if WAIT {
-            WORK = 0;
-            IDLE = 1;
+            WORK := 0;
+            IDLE := 1;
         } else {
-            IDLE = 0;
-            WORK = 1;
+            IDLE := 0;
+            WORK := 1;
         }
     }
   }

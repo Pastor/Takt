@@ -5,6 +5,6 @@
 model M {
     type u8 = [bit;8];
     fn get() -> u8 { return 0; }
-    var x = get();
+    var x := get();
     start S {}
 }

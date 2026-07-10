@@ -13,8 +13,8 @@
 | Архитектура (ADR) | [`docs/adr/0021-swap-assign-compare.md`](../adr/0021-swap-assign-compare.md) |
 | Анализ | [`docs/analyze/0021-swap-assign-compare.md`](../analyze/0021-swap-assign-compare.md) |
 | Разработка 0021-01 | [`docs/development/0021-01-lexer-grammar.md`](../development/0021-01-lexer-grammar.md) (**ВЫПОЛНЕНО** — PoC LR(1) + зонд-тесты) |
-| Разработка 0021-02 | [`docs/development/0021-02-semantics-codegen-lsp.md`](../development/0021-02-semantics-codegen-lsp.md) (ЗАПЛАНИРОВАНО) |
-| Разработка 0021-03 | [`docs/development/0021-03-migrator.md`](../development/0021-03-migrator.md) (ЗАПЛАНИРОВАНО) |
+| Разработка 0021-02 | [`docs/development/0021-02-semantics-codegen-lsp.md`](../development/0021-02-semantics-codegen-lsp.md) (**ПОДТВЕРЖДЕНО** — AST не менялся, кодоген/LSP-тесты зелёные) |
+| Разработка 0021-03 | [`docs/development/0021-03-migrator.md`](../development/0021-03-migrator.md) (**ВЫПОЛНЕНО** — все `.lam` + inline-`.rs` мигрированы, тесты зелёные) |
 | Разработка 0021-04 | [`docs/development/0021-04-docs-version.md`](../development/0021-04-docs-version.md) (ЗАПЛАНИРОВАНО) |
 | Тест-план | [`docs/tests/0021-swap-assign-compare.md`](../tests/0021-swap-assign-compare.md) |
 

@@ -5,15 +5,15 @@
 // Переменная toggle объявлена внутри модели Inner (не в корне).
 
 model Inner {
-    var toggle: bit = false;
+    var toggle: bit := false;
 
     start On {
         ref Off: toggle;
         enter {
-            toggle = true;
+            toggle := true;
         }
         exit {
-            toggle = false;
+            toggle := false;
         }
     }
     state Off {

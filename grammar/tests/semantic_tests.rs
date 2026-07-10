@@ -79,7 +79,7 @@ fn search_model_walks_upper_chain() {
 /// `search_var` находит переменную на верхнем уровне.
 #[test]
 fn search_var_finds_global_variable() {
-    let node = build("var x: bit = false;");
+    let node = build("var x: bit := false;");
     assert!(
         node.search_var("x").is_some(),
         "Переменная x должна быть найдена"
@@ -89,7 +89,7 @@ fn search_var_finds_global_variable() {
 /// `search_var` возвращает `None` для необъявленной переменной.
 #[test]
 fn search_var_returns_none_for_unknown() {
-    let node = build("var x: bit = false;");
+    let node = build("var x: bit := false;");
     assert!(
         node.search_var("y").is_none(),
         "Необъявленная переменная y должна давать None"
@@ -99,7 +99,7 @@ fn search_var_returns_none_for_unknown() {
 /// `search_var` находит константу.
 #[test]
 fn search_var_finds_const() {
-    let node = build("type u8 = [bit;8]; const C: u8 = 0xFF;");
+    let node = build("type u8 = [bit;8]; const C: u8 := 0xFF;");
     assert!(
         node.search_var("C").is_some(),
         "Константа C должна быть найдена"
@@ -113,7 +113,7 @@ fn search_var_finds_const() {
 /// `search_var` находит порт.
 #[test]
 fn search_var_finds_port() {
-    let node = build("type u8 = [bit;8]; in P: u8 = 0x00100000;");
+    let node = build("type u8 = [bit;8]; in P: u8 := 0x00100000;");
     assert!(node.search_var("P").is_some(), "Порт P должен быть найден");
     assert!(
         matches!(node.search_var("P").unwrap(), VariableNode::Port { .. }),
@@ -126,7 +126,7 @@ fn search_var_finds_port() {
 /// `bit` разрешается в `TypeNode::Bit`.
 #[test]
 fn type_bit_resolves_to_type_node_bit() {
-    let node = build("var x: bit = false;");
+    let node = build("var x: bit := false;");
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(ty, TypeNode::Bit, "bit должен разрешаться в TypeNode::Bit");
     } else {
@@ -137,7 +137,7 @@ fn type_bit_resolves_to_type_node_bit() {
 /// `[bit;8]` разрешается в `TypeNode::Array(8, Box<TypeNode::Bit>)`.
 #[test]
 fn type_array_resolves_correctly() {
-    let node = build("var x: [bit;8] = 0;");
+    let node = build("var x: [bit;8] := 0;");
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
@@ -152,7 +152,7 @@ fn type_array_resolves_correctly() {
 /// Псевдоним типа `u8 = [bit;8]` раскрывается в `TypeNode::Array`.
 #[test]
 fn type_alias_resolves_through_map() {
-    let node = build("type u8 = [bit;8]; var x: u8 = 0;");
+    let node = build("type u8 = [bit;8]; var x: u8 := 0;");
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
@@ -167,7 +167,7 @@ fn type_alias_resolves_through_map() {
 /// Встроенный тип `u8` (без переопределения) даёт `Integer { bits:8, signed:false }`.
 #[test]
 fn builtin_u8_gives_integer_type() {
-    let node = build("var x: u8 = 0; start S;");
+    let node = build("var x: u8 := 0; start S;");
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
@@ -184,7 +184,7 @@ fn builtin_u8_gives_integer_type() {
 /// Встроенный тип `i32` даёт `Integer { bits:32, signed:true }`.
 #[test]
 fn builtin_i32_gives_integer_type() {
-    let node = build("var x: i32 = 0; start S;");
+    let node = build("var x: i32 := 0; start S;");
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
@@ -201,7 +201,7 @@ fn builtin_i32_gives_integer_type() {
 /// Встроенный псевдоним `bool` разрешается в `TypeNode::Bool`.
 #[test]
 fn type_alias_bool_resolves_to_bit() {
-    let node = build("var flag: bool = false;");
+    let node = build("var flag: bool := false;");
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("flag") {
         assert_eq!(ty, TypeNode::Bool);
     } else {
@@ -212,7 +212,7 @@ fn type_alias_bool_resolves_to_bit() {
 /// Встроенный псевдоним `float` разрешается в `TypeNode::Rational`.
 #[test]
 fn type_alias_float_resolves_to_rational() {
-    let node = build("var r: float = 0;");
+    let node = build("var r: float := 0;");
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("r") {
         assert_eq!(ty, TypeNode::Rational);
     } else {
@@ -223,7 +223,7 @@ fn type_alias_float_resolves_to_rational() {
 /// Несуществующий псевдоним типа — ошибка.
 #[test]
 fn unknown_type_alias_is_error() {
-    let (ast, _) = parse("var x: UnknownType = 0;", 0).unwrap();
+    let (ast, _) = parse("var x: UnknownType := 0;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_err(),
@@ -342,7 +342,7 @@ fn duplicate_nested_model_name_is_error() {
 /// Порт без явного типа — ошибка.
 #[test]
 fn port_without_type_is_error() {
-    let (ast, _) = parse("in P = 0x00100000;", 0).unwrap();
+    let (ast, _) = parse("in P := 0x00100000;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(result.is_err(), "Порт без типа должен давать ошибку");
 }
@@ -350,7 +350,7 @@ fn port_without_type_is_error() {
 /// Порт с инициализатором не-адресом — адрес игнорируется, порт создаётся без адреса.
 #[test]
 fn port_with_non_address_initializer_is_valid() {
-    let (ast, _) = parse("type u8 = [bit;8]; in P: u8 = true; start S;", 0).unwrap();
+    let (ast, _) = parse("type u8 = [bit;8]; in P: u8 := true; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_ok(),
@@ -385,7 +385,7 @@ fn multiple_named_models_all_registered() {
 /// Несколько переменных регистрируются в корне.
 #[test]
 fn multiple_global_variables_all_registered() {
-    let node = build("var a: bit = false; var b: bit = true; var c: bit = false;");
+    let node = build("var a: bit := false; var b: bit := true; var c: bit := false;");
     assert!(node.search_var("a").is_some());
     assert!(node.search_var("b").is_some());
     assert!(node.search_var("c").is_some());
@@ -620,7 +620,7 @@ fn search_cond_returns_none_for_unknown() {
 /// `search_func` возвращает `None` когда функций нет.
 #[test]
 fn search_func_returns_none_when_no_functions() {
-    let node = build("var x: bit = false;");
+    let node = build("var x: bit := false;");
     assert!(
         node.search_func("any_func").is_none(),
         "search_func должен вернуть None, если функций нет"
@@ -675,7 +675,7 @@ fn implement_parenthesized_add_resolves() {
 /// Переменная из родительской области видимости видна во вложенной модели.
 #[test]
 fn nested_model_sees_parent_variable() {
-    let (ast, _) = parse("var global_flag: bit = false; model Inner { start S; }", 0).unwrap();
+    let (ast, _) = parse("var global_flag: bit := false; model Inner { start S; }", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
     let inner = root.borrow().search_model("Inner").unwrap();
     // Inner должна видеть переменную из родительского контекста через upper
@@ -688,7 +688,7 @@ fn nested_model_sees_parent_variable() {
 /// Переменная из вложенной модели недоступна в родительской (область видимости строга).
 #[test]
 fn parent_does_not_see_nested_variable() {
-    let node = build("model Inner { var local: bit = false; start S; } start Root;");
+    let node = build("model Inner { var local: bit := false; start S; } start Root;");
     // Корневая модель не знает о переменной Inner
     assert!(
         node.search_var("local").is_none(),
@@ -701,7 +701,7 @@ fn parent_does_not_see_nested_variable() {
 /// Тип `[[bit;4];2]` разрешается в `Array(2, Array(4, Bit))`.
 #[test]
 fn type_nested_array_resolves() {
-    let node = build("var x: [[bit;4];2] = 0;");
+    let node = build("var x: [[bit;4];2] := 0;");
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
@@ -717,7 +717,7 @@ fn type_nested_array_resolves() {
 #[test]
 fn type_alias_inside_array_resolves() {
     // u4 = [bit;4], затем var x: [u4; 3]
-    let node = build("type u4 = [bit;4]; var x: [u4;3] = 0;");
+    let node = build("type u4 = [bit;4]; var x: [u4;3] := 0;");
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
@@ -745,7 +745,7 @@ fn error_message_contains_missing_model_name() {
 /// Сообщение об ошибке для неизвестного псевдонима типа содержит его имя.
 #[test]
 fn error_message_contains_missing_type_name() {
-    let (ast, _) = parse("var x: NoSuchType = 0;", 0).unwrap();
+    let (ast, _) = parse("var x: NoSuchType := 0;", 0).unwrap();
     let err = construct_model(&ast, None, &[]).unwrap_err();
     assert!(
         err.message.contains("NoSuchType"),
@@ -986,7 +986,7 @@ fn rename_import_model_with_alias() {
 #[test]
 fn rename_import_type() {
     let node = build_with_includes(
-        r#"import { SharedType } from "shared.lam"; var x: SharedType = 0; start S;"#,
+        r#"import { SharedType } from "shared.lam"; var x: SharedType := 0; start S;"#,
     )
     .unwrap();
     assert!(
@@ -1003,7 +1003,7 @@ fn rename_import_type() {
 #[test]
 fn rename_import_type_with_alias() {
     let node = build_with_includes(
-        r#"import { SharedType as ST } from "shared.lam"; var x: ST = 0; start S;"#,
+        r#"import { SharedType as ST } from "shared.lam"; var x: ST := 0; start S;"#,
     )
     .unwrap();
     assert!(
@@ -1116,21 +1116,21 @@ fn example_rename_import_is_valid() {
 /// ArraySubscript на переменной с корректным индексом — строится без ошибок.
 #[test]
 fn array_subscript_valid_index() {
-    let node = build("var buf: [bit;8] = 0; var x: bit = buf[0];");
+    let node = build("var buf: [bit;8] := 0; var x: bit := buf[0];");
     assert!(node.search_var("x").is_some());
 }
 
 /// ArraySubscript: последний допустимый индекс (size-1) — ок.
 #[test]
 fn array_subscript_last_valid_index() {
-    let node = build("var buf: [bit;8] = 0; var x: bit = buf[7];");
+    let node = build("var buf: [bit;8] := 0; var x: bit := buf[7];");
     assert!(node.search_var("x").is_some());
 }
 
 /// ArraySubscript: индекс равный размеру массива — ошибка (out of bounds).
 #[test]
 fn array_subscript_out_of_bounds_is_error() {
-    let (ast, _) = parse("var buf: [bit;8] = 0; var x: bit = buf[8]; start S;", 0).unwrap();
+    let (ast, _) = parse("var buf: [bit;8] := 0; var x: bit := buf[8]; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_err(),
@@ -1142,7 +1142,7 @@ fn array_subscript_out_of_bounds_is_error() {
 #[test]
 fn array_subscript_negative_index_is_error() {
     // Отрицательные индексы не поддерживаются
-    let (ast, _) = parse("var buf: [bit;8] = 0; var x: bit = buf[-1]; start S;", 0).unwrap();
+    let (ast, _) = parse("var buf: [bit;8] := 0; var x: bit := buf[-1]; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(result.is_err(), "отрицательный индекс должен давать ошибку");
 }
@@ -1150,7 +1150,7 @@ fn array_subscript_negative_index_is_error() {
 /// ArraySubscript на переменной с типом Bit — ошибка (не массив).
 #[test]
 fn array_subscript_on_bit_is_error() {
-    let (ast, _) = parse("var flag: bit = false; var x: bit = flag[0]; start S;", 0).unwrap();
+    let (ast, _) = parse("var flag: bit := false; var x: bit := flag[0]; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_err(),
@@ -1195,28 +1195,28 @@ fn example_non_array_subscript_is_error() {
 /// ArraySubscript с индексом-переменной — строится без ошибок.
 #[test]
 fn array_subscript_variable_index() {
-    let node = build("var buf: [bit;8] = 0; var i: bit = 0; var x: bit = buf[i];");
+    let node = build("var buf: [bit;8] := 0; var i: bit := 0; var x: bit := buf[i];");
     assert!(node.search_var("x").is_some());
 }
 
 /// ArraySubscript с индексом-переменной в условии cond — строится без ошибок.
 #[test]
 fn array_subscript_variable_index_in_cond() {
-    let node = build("var buf: [bit;8] = 0; var i: bit = 0; cond c = buf[i];");
+    let node = build("var buf: [bit;8] := 0; var i: bit := 0; cond c = buf[i];");
     assert!(node.search_cond("c").is_some());
 }
 
 /// `inout` порт объявляется без ошибок и виден в семантическом дереве.
 #[test]
 fn inout_port_is_valid() {
-    let node = build("inout sensor: bit = 0x100:0; start S;");
+    let node = build("inout sensor: bit := 0x100:0; start S;");
     assert!(node.search_var("sensor").is_some());
 }
 
 /// `while cond { body }` — синоним loop, строится без ошибок.
 #[test]
 fn while_loop_is_valid() {
-    let node = build("var x: bit = 0; start S { always { while x { x = 0; } } }");
+    let node = build("var x: bit := 0; start S { always { while x { x := 0; } } }");
     assert!(node.search_var("x").is_some());
 }
 
@@ -1274,7 +1274,7 @@ use grammar::semantic::type_node::TypeNode;
 /// Model-level `always` block с известной переменной → блок разрешается.
 #[test]
 fn model_always_block_with_known_var_resolves() {
-    let node = build("var led: bit = false; always { led = led; } start S;");
+    let node = build("var led: bit := false; always { led := led; } start S;");
     let nb = node.get_named_block("always").expect("always должен быть");
     let stmt = nb.statement().expect("оператор должен быть");
     assert!(
@@ -1287,7 +1287,7 @@ fn model_always_block_with_known_var_resolves() {
 /// State-level `enter` block → присутствует в state.named_blocks.
 #[test]
 fn state_enter_block_is_populated() {
-    let node = build("var x: bit = false; start S { enter { x = x; } }");
+    let node = build("var x: bit := false; start S { enter { x := x; } }");
     let state = node.states.get("S").unwrap();
     assert!(
         state.get_named_block("enter").is_some(),
@@ -1298,7 +1298,7 @@ fn state_enter_block_is_populated() {
 /// State-level `enter` с известной переменной → разрешается (не Unresolved).
 #[test]
 fn state_enter_block_resolves() {
-    let node = build("var x: bit = false; start S { enter { x = x; } }");
+    let node = build("var x: bit := false; start S { enter { x := x; } }");
     let state = node.states.get("S").unwrap();
     let enter = state.get_named_block("enter").expect("enter не найден");
     let stmt = enter.statement().expect("оператор должен быть");
@@ -1312,7 +1312,7 @@ fn state_enter_block_resolves() {
 /// State-level `enter` + `exit` → оба присутствуют в named_blocks состояния.
 #[test]
 fn state_enter_exit_blocks_both_present() {
-    let node = build("var x: bit = false; start S { enter { x = x; } exit { x = x; } }");
+    let node = build("var x: bit := false; start S { enter { x := x; } exit { x := x; } }");
     let state = node.states.get("S").unwrap();
     assert!(
         state.get_named_block("enter").is_some(),
@@ -1324,7 +1324,7 @@ fn state_enter_exit_blocks_both_present() {
 /// `if cond { ... }` в named block разрешается через Statement::Block.
 #[test]
 fn state_named_block_if_resolves() {
-    let node = build("var f: bit = false; start S { always { if f { f = f; } } }");
+    let node = build("var f: bit := false; start S { always { if f { f := f; } } }");
     let state = node.states.get("S").unwrap();
     let always = state.get_named_block("always").expect("always не найден");
     let stmt = always.statement().expect("оператор должен быть");
@@ -1340,7 +1340,7 @@ fn state_named_block_if_resolves() {
 #[test]
 fn nested_model_named_blocks_resolve_with_own_context() {
     let node = build(
-        "model Inner { var t: bit = false; start On { enter { t = t; } } state Off; } \
+        "model Inner { var t: bit := false; start On { enter { t := t; } } state Off; } \
          start Root = Inner { }",
     );
     // Находим вложенную модель Inner
@@ -1360,7 +1360,7 @@ fn nested_model_named_blocks_resolve_with_own_context() {
 /// `return x;` в always block разрешается в Statement::Block([Return(...)]).
 #[test]
 fn return_statement_in_named_block_resolves() {
-    let node = build("var x: bit = false; always { return x; } start S;");
+    let node = build("var x: bit := false; always { return x; } start S;");
     let nb = node.get_named_block("always").expect("always не найден");
     let stmt = nb.statement().expect("оператор должен быть");
     assert!(
@@ -1392,35 +1392,35 @@ fn syntax_simple_does_not_panic() {
     // Копия SRC из lib.rs — проверяем что construct_model успешен
     let src = r#"
 type u8 = [bit;8];
-const MATRIX: u8 = { 0, 0, 0, 0, 0, 0, 0, 0 };
-const NUMB: u8 = 0xFF;
+const MATRIX: u8 := { 0, 0, 0, 0, 0, 0, 0, 0 };
+const NUMB: u8 := 0xFF;
 cond IsEmpty = it = 0;
-out A : u8  = 0x00548835;
-in  B1: bit = 0x00648835:6;
-var it: [bit;64] = 0;
+out A : u8  := 0x00548835;
+in  B1: bit := 0x00648835:6;
+var it: [bit;64] := 0;
 model Ping {
     start Start {
         ref End: B1;
-        enter { A.0 = true; }
-        exit  { A.0 = false; }
-        always { A.2 = toggle; }
-        always { toggle = !toggle; }
+        enter { A.0 := true; }
+        exit  { A.0 := false; }
+        always { A.2 := toggle; }
+        always { toggle := !toggle; }
     }
     state End;
-    var toggle = false;
+    var toggle := false;
 }
 model Pong {
     start Begin {
         ref Stop: S(Ping) = End;
-        always { A.5 = MATRIX.5; }
+        always { A.5 := MATRIX.5; }
     }
     state Stop {
-        enter { A.6 = MATRIX.3; }
+        enter { A.6 := MATRIX.3; }
     }
 }
 start Entry = (Ping | Pong) + Ping;
 always {
-    it = it + 1;
+    it := it + 1;
 }
 "#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
@@ -1482,7 +1482,7 @@ fn example_named_block_port_without_address_is_valid() {
 #[test]
 fn multiple_named_blocks_with_same_name_resolve() {
     let node =
-        build("var a: bit = 0; var b: bit = 0; start S { enter { a = 1; } enter { b = 1; } }");
+        build("var a: bit := 0; var b: bit := 0; start S { enter { a := 1; } enter { b := 1; } }");
     let state = node.states.get("S").expect("S не найден");
     let blocks = state.get_named_blocks("enter");
     assert_eq!(blocks.len(), 2, "Должно быть два блока enter");
@@ -1501,7 +1501,7 @@ fn multiple_named_blocks_with_same_name_resolve() {
 #[test]
 fn multiple_model_level_always_blocks() {
     let node =
-        build("var a: bit = 0; var b: bit = 0; always { a = 1; } always { b = 1; } start S;");
+        build("var a: bit := 0; var b: bit := 0; always { a := 1; } always { b := 1; } start S;");
     let blocks = node.get_named_blocks("always");
     assert_eq!(blocks.len(), 2, "Должно быть два блока always");
 
@@ -2050,7 +2050,7 @@ fn doc_comment_for_state() {
 /// Переменная получает свой doc-комментарий.
 #[test]
 fn doc_comment_for_variable() {
-    let src = "/// Счётчик.\nvar counter: bit = false;";
+    let src = "/// Счётчик.\nvar counter: bit := false;";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
     let root =
         construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
@@ -2297,7 +2297,7 @@ fn multi_line_doc_for_model() {
 /// ```
 #[test]
 fn se11_explicit_comparison_no_warnings() {
-    let src = "var timer: [bit;8] = 0; start S { ref T: timer != 0; } state T;";
+    let src = "var timer: [bit;8] := 0; start S { ref T: timer != 0; } state T;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2317,7 +2317,7 @@ fn se11_explicit_comparison_no_warnings() {
 /// ```
 #[test]
 fn se11_numeric_var_in_ref_gives_warning() {
-    let src = "var timer: [bit;8] = 0; start S { ref T: timer; } state T;";
+    let src = "var timer: [bit;8] := 0; start S { ref T: timer; } state T;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2349,7 +2349,7 @@ fn se11_number_literal_in_ref_gives_warning() {
 /// Переменная типа `bool` в условии — нет предупреждений.
 #[test]
 fn se11_bool_var_in_ref_no_warnings() {
-    let src = "var flag: bool = false; start S { ref T: flag; } state T;";
+    let src = "var flag: bool := false; start S { ref T: flag; } state T;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2362,7 +2362,7 @@ fn se11_bool_var_in_ref_no_warnings() {
 /// Переменная типа `bit` (1 бит) в условии — нет предупреждений.
 #[test]
 fn se11_bit_var_in_ref_no_warnings() {
-    let src = "var flag: bit = 0; start S { ref T: flag; } state T;";
+    let src = "var flag: bit := 0; start S { ref T: flag; } state T;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2402,8 +2402,8 @@ fn se11_unconditional_ref_no_warnings() {
 #[test]
 fn se11_one_numeric_one_explicit_ref() {
     let src = concat!(
-        "var timer: [bit;8] = 0;\n",
-        "var flag: bool = false;\n",
+        "var timer: [bit;8] := 0;\n",
+        "var flag: bool := false;\n",
         "start S { ref T: timer; ref U: flag; }\n",
         "state T;\n",
         "state U;\n",
@@ -2419,7 +2419,7 @@ fn se11_one_numeric_one_explicit_ref() {
 fn se11_nested_model_numeric_ref_warning() {
     let src = concat!(
         "model M {\n",
-        "    var timer: [bit;8] = 0;\n",
+        "    var timer: [bit;8] := 0;\n",
         "    start S { ref T: timer; }\n",
         "    state T;\n",
         "}\n",
@@ -2473,7 +2473,7 @@ fn se11_numeric_file_gives_one_warning() {
 /// Условие сравнения `<` — нет предупреждений Се11.
 #[test]
 fn se11_less_comparison_no_warnings() {
-    let src = "var timer: [bit;8] = 0; start S { ref T: timer < 100; } state T;";
+    let src = "var timer: [bit;8] := 0; start S { ref T: timer < 100; } state T;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2487,8 +2487,8 @@ fn se11_less_comparison_no_warnings() {
 #[test]
 fn se11_other_comparisons_no_warnings() {
     let src = concat!(
-        "var a: [bit;8] = 0;\n",
-        "var b: [bit;8] = 0;\n",
+        "var a: [bit;8] := 0;\n",
+        "var b: [bit;8] := 0;\n",
         "start S { ref T: a > 0; ref U: a <= b; ref V: a >= b; }\n",
         "state T; state U; state V;\n",
     );
@@ -2504,7 +2504,7 @@ fn se11_other_comparisons_no_warnings() {
 /// Логическое НЕ в условии — нет предупреждений Се11.
 #[test]
 fn se11_not_condition_no_warnings() {
-    let src = "var flag: bool = false; start S { ref T: !flag; } state T;";
+    let src = "var flag: bool := false; start S { ref T: !flag; } state T;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2518,7 +2518,7 @@ fn se11_not_condition_no_warnings() {
 #[test]
 fn se11_named_cond_in_ref_no_warnings() {
     let src = concat!(
-        "var counter: [bit;8] = 0;\n",
+        "var counter: [bit;8] := 0;\n",
         "cond Full = counter = 255;\n",
         "start S { ref T: Full; }\n",
         "state T;\n",
@@ -2535,7 +2535,7 @@ fn se11_named_cond_in_ref_no_warnings() {
 /// Арифметическое выражение в условии — предупреждение Се11.
 #[test]
 fn se11_arithmetic_in_ref_gives_warning() {
-    let src = "var timer: [bit;8] = 0; start S { ref T: timer + 1; } state T;";
+    let src = "var timer: [bit;8] := 0; start S { ref T: timer + 1; } state T;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2584,7 +2584,7 @@ fn se11_named_cond_file_no_warnings() {
 /// Предупреждение Се11 содержит имя исходного состояния.
 #[test]
 fn se11_warning_contains_source_state_name() {
-    let src = "var x: [bit;8] = 0; start SourceState { ref T: x; } state T;";
+    let src = "var x: [bit;8] := 0; start SourceState { ref T: x; } state T;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2609,7 +2609,7 @@ fn se11_warning_contains_source_state_name() {
 #[test]
 fn ref_cond_bit_var_is_resolved() {
     use grammar::semantic::ConditionNode;
-    let src = "var flag: bit = false; start A { ref B: flag; } state B;";
+    let src = "var flag: bit := false; start A { ref B: flag; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
     if let StateNode::Simple { references, .. } = state_a {
@@ -2635,7 +2635,7 @@ fn ref_cond_bit_var_is_resolved() {
 #[test]
 fn ref_cond_bool_var_is_resolved() {
     use grammar::semantic::ConditionNode;
-    let src = "var done: bool = false; start A { ref B: done; } state B;";
+    let src = "var done: bool := false; start A { ref B: done; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
     if let StateNode::Simple { references, .. } = state_a {
@@ -2660,7 +2660,7 @@ fn ref_cond_bool_var_is_resolved() {
 #[test]
 fn ref_cond_named_cond_is_resolved() {
     use grammar::semantic::ConditionNode;
-    let src = "var x: [bit;8] = 0; cond full = x = 255; start A { ref B: full; } state B;";
+    let src = "var x: [bit;8] := 0; cond full = x = 255; start A { ref B: full; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
     if let StateNode::Simple { references, .. } = state_a {
@@ -2727,7 +2727,7 @@ fn ref_cond_bool_literal_is_resolved() {
 #[test]
 fn ref_cond_comparison_is_resolved() {
     use grammar::semantic::ConditionNode;
-    let src = "var x: [bit;8] = 0; start A { ref B: x = 255; } state B;";
+    let src = "var x: [bit;8] := 0; start A { ref B: x = 255; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
     if let StateNode::Simple { references, .. } = state_a {
@@ -2751,7 +2751,7 @@ fn ref_cond_comparison_is_resolved() {
 /// ```
 #[test]
 fn se11_subtract_in_ref_gives_warning() {
-    let src = "var x: [bit;8] = 0; start A { ref B: x - 1; } state B;";
+    let src = "var x: [bit;8] := 0; start A { ref B: x - 1; } state B;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2773,7 +2773,7 @@ fn se11_subtract_in_ref_gives_warning() {
 /// ```
 #[test]
 fn se11_bitwise_and_in_ref_gives_warning() {
-    let src = "var x: [bit;8] = 0; start A { ref B: x & 1; } state B;";
+    let src = "var x: [bit;8] := 0; start A { ref B: x & 1; } state B;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let warnings = implicit_bool_warnings(&root);
@@ -2862,7 +2862,7 @@ fn ref_cond_arithmetic_file_gives_warning() {
 /// ```
 #[test]
 fn variable_node_has_parent_upper() {
-    let (ast, _) = parse("var flag: bit = false;", 0).unwrap();
+    let (ast, _) = parse("var flag: bit := false;", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
     let var = root
         .borrow()
@@ -2881,7 +2881,7 @@ fn variable_node_has_parent_upper() {
 /// модель оставалась живой и Weak-ссылка могла быть разыменована.
 #[test]
 fn const_node_has_parent_upper() {
-    let (ast, _) = parse("type u8 = [bit;8]; const C: u8 = 0;", 0).unwrap();
+    let (ast, _) = parse("type u8 = [bit;8]; const C: u8 := 0;", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
     let var = root
         .borrow()
@@ -2920,7 +2920,7 @@ fn condition_node_has_parent_upper() {
 /// ```
 #[test]
 fn nested_variable_upper_points_to_inner_model() {
-    let (ast, _) = parse("model Inner { var x: bit = false; start S; }", 0).unwrap();
+    let (ast, _) = parse("model Inner { var x: bit := false; start S; }", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
     let inner = root
         .borrow()
@@ -2951,7 +2951,7 @@ fn unresolved_variable_upper_is_none() {
 #[test]
 fn variable_node_name_and_ty_methods() {
     use grammar::semantic::type_node::TypeNode;
-    let node = build("var flag: bit = false;");
+    let node = build("var flag: bit := false;");
     let var = node.search_var("flag").expect("flag не найдена");
     assert_eq!(var.name(), "flag");
     assert_eq!(*var.ty(), TypeNode::Bit);
@@ -3017,7 +3017,7 @@ fn example_local_var_nested_is_valid() {
 /// внутри переменных ссылался на живой узел модели.
 #[test]
 fn variable_upper_gives_access_to_sibling_vars() {
-    let (ast, _) = parse("var a: bit = false; var b: bit = false;", 0).expect("ошибка разбора");
+    let (ast, _) = parse("var a: bit := false; var b: bit := false;", 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
     let var_a = root.borrow().search_var("a").expect("a не найдена");
     let upper = var_a.upper().expect("upper должен быть Some");
@@ -3034,7 +3034,7 @@ fn variable_upper_gives_access_to_sibling_vars() {
 #[test]
 fn no_strong_cycle_with_conditions() {
     use std::rc::Rc;
-    let (ast, _) = parse("var x: bit = false; cond done = x = false; start S;", 0).unwrap();
+    let (ast, _) = parse("var x: bit := false; cond done = x = false; start S;", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
     assert_eq!(
         Rc::strong_count(&root),
@@ -3047,7 +3047,7 @@ fn no_strong_cycle_with_conditions() {
 #[test]
 fn no_strong_cycle_with_named_blocks() {
     use std::rc::Rc;
-    let (ast, _) = parse("var x: bit = false; start S { always { x = x; } }", 0).unwrap();
+    let (ast, _) = parse("var x: bit := false; start S { always { x := x; } }", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
     assert_eq!(
         Rc::strong_count(&root),
@@ -3152,7 +3152,7 @@ fn ce5_state_no_path_to_terminal_warning() {
 /// Модель без состояний — нет предупреждений Ce5.
 #[test]
 fn ce5_no_states_no_warning() {
-    let warns = ce5_warnings("var x: bit = false;");
+    let warns = ce5_warnings("var x: bit := false;");
     assert!(
         warns.is_empty(),
         "модель без состояний не должна давать предупреждений Ce5"
@@ -3384,7 +3384,7 @@ fn ce6_type_inferred_from_function_return() {
     use grammar::semantic::type_node::TypeNode;
     let node = build(
         "fn getbool() -> bool { return true; } \
-         var result = getbool(); start S;",
+         var result := getbool(); start S;",
     );
     let var_result = node
         .search_var("result")
@@ -3404,7 +3404,7 @@ fn ce6_type_inferred_from_function_return() {
 fn ce6_type_chain_from_variable() {
     use grammar::semantic::type_node::TypeNode;
     // Явно задаём тип x, чтобы избежать зависимости от порядка обработки HashMap
-    let node = build("var x: bit = false; var y = x; start S;");
+    let node = build("var x: bit := false; var y := x; start S;");
     let var_y = node.search_var("y").expect("переменная y не найдена");
     let ty = var_y.ty().clone();
     assert_eq!(ty, TypeNode::Bit, "тип y должен быть Bit (через x: bit)");
@@ -3416,7 +3416,7 @@ fn ce6_bool_return_type_inferred() {
     use grammar::semantic::type_node::TypeNode;
     let node = build(
         "fn check() -> bool { return true; } \
-         var flag = check(); start S;",
+         var flag := check(); start S;",
     );
     let var_flag = node.search_var("flag").expect("переменная flag не найдена");
     let ty = var_flag.ty().clone();
@@ -3429,7 +3429,7 @@ fn ce6_array32_return_type_inferred() {
     use grammar::semantic::type_node::TypeNode;
     let node = build(
         "fn get32() -> [bit;32] { return 0; } \
-         var val = get32(); start S;",
+         var val := get32(); start S;",
     );
     let var_val = node.search_var("val").expect("переменная val не найдена");
     let ty = var_val.ty().clone();
@@ -3446,7 +3446,7 @@ fn ce6_explicit_type_not_overwritten_by_function() {
     use grammar::semantic::type_node::TypeNode;
     let node = build(
         "fn getbool() -> bool { return true; } \
-         var result: bit = getbool(); start S;",
+         var result: bit := getbool(); start S;",
     );
     let var_result = node
         .search_var("result")
@@ -3576,9 +3576,9 @@ fn test_all_vars_used_no_warning() {
 #[test]
 fn test_parent_var_used_in_submodel_no_unused_warning() {
     let src = r#"
-        var shared: bit = 0;
+        var shared: bit := 0;
         model Sub {
-            start S { always { shared = 1; } }
+            start S { always { shared := 1; } }
         }
         start Main = Sub;
     "#;
@@ -3779,7 +3779,7 @@ fn ce4_enum_typed_var_invalid_value() {
 #[test]
 fn ce4_enum_variant_used_as_initializer() {
     // North — вариант enum Direction, разрешается в Number(0)
-    let src = "enum Direction { North = 0, South = 1 } var dir: Direction = North; start S;";
+    let src = "enum Direction { North = 0, South = 1 } var dir: Direction := North; start S;";
     let node = build(src);
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("dir") {
         assert_eq!(
@@ -3806,8 +3806,8 @@ fn ce4_enum_variant_used_as_initializer() {
 fn ce4_two_enums_in_model() {
     let src = "enum Color { Red = 0, Green = 1 } \
                enum Priority { Low = 0, High = 1 } \
-               var c: Color = 0; \
-               var p: Priority = 1; \
+               var c: Color := 0; \
+               var p: Priority := 1; \
                start S;";
     let node = build(src);
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("c") {
@@ -3842,7 +3842,7 @@ fn ce4_enum_variant_accessible_from_nested_model() {
     // Вариант N (=0) из Dir должен быть доступен в Inner через search_enum_variant.
     // Используем Rc напрямую, чтобы не потерять upper-ссылку через .take().
     let src = "enum Dir { N = 0, S = 1 } \
-               model Inner { var d: [bit;8] = N; start S; } \
+               model Inner { var d: [bit;8] := N; start S; } \
                start Root = Inner;";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения дерева");
@@ -3868,7 +3868,7 @@ fn ce4_enum_variant_accessible_from_nested_model() {
 /// Enum из вложенной модели не виден в родительской через аннотации типов.
 #[test]
 fn ce4_enum_declared_inside_model_local_to_it() {
-    let src = "model Inner { enum Status { Ok = 0, Err = 1 } var s: Status = 0; start S; } \
+    let src = "model Inner { enum Status { Ok = 0, Err = 1 } var s: Status := 0; start S; } \
                start Root = Inner;";
     let node = build(src);
     // В Inner: enum Status и переменная s: Status должны работать
@@ -3935,7 +3935,7 @@ fn test_struct_variable_type() {
     use grammar::semantic::type_node::TypeNode;
     let src = r#"
 struct Flags { active: bit, ready: bit }
-var ctrl: Flags = 0;
+var ctrl: Flags := 0;
 start S;
 "#;
     let node = build_from_src(src).expect("должен разобраться без ошибок");
@@ -4067,7 +4067,7 @@ fn test_ni4_non_overlapping_no_warn() {
 #[test]
 fn test_ni4_eq_lt_overlap_warns() {
     let src = r#"
-var x: [bit;8] = 0;
+var x: [bit;8] := 0;
 start S {
     ref A: x = 3;
     ref B: x < 10;
@@ -4093,7 +4093,7 @@ state B { ref S: x >= 10; }
 #[test]
 fn test_ni4_eq_lt_no_overlap_no_warn() {
     let src = r#"
-var x: [bit;8] = 0;
+var x: [bit;8] := 0;
 start S {
     ref A: x = 15;
     ref B: x < 10;
@@ -4149,7 +4149,7 @@ fn i5_mutual_recursive_type_alias_is_error() {
 /// Ce16: линейная цепочка без цикла — OK.
 #[test]
 fn i5_non_recursive_type_alias_ok() {
-    let model = build("type A = [bit; 8]; type B = [A; 2]; var x: B = 0; start S;");
+    let model = build("type A = [bit; 8]; type B = [A; 2]; var x: B := 0; start S;");
     assert!(
         model.types.contains_key("A"),
         "псевдоним A должен быть в types"
@@ -4228,7 +4228,7 @@ fn struct_fields_accessible() {
 #[test]
 fn struct_as_var_type_resolves() {
     let model =
-        build("struct Coord { x: [bit;16], y: [bit;16] } var origin: Coord = 0; start Idle;");
+        build("struct Coord { x: [bit;16], y: [bit;16] } var origin: Coord := 0; start Idle;");
     assert!(
         model.structs.contains_key("Coord"),
         "структура Coord должна быть в model.structs"
@@ -4332,7 +4332,7 @@ fn extern_fn_is_resolvable_via_search_func() {
 type u8 = [bit;8];
 extern fn my_log(v: u8);
 model M {
-    var x: u8 = 0;
+    var x: u8 := 0;
     start S { always { my_log(x); } }
 }
 start Root = M;
@@ -4355,7 +4355,7 @@ start Root = M;
 /// Встроенная формула на уровне модели разрешается и попадает в `model.formulas`.
 #[test]
 fn test_inline_formula_model_resolved() {
-    let (ast, _) = grammar::parse("var x: bit = false; : x; start S;", 0).expect("ошибка разбора");
+    let (ast, _) = grammar::parse("var x: bit := false; : x; start S;", 0).expect("ошибка разбора");
     let node = construct_model(&ast, None, &[]).expect("ошибка построения");
     assert_eq!(
         node.borrow().formulas.len(),
@@ -4376,7 +4376,7 @@ fn test_inline_formula_model_resolved() {
 #[test]
 fn test_var_used_in_condition_bitaccess_no_unused_warning() {
     let src = r#"
-        var flag: bit = 0;
+        var flag: bit := 0;
         cond bit_set = flag.0;
         start S { ref Done: bit_set; }
         state Done;
@@ -4405,7 +4405,7 @@ fn test_var_used_in_condition_bitaccess_no_unused_warning() {
 #[test]
 fn test_inline_formula_state_resolved() {
     let (ast, _) =
-        grammar::parse("var x: bit = false; start S { : x; }", 0).expect("ошибка разбора");
+        grammar::parse("var x: bit := false; start S { : x; }", 0).expect("ошибка разбора");
     let node = construct_model(&ast, None, &[]).expect("ошибка построения");
     let state = node
         .borrow()
@@ -4617,13 +4617,13 @@ fn test_cond_define_semicolon_consumed_not_stray() {
 fn match_statement_is_valid() {
     let src = r#"
         model M {
-            var x: bit = 0;
+            var x: bit := 0;
             start S {
                 always {
                     match x {
-                        0 => { x = 1; }
-                        1 | 2 => { x = 0; }
-                        _ => { x = 0; }
+                        0 => { x := 1; }
+                        1 | 2 => { x := 0; }
+                        _ => { x := 0; }
                     }
                 }
             }
@@ -4685,7 +4685,7 @@ fn constant_condition_always_true_warns() {
 /// SE-047: переход с переменной в условии — не предупреждение.
 #[test]
 fn constant_condition_with_variable_no_warn() {
-    let src = "var x: bit = 0; start S { ref S: x = 1; }";
+    let src = "var x: bit := 0; start S { ref S: x = 1; }";
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let model = construct_model(&ast, None, &[]).expect("ошибка семантики");
     let warnings = grammar::constant_condition_warnings(&model);

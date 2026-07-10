@@ -22,7 +22,7 @@ mod lsp_integration {
     /// Первая строка, нулевой столбец → байт 0.
     #[test]
     fn position_to_offset_first_char() {
-        let src = "var x: bit = false;";
+        let src = "var x: bit := false;";
         assert_eq!(
             position_to_offset(src, Position::new(0, 0)),
             Some(0),
@@ -33,7 +33,7 @@ mod lsp_integration {
     /// Первая строка, 4-й символ → байт 4.
     #[test]
     fn position_to_offset_middle_of_first_line() {
-        let src = "var x: bit = false;";
+        let src = "var x: bit := false;";
         assert_eq!(
             position_to_offset(src, Position::new(0, 4)),
             Some(4),
@@ -101,7 +101,7 @@ mod lsp_integration {
     fn node_at_position_variable_declaration() {
         //           0         1
         //           0123456789012345678
-        let src = "var counter: bit = false;";
+        let src = "var counter: bit := false;";
         let model = make_model(src);
         // Позиция 4 — символ 'c' в "counter"
         let node = node_at_position(src, Position::new(0, 4), &model);
@@ -114,7 +114,7 @@ mod lsp_integration {
     /// Курсор на ключевом слове → None (не объявление).
     #[test]
     fn node_at_position_on_keyword_returns_none() {
-        let src = "var x: bit = false;";
+        let src = "var x: bit := false;";
         let model = make_model(src);
         // Позиция 0 — символ 'v' в "var" (ключевое слово)
         // Если Location включает всё объявление, может найти переменную;
@@ -125,7 +125,7 @@ mod lsp_integration {
     /// Курсор за пределами файла → None.
     #[test]
     fn node_at_position_past_end_of_file() {
-        let src = "var x: bit = false;";
+        let src = "var x: bit := false;";
         let model = make_model(src);
         let node = node_at_position(src, Position::new(99, 0), &model);
         assert!(node.is_none(), "позиция за концом файла → None");
@@ -136,7 +136,7 @@ mod lsp_integration {
     fn node_at_position_const_declaration() {
         //           0         1         2
         //           012345678901234567890123456789
-        let src = "const LIMIT: bit = true;";
+        let src = "const LIMIT: bit := true;";
         let model = make_model(src);
         // Позиция 6 — символ 'L' в "LIMIT"
         let node = node_at_position(src, Position::new(0, 6), &model);
@@ -231,7 +231,7 @@ mod lsp_integration {
     /// Комплексный тест: несколько элементов на разных строках.
     #[test]
     fn node_at_position_multiline_file() {
-        let src = "var alpha: bit = false;\nconst BETA: bit = true;\nstart Gamma;";
+        let src = "var alpha: bit := false;\nconst BETA: bit := true;\nstart Gamma;";
         let model = make_model(src);
 
         // Строка 0, позиция 4 — 'a' в "alpha"
@@ -255,7 +255,7 @@ mod lsp_integration {
     /// Hover на объявлении переменной возвращает корректный тип.
     #[test]
     fn hover_variable_via_position_index() {
-        let src = "var speed: bit = false; start S;";
+        let src = "var speed: bit := false; start S;";
         // Позиция 4 — 's' в "speed"
         let h = hover_info(src, Position::new(0, 4));
         assert!(h.is_some(), "hover должен найти переменную");
@@ -277,7 +277,7 @@ mod lsp_integration {
     /// Hover на объявлении константы содержит "const".
     #[test]
     fn hover_const_via_position_index() {
-        let src = "const LIMIT: bit = true; start S;";
+        let src = "const LIMIT: bit := true; start S;";
         let h = hover_info(src, Position::new(0, 6));
         assert!(h.is_some(), "hover должен найти константу");
         let h = h.unwrap();
@@ -372,7 +372,7 @@ mod lsp_integration {
     #[test]
     fn hover_variable_usage_fallback_search() {
         // "var x" на строке 0; использование "x" в условии на строке 1
-        let src = "var x: bit = false;\ncond C = x = true;\nstart S;";
+        let src = "var x: bit := false;\ncond C = x = true;\nstart S;";
         // Позиция (1, 9) — 'x' в условии (использование)
         let h = hover_info(src, Position::new(1, 9));
         // Резервный поиск должен найти переменную "x"
@@ -409,24 +409,24 @@ enum Priority { Low = 0, Medium = 5, High = 10 }
 extern fn log(msg: u8);
 
 /// Переменная состояния направления.
-var heading: Direction = 0;
+var heading: Direction := 0;
 
 /// Модель управления роботом.
 model Robot {
-    var speed: u8 = 0;
-    var active: bit = false;
+    var speed: u8 := 0;
+    var active: bit := false;
 
     start Idle {
         enter {
-            speed = 0;
-            active = false;
+            speed := 0;
+            active := false;
         }
         ref Moving: active;
     }
 
     state Moving {
         always {
-            speed = 100;
+            speed := 100;
         }
         ref Idle: true;
     }
@@ -485,7 +485,7 @@ start Main = Robot;
     fn goto_declaration_variable_self() {
         //           0         1         2
         //           0123456789012345678901234
-        let src = "var counter: bit = false;";
+        let src = "var counter: bit := false;";
         // Позиция 4 — символ 'c' в "counter"
         let range = goto_declaration(src, Position::new(0, 4));
         assert!(
@@ -555,7 +555,7 @@ start Main = Robot;
         // Строка 1: "start Idle;"
         // Строка 2: "state Run;"
         // Строка 3: "start Idle { ref Run: flag; }"
-        let src = "var flag: bit = false;\nstart Idle;\nstate Run;\nstart Idle { ref Run: flag; }";
+        let src = "var flag: bit := false;\nstart Idle;\nstate Run;\nstart Idle { ref Run: flag; }";
         // Строка 3: "start Idle { ref Run: flag; }"
         //            0         1         2
         //            0123456789012345678901234567890
@@ -576,7 +576,7 @@ start Main = Robot;
     /// Курсор вне идентификаторов → None.
     #[test]
     fn goto_declaration_outside_node_returns_none() {
-        let src = "var x: bit = false;\nstart S;";
+        let src = "var x: bit := false;\nstart S;";
         // Позиция (0, 0) — символ 'v' в "var" (ключевое слово, не идентификатор объявления)
         // Может вернуть Some (если Location включает всё объявление) или None.
         // Главное — не паниковать.
@@ -601,7 +601,7 @@ start Main = Robot;
     fn i7_goto_declaration_local_var() {
         use grammar::lsp::goto_declaration_with_paths;
 
-        let src = "var counter: [bit;8] = 0;\nstart S;";
+        let src = "var counter: [bit;8] := 0;\nstart S;";
         // Позиция 4 — символ 'c' в "counter"
         let loc = goto_declaration_with_paths(src, Position::new(0, 4), &[]);
         assert!(
@@ -635,7 +635,7 @@ start Main = Robot;
     fn i7_goto_declaration_outside_returns_none() {
         use grammar::lsp::goto_declaration_with_paths;
 
-        let src = "var x: bit = false;\nstart S;";
+        let src = "var x: bit := false;\nstart S;";
         let loc = goto_declaration_with_paths(src, Position::new(99, 0), &[]);
         assert!(loc.is_none(), "позиция за пределами файла → None");
     }
@@ -654,7 +654,7 @@ start Main = Robot;
     /// I8: локальная переменная в `always`-блоке доступна через SemanticIndex.
     #[test]
     fn i8_local_var_in_always_indexed() {
-        let src = "start S;\nalways { var local_x: [bit;8] = 0; }";
+        let src = "start S;\nalways { var local_x: [bit;8] := 0; }";
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
         let index = SemanticIndex::build(&model);
@@ -685,7 +685,7 @@ start Main = Robot;
     #[test]
     fn i8_local_var_in_model_enter_indexed() {
         // Блок enter на уровне модели (не внутри состояния)
-        let src = "start S;\nenter { var enter_var: bit = false; }";
+        let src = "start S;\nenter { var enter_var: bit := false; }";
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
         let index = SemanticIndex::build(&model);
@@ -708,7 +708,7 @@ start Main = Robot;
     #[test]
     fn i8_local_var_in_model_exit_indexed() {
         // Блок exit на уровне модели (не внутри состояния)
-        let src = "start S;\nexit { var exit_var: bit = false; }";
+        let src = "start S;\nexit { var exit_var: bit := false; }";
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
         let index = SemanticIndex::build(&model);
@@ -730,7 +730,7 @@ start Main = Robot;
     /// I8: поиск локальной переменной по позиции LSP в always-блоке.
     #[test]
     fn i8_node_at_position_local_var_in_always() {
-        let src = "start S;\nalways { var my_local: [bit;8] = 0; }";
+        let src = "start S;\nalways { var my_local: [bit;8] := 0; }";
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
 
@@ -838,7 +838,7 @@ mod diagnostic_location_tests {
     fn grammar_diagnostic_to_lsp_source_location_gives_correct_range() {
         use grammar::diagnostics::{Diagnostic as GDiag, Location};
 
-        let src = "var x: bit = false;";
+        let src = "var x: bit := false;";
         // Создаём диагностику с конкретной позицией (байты 4..5 — символ 'x')
         let diag = GDiag::error(Location::Source(0, 4, 5), "Тестовая ошибка".to_string());
         let lsp_diag = grammar_diagnostic_to_lsp(&diag, src);
@@ -861,7 +861,7 @@ mod diagnostic_location_tests {
     fn grammar_diagnostic_to_lsp_notes_appended_to_message() {
         use grammar::diagnostics::{Diagnostic as GDiag, Location};
 
-        let src = "var x: bit = false;";
+        let src = "var x: bit := false;";
         let diag = GDiag::error_with_note(
             Location::Source(0, 4, 5),
             "Основная ошибка".to_string(),
@@ -899,7 +899,7 @@ mod diagnostic_location_tests {
     #[test]
     fn ce13_unused_variable_warning_has_source_location() {
         // Переменная `heading` объявлена на строке 0, нигде не используется
-        let src = "var heading: bit = false;\nstart S;";
+        let src = "var heading: bit := false;\nstart S;";
         let diags = collect_diagnostics(src);
 
         let ce13 = diags
@@ -962,7 +962,7 @@ mod diagnostic_location_tests {
     /// `match` подсвечивается как ключевое слово (TT_KEYWORD = 0).
     #[test]
     fn semantic_tokens_match_is_keyword() {
-        let src = "model M { var x: u8 = 0; start S { always { match x { _ => { } } } } }";
+        let src = "model M { var x: u8 := 0; start S { always { match x { _ => { } } } } }";
         let tokens = decode_semantic_tokens(src);
         let match_tok = tokens.iter().find(|(w, _)| w == "match");
         assert!(match_tok.is_some(), "токен 'match' должен присутствовать");
@@ -977,7 +977,7 @@ mod diagnostic_location_tests {
     /// `inout` подсвечивается как ключевое слово (TT_KEYWORD = 0).
     #[test]
     fn semantic_tokens_inout_is_keyword() {
-        let src = "inout bus: u8 = 0x1000:0;\nstart S;";
+        let src = "inout bus: u8 := 0x1000:0;\nstart S;";
         let tokens = decode_semantic_tokens(src);
         let tok = tokens.iter().find(|(w, _)| w == "inout");
         assert!(tok.is_some(), "токен 'inout' должен присутствовать");
@@ -987,7 +987,7 @@ mod diagnostic_location_tests {
     /// `u8` в аннотации типа подсвечивается как тип (TT_TYPE = 3).
     #[test]
     fn semantic_tokens_u8_is_type() {
-        let src = "var x: u8 = 0;\nstart S;";
+        let src = "var x: u8 := 0;\nstart S;";
         let tokens = decode_semantic_tokens(src);
         let u8_tok = tokens.iter().find(|(w, _)| w == "u8");
         assert!(u8_tok.is_some(), "токен 'u8' должен присутствовать");
@@ -1002,7 +1002,7 @@ mod diagnostic_location_tests {
     /// `i32` в аннотации типа подсвечивается как тип (TT_TYPE = 3).
     #[test]
     fn semantic_tokens_i32_is_type() {
-        let src = "var n: i32 = 0;\nstart S;";
+        let src = "var n: i32 := 0;\nstart S;";
         let tokens = decode_semantic_tokens(src);
         let tok = tokens.iter().find(|(w, _)| w == "i32");
         assert!(tok.is_some(), "токен 'i32' должен присутствовать");
@@ -1012,7 +1012,7 @@ mod diagnostic_location_tests {
     /// `bit` в аннотации типа подсвечивается как тип (TT_TYPE = 3).
     #[test]
     fn semantic_tokens_bit_is_type() {
-        let src = "var flag: bit = 0;\nstart S;";
+        let src = "var flag: bit := 0;\nstart S;";
         let tokens = decode_semantic_tokens(src);
         let tok = tokens.iter().find(|(w, _)| w == "bit");
         assert!(tok.is_some(), "токен 'bit' должен присутствовать");
@@ -1024,7 +1024,7 @@ mod diagnostic_location_tests {
     /// Hover над `u8` возвращает описание типа.
     #[test]
     fn hover_builtin_type_u8() {
-        let src = "var x: u8 = 0;\nstart S;";
+        let src = "var x: u8 := 0;\nstart S;";
         // Позиция курсора на 'u8' (строка 0, столбец 7)
         let result = hover_info(src, Position::new(0, 7));
         assert!(result.is_some(), "hover над 'u8' должен вернуть результат");
@@ -1043,7 +1043,7 @@ mod diagnostic_location_tests {
     /// Hover над `i8` возвращает описание типа.
     #[test]
     fn hover_builtin_type_i8() {
-        let src = "var n: i8 = 0;\nstart S;";
+        let src = "var n: i8 := 0;\nstart S;";
         let result = hover_info(src, Position::new(0, 7));
         assert!(result.is_some(), "hover над 'i8' должен вернуть результат");
         let hover = result.unwrap();
@@ -1076,7 +1076,7 @@ mod diagnostic_location_tests {
     /// Hover над переменной с типом `u8` показывает «u8», а не Debug-строку «Integer { bits: 8, signed: false }».
     #[test]
     fn hover_var_u8_shows_u8_not_debug() {
-        let src = "var speed: u8 = 0;\nstart S;";
+        let src = "var speed: u8 := 0;\nstart S;";
         // Позиция 4 — «s» в «speed»
         let h = hover_info(src, lsp_types::Position::new(0, 4));
         assert!(h.is_some(), "hover над переменной должен вернуть результат");
@@ -1098,7 +1098,7 @@ mod diagnostic_location_tests {
     #[test]
     fn collect_diagnostics_builtin_integer_types_no_error() {
         // const-переменные не генерируют предупреждения об использовании
-        let src = "const A: u8 = 10;\nconst B: i32 = -5;\nconst C: u64 = 0;\nstart S;";
+        let src = "const A: u8 := 10;\nconst B: i32 := -5;\nconst C: u64 := 0;\nstart S;";
         let diags = collect_diagnostics(src);
         let errors: Vec<_> = diags
             .iter()

@@ -3,15 +3,15 @@
 // Внешняя переменная x (уровня модели) затеняется локальной x
 // во внутреннем блоке. После выхода из блока снова видна model-level x.
 
-var x: bit = true;
+var x: bit := true;
 
 start S {
     always {
         {
-            var x: bit = false;
-            x = false;
+            var x: bit := false;
+            x := false;
         }
         // Здесь x — снова ссылка на model-level x
-        x = true;
+        x := true;
     }
 }

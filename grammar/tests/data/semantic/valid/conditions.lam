@@ -6,7 +6,7 @@
 // - negated — логическое НЕ
 // - grouped — скобочная группировка
 
-var flag: bit = false;
+var flag: bit := false;
 
 cond always_true  = true;
 cond always_false = false;

@@ -3,22 +3,22 @@
 // о неявном приведении числового типа к bool.
 
 // Числовая переменная-счётчик (8-битный массив битов)
-var timer: [bit;8] = 0;
+var timer: [bit;8] := 0;
 
 // Булева переменная (предупреждений не должно быть)
-var flag: bool = false;
+var flag: bool := false;
 
 // Начальное состояние: два перехода —
 //   один с числовым условием (→ предупреждение),
 //   один с явным сравнением (→ без предупреждения).
 start Red {
-    always { timer = timer + 1; }
+    always { timer := timer + 1; }
     ref Green: timer != 100;   // ok — явное сравнение
     ref Yellow: flag;          // ok — переменная bool
 }
 
 state Green {
-    always { timer = timer + 1; }
+    always { timer := timer + 1; }
     ref Yellow: timer != 50;   // ok — явное сравнение
 }
 

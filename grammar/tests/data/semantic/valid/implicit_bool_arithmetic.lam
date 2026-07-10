@@ -3,10 +3,10 @@
 //
 // ref T: timer + 1  →  Предупреждение Се11: арифметическое сложение
 
-var timer: [bit;8] = 0;
+var timer: [bit;8] := 0;
 
 start S {
-    always { timer = timer + 1; }
+    always { timer := timer + 1; }
     ref T: timer + 1;    // Предупреждение: числовой результат вместо bool
 }
 

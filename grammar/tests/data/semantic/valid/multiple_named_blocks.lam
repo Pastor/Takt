@@ -1,32 +1,32 @@
 // Пример с несколькими именованными блоками одного типа.
 // Это может быть полезно для разделения логики на несколько независимых частей.
 
-var a: bit = false;
-var b: bit = false;
-var counter: [bit; 8] = 0;
+var a: bit := false;
+var b: bit := false;
+var counter: [bit; 8] := 0;
 
 // Первый блок always
 always {
-    a = !a;
+    a := !a;
 }
 
 // Второй блок always
 always {
-    b = !b;
+    b := !b;
 }
 
 // Третий блок always
 always {
-    counter = counter + 1;
+    counter := counter + 1;
 }
 
 start Initial {
     enter {
-        a = false;
+        a := false;
     }
     // Второй блок enter в том же состоянии
     enter {
-        b = false;
+        b := false;
     }
 
     exit {
@@ -34,6 +34,6 @@ start Initial {
     }
     // Второй блок exit
     exit {
-        counter = 0;
+        counter := 0;
     }
 }

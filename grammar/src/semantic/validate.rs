@@ -1407,7 +1407,7 @@ mod tests {
     /// ```
     #[test]
     fn bit_var_with_zero_is_valid() {
-        assert!(build("var x: bit = 0;").is_ok());
+        assert!(build("var x: bit := 0;").is_ok());
     }
 
     /// `var x: bit = 1;` — допустимо (числовое значение 1).
@@ -1418,19 +1418,19 @@ mod tests {
     /// ```
     #[test]
     fn bit_var_with_one_is_valid() {
-        assert!(build("var x: bit = 1;").is_ok());
+        assert!(build("var x: bit := 1;").is_ok());
     }
 
     /// `var x: bit = true;` — допустимо (булев литерал).
     #[test]
     fn bit_var_with_true_is_valid() {
-        assert!(build("var x: bit = true;").is_ok());
+        assert!(build("var x: bit := true;").is_ok());
     }
 
     /// `var x: bit = false;` — допустимо (булев литерал).
     #[test]
     fn bit_var_with_false_is_valid() {
-        assert!(build("var x: bit = false;").is_ok());
+        assert!(build("var x: bit := false;").is_ok());
     }
 
     /// `var x: bit = 2;` — ошибка: значение 2 не является допустимым для bit.
@@ -1441,7 +1441,7 @@ mod tests {
     /// ```
     #[test]
     fn bit_var_with_two_is_error() {
-        let result = build("var x: bit = 2;");
+        let result = build("var x: bit := 2;");
         assert!(result.is_err(), "значение 2 недопустимо для типа bit");
         assert!(result.unwrap_err().message.contains("bit"));
     }
@@ -1454,7 +1454,7 @@ mod tests {
     /// ```
     #[test]
     fn bit_var_with_minus_one_is_error() {
-        let result = build("var x: bit = -1;");
+        let result = build("var x: bit := -1;");
         // -1 парсится как Negate(1) или Number(-1): в обоих случаях числовой литерал -1
         // Если парсер создаёт Number(-1), должна быть ошибка валидации.
         // Если парсер создаёт Negate(Number(1)), это выражение — не Number, ошибки нет.
@@ -1470,14 +1470,14 @@ mod tests {
     /// ```
     #[test]
     fn bit_var_with_255_is_error() {
-        let result = build("var x: bit = 255;");
+        let result = build("var x: bit := 255;");
         assert!(result.is_err(), "значение 255 недопустимо для типа bit");
     }
 
     /// `const C: bit = 2;` — ошибка: константа типа bit с недопустимым значением.
     #[test]
     fn bit_const_with_invalid_value_is_error() {
-        let result = build("const C: bit = 2;");
+        let result = build("const C: bit := 2;");
         assert!(result.is_err(), "константа bit = 2 должна давать ошибку");
     }
 
@@ -1486,20 +1486,20 @@ mod tests {
     #[test]
     fn bit_array_initializer_is_not_range_checked() {
         // [bit;8] = 255 — это 8-битное значение, проверка диапазона не применяется.
-        assert!(build("var x: [bit;8] = 255;").is_ok());
+        assert!(build("var x: [bit;8] := 255;").is_ok());
     }
 
     /// Переменная `bit` с инициализатором-переменной не проверяется статически.
     #[test]
     fn bit_var_initialized_from_other_var_is_valid() {
         // b: bit = a — ссылка на переменную, статическая проверка значения не применяется.
-        assert!(build("var a: bit = 0; var b: bit = a;").is_ok());
+        assert!(build("var a: bit := 0; var b: bit := a;").is_ok());
     }
 
     /// Вложенная модель с некорректным значением bit — ошибка.
     #[test]
     fn nested_model_with_invalid_bit_value_is_error() {
-        let result = build("model M { var x: bit = 5; start S; }");
+        let result = build("model M { var x: bit := 5; start S; }");
         assert!(
             result.is_err(),
             "вложенная модель: bit = 5 должна давать ошибку"
@@ -1525,15 +1525,15 @@ mod tests {
     /// Строит модель с переменными: `flag: bool`, `bit1: bit`, `timer: [bit;8]`.
     fn model_with_vars() -> Rc<RefCell<ModelNode>> {
         build_rc(
-            "var flag: bool = false; \
-             var bit1: bit = 0; \
-             var timer: [bit;8] = 0;",
+            "var flag: bool := false; \
+             var bit1: bit := 0; \
+             var timer: [bit;8] := 0;",
         )
     }
 
     /// Строит модель с именованным условием `cond Full = timer = 255;`.
     fn model_with_named_cond() -> Rc<RefCell<ModelNode>> {
-        build_rc("var timer: [bit;8] = 0; cond Full = timer = 255;")
+        build_rc("var timer: [bit;8] := 0; cond Full = timer = 255;")
     }
 
     use crate::diagnostics::Location as Loc;
@@ -1949,7 +1949,7 @@ mod tests {
     /// Переменная типа `bool` в условии — нет предупреждений.
     #[test]
     fn bool_var_cond_no_warning() {
-        let model = build_rc("var flag: bool = false; start S { ref T: flag; } state T;");
+        let model = build_rc("var flag: bool := false; start S { ref T: flag; } state T;");
         let warnings = check_implicit_bool_conditions(&model);
         assert!(
             warnings.is_empty(),
@@ -1960,7 +1960,7 @@ mod tests {
     /// Переменная типа `bit` (один бит) в условии — нет предупреждений.
     #[test]
     fn bit_var_cond_no_warning() {
-        let model = build_rc("var flag: bit = 0; start S { ref T: flag; } state T;");
+        let model = build_rc("var flag: bit := 0; start S { ref T: flag; } state T;");
         let warnings = check_implicit_bool_conditions(&model);
         assert!(
             warnings.is_empty(),
@@ -1971,7 +1971,7 @@ mod tests {
     /// Явное сравнение `!= 0` — нет предупреждений.
     #[test]
     fn explicit_ne_comparison_no_warning() {
-        let model = build_rc("var timer: [bit;8] = 0; start S { ref T: timer != 0; } state T;");
+        let model = build_rc("var timer: [bit;8] := 0; start S { ref T: timer != 0; } state T;");
         let warnings = check_implicit_bool_conditions(&model);
         assert!(
             warnings.is_empty(),
@@ -1982,7 +1982,7 @@ mod tests {
     /// Явное сравнение `= 100` — нет предупреждений.
     #[test]
     fn explicit_eq_comparison_no_warning() {
-        let model = build_rc("var timer: [bit;8] = 0; start S { ref T: timer = 100; } state T;");
+        let model = build_rc("var timer: [bit;8] := 0; start S { ref T: timer = 100; } state T;");
         let warnings = check_implicit_bool_conditions(&model);
         assert!(
             warnings.is_empty(),
@@ -1994,7 +1994,7 @@ mod tests {
     #[test]
     fn named_cond_in_ref_no_warning() {
         let model = build_rc(
-            "var timer: [bit;8] = 0; \
+            "var timer: [bit;8] := 0; \
              cond Full = timer = 255; \
              start S { ref T: Full; } state T;",
         );
@@ -2008,7 +2008,7 @@ mod tests {
     /// Переменная числового типа `[bit;8]` без сравнения — предупреждение.
     #[test]
     fn array_var_cond_gives_warning() {
-        let model = build_rc("var timer: [bit;8] = 0; start S { ref T: timer; } state T;");
+        let model = build_rc("var timer: [bit;8] := 0; start S { ref T: timer; } state T;");
         let warnings = check_implicit_bool_conditions(&model);
         assert_eq!(
             warnings.len(),
@@ -2040,7 +2040,7 @@ mod tests {
     /// Предупреждение содержит имя целевого состояния.
     #[test]
     fn warning_message_contains_target_state() {
-        let model = build_rc("var x: [bit;8] = 0; start S { ref MyTarget: x; } state MyTarget;");
+        let model = build_rc("var x: [bit;8] := 0; start S { ref MyTarget: x; } state MyTarget;");
         let warnings = check_implicit_bool_conditions(&model);
         assert_eq!(warnings.len(), 1);
         assert!(
@@ -2054,7 +2054,7 @@ mod tests {
     #[test]
     fn mixed_refs_one_warning() {
         let model = build_rc(
-            "var timer: [bit;8] = 0; var flag: bool = false; \
+            "var timer: [bit;8] := 0; var flag: bool := false; \
              start S { ref T: timer; ref U: flag; } state T; state U;",
         );
         let warnings = check_implicit_bool_conditions(&model);
@@ -2065,7 +2065,7 @@ mod tests {
     #[test]
     fn two_numeric_refs_two_warnings() {
         let model = build_rc(
-            "var a: [bit;8] = 0; var b: [bit;8] = 0; \
+            "var a: [bit;8] := 0; var b: [bit;8] := 0; \
              start S { ref T: a; ref U: b; } state T; state U;",
         );
         let warnings = check_implicit_bool_conditions(&model);
@@ -2080,7 +2080,7 @@ mod tests {
     #[test]
     fn nested_model_implicit_bool_gives_warning() {
         let model =
-            build_rc("model M { var timer: [bit;8] = 0; start S { ref T: timer; } state T; }");
+            build_rc("model M { var timer: [bit;8] := 0; start S { ref T: timer; } state T; }");
         let warnings = check_implicit_bool_conditions(&model);
         assert_eq!(
             warnings.len(),
@@ -2096,7 +2096,7 @@ mod tests {
     /// Модель без состояний — нет предупреждений.
     #[test]
     fn model_without_states_no_warnings() {
-        let model = build_rc("var timer: [bit;8] = 0;");
+        let model = build_rc("var timer: [bit;8] := 0;");
         let warnings = check_implicit_bool_conditions(&model);
         assert!(
             warnings.is_empty(),
@@ -2263,7 +2263,7 @@ mod tests {
     /// Переменная типа bit не проверяется функцией NI6.
     #[test]
     fn ni6_non_enum_var_not_checked() {
-        let model_rc = build_rc("var x: bit = 0; start S;");
+        let model_rc = build_rc("var x: bit := 0; start S;");
         let errors = check_enum_type_safety(model_rc);
         assert!(
             errors.is_empty(),
@@ -2353,7 +2353,7 @@ mod tests_ce4_declarations {
     /// ```
     #[test]
     fn ce4_non_enum_type_not_checked() {
-        let model_rc = build_rc("var x: [bit;8] = 0; start S;");
+        let model_rc = build_rc("var x: [bit;8] := 0; start S;");
         let result = validate_enum_type_declarations(model_rc);
         assert!(result.is_ok(), "не-enum тип не должен проверяться Ce4");
     }
@@ -2557,7 +2557,7 @@ mod tests_ce15_array_size {
     /// Ce15: переменная с допустимым размером массива не даёт ошибку через validate_model.
     #[test]
     fn validate_model_accepts_small_array() {
-        let (ast, _) = crate::parse("var x: [bit;8] = 0; start S;", 0).unwrap();
+        let (ast, _) = crate::parse("var x: [bit;8] := 0; start S;", 0).unwrap();
         let result = crate::semantic::tree::construct_model(&ast, None, &[]);
         assert!(
             result.is_ok(),

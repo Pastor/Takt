@@ -2,7 +2,13 @@
 
 > Фича: [../features/0021-swap-assign-compare.md](../features/0021-swap-assign-compare.md) · ADR: [../adr/0021-swap-assign-compare.md](../adr/0021-swap-assign-compare.md) · анализ: [../analyze/0021-swap-assign-compare.md](../analyze/0021-swap-assign-compare.md)
 
-> **Статус:** ЗАПЛАНИРОВАНО (после 0021-01).
+> **Статус:** ПОДТВЕРЖДЕНО. Правки кода не потребовались: AST-узлы
+> (`Expression::Assign`/`Equal`, `Condition::Equal`, `LessEqual`) не менялись —
+> сменилась лишь привязка токенов в грамматике (0021-01). Семантика,
+> C-генератор, PlantUML, LTL/Бюхи и LSP работают на прежних узлах. Подтверждено
+> зелёными тестами после миграции (0021-03): `codegen_tests` 31/31, `lsp_tests`
+> 60/60, `semantic_tests` 270/270, а также нормализованной сверкой кодогена
+> (C генерируется прежним образом: `:=`→`=`, `=`-равенство→`==`, `<=`→`<=`).
 
 ## Что было
 

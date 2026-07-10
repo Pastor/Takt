@@ -6,11 +6,11 @@ type u8 = [bit;8];
 extern fn log_value(v: u8);
 
 model Counter {
-    var x: u8 = 0;
+    var x: u8 := 0;
 
     start Running {
         always {
-            x = x + 1;
+            x := x + 1;
             log_value(x);
         }
     }

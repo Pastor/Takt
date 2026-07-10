@@ -3,12 +3,12 @@
 // Проверяет: локальная переменная объявляется в именованном блоке (always)
 // и доступна в последующих операторах того же блока.
 
-var flag: bit = false;
+var flag: bit := false;
 
 start Running {
     always {
-        var x: bit = false;
-        x = true;
-        flag = x;
+        var x: bit := false;
+        x := true;
+        flag := x;
     }
 }

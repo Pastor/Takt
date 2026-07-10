@@ -5,13 +5,13 @@
 start S;
 
 enter {
-    var local_in_enter: [bit;8] = 0;
+    var local_in_enter: [bit;8] := 0;
 }
 
 exit {
-    var local_in_exit: bit = false;
+    var local_in_exit: bit := false;
 }
 
 always {
-    var local_in_always: [bit;8] = 42;
+    var local_in_always: [bit;8] := 42;
 }

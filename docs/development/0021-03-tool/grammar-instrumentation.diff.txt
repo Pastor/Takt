@@ -1,0 +1,154 @@
+diff --git a/grammar/src/grammar.lalrpop b/grammar/src/grammar.lalrpop
+index 897b46d..e136746 100644
+--- a/grammar/src/grammar.lalrpop
++++ b/grammar/src/grammar.lalrpop
+@@ -3,7 +3,7 @@ use super::diagnostics::Location;
+ use super::parser::lexer::{Token, LexicalError};
+ use super::parser::parse_address_literal;
+ use lalrpop_util::ErrorRecovery;
+-grammar<'input, 'err>(input: &'input str, file_no: u64 , parser_errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, LexicalError>> );
++grammar<'input, 'err>(input: &'input str, file_no: u64 , parser_errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, LexicalError>>, ops: &'err mut Vec<(usize, usize, u8)> );
+ 
+ pub SourceUnit: Model = {
+     <l:@L> <elements:(<ModelElement>)*> <r:@R> => Model{loc: Location::Source(file_no, l, r), name: None, elements, implements: None},
+@@ -112,29 +112,29 @@ ConditionDefine: ConditionDefine = {
+ }
+ 
+ VariableDefine: Box<VariableDefine> = {
+-    <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
++    <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:InitExpr?> <r:@R> ";" => {
+         Box::new(VariableDefine::Variable {
+             loc: Location::Source(file_no, l, r), typ, name, initializer: e
+         })
+     },
+-    <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> "=" <e:Expression> <r:@R> ";" => {
++    <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:InitExpr> <r:@R> ";" => {
+         Box::new(VariableDefine::Constant {
+             loc: Location::Source(file_no, l, r), typ, name, initializer: e
+         })
+     },
+-    <l:@L> "in" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
++    <l:@L> "in" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:InitExpr?> <r:@R> ";" => {
+         Box::new(VariableDefine::Port {
+             loc: Location::Source(file_no, l, r), typ, name, initializer: e,
+             direction: PortDirection::In,
+         })
+     },
+-    <l:@L> "out" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
++    <l:@L> "out" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:InitExpr?> <r:@R> ";" => {
+         Box::new(VariableDefine::Port {
+             loc: Location::Source(file_no, l, r), typ, name, initializer: e,
+             direction: PortDirection::Out,
+         })
+     },
+-    <l:@L> "inout" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
++    <l:@L> "inout" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:InitExpr?> <r:@R> ";" => {
+         Box::new(VariableDefine::Port {
+             loc: Location::Source(file_no, l, r), typ, name, initializer: e,
+             direction: PortDirection::InOut,
+@@ -149,18 +149,23 @@ VariableDefine: Box<VariableDefine> = {
+ // port не поддерживается внутри блоков — порты являются аппаратными маппингами
+ // и объявляются только на уровне модели.
+ LocalVariableDefine: Box<VariableDefine> = {
+-    <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> => {
++    <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:InitExpr?> <r:@R> => {
+         Box::new(VariableDefine::Variable {
+             loc: Location::Source(file_no, l, r), typ, name, initializer: e
+         })
+     },
+-    <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> "=" <e:Expression> <r:@R> => {
++    <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:InitExpr> <r:@R> => {
+         Box::new(VariableDefine::Constant {
+             loc: Location::Source(file_no, l, r), typ, name, initializer: e
+         })
+     },
+ }
+ 
++// [migrate 0021] инициализатор значения: захват позиции `=` для замены на `:=`.
++InitExpr: Expression = {
++    <ol:@L> "=" <or:@R> <e:Expression> => { ops.push((ol, or, 0u8)); e }
++}
++
+ FunctionCall: Expression = {
+     <a:@L> <i:Identifier> "(" <v:Comma<Expression>> ")" <b:@R> => {
+         Expression::Function(Location::Source(file_no, a, b), i, v)
+@@ -416,7 +421,7 @@ Member: Member = {
+ LoopCond: Expression = { LoopCondP14 }
+ 
+ LoopCondP14: Expression = {
+-    <a:@L> <l:LoopCondP13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
++    <a:@L> <l:LoopCondP13> <ol:@L> "=" <or:@R> <r:Precedence14> <b:@R> => { ops.push((ol, or, 0u8)); Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)) },
+     // Тернарный оператор в контексте loop-условия (правоассоциативный)
+     <a:@L> <c:LoopCondP13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
+     LoopCondP13,
+@@ -433,7 +438,7 @@ LoopCondP12: Expression = {
+ }
+ 
+ LoopCondP11: Expression = {
+-    <a:@L> <l:LoopCondP11> "==" <r:Precedence10> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
++    <a:@L> <l:LoopCondP11> <ol:@L> "==" <or:@R> <r:Precedence10> <b:@R> => { ops.push((ol, or, 1u8)); Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)) },
+     <a:@L> <l:LoopCondP11> "!=" <r:Precedence10> <b:@R> => Expression::NotEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+     LoopCondP10,
+ }
+@@ -513,7 +518,7 @@ Expression: Expression = {
+ }
+ 
+ Precedence14: Expression = {
+-    <a:@L> <l:Precedence13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
++    <a:@L> <l:Precedence13> <ol:@L> "=" <or:@R> <r:Precedence14> <b:@R> => { ops.push((ol, or, 0u8)); Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)) },
+     // Тернарный оператор: cond ? then : else (правоассоциативный, ниже присваивания)
+     <a:@L> <c:Precedence13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
+     Precedence13,
+@@ -530,7 +535,7 @@ Precedence12: Expression = {
+ }
+ 
+ Precedence11: Expression = {
+-    <a:@L> <l:Precedence11> "==" <r:Precedence10> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
++    <a:@L> <l:Precedence11> <ol:@L> "==" <or:@R> <r:Precedence10> <b:@R> => { ops.push((ol, or, 1u8)); Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)) },
+     <a:@L> <l:Precedence11> "!=" <r:Precedence10> <b:@R> => Expression::NotEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+     Precedence10,
+ }
+diff --git a/grammar/src/lib.rs b/grammar/src/lib.rs
+index 0988c51..b25053c 100644
+--- a/grammar/src/lib.rs
++++ b/grammar/src/lib.rs
+@@ -91,12 +91,29 @@ mod grammar {
+ /// assert!(err.is_err());
+ /// ```
+ pub fn parse(src: &str, file_no: u64) -> Result<(ast::Model, Vec<ast::Comment>), Vec<Diagnostic>> {
++    parse_ops(src, file_no).map(|(m, c, _ops)| (m, c))
++}
++
++/// Как [`parse`], но дополнительно возвращает позиции операторов присваивания
++/// (`=`, kind 0) и равенства (`==`, kind 1) для миграции 0021 (`=`→`:=`, `==`→`=`).
++#[allow(clippy::type_complexity)]
++pub fn parse_ops(
++    src: &str,
++    file_no: u64,
++) -> Result<(ast::Model, Vec<ast::Comment>, Vec<(usize, usize, u8)>), Vec<Diagnostic>> {
+     let mut comments = Vec::new();
+     let mut lexer_errors = Vec::new();
+     let mut lex = lexer::Lexer::new(src, file_no, &mut comments, &mut lexer_errors);
+ 
+     let mut parser_errors = Vec::new();
+-    let res = grammar::SourceUnitParser::new().parse(src, file_no, &mut parser_errors, &mut lex);
++    let mut ops: Vec<(usize, usize, u8)> = Vec::new();
++    let res = grammar::SourceUnitParser::new().parse(
++        src,
++        file_no,
++        &mut parser_errors,
++        &mut ops,
++        &mut lex,
++    );
+ 
+     let mut diagnostics = Vec::with_capacity(lex.errors.len() + parser_errors.len());
+     for lexical_error in lex.errors {
+@@ -116,7 +133,7 @@ pub fn parse(src: &str, file_no: u64) -> Result<(ast::Model, Vec<ast::Comment>),
+             Err(diagnostics)
+         }
+         _ if !diagnostics.is_empty() => Err(diagnostics),
+-        Ok(res) => Ok((res, comments)),
++        Ok(res) => Ok((res, comments, ops)),
+     }
+ }
+ 

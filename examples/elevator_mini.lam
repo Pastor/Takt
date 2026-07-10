@@ -16,9 +16,9 @@ enum Command {
     Stop
 }
 
-var command:       Command = Stop;
-var current_floor: u8      = 1;
-var target_floor:  u8      = 0;
+var command:       Command := Stop;
+var current_floor: u8      := 1;
+var target_floor:  u8      := 0;
 
 // ─── Модель мотора ────────────────────────────────────────────────────────────
 // Простой трёхсостоянный автомат: Idle ↔ Up | Down → Stop → Idle.
@@ -29,25 +29,25 @@ model Motor {
         ref Down: command = Down;
         ref Stop: command = Stop;
         enter {
-            ElevatorMotor_Stop = true;
+            ElevatorMotor_Stop := true;
         }
     }
     state Up {
         ref Stop: command = Stop | ElevatorMotor_SensorU;
         always {
-            ElevatorMotor_Up = true;
+            ElevatorMotor_Up := true;
         }
     }
     state Down {
         ref Stop: command = Stop | ElevatorMotor_SensorD;
         always {
-            ElevatorMotor_Down = true;
+            ElevatorMotor_Down := true;
         }
     }
     state Stop {
         next Idle;
         always {
-            ElevatorMotor_Stop = true;
+            ElevatorMotor_Stop := true;
         }
     }
 
@@ -70,45 +70,45 @@ model Cabin {
     start Idle {
         // Обновляем current_floor по нижнему датчику зоны этажа
         always {
-            if FloorSensor_F1_Bottom { current_floor = 1; }
-            if FloorSensor_F2_Bottom { current_floor = 2; }
-            if FloorSensor_F3_Bottom { current_floor = 3; }
-            if FloorSensor_F4_Bottom { current_floor = 4; }
-            if FloorSensor_F5_Bottom { current_floor = 5; }
-            if FloorSensor_F6_Bottom { current_floor = 6; }
-            if FloorSensor_F7_Bottom { current_floor = 7; }
-            if FloorSensor_F8_Bottom { current_floor = 8; }
-            if FloorSensor_F9_Bottom { current_floor = 9; }
+            if FloorSensor_F1_Bottom { current_floor := 1; }
+            if FloorSensor_F2_Bottom { current_floor := 2; }
+            if FloorSensor_F3_Bottom { current_floor := 3; }
+            if FloorSensor_F4_Bottom { current_floor := 4; }
+            if FloorSensor_F5_Bottom { current_floor := 5; }
+            if FloorSensor_F6_Bottom { current_floor := 6; }
+            if FloorSensor_F7_Bottom { current_floor := 7; }
+            if FloorSensor_F8_Bottom { current_floor := 8; }
+            if FloorSensor_F9_Bottom { current_floor := 9; }
         }
         // Принимаем вызовы: кнопки кабины и кнопки вызова на этажах
         always {
-            if CabinButton_F1 { target_floor = 1; }
-            if CabinButton_F2 { target_floor = 2; }
-            if CabinButton_F3 { target_floor = 3; }
-            if CabinButton_F4 { target_floor = 4; }
-            if CabinButton_F5 { target_floor = 5; }
-            if CabinButton_F6 { target_floor = 6; }
-            if CabinButton_F7 { target_floor = 7; }
-            if CabinButton_F8 { target_floor = 8; }
-            if CabinButton_F9 { target_floor = 9; }
-            if FloorButton_F1 { target_floor = 1; }
-            if FloorButton_F2 { target_floor = 2; }
-            if FloorButton_F3 { target_floor = 3; }
-            if FloorButton_F4 { target_floor = 4; }
-            if FloorButton_F5 { target_floor = 5; }
-            if FloorButton_F6 { target_floor = 6; }
-            if FloorButton_F7 { target_floor = 7; }
-            if FloorButton_F8 { target_floor = 8; }
-            if FloorButton_F9 { target_floor = 9; }
+            if CabinButton_F1 { target_floor := 1; }
+            if CabinButton_F2 { target_floor := 2; }
+            if CabinButton_F3 { target_floor := 3; }
+            if CabinButton_F4 { target_floor := 4; }
+            if CabinButton_F5 { target_floor := 5; }
+            if CabinButton_F6 { target_floor := 6; }
+            if CabinButton_F7 { target_floor := 7; }
+            if CabinButton_F8 { target_floor := 8; }
+            if CabinButton_F9 { target_floor := 9; }
+            if FloorButton_F1 { target_floor := 1; }
+            if FloorButton_F2 { target_floor := 2; }
+            if FloorButton_F3 { target_floor := 3; }
+            if FloorButton_F4 { target_floor := 4; }
+            if FloorButton_F5 { target_floor := 5; }
+            if FloorButton_F6 { target_floor := 6; }
+            if FloorButton_F7 { target_floor := 7; }
+            if FloorButton_F8 { target_floor := 8; }
+            if FloorButton_F9 { target_floor := 9; }
         }
         // Дверь открыта пока в Idle
         always {
-            DoorOpen = true;
+            DoorOpen := true;
         }
         // Начать движение при наличии задания
         ref Moving: target_floor != 0;
         enter {
-            command = Stop;
+            command := Stop;
         }
     }
 
@@ -116,20 +116,20 @@ model Cabin {
     state Moving {
         // Непрерывно обновляем current_floor по датчикам
         always {
-            if FloorSensor_F1_Bottom { current_floor = 1; }
-            if FloorSensor_F2_Bottom { current_floor = 2; }
-            if FloorSensor_F3_Bottom { current_floor = 3; }
-            if FloorSensor_F4_Bottom { current_floor = 4; }
-            if FloorSensor_F5_Bottom { current_floor = 5; }
-            if FloorSensor_F6_Bottom { current_floor = 6; }
-            if FloorSensor_F7_Bottom { current_floor = 7; }
-            if FloorSensor_F8_Bottom { current_floor = 8; }
-            if FloorSensor_F9_Bottom { current_floor = 9; }
+            if FloorSensor_F1_Bottom { current_floor := 1; }
+            if FloorSensor_F2_Bottom { current_floor := 2; }
+            if FloorSensor_F3_Bottom { current_floor := 3; }
+            if FloorSensor_F4_Bottom { current_floor := 4; }
+            if FloorSensor_F5_Bottom { current_floor := 5; }
+            if FloorSensor_F6_Bottom { current_floor := 6; }
+            if FloorSensor_F7_Bottom { current_floor := 7; }
+            if FloorSensor_F8_Bottom { current_floor := 8; }
+            if FloorSensor_F9_Bottom { current_floor := 9; }
         }
         // Выбираем направление: выше — Up, ниже — Down
         always {
-            if target_floor > current_floor { command = Up; }
-            if target_floor < current_floor { command = Down; }
+            if target_floor > current_floor { command := Up; }
+            if target_floor < current_floor { command := Down; }
         }
         // Прибыли на целевой этаж
         ref AtFloor: target_floor = current_floor;
@@ -139,11 +139,11 @@ model Cabin {
     state AtFloor {
         // Дверь открыта всё время пребывания на этаже
         always {
-            DoorOpen = true;
+            DoorOpen := true;
         }
         enter {
-            command    = Stop;
-            target_floor = 0;
+            command    := Stop;
+            target_floor := 0;
         }
         // Ждём нажатия кнопки закрытия двери (DC = Door Close)
         ref Idle: CabinButton_DC;

@@ -4,7 +4,7 @@
 /// предупреждение Се11 о неявном приведении к bool.
 /// Правильный вариант: `ref Next: counter != 255;`
 
-var counter: [bit;8] = 0;
+var counter: [bit;8] := 0;
 
 start Counting {
     ref Done: counter + 1;

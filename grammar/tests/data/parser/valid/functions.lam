@@ -13,12 +13,12 @@ fn add(a: u8, b: u8) -> u8 {
 extern fn reset();
 
 model M {
-    var result: u8 = 0;
+    var result: u8 := 0;
     start S {
         always {
             // Вызов функции внутри always — только выражения
             debug(42);
-            result = add(1, 2);
+            result := add(1, 2);
         }
     }
 }

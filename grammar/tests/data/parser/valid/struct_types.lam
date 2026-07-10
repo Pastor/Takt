@@ -23,6 +23,6 @@ struct Rect {
 }
 
 // Пример 4: переменная структурного типа
-var w: Wrapper = 0;
+var w: Wrapper := 0;
 
 start S;

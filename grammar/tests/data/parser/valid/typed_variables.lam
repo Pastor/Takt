@@ -8,20 +8,20 @@ type Nibble = [bit;4];
 type Word   = [Byte;2];
 
 // ── Константы ───────────────────────────────────────────────────────────────
-const MAX:   Byte = 0xFF;
-const ZERO:  Flag = false;
-const ONE:   Flag = true;
-const HALF:  Byte = 0x80;
+const MAX:   Byte := 0xFF;
+const ZERO:  Flag := false;
+const ONE:   Flag := true;
+const HALF:  Byte := 0x80;
 
 // ── Порты с адресами ─────────────────────────────────────────────────────────
-in  INPUT:    Byte = 0x00100000;
-out OUTPUT:   Byte = 0x00200000;
-in  FLAG_BIT: Flag = 0x00300000;
+in  INPUT:    Byte := 0x00100000;
+out OUTPUT:   Byte := 0x00200000;
+in  FLAG_BIT: Flag := 0x00300000;
 
 // ── Переменные ───────────────────────────────────────────────────────────────
-var x:   Byte = 0;
-var y:   Flag = false;
-var arr: [Byte;4] = { 0, 0, 0, 0 };
+var x:   Byte := 0;
+var y:   Flag := false;
+var arr: [Byte;4] := { 0, 0, 0, 0 };
 
 // ── Минимальная модель для корректности АСД ──────────────────────────────────
 model M {
