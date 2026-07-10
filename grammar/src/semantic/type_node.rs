@@ -492,6 +492,7 @@ mod tests {
 /// - [`Struct`](TypeNode::Struct) — структурный тип (NI3).
 /// - [`Unsupported`](TypeNode::Unsupported) — неподдерживаемый тип (например, функциональный).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
+#[non_exhaustive]
 pub enum TypeNode {
     /// Тип ещё не определён (вывод типа в процессе).
     #[default]

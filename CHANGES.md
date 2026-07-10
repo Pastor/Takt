@@ -23,6 +23,13 @@
 
 ### Изменено
 
+- Фича 0018, подзадача 0018-03: P11 — `Printer::calculate_padding` использует
+  `" ".repeat(n)` (одна аллокация точной ёмкости) вместо посимвольного цикла;
+  P04b — `#[non_exhaustive]` на публичных enum `parser::ast::{Type, ModelElement,
+  StateElement, Expression, Statement}` и `semantic::type_node::TypeNode`
+  (внешняя совместимость по правилу 11; внутрикрейтовая исчерпывающая проверка
+  сохранена); P13 — аудит `new()`/`Default` показал адекватное покрытие,
+  изменений не потребовалось. Поведение не изменилось.
 - Фича 0018, подзадача 0018-02 (P05): «bool trap» `guard_enable` заменён на тип
   опций `generator::GenerateOptions` (`#[non_exhaustive]` + `Default` + `new()`,
   реэкспорт `grammar::GenerateOptions`). Проведён через трейт `Generator`,

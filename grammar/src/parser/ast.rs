@@ -133,6 +133,7 @@ pub type ParameterList = Vec<(Location, Option<Parameter>)>;
 /// Тип данных в языке Lam.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum Type {
     /// Адресный тип `порт[:бит]`.
     Address {
@@ -247,6 +248,7 @@ pub struct Model {
 /// Элемент модели верхнего уровня.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum ModelElement {
     /// Директива импорта.
     Import(ImportDefine),
@@ -307,6 +309,7 @@ pub struct StateDefine {
 /// Элемент состояния.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum StateElement {
     /// Переход к следующему состоянию (`next Имя`).
     Next(Identifier),
@@ -529,6 +532,7 @@ pub enum Member {
 /// сравнения, логику, обращение к массивам, вызовы функций и т.д.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum Expression {
     /// Доступ к элементу массива: `id[индекс]`.
     ArraySubscript(Location, Identifier, Box<Expression>),
@@ -961,6 +965,7 @@ impl FunctionDefine {
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 #[allow(clippy::large_enum_variant, clippy::type_complexity)]
+#[non_exhaustive]
 pub enum Statement {
     /// Блок операторов: `{ операторы* }`.
     Block {
