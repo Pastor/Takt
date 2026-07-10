@@ -1456,6 +1456,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             Token::Equal
             | Token::NotEqual
             | Token::Assign
+            | Token::ColonAssign
             | Token::Add
             | Token::Subtract
             | Token::Mul

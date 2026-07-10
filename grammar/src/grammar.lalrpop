@@ -112,29 +112,29 @@ ConditionDefine: ConditionDefine = {
 }
 
 VariableDefine: Box<VariableDefine> = {
-    <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
+    <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Variable {
             loc: Location::Source(file_no, l, r), typ, name, initializer: e
         })
     },
-    <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> "=" <e:Expression> <r:@R> ";" => {
+    <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> ":=" <e:Expression> <r:@R> ";" => {
         Box::new(VariableDefine::Constant {
             loc: Location::Source(file_no, l, r), typ, name, initializer: e
         })
     },
-    <l:@L> "in" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
+    <l:@L> "in" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
             loc: Location::Source(file_no, l, r), typ, name, initializer: e,
             direction: PortDirection::In,
         })
     },
-    <l:@L> "out" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
+    <l:@L> "out" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
             loc: Location::Source(file_no, l, r), typ, name, initializer: e,
             direction: PortDirection::Out,
         })
     },
-    <l:@L> "inout" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> ";" => {
+    <l:@L> "inout" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
             loc: Location::Source(file_no, l, r), typ, name, initializer: e,
             direction: PortDirection::InOut,
@@ -149,12 +149,12 @@ VariableDefine: Box<VariableDefine> = {
 // port не поддерживается внутри блоков — порты являются аппаратными маппингами
 // и объявляются только на уровне модели.
 LocalVariableDefine: Box<VariableDefine> = {
-    <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:("=" <Expression>)?> <r:@R> => {
+    <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> => {
         Box::new(VariableDefine::Variable {
             loc: Location::Source(file_no, l, r), typ, name, initializer: e
         })
     },
-    <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> "=" <e:Expression> <r:@R> => {
+    <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> ":=" <e:Expression> <r:@R> => {
         Box::new(VariableDefine::Constant {
             loc: Location::Source(file_no, l, r), typ, name, initializer: e
         })
@@ -416,7 +416,7 @@ Member: Member = {
 LoopCond: Expression = { LoopCondP14 }
 
 LoopCondP14: Expression = {
-    <a:@L> <l:LoopCondP13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:LoopCondP13> ":=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
     // Тернарный оператор в контексте loop-условия (правоассоциативный)
     <a:@L> <c:LoopCondP13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
     LoopCondP13,
@@ -433,7 +433,7 @@ LoopCondP12: Expression = {
 }
 
 LoopCondP11: Expression = {
-    <a:@L> <l:LoopCondP11> "==" <r:Precedence10> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:LoopCondP11> "=" <r:Precedence10> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
     <a:@L> <l:LoopCondP11> "!=" <r:Precedence10> <b:@R> => Expression::NotEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
     LoopCondP10,
 }
@@ -513,7 +513,7 @@ Expression: Expression = {
 }
 
 Precedence14: Expression = {
-    <a:@L> <l:Precedence13> "=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Precedence13> ":=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
     // Тернарный оператор: cond ? then : else (правоассоциативный, ниже присваивания)
     <a:@L> <c:Precedence13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
     Precedence13,
@@ -530,7 +530,7 @@ Precedence12: Expression = {
 }
 
 Precedence11: Expression = {
-    <a:@L> <l:Precedence11> "==" <r:Precedence10> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Precedence11> "=" <r:Precedence10> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
     <a:@L> <l:Precedence11> "!=" <r:Precedence10> <b:@R> => Expression::NotEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
     Precedence10,
 }
@@ -895,6 +895,7 @@ extern {
         "(" => Token::OpenParenthesis,
         ")" => Token::CloseParenthesis,
         "=" => Token::Assign,
+        ":=" => Token::ColonAssign,
         "==" => Token::Equal,
         "||" => Token::Or,
         "&&" => Token::And,
