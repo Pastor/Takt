@@ -114,10 +114,18 @@ pub enum Token<'input> {
     /// Оператор взятия остатка `%`.
     Modulo,
 
-    /// Оператор равенства `==`.
+    /// Оператор `==` (фича 0021: **выведен** из языка — в грамматике не
+    /// используется; при появлении в исходнике даёт ошибку разбора). Токен
+    /// сохранён для понятной диагностики «использовать `=`».
     Equal,
-    /// Оператор присваивания `=`.
+    /// Оператор `=` — **сравнение на равенство** (фича 0021, Option B) в
+    /// выражениях и условиях; в декларациях (`type`/`enum`/`model`/`cond`) —
+    /// определение имени. Присваивание значения — отдельный токен [`Token::ColonAssign`].
     Assign,
+    /// Оператор `:=` — **присваивание/инициализация значения** (фича 0021,
+    /// Option B; стиль ST/IEC 61131-3): в выражениях (`Expression::Assign`) и
+    /// инициализаторах `var`/`const`/`in`/`out`/`inout`.
+    ColonAssign,
 
     /// Оператор неравенства `!=`.
     NotEqual,
@@ -263,6 +271,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Modulo => write!(f, "%"),
             Token::Equal => write!(f, "=="),
             Token::Assign => write!(f, "="),
+            Token::ColonAssign => write!(f, ":="),
             Token::NotEqual => write!(f, "!="),
             Token::Not => write!(f, "!"),
             Token::ShiftLeft => write!(f, "<<"),
@@ -339,7 +348,7 @@ impl<'input> fmt::Display for Token<'input> {
 /// ```
 /// use grammar::parser::lexer::{Lexer, Token};
 ///
-/// let source = "var x = 42;";
+/// let source = "var x := 42;";
 /// let mut comments = Vec::new();
 /// let mut errors = Vec::new();
 /// let mut lexer = Lexer::new(source, 0, &mut comments, &mut errors);
@@ -347,7 +356,7 @@ impl<'input> fmt::Display for Token<'input> {
 /// let mut next_token = || lexer.next().map(|(_, token, _)| token);
 /// assert_eq!(next_token(), Some(Token::Variable));
 /// assert_eq!(next_token(), Some(Token::Identifier("x")));
-/// assert_eq!(next_token(), Some(Token::Assign));
+/// assert_eq!(next_token(), Some(Token::ColonAssign)); // `:=` — присваивание (фича 0021)
 /// assert_eq!(next_token(), Some(Token::Number(42i64)));
 /// assert_eq!(next_token(), Some(Token::Semicolon));
 /// assert_eq!(next_token(), None);
@@ -1007,7 +1016,18 @@ impl<'input> Lexer<'input> {
                 }
                 Some((i, '[')) => return Some((i, Token::OpenBracket, i + 1)),
                 Some((i, ']')) => return Some((i, Token::CloseBracket, i + 1)),
-                Some((i, ':')) => return Some((i, Token::Colon, i + 1)),
+                Some((i, ':')) => {
+                    // Фича 0021: `:=` — оператор присваивания (Option B). `::`
+                    // остаётся двумя токенами `Colon` (маx. munch не затрагивает,
+                    // т.к. здесь склеивается только `:` + `=`).
+                    return match self.chars.peek() {
+                        Some((_, '=')) => {
+                            self.chars.next();
+                            Some((i, Token::ColonAssign, i + 2))
+                        }
+                        _ => Some((i, Token::Colon, i + 1)),
+                    };
+                }
                 Some((i, '?')) => return Some((i, Token::Question, i + 1)),
                 Some((i, '~')) => return Some((i, Token::BitwiseNot, i + 1)),
                 // Пробельные символы игнорируются
