@@ -144,8 +144,8 @@ Lam — **декларативный, ориентированный на сос
 |----------------------|----------------------------------------------|
 | `import "file.lam";` | Импорт другого файла                         |
 | `type T = ...;`      | Псевдоним типа                               |
-| `var x: T = v;`      | Глобальная переменная                        |
-| `const C: T = v;`    | Константа                                    |
+| `var x: T := v;`     | Глобальная переменная                        |
+| `const C: T := v;`   | Константа                                    |
 | `fn f(...) {...}`    | Функция                                      |
 | `extern fn f(...);`  | Прототип внешней функции                     |
 | `enum E {...}`       | Перечисление                                 |
@@ -197,10 +197,10 @@ struct Point { x: u8, y: u8 }
 
 | Уровень | Оператор          | Описание                     | Ассоциативность |
 |---------|-------------------|------------------------------|-----------------|
-| 14      | `=`               | Присваивание                 | правая          |
+| 14      | `:=`              | Присваивание                 | правая          |
 | 13      | `\|\|`            | Логическое ИЛИ               | левая           |
 | 12      | `&&`              | Логическое И                 | левая           |
-| 11      | `==` `!=`         | Равенство                    | левая           |
+| 11      | `=` `!=`          | Равенство                    | левая           |
 | 10      | `<` `>` `<=` `>=` | Сравнение                    | левая           |
 | 9       | `\|`              | Побитовое ИЛИ                | левая           |
 | 8       | `^`               | Побитовое XOR                | левая           |
@@ -272,9 +272,9 @@ type Word = [u8;4];
 ```lam
 var x;               // без типа и значения
 var x: u8;           // с явным типом
-var x = 100;         // тип выводится
-var x: u8 = 50;      // явный тип и значение
-const MAX: u8 = 255; // константа
+var x := 100;        // тип выводится
+var x: u8 := 50;     // явный тип и значение
+const MAX: u8 := 255; // константа
 ```
 
 ### Функции
@@ -308,10 +308,10 @@ model_element = import_define | type_define | variable_define
               | named_block | ";" ;
 
 variable_define
-    = "var"   identifier [ ":" type ] [ "=" expression ] ";"
-    | "const" identifier [ ":" type ] "=" expression ";"
-    | "in"    identifier [ ":" type ] [ "=" expression ] ";"
-    | "out"   identifier [ ":" type ] [ "=" expression ] ";" ;
+    = "var"   identifier [ ":" type ] [ ":=" expression ] ";"
+    | "const" identifier [ ":" type ] ":=" expression ";"
+    | "in"    identifier [ ":" type ] [ ":=" expression ] ";"
+    | "out"   identifier [ ":" type ] [ ":=" expression ] ";" ;
 
 model        = "model" identifier [ "=" expression ]
                "{" { model_element } "}" ;
@@ -331,35 +331,44 @@ state_element
 
 ## 5. Семантика
 
-### Два значения оператора `=`
+### Присваивание `:=` и сравнение `=`
 
-В Lam оператор `=` имеет **разный смысл** в зависимости от контекста:
+В Lam присваивание и сравнение разведены по разным знакам (стиль ST/IEC 61131-3,
+привычный инженерам АСУ ТП):
 
-| Контекст                | Оператор `=` | Смысл              |
-|-------------------------|--------------|--------------------|
-| Выражение               | `x = 0`      | Присваивание       |
-| Условие (`cond`, `ref`) | `x = 0`      | Проверка равенства |
+| Знак  | Смысл                                   | Где                                        |
+|-------|-----------------------------------------|--------------------------------------------|
+| `:=`  | Присваивание / инициализация значения   | выражения, тела, инициализаторы `var`/`const`/портов |
+| `=`   | Сравнение на равенство                  | выражения **и** условия (`cond`, `ref`)    |
+| `<=`  | «Меньше или равно» (реляционный)        | выражения и условия                        |
+
+Оператор `==` из языка **выведен** — равенство всегда пишется `=`. Знак `=`
+дополнительно служит связкой в **определениях имён**: `type T = …`,
+`enum E { A = 0 }`, `model M = …`, `start Main = …`, `cond C = …` — здесь `=`
+вводит определение, а не присваивает значение переменной.
 
 ```lam
-cond IsZero = x = 0;    // = внутри cond — проверка равенства
-always { x = 0; }       // = в выражении — присваивание
-if x == 0 { ... }       // == в выражении — сравнение
+always { x := 0; }      // := — присваивание значения
+if x = 0 { ... }        // = в выражении — сравнение на равенство
+cond IsZero = x = 0;    // первое = — связка cond, второе = — сравнение
+ref Green: timer = 255; // = в условии перехода — сравнение
+var y: u8 := 5;         // := — инициализация переменной
 ```
 
 ### Управляющие конструкции
 
 ```lam
 // if — без скобок вокруг условия
-if x > 0 { x = x - 1; }
-else if x == 0 { x = 10; }
-else { x = 0; }
+if x > 0 { x := x - 1; }
+else if x = 0 { x := 10; }
+else { x := 0; }
 
 // loop — бесконечный или с условием
-loop { x = x + 1; if x >= 10 { break; } }
-loop x > 0 { x = x - 1; }
+loop { x := x + 1; if x >= 10 { break; } }
+loop x > 0 { x := x - 1; }
 
 // for
-for var i = 0; i < 10; i = i + 1 {
+for var i := 0; i < 10; i := i + 1 {
     // тело
 }
 ```
@@ -435,23 +444,23 @@ start Main = Minimal;
 type u8 = [bit;8];
 
 model TrafficLight {
-    var timer: u8 = 0;
+    var timer: u8 := 0;
 
     start Red {
-        enter  { timer = 0; }
-        always { timer = timer + 1; }
+        enter  { timer := 0; }
+        always { timer := timer + 1; }
         ref Green: timer = 255;
     }
 
     state Green {
-        enter  { timer = 0; }
-        always { timer = timer + 1; }
+        enter  { timer := 0; }
+        always { timer := timer + 1; }
         ref Yellow: timer = 100;
     }
 
     state Yellow {
-        enter  { timer = 0; }
-        always { timer = timer + 1; }
+        enter  { timer := 0; }
+        always { timer := timer + 1; }
         ref Red: timer = 50;
     }
 }
@@ -469,7 +478,7 @@ extern fn debug(msg: u8);
 fn toggle(val: u8) -> u8 { return ~val; }
 
 model ButtonLED {
-    var state: u8 = 0;
+    var state: u8 := 0;
 
     in  BTN: bit;   // входной порт — кнопка
     out LED: u8;    // выходной порт — светодиод
@@ -480,8 +489,8 @@ model ButtonLED {
 
     state Active {
         enter {
-            state = toggle(state);
-            LED   = state;
+            state := toggle(state);
+            LED   := state;
             debug(state);
         }
         next Idle;
@@ -498,25 +507,25 @@ type u8 = [bit;8];
 
 enum Command { Up, Down, Stop }
 
-var command: Command = Stop;
+var command: Command := Stop;
 
 model Motor {
     start Idle {
         ref Up:   command = Up;
         ref Down: command = Down;
-        enter { ElevatorMotor_Stop = true; }
+        enter { ElevatorMotor_Stop := true; }
     }
     state Up {
         ref Stop: command = Stop | ElevatorMotor_SensorU;
-        always   { ElevatorMotor_Up = true; }
+        always   { ElevatorMotor_Up := true; }
     }
     state Down {
         ref Stop: command = Stop | ElevatorMotor_SensorD;
-        always   { ElevatorMotor_Down = true; }
+        always   { ElevatorMotor_Down := true; }
     }
     state Stop {
         next Idle;
-        always { ElevatorMotor_Stop = true; }
+        always { ElevatorMotor_Stop := true; }
     }
 
     out ElevatorMotor_Up:    bit;
@@ -635,7 +644,8 @@ start System = (Init + Startup) + (Run | Halt);
 ### Типичные ошибки пользователей
 
 - Забытое `start` в модели → SE-011.
-- Использование `=` вместо `==` в выражении if → присваивание вместо сравнения.
+- Использование `:=` вместо `=` в условии (`if`, `cond`, `ref`) → присваивание
+  вместо сравнения (в большинстве позиций условия — ошибка разбора).
 - Запись в `in`-порт или чтение из `out`-порта → ошибка направления.
 - Перекрывающиеся условия в `ref` → SE-042, недетерминированный переход.
 
@@ -709,8 +719,8 @@ model Motor {
 ### Адресные литералы (MMIO)
 
 ```lam
-var LED : u8  = 0x00100000;      // привязка к адресу
-var BTN : bit = 0x00200000:0;    // адрес:номер_бита
+var LED : u8  := 0x00100000;      // привязка к адресу
+var BTN : bit := 0x00200000:0;    // адрес:номер_бита
 ```
 
 ### Внешние функции (FFI)
@@ -799,7 +809,13 @@ cargo install --path grammar --bin lamc
 
 ### Версия
 
-Документ актуален для ветки `v2`. Список изменений — в файле [`CHANGES.md`](CHANGES.md).
+**Версия языка: 0.1.0** (крейт `grammar`). Документ актуален для ветки `v2`.
+Список изменений — в файле [`CHANGES.md`](CHANGES.md).
+
+> **Слом совместимости 0.0.x → 0.1.0 (фича 0021):** присваивание записывается
+> `:=` (было `=`), сравнение на равенство — `=` (было `==`); оператор `==`
+> выведен. Реляционный `<=` без изменений. Старые `.lam` переводятся
+> AST-мигратором (см. `docs/development/0021-03-tool/`).
 
 ### Композиция моделей
 
