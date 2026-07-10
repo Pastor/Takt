@@ -12,4 +12,5 @@
 | 0018 | Приведение кода к docs/CODE.md | [0018-code-guidelines.md](0018-code-guidelines.md) | нет (рефакторинг без слома API) |
 | 0019 | Унификация грамматик Condition/Expression | [0019-condition-expression-unification.md](0019-condition-expression-unification.md) | нет (внутренний рефактор грамматики) |
 | 0020 | Адрес порта отдельно от объявления | [0020-port-address-decl.md](0020-port-address-decl.md) | аддитивно (инлайн-форма сохраняется) |
+| 0021 | Смена операторов: `<=` присваивание, `=` сравнение | [0021-swap-assign-compare.md](0021-swap-assign-compare.md) | слом (мажорная версия языка + мигратор) |
 
