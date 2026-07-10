@@ -27,7 +27,8 @@ for sim_file in "$SIM_DIR"/*.json; do
   # Имя модели — часть до первого подчёркивания: stacker
   model="${base%%_*}"
   lam_file="$SCRIPT_DIR/examples/${model}.lam"
-  gif_file="$SCRIPT_DIR/examples/simulations/${base}.gif"
+  output_path="$SCRIPT_DIR/examples/simulations/graphics"
+  config_file="$SCRIPT_DIR/examples/graphics-configs/default_svg.json"
 
   if [[ ! -f "$lam_file" ]]; then
     echo "[ ПРОПУСК ] $base  (не найден ${model}.lam)"
@@ -42,7 +43,7 @@ for sim_file in "$SIM_DIR"/*.json; do
 
   # Запуск симуляции
   # shellcheck disable=SC2086
-  if output="$("$BINARY" "$lam_file" -s "$sim_file" -g "$gif_file" $step_arg 2>&1)"; then
+  if output="$("$BINARY" "$lam_file" -s "$sim_file" -o "$output_path" --graphics-config $config_file $step_arg 2>&1)"; then
     echo "[  OK  ] $base"
     ((pass++)) || true
   else

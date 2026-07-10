@@ -1,11 +1,45 @@
 use crate::context::Context;
 use crate::gif::GifRecorder;
-use crate::gif_config::GifConfig;
+use crate::graphics_config::{GraphicsConfig, OutputMode};
 use crate::json_input::{Guard, SimStep, json_to_value};
+use crate::svg::SvgRecorder;
 use crate::unit::viewport::{CachedLayout, LegendData, compute_layout, render_from_layout};
 use crate::unit::{TickResult, Unit};
 use crate::value::Value;
 use std::path::PathBuf;
+
+// ── Диспетчер режимов записи графики ─────────────────────────────────────────
+
+pub(crate) enum GraphicsRecorder {
+    Gif(GifRecorder),
+    Svg(SvgRecorder),
+}
+
+impl GraphicsRecorder {
+    fn add_frame(
+        &mut self,
+        viewport: &crate::unit::viewport::Viewport,
+        w: u32,
+        h: u32,
+        delay: Option<u16>,
+    ) -> Result<crate::gif::FrameTiming, String> {
+        match self {
+            Self::Gif(r) => r.add_frame(viewport, w, h, delay),
+            Self::Svg(r) => r.add_frame(viewport, w, h, delay),
+        }
+    }
+
+    fn save(self) -> Result<(), String> {
+        match self {
+            Self::Gif(r) => r.save(),
+            Self::Svg(r) => r.save(),
+        }
+    }
+
+    fn is_svg(&self) -> bool {
+        matches!(self, Self::Svg(_))
+    }
+}
 
 // ── Имена портов из модели ───────────────────────────────────────────────────
 
@@ -37,12 +71,12 @@ pub struct SimulationRunner {
     unit: Unit,
     sim_steps: Vec<SimStep>,
     max_steps: Option<usize>,
-    gif_recorder: Option<GifRecorder>,
+    graphics_recorder: Option<GraphicsRecorder>,
     gif_frame_size: Option<(u32, u32)>,
     port_names: PortNames,
     model_name: Option<String>,
-    gif_config: GifConfig,
-    // Раскладка графа вычисляется один раз перед первым кадром GIF.
+    gif_config: GraphicsConfig,
+    // Раскладка графа вычисляется один раз перед первым кадром.
     cached_layout: Option<CachedLayout>,
 }
 
@@ -51,32 +85,49 @@ impl SimulationRunner {
         unit: Unit,
         sim_steps: Vec<SimStep>,
         max_steps: Option<usize>,
-        gif_output: Option<&PathBuf>,
+        output_dir: Option<&PathBuf>,
+        input_stem: &str,
+        output_mode: OutputMode,
         port_names: PortNames,
         model_name: Option<String>,
-        gif_config: GifConfig,
-    ) -> Self {
-        let (gif_recorder, gif_frame_size) = if let Some(gif_path) = gif_output {
+        gif_config: GraphicsConfig,
+    ) -> Result<Self, String> {
+        let (graphics_recorder, gif_frame_size) = if let Some(dir) = output_dir {
+            std::fs::create_dir_all(dir)
+                .map_err(|e| format!("Не удалось создать директорию {}: {e}", dir.display()))?;
             let size = (
                 (gif_config.canvas.width + gif_config.legend.width) as u32,
                 gif_config.canvas.height as u32,
             );
-            let recorder = GifRecorder::new(gif_path, gif_config.canvas.frame_delay_cs);
+            let recorder = match output_mode {
+                OutputMode::Gif => {
+                    let gif_path = dir.join(format!("{input_stem}.gif"));
+                    GraphicsRecorder::Gif(GifRecorder::new(
+                        &gif_path,
+                        gif_config.canvas.frame_delay_cs,
+                    ))
+                }
+                OutputMode::Svg => GraphicsRecorder::Svg(SvgRecorder::new(
+                    dir.clone(),
+                    input_stem.to_string(),
+                    &gif_config,
+                )),
+            };
             (Some(recorder), Some(size))
         } else {
             (None, None)
         };
-        Self {
+        Ok(Self {
             unit,
             sim_steps,
             max_steps,
-            gif_recorder,
+            graphics_recorder,
             gif_frame_size,
             port_names,
             model_name,
             gif_config,
             cached_layout: None,
-        }
+        })
     }
 
     /// Запускает главный цикл симуляции.
@@ -106,8 +157,8 @@ impl SimulationRunner {
             // Выводим информацию о шаге
             self.print_step(completed);
 
-            // Записываем кадры в GIF (если нужно)
-            if self.gif_recorder.is_some() {
+            // Записываем кадры в графику (если нужно)
+            if self.graphics_recorder.is_some() {
                 // Highlight-кадры для каждого сработавшего перехода (включая параллельные)
                 let transitions = self.unit.take_last_transitions();
                 for (from, to, _pred) in &transitions {
@@ -134,9 +185,9 @@ impl SimulationRunner {
         Ok(RunResult::StepsReached { steps: completed })
     }
 
-    /// Сохраняет GIF-файл (вызывается после завершения run).
-    pub fn save_gif(self) -> Result<(), String> {
-        if let Some(recorder) = self.gif_recorder {
+    /// Сохраняет результат записи (вызывается после завершения run).
+    pub fn save_output(self) -> Result<(), String> {
+        if let Some(recorder) = self.graphics_recorder {
             recorder.save()?;
         }
         Ok(())
@@ -302,6 +353,11 @@ impl SimulationRunner {
         let legend = build_legend(&self.unit, &self.port_names);
 
         let t_vp = std::time::Instant::now();
+        let is_svg = self
+            .graphics_recorder
+            .as_ref()
+            .map(|r| r.is_svg())
+            .unwrap_or(false);
         let viewport = render_from_layout(
             self.cached_layout.as_ref().unwrap(),
             &self.gif_config,
@@ -309,6 +365,7 @@ impl SimulationRunner {
             Some(&legend),
             self.model_name.as_deref(),
             highlighted_edge,
+            is_svg,
         )
         .map_err(|d| format!("Ошибка viewport: {}", d.message))?;
         let vp_ms = t_vp.elapsed().as_millis();
@@ -319,22 +376,38 @@ impl SimulationRunner {
         } else {
             None
         };
-        let frame_timing = if let Some(rec) = &mut self.gif_recorder {
-            Some(rec.add_frame(&viewport, w, h, delay)?)
+        let frame_timing = if let Some(rec) = &mut self.graphics_recorder {
+            Some((rec.is_svg(), rec.add_frame(&viewport, w, h, delay)?))
         } else {
             None
         };
 
-        // Вывод тайминга GIF-кадра
-        if let Some(ft) = frame_timing {
-            let rast_detail = format!(
-                "svg={} мс  usvg={} мс  render={} мс  quant={} мс",
-                ft.serial_ms, ft.parse_ms, ft.render_ms, ft.quant_ms
-            );
-            if let Some(lms) = layout_ms {
-                println!("           GIF:  раскладка={lms} мс  viewport={vp_ms} мс  {rast_detail}");
+        // Вывод тайминга
+        if let Some((is_svg, ft)) = frame_timing {
+            if is_svg {
+                if let Some(lms) = layout_ms {
+                    println!(
+                        "           SVG:  раскладка={lms} мс  viewport={vp_ms} мс  запись={} мс",
+                        ft.serial_ms
+                    );
+                } else {
+                    println!(
+                        "           SVG:  viewport={vp_ms} мс  запись={} мс",
+                        ft.serial_ms
+                    );
+                }
             } else {
-                println!("           GIF:  viewport={vp_ms} мс  {rast_detail}");
+                let rast_detail = format!(
+                    "svg={} мс  usvg={} мс  render={} мс  quant={} мс",
+                    ft.serial_ms, ft.parse_ms, ft.render_ms, ft.quant_ms
+                );
+                if let Some(lms) = layout_ms {
+                    println!(
+                        "           GIF:  раскладка={lms} мс  viewport={vp_ms} мс  {rast_detail}"
+                    );
+                } else {
+                    println!("           GIF:  viewport={vp_ms} мс  {rast_detail}");
+                }
             }
         }
 

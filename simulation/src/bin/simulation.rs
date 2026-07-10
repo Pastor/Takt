@@ -9,7 +9,7 @@ use grammar::parser::ast::PortDirection;
 use grammar::semantic::VariableNode;
 use grammar::semantic::tree::construct_model;
 use simulation::build_unit;
-use simulation::gif_config::GifConfig;
+use simulation::graphics_config::GraphicsConfig;
 use simulation::json_input::load_sim_steps;
 use simulation::runner::{PortNames, RunResult, SimulationRunner};
 use simulation::state_io;
@@ -32,9 +32,10 @@ struct Args {
     #[arg(short = 'n', long = "steps", value_name = "N")]
     steps: Option<usize>,
 
-    /// Путь для записи GIF-анимации (если указан — запись включена)
-    #[arg(short = 'g', long = "gif", value_name = "FILE")]
-    gif_output: Option<PathBuf>,
+    /// Директория для сохранения графики (GIF или SVG).
+    /// Режим выбирается полем output_mode в --graphics-config ("gif" по умолчанию).
+    #[arg(short = 'o', long = "output", value_name = "DIR")]
+    output_dir: Option<PathBuf>,
 
     /// JSON-файл с входными данными и проверками
     #[arg(short = 's', long = "sim-file", value_name = "FILE")]
@@ -49,9 +50,9 @@ struct Args {
     save_state: Option<PathBuf>,
 
     /// Путь к JSON-файлу с настройками генерации GIF
-    /// (см. examples/gif-configs/*.json)
-    #[arg(long = "gif-config", value_name = "FILE")]
-    gif_config: Option<PathBuf>,
+    /// (см. examples/graphics-configs/*.json)
+    #[arg(long = "graphics-config", value_name = "FILE")]
+    graphics_config: Option<PathBuf>,
 }
 
 // ── Точка входа ───────────────────────────────────────────────────────────────
@@ -114,21 +115,32 @@ fn run(args: Args) -> Result<RunResult, String> {
     };
 
     // 6а. Загружаем конфигурацию GIF (если указан --gif-config)
-    let gif_config = match &args.gif_config {
-        Some(path) => GifConfig::from_file(path)?,
-        None => GifConfig::default(),
+    let gif_config = match &args.graphics_config {
+        Some(path) => GraphicsConfig::from_file(path)?,
+        None => GraphicsConfig::default(),
     };
 
     // 7. Создаём и запускаем runner
+    // Имя выходного файла берётся из файла симуляции; если он не задан — из LAM-файла.
+    let input_stem = args
+        .sim_file
+        .as_ref()
+        .or(Some(&args.lam_file))
+        .and_then(|p| p.file_stem())
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "output".to_string());
+    let output_mode = gif_config.output_mode.clone();
     let mut runner = SimulationRunner::new(
         unit,
         sim_steps,
         args.steps,
-        args.gif_output.as_ref(),
+        args.output_dir.as_ref(),
+        &input_stem,
+        output_mode,
         port_names,
         model_name,
         gif_config,
-    );
+    )?;
 
     let result = runner.run()?;
 
@@ -138,8 +150,8 @@ fn run(args: Args) -> Result<RunResult, String> {
         println!("Состояние сохранено в {}", path.display());
     }
 
-    // 8. Сохраняем GIF (потребляет runner)
-    runner.save_gif()?;
+    // 8. Сохраняем вывод графики (потребляет runner)
+    runner.save_output()?;
 
     Ok(result)
 }
