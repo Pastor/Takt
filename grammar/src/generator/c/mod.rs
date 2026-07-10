@@ -233,24 +233,24 @@ mod tests {
     const SRC: &str = r#"
 type u8 = [bit;8];
 
-in sensors_1: u8 = 0x100000000;
-in sensors_2: u8 = 0x200000000;
+in sensors_1: u8 := 0x100000000;
+in sensors_2: u8 := 0x200000000;
 cond AtFloor8 = sensors_1.0 & sensors_1.1;
 cond AtFloor9 = sensors_2.0 & sensors_2.1;
 
 enum Direction { North, South, East, West }
 enum Priority { Low = 0, Medium = 5, High = 10 }
-var heading: Direction = 0;
+var heading: Direction := 0;
 model Robot {
-    var speed: u8 = 0;
-    var active: bit = false;
+    var speed: u8 := 0;
+    var active: bit := false;
 
     model Idle {
         start Start {
                 enter {
-                speed = 0;
-                active = false;
-                heading = North;
+                speed := 0;
+                active := false;
+                heading := North;
             }
             ref End: active;
         }
@@ -263,8 +263,8 @@ model Robot {
 
     state Moving {
         always {
-            heading = West;
-            speed = 100;
+            heading := West;
+            speed := 100;
             debug("Moving");
         }
         ref Idle: AtFloor8 & heading = West;
@@ -319,11 +319,11 @@ start Main = Robot;
         // Константы используются в always, чтобы попасть в UsageSet.
         let src = r#"
 type u8 = [bit;8];
-const MATRIX: u8 = 0;
-const NUMB: u8 = 255;
-in SENSOR: u8 = 0x100000;
-var v: u8 = 0;
-start Main { always { v = MATRIX; v = NUMB; } }
+const MATRIX: u8 := 0;
+const NUMB: u8 := 255;
+in SENSOR: u8 := 0x100000;
+var v: u8 := 0;
+start Main { always { v := MATRIX; v := NUMB; } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
@@ -372,9 +372,9 @@ start Main { always { v = MATRIX; v = NUMB; } }
 type u8 = [bit;8];
 extern fn log_val(v: u8);
 model Counter {
-    var x: u8 = 0;
+    var x: u8 := 0;
     start Running {
-        always { x = x + 1; log_val(x); }
+        always { x := x + 1; log_val(x); }
     }
 }
 start Root = Counter;
@@ -403,11 +403,11 @@ start Root = Counter;
 type u8 = [bit;8];
 extern fn log_val(v: u8);
 model Counter {
-    var x: u8 = 0;
+    var x: u8 := 0;
     start Running {
         always {
-            var delta: u8 = 1;
-            x = x + delta;
+            var delta: u8 := 1;
+            x := x + delta;
             log_val(x);
         }
     }
@@ -435,12 +435,12 @@ start Root = Counter;
     fn test_guard_formula_codegen() {
         let src = r#"
             type u8 = [bit;8];
-            var x: u8 = 0;
+            var x: u8 := 0;
             :[Guard] x < 100;
             start Running {
                 :[Guard] x >= 0;
                 always {
-                    x = x + 1;
+                    x := x + 1;
                     :[Guard] x > 0;
                 }
             }

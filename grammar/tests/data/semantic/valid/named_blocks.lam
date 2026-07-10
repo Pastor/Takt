@@ -5,24 +5,24 @@
 // - exit-блока: выполняется при выходе из состояния
 // - always-блока: выполняется при каждом такте
 
-var led: bit = false;
+var led: bit := false;
 
 start Active {
     ref Idle: led;
     enter {
-        led = true;
+        led := true;
     }
     exit {
-        led = false;
+        led := false;
     }
     always {
-        led = led;
+        led := led;
     }
 }
 
 state Idle {
     ref Active: true;
     enter {
-        led = false;
+        led := false;
     }
 }

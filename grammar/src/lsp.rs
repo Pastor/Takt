@@ -387,7 +387,7 @@ pub fn position_to_offset(source: &str, position: Position) -> Option<usize> {
 /// use grammar::semantic::index::SemanticNodeKind;
 /// use lsp_types::Position;
 ///
-/// let src = "var counter: bit = false; start S;";
+/// let src = "var counter: bit := false; start S;";
 /// let (ast, _) = parse(src, 0).unwrap();
 /// let model = construct_model(&ast, None, &[]).unwrap();
 ///
@@ -1555,8 +1555,8 @@ mod tests {
     /// Минимально корректный Lam-файл с переменной, функцией, типом, перечислением.
     const VALID_SRC: &str = r#"
 type u8 = [bit;8];
-var counter: [bit;8] = 0;
-const LIMIT: [bit;8] = 10;
+var counter: [bit;8] := 0;
+const LIMIT: [bit;8] := 10;
 cond IsReady = counter = 0;
 enum Color { Red = 0, Green = 1, Blue = 2 }
 extern fn add(a: [bit;8], b: [bit;8]) -> [bit;8];
@@ -1641,7 +1641,7 @@ start S = M;
     /// Курсор в конце простого слова.
     #[test]
     fn test_word_at_position_simple() {
-        let src = "var hello = 0;";
+        let src = "var hello := 0;";
         let word = word_at_position(src, Position::new(0, 7));
         assert_eq!(word, Some("hello".to_string()));
     }
@@ -1658,7 +1658,7 @@ start S = M;
     /// Курсор на знаке «=» между двумя пробелами — слово не найдено.
     #[test]
     fn test_word_at_position_on_space() {
-        let src = "var x = 0;";
+        let src = "var x := 0;";
         // Позиция 6 — символ «=» не является буквой/цифрой/подчёркиванием.
         // «var x » (6 символов) → left = " ", last non-word index = 5 → start = 6.
         // «= 0;» → «=» не алфавитно-цифровой → find вернёт 0 → end = 6.
@@ -1674,7 +1674,7 @@ start S = M;
     /// Несуществующая строка — None.
     #[test]
     fn test_word_at_position_nonexistent_line() {
-        let src = "var x = 0;";
+        let src = "var x := 0;";
         let word = word_at_position(src, Position::new(99, 0));
         assert_eq!(word, None);
     }
@@ -1698,7 +1698,7 @@ start S = M;
     /// Автодополнение по корректному коду включает идентификаторы из семантики.
     #[test]
     fn test_completion_items_contains_semantic() {
-        let src = "var myVar: [bit;8] = 0; start S;";
+        let src = "var myVar: [bit;8] := 0; start S;";
         let items = completion_items(src);
         let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
         assert!(
@@ -1723,7 +1723,7 @@ start S = M;
     /// Hover над переменной показывает тип.
     #[test]
     fn test_hover_variable() {
-        let src = "var counter: [bit;8] = 0; start S;";
+        let src = "var counter: [bit;8] := 0; start S;";
         let hover = hover_info(src, Position::new(0, 5));
         assert!(
             hover.is_some(),
@@ -1815,7 +1815,7 @@ start S = M;
     /// вместе с типом переменной.
     #[test]
     fn test_hover_variable_with_docs() {
-        let src = "/// Счётчик тактов.\nvar counter: [bit;8] = 0; start S;";
+        let src = "/// Счётчик тактов.\nvar counter: [bit;8] := 0; start S;";
         // "counter" находится на строке 1 (0-indexed), символ 4 ("var " = 4)
         let hover = hover_info(src, Position::new(1, 4));
         assert!(
@@ -1842,7 +1842,7 @@ start S = M;
     /// Если `///`-комментарии отсутствуют, hover возвращает только тип переменной.
     #[test]
     fn test_hover_variable_without_docs() {
-        let src = "var counter: [bit;8] = 0; start S;";
+        let src = "var counter: [bit;8] := 0; start S;";
         let hover = hover_info(src, Position::new(0, 5));
         assert!(
             hover.is_some(),

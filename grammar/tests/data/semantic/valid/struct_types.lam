@@ -16,8 +16,8 @@ struct Flags {
 }
 
 // Переменная структурного типа
-var origin: Point = 0;
-var ctrl: Flags = 0;
+var origin: Point := 0;
+var ctrl: Flags := 0;
 
 // Конечный автомат с использованием структурных типов
 start Idle {

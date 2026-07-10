@@ -9,6 +9,6 @@
 // (Пути файлов задаются через search_paths при вызове construct_model)
 import { SharedModel as M, SharedType as ST } from "shared.lam";
 
-var x: ST = 0;
+var x: ST := 0;
 
 start Entry = M { }

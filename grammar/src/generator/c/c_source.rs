@@ -494,10 +494,10 @@ mod tests {
         // чтобы константа попала в UsageSet и не была отфильтрована.
         let src = r#"
 type u8 = [bit;8];
-const LIMIT: u8 = 100;
-in SENSOR: u8 = 0x100000;
-var v: u8 = 0;
-start Main { always { v = LIMIT; } }
+const LIMIT: u8 := 100;
+in SENSOR: u8 := 0x100000;
+var v: u8 := 0;
+start Main { always { v := LIMIT; } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
@@ -589,7 +589,7 @@ start Main { always { check(0); } }
         let src = r#"
 type u8 = [bit;8];
 model Controller {
-    var temperature: u8 = 0;
+    var temperature: u8 := 0;
     fn clamp(value: u8) -> u8 {
         if value < temperature { return temperature; }
         return value;
@@ -918,7 +918,7 @@ state End;";
     #[test]
     fn test_bit_access_var_read_in_condition() {
         let src =
-            "type u8 = [bit;8]; var flags: u8 = 0; start S { ref Done: flags.2; } state Done;";
+            "type u8 = [bit;8]; var flags: u8 := 0; start S { ref Done: flags.2; } state Done;";
         let code = generate_source_str(src);
         assert!(
             code.contains("((model->flags >> 2) & 1u)"),
@@ -931,7 +931,7 @@ state End;";
     #[test]
     fn test_bit_access_port_read_in_condition() {
         let src =
-            "type u8 = [bit;8]; in BTN: u8 = 0x200000; start S { ref Done: BTN.0; } state Done;";
+            "type u8 = [bit;8]; in BTN: u8 := 0x200000; start S { ref Done: BTN.0; } state Done;";
         let code = generate_source_str(src);
         assert!(
             code.contains("(((*model->read_numeric)(ROOT_BTN, model->userdata) >> 0) & 1u)"),
@@ -942,7 +942,7 @@ state End;";
     /// Чтение бита переменной в блоке `always`: `x = flags.3` → `((model->flags >> 3) & 1u)`
     #[test]
     fn test_bit_access_var_read_in_always() {
-        let src = "type u8 = [bit;8]; var flags: u8 = 0; var x: u8 = 0; start S { always { x = flags.3; } ref Done: true; } state Done;";
+        let src = "type u8 = [bit;8]; var flags: u8 := 0; var x: u8 := 0; start S { always { x := flags.3; } ref Done: true; } state Done;";
         let code = generate_source_str(src);
         assert!(
             code.contains("((model->flags >> 3) & 1u)"),
@@ -953,7 +953,7 @@ state End;";
     /// Запись бита переменной: `flags.3 = true` → bit-set идиома C
     #[test]
     fn test_bit_access_var_write_in_always() {
-        let src = "type u8 = [bit;8]; var flags: u8 = 0; start S { always { flags.3 = true; } ref Done: true; } state Done;";
+        let src = "type u8 = [bit;8]; var flags: u8 := 0; start S { always { flags.3 := true; } ref Done: true; } state Done;";
         let code = generate_source_str(src);
         assert!(
             code.contains("model->flags = (model->flags & ~(1u << 3)) | ((true & 1u) << 3)"),
@@ -965,7 +965,7 @@ state End;";
     /// Корневая модель: tick получает `model`, поэтому используется `model->`.
     #[test]
     fn test_bit_access_port_read_in_always() {
-        let src = "type u8 = [bit;8]; in BTN: u8 = 0x200000; var x: u8 = 0; start S { always { x = BTN.0; } ref Done: true; } state Done;";
+        let src = "type u8 = [bit;8]; in BTN: u8 := 0x200000; var x: u8 := 0; start S { always { x := BTN.0; } ref Done: true; } state Done;";
         let code = generate_source_str(src);
         assert!(
             code.contains("(((*model->read_numeric)(ROOT_BTN, model->userdata) >> 0) & 1u)"),
@@ -977,7 +977,7 @@ state End;";
     /// Корневая модель: используется `model->` (не `main->`).
     #[test]
     fn test_bit_access_port_write_in_always() {
-        let src = "type u8 = [bit;8]; out LED: u8 = 0x100000; start S { always { LED.7 = true; } ref Done: true; } state Done;";
+        let src = "type u8 = [bit;8]; out LED: u8 := 0x100000; start S { always { LED.7 := true; } ref Done: true; } state Done;";
         let code = generate_source_str(src);
         assert!(
             code.contains("write_numeric)(ROOT_LED,")
@@ -996,12 +996,12 @@ state End;";
         // При вызове Main_process(root_val), root_val принадлежит Main.
         // Должно генерироваться `model->root_val`, а не несуществующий `main->root_val`.
         let src = r#"
-var root_val: bit = 0;
-var result: bit = 0;
+var root_val: bit := 0;
+var result: bit := 0;
 fn process(x: bit) -> bit { return x; }
 model Sub {
     fn compute() -> bit { return process(root_val); }
-    start S { always { result = compute(); } }
+    start S { always { result := compute(); } }
 }
 start Main = Sub;
 "#;
@@ -1030,9 +1030,9 @@ start Main = Sub;
         let src = r#"
 type u8 = [bit;8];
 fn double(x: u8) -> u8 { return x + x; }
-var y: u8 = 0;
+var y: u8 := 0;
 start Main {
-    always { y = double(y); }
+    always { y := double(y); }
 }
 "#;
         let (ast, _) = parse(src, 0).expect("ошибка разбора");
@@ -1059,10 +1059,10 @@ start Main {
         // В локальной функции (has_model=false) первый параметр — `const Root *model`.
         // Чтение порта должно генерировать `(*model->read_bit)(...)`, а не `(*main->read_bit)(...)`.
         let src = r#"
-in sensor: bit = 0x0:0;
-var v: bit = 0;
+in sensor: bit := 0x0:0;
+var v: bit := 0;
 fn read_port() -> bit { return sensor; }
-start Main { always { v = read_port(); } }
+start Main { always { v := read_port(); } }
 "#;
         let (ast, _) = parse(src, 0).expect("ошибка разбора");
         let model_rc = semantic::tree::construct_model(&ast, None, &[]).unwrap();

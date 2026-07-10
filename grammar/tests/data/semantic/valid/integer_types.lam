@@ -10,11 +10,11 @@ type u8  = [bit;8];
 type u16 = [bit;16];
 type u32 = [bit;32];
 
-var byte_val: u8  = 200;
-var word_val: u16 = 1000;
-var dword_val: u32 = 100000;
+var byte_val: u8  := 200;
+var word_val: u16 := 1000;
+var dword_val: u32 := 100000;
 
 // Вывод типов из числовых литералов
-var small  = 42;      // → [bit;8]
-var medium = 300;     // → [bit;16]
-var large  = 70000;   // → [bit;32]
+var small  := 42;      // → [bit;8]
+var medium := 300;     // → [bit;16]
+var large  := 70000;   // → [bit;32]

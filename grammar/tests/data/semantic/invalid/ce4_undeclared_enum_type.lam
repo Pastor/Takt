@@ -6,5 +6,5 @@
 // Ожидаемое поведение: семантическая ошибка Ce4:
 // "переменная 'current' объявлена с типом 'Status', но перечисление 'Status' не найдено"
 
-var current: Status = 0;
+var current: Status := 0;
 start S;

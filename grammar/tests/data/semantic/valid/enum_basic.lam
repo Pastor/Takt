@@ -3,6 +3,6 @@
 
 model M {
     enum Direction { North, South, East, West }
-    var dir: [bit;8] = 0;
+    var dir: [bit;8] := 0;
     start S {}
 }

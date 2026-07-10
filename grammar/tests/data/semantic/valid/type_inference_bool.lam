@@ -5,13 +5,13 @@
 // Явная аннотация :bit даёт TypeNode::Bit.
 
 // Вывод типа bool из литерала
-var flag = true;
-var done = false;
+var flag := true;
+var done := false;
 
 // Явная аннотация bool
-var ready: bool = true;
-var active: bool = false;
+var ready: bool := true;
+var active: bool := false;
 
 // Явная аннотация bit (отличается от bool)
-var signal: bit = 1;
-var zero: bit = 0;
+var signal: bit := 1;
+var zero: bit := 0;

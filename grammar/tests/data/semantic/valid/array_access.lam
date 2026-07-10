@@ -6,8 +6,8 @@
 
 type u8 = [bit; 8];
 
-var buf: u8 = 0;
-var bit0: bit = buf[0];
-var bit7: bit = buf[7];
+var buf: u8 := 0;
+var bit0: bit := buf[0];
+var bit7: bit := buf[7];
 
 start S;

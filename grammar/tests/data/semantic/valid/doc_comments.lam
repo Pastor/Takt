@@ -5,7 +5,7 @@
 type u8 = [bit;8];
 
 /// Переменная-счётчик, используемая в примере.
-var counter: u8 = 0;
+var counter: u8 := 0;
 
 /// Условие: счётчик достиг максимального значения.
 cond MaxReached = counter = 255;
@@ -14,26 +14,26 @@ cond MaxReached = counter = 255;
 /// Управляет циклическими переходами между состояниями.
 model TrafficLight {
     /// Счётчик тактов в текущем состоянии.
-    var timer: [bit;8] = 0;
+    var timer: [bit;8] := 0;
 
     /// Начальное состояние — красный свет.
     /// Автомат всегда стартует здесь.
     start Red {
-        enter { timer = 0; }
-        always { timer = timer + 1; }
+        enter { timer := 0; }
+        always { timer := timer + 1; }
         ref Green: timer = 100;
     }
 
     /// Зелёный свет — разрешение движения.
     state Green {
-        enter { timer = 0; }
-        always { timer = timer + 1; }
+        enter { timer := 0; }
+        always { timer := timer + 1; }
         ref Yellow: timer = 50;
     }
 
     /// Жёлтый свет — предупреждение перед сменой.
     state Yellow {
-        enter { timer = 0; }
+        enter { timer := 0; }
         next Red;
     }
 }

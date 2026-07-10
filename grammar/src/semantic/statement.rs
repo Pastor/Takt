@@ -423,7 +423,7 @@ mod tests {
     /// `always { it = it; }` с объявленной переменной `it` — разрешается в Block.
     #[test]
     fn model_level_always_block_with_known_var_resolves() {
-        let node = build("var it: bit = 0; always { it = it; } start S;");
+        let node = build("var it: bit := 0; always { it := it; } start S;");
         let nb = node
             .get_named_block("always")
             .expect("блок always должен быть");
@@ -451,7 +451,7 @@ mod tests {
     /// `enter { A = 0; }` внутри состояния — блок хранится в state.named_blocks.
     #[test]
     fn state_level_named_block_is_populated() {
-        let node = build("var A: bit = false; start S { enter { A = A; } }");
+        let node = build("var A: bit := false; start S { enter { A := A; } }");
         let state = node.states.get("S").expect("состояние S не найдено");
         assert!(
             state.get_named_block("enter").is_some(),
@@ -462,7 +462,7 @@ mod tests {
     /// `enter { A = A; }` с известной переменной — разрешается.
     #[test]
     fn state_level_named_block_resolves_known_var() {
-        let node = build("var A: bit = false; start S { enter { A = A; } }");
+        let node = build("var A: bit := false; start S { enter { A := A; } }");
         let state = node.states.get("S").expect("состояние S не найдено");
         let enter = state.get_named_block("enter").expect("enter не найден");
         let stmt = enter.statement().expect("оператор должен быть");
@@ -475,7 +475,7 @@ mod tests {
     /// Несколько named blocks в одном состоянии: enter и exit.
     #[test]
     fn state_level_multiple_named_blocks() {
-        let node = build("var A: bit = false; start S { enter { A = A; } exit { A = A; } }");
+        let node = build("var A: bit := false; start S { enter { A := A; } exit { A := A; } }");
         let state = node.states.get("S").unwrap();
         assert!(
             state.get_named_block("enter").is_some(),
@@ -487,7 +487,7 @@ mod tests {
     /// Разрешение оператора `if` в блоке состояния.
     #[test]
     fn state_named_block_if_statement_resolves() {
-        let node = build("var x: bit = false; start S { always { if x { x = x; } } }");
+        let node = build("var x: bit := false; start S { always { if x { x := x; } } }");
         let state = node.states.get("S").unwrap();
         let always = state.get_named_block("always").expect("always не найден");
         let stmt = always.statement().expect("оператор должен быть");
@@ -501,7 +501,7 @@ mod tests {
     /// Оператор `return` в named block разрешается.
     #[test]
     fn return_statement_resolves() {
-        let node = build("var x: bit = false; always { return x; } start S;");
+        let node = build("var x: bit := false; always { return x; } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
         assert!(
@@ -554,7 +554,7 @@ mod tests {
     fn loop_with_condition_resolves() {
         let node = build(
             // loop с условием — аналог while
-            "var flag: bit = false; always { loop flag { flag = flag; } } start S;",
+            "var flag: bit := false; always { loop flag { flag := flag; } } start S;",
         );
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
@@ -602,7 +602,7 @@ mod tests {
     fn for_loop_resolves() {
         let node = build(
             // С1 (вариант A): for без скобок вокруг заголовка
-            "var i: bit = false; always { for i = false; i; i = false { } } start S;",
+            "var i: bit := false; always { for i := false; i; i := false { } } start S;",
         );
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
@@ -623,7 +623,7 @@ mod tests {
     #[test]
     fn for_loop_empty_parts_resolves() {
         // С1 (вариант A): for без скобок вокруг заголовка
-        let node = build("var i: bit = false; always { for ;; { } } start S;");
+        let node = build("var i: bit := false; always { for ;; { } } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
@@ -666,7 +666,7 @@ mod tests {
     #[test]
     fn if_else_resolves() {
         let node =
-            build("var x: bit = false; always { if x { x = x; } else { x = false; } } start S;");
+            build("var x: bit := false; always { if x { x := x; } else { x := false; } } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
@@ -679,7 +679,7 @@ mod tests {
     /// `if` без `else` имеет `else_ = None`.
     #[test]
     fn if_without_else_has_none_else() {
-        let node = build("var x: bit = false; always { if x { x = x; } } start S;");
+        let node = build("var x: bit := false; always { if x { x := x; } } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
@@ -701,7 +701,7 @@ mod tests {
     /// ```
     #[test]
     fn local_var_in_block_resolves() {
-        let node = build("always { var x: bit = false; x = true; } start S;");
+        let node = build("always { var x: bit := false; x := true; } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
         // Блок должен быть разрешён
@@ -732,7 +732,7 @@ mod tests {
     /// ```
     #[test]
     fn local_var_initializer_is_preserved() {
-        let node = build("always { var x: bit = false; x = true; } start S;");
+        let node = build("always { var x: bit := false; x := true; } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
         if let StatementNode::Block(stmts) = stmt {
@@ -754,7 +754,7 @@ mod tests {
     /// ```
     #[test]
     fn local_const_in_block_resolves() {
-        let node = build("always { const C: bit = true; C; } start S;");
+        let node = build("always { const C: bit := true; C; } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
         assert!(
@@ -783,7 +783,8 @@ mod tests {
     /// ```
     #[test]
     fn local_var_shadows_model_var() {
-        let node = build("var x: bit = true; always { var x: bit = false; x = false; } start S;");
+        let node =
+            build("var x: bit := true; always { var x: bit := false; x := false; } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
         // Блок разрешается (затенение работает)
@@ -862,7 +863,7 @@ mod tests {
     /// ```
     #[test]
     fn local_var_in_for_init_resolves() {
-        let node = build("always { for var i: bit = false; i; i = false { } } start S;");
+        let node = build("always { for var i: bit := false; i; i := false { } } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = first_in_block(nb.statement().expect("оператор должен быть"));
         assert!(
@@ -912,8 +913,8 @@ mod tests {
         // До исправления это приводило к ошибке LSP «Идентификатор 'value' не найден».
         let node = build(concat!(
             "type u8 = [bit;8]; ",
-            "var result: u8 = 0; ",
-            "fn clamp(value: u8) -> u8 { result = value; return value; } ",
+            "var result: u8 := 0; ",
+            "fn clamp(value: u8) -> u8 { result := value; return value; } ",
             "start S;"
         ));
         // Проверяем, что модель успешно построена и функция clamp присутствует

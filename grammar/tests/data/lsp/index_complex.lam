@@ -4,8 +4,8 @@
 model DirectionEnum { enum Direction { North, South, East, West } start S; }
 
 type Byte = [bit;8];
-var speed: Byte = 0;
-const MAX_SPEED: Byte = 100;
+var speed: Byte := 0;
+const MAX_SPEED: Byte := 100;
 cond IsStopped = speed = 0;
 
 fn clamp(x: Byte) -> Byte {

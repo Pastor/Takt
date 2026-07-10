@@ -292,7 +292,7 @@ pub fn compile_to_plantuml(
 /// use grammar::parse;
 /// use grammar::semantic::tree::construct_model;
 ///
-/// let (ast, _) = parse("var unused: bit = 0; start S;", 0).unwrap();
+/// let (ast, _) = parse("var unused: bit := 0; start S;", 0).unwrap();
 /// let model = construct_model(&ast, None, &[]).unwrap();
 /// let warnings = grammar::unused_variable_warnings(model);
 /// assert_eq!(warnings.len(), 1);
@@ -482,14 +482,14 @@ mod tests {
 //Алиас типа
 type u8 = [bit;8];
 //Константа
-const MATRIX: u8 = { 0, 0, 0, 0, 0, 0, 0, 0 };
-const NUMB: u8 = 0xFF;
+const MATRIX: u8 := { 0, 0, 0, 0, 0, 0, 0, 0 };
+const NUMB: u8 := 0xFF;
 cond  IsEmpty = it = 0;
 //Порт с указанием отображаемого адреса
-out   A : u8  = 0x00548835;
-in    B1: bit = 0x00648835:6;
+out   A : u8  := 0x00548835;
+in    B1: bit := 0x00648835:6;
 //Переменная
-var   it: [bit;64] = 0;
+var   it: [bit;64] := 0;
 
 //Модель
 model Ping {
@@ -499,34 +499,34 @@ model Ping {
         ref End: B1;
         //Исполнение блока кода при первом переходе в состояние
         enter {
-            A.0 = true;
-            A.1 = false;
+            A.0 := true;
+            A.1 := false;
         }
         //Исполнение блока кода при выходе из состояния
         exit {
-            A.0 = false;
-            A.1 = true;
+            A.0 := false;
+            A.1 := true;
         }
         always {
-            A.2 = toggle;
+            A.2 := toggle;
         }
         always {
-            toggle = !toggle;
+            toggle := !toggle;
         }
     }
     state End;
-    var toggle = false;
+    var toggle := false;
 }
 model Pong {
     start Begin {
         ref Stop: S(Ping) = End;
         always {
-            A.5 = MATRIX.5;
+            A.5 := MATRIX.5;
         }
     }
     state Stop {
         enter {
-            A.6 = MATRIX.3;
+            A.6 := MATRIX.3;
         }
     }
 }
@@ -551,8 +551,8 @@ model Toggle {
 start Entry = (Ping | Pong) + Toggle;
 always {
     debug("Main processing");
-    it = it + 1;
-    if S(Toggle) = Pong {
+    it := it + 1;
+    if S(Toggle) := Pong {
         debug("Pong processing");
     }
 }"#;

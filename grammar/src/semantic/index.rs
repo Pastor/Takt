@@ -22,7 +22,7 @@
 //! use grammar::semantic::tree::construct_model;
 //! use grammar::semantic::index::SemanticIndex;
 //!
-//! let src = "var x: bit = false;";
+//! let src = "var x: bit := false;";
 //! let (ast, _) = parse(src, 0).unwrap();
 //! let model = construct_model(&ast, None, &[]).unwrap();
 //! let index = SemanticIndex::build(&model);
@@ -146,7 +146,7 @@ impl SemanticIndex {
     /// use grammar::semantic::tree::construct_model;
     /// use grammar::semantic::index::SemanticIndex;
     ///
-    /// let src = "var x: bit = false; start S;";
+    /// let src = "var x: bit := false; start S;";
     /// let (ast, _) = parse(src, 0).unwrap();
     /// let model = construct_model(&ast, None, &[]).unwrap();
     /// let index = SemanticIndex::build(&model);
@@ -175,7 +175,7 @@ impl SemanticIndex {
     /// use grammar::semantic::tree::construct_model;
     /// use grammar::semantic::index::{SemanticIndex, SemanticNodeKind};
     ///
-    /// let src = "var counter: bit = false;";
+    /// let src = "var counter: bit := false;";
     /// let (ast, _) = parse(src, 0).unwrap();
     /// let model = construct_model(&ast, None, &[]).unwrap();
     /// let index = SemanticIndex::build(&model);
@@ -986,7 +986,7 @@ mod tests {
     /// Одна переменная индексируется корректно.
     #[test]
     fn single_variable_is_indexed() {
-        let src = "var x: bit = false;";
+        let src = "var x: bit := false;";
         let index = build_index(src);
         // Индекс должен содержать хотя бы запись о переменной
         assert!(!index.is_empty());
@@ -996,7 +996,7 @@ mod tests {
     #[test]
     fn node_at_offset_finds_variable() {
         //           0123456789...
-        let src = "var x: bit = false;";
+        let src = "var x: bit := false;";
         let index = build_index(src);
         // Смещение 4 — символ 'x'
         let node = index.node_at_offset(4);
@@ -1009,7 +1009,7 @@ mod tests {
     /// Поиск за пределами всех объявлений возвращает None.
     #[test]
     fn node_at_offset_out_of_range_returns_none() {
-        let src = "var x: bit = false;";
+        let src = "var x: bit := false;";
         let index = build_index(src);
         // Смещение 99999 — далеко за концом файла
         assert!(index.node_at_offset(99999).is_none());
@@ -1100,7 +1100,7 @@ mod tests {
     fn multiple_elements_most_specific_returned() {
         //           0         1         2         3
         //           0123456789012345678901234567890123456789
-        let src = "var alpha: bit = false; start Beta;";
+        let src = "var alpha: bit := false; start Beta;";
         let index = build_index(src);
         // Смещение 4 — 'a' в "alpha"
         let node = index.node_at_offset(4).expect("должен найти элемент");
@@ -1114,7 +1114,7 @@ mod tests {
     #[test]
     fn len_matches_element_count() {
         // 1 переменная + 1 состояние = минимум 2
-        let src = "var x: bit = false; start S;";
+        let src = "var x: bit := false; start S;";
         let index = build_index(src);
         assert!(index.len() >= 2);
     }
@@ -1122,7 +1122,7 @@ mod tests {
     /// Константа индексируется с правильным видом.
     #[test]
     fn const_kind_is_indexed() {
-        let src = "const LIMIT: bit = true;";
+        let src = "const LIMIT: bit := true;";
         let index = build_index(src);
         let node = index.node_at_offset(6);
         assert!(node.is_some(), "должен найти константу");
@@ -1313,7 +1313,7 @@ mod tests {
     fn collect_condition_entries_resolved_variable_adds_entry() {
         //      0         1         2         3         4         5
         //      012345678901234567890123456789012345678901234567890123456789
-        let src = "var flag: bit = false; start S { ref T: flag; } state T;";
+        let src = "var flag: bit := false; start S { ref T: flag; } state T;";
         let index = build_index(src);
         let rc_entries: Vec<_> = index
             .entries
@@ -1440,7 +1440,7 @@ mod tests {
     /// `ref T: true;` — литерал, не переменная → нет ReferenceCondition.
     #[test]
     fn named_block_bool_condition_no_reference_condition() {
-        let src = "var x: bit = false; start S { always { x = true; } ref T: true; } state T;";
+        let src = "var x: bit := false; start S { always { x := true; } ref T: true; } state T;";
         let index = build_index(src);
         let rc_entries: Vec<_> = index
             .entries
@@ -1464,7 +1464,7 @@ mod tests {
     fn condition_variable_use_site_is_indexed() {
         //      0         1         2         3
         //      0123456789012345678901234567890123456789012345678901234567
-        let src = "var flag: bit = false; start S { ref T: flag; } state T;";
+        let src = "var flag: bit := false; start S { ref T: flag; } state T;";
         //                                            ^^^^ позиция "flag" = 40..44
         let index = build_index(src);
         // Находим запись ReferenceCondition по use-site позиции (offset внутри "flag")
@@ -1481,7 +1481,7 @@ mod tests {
     /// `ref T: a & b;` → записи для `a` и `b` по их позициям в условии.
     #[test]
     fn condition_and_both_variables_indexed() {
-        let src = "var a: bit = false; var b: bit = true; start S { ref T: a & b; } state T;";
+        let src = "var a: bit := false; var b: bit := true; start S { ref T: a & b; } state T;";
         let index = build_index(src);
         let rc: Vec<_> = index
             .entries

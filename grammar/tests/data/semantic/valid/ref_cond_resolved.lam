@@ -9,8 +9,8 @@
 /// 3. Булев литерал → `Condition::Bool`.
 /// 4. Сравнение → `Condition::Equal`.
 
-var flag: bit = false;
-var counter: [bit;8] = 0;
+var flag: bit := false;
+var counter: [bit;8] := 0;
 cond done = counter = 255;
 
 start Idle {

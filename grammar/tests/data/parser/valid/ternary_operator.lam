@@ -4,21 +4,21 @@
 // Синтаксис: cond ? expr_then : expr_else
 
 // Пример 1: простой тернарный оператор
-var flag: bit = true;
-var result: bit = flag ? true : false;
+var flag: bit := true;
+var result: bit := flag ? true : false;
 
 // Пример 2: тернарный оператор с выражением-условием
-var x: bit = true;
-var y: bit = x ? false : true;
+var x: bit := true;
+var y: bit := x ? false : true;
 
 // Пример 3: правоассоциативная вложенность (nested right)
-var a: bit = true;
-var b: bit = false;
-var z: bit = a ? b ? true : false : false;
+var a: bit := true;
+var b: bit := false;
+var z: bit := a ? b ? true : false : false;
 
 // Пример 4: тернарный оператор в правой части присваивания
-var c: bit = true;
-var d: bit = false;
-var e: bit = c ? d : c;
+var c: bit := true;
+var d: bit := false;
+var e: bit := c ? d : c;
 
 start S;

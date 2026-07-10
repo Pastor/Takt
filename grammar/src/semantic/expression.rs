@@ -487,14 +487,14 @@ mod tests {
     /// Числовой литерал: `var x = 42;` → `Number(42)`.
     #[test]
     fn number_literal_resolved() {
-        let node = build("var x: bit = false; cond c = 42;").unwrap();
+        let node = build("var x: bit := false; cond c = 42;").unwrap();
         assert_eq!(node.conditions["c"].value, ConditionNode::Number(42));
     }
 
     /// Булев литерал `true`: инициализатор переменной → `Bool(true)`.
     #[test]
     fn bool_literal_in_var_initializer() {
-        let node = build("var flag: bit = true;").unwrap();
+        let node = build("var flag: bit := true;").unwrap();
         assert!(
             matches!(var_expr(&node, "flag"), ExpressionNode::Bool(true)),
             "инициализатор должен быть Bool(true)"
@@ -504,7 +504,7 @@ mod tests {
     /// Булев литерал `false`: инициализатор переменной → `Bool(false)`.
     #[test]
     fn bool_false_literal_in_var() {
-        let node = build("var flag: bit = false;").unwrap();
+        let node = build("var flag: bit := false;").unwrap();
         assert!(
             matches!(var_expr(&node, "flag"), ExpressionNode::Bool(false)),
             "инициализатор должен быть Bool(false)"
@@ -514,7 +514,7 @@ mod tests {
     /// Целочисленный литерал как инициализатор переменной → `Number(n)`.
     #[test]
     fn number_literal_in_var_initializer() {
-        let node = build("var x: [bit;8] = 0;").unwrap();
+        let node = build("var x: [bit;8] := 0;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Number(_)),
             "инициализатор должен быть Number"
@@ -532,7 +532,7 @@ mod tests {
     /// ```
     #[test]
     fn variable_ref_in_initializer_resolves() {
-        let node = build("var a: bit = false; var b: bit = a;").unwrap();
+        let node = build("var a: bit := false; var b: bit := a;").unwrap();
         assert!(
             matches!(var_expr(&node, "b"), ExpressionNode::Variable(_)),
             "инициализатор b должен быть Variable(a)"
@@ -562,7 +562,7 @@ mod tests {
     /// Контрпример: несуществующий идентификатор → ошибка.
     #[test]
     fn unknown_identifier_is_error() {
-        let result = build("var x: bit = ghost;");
+        let result = build("var x: bit := ghost;");
         assert!(
             result.is_err(),
             "неизвестный идентификатор должен давать ошибку"
@@ -574,7 +574,7 @@ mod tests {
     /// Сложение в инициализаторе: `var x = 1 + 2;` → `Add`.
     #[test]
     fn add_in_var_initializer() {
-        let node = build("var x: [bit;8] = 1 + 2;").unwrap();
+        let node = build("var x: [bit;8] := 1 + 2;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Add(_, _)),
             "инициализатор должен быть Add"
@@ -584,7 +584,7 @@ mod tests {
     /// Вычитание в инициализаторе: `var x = 3 - 1;` → `Subtract`.
     #[test]
     fn subtract_in_var_initializer() {
-        let node = build("var x: [bit;8] = 3 - 1;").unwrap();
+        let node = build("var x: [bit;8] := 3 - 1;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Subtract(_, _)),
             "инициализатор должен быть Subtract"
@@ -594,7 +594,7 @@ mod tests {
     /// Побитовое И: `var x = 0xFF & 0x0F;` → `BitwiseAnd`.
     #[test]
     fn bitwise_and_in_var_initializer() {
-        let node = build("var x: [bit;8] = 255 & 15;").unwrap();
+        let node = build("var x: [bit;8] := 255 & 15;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::BitwiseAnd(_, _)),
             "инициализатор должен быть BitwiseAnd"
@@ -604,7 +604,7 @@ mod tests {
     /// Побитовое ИЛИ: `var x = 0x0F | 0xF0;` → `BitwiseOr`.
     #[test]
     fn bitwise_or_in_var_initializer() {
-        let node = build("var x: [bit;8] = 15 | 240;").unwrap();
+        let node = build("var x: [bit;8] := 15 | 240;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::BitwiseOr(_, _)),
             "инициализатор должен быть BitwiseOr"
@@ -614,7 +614,7 @@ mod tests {
     /// Логическое НЕ: `var x = !false;` → `Not`.
     #[test]
     fn not_in_var_initializer() {
-        let node = build("var x: bit = !false;").unwrap();
+        let node = build("var x: bit := !false;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Not(_)),
             "инициализатор должен быть Not"
@@ -624,7 +624,7 @@ mod tests {
     /// Скобки: `var x = (42);` → `Parenthesis`.
     #[test]
     fn parenthesis_in_var_initializer() {
-        let node = build("var x: [bit;8] = (42);").unwrap();
+        let node = build("var x: [bit;8] := (42);").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Parenthesis(_)),
             "инициализатор должен быть Parenthesis"
@@ -634,7 +634,7 @@ mod tests {
     /// Сравнение `<`: инициализатор → `Less`.
     #[test]
     fn less_in_var_initializer() {
-        let node = build("var x: bit = 1 < 2;").unwrap();
+        let node = build("var x: bit := 1 < 2;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Less(_, _)),
             "инициализатор должен быть Less"
@@ -644,7 +644,7 @@ mod tests {
     /// Сравнение `>`: инициализатор → `More`.
     #[test]
     fn more_in_var_initializer() {
-        let node = build("var x: bit = 2 > 1;").unwrap();
+        let node = build("var x: bit := 2 > 1;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::More(_, _)),
             "инициализатор должен быть More"
@@ -654,7 +654,7 @@ mod tests {
     /// Равенство `==`: инициализатор → `Equal`.
     #[test]
     fn equal_in_var_initializer() {
-        let node = build("var x: bit = 1 == 1;").unwrap();
+        let node = build("var x: bit := 1 = 1;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Equal(_, _)),
             "инициализатор должен быть Equal"
@@ -664,7 +664,7 @@ mod tests {
     /// Неравенство `!=`: инициализатор → `NotEqual`.
     #[test]
     fn not_equal_in_var_initializer() {
-        let node = build("var x: bit = 1 != 2;").unwrap();
+        let node = build("var x: bit := 1 != 2;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::NotEqual(_, _)),
             "инициализатор должен быть NotEqual"
@@ -681,7 +681,7 @@ mod tests {
     /// ```
     #[test]
     fn type_inference_bool_literal() {
-        let node = build("var flag = false;").unwrap();
+        let node = build("var flag := false;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("flag") {
             assert_eq!(
                 ty,
@@ -696,7 +696,7 @@ mod tests {
     /// Переменная без аннотации типа с вещественным литералом: → `TypeNode::Rational`.
     #[test]
     fn type_inference_rational_literal() {
-        let node = build("var r = 3.14;").unwrap();
+        let node = build("var r := 3.14;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("r") {
             assert_eq!(
                 ty,
@@ -711,7 +711,7 @@ mod tests {
     /// Константа без аннотации типа с булевым литералом: → `TypeNode::Bool`.
     #[test]
     fn type_inference_const_bool() {
-        let node = build("const C = false;").unwrap();
+        let node = build("const C := false;").unwrap();
         if let Some(VariableNode::Const { ty, .. }) = node.search_var("C") {
             assert_eq!(
                 ty,
@@ -726,7 +726,7 @@ mod tests {
     /// Вывод типа через переменную: `var b: bit = false; var a = b;` → тип `a` = `Bit`.
     #[test]
     fn type_inference_from_variable() {
-        let node = build("var b: bit = false; var a = b;").unwrap();
+        let node = build("var b: bit := false; var a := b;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("a") {
             assert_eq!(ty, TypeNode::Bit, "тип a должен выводиться из типа b = Bit");
         } else {
@@ -745,7 +745,7 @@ mod tests {
     /// ```
     #[test]
     fn array_subscript_in_var_initializer() {
-        let node = build("var buf: [bit;8] = 0; var x: bit = buf[3];").unwrap();
+        let node = build("var buf: [bit;8] := 0; var x: bit := buf[3];").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(3))),
             "инициализатор x должен быть ArraySubscript(buf, 3)"
@@ -755,7 +755,7 @@ mod tests {
     /// Контрпример: индексирование несуществующего массива — ошибка.
     #[test]
     fn array_subscript_unknown_var_is_error() {
-        let result = build("var x: bit = ghost[0];");
+        let result = build("var x: bit := ghost[0];");
         assert!(
             result.is_err(),
             "индексирование несуществующего массива — ошибка"
@@ -767,7 +767,7 @@ mod tests {
     /// Корректный индекс в пределах массива — строится без ошибок.
     #[test]
     fn array_subscript_valid_index() {
-        let node = build("var buf: [bit;8] = 0; var x: bit = buf[0];").unwrap();
+        let node = build("var buf: [bit;8] := 0; var x: bit := buf[0];").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(0))),
             "x должен быть ArraySubscript(buf, 0)"
@@ -777,7 +777,7 @@ mod tests {
     /// Последний допустимый индекс (size - 1) — строится без ошибок.
     #[test]
     fn array_subscript_last_valid_index() {
-        let node = build("var buf: [bit;8] = 0; var x: bit = buf[7];").unwrap();
+        let node = build("var buf: [bit;8] := 0; var x: bit := buf[7];").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::ArraySubscript(_, ref idx) if matches!(**idx, ExpressionNode::Number(7))),
             "x должен быть ArraySubscript(buf, 7)"
@@ -787,21 +787,21 @@ mod tests {
     /// Индекс равный размеру массива (out of bounds) — ошибка.
     #[test]
     fn array_subscript_out_of_bounds_is_error() {
-        let result = build("var buf: [bit;8] = 0; var x: bit = buf[8];");
+        let result = build("var buf: [bit;8] := 0; var x: bit := buf[8];");
         assert!(result.is_err(), "индекс 8 >= size 8 должен давать ошибку");
     }
 
     /// Отрицательный индекс — ошибка.
     #[test]
     fn array_subscript_negative_index_is_error() {
-        let result = build("var buf: [bit;8] = 0; var x: bit = buf[-1];");
+        let result = build("var buf: [bit;8] := 0; var x: bit := buf[-1];");
         assert!(result.is_err(), "отрицательный индекс должен давать ошибку");
     }
 
     /// Индексирование переменной с типом Bit — ошибка (не массив).
     #[test]
     fn array_subscript_on_non_array_is_error() {
-        let result = build("var flag: bit = false; var x: bit = flag[0];");
+        let result = build("var flag: bit := false; var x: bit := flag[0];");
         assert!(
             result.is_err(),
             "индексирование Bit-переменной должно давать ошибку"
@@ -887,7 +887,7 @@ mod tests {
     /// Переменная без аннотации с числовым литералом: `var x = 100;` → `Array(8, Bit)`.
     #[test]
     fn type_inference_number_literal() {
-        let node = build("var x = 100;").unwrap();
+        let node = build("var x := 100;").unwrap();
         if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
             assert_eq!(
                 ty,
@@ -904,7 +904,7 @@ mod tests {
     /// Умножение: `var x: [bit;8] = 2 * 3;` → `Multiply`.
     #[test]
     fn multiply_in_var_initializer() {
-        let node = build("var x: [bit;8] = 2 * 3;").unwrap();
+        let node = build("var x: [bit;8] := 2 * 3;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Multiply(_, _)),
             "инициализатор должен быть Multiply"
@@ -914,7 +914,7 @@ mod tests {
     /// Деление: `var x: [bit;8] = 6 / 2;` → `Divide`.
     #[test]
     fn divide_in_var_initializer() {
-        let node = build("var x: [bit;8] = 6 / 2;").unwrap();
+        let node = build("var x: [bit;8] := 6 / 2;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Divide(_, _)),
             "инициализатор должен быть Divide"
@@ -924,7 +924,7 @@ mod tests {
     /// Остаток от деления: `var x: [bit;8] = 7 % 3;` → `Modulo`.
     #[test]
     fn modulo_in_var_initializer() {
-        let node = build("var x: [bit;8] = 7 % 3;").unwrap();
+        let node = build("var x: [bit;8] := 7 % 3;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Modulo(_, _)),
             "инициализатор должен быть Modulo"
@@ -934,7 +934,7 @@ mod tests {
     /// Возведение в степень: `var x: [bit;8] = 2 ** 3;` → `Power`.
     #[test]
     fn power_in_var_initializer() {
-        let node = build("var x: [bit;8] = 2 ** 3;").unwrap();
+        let node = build("var x: [bit;8] := 2 ** 3;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Power(_, _)),
             "инициализатор должен быть Power"
@@ -944,7 +944,7 @@ mod tests {
     /// Сдвиг влево: `var x: [bit;8] = 1 << 2;` → `ShiftLeft`.
     #[test]
     fn shift_left_in_var_initializer() {
-        let node = build("var x: [bit;8] = 1 << 2;").unwrap();
+        let node = build("var x: [bit;8] := 1 << 2;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::ShiftLeft(_, _)),
             "инициализатор должен быть ShiftLeft"
@@ -954,7 +954,7 @@ mod tests {
     /// Сдвиг вправо: `var x: [bit;8] = 4 >> 1;` → `ShiftRight`.
     #[test]
     fn shift_right_in_var_initializer() {
-        let node = build("var x: [bit;8] = 4 >> 1;").unwrap();
+        let node = build("var x: [bit;8] := 4 >> 1;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::ShiftRight(_, _)),
             "инициализатор должен быть ShiftRight"
@@ -964,7 +964,7 @@ mod tests {
     /// Побитовое XOR: `var x: [bit;8] = 3 ^ 1;` → `BitwiseXor`.
     #[test]
     fn bitwise_xor_in_var_initializer() {
-        let node = build("var x: [bit;8] = 3 ^ 1;").unwrap();
+        let node = build("var x: [bit;8] := 3 ^ 1;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::BitwiseXor(_, _)),
             "инициализатор должен быть BitwiseXor"
@@ -976,7 +976,7 @@ mod tests {
     /// Меньше или равно: `var x: bit = 1 <= 2;` → `LessEqual`.
     #[test]
     fn less_equal_in_var_initializer() {
-        let node = build("var x: bit = 1 <= 2;").unwrap();
+        let node = build("var x: bit := 1 <= 2;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::LessEqual(_, _)),
             "инициализатор должен быть LessEqual"
@@ -986,7 +986,7 @@ mod tests {
     /// Больше или равно: `var x: bit = 2 >= 1;` → `MoreEqual`.
     #[test]
     fn more_equal_in_var_initializer() {
-        let node = build("var x: bit = 2 >= 1;").unwrap();
+        let node = build("var x: bit := 2 >= 1;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::MoreEqual(_, _)),
             "инициализатор должен быть MoreEqual"
@@ -998,7 +998,7 @@ mod tests {
     /// Логическое И: `var x: bit = true && false;` → `And`.
     #[test]
     fn and_in_var_initializer() {
-        let node = build("var x: bit = true && false;").unwrap();
+        let node = build("var x: bit := true && false;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::And(_, _)),
             "инициализатор должен быть And"
@@ -1008,7 +1008,7 @@ mod tests {
     /// Логическое ИЛИ: `var x: bit = true || false;` → `Or`.
     #[test]
     fn or_in_var_initializer() {
-        let node = build("var x: bit = true || false;").unwrap();
+        let node = build("var x: bit := true || false;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Or(_, _)),
             "инициализатор должен быть Or"
@@ -1020,7 +1020,7 @@ mod tests {
     /// Унарный плюс: `var x: [bit;8] = +5;` → `UnaryPlus`.
     #[test]
     fn unary_plus_in_var_initializer() {
-        let node = build("var x: [bit;8] = +5;").unwrap();
+        let node = build("var x: [bit;8] := +5;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::UnaryPlus(_)),
             "инициализатор должен быть UnaryPlus"
@@ -1030,7 +1030,7 @@ mod tests {
     /// Побитовое НЕ: `var x: [bit;8] = ~0;` → `BitwiseNot`.
     #[test]
     fn bitwise_not_in_var_initializer() {
-        let node = build("var x: [bit;8] = ~0;").unwrap();
+        let node = build("var x: [bit;8] := ~0;").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::BitwiseNot(_)),
             "инициализатор должен быть BitwiseNot"
@@ -1040,7 +1040,7 @@ mod tests {
     /// Вещественный литерал: `var r = 3.14;` → `Rational`.
     #[test]
     fn rational_literal_in_var_initializer() {
-        let node = build("var r = 3.14;").unwrap();
+        let node = build("var r := 3.14;").unwrap();
         assert!(
             matches!(var_expr(&node, "r"), ExpressionNode::Rational(_, _)),
             "инициализатор должен быть Rational"
@@ -1051,7 +1051,7 @@ mod tests {
     #[test]
     fn negate_rational_in_var_initializer() {
         // Парсер может представить -3.14 как Rational(_, true) или Negate(Rational)
-        let node = build("var r = -3.14;").unwrap();
+        let node = build("var r := -3.14;").unwrap();
         let expr = var_expr(&node, "r");
         assert!(
             matches!(
@@ -1098,7 +1098,7 @@ mod tests {
     fn conditional_operator_with_variable_condition() {
         use crate::semantic::tree::construct_model;
         // Строим модель с переменной flag
-        let (ast, _) = crate::parse("var flag: bit = true;", 0).expect("ошибка разбора");
+        let (ast, _) = crate::parse("var flag: bit := true;", 0).expect("ошибка разбора");
         let model = construct_model(&ast, None, &[]).expect("ошибка семантики");
         let loc = crate::diagnostics::Location::default();
         // flag ? 10 : 20
@@ -1144,7 +1144,7 @@ mod tests {
     /// Срез массива: `var y: [bit;4] = buf[1:5];` → `ArraySlice`.
     #[test]
     fn array_slice_in_var_initializer() {
-        let node = build("var buf: [bit;8] = 0; var y: [bit;4] = buf[1:5];").unwrap();
+        let node = build("var buf: [bit;8] := 0; var y: [bit;4] := buf[1:5];").unwrap();
         assert!(
             matches!(var_expr(&node, "y"), ExpressionNode::ArraySlice(_, _, _)),
             "инициализатор y должен быть ArraySlice"
@@ -1154,7 +1154,7 @@ mod tests {
     /// Срез несуществующего массива — ошибка.
     #[test]
     fn array_slice_unknown_var_is_error() {
-        let result = build("var y: [bit;4] = ghost[0:4];");
+        let result = build("var y: [bit;4] := ghost[0:4];");
         assert!(
             result.is_err(),
             "срез несуществующего массива должен давать ошибку"
@@ -1164,7 +1164,7 @@ mod tests {
     /// Срез переменной с типом Bit — ошибка (не массив).
     #[test]
     fn array_slice_on_non_array_is_error() {
-        let result = build("var flag: bit = false; var y: [bit;4] = flag[0:4];");
+        let result = build("var flag: bit := false; var y: [bit;4] := flag[0:4];");
         assert!(result.is_err(), "срез Bit-переменной должен давать ошибку");
     }
 
@@ -1191,7 +1191,7 @@ mod tests {
     /// Приведение типа: `var x: [bit;8] = 42 as [bit;8];` → `Cast`.
     #[test]
     fn cast_in_var_initializer() {
-        let node = build("var x: [bit;8] = 42 as [bit;8];").unwrap();
+        let node = build("var x: [bit;8] := 42 as [bit;8];").unwrap();
         assert!(
             matches!(var_expr(&node, "x"), ExpressionNode::Cast(_, _)),
             "инициализатор должен быть Cast"

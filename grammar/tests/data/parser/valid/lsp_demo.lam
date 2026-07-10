@@ -16,24 +16,24 @@ enum Priority { Low = 0, Medium = 5, High = 10 }
 extern fn log(msg: u8);
 
 /// Переменная состояния направления.
-var heading: Direction = 0;
+var heading: Direction := 0;
 
 /// Модель управления роботом.
 model Robot {
-    var speed: u8 = 0;
-    var active: bit = false;
+    var speed: u8 := 0;
+    var active: bit := false;
 
     start Idle {
         enter {
-            speed = 0;
-            active = false;
+            speed := 0;
+            active := false;
         }
         ref Moving: active;
     }
 
     state Moving {
         always {
-            speed = 100;
+            speed := 100;
         }
         ref Idle: true;
     }

@@ -3,12 +3,12 @@
 // Проверяет: переменная, объявленная в for-init, доступна в условии,
 // шаге и теле цикла.
 
-var result: bit = false;
+var result: bit := false;
 
 start S {
     always {
-        for var i: bit = false; i; i = false {
-            result = i;
+        for var i: bit := false; i; i := false {
+            result := i;
         }
     }
 }

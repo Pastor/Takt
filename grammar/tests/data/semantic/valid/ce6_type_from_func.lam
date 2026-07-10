@@ -8,5 +8,5 @@ fn getbool() -> bool {
     return true;
 }
 
-var result = getbool();
+var result := getbool();
 start S;

@@ -1,27 +1,27 @@
 // Именованные блоки кода (позитивный тест парсера)
 type u8 = [bit;8];
-out LED: u8 = 0x00100000;
+out LED: u8 := 0x00100000;
 
 model Blinker {
     start On {
         ref Off: true;
         // Выполняется один раз при входе в состояние
         enter {
-            LED = 0xFF;
+            LED := 0xFF;
         }
         // Выполняется один раз при выходе из состояния
         exit {
-            LED = 0x00;
+            LED := 0x00;
         }
         // Выполняется каждый такт
         always {
-            LED = LED + 1;
+            LED := LED + 1;
         }
     }
     state Off {
         ref On: true;
         enter {
-            LED = 0x00;
+            LED := 0x00;
         }
     }
 }

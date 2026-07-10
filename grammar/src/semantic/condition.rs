@@ -395,7 +395,7 @@ mod tests {
     /// ```
     #[test]
     fn variable_in_scope_resolves() {
-        let node = build("var flag: bit = false; cond c = flag;").unwrap();
+        let node = build("var flag: bit := false; cond c = flag;").unwrap();
         assert!(
             matches!(cond_val(&node, "c"), ConditionNode::Variable(_, _)),
             "ожидалось Condition::Variable, получено {:?}",
@@ -572,7 +572,7 @@ mod tests {
     /// ```
     #[test]
     fn array_subscript_on_non_array_is_error() {
-        let result = build("var x: bit = false; cond bad = x[0];");
+        let result = build("var x: bit := false; cond bad = x[0];");
         assert!(
             result.is_err(),
             "ожидалась ошибка при индексации не-массива"
@@ -642,7 +642,7 @@ mod tests {
     /// в `Condition::Variable`.
     #[test]
     fn extract_variable_condition() {
-        let node = build("var x: bit = false; cond c = x;").unwrap();
+        let node = build("var x: bit := false; cond c = x;").unwrap();
         assert!(
             matches!(cond_val(&node, "c"), ConditionNode::Variable(_, _)),
             "ожидалось условие Variable"
@@ -669,7 +669,7 @@ mod tests {
     fn enum_variant_resolves_over_state_in_equal() {
         let src = r#"
 enum Command { Up, Down, Stop }
-var command: Command = Stop;
+var command: Command := Stop;
 model Motor {
     cond c = command = Stop;
     start Up {}
@@ -699,7 +699,7 @@ start Main = Motor;
     fn enum_variant_resolves_over_state_in_not_equal() {
         let src = r#"
 enum Command { Up, Down, Stop }
-var command: Command = Stop;
+var command: Command := Stop;
 model Motor {
     cond c = command != Stop;
     start Up {}
@@ -729,7 +729,7 @@ start Main = Motor;
     fn enum_equal_wrong_variant_is_error() {
         let src = r#"
 enum Command { Up, Down, Stop }
-var command: Command = Stop;
+var command: Command := Stop;
 cond c = command = Foo;
 "#;
         let result = build(src);

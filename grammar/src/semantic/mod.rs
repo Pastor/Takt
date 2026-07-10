@@ -297,7 +297,7 @@ impl ModelNode {
     /// use grammar::parse;
     /// use grammar::semantic::tree::construct_model;
     ///
-    /// let (ast, _) = parse("var x: bit = false;", 0).unwrap();
+    /// let (ast, _) = parse("var x: bit := false;", 0).unwrap();
     /// let root = construct_model(&ast, None, &[]).unwrap();
     /// assert!(root.borrow().search_var("x").is_some());
     /// assert!(root.borrow().search_var("y").is_none());
@@ -1454,7 +1454,7 @@ mod tests {
     /// он увеличил бы счётчик до 1 + N (по количеству переменных).
     #[test]
     fn model_with_vars_has_no_strong_cycle() {
-        let (ast, _) = parse("var a: bit = false; var b: bit = false; start S;", 0).unwrap();
+        let (ast, _) = parse("var a: bit := false; var b: bit := false; start S;", 0).unwrap();
         let root = construct_model(&ast, None, &[]).unwrap();
         // Единственный сильный владелец — наша переменная `root`
         assert_eq!(
@@ -1483,7 +1483,7 @@ mod tests {
     /// Это доказывает, что циклов нет: дерево освобождается корректно.
     #[test]
     fn upper_weak_invalidated_after_drop() {
-        let (ast, _) = parse("var x: bit = false; start S;", 0).unwrap();
+        let (ast, _) = parse("var x: bit := false; start S;", 0).unwrap();
         let root = construct_model(&ast, None, &[]).unwrap();
         // Получаем переменную и сохраняем Weak через upper
         let var_x = root
@@ -1510,7 +1510,7 @@ mod tests {
     /// `upper()` метод переменной возвращает Some, если модель жива.
     #[test]
     fn variable_upper_returns_some_while_model_alive() {
-        let (ast, _) = parse("var x: bit = false;", 0).unwrap();
+        let (ast, _) = parse("var x: bit := false;", 0).unwrap();
         let root = construct_model(&ast, None, &[]).unwrap();
         let var_x = root
             .borrow()

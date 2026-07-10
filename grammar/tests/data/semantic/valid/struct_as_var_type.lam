@@ -8,6 +8,6 @@ struct Coord {
     y: [bit;16]
 }
 
-var origin: Coord = 0;
+var origin: Coord := 0;
 
 start Idle;

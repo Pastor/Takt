@@ -2,6 +2,6 @@
 //
 // Ожидается: семантическая ошибка — идентификатор 'ghost' не найден.
 
-var x: bit = ghost;
+var x: bit := ghost;
 
 start S;

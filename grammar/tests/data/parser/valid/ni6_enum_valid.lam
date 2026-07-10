@@ -5,22 +5,22 @@
 enum Direction { North, South, East, West }
 
 /// Переменная числового типа (аналог Direction для представления направлений)
-var heading: [bit;8] = 0;  // 0 = North
+var heading: [bit;8] := 0;  // 0 = North
 
 /// модель робота
 model Robot {
-    var dir: [bit;8] = 2;  // 2 = East
+    var dir: [bit;8] := 2;  // 2 = East
 
     start Idle {
         enter {
-            dir = 1;  // South — допустимо
+            dir := 1;  // South — допустимо
         }
         ref Moving: true;
     }
 
     state Moving {
         always {
-            dir = 3;  // West — допустимо
+            dir := 3;  // West — допустимо
         }
         ref Idle: true;
     }

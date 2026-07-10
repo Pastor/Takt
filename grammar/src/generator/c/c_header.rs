@@ -612,8 +612,8 @@ mod tests {
         // p используется в always, чтобы попасть в UsageSet.
         let src = r#"
 enum Priority { Low = 0, Medium = 5, High = 300 }
-var p: Priority = Low;
-start Main { always { p = High; } }
+var p: Priority := Low;
+start Main { always { p := High; } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
@@ -634,8 +634,8 @@ start Main { always { p = High; } }
         // lv используется в always, чтобы попасть в UsageSet.
         let src2 = r#"
 enum Levels { Low = 0, High = 200 }
-var lv: Levels = Low;
-start Main { always { lv = High; } }
+var lv: Levels := Low;
+start Main { always { lv := High; } }
         "#;
         let (model_ast2, _) = parse(src2, 0).unwrap();
         let model2 = semantic::tree::construct_model(&model_ast2, None, &[]).unwrap();
@@ -798,8 +798,8 @@ state Mid = Eng + (Eng | Eng) + Eng;
     fn struct_typedef_in_header() {
         let src = r#"
 struct Point { x: [bit;16], y: [bit;16] }
-var pos: Point = 0;
-start Main { always { pos.x = 1; } }
+var pos: Point := 0;
+start Main { always { pos.x := 1; } }
         "#;
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();

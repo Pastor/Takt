@@ -606,11 +606,11 @@ fn test_if_else_if_collapse() {
     // check вызывается в always, чтобы функция попала в UsageSet и была сгенерирована.
     let src = r#"
 enum Color { Red, Green }
-var c: Color = Red;
+var c: Color := Red;
 fn check(c: Color) -> bool {
-    if c == Red {
+    if c = Red {
         return true;
-    } else if c == Green {
+    } else if c = Green {
         return true;
     }
     return false;
@@ -644,13 +644,13 @@ fn test_if_else_if_chain() {
     // route вызывается в always, чтобы функция попала в UsageSet и была сгенерирована.
     let src = r#"
 enum Dir { North, South, East }
-var d: Dir = North;
+var d: Dir := North;
 fn route(d: Dir) -> bool {
-    if d == North {
+    if d = North {
         return true;
-    } else if d == South {
+    } else if d = South {
         return true;
-    } else if d == East {
+    } else if d = East {
         return true;
     }
     return false;
@@ -686,7 +686,7 @@ fn flip(x: bool) -> bool {
         return true;
     }
 }
-start S { always { flag = flip(flag); } }
+start S { always { flag := flip(flag); } }
 "#;
     let c = generate_c_content(src, "Fsm");
 
@@ -895,7 +895,7 @@ fn loop_body_infinite_has_braces() {
 var flag: bool;
 start A {
     always {
-        loop { flag = true; }
+        loop { flag := true; }
     }
 }
 "#;
@@ -913,7 +913,7 @@ fn loop_body_cond_has_braces() {
 var flag: bool;
 start A {
     always {
-        loop flag { flag = false; }
+        loop flag { flag := false; }
     }
 }
 "#;
@@ -931,7 +931,7 @@ fn for_body_has_braces() {
 var flag: bool;
 start A {
     always {
-        for var i: bool = true; i; i = false { flag = i; }
+        for var i: bool := true; i; i := false { flag := i; }
     }
 }
 "#;
@@ -958,10 +958,10 @@ start A {
 fn unused_var_excluded() {
     let src = r#"
 type u8 = [bit;8];
-var unused: u8 = 0;
-var used: u8 = 0;
+var unused: u8 := 0;
+var used: u8 := 0;
 start S {
-    always { used = 1; }
+    always { used := 1; }
 }
 "#;
     // Поля struct — в .h, инициализация — в .c
@@ -991,9 +991,9 @@ start S {
 fn used_var_stays() {
     let src = r#"
 type u8 = [bit;8];
-var counter: u8 = 0;
+var counter: u8 := 0;
 start S {
-    always { counter = counter + 1; }
+    always { counter := counter + 1; }
 }
 "#;
     let h = generate_h_content(src, "Fsm");
@@ -1013,11 +1013,11 @@ start S {
 fn unused_const_excluded() {
     let src = r#"
 type u8 = [bit;8];
-const DEAD: u8 = 42;
-const LIVE: u8 = 7;
-var v: u8 = 0;
+const DEAD: u8 := 42;
+const LIVE: u8 := 7;
+var v: u8 := 0;
 start S {
-    always { v = LIVE; }
+    always { v := LIVE; }
 }
 "#;
     let c = generate_c_content(src, "Fsm");
@@ -1041,10 +1041,10 @@ start S {
 fn used_const_stays() {
     let src = r#"
 type u8 = [bit;8];
-const MAX: u8 = 255;
-var v: u8 = 0;
+const MAX: u8 := 255;
+var v: u8 := 0;
 start S {
-    always { v = MAX; }
+    always { v := MAX; }
 }
 "#;
     let c = generate_c_content(src, "Fsm");
@@ -1068,7 +1068,7 @@ start S {
 fn test_enum_equal_name_collision_generates_value() {
     let src = r#"
 enum Command { Up, Down, Stop }
-var command: Command = Stop;
+var command: Command := Stop;
 model Motor {
     start Idle {
         ref Stop: command = Stop;

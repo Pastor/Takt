@@ -4,20 +4,20 @@
 // корректно разбираются парсером BuT.
 
 // Пример 1: min в правой части присваивания
-var x: bit = true;
-var y: bit = false;
-var lo: bit = min(x, y);
+var x: bit := true;
+var y: bit := false;
+var lo: bit := min(x, y);
 
 // Пример 2: max в правой части присваивания
-var hi: bit = max(x, y);
+var hi: bit := max(x, y);
 
 // Пример 3: abs одного значения
-var magnitude: bit = abs(x);
+var magnitude: bit := abs(x);
 
 // Пример 4: clamp — ограничение значения в диапазон
-var bounded: bit = clamp(x, y, x);
+var bounded: bit := clamp(x, y, x);
 
 // Пример 5: вложенные вызовы
-var nested: bit = min(max(x, y), abs(x));
+var nested: bit := min(max(x, y), abs(x));
 
 start S;

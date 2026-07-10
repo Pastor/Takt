@@ -5,12 +5,12 @@
 // bool — исключительно булев тип.
 
 // Явные аннотации bool
-var ready: bool = true;
-var done: bool = false;
+var ready: bool := true;
+var done: bool := false;
 
 // Вывод типа из булева литерала → bool
-var inferred_true = true;
-var inferred_false = false;
+var inferred_true := true;
+var inferred_false := false;
 
 // Константа типа bool
-const IS_ENABLED: bool = true;
+const IS_ENABLED: bool := true;

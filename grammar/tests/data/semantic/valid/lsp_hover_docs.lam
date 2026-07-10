@@ -11,18 +11,18 @@
 //   <документация>
 
 /// Счётчик количества обработанных пакетов.
-var packet_count: [bit;16] = 0;
+var packet_count: [bit;16] := 0;
 
 /// Флаг готовности системы к работе.
-var ready: bit = false;
+var ready: bit := false;
 
 /// Порог срабатывания таймера (в тактах).
-const TIMEOUT: [bit;8] = 100;
+const TIMEOUT: [bit;8] := 100;
 
 /// Основное рабочее состояние автомата.
 start Active {
     always {
-        packet_count = packet_count + 1;
+        packet_count := packet_count + 1;
     }
     ref Idle: packet_count = 0;
 }

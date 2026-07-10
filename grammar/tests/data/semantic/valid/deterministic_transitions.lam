@@ -1,6 +1,6 @@
 // FE4: Детерминированные переходы — у каждого ref есть условие.
 
-var flag: bit = 0;
+var flag: bit := 0;
 start S {
     ref A: flag;
     ref B: !flag;
