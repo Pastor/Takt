@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Генерирует C-файлы из Lam-примеров в grammar/.output/
+# Предкоммит-проверка: fmt + check + clippy + test + генерация C/PlantUML из
+# примеров Lam и сборка сгенерированного кода. Запускать из любого каталога.
 set -euo pipefail
 
 if command -v rtk &>/dev/null; then
@@ -13,12 +14,9 @@ $CARGO_CMD check
 $CARGO_CMD clippy --all-targets --all-features
 $CARGO_CMD test -- --test-threads=1
 
-#if command -v shfmt &>/dev/null; then
-#  shfmt -w **/*.sh
-#fi
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# Корень репозитория = каталог этого скрипта /..
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
 $CARGO_CMD build --bin lamc 2>/dev/null
 $CARGO_CMD build --features lsp --bin lam-lsp
@@ -39,18 +37,11 @@ cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -S $C_OUTPUT -B $C_OUTPUT/cmake-build-de
 cd $C_OUTPUT/cmake-build-debug/ && ninja
 cd -
 
-BUILD_DIR="$SCRIPT_DIR/$C_OUTPUT/cmake-build-debug"
+BUILD_DIR="$ROOT/$C_OUTPUT/cmake-build-debug"
 if [ -x "$BUILD_DIR/stacker" ]; then
   echo "Запуск симуляции stacker..."
   "$BUILD_DIR/stacker" > /tmp/stacker_sim.log
   echo "  лог: /tmp/stacker_sim.log ($(wc -l < /tmp/stacker_sim.log) строк)"
-
-#  if command -v python3 &>/dev/null; then
-#    echo "Формирование GIF-анимаций..."
-#    python3 "$SCRIPT_DIR/$C_OUTPUT/stacker_visualize.py" /tmp/stacker_sim.log
-#  else
-#    echo "  [пропуск] python3 не найден — GIF не сформированы"
-#  fi
 else
   echo "  [пропуск] stacker не собран — симуляция пропущена"
 fi
