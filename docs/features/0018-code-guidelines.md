@@ -24,6 +24,7 @@
 | Разработка 0018-01 | [`docs/development/0018-01-slice-types-and-api.md`](../development/0018-01-slice-types-and-api.md) |
 | Разработка 0018-02 | [`docs/development/0018-02-generate-options.md`](../development/0018-02-generate-options.md) |
 | Разработка 0018-03 | [`docs/development/0018-03-with-capacity-nonexhaustive-ast.md`](../development/0018-03-with-capacity-nonexhaustive-ast.md) |
+| Разработка 0018-04 | [`docs/development/0018-04-doctests-and-ownership.md`](../development/0018-04-doctests-and-ownership.md) |
 
 ## Прогресс
 
@@ -35,6 +36,8 @@
 - **0018-03 (ВЫПОЛНЕНО):** P11 — `" ".repeat` в `Printer::calculate_padding`;
   P04b — `#[non_exhaustive]` на `Type`/`ModelElement`/`StateElement`/`Expression`/
   `Statement`/`TypeNode`; P13 — аудит `new()`/`Default` (изменений не требуется).
-- **Осталось:** P08 (аудит `.clone()`), P09, P10 (`mem::take`), P12 (doctests).
+- **0018-04 (ВЫПОЛНЕНО):** P12 — 2 примера `own_doc`/`element_doc` переведены в
+  компилируемые doctests; P09 — возврат владения при `Err` (изменений не требуется).
+- **Осталось:** P08 (аудит `.clone()`), P10 (`mem::take`).
 
 > Детальный план — в аналитическом документе (перенесён из бывшего корневого `PLAN.md`).

@@ -447,9 +447,11 @@ impl ModelNode {
     ///
     /// # Примеры
     ///
-    /// ```rust,ignore
-    /// let (ast, comments) = parse("/// Тест\nmodel M { start S; }", 0)?;
-    /// let root = construct_model_with_docs(&ast, None, &[], &comments)?;
+    /// ```
+    /// # use grammar::parse;
+    /// # use grammar::semantic::tree::construct_model_with_docs;
+    /// let (ast, comments) = parse("/// Тест\nmodel M { start S; }", 0).unwrap();
+    /// let root = construct_model_with_docs(&ast, None, &[], &comments).unwrap();
     /// let m = root.borrow().search_model("M").unwrap();
     /// assert_eq!(m.borrow().own_doc(), ["Тест"]);
     /// ```
@@ -466,9 +468,11 @@ impl ModelNode {
     ///
     /// # Примеры
     ///
-    /// ```rust,ignore
-    /// let (ast, comments) = parse("/// Состояние.\nstart S;", 0)?;
-    /// let root = construct_model_with_docs(&ast, None, &[], &comments)?;
+    /// ```
+    /// # use grammar::parse;
+    /// # use grammar::semantic::tree::construct_model_with_docs;
+    /// let (ast, comments) = parse("/// Состояние.\nstart S;", 0).unwrap();
+    /// let root = construct_model_with_docs(&ast, None, &[], &comments).unwrap();
     /// assert_eq!(root.borrow().element_doc("S"), ["Состояние."]);
     /// ```
     pub fn element_doc(&self, name: &str) -> &[String] {
