@@ -174,7 +174,7 @@ fn rects_intersection_area(
 fn create_svg(
     node_labels: &[String],
     node_aliases: &[String],
-    edges_vec: &Vec<(usize, usize, String)>,
+    edges_vec: &[(usize, usize, String)],
     positions: &Positions,
     cfg: &GraphicsConfig,
     active_states: &[&str],

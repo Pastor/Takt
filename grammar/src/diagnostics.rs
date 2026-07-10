@@ -62,7 +62,11 @@ impl Level {
 }
 
 /// Категория диагностического сообщения.
+///
+/// Помечен `#[non_exhaustive]`: набор категорий ошибок будет пополняться без
+/// слома обратной совместимости (правило 11).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum ErrorType {
     /// Категория не задана.
     None,

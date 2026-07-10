@@ -5,11 +5,12 @@ mod plantuml;
 use crate::diagnostics::Diagnostic;
 use crate::semantic::ModelNode;
 
-/// Пара (заголовочный файл, исходный файл) для генераторов, производящих несколько артефактов.
-pub type Source = (Option<String>, Option<String>);
-
 /// Поддерживаемые языки генерации кода.
+///
+/// Помечен `#[non_exhaustive]`: список целевых языков будет расширяться, и
+/// добавление вариантов не должно ломать обратную совместимость (правило 11).
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Language {
     /// Генерация C-кода.
     C,
