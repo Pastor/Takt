@@ -2,7 +2,9 @@
 
 > Фича: [../features/0021-swap-assign-compare.md](../features/0021-swap-assign-compare.md) · ADR: [../adr/0021-swap-assign-compare.md](../adr/0021-swap-assign-compare.md) · анализ: [../analyze/0021-swap-assign-compare.md](../analyze/0021-swap-assign-compare.md)
 
-> **Статус:** ЗАПЛАНИРОВАНО (после 0021-01/02/03).
+> **Статус:** ВЫПОЛНЕНО. README (правило 15) и `CLAUDE.md` переведены на `:=`/`=`;
+> инвариант `=`/`==` снят и переписан; версия языка (крейт `grammar`) повышена
+> `0.0.5 → 0.1.0` (слом синтаксиса, правило 22). Doctests мигрированы в 0021-03.
 
 ## Что было
 

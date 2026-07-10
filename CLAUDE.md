@@ -67,8 +67,13 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
   `resolve_state_references` — ломает `S(Ping) = End`. Охраняется тестом
   `syntax_simple`. (`semantic/reference.rs` — это структура данных
   `ReferenceNode`, а НЕ запрещённый проход разрешения.)
-- **`=` vs `==`:** `=` в выражениях → `Expression::Assign`; `==` в выражениях →
-  `Expression::Equal`; `=` в условиях (`cond`/`ref`) → `Condition::Equal`.
+- **Операторы `:=` / `=` (фича 0021, версия языка 0.1.0):** присваивание —
+  `:=` (`Expression::Assign`); сравнение на равенство — `=` в выражениях
+  (`Expression::Equal`) **и** в условиях (`Condition::Equal`); `==` **выведен**
+  из языка (ошибка разбора). Реляционный `<=` без изменений (`LessEqual`). Знак
+  `=` также связка в определениях имён (`type`/`enum`/`model`/`state`/`cond`),
+  инициализаторы `var`/`const`/портов — через `:=`. AST-узлы прежние — сменилась
+  лишь привязка токенов в `grammar.lalrpop` (токен `:=` = `Token::ColonAssign`).
 
 ### Ключевые файлы
 
