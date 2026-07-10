@@ -26,6 +26,6 @@
 | [0015](./0015-stage-templates.md) | Шаблоны стадий и генератор new-feature.sh | — | ГОТОВО |
 | [0016](./0016-public-api-docs.md) | Документирование публичного API | — | ГОТОВО |
 | [0017](./0017-lifecycle-process.md) | Внедрение процесса разработки | — | ГОТОВО |
-| [0018](./0018-code-guidelines.md) | Приведение кода к docs/CODE.md | [анализ](../analyze/0018-code-guidelines.md) · [dev 0018-01](../development/0018-01-slice-types-and-api.md) | РАЗРАБОТКА |
+| [0018](./0018-code-guidelines.md) | Приведение кода к docs/CODE.md | [анализ](../analyze/0018-code-guidelines.md) · dev [01](../development/0018-01-slice-types-and-api.md) [02](../development/0018-02-generate-options.md) | РАЗРАБОТКА |
 | [0019](./0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | — | СОЗДАНА |
 | [0020](./0020-port-address-decl.md) | Адрес порта отдельно от объявления | — | СОЗДАНА |

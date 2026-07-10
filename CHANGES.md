@@ -23,6 +23,12 @@
 
 ### Изменено
 
+- Фича 0018, подзадача 0018-02 (P05): «bool trap» `guard_enable` заменён на тип
+  опций `generator::GenerateOptions` (`#[non_exhaustive]` + `Default` + `new()`,
+  реэкспорт `grammar::GenerateOptions`). Проведён через трейт `Generator`,
+  диспетчер `generator::generate`, публичную `compile_to_c(..., &GenerateOptions)`
+  и `bin/lamc.rs`. P07 (Builder `GraphicsConfig`) признан ненужным по YAGNI
+  (конфиг конструируется только из serde/`Default`). Поведение не изменилось.
 - Фича 0018 (приведение кода к `docs/CODE.md`), подзадача 0018-01: срезовые типы
   в сигнатурах — `const_expr_string(name: &str)` (`generator/c/c_decl.rs`),
   `create_svg(edges_vec: &[…])` (`simulation/unit/viewport.rs`),

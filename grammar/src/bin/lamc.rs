@@ -306,7 +306,7 @@ fn main() {
                 &source,
                 &options.output_path,
                 &options.include_dirs,
-                options.guard_enable,
+                &grammar::GenerateOptions::new(options.guard_enable),
             ) {
                 eprintln!("Ошибка компиляции: {}", diag.message);
                 process::exit(1);

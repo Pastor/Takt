@@ -46,7 +46,12 @@ model Traffic {
         .borrow()
         .search_model("Traffic")
         .expect("модель Traffic должна быть найдена");
-    let result = generate(Language::C, &traffic.borrow(), out_path, true);
+    let result = generate(
+        Language::C,
+        &traffic.borrow(),
+        out_path,
+        &grammar::GenerateOptions::default(),
+    );
     assert!(
         result.is_ok(),
         "компиляция простой FSM должна быть успешной, ошибка: {:?}",
@@ -70,8 +75,13 @@ const MODEL_FILENAME: &str = "model.lam";
 fn test_compile_invalid_syntax_returns_error() {
     let src = "model { }"; // нет имени модели
     let tmp = tempdir().unwrap();
-    let result =
-        grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[], true);
+    let result = grammar::compile_to_c(
+        MODEL_FILENAME,
+        src,
+        tmp.path().to_str().unwrap(),
+        &[],
+        &grammar::GenerateOptions::default(),
+    );
     assert!(result.is_err(), "неверный код должен возвращать Err");
 }
 
@@ -80,8 +90,13 @@ fn test_compile_invalid_syntax_returns_error() {
 fn test_compile_no_start_state_returns_error() {
     let src = "model M { state S {} }"; // нет start-состояния
     let tmp = tempdir().unwrap();
-    let result =
-        grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[], true);
+    let result = grammar::compile_to_c(
+        MODEL_FILENAME,
+        src,
+        tmp.path().to_str().unwrap(),
+        &[],
+        &grammar::GenerateOptions::default(),
+    );
     assert!(
         result.is_err(),
         "модель без start-состояния должна возвращать Err"
@@ -93,8 +108,13 @@ fn test_compile_no_start_state_returns_error() {
 fn test_compile_no_imports_empty_search_paths() {
     let src = "start S;";
     let tmp = tempdir().unwrap();
-    let result =
-        grammar::compile_to_c(MODEL_FILENAME, src, tmp.path().to_str().unwrap(), &[], true);
+    let result = grammar::compile_to_c(
+        MODEL_FILENAME,
+        src,
+        tmp.path().to_str().unwrap(),
+        &[],
+        &grammar::GenerateOptions::default(),
+    );
     assert!(
         result.is_ok(),
         "программа без импортов должна компилироваться без путей поиска: {:?}",
@@ -139,7 +159,7 @@ state Done;
         main_src,
         out_dir.path().to_str().unwrap(),
         &search_paths,
-        true,
+        &grammar::GenerateOptions::default(),
     );
     assert!(
         result.is_ok(),
@@ -163,7 +183,7 @@ fn test_compile_missing_import_without_search_path_is_error() {
         main_src,
         out_dir.path().to_str().unwrap(),
         &[],
-        true,
+        &grammar::GenerateOptions::default(),
     );
     assert!(
         result.is_err(),
@@ -200,7 +220,7 @@ fn test_compile_second_search_path_wins() {
         main_src,
         out_dir.path().to_str().unwrap(),
         &search_paths,
-        true,
+        &grammar::GenerateOptions::default(),
     );
     assert!(
         result.is_ok(),
@@ -221,7 +241,7 @@ fn test_compile_wrong_search_path_is_error() {
         main_src,
         out_dir.path().to_str().unwrap(),
         &search_paths,
-        true,
+        &grammar::GenerateOptions::default(),
     );
     assert!(result.is_err(), "файл в несуществующей директории → ошибка");
 }
@@ -248,7 +268,7 @@ fn test_compile_identifier_import_with_search_path() {
         main_src,
         out_dir.path().to_str().unwrap(),
         &search_paths,
-        true,
+        &grammar::GenerateOptions::default(),
     );
     assert!(
         result.is_ok(),
@@ -278,7 +298,7 @@ state Done;
         main_src,
         out_dir.path().to_str().unwrap(),
         &search_paths,
-        true,
+        &grammar::GenerateOptions::default(),
     );
     assert!(
         result.is_ok(),
@@ -312,7 +332,7 @@ fn test_compile_example_file_with_include_path() {
         &src,
         out_dir.path().to_str().unwrap(),
         &search_paths,
-        true,
+        &grammar::GenerateOptions::default(),
     );
     assert!(
         result.is_ok(),
@@ -357,7 +377,12 @@ state End;
     let root = construct_model(&ast, None, &[]).expect("семантический анализ должен быть успешен");
     root.borrow_mut().name = Some("Elevator".to_string());
 
-    let result = generate(Language::C, &root.borrow(), out_path, true);
+    let result = generate(
+        Language::C,
+        &root.borrow(),
+        out_path,
+        &grammar::GenerateOptions::default(),
+    );
     assert!(
         result.is_ok(),
         "компиляция должна быть успешной: {:?}",
@@ -448,7 +473,7 @@ fn test_include_dirs_end_to_end_integration() {
         src_content,
         out_dir.path().to_str().unwrap(),
         &search_paths,
-        true,
+        &grammar::GenerateOptions::default(),
     );
 
     // Значение args не используется в вычислении — только для демонстрации
@@ -478,7 +503,7 @@ fn generate_c_content(src: &str, model_name: &str) -> String {
         Language::C,
         &root.borrow(),
         tmp.path().to_str().unwrap(),
-        true,
+        &grammar::GenerateOptions::default(),
     )
     .unwrap();
     fs::read_dir(tmp.path())
@@ -504,7 +529,7 @@ fn generate_h_content(src: &str, model_name: &str) -> String {
         Language::C,
         &root.borrow(),
         tmp.path().to_str().unwrap(),
-        true,
+        &grammar::GenerateOptions::default(),
     )
     .unwrap();
     fs::read_dir(tmp.path())
