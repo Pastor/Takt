@@ -11,4 +11,5 @@
 |-----|-----------|--------|------|
 | [0019](./0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | Accepted | фича 0019 |
 | [0020](./0020-port-address-decl.md) | Адрес порта отдельно от объявления | Accepted | фича 0020 |
+| [0021](./0021-swap-assign-compare.md) | Смена операторов: `<=` присваивание, `=` сравнение | Accepted | фича 0021 |
 
