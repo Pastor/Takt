@@ -13,6 +13,7 @@
 mod puml_map;
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
 use crate::semantic::ModelNode;
 use crate::semantic::minimap::{Element, StateExtend};
@@ -29,7 +30,7 @@ impl AsGenerator for Generator {
         &self,
         model: &ModelNode,
         output_path: &str,
-        _guard_enable: bool,
+        _options: &GenerateOptions,
     ) -> Result<(), Diagnostic> {
         let map = PumlMap::new(
             &normalize_lowercase_snakecase(model.name().to_string()),

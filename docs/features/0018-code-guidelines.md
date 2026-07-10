@@ -22,11 +22,15 @@
 |---|---|
 | Анализ/план | [`docs/analyze/0018-code-guidelines.md`](../analyze/0018-code-guidelines.md) |
 | Разработка 0018-01 | [`docs/development/0018-01-slice-types-and-api.md`](../development/0018-01-slice-types-and-api.md) |
+| Разработка 0018-02 | [`docs/development/0018-02-generate-options.md`](../development/0018-02-generate-options.md) |
 
 ## Прогресс
 
 - **0018-01 (ВЫПОЛНЕНО):** P01–P04, P06 — срезовые типы в сигнатурах,
   `#[non_exhaustive]` на `Language`/`ErrorType`, удаление мёртвого алиаса `Source`.
-- **Осталось:** P05, P07–P13, P04b (см. план и подзадачу 0018-01).
+- **0018-02 (ВЫПОЛНЕНО):** P05 — `GenerateOptions` вместо `guard_enable: bool`;
+  P07 — Builder `GraphicsConfig` признан ненужным (YAGNI: конфиг только из
+  serde/`Default`).
+- **Осталось:** P08–P13, P04b (см. план и подзадачи).
 
 > Детальный план — в аналитическом документе (перенесён из бывшего корневого `PLAN.md`).

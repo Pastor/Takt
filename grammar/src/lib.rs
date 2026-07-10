@@ -48,6 +48,9 @@ pub mod semantic;
 /// Модуль проверки формальных свойств (LTL-формулы, автоматы Бюхи).
 pub mod verification;
 
+/// Опции генерации кода (реэкспорт для удобства: `grammar::GenerateOptions`).
+pub use generator::GenerateOptions;
+
 #[allow(
     clippy::needless_lifetimes,
     clippy::type_complexity,
@@ -174,8 +177,15 @@ fn parser_error_to_diagnostic(
 /// # Примеры
 ///
 /// ```no_run
-/// // Без импортов — пустой список путей
-/// grammar::compile_to_c("dummy.lam", "start S;", ".output", &[], true).unwrap();
+/// // Без импортов — пустой список путей; guard-проверки по умолчанию включены
+/// grammar::compile_to_c(
+///     "dummy.lam",
+///     "start S;",
+///     ".output",
+///     &[],
+///     &grammar::GenerateOptions::default(),
+/// )
+/// .unwrap();
 ///
 /// // С импортами — указываем директорию поиска
 /// grammar::compile_to_c(
@@ -183,7 +193,7 @@ fn parser_error_to_diagnostic(
 ///     r#"import "std.lam"; start S;"#,
 ///     ".output",
 ///     &["/usr/lib/lam".to_string()],
-///     true,
+///     &grammar::GenerateOptions::default(),
 /// ).unwrap();
 /// ```
 pub fn compile_to_c(
@@ -191,7 +201,7 @@ pub fn compile_to_c(
     source: &str,
     output_path: &str,
     search_paths: &[String],
-    guard_enable: bool,
+    options: &GenerateOptions,
 ) -> Result<(), Diagnostic> {
     // Шаг 1: Синтаксический анализ
     let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
@@ -222,7 +232,7 @@ pub fn compile_to_c(
         generator::Language::C,
         &model.borrow(),
         output_path,
-        guard_enable,
+        options,
     )?;
 
     Ok(())
@@ -264,7 +274,7 @@ pub fn compile_to_plantuml(
         generator::Language::PlantUML,
         &model.borrow(),
         output_path,
-        false,
+        &GenerateOptions::default(),
     )?;
 
     Ok(())
@@ -585,7 +595,13 @@ always {
         let model = construct_model(&model, None, &[]).unwrap();
         assert!(model.borrow().has_states());
         model.borrow_mut().name = Some(String::from("ThisIsMyModel"));
-        generate(Language::C, &model.borrow(), ".output", true).unwrap();
+        generate(
+            Language::C,
+            &model.borrow(),
+            ".output",
+            &GenerateOptions::default(),
+        )
+        .unwrap();
     }
 
     // ── Тесты ошибок парсера ──────────────────────────────────────────────────
@@ -660,7 +676,13 @@ always {
         let out = dir.path().to_string_lossy().into_owned();
         // Простой FSM без имени модели; имя должно быть взято из имени файла.
         let src = "start S;";
-        let result = compile_to_c("path/to/my_model.lam", src, &out, &[], true);
+        let result = compile_to_c(
+            "path/to/my_model.lam",
+            src,
+            &out,
+            &[],
+            &GenerateOptions::default(),
+        );
         // Функция может вернуть ошибку генератора (файл записан / не записан),
         // но не должна паниковать.
         let _ = result;
@@ -673,7 +695,7 @@ always {
         let out = dir.path().to_string_lossy().into_owned();
         let src = "start S;";
         // Путь с завершающим слешем — не должен паниковать.
-        let _ = compile_to_c("some/dir/", src, &out, &[], true);
+        let _ = compile_to_c("some/dir/", src, &out, &[], &GenerateOptions::default());
     }
 
     /// V1: пустая строка имени файла — `file_name()` вернёт None → имя «Root».
@@ -683,7 +705,7 @@ always {
         let out = dir.path().to_string_lossy().into_owned();
         let src = "start S;";
         // Пустое имя файла — не должно паниковать.
-        let _ = compile_to_c("", src, &out, &[], true);
+        let _ = compile_to_c("", src, &out, &[], &GenerateOptions::default());
     }
 
     /// V2: имя файла без расширения — возвращается строка целиком.
@@ -693,7 +715,7 @@ always {
         let out = dir.path().to_string_lossy().into_owned();
         let src = "start S;";
         // Без точки — `splitn(2,'.')` вернёт всё имя файла.
-        let _ = compile_to_c("my_model", src, &out, &[], true);
+        let _ = compile_to_c("my_model", src, &out, &[], &GenerateOptions::default());
     }
 
     /// V2: имя файла с несколькими точками — берётся только часть до первой.
@@ -703,6 +725,6 @@ always {
         let out = dir.path().to_string_lossy().into_owned();
         let src = "start S;";
         // "arch.v2.lam" → должно брать "arch", не "arch.v2".
-        let _ = compile_to_c("arch.v2.lam", src, &out, &[], true);
+        let _ = compile_to_c("arch.v2.lam", src, &out, &[], &GenerateOptions::default());
     }
 }

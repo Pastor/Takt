@@ -38,6 +38,7 @@ mod c_model;
 mod c_source;
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
 use crate::generator::c::c_header::generate_header;
 use crate::generator::c::c_map::CMap;
@@ -116,13 +117,13 @@ impl AsGenerator for Generator {
         &self,
         model: &ModelNode,
         output_path: &str,
-        guard_enable: bool,
+        options: &GenerateOptions,
     ) -> Result<(), Diagnostic> {
         //TODO: При генерации следует работать с примитивным слепком модели
         let map = CMap::new(
             &*normalize_lowercase_snakecase(model.name().to_string()),
             model,
-            guard_enable,
+            options.guard_enable,
         )?;
         let header = generate_header(map.get_filename(), &map)?;
         let source = generate_source(map.get_filename(), &map)?;
