@@ -23,6 +23,7 @@
 | Анализ/план | [`docs/analyze/0018-code-guidelines.md`](../analyze/0018-code-guidelines.md) |
 | Разработка 0018-01 | [`docs/development/0018-01-slice-types-and-api.md`](../development/0018-01-slice-types-and-api.md) |
 | Разработка 0018-02 | [`docs/development/0018-02-generate-options.md`](../development/0018-02-generate-options.md) |
+| Разработка 0018-03 | [`docs/development/0018-03-with-capacity-nonexhaustive-ast.md`](../development/0018-03-with-capacity-nonexhaustive-ast.md) |
 
 ## Прогресс
 
@@ -31,6 +32,9 @@
 - **0018-02 (ВЫПОЛНЕНО):** P05 — `GenerateOptions` вместо `guard_enable: bool`;
   P07 — Builder `GraphicsConfig` признан ненужным (YAGNI: конфиг только из
   serde/`Default`).
-- **Осталось:** P08–P13, P04b (см. план и подзадачи).
+- **0018-03 (ВЫПОЛНЕНО):** P11 — `" ".repeat` в `Printer::calculate_padding`;
+  P04b — `#[non_exhaustive]` на `Type`/`ModelElement`/`StateElement`/`Expression`/
+  `Statement`/`TypeNode`; P13 — аудит `new()`/`Default` (изменений не требуется).
+- **Осталось:** P08 (аудит `.clone()`), P09, P10 (`mem::take`), P12 (doctests).
 
 > Детальный план — в аналитическом документе (перенесён из бывшего корневого `PLAN.md`).

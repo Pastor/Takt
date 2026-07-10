@@ -77,12 +77,9 @@ impl<'a> Printer<'a> {
     }
 
     fn calculate_padding(&mut self) {
-        let mut padding = String::new();
-        for _ in 0..self.indent {
-            for _ in 0..self.indent_size {
-                padding.push(' ');
-            }
-        }
+        // Длина отступа известна точно (уровень × размер) — строим строку нужной
+        // ёмкости за одну аллокацию вместо посимвольного push в двойном цикле.
+        let padding = " ".repeat(self.indent * self.indent_size);
         self.padding.replace(padding);
     }
 
