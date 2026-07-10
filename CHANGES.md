@@ -23,6 +23,12 @@
 
 ### Изменено
 
+- Фича 0018 (приведение кода к `docs/CODE.md`), подзадача 0018-01: срезовые типы
+  в сигнатурах — `const_expr_string(name: &str)` (`generator/c/c_decl.rs`),
+  `create_svg(edges_vec: &[…])` (`simulation/unit/viewport.rs`),
+  `Comment::value() -> &str` (`parser/ast.rs`); `#[non_exhaustive]` на
+  `generator::Language` и `diagnostics::ErrorType`; удалён неиспользуемый
+  тип-алиас `generator::Source`. Поведение не изменилось, тесты зелёные.
 - `docs/RULE.md` — содержит только правила (эталон процесса); секция контекста
   удалена. Процесс управления работой — исключительно через жизненный цикл фич.
 - `CLAUDE.md` — переписан как контекст-only (архитектура, ключевые файлы,

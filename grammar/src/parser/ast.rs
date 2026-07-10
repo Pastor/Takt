@@ -65,7 +65,7 @@ pub enum Comment {
 impl Comment {
     /// Возвращает текстовое содержимое комментария.
     #[inline]
-    pub const fn value(&self) -> &String {
+    pub fn value(&self) -> &str {
         match self {
             Self::Line(_, s) | Self::DocLine(_, s) | Self::Block(_, s) => s,
         }

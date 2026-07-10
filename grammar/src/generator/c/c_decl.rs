@@ -12,7 +12,7 @@ use crate::semantic::minimap::Element;
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::{ExpressionNode, FunctionDefinitionNode, VariableNode};
 
-fn const_expr_string(expr: &ExpressionNode, name: &String) -> Result<String, Diagnostic> {
+fn const_expr_string(expr: &ExpressionNode, name: &str) -> Result<String, Diagnostic> {
     Ok(if let ExpressionNode::Number(value) = expr {
         value.to_string()
     } else if let ExpressionNode::Bool(value) = expr {

@@ -21,7 +21,7 @@
 
 | № | Фича | Зависит от | Статус |
 |---|------|------------|--------|
-| [0018](docs/features/0018-code-guidelines.md) | Приведение кода к `docs/CODE.md` | нет | АНАЛИЗ |
+| [0018](docs/features/0018-code-guidelines.md) | Приведение кода к `docs/CODE.md` | нет | РАЗРАБОТКА |
 | [0019](docs/features/0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | нет | СОЗДАНА |
 | [0020](docs/features/0020-port-address-decl.md) | Адрес порта отдельно от объявления | нет | СОЗДАНА |
 
