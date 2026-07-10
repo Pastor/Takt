@@ -23,7 +23,7 @@
 |---|------|------------|--------|
 | [0019](docs/features/0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | нет | РАЗРАБОТКА |
 | [0020](docs/features/0020-port-address-decl.md) | Адрес порта отдельно от объявления | нет | РАЗРАБОТКА |
-| [0021](docs/features/0021-swap-assign-compare.md) | Смена операторов: `<=` присваивание, `=` сравнение | нет | АНАЛИЗ |
+| [0021](docs/features/0021-swap-assign-compare.md) | Смена операторов: `:=` присваивание, `=` сравнение (Option B) | нет | РАЗРАБОТКА |
 
 ## 2. Кандидаты в фичи
 
