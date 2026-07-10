@@ -27,5 +27,5 @@
 | [0016](./0016-public-api-docs.md) | Документирование публичного API | — | ГОТОВО |
 | [0017](./0017-lifecycle-process.md) | Внедрение процесса разработки | — | ГОТОВО |
 | [0018](./0018-code-guidelines.md) | Приведение кода к docs/CODE.md | [анализ](../analyze/0018-code-guidelines.md) · [отчёт](../reports/0018-code-guidelines.md) · dev 01–05 | ГОТОВО |
-| [0019](./0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | — | СОЗДАНА |
-| [0020](./0020-port-address-decl.md) | Адрес порта отдельно от объявления | — | СОЗДАНА |
+| [0019](./0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | [ADR](../adr/0019-condition-expression-unification.md) · [анализ](../analyze/0019-condition-expression-unification.md) · [dev 01](../development/0019-01-loopcond-dedup.md) | РАЗРАБОТКА |
+| [0020](./0020-port-address-decl.md) | Адрес порта отдельно от объявления | [ADR](../adr/0020-port-address-decl.md) · [анализ](../analyze/0020-port-address-decl.md) · [dev 01](../development/0020-01-address-grammar.md) | РАЗРАБОТКА |
