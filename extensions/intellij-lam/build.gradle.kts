@@ -38,7 +38,9 @@ intellijPlatform {
     pluginConfiguration {
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
-            untilBuild = providers.gradleProperty("pluginUntilBuild")
+            // Пустое значение → until-build не задаётся (открытый верхний диапазон),
+            // чтобы плагин ставился и в новые IDE (напр. RustRover 261).
+            untilBuild = providers.gradleProperty("pluginUntilBuild").orElse("")
         }
     }
 }

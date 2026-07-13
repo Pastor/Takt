@@ -23,7 +23,6 @@
 |---|------|------------|--------|
 | [0019](docs/features/0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | нет | РАЗРАБОТКА |
 | [0020](docs/features/0020-port-address-decl.md) | Адрес порта отдельно от объявления | нет | РАЗРАБОТКА |
-| [0022](docs/features/0022-intellij-syntax-highlight.md) | Плагин IntelliJ IDEA: подсветка синтаксиса Lam | нет | РАЗРАБОТКА |
 
 ## 2. Кандидаты в фичи
 
@@ -33,6 +32,16 @@
   ней; падают и на исходном коде): 5 тестов `lamc` — разбиение `--include-dirs`
   по `:` конфликтует с Windows-путями/буквами дисков; 1 тест `viewport`
   (`simulation`) — путь к ресурсу не найден (ошибка ФС). Оформить фикс/фичу.
+- **Семантическая подсветка Lam в IntelliJ через `lam-lsp`** (задел из фичи 0022,
+  Option C ADR) — надстройка над лексической подсветкой плагина
+  `extensions/intellij-lam` (semantic tokens `lam-lsp`; LSP4IJ/LSP API).
+- **Расширение плагина IntelliJ до навигации/инспекций** (PSI-парсер поверх
+  лексера 0022) — Go to Declaration, структура файла, диагностики.
+
+Остаточные пункты плагина 0022 (из [отчёта](docs/reports/0022-intellij-syntax-highlight.md)):
+бинарный `verifyPlugin` (Plugin Verifier) и визуальная `runIde`-проверка в
+среде с GUI/CI; расширение диапазона IDE на 2024.2+ (нужен JDK 21); юнит-тест
+CT3 на произвольный неалфавитный символ → `BAD_CHARACTER`.
 
 ## 3. Процессный бэклог
 

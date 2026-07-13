@@ -1,7 +1,7 @@
 # Фича 0022: Плагин IntelliJ IDEA — подсветка синтаксиса Lam
 
 - **Номер:** 0022
-- **Статус:** РАЗРАБОТКА
+- **Статус:** ГОТОВО
 - **Зависит от:** нет (см. анализ: связь с [0011](0011-lsp-server.md) `lam-lsp` —
   необязательная, лишь для будущей семантической подсветки; лексическая подсветка
   автономна)
@@ -18,7 +18,7 @@
 | Разработка 0022-02 | [`docs/development/0022-02-lexer-highlighter.md`](../development/0022-02-lexer-highlighter.md) (**ВЫПОЛНЕНО** — лексер `LexerBase` + `SyntaxHighlighter`; 22 теста зелёные) |
 | Разработка 0022-03 | [`docs/development/0022-03-color-settings-docs.md`](../development/0022-03-color-settings-docs.md) (**ВЫПОЛНЕНО** — `ColorSettingsPage`, commenter, brace matcher, README; 27 тестов зелёные) |
 | Тест-план | [`docs/tests/0022-intellij-syntax-highlight.md`](../tests/0022-intellij-syntax-highlight.md) |
-| Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) (при закрытии) |
+| Отчёт о тестировании | [`docs/reports/0022-intellij-syntax-highlight.md`](../reports/0022-intellij-syntax-highlight.md) (✅ ГОТОВО) |
 
 > Взята в разработку по запросу заказчика (2026-07-13). Проработка до стадии
 > «Разработка» **без реализации** плагина (по образцу фич 0019/0020/0021): готовы
@@ -50,6 +50,34 @@ Platform), обеспечивающий **подсветку синтаксис�
 > Фича зарегистрирована по запросу заказчика (2026-07-13); проходит жизненный
 > цикл по правилу 17.
 
-<!-- При ЗАКРЫТИИ фичи (стадия 8, статус ГОТОВО) сюда добавляется раздел
-     «## Итог (что сделано)» — ссылки на отчёт/фиксы (правило 21).
-     Незакрытые фичи «Итога» не имеют. -->
+## Итог (что сделано)
+
+Реализован **Option A** (ADR): полноценный плагин IntelliJ Platform с **лексической**
+подсветкой `.lam` — новый подпроект `extensions/intellij-lam/` (Kotlin + IntelliJ
+Platform Gradle Plugin 2.1.0), рядом с `extensions/zed-lam`. Подсветка автономна
+(офлайн, в Community), от `lam-lsp` не зависит. Фича **аддитивна**: `grammar`/
+`simulation`, синтаксис/семантика и **версия языка** не тронуты (правило 22
+неприменим).
+
+- **0022-01 — каркас:** `LamLanguage`, `LamFileType` (`.lam`, иконка
+  `icons/lam.svg`), `LamIcons`; Gradle-сборка (wrapper 8.10.2), `plugin.xml`.
+  Целевая платформа IC **2024.1.7** (последняя на Java 17 — под доступный JDK 17).
+- **0022-02 — лексер + подсветка:** `LamLexer` (рукописный `LexerBase`, зеркалит
+  `grammar/src/parser/lexer.rs`; **осознанное отклонение от JFlex** ради
+  самодостаточной сборки). Операторы 0021 (`:=`→`OP_ASSIGN`, `=`→`OP_EQ`, `<=`/`>=`;
+  **`==`→`BAD_CHARACTER`**), числа/строки/комментарии/скобки. `LamSyntaxHighlighter`
+  + `LamHighlighterColors`. Регресс-тест `LamKeywordSyncTest` **читает** таблицу
+  `KEYWORDS` из Rust-лексера и сверяет с плагином.
+- **0022-03 — цвета/эргономика/доки:** `LamColorSettingsPage`, `LamCommenter`
+  (`//` и `/* */`), `LamBraceMatcher` (`{}` `()` `[]`; типы скобок разделены на
+  `L*/R*`); README подпроекта + раздел в корневом README (правило 15).
+- **Фикс 0022-01 (приёмка):** снята верхняя граница совместимости IDE — плагин
+  не ставился в сборки новее 243 (RustRover 261); `until-build` открыт, версия
+  `0.1.0 → 0.1.1`. См. [`docs/fixes/0022-01-untilbuild-open-range.md`](../fixes/0022-01-untilbuild-open-range.md).
+
+**Проверка:** `./gradlew buildPlugin test` → BUILD SUCCESSFUL, **27/27 тестов
+зелёные** (лексер 13, FileType 5, highlighter 3, ColorSettingsPage 3, эргономика 2,
+регресс ключевых слов 1). Собран `intellij-lam-0.1.1.zip`. Детали и остаточные
+пункты (бинарный `verifyPlugin`/`runIde` в headless не запускались; расширение
+диапазона на 2024.2+ требует JDK 21; семантическая LSP-подсветка) — в
+[отчёте](../reports/0022-intellij-syntax-highlight.md) и бэклоге `FEATURES.md`.
