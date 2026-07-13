@@ -55,9 +55,9 @@ R1–R7, критерии приёмки A1–A8 анализа). Фича не 
 | Лексер / токены (0022-02, рукописный `LexerBase`) | T2–T9, CT1–CT3 | ✅ (`LamLexerTest` 13/13) |
 | Регресс-тест лексики vs `parser/lexer.rs` (0022-02) | T10 | ✅ (`LamKeywordSyncTest`, реальная сверка) |
 | Highlighter-маппинг токен→цвет (0022-02) | T2/A2 | ✅ (`LamSyntaxHighlighterTest` 3/3) |
-| ColorSettingsPage (0022-03) | T11 | ⬜ |
-| Commenter / BraceMatcher (0022-03) | T12, T13 | ⬜ |
-| Сборка/verifyPlugin/аддитивность | T14, T15 | ◑ сборка+тесты ✅; `verifyPlugin` — при закрытии фичи |
+| ColorSettingsPage (0022-03) | T11 | ✅ (`LamColorSettingsPageTest` 3/3; демо-текст без BAD_CHARACTER) |
+| Commenter / BraceMatcher (0022-03) | T12, T13 | ✅ (`LamEditorSupportTest` 2/2; автотест вместо `runIde`) |
+| Сборка/verifyPlugin/аддитивность | T14, T15 | ◑ сборка+27 тестов ✅, аддитивность ✅; бинарный `verifyPlugin` — при закрытии фичи |
 
 <!-- Легенда: ✅ пройдено · ❌ провалено · ⬜ не проверялось · — не применимо -->
 

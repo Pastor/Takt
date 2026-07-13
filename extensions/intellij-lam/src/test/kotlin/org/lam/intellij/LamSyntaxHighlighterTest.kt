@@ -23,7 +23,10 @@ class LamSyntaxHighlighterTest : BasePlatformTestCase() {
         assertEquals(LamHighlighterColors.LINE_COMMENT, keyOf(LamTokenTypes.LINE_COMMENT))
         assertEquals(LamHighlighterColors.DOC_COMMENT, keyOf(LamTokenTypes.DOC_COMMENT))
         assertEquals(LamHighlighterColors.BLOCK_COMMENT, keyOf(LamTokenTypes.BLOCK_COMMENT))
-        assertEquals(LamHighlighterColors.BRACES, keyOf(LamTokenTypes.BRACES))
+        assertEquals(LamHighlighterColors.BRACES, keyOf(LamTokenTypes.LBRACE))
+        assertEquals(LamHighlighterColors.BRACES, keyOf(LamTokenTypes.RBRACE))
+        assertEquals(LamHighlighterColors.PARENTHESES, keyOf(LamTokenTypes.LPAREN))
+        assertEquals(LamHighlighterColors.BRACKETS, keyOf(LamTokenTypes.LBRACKET))
     }
 
     fun testAllOperatorsShareOperatorColor() {

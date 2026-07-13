@@ -9,6 +9,16 @@
 
 ### Добавлено
 
+- Фича **0022**, задача **0022-03** (настройка цветов, эргономика, документация)
+  **выполнена** — все три задачи разработки плагина IntelliJ закрыты. Добавлены
+  `LamColorSettingsPage` (страница «Color Scheme → Lam», 15 групп атрибутов,
+  демо-код Lam), `LamCommenter` (`//` и `/* */`), `LamBraceMatcher` (`{}` `()`
+  `[]`; фигурные — структурные). Для brace matcher типы скобок разделены на
+  `L*/R*` (лексер/highlighter обновлены, цветовые группы сохранены). Создан
+  `extensions/intellij-lam/README.md`, дополнен корневой `README.md` (§8,
+  правило 15). Проверка: `./gradlew buildPlugin test` → BUILD SUCCESSFUL, тесты
+  **27/27 зелёные** (+ColorSettingsPage 3, +EditorSupport 2). Аддитивно:
+  `grammar`/`simulation` и версия языка не тронуты.
 - Фича **0022**, задача **0022-02** (лексер + подсветка) **выполнена**. Реализован
   токенизатор `LamLexer` (рукописный `com.intellij.lexer.LexerBase`, зеркалит
   `grammar/src/parser/lexer.rs` — осознанное отклонение от JFlex ради
