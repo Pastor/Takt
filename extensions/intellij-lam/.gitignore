@@ -1,5 +1,6 @@
 # Gradle / IntelliJ Platform Plugin
 .gradle/
+.kotlin/
 build/
 .intellijPlatform/
 # IDE
