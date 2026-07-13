@@ -14,7 +14,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0022-intellij-syntax-highlight.md`](../adr/0022-intellij-syntax-highlight.md) |
 | Анализ | [`docs/analyze/0022-intellij-syntax-highlight.md`](../analyze/0022-intellij-syntax-highlight.md) |
-| Разработка 0022-01 | [`docs/development/0022-01-plugin-skeleton.md`](../development/0022-01-plugin-skeleton.md) (ЗАПЛАНИРОВАНО — каркас Gradle / `plugin.xml` / FileType) |
+| Разработка 0022-01 | [`docs/development/0022-01-plugin-skeleton.md`](../development/0022-01-plugin-skeleton.md) (**ВЫПОЛНЕНО** — каркас Gradle / `plugin.xml` / FileType; `buildPlugin` + 5 тестов зелёные) |
 | Разработка 0022-02 | [`docs/development/0022-02-lexer-highlighter.md`](../development/0022-02-lexer-highlighter.md) (ЗАПЛАНИРОВАНО — JFlex-лексер + `SyntaxHighlighter`) |
 | Разработка 0022-03 | [`docs/development/0022-03-color-settings-docs.md`](../development/0022-03-color-settings-docs.md) (ЗАПЛАНИРОВАНО — `ColorSettingsPage`, commenter, brace matcher, README/сборка) |
 | Тест-план | [`docs/tests/0022-intellij-syntax-highlight.md`](../tests/0022-intellij-syntax-highlight.md) |

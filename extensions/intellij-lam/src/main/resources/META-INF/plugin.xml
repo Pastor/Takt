@@ -1,0 +1,38 @@
+<idea-plugin>
+    <id>org.lam.intellij</id>
+    <name>Lam</name>
+    <vendor url="https://github.com/Pastor/BuT">Lam</vendor>
+
+    <description><![CDATA[
+        Поддержка языка <b>Lam</b> (Language of Automata Models) в IntelliJ IDEA:
+        распознавание файлов <code>.lam</code> и подсветка синтаксиса.<br/>
+        Базовая подсветка лексическая (работает офлайн, в т.ч. в Community).
+    ]]></description>
+
+    <!-- Диапазон совместимости IDE (sinceBuild/untilBuild) патчится Gradle-плагином
+         из gradle.properties — здесь не дублируется (ADR 0022). -->
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- 0022-01: регистрация типа файла `.lam` → язык Lam (R1, A1). -->
+        <fileType
+                name="Lam"
+                implementationClass="org.lam.intellij.LamFileType"
+                fieldName="INSTANCE"
+                language="Lam"
+                extensions="lam"/>
+
+        <!-- 0022-02: подсветка (SyntaxHighlighterFactory) — добавляется в след. задаче.
+        <lang.syntaxHighlighterFactory
+                language="Lam"
+                implementationClass="org.lam.intellij.highlight.LamSyntaxHighlighterFactory"/>
+        -->
+
+        <!-- 0022-03: страница настройки цветов, commenter, brace matcher.
+        <colorSettingsPage implementation="org.lam.intellij.highlight.LamColorSettingsPage"/>
+        <lang.commenter language="Lam" implementationClass="org.lam.intellij.LamCommenter"/>
+        <lang.braceMatcher language="Lam" implementationClass="org.lam.intellij.LamBraceMatcher"/>
+        -->
+    </extensions>
+</idea-plugin>

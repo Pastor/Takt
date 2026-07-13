@@ -1,0 +1,8 @@
+# Gradle / IntelliJ Platform Plugin
+.gradle/
+build/
+.intellijPlatform/
+# IDE
+.idea/
+*.iml
+out/

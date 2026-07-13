@@ -9,6 +9,18 @@
 
 ### Добавлено
 
+- Фича **0022**, задача **0022-01** (каркас плагина IntelliJ) **выполнена**.
+  Заведён подпроект `extensions/intellij-lam/` (Kotlin + IntelliJ Platform Gradle
+  Plugin 2.1.0, рабочий Gradle wrapper 8.10.2): `LamLanguage`, `LamFileType`
+  (`getDefaultExtension()="lam"`, иконка `icons/lam.svg`), `LamIcons`, каркас
+  `psi/LamTokenType`/`LamElementType` под лексер; `plugin.xml` регистрирует
+  `com.intellij.fileType` для `.lam` (+ закомментированные точки расширения под
+  0022-02/03). Целевая платформа — IC **2024.1.7** (`sinceBuild 241` / `untilBuild
+  243.*`): линейка 2024.1.x последняя на Java 17, что даёт воспроизводимую сборку
+  под доступным JDK 17. `./gradlew buildPlugin test` → **BUILD SUCCESSFUL**,
+  артефакт `intellij-lam-0.1.0.zip`, тесты `LamFileTypeTest` **5/5 зелёные**
+  (в т.ч. распознавание `.lam` как языка Lam — R1/A1). Аддитивно: `grammar`/
+  `simulation` и версия языка не тронуты.
 - Фича **0022** «Плагин IntelliJ IDEA: подсветка синтаксиса Lam» проработана до
   стадии «Разработка» (**без реализации** кода плагина, по образцу 0019/0020/0021).
   Заведён новый подпроект-цель `extensions/intellij-lam/` (рядом с существующим
