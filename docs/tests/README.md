@@ -11,3 +11,4 @@
 | Фича | Заголовок | Тест-план | Статус |
 |------|-----------|-----------|--------|
 | 0021 | Смена операторов: `:=` присваивание, `=` сравнение | [0021-swap-assign-compare.md](0021-swap-assign-compare.md) | ✅ ПРОЙДЕН (отчёт: [reports/0021](../reports/0021-swap-assign-compare.md)) |
+| 0022 | Плагин IntelliJ IDEA: подсветка синтаксиса Lam | [0022-intellij-syntax-highlight.md](0022-intellij-syntax-highlight.md) | ⬜ ЗАПЛАНИРОВАН (параллельно разработке) |

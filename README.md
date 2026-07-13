@@ -766,6 +766,20 @@ cargo install --path grammar --bin lam-lsp --features lsp
 }
 ```
 
+### Оснастка редакторов (IDE)
+
+Подсветка и навигация для `.lam` доступны в нескольких средах:
+
+| Среда | Пакет | Подсветка | Статус |
+|-------|-------|-----------|--------|
+| Zed | `extensions/zed-lam` | через `lam-lsp` (semantic tokens) | v0.1.1 |
+| IntelliJ IDEA (и IDE на IntelliJ Platform) | `extensions/intellij-lam` | нативная лексическая (JFlex + `SyntaxHighlighter`), работает офлайн и в Community | в разработке (фича [0022](docs/features/0022-intellij-syntax-highlight.md)) |
+| Любой LSP-клиент | `lam-lsp` | диагностика, hover, автодополнение, semantic tokens | стабильно |
+
+Плагин IntelliJ даёт автономную подсветку синтаксиса (ключевые слова, операторы
+`:=`/`=`/`<=`, литералы, комментарии) без запуска LSP-сервера; семантическая
+подсветка через `lam-lsp` — задел на будущее.
+
 ---
 
 ## 9. Тестирование
