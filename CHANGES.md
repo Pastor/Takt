@@ -9,6 +9,18 @@
 
 ### Добавлено
 
+- **Фикс 0023-02: навигация к константам `enum` и к портам в выражениях
+  `port.N`.** По запросу заказчика в плагине IntelliJ доработан переход к
+  декларации (`Ctrl/⌘+Click`/`Ctrl/⌘+B`): `LamSymbolScanner` теперь индексирует
+  **константы-варианты `enum`** (переход `… := Closing;` → `enum Action { …,
+  Closing }`) и **порты** `in`/`out`/`inout` (переход от использования порта, в
+  т.ч. как части `BitAccess` `sensors_cab.0`, к объявлению `in sensors_cab: …`).
+  Причина прежнего отказа — порты не входили в список декларирующих ключевых слов,
+  а варианты `enum` не сканировались вовсе (`.0` навигации не мешает). Аддитивно,
+  без изменений `grammar`/`simulation` и версии языка. Версия плагина
+  `0.2.1 → 0.3.0`. Проверка: `./gradlew --offline clean buildPlugin test` → BUILD
+  SUCCESSFUL, 53/53 теста (47 + 6 новых). См.
+  `docs/fixes/0023-02-enum-variants-and-port-members.md`.
 - **Скрипт установки плагина в RustRover** — `extensions/install-rustrover-plugin.sh`
   (POSIX sh, macOS/Linux). Собирает `intellij-lam` (`buildPlugin`), находит
   каталоги плагинов RustRover (`…/JetBrains/RustRover*`, в т.ч. Toolbox) и

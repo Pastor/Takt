@@ -19,6 +19,7 @@
 | Тест-план | [`docs/tests/0023-intellij-navigation-include.md`](../tests/0023-intellij-navigation-include.md) |
 | Отчёт о тестировании | [`docs/reports/0023-intellij-navigation-include.md`](../reports/0023-intellij-navigation-include.md) (✅ ГОТОВО) |
 | Исправление 0023-01 | [`docs/fixes/0023-01-verifyplugin-descriptor.md`](../fixes/0023-01-verifyplugin-descriptor.md) (verifyPlugin + валидность дескриптора) |
+| Исправление 0023-02 | [`docs/fixes/0023-02-enum-variants-and-port-members.md`](../fixes/0023-02-enum-variants-and-port-members.md) (навигация к константам enum и портам в `port.N`) |
 
 ## Краткое описание
 

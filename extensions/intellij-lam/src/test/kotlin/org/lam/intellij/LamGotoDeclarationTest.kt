@@ -54,6 +54,31 @@ class LamGotoDeclarationTest : BasePlatformTestCase() {
         assertEquals("M", targets!!.single().text)
     }
 
+    fun testJumpFromBitAccessPortToDeclaration() {
+        // Порт как часть выражения `port.N` (BitAccess): каретка на имени порта.
+        val targets = targetsAtCaret(
+            """
+            in sensors_cab: u8 := 0x10000009;
+            cond Occupied = sensors_<caret>cab.0;
+            """.trimIndent(),
+        )
+        assertNotNull(targets)
+        assertEquals("sensors_cab", targets!!.single().text)
+        assertTrue(targets.single().textRange.startOffset < myFixture.caretOffset)
+    }
+
+    fun testJumpFromEnumVariantUsageToDeclaration() {
+        val targets = targetsAtCaret(
+            """
+            enum Action { Idle = 670, Closing }
+            var a: Action := Clos<caret>ing;
+            """.trimIndent(),
+        )
+        assertNotNull(targets)
+        assertEquals("Closing", targets!!.single().text)
+        assertTrue(targets.single().textRange.startOffset < myFixture.caretOffset)
+    }
+
     fun testNoTargetOnKeyword() {
         assertNull(targetsAtCaret("mod<caret>el Foo { }"))
     }
