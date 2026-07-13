@@ -13,16 +13,22 @@ data class LamDeclaration(val name: String, val range: TextRange, val kind: Stri
  * Сканер деклараций Lam поверх [LamLexer] (фича 0023, задача 0023-01).
  *
  * Источник истины по формам деклараций — грамматика `grammar/src/grammar.lalrpop`
- * (правила `model`/`state`/`start`/`type`/`enum`/`cond`/`var`/`const`/`fn` вида
- * `kw <Id>` и правило `Import` с `as`-переименованиями). Разрешение имён —
- * эвристика по токенам одного файла без областей видимости (осознанное
+ * (правила `model`/`state`/`start`/`type`/`cond`/`var`/`const`/`fn` вида
+ * `kw <Id>`; порты `in`/`out`/`inout <Id>`; правило `EnumDefine` с константами-
+ * вариантами в `{ … }`; правило `Import` с `as`-переименованиями). Разрешение
+ * имён — эвристика по токенам одного файла без областей видимости (осознанное
  * ограничение Option A, ADR 0023).
  */
 object LamSymbolScanner {
 
-    /** Ключевые слова, за которыми идёт имя объявляемого символа. */
+    /**
+     * Ключевые слова, за которыми идёт имя объявляемого символа: `kw <Id>`.
+     * Порты `in`/`out`/`inout` объявляют имя так же (`in name: Type := …;`), поэтому
+     * их использования (в т.ч. как часть `port.N` — `BitAccess`) резолвятся к порту.
+     */
     private val SIMPLE_DECL_KEYWORDS = setOf(
-        "model", "state", "start", "type", "enum", "cond", "var", "const", "fn",
+        "model", "state", "start", "type", "cond", "var", "const", "fn",
+        "in", "out", "inout",
     )
 
     private data class Tok(val type: IElementType, val start: Int, val end: Int, val text: String)
@@ -38,6 +44,10 @@ object LamSymbolScanner {
                 when {
                     t.text == "import" -> {
                         i = scanImport(toks, i, decls)
+                        continue
+                    }
+                    t.text == "enum" -> {
+                        i = scanEnum(toks, i, decls)
                         continue
                     }
                     t.text in SIMPLE_DECL_KEYWORDS -> {
@@ -91,6 +101,44 @@ object LamSymbolScanner {
                     }
                 else -> {}
             }
+            j++
+        }
+        return j
+    }
+
+    /**
+     * Разбирает `enum <Name> { V1 = n, V2, … }` от индекса `from` (токен `enum`).
+     * Записывает имя перечисления и имена его констант-вариантов, чтобы переход к
+     * декларации работал и от использования варианта (`… := Closing;`). Возвращает
+     * индекс токена сразу за закрывающей `}` (или конец при неполной структуре).
+     */
+    private fun scanEnum(toks: List<Tok>, from: Int, decls: MutableList<LamDeclaration>): Int {
+        var j = from + 1
+        val nameTok = toks.getOrNull(j)
+        if (nameTok != null && nameTok.type == LamTokenTypes.IDENTIFIER) {
+            decls.add(LamDeclaration(nameTok.text, TextRange(nameTok.start, nameTok.end), "enum"))
+            j++
+        }
+        // Без тела `{ … }` вариантов нет.
+        if (toks.getOrNull(j)?.type != LamTokenTypes.LBRACE) return j
+        j++
+        var depth = 1
+        // Вариант начинается сразу после `{` или `,`; значение `= n` — это NUMBER,
+        // а не идентификатор, поэтому за вариант не принимается.
+        var atVariantStart = true
+        while (j < toks.size && depth > 0) {
+            val tk = toks[j]
+            when (tk.type) {
+                LamTokenTypes.LBRACE -> depth++
+                LamTokenTypes.RBRACE -> depth--
+                LamTokenTypes.COMMA -> if (depth == 1) atVariantStart = true
+                LamTokenTypes.IDENTIFIER ->
+                    if (depth == 1 && atVariantStart) {
+                        decls.add(LamDeclaration(tk.text, TextRange(tk.start, tk.end), "enum-variant"))
+                    }
+                else -> {}
+            }
+            if (tk.type != LamTokenTypes.COMMA) atVariantStart = false
             j++
         }
         return j
