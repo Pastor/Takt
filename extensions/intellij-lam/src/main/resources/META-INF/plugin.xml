@@ -32,5 +32,15 @@
         <colorSettingsPage implementation="org.lam.intellij.highlight.LamColorSettingsPage"/>
         <lang.commenter language="Lam" implementationClass="org.lam.intellij.editor.LamCommenter"/>
         <lang.braceMatcher language="Lam" implementationClass="org.lam.intellij.editor.LamBraceMatcher"/>
+
+        <!-- 0023: плоский PSI-разбор — даёт реальные PsiElement под кареткой
+             (нужны навигации и ссылкам; ADR 0023, Option A). -->
+        <lang.parserDefinition
+                language="Lam"
+                implementationClass="org.lam.intellij.parser.LamParserDefinition"/>
+
+        <!-- 0023: переход к декларации (Go to Declaration) и к файлам `import`. -->
+        <gotoDeclarationHandler
+                implementation="org.lam.intellij.navigation.LamGotoDeclarationHandler"/>
     </extensions>
 </idea-plugin>
