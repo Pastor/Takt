@@ -35,8 +35,12 @@
 - **Семантическая подсветка Lam в IntelliJ через `lam-lsp`** (задел из фичи 0022,
   Option C ADR) — надстройка над лексической подсветкой плагина
   `extensions/intellij-lam` (semantic tokens `lam-lsp`; LSP4IJ/LSP API).
-- **Расширение плагина IntelliJ до навигации/инспекций** (PSI-парсер поверх
-  лексера 0022) — Go to Declaration, структура файла, диагностики.
+- **Полноценный PSI-парсер плагина IntelliJ** (поверх лексера 0022; надстройка
+  над фичей [0023](docs/features/0023-intellij-navigation-include.md)) — то, что
+  лёгкий путь 0023 не покрывает: **find usages**, **структура файла**, **rename**,
+  инспекции/диагностики, настоящие `PsiReference` для путей `import`,
+  кросс-файловое разрешение имён (переход к символу *внутри* импортированного
+  файла). Go to Declaration и переход к файлу `import` уже сделаны в 0023.
 
 Остаточные пункты плагина 0022 (из [отчёта](docs/reports/0022-intellij-syntax-highlight.md)):
 бинарный `verifyPlugin` (Plugin Verifier) и визуальная `runIde`-проверка в

@@ -773,13 +773,16 @@ cargo install --path grammar --bin lam-lsp --features lsp
 | Среда | Пакет | Подсветка | Статус |
 |-------|-------|-----------|--------|
 | Zed | `extensions/zed-lam` | через `lam-lsp` (semantic tokens) | v0.1.1 |
-| IntelliJ IDEA (и IDE на IntelliJ Platform) | `extensions/intellij-lam` | нативная лексическая (`SyntaxHighlighter`), офлайн и в Community | фича [0022](docs/features/0022-intellij-syntax-highlight.md) |
+| IntelliJ IDEA (и IDE на IntelliJ Platform) | `extensions/intellij-lam` | нативная лексическая (`SyntaxHighlighter`), офлайн и в Community; навигация к декларации и по `import` | фичи [0022](docs/features/0022-intellij-syntax-highlight.md), [0023](docs/features/0023-intellij-navigation-include.md) |
 | Любой LSP-клиент | `lam-lsp` | диагностика, hover, автодополнение, semantic tokens | стабильно |
 
 Плагин IntelliJ даёт автономную подсветку синтаксиса (ключевые слова, операторы
 `:=`/`=`/`<=`, литералы, комментарии `//`/`///`/`/* */`) без запуска LSP-сервера,
 плюс страницу настройки цветов, комментирование (Ctrl+/) и подсветку парных
-скобок. Сборка/установка — см. [`extensions/intellij-lam/README.md`](extensions/intellij-lam/README.md).
+скобок. С фичи 0023 — **переход к декларации** (`Ctrl/⌘+Click`, `Ctrl/⌘+B`) для
+`model`/`state`/`type`/`enum`/`cond`/`var`/`const`/`fn` и импортированных имён, а
+также **переход по строке-пути `import`** к файлу `.lam`. Сборка/установка — см.
+[`extensions/intellij-lam/README.md`](extensions/intellij-lam/README.md).
 Семантическая подсветка через `lam-lsp` — задел на будущее.
 
 ---

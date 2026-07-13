@@ -1,9 +1,10 @@
 # Плагин IntelliJ IDEA — язык Lam
 
 Плагин для JetBrains IntelliJ IDEA (и IDE на IntelliJ Platform) с поддержкой
-языка **Lam** (Language of Automata Models): распознавание файлов `.lam` и
-**подсветка синтаксиса**. Часть монорепозитория проекта Lam (фича
-[`0022`](../../docs/features/0022-intellij-syntax-highlight.md)).
+языка **Lam** (Language of Automata Models): распознавание файлов `.lam`,
+**подсветка синтаксиса** и **навигация**. Часть монорепозитория проекта Lam
+(фичи [`0022`](../../docs/features/0022-intellij-syntax-highlight.md),
+[`0023`](../../docs/features/0023-intellij-navigation-include.md)).
 
 ## Возможности
 
@@ -14,9 +15,17 @@
 - Страница настройки цветов (**Settings → Editor → Color Scheme → Lam**).
 - Комментирование строкой `//` (Ctrl+/) и блоком `/* … */`; подсветка парных
   скобок `{}` `()` `[]`.
+- **Переход к декларации** (0023, `Ctrl/⌘+Click`, `Ctrl/⌘+B`) — от использования
+  имени к объявлению `model`/`state`/`start`/`type`/`enum`/`cond`/`var`/`const`/
+  `fn` и имён, введённых `import … as`.
+- **Навигация по `import`** (0023) — переход от строки-пути (`import "файл.lam";`
+  и `import { … } from "файл.lam";`) к самому файлу `.lam`.
 
 Подсветка **лексическая** и работает офлайн (без LSP-сервера) в любой редакции,
-включая Community. Семантическая подсветка через `lam-lsp` — задел на будущее.
+включая Community. Навигация — лёгкий путь поверх лексера (без полноценного
+PSI-парсера): переход к декларации через `GotoDeclarationHandler`, разрешение имён
+эвристикой по токенам одного файла. Find usages/rename/структура/инспекции и
+семантическая подсветка через `lam-lsp` — задел на будущее.
 
 ## Требования
 
@@ -50,6 +59,10 @@ src/main/kotlin/org/lam/intellij/
   highlight/    LamSyntaxHighlighter(+Factory),
                 LamHighlighterColors, LamColorSettingsPage    — подсветка/цвета
   editor/       LamCommenter, LamBraceMatcher     — эргономика (0022-03)
+  psi/          LamFile, LamTokenSets             — плоский PSI (0023)
+  parser/       LamParserDefinition, LamParser    — плоский разбор (0023)
+  navigation/   LamSymbolScanner, LamImports,
+                LamGotoDeclarationHandler         — навигация/import (0023)
 src/main/resources/META-INF/plugin.xml           — точки расширения
 src/main/resources/icons/lam.svg                 — иконка типа файла
 ```

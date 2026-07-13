@@ -9,6 +9,21 @@
 
 ### Добавлено
 
+- **Фича 0023 закрыта (ГОТОВО).** Плагин IntelliJ IDEA — навигация к декларации и
+  обработка `import` (подпроект `extensions/intellij-lam/`, версия плагина
+  `0.1.1 → 0.2.0`). Реализован Option A ADR (лёгкий путь) поверх лексера 0022, без
+  полноценного PSI-парсера: плоский `ParserDefinition`/`LamParser`/`LamFile` (даёт
+  реальные `PsiElement` под кареткой), `LamSymbolScanner` (индекс деклараций
+  `model`/`state`/`start`/`type`/`enum`/`cond`/`var`/`const`/`fn` и локальных имён
+  `import`), `LamGotoDeclarationHandler` (переход от использования к объявлению) и
+  `LamImports` (переход по строке-пути `import` к файлу `.lam`). Навигация по
+  `import` реализована через `GotoDeclarationHandler`, а не `PsiReferenceContributor`
+  (ссылки не привязываются к листовым токенам). Отчёт `docs/reports/0023-*` (✅,
+  **47/47 тестов**: 27 регресс 0022 + 20 новых), «Итог» — в карточке фичи.
+  Аддитивно: `grammar`/`simulation`, синтаксис/семантика и версия языка не тронуты
+  (правило 22 неприменим). Остаток (find-usages/rename/структура/инспекции,
+  настоящие `PsiReference`, кросс-файловое разрешение имён) вынесен в бэклог
+  `FEATURES.md` как будущая PSI-фича.
 - **Фича 0022 закрыта (ГОТОВО).** Плагин IntelliJ IDEA для подсветки синтаксиса
   Lam (подпроект `extensions/intellij-lam/`) доведён до релиза: тип файла + лексер
   (зеркалит `parser/lexer.rs`) + highlighter + страница цветов + commenter/brace
