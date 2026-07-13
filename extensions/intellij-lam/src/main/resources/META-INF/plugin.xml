@@ -23,11 +23,10 @@
                 language="Lam"
                 extensions="lam"/>
 
-        <!-- 0022-02: подсветка (SyntaxHighlighterFactory) — добавляется в след. задаче.
+        <!-- 0022-02: лексическая подсветка синтаксиса. -->
         <lang.syntaxHighlighterFactory
                 language="Lam"
                 implementationClass="org.lam.intellij.highlight.LamSyntaxHighlighterFactory"/>
-        -->
 
         <!-- 0022-03: страница настройки цветов, commenter, brace matcher.
         <colorSettingsPage implementation="org.lam.intellij.highlight.LamColorSettingsPage"/>
