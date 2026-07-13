@@ -14,4 +14,5 @@
 | 0020 | Адрес порта отдельно от объявления | [0020-port-address-decl.md](0020-port-address-decl.md) | аддитивно (инлайн-форма сохраняется) |
 | 0021 | Смена операторов: `<=` присваивание, `=` сравнение | [0021-swap-assign-compare.md](0021-swap-assign-compare.md) | слом (мажорная версия языка + мигратор) |
 | 0022 | Плагин IntelliJ IDEA: подсветка синтаксиса Lam | [0022-intellij-syntax-highlight.md](0022-intellij-syntax-highlight.md) | аддитивно (новый подпроект, язык не тронут) |
+| 0023 | Плагин IntelliJ IDEA — навигация к декларации и include | [0023-intellij-navigation-include.md](0023-intellij-navigation-include.md) | — (новая фича) |
 
