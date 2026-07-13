@@ -9,6 +9,18 @@
 
 ### Добавлено
 
+- Фича **0022**, задача **0022-02** (лексер + подсветка) **выполнена**. Реализован
+  токенизатор `LamLexer` (рукописный `com.intellij.lexer.LexerBase`, зеркалит
+  `grammar/src/parser/lexer.rs` — осознанное отклонение от JFlex ради
+  самодостаточной сборки): ключевые слова, операторы 0021 (`:=`→`OP_ASSIGN`,
+  `=`→`OP_EQ`, `<=`/`>=`; **`==`→`BAD_CHARACTER`**), числа (dec/hex/дробь/эксп.),
+  строки, комментарии `//`/`///`/`/* */`, скобки/пунктуация. Добавлены
+  `LamTokenTypes`, `LamHighlighterColors` (наследуют `DefaultLanguageHighlighterColors`),
+  `LamSyntaxHighlighter` + фабрика (зарегистрирована в `plugin.xml`). Регресс-тест
+  `LamKeywordSyncTest` **читает** таблицу `KEYWORDS` из `parser/lexer.rs` и сверяет
+  с плагином (ловит рассинхрон). Проверка: `./gradlew buildPlugin test` → BUILD
+  SUCCESSFUL, тесты **22/22 зелёные** (лексер 13, highlighter 3, регресс 1,
+  FileType 5). Аддитивно: `grammar`/`simulation` и версия языка не тронуты.
 - Фича **0022**, задача **0022-01** (каркас плагина IntelliJ) **выполнена**.
   Заведён подпроект `extensions/intellij-lam/` (Kotlin + IntelliJ Platform Gradle
   Plugin 2.1.0, рабочий Gradle wrapper 8.10.2): `LamLanguage`, `LamFileType`

@@ -2,7 +2,7 @@
 
 > Фича: [../features/0022-intellij-syntax-highlight.md](../features/0022-intellij-syntax-highlight.md) · ADR: [../adr/0022-intellij-syntax-highlight.md](../adr/0022-intellij-syntax-highlight.md) · анализ: [../analyze/0022-intellij-syntax-highlight.md](../analyze/0022-intellij-syntax-highlight.md)
 
-**Статус:** ЗАПЛАНИРОВАНО (разработка не начата).
+**Статус:** ВЫПОЛНЕНО (2026-07-13; сборка и 22 теста зелёные — см. «Проверки»).
 
 ## Что было
 
@@ -11,37 +11,56 @@
 (таблица `KEYWORDS`) и операторы фичи 0021 (`:=` присваивание, `=` сравнение,
 `<=` реляционный, `==` выведен).
 
-## Что план (объём задачи)
+## Что сделано
 
 Ядро подсветки (R2, R3):
 
-- **`Lam.flex`** (JFlex) → генерируемый `LamLexer` (`FlexAdapter`). Токены:
-  - **ключевые слова** — весь набор `KEYWORDS`: `model state start ref next cond
-    var const fn type enum struct import from as if else match for while loop
-    break continue return in out inout true false extern template assembly
-    formula string _ X F G U R LTL Guard` (перечень зеркалит `parser/lexer.rs`);
-  - **операторы** — `:=`, `=`, `<=`, `>=`, `<`, `>`, `+ - * / %`, `&& || !`,
-    `|`, `&`, `->`, `..`; последовательность `==` — как **BAD_CHARACTER**/два `=`
-    (в 0021 выведена, не легализуем визуально);
-  - **литералы** — целые/hex/bin числа, строки `"…"` (с эскейпами), `true/false`;
-  - **комментарии** — строчный `//…` и doc `///…`;
+- **`lexer/LamLexer`** — токенизатор Lam. **Отклонение от плана (обосновано):**
+  вместо `Lam.flex`/JFlex сделан **рукописный `com.intellij.lexer.LexerBase`**,
+  точно зеркалящий правила `grammar/src/parser/lexer.rs`. Причина — самодостаточная
+  сборка без внешнего генератора лексеров (grammarkit/JFlex-кодоген и его сетевых
+  зависимостей); поведение и тестируемость эквивалентны, а связь с источником
+  истины сильнее (см. регресс-тест ниже). Разбираются:
+  - **ключевые слова** — весь набор `KEYWORDS` (хранится в `LamTokenTypes.KEYWORDS`);
+  - **операторы** — `:=` → `OP_ASSIGN`, `=` → `OP_EQ`, `<=`/`>=` → `OP_LE`/`OP_GE`,
+    `<`/`>`, а также `+ - * ** / % ! != && || | & ^ ~ -> --> => << >> ? #`;
+    **`==` → `BAD_CHARACTER`** (оператор выведен в 0021 — не легализуем визуально);
+  - **литералы** — числа (десятичные с `_`, hex `0x…`, дробные `3.14`, экспонента
+    `1e10`/`2.5E-3` — как в Rust-лексере; двоичных `0b…` в языке нет), строки
+    `"…"` с экранированием (незакрытая не «съедает» остаток файла);
+  - **комментарии** — строчный `//…`, документационный `///…`, блочный `/* … */`
+    (одним токеном, в т.ч. многострочный);
   - **идентификаторы**, пунктуация `{ } ( ) [ ] ; : , .`.
-- **`LamTokenTypes`** — `IElementType`-константы по категориям.
-- **`LamSyntaxHighlighter`** (`SyntaxHighlighterBase`) — маппинг токен →
-  `TextAttributesKey` (KEYWORD, OPERATOR, NUMBER, STRING, LINE_COMMENT,
-  DOC_COMMENT, IDENTIFIER, PARENTHESES/BRACES/BRACKETS, SEMICOLON/COMMA/DOT,
-  BAD_CHARACTER), + `LamSyntaxHighlighterFactory` в `plugin.xml`.
-- **Регресс-тест соответствия** (R3): константа набора ключевых слов плагина
-  сверяется с эталонным списком из `parser/lexer.rs` (список фиксируется в
-  тест-плане; при добавлении слова в язык тест краснеет).
+- **`psi/LamTokenTypes`** — `IElementType`-константы по категориям + набор
+  `KEYWORDS` (зеркало таблицы из `parser/lexer.rs`).
+- **`highlight/LamHighlighterColors`** — ключи `TextAttributesKey` с наследованием
+  от `DefaultLanguageHighlighterColors` (работают в любой схеме; переиспользуются
+  страницей цветов 0022-03).
+- **`highlight/LamSyntaxHighlighter`** (`SyntaxHighlighterBase`) + **`…Factory`** —
+  маппинг токен → цвет; фабрика зарегистрирована в `plugin.xml`
+  (`lang.syntaxHighlighterFactory`).
+- **Регресс-тест соответствия** (R3, A3): `LamKeywordSyncTest` **читает**
+  `grammar/src/parser/lexer.rs` (поиск вверх от рабочего каталога), извлекает ключи
+  из блока `phf_map!` таблицы `KEYWORDS` и сверяет с `LamTokenTypes.KEYWORDS`.
+  При рассинхроне (новое/удалённое ключевое слово в языке) тест краснеет.
 
-Функциональность по стекам (правило 11): язык/компилятор — **н/п**.
+Функциональность по стекам (правило 11): язык/компилятор — **н/п** (аддитивно).
 
-## Проверки (план)
+## Проверки
 
-- `LexerTestCase` (IntelliJ test framework): для набора примеров/контрпримеров из
-  тест-плана поток токенов совпадает с ожидаемым; `x := 1;`, `a = b`, `x <= y`
-  дают ASSIGN/EQ/LE, `x == y` — BAD_CHARACTER.
-- Highlighter-тест: диапазоны образцового `.lam` → ожидаемые `TextAttributesKey`.
-- Регресс-тест ключевых слов (A3) зелёный.
-- Соответствие R2/R3 и критериям приёмки A2/A3/A4 (анализ).
+`./gradlew buildPlugin test --no-daemon` → **BUILD SUCCESSFUL** (15s, платформа из
+кэша); собран `intellij-lam-0.1.0.zip`. Тесты — **22/22 зелёные** (`failures=0`):
+
+- **`LamLexerTest` (13):** `x := 1;` → `OP_ASSIGN`; `a = b` → `OP_EQ`; `x <= 3` →
+  `OP_LE`; **`x == y` → `BAD_CHARACTER`** (контрпример CT1); ключевые слова и LTL
+  `X F G U R LTL Guard` → `KEYWORD`; числа `42/0xFF/3.14/1e10/2.5E-3` → `NUMBER`;
+  строка `"util.lam"` → `STRING`; `//`/`///`/`/* */` → соответствующие комментарии;
+  скобки/пунктуация; инвариант «токены покрывают весь ввод без разрывов».
+- **`LamSyntaxHighlighterTest` (3):** категории → ожидаемые `TextAttributesKey`;
+  все операторы делят цвет `OPERATOR`; `BAD_CHARACTER` раскрашен.
+- **`LamKeywordSyncTest` (1):** реальная сверка с `parser/lexer.rs` выполнена
+  (файл найден, `missing`/`extra` пусты) — набор ключевых слов совпал.
+- **`LamFileTypeTest` (5):** без регресса (0022-01).
+- → выполнены R2/R3 и критерии приёмки **A2/A3/A4** (анализ).
+- `runIde` (визуальная проверка раскраски) в headless-окружении не выполнялся;
+  подсветка подтверждена автотестами лексера и маппинга highlighter.
