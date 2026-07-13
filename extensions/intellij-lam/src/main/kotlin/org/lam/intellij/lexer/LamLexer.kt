@@ -181,9 +181,12 @@ class LamLexer : LexerBase() {
             ',' -> LamTokenTypes.COMMA
             ';' -> LamTokenTypes.SEMICOLON
             ':' -> LamTokenTypes.COLON
-            '(', ')' -> LamTokenTypes.PARENTHESES
-            '{', '}' -> LamTokenTypes.BRACES
-            '[', ']' -> LamTokenTypes.BRACKETS
+            '(' -> LamTokenTypes.LPAREN
+            ')' -> LamTokenTypes.RPAREN
+            '{' -> LamTokenTypes.LBRACE
+            '}' -> LamTokenTypes.RBRACE
+            '[' -> LamTokenTypes.LBRACKET
+            ']' -> LamTokenTypes.RBRACKET
             else -> TokenType.BAD_CHARACTER
         }
         emit(type, 1)

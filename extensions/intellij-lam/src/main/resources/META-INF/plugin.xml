@@ -28,10 +28,9 @@
                 language="Lam"
                 implementationClass="org.lam.intellij.highlight.LamSyntaxHighlighterFactory"/>
 
-        <!-- 0022-03: страница настройки цветов, commenter, brace matcher.
+        <!-- 0022-03: страница настройки цветов, commenter, brace matcher. -->
         <colorSettingsPage implementation="org.lam.intellij.highlight.LamColorSettingsPage"/>
-        <lang.commenter language="Lam" implementationClass="org.lam.intellij.LamCommenter"/>
-        <lang.braceMatcher language="Lam" implementationClass="org.lam.intellij.LamBraceMatcher"/>
-        -->
+        <lang.commenter language="Lam" implementationClass="org.lam.intellij.editor.LamCommenter"/>
+        <lang.braceMatcher language="Lam" implementationClass="org.lam.intellij.editor.LamBraceMatcher"/>
     </extensions>
 </idea-plugin>

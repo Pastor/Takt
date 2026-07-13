@@ -37,9 +37,14 @@ object LamTokenTypes {
     @JvmField val DOT = LamTokenType("DOT")
     @JvmField val COLON = LamTokenType("COLON")
 
-    @JvmField val PARENTHESES = LamTokenType("PARENTHESES") // ( )
-    @JvmField val BRACES = LamTokenType("BRACES")           // { }
-    @JvmField val BRACKETS = LamTokenType("BRACKETS")       // [ ]
+    // Скобки — раздельные типы для открывающих/закрывающих, чтобы работал
+    // подсветчик парных скобок (`LamBraceMatcher`, задача 0022-03).
+    @JvmField val LPAREN = LamTokenType("LPAREN")     // (
+    @JvmField val RPAREN = LamTokenType("RPAREN")     // )
+    @JvmField val LBRACE = LamTokenType("LBRACE")     // {
+    @JvmField val RBRACE = LamTokenType("RBRACE")     // }
+    @JvmField val LBRACKET = LamTokenType("LBRACKET") // [
+    @JvmField val RBRACKET = LamTokenType("RBRACKET") // ]
 
     /**
      * Ключевые слова Lam — зеркало таблицы `KEYWORDS` из

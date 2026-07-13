@@ -99,9 +99,12 @@ class LamLexerTest : BasePlatformTestCase() {
         // start Start = A + B + (C | D) + E { next Next; }
         val src = "A + (C | D) { [x] };"
         val types = types(src)
-        assertTrue(types.contains(LamTokenTypes.PARENTHESES))
-        assertTrue(types.contains(LamTokenTypes.BRACES))
-        assertTrue(types.contains(LamTokenTypes.BRACKETS))
+        assertTrue(types.contains(LamTokenTypes.LPAREN))
+        assertTrue(types.contains(LamTokenTypes.RPAREN))
+        assertTrue(types.contains(LamTokenTypes.LBRACE))
+        assertTrue(types.contains(LamTokenTypes.RBRACE))
+        assertTrue(types.contains(LamTokenTypes.LBRACKET))
+        assertTrue(types.contains(LamTokenTypes.RBRACKET))
         assertTrue(types.contains(LamTokenTypes.SEMICOLON))
         assertTrue(types.contains(LamTokenTypes.OPERATOR)) // + и |
     }

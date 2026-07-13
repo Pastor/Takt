@@ -38,9 +38,9 @@ class LamSyntaxHighlighter : SyntaxHighlighterBase() {
             LamTokenTypes.SEMICOLON -> LamHighlighterColors.SEMICOLON
             LamTokenTypes.COMMA -> LamHighlighterColors.COMMA
             LamTokenTypes.DOT -> LamHighlighterColors.DOT
-            LamTokenTypes.PARENTHESES -> LamHighlighterColors.PARENTHESES
-            LamTokenTypes.BRACES -> LamHighlighterColors.BRACES
-            LamTokenTypes.BRACKETS -> LamHighlighterColors.BRACKETS
+            LamTokenTypes.LPAREN, LamTokenTypes.RPAREN -> LamHighlighterColors.PARENTHESES
+            LamTokenTypes.LBRACE, LamTokenTypes.RBRACE -> LamHighlighterColors.BRACES
+            LamTokenTypes.LBRACKET, LamTokenTypes.RBRACKET -> LamHighlighterColors.BRACKETS
 
             TokenType.BAD_CHARACTER -> LamHighlighterColors.BAD_CHARACTER
             else -> null

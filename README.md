@@ -773,12 +773,14 @@ cargo install --path grammar --bin lam-lsp --features lsp
 | Среда | Пакет | Подсветка | Статус |
 |-------|-------|-----------|--------|
 | Zed | `extensions/zed-lam` | через `lam-lsp` (semantic tokens) | v0.1.1 |
-| IntelliJ IDEA (и IDE на IntelliJ Platform) | `extensions/intellij-lam` | нативная лексическая (JFlex + `SyntaxHighlighter`), работает офлайн и в Community | в разработке (фича [0022](docs/features/0022-intellij-syntax-highlight.md)) |
+| IntelliJ IDEA (и IDE на IntelliJ Platform) | `extensions/intellij-lam` | нативная лексическая (`SyntaxHighlighter`), офлайн и в Community | фича [0022](docs/features/0022-intellij-syntax-highlight.md) |
 | Любой LSP-клиент | `lam-lsp` | диагностика, hover, автодополнение, semantic tokens | стабильно |
 
 Плагин IntelliJ даёт автономную подсветку синтаксиса (ключевые слова, операторы
-`:=`/`=`/`<=`, литералы, комментарии) без запуска LSP-сервера; семантическая
-подсветка через `lam-lsp` — задел на будущее.
+`:=`/`=`/`<=`, литералы, комментарии `//`/`///`/`/* */`) без запуска LSP-сервера,
+плюс страницу настройки цветов, комментирование (Ctrl+/) и подсветку парных
+скобок. Сборка/установка — см. [`extensions/intellij-lam/README.md`](extensions/intellij-lam/README.md).
+Семантическая подсветка через `lam-lsp` — задел на будущее.
 
 ---
 
