@@ -18,7 +18,7 @@
 | Разработка 0023-01 | [`docs/development/0023-01-intellij-navigation-include.md`](../development/0023-01-intellij-navigation-include.md) (**ВЫПОЛНЕНО**) |
 | Тест-план | [`docs/tests/0023-intellij-navigation-include.md`](../tests/0023-intellij-navigation-include.md) |
 | Отчёт о тестировании | [`docs/reports/0023-intellij-navigation-include.md`](../reports/0023-intellij-navigation-include.md) (✅ ГОТОВО) |
-| Исправления | не потребовались |
+| Исправление 0023-01 | [`docs/fixes/0023-01-verifyplugin-descriptor.md`](../fixes/0023-01-verifyplugin-descriptor.md) (verifyPlugin + валидность дескриптора) |
 
 ## Краткое описание
 
@@ -61,6 +61,9 @@ PSI-парсера. Фича аддитивна: синтаксис/семант
 
 **Проверка:** `./gradlew --offline clean buildPlugin test` → BUILD SUCCESSFUL,
 **47/47 тестов зелёные** (27 регресс 0022 + 20 новых: сканер 9, переход 6,
-импорт 5). Детали и остаточные пункты (find-usages/rename/структура/инспекции,
-настоящие `PsiReference` для путей, кросс-файловое разрешение имён,
-`verifyPlugin`/`runIde` в GUI) — в [отчёте](../reports/0023-intellij-navigation-include.md) и бэклоге `FEATURES.md`.
+импорт 5). **Совместимость с новыми IDE** подтверждена IntelliJ Plugin Verifier —
+**Compatible** для IC 2024.3 / 2025.1 / 2025.2 (фикс [0023-01](../fixes/0023-01-verifyplugin-descriptor.md):
+настройка `verifyPlugin`, снят невалидный пустой `until-build`, версия плагина
+`0.2.0 → 0.2.1`). Остаточные пункты (find-usages/rename/структура/инспекции,
+настоящие `PsiReference` для путей, кросс-файловое разрешение имён, визуальная
+`runIde` в GUI) — в [отчёте](../reports/0023-intellij-navigation-include.md) и бэклоге `FEATURES.md`.

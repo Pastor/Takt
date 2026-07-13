@@ -27,6 +27,9 @@ dependencies {
             providers.gradleProperty("platformVersion").get(),
         )
         testFramework(TestFrameworkType.Platform)
+        // CLI IntelliJ Plugin Verifier — для задачи verifyPlugin (проверка
+        // бинарной совместимости с новыми IDE).
+        pluginVerifier()
     }
     testImplementation("junit:junit:4.13.2")
 }
@@ -38,9 +41,29 @@ intellijPlatform {
     pluginConfiguration {
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
-            // Пустое значение → until-build не задаётся (открытый верхний диапазон),
-            // чтобы плагин ставился и в новые IDE (напр. RustRover 261).
-            untilBuild = providers.gradleProperty("pluginUntilBuild").orElse("")
+            // Открытый верхний диапазон: при пустом `pluginUntilBuild` провайдер
+            // становится «отсутствующим» (filter отбрасывает пустое значение), и
+            // атрибут until-build в дескрипторе НЕ эмитится вовсе. Прежний
+            // `.orElse("")` давал невалидный `until-build=""` (ловится Plugin
+            // Verifier). Пустой until-build ⇒ плагин ставится в любые новые IDE.
+            untilBuild = providers.gradleProperty("pluginUntilBuild").filter { it.isNotBlank() }
+        }
+    }
+
+    // Проверка бинарной совместимости с новыми IDE (IntelliJ Plugin Verifier).
+    // Открытый until-build обещает работу в свежих сборках — verifier это проверяет
+    // на явном спреде релизов IC, которые новее сборочной платформы (2024.1.7).
+    // `recommended()` не используем: он подтягивает ещё не вышедшую сборку (2025.3),
+    // не резолвимую в релизном репозитории. Список правится по мере выхода IDE.
+    pluginVerification {
+        // Гасим косметический гайдлайн Marketplace «слово intellij в id плагина»
+        // (org.lam.intellij): не влияет на совместимость, переименование id
+        // сломало бы идентичность плагина.
+        freeArgs = listOf("-mute", "TemplateWordInPluginId")
+        ides {
+            ide("IC-2024.3")
+            ide("IC-2025.1")
+            ide("IC-2025.2")
         }
     }
 }

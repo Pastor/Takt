@@ -30,8 +30,10 @@ PSI-парсера): переход к декларации через `GotoDecl
 ## Требования
 
 - JDK 17.
-- Целевая платформа: IntelliJ IDEA Community **2024.1.x** (`sinceBuild 241` /
-  `untilBuild 243.*`). Версии вынесены в [`gradle.properties`](gradle.properties).
+- Целевая платформа сборки: IntelliJ IDEA Community **2024.1.x** (`sinceBuild
+  241`, верхняя граница **не задана** — открытый диапазон). Версии вынесены в
+  [`gradle.properties`](gradle.properties). Совместимость с новыми IDE проверена
+  IntelliJ Plugin Verifier (см. ниже).
 
 ## Сборка и запуск
 
@@ -41,8 +43,15 @@ cd extensions/intellij-lam
 ./gradlew buildPlugin      # собрать плагин → build/distributions/intellij-lam-<версия>.zip
 ./gradlew test             # юнит-тесты (лексер, highlighter, эргономика, регресс ключевых слов)
 ./gradlew runIde           # запустить песочницу IDE с установленным плагином
-./gradlew verifyPlugin     # проверка совместимости (IntelliJ Plugin Verifier)
+./gradlew verifyPlugin     # проверка совместимости с новыми IDE (Plugin Verifier)
 ```
+
+`verifyPlugin` качает указанные в `build.gradle.kts`
+(`pluginVerification.ides`) сборки IDE и проверяет бинарную совместимость.
+Список задан строковой нотацией `ide("IC-2024.3")`, `ide("IC-2025.1")`,
+`ide("IC-2025.2")` — строки аккумулируются (форма `ide(type, version)` для одного
+типа схлопнулась бы в одну проверку). Последний прогон: **Compatible** для всех
+трёх. Список обновляется по мере выхода новых релизов.
 
 ## Установка из файла
 
