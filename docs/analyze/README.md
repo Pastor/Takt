@@ -13,4 +13,5 @@
 | 0019 | Унификация грамматик Condition/Expression | [0019-condition-expression-unification.md](0019-condition-expression-unification.md) | нет (внутренний рефактор грамматики) |
 | 0020 | Адрес порта отдельно от объявления | [0020-port-address-decl.md](0020-port-address-decl.md) | аддитивно (инлайн-форма сохраняется) |
 | 0021 | Смена операторов: `<=` присваивание, `=` сравнение | [0021-swap-assign-compare.md](0021-swap-assign-compare.md) | слом (мажорная версия языка + мигратор) |
+| 0022 | Плагин IntelliJ IDEA: подсветка синтаксиса Lam | [0022-intellij-syntax-highlight.md](0022-intellij-syntax-highlight.md) | аддитивно (новый подпроект, язык не тронут) |
 

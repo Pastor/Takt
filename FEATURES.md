@@ -23,6 +23,7 @@
 |---|------|------------|--------|
 | [0019](docs/features/0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | нет | РАЗРАБОТКА |
 | [0020](docs/features/0020-port-address-decl.md) | Адрес порта отдельно от объявления | нет | РАЗРАБОТКА |
+| [0022](docs/features/0022-intellij-syntax-highlight.md) | Плагин IntelliJ IDEA: подсветка синтаксиса Lam | нет | РАЗРАБОТКА |
 
 ## 2. Кандидаты в фичи
 

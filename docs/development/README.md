@@ -19,4 +19,7 @@
 | 0021-02 | 0021 | Семантика/C-генератор/LSP под новую семантику (ЗАПЛАНИРОВАНО) | [0021-02-semantics-codegen-lsp.md](0021-02-semantics-codegen-lsp.md) |
 | 0021-03 | 0021 | Мигратор `.lam` + миграция фикстур/примеров (ЗАПЛАНИРОВАНО) | [0021-03-migrator.md](0021-03-migrator.md) |
 | 0021-04 | 0021 | Документация и повышение версии языка (ЗАПЛАНИРОВАНО) | [0021-04-docs-version.md](0021-04-docs-version.md) |
+| 0022-01 | 0022 | Каркас плагина: Gradle, FileType, регистрация `.lam` (ЗАПЛАНИРОВАНО) | [0022-01-plugin-skeleton.md](0022-01-plugin-skeleton.md) |
+| 0022-02 | 0022 | JFlex-лексер + SyntaxHighlighter (ЗАПЛАНИРОВАНО) | [0022-02-lexer-highlighter.md](0022-02-lexer-highlighter.md) |
+| 0022-03 | 0022 | ColorSettingsPage, commenter, brace matcher, доки (ЗАПЛАНИРОВАНО) | [0022-03-color-settings-docs.md](0022-03-color-settings-docs.md) |
 
