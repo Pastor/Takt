@@ -23,7 +23,7 @@
 |---|------|------------|--------|
 | [0019](docs/features/0019-condition-expression-unification.md) | Унификация грамматик Condition/Expression | нет | РАЗРАБОТКА |
 | [0020](docs/features/0020-port-address-decl.md) | Адрес порта отдельно от объявления | нет | РАЗРАБОТКА |
-| [0024](docs/features/0024-lam-formatter.md) | Канонический форматтер `.lam` (`lamc fmt`) | нет (уточняет анализ) | СОЗДАНА |
+| [0024](docs/features/0024-lam-formatter.md) | Канонический форматтер `.lam` (`lamc fmt`) | нет | АНАЛИЗ |
 
 ## 2. Кандидаты в фичи
 
