@@ -58,6 +58,18 @@ cd extensions/intellij-lam
 **Settings → Plugins → ⚙ → Install Plugin from Disk…** и выбрать собранный
 `build/distributions/intellij-lam-<версия>.zip`.
 
+## Установка в RustRover скриптом
+
+Скрипт [`../install-rustrover-plugin.sh`](../install-rustrover-plugin.sh)
+(macOS/Linux) собирает плагин и ставит/обновляет его во всех найденных
+инсталляциях RustRover (каталоги `…/JetBrains/RustRover*`), после чего IDE нужно
+перезапустить:
+
+```sh
+extensions/install-rustrover-plugin.sh              # собрать и установить/обновить
+extensions/install-rustrover-plugin.sh --skip-build # без пересборки (готовый zip)
+```
+
 ## Структура
 
 ```

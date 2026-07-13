@@ -9,6 +9,12 @@
 
 ### Добавлено
 
+- **Скрипт установки плагина в RustRover** — `extensions/install-rustrover-plugin.sh`
+  (POSIX sh, macOS/Linux). Собирает `intellij-lam` (`buildPlugin`), находит
+  каталоги плагинов RustRover (`…/JetBrains/RustRover*`, в т.ч. Toolbox) и
+  ставит/обновляет плагин (удаляет прежнюю папку, распаковывает свежий zip);
+  флаг `--skip-build`, предупреждение о перезапуске запущенной IDE. Проверено:
+  сборка + установка в `RustRover2026.1` (плагин `0.2.1`).
 - **Фикс 0023-01: проверка совместимости с новыми IDE (`verifyPlugin`).** По
   запросу заказчика настроен и пройден IntelliJ Plugin Verifier: подключён CLI
   (`pluginVerifier()`), задан явный спред IDE строковой нотацией `ide("IC-…")`
