@@ -4,10 +4,19 @@ pub(crate) mod viewport;
 
 use crate::context::Context;
 use crate::eval::value::Value;
+use grammar::diagnostics::Diagnostic;
 use std::cell::RefCell;
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::rc::Rc;
+
+/// Человекочитаемое описание диагностики для `TickResult::Failed`.
+fn describe(diagnostic: &Diagnostic) -> String {
+    match &diagnostic.code {
+        Some(code) => format!("{} ({code})", diagnostic.message),
+        None => diagnostic.message.clone(),
+    }
+}
 
 /// Предикат перехода: именованное условие с функцией-проверкой.
 ///
@@ -16,13 +25,13 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub(crate) struct Predicate {
     pub(crate) name: String,
-    func: Rc<dyn Fn(&mut dyn Context) -> bool>,
+    func: Rc<dyn Fn(&mut dyn Context) -> Result<bool, Diagnostic>>,
 }
 
 impl Predicate {
     pub(crate) fn new(
         name: impl Into<String>,
-        f: impl Fn(&mut dyn Context) -> bool + 'static,
+        f: impl Fn(&mut dyn Context) -> Result<bool, Diagnostic> + 'static,
     ) -> Self {
         Self {
             name: name.into(),
@@ -30,7 +39,7 @@ impl Predicate {
         }
     }
 
-    pub(crate) fn evaluate(&self, ctx: &mut dyn Context) -> bool {
+    pub(crate) fn evaluate(&self, ctx: &mut dyn Context) -> Result<bool, Diagnostic> {
         (self.func)(ctx)
     }
 }
@@ -51,13 +60,24 @@ pub(crate) enum Flow {
     Return(Option<Value>),
 }
 
-pub(crate) type Execution = Rc<dyn Fn(&mut dyn Context) -> Flow>;
+/// Исполнитель. `Err` — ошибка вычисления: она **обязана** дойти до
+/// вызывающего, а не быть напечатанной и забытой (требование R5 фичи 0025).
+pub(crate) type Execution = Rc<dyn Fn(&mut dyn Context) -> Result<Flow, Diagnostic>>;
 type Executions = HashMap<String, Vec<Execution>>;
 
+/// Результат шага симуляции.
+///
+/// `pub` (а не `pub(crate)`), поскольку возвращается публичным [`Unit::tick`] —
+/// иначе `private_interfaces` (пункт бэклога, закрыт попутно задачей 0025-05).
 #[derive(Eq, PartialEq, Clone, Debug)]
-pub(crate) enum TickResult {
+pub enum TickResult {
     Processing,
     Terminated,
+    /// Ошибка вычисления: симуляция недостоверна, продолжать нельзя.
+    ///
+    /// Именно этот вариант делает ошибку **отличимой** от честно ложного
+    /// условия (требование R5): раньше и то и другое давало `false`.
+    Failed(String),
 }
 
 #[derive(Clone, Default)]
@@ -140,8 +160,12 @@ impl Context for Unit {
 
 impl Unit {
     pub fn tick(&mut self) -> TickResult {
-        self.enter_initial_state();
-        self.execution("always");
+        if let Err(diagnostic) = self.enter_initial_state() {
+            return TickResult::Failed(describe(&diagnostic));
+        }
+        if let Err(diagnostic) = self.execution("always") {
+            return TickResult::Failed(describe(&diagnostic));
+        }
         match self {
             Unit::None => TickResult::Terminated,
             Unit::Node { .. } => self.tick_node(),
@@ -176,14 +200,22 @@ impl Unit {
             return TickResult::Terminated;
         }
 
-        // Шаг 3: ищем первый сработавший переход (predicate берёт &dyn Context)
-        let fired = transitions.iter().find_map(|(name, pred)| {
-            if pred.evaluate(self) {
-                Some((name.clone(), pred.name.clone()))
-            } else {
-                None
+        // Шаг 3: ищем первый сработавший переход.
+        //
+        // R5: ошибка вычисления условия — **не** «условие ложно». Раньше
+        // `create_predicate` сводил `Err` и невычислимый результат к `false`, и
+        // отличить сломанную модель от честно неактивного перехода было нельзя.
+        let mut fired = None;
+        for (name, pred) in &transitions {
+            match pred.evaluate(self) {
+                Ok(true) => {
+                    fired = Some((name.clone(), pred.name.clone()));
+                    break;
+                }
+                Ok(false) => {}
+                Err(diagnostic) => return TickResult::Failed(describe(&diagnostic)),
             }
-        });
+        }
 
         if let Unit::Node {
             last_transition, ..
@@ -207,7 +239,9 @@ impl Unit {
                 unreachable!()
             };
             for f in &exit_fns {
-                let _ = f(self);
+                if let Err(diagnostic) = f(self) {
+                    return TickResult::Failed(describe(&diagnostic));
+                }
             }
 
             // Шаг 5: исполнители входа в следующее состояние
@@ -224,7 +258,9 @@ impl Unit {
                 unreachable!()
             };
             for f in &enter_fns {
-                let _ = f(self);
+                if let Err(diagnostic) = f(self) {
+                    return TickResult::Failed(describe(&diagnostic));
+                }
             }
 
             // Шаг 6: переход в новое состояние + запись последнего перехода
@@ -294,6 +330,14 @@ impl Unit {
         } else {
             unreachable!()
         };
+        // Ошибка любого из параллельных детей делает шаг недостоверным (R5).
+        if let Some(failed) = results
+            .iter()
+            .find(|r| matches!(r, TickResult::Failed(_)))
+            .cloned()
+        {
+            return failed;
+        }
         if results.iter().all(|r| *r == TickResult::Terminated) {
             TickResult::Terminated
         } else {
@@ -317,6 +361,8 @@ impl Unit {
         };
         match child_result {
             TickResult::Processing => TickResult::Processing,
+            // Ошибка ребёнка — ошибка всей последовательности (R5).
+            failed @ TickResult::Failed(_) => failed,
             TickResult::Terminated => {
                 if let Unit::Sequential { index, .. } = self {
                     *index += 1;
@@ -331,12 +377,12 @@ impl Unit {
     ///
     /// Для `Parallel`/`Sequential` вызывать не нужно: их дети получают вызов
     /// через собственный [`Unit::tick`].
-    fn enter_initial_state(&mut self) {
+    fn enter_initial_state(&mut self) -> Result<(), Diagnostic> {
         let state_name = match self {
             Unit::Node {
                 entered_initial: true,
                 ..
-            } => return,
+            } => return Ok(()),
             Unit::Node {
                 entered_initial,
                 state,
@@ -345,10 +391,10 @@ impl Unit {
                 *entered_initial = true;
                 match state {
                     Some(name) => name.clone(),
-                    None => return,
+                    None => return Ok(()),
                 }
             }
-            Unit::Parallel { .. } | Unit::Sequential { .. } | Unit::None => return,
+            Unit::Parallel { .. } | Unit::Sequential { .. } | Unit::None => return Ok(()),
         };
         let enter_fns: Vec<Execution> = match self {
             Unit::Node {
@@ -361,11 +407,12 @@ impl Unit {
             Unit::Parallel { .. } | Unit::Sequential { .. } | Unit::None => vec![],
         };
         for f in &enter_fns {
-            let _ = f(self);
+            f(self)?;
         }
+        Ok(())
     }
 
-    pub fn execution(&mut self, name: &str) {
+    pub fn execution(&mut self, name: &str) -> Result<(), Diagnostic> {
         // Шаг 1: клонируем Rc-ссылки на функции уровня unit, не удерживая заимствование self
         let unit_fns: Vec<Execution> = match self {
             Unit::Node { executions, .. } => executions.get(name).cloned().unwrap_or_default(),
@@ -376,7 +423,7 @@ impl Unit {
         };
         // Шаг 2: вызываем — self свободен от заимствования
         for f in &unit_fns {
-            let _ = f(self);
+            f(self)?;
         }
         // Шаг 3: для Node — функции уровня текущего состояния
         let state_fns: Vec<Execution> = match self {
@@ -392,21 +439,24 @@ impl Unit {
             _ => vec![],
         };
         for f in &state_fns {
-            let _ = f(self);
+            f(self)?;
         }
-        // Шаг 4: рекурсия в дочерние
+        // Шаг 4: рекурсия в дочерние — ошибка ребёнка поднимается наверх (R5).
         match self {
             Unit::Parallel { units, .. } => {
                 let units = units.clone();
-                units.iter().for_each(|u| u.borrow_mut().execution(name));
+                for u in units.iter() {
+                    u.borrow_mut().execution(name)?;
+                }
             }
             Unit::Sequential { units, index, .. } => {
                 if *index < units.len() {
-                    units[*index].clone().borrow_mut().execution(name);
+                    units[*index].clone().borrow_mut().execution(name)?;
                 }
             }
-            _ => {}
+            Unit::Node { .. } | Unit::None => {}
         }
+        Ok(())
     }
 
     /// Возвращает имя текущего активного состояния (только для Unit::Node).
@@ -585,8 +635,8 @@ fn collect_active_states(unit: &Unit, out: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
     use super::*;
+    use std::cell::Cell;
     use std::collections::HashMap;
 
     struct MockCtx(HashMap<String, Value>);
@@ -860,6 +910,64 @@ mod tests {
     // ── tick: вспомогательные конструкторы ───────────────────────────────────
 
     /// Узел в именованном терминальном состоянии (нет исходящих переходов).
+    // ── R5: ошибка вычисления отличима от ложного условия (задача 0025-05) ───
+
+    #[test]
+    fn r5_eval_error_is_distinguishable_from_false_condition() {
+        // Ядро требования R5. Раньше `create_predicate` сводил Err и
+        // невычислимый результат к `false`, поэтому сломанная модель выглядела
+        // как модель с неактивным переходом.
+        let mut st = HashMap::new();
+        let failing = Predicate::new("сломанное", |_| {
+            Err(grammar::diagnostics::Diagnostic::error(
+                grammar::diagnostics::Location::Builtin,
+                "деление на ноль".to_string(),
+            )
+            .with_code("SIM-001"))
+        });
+        st.insert("A".to_string(), vec![("B".to_string(), failing)]);
+        st.insert("B".to_string(), vec![]);
+        let mut u = Unit::Node {
+            entered_initial: true,
+            context: None,
+            variables: HashMap::new(),
+            state_transitions: st,
+            state_executions: HashMap::new(),
+            state: Some("A".to_string()),
+            executions: HashMap::new(),
+            last_transition: None,
+        };
+        match u.tick() {
+            TickResult::Failed(details) => {
+                assert!(details.contains("деление на ноль"), "детали: {details}");
+                assert!(details.contains("SIM-001"), "код обязан быть в деталях: {details}");
+            }
+            other => panic!("ошибка вычисления обязана давать Failed, получено {other:?}"),
+        }
+    }
+
+    #[test]
+    fn r5_false_condition_is_not_an_error() {
+        // Контрпример: честно ложное условие — это Processing, а не Failed.
+        let mut st = HashMap::new();
+        st.insert(
+            "A".to_string(),
+            vec![("B".to_string(), Predicate::new("ложное", |_| Ok(false)))],
+        );
+        st.insert("B".to_string(), vec![]);
+        let mut u = Unit::Node {
+            entered_initial: true,
+            context: None,
+            variables: HashMap::new(),
+            state_transitions: st,
+            state_executions: HashMap::new(),
+            state: Some("A".to_string()),
+            executions: HashMap::new(),
+            last_transition: None,
+        };
+        assert_eq!(u.tick(), TickResult::Processing);
+    }
+
     // ── Д5: enter стартового состояния (задача 0025-04) ──────────────────────
 
     /// Строит узел с `enter`-исполнителем, считающим вызовы.
@@ -869,7 +977,7 @@ mod tests {
         let mut execs: HashMap<String, Executions> = HashMap::new();
         let f: Execution = Rc::new(move |_ctx: &mut dyn Context| {
             counter.set(counter.get() + 1);
-            Flow::Normal
+            Ok(Flow::Normal)
         });
         let mut m: Executions = HashMap::new();
         m.insert("enter".to_string(), vec![f]);
@@ -893,7 +1001,11 @@ mod tests {
         let counter = Rc::new(Cell::new(0));
         let mut u = node_with_enter(counter.clone());
         u.tick();
-        assert_eq!(counter.get(), 1, "enter стартового состояния обязан исполниться");
+        assert_eq!(
+            counter.get(),
+            1,
+            "enter стартового состояния обязан исполниться"
+        );
     }
 
     #[test]
@@ -915,7 +1027,11 @@ mod tests {
         let snap = crate::state_io::snapshot(&u);
         crate::state_io::restore(&mut u, &snap);
         u.tick();
-        assert_eq!(counter.get(), 0, "после restore enter не должен исполняться");
+        assert_eq!(
+            counter.get(),
+            0,
+            "после restore enter не должен исполняться"
+        );
     }
 
     fn node_terminal(name: &str) -> Unit {
@@ -935,7 +1051,7 @@ mod tests {
 
     /// Узел в состоянии `from` с одним переходом в `to`; предикат всегда `cond`.
     fn node_with_transition(from: &str, to: &str, cond: bool) -> Unit {
-        let pred = Predicate::new("cond", move |_| cond);
+        let pred = Predicate::new("cond", move |_| Ok(cond));
         let mut st = HashMap::new();
         st.insert(from.to_string(), vec![(to.to_string(), pred)]);
         st.insert(to.to_string(), vec![]);
@@ -1022,7 +1138,7 @@ mod tests {
     // После tick() состояние должно быть "B" (первый по порядку), а не "C".
     #[test]
     fn test_tick_node_only_first_matching_transition_taken() {
-        let pred = Predicate::new("always", |_| true);
+        let pred = Predicate::new("always", |_| Ok(true));
         let mut st = HashMap::new();
         st.insert(
             "A".to_string(),

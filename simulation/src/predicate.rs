@@ -24,21 +24,14 @@ use grammar::semantic::ConditionNode;
 
 /// Строит предикат перехода из условия.
 ///
-/// # Ограничение (задача 0025-05)
-///
-/// [`Predicate`] возвращает `bool`, поэтому ошибка вычисления пока сводится к
-/// `false` — как и раньше. Это **не** регресс: значения теперь вычисляются
-/// верно (Д6–Д8) и паник нет (Д4, Д6). Но требование R5 («ошибка вычисления
-/// отличима от честно ложного условия») закрывается только вместе с каналом
-/// диагностики — задача `0025-05`, где `Predicate`/`TickResult` получат
-/// `Result`.
+/// Ошибка вычисления **не** сводится к «условие ложно» (требование R5): она
+/// возвращается вызывающему и доходит до `TickResult::Failed` → CLI.
 pub(crate) fn create_predicate(cond: &ConditionNode) -> Predicate {
     let name = condition_label(cond);
     let cond = cond.clone();
     Predicate::new(name, move |c: &mut dyn Context| {
-        eval_condition(&cond, c)
-            .and_then(|value| ops::to_bool(&value).map_err(|e| e.to_diagnostic(loc_of(&cond))))
-            .unwrap_or(false)
+        let value = eval_condition(&cond, c)?;
+        ops::to_bool(&value).map_err(|e| e.to_diagnostic(loc_of(&cond)))
     })
 }
 

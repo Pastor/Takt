@@ -183,7 +183,7 @@ mod tests {
     }
 
     fn make_transitioning_node(from: &str, to: &str) -> Unit {
-        let pred = Predicate::new("go", |_| true);
+        let pred = Predicate::new("go", |_| Ok(true));
         let mut st = HashMap::new();
         st.insert(from.to_string(), vec![(to.to_string(), pred)]);
         st.insert(to.to_string(), vec![]);

@@ -267,7 +267,7 @@ fn build_transitions(state: &StateNode) -> Result<Vec<(String, Predicate)>, Diag
         .iter()
         .map(|r| {
             let pred = if matches!(r.cond, ConditionNode::None) {
-                Predicate::new("Always", |_| true)
+                Predicate::new("Always", |_| Ok(true))
             } else {
                 create_predicate(&r.cond)
             };
@@ -486,7 +486,7 @@ mod tests {
         let trans = state_transitions.get("A").unwrap();
         assert_eq!(trans.len(), 1);
         assert_eq!(trans[0].0, "B");
-        assert!(trans[0].1.evaluate(&mut Unit::None));
+        assert!(trans[0].1.evaluate(&mut Unit::None).unwrap());
     }
 
     #[test]
