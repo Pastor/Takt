@@ -13,7 +13,8 @@
 | Анализ | [`docs/analyze/0020-port-address-decl.md`](../analyze/0020-port-address-decl.md) |
 | Разработка 0020-01 | [`docs/development/0020-01-address-grammar.md`](../development/0020-01-address-grammar.md) (ВЫПОЛНЕНО) |
 | Разработка 0020-02 | [`docs/development/0020-02-semantics-diagnostics.md`](../development/0020-02-semantics-diagnostics.md) (ВЫПОЛНЕНО) |
-| Разработка 0020-03…05 | внешняя карта / полнота / C — ЗАПЛАНИРОВАНО |
+| Разработка 0020-03 | [`docs/development/0020-03-external-map.md`](../development/0020-03-external-map.md) (ВЫПОЛНЕНО) |
+| Разработка 0020-04…05 | полнота по достижимости / C — ЗАПЛАНИРОВАНО |
 
 > **Пересмотр архитектуры 2026-07-14.** По запросу заказчика решение 0020
 > пересмотрено: фича охватывает **обе оси** — *размещение* адреса и его

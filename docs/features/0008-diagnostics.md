@@ -22,6 +22,11 @@
 - SE-048 висячая привязка адреса (`address` для несуществующего порта),
   SE-049 конфликт источников адреса (inline + `address`, либо дубликат `address`)
   — оператор `address` фичи 0020 (`check_port_addresses` в `validate.rs`).
+- SE-050 внешняя карта переопределяет адрес порта (оверлей), SE-051 запись
+  внешней карты для несуществующего порта — фича 0020-03
+  (`address_map_overlay_warnings` в `address_map.rs`).
+- AM-001…006 — ошибки формата внешней `.ld`-подобной карты адресов
+  (`parse_address_map` в `address_map.rs`): имя/`=`/адрес/`;`/литерал/дубликат.
 - Неявный bool и документирующие комментарии (Ce12): `semantic/docs.rs`,
   `check_implicit_bool_conditions`.
 - Фикстуры `unused_variable.lam`, `nondeterministic_warn.lam`, `implicit_bool_*.lam`,

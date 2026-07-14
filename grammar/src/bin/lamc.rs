@@ -68,6 +68,12 @@ pub struct CompileOptions {
     pub quiet: bool,
     /// Флаг включения генерации проверок Guard-формул.
     pub guard_enable: bool,
+    /// Путь к внешней карте адресов (`.ld`-подобный формат, фича 0020).
+    ///
+    /// Заполняется флагом `--address-map`. Если задан, карта разбирается и
+    /// накладывается на модель оверлеем (с предупреждениями об оверлее/висячих
+    /// записях). Понижение адреса в целевой код — задача 0020-05.
+    pub address_map: Option<String>,
 }
 
 /// Разбивает строку путей на отдельные директории.
@@ -159,6 +165,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     let mut verbose = false;
     let mut quiet = false;
     let mut guard_enable = true;
+    let mut address_map: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -201,6 +208,13 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
             "--guard-disable" => {
                 guard_enable = false;
             }
+            "--address-map" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => address_map = Some(v.clone()),
+                    None => return Err(format!("{} требует аргумент", arg)),
+                }
+            }
             // Позиционный аргумент — входной файл
             a if !a.starts_with('-') => {
                 input_file = Some(a.to_string());
@@ -231,6 +245,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
         verbose,
         quiet,
         guard_enable,
+        address_map,
     })
 }
 
@@ -249,6 +264,7 @@ fn print_usage() {
     eprintln!("                         Флаги --verbose и --quiet взаимоисключающие");
     eprintln!("  --guard-enable         Включить генерацию проверок Guard-формул (по умолчанию)");
     eprintln!("  --guard-disable        Выключить генерацию проверок Guard-формул");
+    eprintln!("  --address-map <файл>   Внешняя карта адресов портов (.ld-подобный формат)");
     eprintln!();
     eprintln!("Целевые платформы:");
     eprintln!("  c         Генерация C-заголовочного файла");
@@ -298,6 +314,51 @@ fn main() {
             process::exit(1);
         }
     };
+
+    // Внешняя карта адресов (фича 0020-03): разбор + оверлей-предупреждения.
+    // Понижение адреса в целевой код — задача 0020-05; здесь только валидация
+    // карты и предупреждения об оверлее/висячих записях.
+    if let Some(map_path) = &options.address_map {
+        let map_src = match fs::read_to_string(map_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Ошибка чтения карты адресов '{}': {}", map_path, e);
+                process::exit(1);
+            }
+        };
+        match grammar::parse_address_map(&map_src, 0) {
+            Err(diags) => {
+                for d in diags {
+                    eprintln!(
+                        "Ошибка карты адресов [{}]: {}",
+                        d.code.as_deref().unwrap_or("?"),
+                        d.message
+                    );
+                }
+                process::exit(1);
+            }
+            Ok(entries) => {
+                // Строим модель для проверки оверлея (compile_to_c строит свою).
+                let warnings = grammar::parse(&source, 0)
+                    .ok()
+                    .and_then(|(ast, _)| {
+                        grammar::semantic::tree::construct_model(&ast, None, &options.include_dirs)
+                            .ok()
+                    })
+                    .map(|model| grammar::address_map_overlay_warnings(model, &entries))
+                    .unwrap_or_default();
+                for w in warnings {
+                    if !options.quiet {
+                        eprintln!(
+                            "Предупреждение [{}]: {}",
+                            w.code.as_deref().unwrap_or("?"),
+                            w.message
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     match options.target.as_str() {
         "c" => {
@@ -789,5 +850,31 @@ mod tests {
         assert!(opts.quiet);
         assert!(!opts.verbose);
         assert_eq!(opts.output_path, "dist/");
+    }
+
+    /// Флаг `--address-map` задаёт путь к внешней карте адресов (фича 0020-03).
+    #[test]
+    fn parse_address_map_flag() {
+        let args = vec![
+            "main.lam".to_string(),
+            "--address-map".to_string(),
+            "stm32.map".to_string(),
+        ];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.address_map.as_deref(), Some("stm32.map"));
+    }
+
+    /// По умолчанию карта адресов не задана.
+    #[test]
+    fn address_map_absent_by_default() {
+        let opts = parse_compile_args(&["main.lam".to_string()]).unwrap();
+        assert!(opts.address_map.is_none());
+    }
+
+    /// `--address-map` без аргумента — ошибка.
+    #[test]
+    fn address_map_requires_argument() {
+        let err = parse_compile_args(&["--address-map".to_string()]).unwrap_err();
+        assert!(err.contains("--address-map"), "сообщение: {}", err);
     }
 }
