@@ -9,6 +9,15 @@
 
 ### Добавлено
 
+- **Скрипт установки плагина в RustRover — вариант для Windows (PowerShell).**
+  Добавлен `extensions/install-rustrover-plugin.ps1` — порт `install-rustrover-plugin.sh`
+  под Windows: сборка `intellij-lam` через `gradlew.bat` (`buildPlugin`), поиск
+  каталогов плагинов в `%APPDATA%\JetBrains\RustRover*\plugins`, установка/обновление
+  (удаление прежней папки + `Expand-Archive`), флаг `-SkipBuild`, определение
+  запущенной IDE по процессу `rustrover*` и предупреждение о перезапуске. Имя
+  папки плагина читается из zip через `System.IO.Compression`. README плагина
+  дополнен разделом с командами PowerShell.
+
 - **Фича 0024 (АНАЛИЗ): архитектура и анализ форматтера `.lam`.** Пройдены стадии
   2–3 жизненного цикла (правило 17). **ADR** `docs/adr/0024-lam-formatter.md`:
   из трёх вариантов (pretty-printer от AST / lossless CST / репринтер токенов)
