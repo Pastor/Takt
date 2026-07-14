@@ -1,5 +1,8 @@
 use crate::context::Context;
+use crate::eval::ops;
 use crate::eval::value::Value;
+use crate::eval::{self as eval_core};
+use crate::expression::eval_expression;
 use crate::predicate::create_predicate;
 use crate::unit::{Execution, Predicate, Unit};
 use grammar::diagnostics::{Diagnostic, Location};
@@ -129,29 +132,6 @@ fn eval_expr(expr: &ExpressionNode) -> Option<Value> {
     }
 }
 
-// ── Выполнение выражений в runtime ───────────────────────────────────────────
-
-/// Вычисляет выражение в runtime-контексте (для тел enter/exit/always блоков).
-fn eval_expression_rt(expr: &ExpressionNode, ctx: &dyn Context) -> Option<Value> {
-    match expr {
-        ExpressionNode::Number(n) => Some(Value::Number(*n)),
-        ExpressionNode::Bool(b) => Some(Value::Boolean(*b)),
-        ExpressionNode::Rational(s, neg) => {
-            let v: f64 = s.parse().ok()?;
-            Some(Value::Real(if *neg { -v } else { v }))
-        }
-        ExpressionNode::Variable(var_rc) => ctx.get_value(var_rc.borrow().name()),
-        ExpressionNode::Address(_, _) => Some(Value::Number(0)),
-        ExpressionNode::Negate(inner) => match eval_expression_rt(inner, ctx)? {
-            Value::Number(n) => Some(Value::Number(-n)),
-            Value::Real(f) => Some(Value::Real(-f)),
-            _ => None,
-        },
-        ExpressionNode::Parenthesis(inner) => eval_expression_rt(inner, ctx),
-        _ => None,
-    }
-}
-
 /// Компилирует оператор в список исполнителей (closures).
 ///
 /// `write_ctx` — контекст для записи (ModelNodeContext цепочка, делегирует в shared parent).
@@ -189,11 +169,14 @@ fn compile_if(
     }
 
     let f: Execution = Rc::new(move |ctx: &mut dyn Context| {
-        let cond_val = eval_expression_rt(&cond_clone, ctx);
-        let branch_true = match &cond_val {
-            Some(Value::Boolean(b)) => *b,
-            Some(Value::Number(n)) => *n != 0,
-            _ => false,
+        let branch_true = match eval_expression(&cond_clone, ctx)
+            .and_then(|v| ops::to_bool(&v).map_err(|e| e.to_diagnostic(Location::Builtin)))
+        {
+            Ok(taken) => taken,
+            Err(diagnostic) => {
+                report("условие if", &diagnostic);
+                false
+            }
         };
         if branch_true {
             for f in &then_fns {
@@ -208,31 +191,65 @@ fn compile_if(
     vec![f]
 }
 
-/// Компилирует выражение в список исполнителей.
+/// Компилирует выражение-оператор в список исполнителей.
 ///
 /// Запись идёт в `write_ctx` (ModelNodeContext), чтение — из `ctx` (юнит-контекст).
+///
+/// # Приведение типа при записи (S9)
+///
+/// Значение приводится к объявленному типу цели (`VariableNode::ty()`) **здесь**,
+/// а не внутри `Context::set_value`: метод объявлен без `Result`, а S2 (знаковое
+/// переполнение) обязан уметь отказать. Обоснование —
+/// `docs/development/0025-01-eval-core.md`.
 fn compile_expression(
     expr: &ExpressionNode,
     write_ctx: Rc<RefCell<dyn Context>>,
 ) -> Vec<Execution> {
     match expr {
         ExpressionNode::Assign(lhs, rhs) => {
-            if let ExpressionNode::Variable(var_rc) = lhs.as_ref() {
-                let name = var_rc.borrow().name().to_string();
-                let rhs_clone = (**rhs).clone();
-                let write_ctx_clone = write_ctx.clone();
-                let f: Execution = Rc::new(move |ctx: &mut dyn Context| {
-                    if let Some(value) = eval_expression_rt(&rhs_clone, ctx) {
-                        write_ctx_clone.borrow_mut().set_value(&name, value);
-                    }
-                });
-                vec![f]
-            } else {
-                vec![]
-            }
+            let ExpressionNode::Variable(var_rc) = lhs.as_ref() else {
+                // Цель присваивания — не переменная (например, элемент массива).
+                // Пока не поддержано; полноценная обработка — задача 0025-02b.
+                return vec![];
+            };
+            let (name, ty, loc) = {
+                let b = var_rc.borrow();
+                (b.name().to_string(), b.ty().clone(), b.loc())
+            };
+            let rhs_clone = (**rhs).clone();
+            let write_ctx_clone = write_ctx.clone();
+            let f: Execution = Rc::new(move |ctx: &mut dyn Context| {
+                // Раньше здесь было `if let Some(value) = …` без ветки `else` —
+                // невычислимое выражение молча пропускало присваивание (Д2).
+                // Теперь ошибка не теряется: до появления канала диагностики
+                // (задача 0025-05) она печатается в stderr, а не исчезает.
+                match eval_expression(&rhs_clone, ctx).and_then(|value| {
+                    eval_core::coerce_to_type(value, &ty).map_err(|e| e.to_diagnostic(loc))
+                }) {
+                    Ok(value) => write_ctx_clone.borrow_mut().set_value(&name, value),
+                    Err(diagnostic) => report(&name, &diagnostic),
+                }
+            });
+            vec![f]
         }
+        // Прочие выражения-операторы (в первую очередь вызовы функций, Д3) —
+        // задача 0025-02b: требуется интерпретатор тела `fn`.
         _ => vec![],
     }
+}
+
+/// Временный канал диагностики времени выполнения.
+///
+/// Полноценный путь «ошибка → `TickResult` → `RunResult` → ненулевой код возврата
+/// CLI» — задача `0025-05`. До неё ошибка **печатается**, а не теряется: тихий
+/// пропуск и есть корневая причина фичи 0025, и заменять одну тишину на другую
+/// нельзя.
+fn report(name: &str, diagnostic: &Diagnostic) {
+    eprintln!(
+        "[симуляция] присваивание '{name}' пропущено: {} ({})",
+        diagnostic.message,
+        diagnostic.code.as_deref().unwrap_or("SIM-000")
+    );
 }
 
 // ── Точка входа ───────────────────────────────────────────────────────────────
