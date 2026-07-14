@@ -5,8 +5,13 @@
 /// через [`crate::eval::ops::apply_binary`], где несравнимость `NaN` — явная
 /// ошибка, а не выдуманный порядок; `PartialEq` здесь нужен тестам и служебным
 /// сверкам.
+///
+/// `pub` (а не `pub(crate)`), поскольку значение наблюдаемо извне через
+/// [`crate::unit::Unit::variable`] и уже возвращалось публичной
+/// [`crate::json_input::json_to_value`] (что и давало предупреждение
+/// `private_interfaces` — пункт бэклога, закрыт задачей 0025-06).
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Value {
+pub enum Value {
     Number(i64),
     Real(f64),
     Boolean(bool),

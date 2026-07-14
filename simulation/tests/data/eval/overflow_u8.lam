@@ -1,0 +1,13 @@
+/// T9/T17 (правила S1/S9): усечение по объявленному типу при записи.
+///
+/// Сверено с C (cc -std=c11): uint8_t b = 300 → 44; uint8_t a = 255; a+1 → 0.
+var wrapped: u8 := 0;
+var truncated: u8 := 0;
+
+start Idle {
+    always {
+        wrapped := 255;
+        wrapped := wrapped + 1;
+        truncated := 300;
+    }
+}
