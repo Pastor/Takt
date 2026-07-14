@@ -21,6 +21,7 @@
 | 0025-04 | 0025 | `enter` стартового состояния — Д5 (ВЫПОЛНЕНО) | [0025-04-initial-enter.md](0025-04-initial-enter.md) |
 | 0025-05 | 0025 | Канал диагностики: `TickResult::Failed` → `RunResult::EvalFailed` → код возврата (R5) (ВЫПОЛНЕНО) | [0025-05-diagnostic-channel.md](0025-05-diagnostic-channel.md) |
 | 0025-06 | 0025 | Фикстуры `tests/data/eval/` + интеграционный слой `tests/eval_tests.rs` (ВЫПОЛНЕНО) | [0025-06-fixtures-integration-tests.md](0025-06-fixtures-integration-tests.md) |
+| 0025-07 | 0025 | Автоматическая сверка с `lamc -t c` (критерий A8) (ВЫПОЛНЕНО) | [0025-07-c-conformance-test.md](0025-07-c-conformance-test.md) |
 | 0025-03 | 0025 | Адаптер условий `ConditionNode`, переписывание `flat` — Д6/Д7/Д8, паники сняты (ВЫПОЛНЕНО) | [0025-03-condition-adapter.md](0025-03-condition-adapter.md) |
 | 0020-01 | 0020 | Грамматика и AST оператора `address` (ВЫПОЛНЕНО) | [0020-01-address-grammar.md](0020-01-address-grammar.md) |
 | 0020-02 | 0020 | Семантика: привязка `address` + диагностики SE-048/049 (ВЫПОЛНЕНО) | [0020-02-semantics-diagnostics.md](0020-02-semantics-diagnostics.md) |
