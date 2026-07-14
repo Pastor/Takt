@@ -126,7 +126,8 @@ fn resolve_ast_statement(
         // ── Цикл loop ────────────────────────────────────────────────────────
         // `loop { тело }` — бесконечный цикл (cond = None)
         // `loop условие { тело }` — продолжается, пока условие истинно
-        ast::Statement::Loop(_, cond, body) => {
+        // Ключевое слово (`loop`/`while`) на семантику не влияет — синонимы.
+        ast::Statement::Loop(_, cond, body, _) => {
             let cond = cond
                 .as_ref()
                 .map(|c| construct_expression(c.clone(), params.clone(), model.clone()))

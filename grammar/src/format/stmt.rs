@@ -82,10 +82,16 @@ pub(crate) fn print(out: &mut Out, statement: &ast::Statement) -> Result<(), For
             }
             Ok(())
         }
-        S::Loop(_, cond, body) => {
+        S::Loop(_, cond, body, keyword) => {
+            // Печатаем слово АВТОРА: `while` — синоним `loop`, и переписывать
+            // одно в другое форматтер не вправе (решение заказчика по фиче 0024).
+            let word = match keyword {
+                ast::LoopKeyword::Loop => "loop",
+                ast::LoopKeyword::While => "while",
+            };
             let head = match cond {
-                Some(cond) => format!("loop {} ", expr::expression(cond)?),
-                None => "loop ".to_string(),
+                Some(cond) => format!("{word} {} ", expr::expression(cond)?),
+                None => format!("{word} "),
             };
             block_with_head(out, &head, body)
         }

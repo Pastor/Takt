@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Предкоммит-проверка: ссылки в Markdown + fmt + check + clippy + test +
+# формат примеров (lamc fmt --check) +
 # генерация C/PlantUML из примеров Lam и сборка сгенерированного кода.
 # Запускать из любого каталога.
 set -euo pipefail
@@ -30,6 +31,17 @@ $CARGO_CMD build --bin lamc 2>/dev/null
 $CARGO_CMD build --features lsp --bin lam-lsp
 
 LAMC="./target/debug/lamc"
+
+# Канон форматирования примеров (фича 0024). Проверка НЕразрушающая: только код
+# возврата. Область — `examples/`: они являются документацией по языку
+# (правила 15, 16) и обязаны быть в каноне. Фикстуры `tests/data/` намеренно НЕ
+# проверяются: часть тестов завязана на их раскладку и позиции.
+echo "Проверка формата примеров (lamc fmt --check)..."
+$LAMC fmt --check examples/ || {
+  echo "  Примеры не в каноне. Исправить: $LAMC fmt examples/"
+  exit 1
+}
+
 C_OUTPUT="examples/generated/c"
 PLANTUML_OUTPUT="examples/generated/plantuml"
 

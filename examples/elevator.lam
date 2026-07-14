@@ -33,76 +33,73 @@
 //   0x30000001             — btns_cab_hi
 
 // ══ ПОРТЫ ДАТЧИКОВ ПОЛОЖЕНИЯ КАБИНЫ (1 порт на этаж, 2 бита) ════════════════
-
-in sensors_1: u8 := 0x10000000;  // этаж 1: бит 0 = lo, бит 1 = hi
-in sensors_2: u8 := 0x10000001;  // этаж 2: бит 0 = lo, бит 1 = hi
-in sensors_3: u8 := 0x10000002;  // этаж 3: бит 0 = lo, бит 1 = hi
-in sensors_4: u8 := 0x10000003;  // этаж 4: бит 0 = lo, бит 1 = hi
-in sensors_5: u8 := 0x10000004;  // этаж 5: бит 0 = lo, бит 1 = hi
-in sensors_6: u8 := 0x10000005;  // этаж 6: бит 0 = lo, бит 1 = hi
-in sensors_7: u8 := 0x10000006;  // этаж 7: бит 0 = lo, бит 1 = hi
-in sensors_8: u8 := 0x10000007;  // этаж 8: бит 0 = lo, бит 1 = hi
-in sensors_9: u8 := 0x10000008;  // этаж 9: бит 0 = lo, бит 1 = hi
+in sensors_1: u8 := 268435456; // этаж 1: бит 0 = lo, бит 1 = hi
+in sensors_2: u8 := 268435457; // этаж 2: бит 0 = lo, бит 1 = hi
+in sensors_3: u8 := 268435458; // этаж 3: бит 0 = lo, бит 1 = hi
+in sensors_4: u8 := 268435459; // этаж 4: бит 0 = lo, бит 1 = hi
+in sensors_5: u8 := 268435460; // этаж 5: бит 0 = lo, бит 1 = hi
+in sensors_6: u8 := 268435461; // этаж 6: бит 0 = lo, бит 1 = hi
+in sensors_7: u8 := 268435462; // этаж 7: бит 0 = lo, бит 1 = hi
+in sensors_8: u8 := 268435463; // этаж 8: бит 0 = lo, бит 1 = hi
+in sensors_9: u8 := 268435464; // этаж 9: бит 0 = lo, бит 1 = hi
 
 // ══ ПОРТ ДАТЧИКОВ КАБИНЫ (2 бита в одном регистре) ══════════════════════════
-
-in sensors_cab: u8 := 0x10000009;  // бит 0 = присутствие, бит 1 = перегрузка
+in sensors_cab: u8 := 268435465; // бит 0 = присутствие, бит 1 = перегрузка
 
 // ══ ПОРТЫ КНОПОК ВЫЗОВА НА ЭТАЖАХ (1 порт на этаж, 2 бита) ════════════════
-
-in btns_floor_1: u8 := 0x20000000;  // этаж 1: бит 0 = вверх, бит 1 = вниз
-in btns_floor_2: u8 := 0x20000001;  // этаж 2: бит 0 = вверх, бит 1 = вниз
-in btns_floor_3: u8 := 0x20000002;  // этаж 3: бит 0 = вверх, бит 1 = вниз
-in btns_floor_4: u8 := 0x20000003;  // этаж 4: бит 0 = вверх, бит 1 = вниз
-in btns_floor_5: u8 := 0x20000004;  // этаж 5: бит 0 = вверх, бит 1 = вниз
-in btns_floor_6: u8 := 0x20000005;  // этаж 6: бит 0 = вверх, бит 1 = вниз
-in btns_floor_7: u8 := 0x20000006;  // этаж 7: бит 0 = вверх, бит 1 = вниз
-in btns_floor_8: u8 := 0x20000007;  // этаж 8: бит 0 = вверх, бит 1 = вниз
-in btns_floor_9: u8 := 0x20000008;  // этаж 9: бит 0 = вверх, бит 1 = вниз
+in btns_floor_1: u8 := 536870912; // этаж 1: бит 0 = вверх, бит 1 = вниз
+in btns_floor_2: u8 := 536870913; // этаж 2: бит 0 = вверх, бит 1 = вниз
+in btns_floor_3: u8 := 536870914; // этаж 3: бит 0 = вверх, бит 1 = вниз
+in btns_floor_4: u8 := 536870915; // этаж 4: бит 0 = вверх, бит 1 = вниз
+in btns_floor_5: u8 := 536870916; // этаж 5: бит 0 = вверх, бит 1 = вниз
+in btns_floor_6: u8 := 536870917; // этаж 6: бит 0 = вверх, бит 1 = вниз
+in btns_floor_7: u8 := 536870918; // этаж 7: бит 0 = вверх, бит 1 = вниз
+in btns_floor_8: u8 := 536870919; // этаж 8: бит 0 = вверх, бит 1 = вниз
+in btns_floor_9: u8 := 536870920; // этаж 9: бит 0 = вверх, бит 1 = вниз
 
 // ══ ПОРТЫ КНОПОК В КАБИНЕ (9 кнопок = 2 байта) ══════════════════════════════
-
-in btns_cab_lo: u8 := 0x30000000;  // биты 0-7 → кнопки этажей 1-8
-in btns_cab_hi: u8 := 0x30000001;  // бит  0   → кнопка этажа 9
+in btns_cab_lo: u8 := 805306368; // биты 0-7 → кнопки этажей 1-8
+in btns_cab_hi: u8 := 805306369; // бит  0   → кнопка этажа 9
 
 // ══ ПЕРЕМЕННЫЕ СОСТОЯНИЯ ════════════════════════════════════════════════════
-
-var current_floor: u8 := 1;  // текущий этаж кабины (обновляется read_floor_sensors)
-var target_floor:  u8 := 1;  // целевой этаж (обновляется scan_floor/cabin_buttons)
-var has_call:      u8 := 0;  // 1 = есть необработанный вызов
+var current_floor: u8 := 1; // текущий этаж кабины (обновляется read_floor_sensors)
+var target_floor: u8 := 1; // целевой этаж (обновляется scan_floor/cabin_buttons)
+var has_call: u8 := 0; // 1 = есть необработанный вызов
 
 // ══ УСЛОВИЯ ТОЧНОГО НАХОЖДЕНИЯ НА ЭТАЖЕ ════════════════════════════════════
 // Оба датчика активны (бит 0 И бит 1) → кабина в зоне точной остановки.
-
-cond AtFloor1 = sensors_1.0 & sensors_1.1;  // кабина на уровне 1-го этажа
-cond AtFloor2 = sensors_2.0 & sensors_2.1;  // кабина на уровне 2-го этажа
-cond AtFloor3 = sensors_3.0 & sensors_3.1;  // кабина на уровне 3-го этажа
-cond AtFloor4 = sensors_4.0 & sensors_4.1;  // кабина на уровне 4-го этажа
-cond AtFloor5 = sensors_5.0 & sensors_5.1;  // кабина на уровне 5-го этажа
-cond AtFloor6 = sensors_6.0 & sensors_6.1;  // кабина на уровне 6-го этажа
-cond AtFloor7 = sensors_7.0 & sensors_7.1;  // кабина на уровне 7-го этажа
-cond AtFloor8 = sensors_8.0 & sensors_8.1;  // кабина на уровне 8-го этажа
-cond AtFloor9 = sensors_9.0 & sensors_9.1;  // кабина на уровне 9-го этажа
+cond AtFloor1 = sensors_1.0 & sensors_1.1; // кабина на уровне 1-го этажа
+cond AtFloor2 = sensors_2.0 & sensors_2.1; // кабина на уровне 2-го этажа
+cond AtFloor3 = sensors_3.0 & sensors_3.1; // кабина на уровне 3-го этажа
+cond AtFloor4 = sensors_4.0 & sensors_4.1; // кабина на уровне 4-го этажа
+cond AtFloor5 = sensors_5.0 & sensors_5.1; // кабина на уровне 5-го этажа
+cond AtFloor6 = sensors_6.0 & sensors_6.1; // кабина на уровне 6-го этажа
+cond AtFloor7 = sensors_7.0 & sensors_7.1; // кабина на уровне 7-го этажа
+cond AtFloor8 = sensors_8.0 & sensors_8.1; // кабина на уровне 8-го этажа
+cond AtFloor9 = sensors_9.0 & sensors_9.1; // кабина на уровне 9-го этажа
 
 // ══ УСЛОВИЯ УПРАВЛЕНИЯ ДВИЖЕНИЕМ ════════════════════════════════════════════
-
-cond Occupied   = sensors_cab.0;              // бит 0: в кабине есть пассажир
-cond Overloaded = sensors_cab.1;              // бит 1: превышена грузоподъёмность
-cond AtTarget   = current_floor = target_floor;  // кабина уже на целевом этаже
-cond NeedUp     = current_floor < target_floor;  // цель выше → движение вверх
-cond NeedDown   = current_floor > target_floor;  // цель ниже → движение вниз
-cond HasCall    = has_call = 1;                  // есть необработанный вызов
+cond Occupied = sensors_cab.0; // бит 0: в кабине есть пассажир
+cond Overloaded = sensors_cab.1; // бит 1: превышена грузоподъёмность
+cond AtTarget = current_floor = target_floor; // кабина уже на целевом этаже
+cond NeedUp = current_floor < target_floor; // цель выше → движение вверх
+cond NeedDown = current_floor > target_floor; // цель ниже → движение вниз
+cond HasCall = has_call = 1; // есть необработанный вызов
 
 // Начать движение: есть вызов И кабина не на целевом этаже
 cond ShouldMove = HasCall & !AtTarget;
 
 // ══ ВНЕШНИЕ ФУНКЦИИ УПРАВЛЕНИЯ АППАРАТУРОЙ ══════════════════════════════════
-
-extern fn motor_up();    // включить двигатель на подъём
-extern fn motor_down();  // включить двигатель на спуск
-extern fn motor_stop();  // отключить двигатель (торможение)
-extern fn door_open();   // открыть двери кабины
-extern fn door_close();  // закрыть двери кабины
+extern fn motor_up();
+// включить двигатель на подъём
+extern fn motor_down();
+// включить двигатель на спуск
+extern fn motor_stop();
+// отключить двигатель (торможение)
+extern fn door_open();
+// открыть двери кабины
+extern fn door_close();
+// закрыть двери кабины
 
 // Читает sensors_N.0 и sensors_N.1 для каждого этажа N;
 // устанавливает current_floor = N, когда оба бита активны.
@@ -120,7 +117,6 @@ extern fn scan_cabin_buttons();
 enum Floor { Bottom = 80, Top }
 
 // ══ МОДЕЛЬ ЛИФТА ════════════════════════════════════════════════════════════
-
 model Engine {
     enum Action { Idle = 670, Closing }
     // ── Idle: двери открыты, ожидание вызова ──────────────────────────────
@@ -146,9 +142,12 @@ model Engine {
     // Перегрузка (sensors_cab.1) или совпадение этажей прерывают закрытие.
     // Иначе автомат выбирает направление и переходит в MovingUp/MovingDown.
     state DoorClosing {
-        ref Idle:       Overloaded | AtTarget;   // перегрузка или вызов снят
-        ref MovingUp:   !Overloaded & NeedUp;    // цель выше — ехать вверх
-        ref MovingDown: !Overloaded & NeedDown;  // цель ниже — ехать вниз
+        ref Idle: Overloaded | AtTarget;
+        // перегрузка или вызов снят
+        ref MovingUp: !Overloaded & NeedUp;
+        // цель выше — ехать вверх
+        ref MovingDown: !Overloaded & NeedDown;
+        // цель ниже — ехать вниз
         always {
             door_close();
         }

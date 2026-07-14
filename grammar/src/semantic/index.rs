@@ -756,7 +756,8 @@ fn collect_ast_statement_entries(
                 collect_ast_statement_entries(e, model, entries);
             }
         }
-        ast::Statement::Loop(_, cond_opt, body) => {
+        // Ключевое слово (`loop`/`while`) на индекс не влияет — синонимы.
+        ast::Statement::Loop(_, cond_opt, body, _) => {
             if let Some(c) = cond_opt {
                 collect_ast_expression_entries(c, model, entries);
             }

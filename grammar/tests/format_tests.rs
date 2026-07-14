@@ -353,3 +353,40 @@ fn r2_blank_line_between_comment_groups_survives() {
     assert_eq!(out, "/// шапка файла\n\n/// про enum\nenum M { A = 0 }\n");
     assert_eq!(out, format_source(&out).unwrap(), "идемпотентность");
 }
+
+#[test]
+fn r4_author_keyword_is_preserved_not_canonicalised() {
+    // Решение заказчика по фиче 0024 (вариант 2): форматтер печатает СЛОВО
+    // АВТОРА. `while` — синоним `loop`, но переписывать одно в другое форматтер
+    // не вправе: он меняет раскладку, а не текст программы.
+    //
+    // Раньше АСД не хранил ключевое слово, и `while` молча превращался в `loop`
+    // — это поймал пробный нормализующий прогон по examples/, а не тест.
+    let source = "var c: u8 := 0;\nstart S {\n    always {\n        while c < 3 {\n            c := c + 1;\n        }\n        loop c < 9 {\n            c := c + 1;\n        }\n    }\n}\n";
+    let out = format_source(source).unwrap();
+    assert!(
+        out.contains("while c < 3 {"),
+        "`while` обязан остаться `while`:\n{out}"
+    );
+    assert!(
+        out.contains("loop c < 9 {"),
+        "`loop` обязан остаться `loop`:\n{out}"
+    );
+    assert_eq!(out, format_source(&out).unwrap(), "идемпотентность");
+}
+
+#[test]
+fn r4_guard_form_is_preserved() {
+    // То же для синонимов `: [Guard] условия;` и `: условия;`.
+    let out =
+        format_source("state A {\n    : [Guard] x > 1;\n}\nstate B {\n    : y > 2;\n}\n").unwrap();
+    assert!(
+        out.contains(": [Guard] x > 1;"),
+        "явная форма обязана сохраниться:\n{out}"
+    );
+    assert!(
+        out.contains(": y > 2;"),
+        "краткая форма обязана сохраниться:\n{out}"
+    );
+    assert_eq!(out, format_source(&out).unwrap(), "идемпотентность");
+}
