@@ -1123,59 +1123,65 @@ mod diagnostic_location_tests {
 }
 
 // ── textDocument/formatting (фича 0024, задача 0024-04) ──────────────────────
+//
+// Гейт `cfg(feature = "lsp")` обязателен: `grammar::lsp` собирается только с
+// этой фичей, а `precheck.sh` гоняет `cargo test` БЕЗ `--all-features`.
+#[cfg(feature = "lsp")]
+#[cfg(test)]
+mod formatting_tests {
+    #[test]
+    fn formatting_returns_single_full_document_edit() {
+        let source = "var   x :u8:=0;\nstart   S ;\n";
+        let edits = grammar::lsp::formatting_edits(source)
+            .expect("форматирование удалось")
+            .expect("текст не каноничен — правка обязана быть");
+        assert_eq!(edits.len(), 1, "ожидается одна правка на весь документ");
+        assert_eq!(edits[0].new_text, "var x: u8 := 0;\nstart S;\n");
+        // Диапазон обязан покрывать документ целиком, иначе редактор склеит текст.
+        assert_eq!(edits[0].range.start.line, 0);
+        assert_eq!(edits[0].range.start.character, 0);
+    }
 
-#[test]
-fn formatting_returns_single_full_document_edit() {
-    let source = "var   x :u8:=0;\nstart   S ;\n";
-    let edits = grammar::lsp::formatting_edits(source)
-        .expect("форматирование удалось")
-        .expect("текст не каноничен — правка обязана быть");
-    assert_eq!(edits.len(), 1, "ожидается одна правка на весь документ");
-    assert_eq!(edits[0].new_text, "var x: u8 := 0;\nstart S;\n");
-    // Диапазон обязан покрывать документ целиком, иначе редактор склеит текст.
-    assert_eq!(edits[0].range.start.line, 0);
-    assert_eq!(edits[0].range.start.character, 0);
-}
+    #[test]
+    fn formatting_returns_none_when_already_canonical() {
+        // Файл уже каноничен — правок нет, редактор не помечает его изменённым.
+        let canonical = "var x: u8 := 0;\nstart S;\n";
+        let edits = grammar::lsp::formatting_edits(canonical).expect("форматирование удалось");
+        assert!(
+            edits.is_none(),
+            "на каноническом тексте правок быть не должно"
+        );
+    }
 
-#[test]
-fn formatting_returns_none_when_already_canonical() {
-    // Файл уже каноничен — правок нет, редактор не помечает его изменённым.
-    let canonical = "var x: u8 := 0;\nstart S;\n";
-    let edits = grammar::lsp::formatting_edits(canonical).expect("форматирование удалось");
-    assert!(
-        edits.is_none(),
-        "на каноническом тексте правок быть не должно"
-    );
-}
+    #[test]
+    fn formatting_reports_error_instead_of_mangling() {
+        // Контрпример: непечатаемый узел — это ОШИБКА, а не «отформатировали как
+        // смогли». Сервер её залогирует и ответит null.
+        //
+        // Раньше здесь стоял `InlineFormula`; после того как его печать реализовали,
+        // тест устарел по замыслу и был перенаправлен на `assembly` — узел, печать
+        // которого действительно не поддержана.
+        let unsupported = "start S {\n    always { assembly { } }\n}\n";
+        assert!(
+            grammar::lsp::formatting_edits(unsupported).is_err(),
+            "непечатаемый узел обязан давать ошибку, а не молча искажать исходник"
+        );
+    }
 
-#[test]
-fn formatting_reports_error_instead_of_mangling() {
-    // Контрпример: непечатаемый узел — это ОШИБКА, а не «отформатировали как
-    // смогли». Сервер её залогирует и ответит null.
-    //
-    // Раньше здесь стоял `InlineFormula`; после того как его печать реализовали,
-    // тест устарел по замыслу и был перенаправлен на `assembly` — узел, печать
-    // которого действительно не поддержана.
-    let unsupported = "start S {\n    always { assembly { } }\n}\n";
-    assert!(
-        grammar::lsp::formatting_edits(unsupported).is_err(),
-        "непечатаемый узел обязан давать ошибку, а не молча искажать исходник"
-    );
-}
-
-#[test]
-fn a6_lsp_and_cli_share_one_core() {
-    // Критерий A6: LSP и `lamc fmt` не могут разойтись в стиле — они зовут одну
-    // и ту же функцию. Проверяем это фактом, а не договорённостью.
-    let source = "var   x :u8:=0;\nstart   S ;\n";
-    let from_core = grammar::format::format_source(source).unwrap();
-    let from_lsp = grammar::lsp::formatting_edits(source)
-        .unwrap()
-        .unwrap()
-        .remove(0)
-        .new_text;
-    assert_eq!(
-        from_lsp, from_core,
-        "LSP обязан давать ровно то же, что ядро"
-    );
+    #[test]
+    fn a6_lsp_and_cli_share_one_core() {
+        // Критерий A6: LSP и `lamc fmt` не могут разойтись в стиле — они зовут одну
+        // и ту же функцию. Проверяем это фактом, а не договорённостью.
+        let source = "var   x :u8:=0;\nstart   S ;\n";
+        let from_core = grammar::format::format_source(source).unwrap();
+        let from_lsp = grammar::lsp::formatting_edits(source)
+            .unwrap()
+            .unwrap()
+            .remove(0)
+            .new_text;
+        assert_eq!(
+            from_lsp, from_core,
+            "LSP обязан давать ровно то же, что ядро"
+        );
+    }
 }
