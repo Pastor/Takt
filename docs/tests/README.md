@@ -13,4 +13,4 @@
 | 0021 | Смена операторов: `:=` присваивание, `=` сравнение | [0021-swap-assign-compare.md](0021-swap-assign-compare.md) | ✅ ПРОЙДЕН (отчёт: [reports/0021](../reports/0021-swap-assign-compare.md)) |
 | 0022 | Плагин IntelliJ IDEA: подсветка синтаксиса Lam | [0022-intellij-syntax-highlight.md](0022-intellij-syntax-highlight.md) | ✅ ПРОЙДЕН (отчёт: [reports/0022](../reports/0022-intellij-syntax-highlight.md)) |
 | 0023 | Плагин IntelliJ IDEA — навигация к декларации и include | [0023-intellij-navigation-include.md](0023-intellij-navigation-include.md) | СОЗДАНА |
-| 0025 | Починка вычислителя выражений симулятора | [0025-simulator-expression-eval.md](0025-simulator-expression-eval.md) | ⚠️ ЧАСТИЧНО (отчёт: [reports/0025](../reports/0025-simulator-expression-eval.md)) — T1–T21 зелёные; T18 непроверяем (рекурсия запрещена семантикой), T31 красный (дефект 0014), T32/T33 не проверялись, T21/T22/T30 частично |
+| 0025 | Починка вычислителя выражений симулятора | [0025-simulator-expression-eval.md](0025-simulator-expression-eval.md) | ✅ ПРОЙДЕН (отчёт: [reports/0025](../reports/0025-simulator-expression-eval.md)) |
