@@ -34,7 +34,7 @@ use grammar::semantic::ExpressionNode;
 /// Паники недостижимы: любой неподдержанный случай — `Err` (R4).
 pub(crate) fn eval_expression(
     expr: &ExpressionNode,
-    ctx: &dyn Context,
+    ctx: &mut dyn Context,
 ) -> Result<Value, Diagnostic> {
     match expr {
         // ── Литералы ─────────────────────────────────────────────────────────
@@ -214,14 +214,15 @@ pub(crate) fn eval_expression(
         // ── Пока не поддержано — но с диагностикой, а не тихим пропуском ─────
         //
         // Вызовы функций требуют интерпретатора тела `fn` — задача `0025-02b`.
-        ExpressionNode::Function(func, _) => Err(Diagnostic::error(
-            func.borrow().loc(),
-            format!(
-                "вызов функции '{}' пока не поддерживается симулятором",
-                func.borrow().name()
-            ),
-        )
-        .with_code("SIM-012")),
+        // Д3/Д4: вызов функции. Аргументы вычисляются в контексте вызывающего,
+        // тело исполняет общий интерпретатор (`unit::statement`).
+        ExpressionNode::Function(func, args) => {
+            let values = args
+                .iter()
+                .map(|arg| eval_expression(arg, ctx))
+                .collect::<Result<Vec<Value>, Diagnostic>>()?;
+            crate::unit::statement::call_function(func, &values, ctx)
+        }
         ExpressionNode::NamedFunctionBox(_, _) => Err(unsupported(
             "вызов с именованными аргументами",
             loc_of(expr),
@@ -342,7 +343,7 @@ fn loc_of(expr: &ExpressionNode) -> Location {
     }
 }
 
-fn unary(op: UnOp, inner: &ExpressionNode, ctx: &dyn Context) -> Result<Value, Diagnostic> {
+fn unary(op: UnOp, inner: &ExpressionNode, ctx: &mut dyn Context) -> Result<Value, Diagnostic> {
     let value = eval_expression(inner, ctx)?;
     ops::apply_unary(op, &value).map_err(|e: EvalError| e.to_diagnostic(loc_of(inner)))
 }
@@ -351,7 +352,7 @@ fn binary(
     op: BinOp,
     left: &ExpressionNode,
     right: &ExpressionNode,
-    ctx: &dyn Context,
+    ctx: &mut dyn Context,
 ) -> Result<Value, Diagnostic> {
     let lhs = eval_expression(left, ctx)?;
     let rhs = eval_expression(right, ctx)?;
@@ -367,6 +368,7 @@ fn binary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use grammar::semantic::StatementNode;
     use grammar::semantic::type_node::TypeNode;
     use std::collections::HashMap;
 
@@ -404,14 +406,14 @@ mod tests {
     #[test]
     fn d1_add_is_evaluated() {
         // Ядро дефекта Д1: `a + 1` уходило в `_ => None`.
-        let ctx = MockContext::new(&[]);
+        let mut ctx = MockContext::new(&[]);
         let expr = ExpressionNode::Add(num(5), num(1));
-        assert_eq!(eval_expression(&expr, &ctx), Ok(Value::Number(6)));
+        assert_eq!(eval_expression(&expr, &mut ctx), Ok(Value::Number(6)));
     }
 
     #[test]
     fn d1_all_arithmetic_operators_work() {
-        let ctx = MockContext::new(&[]);
+        let mut ctx = MockContext::new(&[]);
         for (expr, expected) in [
             (ExpressionNode::Subtract(num(5), num(3)), 2),
             (ExpressionNode::Multiply(num(5), num(3)), 15),
@@ -425,7 +427,7 @@ mod tests {
             (ExpressionNode::BitwiseXor(num(6), num(3)), 5),
         ] {
             assert_eq!(
-                eval_expression(&expr, &ctx),
+                eval_expression(&expr, &mut ctx),
                 Ok(Value::Number(expected)),
                 "провал на {expr:?}"
             );
@@ -434,9 +436,9 @@ mod tests {
 
     #[test]
     fn comparisons_and_logic() {
-        let ctx = MockContext::new(&[]);
+        let mut ctx = MockContext::new(&[]);
         assert_eq!(
-            eval_expression(&ExpressionNode::Less(num(1), num(2)), &ctx),
+            eval_expression(&ExpressionNode::Less(num(1), num(2)), &mut ctx),
             Ok(Value::Boolean(true))
         );
         assert_eq!(
@@ -445,7 +447,7 @@ mod tests {
                     Box::new(ExpressionNode::Bool(true)),
                     Box::new(ExpressionNode::Bool(false))
                 ),
-                &ctx
+                &mut ctx
             ),
             Ok(Value::Boolean(false))
         );
@@ -453,30 +455,30 @@ mod tests {
 
     #[test]
     fn parenthesis_recurses() {
-        let ctx = MockContext::new(&[]);
+        let mut ctx = MockContext::new(&[]);
         let inner = ExpressionNode::Add(num(5), num(1));
         let expr = ExpressionNode::More(
             Box::new(ExpressionNode::Parenthesis(Box::new(inner))),
             num(2),
         );
-        assert_eq!(eval_expression(&expr, &ctx), Ok(Value::Boolean(true)));
+        assert_eq!(eval_expression(&expr, &mut ctx), Ok(Value::Boolean(true)));
     }
 
     #[test]
     fn conditional_operator_picks_branch() {
-        let ctx = MockContext::new(&[]);
+        let mut ctx = MockContext::new(&[]);
         let expr = ExpressionNode::ConditionalOperator(
             Box::new(ExpressionNode::Bool(true)),
             num(1),
             num(2),
         );
-        assert_eq!(eval_expression(&expr, &ctx), Ok(Value::Number(1)));
+        assert_eq!(eval_expression(&expr, &mut ctx), Ok(Value::Number(1)));
     }
 
     #[test]
     fn cast_uses_core_coercion() {
         // Cast опирается на то же coerce_to_type, что и запись в переменную.
-        let ctx = MockContext::new(&[]);
+        let mut ctx = MockContext::new(&[]);
         let expr = ExpressionNode::Cast(
             num(300),
             TypeNode::Integer {
@@ -484,16 +486,16 @@ mod tests {
                 signed: false,
             },
         );
-        assert_eq!(eval_expression(&expr, &ctx), Ok(Value::Number(44)));
+        assert_eq!(eval_expression(&expr, &mut ctx), Ok(Value::Number(44)));
     }
 
     #[test]
     fn array_literal_builds_array() {
-        let ctx = MockContext::new(&[]);
+        let mut ctx = MockContext::new(&[]);
         let expr =
             ExpressionNode::Array(vec![ExpressionNode::Number(1), ExpressionNode::Number(2)]);
         assert_eq!(
-            eval_expression(&expr, &ctx),
+            eval_expression(&expr, &mut ctx),
             Ok(Value::Array(vec![Value::Number(1), Value::Number(2)]))
         );
     }
@@ -502,36 +504,77 @@ mod tests {
 
     #[test]
     fn d2_division_by_zero_is_diagnostic_not_silence() {
-        let ctx = MockContext::new(&[]);
+        let mut ctx = MockContext::new(&[]);
         let expr = ExpressionNode::Divide(num(10), num(0));
-        let err = eval_expression(&expr, &ctx).unwrap_err();
+        let err = eval_expression(&expr, &mut ctx).unwrap_err();
         assert_eq!(err.code.as_deref(), Some("SIM-001"));
     }
 
     #[test]
-    fn function_call_is_diagnostic_not_panic() {
-        // Полная поддержка — задача 0025-02b.
-        let ctx = MockContext::new(&[]);
+    fn function_call_returns_value() {
+        // Д3: `fn f(n: u8) -> u8 { return n + 1; }` → f(41) = 42.
+        let func = std::rc::Rc::new(std::cell::RefCell::new(
+            grammar::semantic::FunctionDefinitionNode::Local {
+                upper: None,
+                loc: Location::Builtin,
+                name: "f".to_string(),
+                params: vec![(
+                    "n".to_string(),
+                    TypeNode::Integer {
+                        bits: 8,
+                        signed: false,
+                    },
+                )],
+                ret: TypeNode::Integer {
+                    bits: 8,
+                    signed: false,
+                },
+                body: StatementNode::Return(Some(Box::new(ExpressionNode::Add(
+                    Box::new(ExpressionNode::Variable(std::rc::Rc::new(
+                        std::cell::RefCell::new(grammar::semantic::VariableNode::Simple {
+                            upper: None,
+                            loc: Location::Builtin,
+                            name: "n".to_string(),
+                            ty: TypeNode::Integer {
+                                bits: 8,
+                                signed: false,
+                            },
+                            expr: ExpressionNode::Number(0),
+                        }),
+                    ))),
+                    num(1),
+                )))),
+            },
+        ));
+        let mut ctx = MockContext::new(&[]);
+        let expr = ExpressionNode::Function(func, vec![ExpressionNode::Number(41)]);
+        assert_eq!(eval_expression(&expr, &mut ctx), Ok(Value::Number(42)));
+    }
+
+    #[test]
+    fn unresolved_function_is_diagnostic_not_panic() {
+        // Контрпример: неразрешённая функция — отказ, а не паника.
+        let mut ctx = MockContext::new(&[]);
         let expr = ExpressionNode::Function(
             std::rc::Rc::new(std::cell::RefCell::new(Default::default())),
             vec![],
         );
-        let err = eval_expression(&expr, &ctx).unwrap_err();
-        assert_eq!(err.code.as_deref(), Some("SIM-012"));
+        let err = eval_expression(&expr, &mut ctx).unwrap_err();
+        assert_eq!(err.code.as_deref(), Some("SIM-016"));
     }
 
     #[test]
     fn string_expression_is_diagnostic() {
-        let ctx = MockContext::new(&[]);
+        let mut ctx = MockContext::new(&[]);
         let expr = ExpressionNode::String(vec!["a".to_string()]);
-        let err = eval_expression(&expr, &ctx).unwrap_err();
+        let err = eval_expression(&expr, &mut ctx).unwrap_err();
         assert_eq!(err.code.as_deref(), Some("SIM-014"));
     }
 
     #[test]
     fn none_expression_is_diagnostic() {
-        let ctx = MockContext::new(&[]);
-        let err = eval_expression(&ExpressionNode::None, &ctx).unwrap_err();
+        let mut ctx = MockContext::new(&[]);
+        let err = eval_expression(&ExpressionNode::None, &mut ctx).unwrap_err();
         assert_eq!(err.code.as_deref(), Some("SIM-015"));
     }
 }
