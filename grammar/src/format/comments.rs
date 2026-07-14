@@ -89,6 +89,11 @@ impl<'a> Comments<'a> {
         Some(text)
     }
 
+    /// Начало ближайшего непогашенного комментария (без потребления).
+    pub(crate) fn peek_start(&self) -> Option<usize> {
+        self.items.get(self.next).map(|i| i.start)
+    }
+
     /// Всё, что осталось (хвост файла).
     pub(crate) fn rest(&mut self) -> Vec<String> {
         let out: Vec<String> = self.items[self.next..]

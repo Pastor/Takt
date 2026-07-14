@@ -316,3 +316,29 @@ fn inline_formula_guard_and_ltl_are_printed() {
     let ltl = format_source("state A {\n    : [LTL]  G  x ->  F y ;\n}\n").unwrap();
     assert!(ltl.contains(": [LTL] G x -> F y;"), "{ltl}");
 }
+
+#[test]
+fn r5_blank_lines_are_restored_and_normalised() {
+    // Пустые строки не хранятся в АСД — восстанавливаются из исходника.
+    // Канон: не более одной подряд.
+    let out = format_source("var a: u8 := 0;\n\n\n\nvar b: u8 := 0;\nvar c: u8 := 0;\n").unwrap();
+    assert_eq!(
+        out, "var a: u8 := 0;\n\nvar b: u8 := 0;\nvar c: u8 := 0;\n",
+        "три пустые строки обязаны схлопнуться в одну, а между b и c её быть не должно"
+    );
+}
+
+#[test]
+fn r5_no_spurious_blank_after_multiline_function() {
+    // Регресс, пойманный harness'ом на type_alias_inference.lam: `fn.loc` покрывает
+    // только сигнатуру, поэтому замер «от loc.end» проезжал через тело функции и
+    // вставлял пустую строку. Проверяем именно этот случай.
+    let source =
+        "model M {\n    fn get() -> u8 {\n        return 0;\n    }\n    var x := get();\n}\n";
+    let once = format_source(source).unwrap();
+    assert!(
+        !once.contains("}\n\n    var x"),
+        "пустая строка после тела функции появилась на ровном месте:\n{once}"
+    );
+    assert_eq!(once, format_source(&once).unwrap(), "идемпотентность");
+}
