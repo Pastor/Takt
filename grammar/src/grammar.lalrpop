@@ -49,6 +49,7 @@ ModelElement: ModelElement = {
     NamedBlockCodeDefine => ModelElement::NamedBlockCode(<>),
     <e:EnumDefine> => ModelElement::Enum(e),
     <s:StructDefine> => ModelElement::Struct(s),
+    AddressDefine => ModelElement::Address(Box::new(<>)),
     <l:@L> ";" <r:@R> => ModelElement::StraySemicolon(Location::Source(file_no, l, r)),
 }
 
@@ -108,6 +109,16 @@ IdentifierOrError: Option<Identifier> = {
 ConditionDefine: ConditionDefine = {
     <l:@L> "cond" <name:IdentifierOrError> "=" <c:Condition> <r:@R> ";" => ConditionDefine {
         loc: Location::Source(file_no, l, r), name: name, value: c
+    },
+}
+
+// Оператор задания адреса порта (фича 0020): `address Имя = <выражение>;`.
+// Связка — `=` (как в определениях имён), значение — обычно литерал адреса
+// `0xADDR` или `0xADDR:bit`. Привязка к порту и приоритет источников —
+// семантика (0020-02).
+AddressDefine: AddressDefine = {
+    <l:@L> "address" <name:IdentifierOrError> "=" <e:Expression> <r:@R> ";" => AddressDefine {
+        loc: Location::Source(file_no, l, r), name, value: e
     },
 }
 
@@ -929,6 +940,7 @@ extern {
         "in"    => Token::PortIn,
         "out"   => Token::PortOut,
         "inout" => Token::PortInOut,
+        "address" => Token::Address,
         "extern" => Token::Extern,
         "true" => Token::True,
         "false" => Token::False,

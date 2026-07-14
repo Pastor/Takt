@@ -143,7 +143,7 @@ fn is_keyword_returns_true_for_keywords() {
     let keywords = [
         "break", "const", "continue", "else", "false", "for", "fn", "if", "import", "loop",
         "return", "string", "true", "type", "as", "assembly", "formula", "in", "out", "model",
-        "state", "start", "ref", "template", "cond", "var", "next", "extern",
+        "state", "start", "ref", "template", "cond", "var", "next", "extern", "inout", "address",
     ];
     for kw in keywords {
         assert!(is_keyword(kw), "'{}' должно быть ключевым словом", kw);
@@ -178,6 +178,21 @@ fn extern_keyword_produces_extern_token() {
     assert!(
         matches!(tokens[0].1, Token::Extern),
         "extern должен быть Token::Extern, получено: {:?}",
+        tokens[0].1
+    );
+}
+
+/// `address` распознаётся как `Token::Address`, а не как идентификатор (фича 0020).
+#[test]
+fn address_keyword_produces_address_token() {
+    let src = "address".to_string();
+    let mut comments = Vec::new();
+    let mut errors = Vec::new();
+    let tokens: Vec<_> = Lexer::new(&src, 0, &mut comments, &mut errors).collect();
+    assert_eq!(tokens.len(), 1, "address должен давать 1 токен");
+    assert!(
+        matches!(tokens[0].1, Token::Address),
+        "address должен быть Token::Address, получено: {:?}",
         tokens[0].1
     );
 }

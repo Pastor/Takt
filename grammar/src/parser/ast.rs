@@ -276,6 +276,11 @@ pub enum ModelElement {
     Struct(Box<StructDefine>),
     /// Встроенная формула в теле модели.
     InlineFormula(Box<InlineFormulaDefine>),
+    /// Задание адреса порта отдельным оператором (`address NAME = <expr>;`).
+    ///
+    /// Разрешение адреса (привязка к порту, приоритет источников, `AddressMap`)
+    /// выполняется семантикой (фича 0020-02); здесь — только синтаксический узел.
+    Address(Box<AddressDefine>),
 }
 
 /// Вид состояния автомата.
@@ -913,6 +918,22 @@ pub struct ConditionDefine {
     pub name: Option<Identifier>,
     /// Выражение условия.
     pub value: Condition,
+}
+
+/// Задание адреса порта отдельным оператором (`address Имя = <выражение>;`).
+///
+/// Аддитивно к инлайн-форме `in Имя: T := <адрес>;`. Само по себе только несёт
+/// синтаксис; привязку к порту и разрешение приоритета источников выполняет
+/// семантика (фича 0020-02, слой `AddressMap`).
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct AddressDefine {
+    /// Местоположение в исходном тексте.
+    pub loc: Location,
+    /// Имя порта, которому назначается адрес.
+    pub name: Option<Identifier>,
+    /// Выражение-адрес (обычно литерал `0xADDR` или `0xADDR:bit`).
+    pub value: Expression,
 }
 
 /// Именованный блок кода (`enter`, `exit`, `always`, …).
