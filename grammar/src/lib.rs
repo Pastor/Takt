@@ -329,6 +329,23 @@ pub fn nondeterministic_transition_warnings(
     semantic::validate::check_nondeterministic_transitions(model)
 }
 
+/// Фича 0020-04: предупреждения о портах без адреса, попадающих в кодогенерацию.
+///
+/// Используемый (достижимый кодогенерацией) порт обязан иметь адрес: inline,
+/// оператором `address` или во внешней карте. Имена портов, покрытых внешней
+/// картой, передаются в `external_ports`. Мёртвые (неиспользуемые) порты без
+/// адреса не предупреждаются. Возвращает предупреждения `SE-052`.
+///
+/// Аналитическая функция: потребитель адресов (C-таблица/HAL, задача 0020-05)
+/// вызывает её и при необходимости трактует как ошибку.
+pub fn port_address_completeness_warnings(
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+    external_ports: &[String],
+) -> Vec<Diagnostic> {
+    let external: std::collections::HashSet<String> = external_ports.iter().cloned().collect();
+    semantic::validate::check_port_address_completeness(model, &external)
+}
+
 /// Ce16: возвращает ошибки рекурсивных псевдонимов типов в модели.
 ///
 /// Проверяет граф зависимостей псевдонимов типов на наличие циклов.

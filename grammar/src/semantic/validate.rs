@@ -1099,6 +1099,73 @@ pub fn validate_model(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     Ok(())
 }
 
+/// Фича 0020 (задача 0020-04): предупреждения о портах без адреса, попадающих
+/// в кодогенерацию.
+///
+/// Порт считается **достижимым кодогенерацией**, если он используется в логике
+/// модели (условиях, блоках, функциях) — критерий переиспользуется из
+/// [`compute_usage`](super::unused::compute_usage). Для такого порта адрес
+/// обязателен; источником может быть inline-инициализатор, оператор `address`
+/// или внешняя карта (`external_ports` — имена портов, покрытых картой).
+/// **Мёртвые** (неиспользуемые) порты без адреса **не** предупреждаются.
+///
+/// Возвращает предупреждения **SE-052**, отсортированные по позиции (для
+/// детерминизма). Функция аналитическая: она не вызывается конвейером
+/// `validate_model` по умолчанию (в текущей C-модели адрес не эмитится) — её
+/// подключает потребитель адресов (C-таблица/HAL, задача 0020-05).
+pub fn check_port_address_completeness(
+    model: Rc<RefCell<ModelNode>>,
+    external_ports: &HashSet<String>,
+) -> Vec<Diagnostic> {
+    let usage = super::unused::compute_usage(Rc::clone(&model));
+    let mut out = Vec::new();
+    collect_incomplete_addresses(&model, &usage.ports, external_ports, &mut out);
+    out.sort_by_key(|d| d.loc.start());
+    out
+}
+
+/// Рекурсивно собирает используемые порты без адреса по дереву моделей.
+fn collect_incomplete_addresses(
+    model: &Rc<RefCell<ModelNode>>,
+    used_ports: &HashSet<String>,
+    external_ports: &HashSet<String>,
+    out: &mut Vec<Diagnostic>,
+) {
+    let borrowed = model.borrow();
+    for var in borrowed.variables.values() {
+        let VariableNode::Port {
+            expr, loc, name, ..
+        } = var
+        else {
+            continue;
+        };
+        if !used_ports.contains(name) {
+            continue; // мёртвый порт — адрес не требуется
+        }
+        let has_inline = !matches!(expr, ExpressionNode::None);
+        let has_operator = borrowed.address_defs.iter().any(|d| &d.port == name);
+        let has_external = external_ports.contains(name);
+        if !has_inline && !has_operator && !has_external {
+            out.push(
+                Diagnostic::warning(
+                    *loc,
+                    format!(
+                        "порт '{}' используется в кодогенерации, но не имеет адреса \
+                         (ни inline, ни оператором `address`, ни во внешней карте)",
+                        name
+                    ),
+                )
+                .with_code("SE-052"),
+            );
+        }
+    }
+    let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
+    drop(borrowed);
+    for nested_model in nested {
+        collect_incomplete_addresses(&nested_model, used_ports, external_ports, out);
+    }
+}
+
 /// Фича 0020 (задача 0020-02): проверки оператора `address` для одной модели.
 ///
 /// Наполнение [`address_defs`](ModelNode::address_defs) выполняет
