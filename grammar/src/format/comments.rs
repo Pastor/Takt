@@ -44,7 +44,7 @@ impl<'a> Comments<'a> {
         let mut items: Vec<Item> = comments
             .iter()
             .filter_map(|c| {
-                let (Location::Source(_, start, end)) = *location(c) else {
+                let Location::Source(_, start, end) = *location(c) else {
                     return None;
                 };
                 Some(Item {

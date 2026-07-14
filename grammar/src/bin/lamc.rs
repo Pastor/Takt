@@ -39,6 +39,8 @@
 
 use std::env;
 use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::process;
 
 /// Параметры компиляции, разобранные из аргументов командной строки.
@@ -249,9 +251,172 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     })
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Подкоманда `fmt` — канонический форматтер (фича 0024, задача 0024-03)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Опции подкоманды `fmt`.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct FmtOptions {
+    /// Не писать файлы; вернуть ненулевой код, если ввод отличается от канона.
+    ///
+    /// Режим для CI: проверяет, отформатирован ли репозиторий.
+    pub check: bool,
+    /// Читать из stdin, писать в stdout.
+    pub stdin: bool,
+    /// Файлы и каталоги (каталоги обходятся рекурсивно по `*.lam`).
+    pub paths: Vec<String>,
+}
+
+/// Разбирает аргументы подкоманды `fmt`.
+///
+/// Принимает слайс без имени программы и без `"fmt"` в начале.
+pub fn parse_fmt_args(args: &[String]) -> Result<FmtOptions, String> {
+    let mut options = FmtOptions::default();
+    for arg in args {
+        match arg.as_str() {
+            "--check" => options.check = true,
+            "--stdin" => options.stdin = true,
+            other if other.starts_with('-') => {
+                return Err(format!("неизвестный флаг '{other}'"));
+            }
+            other => options.paths.push(other.to_string()),
+        }
+    }
+    if options.stdin && !options.paths.is_empty() {
+        return Err("--stdin несовместим с указанием файлов".to_string());
+    }
+    if !options.stdin && options.paths.is_empty() {
+        return Err("укажите файлы/каталоги или --stdin".to_string());
+    }
+    Ok(options)
+}
+
+/// Рекурсивно собирает `*.lam` из файла или каталога.
+fn collect_lam_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    if path.is_file() {
+        out.push(path.to_path_buf());
+        return Ok(());
+    }
+    if !path.is_dir() {
+        return Err(format!("путь не найден: {}", path.display()));
+    }
+    let entries = fs::read_dir(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    for entry in entries.flatten() {
+        let child = entry.path();
+        if child.is_dir() {
+            collect_lam_files(&child, out)?;
+        } else if child.extension().is_some_and(|e| e == "lam") {
+            out.push(child);
+        }
+    }
+    Ok(())
+}
+
+/// Исполняет подкоманду `fmt`; возвращает код завершения процесса.
+///
+/// Коды: `0` — всё канонично (или файлы отформатированы); `1` — при `--check`
+/// найдены отличия либо произошла ошибка. Ненулевой код при `--check` — это и
+/// есть контракт для CI (критерий A4).
+fn run_fmt(options: &FmtOptions) -> i32 {
+    if options.stdin {
+        let mut source = String::new();
+        if let Err(e) = io::Read::read_to_string(&mut io::stdin(), &mut source) {
+            eprintln!("Ошибка чтения stdin: {e}");
+            return 1;
+        }
+        return match grammar::format::format_source(&source) {
+            Ok(formatted) => {
+                if options.check {
+                    if formatted == source {
+                        0
+                    } else {
+                        eprintln!("stdin: требуется форматирование");
+                        1
+                    }
+                } else {
+                    print!("{formatted}");
+                    0
+                }
+            }
+            Err(e) => {
+                eprintln!("Ошибка форматирования stdin: {e}");
+                1
+            }
+        };
+    }
+
+    let mut files = Vec::new();
+    for path in &options.paths {
+        if let Err(e) = collect_lam_files(Path::new(path), &mut files) {
+            eprintln!("Ошибка: {e}");
+            return 1;
+        }
+    }
+
+    let mut need_format = Vec::new();
+    let mut failed = 0usize;
+    let mut changed = 0usize;
+
+    for file in &files {
+        let source = match fs::read_to_string(file) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Ошибка чтения '{}': {e}", file.display());
+                failed += 1;
+                continue;
+            }
+        };
+        let formatted = match grammar::format::format_source(&source) {
+            Ok(f) => f,
+            Err(e) => {
+                // Отказ форматтера — не «файл канонический». Сообщаем и считаем
+                // ошибкой: молча пропустить значило бы соврать в --check.
+                eprintln!("Ошибка форматирования '{}': {e}", file.display());
+                failed += 1;
+                continue;
+            }
+        };
+        if formatted == source {
+            continue;
+        }
+        if options.check {
+            need_format.push(file.clone());
+        } else if let Err(e) = fs::write(file, &formatted) {
+            eprintln!("Ошибка записи '{}': {e}", file.display());
+            failed += 1;
+        } else {
+            changed += 1;
+        }
+    }
+
+    if options.check {
+        for file in &need_format {
+            eprintln!("требуется форматирование: {}", file.display());
+        }
+        if !need_format.is_empty() {
+            eprintln!(
+                "\nНе отформатировано файлов: {} из {}",
+                need_format.len(),
+                files.len()
+            );
+        }
+        if need_format.is_empty() && failed == 0 {
+            return 0;
+        }
+        return 1;
+    }
+
+    if changed > 0 {
+        eprintln!("Отформатировано файлов: {changed} из {}", files.len());
+    }
+    if failed > 0 { 1 } else { 0 }
+}
+
 /// Выводит справку по использованию утилиты в stderr.
 fn print_usage() {
     eprintln!("Использование: lamc compile [флаги] <input.lam> [-o <output>]");
+    eprintln!("               lamc fmt [--check] [--stdin] <файлы/каталоги>");
     eprintln!("               lamc --help");
     eprintln!();
     eprintln!("Флаги:");
@@ -277,6 +442,13 @@ fn print_usage() {
     eprintln!("  lamc compile -I /lib/lam -I /home/user/lam --target c main.lam");
     eprintln!("  lamc compile --verbose main.lam");
     eprintln!("  lamc compile --quiet main.lam -o dist/");
+    eprintln!();
+    eprintln!("Подкоманда fmt (канонический форматтер):");
+    eprintln!("  --check      Не писать файлы; ненулевой код, если нужен формат (для CI)");
+    eprintln!("  --stdin      Читать из stdin, писать в stdout");
+    eprintln!("  lamc fmt examples/            # отформатировать каталог на месте");
+    eprintln!("  lamc fmt --check examples/    # проверить (CI)");
+    eprintln!("  cat a.lam | lamc fmt --stdin  # отформатировать поток");
 }
 
 fn main() {
@@ -287,9 +459,21 @@ fn main() {
         process::exit(0);
     }
 
+    if args[1] == "fmt" {
+        let options = match parse_fmt_args(&args[2..]) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("Ошибка разбора аргументов: {e}");
+                print_usage();
+                process::exit(1);
+            }
+        };
+        process::exit(run_fmt(&options));
+    }
+
     if args[1] != "compile" {
         eprintln!(
-            "Ошибка: неизвестная команда '{}'. Используйте 'compile'.",
+            "Ошибка: неизвестная команда '{}'. Используйте 'compile' или 'fmt'.",
             args[1]
         );
         print_usage();
@@ -476,6 +660,51 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+
+    // ── Подкоманда fmt (задача 0024-03) ──────────────────────────────────────
+
+    #[test]
+    fn fmt_args_paths() {
+        let args = vec!["examples/".to_string(), "a.lam".to_string()];
+        let o = parse_fmt_args(&args).unwrap();
+        assert!(!o.check);
+        assert!(!o.stdin);
+        assert_eq!(o.paths, vec!["examples/", "a.lam"]);
+    }
+
+    #[test]
+    fn fmt_args_check_flag() {
+        let args = vec!["--check".to_string(), "a.lam".to_string()];
+        let o = parse_fmt_args(&args).unwrap();
+        assert!(o.check);
+    }
+
+    #[test]
+    fn fmt_args_stdin_flag() {
+        let args = vec!["--stdin".to_string()];
+        let o = parse_fmt_args(&args).unwrap();
+        assert!(o.stdin);
+        assert!(o.paths.is_empty());
+    }
+
+    #[test]
+    fn fmt_args_stdin_with_files_is_error() {
+        // Контрпример: `--stdin` и файлы одновременно бессмысленны — лучше
+        // отказать, чем молча проигнорировать одно из двух.
+        let args = vec!["--stdin".to_string(), "a.lam".to_string()];
+        assert!(parse_fmt_args(&args).is_err());
+    }
+
+    #[test]
+    fn fmt_args_without_input_is_error() {
+        assert!(parse_fmt_args(&[]).is_err());
+    }
+
+    #[test]
+    fn fmt_args_unknown_flag_is_error() {
+        let args = vec!["--verbose".to_string()];
+        assert!(parse_fmt_args(&args).is_err());
+    }
     use super::*;
 
     // ── split_include_dirs ────────────────────────────────────────────────────

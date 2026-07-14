@@ -26,6 +26,10 @@ AI-инструментов. Здесь — **только контекст** (�
 cargo build --bin lamc
 cargo build --features lsp --bin lam-lsp
 
+# Канонический форматтер .lam (фича 0024)
+cargo run --bin lamc -- fmt examples/          # на месте
+cargo run --bin lamc -- fmt --check examples/  # проверка для CI (код ≠ 0 при отличии)
+
 # Тесты (однопоточно — иначе гонки за общие файлы)
 cargo test -- --test-threads=1
 cargo test --features lsp -- --test-threads=1   # включая тесты LSP

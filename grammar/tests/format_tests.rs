@@ -228,3 +228,79 @@ fn a2_comments_are_idempotent() {
         "дубль комментария:\n{once}"
     );
 }
+
+// ── Контракт CLI `lamc fmt` (задача 0024-03, критерий A4) ────────────────────
+
+/// Прогоняет настоящий бинарник `lamc` — тот же путь, что у пользователя.
+fn lamc(args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_lamc"))
+        .args(args)
+        .output()
+        .expect("запуск lamc")
+}
+
+#[test]
+fn a4_fmt_check_exit_codes() {
+    let dir = std::env::temp_dir().join("lam_fmt_0024_03");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let messy = dir.join("messy.lam");
+    std::fs::write(&messy, "var   x :u8:=0;\nstart   S ;\n").unwrap();
+    let out = lamc(&["fmt", "--check", messy.to_str().unwrap()]);
+    assert!(
+        !out.status.success(),
+        "--check на НЕотформатированном обязан вернуть ненулевой код (контракт CI)"
+    );
+
+    let canon = dir.join("canon.lam");
+    std::fs::write(&canon, "var x: u8 := 0;\nstart S;\n").unwrap();
+    let out = lamc(&["fmt", "--check", canon.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "--check на каноническом обязан вернуть 0; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn a4_fmt_check_does_not_write() {
+    // `--check` — режим для CI: он обязан быть НЕразрушающим.
+    let dir = std::env::temp_dir().join("lam_fmt_0024_03_nowrite");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("messy.lam");
+    let original = "var   x :u8:=0;\n";
+    std::fs::write(&file, original).unwrap();
+
+    let _ = lamc(&["fmt", "--check", file.to_str().unwrap()]);
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        original,
+        "--check не должен изменять файл"
+    );
+}
+
+#[test]
+fn fmt_rewrites_file_in_place() {
+    let dir = std::env::temp_dir().join("lam_fmt_0024_03_inplace");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("messy.lam");
+    std::fs::write(&file, "var   x :u8:=0;\nstart   S ;\n").unwrap();
+
+    let out = lamc(&["fmt", file.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "var x: u8 := 0;\nstart S;\n"
+    );
+
+    // Повторный прогон ничего не меняет и остаётся каноничным (A1 через CLI).
+    let out = lamc(&["fmt", "--check", file.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "после форматирования --check обязан быть зелёным"
+    );
+}
