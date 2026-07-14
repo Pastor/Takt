@@ -125,6 +125,35 @@ const BUT_BUILTIN_TYPES: &[(&str, &str)] = &[
 ///
 /// Выполняет лексический, синтаксический и семантический анализ.
 /// Возвращает список LSP-диагностик для отображения в редакторе.
+/// Правки для `textDocument/formatting` (фича 0024, задача 0024-04).
+///
+/// Возвращает **одну** правку, заменяющую документ целиком каноническим текстом,
+/// либо `None`, если форматировать нечего (текст уже каноничен) — так редактор
+/// не помечает файл изменённым на ровном месте.
+///
+/// # Единое ядро (критерий A6)
+///
+/// Используется та же [`crate::format::format_source`], что и в `lamc fmt`, —
+/// поэтому расхождения стилей между CLI и редактором быть не может **по
+/// построению**, а не по договорённости.
+///
+/// # Ошибки
+///
+/// `Err` — исходник не форматируется (синтаксическая ошибка или непокрытый
+/// узел). Вызывающий обязан решить, что с этим делать: LSP-сервер логирует и
+/// отвечает `null`, потому что молча «отформатировать во что-то» хуже, чем не
+/// форматировать вовсе.
+pub fn formatting_edits(source: &str) -> Result<Option<Vec<TextEdit>>, crate::format::FormatError> {
+    let formatted = crate::format::format_source(source)?;
+    if formatted == source {
+        return Ok(None);
+    }
+    Ok(Some(vec![TextEdit {
+        range: offset_to_range(source, 0, source.len()),
+        new_text: formatted,
+    }]))
+}
+
 pub fn collect_diagnostics(source: &str) -> Vec<Diagnostic> {
     let mut lsp_diags = Vec::new();
 

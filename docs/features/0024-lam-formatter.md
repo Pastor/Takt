@@ -17,7 +17,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0024-lam-formatter.md`](../adr/0024-lam-formatter.md) |
 | Анализ | [`docs/analyze/0024-lam-formatter.md`](../analyze/0024-lam-formatter.md) |
-| Разработка | [`0024-01`](../development/0024-01-format-core.md) ядро печати · [`0024-02`](../development/0024-02-comments.md) комментарии · [`0024-03`](../development/0024-03-lamc-fmt.md) `lamc fmt` — **выполнены**; остаётся `0024-04` (LSP/IntelliJ) |
+| Разработка | [`0024-01`](../development/0024-01-format-core.md) ядро печати · [`0024-02`](../development/0024-02-comments.md) комментарии · [`0024-03`](../development/0024-03-lamc-fmt.md) `lamc fmt` · [`0024-04`](../development/0024-04-lsp-formatting.md) LSP-форматирование — **выполнены** (часть про IntelliJ вынесена в бэклог) |
 | Тест-план | — (стадия 5, не начата) |
 | Отчёт о тестировании | — (стадия 6, не начата) |
 | Исправления | — (при необходимости `0024-YY-*`) |
