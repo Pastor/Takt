@@ -85,8 +85,9 @@ impl<'a> Out<'a> {
             self.line(text);
             return;
         };
-        for c in self.comments.leading(start) {
-            self.line(&c);
+        for (offset, text) in self.comments.leading(start) {
+            self.blank_at(offset);
+            self.line(&text);
         }
         match self.comments.trailing(end) {
             Some(trailing) => self.line(&format!("{text} {trailing}")),
@@ -131,7 +132,16 @@ impl<'a> Out<'a> {
             .peek_start()
             .filter(|s| *s < start)
             .unwrap_or(start);
-        let Some(prefix) = self.source.get(..anchor) else {
+        self.blank_at(anchor);
+    }
+
+    /// Пустая строка перед позицией `offset`, если она была в исходнике.
+    ///
+    /// Вызывается и перед узлом, и перед **каждым** ведущим комментарием —
+    /// иначе пустая строка между группами комментариев (`/// шапка` ⏎⏎
+    /// `/// про enum`) терялась бы.
+    fn blank_at(&mut self, offset: usize) {
+        let Some(prefix) = self.source.get(..offset) else {
             return;
         };
         let trimmed = prefix.trim_end_matches(|c: char| c.is_whitespace());
@@ -146,8 +156,9 @@ impl<'a> Out<'a> {
         let Some((start, _)) = comments::span(loc) else {
             return;
         };
-        for c in self.comments.leading(start) {
-            self.line(&c);
+        for (offset, text) in self.comments.leading(start) {
+            self.blank_at(offset);
+            self.line(&text);
         }
     }
 
