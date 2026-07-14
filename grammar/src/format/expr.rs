@@ -310,22 +310,31 @@ fn import_path(p: &ast::ImportPath) -> String {
 
 /// Печатает встроенную формулу (`: условия;` / `: [LTL] формулы;`).
 ///
-/// # Канонизация формы `Guard`
+/// # Форма автора сохраняется
 ///
-/// `: conds;` и `: [Guard] conds;` дают **один и тот же** АСД — форма в дереве не
-/// сохраняется. Канон выбирает короткую (`: conds;`); это нормализация
-/// раскладки, а не смена смысла: обе формы разбираются одинаково, поэтому
-/// требование R4 (семантическая нейтральность) не нарушается.
+/// `: conds;` и `: [Guard] conds;` — синонимы с одной семантикой, но АСД хранит
+/// признак `explicit`, поэтому печатается **та форма, которую написал автор**.
+/// Канонизировать синонимы форматтер не вправе: он меняет раскладку, а не текст
+/// программы (решение заказчика по фиче 0024, вариант 2).
 pub(crate) fn inline_formula(f: &ast::InlineFormulaDefine) -> Result<String, FormatError> {
     use ast::InlineFormulaDefine as F;
     Ok(match f {
-        F::Guard { conditions, .. } => {
+        F::Guard {
+            conditions,
+            explicit,
+            ..
+        } => {
             let list = conditions
                 .iter()
                 .map(condition)
                 .collect::<Result<Vec<_>, _>>()?
                 .join(", ");
-            format!(": {list};")
+            // Печатаем форму автора: `: [Guard] …` и `: …` — синонимы.
+            if *explicit {
+                format!(": [Guard] {list};")
+            } else {
+                format!(": {list};")
+            }
         }
         F::Ltl { formulas, .. } => {
             let list = formulas

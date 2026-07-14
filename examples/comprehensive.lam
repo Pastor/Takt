@@ -21,8 +21,12 @@ model Controller {
 
     /// Ограничивает значение диапазоном [0, MAX_TEMP]
     fn clamp_temp(value: u8) -> u8 {
-        if value > MAX_TEMP { return MAX_TEMP; }
-        if value < temperature { return temperature; }
+        if value > MAX_TEMP {
+            return MAX_TEMP;
+        }
+        if value < temperature {
+            return temperature;
+        }
         return value;
     }
 
@@ -42,7 +46,9 @@ model Controller {
             temperature := temperature + delta;
             log_temp(temperature);
         }
-        exit { count := increment(count); }
+        exit {
+            count := increment(count);
+        }
         ref Heating: temperature > 10;
     }
 
@@ -57,20 +63,28 @@ model Controller {
                 count := count + 1;
             }
             match mode {
-                Auto      => { log_temp(temperature); }
-                Manual    => { log_count(count); }
-                _         => { count := 0; }
+                Auto => {
+                    log_temp(temperature);
+                }
+                Manual => {
+                    log_count(count);
+                }
+                _ => {
+                    count := 0;
+                }
             }
         }
         ref Cooling: temperature > MAX_TEMP;
-        ref Idle:    count >= MAX_COUNT;
+        ref Idle: count >= MAX_COUNT;
     }
 
     /// Состояние охлаждения
     state Cooling {
         always {
             for var i: u8 := 0; i < 3; i := i + 1 {
-                if temperature > 0 { temperature := temperature - 1; }
+                if temperature > 0 {
+                    temperature := temperature - 1;
+                }
             }
             log_count(count);
         }

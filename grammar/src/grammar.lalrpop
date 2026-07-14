@@ -284,13 +284,15 @@ FormulaDefine: Box<FormulaDefine> = {
 
 InlineFormulaDefine: Box<InlineFormulaDefine> = {
     <l:@L> ":" <conditions:CommaOne<Condition>> ";" <r:@R> => {
-        Box::new(InlineFormulaDefine::Guard { loc: Location::Source(file_no, l, r), conditions })
+        Box::new(InlineFormulaDefine::Guard { loc: Location::Source(file_no, l, r), conditions, explicit: false })
     },
     <l:@L> ":" "[" "LTL" "]" <formulas:CommaOne<LtlExpr>> ";" <r:@R> => {
         Box::new(InlineFormulaDefine::Ltl { loc: Location::Source(file_no, l, r), formulas })
     },
+    // Явная форма `: [Guard] условия;` — синоним краткой. Признак `explicit`
+    // нужен форматтеру (фича 0024), чтобы печатать форму автора.
     <l:@L> ":" "[" "Guard" "]" <conditions:CommaOne<Condition>> ";" <r:@R> => {
-        Box::new(InlineFormulaDefine::Guard { loc: Location::Source(file_no, l, r), conditions })
+        Box::new(InlineFormulaDefine::Guard { loc: Location::Source(file_no, l, r), conditions, explicit: true })
     }
 }
 
@@ -648,16 +650,18 @@ ClosedStatement: Statement = {
     // Цикл loop без условия (бесконечный): loop { тело }
     // '{' безусловно начинает тело — неоднозначности нет
     <l:@L> "loop" <b:BlockStatement> <r:@R> => {
-        Statement::Loop(Location::Source(file_no, l, r), None, Box::new(b))
+        Statement::Loop(Location::Source(file_no, l, r), None, Box::new(b), LoopKeyword::Loop)
     },
     // Цикл loop с условием: loop условие { тело }
     // LoopCond не начинается с '{', что устраняет LR(1)-конфликт с BlockStatement
     <l:@L> "loop" <e:LoopCond> <b:BlockStatement> <r:@R> => {
-        Statement::Loop(Location::Source(file_no, l, r), Some(e), Box::new(b))
+        Statement::Loop(Location::Source(file_no, l, r), Some(e), Box::new(b), LoopKeyword::Loop)
     },
-    // `while условие { тело }` — синоним `loop условие { тело }`
+    // `while условие { тело }` — синоним `loop условие { тело }`.
+    // Различает их только LoopKeyword: он нужен форматтеру (фича 0024), чтобы
+    // печатать слово автора; семантика оба варианта не различает.
     <l:@L> "while" <e:LoopCond> <b:BlockStatement> <r:@R> => {
-        Statement::Loop(Location::Source(file_no, l, r), Some(e), Box::new(b))
+        Statement::Loop(Location::Source(file_no, l, r), Some(e), Box::new(b), LoopKeyword::While)
     },
     // С1 (вариант A): for без скобок вокруг заголовка; тело — обязательный блок в {}.
     <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> <block:BlockStatement> <r:@R> => {

@@ -856,6 +856,12 @@ pub enum InlineFormulaDefine {
         loc: Location,
         /// Список условий.
         conditions: Vec<Condition>,
+        /// Записана ли явная форма `: [Guard] условия;`.
+        ///
+        /// `: условия;` и `: [Guard] условия;` — синонимы с одной семантикой.
+        /// Признак хранится, чтобы форматтер печатал форму автора (фича 0024);
+        /// семантика его игнорирует.
+        explicit: bool,
     },
     /// LTL формула.
     Ltl {
@@ -982,6 +988,25 @@ impl FunctionDefine {
     }
 }
 
+/// Ключевое слово цикла, написанное автором.
+///
+/// `while условие { тело }` — **синоним** `loop условие { тело }`: семантика
+/// одна, АСД-узел один. Но какое слово написал автор — информация, которую
+/// нельзя восстановить после разбора, поэтому она хранится здесь.
+///
+/// Нужна форматтеру (фича 0024): печать идёт от АСД, и без этого признака
+/// `while` молча переписывался бы в `loop`. Семантические проходы и генераторы
+/// признак игнорируют — для них разницы нет.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub enum LoopKeyword {
+    /// Написано `loop`.
+    #[default]
+    Loop,
+    /// Написано `while` (всегда с условием).
+    While,
+}
+
 /// Оператор языка Lam.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
@@ -1023,9 +1048,12 @@ pub enum Statement {
     Args(Location, Vec<NamedArgument>),
     /// Оператор `if`: `if условие блок [else ветка]`.
     If(Location, Expression, Box<Statement>, Option<Box<Statement>>),
-    /// Цикл `loop [условие] { тело }`.
-    /// Без условия — бесконечный цикл; с условием — продолжается, пока условие истинно.
-    Loop(Location, Option<Expression>, Box<Statement>),
+    /// Цикл `loop [условие] { тело }` (или `while условие { тело }` — синоним).
+    ///
+    /// Без условия — бесконечный цикл; с условием — продолжается, пока условие
+    /// истинно. Последнее поле — [`LoopKeyword`]: какое слово написал автор
+    /// (нужно форматтеру, семантикой игнорируется).
+    Loop(Location, Option<Expression>, Box<Statement>, LoopKeyword),
     /// Оператор-выражение.
     Expression(Location, Expression),
     /// Объявление переменной с опциональным инициализатором.
