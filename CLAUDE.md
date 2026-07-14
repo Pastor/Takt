@@ -160,6 +160,20 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
 `tests/data/semantic/{valid,invalid}/`. Изменение языка → рост версии языка
 (правило 22).
 
+## Форматтер
+
+Ядро печати — `grammar/src/format/` (`format_source`), потребители: `lamc fmt`
+(`--check`/`--stdin`) и LSP `textDocument/formatting`. **Добавляешь узел АСД —
+добавь и его печать**, иначе `format_source` начнёт отказывать (по замыслу: молча
+потерять кусок исходника хуже). `grammar/tests/format_tests.rs` гоняет форматтер
+по **всему корпусу** `.lam` и валит сборку при новом непокрытом узле.
+`precheck.sh` проверяет канон `examples/` (фикстуры `tests/data/` намеренно не
+нормализованы — тесты завязаны на их позиции).
+
+**Синонимы не канонизируются:** `while`/`loop` и `: [Guard] x;`/`: x;` — АСД
+хранит выбор автора (`ast::LoopKeyword`, `Guard::explicit`); семантика эти
+признаки игнорирует.
+
 ## Состояние
 
 Актуальное состояние и последнее изменение — в `CHANGES.md` (раздел
