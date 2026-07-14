@@ -16,6 +16,7 @@
 | 0019-01 | 0019 | Устранение дубликата LoopCond (ЗАПЛАНИРОВАНО) | [0019-01-loopcond-dedup.md](0019-01-loopcond-dedup.md) |
 | 0025-01 | 0025 | Ядро вычисления `eval`: значения, операции, приведение типов (ВЫПОЛНЕНО) | [0025-01-eval-core.md](0025-01-eval-core.md) |
 | 0025-02a | 0025 | Адаптер выражений `ExpressionNode` — Д1/Д2, старый вычислитель удалён (ВЫПОЛНЕНО) | [0025-02a-expression-adapter.md](0025-02a-expression-adapter.md) |
+| 0025-02b-1 | 0025 | Интерпретатор операторов: локальные `var`, `while`/`loop`, `for`, `match` (ВЫПОЛНЕНО) | [0025-02b-1-statement-interpreter.md](0025-02b-1-statement-interpreter.md) |
 | 0025-03 | 0025 | Адаптер условий `ConditionNode`, переписывание `flat` — Д6/Д7/Д8, паники сняты (ВЫПОЛНЕНО) | [0025-03-condition-adapter.md](0025-03-condition-adapter.md) |
 | 0020-01 | 0020 | Грамматика и AST оператора `address` (ВЫПОЛНЕНО) | [0020-01-address-grammar.md](0020-01-address-grammar.md) |
 | 0020-02 | 0020 | Семантика: привязка `address` + диагностики SE-048/049 (ВЫПОЛНЕНО) | [0020-02-semantics-diagnostics.md](0020-02-semantics-diagnostics.md) |
