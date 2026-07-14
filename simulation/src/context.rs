@@ -1,4 +1,4 @@
-use crate::value::Value;
+use crate::eval::value::Value;
 
 /// Контекст выполнения: предоставляет доступ к переменным текущей области видимости.
 pub(crate) trait Context {
@@ -11,7 +11,7 @@ pub(crate) trait Context {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::value::Value;
+    use crate::eval::value::Value;
     use std::collections::HashMap;
 
     struct MockContext {

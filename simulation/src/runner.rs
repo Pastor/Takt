@@ -1,11 +1,11 @@
 use crate::context::Context;
+use crate::eval::value::Value;
 use crate::gif::GifRecorder;
 use crate::graphics_config::{GraphicsConfig, OutputMode};
 use crate::json_input::{Guard, SimStep, json_to_value};
 use crate::svg::SvgRecorder;
 use crate::unit::viewport::{CachedLayout, LegendData, compute_layout, render_from_layout};
 use crate::unit::{TickResult, Unit};
-use crate::value::Value;
 use std::path::PathBuf;
 
 // ── Диспетчер режимов записи графики ─────────────────────────────────────────

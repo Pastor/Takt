@@ -1,6 +1,6 @@
 use crate::context::Context;
+use crate::eval::value::Value;
 use crate::unit::Predicate;
-use crate::value::Value;
 use grammar::diagnostics::{Diagnostic, Location};
 use grammar::parser::ast::Member;
 use grammar::semantic::ConditionNode;
