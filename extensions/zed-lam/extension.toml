@@ -1,6 +1,6 @@
 id = "lam"
 name = "Lam"
-version = "0.1.0"
+version = "0.2.0"
 schema_version = 1
 authors = ["khlebnikov.a"]
 description = "Lam FSM language support for Zed: syntax highlighting and code navigation for .lam files"

@@ -984,6 +984,16 @@ mod diagnostic_location_tests {
         assert_eq!(tok.unwrap().1, 0, "'inout' должен быть TT_KEYWORD (0)");
     }
 
+    /// `address` (оператор адреса порта, фича 0020) подсвечивается как keyword.
+    #[test]
+    fn semantic_tokens_address_is_keyword() {
+        let src = "in BTN: bit;\naddress BTN = 0x200000;\nstart S;";
+        let tokens = decode_semantic_tokens(src);
+        let tok = tokens.iter().find(|(w, _)| w == "address");
+        assert!(tok.is_some(), "токен 'address' должен присутствовать");
+        assert_eq!(tok.unwrap().1, 0, "'address' должен быть TT_KEYWORD (0)");
+    }
+
     /// `u8` в аннотации типа подсвечивается как тип (TT_TYPE = 3).
     #[test]
     fn semantic_tokens_u8_is_type() {

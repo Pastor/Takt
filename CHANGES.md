@@ -39,6 +39,16 @@
 
 ### Добавлено
 
+- **Расширения редакторов: поддержка ключевого слова `address` (фича 0020).**
+  `lam-lsp` (`grammar/src/lsp.rs`): `Token::Address` добавлен в semantic-token-arm
+  `TT_KEYWORD` (подсветка `address` в **Zed** через LSP и семантическую подсветку
+  вообще) и в список автодополнения `BUT_KEYWORDS`. Плагин **IntelliJ**
+  (`intellij-lam`): `address` добавлен в `LamTokenTypes.KEYWORDS` (лексическая
+  подсветка; синхронизация с Rust-лексером под контролем `LamKeywordSyncTest`) —
+  как ссылка на порт, не как декларация (в `SIMPLE_DECL_KEYWORDS` не входит).
+  Версии расширений: `intellij-lam` 0.3.0 → 0.4.0, `zed-lam` 0.1.0 → 0.2.0.
+  Тест `semantic_tokens_address_is_keyword` (LSP).
+
 - **Фича 0020-05 (разработка): потребление адреса в C — цель `c-hal`.**
   Завершает подсистему адресов (фича [0020](docs/features/0020-port-address-decl.md)):
   адрес порта становится реально потребляемым артефактом. Новая цель `lamc compile
