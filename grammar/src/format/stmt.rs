@@ -126,6 +126,25 @@ pub(crate) fn print(out: &mut Out, statement: &ast::Statement) -> Result<(), For
             }
             Ok(())
         }
+        S::Match(_, subject, arms) => {
+            out.line(&format!("match {} {{", expr::expression(subject)?));
+            out.up();
+            for arm in arms {
+                let patterns = arm
+                    .patterns
+                    .iter()
+                    .map(|p| match p {
+                        ast::MatchPattern::Wildcard(_) => Ok("_".to_string()),
+                        ast::MatchPattern::Value(e) => expr::expression(e),
+                    })
+                    .collect::<Result<Vec<_>, FormatError>>()?
+                    .join(" | ");
+                block_with_head(out, &format!("{patterns} => "), &arm.body)?;
+            }
+            out.down();
+            out.line("}");
+            Ok(())
+        }
         // Вынужденная ветка: перечисление `#[non_exhaustive]`. Отказ, а не
         // молчаливая потеря оператора.
         other => Err(FormatError::Unsupported(format!("Statement::{other:?}"))),

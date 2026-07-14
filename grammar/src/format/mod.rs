@@ -22,6 +22,7 @@
 //! помечено `#[non_exhaustive]` (например, `ast::Statement`), ветка `_`
 //! вынужденная — она **отказывает**, а не печатает пустоту.
 
+mod comments;
 mod expr;
 mod stmt;
 
@@ -55,17 +56,48 @@ impl std::fmt::Display for FormatError {
 
 impl std::error::Error for FormatError {}
 
-/// Накопитель канонического текста с отступами.
-pub(crate) struct Out {
+/// Накопитель канонического текста с отступами и курсором комментариев.
+pub(crate) struct Out<'a> {
     buf: String,
     depth: usize,
+    comments: comments::Comments<'a>,
 }
 
-impl Out {
-    fn new() -> Self {
+impl<'a> Out<'a> {
+    fn new(source: &'a str, items: &[ast::Comment]) -> Self {
         Self {
-            buf: String::with_capacity(1024),
+            buf: String::with_capacity(source.len() + 64),
             depth: 0,
+            comments: comments::Comments::new(source, items),
+        }
+    }
+
+    /// Печатает строку, **привязанную к узлу**: сперва ведущие комментарии узла,
+    /// затем сама строка, затем хвостовой комментарий той же строки исходника.
+    ///
+    /// Это единственный путь печати содержательных строк — так комментарий не
+    /// может «потеряться» из-за того, что о нём забыли в конкретной ветке.
+    pub(crate) fn node_line(&mut self, loc: &crate::diagnostics::Location, text: &str) {
+        let Some((start, end)) = comments::span(loc) else {
+            self.line(text);
+            return;
+        };
+        for c in self.comments.leading(start) {
+            self.line(&c);
+        }
+        match self.comments.trailing(end) {
+            Some(trailing) => self.line(&format!("{text} {trailing}")),
+            None => self.line(text),
+        }
+    }
+
+    /// Ведущие комментарии перед узлом (для блоков, где строка печатается сама).
+    pub(crate) fn leading_for(&mut self, loc: &crate::diagnostics::Location) {
+        let Some((start, _)) = comments::span(loc) else {
+            return;
+        };
+        for c in self.comments.leading(start) {
+            self.line(&c);
         }
     }
 
@@ -102,20 +134,70 @@ impl Out {
 
 /// Форматирует исходник `.lam` в канонический вид.
 ///
-/// Комментарии на этом шаге **не печатаются** — их переассоциация по `Location`
-/// вынесена в задачу `0024-02` (см. анализ фичи). До неё функция отказывает на
-/// входе с комментариями, а не молча их теряет.
+/// Комментарии сохраняются: они переассоциируются по `Location` (см.
+/// [`comments`]) и печатаются как ведущие/хвостовые. Ни один не теряется —
+/// требование R2.
 pub fn format_source(source: &str) -> Result<String, FormatError> {
-    let (model, comments) =
+    let (model, items) =
         crate::parse(source, 0).map_err(|d| FormatError::Parse(format!("{d:?}")))?;
-    if !comments.is_empty() {
-        return Err(FormatError::Unsupported(
-            "комментарии (печать — задача 0024-02)".to_string(),
-        ));
-    }
-    let mut out = Out::new();
+    let mut out = Out::new(source, &items);
     print_model_body(&mut out, &model)?;
+    // Хвост файла: комментарии после последнего узла.
+    for c in out.comments.rest() {
+        out.line(&c);
+    }
+    // Страховка R2: ни один комментарий не должен остаться непогашенным.
+    debug_assert!(
+        out.comments.is_exhausted(),
+        "комментарий потерян при печати — нарушено требование R2"
+    );
     Ok(out.finish())
+}
+
+/// Позиция элемента модели.
+///
+/// У `ModelElement` нет `loc()` (в отличие от `Expression`/`Condition`),
+/// поэтому извлекаем из вложенного узла — иначе комментарии не к чему привязать.
+fn element_loc(element: &ast::ModelElement) -> crate::diagnostics::Location {
+    use ast::ModelElement as M;
+    match element {
+        M::StraySemicolon(loc) => *loc,
+        M::Variable(v) => variable_loc(v),
+        M::Type(t) => t.loc,
+        M::State(s) => s.loc,
+        M::Model(m) => m.loc,
+        M::NamedBlockCode(b) => b.loc,
+        M::Enum(e) => e.loc,
+        M::Struct(s) => s.loc,
+        M::Function(f) => f.loc,
+        M::Import(i) => import_loc(i),
+        M::Formula(f) => f.loc,
+        M::Condition(c) => c.loc,
+        M::InlineFormula(f) => inline_formula_loc(f),
+        M::Address(a) => a.loc,
+    }
+}
+
+fn variable_loc(v: &ast::VariableDefine) -> crate::diagnostics::Location {
+    use ast::VariableDefine as V;
+    match v {
+        V::Variable { loc, .. } | V::Port { loc, .. } | V::Constant { loc, .. } => *loc,
+    }
+}
+
+fn import_loc(i: &ast::ImportDefine) -> crate::diagnostics::Location {
+    use ast::ImportDefine as I;
+    match i {
+        I::Plain(_, loc) | I::GlobalSymbol(_, _, loc) | I::Rename(_, _, loc) => *loc,
+    }
+}
+
+#[allow(clippy::wildcard_enum_match_arm)]
+fn inline_formula_loc(f: &ast::InlineFormulaDefine) -> crate::diagnostics::Location {
+    // `InlineFormulaDefine` — перечисление; печать его пока не поддержана,
+    // позиция нужна лишь для сообщения об отказе.
+    let _ = f;
+    crate::diagnostics::Location::Builtin
 }
 
 /// Печатает элементы модели верхнего уровня (без обёртки `model … { }`).
@@ -130,17 +212,24 @@ fn print_model_body(out: &mut Out, model: &ast::Model) -> Result<(), FormatError
 }
 
 fn print_element(out: &mut Out, element: &ast::ModelElement) -> Result<(), FormatError> {
+    let loc = element_loc(element);
+    // Ведущие комментарии печатаются для ЛЮБОГО элемента — единая точка, чтобы
+    // ни одна ветка не забыла про них (требование R2).
+    out.leading_for(&loc);
     match element {
         ast::ModelElement::StraySemicolon(_) => {
             // Одиночная `;` — синтаксический шум; канон её опускает.
             Ok(())
         }
         ast::ModelElement::Variable(v) => {
-            out.line(&format!("{};", expr::variable_define(v)?));
+            out.node_line(&loc, &format!("{};", expr::variable_define(v)?));
             Ok(())
         }
         ast::ModelElement::Type(t) => {
-            out.line(&format!("type {} = {};", t.name.name, expr::ty(&t.ty)?));
+            out.node_line(
+                &loc,
+                &format!("type {} = {};", t.name.name, expr::ty(&t.ty)?),
+            );
             Ok(())
         }
         ast::ModelElement::State(s) => print_state(out, s),
@@ -157,7 +246,7 @@ fn print_element(out: &mut Out, element: &ast::ModelElement) -> Result<(), Forma
                 .collect::<Vec<_>>()
                 .join(", ");
             let name = e.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
-            out.line(&format!("enum {name} {{ {variants} }}"));
+            out.node_line(&loc, &format!("enum {name} {{ {variants} }}"));
             Ok(())
         }
         ast::ModelElement::Struct(s) => {
@@ -177,19 +266,34 @@ fn print_element(out: &mut Out, element: &ast::ModelElement) -> Result<(), Forma
             Ok(())
         }
         ast::ModelElement::Import(i) => {
-            out.line(&expr::import(i)?);
+            out.node_line(&loc, &expr::import(i)?);
             Ok(())
         }
         ast::ModelElement::Function(f) => print_function(out, f),
         // Узлы, печать которых относится к последующим задачам фичи.
         ast::ModelElement::Formula(_) => Err(FormatError::Unsupported("Formula".to_string())),
-        ast::ModelElement::Condition(_) => {
-            Err(FormatError::Unsupported("ConditionDefine".to_string()))
+        ast::ModelElement::Condition(c) => {
+            // `cond Имя = условие;` — печатается ПЕЧАТЬЮ УСЛОВИЙ, а не выражений:
+            // `=` здесь равенство (инвариант ADR 0019).
+            let name = c.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
+            out.node_line(
+                &loc,
+                &format!("cond {name} = {};", expr::condition(&c.value)?),
+            );
+            Ok(())
         }
         ast::ModelElement::InlineFormula(_) => {
             Err(FormatError::Unsupported("InlineFormula".to_string()))
         }
-        ast::ModelElement::Address(_) => Err(FormatError::Unsupported("Address".to_string())),
+        ast::ModelElement::Address(a) => {
+            // `address ИМЯ = <выражение>;` (фича 0020).
+            let name = a.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
+            out.node_line(
+                &loc,
+                &format!("address {name} = {};", expr::expression(&a.value)?),
+            );
+            Ok(())
+        }
     }
 }
 
@@ -323,11 +427,18 @@ mod tests {
     }
 
     #[test]
-    fn comments_are_refused_not_dropped() {
-        // Задача 0024-02: пока комментарии не печатаются — отказываем явно,
-        // потому что молча потерять комментарий пользователя недопустимо.
-        let err = format_source("// заметка\nstart S;").unwrap_err();
-        assert!(matches!(err, FormatError::Unsupported(_)), "{err:?}");
+    fn leading_comment_is_printed_before_node() {
+        // Задача 0024-02: комментарии сохраняются. Раньше здесь стоял тест,
+        // проверявший ОТКАЗ на комментариях (ограничение задачи 0024-01);
+        // ограничение снято — тест устарел по замыслу и заменён.
+        let out = format_source("// заметка\nstart S;").unwrap();
+        assert_eq!(out, "// заметка\nstart S;\n");
+    }
+
+    #[test]
+    fn trailing_comment_stays_on_its_line() {
+        let out = format_source("var x: u8 := 0; // счётчик").unwrap();
+        assert_eq!(out, "var x: u8 := 0; // счётчик\n");
     }
 
     #[test]
