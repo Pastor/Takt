@@ -34,6 +34,8 @@ use diagnostics::{Diagnostic, Location};
 use lalrpop_util::ParseError;
 use std::path::Path;
 
+/// Внешняя карта адресов портов (`.ld`-подобный формат, фича 0020).
+pub mod address_map;
 /// Модуль диагностических сообщений компилятора.
 pub mod diagnostics;
 /// Модуль генерации кода (C и другие целевые платформы).
@@ -48,6 +50,8 @@ pub mod semantic;
 /// Модуль проверки формальных свойств (LTL-формулы, автоматы Бюхи).
 pub mod verification;
 
+/// Внешняя карта адресов: парсер формата и предупреждения оверлея (фича 0020).
+pub use address_map::{AddressMapEntry, address_map_overlay_warnings, parse_address_map};
 /// Опции генерации кода (реэкспорт для удобства: `grammar::GenerateOptions`).
 pub use generator::GenerateOptions;
 
