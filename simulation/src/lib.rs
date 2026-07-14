@@ -15,6 +15,7 @@
 //! ```
 mod context;
 pub(crate) mod eval;
+pub(crate) mod expression;
 pub(crate) mod gif;
 pub mod graphics_config;
 pub mod json_input;
