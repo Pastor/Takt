@@ -30,19 +30,36 @@ pub enum Language {
 pub struct GenerateOptions {
     /// Генерировать guard-проверки в целевом коде.
     pub guard_enable: bool,
+    /// Режим `c-hal` (фича 0020-05): эмитить таблицу адресов портов и дефолтную
+    /// реализацию HAL (`*(volatile T*)addr`). В обычном режиме `c` — `false`,
+    /// вывод не меняется.
+    pub hal: bool,
+    /// Разрешённые адреса портов (`имя порта → адрес`) для режима [`hal`].
+    ///
+    /// Заполняется из [`resolve_addresses`](crate::address_map::resolve_addresses)
+    /// (приоритет inline < `address` < внешняя карта). В обычном режиме пуста.
+    pub address_map: std::collections::HashMap<String, crate::address_map::ResolvedAddress>,
 }
 
 impl GenerateOptions {
-    /// Создаёт опции с указанным режимом guard-проверок.
+    /// Создаёт опции с указанным режимом guard-проверок (режим `c`, без HAL).
     pub fn new(guard_enable: bool) -> Self {
-        Self { guard_enable }
+        Self {
+            guard_enable,
+            hal: false,
+            address_map: std::collections::HashMap::new(),
+        }
     }
 }
 
 impl Default for GenerateOptions {
-    /// По умолчанию guard-проверки включены.
+    /// По умолчанию guard-проверки включены, режим HAL выключен.
     fn default() -> Self {
-        Self { guard_enable: true }
+        Self {
+            guard_enable: true,
+            hal: false,
+            address_map: std::collections::HashMap::new(),
+        }
     }
 }
 

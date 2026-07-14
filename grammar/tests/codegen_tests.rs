@@ -1084,3 +1084,120 @@ start Main = Motor;
         "команда Stop должна сравниваться с числовым значением варианта перечисления:\n{c}"
     );
 }
+
+// ── Фича 0020-05: режим c-hal (таблица адресов + дефолтный HAL) ───────────────
+
+/// Читает единственный `.h`-файл из каталога вывода.
+fn read_header(out_dir: &str) -> String {
+    let h = fs::read_dir(out_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| p.extension().map(|x| x == "h").unwrap_or(false))
+        .expect("должен быть .h-файл");
+    fs::read_to_string(h).unwrap()
+}
+
+/// c-hal эмитит таблицу адресов, дефолтный HAL и bind-помощник.
+#[test]
+fn c_hal_emits_address_table_and_hal() {
+    let tmp = tempdir().unwrap();
+    let out = tmp.path().to_str().unwrap();
+    let src = "type u8 = [bit;8]; in BTN: u8 := 0x00200000; out LED: bit; \
+               address LED = 0x00200004; start Idle { ref On: BTN; } state On { ref Idle: BTN; }";
+    let warnings = grammar::compile_to_c_hal(
+        "demo.lam",
+        src,
+        out,
+        &[],
+        &[],
+        &grammar::GenerateOptions::default(),
+    )
+    .expect("c-hal должен компилироваться");
+    assert!(
+        warnings.is_empty(),
+        "без карты предупреждений нет: {:?}",
+        warnings
+    );
+
+    let h = read_header(out);
+    assert!(h.contains("Demo_PortBinding"), "нет типа привязки:\n{}", h);
+    assert!(h.contains("__ADDR[]"), "нет таблицы адресов:\n{}", h);
+    assert!(h.contains("0x200000"), "нет адреса BTN:\n{}", h);
+    assert!(
+        h.contains("Demo_bind_default_hal"),
+        "нет bind-помощника:\n{}",
+        h
+    );
+    assert!(
+        h.contains("typedef struct Demo Demo;"),
+        "нужен typedef корня для валидного C:\n{}",
+        h
+    );
+}
+
+/// Обычный режим `c` НЕ эмитит HAL-артефакты (регресс = 0).
+#[test]
+fn plain_c_has_no_hal_artifacts() {
+    let tmp = tempdir().unwrap();
+    let out = tmp.path().to_str().unwrap();
+    let src = "type u8 = [bit;8]; in BTN: u8 := 0x00200000; start Idle { ref On: BTN; } state On;";
+    grammar::compile_to_c(
+        "demo.lam",
+        src,
+        out,
+        &[],
+        &grammar::GenerateOptions::default(),
+    )
+    .expect("c должен компилироваться");
+    let h = read_header(out);
+    assert!(
+        !h.contains("PortBinding"),
+        "режим c не должен эмитить HAL:\n{}",
+        h
+    );
+    assert!(!h.contains("bind_default_hal"));
+}
+
+/// Используемый порт без адреса в c-hal → ошибка полноты SE-052.
+#[test]
+fn c_hal_missing_address_is_error() {
+    let tmp = tempdir().unwrap();
+    let out = tmp.path().to_str().unwrap();
+    let src = "in BTN: bit; start S { ref T: BTN; } state T;";
+    let err = grammar::compile_to_c_hal(
+        "demo.lam",
+        src,
+        out,
+        &[],
+        &[],
+        &grammar::GenerateOptions::default(),
+    )
+    .expect_err("used-порт без адреса должен давать ошибку");
+    assert_eq!(err.code.as_deref(), Some("SE-052"));
+}
+
+/// Внешняя карта переопределяет адрес модели → c-hal успешен + предупреждение SE-050.
+#[test]
+fn c_hal_external_overrides_and_warns() {
+    let tmp = tempdir().unwrap();
+    let out = tmp.path().to_str().unwrap();
+    let src = "type u8 = [bit;8]; in BTN: u8 := 0x00100000; start Idle { ref On: BTN; } state On;";
+    let entries = grammar::parse_address_map("BTN = 0x40000000;", 0).unwrap();
+    let warnings = grammar::compile_to_c_hal(
+        "demo.lam",
+        src,
+        out,
+        &[],
+        &entries,
+        &grammar::GenerateOptions::default(),
+    )
+    .expect("c-hal должен компилироваться");
+    assert!(warnings.iter().any(|d| d.code.as_deref() == Some("SE-050")));
+    let h = read_header(out);
+    assert!(
+        h.contains("0x40000000"),
+        "должен эмитить адрес из карты:\n{}",
+        h
+    );
+}

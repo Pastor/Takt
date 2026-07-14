@@ -51,7 +51,10 @@ pub mod semantic;
 pub mod verification;
 
 /// Внешняя карта адресов: парсер формата и предупреждения оверлея (фича 0020).
-pub use address_map::{AddressMapEntry, address_map_overlay_warnings, parse_address_map};
+pub use address_map::{
+    AddressMapEntry, AddressResolution, AddressSource, ResolvedAddress,
+    address_map_overlay_warnings, parse_address_map, resolve_addresses,
+};
 /// Опции генерации кода (реэкспорт для удобства: `grammar::GenerateOptions`).
 pub use generator::GenerateOptions;
 
@@ -240,6 +243,57 @@ pub fn compile_to_c(
     )?;
 
     Ok(())
+}
+
+/// Компилирует Lam в C в режиме `c-hal` (фича 0020-05): к обычному C добавляются
+/// таблица адресов портов и дефолтная реализация HAL.
+///
+/// Адреса разрешаются с приоритетом inline < `address` < внешняя карта
+/// (`external`). Полнота обязательна: используемый порт без адреса → ошибка
+/// (`SE-052`). Возвращает `Ok(warnings)` (предупреждения оверлея `SE-050` /
+/// висячих записей карты `SE-051`) при успехе либо первую ошибку.
+pub fn compile_to_c_hal(
+    filename: &str,
+    source: &str,
+    output_path: &str,
+    search_paths: &[String],
+    external: &[address_map::AddressMapEntry],
+    options: &GenerateOptions,
+) -> Result<Vec<Diagnostic>, Diagnostic> {
+    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
+    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+
+    if model.borrow().name.is_none() {
+        let stem = Path::new(filename)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
+            .unwrap_or_else(|| "Root".to_owned());
+        model.borrow_mut().name = Some(stem);
+    }
+
+    // Разрешаем адреса (inline < address < внешняя карта) и проверяем полноту.
+    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&model), external);
+    if let Some(err) = resolution
+        .diagnostics
+        .iter()
+        .find(|d| d.level == diagnostics::Level::Error)
+    {
+        return Err(err.clone());
+    }
+
+    let mut hal_options = options.clone();
+    hal_options.hal = true;
+    hal_options.address_map = resolution.map;
+
+    generator::generate(
+        generator::Language::C,
+        &model.borrow(),
+        output_path,
+        &hal_options,
+    )?;
+
+    Ok(resolution.diagnostics)
 }
 
 /// Компилирует исходный код Lam в диаграмму состояний PlantUML.

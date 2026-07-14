@@ -485,7 +485,11 @@ fn generate_model_header(
     Ok(num)
 }
 
-pub fn generate_header(filename: &str, map: &CMap) -> Result<String, Diagnostic> {
+pub fn generate_header(
+    filename: &str,
+    map: &CMap,
+    options: &crate::generator::GenerateOptions,
+) -> Result<String, Diagnostic> {
     let mut header = String::new();
     let mut printer = Printer::new(4, &mut header);
     // Исправлено: заменяем '.' (не '\.') для корректного C-идентификатора #ifndef guard
@@ -513,6 +517,15 @@ pub fn generate_header(filename: &str, map: &CMap) -> Result<String, Diagnostic>
             let s = name.unique_camelcase();
             printer.print(&format!("typedef struct {0} {0};", s)).nl();
         }
+        let root_struct = map.root_name().unique_camelcase();
+        printer
+            .print(&format!("typedef struct {0} {0};", root_struct))
+            .nl();
+        printer.nl();
+    } else if options.hal {
+        // Режим c-hal: без под-моделей forward-декларций нет, но typedef корня
+        // нужен, чтобы прототипы `{Root}_init({Root} *)` и дефолтный HAL были
+        // валидным C. Обычный режим `c` не трогаем (вывод байт-в-байт).
         let root_struct = map.root_name().unique_camelcase();
         printer
             .print(&format!("typedef struct {0} {0};", root_struct))
@@ -590,8 +603,216 @@ pub fn generate_header(filename: &str, map: &CMap) -> Result<String, Diagnostic>
         .print(&struct_name)
         .print(" *main);")
         .nl();
+
+    // Фича 0020-05: в режиме `c-hal` — таблица адресов портов и дефолтный HAL.
+    if options.hal {
+        generate_hal(&mut printer, map, options)?;
+    }
+
     printer.print("#endif").nl();
     Ok(header)
+}
+
+/// Ширина разыменования (в байтах) по C-типу порта из [`get_c_type`].
+fn width_from_ctype(ct: &str) -> u8 {
+    match ct {
+        "uint8_t" | "int8_t" | "bool" => 1,
+        "uint16_t" | "int16_t" => 2,
+        "uint64_t" | "int64_t" | "double" => 8,
+        // "uint32_t"/"int32_t"/"float"/"int" и всё прочее — 4 байта.
+        _ => 4,
+    }
+}
+
+/// C-тип порта `(model, name)` через [`get_c_type`] (для ширины доступа).
+fn port_ctype(map: &CMap, model_name: &Name, port_name: &str) -> Option<String> {
+    let model = map.raw_model_at(model_name.clone()).ok()?;
+    let borrowed = model.borrow();
+    let VariableNode::Port { ty, .. } = borrowed.variables.get(port_name)? else {
+        return None;
+    };
+    c::get_c_type(ty, &borrowed)
+}
+
+/// Фича 0020-05: эмитит таблицу адресов портов и дефолтную реализацию HAL.
+///
+/// Для каждой пары `(класс, направление)` генерируется `static const`-таблица
+/// `{Enum}__ADDR[]`, индексируемая enum-вариантами порта, и дефолтные
+/// `read_*`/`write_*` через `*(volatile T*)addr`. Помощник `bind_default_hal`
+/// связывает указатели структуры с этими функциями (только для присутствующих
+/// классов/направлений).
+fn generate_hal(
+    printer: &mut Printer,
+    map: &CMap,
+    options: &crate::generator::GenerateOptions,
+) -> Result<(), Diagnostic> {
+    let root = map.root_name().unique_camelcase();
+    let by_class = collect_ports_by_class(map)?;
+    let addr_map = &options.address_map;
+    let has = |c: PortClass, d: PortDirection| by_class.contains_key(&(c, d));
+
+    printer.nl();
+    printer
+        .print("/* 0020: карта адресов портов и дефолтный HAL */")
+        .nl();
+    printer
+        .print(&format!(
+            "typedef struct {{ uintptr_t addr; int8_t bit; uint8_t width; }} {}_PortBinding;",
+            root
+        ))
+        .nl();
+    printer.nl();
+
+    // Таблицы адресов для всех присутствующих (класс, направление).
+    for cls in [PortClass::Bit, PortClass::Rational, PortClass::Numeric] {
+        for dir in [PortDirection::In, PortDirection::Out] {
+            let Some(ports) = by_class.get(&(cls, dir)) else {
+                continue;
+            };
+            let enum_type = cls.qualified_enum_name_with_dir(&root, dir);
+            printer
+                .print(&format!(
+                    "static const {root}_PortBinding {enum_type}__ADDR[] = {{"
+                ))
+                .nl();
+            printer.up();
+            for (model_name, port_name) in ports {
+                let variant = format!(
+                    "{}_{}",
+                    model_name.unique_uppercase_snakecase(),
+                    normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
+                );
+                let resolved = addr_map.get(port_name);
+                let addr = resolved.map(|r| r.addr).unwrap_or(0);
+                let bit = resolved.and_then(|r| r.bit).unwrap_or(-1);
+                let width = port_ctype(map, model_name, port_name)
+                    .map(|ct| width_from_ctype(&ct))
+                    .unwrap_or(4);
+                printer
+                    .ident(&format!(
+                        "[{variant}] = {{ (uintptr_t)0x{addr:X}u, {bit}, {width} }},",
+                        addr = addr as u64,
+                    ))
+                    .nl();
+            }
+            printer.down();
+            printer.print("};").nl();
+        }
+    }
+    printer.nl();
+
+    // Дефолтные функции чтения/записи (только для присутствующих классов).
+    if has(PortClass::Bit, PortDirection::In) {
+        let e = PortClass::Bit.qualified_enum_name_with_dir(&root, PortDirection::In);
+        printer
+            .print(&format!(
+                "static bool {root}_default_{f}({e} p, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; \
+             return ((*(volatile uint8_t*)b.addr) >> (b.bit < 0 ? 0 : b.bit)) & 1u; }}",
+                f = FUNCTION_PORT_READ_BIT,
+            ))
+            .nl();
+    }
+    if has(PortClass::Bit, PortDirection::Out) {
+        let e = PortClass::Bit.qualified_enum_name_with_dir(&root, PortDirection::Out);
+        printer.print(&format!(
+            "static void {root}_default_{f}({e} p, bool val, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; \
+             volatile uint8_t *reg = (volatile uint8_t*)b.addr; \
+             uint8_t mask = (uint8_t)(1u << (b.bit < 0 ? 0 : b.bit)); \
+             if (val) *reg |= mask; else *reg &= (uint8_t)~mask; }}",
+            f = FUNCTION_PORT_WRITE_BIT,
+        )).nl();
+    }
+    if has(PortClass::Rational, PortDirection::In) {
+        let e = PortClass::Rational.qualified_enum_name_with_dir(&root, PortDirection::In);
+        printer
+            .print(&format!(
+                "static float {root}_default_{f}({e} p, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; return *(volatile float*)b.addr; }}",
+                f = FUNCTION_PORT_READ_FLOAT,
+            ))
+            .nl();
+    }
+    if has(PortClass::Rational, PortDirection::Out) {
+        let e = PortClass::Rational.qualified_enum_name_with_dir(&root, PortDirection::Out);
+        printer.print(&format!(
+            "static void {root}_default_{f}({e} p, float val, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; *(volatile float*)b.addr = val; }}",
+            f = FUNCTION_PORT_WRITE_FLOAT,
+        )).nl();
+    }
+    if has(PortClass::Numeric, PortDirection::In) {
+        let e = PortClass::Numeric.qualified_enum_name_with_dir(&root, PortDirection::In);
+        printer
+            .print(&format!(
+                "static int64_t {root}_default_{f}({e} p, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; switch (b.width) {{ \
+             case 1: return (int64_t)*(volatile uint8_t*)b.addr; \
+             case 2: return (int64_t)*(volatile uint16_t*)b.addr; \
+             case 8: return (int64_t)*(volatile uint64_t*)b.addr; \
+             default: return (int64_t)*(volatile uint32_t*)b.addr; }} }}",
+                f = FUNCTION_PORT_READ_NUMERIC,
+            ))
+            .nl();
+    }
+    if has(PortClass::Numeric, PortDirection::Out) {
+        let e = PortClass::Numeric.qualified_enum_name_with_dir(&root, PortDirection::Out);
+        printer.print(&format!(
+            "static void {root}_default_{f}({e} p, int64_t val, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; switch (b.width) {{ \
+             case 1: *(volatile uint8_t*)b.addr = (uint8_t)val; break; \
+             case 2: *(volatile uint16_t*)b.addr = (uint16_t)val; break; \
+             case 8: *(volatile uint64_t*)b.addr = (uint64_t)val; break; \
+             default: *(volatile uint32_t*)b.addr = (uint32_t)val; break; }} }}",
+            f = FUNCTION_PORT_WRITE_NUMERIC,
+        )).nl();
+    }
+    printer.nl();
+
+    // Помощник связывания дефолтного HAL со структурой модели.
+    printer
+        .print(&format!(
+            "static void {root}_bind_default_hal({root} *m) {{"
+        ))
+        .nl();
+    printer.up();
+    let bindings: [(bool, &str); 6] = [
+        (
+            has(PortClass::Bit, PortDirection::In),
+            FUNCTION_PORT_READ_BIT,
+        ),
+        (
+            has(PortClass::Bit, PortDirection::Out),
+            FUNCTION_PORT_WRITE_BIT,
+        ),
+        (
+            has(PortClass::Rational, PortDirection::In),
+            FUNCTION_PORT_READ_FLOAT,
+        ),
+        (
+            has(PortClass::Rational, PortDirection::Out),
+            FUNCTION_PORT_WRITE_FLOAT,
+        ),
+        (
+            has(PortClass::Numeric, PortDirection::In),
+            FUNCTION_PORT_READ_NUMERIC,
+        ),
+        (
+            has(PortClass::Numeric, PortDirection::Out),
+            FUNCTION_PORT_WRITE_NUMERIC,
+        ),
+    ];
+    for (present, field) in bindings {
+        if present {
+            printer
+                .ident(&format!("m->{field} = {root}_default_{field};"))
+                .nl();
+        }
+    }
+    printer.down();
+    printer.print("}").nl();
+    Ok(())
 }
 
 #[cfg(test)]
@@ -620,7 +841,12 @@ start Main { always { p := High; } }
         model.borrow_mut().name = Some("Test".to_string());
         let model = model.borrow();
         let map = CMap::new(model.name(), &*model, true).unwrap();
-        let header = generate_header(map.get_filename(), &map).unwrap();
+        let header = generate_header(
+            map.get_filename(),
+            &map,
+            &crate::generator::GenerateOptions::default(),
+        )
+        .unwrap();
         assert!(
             header.contains("uint16_t"),
             "ожидался uint16_t для max=300, получено:\n{header}"
@@ -642,7 +868,12 @@ start Main { always { lv := High; } }
         model2.borrow_mut().name = Some("Test2".to_string());
         let model2 = model2.borrow();
         let map2 = CMap::new(model2.name(), &*model2, true).unwrap();
-        let header2 = generate_header(map2.get_filename(), &map2).unwrap();
+        let header2 = generate_header(
+            map2.get_filename(),
+            &map2,
+            &crate::generator::GenerateOptions::default(),
+        )
+        .unwrap();
         assert!(
             header2.contains("uint8_t lv"),
             "ожидался uint8_t для max=200 (≤ u8::MAX=255), получено:\n{header2}"
@@ -665,7 +896,12 @@ state Par = Eng | Eng;
         model.borrow_mut().name = Some("Test".to_string());
         let model = model.borrow();
         let map = CMap::new(model.name(), &*model, true).unwrap();
-        let header = generate_header(map.get_filename(), &map).unwrap();
+        let header = generate_header(
+            map.get_filename(),
+            &map,
+            &crate::generator::GenerateOptions::default(),
+        )
+        .unwrap();
         // Внутри параллельного блока поля нумеруются с 0 по имени модели
         assert!(
             header.contains("eng0;"),
@@ -711,7 +947,12 @@ state Mid = Eng + (Eng | Eng) + Eng;
         model.borrow_mut().name = Some("Test".to_string());
         let model = model.borrow();
         let map = CMap::new(model.name(), &*model, true).unwrap();
-        let header = generate_header(map.get_filename(), &map).unwrap();
+        let header = generate_header(
+            map.get_filename(),
+            &map,
+            &crate::generator::GenerateOptions::default(),
+        )
+        .unwrap();
         // Первый элемент конкатенации: {state}_{model}{idx}
         assert!(
             header.contains("mid_eng0;"),
@@ -765,7 +1006,12 @@ state Mid = Eng + (Eng | Eng) + Eng;
         model.borrow_mut().name = Some("Test".to_string());
         let model = model.borrow();
         let map = CMap::new(model.name(), &*model, true).unwrap();
-        let header = generate_header(map.get_filename(), &map).unwrap();
+        let header = generate_header(
+            map.get_filename(),
+            &map,
+            &crate::generator::GenerateOptions::default(),
+        )
+        .unwrap();
         // enum поле состояния конкатенации
         assert!(
             header.contains("mid_state;"),
@@ -806,7 +1052,12 @@ start Main { always { pos.x := 1; } }
         model.borrow_mut().name = Some("Test".to_string());
         let model = model.borrow();
         let map = CMap::new(model.name(), &*model, true).unwrap();
-        let header = generate_header(map.get_filename(), &map).unwrap();
+        let header = generate_header(
+            map.get_filename(),
+            &map,
+            &crate::generator::GenerateOptions::default(),
+        )
+        .unwrap();
         assert!(
             header.contains("typedef struct Point"),
             "ожидался typedef struct Point:\n{header}"

@@ -125,7 +125,7 @@ impl AsGenerator for Generator {
             model,
             options.guard_enable,
         )?;
-        let header = generate_header(map.get_filename(), &map)?;
+        let header = generate_header(map.get_filename(), &map, options)?;
         let source = generate_source(map.get_filename(), &map)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));
