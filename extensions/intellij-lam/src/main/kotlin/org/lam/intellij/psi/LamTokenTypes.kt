@@ -56,8 +56,8 @@ object LamTokenTypes {
     val KEYWORDS: Set<String> = setOf(
         "break", "const", "continue", "else", "false", "for", "fn", "if", "match",
         "_", "import", "loop", "while", "return", "string", "true", "type", "as",
-        "assembly", "formula", "in", "out", "inout", "model", "state", "start",
-        "ref", "template", "cond", "var", "next", "extern", "enum", "struct",
-        "from", "X", "F", "G", "U", "R", "LTL", "Guard",
+        "assembly", "formula", "in", "out", "inout", "address", "model", "state",
+        "start", "ref", "template", "cond", "var", "next", "extern", "enum",
+        "struct", "from", "X", "F", "G", "U", "R", "LTL", "Guard",
     )
 }

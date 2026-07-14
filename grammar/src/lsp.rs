@@ -56,6 +56,10 @@ const BUT_KEYWORDS: &[(&str, &str)] = &[
     ("in", "входной порт"),
     ("out", "выходной порт"),
     ("inout", "двунаправленный порт"),
+    (
+        "address",
+        "задание аппаратного адреса порта (address Имя = <адрес>;)",
+    ),
     ("enum", "объявление перечисления"),
     ("struct", "объявление структуры"),
     ("cond", "именованное условие перехода"),
@@ -1424,6 +1428,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             | Token::PortIn
             | Token::PortOut
             | Token::PortInOut
+            | Token::Address
             | Token::Function
             | Token::Extern
             | Token::Enum
