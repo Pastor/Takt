@@ -64,10 +64,16 @@ impl<'a> Comments<'a> {
     }
 
     /// Ведущие комментарии: все, что начинаются раньше `offset`.
-    pub(crate) fn leading(&mut self, offset: usize) -> Vec<String> {
+    ///
+    /// Возвращает пары «начало, текст»: начало нужно, чтобы восстановить пустые
+    /// строки **между** комментариями. Без него блок
+    /// `/// шапка` + пустая строка + `/// про enum` слипался бы в один — потеря
+    /// авторского замысла.
+    pub(crate) fn leading(&mut self, offset: usize) -> Vec<(usize, String)> {
         let mut out = Vec::new();
         while self.next < self.items.len() && self.items[self.next].start < offset {
-            out.push(self.items[self.next].text.clone());
+            let item = &self.items[self.next];
+            out.push((item.start, item.text.clone()));
             self.next += 1;
         }
         out

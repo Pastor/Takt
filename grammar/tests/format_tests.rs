@@ -342,3 +342,14 @@ fn r5_no_spurious_blank_after_multiline_function() {
     );
     assert_eq!(once, format_source(&once).unwrap(), "идемпотентность");
 }
+
+#[test]
+fn r2_blank_line_between_comment_groups_survives() {
+    // Найдено при нормализующем прогоне по examples/: пустая строка МЕЖДУ двумя
+    // группами комментариев терялась, потому что «пустая строка перед узлом»
+    // привязывалась только к первому комментарию группы. Это потеря авторского
+    // замысла: шапка файла слипалась с доком следующего элемента.
+    let out = format_source("/// шапка файла\n\n/// про enum\nenum M { A = 0 }\n").unwrap();
+    assert_eq!(out, "/// шапка файла\n\n/// про enum\nenum M { A = 0 }\n");
+    assert_eq!(out, format_source(&out).unwrap(), "идемпотентность");
+}
