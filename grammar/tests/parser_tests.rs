@@ -1812,3 +1812,82 @@ fn test_inline_formula_in_always_parsed() {
     let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
     assert!(!ast.elements.is_empty());
 }
+
+// ───────────────────────── Фича 0020: оператор `address` ─────────────────────
+
+/// Оператор `address Имя = <выражение>;` парсится в `ModelElement::Address`
+/// с именем порта и выражением-адресом (фича 0020-01).
+#[test]
+fn address_operator_parses_to_model_element_address() {
+    let root = must_parse("address BTN = 0x00200000;");
+    let addr = root
+        .elements
+        .iter()
+        .find_map(|e| match e {
+            ModelElement::Address(a) => Some(a),
+            _ => None,
+        })
+        .expect("ожидался ModelElement::Address");
+    assert_eq!(
+        addr.name.as_ref().map(|id| id.name.as_str()),
+        Some("BTN"),
+        "имя порта в address-операторе"
+    );
+    // Голый hex `0x…` без суффикса `:bit` лексируется как число; адресный
+    // литерал `Expression::Address` порождается только формой `0xADDR:bit`.
+    assert!(
+        matches!(
+            addr.value,
+            grammar::parser::ast::Expression::Number(_, 0x0020_0000)
+        ),
+        "значение должно быть числом 0x00200000, получено: {:?}",
+        addr.value
+    );
+}
+
+/// Адрес с битовой позицией `0xADDR:bit` также парсится в address-операторе.
+#[test]
+fn address_operator_accepts_bit_addressed_literal() {
+    let root = must_parse("address LED = 0x00200004:3;");
+    let addr = root
+        .elements
+        .iter()
+        .find_map(|e| match e {
+            ModelElement::Address(a) => Some(a),
+            _ => None,
+        })
+        .expect("ожидался ModelElement::Address");
+    assert!(
+        matches!(
+            addr.value,
+            grammar::parser::ast::Expression::Address(_, 0x0020_0004, 3)
+        ),
+        "значение должно быть 0x00200004:3, получено: {:?}",
+        addr.value
+    );
+}
+
+/// Оператор `address` соседствует с объявлением порта в одной модели
+/// и не мешает разбору остальных элементов.
+#[test]
+fn address_operator_coexists_with_port_declaration() {
+    let root = must_parse("model Sensors { in BTN: u8; address BTN = 0x00200000; start Idle; }");
+    let model = match &root.elements[0] {
+        ModelElement::Model(m) => m,
+        other => panic!("ожидалась вложенная модель, получено: {:?}", other),
+    };
+    assert!(
+        model
+            .elements
+            .iter()
+            .any(|e| matches!(e, ModelElement::Address(_))),
+        "в модели должен быть ModelElement::Address"
+    );
+    assert!(
+        model
+            .elements
+            .iter()
+            .any(|e| matches!(e, ModelElement::Variable(_))),
+        "в модели должно остаться объявление порта (ModelElement::Variable)"
+    );
+}

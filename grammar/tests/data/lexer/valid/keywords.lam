@@ -4,3 +4,4 @@
 model state start ref cond var const port type
 fn return if else for loop break continue
 import as assembly formula true false extern
+in out inout address
