@@ -18,8 +18,8 @@ use lsp_types::notification::{
     PublishDiagnostics,
 };
 use lsp_types::request::{
-    Completion, GotoDeclaration, GotoDeclarationParams, GotoDeclarationResponse, HoverRequest,
-    Request as _,
+    Completion, Formatting, GotoDeclaration, GotoDeclarationParams, GotoDeclarationResponse,
+    HoverRequest, Request as _,
 };
 use lsp_types::*;
 
@@ -45,6 +45,9 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         declaration_provider: Some(DeclarationCapability::Simple(true)),
         document_symbol_provider: Some(OneOf::Left(true)),
+        // Фича 0024: канонический форматтер. То же ядро, что у `lamc fmt`, —
+        // расхождение стилей между CLI и редактором невозможно по построению.
+        document_formatting_provider: Some(OneOf::Left(true)),
         semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
             SemanticTokensOptions {
                 legend: SemanticTokensLegend {
@@ -133,6 +136,25 @@ fn handle_request(
             let text = state.get_text(uri).unwrap_or("");
             let items = grammar::lsp::completion_items(text);
             let result = CompletionResponse::Array(items);
+            connection.sender.send(Message::Response(Response::new_ok(
+                req.id,
+                serde_json::to_value(result)?,
+            )))?;
+        }
+        Formatting::METHOD => {
+            let params: DocumentFormattingParams = serde_json::from_value(req.params)?;
+            let uri = &params.text_document.uri;
+            let text = state.get_text(uri).unwrap_or("");
+            // `Ok(None)` — текст уже каноничен: правок нет, файл не трогаем.
+            // `Err` — форматировать нельзя: логируем и отвечаем `null`. Молча
+            // «отформатировать во что-то» хуже, чем не форматировать вовсе.
+            let result = match grammar::lsp::formatting_edits(text) {
+                Ok(edits) => edits,
+                Err(e) => {
+                    eprintln!("[lam-lsp] форматирование не выполнено: {e}");
+                    None
+                }
+            };
             connection.sender.send(Message::Response(Response::new_ok(
                 req.id,
                 serde_json::to_value(result)?,
