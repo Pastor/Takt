@@ -115,6 +115,27 @@ pub struct ModelNode {
     pub docs: HashMap<String, Vec<String>>,
     /// Встроенные формулы модели.
     pub formulas: Vec<Formula>,
+    /// Привязки адресов портов оператором `address` (фича 0020, слой AddressMap).
+    ///
+    /// Каждый элемент — один оператор `address Имя = <выражение>;`. Разрешение
+    /// (привязка к порту, приоритет источников inline/`address`/внешняя карта) и
+    /// диагностики выполняет [`check_port_addresses`](validate::check_port_addresses).
+    pub address_defs: Vec<AddressBindingNode>,
+}
+
+/// Привязка адреса к порту оператором `address` (фича 0020).
+///
+/// Хранит имя целевого порта, позицию оператора и выражение-адрес. Выражение
+/// остаётся «сырым» ([`ExpressionNode::Unresolved`]) до понижения в конкретный
+/// адрес потребителем (C-генерация, задача 0020-05).
+#[derive(Debug, Clone)]
+pub struct AddressBindingNode {
+    /// Имя порта, которому назначается адрес.
+    pub port: String,
+    /// Позиция оператора `address` в исходном тексте.
+    pub loc: Location,
+    /// Выражение-адрес (сырое АСД до понижения).
+    pub value: ExpressionNode,
 }
 
 impl ModelNode {
@@ -142,6 +163,7 @@ impl ModelNode {
             doc: Vec::new(),
             docs: HashMap::new(),
             formulas: Vec::new(),
+            address_defs: Vec::new(),
         };
         let model = Rc::new(RefCell::new(model));
         if let Some(parent) = &parent {
@@ -212,6 +234,7 @@ impl ModelNode {
             doc: self.doc.clone(),
             docs: self.docs.clone(),
             formulas: self.formulas.clone(),
+            address_defs: self.address_defs.clone(),
         }
     }
 }

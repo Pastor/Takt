@@ -1068,6 +1068,7 @@ pub fn validate_model(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     validate_variables(model.clone())?;
     validate_conditions(model.clone())?;
     check_array_sizes(model.clone())?;
+    check_port_addresses(model.clone())?;
 
     // Ce16: проверка рекурсивных псевдонимов — ошибка при первом цикле
     let recursive_diags = check_recursive_type_aliases(model.clone());
@@ -1094,6 +1095,62 @@ pub fn validate_model(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
 
     for (_, nested_model) in nested {
         validate_model(nested_model)?; // рекурсивно проверяем вложенные модели
+    }
+    Ok(())
+}
+
+/// Фича 0020 (задача 0020-02): проверки оператора `address` для одной модели.
+///
+/// Наполнение [`address_defs`](ModelNode::address_defs) выполняет
+/// [`construct_model`](super::tree::construct_model); здесь эти привязки
+/// сверяются с объявленными портами:
+///
+/// - **Висячая привязка (R5, SE-048).** `address` ссылается на имя, которого нет
+///   среди портов модели.
+/// - **Конфликт источников (R4, SE-049).** Адрес порта задан одновременно inline
+///   (`in P: T := <addr>;`) и оператором `address`, либо несколькими операторами
+///   `address` для одного порта.
+///
+/// Приоритет источников (inline < `address` < внешняя карта) и построение
+/// `AddressMap` для потребителей — задачи 0020-03/0020-05. Здесь достаточно
+/// гарантировать однозначность источника адреса внутри модели.
+fn check_port_addresses(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let borrowed = model.borrow();
+    let mut bound_by_address: HashSet<&str> = HashSet::new();
+    for def in &borrowed.address_defs {
+        // R5: адрес должен ссылаться на существующий порт.
+        let Some(VariableNode::Port { expr, .. }) = borrowed.variables.get(&def.port) else {
+            return Err(Diagnostic::error(
+                def.loc,
+                format!(
+                    "оператор `address` ссылается на несуществующий порт '{}'",
+                    def.port
+                ),
+            )
+            .with_code("SE-048"));
+        };
+        // R4: несколько операторов `address` для одного порта.
+        if !bound_by_address.insert(def.port.as_str()) {
+            return Err(Diagnostic::error(
+                def.loc,
+                format!(
+                    "адрес порта '{}' задан оператором `address` более одного раза",
+                    def.port
+                ),
+            )
+            .with_code("SE-049"));
+        }
+        // R4: адрес задан и inline-инициализатором, и оператором `address`.
+        if !matches!(expr, ExpressionNode::None) {
+            return Err(Diagnostic::error(
+                def.loc,
+                format!(
+                    "адрес порта '{}' задан одновременно inline и оператором `address`",
+                    def.port
+                ),
+            )
+            .with_code("SE-049"));
+        }
     }
     Ok(())
 }

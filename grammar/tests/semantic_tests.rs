@@ -359,22 +359,72 @@ fn port_with_non_address_initializer_is_valid() {
     );
 }
 
-/// Фича 0020-01: оператор `address Имя = <адрес>;` синтаксически принимается и
-/// НЕ ломает построение модели. Семантическая привязка адреса к порту и
-/// диагностики (конфликт/висячая привязка/полнота) — задача 0020-02; сейчас
-/// оператор игнорируется семантикой, порт остаётся без адреса.
+/// Фича 0020-02: оператор `address Имя = <адрес>;` привязывается к порту и
+/// сохраняется в `address_defs` модели.
 #[test]
-fn address_operator_is_accepted_and_ignored_by_semantics() {
-    let (ast, _) = parse(
-        "type u8 = [bit;8]; in BTN: u8; address BTN = 0x00200000; start Idle;",
-        0,
+fn address_operator_is_captured_in_address_defs() {
+    let model =
+        build_from_src("type u8 = [bit;8]; in BTN: u8; address BTN = 0x00200000; start Idle;")
+            .expect("модель с оператором address должна строиться");
+    assert_eq!(
+        model.address_defs.len(),
+        1,
+        "должна быть одна привязка адреса"
+    );
+    assert_eq!(
+        model.address_defs[0].port, "BTN",
+        "привязка должна указывать на порт BTN"
+    );
+}
+
+/// Фича 0020-02: адрес отдельным оператором (без inline) — модель валидна.
+#[test]
+fn example_port_address_separate_is_valid() {
+    let model = build_file("tests/data/semantic/valid/port_address_separate.lam")
+        .expect("модель с отдельными адресами портов должна строиться");
+    assert_eq!(
+        model.address_defs.len(),
+        2,
+        "должны быть привязки адресов для BTN и LED"
+    );
+}
+
+/// Фича 0020-02 (R4/SE-049): адрес задан и inline, и оператором `address`.
+#[test]
+fn port_address_conflict_inline_and_operator_is_error() {
+    let err = build_file_err("tests/data/semantic/invalid/port_address_conflict.lam");
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-049"),
+        "конфликт inline + address должен давать SE-049, получено: {:?}",
+        err.code
+    );
+}
+
+/// Фича 0020-02 (R4/SE-049): несколько операторов `address` для одного порта.
+#[test]
+fn port_address_duplicate_operator_is_error() {
+    let err = build_from_src(
+        "in BTN: bit; address BTN = 0x00200000; address BTN = 0x00200004; start Idle;",
     )
-    .unwrap();
-    let result = construct_model(&ast, None, &[]);
-    assert!(
-        result.is_ok(),
-        "Модель с оператором address должна строиться (адрес пока игнорируется): {:?}",
-        result.err()
+    .expect_err("два оператора address для одного порта должны давать ошибку");
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-049"),
+        "повторная привязка адреса должна давать SE-049, получено: {:?}",
+        err.code
+    );
+}
+
+/// Фича 0020-02 (R5/SE-048): `address` для несуществующего порта.
+#[test]
+fn port_address_dangling_reference_is_error() {
+    let err = build_file_err("tests/data/semantic/invalid/port_address_dangling.lam");
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-048"),
+        "висячая привязка должна давать SE-048, получено: {:?}",
+        err.code
     );
 }
 
