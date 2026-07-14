@@ -76,7 +76,10 @@ pub fn restore(unit: &mut Unit, snap: &UnitSnapshot) {
     match (unit, snap) {
         (
             Unit::Node {
-                state, variables, ..
+                state,
+                variables,
+                entered_initial,
+                ..
             },
             UnitSnapshot::Node {
                 current_state,
@@ -84,6 +87,9 @@ pub fn restore(unit: &mut Unit, snap: &UnitSnapshot) {
             },
         ) => {
             *state = current_state.clone();
+            // Возобновление: модель уже находится в этом состоянии, поэтому
+            // `enter` повторять нельзя — иначе он затрёт загруженные значения (Д5).
+            *entered_initial = true;
             for (k, v) in vars {
                 if let Some(val) = json_to_value(v) {
                     variables.insert(k.clone(), val);
@@ -148,6 +154,7 @@ mod tests {
         let mut st = HashMap::new();
         st.insert(state.to_string(), vec![]);
         Unit::Node {
+            entered_initial: false,
             context: None,
             variables: HashMap::new(),
             executions: HashMap::new(),
@@ -164,6 +171,7 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert(var.to_string(), val);
         Unit::Node {
+            entered_initial: false,
             context: None,
             variables: vars,
             executions: HashMap::new(),
@@ -180,6 +188,7 @@ mod tests {
         st.insert(from.to_string(), vec![(to.to_string(), pred)]);
         st.insert(to.to_string(), vec![]);
         Unit::Node {
+            entered_initial: false,
             context: None,
             variables: HashMap::new(),
             executions: HashMap::new(),

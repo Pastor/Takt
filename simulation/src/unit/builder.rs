@@ -250,6 +250,7 @@ fn build_node(
     }
 
     Ok(Unit::Node {
+        entered_initial: false,
         context: Some(ctx_rc),
         state_transitions,
         state_executions,

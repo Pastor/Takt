@@ -75,6 +75,14 @@ pub enum Unit {
         executions: Executions,
         /// Последний сработавший переход: (из, в, имя_предиката).
         last_transition: Option<(String, String, String)>,
+        /// Исполнен ли `enter` **стартового** состояния (Д5).
+        ///
+        /// `enter` вызывался только в ветке перехода, поэтому начальная
+        /// инициализация модели терялась. Флаг гарантирует «ровно один раз»:
+        /// при возобновлении из сохранённого состояния (`state_io::restore`)
+        /// он выставляется в `true` — модель уже находится в состоянии, входить
+        /// в него повторно нельзя.
+        entered_initial: bool,
     },
     Parallel {
         units: Vec<Rc<RefCell<Unit>>>,
@@ -132,6 +140,7 @@ impl Context for Unit {
 
 impl Unit {
     pub fn tick(&mut self) -> TickResult {
+        self.enter_initial_state();
         self.execution("always");
         match self {
             Unit::None => TickResult::Terminated,
@@ -314,6 +323,45 @@ impl Unit {
                 }
                 TickResult::Processing
             }
+        }
+    }
+
+    /// Д5: исполняет `enter` стартового состояния — ровно один раз, до первого
+    /// `always` и до проверки переходов.
+    ///
+    /// Для `Parallel`/`Sequential` вызывать не нужно: их дети получают вызов
+    /// через собственный [`Unit::tick`].
+    fn enter_initial_state(&mut self) {
+        let state_name = match self {
+            Unit::Node {
+                entered_initial: true,
+                ..
+            } => return,
+            Unit::Node {
+                entered_initial,
+                state,
+                ..
+            } => {
+                *entered_initial = true;
+                match state {
+                    Some(name) => name.clone(),
+                    None => return,
+                }
+            }
+            Unit::Parallel { .. } | Unit::Sequential { .. } | Unit::None => return,
+        };
+        let enter_fns: Vec<Execution> = match self {
+            Unit::Node {
+                state_executions, ..
+            } => state_executions
+                .get(&state_name)
+                .and_then(|m| m.get("enter"))
+                .cloned()
+                .unwrap_or_default(),
+            Unit::Parallel { .. } | Unit::Sequential { .. } | Unit::None => vec![],
+        };
+        for f in &enter_fns {
+            let _ = f(self);
         }
     }
 
@@ -537,6 +585,7 @@ fn collect_active_states(unit: &Unit, out: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use super::*;
     use std::collections::HashMap;
 
@@ -560,6 +609,7 @@ mod tests {
 
     fn node() -> Unit {
         Unit::Node {
+            entered_initial: false,
             context: None,
             variables: HashMap::new(),
             executions: HashMap::new(),
@@ -572,6 +622,7 @@ mod tests {
 
     fn node_with(key: &str, val: Value) -> Unit {
         Unit::Node {
+            entered_initial: false,
             context: Some(ctx_with(key, val)),
             variables: HashMap::new(),
             executions: HashMap::new(),
@@ -809,10 +860,69 @@ mod tests {
     // ── tick: вспомогательные конструкторы ───────────────────────────────────
 
     /// Узел в именованном терминальном состоянии (нет исходящих переходов).
+    // ── Д5: enter стартового состояния (задача 0025-04) ──────────────────────
+
+    /// Строит узел с `enter`-исполнителем, считающим вызовы.
+    fn node_with_enter(counter: Rc<Cell<u32>>) -> Unit {
+        let mut st = HashMap::new();
+        st.insert("A".to_string(), vec![]);
+        let mut execs: HashMap<String, Executions> = HashMap::new();
+        let f: Execution = Rc::new(move |_ctx: &mut dyn Context| {
+            counter.set(counter.get() + 1);
+            Flow::Normal
+        });
+        let mut m: Executions = HashMap::new();
+        m.insert("enter".to_string(), vec![f]);
+        execs.insert("A".to_string(), m);
+        Unit::Node {
+            entered_initial: false,
+            context: None,
+            variables: HashMap::new(),
+            state_transitions: st,
+            state_executions: execs,
+            state: Some("A".to_string()),
+            executions: HashMap::new(),
+            last_transition: None,
+        }
+    }
+
+    #[test]
+    fn d5_enter_of_start_state_runs_on_first_tick() {
+        // Д5: раньше `enter` вызывался только в ветке перехода, поэтому
+        // начальная инициализация модели терялась.
+        let counter = Rc::new(Cell::new(0));
+        let mut u = node_with_enter(counter.clone());
+        u.tick();
+        assert_eq!(counter.get(), 1, "enter стартового состояния обязан исполниться");
+    }
+
+    #[test]
+    fn d5_enter_of_start_state_runs_exactly_once() {
+        let counter = Rc::new(Cell::new(0));
+        let mut u = node_with_enter(counter.clone());
+        u.tick();
+        u.tick();
+        u.tick();
+        assert_eq!(counter.get(), 1, "enter обязан исполниться ровно один раз");
+    }
+
+    #[test]
+    fn d5_restore_does_not_rerun_enter() {
+        // Возобновление: модель уже в состоянии — входить повторно нельзя,
+        // иначе enter затрёт загруженные значения.
+        let counter = Rc::new(Cell::new(0));
+        let mut u = node_with_enter(counter.clone());
+        let snap = crate::state_io::snapshot(&u);
+        crate::state_io::restore(&mut u, &snap);
+        u.tick();
+        assert_eq!(counter.get(), 0, "после restore enter не должен исполняться");
+    }
+
     fn node_terminal(name: &str) -> Unit {
         let mut st = HashMap::new();
         st.insert(name.to_string(), vec![]);
         Unit::Node {
+            entered_initial: false,
             context: None,
             variables: HashMap::new(),
             executions: HashMap::new(),
@@ -830,6 +940,7 @@ mod tests {
         st.insert(from.to_string(), vec![(to.to_string(), pred)]);
         st.insert(to.to_string(), vec![]);
         Unit::Node {
+            entered_initial: false,
             context: None,
             variables: HashMap::new(),
             executions: HashMap::new(),
@@ -923,6 +1034,7 @@ mod tests {
         st.insert("B".to_string(), vec![]);
         st.insert("C".to_string(), vec![]);
         let mut u = Unit::Node {
+            entered_initial: false,
             context: None,
             variables: HashMap::new(),
             executions: HashMap::new(),
