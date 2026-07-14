@@ -410,199 +410,115 @@ Member: Member = {
     <number> => Member::Number(<>)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LoopCond: условие цикла loop.
-//
-// Аналогично Expression, но не может начинаться с '{', чтобы устранить
-// LR(1)-неоднозначность между `loop { body }` (бесконечный цикл) и
-// `loop {expr,...} { body }` (инициализатор массива как условие).
-//
-// Для инициализатора массива в условии используйте скобки:
-//   loop ({1, 2}) { body }
-//
-// В двоичных операторах правая часть использует полный `PrecedenceN`,
-// поскольку только первый токен условия создаёт неоднозначность.
-// ─────────────────────────────────────────────────────────────────────────────
-
-LoopCond: Expression = { LoopCondP14 }
-
-LoopCondP14: Expression = {
-    <a:@L> <l:LoopCondP13> ":=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    // Тернарный оператор в контексте loop-условия (правоассоциативный)
-    <a:@L> <c:LoopCondP13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
-    LoopCondP13,
-}
-
-LoopCondP13: Expression = {
-    <a:@L> <l:LoopCondP13> "||" <r:Precedence12> <b:@R> => Expression::Or(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    LoopCondP12,
-}
-
-LoopCondP12: Expression = {
-    <a:@L> <l:LoopCondP12> "&&" <r:Precedence11> <b:@R> => Expression::And(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    LoopCondP11,
-}
-
-LoopCondP11: Expression = {
-    <a:@L> <l:LoopCondP11> "=" <r:Precedence10> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:LoopCondP11> "!=" <r:Precedence10> <b:@R> => Expression::NotEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    LoopCondP10,
-}
-
-LoopCondP10: Expression = {
-    <a:@L> <l:LoopCondP10> "<"  <r:Precedence9> <b:@R> => Expression::Less(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:LoopCondP10> ">"  <r:Precedence9> <b:@R> => Expression::More(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:LoopCondP10> "<=" <r:Precedence9> <b:@R> => Expression::LessEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:LoopCondP10> ">=" <r:Precedence9> <b:@R> => Expression::MoreEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    LoopCondP9,
-}
-
-LoopCondP9: Expression = {
-    <a:@L> <l:LoopCondP9> "|" <r:Precedence8> <b:@R> => Expression::BitwiseOr(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    LoopCondP8,
-}
-
-LoopCondP8: Expression = {
-    <a:@L> <l:LoopCondP8> "^" <r:Precedence7> <b:@R> => Expression::BitwiseXor(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    LoopCondP7,
-}
-
-LoopCondP7: Expression = {
-    <a:@L> <l:LoopCondP7> "&"    <r:Precedence6> <b:@R> => Expression::BitwiseAnd(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <e:LoopCondP7> "as"   <ty:Type>        <b:@R> => Expression::Cast(Location::Source(file_no, a, b), Box::new(e), ty),
-    LoopCondP6,
-}
-
-LoopCondP6: Expression = {
-    <a:@L> <l:LoopCondP6> "<<" <r:Precedence5> <b:@R> => Expression::ShiftLeft(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:LoopCondP6> ">>" <r:Precedence5> <b:@R> => Expression::ShiftRight(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    LoopCondP5,
-}
-
-LoopCondP5: Expression = {
-    <a:@L> <l:LoopCondP5> "+" <r:Precedence4> <b:@R> => Expression::Add(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:LoopCondP5> "-" <r:Precedence4> <b:@R> => Expression::Subtract(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    LoopCondP4,
-}
-
-LoopCondP4: Expression = {
-    <a:@L> <l:LoopCondP4> "*" <r:Precedence3> <b:@R> => Expression::Multiply(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:LoopCondP4> "/" <r:Precedence3> <b:@R> => Expression::Divide(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:LoopCondP4> "%" <r:Precedence3> <b:@R> => Expression::Modulo(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    LoopCondP3,
-}
-
-LoopCondP3: Expression = {
-    <a:@L> <l:LoopCondP2> "**" <r:Precedence3> <b:@R> => Expression::Power(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    LoopCondP2,
-}
-
-LoopCondP2: Expression = {
-    <a:@L> "!" <e:LoopCondP2> <b:@R> => Expression::Not(Location::Source(file_no, a, b), Box::new(e)),
-    <a:@L> "~" <e:LoopCondP2> <b:@R> => Expression::BitwiseNot(Location::Source(file_no, a, b), Box::new(e)),
-    <a:@L> "+" <e:LoopCondP2> <b:@R> => Expression::UnaryPlus(Location::Source(file_no, a, b), Box::new(e)),
-    <a:@L> "-" <e:LoopCondP2> <b:@R> => Expression::Negate(Location::Source(file_no, a, b), Box::new(e)),
-    LoopCondP1,
-}
-
-// LoopCondP1: как Precedence1, но БЕЗ инициализатора массива `{ expr, ... }`.
-// Именно это устраняет конфликт LR(1): '{' всегда начинает тело цикла, а не условие.
-LoopCondP1: Expression = {
-    // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта)
-    <l:@L> <a:address> <r:@R> => {
-        let (addr_val, bit_val) = parse_address_literal(a);
-        Expression::Address(Location::Source(file_no, l, r), addr_val, bit_val)
-    },
-    <l:@L> <n:number>   <r:@R> => Expression::Number(Location::Source(file_no, l, r), n),
-    <l:@L> <n:rational> <r:@R> => Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1),
-    // инициализатор массива '{...}' здесь намеренно отсутствует
-    Precedence0
-}
+// LoopCond: условие цикла `loop` — та же цепочка, но с атомом без ведущей `{`.
+// Дубликат `LoopCondP14…LoopCondP1` (96 строк) устранён задачей 0019-01.
+LoopCond: Expression = { Chain14<Precedence1NoBrace> }
 
 Expression: Expression = {
-    Precedence14
+    Chain14<Precedence1Full>
 }
 
-Precedence14: Expression = {
-    <a:@L> <l:Precedence13> ":=" <r:Precedence14> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+// ─────────────────────────────────────────────────────────────────────────────
+// Chain<Atom> — цепочка приоритетов выражений, параметризованная атомом.
+//
+// Задача 0019-01 (ADR 0019, Option B): раньше цепочка существовала ДВАЖДЫ —
+// `Precedence14…Precedence1` и её почти дословная копия `LoopCondP14…LoopCondP1`.
+// Копии отличались ровно одним: атом loop-условия не может начинаться с `{`
+// (иначе LR(1)-неоднозначность между `loop { body }` и `loop {init} { body }`).
+//
+// Теперь цепочка написана ОДИН раз и инстанцируется двумя атомами:
+//   Expression = Chain14<Precedence1Full>     — атом с инициализатором `{…}`
+//   LoopCond   = Chain14<Precedence1NoBrace>  — атом без него
+//
+// ВАЖНО: ограничение касается только ПЕРВОГО токена, поэтому ПРАВЫЙ операнд
+// любого бинарного оператора — всегда полная цепочка `Chain*<Precedence1Full>`.
+// Это в точности повторяет прежнее поведение LoopCondP*, где справа стоял
+// `PrecedenceN`.
+//
+// Разделение `Condition` и `Expression` НЕ унифицируется: оно намеренное —
+// `=` в условии означает равенство, а в выражении присваивание (ADR 0019).
+// ─────────────────────────────────────────────────────────────────────────────
+
+Chain14<Atom>: Expression = {
+    <a:@L> <l:Chain13<Atom>> ":=" <r:Chain14<Precedence1Full>> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
     // Тернарный оператор: cond ? then : else (правоассоциативный, ниже присваивания)
-    <a:@L> <c:Precedence13> "?" <t:Precedence14> ":" <e:Precedence14> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
-    Precedence13,
+    <a:@L> <c:Chain13<Atom>> "?" <t:Chain14<Precedence1Full>> ":" <e:Chain14<Precedence1Full>> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
+    Chain13<Atom>,
 }
 
-Precedence13: Expression = {
-    <a:@L> <l:Precedence13> "||" <r:Precedence12> <b:@R> => Expression::Or(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    Precedence12,
+Chain13<Atom>: Expression = {
+    <a:@L> <l:Chain13<Atom>> "||" <r:Chain12<Precedence1Full>> <b:@R> => Expression::Or(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    Chain12<Atom>,
 }
 
-Precedence12: Expression = {
-    <a:@L> <l:Precedence12> "&&" <r:Precedence11> <b:@R> => Expression::And(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    Precedence11,
+Chain12<Atom>: Expression = {
+    <a:@L> <l:Chain12<Atom>> "&&" <r:Chain11<Precedence1Full>> <b:@R> => Expression::And(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    Chain11<Atom>,
 }
 
-Precedence11: Expression = {
-    <a:@L> <l:Precedence11> "=" <r:Precedence10> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Precedence11> "!=" <r:Precedence10> <b:@R> => Expression::NotEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    Precedence10,
+Chain11<Atom>: Expression = {
+    <a:@L> <l:Chain11<Atom>> "=" <r:Chain10<Precedence1Full>> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain11<Atom>> "!=" <r:Chain10<Precedence1Full>> <b:@R> => Expression::NotEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    Chain10<Atom>,
 }
 
-Precedence10: Expression = {
-    <a:@L> <l:Precedence10> "<" <r:Precedence9> <b:@R> => Expression::Less(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Precedence10> ">" <r:Precedence9> <b:@R> => Expression::More(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Precedence10> "<=" <r:Precedence9> <b:@R> => Expression::LessEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Precedence10> ">=" <r:Precedence9> <b:@R> => Expression::MoreEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    Precedence9,
+Chain10<Atom>: Expression = {
+    <a:@L> <l:Chain10<Atom>> "<" <r:Chain9<Precedence1Full>> <b:@R> => Expression::Less(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain10<Atom>> ">" <r:Chain9<Precedence1Full>> <b:@R> => Expression::More(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain10<Atom>> "<=" <r:Chain9<Precedence1Full>> <b:@R> => Expression::LessEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain10<Atom>> ">=" <r:Chain9<Precedence1Full>> <b:@R> => Expression::MoreEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    Chain9<Atom>,
 }
 
-Precedence9: Expression = {
-    <a:@L> <l:Precedence9> "|" <r:Precedence8> <b:@R> => Expression::BitwiseOr(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    Precedence8,
+Chain9<Atom>: Expression = {
+    <a:@L> <l:Chain9<Atom>> "|" <r:Chain8<Precedence1Full>> <b:@R> => Expression::BitwiseOr(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    Chain8<Atom>,
 }
 
-Precedence8: Expression = {
-    <a:@L> <l:Precedence8> "^" <r:Precedence7> <b:@R> => Expression::BitwiseXor(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    Precedence7,
+Chain8<Atom>: Expression = {
+    <a:@L> <l:Chain8<Atom>> "^" <r:Chain7<Precedence1Full>> <b:@R> => Expression::BitwiseXor(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    Chain7<Atom>,
 }
 
-Precedence7: Expression = {
-    <a:@L> <l:Precedence7> "&" <r:Precedence6> <b:@R> => Expression::BitwiseAnd(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <e:Precedence7> "as" <ty:Type> <b:@R> => Expression::Cast(Location::Source(file_no, a, b), Box::new(e), ty),
-    Precedence6,
+Chain7<Atom>: Expression = {
+    <a:@L> <l:Chain7<Atom>> "&" <r:Chain6<Precedence1Full>> <b:@R> => Expression::BitwiseAnd(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <e:Chain7<Atom>> "as" <ty:Type> <b:@R> => Expression::Cast(Location::Source(file_no, a, b), Box::new(e), ty),
+    Chain6<Atom>,
 }
 
-Precedence6: Expression = {
-    <a:@L> <l:Precedence6> "<<" <r:Precedence5> <b:@R> => Expression::ShiftLeft(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Precedence6> ">>" <r:Precedence5> <b:@R> => Expression::ShiftRight(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    Precedence5,
+Chain6<Atom>: Expression = {
+    <a:@L> <l:Chain6<Atom>> "<<" <r:Chain5<Precedence1Full>> <b:@R> => Expression::ShiftLeft(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain6<Atom>> ">>" <r:Chain5<Precedence1Full>> <b:@R> => Expression::ShiftRight(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    Chain5<Atom>,
 }
 
-Precedence5: Expression = {
-    <a:@L> <l:Precedence5> "+" <r:Precedence4> <b:@R> => Expression::Add(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Precedence5> "-" <r:Precedence4> <b:@R> => Expression::Subtract(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    Precedence4,
+Chain5<Atom>: Expression = {
+    <a:@L> <l:Chain5<Atom>> "+" <r:Chain4<Precedence1Full>> <b:@R> => Expression::Add(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain5<Atom>> "-" <r:Chain4<Precedence1Full>> <b:@R> => Expression::Subtract(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    Chain4<Atom>,
 }
 
-Precedence4: Expression = {
-    <a:@L> <l:Precedence4> "*" <r:Precedence3> <b:@R> => Expression::Multiply(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Precedence4> "/" <r:Precedence3> <b:@R> => Expression::Divide(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Precedence4> "%" <r:Precedence3> <b:@R> => Expression::Modulo(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    Precedence3,
+Chain4<Atom>: Expression = {
+    <a:@L> <l:Chain4<Atom>> "*" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Multiply(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain4<Atom>> "/" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Divide(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain4<Atom>> "%" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Modulo(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    Chain3<Atom>,
 }
 
-Precedence3: Expression = {
-    <a:@L> <l:Precedence2> "**" <r:Precedence3> <b:@R> => Expression::Power(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    Precedence2,
+Chain3<Atom>: Expression = {
+    <a:@L> <l:Chain2<Atom>> "**" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Power(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    Chain2<Atom>,
 }
 
-Precedence2: Expression = {
-    <a:@L> "!" <e:Precedence2> <b:@R> => Expression::Not(Location::Source(file_no, a, b), Box::new(e)),
-    <a:@L> "~" <e:Precedence2> <b:@R> => Expression::BitwiseNot(Location::Source(file_no, a, b), Box::new(e)),
-    <a:@L> "+" <e:Precedence2> <b:@R>  => Expression::UnaryPlus(Location::Source(file_no, a, b), Box::new(e)),
-    <a:@L> "-" <e:Precedence2> <b:@R> => Expression::Negate(Location::Source(file_no, a, b), Box::new(e)),
-    Precedence1
+Chain2<Atom>: Expression = {
+    <a:@L> "!" <e:Chain2<Atom>> <b:@R> => Expression::Not(Location::Source(file_no, a, b), Box::new(e)),
+    <a:@L> "~" <e:Chain2<Atom>> <b:@R> => Expression::BitwiseNot(Location::Source(file_no, a, b), Box::new(e)),
+    <a:@L> "+" <e:Chain2<Atom>> <b:@R>  => Expression::UnaryPlus(Location::Source(file_no, a, b), Box::new(e)),
+    <a:@L> "-" <e:Chain2<Atom>> <b:@R> => Expression::Negate(Location::Source(file_no, a, b), Box::new(e)),
+    Atom,
 }
 
-Precedence1: Expression = {
+Precedence1Full: Expression = {
     // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта с тернарным `?:`)
     <l:@L> <a:address> <r:@R> => {
         let (addr_val, bit_val) = parse_address_literal(a);
@@ -617,6 +533,24 @@ Precedence1: Expression = {
     <l:@L> "{" <v:CommaOne<Expression>> "}" <r:@R> => {
         Expression::Initializer(Location::Source(file_no, l, r), v)
     },
+    Precedence0
+}
+
+Precedence1NoBrace: Expression = {
+    // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта с тернарным `?:`)
+    <l:@L> <a:address> <r:@R> => {
+        let (addr_val, bit_val) = parse_address_literal(a);
+        Expression::Address(Location::Source(file_no, l, r), addr_val, bit_val)
+    },
+    <l:@L> <n:number> <r:@R> => {
+        Expression::Number(Location::Source(file_no, l, r), n)
+    },
+    <l:@L> <n:rational> <r:@R> => {
+        Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1)
+    },
+    // Инициализатор массива `{…}` намеренно отсутствует: в loop-условии
+    // ведущая `{` всегда начинает тело цикла. Для инициализатора — скобки:
+    // `loop ({1, 2}) { body }`.
     Precedence0
 }
 
