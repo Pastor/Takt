@@ -35,7 +35,7 @@ use grammar::semantic::ConditionNode;
 pub(crate) fn create_predicate(cond: &ConditionNode) -> Predicate {
     let name = condition_label(cond);
     let cond = cond.clone();
-    Predicate::new(name, move |c: &dyn Context| {
+    Predicate::new(name, move |c: &mut dyn Context| {
         eval_condition(&cond, c)
             .and_then(|value| ops::to_bool(&value).map_err(|e| e.to_diagnostic(loc_of(&cond))))
             .unwrap_or(false)
@@ -132,7 +132,10 @@ fn loc_of(cond: &ConditionNode) -> Location {
 ///
 /// Структурный разбор — здесь; семантика операций — в [`crate::eval::ops`].
 /// Паники недостижимы: любой неподдержанный случай — `Err` (R4).
-pub(crate) fn eval_condition(cond: &ConditionNode, ctx: &dyn Context) -> Result<Value, Diagnostic> {
+pub(crate) fn eval_condition(
+    cond: &ConditionNode,
+    ctx: &mut dyn Context,
+) -> Result<Value, Diagnostic> {
     match cond {
         // ── Литералы ─────────────────────────────────────────────────────────
         ConditionNode::Number(n) => Ok(Value::Number(*n)),
@@ -252,14 +255,14 @@ pub(crate) fn eval_condition(cond: &ConditionNode, ctx: &dyn Context) -> Result<
         // Д4: здесь был `unimplemented!()`, роняющий симулятор. Вычисление
         // вызова требует интерпретатора тела `fn`, который поставляет задача
         // `0025-02`; до неё — честный отказ.
-        ConditionNode::Function(func, _, loc) => Err(Diagnostic::error(
-            *loc,
-            format!(
-                "вызов функции '{}' в условии пока не поддерживается симулятором",
-                func.borrow().name()
-            ),
-        )
-        .with_code("SIM-012")),
+        // Д4: вызов функции в условии. Тот же интерпретатор, что и у выражений.
+        ConditionNode::Function(func, args, _) => {
+            let values = args
+                .iter()
+                .map(|arg| eval_condition(arg, ctx))
+                .collect::<Result<Vec<Value>, Diagnostic>>()?;
+            crate::unit::statement::call_function(func, &values, ctx)
+        }
         // Требует доступа к текущему состоянию под-модели через `Context` —
         // отдельная задача внутри фичи 0025 (решение ADR).
         ConditionNode::State(state) => Err(Diagnostic::error(
@@ -306,7 +309,7 @@ pub(crate) fn eval_condition(cond: &ConditionNode, ctx: &dyn Context) -> Result<
 fn unary(
     op: UnOp,
     inner: &ConditionNode,
-    ctx: &dyn Context,
+    ctx: &mut dyn Context,
     loc: Location,
 ) -> Result<Value, Diagnostic> {
     let value = eval_condition(inner, ctx)?;
@@ -317,7 +320,7 @@ fn binary(
     op: BinOp,
     left: &ConditionNode,
     right: &ConditionNode,
-    ctx: &dyn Context,
+    ctx: &mut dyn Context,
     loc: Location,
 ) -> Result<Value, Diagnostic> {
     let lhs = eval_condition(left, ctx)?;
@@ -369,26 +372,26 @@ mod tests {
 
     #[test]
     fn number_and_bool_literals() {
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         assert_eq!(
-            eval_condition(&ConditionNode::Number(7), &ctx),
+            eval_condition(&ConditionNode::Number(7), &mut ctx),
             Ok(Value::Number(7))
         );
         assert_eq!(
-            eval_condition(&ConditionNode::Bool(true), &ctx),
+            eval_condition(&ConditionNode::Bool(true), &mut ctx),
             Ok(Value::Boolean(true))
         );
     }
 
     #[test]
     fn rational_literal_is_parsed_with_sign() {
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         assert_eq!(
-            eval_condition(&ConditionNode::Rational("2.5".to_string(), false), &ctx),
+            eval_condition(&ConditionNode::Rational("2.5".to_string(), false), &mut ctx),
             Ok(Value::Real(2.5))
         );
         assert_eq!(
-            eval_condition(&ConditionNode::Rational("2.5".to_string(), true), &ctx),
+            eval_condition(&ConditionNode::Rational("2.5".to_string(), true), &mut ctx),
             Ok(Value::Real(-2.5))
         );
     }
@@ -396,9 +399,9 @@ mod tests {
     #[test]
     fn malformed_rational_is_diagnostic_not_panic() {
         // Раньше здесь был unwrap() при разборе литерала.
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         let cond = ConditionNode::Rational("не-число".to_string(), false);
-        let err = eval_condition(&cond, &ctx).unwrap_err();
+        let err = eval_condition(&cond, &mut ctx).unwrap_err();
         assert_eq!(err.code.as_deref(), Some("SIM-008"));
     }
 
@@ -408,26 +411,26 @@ mod tests {
     fn d7_parenthesis_is_evaluated_recursively() {
         // Проба paren.lam: (t + 1) > 2 при t = 5 → истина.
         // Прежний flat возвращал внутренний узел невычисленным → было ложно.
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         let inner = ConditionNode::Add(num(5), num(1));
         let cond = ConditionNode::More(
             Box::new(ConditionNode::Parenthesis(Box::new(inner))),
             num(2),
         );
-        assert_eq!(eval_condition(&cond, &ctx), Ok(Value::Boolean(true)));
+        assert_eq!(eval_condition(&cond, &mut ctx), Ok(Value::Boolean(true)));
     }
 
     // ── Д8: вариант enum ──────────────────────────────────────────────────────
 
     #[test]
     fn d8_enum_variant_evaluates_to_its_value() {
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         let cond = ConditionNode::EnumVariant(
             std::rc::Rc::new(std::cell::RefCell::new(Default::default())),
             "Manual".to_string(),
             1,
         );
-        assert_eq!(eval_condition(&cond, &ctx), Ok(Value::Number(1)));
+        assert_eq!(eval_condition(&cond, &mut ctx), Ok(Value::Number(1)));
     }
 
     // ── Д6: смешение int/real не роняет ───────────────────────────────────────
@@ -435,60 +438,83 @@ mod tests {
     #[test]
     fn d6_mixed_int_real_does_not_panic() {
         // Проба mix.lam: t + 2.5 > 3 при t = 1. Прежний flat падал на unwrap().
-        let ctx = MockContext::new(&[]);
+        let mut ctx = MockContext::new(&[]);
         let sum = ConditionNode::Add(
             num(1),
             Box::new(ConditionNode::Rational("2.5".to_string(), false)),
         );
         let cond = ConditionNode::More(Box::new(sum), num(3));
-        assert_eq!(eval_condition(&cond, &ctx), Ok(Value::Boolean(true)));
+        assert_eq!(eval_condition(&cond, &mut ctx), Ok(Value::Boolean(true)));
     }
 
     // ── Д4: вызов функции — диагностика вместо паники ─────────────────────────
 
     #[test]
-    fn d4_function_call_is_diagnostic_not_panic() {
-        // Полная поддержка — задача 0025-02 (нужен интерпретатор тела fn).
-        // Здесь проверяется главное: симулятор не падает.
-        let ctx = empty_ctx();
+    fn d4_function_call_in_condition_is_evaluated() {
+        // Д4: `fn ready() -> u8 { return 1; }` → условие `ready()` истинно.
+        // Раньше здесь была паника `unimplemented!()`.
+        use grammar::semantic::type_node::TypeNode;
+        let func = std::rc::Rc::new(std::cell::RefCell::new(
+            grammar::semantic::FunctionDefinitionNode::Local {
+                upper: None,
+                loc: Location::Builtin,
+                name: "ready".to_string(),
+                params: vec![],
+                ret: TypeNode::Integer {
+                    bits: 8,
+                    signed: false,
+                },
+                body: grammar::semantic::StatementNode::Return(Some(Box::new(
+                    grammar::semantic::ExpressionNode::Number(1),
+                ))),
+            },
+        ));
+        let mut ctx = empty_ctx();
+        let cond = ConditionNode::Function(func, vec![], Location::Builtin);
+        assert_eq!(eval_condition(&cond, &mut ctx), Ok(Value::Number(1)));
+    }
+
+    #[test]
+    fn unresolved_function_in_condition_is_diagnostic_not_panic() {
+        let mut ctx = empty_ctx();
         let cond = ConditionNode::Function(
             std::rc::Rc::new(std::cell::RefCell::new(Default::default())),
             vec![],
             Location::Builtin,
         );
-        let err = eval_condition(&cond, &ctx).unwrap_err();
-        assert_eq!(err.code.as_deref(), Some("SIM-012"));
+        let err = eval_condition(&cond, &mut ctx).unwrap_err();
+        assert_eq!(err.code.as_deref(), Some("SIM-016"));
     }
 
     // ── Сравнения и арифметика ────────────────────────────────────────────────
 
     #[test]
     fn comparisons_delegate_to_core() {
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         let cond = ConditionNode::More(Box::new(ConditionNode::Add(num(5), num(1))), num(2));
-        assert_eq!(eval_condition(&cond, &ctx), Ok(Value::Boolean(true)));
+        assert_eq!(eval_condition(&cond, &mut ctx), Ok(Value::Boolean(true)));
     }
 
     #[test]
     fn logical_and_or_keep_historical_semantics() {
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         let and = ConditionNode::And(
             Box::new(ConditionNode::Bool(true)),
             Box::new(ConditionNode::Bool(false)),
         );
-        assert_eq!(eval_condition(&and, &ctx), Ok(Value::Boolean(false)));
+        assert_eq!(eval_condition(&and, &mut ctx), Ok(Value::Boolean(false)));
         let or = ConditionNode::Or(
             Box::new(ConditionNode::Bool(true)),
             Box::new(ConditionNode::Bool(false)),
         );
-        assert_eq!(eval_condition(&or, &ctx), Ok(Value::Boolean(true)));
+        assert_eq!(eval_condition(&or, &mut ctx), Ok(Value::Boolean(true)));
     }
 
     #[test]
     fn not_negates() {
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         let cond = ConditionNode::Not(Box::new(ConditionNode::Bool(true)));
-        assert_eq!(eval_condition(&cond, &ctx), Ok(Value::Boolean(false)));
+        assert_eq!(eval_condition(&cond, &mut ctx), Ok(Value::Boolean(false)));
     }
 
     // ── S3: деление на ноль приходит из ядра как диагностика ──────────────────
@@ -498,13 +524,13 @@ mod tests {
         // В условиях деления нет (нет узла Divide), но проверяем канал ошибок
         // ядра на доступной операции: сдвиг здесь недоступен, берём типовую
         // ошибку — сравнение массива с числом.
-        let ctx = MockContext::new(&[("a", Value::Array(vec![]))]);
+        let mut ctx = MockContext::new(&[("a", Value::Array(vec![]))]);
         let var = std::rc::Rc::new(std::cell::RefCell::new(
             grammar::semantic::VariableNode::Unresolved,
         ));
         // Переменная не найдена по имени — проверяем диагностику доступа.
         let cond = ConditionNode::Variable(var, Location::Builtin);
-        let err = eval_condition(&cond, &ctx).unwrap_err();
+        let err = eval_condition(&cond, &mut ctx).unwrap_err();
         assert_eq!(err.code.as_deref(), Some("SIM-009"));
     }
 
@@ -512,18 +538,18 @@ mod tests {
 
     #[test]
     fn unresolved_condition_is_diagnostic() {
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         let raw = grammar::parser::ast::Condition::Bool(Location::Builtin, true);
         let cond = ConditionNode::Unresolved(raw);
-        let err = eval_condition(&cond, &ctx).unwrap_err();
+        let err = eval_condition(&cond, &mut ctx).unwrap_err();
         assert_eq!(err.code.as_deref(), Some("SIM-016"));
     }
 
     #[test]
     fn string_condition_is_diagnostic() {
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         let cond = ConditionNode::String(vec!["a".to_string()]);
-        let err = eval_condition(&cond, &ctx).unwrap_err();
+        let err = eval_condition(&cond, &mut ctx).unwrap_err();
         assert_eq!(err.code.as_deref(), Some("SIM-014"));
     }
 
@@ -531,13 +557,13 @@ mod tests {
 
     #[test]
     fn diagnostic_carries_source_location_from_variable() {
-        let ctx = empty_ctx();
+        let mut ctx = empty_ctx();
         let loc = Location::Source(0, 10, 20);
         let var = std::rc::Rc::new(std::cell::RefCell::new(
             grammar::semantic::VariableNode::Unresolved,
         ));
         let cond = ConditionNode::Variable(var, loc);
-        let err = eval_condition(&cond, &ctx).unwrap_err();
+        let err = eval_condition(&cond, &mut ctx).unwrap_err();
         assert_eq!(
             err.loc, loc,
             "диагностика обязана нести позицию, а не Builtin"

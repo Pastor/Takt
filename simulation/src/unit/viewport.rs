@@ -1168,7 +1168,7 @@ pub(super) mod graph {
         #[test]
         fn test_unit_to_graph_transitions_become_edges() {
             let pred =
-                crate::unit::Predicate::new("is_ready", |_: &dyn crate::context::Context| true);
+                crate::unit::Predicate::new("is_ready", |_: &mut dyn crate::context::Context| true);
             let mut transitions = HashMap::new();
             transitions.insert("A".to_string(), vec![("B".to_string(), pred)]);
             transitions.insert("B".to_string(), vec![]);
@@ -1380,7 +1380,7 @@ mod tests {
     #[test]
     fn test_create_viewport_node_unit_returns_ok() {
         use std::collections::HashMap;
-        let pred = crate::unit::Predicate::new("cond", |_: &dyn crate::context::Context| true);
+        let pred = crate::unit::Predicate::new("cond", |_: &mut dyn crate::context::Context| true);
         let mut transitions = HashMap::new();
         transitions.insert("A".to_string(), vec![("B".to_string(), pred)]);
         transitions.insert("B".to_string(), vec![]);
@@ -1422,7 +1422,7 @@ mod test_highlight {
 
     #[test]
     fn test_highlight_frame_contains_orange_bg() {
-        let pred = crate::unit::Predicate::new("btn", |_: &dyn crate::context::Context| true);
+        let pred = crate::unit::Predicate::new("btn", |_: &mut dyn crate::context::Context| true);
         let mut t = HashMap::new();
         t.insert("Off".to_string(), vec![("On".to_string(), pred)]);
         t.insert("On".to_string(), vec![]);

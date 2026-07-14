@@ -16,23 +16,42 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub(crate) struct Predicate {
     pub(crate) name: String,
-    func: Rc<dyn Fn(&dyn Context) -> bool>,
+    func: Rc<dyn Fn(&mut dyn Context) -> bool>,
 }
 
 impl Predicate {
-    pub(crate) fn new(name: impl Into<String>, f: impl Fn(&dyn Context) -> bool + 'static) -> Self {
+    pub(crate) fn new(
+        name: impl Into<String>,
+        f: impl Fn(&mut dyn Context) -> bool + 'static,
+    ) -> Self {
         Self {
             name: name.into(),
             func: Rc::new(f),
         }
     }
 
-    pub(crate) fn evaluate(&self, ctx: &dyn Context) -> bool {
+    pub(crate) fn evaluate(&self, ctx: &mut dyn Context) -> bool {
         (self.func)(ctx)
     }
 }
 
-pub(crate) type Execution = Rc<dyn Fn(&mut dyn Context)>;
+/// Поток управления после исполнения оператора.
+///
+/// До задачи 0025-02b-2 исполнитель ничего не возвращал, поэтому
+/// `return`/`break`/`continue` были невыразимы и молча ронялись.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Flow {
+    /// Исполнение продолжается со следующего оператора.
+    Normal,
+    /// `break` — выйти из ближайшего цикла.
+    Break,
+    /// `continue` — перейти к следующей итерации ближайшего цикла.
+    Continue,
+    /// `return [значение]` — выйти из тела функции.
+    Return(Option<Value>),
+}
+
+pub(crate) type Execution = Rc<dyn Fn(&mut dyn Context) -> Flow>;
 type Executions = HashMap<String, Vec<Execution>>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -179,7 +198,7 @@ impl Unit {
                 unreachable!()
             };
             for f in &exit_fns {
-                f(self);
+                let _ = f(self);
             }
 
             // Шаг 5: исполнители входа в следующее состояние
@@ -196,7 +215,7 @@ impl Unit {
                 unreachable!()
             };
             for f in &enter_fns {
-                f(self);
+                let _ = f(self);
             }
 
             // Шаг 6: переход в новое состояние + запись последнего перехода
@@ -309,7 +328,7 @@ impl Unit {
         };
         // Шаг 2: вызываем — self свободен от заимствования
         for f in &unit_fns {
-            f(self);
+            let _ = f(self);
         }
         // Шаг 3: для Node — функции уровня текущего состояния
         let state_fns: Vec<Execution> = match self {
@@ -325,7 +344,7 @@ impl Unit {
             _ => vec![],
         };
         for f in &state_fns {
-            f(self);
+            let _ = f(self);
         }
         // Шаг 4: рекурсия в дочерние
         match self {
