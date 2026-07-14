@@ -14,6 +14,7 @@
 //! let map = Map::create(model).unwrap();
 //! ```
 mod context;
+pub(crate) mod eval;
 pub(crate) mod gif;
 pub mod graphics_config;
 pub mod json_input;
@@ -22,7 +23,6 @@ pub mod runner;
 pub mod state_io;
 pub(crate) mod svg;
 mod unit;
-mod value;
 
 /// Строит дерево симуляции из семантической модели.
 pub fn build_unit(

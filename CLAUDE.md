@@ -129,7 +129,16 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
   отношения **не имеет** — условия разрешаются корректно. Решение
   ([ADR 0025](docs/adr/0025-simulator-expression-eval.md)): общее ядро `eval` над
   `Value` + адаптеры с исчерпывающим `match` **без `_`** (`_ => None` и есть
-  корневая причина) и `Result` вместо `Option`.
+  корневая причина) и `Result` вместо `Option`. **Состояние:** ядро
+  `simulation/src/eval/` готово (задача 0025-01) — вся семантика значений живёт
+  **только** там (`ops.rs` — операции, `mod.rs::coerce_to_type` — приведение по
+  типу, `error.rs` — `EvalError`/`SIM-00x`); но оно **ещё не подключено** (задачи
+  0025-02/03), поэтому Д1–Д8 воспроизводятся. Новую семантику вычислений добавляй
+  в `eval/`, а не в `builder.rs`/`predicate.rs`. `Value` переехал:
+  `crate::eval::value::Value`. Модуль под
+  `deny(clippy::wildcard_enum_match_arm)` — ветка `_` по вариантам узла завалит
+  сборку (так и задумано). Исключение — `coerce_to_type`: `TypeNode` помечен
+  `#[non_exhaustive]`, поэтому ветка `_` там вынужденная и возвращает ошибку.
 
 ## Добавление конструкции языка
 

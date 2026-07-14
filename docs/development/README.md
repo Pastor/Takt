@@ -14,6 +14,7 @@
 | 0018-04 | 0018 | Компилируемые doctests (P12); возврат владения при Err (P09) | [0018-04-doctests-and-ownership.md](0018-04-doctests-and-ownership.md) |
 | 0018-05 | 0018 | Аудит `.clone()` (P08); `mem::take` (P10) | [0018-05-clone-audit.md](0018-05-clone-audit.md) |
 | 0019-01 | 0019 | Устранение дубликата LoopCond (ЗАПЛАНИРОВАНО) | [0019-01-loopcond-dedup.md](0019-01-loopcond-dedup.md) |
+| 0025-01 | 0025 | Ядро вычисления `eval`: значения, операции, приведение типов (ВЫПОЛНЕНО) | [0025-01-eval-core.md](0025-01-eval-core.md) |
 | 0020-01 | 0020 | Грамматика и AST оператора `address` (ВЫПОЛНЕНО) | [0020-01-address-grammar.md](0020-01-address-grammar.md) |
 | 0020-02 | 0020 | Семантика: привязка `address` + диагностики SE-048/049 (ВЫПОЛНЕНО) | [0020-02-semantics-diagnostics.md](0020-02-semantics-diagnostics.md) |
 | 0020-03 | 0020 | Внешняя `.ld`-карта: парсер + `--address-map` + оверлей SE-050/051 (ВЫПОЛНЕНО) | [0020-03-external-map.md](0020-03-external-map.md) |

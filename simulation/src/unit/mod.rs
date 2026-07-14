@@ -2,7 +2,7 @@ pub(crate) mod builder;
 pub(crate) mod viewport;
 
 use crate::context::Context;
-use crate::value::Value;
+use crate::eval::value::Value;
 use std::cell::RefCell;
 use std::cmp::PartialEq;
 use std::collections::HashMap;

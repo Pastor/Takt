@@ -1,7 +1,7 @@
 use crate::context::Context;
+use crate::eval::value::Value;
 use crate::predicate::create_predicate;
 use crate::unit::{Execution, Predicate, Unit};
-use crate::value::Value;
 use grammar::diagnostics::{Diagnostic, Location};
 use grammar::semantic::extend::Extend;
 use grammar::semantic::{
