@@ -16,6 +16,7 @@
 | 0019-01 | 0019 | Устранение дубликата LoopCond параметризацией Expression (ВЫПОЛНЕНО) | [0019-01-loopcond-dedup.md](0019-01-loopcond-dedup.md) |
 | 0024-01 | 0024 | Ядро печати АСД (`format_source`) (ВЫПОЛНЕНО) | [0024-01-format-core.md](0024-01-format-core.md) |
 | 0024-02 | 0024 | Печать комментариев (переассоциация по `Location`) — гейт по корпусу включён (ВЫПОЛНЕНО) | [0024-02-comments.md](0024-02-comments.md) |
+| 0024-03 | 0024 | Подкоманда `lamc fmt` (`--check`/`--stdin`, обход каталогов) (ВЫПОЛНЕНО) | [0024-03-lamc-fmt.md](0024-03-lamc-fmt.md) |
 | 0025-01 | 0025 | Ядро вычисления `eval`: значения, операции, приведение типов (ВЫПОЛНЕНО) | [0025-01-eval-core.md](0025-01-eval-core.md) |
 | 0025-02a | 0025 | Адаптер выражений `ExpressionNode` — Д1/Д2, старый вычислитель удалён (ВЫПОЛНЕНО) | [0025-02a-expression-adapter.md](0025-02a-expression-adapter.md) |
 | 0025-02b-1 | 0025 | Интерпретатор операторов: локальные `var`, `while`/`loop`, `for`, `match` (ВЫПОЛНЕНО) | [0025-02b-1-statement-interpreter.md](0025-02b-1-statement-interpreter.md) |
