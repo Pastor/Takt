@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# Предкоммит-проверка: fmt + check + clippy + test + генерация C/PlantUML из
-# примеров Lam и сборка сгенерированного кода. Запускать из любого каталога.
+# Предкоммит-проверка: ссылки в Markdown + fmt + check + clippy + test +
+# генерация C/PlantUML из примеров Lam и сборка сгенерированного кода.
+# Запускать из любого каталога.
 set -euo pipefail
 
 if command -v rtk &>/dev/null; then
   CARGO_CMD="rtk cargo"
 else
   CARGO_CMD="cargo"
+fi
+
+if command -v python3 &>/dev/null; then
+  echo "Проверка ссылок в Markdown (правило 14)..."
+  "$(dirname "$0")/check-links.py"
+else
+  echo "  [пропуск] python3 не найден — проверка ссылок пропущена"
 fi
 
 $CARGO_CMD +nightly fmt
