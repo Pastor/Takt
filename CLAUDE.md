@@ -145,6 +145,12 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
 
 ## Добавление конструкции языка
 
+> **Форматтер (фича 0024, в работе).** Если добавляешь узел АСД — добавь и его
+> печать в `grammar/src/format/`, иначе `format_source` начнёт **отказывать** на
+> файлах с этим узлом (по замыслу: молча потерять кусок исходника хуже). Тест
+> `grammar/tests/format_tests.rs` прогоняет форматтер по всему корпусу `.lam` и
+> валит сборку при появлении **нового** непокрытого узла.
+
 1. `grammar.lalrpop` + `lexer.rs`. 2. AST-узел в `parser/ast.rs`. 3. Семантический
 проход в `semantic/tree.rs`. 4. Генератор в `generator/`. 5. Фикстуры в
 `tests/data/semantic/{valid,invalid}/`. Изменение языка → рост версии языка
