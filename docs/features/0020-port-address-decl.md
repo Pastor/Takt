@@ -15,7 +15,7 @@
 | Разработка 0020-02 | [`docs/development/0020-02-semantics-diagnostics.md`](../development/0020-02-semantics-diagnostics.md) (ВЫПОЛНЕНО) |
 | Разработка 0020-03 | [`docs/development/0020-03-external-map.md`](../development/0020-03-external-map.md) (ВЫПОЛНЕНО) |
 | Разработка 0020-04 | [`docs/development/0020-04-completeness.md`](../development/0020-04-completeness.md) (ВЫПОЛНЕНО) |
-| Разработка 0020-05 | потребление адреса в C (таблица + дефолтный HAL) — ЗАПЛАНИРОВАНО |
+| Разработка 0020-05 | [`docs/development/0020-05-c-consumption.md`](../development/0020-05-c-consumption.md) (ВЫПОЛНЕНО) |
 
 > **Пересмотр архитектуры 2026-07-14.** По запросу заказчика решение 0020
 > пересмотрено: фича охватывает **обе оси** — *размещение* адреса и его

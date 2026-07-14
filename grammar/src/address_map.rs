@@ -345,6 +345,184 @@ pub fn address_map_overlay_warnings(
     out
 }
 
+/// Источник, из которого получен адрес порта (по возрастанию приоритета).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddressSource {
+    /// Inline-инициализатор объявления (`in P: T := <addr>;`).
+    Inline,
+    /// Оператор `address P = <addr>;`.
+    Operator,
+    /// Внешняя карта адресов (`--address-map`).
+    External,
+}
+
+/// Разрешённый адрес порта: числовое значение, бит и источник-победитель.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedAddress {
+    /// Числовой адрес.
+    pub addr: i64,
+    /// Битовая позиция (`0xADDR:bit`), если задана.
+    pub bit: Option<i64>,
+    /// Источник, из которого взят адрес (после разрешения приоритета).
+    pub source: AddressSource,
+}
+
+/// Результат разрешения адресов модели (фича 0020-05).
+#[derive(Debug, Default)]
+pub struct AddressResolution {
+    /// Итоговая карта: имя порта → разрешённый адрес.
+    pub map: HashMap<String, ResolvedAddress>,
+    /// Диагностики: ошибки полноты (SE-052) и предупреждения оверлея
+    /// (SE-050) / висячих записей карты (SE-051).
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// Понижает выражение-адрес (`ExpressionNode`) в числовые `(addr, bit)`.
+///
+/// Голый `0x…`/десятичное хранится как `Number`, форма `0xADDR:bit` — как
+/// `Address`; оба принимаются (в т. ч. в «сыром» виде `Unresolved`).
+fn lower_addr_expr(expr: &ExpressionNode) -> Option<(i64, Option<i64>)> {
+    use crate::parser::ast;
+    match expr {
+        ExpressionNode::Address(a, b) => Some((*a, Some(*b))),
+        ExpressionNode::Number(n) => Some((*n, None)),
+        ExpressionNode::Unresolved(ast::Expression::Address(_, a, b)) => Some((*a, Some(*b))),
+        ExpressionNode::Unresolved(ast::Expression::Number(_, n)) => Some((*n, None)),
+        _ => None,
+    }
+}
+
+/// Разрешает адреса всех портов модели с учётом приоритета источников
+/// (inline < `address` < внешняя карта) — фича 0020-05.
+///
+/// Строит консолидированную карту `имя порта → ResolvedAddress` и собирает
+/// диагностики для адрес-потребляющего режима (`c-hal`):
+///
+/// - **SE-052** — используемый (достижимый кодогенерацией) порт без адреса ни из
+///   одного источника (ошибка полноты);
+/// - **SE-050** — внешняя карта переопределяет адрес, заданный в модели
+///   (предупреждение оверлея);
+/// - **SE-051** — запись внешней карты для несуществующего порта.
+///
+/// Конфликт inline + `address` внутри модели уже исключён семантикой (SE-049 на
+/// этапе `construct_model`), поэтому здесь не проверяется.
+pub fn resolve_addresses(
+    model: Rc<RefCell<ModelNode>>,
+    external: &[AddressMapEntry],
+) -> AddressResolution {
+    let usage = crate::semantic::unused::compute_usage(Rc::clone(&model));
+    let external_by_name: HashMap<&str, &AddressMapEntry> =
+        external.iter().map(|e| (e.name.as_str(), e)).collect();
+
+    let mut result = AddressResolution::default();
+    resolve_model(&model, &usage.ports, &external_by_name, &mut result);
+
+    // SE-051: записи карты без соответствующего порта.
+    for e in external {
+        if !result.map.contains_key(&e.name) {
+            result.diagnostics.push(
+                Diagnostic::warning(
+                    e.loc,
+                    format!(
+                        "внешняя карта задаёт адрес для несуществующего порта '{}'",
+                        e.name
+                    ),
+                )
+                .with_code("SE-051"),
+            );
+        }
+    }
+    result.diagnostics.sort_by_key(|d| d.loc.start());
+    result
+}
+
+/// Рекурсивный обход дерева моделей для разрешения адресов портов.
+fn resolve_model(
+    model: &Rc<RefCell<ModelNode>>,
+    used_ports: &std::collections::HashSet<String>,
+    external_by_name: &HashMap<&str, &AddressMapEntry>,
+    out: &mut AddressResolution,
+) {
+    let borrowed = model.borrow();
+    for var in borrowed.variables.values() {
+        let VariableNode::Port {
+            expr, loc, name, ..
+        } = var
+        else {
+            continue;
+        };
+
+        let inline = lower_addr_expr(expr);
+        let operator = borrowed
+            .address_defs
+            .iter()
+            .find(|d| &d.port == name)
+            .and_then(|d| lower_addr_expr(&d.value));
+        let external = external_by_name.get(name.as_str());
+
+        // Приоритет: внешняя карта > оператор > inline.
+        let resolved = if let Some(e) = external {
+            // Оверлей поверх адреса модели — предупреждение SE-050.
+            if inline.is_some() || operator.is_some() {
+                out.diagnostics.push(
+                    Diagnostic::warning(
+                        e.loc,
+                        format!(
+                            "внешняя карта переопределяет адрес порта '{}', заданный в модели",
+                            name
+                        ),
+                    )
+                    .with_code("SE-050"),
+                );
+            }
+            Some(ResolvedAddress {
+                addr: e.addr,
+                bit: e.bit,
+                source: AddressSource::External,
+            })
+        } else if let Some((addr, bit)) = operator {
+            Some(ResolvedAddress {
+                addr,
+                bit,
+                source: AddressSource::Operator,
+            })
+        } else {
+            inline.map(|(addr, bit)| ResolvedAddress {
+                addr,
+                bit,
+                source: AddressSource::Inline,
+            })
+        };
+
+        match resolved {
+            Some(r) => {
+                out.map.insert(name.clone(), r);
+            }
+            None => {
+                // SE-052: используемый порт без адреса ни из одного источника.
+                if used_ports.contains(name) {
+                    out.diagnostics.push(
+                        Diagnostic::error(
+                            *loc,
+                            format!(
+                                "порт '{}' используется в кодогенерации, но не имеет адреса \
+                                 (ни inline, ни оператором `address`, ни во внешней карте)",
+                                name
+                            ),
+                        )
+                        .with_code("SE-052"),
+                    );
+                }
+            }
+        }
+    }
+    let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
+    drop(borrowed);
+    for nested_model in nested {
+        resolve_model(&nested_model, used_ports, external_by_name, out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

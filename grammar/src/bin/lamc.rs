@@ -268,6 +268,7 @@ fn print_usage() {
     eprintln!();
     eprintln!("Целевые платформы:");
     eprintln!("  c         Генерация C-заголовочного файла");
+    eprintln!("  c-hal     C + таблица адресов портов и дефолтный HAL (фича 0020)");
     eprintln!("  plantuml  Генерация диаграммы состояний PlantUML (.puml)");
     eprintln!();
     eprintln!("Примеры:");
@@ -315,52 +316,91 @@ fn main() {
         }
     };
 
-    // Внешняя карта адресов (фича 0020-03): разбор + оверлей-предупреждения.
-    // Понижение адреса в целевой код — задача 0020-05; здесь только валидация
-    // карты и предупреждения об оверлее/висячих записях.
-    if let Some(map_path) = &options.address_map {
-        let map_src = match fs::read_to_string(map_path) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("Ошибка чтения карты адресов '{}': {}", map_path, e);
-                process::exit(1);
-            }
-        };
-        match grammar::parse_address_map(&map_src, 0) {
-            Err(diags) => {
-                for d in diags {
-                    eprintln!(
-                        "Ошибка карты адресов [{}]: {}",
-                        d.code.as_deref().unwrap_or("?"),
-                        d.message
-                    );
+    // Внешняя карта адресов (фича 0020): разбор один раз. В режиме `c-hal` карта
+    // участвует в разрешении адресов (compile_to_c_hal); для остальных целей —
+    // только информационные предупреждения об оверлее/висячих записях (0020-03).
+    let external_entries: Vec<grammar::AddressMapEntry> =
+        if let Some(map_path) = &options.address_map {
+            let map_src = match fs::read_to_string(map_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Ошибка чтения карты адресов '{}': {}", map_path, e);
+                    process::exit(1);
                 }
-                process::exit(1);
-            }
-            Ok(entries) => {
-                // Строим модель для проверки оверлея (compile_to_c строит свою).
-                let warnings = grammar::parse(&source, 0)
-                    .ok()
-                    .and_then(|(ast, _)| {
-                        grammar::semantic::tree::construct_model(&ast, None, &options.include_dirs)
-                            .ok()
-                    })
-                    .map(|model| grammar::address_map_overlay_warnings(model, &entries))
-                    .unwrap_or_default();
-                for w in warnings {
-                    if !options.quiet {
+            };
+            match grammar::parse_address_map(&map_src, 0) {
+                Ok(entries) => entries,
+                Err(diags) => {
+                    for d in diags {
                         eprintln!(
-                            "Предупреждение [{}]: {}",
-                            w.code.as_deref().unwrap_or("?"),
-                            w.message
+                            "Ошибка карты адресов [{}]: {}",
+                            d.code.as_deref().unwrap_or("?"),
+                            d.message
                         );
                     }
+                    process::exit(1);
                 }
+            }
+        } else {
+            Vec::new()
+        };
+
+    if !external_entries.is_empty() && options.target != "c-hal" {
+        let warnings = grammar::parse(&source, 0)
+            .ok()
+            .and_then(|(ast, _)| {
+                grammar::semantic::tree::construct_model(&ast, None, &options.include_dirs).ok()
+            })
+            .map(|model| grammar::address_map_overlay_warnings(model, &external_entries))
+            .unwrap_or_default();
+        for w in warnings {
+            if !options.quiet {
+                eprintln!(
+                    "Предупреждение [{}]: {}",
+                    w.code.as_deref().unwrap_or("?"),
+                    w.message
+                );
             }
         }
     }
 
     match options.target.as_str() {
+        "c-hal" => {
+            match grammar::compile_to_c_hal(
+                &options.input_file,
+                &source,
+                &options.output_path,
+                &options.include_dirs,
+                &external_entries,
+                &grammar::GenerateOptions::new(options.guard_enable),
+            ) {
+                Ok(warnings) => {
+                    for w in warnings {
+                        if !options.quiet {
+                            eprintln!(
+                                "Предупреждение [{}]: {}",
+                                w.code.as_deref().unwrap_or("?"),
+                                w.message
+                            );
+                        }
+                    }
+                    if !options.quiet {
+                        eprintln!(
+                            "Скомпилировано: {} → {}/ (c-hal)",
+                            options.input_file, options.output_path
+                        );
+                    }
+                }
+                Err(diag) => {
+                    eprintln!(
+                        "Ошибка компиляции [{}]: {}",
+                        diag.code.as_deref().unwrap_or("?"),
+                        diag.message
+                    );
+                    process::exit(1);
+                }
+            }
+        }
         "c" => {
             if let Err(diag) = grammar::compile_to_c(
                 &options.input_file,
