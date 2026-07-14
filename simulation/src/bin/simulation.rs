@@ -65,7 +65,7 @@ fn main() -> ExitCode {
         Ok(result) => {
             print_result(&result);
             match &result {
-                RunResult::GuardFailed { .. } => ExitCode::FAILURE,
+                RunResult::GuardFailed { .. } | RunResult::EvalFailed { .. } => ExitCode::FAILURE,
                 _ => ExitCode::SUCCESS,
             }
         }
@@ -213,6 +213,10 @@ fn print_result(result: &RunResult) {
         }
         RunResult::GuardFailed { step, details } => {
             eprintln!("ОШИБКА guard на шаге {step}: {details}");
+        }
+        RunResult::EvalFailed { step, details } => {
+            eprintln!("ОШИБКА вычисления на шаге {step}: {details}");
+            eprintln!("Симуляция остановлена: результат недостоверен.");
         }
     }
 }

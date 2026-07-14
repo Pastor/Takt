@@ -63,6 +63,11 @@ pub enum RunResult {
     StepsExhausted { completed: usize, requested: usize },
     /// Guard не выполнен на шаге `step` (нумерация с 1).
     GuardFailed { step: usize, details: String },
+    /// Ошибка вычисления на шаге `step` (нумерация с 1): симуляция недостоверна.
+    ///
+    /// Отличает сломанную модель от честно неактивного перехода (R5 фичи 0025):
+    /// раньше ошибка вычисления сводилась к `false` и была неотличима.
+    EvalFailed { step: usize, details: String },
 }
 
 // ── Бегун симуляции ──────────────────────────────────────────────────────────
@@ -152,6 +157,12 @@ impl SimulationRunner {
 
             // Выполняем шаг
             let tick_result = self.unit.tick();
+            if let TickResult::Failed(details) = &tick_result {
+                return Ok(RunResult::EvalFailed {
+                    step: completed + 1,
+                    details: details.clone(),
+                });
+            }
             completed += 1;
 
             // Выводим информацию о шаге

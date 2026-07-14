@@ -138,18 +138,6 @@ fn collect_locals(stmt: &StatementNode, out: &mut Vec<(String, Value)>) {
     }
 }
 
-/// Сообщает об ошибке времени выполнения.
-///
-/// Полноценный канал (`TickResult` → `RunResult` → код возврата CLI) — задача
-/// `0025-05`. До неё ошибка **печатается**, а не теряется.
-pub(crate) fn report(what: &str, diagnostic: &Diagnostic) {
-    eprintln!(
-        "[симуляция] {what}: {} ({})",
-        diagnostic.message,
-        diagnostic.code.as_deref().unwrap_or("SIM-000")
-    );
-}
-
 // ── Точка входа: тело именованного блока ─────────────────────────────────────
 
 /// Оборачивает тело блока в область видимости и зовёт интерпретатор.
@@ -169,13 +157,9 @@ pub(crate) fn compile_block_body(
             outer: ctx,
             write: write_ctx.clone(),
         };
-        match exec_statement(&stmt, &mut scope) {
-            Ok(_) => Flow::Normal,
-            Err(diagnostic) => {
-                report("оператор пропущен", &diagnostic);
-                Flow::Normal
-            }
-        }
+        // Ошибка пробрасывается наверх: до задачи 0025-05 она печаталась в
+        // stderr и терялась. Теперь её увидит `TickResult::Failed` → CLI (R5).
+        exec_statement(&stmt, &mut scope).map(|_| Flow::Normal)
     });
     vec![f]
 }
