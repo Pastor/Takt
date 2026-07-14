@@ -5,41 +5,41 @@ title Stacker
 Stacker : CommandReceiver | MovementController | LiftController
 Stacker --> [*]
 
+state CommandReceiver {
+    [*] --> WaitingForTask
+    WaitingForTask --> AcceptingTask
+    AcceptingTask --> TaskActive
+    TaskActive --> WaitingForTask
+}
+
 state MovementController {
     [*] --> MovementIdle
-    MovementIdle --> DispatchMove
     MovingToStorage --> WaitingForkAtStorage
     MovingToStorage --> EmergencyCharge
     MovingToPickup --> WaitingForkAtPickup
     MovingToPickup --> EmergencyCharge
-    MovingToDropoff --> WaitingForkAtDropoff
-    MovingToDropoff --> EmergencyCharge
-    WaitingForkAtCell --> TaskCompleting
-    WaitingForkAtPickup --> MovingToCell
-    EmergencyCharge --> MovementIdle
     WaitingForkAtDropoff --> TaskCompleting
+    WaitingForkAtPickup --> MovingToCell
+    DispatchMove --> MovingToPickup
+    DispatchMove --> MovingToStorage
     TaskCompleting --> MovementIdle
     MovingToCell --> WaitingForkAtCell
     MovingToCell --> EmergencyCharge
-    DispatchMove --> MovingToPickup
-    DispatchMove --> MovingToStorage
+    WaitingForkAtCell --> TaskCompleting
+    MovementIdle --> DispatchMove
+    MovingToDropoff --> WaitingForkAtDropoff
+    MovingToDropoff --> EmergencyCharge
     WaitingForkAtStorage --> MovingToDropoff
-}
-
-state CommandReceiver {
-    [*] --> WaitingForTask
-    TaskActive --> WaitingForTask
-    AcceptingTask --> TaskActive
-    WaitingForTask --> AcceptingTask
+    EmergencyCharge --> MovementIdle
 }
 
 state LiftController {
     [*] --> LiftIdle
-    LiftIdle --> LiftOperating
     LiftDone --> LiftIdle
     LiftOperating --> LiftDone
     LiftOperating --> LiftDone
     LiftOperating --> LiftIdle
+    LiftIdle --> LiftOperating
 }
 
 @enduml
