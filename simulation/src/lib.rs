@@ -25,6 +25,15 @@ pub mod state_io;
 pub(crate) mod svg;
 mod unit;
 
+/// Значение переменной или порта — для наблюдения извне ([`Unit::variable`]).
+pub use eval::value::Value;
+/// Дерево симуляции и результат шага.
+///
+/// Реэкспорт: сам модуль `unit` внутренний, но его типы возвращаются публичным
+/// [`build_unit`] и обязаны быть именуемыми снаружи (иначе `private_interfaces`
+/// и невозможность написать интеграционный тест — пункт бэклога, закрыт 0025-06).
+pub use unit::{TickResult, Unit};
+
 /// Строит дерево симуляции из семантической модели.
 pub fn build_unit(
     model: std::rc::Rc<std::cell::RefCell<grammar::semantic::ModelNode>>,

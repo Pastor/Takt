@@ -1,0 +1,15 @@
+/// T4 (дефект Д4): вызов функции в условии перехода.
+///
+/// До фичи 0025 роняло симулятор: unimplemented!() в predicate.rs.
+var t: u8 := 0;
+
+fn ready(v: u8) -> u8 {
+    return 1;
+}
+
+start Idle {
+    ref Hot: ready(t) > 0;
+}
+
+state Hot {
+}

@@ -1,0 +1,18 @@
+/// T3 (дефект Д3): голый вызов внешней процедуры как оператор.
+///
+/// До фичи 0025 compile_expression обрабатывал только Assign, поэтому
+/// `log_temp(x);` молча отбрасывался.
+extern fn log_temp(v: u8);
+
+var x: u8 := 5;
+
+start Idle {
+    always {
+        log_temp(x);
+        x := x + 1;
+    }
+    ref Hot: x > 7;
+}
+
+state Hot {
+}
