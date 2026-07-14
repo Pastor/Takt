@@ -12,7 +12,8 @@
 | Архитектура (ADR) | [`docs/adr/0020-port-address-decl.md`](../adr/0020-port-address-decl.md) |
 | Анализ | [`docs/analyze/0020-port-address-decl.md`](../analyze/0020-port-address-decl.md) |
 | Разработка 0020-01 | [`docs/development/0020-01-address-grammar.md`](../development/0020-01-address-grammar.md) (ВЫПОЛНЕНО) |
-| Разработка 0020-02…05 | грамматика/семантика/карта/C — ЗАПЛАНИРОВАНО |
+| Разработка 0020-02 | [`docs/development/0020-02-semantics-diagnostics.md`](../development/0020-02-semantics-diagnostics.md) (ВЫПОЛНЕНО) |
+| Разработка 0020-03…05 | внешняя карта / полнота / C — ЗАПЛАНИРОВАНО |
 
 > **Пересмотр архитектуры 2026-07-14.** По запросу заказчика решение 0020
 > пересмотрено: фича охватывает **обе оси** — *размещение* адреса и его

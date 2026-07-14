@@ -548,6 +548,19 @@ fn construct_model_stage0(
                     .type_locs
                     .insert(struct_name.clone(), struct_loc);
             }
+        } else if let ModelElement::Address(def) = element {
+            // Фича 0020: оператор `address Имя = <выражение>;`. Захватываем сырую
+            // привязку; проверка (существование порта, конфликт источников) —
+            // `check_port_addresses` в validate.rs (порты могут объявляться позже).
+            let port = extract_name(def.name.clone(), def.loc)?;
+            model_node
+                .borrow_mut()
+                .address_defs
+                .push(crate::semantic::AddressBindingNode {
+                    port,
+                    loc: def.loc,
+                    value: ExpressionNode::Unresolved(def.value.clone()),
+                });
         } else if let ModelElement::InlineFormula(inline) = element {
             match &**inline {
                 ast::InlineFormulaDefine::Guard { conditions, .. } => {

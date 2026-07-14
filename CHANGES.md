@@ -31,6 +31,24 @@
 
 ### Добавлено
 
+- **Фича 0020-02 (разработка): семантика оператора `address` — привязка и
+  диагностики.** Оператор `address Имя = <адрес>;` теперь привязывается к порту
+  и валидируется (фича [0020](docs/features/0020-port-address-decl.md), стадия
+  «Разработка»). `semantic/mod.rs`: узел `AddressBindingNode { port, loc, value }`
+  и поле `ModelNode::address_defs`. `semantic/tree.rs`: `construct_model_stage0`
+  захватывает `ModelElement::Address` в `address_defs` (захват отделён от проверки
+  — порт может объявляться позже). `semantic/validate.rs`: `check_port_addresses`
+  в конвейере `validate_model` с диагностиками **SE-048** (висячая привязка —
+  `address` для несуществующего порта, R5) и **SE-049** (конфликт источников —
+  адрес задан одновременно inline и оператором `address`, либо несколькими
+  операторами `address` для одного порта, R4). Тесты: захват в `address_defs`,
+  валидная фикстура `valid/port_address_separate.lam`, контрпримеры
+  `invalid/port_address_conflict.lam` (SE-049) и `invalid/port_address_dangling.lam`
+  (SE-048), дубликат-оператор (SE-049). Все тесты зелёные; fmt/clippy чисты.
+  Границы: приоритет-оверлей (внешняя карта) — 0020-03; консолидированный
+  `AddressMap` и понижение адреса — 0020-05. Документ разработки
+  `docs/development/0020-02-semantics-diagnostics.md`.
+
 - **Фича 0020-01 (разработка): грамматика и AST оператора `address`.** Реализован
   синтаксис задания адреса порта отдельным оператором `address Имя = <выражение>;`
   (фича [0020](docs/features/0020-port-address-decl.md), стадия «Разработка»).
