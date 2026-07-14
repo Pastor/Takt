@@ -194,10 +194,7 @@ fn import_loc(i: &ast::ImportDefine) -> crate::diagnostics::Location {
 
 #[allow(clippy::wildcard_enum_match_arm)]
 fn inline_formula_loc(f: &ast::InlineFormulaDefine) -> crate::diagnostics::Location {
-    // `InlineFormulaDefine` — перечисление; печать его пока не поддержана,
-    // позиция нужна лишь для сообщения об отказе.
-    let _ = f;
-    crate::diagnostics::Location::Builtin
+    expr::inline_formula_loc(f)
 }
 
 /// Печатает элементы модели верхнего уровня (без обёртки `model … { }`).
@@ -282,8 +279,9 @@ fn print_element(out: &mut Out, element: &ast::ModelElement) -> Result<(), Forma
             );
             Ok(())
         }
-        ast::ModelElement::InlineFormula(_) => {
-            Err(FormatError::Unsupported("InlineFormula".to_string()))
+        ast::ModelElement::InlineFormula(f) => {
+            out.node_line(&loc, &expr::inline_formula(f)?);
+            Ok(())
         }
         ast::ModelElement::Address(a) => {
             // `address ИМЯ = <выражение>;` (фича 0020).
@@ -376,8 +374,10 @@ fn print_state_element(out: &mut Out, element: &ast::StateElement) -> Result<(),
             Ok(())
         }
         ast::StateElement::NamedBlockCode(b) => print_named_block(out, b),
-        ast::StateElement::InlineFormula(_) => {
-            Err(FormatError::Unsupported("InlineFormula".to_string()))
+        ast::StateElement::InlineFormula(f) => {
+            let loc = expr::inline_formula_loc(f);
+            out.node_line(&loc, &expr::inline_formula(f)?);
+            Ok(())
         }
     }
 }

@@ -307,3 +307,61 @@ fn import_path(p: &ast::ImportPath) -> String {
             .join("."),
     }
 }
+
+/// Печатает встроенную формулу (`: условия;` / `: [LTL] формулы;`).
+///
+/// # Канонизация формы `Guard`
+///
+/// `: conds;` и `: [Guard] conds;` дают **один и тот же** АСД — форма в дереве не
+/// сохраняется. Канон выбирает короткую (`: conds;`); это нормализация
+/// раскладки, а не смена смысла: обе формы разбираются одинаково, поэтому
+/// требование R4 (семантическая нейтральность) не нарушается.
+pub(crate) fn inline_formula(f: &ast::InlineFormulaDefine) -> Result<String, FormatError> {
+    use ast::InlineFormulaDefine as F;
+    Ok(match f {
+        F::Guard { conditions, .. } => {
+            let list = conditions
+                .iter()
+                .map(condition)
+                .collect::<Result<Vec<_>, _>>()?
+                .join(", ");
+            format!(": {list};")
+        }
+        F::Ltl { formulas, .. } => {
+            let list = formulas
+                .iter()
+                .map(ltl)
+                .collect::<Result<Vec<_>, _>>()?
+                .join(", ");
+            format!(": [LTL] {list};")
+        }
+    })
+}
+
+/// Позиция встроенной формулы — для привязки комментариев.
+pub(crate) fn inline_formula_loc(f: &ast::InlineFormulaDefine) -> crate::diagnostics::Location {
+    use ast::InlineFormulaDefine as F;
+    match f {
+        F::Guard { loc, .. } | F::Ltl { loc, .. } => *loc,
+    }
+}
+
+/// Печатает LTL-формулу.
+fn ltl(e: &ast::LtlExpr) -> Result<String, FormatError> {
+    use ast::LtlExpr as L;
+    Ok(match e {
+        L::True(_) => "true".to_string(),
+        L::False(_) => "false".to_string(),
+        L::Atom(id) => id.name.clone(),
+        L::Parenthesis(_, inner) => format!("({})", ltl(inner)?),
+        L::Not(_, inner) => format!("!{}", ltl(inner)?),
+        L::Next(_, inner) => format!("X {}", ltl(inner)?),
+        L::Finally(_, inner) => format!("F {}", ltl(inner)?),
+        L::Globally(_, inner) => format!("G {}", ltl(inner)?),
+        L::And(_, l, r) => format!("{} & {}", ltl(l)?, ltl(r)?),
+        L::Or(_, l, r) => format!("{} | {}", ltl(l)?, ltl(r)?),
+        L::Until(_, l, r) => format!("{} U {}", ltl(l)?, ltl(r)?),
+        L::Release(_, l, r) => format!("{} R {}", ltl(l)?, ltl(r)?),
+        L::Implies(_, l, r) => format!("{} -> {}", ltl(l)?, ltl(r)?),
+    })
+}

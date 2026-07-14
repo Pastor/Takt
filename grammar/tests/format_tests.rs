@@ -304,3 +304,15 @@ fn fmt_rewrites_file_in_place() {
         "после форматирования --check обязан быть зелёным"
     );
 }
+
+#[test]
+fn inline_formula_guard_and_ltl_are_printed() {
+    // Guard: `: [Guard] conds;` и `: conds;` дают ОДИН АСД — канон выбирает
+    // короткую форму. Это нормализация раскладки, а не смена смысла: A3
+    // (parse(fmt(x)) ≡ parse(x)) проверяется на корпусе.
+    let out = format_source("state A {\n    :  x > 1 ,  y ;\n}\n").unwrap();
+    assert!(out.contains(": x > 1, y;"), "{out}");
+
+    let ltl = format_source("state A {\n    : [LTL]  G  x ->  F y ;\n}\n").unwrap();
+    assert!(ltl.contains(": [LTL] G x -> F y;"), "{ltl}");
+}

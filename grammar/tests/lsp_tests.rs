@@ -1152,7 +1152,11 @@ fn formatting_returns_none_when_already_canonical() {
 fn formatting_reports_error_instead_of_mangling() {
     // Контрпример: непечатаемый узел — это ОШИБКА, а не «отформатировали как
     // смогли». Сервер её залогирует и ответит null.
-    let unsupported = ": true;\nstart S;\n"; // встроенная формула (InlineFormula)
+    //
+    // Раньше здесь стоял `InlineFormula`; после того как его печать реализовали,
+    // тест устарел по замыслу и был перенаправлен на `assembly` — узел, печать
+    // которого действительно не поддержана.
+    let unsupported = "start S {\n    always { assembly { } }\n}\n";
     assert!(
         grammar::lsp::formatting_edits(unsupported).is_err(),
         "непечатаемый узел обязан давать ошибку, а не молча искажать исходник"
