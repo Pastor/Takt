@@ -61,6 +61,8 @@ pub(crate) struct Out<'a> {
     buf: String,
     depth: usize,
     comments: comments::Comments<'a>,
+    /// Исходник — нужен для восстановления осмысленных пустых строк.
+    source: &'a str,
 }
 
 impl<'a> Out<'a> {
@@ -69,6 +71,7 @@ impl<'a> Out<'a> {
             buf: String::with_capacity(source.len() + 64),
             depth: 0,
             comments: comments::Comments::new(source, items),
+            source,
         }
     }
 
@@ -88,6 +91,53 @@ impl<'a> Out<'a> {
         match self.comments.trailing(end) {
             Some(trailing) => self.line(&format!("{text} {trailing}")),
             None => self.line(text),
+        }
+    }
+
+    /// Пустая строка — не более одной подряд (правило канона).
+    fn blank(&mut self) {
+        if !self.buf.is_empty() && !self.buf.ends_with("\n\n") {
+            self.buf.push('\n');
+        }
+    }
+
+    /// Восстанавливает **осмысленную** пустую строку перед узлом.
+    ///
+    /// Пустые строки не хранятся ни в АСД, ни в `Vec<Comment>`, поэтому берём их
+    /// из исходника (решение ADR 0024).
+    ///
+    /// # Почему скан назад, а не «зазор от конца предыдущего узла»
+    ///
+    /// `Location` узла **не всегда покрывает его целиком**: у функции `fn.loc` —
+    /// это только сигнатура (`fn get() -> u8`), тело живёт в отдельном `loc`.
+    /// Замер «от `loc.end` предыдущего узла» из-за этого проезжал через всё тело
+    /// функции и вставлял пустую строку на ровном месте — harness поймал это на
+    /// `type_alias_inference.lam` как нарушение идемпотентности.
+    ///
+    /// Поэтому смотрим **назад от самого узла**: пробельный хвост перед ним и
+    /// отвечает на вопрос «была ли пустая строка». Точность `loc.end` не важна.
+    ///
+    /// Якорь — начало ведущего комментария, если он есть: иначе пустая строка
+    /// уехала бы под комментарий, оторвав его от предыдущего элемента.
+    ///
+    /// Идемпотентность: в отформатированном тексте перед узлом снова ровно один
+    /// пустой перевод строки, поэтому повторный прогон даёт то же самое.
+    pub(crate) fn blank_before(&mut self, loc: &crate::diagnostics::Location) {
+        let Some((start, _)) = comments::span(loc) else {
+            return;
+        };
+        let anchor = self
+            .comments
+            .peek_start()
+            .filter(|s| *s < start)
+            .unwrap_or(start);
+        let Some(prefix) = self.source.get(..anchor) else {
+            return;
+        };
+        let trimmed = prefix.trim_end_matches(|c: char| c.is_whitespace());
+        // Два перевода строки в пробельном хвосте = автор оставил пустую строку.
+        if prefix[trimmed.len()..].matches('\n').count() >= 2 {
+            self.blank();
         }
     }
 
@@ -210,9 +260,20 @@ fn print_model_body(out: &mut Out, model: &ast::Model) -> Result<(), FormatError
 
 fn print_element(out: &mut Out, element: &ast::ModelElement) -> Result<(), FormatError> {
     let loc = element_loc(element);
-    // Ведущие комментарии печатаются для ЛЮБОГО элемента — единая точка, чтобы
-    // ни одна ветка не забыла про них (требование R2).
+    // Единая точка для ЛЮБОГО элемента: сперва осмысленная пустая строка из
+    // зазора исходника, затем ведущие комментарии. Так ни одна ветка печати не
+    // может о них забыть (требования R2, R5).
+    out.blank_before(&loc);
     out.leading_for(&loc);
+    print_element_inner(out, element, &loc)
+}
+
+fn print_element_inner(
+    out: &mut Out,
+    element: &ast::ModelElement,
+    loc: &crate::diagnostics::Location,
+) -> Result<(), FormatError> {
+    let loc = *loc;
     match element {
         ast::ModelElement::StraySemicolon(_) => {
             // Одиночная `;` — синтаксический шум; канон её опускает.
@@ -360,6 +421,27 @@ fn print_state(out: &mut Out, state: &ast::StateDefine) -> Result<(), FormatErro
 }
 
 fn print_state_element(out: &mut Out, element: &ast::StateElement) -> Result<(), FormatError> {
+    let loc = state_element_loc(element);
+    out.blank_before(&loc);
+    out.leading_for(&loc);
+    print_state_element_inner(out, element)
+}
+
+/// Позиция элемента состояния — для пустых строк и комментариев.
+fn state_element_loc(element: &ast::StateElement) -> crate::diagnostics::Location {
+    use ast::StateElement as S;
+    match element {
+        S::StraySemicolon(loc) | S::Reference(loc, _, _) => *loc,
+        S::Next(id) => id.loc,
+        S::NamedBlockCode(b) => b.loc,
+        S::InlineFormula(f) => expr::inline_formula_loc(f),
+    }
+}
+
+fn print_state_element_inner(
+    out: &mut Out,
+    element: &ast::StateElement,
+) -> Result<(), FormatError> {
     match element {
         ast::StateElement::StraySemicolon(_) => Ok(()),
         ast::StateElement::Next(id) => {
