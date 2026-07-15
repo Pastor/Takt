@@ -1201,3 +1201,54 @@ fn c_hal_external_overrides_and_warns() {
         h
     );
 }
+
+/// **T2 фичи 0026 — главная проверка: порождённый C компилируется.**
+///
+/// Модель **без под-моделей** — простейший класс, и именно он был сломан:
+/// генератор не эмитил `typedef struct {Root} {Root};`, структура печаталась
+/// тегом, а прототипы — через голое имя. **Контрольная точка:** до фикса тот же
+/// вход давал **8 ошибок** `must use 'struct' tag to refer to type`.
+///
+/// Тест живой: он вызывает настоящий `cc`. Снапшот тут бесполезен — он
+/// зафиксировал бы невалидный C ровно так же охотно, как валидный. Дефект дожил
+/// до сих пор именно потому, что все пять `examples/*.lam`, на которых
+/// `precheck.sh` собирает C, содержат под-модели и попадали в рабочую ветку.
+#[test]
+fn test_single_model_generates_compilable_c() {
+    if !cc_available() {
+        eprintln!("[пропуск] cc недоступен — живая проверка C пропущена");
+        return;
+    }
+    let dir = tempdir().expect("временный каталог");
+    let src = "var n: u8 := 0;\nstart S { always { n := n + 1; } }";
+    grammar::compile_to_c(
+        "single.lam",
+        src,
+        dir.path().to_str().unwrap(),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("компиляция в C");
+
+    let out = std::process::Command::new("cc")
+        .arg("-std=c11")
+        .arg("-fsyntax-only")
+        .arg("single.c")
+        .current_dir(dir.path())
+        .output()
+        .expect("запуск cc");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success() && !stderr.contains("error:"),
+        "порождённый C одиночной модели обязан компилироваться, cc сказал:\n{stderr}"
+    );
+}
+
+/// Проверяет, доступен ли `cc` — без него живая проверка пропускается.
+fn cc_available() -> bool {
+    std::process::Command::new("cc")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
