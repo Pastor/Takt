@@ -38,6 +38,7 @@ use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, MatchPatternNode, ModelNode, StatementNode};
 
 /// Объявление, поднятое из тела в шапку POU.
+#[derive(Debug)]
 pub(crate) struct Hoisted {
     /// Имя переменной.
     pub name: String,
@@ -46,7 +47,7 @@ pub(crate) struct Hoisted {
 }
 
 /// Побочные результаты печати тела: поднятые объявления и предупреждения.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct StmtOutput {
     /// Объявления, которые вызывающий обязан напечатать в шапке POU.
     pub hoisted: Vec<Hoisted>,
