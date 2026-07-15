@@ -66,12 +66,14 @@ bison/flex/autoconf) и, вероятно, требует полной `CONFIGUR
 | T13 | T3–T10: целые | `var a: u8; var b: i16; var c: u32; var d: i64;` | `USINT`, `INT`, `UDINT`, `LINT` | R5 / A3.1 |
 | T14 | T11: вещественный | `var x: float;` | `x : LREAL;` (**не** `REAL` — дефект Д3) | R5 / A4.3 |
 | T15 | **T12: массив** | `var data: [u8; 4];` | `data : ARRAY [0..3] OF USINT;` — переменная **присутствует** (**контрпример к дефекту Д1b**: в C она молча исчезает) | R5 / A4.1 |
-| T16 | T12: вложенный массив | `var m: [[u8; 2]; 3];` | `ARRAY [0..2] OF ARRAY [0..1] OF USINT` | R5 / A4.2 |
-| T17 | T13: перечисление | `enum Floor { Bottom = 80, Top }` (`elevator.lam:117`) | `TYPE Floor : (Bottom := 80, Top := 81); END_TYPE`. **Зонд первым** — значение `Top` снять из семантики, не угадывать | R5 / A5.2 |
-| T18 | T14: структура | фикстура со `struct` | `TYPE … : STRUCT … END_STRUCT; END_TYPE` | R5 / A3.1 |
+| T16 | T12: вложенный массив | `var m: [[u8; 2]; 3];` | **`ARRAY [0..2, 0..1] OF USINT`** — многомерная форма. ⚠ Исправлено по факту: `ARRAY OF ARRAY` `iec2c` **отвергает** («invalid item data type in array specification») | R5 / A4.2 |
+| T17 | T13: перечисление | `enum Floor { Bottom = 80, Top }` (`elevator.lam:117`) | **`Floor_Bottom : USINT := 80;` / `Floor_Top : USINT := 81;`** в `VAR CONSTANT` (откат Option C — П4 красная). Зонд исполнен: семантика даёт `[("Bottom", 80), ("Top", 81)]` | R5 / A5.2 |
+| T18 | T14: структура | фикстура со `struct` | `TYPE … : STRUCT … END_STRUCT; END_TYPE` **до** первого `FUNCTION_BLOCK` | R5 / A3.1 |
+| T21a | Массив не получает скалярный инициализатор | `var data: [u8; 4] := 0;` (форма всего корпуса) | `data : ARRAY [0..3] OF USINT;` **без** `:= 0`: `iec2c` отвергает «invalid initial value in array specification with initialization» | R5 |
+| T21b | Разрядность перечисления по диапазону | `enum Action { Idle = 670, Closing }` (`elevator.lam:121`) | `Action_Idle : UINT := 670;` — **не** `USINT` (усечение 670 было бы тихой потерей) | R5 |
 | T19 | **T16: неотображаемый тип → ошибка** | фикстура с `Unsupported`/незавершённым выводом | Диагностика **`ST-002`**; вывод **не создаётся** | R4 / A3.2, A5 |
 | T20 | Массив нулевого размера | `var z: [u8; 0];` | `ST-007`; вывода нет | R5 / A5.1 |
-| T21 | Полнота разбора `TypeNode` | — | 14 юнит-тестов (T1..T14) в `st_type.rs`; вынужденная ветка `_` → `ST-003` (**ошибка**, не `None`) | R4 / A3 |
+| T21 | Полнота разбора `TypeNode` | — | Юнит-тесты T1..T14 в `st_type.rs`. ⚠ Ветки `_` **нет** и `ST-003` **не занят**: `#[non_exhaustive]` не действует внутри своего крейта, разбор исчерпывающий — новый вариант ловит **компилятор**, а не рантайм | R4 / A3 |
 
 ### Группа 4. Состояния, переходы, композиция ([анализ 0041-03](../analyze/0041-03-state-mapping.md))
 

@@ -89,14 +89,13 @@ impl StMap {
     /// Возвращает модель по имени.
     ///
     /// # Ошибки
-    /// [`Diagnostic`] с кодом `ST-007`, если модели с таким именем нет.
-    #[allow(dead_code)]
+    /// [`Diagnostic`] с кодом `ST-012`, если модели с таким именем нет.
     pub(crate) fn raw_model_at(&self, name: Name) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
         self.map
             .model_at(Some(name.unique().to_string()))
             .ok_or_else(|| {
                 Diagnostic::error(Location::Codegen, format!("Модель '{}' не найдена", name))
-                    .with_code("ST-007")
+                    .with_code("ST-012")
             })
     }
 

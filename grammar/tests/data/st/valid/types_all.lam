@@ -1,0 +1,24 @@
+// 0041-02 (A4.3, A4.4, A3.1): все скалярные типы Lam разом.
+//
+// Ожидаемое отображение: bit/bool → BOOL, float → LREAL (не REAL),
+// u8/i16/u32/i64 → USINT/INT/UDINT/LINT.
+
+var flag: bit := 1;
+var ready: bool := 0;
+var ratio: float := 0.0;
+var small: u8 := 0;
+var signed_small: i16 := 0;
+var wide: u32 := 0;
+var signed_wide: i64 := 0;
+
+start Idle {
+    always {
+        flag := flag;
+        ready := ready;
+        ratio := ratio;
+        small := small;
+        signed_small := signed_small;
+        wide := wide;
+        signed_wide := signed_wide;
+    }
+}

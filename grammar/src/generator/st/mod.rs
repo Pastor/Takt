@@ -19,30 +19,45 @@
 //!
 //! ## Состояние реализации
 //!
-//! Задача **0041-01** (эта) закрывает **каркас и диспетчеризацию**: цели,
-//! публичный API, снимок карты и скелет `FUNCTION_BLOCK` на каждую модель.
-//! Наполнение тела — задачи 0041-02…0041-05:
+//! Задача **0041-01** закрыла **каркас и диспетчеризацию**: цели, публичный API,
+//! снимок карты и скелет `FUNCTION_BLOCK` на каждую модель. Задача **0041-02**
+//! добавила отображение типов (`st_type.rs`) и секции объявлений
+//! (`st_decl.rs`). Остаток:
 //!
 //! | Задача | Что добавляет |
 //! |---|---|
-//! | 0041-02 | `st_type.rs`, `st_decl.rs` — типы и объявления `VAR`/`VAR_INPUT` |
 //! | 0041-03 | `st_model.rs` — `CASE state OF`, переходы, композиция |
 //! | 0041-04 | `st_expr.rs` — выражения, условия, операторы |
 //! | 0041-05 | `AT %…` — потребление карты адресов (цель `st-at`) |
+//!
+//! ## Почему вывод пока не принимается `iec2c`
+//!
+//! Проба 0041-06 предполагала, что для валидности достаточно объявлений, и
+//! ставила это критерием приёмки 0041-02. Проверка **опровергла** предположение:
+//! `iec2c` требует от `FUNCTION_BLOCK` ещё и **тело** — блок с одними
+//! объявлениями отвергается («no body defined in function block declaration»), и
+//! комментарий за тело не считается. Тело — `CASE state OF` — предмет задачи
+//! **0041-03**; до неё гейт закрыть нельзя. Заглушку-тело генератор намеренно
+//! **не** эмитит: она уехала бы в ПЛК под видом логики.
 
+mod st_decl;
 mod st_map;
+mod st_type;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
 use crate::semantic::ModelNode;
-use crate::semantic::minimap::Element;
+use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
+use crate::semantic::unused::UsageSet;
 use st_map::StMap;
+use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
+use std::rc::Rc;
 
 /// Размер одного уровня отступа в порождаемом ST.
 const INDENT: usize = 4;
@@ -78,16 +93,17 @@ impl AsGenerator for Generator {
 
 /// Строит текст ST-программы из снимка модели.
 ///
-/// На этапе 0041-01 эмитится скелет: заголовок файла и по одному
+/// Эмитится заголовок файла, общие объявления `TYPE … END_TYPE` и по одному
 /// `FUNCTION_BLOCK … END_FUNCTION_BLOCK` на корневую модель и на каждую
-/// используемую подмодель. Тело наполняют задачи 0041-02…0041-05.
+/// используемую подмодель — с секциями объявлений (0041-02). Тело блоков
+/// наполняют задачи 0041-03…0041-05.
 fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     let Element::Model { .. } = map.model() else {
         return Err(Diagnostic::error(
             Location::Codegen,
             "Корневой элемент карты не является моделью".to_string(),
         )
-        .with_code("ST-008"));
+        .with_code("ST-012"));
     };
 
     let mut out = String::new();
@@ -125,25 +141,65 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
         })
         .collect();
     submodels.sort_by(|a, b| a.unique().cmp(b.unique()));
-    for name in submodels {
-        emit_function_block(&mut p, &name.unique_camelcase());
-    }
 
-    emit_function_block(&mut p, &map.root_name().unique_camelcase());
+    // Блоки строятся в порядке «подмодели → корень»; корень идёт последним по
+    // той же причине, что и сортировка выше.
+    let mut blocks: Vec<(Name, Rc<RefCell<ModelNode>>)> = Vec::new();
+    for name in submodels {
+        let model = map.raw_model_at(name.clone())?;
+        blocks.push((name, model));
+    }
+    let root = map
+        .root_model_node()
+        .ok_or_else(|| root_missing(map.root_name()))?;
+    blocks.push((map.root_name(), root));
+
+    // Объявления структур — общие для файла и печатаются раньше всех блоков:
+    // в IEC 61131-3 тип обязан быть известен к моменту использования.
+    st_decl::emit_struct_types(&mut p, &blocks)?;
+
+    for (name, model) in &blocks {
+        emit_function_block(
+            &mut p,
+            &name.unique_camelcase(),
+            &model.borrow(),
+            map.usage(),
+        )?;
+    }
 
     Ok(out)
 }
 
-/// Печатает скелет одного `FUNCTION_BLOCK` с пустым телом.
-fn emit_function_block(p: &mut Printer, name: &str) {
+/// Строит диагностику `ST-012` — снимок карты не содержит корневой модели.
+fn root_missing(name: Name) -> Diagnostic {
+    Diagnostic::error(
+        Location::Codegen,
+        format!("Корневая модель '{}' отсутствует в снимке карты", name),
+    )
+    .with_code("ST-012")
+}
+
+/// Печатает один `FUNCTION_BLOCK`: заголовок, секции объявлений, тело.
+///
+/// Тело (`CASE state OF`) — задача 0041-03; сейчас на его месте комментарий.
+/// Из-за этого `iec2c` блок пока отвергает: IEC 61131-3 требует тела, и
+/// комментарий за него не считается (см. заметку в шапке модуля).
+fn emit_function_block(
+    p: &mut Printer,
+    name: &str,
+    model: &ModelNode,
+    usage: &UsageSet,
+) -> Result<(), Diagnostic> {
     let mut header = String::new();
     let _ = write!(header, "FUNCTION_BLOCK {}", name);
     p.ident(&header).nl();
+    st_decl::emit_declarations(p, model, usage)?;
     p.up();
-    p.ident("(* Тело: задачи 0041-02…0041-05 (объявления, CASE state OF, выражения). *)")
+    p.ident("(* Тело: задачи 0041-03…0041-05 (CASE state OF, выражения, адреса). *)")
         .nl();
     p.down();
     p.ident("END_FUNCTION_BLOCK").nl().nl();
+    Ok(())
 }
 
 #[cfg(test)]
