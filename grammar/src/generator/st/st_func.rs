@@ -35,11 +35,6 @@
 //! здесь дало бы ПЛК-код, который тихо ничего не делает вместо того, чтобы
 //! крутить двигатель, — ровно класс дефекта фичи 0025.
 
-// `emit_functions` ещё никто не вызывает: его потребитель — `st_model.rs`
-// (задача 0041-03). Разрешение снимается вместе с появлением вызывающего — та же
-// причина и тот же приём, что в `st_expr.rs` и `st_stmt.rs`.
-#![allow(dead_code)]
-
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::st::st_expr::print_expression;
@@ -117,13 +112,25 @@ pub(crate) fn print_call(
     args: &[ExpressionNode],
     model: &ModelNode,
 ) -> Result<String, Diagnostic> {
-    let def = def.borrow();
-    let name = name_of(&def)
-        .ok_or_else(|| unsupported("вызов неразрешённой функции (определение отсутствует)"))?;
     let mut printed = Vec::new();
     for arg in args {
         printed.push(print_expression(arg, model)?);
     }
+    print_call_texts(def, &printed)
+}
+
+/// Печатает вызов по уже напечатанным аргументам.
+///
+/// Отдельный вход нужен печатнику условий: у `ConditionNode` своя грамматика
+/// (инвариант ADR 0019), и её аргументы печатает он сам.
+pub(crate) fn print_call_texts(
+    def: &Rc<RefCell<FunctionDefinitionNode>>,
+    args: &[String],
+) -> Result<String, Diagnostic> {
+    let def = def.borrow();
+    let name = name_of(&def)
+        .ok_or_else(|| unsupported("вызов неразрешённой функции (определение отсутствует)"))?;
+    let mut printed: Vec<String> = args.to_vec();
     if printed.is_empty() {
         // Синтетический параметр требует синтетического аргумента.
         printed.push("0".to_string());

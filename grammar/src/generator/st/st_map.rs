@@ -6,9 +6,10 @@
 //! модель не использует.
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::semantic::ModelNode;
 use crate::semantic::minimap::{Element, Map, Name};
+use crate::semantic::type_node::TypeNode;
 use crate::semantic::unused::UsageSet;
+use crate::semantic::{ModelNode, VariableNode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -78,6 +79,55 @@ impl StMap {
     /// Возвращает список подмоделей, используемых через `StateExtend`.
     pub fn using_models(&self) -> Vec<Element> {
         self.map.used_models()
+    }
+
+    /// Возвращает элемент карты по имени (состояние, модель либо `StateExtend`).
+    pub fn element_of(&self, name: &Name) -> Option<Element> {
+        self.map.element_at(name.clone())
+    }
+
+    /// Возвращает переменные **корня**, которыми пользуется под-модель.
+    ///
+    /// Это список для `VAR_IN_OUT` под-FB и, он же, для аргументов вызова —
+    /// **один источник истины**: разойдись они, порождённый ST перестал бы
+    /// собираться (либо, хуже, связал бы не те переменные).
+    ///
+    /// В цели `c` этой задачи нет: там под-модель получает указатель `main` и
+    /// читает `main->lift_request` (Ф7). В переносимом подмножестве ST указателей
+    /// нет, поэтому общие переменные передаются по ссылке через `VAR_IN_OUT`
+    /// (вариант О1-в; проба П7 подтвердила, что MatIEC это принимает).
+    ///
+    /// Список считается по фактическому использованию (`compute_usage`), а не
+    /// «все переменные корня»: лишний `VAR_IN_OUT` — это лишний обязательный
+    /// аргумент у каждого вызова.
+    pub(crate) fn shared_variables(&self, sub: &Name) -> Vec<(String, TypeNode)> {
+        let Some(root) = self.map.model_at(None) else {
+            return Vec::new();
+        };
+        let Some(sub_model) = self.map.model_at(Some(sub.unique().to_string())) else {
+            return Vec::new();
+        };
+        let usage = crate::semantic::unused::compute_usage(Rc::clone(&sub_model));
+        let own: Vec<String> = sub_model.borrow().variables.keys().cloned().collect();
+        let root_ref = root.borrow();
+
+        let mut shared: Vec<(String, TypeNode)> = Vec::new();
+        let mut names: Vec<&String> = root_ref.variables.keys().collect();
+        names.sort();
+        for name in names {
+            // Константы не разделяются: они неизменны и объявляются в каждом FB
+            // своей секцией `VAR CONSTANT`.
+            let (VariableNode::Simple { ty, .. } | VariableNode::Port { ty, .. }) =
+                &root_ref.variables[name]
+            else {
+                continue;
+            };
+            let used = usage.variables.contains(name) || usage.ports.contains(name);
+            if used && !own.contains(name) {
+                shared.push((name.clone(), ty.clone()));
+            }
+        }
+        shared
     }
 
     /// Возвращает корневую модель (только для чтения).

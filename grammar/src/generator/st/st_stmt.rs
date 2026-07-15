@@ -26,11 +26,6 @@
 //! есть прямого соответствия нет: си-образный `for` разворачивается в `WHILE` с
 //! шагом в конце тела.
 
-// Печатник операторов ещё никто не вызывает: его потребитель — `st_model.rs`
-// (задача 0041-03), который пишется следующим. Разрешение снимается вместе с
-// появлением вызывающего — та же причина и тот же приём, что в `st_expr.rs`.
-#![allow(dead_code)]
-
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::st::st_expr::print_expression;

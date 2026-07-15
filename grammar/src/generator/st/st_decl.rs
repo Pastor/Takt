@@ -102,6 +102,26 @@ pub(crate) fn emit_struct_types(
     Ok(true)
 }
 
+/// Дополнения к объявлениям, известные только вызывающему.
+///
+/// Секции `VAR` печатаются один раз, поэтому всё, что рождается при печати тела
+/// (поднятые объявления, экземпляры под-FB) и всё, что синтезирует генератор
+/// (`state`, `is_done`, `VAR_IN_OUT`), приходит сюда, а не печатается отдельно:
+/// вторая секция `VAR` в одном POU недопустима.
+#[derive(Default)]
+pub(crate) struct Extras {
+    /// Эмитить `state : USINT := 0;` — переменную автомата.
+    pub state_var: bool,
+    /// Эмитить `is_done : BOOL;` в `VAR_OUTPUT` — признак завершения (S11).
+    pub is_done: bool,
+    /// Переменные корня, разделяемые через `VAR_IN_OUT` (О1-в).
+    pub shared: Vec<(String, TypeNode)>,
+    /// Экземпляры под-FB: `(имя, тип)`.
+    pub instances: Vec<(String, String)>,
+    /// Объявления, поднятые из тела (`st_stmt`).
+    pub hoisted: Vec<(String, TypeNode)>,
+}
+
 /// Печатает все секции объявлений одного `FUNCTION_BLOCK`.
 ///
 /// Возвращает `true`, если напечатана хотя бы одна секция. Это не косметика:
@@ -125,12 +145,55 @@ pub(crate) fn emit_declarations(
     p: &mut Printer,
     model: &ModelNode,
     usage: &UsageSet,
+    extras: &Extras,
 ) -> Result<bool, Diagnostic> {
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
     let mut in_outs = Vec::new();
     let mut locals = Vec::new();
     let mut constants = enum_constants(model)?;
+
+    // Признак завершения — выход FB: по нему родитель узнаёт об окончании (S11).
+    if extras.is_done {
+        outputs.push(Declaration {
+            name: "is_done".to_string(),
+            ty: "BOOL".to_string(),
+            init: None,
+        });
+    }
+    // Переменная автомата. Ноль — это `INIT`: холодный старт ПЛК обнуляет `VAR`,
+    // поэтому отдельная инициализация не нужна (S3).
+    if extras.state_var {
+        locals.push(Declaration {
+            name: "state".to_string(),
+            ty: "USINT".to_string(),
+            init: Some("0".to_string()),
+        });
+    }
+    for (name, ty) in &extras.shared {
+        in_outs.push(Declaration {
+            name: name.clone(),
+            ty: get_st_type(ty, model)?,
+            init: None,
+        });
+    }
+    for (name, fb_type) in &extras.instances {
+        locals.push(Declaration {
+            name: name.clone(),
+            ty: fb_type.clone(),
+            init: None,
+        });
+    }
+    for (name, ty) in &extras.hoisted {
+        if locals.iter().any(|d| &d.name == name) {
+            continue;
+        }
+        locals.push(Declaration {
+            name: name.clone(),
+            ty: get_st_type(ty, model)?,
+            init: None,
+        });
+    }
 
     let mut names: Vec<&String> = model.variables.keys().collect();
     names.sort();
@@ -139,6 +202,12 @@ pub(crate) fn emit_declarations(
             VariableNode::Unresolved => {}
             VariableNode::Simple { name, ty, expr, .. } => {
                 if !usage.variables.contains(name) {
+                    continue;
+                }
+                // Разделяемая переменная уже объявлена в `VAR_IN_OUT`: повторное
+                // объявление в `VAR` сделало бы у под-FB ДВЕ разных переменных с
+                // одним именем — то есть тихо разорвало бы связь с корнем.
+                if extras.shared.iter().any(|(n, _)| n == name) {
                     continue;
                 }
                 locals.push(declaration(name, ty, expr, model)?);
@@ -150,6 +219,9 @@ pub(crate) fn emit_declarations(
                 ..
             } => {
                 if !usage.ports.contains(name) {
+                    continue;
+                }
+                if extras.shared.iter().any(|(n, _)| n == name) {
                     continue;
                 }
                 // Адрес порта (`AT %IX…`) здесь не эмитится: цель `st` его не
@@ -278,7 +350,8 @@ mod tests {
         let model = rc.borrow();
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
-        emit_declarations(&mut p, &model, &usage).expect("объявления должны печататься");
+        emit_declarations(&mut p, &model, &usage, &Extras::default())
+            .expect("объявления должны печататься");
         out
     }
 
@@ -418,7 +491,7 @@ mod tests {
         let model = rc.borrow();
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
-        let printed = emit_declarations(&mut p, &model, &usage).unwrap();
+        let printed = emit_declarations(&mut p, &model, &usage, &Extras::default()).unwrap();
         assert!(!printed, "модель без переменных не имеет секций");
         assert!(
             out.is_empty(),
@@ -450,7 +523,8 @@ mod tests {
         let model = rc.borrow();
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
-        let err = emit_declarations(&mut p, &model, &usage).expect_err("ожидалась диагностика");
+        let err = emit_declarations(&mut p, &model, &usage, &Extras::default())
+            .expect_err("ожидалась диагностика");
         assert_eq!(err.code.as_deref(), Some("ST-002"));
     }
 }

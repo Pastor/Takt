@@ -33,17 +33,13 @@
 //! - Перечислимых типов состояний нет (проба П4), поэтому номера состояний —
 //!   числовые литералы, а не имена; читаемость держится на комментариях.
 
-// Печатник автомата подключит часть 2 (композиция + шапка POU): пока его никто
-// не вызывает. Разрешение снимается вместе с появлением вызывающего — та же
-// причина и тот же приём, что в `st_expr.rs`/`st_stmt.rs`/`st_func.rs`.
-#![allow(dead_code)]
-
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::st::st_expr::print_condition;
+use crate::generator::st::st_map::StMap;
 use crate::generator::st::st_stmt::{StmtOutput, print_statement};
-use crate::semantic::minimap::{Element, Name};
-use crate::semantic::{ModelNode, NamedCodeBlockDefinitionNode, StateNode};
+use crate::semantic::minimap::{Element, Name, StateExtend};
+use crate::semantic::{ConditionNode, ModelNode, NamedCodeBlockDefinitionNode, StateNode};
 use std::collections::HashMap;
 
 /// Номер синтетического состояния `INIT`.
@@ -51,6 +47,28 @@ use std::collections::HashMap;
 /// Ноль не случаен: холодный старт ПЛК обнуляет `VAR`, поэтому автомат сам
 /// оказывается в `INIT` без отдельного вызова инициализации (S3).
 const INIT_STATE: usize = 0;
+
+/// Экземпляр под-`FUNCTION_BLOCK` внутри родительского FB.
+///
+/// Аналог поля `StackerCommandReceiver command_receiver0;` в структуре цели `c`
+/// (Ф6). Числовой суффикс обязателен: одна и та же модель может входить в
+/// композицию **несколько раз** (`elevator.lam:198` включает `Engine` пять раз).
+#[derive(Debug)]
+pub(crate) struct Instance {
+    /// Имя переменной-экземпляра.
+    pub name: String,
+    /// Имя типа — `FUNCTION_BLOCK` под-модели.
+    pub fb_type: String,
+}
+
+/// Результат печати тела: побочные эффекты операторов плюс экземпляры под-FB.
+#[derive(Default, Debug)]
+pub(crate) struct BodyOutput {
+    /// Поднятые объявления и предупреждения печатника операторов.
+    pub stmt: StmtOutput,
+    /// Экземпляры под-FB, которые вызывающий обязан объявить в `VAR`.
+    pub instances: Vec<Instance>,
+}
 
 /// Таблица номеров состояний модели: `INIT` = 0, состояния, `END` последним.
 pub(crate) struct StateTable {
@@ -101,10 +119,11 @@ impl StateTable {
 /// - Диагностики печатников выражений и операторов.
 pub(crate) fn emit_body(
     p: &mut Printer,
+    map: &StMap,
     element: &Element,
     model: &ModelNode,
     table: &StateTable,
-) -> Result<StmtOutput, Diagnostic> {
+) -> Result<BodyOutput, Diagnostic> {
     let Element::Model { start, .. } = element else {
         return Err(Diagnostic::error(
             Location::Codegen,
@@ -112,7 +131,7 @@ pub(crate) fn emit_body(
         )
         .with_code("ST-012"));
     };
-    let mut out = StmtOutput::default();
+    let mut out = BodyOutput::default();
 
     p.ident("CASE state OF").nl();
     p.up();
@@ -128,7 +147,7 @@ pub(crate) fn emit_body(
     p.ident(&format!("{}: (* INIT *)", INIT_STATE)).nl();
     p.up();
     let start_state = raw_state(model, start)?;
-    emit_block(p, &start_state, "enter", model, &mut out)?;
+    emit_block(p, &start_state, "enter", model, &mut out.stmt)?;
     p.ident(&format!("state := {}; (* {} *)", start_no, start.local()))
         .nl();
     p.down();
@@ -140,7 +159,7 @@ pub(crate) fn emit_body(
         let state = raw_state(model, name)?;
         p.ident(&format!("{}: (* {} *)", number, name.local())).nl();
         p.up();
-        emit_state(p, &state, model, table, &mut out)?;
+        emit_state(p, map, name, &state, model, table, &mut out)?;
         p.down();
     }
 
@@ -162,31 +181,22 @@ pub(crate) fn emit_body(
 /// Печатает содержимое ветви одного состояния.
 fn emit_state(
     p: &mut Printer,
+    map: &StMap,
+    name: &Name,
     state: &StateNode,
     model: &ModelNode,
     table: &StateTable,
-    out: &mut StmtOutput,
+    out: &mut BodyOutput,
 ) -> Result<(), Diagnostic> {
-    // Состояние с реализацией (`state X = Model`, `= M1 | M2`) — композиция:
-    // предмет части 2. Отказ обязателен и не косметичен: без него ветвь
-    // напечаталась бы БЕЗ вызова под-модели, то есть автомат молча потерял бы
-    // всю вложенную логику — тихое расхождение, худший класс дефекта (0025).
-    if let StateNode::Implement { name, .. } = state {
-        return Err(Diagnostic::error(
-            Location::Codegen,
-            format!(
-                "Состояние '{}' реализовано композицией моделей: её трансляция — \
-                 часть 2 задачи 0041-03 (экземпляры под-FB, VAR_IN_OUT, конъюнкция \
-                 is_done). Напечатать ветвь без вызова под-модели значило бы молча \
-                 потерять её логику",
-                name
-            ),
-        )
-        .with_code("ST-011"));
-    }
-
     // `always` — первым в ветви, до проверок переходов (S8, Ф5).
-    emit_block(p, state, "always", model, out)?;
+    emit_block(p, state, "always", model, &mut out.stmt)?;
+
+    // Состояние с реализацией (`= Модель`, `= M1 | M2`) — композиция.
+    if let Some(Element::StateExtend { extend, next, .. }) = map.element_of(name)
+        && !matches!(extend, StateExtend::None)
+    {
+        return emit_composition(p, map, &extend, &next, table, out);
+    }
 
     let references = match state {
         StateNode::Simple { references, .. } | StateNode::Implement { references, .. } => {
@@ -198,7 +208,7 @@ fn emit_state(
     if references.is_empty() {
         // Состояние без исходящих переходов терминально: исполняет `exit` и
         // уходит в `END` — как `case B` в зонде `exit_probe` (Ф8).
-        emit_block(p, state, "exit", model, out)?;
+        emit_block(p, state, "exit", model, &mut out.stmt)?;
         p.ident(&format!("state := {}; (* END *)", table.end)).nl();
         return Ok(());
     }
@@ -213,12 +223,22 @@ fn emit_state(
                 reference.name
             ))
         })?;
-        let guard = print_condition(&reference.cond, model)?;
-        if guard.is_empty() {
-            // Безусловный переход: цепочку прерывать нечем — печатаем как есть.
-            emit_transition(p, state, &reference.name, target, model, out)?;
+        // Безусловный переход (`ref T;` без условия) приходит как
+        // `ConditionNode::None`: проверять нечего — переход печатается как есть,
+        // и цепочка на нём заканчивается.
+        if matches!(reference.cond, ConditionNode::None) {
+            if printed_if {
+                p.ident("ELSE").nl();
+                p.up();
+                emit_transition(p, state, &reference.name, target, model, &mut out.stmt)?;
+                p.down();
+                p.ident("END_IF;").nl();
+            } else {
+                emit_transition(p, state, &reference.name, target, model, &mut out.stmt)?;
+            }
             return Ok(());
         }
+        let guard = print_condition(&reference.cond, model)?;
         p.ident(&format!(
             "{} {} THEN",
             if printed_if { "ELSIF" } else { "IF" },
@@ -226,7 +246,7 @@ fn emit_state(
         ))
         .nl();
         p.up();
-        emit_transition(p, state, &reference.name, target, model, out)?;
+        emit_transition(p, state, &reference.name, target, model, &mut out.stmt)?;
         p.down();
         printed_if = true;
     }
@@ -234,6 +254,92 @@ fn emit_state(
         p.ident("END_IF;").nl();
     }
     Ok(())
+}
+
+/// Печатает ветвь состояния-композиции: вызовы под-FB и завершение по `is_done`.
+///
+/// Форма изоморфна цели `c` (Ф6, `stacker.c:414-439`): под-модели вызываются
+/// **последовательно в одном такте** родителя, в порядке объявления, а
+/// композиция завершается по **конъюнкции** их `is_done`. Настоящей
+/// конкурентности нет — чередование детерминировано, что и нужно скан-циклу ПЛК.
+fn emit_composition(
+    p: &mut Printer,
+    map: &StMap,
+    extend: &StateExtend,
+    next: &Name,
+    table: &StateTable,
+    out: &mut BodyOutput,
+) -> Result<(), Diagnostic> {
+    let mut steps = Vec::new();
+    collect_models(extend, &mut steps)?;
+
+    let mut done_terms = Vec::new();
+    for model_name in steps {
+        // Числовой суффикс — по образцу цели `c` (`command_receiver0`): одна и та
+        // же модель может входить в композицию несколько раз.
+        let index = out.instances.len();
+        let inst = format!("{}{}", model_name.local_lowercase_snakecase(), index);
+        out.instances.push(Instance {
+            name: inst.clone(),
+            fb_type: model_name.unique_camelcase(),
+        });
+        // Переменные корня под-FB видит через `VAR_IN_OUT`: в ST указателей нет,
+        // а `main->lift_request` цели `c` выразить нечем (О1-в, проба П7).
+        // Список общих имён берётся из ЕДИНОГО источника — того же, по которому
+        // `mod.rs` объявляет `VAR_IN_OUT` у под-FB.
+        let args: Vec<String> = map
+            .shared_variables(&model_name)
+            .into_iter()
+            .map(|(n, _)| format!("{} := {}", n, n))
+            .collect();
+        p.ident(&format!("{}({});", inst, args.join(", "))).nl();
+        done_terms.push(format!("{}.is_done", inst));
+    }
+
+    let target = if next.unique().is_empty() {
+        table.end
+    } else {
+        table.number_of_local(next.local()).unwrap_or(table.end)
+    };
+    p.ident(&format!("IF {} THEN", done_terms.join(" AND ")))
+        .nl();
+    p.up();
+    p.ident(&format!("state := {}; (* {} *)", target, next.local()))
+        .nl();
+    p.down();
+    p.ident("END_IF;").nl();
+    Ok(())
+}
+
+/// Собирает модели композиции в порядке объявления.
+///
+/// # Ошибки
+/// `ST-011` — `Concatenation` (`M1 + M2`): последовательная композиция требует
+/// собственного счётчика шагов (в цели `c` — вложенный `enum state`) и
+/// реализуется частью 3.
+fn collect_models(extend: &StateExtend, out: &mut Vec<Name>) -> Result<(), Diagnostic> {
+    match extend {
+        StateExtend::None => Ok(()),
+        StateExtend::Model(name) => {
+            out.push(name.clone());
+            Ok(())
+        }
+        StateExtend::Parallel(steps) => {
+            for step in steps {
+                collect_models(step, out)?;
+            }
+            Ok(())
+        }
+        StateExtend::Concatenation(_) => Err(Diagnostic::error(
+            Location::Codegen,
+            "Последовательная композиция (`M1 + M2`) требует собственного счётчика \
+             шагов — в цели `c` это вложенный `enum state`. Её трансляция — часть 3 \
+             задачи 0041-03. Напечатать шаги как параллельные значило бы молча \
+             изменить семантику модели"
+                .to_string(),
+        )
+        .with_code("ST-011")),
+    }
 }
 
 /// Печатает переход: `exit` источника, `enter` цели, смена состояния.
@@ -313,16 +419,14 @@ fn unknown_state(what: &str) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::minimap::Map;
     use crate::semantic::tree::construct_model;
-    use std::rc::Rc;
 
     /// Печатает тело автомата корневой модели исходника.
     fn body_of(src: &str) -> String {
         let (ast, _) = crate::parse(src, 0).unwrap();
         let rc = construct_model(&ast, None, &[]).unwrap();
         rc.borrow_mut().name = Some("Root".to_string());
-        let map = Map::create(Rc::clone(&rc)).unwrap();
+        let map = StMap::new("root", &rc.borrow(), false).unwrap();
         let element = map.model();
         let Element::Model { states, .. } = &element else {
             panic!("корень не модель");
@@ -331,7 +435,7 @@ mod tests {
         let model = rc.borrow();
         let mut text = String::new();
         let mut p = Printer::new(4, &mut text);
-        emit_body(&mut p, &element, &model, &table).expect("тело должно печататься");
+        emit_body(&mut p, &map, &element, &model, &table).expect("тело должно печататься");
         text
     }
 
@@ -452,21 +556,70 @@ mod tests {
         );
     }
 
-    /// Состояние-композиция отвергается, а не печатается без вызова под-модели.
-    ///
-    /// Ключевой сторож части 1: напечатать ветвь `= Controller` без вызова
-    /// под-FB значило бы молча потерять всю вложенную логику. Отказ громкий до
-    /// тех пор, пока часть 2 не научится композиции.
+    /// Одиночная под-модель (`= Controller`) → экземпляр под-FB и вызов.
     #[test]
-    fn test_composed_state_is_refused_not_silently_emitted_without_submodel() {
+    fn test_single_submodel_becomes_instance_call() {
+        let st = body_of("model M { start Q { } }\nvar n: u8 := 0;\nstart Entry = M;");
+        assert!(st.contains("m0("), "нет вызова экземпляра под-FB:\n{st}");
+        assert!(
+            st.contains("IF m0.is_done THEN"),
+            "завершение композиции — по is_done под-FB:\n{st}"
+        );
+    }
+
+    /// Параллельная композиция: вызовы последовательны, завершение — конъюнкция.
+    ///
+    /// Сверка с зондом C (Ф6, `stacker.c:414-439`): под-модели вызываются
+    /// последовательно в ОДНОМ такте родителя, в порядке объявления; завершение —
+    /// конъюнкция `is_done`. Настоящей конкурентности нет.
+    #[test]
+    fn test_parallel_composition_calls_sequentially_and_joins_by_conjunction() {
+        let st = body_of(
+            "model A { start Q { } }\nmodel B { start R { } }\n\
+             var n: u8 := 0;\nstart Main = A | B;",
+        );
+        let a = st.find("a0(").expect("нет вызова A");
+        let b = st.find("b1(").expect("нет вызова B");
+        assert!(
+            a < b,
+            "порядок вызовов обязан совпадать с порядком объявления:\n{st}"
+        );
+        assert!(
+            st.contains("IF a0.is_done AND b1.is_done THEN"),
+            "завершение — конъюнкция is_done:\n{st}"
+        );
+    }
+
+    /// Экземпляры нумеруются: одна модель может входить в композицию несколько раз.
+    ///
+    /// Вход не гипотетический: `elevator.lam:198` включает `Engine` пять раз.
+    #[test]
+    fn test_repeated_model_gets_distinct_instances() {
+        let st = body_of("model A { start Q { } }\nvar n: u8 := 0;\nstart Main = A | A;");
+        assert!(st.contains("a0("), "нет первого экземпляра:\n{st}");
+        assert!(
+            st.contains("a1("),
+            "повторная модель обязана получить свой экземпляр:\n{st}"
+        );
+    }
+
+    /// Последовательная композиция (`M1 + M2`) отвергается, а не печатается как
+    /// параллельная.
+    ///
+    /// Ключевой сторож: `+` требует собственного счётчика шагов (в цели `c` —
+    /// вложенный `enum state`). Напечатать шаги параллельно значило бы молча
+    /// изменить семантику модели — тихое расхождение (класс 0025).
+    #[test]
+    fn test_concatenation_is_refused_not_silently_treated_as_parallel() {
         let (ast, _) = crate::parse(
-            "model M { start Q { } }\nvar n: u8 := 0;\nstart Entry = M;",
+            "model A { start Q { } }\nmodel B { start R { } }\n\
+             var n: u8 := 0;\nstart Main = A + B;",
             0,
         )
         .unwrap();
         let rc = construct_model(&ast, None, &[]).unwrap();
         rc.borrow_mut().name = Some("Root".to_string());
-        let map = Map::create(Rc::clone(&rc)).unwrap();
+        let map = StMap::new("root", &rc.borrow(), false).unwrap();
         let element = map.model();
         let Element::Model { states, .. } = &element else {
             panic!("корень не модель");
@@ -475,8 +628,8 @@ mod tests {
         let model = rc.borrow();
         let mut text = String::new();
         let mut p = Printer::new(4, &mut text);
-        let err = emit_body(&mut p, &element, &model, &table)
-            .expect_err("композиция обязана отвергаться до части 2");
+        let err = emit_body(&mut p, &map, &element, &model, &table)
+            .expect_err("конкатенация обязана отвергаться до части 3");
         assert_eq!(err.code.as_deref(), Some("ST-011"));
     }
 

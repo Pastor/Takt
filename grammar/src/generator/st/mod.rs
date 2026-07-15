@@ -55,7 +55,6 @@ use crate::generator::indent::Printer;
 use crate::semantic::ModelNode;
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
-use crate::semantic::unused::UsageSet;
 use st_map::StMap;
 use std::cell::RefCell;
 use std::fmt::Write as _;
@@ -161,17 +160,29 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     // Объявления структур — общие для файла и печатаются раньше всех блоков:
     // в IEC 61131-3 тип обязан быть известен к моменту использования.
     st_decl::emit_struct_types(&mut p, &blocks)?;
+    // Функции — тоже раньше: опережающие ссылки в ST нестандартны (`iec2c -p`).
+    let warnings = st_func::emit_functions(&mut p, &blocks)?;
 
+    let root_name = map.root_name();
     for (name, model) in &blocks {
-        emit_function_block(
-            &mut p,
-            &name.unique_camelcase(),
-            &model.borrow(),
-            map.usage(),
-        )?;
+        let is_root = name.unique() == root_name.unique();
+        emit_function_block(&mut p, map, name, &model.borrow(), is_root)?;
     }
 
+    report(&warnings);
     Ok(out)
+}
+
+/// Показывает предупреждения генератора (`ST-009`, `ST-010`).
+///
+/// Молчание здесь недопустимо: `ST-009` сообщает, что тело внешней функции
+/// подменено заглушкой, а `ST-010` — что LTL-формула в ПЛК не поедет. И то и
+/// другое пользователь обязан увидеть.
+fn report(warnings: &[Diagnostic]) {
+    for w in warnings {
+        let code = w.code.as_deref().unwrap_or("ST");
+        eprintln!("Предупреждение [{}]: {}", code, w.message);
+    }
 }
 
 /// Строит диагностику `ST-012` — снимок карты не содержит корневой модели.
@@ -185,24 +196,69 @@ fn root_missing(name: Name) -> Diagnostic {
 
 /// Печатает один `FUNCTION_BLOCK`: заголовок, секции объявлений, тело.
 ///
-/// Тело (`CASE state OF`) — задача 0041-03; сейчас на его месте комментарий.
-/// Из-за этого `iec2c` блок пока отвергает: IEC 61131-3 требует тела, и
-/// комментарий за него не считается (см. заметку в шапке модуля).
+/// **Тело печатается дважды.** Сначала «вхолостую», в отдельный буфер: только
+/// напечатав его, генератор узнаёт, что нужно объявить — поднятые из тела
+/// переменные (`st_stmt`) и экземпляры под-FB (`st_model`). А объявления в POU
+/// обязаны стоять **до** тела, и второй секции `VAR` быть не может. Поэтому
+/// сперва буфер, затем шапка, затем готовый текст тела.
 fn emit_function_block(
     p: &mut Printer,
-    name: &str,
+    map: &StMap,
+    name: &Name,
     model: &ModelNode,
-    usage: &UsageSet,
+    is_root: bool,
 ) -> Result<(), Diagnostic> {
+    let element = if is_root {
+        map.model()
+    } else {
+        map.element_of(name)
+            .ok_or_else(|| root_missing(name.clone()))?
+    };
+    let Element::Model { states, .. } = &element else {
+        return Err(root_missing(name.clone()));
+    };
+    let table = st_model::StateTable::build(states);
+
+    // Переменные корня под-модель видит через `VAR_IN_OUT` (О1-в): указателей,
+    // как `main->` в цели `c`, в переносимом ST нет.
+    let shared = if is_root {
+        Vec::new()
+    } else {
+        map.shared_variables(name)
+    };
+
+    let mut body = String::new();
+    let out = {
+        let mut bp = Printer::new(INDENT, &mut body);
+        bp.up();
+        st_model::emit_body(&mut bp, map, &element, model, &table)?
+    };
+
+    let extras = st_decl::Extras {
+        state_var: true,
+        is_done: true,
+        shared,
+        instances: out
+            .instances
+            .iter()
+            .map(|i| (i.name.clone(), i.fb_type.clone()))
+            .collect(),
+        hoisted: out
+            .stmt
+            .hoisted
+            .iter()
+            .map(|h| (h.name.clone(), h.ty.clone()))
+            .collect(),
+    };
+
     let mut header = String::new();
-    let _ = write!(header, "FUNCTION_BLOCK {}", name);
+    let _ = write!(header, "FUNCTION_BLOCK {}", name.unique_camelcase());
     p.ident(&header).nl();
-    st_decl::emit_declarations(p, model, usage)?;
-    p.up();
-    p.ident("(* Тело: задачи 0041-03…0041-05 (CASE state OF, выражения, адреса). *)")
-        .nl();
-    p.down();
+    st_decl::emit_declarations(p, model, map.usage(), &extras)?;
+    p.print(&body);
     p.ident("END_FUNCTION_BLOCK").nl().nl();
+
+    report(&out.stmt.warnings);
     Ok(())
 }
 
