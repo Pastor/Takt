@@ -66,6 +66,7 @@ pub(crate) fn print_statement(
     model: &ModelNode,
     p: &mut Printer,
     out: &mut StmtOutput,
+    fn_name: Option<&str>,
 ) -> Result<(), Diagnostic> {
     match stmt {
         // Пустой оператор ничего не печатает: в ST лишняя `;` — синтаксическая
@@ -73,11 +74,26 @@ pub(crate) fn print_statement(
         StatementNode::None => Ok(()),
         StatementNode::Block(items) => {
             for item in items {
-                print_statement(item, model, p, out)?;
+                print_statement(item, model, p, out, fn_name)?;
             }
             Ok(())
         }
+        // Голый вызов функции оператором быть НЕ МОЖЕТ: «Function invocation in
+        // ST code is not allowed outside an expression». Lam так вызывает
+        // (`log_temp(temperature);`, `motor_up();`), поэтому результат уходит в
+        // переменную-приёмник, которую вызывающий объявит в шапке POU.
         StatementNode::Expression(expr) => {
+            if let ExpressionNode::Function(def, args) = expr.as_ref() {
+                let call = crate::generator::st::st_func::print_call(def, args, model)?;
+                let ret = crate::generator::st::st_func::return_type_of(&def.borrow());
+                let sink = sink_name(&ret, model)?;
+                out.hoisted.push(Hoisted {
+                    name: sink.clone(),
+                    ty: ret,
+                });
+                p.ident(&format!("{} := {};", sink, call)).nl();
+                return Ok(());
+            }
             let text = print_expression(expr, model)?;
             p.ident(&format!("{};", text)).nl();
             Ok(())
@@ -86,12 +102,12 @@ pub(crate) fn print_statement(
             p.ident(&format!("IF {} THEN", print_expression(cond, model)?))
                 .nl();
             p.up();
-            print_statement(then_, model, p, out)?;
+            print_statement(then_, model, p, out, fn_name)?;
             p.down();
             if let Some(else_) = else_ {
                 p.ident("ELSE").nl();
                 p.up();
-                print_statement(else_, model, p, out)?;
+                print_statement(else_, model, p, out, fn_name)?;
                 p.down();
             }
             p.ident("END_IF;").nl();
@@ -107,7 +123,7 @@ pub(crate) fn print_statement(
             };
             p.ident(&format!("WHILE {} DO", guard)).nl();
             p.up();
-            print_statement(body, model, p, out)?;
+            print_statement(body, model, p, out, fn_name)?;
             p.down();
             p.ident("END_WHILE;").nl();
             Ok(())
@@ -117,7 +133,7 @@ pub(crate) fn print_statement(
             cond,
             step,
             body,
-        } => print_for(init, cond, step, body, model, p, out),
+        } => print_for(init, cond, step, body, model, p, out, fn_name),
         // Объявление: тип уезжает в шапку POU, инициализатор остаётся здесь.
         StatementNode::Variable(name, ty, init) => {
             out.hoisted.push(Hoisted {
@@ -136,10 +152,20 @@ pub(crate) fn print_statement(
             p.ident("RETURN;").nl();
             Ok(())
         }
-        StatementNode::Return(Some(_)) => Err(unsupported(
-            "return со значением вне функции: в ST возврат — присваивание имени \
-             функции, и печатается печатником функций (часть 3 задачи 0041-04)",
-        )),
+        // В ST нет `return <значение>`: результат возвращается присваиванием
+        // ИМЕНИ функции, а `RETURN;` лишь досрочно выходит.
+        StatementNode::Return(Some(value)) => {
+            let name = fn_name.ok_or_else(|| {
+                unsupported(
+                    "return со значением вне функции: присваивать нечему — имя \
+                     функции неизвестно",
+                )
+            })?;
+            let text = print_expression(value, model)?;
+            p.ident(&format!("{} := {};", name, text)).nl();
+            p.ident("RETURN;").nl();
+            Ok(())
+        }
         // В ST выход из цикла — `EXIT`, а не `break`.
         StatementNode::Break => {
             p.ident("EXIT;").nl();
@@ -154,7 +180,7 @@ pub(crate) fn print_statement(
         // выражениями (включая варианты перечислений, которые у нас стали
         // именованными константами, а не литералами). Цепочка сравнений
         // семантически тождественна и заведомо выразима.
-        StatementNode::Match { expr, arms } => print_match(expr, arms, model, p, out),
+        StatementNode::Match { expr, arms } => print_match(expr, arms, model, p, out, fn_name),
         // LTL-формулы в ST не транслируются. Предупреждение, а не тихий пропуск:
         // молчание здесь — ровно класс дефекта фичи 0025 (ср. фича 0035, где
         // формулы теряются молча уже в семантике).
@@ -189,6 +215,7 @@ pub(crate) fn print_statement(
 /// `ST-011`, если тело содержит `continue`: в си-образном `for` шаг выполняется и
 /// после `continue`, а в `WHILE` — нет. Развернуть такой цикл, не изменив
 /// семантику, нельзя, поэтому отказ громкий, а не тихое расхождение.
+#[allow(clippy::ref_option)]
 fn print_for(
     init: &Option<Box<StatementNode>>,
     cond: &Option<Box<ExpressionNode>>,
@@ -197,6 +224,7 @@ fn print_for(
     model: &ModelNode,
     p: &mut Printer,
     out: &mut StmtOutput,
+    fn_name: Option<&str>,
 ) -> Result<(), Diagnostic> {
     if step.is_some() && contains_continue(body) {
         return Err(unsupported(
@@ -205,7 +233,7 @@ fn print_for(
         ));
     }
     if let Some(init) = init {
-        print_statement(init, model, p, out)?;
+        print_statement(init, model, p, out, fn_name)?;
     }
     let guard = match cond {
         Some(c) => print_expression(c, model)?,
@@ -213,7 +241,7 @@ fn print_for(
     };
     p.ident(&format!("WHILE {} DO", guard)).nl();
     p.up();
-    print_statement(body, model, p, out)?;
+    print_statement(body, model, p, out, fn_name)?;
     if let Some(step) = step {
         let text = print_expression(step, model)?;
         p.ident(&format!("{};", text)).nl();
@@ -230,6 +258,7 @@ fn print_match(
     model: &ModelNode,
     p: &mut Printer,
     out: &mut StmtOutput,
+    fn_name: Option<&str>,
 ) -> Result<(), Diagnostic> {
     let subject = print_expression(expr, model)?;
     let mut printed_if = false;
@@ -263,7 +292,7 @@ fn print_match(
         ))
         .nl();
         p.up();
-        print_statement(&arm.body, model, p, out)?;
+        print_statement(&arm.body, model, p, out, fn_name)?;
         p.down();
         printed_if = true;
     }
@@ -273,7 +302,7 @@ fn print_match(
         (true, Some(body)) => {
             p.ident("ELSE").nl();
             p.up();
-            print_statement(body, model, p, out)?;
+            print_statement(body, model, p, out, fn_name)?;
             p.down();
             p.ident("END_IF;").nl();
         }
@@ -281,7 +310,7 @@ fn print_match(
             p.ident("END_IF;").nl();
         }
         // Только `_` → тело исполняется безусловно; `IF` не нужен.
-        (false, Some(body)) => print_statement(body, model, p, out)?,
+        (false, Some(body)) => print_statement(body, model, p, out, fn_name)?,
         (false, None) => {}
     }
     Ok(())
@@ -306,6 +335,15 @@ fn contains_continue(stmt: &StatementNode) -> bool {
         | StatementNode::Break
         | StatementNode::InlineFormula(_) => false,
     }
+}
+
+/// Имя переменной-приёмника для результата вызова-оператора.
+///
+/// Приёмник свой на каждый тип: в ST у переменной один тип, а вызовы в теле
+/// могут возвращать разное.
+fn sink_name(ty: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic> {
+    let st = crate::generator::st::st_type::get_st_type(ty, model)?;
+    Ok(format!("_st_discard_{}", st.to_lowercase()))
 }
 
 /// Строит диагностику `ST-011` — узел без представления в ST.
@@ -338,7 +376,7 @@ mod tests {
         let mut out = StmtOutput::default();
         {
             let mut p = Printer::new(4, &mut text);
-            print_statement(&block, &model, &mut p, &mut out).expect("должно печататься");
+            print_statement(&block, &model, &mut p, &mut out, None).expect("должно печататься");
         }
         (text, out)
     }
@@ -452,7 +490,7 @@ mod tests {
         let mut text = String::new();
         let mut out = StmtOutput::default();
         let mut p = Printer::new(4, &mut text);
-        let err = print_statement(&block, &model, &mut p, &mut out)
+        let err = print_statement(&block, &model, &mut p, &mut out, None)
             .expect_err("continue в for с шагом обязан отвергаться");
         assert_eq!(err.code.as_deref(), Some("ST-011"));
     }
@@ -472,7 +510,7 @@ mod tests {
         let mut out = StmtOutput::default();
         {
             let mut p = Printer::new(4, &mut text);
-            print_statement(&stmt, &model, &mut p, &mut out).unwrap();
+            print_statement(&stmt, &model, &mut p, &mut out, None).unwrap();
         }
         assert_eq!(out.warnings.len(), 1, "формула обязана дать предупреждение");
         assert_eq!(out.warnings[0].code.as_deref(), Some("ST-010"));
@@ -496,6 +534,7 @@ mod tests {
             &model,
             &mut p,
             &mut out,
+            None,
         )
         .unwrap();
         assert!(out.warnings.is_empty(), "пустая формула не теряет ничего");
