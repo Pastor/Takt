@@ -13,12 +13,24 @@
 //!
 //! # Область сверки сужена намеренно
 //!
-//! Только `Integer`/`Enum`/`Bool`. Для `Rational`, `Bit` и `Array` эталон
-//! **непригоден**: генератор C на них дефектен (`Array(size, elem)` →
-//! `uint{size}_t`, где `size` — число элементов; `Bit` → `int`; `Rational` →
-//! `float` против f64 в симуляторе). Сверяться с дефектным эталоном — значит
-//! узаконить его дефекты. Обоснование — в анализе фичи, раздел «Пригодность
-//! эталона C».
+//! Изначально (фича 0025) — только `Integer`/`Enum`/`Bool`: для `Rational`,
+//! `Bit` и `Array` эталон был **непригоден**, потому что генератор C на них сам
+//! был дефектен (`Array(size, elem)` → `uint{size}_t`, где `size` — число
+//! элементов; `Bit` → `int`; `Rational` → `float` против f64 в симуляторе).
+//! Сверяться с дефектным эталоном — значит узаконить его дефекты.
+//!
+//! **Фича 0029 сузила это сужение.** Дефекты эталона исправлены, и сверка
+//! расширена на **`Rational`** (`float` → `double` = f64 симулятора; тесты
+//! `a9_*`). Скалярный `Bit` тоже перестал расходиться (`int` → `uint8_t`).
+//!
+//! **Вне сверки остаются `[bit;N]` и `Array`** — уже не из-за эталона:
+//! - `[bit;N]`: C видит скаляр, симулятор — массив из N значений. Вопрос
+//!   **семантики языка**, а не дефект генератора;
+//! - `Array`: **симулятор** не умеет ни записи в элемент (`SIM-017`), ни чтения
+//!   у скалярно-инициализированного массива (`SIM-010`).
+//!
+//! Оба ограничения зафиксированы тестом `a9_bit_and_array_conformance_gap` —
+//! чтобы они не «проходили молча» и упали, когда препятствие исчезнет.
 //!
 //! # Почему фикстура обёрнута в `model`
 //!
@@ -71,7 +83,11 @@ fn cc_available() -> bool {
 }
 
 fn simulate() -> Unit {
-    let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
+    simulate_fixture(FIXTURE)
+}
+
+fn simulate_fixture(fixture: &str) -> Unit {
+    let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     let (ast, _) = grammar::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
     let mut unit = build_unit(model).expect("построение юнита");
@@ -195,6 +211,206 @@ fn a8_simulator_matches_generated_c() {
              Симуляция обязана совпадать с синтезированным C (критерий A8)"
         );
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T17 (фича 0029): сверка по `Rational`
+//
+// Сужение критерия A8 фичи 0025 («не для Rational/Bit/Array») снято **частично**:
+// по `Rational` сверка теперь возможна, потому что 0029-03 сменила отображение
+// `float` → `double`, и обе стороны считают в IEEE 754 binary64.
+//
+// Про `Bit` и `Array` — см. комментарии к `a9_bit_and_array_conformance_gap`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FLOAT_FIXTURE: &str = "tests/data/eval/conformance_float.lam";
+
+/// Вещественные переменные, сверяемые с C.
+const CHECKED_FLOAT: &[&str] = &[
+    "sum",   // 0.1 + 0.2 — в f32 и f64 РАЗНЫЕ (проверяет точность, а не арифметику)
+    "third", // 1.0 / 3.0 — то же
+    "exact", // 1.5 + 2.25 = 3.75 — точно в обеих разрядностях (контроль)
+];
+
+fn sim_real(unit: &Unit, name: &str) -> f64 {
+    match unit.variable(name) {
+        Some(Value::Real(x)) => x,
+        other => panic!("переменная '{name}': ожидалось Real, получено {other:?}"),
+    }
+}
+
+/// Порождает C для вещественной фикстуры, собирает и возвращает напечатанное.
+///
+/// Печать — `%.17g`: 17 значащих цифр восстанавливают binary64 однозначно.
+/// Меньшая точность скрыла бы ровно то расхождение, ради которого тест написан.
+fn run_generated_float_c(dir: &Path) -> Vec<(String, f64)> {
+    let source = std::fs::read_to_string(FLOAT_FIXTURE).expect("фикстура читается");
+    grammar::compile_to_c(
+        "conformance_float",
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &grammar::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+
+    let prints = CHECKED_FLOAT
+        .iter()
+        .map(|name| format!(r#"    printf("{name}=%.17g\n", m.entry.{name});"#))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "conformance_float.h"
+
+int main(void) {{
+    ConformanceFloat m;
+    ConformanceFloat_init(&m);
+    /* Прогоняем до завершения: первые такты уходят на синтетические INIT. */
+    for (int i = 0; i < {MAX_TICKS}; i++) {{
+        ConformanceFloat_tick(&m);
+        if (ConformanceFloat_is_done(&m)) break;
+    }}
+{prints}
+    return 0;
+}}
+"#
+    );
+    let harness_path = dir.join("harness.c");
+    std::fs::write(&harness_path, harness).expect("запись харнесса");
+
+    let bin = dir.join("conformance_float_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c11", "-I"])
+        .arg(dir)
+        .arg(dir.join("conformance_float.c"))
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "порождённый C не компилируется:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+
+    let run = Command::new(&bin).output().expect("запуск собранного C");
+    assert!(run.status.success(), "собранный C завершился с ошибкой");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|line| {
+            let (name, value) = line.split_once('=')?;
+            Some((name.to_string(), value.trim().parse().ok()?))
+        })
+        .collect()
+}
+
+/// **T17 (0029).** Значения `Rational`: симулятор (f64) = порождённый C (`double`).
+///
+/// Сверка **побитовая** (`==` по f64), а не с допуском: обе стороны обязаны
+/// исполнять одну и ту же арифметику IEEE 754 binary64. Допуск скрыл бы ровно
+/// тот класс расхождения, ради которого тест написан, — разную разрядность.
+#[test]
+fn a9_simulator_matches_generated_c_rational() {
+    if !cc_available() {
+        eprintln!(
+            "[ПРОПУСК] a9_simulator_matches_generated_c_rational: компилятор `cc` не найден — \
+             сверка по Rational не выполнена"
+        );
+        return;
+    }
+
+    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_0029_float");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+
+    let unit = simulate_fixture(FLOAT_FIXTURE);
+    let from_c = run_generated_float_c(&dir);
+    assert_eq!(
+        from_c.len(),
+        CHECKED_FLOAT.len(),
+        "C напечатал не все переменные: {from_c:?}"
+    );
+
+    for (name, c_value) in &from_c {
+        let sim = sim_real(&unit, name);
+        assert_eq!(
+            sim, *c_value,
+            "расхождение по '{name}': симулятор={sim:.17}, порождённый C={c_value:.17}. \
+             Симуляция обязана совпадать с синтезированным C (критерий A9)"
+        );
+    }
+}
+
+/// **T17 (0029).** Значения зафиксированы вручную — страховка от «сверки пустоты».
+///
+/// Значения **захвачены зондом** (прогон `cc` над порождённым C), а не угаданы.
+/// `sum` и `third` — те самые, что отличают f64 от f32: на прежнем отображении
+/// (`float` → `float`) C напечатал бы `0.30000001192092896` и
+/// `0.33333334326744080`, и сверка стала бы красной. Именно поэтому фикстура
+/// построена на них, а не на «круглых» числах.
+#[test]
+fn a9_rational_expected_values_are_pinned() {
+    let unit = simulate_fixture(FLOAT_FIXTURE);
+    assert_eq!(
+        sim_real(&unit, "sum"),
+        0.30000000000000004,
+        "0.1 + 0.2 в binary64"
+    );
+    assert_eq!(
+        sim_real(&unit, "third"),
+        0.3333333333333333,
+        "1.0 / 3.0 в binary64"
+    );
+    assert_eq!(sim_real(&unit, "exact"), 3.75, "1.5 + 2.25 — точно");
+}
+
+/// **T19 (0029).** `Bit` и `Array` из сверки исключены — с указанием причины.
+///
+/// Ограничение обязано быть **явным**, а не «проходить молча»: тест
+/// документирует, почему сверки нет, и падёт, если препятствие исчезнет, —
+/// то есть заставит пересмотреть исключение, а не забыть о нём.
+///
+/// **`Array`.** Сверка недостижима не из-за генератора C (он после 0029-01 даёт
+/// корректный `uint8_t data[4]`), а из-за **симулятора** — проверено пробами:
+///   - `data[0] := 7;` → `SIM-017` «присваивание не в переменную пока не
+///     поддерживается симулятором»: записи в элемент массива нет вовсе;
+///   - `var data: [u8;4] := 0;` кладёт в переменную **скаляр**, после чего
+///     чтение `data[0]` даёт `SIM-010` «переменная 'data' не является массивом».
+/// То есть T18 тест-плана 0029 **неисполним**: сверять нечего, пока симулятор не
+/// умеет массивы. Это дефект симулятора, а не фичи 0029 (её объём — `grammar`).
+///
+/// **`Bit`.** `[bit;N]` C трактует как скаляр `uint{N}_t`, симулятор — как
+/// массив из N значений (`coerce_array`), а корпус инициализирует его скаляром.
+/// Три ответа противоречат друг другу — это вопрос **семантики языка**
+/// (кандидат «Семантика `[bit;N]` расходится втрое» в `FEATURES.md`), и 0029 не
+/// вправе его решать.
+#[test]
+fn a9_bit_and_array_conformance_gap() {
+    // Проба, фиксирующая препятствие: элемент массива симулятору не присвоить.
+    let source = "\
+model Conf {
+    var data: [u8;4];
+    var counter: u8 := 0;
+    start Idle { always { data[0] := 7; counter := 1; } }
+}
+start Entry = Conf;
+";
+    let (ast, _) = grammar::parse(source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let result = unit.tick();
+    let TickResult::Failed(diag) = result else {
+        panic!(
+            "ОЖИДАЛСЯ отказ симулятора на записи в элемент массива, получено {result:?}. \
+             Если симулятор научился массивам — препятствие для T18 снято: \
+             расширить сверку на [u8;4] и убрать это исключение"
+        );
+    };
+    assert!(
+        diag.contains("SIM-017"),
+        "препятствие ожидалось SIM-017 (присваивание не в переменную), получено: {diag}"
+    );
 }
 
 #[test]

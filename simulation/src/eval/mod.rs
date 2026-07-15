@@ -70,8 +70,12 @@ pub(crate) fn coerce_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalE
         TypeNode::Integer { bits, signed } => coerce_integer(value, *bits, *signed),
         // S7: вариант enum — целое; разрядность подбирает генератор C по максимуму.
         TypeNode::Enum(_) => coerce_integer(value, 64, true),
-        // S6: `bit` — один бит. Расходится с генератором C (`Bit` → `int`), но
-        // сверка по `Bit` анализом исключена: эталон C для него дефектен.
+        // S6: `bit` — один бит. Прежде здесь стояло «расходится с генератором C
+        // (`Bit` → `int`)» — с фичей 0029 это неверно: C даёт `uint8_t`, то есть
+        // тоже беззнаковое целое, и расхождения по скалярному `bit` больше нет.
+        // Сверка по `[bit;N]` по-прежнему исключена, но по другой причине: C
+        // видит бит-вектор скаляром, симулятор — массивом из N значений. Это
+        // вопрос семантики языка (кандидат в `FEATURES.md`), а не дефект эталона.
         TypeNode::Bit => Ok(Value::Number(to_integer(&value, ty)? & 1)),
         TypeNode::Bool => match &value {
             Value::Boolean(b) => Ok(Value::Boolean(*b)),
