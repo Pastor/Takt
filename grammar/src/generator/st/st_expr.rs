@@ -135,9 +135,9 @@ pub(crate) fn print_expression(
         ExpressionNode::ArraySlice(_, _, _) => Err(unsupported(
             "срез массива: в IEC 61131-3 нет операции среза",
         )),
-        ExpressionNode::Function(_, _) => Err(unsupported(
-            "вызов функции: печать функций — часть 2 задачи 0041-04",
-        )),
+        // Вызов функции печатает `st_func` (часть 3): у беспараметрических
+        // функций есть синтетический параметр, и аргумент к нему добавляется там.
+        ExpressionNode::Function(def, args) => super::st_func::print_call(def, args, model),
         ExpressionNode::CodeBlock(_, _) => {
             Err(unsupported("блок кода как выражение не выразим в ST"))
         }
