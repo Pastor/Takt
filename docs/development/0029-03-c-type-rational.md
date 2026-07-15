@@ -2,9 +2,8 @@
 
 > Фича: [../features/0029-c-type-mapping.md](../features/0029-c-type-mapping.md) · ADR: [../adr/0029-c-type-mapping.md](../adr/0029-c-type-mapping.md) · анализ: [../analyze/0029-c-type-mapping.md](../analyze/0029-c-type-mapping.md)
 
-> **Статус: планируется (разработка не начата).** Разделы «Что сделано» и
-> «Проверки» — **план**, а не отчёт. Задача **заблокирована** фичей
-> [0026](../features/0026-c-root-typedef.md).
+> **Статус: ВЫПОЛНЕНА** (`float` → `double` — `fbd4264`; опция
+> `--float-width=32|64` — `d9c4fe0`). Блокировка фичей 0026 снята её закрытием.
 
 ## Что было
 

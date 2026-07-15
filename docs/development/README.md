@@ -53,6 +53,7 @@
 | 0029-02 | 0029 | Отображение `Bit` → `uint8_t` и согласование ширины `c-hal` | [0029-02-c-type-bit.md](0029-02-c-type-bit.md) |
 | 0029-03 | 0029 | Отображение `Rational` → `double` и опция `--float-width` | [0029-03-c-type-rational.md](0029-03-c-type-rational.md) |
 | 0029-04 | 0029 | Расширение сверки с симулятором и примеры в документации | [0029-04-conformance-docs.md](0029-04-conformance-docs.md) |
+| 0029-05 | 0029 | Инициализация массива в `_init` (заведена по ходу разработки) | [0029-05-array-initializer.md](0029-05-array-initializer.md) |
 | 0030-01 | 0030 | Починка модели comprehensive.lam + приёмочный тест сценария | [0030-01-comprehensive-example-fix.md](0030-01-comprehensive-example-fix.md) |
 | 0030-02 | 0030 | Корпусной гейт достижимости заявленных сценариев для examples/ | [0030-02-examples-scenario-gate.md](0030-02-examples-scenario-gate.md) |
 | 0031-01 | 0031 | Семантика — разрешение вызовов функций из тел функций | [0031-01-fn-calls-fn.md](0031-01-fn-calls-fn.md) |
