@@ -1,0 +1,304 @@
+//! Размещение портов по карте адресов: `AT %…` для цели `st-at` (задача 0041-05).
+//!
+//! ## Цели асимметричны — и это не косметика
+//!
+//! - `st` — **библиотека блоков**: порты суть `VAR_INPUT`/`VAR_OUTPUT` у
+//!   `FUNCTION_BLOCK`, адрес не эмитится, вывод от `--address-map` не зависит.
+//! - `st-at` — **программа для ПЛК целиком**: порты становятся размещёнными
+//!   глобальными переменными (`VAR_GLOBAL … AT %IX256.0`), а блоки видят их через
+//!   `VAR_EXTERNAL`.
+//!
+//! Асимметрия навязана фактом, а не вкусом: **`VAR_GLOBAL` вне `CONFIGURATION`
+//! недопустим** (проба П8: `error: unknown syntax error`), поэтому `st-at`
+//! **обязана** эмитить полную обёртку `CONFIGURATION`/`RESOURCE`/`TASK`/`PROGRAM`,
+//! тогда как `st` обходится голыми блоками (П2).
+//!
+//! ## Правила локации
+//!
+//! | Что | Откуда | Значение |
+//! |---|---|---|
+//! | Класс | `direction` порта | `In`→`%I`, `Out`→`%Q`, `InOut`→`%M` |
+//! | Размер | **`TypeNode`**, а не C-тип | `BOOL`→`X`, 8→`B`, 16→`W`, 32→`D`, 64→`L`, `LREAL`→`L` |
+//! | Номер | `ResolvedAddress::addr` | **десятичный**: `0x` стандарт не допускает |
+//! | Бит | `ResolvedAddress::bit` | только для `BOOL`: `%IX256.0` |
+//!
+//! `InOut`→`%M` — соглашение: «двунаправленной» локации в IEC нет, `%M` (память)
+//! ближе всего по смыслу. В корпусе `InOut`-портов нет, поэтому правило остаётся
+//! непроверенным на реальных данных (T36 — синтетическая фикстура).
+
+use crate::address_map::{AddressSource, ResolvedAddress};
+use crate::diagnostics::{Diagnostic, Location};
+use crate::semantic::PortDirection;
+use crate::semantic::type_node::TypeNode;
+
+/// Строит текст локации (`%IX256.0`) и комментарий-пояснение к порту.
+///
+/// Возвращает `(локация, комментарий, предупреждения)`.
+///
+/// # Ошибки
+/// `ST-004` — тип порта не имеет локации (`Array`/`Enum`/`Struct`) либо адрес
+/// отрицателен.
+pub(crate) fn location_of(
+    name: &str,
+    ty: &TypeNode,
+    direction: PortDirection,
+    resolved: &ResolvedAddress,
+) -> Result<(String, String, Vec<Diagnostic>), Diagnostic> {
+    let mut warnings = Vec::new();
+
+    if resolved.addr < 0 {
+        return Err(no_location(&format!(
+            "порт '{}' имеет отрицательный адрес {}: номер локации IEC 61131-3 \
+             неотрицателен",
+            name, resolved.addr
+        )));
+    }
+
+    let class = match direction {
+        PortDirection::In => "I",
+        PortDirection::Out => "Q",
+        // «Двунаправленной» локации в IEC нет; `%M` (память) — ближайший смысл.
+        PortDirection::InOut => "M",
+    };
+
+    let is_bool = matches!(ty, TypeNode::Bit | TypeNode::Bool);
+    let size = size_of(ty).ok_or_else(|| {
+        no_location(&format!(
+            "порт '{}' типа '{}' не имеет локации: размещаются только скаляры \
+             (BOOL, целые, LREAL), а не массивы, перечисления и структуры",
+            name, ty
+        ))
+    })?;
+
+    let location = if is_bool {
+        // Бит обязателен для `%IX`: без него адресуется не тот объект.
+        let bit = match resolved.bit {
+            Some(b) if b >= 0 => b,
+            Some(b) => {
+                return Err(no_location(&format!(
+                    "порт '{}': отрицательный номер бита {}",
+                    name, b
+                )));
+            }
+            None => {
+                warnings.push(
+                    Diagnostic::warning(
+                        Location::Codegen,
+                        format!(
+                            "Порт '{}' — BOOL, но бит в адресе не задан: принят бит 0 \
+                             (%{}X{}.0). Если подразумевался другой бит, укажите его \
+                             явно",
+                            name, class, resolved.addr
+                        ),
+                    )
+                    .with_code("ST-005"),
+                );
+                0
+            }
+        };
+        format!("%{}X{}.{}", class, resolved.addr, bit)
+    } else {
+        // У не-BOOL локации бита нет: игнорировать молча нельзя — в исходнике он
+        // написан, и автор вправе думать, что он что-то значит.
+        if resolved.bit.is_some() {
+            warnings.push(
+                Diagnostic::warning(
+                    Location::Codegen,
+                    format!(
+                        "Порт '{}' не булев, а в адресе задан бит: у локации %{}{} \
+                         бита нет — он ПРОИГНОРИРОВАН",
+                        name, class, size
+                    ),
+                )
+                .with_code("ST-006"),
+            );
+        }
+        format!("%{}{}{}", class, size, resolved.addr)
+    };
+
+    // Комментарий обязателен: делает интерпретацию (`0x100` → `256`) проверяемой
+    // глазами и облегчает наладку на стенде.
+    let comment = format!(
+        "(* 0x{:X}{}, источник: {} *)",
+        resolved.addr,
+        resolved.bit.map(|b| format!(":{}", b)).unwrap_or_default(),
+        source_name(resolved.source)
+    );
+    Ok((location, comment, warnings))
+}
+
+/// Буква размера локации по типу Lam.
+///
+/// Размер берётся из `TypeNode`, а **не** из C-типа: цель `c` для `bit` печатает
+/// `int` (дефект Д2 фичи 0029), и наследовать эту ошибку в адресацию нельзя —
+/// `%IX` и `%ID` указывают на разные ячейки.
+fn size_of(ty: &TypeNode) -> Option<&'static str> {
+    Some(match ty {
+        TypeNode::Bit | TypeNode::Bool => "X",
+        TypeNode::Integer { bits: 8, .. } => "B",
+        TypeNode::Integer { bits: 16, .. } => "W",
+        TypeNode::Integer { bits: 32, .. } => "D",
+        TypeNode::Integer { bits: 64, .. } => "L",
+        // `LREAL` — 64 бита (0041-02, T11).
+        TypeNode::Rational => "L",
+        _ => return None,
+    })
+}
+
+/// Человекочитаемое имя источника адреса (для комментария).
+fn source_name(source: AddressSource) -> &'static str {
+    match source {
+        AddressSource::Inline => "inline",
+        AddressSource::Operator => "оператор address",
+        AddressSource::External => "внешняя карта",
+    }
+}
+
+/// Строит диагностику `ST-004` — порт без выразимой локации.
+fn no_location(what: &str) -> Diagnostic {
+    Diagnostic::error(Location::Codegen, format!("Размещение порта: {}", what)).with_code("ST-004")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn resolved(addr: i64, bit: Option<i64>) -> ResolvedAddress {
+        ResolvedAddress {
+            addr,
+            bit,
+            source: AddressSource::Inline,
+        }
+    }
+
+    /// Входной `bit` → `%IX<адрес>.<бит>`.
+    ///
+    /// Сверка с ручным прогоном правил (план 0041-05):
+    /// `in task_valid: bit := 0x100:0;` → `task_valid AT %IX256.0 : BOOL;`.
+    #[test]
+    fn test_input_bit_becomes_ix_with_bit() {
+        let (loc, _, w) = location_of(
+            "task_valid",
+            &TypeNode::Bit,
+            PortDirection::In,
+            &resolved(256, Some(0)),
+        )
+        .unwrap();
+        assert_eq!(loc, "%IX256.0");
+        assert!(w.is_empty(), "предупреждений быть не должно");
+    }
+
+    /// Выходной `bit` → `%QX…`: класс берётся из направления порта.
+    #[test]
+    fn test_output_bit_becomes_qx() {
+        let (loc, _, _) = location_of(
+            "cmd_fork",
+            &TypeNode::Bit,
+            PortDirection::Out,
+            &resolved(1280, Some(0)),
+        )
+        .unwrap();
+        assert_eq!(loc, "%QX1280.0");
+    }
+
+    /// Адрес печатается десятичным: `0x` стандарт не допускает.
+    #[test]
+    fn test_address_is_decimal_not_hex() {
+        let (loc, comment, _) = location_of(
+            "p",
+            &TypeNode::Bit,
+            PortDirection::In,
+            &resolved(256, Some(0)),
+        )
+        .unwrap();
+        assert!(loc.contains("256"), "адрес обязан быть десятичным: {loc}");
+        assert!(!loc.contains("0x"), "0x в локации недопустим: {loc}");
+        // Но в комментарии исходная запись сохраняется — для наладки.
+        assert!(
+            comment.contains("0x100"),
+            "нет исходного адреса в комментарии: {comment}"
+        );
+    }
+
+    /// Размер — из `TypeNode`: `u8` → `B`, `u16` → `W`, `u32` → `D`, `u64` → `L`.
+    #[test]
+    fn test_size_letter_comes_from_lam_type() {
+        let cases = [(8u8, "B"), (16, "W"), (32, "D"), (64, "L")];
+        for (bits, letter) in cases {
+            let ty = TypeNode::Integer {
+                bits,
+                signed: false,
+            };
+            let (loc, _, _) =
+                location_of("p", &ty, PortDirection::In, &resolved(512, None)).unwrap();
+            assert_eq!(loc, format!("%I{}512", letter), "разрядность {bits}");
+        }
+    }
+
+    /// Не-`BOOL` порт с битом: бит игнорируется, но **громко** — `ST-006`.
+    ///
+    /// Вход не гипотетический: `stacker.lam` систематически пишет `:0` даже для
+    /// `u8`-портов (`in pos_stack: u8 := 0x200:0;`).
+    #[test]
+    fn test_non_bool_port_with_bit_warns_st006_and_ignores_bit() {
+        let ty = TypeNode::Integer {
+            bits: 8,
+            signed: false,
+        };
+        let (loc, _, w) =
+            location_of("pos_stack", &ty, PortDirection::In, &resolved(512, Some(0))).unwrap();
+        assert_eq!(loc, "%IB512", "у байтовой локации бита нет");
+        assert_eq!(w.len(), 1, "игнорирование бита обязано быть громким");
+        assert_eq!(w[0].code.as_deref(), Some("ST-006"));
+    }
+
+    /// `BOOL`-порт без бита: принимается `.0`, но с предупреждением `ST-005`.
+    #[test]
+    fn test_bool_port_without_bit_warns_st005_and_assumes_zero() {
+        let (loc, _, w) = location_of(
+            "p",
+            &TypeNode::Bool,
+            PortDirection::In,
+            &resolved(256, None),
+        )
+        .unwrap();
+        assert_eq!(loc, "%IX256.0");
+        assert_eq!(w.len(), 1);
+        assert_eq!(w[0].code.as_deref(), Some("ST-005"));
+    }
+
+    /// `InOut` → `%M`: «двунаправленной» локации в IEC нет.
+    #[test]
+    fn test_inout_port_uses_memory_class() {
+        let (loc, _, _) = location_of(
+            "p",
+            &TypeNode::Bit,
+            PortDirection::InOut,
+            &resolved(16, Some(1)),
+        )
+        .unwrap();
+        assert_eq!(loc, "%MX16.1");
+    }
+
+    /// Составной тип локации не имеет → `ST-004`, а не выдумка.
+    #[test]
+    fn test_composite_port_has_no_location_st004() {
+        let ty = TypeNode::Array(4, Box::new(TypeNode::Bit));
+        let err = location_of("arr", &ty, PortDirection::In, &resolved(768, None))
+            .expect_err("массив не размещается");
+        assert_eq!(err.code.as_deref(), Some("ST-004"));
+    }
+
+    /// Отрицательный адрес → `ST-004`: номер локации IEC неотрицателен.
+    #[test]
+    fn test_negative_address_is_st004() {
+        let err = location_of(
+            "p",
+            &TypeNode::Bit,
+            PortDirection::In,
+            &resolved(-1, Some(0)),
+        )
+        .expect_err("отрицательный адрес обязан отвергаться");
+        assert_eq!(err.code.as_deref(), Some("ST-004"));
+    }
+}
