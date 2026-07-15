@@ -4,8 +4,8 @@
 #include <stdbool.h>
 
 /* Forward declarations */
-typedef struct StackerCommandReceiver StackerCommandReceiver;
 typedef struct StackerLiftController StackerLiftController;
+typedef struct StackerCommandReceiver StackerCommandReceiver;
 typedef struct StackerMovementController StackerMovementController;
 typedef struct Stacker Stacker;
 
@@ -38,29 +38,29 @@ typedef enum {
     STACKER_CMD_TARGET_STACK = 2,
 } Stacker_Out_NumericPort;
 
-// NOTICE: Определение констант для модели CommandReceiver (Stacker:CommandReceiver)
-/* Model CommandReceiver (Stacker:CommandReceiver) */
-struct StackerCommandReceiver {
-    // NOTICE: Определение переменных модели
-    enum {
-        STACKER_COMMAND_RECEIVER_INIT,
-        STACKER_COMMAND_RECEIVER_WAITING_FOR_TASK,
-        STACKER_COMMAND_RECEIVER_TASK_ACTIVE,
-        STACKER_COMMAND_RECEIVER_ACCEPTING_TASK,
-        STACKER_COMMAND_RECEIVER_END
-    } state;
-};
-
 // NOTICE: Определение констант для модели LiftController (Stacker:LiftController)
 /* Model LiftController (Stacker:LiftController) */
 struct StackerLiftController {
     // NOTICE: Определение переменных модели
     enum {
         STACKER_LIFT_CONTROLLER_INIT,
-        STACKER_LIFT_CONTROLLER_LIFT_IDLE,
         STACKER_LIFT_CONTROLLER_LIFT_DONE,
         STACKER_LIFT_CONTROLLER_LIFT_OPERATING,
+        STACKER_LIFT_CONTROLLER_LIFT_IDLE,
         STACKER_LIFT_CONTROLLER_END
+    } state;
+};
+
+// NOTICE: Определение констант для модели CommandReceiver (Stacker:CommandReceiver)
+/* Model CommandReceiver (Stacker:CommandReceiver) */
+struct StackerCommandReceiver {
+    // NOTICE: Определение переменных модели
+    enum {
+        STACKER_COMMAND_RECEIVER_INIT,
+        STACKER_COMMAND_RECEIVER_ACCEPTING_TASK,
+        STACKER_COMMAND_RECEIVER_WAITING_FOR_TASK,
+        STACKER_COMMAND_RECEIVER_TASK_ACTIVE,
+        STACKER_COMMAND_RECEIVER_END
     } state;
 };
 
@@ -70,18 +70,18 @@ struct StackerMovementController {
     // NOTICE: Определение переменных модели
     enum {
         STACKER_MOVEMENT_CONTROLLER_INIT,
-        STACKER_MOVEMENT_CONTROLLER_TASK_COMPLETING,
-        STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE,
-        STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_PICKUP,
-        STACKER_MOVEMENT_CONTROLLER_DISPATCH_MOVE,
-        STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_DROPOFF,
-        STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP,
-        STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_STORAGE,
         STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_CELL,
-        STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE,
-        STACKER_MOVEMENT_CONTROLLER_MOVING_TO_CELL,
-        STACKER_MOVEMENT_CONTROLLER_MOVING_TO_STORAGE,
         STACKER_MOVEMENT_CONTROLLER_MOVING_TO_DROPOFF,
+        STACKER_MOVEMENT_CONTROLLER_TASK_COMPLETING,
+        STACKER_MOVEMENT_CONTROLLER_MOVING_TO_STORAGE,
+        STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_PICKUP,
+        STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP,
+        STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_DROPOFF,
+        STACKER_MOVEMENT_CONTROLLER_MOVING_TO_CELL,
+        STACKER_MOVEMENT_CONTROLLER_DISPATCH_MOVE,
+        STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_STORAGE,
+        STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE,
+        STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE,
         STACKER_MOVEMENT_CONTROLLER_END
     } state;
 };
@@ -90,15 +90,15 @@ struct StackerMovementController {
 /* Model stacker (Stacker) */
 struct Stacker {
     // NOTICE: Определение переменных модели
-    uint8_t eta;
-    int tgt_type;
-    int busy;
-    uint8_t tgt_row;
     uint8_t tgt_section;
+    uint8_t tgt_row;
     uint8_t tgt_stack;
+    int lift_request;
+    int busy;
+    int tgt_type;
+    uint8_t eta;
     int lift_done;
     int lift_op;
-    int lift_request;
     enum {
         STACKER_INIT,
         STACKER_STACKER,
