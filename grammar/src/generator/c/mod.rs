@@ -149,16 +149,20 @@ impl AsGenerator for Generator {
 
 pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
     match typ {
-        TypeNode::Bit => Some("int".to_string()),
+        // Д2 (фича 0029): было `int` — 32-битный ЗНАКОВЫЙ для однобитной
+        // семантики. `uint8_t` — наименьший адресуемый беззнаковый тип C.
+        TypeNode::Bit => Some("uint8_t".to_string()),
         TypeNode::Bool => Some("bool".to_string()),
-        TypeNode::Rational => Some("float".to_string()),
-        TypeNode::Array(size, typ) => {
-            if let TypeNode::Rational = **typ {
-                Some("float *".to_string())
-            } else {
-                Some(format!("uint{}_t", *size))
-            }
-        }
+        // Д3 (фича 0029): было `float` (f32), тогда как симулятор считает в f64
+        // (`eval::Value::Real`) — расхождение точности между эталоном и моделью.
+        // Умолчание `--float-width=64` подтверждено заказчиком.
+        TypeNode::Rational => Some("double".to_string()),
+        // Д1 (фича 0029): было `uint{size}_t`, где `size` — ЧИСЛО ЭЛЕМЕНТОВ, а не
+        // разрядность: `[u8;4]` давало невалидный `uint4_t`. Тип массива без
+        // имени переменной в C не выражается (`elem name[N]` — объявитель, а не
+        // тип), поэтому здесь остаётся только бит-вектор; настоящий массив
+        // печатает `get_typed_variable`.
+        TypeNode::Array(size, elem) => bit_vector_type(*size, elem),
         TypeNode::Unit => Some("void".to_string()),
         TypeNode::BuiltinString => Some("char *".to_string()),
         TypeNode::Struct(struct_name) => Some(struct_name.to_string()),
@@ -199,26 +203,52 @@ pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
     }
 }
 
+/// Отображает бит-вектор `[bit; N]` в целочисленный тип C.
+///
+/// **Доминирующая идиома корпуса** (45 из 46 вхождений массивов): `[bit;8]`,
+/// `[bit;16]`, `[bit;32]` — так в Lam записывают `u8`/`u16`/`u32`. Для неё число
+/// элементов и есть разрядность, поэтому `uint{N}_t` — верное отображение, и оно
+/// **не меняется** фичей 0029.
+///
+/// Для иной ширины (`[bit;128]`, штатно объявлен в `examples/include/std.lam`)
+/// типа в C нет: `uint128_t` не существует. Возвращается `None` → вызывающий
+/// обязан дать диагностику `CC-014`, а не печатать невалидный тип.
+///
+/// Массив НЕ бит: тип в C выражается только вместе с именем (`elem name[N]`),
+/// поэтому здесь `None` — печатает его [`get_typed_variable`].
+fn bit_vector_type(size: u16, elem: &TypeNode) -> Option<String> {
+    if !matches!(elem, TypeNode::Bit) {
+        return None;
+    }
+    match size {
+        8 | 16 | 32 | 64 => Some(format!("uint{}_t", size)),
+        _ => None,
+    }
+}
+
+/// Печатает объявление переменной: тип вместе с именем.
+///
+/// Отдельная функция от [`get_c_type`] не по стилю, а по устройству C: тип
+/// массива **неотделим** от имени (`uint8_t data[4]`, а не `uint8_t[4] data`),
+/// поэтому объявление массива строится только здесь.
 pub(super) fn get_typed_variable(
     typ: &TypeNode,
     name: Option<String>,
     model: &ModelNode,
 ) -> Option<String> {
     match typ {
-        TypeNode::Array(size, typ) => {
-            if let TypeNode::Rational = **typ {
-                Some(format!(
-                    "float {}[{}]",
-                    name.clone().unwrap().as_str(),
-                    *size
-                ))
-            } else {
-                Some(format!(
-                    "uint{}_t {}",
-                    *size,
-                    name.clone().unwrap().as_str()
-                ))
+        TypeNode::Array(size, elem) => {
+            let var = name.clone()?;
+            // Бит-вектор — целое, а не массив: `[bit;8]` это u8.
+            if matches!(**elem, TypeNode::Bit) {
+                return bit_vector_type(*size, elem).map(|t| format!("{} {}", t, var));
             }
+            // Д1 (фича 0029): настоящий массив. Прежде здесь печаталось
+            // `uint{N}_t name` (число элементов как разрядность) для всего, кроме
+            // `Rational`, — то есть правильная форма существовала, но лишь для
+            // одного типа элемента. Теперь она общая для всех.
+            let elem_type = get_c_type(elem, model)?;
+            Some(format!("{} {}[{}]", elem_type, var, size))
         }
         _t => get_c_type(typ, model).map(|c_type| format!("{} {}", c_type, name.clone().unwrap())),
     }
@@ -226,6 +256,82 @@ pub(super) fn get_typed_variable(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::semantic::tree::construct_model;
+
+    /// Пустая модель — для типов, не требующих разрешения имён.
+    fn empty_model() -> std::rc::Rc<std::cell::RefCell<ModelNode>> {
+        let (ast, _) = crate::parse("start S;", 0).unwrap();
+        construct_model(&ast, None, &[]).unwrap()
+    }
+
+    fn typed(ty: &TypeNode, name: &str) -> Option<String> {
+        get_typed_variable(ty, Some(name.to_string()), &empty_model().borrow())
+    }
+
+    /// **Д1 (0029).** `[u8;4]` → настоящий массив, а не `uint4_t`.
+    ///
+    /// Было: `size` (число элементов) подставлялось как разрядность, давая
+    /// **несуществующий** тип `uint4_t` — порождённый C не компилировался, а
+    /// размерность терялась (при том что тело эмитило `data[0] = 7`).
+    #[test]
+    fn test_array_of_u8_is_real_array_not_uint4_t() {
+        let ty = TypeNode::Array(
+            4,
+            Box::new(TypeNode::Integer {
+                bits: 8,
+                signed: false,
+            }),
+        );
+        assert_eq!(typed(&ty, "data").as_deref(), Some("uint8_t data[4]"));
+    }
+
+    /// **Д1 (0029).** Бит-вектор `[bit;8]` остаётся `uint8_t` — доминирующая
+    /// идиома корпуса (45 из 46 вхождений) и НЕ меняется.
+    #[test]
+    fn test_bit_vector_stays_integer_type() {
+        let ty = TypeNode::Array(8, Box::new(TypeNode::Bit));
+        assert_eq!(typed(&ty, "b").as_deref(), Some("uint8_t b"));
+        let ty32 = TypeNode::Array(32, Box::new(TypeNode::Bit));
+        assert_eq!(typed(&ty32, "w").as_deref(), Some("uint32_t w"));
+    }
+
+    /// Бит-вектор нестандартной ширины типа в C не имеет → `None`.
+    ///
+    /// `[bit;128]` штатно объявлен в `examples/include/std.lam`, а `uint128_t` не
+    /// существует. Прежде печатался именно он — невалидный C.
+    #[test]
+    fn test_bit_vector_of_unsupported_width_has_no_c_type() {
+        let ty = TypeNode::Array(128, Box::new(TypeNode::Bit));
+        assert_eq!(typed(&ty, "big"), None, "uint128_t не существует");
+    }
+
+    /// **Д1 (0029).** `[float;4]` → `double fr[4]`: правильная форма была, но
+    /// только для `Rational`; теперь она общая для всех типов элемента.
+    #[test]
+    fn test_array_of_float_is_array_of_double() {
+        let ty = TypeNode::Array(4, Box::new(TypeNode::Rational));
+        assert_eq!(typed(&ty, "fr").as_deref(), Some("double fr[4]"));
+    }
+
+    /// **Д2 (0029).** `bit` → `uint8_t`, а не `int` (32-битный ЗНАКОВЫЙ).
+    #[test]
+    fn test_bit_is_unsigned_byte_not_signed_int() {
+        assert_eq!(
+            get_c_type(&TypeNode::Bit, &empty_model().borrow()).as_deref(),
+            Some("uint8_t")
+        );
+    }
+
+    /// **Д3 (0029).** `float` → `double`: симулятор считает в f64
+    /// (`eval::Value::Real`), и эталон C обязан совпадать по точности.
+    #[test]
+    fn test_rational_is_double_to_match_simulator_f64() {
+        assert_eq!(
+            get_c_type(&TypeNode::Rational, &empty_model().borrow()).as_deref(),
+            Some("double")
+        );
+    }
     use crate::generator::c::c_map::CMap;
     use crate::generator::c::c_source::generate_source;
     use crate::{parse, semantic};
