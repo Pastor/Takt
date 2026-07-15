@@ -154,6 +154,200 @@ fn test_st_zero_sized_array_fails_with_st007_and_writes_nothing() {
     );
 }
 
+/// **A2.** Минимальная модель даёт каркас: `CASE` с `INIT`, состоянием и `END`.
+#[test]
+fn test_minimal_model_emits_case_skeleton() {
+    let st = compile_fixture("minimal_fb");
+    assert!(st.contains("FUNCTION_BLOCK MinimalFb"), "нет блока:\n{st}");
+    assert!(st.contains("CASE state OF"), "нет CASE:\n{st}");
+    assert!(
+        st.contains("0: (* INIT *)"),
+        "INIT обязан быть нулевым:\n{st}"
+    );
+    assert!(
+        st.contains("state : USINT := 0;"),
+        "нет переменной автомата:\n{st}"
+    );
+}
+
+/// **A6.1.** Несколько `ref` → `IF`/`ELSIF` в порядке объявления.
+#[test]
+fn test_multiple_refs_keep_declaration_order() {
+    let st = compile_fixture("transitions");
+    let first = st.find("IF n = 1 THEN").expect("нет первого перехода");
+    let second = st.find("ELSIF n = 2 THEN").expect("нет второго перехода");
+    assert!(first < second, "порядок ref обязан сохраняться:\n{st}");
+}
+
+/// **A6.2/A6.4.** `always` до проверок; `exit` источника перед `enter` цели.
+///
+/// Порядок сверен с зондом цели `c`, а не предположен.
+#[test]
+fn test_always_precedes_checks_and_exit_precedes_enter() {
+    let st = compile_fixture("enter_always");
+    let always = st.find("n := n + 1;").expect("нет always");
+    let check = st.find("IF n = 1 THEN").expect("нет проверки перехода");
+    let exit = st.find("n := 2;").expect("нет exit источника");
+    let enter = st.find("n := 3;").expect("нет enter цели");
+    assert!(always < check, "always обязан идти до проверок:\n{st}");
+    assert!(
+        exit < enter,
+        "exit источника обязан идти до enter цели:\n{st}"
+    );
+}
+
+/// **A6.3.** `A | B` → экземпляры, последовательные вызовы, конъюнкция `is_done`.
+#[test]
+fn test_parallel_composition_joins_by_conjunction() {
+    let st = compile_fixture("parallel");
+    assert!(
+        st.contains("FUNCTION_BLOCK ParallelA"),
+        "нет блока A:\n{st}"
+    );
+    assert!(
+        st.contains("FUNCTION_BLOCK ParallelB"),
+        "нет блока B:\n{st}"
+    );
+    assert!(
+        st.contains(".is_done AND ") && st.contains(".is_done THEN"),
+        "завершение параллели — конъюнкция is_done:\n{st}"
+    );
+}
+
+/// **R7.2.** `A + B` → вложенный `CASE` по счётчику шагов, а не параллель.
+///
+/// Фикстура называется `sequence`, а не `concat`, намеренно: имя модели берётся
+/// из имени файла, а `CONCAT` — **стандартная функция IEC** (склейка строк), и
+/// `FUNCTION_BLOCK Concat` транспилятор отвергает. Пространство имён POU и
+/// стандартной библиотеки — общее.
+#[test]
+fn test_concatenation_uses_step_counter_not_parallel() {
+    let st = compile_fixture("sequence");
+    assert!(
+        st.contains("_step"),
+        "у конкатенации обязан быть счётчик шагов:\n{st}"
+    );
+    assert!(
+        st.matches("CASE ").count() >= 2,
+        "конкатенация — вложенный CASE:\n{st}"
+    );
+}
+
+/// Цель `st`: порты — входы/выходы блока, адрес не эмитится.
+#[test]
+fn test_ports_without_at_in_plain_st() {
+    let st = compile_fixture("ports_at");
+    assert!(st.contains("btn : BOOL;"), "нет входного порта:\n{st}");
+    assert!(st.contains("lamp : BOOL;"), "нет выходного порта:\n{st}");
+    assert!(!st.contains("AT %"), "цель st адрес не эмитит:\n{st}");
+}
+
+/// Цель `st-at`: тот же исходник даёт `VAR_GLOBAL … AT %…` в `CONFIGURATION`.
+///
+/// Пара с тестом выше: цели **асимметричны**, и это фиксируется с обеих сторон.
+#[test]
+fn test_same_ports_get_locations_in_st_at() {
+    let src_path = "tests/data/st/valid/ports_at.lam";
+    let source = fs::read_to_string(src_path).unwrap();
+    let out_dir = target_dir("ports_at_at");
+    let _ = fs::remove_dir_all(&out_dir);
+    grammar::compile_to_st_at(
+        src_path,
+        &source,
+        out_dir.to_str().unwrap(),
+        &[],
+        &[],
+        &GenerateOptions::default(),
+    )
+    .expect("st-at должен компилироваться");
+    let st = fs::read_to_string(out_dir.join("ports_at.st")).unwrap();
+    assert!(
+        st.contains("btn AT %IX256.0 : BOOL;"),
+        "нет локации входа:\n{st}"
+    );
+    assert!(
+        st.contains("lamp AT %QX1280.0 : BOOL;"),
+        "нет локации выхода:\n{st}"
+    );
+    assert!(
+        st.contains("VAR_EXTERNAL"),
+        "блок обязан видеть порты извне:\n{st}"
+    );
+    assert!(
+        st.contains("CONFIGURATION"),
+        "VAR_GLOBAL требует обёртки:\n{st}"
+    );
+}
+
+/// Компилирует контрпример целью `st-at` и возвращает диагностику.
+fn compile_invalid_at(name: &str, map: Option<&str>) -> Vec<String> {
+    let src_path = format!("tests/data/st/invalid/{}.lam", name);
+    let source = fs::read_to_string(&src_path).unwrap();
+    let entries = match map {
+        Some(m) => {
+            let map_src = fs::read_to_string(format!("tests/data/st/invalid/{}", m)).unwrap();
+            grammar::parse_address_map(&map_src, 0).expect("карта должна разбираться")
+        }
+        None => Vec::new(),
+    };
+    let out_dir = target_dir(&format!("inv_{}", name));
+    let _ = fs::remove_dir_all(&out_dir);
+    // Коды, а не сами диагностики: `Diagnostic` из крейта не экспортирован, а
+    // проверять всё равно нужно КОД, а не текст сообщения.
+    match grammar::compile_to_st_at(
+        &src_path,
+        &source,
+        out_dir.to_str().unwrap(),
+        &[],
+        &entries,
+        &GenerateOptions::default(),
+    ) {
+        Ok(warnings) => warnings.iter().filter_map(|d| d.code.clone()).collect(),
+        Err(d) => d.code.into_iter().collect(),
+    }
+}
+
+/// **A5 (контрпример).** Порт-массив в `st-at` → `ST-004`, а не тихое размещение.
+///
+/// Локация IEC адресует **скаляр**; у массива размера локации нет. Молча
+/// разместить его по адресу скаляра значило бы дать неверный адрес на стенде —
+/// то есть дефект, который проявится только на железе.
+#[test]
+fn test_array_port_has_no_location_st004() {
+    let diags = compile_invalid_at("port_array_at", None);
+    assert!(
+        diags.iter().any(|c| c == "ST-004"),
+        "ожидался ST-004, получено: {diags:?}"
+    );
+}
+
+/// **A5 (контрпример).** Используемый порт без адреса в `st-at` → `SE-052`.
+///
+/// Диагностика приходит из слоя 0020 **без изменений** — переиспользование, а не
+/// дублирование правила.
+#[test]
+fn test_used_port_without_address_is_se052() {
+    let diags = compile_invalid_at("port_no_address", None);
+    assert!(
+        diags.iter().any(|c| c == "SE-052"),
+        "ожидался SE-052, получено: {diags:?}"
+    );
+}
+
+/// **A5 (контрпример).** Висячая запись карты → `SE-051` (вероятная опечатка).
+///
+/// Заодно фиксируется `SE-050`: карта перекрывает inline-адрес `btn` — оверлей
+/// по замыслу 0020-03.
+#[test]
+fn test_dangling_map_entry_is_se051_and_overlay_is_se050() {
+    let diags = compile_invalid_at("dangling_map_entry", Some("dangling_map_entry.map"));
+    assert!(diags.iter().any(|c| c == "SE-051"), "нет SE-051: {diags:?}");
+    assert!(
+        diags.iter().any(|c| c == "SE-050"),
+        "нет SE-050 (оверлей): {diags:?}"
+    );
+}
+
 /// **Закрывает РИ4.** Внешняя карта переопределяет МК-адреса на ПЛК-локации.
 ///
 /// `elevator.lam` написан под МК-адресацию: `in sensors_1: u8 := 268435456;`

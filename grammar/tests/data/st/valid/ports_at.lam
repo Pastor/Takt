@@ -1,0 +1,12 @@
+// 0041-07: порты с адресами — для цели st-at.
+//
+// Цель st: порты станут VAR_INPUT/VAR_OUTPUT блока, адрес не эмитится.
+// Цель st-at: VAR_GLOBAL … AT %IX256.0 внутри CONFIGURATION, блок видит их
+// через VAR_EXTERNAL.
+
+in btn: bit := 0x100:0;
+out lamp: bit := 0x500:0;
+
+start Idle {
+    always { lamp := btn; }
+}
