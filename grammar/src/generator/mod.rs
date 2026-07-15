@@ -1,6 +1,7 @@
 mod c;
 mod indent;
 mod plantuml;
+mod st;
 
 use crate::diagnostics::Diagnostic;
 use crate::semantic::ModelNode;
@@ -16,6 +17,12 @@ pub enum Language {
     C,
     /// Генерация диаграммы состояний PlantUML.
     PlantUML,
+    /// Генерация Structured Text (IEC 61131-3) — язык ПЛК (фича 0041).
+    ///
+    /// Модель → `FUNCTION_BLOCK`, состояния → `CASE state OF` (ADR 0041,
+    /// Option A). Потребление карты адресов (`AT %…`) включается флагом
+    /// [`GenerateOptions::hal`] — тем же, что и для режима `c-hal`.
+    ST,
 }
 
 /// Опции генерации кода.
@@ -90,6 +97,10 @@ pub fn generate(
         }
         Language::PlantUML => {
             let generator = plantuml::Generator {};
+            generator.generate(model, output_path, options)
+        }
+        Language::ST => {
+            let generator = st::Generator {};
             generator.generate(model, output_path, options)
         }
     }
