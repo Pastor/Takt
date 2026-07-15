@@ -154,6 +154,58 @@ fn test_st_zero_sized_array_fails_with_st007_and_writes_nothing() {
     );
 }
 
+/// **Закрывает РИ4.** Внешняя карта переопределяет МК-адреса на ПЛК-локации.
+///
+/// `elevator.lam` написан под МК-адресацию: `in sensors_1: u8 := 268435456;`
+/// (`0x10000000`) → `AT %IB268435456`, чего не имеет ни один ПЛК. Модель при
+/// этом **корректна** (для целей `c`/`c-hal`) и не правится: ПЛК-локации живут
+/// во внешней карте, а генератор берёт их по приоритету (inline < `address` <
+/// карта).
+#[test]
+fn test_external_map_overrides_mcu_addresses_with_plc_locations() {
+    let source = fs::read_to_string("../examples/elevator.lam").unwrap();
+    let map_src = fs::read_to_string("../examples/elevator.plc.map").unwrap();
+    let entries = grammar::parse_address_map(&map_src, 0).expect("карта должна разбираться");
+    let out_dir = target_dir("elevator_at");
+    let _ = fs::remove_dir_all(&out_dir);
+
+    grammar::compile_to_st_at(
+        "../examples/elevator.lam",
+        &source,
+        out_dir.to_str().unwrap(),
+        &[],
+        &entries,
+        &GenerateOptions::default(),
+    )
+    .expect("st-at с картой должен компилироваться");
+
+    let st = fs::read_to_string(out_dir.join("elevator.st")).unwrap();
+    assert!(
+        st.contains("sensors_1 AT %IB0"),
+        "карта обязана переопределить адрес на ПЛК-локацию:\n{}",
+        &st[..st.len().min(2000)]
+    );
+    assert!(
+        !st.contains("%IB268435456"),
+        "МК-адрес не должен доезжать до ПЛК-локации"
+    );
+    assert!(
+        st.contains("CONFIGURATION"),
+        "st-at обязана эмитить обёртку: VAR_GLOBAL вне CONFIGURATION недопустим"
+    );
+}
+
+/// Цель `st` карту адресов **не** потребляет: она порождает библиотеку блоков.
+#[test]
+fn test_plain_st_target_ignores_addresses_and_emits_no_configuration() {
+    let st = compile_fixture("types_all");
+    assert!(!st.contains("AT %"), "цель st адреса не эмитит:\n{st}");
+    assert!(
+        !st.contains("CONFIGURATION"),
+        "цель st обёртки не требует — это библиотека блоков:\n{st}"
+    );
+}
+
 /// Комментарии порождённого файла — только в форме IEC `(* … *)`.
 ///
 /// Проверка не косметическая: `//` и `/* */` для компилятора ST — синтаксическая

@@ -182,10 +182,7 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     // недопустим (проба П8). Цель `st` обёртки не требует (П2) — цели
     // асимметричны намеренно.
     if map.at_addresses() {
-        let root = map
-            .root_model_node()
-            .ok_or_else(|| root_missing(root_name.clone()))?;
-        emit_configuration(&mut p, map, &root_name, &root.borrow())?;
+        emit_configuration(&mut p, map, &root_name, &blocks)?;
     }
 
     report(&warnings);
@@ -200,7 +197,7 @@ fn emit_configuration(
     p: &mut Printer,
     map: &StMap,
     root_name: &Name,
-    root: &ModelNode,
+    blocks: &[(Name, Rc<RefCell<ModelNode>>)],
 ) -> Result<(), Diagnostic> {
     let fb = root_name.unique_camelcase();
     p.ident(&format!("PROGRAM {}Main", fb)).nl();
@@ -219,34 +216,46 @@ fn emit_configuration(
     // модель без портов — не ошибка (например, `comprehensive.lam`).
     let mut placed: Vec<String> = Vec::new();
     let mut warnings = Vec::new();
-    let mut names: Vec<&String> = root.variables.keys().collect();
-    names.sort();
-    for name in names {
-        let VariableNode::Port {
-            name: pname,
-            ty,
-            direction,
-            ..
-        } = &root.variables[name]
-        else {
-            continue;
-        };
-        if !map.usage().ports.contains(pname) {
-            continue;
+    let mut seen: Vec<String> = Vec::new();
+    // Порты собираются со ВСЕХ моделей, а не только с корня: в `elevator_mini`
+    // они объявлены внутри под-моделей (`out ElevatorMotor_Up: bit;` в `Motor`).
+    // Пропустить их значило бы оставить `VAR_EXTERNAL` без глобала — «the
+    // external variable does not match with any global variable».
+    for (_, model_rc) in blocks {
+        let root = &*model_rc.borrow();
+        let mut names: Vec<&String> = root.variables.keys().collect();
+        names.sort();
+        for name in names {
+            let VariableNode::Port {
+                name: pname,
+                ty,
+                direction,
+                ..
+            } = &root.variables[name]
+            else {
+                continue;
+            };
+            if !map.usage().ports.contains(pname) || seen.contains(pname) {
+                continue;
+            }
+            // Порт без адреса при `st-at` — уже ошибка слоя 0020 (SE-052), сюда
+            // он не доходит; но если карта пуста, размещать нечего.
+            let Some(resolved) = map.address_of(pname) else {
+                continue;
+            };
+            seen.push(pname.clone());
+            let (location, comment, mut w) = st_at::location_of(pname, ty, *direction, resolved)?;
+            warnings.append(&mut w);
+            let ty_name = st_type::get_st_type(ty, root)?;
+            placed.push(format!(
+                "{} AT {} : {}; {}",
+                pname, location, ty_name, comment
+            ));
         }
-        // Порт без адреса при `st-at` — уже ошибка слоя 0020 (SE-052), сюда он не
-        // доходит; но если карта пуста, размещать нечего.
-        let Some(resolved) = map.address_of(pname) else {
-            continue;
-        };
-        let (location, comment, mut w) = st_at::location_of(pname, ty, *direction, resolved)?;
-        warnings.append(&mut w);
-        let ty_name = st_type::get_st_type(ty, root)?;
-        placed.push(format!(
-            "{} AT {} : {}; {}",
-            pname, location, ty_name, comment
-        ));
     }
+    // Порядок объявления глобалов на семантику не влияет, но должен быть
+    // воспроизводимым: `variables` — HashMap.
+    placed.sort();
 
     p.ident(&format!("CONFIGURATION {}Config", fb)).nl();
     p.up();
