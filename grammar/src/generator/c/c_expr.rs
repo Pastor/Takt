@@ -4,7 +4,7 @@
 //! [`generate_expr`], [`generate_code_block`], [`generate_stmt_expression`],
 //! а также вспомогательные функции разрешения имён переменных и функций.
 
-use super::{PortClass, get_c_type, get_typed_variable};
+use super::{PortClass, c_type_or_diagnostic, typed_variable_or_diagnostic};
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::c::c_map::CMap;
 use crate::generator::c::{
@@ -1306,7 +1306,10 @@ pub(super) fn generate_expr(
         ExpressionNode::Cast(expr, typ) => {
             let model = map.raw_model_at(owner.name())?;
             let model = &*model.borrow();
-            let type_c = get_c_type(typ, model).unwrap_or_else(|| "int".to_string());
+            // 0029-01: было `unwrap_or_else(|| "int")` — невыразимый тип приведения
+            // молча превращался в `(int)`, то есть приведение к ДРУГОМУ типу,
+            // принятое C-компилятором без замечаний.
+            let type_c = c_type_or_diagnostic(typ, model, map.float_width(), "приведение типа")?;
             // Приводимое выражение оборачивается при prec < UNARY (13),
             // то есть при наличии бинарных операторов: (int)(a + b).
             printer.print("(").print(&type_c).print(")");
@@ -1663,8 +1666,15 @@ pub(super) fn generate_code_block(
             let model = map.raw_model_at(owner.name())?;
             let model_ref = model.borrow();
             let snake_name = normalize_lowercase_snakecase(name.clone());
-            let decl = get_typed_variable(ty, Some(snake_name.clone()), &*model_ref)
-                .unwrap_or_else(|| format!("int {}", snake_name));
+            // 0029-01: было `unwrap_or_else(|| format!("int {}"))` — локальная
+            // переменная невыразимого типа молча объявлялась как `int`.
+            let decl = typed_variable_or_diagnostic(
+                ty,
+                &snake_name,
+                &*model_ref,
+                map.float_width(),
+                &format!("локальная переменная '{}'", name),
+            )?;
             printer.ident(&decl);
             if let Some(init_expr) = init {
                 printer.print(" = ");

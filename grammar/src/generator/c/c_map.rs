@@ -1,4 +1,5 @@
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::FloatWidth;
 use crate::semantic::minimap::{Element, Map, Name};
 use crate::semantic::naming::normalize_camelcase_name;
 use crate::semantic::unused::UsageSet;
@@ -13,6 +14,8 @@ pub struct CMap {
     usage: UsageSet,
     /// Флаг включения генерации проверок Guard-формул.
     guard_enable: bool,
+    /// Ширина вещественного типа (фича 0029): `double` при `W64`, `float` при `W32`.
+    float_width: FloatWidth,
 }
 
 impl CMap {
@@ -50,7 +53,23 @@ impl CMap {
             map: Map::create(model_rc)?,
             usage,
             guard_enable,
+            float_width: FloatWidth::default(),
         })
+    }
+
+    /// Задаёт ширину вещественного типа (фича 0029).
+    ///
+    /// Отдельным методом, а не параметром `new`: умолчание `W64` — поведение по
+    /// умолчанию генератора, и 26 существующих вызовов `new` (в основном тесты)
+    /// не должны повторять его дословно.
+    pub fn with_float_width(mut self, float_width: FloatWidth) -> Self {
+        self.float_width = float_width;
+        self
+    }
+
+    /// Ширина вещественного типа в порождаемом C.
+    pub(crate) fn float_width(&self) -> FloatWidth {
+        self.float_width
     }
 
     pub fn guard_enable(&self) -> bool {

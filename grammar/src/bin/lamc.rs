@@ -79,6 +79,12 @@ pub struct CompileOptions {
     /// накладывается на модель оверлеем (с предупреждениями об оверлее/висячих
     /// записях). Понижение адреса в целевой код — задача 0020-05.
     pub address_map: Option<String>,
+    /// Ширина вещественного типа в порождаемом C (фича 0029).
+    ///
+    /// Заполняется флагом `--float-width=32|64`; умолчание — 64 (`double`),
+    /// что совпадает с точностью симулятора (f64). Значение 32 (`float`) — для
+    /// платформ, где 8-байтное чтение недопустимо.
+    pub float_width: grammar::FloatWidth,
 }
 
 /// Разбивает строку путей на отдельные директории.
@@ -171,6 +177,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     let mut quiet = false;
     let mut guard_enable = true;
     let mut address_map: Option<String> = None;
+    let mut float_width = grammar::FloatWidth::default();
 
     let mut i = 0;
     while i < args.len() {
@@ -220,6 +227,19 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                     None => return Err(format!("{} требует аргумент", arg)),
                 }
             }
+            // Фича 0029: ширина вещественного типа. Принимаются обе формы —
+            // `--float-width=32` (как в тест-плане) и `--float-width 32` (как у
+            // прочих флагов): расходиться с соседями по синтаксису нечего.
+            "--float-width" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => float_width = parse_float_width(v)?,
+                    None => return Err(format!("{} требует аргумент: 32 или 64", arg)),
+                }
+            }
+            a if a.starts_with("--float-width=") => {
+                float_width = parse_float_width(&a["--float-width=".len()..])?;
+            }
             // Позиционный аргумент — входной файл
             a if !a.starts_with('-') => {
                 input_file = Some(a.to_string());
@@ -251,7 +271,36 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
         quiet,
         guard_enable,
         address_map,
+        float_width,
     })
+}
+
+/// Собирает опции генерации из разобранных аргументов CLI.
+///
+/// Одна точка сборки на все цели: иначе новая опция доезжает до одних целей и
+/// не доезжает до других, а расхождение обнаруживается на выходе генератора.
+/// Цели `st`/`st-at` `float_width` не потребляют — у ST своё отображение типов
+/// (`generator/st/st_type.rs`).
+fn generate_options(options: &CompileOptions) -> grammar::GenerateOptions {
+    let mut generate = grammar::GenerateOptions::new(options.guard_enable);
+    generate.float_width = options.float_width;
+    generate
+}
+
+/// Разбирает значение флага `--float-width` (фича 0029).
+///
+/// Допустимы только 32 и 64: иных вещественных типов у цели `c` нет. Прочее —
+/// ошибка разбора, а не молчаливое умолчание: `--float-width=16` должен сказать,
+/// что такой ширины не бывает, а не собрать код с другой точностью.
+fn parse_float_width(value: &str) -> Result<grammar::FloatWidth, String> {
+    match value {
+        "32" => Ok(grammar::FloatWidth::W32),
+        "64" => Ok(grammar::FloatWidth::W64),
+        other => Err(format!(
+            "--float-width: недопустимое значение '{}' (допустимо 32 или 64)",
+            other
+        )),
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -433,6 +482,10 @@ fn print_usage() {
     eprintln!("  --guard-enable         Включить генерацию проверок Guard-формул (по умолчанию)");
     eprintln!("  --guard-disable        Выключить генерацию проверок Guard-формул");
     eprintln!("  --address-map <файл>   Внешняя карта адресов портов (.ld-подобный формат)");
+    eprintln!("  --float-width=32|64    Ширина вещественного типа в C: float или double");
+    eprintln!(
+        "                         По умолчанию 64 (double) — совпадает с точностью симулятора"
+    );
     eprintln!();
     eprintln!("Целевые платформы:");
     eprintln!("  c         Генерация C-заголовочного файла");
@@ -564,7 +617,7 @@ fn main() {
                 &options.output_path,
                 &options.include_dirs,
                 &external_entries,
-                &grammar::GenerateOptions::new(options.guard_enable),
+                &generate_options(&options),
             ) {
                 Ok(warnings) => {
                     for w in warnings {
@@ -599,7 +652,7 @@ fn main() {
                 &source,
                 &options.output_path,
                 &options.include_dirs,
-                &grammar::GenerateOptions::new(options.guard_enable),
+                &generate_options(&options),
             ) {
                 eprintln!("Ошибка компиляции: {}", diag.message);
                 process::exit(1);
@@ -660,7 +713,7 @@ fn main() {
                 &source,
                 &options.output_path,
                 &options.include_dirs,
-                &grammar::GenerateOptions::new(options.guard_enable),
+                &generate_options(&options),
             ) {
                 eprintln!(
                     "Ошибка компиляции [{}]: {}",
@@ -693,7 +746,7 @@ fn main() {
                 &options.output_path,
                 &options.include_dirs,
                 &external_entries,
-                &grammar::GenerateOptions::new(options.guard_enable),
+                &generate_options(&options),
             ) {
                 Ok(warnings) => {
                     for w in warnings {
@@ -1221,5 +1274,54 @@ mod tests {
     fn address_map_requires_argument() {
         let err = parse_compile_args(&["--address-map".to_string()]).unwrap_err();
         assert!(err.contains("--address-map"), "сообщение: {}", err);
+    }
+
+    /// T7 (0029-03): без флага — `W64`, то есть `double`: эталон C совпадает с
+    /// точностью симулятора (f64) по умолчанию, а не по особой просьбе.
+    #[test]
+    fn float_width_defaults_to_64() {
+        let opts = parse_compile_args(&["main.lam".to_string()]).unwrap();
+        assert_eq!(opts.float_width, grammar::FloatWidth::W64);
+    }
+
+    /// T8 (0029-03): `--float-width=32` → `float`.
+    #[test]
+    fn parse_float_width_32() {
+        let args = vec!["main.lam".to_string(), "--float-width=32".to_string()];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.float_width, grammar::FloatWidth::W32);
+    }
+
+    /// Форма с пробелом — наравне со слитной (как у прочих флагов).
+    #[test]
+    fn parse_float_width_separate_argument() {
+        let args = vec![
+            "main.lam".to_string(),
+            "--float-width".to_string(),
+            "32".to_string(),
+        ];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.float_width, grammar::FloatWidth::W32);
+    }
+
+    /// T16 (0029-03): `--float-width=16` — ошибка разбора, а не молчаливое
+    /// умолчание: иначе код собрался бы с ДРУГОЙ точностью, чем просил
+    /// пользователь.
+    #[test]
+    fn float_width_rejects_unsupported_value() {
+        let args = vec!["main.lam".to_string(), "--float-width=16".to_string()];
+        let err = parse_compile_args(&args).unwrap_err();
+        assert!(
+            err.contains("16") && err.contains("32") && err.contains("64"),
+            "сообщение обязано назвать и отвергнутое значение, и допустимые: {}",
+            err
+        );
+    }
+
+    /// `--float-width` без аргумента — ошибка.
+    #[test]
+    fn float_width_requires_argument() {
+        let err = parse_compile_args(&["--float-width".to_string()]).unwrap_err();
+        assert!(err.contains("--float-width"), "сообщение: {}", err);
     }
 }

@@ -38,11 +38,11 @@ mod c_model;
 mod c_source;
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
 use crate::generator::c::c_header::generate_header;
 use crate::generator::c::c_map::CMap;
 use crate::generator::c::c_source::generate_source;
+use crate::generator::{FloatWidth, GenerateOptions};
 use crate::semantic::ModelNode;
 use crate::semantic::PortDirection;
 use crate::semantic::minimap::{Element, StateExtend};
@@ -124,7 +124,8 @@ impl AsGenerator for Generator {
             &*normalize_lowercase_snakecase(model.name().to_string()),
             model,
             options.guard_enable,
-        )?;
+        )?
+        .with_float_width(options.float_width);
         let header = generate_header(map.get_filename(), &map, options)?;
         let source = generate_source(map.get_filename(), &map)?;
         let filename = map.get_filename();
@@ -147,27 +148,77 @@ impl AsGenerator for Generator {
     }
 }
 
-pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
+/// Причина, по которой тип Lam не выразим в C.
+///
+/// Существует, чтобы вызывающий мог дать **точную** диагностику вместо тихого
+/// `None`: без причины `[bit;128]` и `BuiltinModel` неразличимы, и оба
+/// вырождались либо в молчание, либо в чужую по смыслу ошибку («переменная не
+/// найдена» — при том что переменная найдена, невыразим её тип).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum CTypeError {
+    /// Бит-вектор `[bit;N]` при N ∉ {8,16,32,64} — целого типа такой ширины в C нет.
+    BitVectorWidth(u16),
+    /// Тип (или тип элемента массива) представления в C не имеет вовсе.
+    Unrepresentable,
+}
+
+impl CTypeError {
+    /// Оборачивает причину в диагностику. `what` — что именно объявлялось
+    /// (`переменная 'x'`, `параметр 'p'`), чтобы сообщение указывало на место.
+    fn into_diagnostic(self, what: &str) -> Diagnostic {
+        match self {
+            Self::BitVectorWidth(n) => Diagnostic::error(
+                Location::Codegen,
+                format!(
+                    "{}: бит-вектор [bit;{}] не представим в C — \
+                     целого типа такой ширины нет (допустимо 8, 16, 32, 64)",
+                    what, n
+                ),
+            )
+            .with_code("CC-014"),
+            Self::Unrepresentable => Diagnostic::error(
+                Location::Codegen,
+                format!("{}: тип не представим в C", what),
+            )
+            .with_code("CC-015"),
+        }
+    }
+}
+
+/// Отображает тип Lam в тип C, сохраняя причину отказа.
+///
+/// Ядро отображения; [`get_c_type`] — его обёртка, теряющая причину.
+pub(super) fn map_c_type(
+    typ: &TypeNode,
+    model: &ModelNode,
+    float_width: FloatWidth,
+) -> Result<String, CTypeError> {
     match typ {
         // Д2 (фича 0029): было `int` — 32-битный ЗНАКОВЫЙ для однобитной
         // семантики. `uint8_t` — наименьший адресуемый беззнаковый тип C.
-        TypeNode::Bit => Some("uint8_t".to_string()),
-        TypeNode::Bool => Some("bool".to_string()),
-        // Д3 (фича 0029): было `float` (f32), тогда как симулятор считает в f64
-        // (`eval::Value::Real`) — расхождение точности между эталоном и моделью.
-        // Умолчание `--float-width=64` подтверждено заказчиком.
-        TypeNode::Rational => Some("double".to_string()),
+        TypeNode::Bit => Ok("uint8_t".to_string()),
+        TypeNode::Bool => Ok("bool".to_string()),
+        // Д3 (фича 0029): было `float` (f32) безусловно, тогда как симулятор
+        // считает в f64 (`eval::Value::Real`) — расхождение точности между
+        // эталоном и моделью. Умолчание `--float-width=64` подтверждено
+        // заказчиком; `W32` — осознанный выбор платформы без f64.
+        TypeNode::Rational => Ok(match float_width {
+            FloatWidth::W64 => "double".to_string(),
+            FloatWidth::W32 => "float".to_string(),
+        }),
         // Д1 (фича 0029): было `uint{size}_t`, где `size` — ЧИСЛО ЭЛЕМЕНТОВ, а не
         // разрядность: `[u8;4]` давало невалидный `uint4_t`. Тип массива без
         // имени переменной в C не выражается (`elem name[N]` — объявитель, а не
         // тип), поэтому здесь остаётся только бит-вектор; настоящий массив
         // печатает `get_typed_variable`.
         TypeNode::Array(size, elem) => bit_vector_type(*size, elem),
-        TypeNode::Unit => Some("void".to_string()),
-        TypeNode::BuiltinString => Some("char *".to_string()),
-        TypeNode::Struct(struct_name) => Some(struct_name.to_string()),
+        TypeNode::Unit => Ok("void".to_string()),
+        TypeNode::BuiltinString => Ok("char *".to_string()),
+        TypeNode::Struct(struct_name) => Ok(struct_name.to_string()),
         TypeNode::Enum(enum_name) => {
-            let enum_node = model.search_enum(enum_name)?;
+            let enum_node = model
+                .search_enum(enum_name)
+                .ok_or(CTypeError::Unrepresentable)?;
             let max = enum_node
                 .variants
                 .into_iter()
@@ -185,13 +236,13 @@ pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
             } else {
                 8
             };
-            Some(format!("uint{}_t", bits))
+            Ok(format!("uint{}_t", bits))
         }
         TypeNode::Integer { bits, signed } => {
             if *signed {
-                Some(format!("int{}_t", bits))
+                Ok(format!("int{}_t", bits))
             } else {
-                Some(format!("uint{}_t", bits))
+                Ok(format!("uint{}_t", bits))
             }
         }
         TypeNode::BuiltinModel
@@ -199,8 +250,41 @@ pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
         | TypeNode::BuiltinNumeric
         | TypeNode::Unsupported
         | TypeNode::Inference
-        | TypeNode::Address(_, _) => None,
+        | TypeNode::Address(_, _) => Err(CTypeError::Unrepresentable),
     }
+}
+
+/// Отображает тип Lam в тип C, теряя причину отказа.
+///
+/// Обёртка над [`map_c_type`] для мест, где причина не нужна (`port_ctype` —
+/// ширина доступа к MMIO). **Для объявлений использовать
+/// [`c_type_or_diagnostic`]**: там потеря причины оборачивается либо молчанием,
+/// либо ошибкой не по адресу.
+pub fn get_c_type(typ: &TypeNode, model: &ModelNode, float_width: FloatWidth) -> Option<String> {
+    map_c_type(typ, model, float_width).ok()
+}
+
+/// Тип C для объявления: при отказе — диагностика `CC-014`/`CC-015`.
+///
+/// `what` описывает объявляемое (`переменная 'x'`) — попадает в сообщение.
+pub(super) fn c_type_or_diagnostic(
+    typ: &TypeNode,
+    model: &ModelNode,
+    float_width: FloatWidth,
+    what: &str,
+) -> Result<String, Diagnostic> {
+    map_c_type(typ, model, float_width).map_err(|e| e.into_diagnostic(what))
+}
+
+/// Объявление переменной (тип + имя): при отказе — диагностика `CC-014`/`CC-015`.
+pub(super) fn typed_variable_or_diagnostic(
+    typ: &TypeNode,
+    name: &str,
+    model: &ModelNode,
+    float_width: FloatWidth,
+    what: &str,
+) -> Result<String, Diagnostic> {
+    map_typed_variable(typ, name, model, float_width).map_err(|e| e.into_diagnostic(what))
 }
 
 /// Отображает бит-вектор `[bit; N]` в целочисленный тип C.
@@ -211,18 +295,19 @@ pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
 /// **не меняется** фичей 0029.
 ///
 /// Для иной ширины (`[bit;128]`, штатно объявлен в `examples/include/std.lam`)
-/// типа в C нет: `uint128_t` не существует. Возвращается `None` → вызывающий
-/// обязан дать диагностику `CC-014`, а не печатать невалидный тип.
+/// типа в C нет: `uint128_t` не существует. Возвращается
+/// [`CTypeError::BitVectorWidth`] → вызывающий даёт `CC-014`, а не печатает
+/// невалидный тип.
 ///
 /// Массив НЕ бит: тип в C выражается только вместе с именем (`elem name[N]`),
-/// поэтому здесь `None` — печатает его [`get_typed_variable`].
-fn bit_vector_type(size: u16, elem: &TypeNode) -> Option<String> {
+/// поэтому здесь отказ — печатает его [`map_typed_variable`].
+fn bit_vector_type(size: u16, elem: &TypeNode) -> Result<String, CTypeError> {
     if !matches!(elem, TypeNode::Bit) {
-        return None;
+        return Err(CTypeError::Unrepresentable);
     }
     match size {
-        8 | 16 | 32 | 64 => Some(format!("uint{}_t", size)),
-        _ => None,
+        8 | 16 | 32 | 64 => Ok(format!("uint{}_t", size)),
+        _ => Err(CTypeError::BitVectorWidth(size)),
     }
 }
 
@@ -231,26 +316,26 @@ fn bit_vector_type(size: u16, elem: &TypeNode) -> Option<String> {
 /// Отдельная функция от [`get_c_type`] не по стилю, а по устройству C: тип
 /// массива **неотделим** от имени (`uint8_t data[4]`, а не `uint8_t[4] data`),
 /// поэтому объявление массива строится только здесь.
-pub(super) fn get_typed_variable(
+pub(super) fn map_typed_variable(
     typ: &TypeNode,
-    name: Option<String>,
+    name: &str,
     model: &ModelNode,
-) -> Option<String> {
+    float_width: FloatWidth,
+) -> Result<String, CTypeError> {
     match typ {
         TypeNode::Array(size, elem) => {
-            let var = name.clone()?;
             // Бит-вектор — целое, а не массив: `[bit;8]` это u8.
             if matches!(**elem, TypeNode::Bit) {
-                return bit_vector_type(*size, elem).map(|t| format!("{} {}", t, var));
+                return bit_vector_type(*size, elem).map(|t| format!("{} {}", t, name));
             }
             // Д1 (фича 0029): настоящий массив. Прежде здесь печаталось
             // `uint{N}_t name` (число элементов как разрядность) для всего, кроме
             // `Rational`, — то есть правильная форма существовала, но лишь для
             // одного типа элемента. Теперь она общая для всех.
-            let elem_type = get_c_type(elem, model)?;
-            Some(format!("{} {}[{}]", elem_type, var, size))
+            let elem_type = map_c_type(elem, model, float_width)?;
+            Ok(format!("{} {}[{}]", elem_type, name, size))
         }
-        _t => get_c_type(typ, model).map(|c_type| format!("{} {}", c_type, name.clone().unwrap())),
+        _t => map_c_type(typ, model, float_width).map(|c_type| format!("{} {}", c_type, name)),
     }
 }
 
@@ -265,8 +350,20 @@ mod tests {
         construct_model(&ast, None, &[]).unwrap()
     }
 
+    /// Объявление при умолчании `--float-width=64`.
     fn typed(ty: &TypeNode, name: &str) -> Option<String> {
-        get_typed_variable(ty, Some(name.to_string()), &empty_model().borrow())
+        map_typed_variable(ty, name, &empty_model().borrow(), FloatWidth::default()).ok()
+    }
+
+    /// Объявление при заданной ширине вещественного типа.
+    fn typed_w(ty: &TypeNode, name: &str, float_width: FloatWidth) -> Option<String> {
+        map_typed_variable(ty, name, &empty_model().borrow(), float_width).ok()
+    }
+
+    /// Причина отказа отображения — для проверки кода диагностики.
+    fn typed_err(ty: &TypeNode, name: &str) -> CTypeError {
+        map_typed_variable(ty, name, &empty_model().borrow(), FloatWidth::default())
+            .expect_err("тип не должен быть представим в C")
     }
 
     /// **Д1 (0029).** `[u8;4]` → настоящий массив, а не `uint4_t`.
@@ -306,6 +403,64 @@ mod tests {
         assert_eq!(typed(&ty, "big"), None, "uint128_t не существует");
     }
 
+    /// **0029-01.** Отказ по ширине бит-вектора несёт причину → `CC-014`.
+    ///
+    /// Без причины вызывающий не мог отличить `[bit;128]` от невыразимого типа
+    /// и выдавал CC-009 «Variable not found» — ошибку не по адресу: переменная
+    /// найдена, невыразим её тип.
+    #[test]
+    fn test_bit_vector_width_error_carries_reason_and_maps_to_cc_014() {
+        let err = typed_err(&TypeNode::Array(128, Box::new(TypeNode::Bit)), "big");
+        assert_eq!(err, CTypeError::BitVectorWidth(128));
+
+        let diag = err.into_diagnostic("переменная 'big'");
+        assert_eq!(diag.code.as_deref(), Some("CC-014"));
+        assert!(
+            diag.message.contains("[bit;128]") && diag.message.contains("переменная 'big'"),
+            "сообщение обязано называть и ширину, и место: {}",
+            diag.message
+        );
+    }
+
+    /// **0029-01.** Невыразимый тип элемента → `CC-015`.
+    ///
+    /// Достижимый случай — вложенный массив: `[[u8;2];2]` (проба `nested.lam`).
+    /// Тип элемента `[u8;2]` в C как тип не выражается.
+    #[test]
+    fn test_unrepresentable_element_maps_to_cc_015() {
+        let elem = TypeNode::Array(
+            2,
+            Box::new(TypeNode::Integer {
+                bits: 8,
+                signed: false,
+            }),
+        );
+        let err = typed_err(&TypeNode::Array(2, Box::new(elem)), "grid");
+        assert_eq!(err, CTypeError::Unrepresentable);
+        assert_eq!(
+            err.into_diagnostic("переменная 'grid'").code.as_deref(),
+            Some("CC-015")
+        );
+    }
+
+    /// **0029-01.** Массив как параметр функции печатается объявителем.
+    ///
+    /// Прежде параметр шёл через `get_c_type`, который для массива даёт `None`,
+    /// а вызывающий делал `.unwrap()` — то есть `fn pick(data: [u8;4])` ронял
+    /// `lamc` **паникой** (проба `fnarr.lam`). Тип массива в C неотделим от
+    /// имени, поэтому параметр обязан печататься `uint8_t data[4]`.
+    #[test]
+    fn test_array_parameter_is_printed_as_declarator_not_panic() {
+        let ty = TypeNode::Array(
+            4,
+            Box::new(TypeNode::Integer {
+                bits: 8,
+                signed: false,
+            }),
+        );
+        assert_eq!(typed(&ty, "data").as_deref(), Some("uint8_t data[4]"));
+    }
+
     /// **Д1 (0029).** `[float;4]` → `double fr[4]`: правильная форма была, но
     /// только для `Rational`; теперь она общая для всех типов элемента.
     #[test]
@@ -318,7 +473,12 @@ mod tests {
     #[test]
     fn test_bit_is_unsigned_byte_not_signed_int() {
         assert_eq!(
-            get_c_type(&TypeNode::Bit, &empty_model().borrow()).as_deref(),
+            get_c_type(
+                &TypeNode::Bit,
+                &empty_model().borrow(),
+                FloatWidth::default()
+            )
+            .as_deref(),
             Some("uint8_t")
         );
     }
@@ -328,8 +488,42 @@ mod tests {
     #[test]
     fn test_rational_is_double_to_match_simulator_f64() {
         assert_eq!(
-            get_c_type(&TypeNode::Rational, &empty_model().borrow()).as_deref(),
+            get_c_type(
+                &TypeNode::Rational,
+                &empty_model().borrow(),
+                FloatWidth::default()
+            )
+            .as_deref(),
             Some("double")
+        );
+    }
+
+    /// **0029-03.** Умолчание — `W64`: без явного выбора эталон C совпадает с
+    /// f64 симулятора. Проверяется именно `Default`, а не `W64` дословно —
+    /// смена умолчания обязана уронить этот тест.
+    #[test]
+    fn test_default_float_width_is_w64() {
+        assert_eq!(FloatWidth::default(), FloatWidth::W64);
+    }
+
+    /// **0029-03.** `--float-width=32` → `float`: платформа без f64 выбирает
+    /// точность осознанно, флагом.
+    #[test]
+    fn test_float_width_32_gives_float() {
+        assert_eq!(
+            get_c_type(
+                &TypeNode::Rational,
+                &empty_model().borrow(),
+                FloatWidth::W32
+            )
+            .as_deref(),
+            Some("float")
+        );
+        // Форма массива (0029-01) обязана следовать за шириной элемента.
+        let arr = TypeNode::Array(4, Box::new(TypeNode::Rational));
+        assert_eq!(
+            typed_w(&arr, "fr", FloatWidth::W32).as_deref(),
+            Some("float fr[4]")
         );
     }
     use crate::generator::c::c_map::CMap;

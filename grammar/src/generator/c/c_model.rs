@@ -12,6 +12,7 @@ use crate::generator::c;
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
 use crate::semantic::minimap::{Element, Name, StateExtend};
+use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, StateNode, VariableNode};
 
 /// Генерирует именованные блоки состояния (enter/exit/always).
@@ -103,7 +104,7 @@ fn generate_model_init(
     for var in raw.variables.values() {
         let VariableNode::Simple {
             name: var_name,
-            ty: _,
+            ty,
             expr,
             ..
         } = var
@@ -117,8 +118,96 @@ fn generate_model_init(
         if let ExpressionNode::None = expr {
             continue;
         }
+        // 0029-05: массив в C **не присваивается** — ни скаляром, ни агрегатом.
+        // Общая ветка ниже печатала `model->x = …` для любого типа, что на
+        // настоящем массиве даёт «array type is not assignable».
+        if is_real_array(ty) {
+            generate_array_init(printer, map, model, &var.name(), ty, expr)?;
+            continue;
+        }
         printer.ident(&format!("model->{} = ", var.name()));
         generate_expr(printer, map, model, vec![], expr, 0, true)?;
+        printer.print(";").nl();
+    }
+    Ok(())
+}
+
+/// Настоящий ли это массив C (`elem name[N]`), а не бит-вектор.
+///
+/// `[bit;N]` при N ∈ {8,16,32,64} — **скаляр** `uint{N}_t` (доминирующая идиома
+/// корпуса), и присваивание ему законно. Прочие массивы — агрегаты.
+fn is_real_array(ty: &TypeNode) -> bool {
+    matches!(ty, TypeNode::Array(_, elem) if !matches!(**elem, TypeNode::Bit))
+}
+
+/// Инициализирует настоящий массив в `_init` — поэлементно.
+///
+/// # Почему не присваиванием
+///
+/// В C массив **не является** изменяемым lvalue: `model->data = …` отвергается
+/// (`array type 'uint8_t[4]' is not assignable`) и для скаляра, и для агрегата,
+/// и даже для составного литерала. Единственная форма — поэлементная запись
+/// (либо `memcpy`, но он тянет `<string.h>` ради инициализации).
+///
+/// Дефект вскрыт правкой Д1 (0029-01) и **ею не создан**: прежде `[u8;4]`
+/// объявлялось как `uint4_t data` — скаляр несуществующего типа, которому
+/// присваивание синтаксически «сходилось». Стоило массиву стать настоящим —
+/// вылез инициализатор.
+///
+/// # Скалярный инициализатор массива не поддерживается намеренно
+///
+/// `var data: [u8;4] := 0;` — что это значит, язык **не определяет**: обнулить
+/// весь массив? записать 0 в первый элемент? Три ответа расходятся уже сегодня
+/// (кандидат «Семантика `[bit;N]` расходится втрое» в `FEATURES.md`): цель `st`
+/// инициализатор молча отбрасывает, полагаясь на обнуление по правилам IEC;
+/// симулятор кладёт в переменную **скаляр** `Number(0)`, после чего чтение
+/// `data[0]` даёт `SIM-010` («переменная не является массивом» — проба). Выбрать
+/// один ответ здесь — значит решить вопрос семантики языка, на что фича 0029 не
+/// уполномочена (см. её карточку). Поэтому — `CC-017`, а не догадка.
+fn generate_array_init(
+    printer: &mut Printer,
+    map: &CMap,
+    model: &Element,
+    field: &str,
+    ty: &TypeNode,
+    expr: &ExpressionNode,
+) -> Result<(), Diagnostic> {
+    let TypeNode::Array(size, _) = ty else {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            format!("переменная '{}': ожидался массив", field),
+        )
+        .with_code("CC-017"));
+    };
+    // Агрегат записывается двумя формами: `:= {0, 0}` (`Initializer`) и
+    // `:= [0, 0]` (`Array`). Для C они неразличимы — обе дают поэлементную
+    // запись; принимать только одну значило бы отвергать корректный исходник.
+    let (ExpressionNode::Initializer(elems) | ExpressionNode::Array(elems)) = expr else {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            format!(
+                "переменная '{}': скалярный инициализатор массива не выразим в C — \
+                 массив в C не присваивается; используйте агрегат вида ':= {{0, 0, …}}'",
+                field
+            ),
+        )
+        .with_code("CC-017"));
+    };
+    if elems.len() != usize::from(*size) {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            format!(
+                "переменная '{}': инициализатор из {} элементов не соответствует массиву [{}]",
+                field,
+                elems.len(),
+                size
+            ),
+        )
+        .with_code("CC-017"));
+    }
+    for (i, elem) in elems.iter().enumerate() {
+        printer.ident(&format!("model->{}[{}] = ", field, i));
+        generate_expr(printer, map, model, vec![], elem, 0, true)?;
         printer.print(";").nl();
     }
     Ok(())

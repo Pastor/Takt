@@ -4,7 +4,7 @@ use crate::generator::c::c_map::CMap;
 use crate::generator::c::{
     FUNCTION_PORT_READ_BIT, FUNCTION_PORT_READ_FLOAT, FUNCTION_PORT_READ_NUMERIC,
     FUNCTION_PORT_WRITE_BIT, FUNCTION_PORT_WRITE_FLOAT, FUNCTION_PORT_WRITE_NUMERIC, PortClass,
-    get_typed_variable,
+    typed_variable_or_diagnostic,
 };
 use crate::generator::indent::Printer;
 use crate::semantic::minimap::{Element, Name, StateExtend};
@@ -344,11 +344,15 @@ fn generate_model_header(
                 if !map.usage().variables.contains(&name) {
                     continue;
                 }
-                let tv = get_typed_variable(&ty, Some(name.clone()), &*model.borrow()).ok_or_else(
-                    || {
-                        Diagnostic::error(Location::Codegen, format!("Variable {} not found", name))
-                            .with_code("CC-009")
-                    },
+                // 0029-01: прежде отказ отображения давал CC-009 «Variable not
+                // found» — ошибку не по адресу: переменная найдена, невыразим
+                // её тип. Теперь причина доходит до пользователя (CC-014/015).
+                let tv = typed_variable_or_diagnostic(
+                    &ty,
+                    &name,
+                    &*model.borrow(),
+                    map.float_width(),
+                    &format!("переменная '{}'", name),
                 )?;
                 printer.ident(&tv).print(";").nl();
             }
@@ -547,8 +551,15 @@ pub fn generate_header(
                     .nl()
                     .up();
                 for (field_name, field_ty) in &s.fields {
-                    let c_decl = c::get_typed_variable(field_ty, Some(field_name.clone()), &*model)
-                        .unwrap_or_else(|| format!("/* unsupported */ {}", field_name));
+                    // 0029-01: было `/* unsupported */ имя` — поле без типа,
+                    // то есть НЕВАЛИДНЫЙ C, выданный молча и с кодом 0.
+                    let c_decl = c::typed_variable_or_diagnostic(
+                        field_ty,
+                        field_name,
+                        &*model,
+                        map.float_width(),
+                        &format!("поле '{}' структуры '{}'", field_name, s.name),
+                    )?;
                     printer.ident(&format!("{};", c_decl)).nl();
                 }
                 printer.down().print(&format!("}} {};", s.name)).nl();
@@ -616,13 +627,23 @@ pub fn generate_header(
 }
 
 /// Ширина разыменования (в байтах) по C-типу порта из [`get_c_type`].
-fn width_from_ctype(ct: &str) -> u8 {
+///
+/// **Перечисление исчерпывающее** (0029-02, R9). Прежде здесь стояло `_ => 4`,
+/// и всё неузнанное читалось четырьмя байтами **молча** — тот же класс дефекта,
+/// против которого заведена вся фича 0029. Пробы показали, что ветка достижима
+/// и даёт неверный результат: битовый порт читался 4 байтами (через `Bit` →
+/// `int`), а порт структурного типа `Point` (2 байта) читается 4 байтами и
+/// сегодня. На железе это доступ за пределы регистра.
+///
+/// `None` — ширина неизвестна: вызывающий обязан дать `CC-016`, а не выбрать
+/// число за пользователя.
+fn width_from_ctype(ct: &str) -> Option<u8> {
     match ct {
-        "uint8_t" | "int8_t" | "bool" => 1,
-        "uint16_t" | "int16_t" => 2,
-        "uint64_t" | "int64_t" | "double" => 8,
-        // "uint32_t"/"int32_t"/"float"/"int" и всё прочее — 4 байта.
-        _ => 4,
+        "uint8_t" | "int8_t" | "bool" => Some(1),
+        "uint16_t" | "int16_t" => Some(2),
+        "uint32_t" | "int32_t" | "float" => Some(4),
+        "uint64_t" | "int64_t" | "double" => Some(8),
+        _ => None,
     }
 }
 
@@ -633,7 +654,7 @@ fn port_ctype(map: &CMap, model_name: &Name, port_name: &str) -> Option<String> 
     let VariableNode::Port { ty, .. } = borrowed.variables.get(port_name)? else {
         return None;
     };
-    c::get_c_type(ty, &borrowed)
+    c::get_c_type(ty, &borrowed, map.float_width())
 }
 
 /// Фича 0020-05: эмитит таблицу адресов портов и дефолтную реализацию HAL.
@@ -687,9 +708,30 @@ fn generate_hal(
                 let resolved = addr_map.get(port_name);
                 let addr = resolved.map(|r| r.addr).unwrap_or(0);
                 let bit = resolved.and_then(|r| r.bit).unwrap_or(-1);
-                let width = port_ctype(map, model_name, port_name)
-                    .map(|ct| width_from_ctype(&ct))
-                    .unwrap_or(4);
+                // 0029-02: было `.unwrap_or(4)` поверх `_ => 4` — два молчаливых
+                // умолчания подряд. Ширина доступа к MMIO угадыванию не подлежит.
+                let ct = port_ctype(map, model_name, port_name).ok_or_else(|| {
+                    Diagnostic::error(
+                        Location::Codegen,
+                        format!(
+                            "порт '{}' модели '{}': тип не представим в C — \
+                             ширина доступа к регистру неизвестна",
+                            port_name, model_name
+                        ),
+                    )
+                    .with_code("CC-015")
+                })?;
+                let width = width_from_ctype(&ct).ok_or_else(|| {
+                    Diagnostic::error(
+                        Location::Codegen,
+                        format!(
+                            "порт '{}' модели '{}': ширина доступа к регистру \
+                             неизвестна для типа C '{}'",
+                            port_name, model_name, ct
+                        ),
+                    )
+                    .with_code("CC-016")
+                })?;
                 printer
                     .ident(&format!(
                         "[{variant}] = {{ (uintptr_t)0x{addr:X}u, {bit}, {width} }},",
@@ -836,6 +878,112 @@ mod tests {
             &crate::generator::GenerateOptions::default(),
         )
         .unwrap()
+    }
+
+    /// Строит `.h` цели `c-hal` с разрешёнными адресами.
+    ///
+    /// Адреса разрешаются тем же путём, что и `lamc -t c-hal`
+    /// (`resolve_addresses`), — таблица `*__ADDR` иначе не эмитится.
+    fn generate_hal_h(src: &str, name: &str, float_width: crate::generator::FloatWidth) -> String {
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model.borrow_mut().name = Some(name.to_string());
+        let resolution = crate::address_map::resolve_addresses(std::rc::Rc::clone(&model), &[]);
+        let model = model.borrow();
+        let map = CMap::new(model.name(), &*model, true)
+            .unwrap()
+            .with_float_width(float_width);
+        let mut options = crate::generator::GenerateOptions::default();
+        options.hal = true;
+        options.address_map = resolution.map;
+        options.float_width = float_width;
+        generate_header(map.get_filename(), &map, &options).unwrap()
+    }
+
+    /// Исходник цели `c-hal` с портами трёх ширин.
+    const HAL_SRC: &str = r#"
+in temperature: float;
+in sensor: bit;
+in level: u16;
+
+address temperature = 0x1000;
+address sensor = 0x2000;
+address level = 0x3000;
+
+var reading: float := 0.0;
+
+start Idle {
+    always {
+        reading := temperature + 1.0;
+    }
+}
+"#;
+
+    /// **T10 (0029-02/03).** Ширина доступа к MMIO по типу порта.
+    ///
+    /// Значения **захвачены зондом** (`lamc -t c-hal`), а не угаданы. Ловит два
+    /// исправления фичи 0029 сразу:
+    /// - битовый порт — **1** байт (было 4: `Bit` → `int` → `_ => 4`); чтение
+    ///   4 байтами из однобайтового регистра — доступ за его пределы;
+    /// - вещественный порт — **8** байт (было 4: `Rational` → `float`); это
+    ///   ожидаемая цена умолчания `--float-width=64`, решение заказчика.
+    #[test]
+    fn test_hal_port_width_follows_c_type() {
+        let header = generate_hal_h(HAL_SRC, "Hal", crate::generator::FloatWidth::W64);
+        assert!(
+            header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, -1, 1 },"),
+            "битовый порт обязан читаться 1 байтом:\n{header}"
+        );
+        assert!(
+            header.contains("[HAL_TEMPERATURE] = { (uintptr_t)0x1000u, -1, 8 },"),
+            "вещественный порт при умолчании W64 — 8 байт:\n{header}"
+        );
+        assert!(
+            header.contains("[HAL_LEVEL] = { (uintptr_t)0x3000u, -1, 2 },"),
+            "u16 — 2 байта, без изменений:\n{header}"
+        );
+    }
+
+    /// **T11 (0029-03).** `--float-width=32` возвращает вещественному порту 4
+    /// байта — для платформ, где 8-байтное чтение недопустимо.
+    #[test]
+    fn test_hal_float_port_width_is_4_with_float_width_32() {
+        let header = generate_hal_h(HAL_SRC, "Hal", crate::generator::FloatWidth::W32);
+        assert!(
+            header.contains("[HAL_TEMPERATURE] = { (uintptr_t)0x1000u, -1, 4 },"),
+            "при W32 вещественный порт — 4 байта:\n{header}"
+        );
+        // Прочие ширины от флага не зависят.
+        assert!(
+            header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, -1, 1 },"),
+            "битовый порт от --float-width не зависит:\n{header}"
+        );
+    }
+
+    /// **R9 (0029-02).** Таблица ширин исчерпывающая: неузнанный тип даёт
+    /// `None`, а не молчаливые 4 байта.
+    ///
+    /// Достижимость проверена зондом: порт структурного типа `Point` (2 байта)
+    /// получал `width 4` — доступ за пределы регистра, выданный молча.
+    #[test]
+    fn test_width_from_ctype_has_no_silent_default() {
+        assert_eq!(width_from_ctype("uint8_t"), Some(1));
+        assert_eq!(width_from_ctype("bool"), Some(1));
+        assert_eq!(width_from_ctype("uint16_t"), Some(2));
+        assert_eq!(width_from_ctype("float"), Some(4));
+        assert_eq!(width_from_ctype("uint32_t"), Some(4));
+        assert_eq!(width_from_ctype("double"), Some(8));
+        assert_eq!(width_from_ctype("uint64_t"), Some(8));
+        assert_eq!(
+            width_from_ctype("Point"),
+            None,
+            "структурный тип: ширина неизвестна → CC-016, а не 4 байта молча"
+        );
+        assert_eq!(
+            width_from_ctype("int"),
+            None,
+            "`int` больше не порождается get_c_type; узнавать его нечего"
+        );
     }
 
     /// **T1.** Одиночная модель БЕЗ под-моделей получает typedef корня.
