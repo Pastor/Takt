@@ -216,7 +216,7 @@ pub(crate) fn print_condition(
             for arg in args {
                 printed.push(print_condition(arg, model)?);
             }
-            super::st_func::print_call_texts(def, &printed)
+            super::st_func::print_call_texts(def, &printed, model)
         }
         ConditionNode::String(_) => Err(unsupported(
             "строковый литерал: цель ST строк не поддерживает",

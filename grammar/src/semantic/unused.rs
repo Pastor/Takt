@@ -17,7 +17,7 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 /// Множество использованных имён в модели.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct UsageSet {
     /// Используемые переменные (var)
     pub variables: HashSet<String>,
@@ -184,7 +184,12 @@ fn usage_from_expr(expr: &ExpressionNode, set: &mut UsageSet) {
 }
 
 /// Записывает имена из оператора в соответствующие множества.
-fn usage_from_stmt(stmt: &StatementNode, set: &mut UsageSet) {
+/// Собирает использованные имена из оператора.
+///
+/// Открыт для генератора ST (фича 0041): там по телу функции нужно узнать, какие
+/// переменные модели она трогает, — в IEC `FUNCTION` чистая и видит только свои
+/// входы, поэтому такие переменные передаются ей через `VAR_IN_OUT`.
+pub(crate) fn usage_from_stmt(stmt: &StatementNode, set: &mut UsageSet) {
     match stmt {
         StatementNode::Block(stmts) => {
             for s in stmts {

@@ -46,6 +46,11 @@ END_VAR
 VAR
     state : USINT := 0;
 END_VAR
+VAR CONSTANT
+    Command_Up : USINT := 0;
+    Command_Down : USINT := 1;
+    Command_Stop : USINT := 2;
+END_VAR
     CASE state OF
         0: (* INIT *)
             command := 2;
@@ -203,6 +208,11 @@ VAR_IN_OUT
 END_VAR
 VAR
     state : USINT := 0;
+END_VAR
+VAR CONSTANT
+    Command_Up : USINT := 0;
+    Command_Down : USINT := 1;
+    Command_Stop : USINT := 2;
 END_VAR
     CASE state OF
         0: (* INIT *)
