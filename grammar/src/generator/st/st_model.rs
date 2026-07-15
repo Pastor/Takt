@@ -515,7 +515,7 @@ mod tests {
         let (ast, _) = crate::parse(src, 0).unwrap();
         let rc = construct_model(&ast, None, &[]).unwrap();
         rc.borrow_mut().name = Some("Root".to_string());
-        let map = StMap::new("root", &rc.borrow(), false).unwrap();
+        let map = StMap::new("root", &rc.borrow(), false, Default::default()).unwrap();
         let element = map.model();
         let Element::Model { states, .. } = &element else {
             panic!("корень не модель");

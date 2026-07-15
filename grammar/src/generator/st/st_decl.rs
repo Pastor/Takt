@@ -120,6 +120,9 @@ pub(crate) struct Extras {
     pub instances: Vec<(String, String)>,
     /// Объявления, поднятые из тела (`st_stmt`).
     pub hoisted: Vec<(String, TypeNode)>,
+    /// Цель `st-at`: порты размещены глобально, поэтому блок видит их через
+    /// `VAR_EXTERNAL`, а не объявляет своими входами/выходами.
+    pub external_ports: bool,
 }
 
 /// Печатает все секции объявлений одного `FUNCTION_BLOCK`.
@@ -150,6 +153,7 @@ pub(crate) fn emit_declarations(
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
     let mut in_outs = Vec::new();
+    let mut externals = Vec::new();
     let mut locals = Vec::new();
     let mut constants = enum_constants(model)?;
 
@@ -224,9 +228,15 @@ pub(crate) fn emit_declarations(
                 if extras.shared.iter().any(|(n, _)| n == name) {
                     continue;
                 }
-                // Адрес порта (`AT %IX…`) здесь не эмитится: цель `st` его не
-                // потребляет, цель `st-at` — задача 0041-05.
                 let decl = declaration(name, ty, &ExpressionNode::None, model)?;
+                // Цель `st-at`: порт — размещённая глобальная переменная
+                // (`VAR_GLOBAL … AT %…` внутри `CONFIGURATION`), и блок видит её
+                // через `VAR_EXTERNAL`. Цель `st` адрес не потребляет: порт
+                // остаётся входом/выходом блока.
+                if extras.external_ports {
+                    externals.push(decl);
+                    continue;
+                }
                 match direction {
                     PortDirection::In => inputs.push(decl),
                     PortDirection::Out => outputs.push(decl),
@@ -254,6 +264,7 @@ pub(crate) fn emit_declarations(
         ("VAR_INPUT", inputs),
         ("VAR_OUTPUT", outputs),
         ("VAR_IN_OUT", in_outs),
+        ("VAR_EXTERNAL", externals),
         ("VAR", locals),
         ("VAR CONSTANT", constants),
     ];

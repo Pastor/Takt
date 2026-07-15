@@ -40,6 +40,7 @@
 //! **0041-03**; до неё гейт закрыть нельзя. Заглушку-тело генератор намеренно
 //! **не** эмитит: она уехала бы в ПЛК под видом логики.
 
+mod st_at;
 mod st_decl;
 mod st_expr;
 mod st_func;
@@ -52,9 +53,9 @@ use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
-use crate::semantic::ModelNode;
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
+use crate::semantic::{ModelNode, VariableNode};
 use st_map::StMap;
 use std::cell::RefCell;
 use std::fmt::Write as _;
@@ -79,6 +80,7 @@ impl AsGenerator for Generator {
             &normalize_lowercase_snakecase(model.name().to_string()),
             model,
             options.hal,
+            options.address_map.clone(),
         )?;
         let program = generate_program(&map)?;
         let filename = map.get_filename();
@@ -175,8 +177,100 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
         emit_function_block(&mut p, map, name, &model.borrow(), is_root)?;
     }
 
+    // Цель `st-at` порождает программу для ПЛК ЦЕЛИКОМ, а не библиотеку блоков:
+    // размещённые порты живут в `VAR_GLOBAL`, а он вне `CONFIGURATION`
+    // недопустим (проба П8). Цель `st` обёртки не требует (П2) — цели
+    // асимметричны намеренно.
+    if map.at_addresses() {
+        let root = map
+            .root_model_node()
+            .ok_or_else(|| root_missing(root_name.clone()))?;
+        emit_configuration(&mut p, map, &root_name, &root.borrow())?;
+    }
+
     report(&warnings);
     Ok(out)
+}
+
+/// Печатает `PROGRAM` и `CONFIGURATION` с размещёнными портами (цель `st-at`).
+///
+/// Форма проверена пробами П3 (обёртка) и П8 (`VAR_GLOBAL … AT %…` внутри
+/// `CONFIGURATION`).
+fn emit_configuration(
+    p: &mut Printer,
+    map: &StMap,
+    root_name: &Name,
+    root: &ModelNode,
+) -> Result<(), Diagnostic> {
+    let fb = root_name.unique_camelcase();
+    p.ident(&format!("PROGRAM {}Main", fb)).nl();
+    p.ident("VAR").nl();
+    p.up();
+    p.ident(&format!("inst : {};", fb)).nl();
+    p.down();
+    p.ident("END_VAR").nl();
+    p.up();
+    p.ident("inst();").nl();
+    p.down();
+    p.ident("END_PROGRAM").nl().nl();
+
+    // Размещённые порты собираются заранее: пустой `VAR_GLOBAL … END_VAR`
+    // недопустим («no variable declared in global variable(s) declaration»), а
+    // модель без портов — не ошибка (например, `comprehensive.lam`).
+    let mut placed: Vec<String> = Vec::new();
+    let mut warnings = Vec::new();
+    let mut names: Vec<&String> = root.variables.keys().collect();
+    names.sort();
+    for name in names {
+        let VariableNode::Port {
+            name: pname,
+            ty,
+            direction,
+            ..
+        } = &root.variables[name]
+        else {
+            continue;
+        };
+        if !map.usage().ports.contains(pname) {
+            continue;
+        }
+        // Порт без адреса при `st-at` — уже ошибка слоя 0020 (SE-052), сюда он не
+        // доходит; но если карта пуста, размещать нечего.
+        let Some(resolved) = map.address_of(pname) else {
+            continue;
+        };
+        let (location, comment, mut w) = st_at::location_of(pname, ty, *direction, resolved)?;
+        warnings.append(&mut w);
+        let ty_name = st_type::get_st_type(ty, root)?;
+        placed.push(format!(
+            "{} AT {} : {}; {}",
+            pname, location, ty_name, comment
+        ));
+    }
+
+    p.ident(&format!("CONFIGURATION {}Config", fb)).nl();
+    p.up();
+    if !placed.is_empty() {
+        p.ident("VAR_GLOBAL").nl();
+        p.up();
+        for line in &placed {
+            p.ident(line).nl();
+        }
+        p.down();
+        p.ident("END_VAR").nl();
+    }
+    p.ident("RESOURCE Res0 ON PLC").nl();
+    p.up();
+    p.ident("TASK Tick(INTERVAL := T#100ms, PRIORITY := 0);")
+        .nl();
+    p.ident(&format!("PROGRAM Inst0 WITH Tick : {}Main;", fb))
+        .nl();
+    p.down();
+    p.ident("END_RESOURCE").nl();
+    p.down();
+    p.ident("END_CONFIGURATION").nl().nl();
+    report(&warnings);
+    Ok(())
 }
 
 /// Показывает предупреждения генератора (`ST-009`, `ST-010`).
@@ -279,6 +373,7 @@ fn emit_function_block(
     let extras = st_decl::Extras {
         state_var: true,
         is_done: true,
+        external_ports: map.at_addresses(),
         shared,
         instances: out
             .instances
@@ -315,7 +410,7 @@ mod tests {
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         model_rc.borrow_mut().name = Some(name.to_string());
         let model = model_rc.borrow();
-        StMap::new(name, &model, false).unwrap()
+        StMap::new(name, &model, false, Default::default()).unwrap()
     }
 
     fn program_of(src: &str, name: &str) -> String {

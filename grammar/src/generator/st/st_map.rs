@@ -5,12 +5,14 @@
 //! имён ([`UsageSet`]), чтобы не эмитить в `FUNCTION_BLOCK` объявления, которых
 //! модель не использует.
 
+use crate::address_map::ResolvedAddress;
 use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::minimap::{Element, Map, Name, StateExtend};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::unused::UsageSet;
 use crate::semantic::{ModelNode, VariableNode};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Снимок модели, подготовленный для генерации Structured Text.
@@ -24,6 +26,8 @@ pub(crate) struct StMap {
     /// Соответствует [`GenerateOptions::hal`](crate::generator::GenerateOptions::hal);
     /// потребляется задачей 0041-05, здесь только переносится в снимок.
     at_addresses: bool,
+    /// Разрешённые адреса портов (`resolve_addresses`, приоритет 0020).
+    addresses: HashMap<String, ResolvedAddress>,
 }
 
 /// Собирает имена моделей из дерева реализации состояния.
@@ -42,7 +46,12 @@ impl StMap {
     ///
     /// # Ошибки
     /// Возвращает [`Diagnostic`], если у модели нет стартового состояния.
-    pub fn new(filename: &str, model: &ModelNode, at_addresses: bool) -> Result<Self, Diagnostic> {
+    pub fn new(
+        filename: &str,
+        model: &ModelNode,
+        at_addresses: bool,
+        addresses: HashMap<String, ResolvedAddress>,
+    ) -> Result<Self, Diagnostic> {
         let model_rc = Rc::new(RefCell::new(model.copy(None, None)));
         let usage = crate::semantic::unused::compute_usage(Rc::clone(&model_rc));
         Ok(Self {
@@ -50,7 +59,13 @@ impl StMap {
             map: Map::create(model_rc)?,
             usage,
             at_addresses,
+            addresses,
         })
+    }
+
+    /// Разрешённый адрес порта по имени (цель `st-at`).
+    pub(crate) fn address_of(&self, port: &str) -> Option<&ResolvedAddress> {
+        self.addresses.get(port)
     }
 
     /// Возвращает базовое имя файла (без расширения).
