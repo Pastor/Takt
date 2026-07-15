@@ -1,0 +1,227 @@
+(*
+ * Порождено компилятором Lam (lamc) — цель: Structured Text (IEC 61131-3).
+ * Не редактировать вручную: файл перезаписывается при каждой генерации.
+ *)
+
+FUNCTION door_close : USINT
+VAR_INPUT
+    unused : USINT;
+END_VAR
+    (* extern fn door_close — заглушка (ST-009) *)
+    door_close := 0;
+END_FUNCTION
+
+FUNCTION door_open : USINT
+VAR_INPUT
+    unused : USINT;
+END_VAR
+    (* extern fn door_open — заглушка (ST-009) *)
+    door_open := 0;
+END_FUNCTION
+
+FUNCTION motor_down : USINT
+VAR_INPUT
+    unused : USINT;
+END_VAR
+    (* extern fn motor_down — заглушка (ST-009) *)
+    motor_down := 0;
+END_FUNCTION
+
+FUNCTION motor_stop : USINT
+VAR_INPUT
+    unused : USINT;
+END_VAR
+    (* extern fn motor_stop — заглушка (ST-009) *)
+    motor_stop := 0;
+END_FUNCTION
+
+FUNCTION motor_up : USINT
+VAR_INPUT
+    unused : USINT;
+END_VAR
+    (* extern fn motor_up — заглушка (ST-009) *)
+    motor_up := 0;
+END_FUNCTION
+
+FUNCTION read_floor_sensors : USINT
+VAR_INPUT
+    unused : USINT;
+END_VAR
+    (* extern fn read_floor_sensors — заглушка (ST-009) *)
+    read_floor_sensors := 0;
+END_FUNCTION
+
+FUNCTION scan_cabin_buttons : USINT
+VAR_INPUT
+    unused : USINT;
+END_VAR
+    (* extern fn scan_cabin_buttons — заглушка (ST-009) *)
+    scan_cabin_buttons := 0;
+END_FUNCTION
+
+FUNCTION scan_floor_buttons : USINT
+VAR_INPUT
+    unused : USINT;
+END_VAR
+    (* extern fn scan_floor_buttons — заглушка (ST-009) *)
+    scan_floor_buttons := 0;
+END_FUNCTION
+
+FUNCTION_BLOCK ElevatorEngine
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR_IN_OUT
+    current_floor : USINT;
+    has_call : USINT;
+    sensors_cab : USINT;
+    target_floor : USINT;
+END_VAR
+VAR
+    state : USINT := 0;
+    _st_discard_usint : USINT;
+END_VAR
+VAR CONSTANT
+    Action_Idle : UINT := 670;
+    Action_Closing : UINT := 671;
+    Floor_Bottom : USINT := 80;
+    Floor_Top : USINT := 81;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            _st_discard_usint := door_open(0);
+            state := 3; (* Idle *)
+        1: (* DoorClosing *)
+            _st_discard_usint := door_close(0);
+            IF ((USINT_TO_BYTE(sensors_cab) AND 16#02) <> 16#00) OR (current_floor = target_floor) THEN
+                _st_discard_usint := door_open(0);
+                state := 3; (* Idle *)
+            ELSIF (NOT ((USINT_TO_BYTE(sensors_cab) AND 16#02) <> 16#00)) AND (current_floor < target_floor) THEN
+                state := 5; (* MovingUp *)
+            ELSIF (NOT ((USINT_TO_BYTE(sensors_cab) AND 16#02) <> 16#00)) AND (current_floor > target_floor) THEN
+                state := 4; (* MovingDown *)
+            END_IF;
+        2: (* DoorOpening *)
+            _st_discard_usint := door_open(0);
+            state := 3; (* Idle *)
+        3: (* Idle *)
+            _st_discard_usint := scan_floor_buttons(0);
+            IF (USINT_TO_BYTE(sensors_cab) AND 16#01) <> 16#00 THEN
+                _st_discard_usint := scan_cabin_buttons(0);
+            END_IF;
+            IF (has_call = 1) AND (NOT (current_floor = target_floor)) THEN
+                state := 1; (* DoorClosing *)
+            END_IF;
+        4: (* MovingDown *)
+            _st_discard_usint := motor_down(0);
+            _st_discard_usint := read_floor_sensors(0);
+            _st_discard_usint := scan_floor_buttons(0);
+            IF (USINT_TO_BYTE(sensors_cab) AND 16#01) <> 16#00 THEN
+                _st_discard_usint := scan_cabin_buttons(0);
+            END_IF;
+            IF current_floor = target_floor THEN
+                _st_discard_usint := motor_stop(0);
+                _st_discard_usint := door_open(0);
+                has_call := 0;
+                state := 2; (* DoorOpening *)
+            END_IF;
+        5: (* MovingUp *)
+            _st_discard_usint := motor_up(0);
+            _st_discard_usint := read_floor_sensors(0);
+            _st_discard_usint := scan_floor_buttons(0);
+            IF (USINT_TO_BYTE(sensors_cab) AND 16#01) <> 16#00 THEN
+                _st_discard_usint := scan_cabin_buttons(0);
+            END_IF;
+            IF current_floor = target_floor THEN
+                _st_discard_usint := motor_stop(0);
+                _st_discard_usint := door_open(0);
+                has_call := 0;
+                state := 2; (* DoorOpening *)
+            END_IF;
+        6: (* END *)
+            state := 6;
+    END_CASE;
+    is_done := state = 6;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK Elevator
+VAR_INPUT
+    sensors_1 : USINT;
+    sensors_2 : USINT;
+    sensors_3 : USINT;
+    sensors_4 : USINT;
+    sensors_5 : USINT;
+    sensors_6 : USINT;
+    sensors_7 : USINT;
+    sensors_8 : USINT;
+    sensors_9 : USINT;
+    sensors_cab : USINT;
+END_VAR
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+    engine0 : ElevatorEngine;
+    middle_engine1 : ElevatorEngine;
+    middle_engine2 : ElevatorEngine;
+    middle_engine3 : ElevatorEngine;
+    middle_engine4 : ElevatorEngine;
+    middle_engine5 : ElevatorEngine;
+    middle_engine6 : ElevatorEngine;
+    middle_step : USINT;
+    current_floor : USINT := 1;
+    has_call : USINT := 0;
+    target_floor : USINT := 1;
+END_VAR
+VAR CONSTANT
+    Floor_Bottom : USINT := 80;
+    Floor_Top : USINT := 81;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 2; (* Main *)
+        1: (* End *)
+            state := 4; (* END *)
+        2: (* Main *)
+            engine0(current_floor := current_floor, has_call := has_call, sensors_cab := sensors_cab, target_floor := target_floor);
+            IF engine0.is_done THEN
+                state := 3; (* Middle *)
+            END_IF;
+        3: (* Middle *)
+            CASE middle_step OF
+                0:
+                    middle_engine1(current_floor := current_floor, has_call := has_call, sensors_cab := sensors_cab, target_floor := target_floor);
+                    IF middle_engine1.is_done THEN
+                        middle_step := 1;
+                    END_IF;
+                1:
+                    middle_engine2(current_floor := current_floor, has_call := has_call, sensors_cab := sensors_cab, target_floor := target_floor);
+                    middle_engine3(current_floor := current_floor, has_call := has_call, sensors_cab := sensors_cab, target_floor := target_floor);
+                    IF middle_engine2.is_done AND middle_engine3.is_done THEN
+                        middle_step := 2;
+                    END_IF;
+                2:
+                    middle_engine4(current_floor := current_floor, has_call := has_call, sensors_cab := sensors_cab, target_floor := target_floor);
+                    IF middle_engine4.is_done THEN
+                        middle_step := 3;
+                    END_IF;
+                3:
+                    middle_engine5(current_floor := current_floor, has_call := has_call, sensors_cab := sensors_cab, target_floor := target_floor);
+                    IF middle_engine5.is_done THEN
+                        middle_step := 4;
+                    END_IF;
+                4:
+                    middle_engine6(current_floor := current_floor, has_call := has_call, sensors_cab := sensors_cab, target_floor := target_floor);
+                    IF middle_engine6.is_done THEN
+                        middle_step := 5;
+                    END_IF;
+                5: (* конкатенация завершена *)
+                    state := 1; (* End *)
+            END_CASE;
+        4: (* END *)
+            state := 4;
+    END_CASE;
+    is_done := state = 4;
+END_FUNCTION_BLOCK
+

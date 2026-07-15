@@ -1,0 +1,363 @@
+(*
+ * Порождено компилятором Lam (lamc) — цель: Structured Text (IEC 61131-3).
+ * Не редактировать вручную: файл перезаписывается при каждой генерации.
+ *)
+
+TYPE
+    Coord :
+    STRUCT
+        x : ARRAY [0..31] OF BOOL;
+        y : ARRAY [0..31] OF BOOL;
+        z : ARRAY [0..31] OF BOOL;
+    END_STRUCT;
+END_TYPE
+
+FUNCTION has_flag : BOOL
+VAR_INPUT
+    v : BOOL;
+END_VAR
+    (* extern fn has_flag — заглушка (ST-009) *)
+    has_flag := FALSE;
+END_FUNCTION
+
+FUNCTION is_collected : BOOL
+VAR_INPUT
+    c : USINT;
+    v : USINT;
+END_VAR
+VAR_IN_OUT
+    x : USINT;
+END_VAR
+    IF (c = 0) AND (v = 1) THEN
+        is_collected := TRUE;
+        RETURN;
+    ELSE
+        IF (c = 1) AND (v = 2) THEN
+            is_collected := TRUE;
+            RETURN;
+        ELSE
+            IF ((USINT_TO_BYTE(x) AND 16#04) <> 16#00) = 0 THEN
+                is_collected := TRUE;
+                RETURN;
+            END_IF;
+        END_IF;
+    END_IF;
+    is_collected := FALSE;
+    RETURN;
+END_FUNCTION
+
+FUNCTION_BLOCK ExtendComplexA
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+END_VAR
+VAR CONSTANT
+    Constant_X : USINT := 0;
+    Constant_Y : USINT := 1;
+    Constant_Z : USINT := 2;
+    ENABLED : BOOL := TRUE;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 1; (* Start *)
+        1: (* Start *)
+            state := 2; (* END *)
+        2: (* END *)
+            state := 2;
+    END_CASE;
+    is_done := state = 2;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ExtendComplexB
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR_IN_OUT
+    IDLE : BOOL;
+    WAIT : BOOL;
+    WORK : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+END_VAR
+VAR CONSTANT
+    Constant_X : USINT := 0;
+    Constant_Y : USINT := 1;
+    Constant_Z : USINT := 2;
+    ENABLED : BOOL := TRUE;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 1; (* Start *)
+        1: (* Start *)
+            IF WAIT THEN
+                WORK := 0;
+                IDLE := 1;
+            ELSE
+                IDLE := 0;
+                WORK := 1;
+            END_IF;
+            state := 2; (* END *)
+        2: (* END *)
+            state := 2;
+    END_CASE;
+    is_done := state = 2;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ExtendComplexCC1
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR_IN_OUT
+    x : USINT;
+    y : USINT;
+END_VAR
+VAR
+    state : USINT := 0;
+END_VAR
+VAR CONSTANT
+    Constant_X : USINT := 0;
+    Constant_Y : USINT := 1;
+    Constant_Z : USINT := 2;
+    Point_Global : USINT := 0;
+    Point_Local : USINT := 1;
+    ENABLED : BOOL := TRUE;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 2; (* Start *)
+        1: (* End *)
+            state := 3; (* END *)
+        2: (* Start *)
+            IF (is_collected(Constant_Y, y) AND is_collected(Constant_X, x)) AND has_flag(ENABLED) THEN
+                state := 1; (* End *)
+            END_IF;
+        3: (* END *)
+            state := 3;
+    END_CASE;
+    is_done := state = 3;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ExtendComplexCC2
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+END_VAR
+VAR CONSTANT
+    Constant_X : USINT := 0;
+    Constant_Y : USINT := 1;
+    Constant_Z : USINT := 2;
+    Point_Global : USINT := 0;
+    Point_Local : USINT := 1;
+    ENABLED : BOOL := TRUE;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 1; (* Start *)
+        1: (* Start *)
+            state := 2; (* END *)
+        2: (* END *)
+            state := 2;
+    END_CASE;
+    is_done := state = 2;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ExtendComplexD
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+END_VAR
+VAR CONSTANT
+    Constant_X : USINT := 0;
+    Constant_Y : USINT := 1;
+    Constant_Z : USINT := 2;
+    ENABLED : BOOL := TRUE;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 1; (* Start *)
+        1: (* Start *)
+            state := 2; (* END *)
+        2: (* END *)
+            state := 2;
+    END_CASE;
+    is_done := state = 2;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ExtendComplexF
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+END_VAR
+VAR CONSTANT
+    Constant_X : USINT := 0;
+    Constant_Y : USINT := 1;
+    Constant_Z : USINT := 2;
+    ENABLED : BOOL := TRUE;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 1; (* Start *)
+        1: (* Start *)
+            state := 2; (* END *)
+        2: (* END *)
+            state := 2;
+    END_CASE;
+    is_done := state = 2;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ExtendComplexC
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR_IN_OUT
+    x : USINT;
+    y : USINT;
+END_VAR
+VAR
+    state : USINT := 0;
+    c10 : ExtendComplexCC1;
+    c21 : ExtendComplexCC2;
+END_VAR
+VAR CONSTANT
+    Constant_X : USINT := 0;
+    Constant_Y : USINT := 1;
+    Constant_Z : USINT := 2;
+    Point_Global : USINT := 0;
+    Point_Local : USINT := 1;
+    ENABLED : BOOL := TRUE;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 2; (* Start *)
+        1: (* End *)
+            state := 3; (* END *)
+        2: (* Start *)
+            c10(x := x, y := y);
+            c21();
+            IF c10.is_done AND c21.is_done THEN
+                state := 1; (* End *)
+            END_IF;
+        3: (* END *)
+            state := 3;
+    END_CASE;
+    is_done := state = 3;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ExtendComplexE
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+    start_d0 : ExtendComplexD;
+    start_f1 : ExtendComplexF;
+    start_step : USINT;
+END_VAR
+VAR CONSTANT
+    Constant_X : USINT := 0;
+    Constant_Y : USINT := 1;
+    Constant_Z : USINT := 2;
+    ENABLED : BOOL := TRUE;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 2; (* Start *)
+        1: (* End *)
+            state := 3; (* END *)
+        2: (* Start *)
+            CASE start_step OF
+                0:
+                    start_d0();
+                    IF start_d0.is_done THEN
+                        start_step := 1;
+                    END_IF;
+                1:
+                    start_f1();
+                    IF start_f1.is_done THEN
+                        start_step := 2;
+                    END_IF;
+                2: (* конкатенация завершена *)
+                    state := 1; (* End *)
+            END_CASE;
+        3: (* END *)
+            state := 3;
+    END_CASE;
+    is_done := state = 3;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ExtendComplex
+VAR_INPUT
+    WAIT : BOOL;
+END_VAR
+VAR_OUTPUT
+    is_done : BOOL;
+    IDLE : BOOL;
+    WORK : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+    f0 : ExtendComplexF;
+    start_a1 : ExtendComplexA;
+    start_b2 : ExtendComplexB;
+    start_c3 : ExtendComplexC;
+    start_d4 : ExtendComplexD;
+    start_e5 : ExtendComplexE;
+    start_step : USINT;
+    x : USINT := 1;
+    y : USINT := 2;
+END_VAR
+VAR CONSTANT
+    Constant_X : USINT := 0;
+    Constant_Y : USINT := 1;
+    Constant_Z : USINT := 2;
+    ENABLED : BOOL := TRUE;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 2; (* Start *)
+        1: (* Next *)
+            f0();
+            IF f0.is_done THEN
+                state := 3; (*  *)
+            END_IF;
+        2: (* Start *)
+            CASE start_step OF
+                0:
+                    start_a1();
+                    IF start_a1.is_done THEN
+                        start_step := 1;
+                    END_IF;
+                1:
+                    start_b2(IDLE := IDLE, WAIT := WAIT, WORK := WORK);
+                    IF start_b2.is_done THEN
+                        start_step := 2;
+                    END_IF;
+                2:
+                    start_c3(x := x, y := y);
+                    start_d4();
+                    IF start_c3.is_done AND start_d4.is_done THEN
+                        start_step := 3;
+                    END_IF;
+                3:
+                    start_e5();
+                    IF start_e5.is_done THEN
+                        start_step := 4;
+                    END_IF;
+                4: (* конкатенация завершена *)
+                    state := 1; (* Next *)
+            END_CASE;
+        3: (* END *)
+            state := 3;
+    END_CASE;
+    is_done := state = 3;
+END_FUNCTION_BLOCK
+

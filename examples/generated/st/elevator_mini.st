@@ -220,7 +220,7 @@ END_VAR
             state := 2; (* Idle *)
         1: (* Down *)
             ElevatorMotor_Down := TRUE;
-            IF command = Command_Stop OR ElevatorMotor_SensorD THEN
+            IF (command = Command_Stop) OR ElevatorMotor_SensorD THEN
                 state := 3; (* Stop *)
             END_IF;
         2: (* Idle *)
@@ -237,7 +237,7 @@ END_VAR
             state := 2; (* Idle *)
         4: (* Up *)
             ElevatorMotor_Up := TRUE;
-            IF command = Command_Stop OR ElevatorMotor_SensorU THEN
+            IF (command = Command_Stop) OR ElevatorMotor_SensorU THEN
                 state := 3; (* Stop *)
             END_IF;
         5: (* END *)

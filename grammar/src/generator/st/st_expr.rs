@@ -60,7 +60,7 @@ pub(crate) fn print_expression(
         ExpressionNode::Variable(var) => Ok(variable_name(&var.borrow())),
         ExpressionNode::Parenthesis(inner) => Ok(format!("({})", print_expression(inner, model)?)),
         // Логические операции: в ST те же слова, что в IEC-условиях.
-        ExpressionNode::Not(a) => Ok(format!("NOT {}", print_expression(a, model)?)),
+        ExpressionNode::Not(a) => Ok(format!("NOT {}", wrap_expr(a, model)?)),
         ExpressionNode::And(a, b) => binary(a, "AND", b, model),
         ExpressionNode::Or(a, b) => binary(a, "OR", b, model),
         // Арифметика: синтаксис совпадает, кроме остатка (`%` → `MOD`).
@@ -70,8 +70,8 @@ pub(crate) fn print_expression(
         ExpressionNode::Divide(a, b) => binary(a, "/", b, model),
         ExpressionNode::Modulo(a, b) => binary(a, "MOD", b, model),
         ExpressionNode::Power(a, b) => binary(a, "**", b, model),
-        ExpressionNode::UnaryPlus(a) => Ok(format!("+{}", print_expression(a, model)?)),
-        ExpressionNode::Negate(a) => Ok(format!("-{}", print_expression(a, model)?)),
+        ExpressionNode::UnaryPlus(a) => Ok(format!("+{}", wrap_expr(a, model)?)),
+        ExpressionNode::Negate(a) => Ok(format!("-{}", wrap_expr(a, model)?)),
         // Сравнения: `!=` в ST записывается `<>`, остальные совпадают.
         ExpressionNode::Equal(a, b) => binary(a, "=", b, model),
         ExpressionNode::NotEqual(a, b) => binary(a, "<>", b, model),
@@ -176,7 +176,7 @@ pub(crate) fn print_condition(
         }
         ConditionNode::Variable(var, _) => Ok(variable_name(&var.borrow())),
         ConditionNode::Parenthesis(inner) => Ok(format!("({})", print_condition(inner, model)?)),
-        ConditionNode::Not(a) => Ok(format!("NOT {}", print_condition(a, model)?)),
+        ConditionNode::Not(a) => Ok(format!("NOT {}", wrap_cond(a, model)?)),
         ConditionNode::And(a, b) => binary_cond(a, "AND", b, model),
         ConditionNode::Or(a, b) => binary_cond(a, "OR", b, model),
         ConditionNode::Add(a, b) => binary_cond(a, "+", b, model),
@@ -259,7 +259,13 @@ fn variable_name(var: &VariableNode) -> String {
     }
 }
 
-/// Печатает бинарную операцию выражения.
+/// Печатает бинарную операцию выражения, скобкуя составные операнды.
+///
+/// **Скобки обязательны, а не косметика.** Приоритеты Lam и ST не совпадают:
+/// `!(a = b)` Lam при наивной печати даёт `NOT a = b`, а в ST `NOT` связывает
+/// сильнее `=`, то есть читается как `(NOT a) = b` — другое выражение. Гейт
+/// поймал это на `elevator` («Invalid data type for 'NOT' expression»), но
+/// страшнее случай, когда типы совпадут и разница пройдёт **молча**.
 fn binary(
     a: &ExpressionNode,
     op: &str,
@@ -268,13 +274,37 @@ fn binary(
 ) -> Result<String, Diagnostic> {
     Ok(format!(
         "{} {} {}",
-        print_expression(a, model)?,
+        wrap_expr(a, model)?,
         op,
-        print_expression(b, model)?
+        wrap_expr(b, model)?
     ))
 }
 
-/// Печатает бинарную операцию условия.
+/// Печатает операнд, заключая составное выражение в скобки.
+fn wrap_expr(expr: &ExpressionNode, model: &ModelNode) -> Result<String, Diagnostic> {
+    let text = print_expression(expr, model)?;
+    Ok(if is_atom_expr(expr) {
+        text
+    } else {
+        format!("({})", text)
+    })
+}
+
+/// Атом — то, чей разбор не зависит от окружения: литерал, имя, вызов, скобки.
+fn is_atom_expr(expr: &ExpressionNode) -> bool {
+    matches!(
+        expr,
+        ExpressionNode::Number(_)
+            | ExpressionNode::Bool(_)
+            | ExpressionNode::Rational(_, _)
+            | ExpressionNode::Variable(_)
+            | ExpressionNode::Parenthesis(_)
+            | ExpressionNode::Function(_, _)
+            | ExpressionNode::ArraySubscript(_, _)
+    )
+}
+
+/// Печатает бинарную операцию условия, скобкуя составные операнды (см. [`binary`]).
 fn binary_cond(
     a: &ConditionNode,
     op: &str,
@@ -283,10 +313,35 @@ fn binary_cond(
 ) -> Result<String, Diagnostic> {
     Ok(format!(
         "{} {} {}",
-        print_condition(a, model)?,
+        wrap_cond(a, model)?,
         op,
-        print_condition(b, model)?
+        wrap_cond(b, model)?
     ))
+}
+
+/// Печатает операнд-условие, заключая составное в скобки.
+fn wrap_cond(cond: &ConditionNode, model: &ModelNode) -> Result<String, Diagnostic> {
+    let text = print_condition(cond, model)?;
+    Ok(if is_atom_cond(cond) {
+        text
+    } else {
+        format!("({})", text)
+    })
+}
+
+/// Атом-условие: литерал, имя, вызов, скобки, вариант перечисления.
+fn is_atom_cond(cond: &ConditionNode) -> bool {
+    matches!(
+        cond,
+        ConditionNode::Number(_)
+            | ConditionNode::Bool(_)
+            | ConditionNode::Rational(_, _)
+            | ConditionNode::Variable(_, _)
+            | ConditionNode::Parenthesis(_)
+            | ConditionNode::Function(_, _, _)
+            | ConditionNode::ArraySubscript(_, _)
+            | ConditionNode::EnumVariant(_, _, _)
+    )
 }
 
 /// Битовая строка, соответствующая целому типу: имя и функции преобразования.
@@ -549,8 +604,20 @@ mod tests {
     /// `lift_request AND NOT lift_op AND …`.
     #[test]
     fn test_condition_logical_operators_use_iec_words() {
-        assert_eq!(cond_of("b & !b"), "b AND NOT b");
-        assert_eq!(cond_of("b | !b"), "b OR NOT b");
+        assert_eq!(cond_of("b & !b"), "b AND (NOT b)");
+        assert_eq!(cond_of("b | !b"), "b OR (NOT b)");
+    }
+
+    /// Составные операнды скобкуются: приоритеты Lam и ST не совпадают.
+    ///
+    /// Сторож против регресса, который поймал гейт, а юнит-тесты — нет:
+    /// `!(a = b)` при наивной печати даёт `NOT a = b`, а в ST `NOT` связывает
+    /// сильнее `=` — читается как `(NOT a) = b`, другое выражение. На `elevator`
+    /// это дало «Invalid data type for 'NOT' expression», но опаснее случай, где
+    /// типы совпадут и подмена пройдёт **молча**.
+    #[test]
+    fn test_not_of_comparison_is_parenthesised_because_iec_binds_not_tighter() {
+        assert_eq!(cond_of("!(n = m)"), "NOT (n = m)");
     }
 
     /// `!=` в ST записывается `<>`.
@@ -601,7 +668,7 @@ mod tests {
     /// Арифметика и сравнения переносятся тождественно.
     #[test]
     fn test_expression_arithmetic_is_identical() {
-        assert_eq!(expr_of("var x: u8 := n + m * 2;"), "n + m * 2");
+        assert_eq!(expr_of("var x: u8 := n + m * 2;"), "n + (m * 2)");
     }
 
     /// Побитовое И идёт через битовую строку: `n AND m` на USINT MatIEC отвергает.

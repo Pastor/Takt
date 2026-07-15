@@ -6,7 +6,7 @@
 //! модель не использует.
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::semantic::minimap::{Element, Map, Name};
+use crate::semantic::minimap::{Element, Map, Name, StateExtend};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::unused::UsageSet;
 use crate::semantic::{ModelNode, VariableNode};
@@ -24,6 +24,17 @@ pub(crate) struct StMap {
     /// Соответствует [`GenerateOptions::hal`](crate::generator::GenerateOptions::hal);
     /// потребляется задачей 0041-05, здесь только переносится в снимок.
     at_addresses: bool,
+}
+
+/// Собирает имена моделей из дерева реализации состояния.
+fn collect_extend_models(extend: &StateExtend, out: &mut Vec<String>) {
+    match extend {
+        StateExtend::None => {}
+        StateExtend::Model(name) => out.push(name.unique().to_string()),
+        StateExtend::Concatenation(steps) | StateExtend::Parallel(steps) => {
+            steps.iter().for_each(|s| collect_extend_models(s, out))
+        }
+    }
 }
 
 impl StMap {
@@ -79,6 +90,23 @@ impl StMap {
     /// Возвращает список подмоделей, используемых через `StateExtend`.
     pub fn using_models(&self) -> Vec<Element> {
         self.map.used_models()
+    }
+
+    /// Возвращает уникальные имена моделей, чьи экземпляры заводит данная модель.
+    ///
+    /// Нужно для порядка объявления: в ST тип экземпляра обязан быть известен к
+    /// моменту объявления, а опережающие ссылки — нестандартное расширение.
+    pub(crate) fn instantiated_by(&self, model: &Name) -> Vec<String> {
+        let Some(Element::Model { states, .. }) = self.map.element_at(model.clone()) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for state in states {
+            if let Some(Element::StateExtend { extend, .. }) = self.map.element_at(state) {
+                collect_extend_models(&extend, &mut out);
+            }
+        }
+        out
     }
 
     /// Возвращает элемент карты по имени (состояние, модель либо `StateExtend`).

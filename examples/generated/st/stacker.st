@@ -122,7 +122,7 @@ END_VAR
                 state := 3; (* WaitingForTask *)
             END_IF;
         3: (* WaitingForTask *)
-            IF task_valid AND NOT busy AND NOT sense_battery_low THEN
+            IF (task_valid AND (NOT busy)) AND (NOT sense_battery_low) THEN
                 tgt_stack := task_stack_no;
                 tgt_row := task_row_no;
                 tgt_section := task_section_no;
@@ -178,11 +178,11 @@ END_VAR
                 state := 3; (* LiftOperating *)
             END_IF;
         3: (* LiftOperating *)
-            IF lift_request AND NOT lift_op AND sense_loaded THEN
+            IF (lift_request AND (NOT lift_op)) AND sense_loaded THEN
                 cmd_fork := 0;
                 lift_done := 1;
                 state := 1; (* LiftDone *)
-            ELSIF lift_request AND lift_op AND NOT sense_loaded THEN
+            ELSIF (lift_request AND lift_op) AND (NOT sense_loaded) THEN
                 cmd_fork := 0;
                 lift_done := 1;
                 state := 1; (* LiftDone *)
@@ -264,11 +264,11 @@ END_VAR
                 state := 3; (* MovementIdle *)
             END_IF;
         3: (* MovementIdle *)
-            IF busy AND NOT sense_battery_low THEN
+            IF busy AND (NOT sense_battery_low) THEN
                 state := 1; (* DispatchMove *)
             END_IF;
         4: (* MovingToCell *)
-            IF pos_stack = tgt_stack AND pos_row = tgt_row AND pos_section = tgt_section THEN
+            IF ((pos_stack = tgt_stack) AND (pos_row = tgt_row)) AND (pos_section = tgt_section) THEN
                 lift_request := 1;
                 lift_op := 1;
                 state := 9; (* WaitingForkAtCell *)
@@ -284,7 +284,7 @@ END_VAR
                 state := 2; (* EmergencyCharge *)
             END_IF;
         5: (* MovingToDropoff *)
-            IF pos_stack = DROPOFF_STACK AND pos_row = DROPOFF_ROW AND pos_section = DROPOFF_SECTION THEN
+            IF ((pos_stack = DROPOFF_STACK) AND (pos_row = DROPOFF_ROW)) AND (pos_section = DROPOFF_SECTION) THEN
                 lift_request := 1;
                 lift_op := 1;
                 state := 10; (* WaitingForkAtDropoff *)
@@ -300,7 +300,7 @@ END_VAR
                 state := 2; (* EmergencyCharge *)
             END_IF;
         6: (* MovingToPickup *)
-            IF pos_stack = PICKUP_STACK AND pos_row = PICKUP_ROW AND pos_section = PICKUP_SECTION THEN
+            IF ((pos_stack = PICKUP_STACK) AND (pos_row = PICKUP_ROW)) AND (pos_section = PICKUP_SECTION) THEN
                 lift_request := 1;
                 lift_op := 0;
                 state := 11; (* WaitingForkAtPickup *)
@@ -316,7 +316,7 @@ END_VAR
                 state := 2; (* EmergencyCharge *)
             END_IF;
         7: (* MovingToStorage *)
-            IF pos_stack = tgt_stack AND pos_row = tgt_row AND pos_section = tgt_section THEN
+            IF ((pos_stack = tgt_stack) AND (pos_row = tgt_row)) AND (pos_section = tgt_section) THEN
                 lift_request := 1;
                 lift_op := 0;
                 state := 12; (* WaitingForkAtStorage *)
