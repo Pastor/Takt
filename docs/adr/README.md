@@ -36,4 +36,5 @@
 | [0043](./0043-address-map-export.md) | Формат и форма экспорта карты адресов портов | Accepted | фича 0043 |
 | [0044](./0044-sim-assert-invariant.md) | Именованный инвариант `invariant` и оживление Guard-формул в симуляторе | Accepted | фича 0044 |
 | [0045](./0045-sv-backend.md) | Бэкенд генерации в SystemVerilog | Accepted | фича 0045 |
+| [0046](./0046-build-warnings-cleanup.md) | Устранение всех предупреждений сборки (rustc + clippy) | Proposed | фича 0046 |
 
