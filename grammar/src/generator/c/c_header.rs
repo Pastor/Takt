@@ -507,7 +507,18 @@ pub fn generate_header(
     let sorted_models = c::topological_sort_models(map, map.using_models());
 
     // Forward declarations всех структур: позволяют компилятору C знать о типах
-    // раньше их полного определения (важно при взаимных ссылках)
+    // раньше их полного определения (важно при взаимных ссылках).
+    //
+    // Typedef корня эмитится БЕЗУСЛОВНО — от наличия под-моделей он не зависит.
+    // Структура печатается тегом (`struct {Root} { … };`), а прототипы объявлены
+    // через голое имя (`void {Root}_init({Root} *main);`), поэтому без typedef
+    // голое имя типом не становится и порождённый C НЕ КОМПИЛИРУЕТСЯ:
+    // «must use 'struct' tag to refer to type».
+    //
+    // Прежде эмиссия была разветвлена на три случая, и ветка «под-моделей нет,
+    // цель `c`» не печатала ничего — отсюда дефект. Ветку `c-hal` (правка
+    // 0020-05) с ней слили в один путь: расхождение целей и было причиной того,
+    // что `c-hal` работал, а `c` — нет. Единый путь не даёт этому воспроизвестись.
     if !sorted_models.is_empty() {
         printer.print("/* Forward declarations */").nl();
         for element in &sorted_models {
@@ -517,21 +528,12 @@ pub fn generate_header(
             let s = name.unique_camelcase();
             printer.print(&format!("typedef struct {0} {0};", s)).nl();
         }
-        let root_struct = map.root_name().unique_camelcase();
-        printer
-            .print(&format!("typedef struct {0} {0};", root_struct))
-            .nl();
-        printer.nl();
-    } else if options.hal {
-        // Режим c-hal: без под-моделей forward-декларций нет, но typedef корня
-        // нужен, чтобы прототипы `{Root}_init({Root} *)` и дефолтный HAL были
-        // валидным C. Обычный режим `c` не трогаем (вывод байт-в-байт).
-        let root_struct = map.root_name().unique_camelcase();
-        printer
-            .print(&format!("typedef struct {0} {0};", root_struct))
-            .nl();
-        printer.nl();
     }
+    let root_struct = map.root_name().unique_camelcase();
+    printer
+        .print(&format!("typedef struct {0} {0};", root_struct))
+        .nl();
+    printer.nl();
 
     // Генерируем typedef struct для пользовательских структур
     if let Some(model_rc) = map.root_model_node() {
@@ -820,6 +822,79 @@ mod tests {
     use super::*;
     use crate::generator::c::c_map::CMap;
     use crate::{parse, semantic};
+
+    /// Строит `.h` для исходника с именем корневой модели.
+    fn generate_h_content(src: &str, name: &str) -> String {
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model.borrow_mut().name = Some(name.to_string());
+        let model = model.borrow();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
+        generate_header(
+            map.get_filename(),
+            &map,
+            &crate::generator::GenerateOptions::default(),
+        )
+        .unwrap()
+    }
+
+    /// **T1.** Одиночная модель БЕЗ под-моделей получает typedef корня.
+    ///
+    /// Дефект фичи 0026: typedef эмитился только при наличии под-моделей либо в
+    /// цели `c-hal`, а ветка «под-моделей нет, цель `c`» не печатала ничего.
+    /// Структура печатается ТЕГОМ (`struct Demo { … };`), а прототипы — через
+    /// голое имя (`void Demo_init(Demo *main);`), поэтому без typedef имя типом
+    /// не становится.
+    #[test]
+    fn test_single_model_without_submodels_gets_root_typedef() {
+        let header = generate_h_content(
+            "var n: u8 := 0;\nstart S { always { n := n + 1; } }",
+            "Demo",
+        );
+        assert_eq!(
+            header.matches("typedef struct Demo Demo;").count(),
+            1,
+            "typedef корня обязан быть ровно один:\n{header}"
+        );
+    }
+
+    /// **T1.** Модель С под-моделями typedef корня не теряет и не дублирует.
+    ///
+    /// Сторож слияния веток: раньше эту ветку правка не трогала, и она обязана
+    /// остаться прежней.
+    #[test]
+    fn test_model_with_submodels_still_has_exactly_one_root_typedef() {
+        let header = generate_h_content(
+            "model A { start Q { } }\nvar n: u8 := 0;\nstart Entry = A;",
+            "Demo",
+        );
+        assert_eq!(
+            header.matches("typedef struct Demo Demo;").count(),
+            1,
+            "typedef корня обязан быть ровно один:\n{header}"
+        );
+        assert!(
+            header.contains("typedef struct DemoA DemoA;"),
+            "forward-декларация под-модели потеряна:\n{header}"
+        );
+    }
+
+    /// **T3.** Заголовок одиночной модели самодостаточен: голое имя — тип.
+    #[test]
+    fn test_root_name_is_usable_as_type_in_prototypes() {
+        let header = generate_h_content(
+            "var n: u8 := 0;\nstart S { always { n := n + 1; } }",
+            "Demo",
+        );
+        let typedef = header
+            .find("typedef struct Demo Demo;")
+            .expect("нет typedef корня");
+        let proto = header.find("Demo_init(Demo *").expect("нет прототипа init");
+        assert!(
+            typedef < proto,
+            "typedef обязан предшествовать прототипу, иначе имя ещё не тип:\n{header}"
+        );
+    }
 
     /// Enum выбирает минимальный беззнаковый тип по максимальному значению варианта.
     ///
