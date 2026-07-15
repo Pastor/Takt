@@ -97,14 +97,44 @@ pub fn get_c_type(typ: &TypeNode, model: &ModelNode) -> Option<String> {
 6. **Фикстуры:** `grammar/tests/data/st/valid/{types_all,array_var}.lam`;
    `invalid/{unmapped_type,array_zero,unresolved_struct}.lam`.
 
-### Открытые вопросы — решаются **пробой 0041-06** до начала работы
+### Открытые вопросы — **ЗАКРЫТЫ пробой [0041-06](0041-06-matiec-validation.md)** (2026-07-15)
 
-- **П4:** принимает ли `iec2c` перечислимые `TYPE Floor : (Bottom := 80, Top);`?
-  Если нет — **откат Option C** ADR: `TYPE Floor : USINT; END_TYPE` +
-  `VAR_GLOBAL CONSTANT Floor_Bottom : USINT := 80;`.
-- **П5:** `ARRAY [0..3] OF USINT` внутри `VAR` блока FB.
-- **П6:** `LREAL` (часть малых ПЛК не поддерживает f64 — ограничение платформы, не
-  генератора; документируется в 0041-07).
+- **П4 — ❌ красная ⇒ откат Option C обязателен.** `iec2c` **отвергает** явные
+  значения вариантов: `TYPE Floor : (Bottom := 80, Top);` →
+  `error: ')' missing at the end of enumerated specification`. Уточняющие пробы:
+  перечисление **без** значений (`(Bottom, Middle, Top)`) принимается, **с**
+  значениями — нет: явные значения появились в **3-й редакции** IEC 61131-3, а
+  MatIEC её не знает. Перечисления Lam значения **имеют**
+  (`tests/data/semantic/valid/enum_with_values`), поэтому прямое отображение
+  непригодно.
+  **Принято: `USINT` + именованные константы.** Форма проверена пробой (`✅`):
+  ```
+  FUNCTION_BLOCK Demo
+  VAR CONSTANT
+      Floor_Bottom : USINT := 80;
+      Floor_Top : USINT := 81;
+  END_VAR
+  ```
+  ⚠ **Не** `VAR_GLOBAL CONSTANT`, как предполагал ADR: `VAR_GLOBAL` вне
+  `CONFIGURATION` **недопустим** (`error: unknown syntax error`) — цель `st`
+  `CONFIGURATION` не эмитит (П2). Константы объявляются `VAR CONSTANT` **внутри**
+  FB.
+- **П5 — ✅.** `ARRAY [0..3] OF USINT` в `VAR` блока FB принимается. T12
+  подтверждён.
+- **П6 — ✅.** `LREAL` принимается; совпадает с f64 симулятора. Ограничение малых
+  ПЛК остаётся вопросом платформы — документируется в 0041-07.
+
+### Критерий приёмки, добавленный гейтом 0041-06
+
+**`iec2c` обязан принимать вывод по всему корпусу `examples/`.** Сейчас
+отвергает **все 5**: `error: FUNCTION_BLOCK with no variable declarations and no
+body` — каркас 0041-01 эмитит `FUNCTION_BLOCK` без объявлений и тела, а
+IEC 61131-3 такого не допускает. **Эта задача обязана эмитить хотя бы
+`VAR … END_VAR`**, иначе вывод остаётся невалидным ST. Проверка:
+
+```sh
+lamc compile -t st examples/stacker.lam -o out && iec2c -I <matiec>/lib -T out/gen out/stacker.st
+```
 
 ### Статус по функциональности (правило 11)
 
