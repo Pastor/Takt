@@ -7,6 +7,12 @@ FUNCTION clamp_temp : USINT
 VAR_INPUT
     value : USINT;
 END_VAR
+VAR_IN_OUT
+    temperature : USINT;
+END_VAR
+VAR CONSTANT
+    MAX_TEMP : USINT := 100;
+END_VAR
     IF value > MAX_TEMP THEN
         clamp_temp := MAX_TEMP;
         RETURN;
@@ -58,6 +64,9 @@ VAR
     temperature : USINT := 0;
 END_VAR
 VAR CONSTANT
+    Mode_Auto : USINT := 0;
+    Mode_Manual : USINT := 1;
+    Mode_Emergency : USINT := 2;
     MAX_COUNT : USINT := 10;
     MAX_TEMP : USINT := 100;
 END_VAR

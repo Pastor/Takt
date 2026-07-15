@@ -41,7 +41,10 @@ use crate::generator::st::st_expr::print_expression;
 use crate::generator::st::st_stmt::{StmtOutput, print_statement};
 use crate::generator::st::st_type::get_st_type;
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::{ExpressionNode, FunctionDefinitionNode, ModelNode};
+use crate::semantic::unused::{UsageSet, usage_from_stmt};
+use crate::semantic::{
+    ExpressionNode, FunctionDefinitionNode, ModelNode, StatementNode, VariableNode,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -99,6 +102,106 @@ fn params_of(def: &FunctionDefinitionNode) -> Vec<(String, TypeNode)> {
     }
 }
 
+/// Переменные модели, которые функция читает или пишет в своём теле.
+///
+/// **Зачем.** В цели `c` функция получает первым параметром указатель на модель
+/// (`static uint8_t Stacker_travel_time(const Stacker *model, …)`) и читает через
+/// него порты и переменные (`stacker.c:29-56`). В IEC 61131-3 `FUNCTION` —
+/// **чистая**: она видит только свои `VAR_INPUT`/`VAR_IN_OUT` и к переменным
+/// вызывающего `FUNCTION_BLOCK` доступа не имеет. Гейт `iec2c` поймал это на
+/// `travel_time`, который читает порт корня `pos_stack`:
+/// «Ambiguous enumerate value or Variable not declared in this scope».
+///
+/// Поэтому такие переменные передаются функции по ссылке — `VAR_IN_OUT`, форма
+/// проверена пробой (✅). Список — **единый источник истины** для объявления и
+/// для аргументов вызова: разойдись они, ST либо не соберётся, либо свяжет не те
+/// переменные.
+///
+/// Константы сюда **не** попадают: они неизменны и объявляются `VAR CONSTANT`
+/// внутри самой функции (форма тоже проверена пробой).
+pub(crate) fn state_params(
+    def: &FunctionDefinitionNode,
+    model: &ModelNode,
+) -> Vec<(String, TypeNode)> {
+    let FunctionDefinitionNode::Local { body, params, .. } = def else {
+        return Vec::new();
+    };
+    let mut set = UsageSet::default();
+    usage_from_stmt(body, &mut set);
+
+    // Локальные объявления тела — не состояние модели.
+    let mut locals: Vec<String> = params.iter().map(|(n, _)| n.clone()).collect();
+    collect_locals(body, &mut locals);
+
+    let mut out = Vec::new();
+    let mut names: Vec<&String> = model.variables.keys().collect();
+    names.sort();
+    for name in names {
+        if locals.contains(name) {
+            continue;
+        }
+        if !set.variables.contains(name) && !set.ports.contains(name) {
+            continue;
+        }
+        let (VariableNode::Simple { ty, .. } | VariableNode::Port { ty, .. }) =
+            &model.variables[name]
+        else {
+            continue;
+        };
+        out.push((name.clone(), ty.clone()));
+    }
+    out
+}
+
+/// Собирает имена переменных, объявленных внутри тела.
+fn collect_locals(stmt: &StatementNode, out: &mut Vec<String>) {
+    match stmt {
+        StatementNode::Variable(name, _, _) => out.push(name.clone()),
+        StatementNode::Block(items) => items.iter().for_each(|s| collect_locals(s, out)),
+        StatementNode::If { then_, else_, .. } => {
+            collect_locals(then_, out);
+            if let Some(e) = else_ {
+                collect_locals(e, out);
+            }
+        }
+        StatementNode::Loop { body, .. } => collect_locals(body, out),
+        StatementNode::For { init, body, .. } => {
+            if let Some(i) = init {
+                collect_locals(i, out);
+            }
+            collect_locals(body, out);
+        }
+        StatementNode::Match { arms, .. } => arms.iter().for_each(|a| collect_locals(&a.body, out)),
+        StatementNode::None
+        | StatementNode::Unresolved(_)
+        | StatementNode::Expression(_)
+        | StatementNode::Return(_)
+        | StatementNode::Continue
+        | StatementNode::Break
+        | StatementNode::InlineFormula(_) => {}
+    }
+}
+
+/// Константы модели, которые функция использует.
+///
+/// Объявляются `VAR CONSTANT` внутри самой функции: `FUNCTION` чистая, а
+/// константа неизменна — дублировать её дешевле, чем плести через параметры.
+fn const_params(def: &FunctionDefinitionNode, model: &ModelNode) -> Vec<String> {
+    let FunctionDefinitionNode::Local { body, .. } = def else {
+        return Vec::new();
+    };
+    let mut set = UsageSet::default();
+    usage_from_stmt(body, &mut set);
+    let mut names: Vec<String> = set
+        .constants
+        .iter()
+        .filter(|n| model.variables.contains_key(*n))
+        .cloned()
+        .collect();
+    names.sort();
+    names
+}
+
 /// Печатает вызов функции как выражение ST.
 ///
 /// У функции, объявленной без параметров, есть синтетический параметр, поэтому
@@ -116,7 +219,7 @@ pub(crate) fn print_call(
     for arg in args {
         printed.push(print_expression(arg, model)?);
     }
-    print_call_texts(def, &printed)
+    print_call_in(def, &printed, model)
 }
 
 /// Печатает вызов по уже напечатанным аргументам.
@@ -126,14 +229,29 @@ pub(crate) fn print_call(
 pub(crate) fn print_call_texts(
     def: &Rc<RefCell<FunctionDefinitionNode>>,
     args: &[String],
+    model: &ModelNode,
 ) -> Result<String, Diagnostic> {
-    let def = def.borrow();
+    print_call_in(def, args, model)
+}
+
+/// Общая печать вызова: объявленные аргументы плюс переменные состояния.
+fn print_call_in(
+    def_rc: &Rc<RefCell<FunctionDefinitionNode>>,
+    args: &[String],
+    model: &ModelNode,
+) -> Result<String, Diagnostic> {
+    let def = def_rc.borrow();
     let name = name_of(&def)
         .ok_or_else(|| unsupported("вызов неразрешённой функции (определение отсутствует)"))?;
     let mut printed: Vec<String> = args.to_vec();
-    if printed.is_empty() {
+    if printed.is_empty() && state_params(&def, model).is_empty() {
         // Синтетический параметр требует синтетического аргумента.
         printed.push("0".to_string());
+    }
+    // Переменные состояния идут ПОСЛЕ объявленных — тем же порядком, что в
+    // `VAR_IN_OUT` функции: список общий (единый источник истины).
+    for (var, _) in state_params(&def, model) {
+        printed.push(var);
     }
     Ok(format!("{}({})", name, printed.join(", ")))
 }
@@ -196,17 +314,59 @@ fn emit_function(
     // Параметры. Пустой `VAR_INPUT … END_VAR` недопустим (и роняет iec2c
     // segfault'ом), поэтому у беспараметрической функции — синтетический вход.
     let mut params = params_of(def);
-    if params.is_empty() {
+    if params.is_empty() && state_params(def, model).is_empty() {
         params.push((SYNTHETIC_PARAM.to_string(), synthetic_type()));
     }
-    p.ident("VAR_INPUT").nl();
-    p.up();
-    for (pname, pty) in &params {
-        let ty = get_st_type(pty, model)?;
-        p.ident(&format!("{} : {};", pname, ty)).nl();
+    // Пустой `VAR_INPUT … END_VAR` недопустим (и роняет iec2c segfault'ом):
+    // если параметров нет, но есть состояние, секция просто не печатается.
+    if !params.is_empty() {
+        p.ident("VAR_INPUT").nl();
+        p.up();
+        for (pname, pty) in &params {
+            let ty = get_st_type(pty, model)?;
+            p.ident(&format!("{} : {};", pname, ty)).nl();
+        }
+        p.down();
+        p.ident("END_VAR").nl();
     }
-    p.down();
-    p.ident("END_VAR").nl();
+
+    // Переменные модели, которые тело трогает: `FUNCTION` в IEC чистая, поэтому
+    // они передаются по ссылке (см. `state_params`).
+    let state = state_params(def, model);
+    if !state.is_empty() {
+        p.ident("VAR_IN_OUT").nl();
+        p.up();
+        for (vname, vty) in &state {
+            let ty = get_st_type(vty, model)?;
+            p.ident(&format!("{} : {};", vname, ty)).nl();
+        }
+        p.down();
+        p.ident("END_VAR").nl();
+    }
+    // Константы модели дублируются внутрь функции.
+    let consts = const_params(def, model);
+    if !consts.is_empty() {
+        p.ident("VAR CONSTANT").nl();
+        p.up();
+        for cname in &consts {
+            let VariableNode::Const { ty, expr, .. } = &model.variables[cname] else {
+                continue;
+            };
+            let ty_name = get_st_type(ty, model)?;
+            let init = crate::generator::st::st_decl::literal_init(expr, ty);
+            match init {
+                Some(v) => p.ident(&format!("{} : {} := {};", cname, ty_name, v)).nl(),
+                None => {
+                    return Err(unsupported(&format!(
+                        "константа '{}' с невычислимым инициализатором внутри функции",
+                        cname
+                    )));
+                }
+            };
+        }
+        p.down();
+        p.ident("END_VAR").nl();
+    }
 
     match def {
         FunctionDefinitionNode::External { .. } => {

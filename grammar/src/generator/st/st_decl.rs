@@ -242,6 +242,14 @@ pub(crate) fn emit_declarations(
         }
     }
 
+    // Константы предков: FB в IEC замкнут и области видимости Lam не наследует.
+    for (name, var) in inherited_constants(model, usage) {
+        let VariableNode::Const { ty, expr, .. } = &var else {
+            continue;
+        };
+        constants.push(declaration(&name, ty, expr, model)?);
+    }
+
     let sections = [
         ("VAR_INPUT", inputs),
         ("VAR_OUTPUT", outputs),
@@ -273,10 +281,17 @@ pub(crate) fn emit_declarations(
 /// допустимы.
 fn enum_constants(model: &ModelNode) -> Result<Vec<Declaration>, Diagnostic> {
     let mut out = Vec::new();
-    let mut names: Vec<&String> = model.enums.keys().collect();
+    // Перечисления собираются с модели И ЕЁ ПРЕДКОВ. Причина: в Lam область
+    // видимости вложенная (под-модель видит `enum Command` корня), а в
+    // IEC 61131-3 `FUNCTION_BLOCK` — замкнутая единица: он видит только то, что
+    // объявлено в нём самом. Гейт поймал это на `elevator_mini`: под-модель
+    // `Motor` пишет `command = Command_Stop`, а константа жила лишь в корне →
+    // «Variable not declared in this scope».
+    let enums = visible_enums(model);
+    let mut names: Vec<&String> = enums.keys().collect();
     names.sort();
     for enum_name in names {
-        let node = &model.enums[enum_name];
+        let node = &enums[enum_name];
         // Разрядность типа выбрана по фактическому диапазону вариантов
         // (`st_type::enum_type`), поэтому усечения значения здесь быть не может.
         let ty = get_st_type(&TypeNode::Enum(enum_name.clone()), model)?;
@@ -289,6 +304,56 @@ fn enum_constants(model: &ModelNode) -> Result<Vec<Declaration>, Diagnostic> {
         }
     }
     Ok(out)
+}
+
+/// Собирает перечисления, видимые модели: её собственные плюс предков.
+fn visible_enums(
+    model: &ModelNode,
+) -> std::collections::HashMap<String, crate::semantic::EnumDefinitionNode> {
+    let mut out = std::collections::HashMap::new();
+    // Свои — в первую очередь: ближняя область видимости перекрывает дальнюю.
+    for (k, v) in &model.enums {
+        out.insert(k.clone(), v.clone());
+    }
+    let mut current = model.upper.as_ref().and_then(|w| w.upgrade());
+    while let Some(parent_rc) = current {
+        let parent = parent_rc.borrow();
+        for (k, v) in &parent.enums {
+            out.entry(k.clone()).or_insert_with(|| v.clone());
+        }
+        current = parent.upper.as_ref().and_then(|w| w.upgrade());
+    }
+    out
+}
+
+/// Собирает константы, видимые модели, но объявленные у предков.
+///
+/// В Lam под-модель видит `const CHARGE_STACK` корня; в IEC — нет. Константа
+/// неизменна, поэтому дешевле продублировать её в `VAR CONSTANT` каждого FB,
+/// чем плести через `VAR_IN_OUT`.
+fn inherited_constants(model: &ModelNode, usage: &UsageSet) -> Vec<(String, VariableNode)> {
+    let mut out: Vec<(String, VariableNode)> = Vec::new();
+    let mut current = model.upper.as_ref().and_then(|w| w.upgrade());
+    while let Some(parent_rc) = current {
+        let parent = parent_rc.borrow();
+        let mut names: Vec<&String> = parent.variables.keys().collect();
+        names.sort();
+        for name in names {
+            let var = &parent.variables[name];
+            if !matches!(var, VariableNode::Const { .. }) {
+                continue;
+            }
+            if !usage.constants.contains(name) {
+                continue;
+            }
+            if model.variables.contains_key(name) || out.iter().any(|(n, _)| n == name) {
+                continue;
+            }
+            out.push((name.clone(), var.clone()));
+        }
+        current = parent.upper.as_ref().and_then(|w| w.upgrade());
+    }
+    out
 }
 
 /// Строит одно объявление: имя, тип IEC и — если он литерал — инициализатор.
@@ -319,7 +384,7 @@ fn declaration(
 /// (`:= [0, 0, 0, 0]`) — задача 0041-04 вместе с остальными выражениями; до неё
 /// массив объявляется без инициализатора и обнуляется правилами IEC по
 /// умолчанию, что совпадает с намерением `:= 0`.
-fn literal_init(expr: &ExpressionNode, ty: &TypeNode) -> Option<String> {
+pub(crate) fn literal_init(expr: &ExpressionNode, ty: &TypeNode) -> Option<String> {
     if matches!(ty, TypeNode::Array(_, _) | TypeNode::Struct(_)) {
         return None;
     }
@@ -432,6 +497,37 @@ mod tests {
         assert!(
             st.contains("Floor_Top : USINT := 81;"),
             "Top обязан наследовать 81:\n{st}"
+        );
+    }
+
+    /// Перечисление ПРЕДКА объявляется в под-модели: FB в IEC замкнут.
+    ///
+    /// Сторож против регресса, который поймал гейт, а юнит-тесты — нет:
+    /// `elevator_mini` пишет в под-модели `command = Command_Stop`, а
+    /// `enum Command` объявлен в корне. В Lam область видимости вложенная, в
+    /// IEC 61131-3 — нет: `FUNCTION_BLOCK` видит только объявленное в нём самом.
+    #[test]
+    fn test_enum_of_ancestor_is_declared_in_submodel_block() {
+        let src = "enum Command { Up, Stop }\n\
+                   model Motor {\n\
+                     var c: u8 := 0;\n\
+                     start S { always { c := Stop; } }\n\
+                   }\n\
+                   start Main = Motor;";
+        let (ast, _) = crate::parse(src, 0).unwrap();
+        let rc = construct_model(&ast, None, &[]).unwrap();
+        let usage = crate::semantic::unused::compute_usage(std::rc::Rc::clone(&rc));
+        let sub = rc.borrow().models.get("Motor").cloned();
+        let Some(sub) = sub else {
+            panic!("под-модель Motor не найдена");
+        };
+        let model = sub.borrow();
+        let mut out = String::new();
+        let mut p = Printer::new(4, &mut out);
+        emit_declarations(&mut p, &model, &usage, &Extras::default()).unwrap();
+        assert!(
+            out.contains("Command_Stop"),
+            "перечисление корня обязано объявляться в под-модели:\n{out}"
         );
     }
 

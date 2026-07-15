@@ -35,6 +35,11 @@ VAR_INPUT
     to_row : USINT;
     to_section : USINT;
 END_VAR
+VAR_IN_OUT
+    pos_row : USINT;
+    pos_section : USINT;
+    pos_stack : USINT;
+END_VAR
 VAR
     ds : USINT;
     dr : USINT;
@@ -93,6 +98,17 @@ END_VAR
 VAR
     state : USINT := 0;
 END_VAR
+VAR CONSTANT
+    CHARGE_ROW : USINT := 0;
+    CHARGE_SECTION : USINT := 0;
+    CHARGE_STACK : USINT := 0;
+    DROPOFF_ROW : USINT := 1;
+    DROPOFF_SECTION : USINT := 1;
+    DROPOFF_STACK : USINT := 11;
+    PICKUP_ROW : USINT := 1;
+    PICKUP_SECTION : USINT := 1;
+    PICKUP_STACK : USINT := 0;
+END_VAR
     CASE state OF
         0: (* INIT *)
             cmd_ack := 0;
@@ -135,6 +151,17 @@ VAR_IN_OUT
 END_VAR
 VAR
     state : USINT := 0;
+END_VAR
+VAR CONSTANT
+    CHARGE_ROW : USINT := 0;
+    CHARGE_SECTION : USINT := 0;
+    CHARGE_STACK : USINT := 0;
+    DROPOFF_ROW : USINT := 1;
+    DROPOFF_SECTION : USINT := 1;
+    DROPOFF_STACK : USINT := 11;
+    PICKUP_ROW : USINT := 1;
+    PICKUP_SECTION : USINT := 1;
+    PICKUP_STACK : USINT := 0;
 END_VAR
     CASE state OF
         0: (* INIT *)
@@ -195,6 +222,17 @@ VAR_IN_OUT
 END_VAR
 VAR
     state : USINT := 0;
+END_VAR
+VAR CONSTANT
+    CHARGE_ROW : USINT := 0;
+    CHARGE_SECTION : USINT := 0;
+    CHARGE_STACK : USINT := 0;
+    DROPOFF_ROW : USINT := 1;
+    DROPOFF_SECTION : USINT := 1;
+    DROPOFF_STACK : USINT := 11;
+    PICKUP_ROW : USINT := 1;
+    PICKUP_SECTION : USINT := 1;
+    PICKUP_STACK : USINT := 0;
 END_VAR
     CASE state OF
         0: (* INIT *)
