@@ -9,16 +9,16 @@ state Motor {
     [*] --> Idle
     Down --> Stop
     Stop --> Idle
+    Up --> Stop
     Idle --> Up
     Idle --> Down
     Idle --> Stop
-    Up --> Stop
 }
 
 state Cabin {
     [*] --> Idle
-    Idle --> Moving
     AtFloor --> Idle
+    Idle --> Moving
     Moving --> AtFloor
 }
 
