@@ -299,6 +299,106 @@ pub fn compile_to_c_hal(
     Ok(resolution.diagnostics)
 }
 
+/// Компилирует исходный код Lam в Structured Text (IEC 61131-3) — язык ПЛК.
+///
+/// Выполняет полный конвейер: лексический анализ → синтаксический →
+/// семантический → генерация `.st`. Модель Lam отображается в `FUNCTION_BLOCK`
+/// (ADR 0041, Option A). Адреса портов **не потребляются** — для размещения по
+/// карте адресов (`AT %…`) используйте [`compile_to_st_at`].
+///
+/// # Параметры
+///
+/// - `filename` — имя входного файла (используется для именования модели и диагностики)
+/// - `source` — исходный код на языке Lam
+/// - `output_path` — путь к выходному каталогу (создаёт `<filename>.st`)
+/// - `search_paths` — директории для поиска файлов `import`
+/// - `options` — опции генерации
+///
+/// # Ошибки
+///
+/// Возвращает [`Diagnostic`] при синтаксической или семантической ошибке, либо
+/// при ошибке записи файла (`ST-001`).
+pub fn compile_to_st(
+    filename: &str,
+    source: &str,
+    output_path: &str,
+    search_paths: &[String],
+    options: &GenerateOptions,
+) -> Result<(), Diagnostic> {
+    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
+    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+
+    if model.borrow().name.is_none() {
+        let stem = Path::new(filename)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
+            .unwrap_or_else(|| "Root".to_owned());
+        model.borrow_mut().name = Some(stem);
+    }
+
+    generator::generate(
+        generator::Language::ST,
+        &model.borrow(),
+        output_path,
+        options,
+    )?;
+
+    Ok(())
+}
+
+/// Компилирует Lam в Structured Text в режиме `st-at` (фича 0041): к обычному ST
+/// добавляется размещение портов по карте адресов (`AT %IX…`/`%QX…`).
+///
+/// Адреса разрешаются тем же слоем и с тем же приоритетом, что и для `c-hal`
+/// (inline < `address` < внешняя карта), поэтому поведение двух
+/// адрес-потребляющих целей не расходится. Полнота обязательна: используемый
+/// порт без адреса → ошибка (`SE-052`). Возвращает `Ok(warnings)`
+/// (предупреждения оверлея `SE-050` / висячих записей карты `SE-051`) при успехе
+/// либо первую ошибку.
+pub fn compile_to_st_at(
+    filename: &str,
+    source: &str,
+    output_path: &str,
+    search_paths: &[String],
+    external: &[address_map::AddressMapEntry],
+    options: &GenerateOptions,
+) -> Result<Vec<Diagnostic>, Diagnostic> {
+    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
+    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+
+    if model.borrow().name.is_none() {
+        let stem = Path::new(filename)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
+            .unwrap_or_else(|| "Root".to_owned());
+        model.borrow_mut().name = Some(stem);
+    }
+
+    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&model), external);
+    if let Some(err) = resolution
+        .diagnostics
+        .iter()
+        .find(|d| d.level == diagnostics::Level::Error)
+    {
+        return Err(err.clone());
+    }
+
+    let mut at_options = options.clone();
+    at_options.hal = true;
+    at_options.address_map = resolution.map;
+
+    generator::generate(
+        generator::Language::ST,
+        &model.borrow(),
+        output_path,
+        &at_options,
+    )?;
+
+    Ok(resolution.diagnostics)
+}
+
 /// Компилирует исходный код Lam в диаграмму состояний PlantUML.
 ///
 /// Выполняет полный конвейер: лексический анализ → синтаксический → семантический → генерация `.puml`.

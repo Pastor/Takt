@@ -35,7 +35,10 @@
 //! # Целевые платформы
 //!
 //! - `c` — генерация C-заголовочного файла (по умолчанию)
+//! - `c-hal` — C плюс таблица адресов портов и дефолтный HAL (фича 0020)
 //! - `plantuml` — генерация диаграммы состояний в формате PlantUML
+//! - `st` — генерация Structured Text (IEC 61131-3), язык ПЛК (фича 0041)
+//! - `st-at` — ST плюс размещение портов по карте адресов (`AT %…`)
 
 use std::env;
 use std::fs;
@@ -435,6 +438,8 @@ fn print_usage() {
     eprintln!("  c         Генерация C-заголовочного файла");
     eprintln!("  c-hal     C + таблица адресов портов и дефолтный HAL (фича 0020)");
     eprintln!("  plantuml  Генерация диаграммы состояний PlantUML (.puml)");
+    eprintln!("  st        Генерация Structured Text IEC 61131-3 (.st), язык ПЛК (фича 0041)");
+    eprintln!("  st-at     ST + размещение портов по карте адресов (AT %...)");
     eprintln!();
     eprintln!("Примеры:");
     eprintln!("  lamc compile main.lam");
@@ -529,7 +534,10 @@ fn main() {
             Vec::new()
         };
 
-    if !external_entries.is_empty() && options.target != "c-hal" {
+    // Адрес-потребляющие цели: только они читают карту адресов. Для остальных
+    // непустая внешняя карта — повод предупредить об оверлее «в никуда».
+    let consumes_addresses = matches!(options.target.as_str(), "c-hal" | "st-at");
+    if !external_entries.is_empty() && !consumes_addresses {
         let warnings = grammar::parse(&source, 0)
             .ok()
             .and_then(|(ast, _)| {
@@ -646,9 +654,77 @@ fn main() {
                 }
             }
         }
+        "st" => {
+            if let Err(diag) = grammar::compile_to_st(
+                &options.input_file,
+                &source,
+                &options.output_path,
+                &options.include_dirs,
+                &grammar::GenerateOptions::new(options.guard_enable),
+            ) {
+                eprintln!(
+                    "Ошибка компиляции [{}]: {}",
+                    diag.code.as_deref().unwrap_or("?"),
+                    diag.message
+                );
+                process::exit(1);
+            }
+            if !options.quiet {
+                if options.verbose {
+                    eprintln!(
+                        "Скомпилировано: {} → {} (st)",
+                        fs::canonicalize(&options.input_file)
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_else(|_| options.input_file.clone()),
+                        options.output_path,
+                    );
+                } else {
+                    eprintln!(
+                        "Скомпилировано: {} → {}/ (st)",
+                        options.input_file, options.output_path,
+                    );
+                }
+            }
+        }
+        "st-at" => {
+            match grammar::compile_to_st_at(
+                &options.input_file,
+                &source,
+                &options.output_path,
+                &options.include_dirs,
+                &external_entries,
+                &grammar::GenerateOptions::new(options.guard_enable),
+            ) {
+                Ok(warnings) => {
+                    for w in warnings {
+                        if !options.quiet {
+                            eprintln!(
+                                "Предупреждение [{}]: {}",
+                                w.code.as_deref().unwrap_or("?"),
+                                w.message
+                            );
+                        }
+                    }
+                    if !options.quiet {
+                        eprintln!(
+                            "Скомпилировано: {} → {}/ (st-at)",
+                            options.input_file, options.output_path
+                        );
+                    }
+                }
+                Err(diag) => {
+                    eprintln!(
+                        "Ошибка компиляции [{}]: {}",
+                        diag.code.as_deref().unwrap_or("?"),
+                        diag.message
+                    );
+                    process::exit(1);
+                }
+            }
+        }
         t => {
             eprintln!(
-                "Ошибка: неизвестная цель '{}'. Поддерживается: c, plantuml",
+                "Ошибка: неизвестная цель '{}'. Поддерживается: c, c-hal, plantuml, st, st-at",
                 t
             );
             process::exit(1);
