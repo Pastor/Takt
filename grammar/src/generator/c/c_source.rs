@@ -361,7 +361,8 @@ mod tests {
         use crate::semantic::type_node::TypeNode;
         // Атом — без скобок после типа
         let expr = ExpressionNode::Cast(Box::new(ExpressionNode::Number(42)), TypeNode::Bit);
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(int)42");
+        // Фича 0029 (Д2): `bit` → `uint8_t`, а не `int` (32-битный знаковый).
+        assert_eq!(expr_to_str(&map, &owner, &expr), "(uint8_t)42");
     }
 
     #[test]
@@ -374,7 +375,8 @@ mod tests {
             Box::new(ExpressionNode::Number(2)),
         );
         let expr = ExpressionNode::Cast(Box::new(inner), TypeNode::Bit);
-        assert_eq!(expr_to_str(&map, &owner, &expr), "(int)(1 + 2)");
+        // Фича 0029 (Д2): `bit` → `uint8_t`.
+        assert_eq!(expr_to_str(&map, &owner, &expr), "(uint8_t)(1 + 2)");
     }
 
     // ── Тесты приоритета операторов ────────────────────────────────────────────
@@ -535,8 +537,9 @@ start Main { always { log_val(double_it(0)); } }
             source.contains("extern void log_val"),
             "extern fn отсутствует:\n{source}"
         );
+        // Фича 0029 (Д2): возвращаемый `bit` → `uint8_t`, а не `int`.
         assert!(
-            source.contains("static int Main_double_it"),
+            source.contains("static uint8_t Main_double_it"),
             "local fn отсутствует:\n{source}"
         );
     }
