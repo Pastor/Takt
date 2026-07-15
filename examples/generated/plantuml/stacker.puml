@@ -5,41 +5,41 @@ title Stacker
 Stacker : CommandReceiver | MovementController | LiftController
 Stacker --> [*]
 
-state MovementController {
-    [*] --> MovementIdle
-    MovingToDropoff --> WaitingForkAtDropoff
-    MovingToDropoff --> EmergencyCharge
-    EmergencyCharge --> MovementIdle
-    MovingToCell --> WaitingForkAtCell
-    MovingToCell --> EmergencyCharge
-    WaitingForkAtStorage --> MovingToDropoff
-    TaskCompleting --> MovementIdle
-    DispatchMove --> MovingToPickup
-    DispatchMove --> MovingToStorage
-    WaitingForkAtCell --> TaskCompleting
-    MovementIdle --> DispatchMove
-    MovingToStorage --> WaitingForkAtStorage
-    MovingToStorage --> EmergencyCharge
-    WaitingForkAtPickup --> MovingToCell
-    MovingToPickup --> WaitingForkAtPickup
-    MovingToPickup --> EmergencyCharge
-    WaitingForkAtDropoff --> TaskCompleting
+state LiftController {
+    [*] --> LiftIdle
+    LiftIdle --> LiftOperating
+    LiftOperating --> LiftDone
+    LiftOperating --> LiftDone
+    LiftOperating --> LiftIdle
+    LiftDone --> LiftIdle
 }
 
 state CommandReceiver {
     [*] --> WaitingForTask
-    WaitingForTask --> AcceptingTask
-    TaskActive --> WaitingForTask
     AcceptingTask --> TaskActive
+    TaskActive --> WaitingForTask
+    WaitingForTask --> AcceptingTask
 }
 
-state LiftController {
-    [*] --> LiftIdle
-    LiftOperating --> LiftDone
-    LiftOperating --> LiftDone
-    LiftOperating --> LiftIdle
-    LiftIdle --> LiftOperating
-    LiftDone --> LiftIdle
+state MovementController {
+    [*] --> MovementIdle
+    WaitingForkAtPickup --> MovingToCell
+    MovementIdle --> DispatchMove
+    MovingToPickup --> WaitingForkAtPickup
+    MovingToPickup --> EmergencyCharge
+    DispatchMove --> MovingToPickup
+    DispatchMove --> MovingToStorage
+    WaitingForkAtCell --> TaskCompleting
+    TaskCompleting --> MovementIdle
+    EmergencyCharge --> MovementIdle
+    WaitingForkAtStorage --> MovingToDropoff
+    MovingToDropoff --> WaitingForkAtDropoff
+    MovingToDropoff --> EmergencyCharge
+    MovingToStorage --> WaitingForkAtStorage
+    MovingToStorage --> EmergencyCharge
+    MovingToCell --> WaitingForkAtCell
+    MovingToCell --> EmergencyCharge
+    WaitingForkAtDropoff --> TaskCompleting
 }
 
 @enduml
