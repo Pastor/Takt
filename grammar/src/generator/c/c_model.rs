@@ -398,15 +398,38 @@ fn generate_state_transitions(
                     printer.ident("break;").nl();
                     printer.down().ident("}").nl();
                 }
+                // 0028-01: было — печать комментария-заглушки «условный переход
+                // не поддерживается» в
+                // порождаемый C и **проглатывание** `Err`. Последствия (проба
+                // воспроизводила): переход не генерировался, `lamc` печатал
+                // «Скомпилировано» и завершался с кодом 0, а порождённый C
+                // собирался БЕЗ ЗАМЕЧАНИЙ — комментарий сборку не ломает. На
+                // выходе — мёртвый автомат, обнаруживаемый на объекте, а не в CI.
+                //
+                // Ошибка, а не предупреждение (ADR 0028, Option B): при коде
+                // возврата 0 главный риск сохраняется. Ужесточение не ломает ни
+                // одной работающей сборки — оно ломает ровно те, что были
+                // сломаны и без него, просто молча (корпус `examples/` эту ветку
+                // не задевает — проверено прогоном).
                 Err(di) => {
-                    // Условие не поддерживается — оставляем комментарий
-                    printer
-                        .ident(&format!(
-                            "//TODO: условный переход в {} не поддерживается. Причина: {}",
+                    return Err(Diagnostic::error_with_note(
+                        // R3: позиция `ref` в исходнике, а не Location::Codegen —
+                        // иначе пользователю негде искать причину.
+                        reference.location,
+                        format!(
+                            "условный переход в состояние '{}' не переводится в C: {}",
                             target.local(),
                             di.message
-                        ))
-                        .nl();
+                        ),
+                        di.loc,
+                        // R2: исходная причина приложена ЗАМЕТКОЙ, а не схлопнута
+                        // в строку — код исходной диагностики иначе теряется.
+                        match &di.code {
+                            Some(code) => format!("причина [{}]: {}", code, di.message),
+                            None => format!("причина: {}", di.message),
+                        },
+                    )
+                    .with_code("CC-018"));
                 }
             }
         } else {
@@ -759,42 +782,22 @@ fn generate_model_tick(
         }
 
         generate_named_blocks(printer, raw_state, map, model, "always")?;
-        if let Element::State { .. } = state {
-            generate_state_transitions(printer, raw_state, map, model, &model_name, states)?;
-            // Терминальное состояние (нет переходов) — явно переходим в END
-            // Исключение: если состояние уже является END (не добавляем самопереход)
-            if raw_state.is_terminated() && !state_name.local().to_uppercase().eq("END") {
-                generate_named_blocks(printer, raw_state, map, model, "exit")?;
-                printer
-                    .ident(&format!(
-                        "model->state = {}_END;",
-                        model_name.unique_uppercase_snakecase()
-                    ))
-                    .nl();
-            }
-        } else if let Element::StateExtend { extend, next, .. } = state {
-            if let StateExtend::Model(name) = extend {
-                printer
-                    .ident(&format!(
-                        "{}_tick(&model->{}",
-                        name.unique_camelcase(),
-                        state_name.local().to_lowercase()
-                    ))
-                    .print(call_append)
-                    .print(");")
-                    .nl();
-                printer
-                    .ident(&format!(
-                        "if ({}_is_done(&model->{}",
-                        name.unique_camelcase(),
-                        state_name.local().to_lowercase()
-                    ))
-                    .print(call_append)
-                    .print(")) {")
-                    .up()
-                    .nl();
-                if next.local().is_empty() {
-                    // exit текущего → state = END → break
+        // 0028-02: было — цепочка `if let / else if let / else`, где хвостовой
+        // `else` печатал в порождаемый C комментарий-заглушку «пока не
+        // реализовано». Ветка
+        // НЕДОСТИЖИМА (доказательство — в ветке `Element::Model` ниже), то есть
+        // это мёртвый код, маскировавшийся под незавершённую работу.
+        //
+        // Исчерпывающий `match` без ветки `_` заменяет дисциплину на проверку
+        // компилятором: новый вариант `Element` теперь ВАЛИТ СБОРКУ, а не
+        // выпадает в молчаливый no-op. Цепочка `if let` этого не давала — для
+        // неё компилятор обязан допустить `else`.
+        match state {
+            Element::State { .. } => {
+                generate_state_transitions(printer, raw_state, map, model, &model_name, states)?;
+                // Терминальное состояние (нет переходов) — явно переходим в END
+                // Исключение: если состояние уже является END (не добавляем самопереход)
+                if raw_state.is_terminated() && !state_name.local().to_uppercase().eq("END") {
                     generate_named_blocks(printer, raw_state, map, model, "exit")?;
                     printer
                         .ident(&format!(
@@ -802,61 +805,128 @@ fn generate_model_tick(
                             model_name.unique_uppercase_snakecase()
                         ))
                         .nl();
-                    printer.ident("break;").nl();
-                } else {
-                    // exit текущего → enter следующего → state → break
-                    generate_named_blocks(printer, raw_state, map, model, "exit")?;
-                    let next_state = map.raw_state_at(next.clone())?;
-                    let next_state = &*next_state.borrow();
-                    generate_named_blocks(printer, next_state, map, model, "enter")?;
-                    printer
-                        .ident(&format!(
-                            "model->state = {};",
-                            next.unique_uppercase_snakecase()
-                        ))
-                        .nl();
-                    printer.ident("break;").nl();
                 }
-                printer.down().ident("}").nl();
-            } else if let StateExtend::Parallel(steps) = extend {
-                let local = state_name.local_lowercase_snakecase();
-                let unique_upper = state_name.unique_uppercase_snakecase();
-                let access = format!("model->{}", local);
-                let done_exprs = generate_parallel_items_tick(
-                    printer,
-                    &access,
-                    &unique_upper,
-                    &steps,
-                    call_append,
-                );
-                if !done_exprs.is_empty() {
-                    printer
-                        .ident(&format!("if ({}) {{", done_exprs.join(" && ")))
-                        .up()
-                        .nl();
-                    generate_extend_transition(printer, raw_state, map, model, &model_name, &next)?;
-                    printer.down().ident("}").nl();
-                }
-            } else if let StateExtend::Concatenation(steps) = extend {
-                let local = state_name.local_lowercase_snakecase();
-                let unique_upper = state_name.unique_uppercase_snakecase();
-                generate_concat_tick(
-                    printer,
-                    &local,
-                    &unique_upper,
-                    &steps,
-                    call_append,
-                    append,
-                    raw_state,
-                    map,
-                    model,
-                    &model_name,
-                    &next,
-                )?;
             }
-        } else {
-            //TODO: Реализовать
-            printer.ident("//FIXME: Пока не реализовано").nl();
+            Element::StateExtend { extend, next, .. } => {
+                // 0028-02: цепочка по `StateExtend` тоже стала исчерпывающим
+                // `match` — у неё не было ветки `None`, и такое состояние молча
+                // не порождало НИЧЕГО, даже комментария — тише заглушки №1.
+                match extend {
+                    StateExtend::Model(name) => {
+                        printer
+                            .ident(&format!(
+                                "{}_tick(&model->{}",
+                                name.unique_camelcase(),
+                                state_name.local().to_lowercase()
+                            ))
+                            .print(call_append)
+                            .print(");")
+                            .nl();
+                        printer
+                            .ident(&format!(
+                                "if ({}_is_done(&model->{}",
+                                name.unique_camelcase(),
+                                state_name.local().to_lowercase()
+                            ))
+                            .print(call_append)
+                            .print(")) {")
+                            .up()
+                            .nl();
+                        if next.local().is_empty() {
+                            // exit текущего → state = END → break
+                            generate_named_blocks(printer, raw_state, map, model, "exit")?;
+                            printer
+                                .ident(&format!(
+                                    "model->state = {}_END;",
+                                    model_name.unique_uppercase_snakecase()
+                                ))
+                                .nl();
+                            printer.ident("break;").nl();
+                        } else {
+                            // exit текущего → enter следующего → state → break
+                            generate_named_blocks(printer, raw_state, map, model, "exit")?;
+                            let next_state = map.raw_state_at(next.clone())?;
+                            let next_state = &*next_state.borrow();
+                            generate_named_blocks(printer, next_state, map, model, "enter")?;
+                            printer
+                                .ident(&format!(
+                                    "model->state = {};",
+                                    next.unique_uppercase_snakecase()
+                                ))
+                                .nl();
+                            printer.ident("break;").nl();
+                        }
+                        printer.down().ident("}").nl();
+                    }
+                    StateExtend::Parallel(steps) => {
+                        let local = state_name.local_lowercase_snakecase();
+                        let unique_upper = state_name.unique_uppercase_snakecase();
+                        let access = format!("model->{}", local);
+                        let done_exprs = generate_parallel_items_tick(
+                            printer,
+                            &access,
+                            &unique_upper,
+                            &steps,
+                            call_append,
+                        );
+                        if !done_exprs.is_empty() {
+                            printer
+                                .ident(&format!("if ({}) {{", done_exprs.join(" && ")))
+                                .up()
+                                .nl();
+                            generate_extend_transition(
+                                printer,
+                                raw_state,
+                                map,
+                                model,
+                                &model_name,
+                                &next,
+                            )?;
+                            printer.down().ident("}").nl();
+                        }
+                    }
+                    StateExtend::Concatenation(steps) => {
+                        let local = state_name.local_lowercase_snakecase();
+                        let unique_upper = state_name.unique_uppercase_snakecase();
+                        generate_concat_tick(
+                            printer,
+                            &local,
+                            &unique_upper,
+                            &steps,
+                            call_append,
+                            append,
+                            raw_state,
+                            map,
+                            model,
+                            &model_name,
+                            &next,
+                        )?;
+                    }
+                    // 0028-02: ветки для этого варианта НЕ БЫЛО — состояние с
+                    // неразрешённой реализацией молча не порождало ничего.
+                    // Достижимость не установлена (проба через `Extend::Unresolved`
+                    // отклоняется семантикой раньше кодогенерации), поэтому
+                    // поведение сохранено прежним — пустая генерация, — но теперь
+                    // оно ЯВНОЕ и обосновано здесь, а не подразумевается отсутствием
+                    // ветки. Задача 0028-02 объём не расширяет: доказать достижимость
+                    // и выбрать между `Err` и пустой генерацией — предмет отдельной
+                    // работы (кандидат в бэклоге).
+                    StateExtend::None => {}
+                }
+            }
+            // 0028-02: НЕДОСТИЖИМО по контракту `CMap::state_at` (`c_map.rs:125`):
+            // он отдаёт элемент, только если `element.is_state()`, а тот —
+            // `matches!(self, Element::State { .. } | Element::StateExtend { .. })`
+            // (`minimap.rs:137`). То есть `Element::Model` сюда не попадает
+            // никогда; прежде здесь печатался комментарий-заглушка.
+            //
+            // `unreachable!`, а не `Err`: инвариант обеспечен ТИПОМ-ФИЛЬТРОМ, а не
+            // входными данными пользователя — диагностика предлагала бы ему
+            // исправить то, чего он не писал.
+            Element::Model { .. } => unreachable!(
+                "CMap::state_at отдаёт только State/StateExtend (фильтр is_state); \
+                 Element::Model сюда не попадает"
+            ),
         }
         printer.ident("break;").nl();
         printer.down().ident("}").nl();

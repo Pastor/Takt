@@ -5,13 +5,25 @@ title Stacker
 Stacker : CommandReceiver | MovementController | LiftController
 Stacker --> [*]
 
-state LiftController {
-    [*] --> LiftIdle
-    LiftIdle --> LiftOperating
-    LiftOperating --> LiftDone
-    LiftOperating --> LiftDone
-    LiftOperating --> LiftIdle
-    LiftDone --> LiftIdle
+state MovementController {
+    [*] --> MovementIdle
+    MovementIdle --> DispatchMove
+    EmergencyCharge --> MovementIdle
+    MovingToCell --> WaitingForkAtCell
+    MovingToCell --> EmergencyCharge
+    MovingToPickup --> WaitingForkAtPickup
+    MovingToPickup --> EmergencyCharge
+    TaskCompleting --> MovementIdle
+    WaitingForkAtPickup --> MovingToCell
+    WaitingForkAtStorage --> MovingToDropoff
+    MovingToDropoff --> WaitingForkAtDropoff
+    MovingToDropoff --> EmergencyCharge
+    MovingToStorage --> WaitingForkAtStorage
+    MovingToStorage --> EmergencyCharge
+    DispatchMove --> MovingToPickup
+    DispatchMove --> MovingToStorage
+    WaitingForkAtDropoff --> TaskCompleting
+    WaitingForkAtCell --> TaskCompleting
 }
 
 state CommandReceiver {
@@ -21,25 +33,13 @@ state CommandReceiver {
     WaitingForTask --> AcceptingTask
 }
 
-state MovementController {
-    [*] --> MovementIdle
-    WaitingForkAtPickup --> MovingToCell
-    MovementIdle --> DispatchMove
-    MovingToPickup --> WaitingForkAtPickup
-    MovingToPickup --> EmergencyCharge
-    DispatchMove --> MovingToPickup
-    DispatchMove --> MovingToStorage
-    WaitingForkAtCell --> TaskCompleting
-    TaskCompleting --> MovementIdle
-    EmergencyCharge --> MovementIdle
-    WaitingForkAtStorage --> MovingToDropoff
-    MovingToDropoff --> WaitingForkAtDropoff
-    MovingToDropoff --> EmergencyCharge
-    MovingToStorage --> WaitingForkAtStorage
-    MovingToStorage --> EmergencyCharge
-    MovingToCell --> WaitingForkAtCell
-    MovingToCell --> EmergencyCharge
-    WaitingForkAtDropoff --> TaskCompleting
+state LiftController {
+    [*] --> LiftIdle
+    LiftOperating --> LiftDone
+    LiftOperating --> LiftDone
+    LiftOperating --> LiftIdle
+    LiftIdle --> LiftOperating
+    LiftDone --> LiftIdle
 }
 
 @enduml

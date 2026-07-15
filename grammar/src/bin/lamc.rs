@@ -275,6 +275,26 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     })
 }
 
+/// Печатает ошибку компиляции: код, сообщение и приложенные заметки.
+///
+/// Единая точка на все цели (0028-01). Прежде печать была **расходящейся**:
+/// цели `c-hal`/`st-at` показывали код (`Ошибка компиляции [SE-049]: …`), а
+/// `c`/`st` — нет, и пользователь одной и той же диагностики видел разное в
+/// зависимости от цели. Заметки не печатала **ни одна** ветка, из-за чего
+/// приложенная причина (`Diagnostic::error_with_note`) до пользователя не
+/// доезжала вовсе. Тот же урок, что в закрытой 0026: расхождение веток —
+/// причина того, что одна работает, а другая нет.
+fn print_compile_error(diag: &grammar::diagnostics::Diagnostic) {
+    eprintln!(
+        "Ошибка компиляции [{}]: {}",
+        diag.code.as_deref().unwrap_or("?"),
+        diag.message
+    );
+    for note in &diag.notes {
+        eprintln!("  примечание: {}", note.message);
+    }
+}
+
 /// Собирает опции генерации из разобранных аргументов CLI.
 ///
 /// Одна точка сборки на все цели: иначе новая опция доезжает до одних целей и
@@ -637,11 +657,7 @@ fn main() {
                     }
                 }
                 Err(diag) => {
-                    eprintln!(
-                        "Ошибка компиляции [{}]: {}",
-                        diag.code.as_deref().unwrap_or("?"),
-                        diag.message
-                    );
+                    print_compile_error(&diag);
                     process::exit(1);
                 }
             }
@@ -654,7 +670,7 @@ fn main() {
                 &options.include_dirs,
                 &generate_options(&options),
             ) {
-                eprintln!("Ошибка компиляции: {}", diag.message);
+                print_compile_error(&diag);
                 process::exit(1);
             }
             // В тихом режиме не выводим информационные сообщения
@@ -687,7 +703,7 @@ fn main() {
                 &options.output_path,
                 &options.include_dirs,
             ) {
-                eprintln!("Ошибка компиляции: {}", diag.message);
+                print_compile_error(&diag);
                 process::exit(1);
             }
             if !options.quiet {
@@ -715,11 +731,7 @@ fn main() {
                 &options.include_dirs,
                 &generate_options(&options),
             ) {
-                eprintln!(
-                    "Ошибка компиляции [{}]: {}",
-                    diag.code.as_deref().unwrap_or("?"),
-                    diag.message
-                );
+                print_compile_error(&diag);
                 process::exit(1);
             }
             if !options.quiet {
@@ -766,11 +778,7 @@ fn main() {
                     }
                 }
                 Err(diag) => {
-                    eprintln!(
-                        "Ошибка компиляции [{}]: {}",
-                        diag.code.as_deref().unwrap_or("?"),
-                        diag.message
-                    );
+                    print_compile_error(&diag);
                     process::exit(1);
                 }
             }
