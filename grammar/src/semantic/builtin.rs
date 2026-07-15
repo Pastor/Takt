@@ -9,7 +9,7 @@
 //! | Имя     | Параметры                               | Возвращаемый тип  | Описание                              |
 //! |---------|----------------------------------------|-------------------|---------------------------------------|
 //! | `debug` | `text: BuiltinString`                  | `Unit`            | Вывод отладочного сообщения           |
-//! | `S`     | `model: BuiltinModel`                  | `BuiltinState`    | Получение начального состояния модели |
+//! | `S`     | `model: BuiltinModel`                  | `BuiltinState`    | **Текущее** состояние модели          |
 //! | `min`   | `a: BuiltinNumeric, b: BuiltinNumeric` | `BuiltinNumeric`  | Минимум из двух числовых значений     |
 //! | `max`   | `a: BuiltinNumeric, b: BuiltinNumeric` | `BuiltinNumeric`  | Максимум из двух числовых значений    |
 //! | `abs`   | `x: BuiltinNumeric`                    | `BuiltinNumeric`  | Абсолютное значение числа             |

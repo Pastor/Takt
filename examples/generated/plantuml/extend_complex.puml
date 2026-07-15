@@ -7,14 +7,24 @@ Next --> [*]
 Start : A + B + C | D + E
 Start --> Next
 
+state D {
+    [*] --> Start
+    Start --> [*]
+}
+
 state C {
     [*] --> Start
+    End --> [*]
     Start : C1 | C2
     Start --> End
-    End --> [*]
 }
 
 state C2 {
+    [*] --> Start
+    Start --> [*]
+}
+
+state A {
     [*] --> Start
     Start --> [*]
 }
@@ -35,21 +45,11 @@ state B {
     Start --> [*]
 }
 
-state D {
-    [*] --> Start
-    Start --> [*]
-}
-
 state E {
     [*] --> Start
+    End --> [*]
     Start : D + F
     Start --> End
-    End --> [*]
-}
-
-state A {
-    [*] --> Start
-    Start --> [*]
 }
 
 @enduml
