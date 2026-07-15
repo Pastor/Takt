@@ -3,16 +3,341 @@
  * Не редактировать вручную: файл перезаписывается при каждой генерации.
  *)
 
+FUNCTION abs_diff : USINT
+VAR_INPUT
+    a : USINT;
+    b : USINT;
+END_VAR
+    IF a > b THEN
+        abs_diff := a - b;
+        RETURN;
+    END_IF;
+    abs_diff := b - a;
+    RETURN;
+END_FUNCTION
+
+FUNCTION max2 : USINT
+VAR_INPUT
+    a : USINT;
+    b : USINT;
+END_VAR
+    IF a > b THEN
+        max2 := a;
+        RETURN;
+    END_IF;
+    max2 := b;
+    RETURN;
+END_FUNCTION
+
+FUNCTION travel_time : USINT
+VAR_INPUT
+    to_stack : USINT;
+    to_row : USINT;
+    to_section : USINT;
+END_VAR
+VAR
+    ds : USINT;
+    dr : USINT;
+    dy : USINT;
+    t : USINT;
+END_VAR
+    ds := 0;
+    dr := 0;
+    dy := 0;
+    t := 0;
+    IF pos_stack > to_stack THEN
+        ds := pos_stack - to_stack;
+    ELSE
+        ds := to_stack - pos_stack;
+    END_IF;
+    IF pos_row > to_row THEN
+        dr := pos_row - to_row;
+    ELSE
+        dr := to_row - pos_row;
+    END_IF;
+    IF pos_section > to_section THEN
+        dy := pos_section - to_section;
+    ELSE
+        dy := to_section - pos_section;
+    END_IF;
+    t := ds;
+    IF dr > t THEN
+        t := dr;
+    END_IF;
+    IF dy > t THEN
+        t := dy;
+    END_IF;
+    travel_time := t;
+    RETURN;
+END_FUNCTION
+
 FUNCTION_BLOCK StackerCommandReceiver
-    (* Тело: задачи 0041-03…0041-05 (CASE state OF, выражения, адреса). *)
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR_IN_OUT
+    busy : BOOL;
+    cmd_ack : BOOL;
+    eta : USINT;
+    sense_battery_low : BOOL;
+    task_row_no : USINT;
+    task_section_no : USINT;
+    task_stack_no : USINT;
+    task_type : BOOL;
+    task_valid : BOOL;
+    tgt_row : USINT;
+    tgt_section : USINT;
+    tgt_stack : USINT;
+    tgt_type : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            cmd_ack := 0;
+            state := 3; (* WaitingForTask *)
+        1: (* AcceptingTask *)
+            cmd_ack := 0;
+            state := 2; (* TaskActive *)
+        2: (* TaskActive *)
+            IF NOT busy THEN
+                cmd_ack := 0;
+                state := 3; (* WaitingForTask *)
+            END_IF;
+        3: (* WaitingForTask *)
+            IF task_valid AND NOT busy AND NOT sense_battery_low THEN
+                tgt_stack := task_stack_no;
+                tgt_row := task_row_no;
+                tgt_section := task_section_no;
+                tgt_type := task_type;
+                eta := travel_time(task_stack_no, task_row_no, task_section_no);
+                busy := 1;
+                cmd_ack := 1;
+                state := 1; (* AcceptingTask *)
+            END_IF;
+        4: (* END *)
+            state := 4;
+    END_CASE;
+    is_done := state = 4;
 END_FUNCTION_BLOCK
 
 FUNCTION_BLOCK StackerLiftController
-    (* Тело: задачи 0041-03…0041-05 (CASE state OF, выражения, адреса). *)
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR_IN_OUT
+    cmd_fork : BOOL;
+    lift_done : BOOL;
+    lift_op : BOOL;
+    lift_request : BOOL;
+    sense_loaded : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            cmd_fork := 0;
+            state := 2; (* LiftIdle *)
+        1: (* LiftDone *)
+            IF NOT lift_request THEN
+                cmd_fork := 0;
+                state := 2; (* LiftIdle *)
+            END_IF;
+        2: (* LiftIdle *)
+            IF lift_request THEN
+                cmd_fork := 1;
+                state := 3; (* LiftOperating *)
+            END_IF;
+        3: (* LiftOperating *)
+            IF lift_request AND NOT lift_op AND sense_loaded THEN
+                cmd_fork := 0;
+                lift_done := 1;
+                state := 1; (* LiftDone *)
+            ELSIF lift_request AND lift_op AND NOT sense_loaded THEN
+                cmd_fork := 0;
+                lift_done := 1;
+                state := 1; (* LiftDone *)
+            ELSIF NOT lift_request THEN
+                cmd_fork := 0;
+                state := 2; (* LiftIdle *)
+            END_IF;
+        4: (* END *)
+            state := 4;
+    END_CASE;
+    is_done := state = 4;
 END_FUNCTION_BLOCK
 
 FUNCTION_BLOCK StackerMovementController
-    (* Тело: задачи 0041-03…0041-05 (CASE state OF, выражения, адреса). *)
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR_IN_OUT
+    busy : BOOL;
+    cmd_ack : BOOL;
+    cmd_done : BOOL;
+    cmd_target_row : USINT;
+    cmd_target_section : USINT;
+    cmd_target_stack : USINT;
+    lift_done : BOOL;
+    lift_op : BOOL;
+    lift_request : BOOL;
+    pos_row : USINT;
+    pos_section : USINT;
+    pos_stack : USINT;
+    sense_at_charge : BOOL;
+    sense_battery_low : BOOL;
+    tgt_row : USINT;
+    tgt_section : USINT;
+    tgt_stack : USINT;
+    tgt_type : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            cmd_target_stack := CHARGE_STACK;
+            cmd_target_row := CHARGE_ROW;
+            cmd_target_section := CHARGE_SECTION;
+            cmd_done := 0;
+            state := 3; (* MovementIdle *)
+        1: (* DispatchMove *)
+            IF NOT tgt_type THEN
+                cmd_target_stack := PICKUP_STACK;
+                cmd_target_row := PICKUP_ROW;
+                cmd_target_section := PICKUP_SECTION;
+                state := 6; (* MovingToPickup *)
+            ELSIF tgt_type THEN
+                lift_request := 0;
+                lift_done := 0;
+                cmd_target_stack := tgt_stack;
+                cmd_target_row := tgt_row;
+                cmd_target_section := tgt_section;
+                state := 7; (* MovingToStorage *)
+            END_IF;
+        2: (* EmergencyCharge *)
+            IF sense_at_charge THEN
+                cmd_target_stack := CHARGE_STACK;
+                cmd_target_row := CHARGE_ROW;
+                cmd_target_section := CHARGE_SECTION;
+                cmd_done := 0;
+                state := 3; (* MovementIdle *)
+            END_IF;
+        3: (* MovementIdle *)
+            IF busy AND NOT sense_battery_low THEN
+                state := 1; (* DispatchMove *)
+            END_IF;
+        4: (* MovingToCell *)
+            IF pos_stack = tgt_stack AND pos_row = tgt_row AND pos_section = tgt_section THEN
+                lift_request := 1;
+                lift_op := 1;
+                state := 9; (* WaitingForkAtCell *)
+            ELSIF sense_battery_low THEN
+                cmd_target_stack := CHARGE_STACK;
+                cmd_target_row := CHARGE_ROW;
+                cmd_target_section := CHARGE_SECTION;
+                lift_request := 0;
+                lift_done := 0;
+                cmd_ack := 0;
+                cmd_done := 0;
+                busy := 0;
+                state := 2; (* EmergencyCharge *)
+            END_IF;
+        5: (* MovingToDropoff *)
+            IF pos_stack = DROPOFF_STACK AND pos_row = DROPOFF_ROW AND pos_section = DROPOFF_SECTION THEN
+                lift_request := 1;
+                lift_op := 1;
+                state := 10; (* WaitingForkAtDropoff *)
+            ELSIF sense_battery_low THEN
+                cmd_target_stack := CHARGE_STACK;
+                cmd_target_row := CHARGE_ROW;
+                cmd_target_section := CHARGE_SECTION;
+                lift_request := 0;
+                lift_done := 0;
+                cmd_ack := 0;
+                cmd_done := 0;
+                busy := 0;
+                state := 2; (* EmergencyCharge *)
+            END_IF;
+        6: (* MovingToPickup *)
+            IF pos_stack = PICKUP_STACK AND pos_row = PICKUP_ROW AND pos_section = PICKUP_SECTION THEN
+                lift_request := 1;
+                lift_op := 0;
+                state := 11; (* WaitingForkAtPickup *)
+            ELSIF sense_battery_low THEN
+                cmd_target_stack := CHARGE_STACK;
+                cmd_target_row := CHARGE_ROW;
+                cmd_target_section := CHARGE_SECTION;
+                lift_request := 0;
+                lift_done := 0;
+                cmd_ack := 0;
+                cmd_done := 0;
+                busy := 0;
+                state := 2; (* EmergencyCharge *)
+            END_IF;
+        7: (* MovingToStorage *)
+            IF pos_stack = tgt_stack AND pos_row = tgt_row AND pos_section = tgt_section THEN
+                lift_request := 1;
+                lift_op := 0;
+                state := 12; (* WaitingForkAtStorage *)
+            ELSIF sense_battery_low THEN
+                cmd_target_stack := CHARGE_STACK;
+                cmd_target_row := CHARGE_ROW;
+                cmd_target_section := CHARGE_SECTION;
+                lift_request := 0;
+                lift_done := 0;
+                cmd_ack := 0;
+                cmd_done := 0;
+                busy := 0;
+                state := 2; (* EmergencyCharge *)
+            END_IF;
+        8: (* TaskCompleting *)
+            cmd_done := 0;
+            cmd_target_stack := CHARGE_STACK;
+            cmd_target_row := CHARGE_ROW;
+            cmd_target_section := CHARGE_SECTION;
+            cmd_done := 0;
+            state := 3; (* MovementIdle *)
+        9: (* WaitingForkAtCell *)
+            IF lift_done THEN
+                lift_request := 0;
+                lift_done := 0;
+                busy := 0;
+                cmd_done := 1;
+                state := 8; (* TaskCompleting *)
+            END_IF;
+        10: (* WaitingForkAtDropoff *)
+            IF lift_done THEN
+                lift_request := 0;
+                lift_done := 0;
+                busy := 0;
+                cmd_done := 1;
+                state := 8; (* TaskCompleting *)
+            END_IF;
+        11: (* WaitingForkAtPickup *)
+            IF lift_done THEN
+                lift_request := 0;
+                lift_done := 0;
+                cmd_target_stack := tgt_stack;
+                cmd_target_row := tgt_row;
+                cmd_target_section := tgt_section;
+                state := 4; (* MovingToCell *)
+            END_IF;
+        12: (* WaitingForkAtStorage *)
+            IF lift_done THEN
+                lift_request := 0;
+                lift_done := 0;
+                cmd_target_stack := DROPOFF_STACK;
+                cmd_target_row := DROPOFF_ROW;
+                cmd_target_section := DROPOFF_SECTION;
+                state := 5; (* MovingToDropoff *)
+            END_IF;
+        13: (* END *)
+            state := 13;
+    END_CASE;
+    is_done := state = 13;
 END_FUNCTION_BLOCK
 
 FUNCTION_BLOCK Stacker
@@ -30,6 +355,7 @@ VAR_INPUT
     task_valid : BOOL;
 END_VAR
 VAR_OUTPUT
+    is_done : BOOL;
     cmd_ack : BOOL;
     cmd_done : BOOL;
     cmd_fork : BOOL;
@@ -38,6 +364,10 @@ VAR_OUTPUT
     cmd_target_stack : USINT;
 END_VAR
 VAR
+    state : USINT := 0;
+    command_receiver0 : StackerCommandReceiver;
+    movement_controller1 : StackerMovementController;
+    lift_controller2 : StackerLiftController;
     busy : BOOL := FALSE;
     eta : USINT := 0;
     lift_done : BOOL := FALSE;
@@ -59,6 +389,19 @@ VAR CONSTANT
     PICKUP_SECTION : USINT := 1;
     PICKUP_STACK : USINT := 0;
 END_VAR
-    (* Тело: задачи 0041-03…0041-05 (CASE state OF, выражения, адреса). *)
+    CASE state OF
+        0: (* INIT *)
+            state := 1; (* Stacker *)
+        1: (* Stacker *)
+            command_receiver0(busy := busy, cmd_ack := cmd_ack, eta := eta, sense_battery_low := sense_battery_low, task_row_no := task_row_no, task_section_no := task_section_no, task_stack_no := task_stack_no, task_type := task_type, task_valid := task_valid, tgt_row := tgt_row, tgt_section := tgt_section, tgt_stack := tgt_stack, tgt_type := tgt_type);
+            movement_controller1(busy := busy, cmd_ack := cmd_ack, cmd_done := cmd_done, cmd_target_row := cmd_target_row, cmd_target_section := cmd_target_section, cmd_target_stack := cmd_target_stack, lift_done := lift_done, lift_op := lift_op, lift_request := lift_request, pos_row := pos_row, pos_section := pos_section, pos_stack := pos_stack, sense_at_charge := sense_at_charge, sense_battery_low := sense_battery_low, tgt_row := tgt_row, tgt_section := tgt_section, tgt_stack := tgt_stack, tgt_type := tgt_type);
+            lift_controller2(cmd_fork := cmd_fork, lift_done := lift_done, lift_op := lift_op, lift_request := lift_request, sense_loaded := sense_loaded);
+            IF command_receiver0.is_done AND movement_controller1.is_done AND lift_controller2.is_done THEN
+                state := 2; (*  *)
+            END_IF;
+        2: (* END *)
+            state := 2;
+    END_CASE;
+    is_done := state = 2;
 END_FUNCTION_BLOCK
 

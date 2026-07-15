@@ -38,14 +38,6 @@
 //! `Data type mismatch for '+'`), поэтому переменные остаются числовыми
 //! (`USINT`), а преобразование делается **в месте операции**, а не в объявлении.
 
-// Печатники ещё никто не вызывает: их потребитель — `st_model.rs` (задача
-// 0041-03, эмиссия `CASE state OF`), который пишется следующим. Без этого
-// разрешения модуль дал бы ~десяток предупреждений `dead_code`, а проект как раз
-// сводит их к нулю (фича 0046). Разрешение снимается вместе с появлением
-// вызывающего — тот же приём и по той же причине применён в `st_map.rs`
-// (задача 0041-01).
-#![allow(dead_code)]
-
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
@@ -217,9 +209,15 @@ pub(crate) fn print_condition(
         ConditionNode::Unresolved(_) => Err(unsupported(
             "условие не прошло семантическое понижение (Unresolved)",
         )),
-        ConditionNode::Function(_, _, _) => Err(unsupported(
-            "вызов функции в условии: печать функций — часть 2 задачи 0041-04",
-        )),
+        // Вызов функции в условии — тот же печатник, что и в выражении:
+        // аргументы приходят условиями, поэтому печатаются печатником условий.
+        ConditionNode::Function(def, args, _) => {
+            let mut printed = Vec::new();
+            for arg in args {
+                printed.push(print_condition(arg, model)?);
+            }
+            super::st_func::print_call_texts(def, &printed)
+        }
         ConditionNode::String(_) => Err(unsupported(
             "строковый литерал: цель ST строк не поддерживает",
         )),
