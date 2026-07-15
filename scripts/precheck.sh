@@ -44,6 +44,7 @@ $LAMC fmt --check examples/ || {
 
 C_OUTPUT="examples/generated/c"
 PLANTUML_OUTPUT="examples/generated/plantuml"
+ST_OUTPUT="examples/generated/st"
 
 echo "Генерация C-кода из примеров Lam..."
 for lam_file in examples/*.lam; do
@@ -51,6 +52,11 @@ for lam_file in examples/*.lam; do
   echo "  $lam_file → $C_OUTPUT/${name}.c / ${name}.h"
   $LAMC compile "$lam_file" -o "$C_OUTPUT" || echo "    [предупреждение] ошибка генерации $lam_file"
   $LAMC compile "$lam_file" -t plantuml -o "$PLANTUML_OUTPUT" || echo "    [предупреждение] ошибка генерации $lam_file"
+  # Цель st (фича 0041). Отказ не валит предкоммит: бэкенд дописывается
+  # (задачи 0041-03, 0041-04 часть 3), и на непокрытом узле он ЗАКОНОМЕРНО
+  # отвечает ST-011 — это замысел («никакого тихого пропуска»), а не поломка.
+  $LAMC compile "$lam_file" -t st -o "$ST_OUTPUT" \
+    || echo "    [предупреждение] цель st: $lam_file не транслируется (бэкенд не закончен)"
 done
 echo "Готово. Файлы в $C_OUTPUT/"
 cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -S $C_OUTPUT -B $C_OUTPUT/cmake-build-debug/
