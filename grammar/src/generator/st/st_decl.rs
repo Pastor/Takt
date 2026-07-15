@@ -394,6 +394,11 @@ pub(crate) fn literal_init(expr: &ExpressionNode, ty: &TypeNode) -> Option<Strin
         ExpressionNode::Number(n) if matches!(ty, TypeNode::Bit | TypeNode::Bool) => {
             Some(if *n == 0 { "FALSE" } else { "TRUE" }.to_string())
         }
+        // Булев литерал (`const ENABLED: bool := true;`). Без этой ветви
+        // константа теряла инициализатор и `iec2c` отвергал объявление:
+        // `VAR CONSTANT` без значения — «invalid specification in variable
+        // declaration».
+        ExpressionNode::Bool(b) => Some(if *b { "TRUE" } else { "FALSE" }.to_string()),
         ExpressionNode::Number(n) => Some(n.to_string()),
         ExpressionNode::Rational(text, negative) => {
             Some(format!("{}{}", if *negative { "-" } else { "" }, text))

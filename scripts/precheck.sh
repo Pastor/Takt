@@ -82,3 +82,35 @@ fi
 # отвергает. Включение гейта — задача 0041-05 (см. docs/development/0041-06).
 echo "Проверка ST-арбитра (MatIEC iec2c)..."
 "$ROOT/scripts/ensure-iec2c.sh" || true
+
+# ГЕЙТ ST: порождённый Structured Text обязан компилироваться (фича 0041).
+# Единственный автоматизируемый способ доказать, что вывод валиден по стандарту:
+# юнит-тесты проверяют лишь, что генератор напечатал задуманное.
+#
+# Гейт НЕ валит предкоммит, если инструмента нет: `iec2c` внешний и для сборки
+# `lamc` не нужен. Но если он есть — невалидный ST это ОШИБКА.
+IEC2C_BIN="${IEC2C_PREFIX:-$HOME/.local}/bin/iec2c"
+IEC2C_LIB="${IEC2C_PREFIX:-$HOME/.local}/share/matiec/lib"
+if [ -x "$IEC2C_BIN" ] && [ -f "$IEC2C_LIB/ieclib.txt" ]; then
+  echo "Гейт ST: проверка порождённого кода транспилятором iec2c..."
+  st_failed=0
+  for st_file in "$ST_OUTPUT"/*.st; do
+    [ -e "$st_file" ] || continue
+    name="$(basename "$st_file" .st)"
+    out_dir="$(mktemp -d)"
+    if "$IEC2C_BIN" -I "$IEC2C_LIB" -T "$out_dir" "$st_file" >/dev/null 2>"$out_dir/err"; then
+      echo "  $name → валиден"
+    else
+      echo "  $name → НЕВАЛИДЕН:"
+      sed 's/^/    /' "$out_dir/err" | head -5
+      st_failed=1
+    fi
+    rm -rf "$out_dir"
+  done
+  if [ "$st_failed" -ne 0 ]; then
+    echo "  Порождённый ST не принимается iec2c — предкоммит провален."
+    exit 1
+  fi
+else
+  echo "  [пропуск] iec2c недоступен — гейт ST пропущен"
+fi

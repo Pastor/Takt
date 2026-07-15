@@ -143,7 +143,13 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
             _ => None,
         })
         .collect();
+    // Модель обязана быть объявлена РАНЬШЕ той, что заводит её экземпляр:
+    // опережающие ссылки в ST — нестандартное расширение (`iec2c -p`).
+    // Порядок топологический, а не по глубине вложенности: зависимость бывает и
+    // между СОСЕДЯМИ (`E` содержит `F`, оба — подмодели корня), и одной лишь
+    // «глубже — раньше» тут мало (поймано гейтом на `extend_complex`).
     submodels.sort_by(|a, b| a.unique().cmp(b.unique()));
+    submodels = topological_order(map, submodels);
 
     // Блоки строятся в порядке «подмодели → корень»; корень идёт последним по
     // той же причине, что и сортировка выше.
@@ -183,6 +189,42 @@ fn report(warnings: &[Diagnostic]) {
         let code = w.code.as_deref().unwrap_or("ST");
         eprintln!("Предупреждение [{}]: {}", code, w.message);
     }
+}
+
+/// Упорядочивает подмодели так, чтобы каждая шла после тех, кого использует.
+///
+/// Алгоритм Кана по отношению «заводит экземпляр». Вход отсортирован
+/// лексикографически, поэтому и результат воспроизводим (`used_models()` обходит
+/// `HashMap`, то есть отдаёт модели в разном порядке от запуска к запуску).
+///
+/// Цикл в зависимостях невозможен: модель не может содержать саму себя. Но если
+/// он вдруг возникнет, остаток дописывается как есть — тогда `iec2c` пожалуется
+/// на опережающую ссылку, то есть **громко**, а не молча.
+fn topological_order(map: &StMap, models: Vec<Name>) -> Vec<Name> {
+    let deps: Vec<(Name, Vec<String>)> = models
+        .iter()
+        .map(|n| (n.clone(), map.instantiated_by(n)))
+        .collect();
+    let mut placed: Vec<Name> = Vec::new();
+    let mut rest: Vec<(Name, Vec<String>)> = deps;
+
+    while !rest.is_empty() {
+        let ready: Vec<Name> = rest
+            .iter()
+            .filter(|(_, d)| d.iter().all(|dep| placed.iter().any(|p| p.unique() == dep)))
+            .map(|(n, _)| n.clone())
+            .collect();
+        if ready.is_empty() {
+            // Цикл: дописываем остаток, не теряя ни одной модели.
+            placed.extend(rest.into_iter().map(|(n, _)| n));
+            break;
+        }
+        for name in &ready {
+            placed.push(name.clone());
+        }
+        rest.retain(|(n, _)| !ready.iter().any(|r| r.unique() == n.unique()));
+    }
+    placed
 }
 
 /// Строит диагностику `ST-012` — снимок карты не содержит корневой модели.
