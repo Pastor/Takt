@@ -25,6 +25,22 @@ pub enum Language {
     ST,
 }
 
+/// Ширина вещественного типа в порождаемом C (фича 0029, ADR Option R-C).
+///
+/// Умолчание — [`W64`](FloatWidth::W64) (`double`): симулятор считает в f64
+/// (`eval::Value::Real`), и без совпадения точности сверка модели с
+/// синтезированным кодом по `float` недостижима. [`W32`](FloatWidth::W32)
+/// (`float`) остаётся для платформ, где 8-байтное чтение недопустимо: цена
+/// умолчания — ширина вещественного порта `c-hal` 4 → 8 байт.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FloatWidth {
+    /// `float` — 4 байта (f32).
+    W32,
+    /// `double` — 8 байт (f64), совпадает с точностью симулятора.
+    #[default]
+    W64,
+}
+
 /// Опции генерации кода.
 ///
 /// Заменяет «голый» булев флаг `guard_enable` на именованную структуру опций —
@@ -46,6 +62,9 @@ pub struct GenerateOptions {
     /// Заполняется из [`resolve_addresses`](crate::address_map::resolve_addresses)
     /// (приоритет inline < `address` < внешняя карта). В обычном режиме пуста.
     pub address_map: std::collections::HashMap<String, crate::address_map::ResolvedAddress>,
+    /// Ширина вещественного типа в порождаемом C (фича 0029). Умолчание —
+    /// [`FloatWidth::W64`]; CLI-флаг `--float-width=32|64`.
+    pub float_width: FloatWidth,
 }
 
 impl GenerateOptions {
@@ -55,6 +74,7 @@ impl GenerateOptions {
             guard_enable,
             hal: false,
             address_map: std::collections::HashMap::new(),
+            float_width: FloatWidth::default(),
         }
     }
 }
@@ -66,6 +86,7 @@ impl Default for GenerateOptions {
             guard_enable: true,
             hal: false,
             address_map: std::collections::HashMap::new(),
+            float_width: FloatWidth::default(),
         }
     }
 }

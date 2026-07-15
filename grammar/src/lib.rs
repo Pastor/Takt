@@ -58,6 +58,8 @@ pub use address_map::{
     AddressMapEntry, AddressResolution, AddressSource, ResolvedAddress,
     address_map_overlay_warnings, parse_address_map, resolve_addresses,
 };
+/// Ширина вещественного типа в порождаемом C (фича 0029): `grammar::FloatWidth`.
+pub use generator::FloatWidth;
 /// Опции генерации кода (реэкспорт для удобства: `grammar::GenerateOptions`).
 pub use generator::GenerateOptions;
 

@@ -467,6 +467,86 @@ mod tests {
 
     // ── Интеграционные тесты generate_source ──────────────────────────────────
 
+    /// Порождает `.c` для исходника (корень — `Main`).
+    fn source_of(src: &str) -> Result<String, crate::diagnostics::Diagnostic> {
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model_rc = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some("Main".to_string());
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &*model, true).unwrap();
+        generate_source(map.get_filename(), &map)
+    }
+
+    /// **T2 (0029-05).** Агрегатный инициализатор массива — поэлементно.
+    ///
+    /// Массив в C **не является** изменяемым lvalue: `model->arr = {0,0,0,0};`
+    /// отвергается (`error: expected expression`), и составной литерал не
+    /// спасает — присваивание массиву запрещено в принципе. Выход один:
+    /// поэлементная запись. Строки захвачены зондом (`lamc -t c`), вывод
+    /// проверен `cc -std=c11 -Wall -Werror`.
+    #[test]
+    fn test_array_aggregate_initializer_is_element_wise() {
+        let src = r#"
+type Byte = [bit;8];
+var arr: [Byte;4] := {0,0,0,0};
+var counter: u8 := 0;
+start Idle { always { arr[0] := 7; counter := 1; } }
+"#;
+        let source = source_of(src).expect("порождение .c");
+        for i in 0..4 {
+            assert!(
+                source.contains(&format!("model->arr[{}] = 0;", i)),
+                "элемент {} обязан инициализироваться отдельно:\n{source}",
+                i
+            );
+        }
+        assert!(
+            !source.contains("model->arr = {"),
+            "присваивание агрегата массиву — невалидный C:\n{source}"
+        );
+    }
+
+    /// **0029-05.** Скалярный инициализатор массива → `CC-017`, а не догадка.
+    ///
+    /// `var data: [u8;4] := 0;` язык не определяет: обнулить весь массив?
+    /// записать в первый элемент? Цель `st` инициализатор отбрасывает,
+    /// симулятор кладёт скаляр (после чего `data[0]` даёт `SIM-010`) — три
+    /// ответа расходятся. Выбор одного — вопрос семантики языка, вне полномочий
+    /// фичи 0029.
+    #[test]
+    fn test_array_scalar_initializer_is_rejected_with_cc_017() {
+        let src = r#"
+var data: [u8;4] := 0;
+var counter: u8 := 0;
+start Idle { always { data[0] := 7; counter := 1; } }
+"#;
+        let diag =
+            source_of(src).expect_err("скалярный инициализатор массива обязан быть отвергнут");
+        assert_eq!(diag.code.as_deref(), Some("CC-017"));
+        assert!(
+            diag.message.contains("data"),
+            "сообщение обязано называть переменную: {}",
+            diag.message
+        );
+    }
+
+    /// **T4 (0029-05).** Бит-вектор — скаляр: присваивание ему законно и
+    /// **не меняется**. Доминирующая идиома корпуса (45 из 46 вхождений).
+    #[test]
+    fn test_bit_vector_initializer_stays_scalar_assignment() {
+        let src = r#"
+type Byte = [bit;8];
+var b: Byte := 0xFF;
+var counter: u8 := 0;
+start Idle { always { counter := b; } }
+"#;
+        let source = source_of(src).expect("порождение .c");
+        assert!(
+            source.contains("model->b = 255;"),
+            "[bit;8] — скаляр uint8_t, присваивание законно:\n{source}"
+        );
+    }
+
     #[test]
     fn test_generate_source_has_include_and_math() {
         let src = r#"start Main { always { } }"#;

@@ -5,41 +5,41 @@ title Stacker
 Stacker : CommandReceiver | MovementController | LiftController
 Stacker --> [*]
 
+state MovementController {
+    [*] --> MovementIdle
+    EmergencyCharge --> MovementIdle
+    WaitingForkAtCell --> TaskCompleting
+    DispatchMove --> MovingToPickup
+    DispatchMove --> MovingToStorage
+    WaitingForkAtPickup --> MovingToCell
+    WaitingForkAtDropoff --> TaskCompleting
+    WaitingForkAtStorage --> MovingToDropoff
+    MovementIdle --> DispatchMove
+    MovingToDropoff --> WaitingForkAtDropoff
+    MovingToDropoff --> EmergencyCharge
+    TaskCompleting --> MovementIdle
+    MovingToCell --> WaitingForkAtCell
+    MovingToCell --> EmergencyCharge
+    MovingToStorage --> WaitingForkAtStorage
+    MovingToStorage --> EmergencyCharge
+    MovingToPickup --> WaitingForkAtPickup
+    MovingToPickup --> EmergencyCharge
+}
+
 state LiftController {
     [*] --> LiftIdle
+    LiftIdle --> LiftOperating
+    LiftDone --> LiftIdle
     LiftOperating --> LiftDone
     LiftOperating --> LiftDone
     LiftOperating --> LiftIdle
-    LiftDone --> LiftIdle
-    LiftIdle --> LiftOperating
 }
 
 state CommandReceiver {
     [*] --> WaitingForTask
-    AcceptingTask --> TaskActive
     TaskActive --> WaitingForTask
+    AcceptingTask --> TaskActive
     WaitingForTask --> AcceptingTask
-}
-
-state MovementController {
-    [*] --> MovementIdle
-    WaitingForkAtPickup --> MovingToCell
-    MovingToCell --> WaitingForkAtCell
-    MovingToCell --> EmergencyCharge
-    MovingToDropoff --> WaitingForkAtDropoff
-    MovingToDropoff --> EmergencyCharge
-    MovingToPickup --> WaitingForkAtPickup
-    MovingToPickup --> EmergencyCharge
-    TaskCompleting --> MovementIdle
-    WaitingForkAtDropoff --> TaskCompleting
-    WaitingForkAtStorage --> MovingToDropoff
-    MovementIdle --> DispatchMove
-    WaitingForkAtCell --> TaskCompleting
-    DispatchMove --> MovingToPickup
-    DispatchMove --> MovingToStorage
-    MovingToStorage --> WaitingForkAtStorage
-    MovingToStorage --> EmergencyCharge
-    EmergencyCharge --> MovementIdle
 }
 
 @enduml

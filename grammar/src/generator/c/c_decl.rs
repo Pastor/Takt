@@ -4,7 +4,7 @@
 //! и [`generate_functions`] для генерации extern/static функций.
 
 use super::c_expr::{generate_code_block, get_function_name};
-use super::get_c_type;
+use super::{c_type_or_diagnostic, typed_variable_or_diagnostic};
 use crate::diagnostics::Diagnostic;
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
@@ -138,22 +138,36 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
                     params, body, ret, ..
                 } => {
                     let mut definition = String::new();
+                    // 0029-01: было `.unwrap()` — невыразимый тип параметра ронял
+                    // `lamc` паникой (проба: `fn pick(data: [u8;4])`). Параметр
+                    // печатается формой объявления: тип массива в C неотделим от
+                    // имени (`uint8_t data[4]`).
                     let mut tiny_params = params
                         .iter()
                         .map(|(name, typ)| {
-                            get_c_type(&typ, model)
-                                .map(|c_type| format!("{} {}", c_type, name.clone()))
-                                .unwrap()
+                            typed_variable_or_diagnostic(
+                                typ,
+                                name,
+                                model,
+                                map.float_width(),
+                                &format!("параметр '{}' функции '{}'", name, fun.name()),
+                            )
                         })
-                        .collect::<Vec<String>>();
+                        .collect::<Result<Vec<String>, Diagnostic>>()?;
                     tiny_params.insert(
                         0,
                         format!("const {} *model", map.root_name().unique_camelcase()),
                     );
+                    let ret_type = c_type_or_diagnostic(
+                        ret,
+                        model,
+                        map.float_width(),
+                        &format!("возвращаемое значение функции '{}'", fun.name()),
+                    )?;
                     definition.push_str(
                         format!(
                             "static {} {}({}) {{\n",
-                            get_c_type(&ret, model).unwrap().as_str(),
+                            ret_type.as_str(),
                             get_function_name(&fun),
                             tiny_params.join(", ")
                         )
@@ -181,14 +195,24 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
                     let params = params
                         .iter()
                         .map(|(name, typ)| {
-                            get_c_type(typ, model)
-                                .map(|c_type| format!("{} {}", c_type, name.clone()))
-                                .unwrap()
+                            typed_variable_or_diagnostic(
+                                typ,
+                                name,
+                                model,
+                                map.float_width(),
+                                &format!("параметр '{}' функции '{}'", name, fun.name()),
+                            )
                         })
-                        .collect::<Vec<String>>();
+                        .collect::<Result<Vec<String>, Diagnostic>>()?;
+                    let ret_type = c_type_or_diagnostic(
+                        ret,
+                        model,
+                        map.float_width(),
+                        &format!("возвращаемое значение функции '{}'", fun.name()),
+                    )?;
                     external_funcs.push(format!(
                         "extern {} {}({});",
-                        get_c_type(&ret, model).unwrap().as_str(),
+                        ret_type.as_str(),
                         get_function_name(&fun),
                         params.join(", ").as_str()
                     ));
