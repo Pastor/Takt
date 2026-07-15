@@ -43,6 +43,7 @@
 mod st_decl;
 mod st_expr;
 mod st_map;
+mod st_stmt;
 mod st_type;
 
 use crate::diagnostics::{Diagnostic, Location};
