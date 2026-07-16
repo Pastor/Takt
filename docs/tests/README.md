@@ -41,3 +41,4 @@
 | 0051 | Область проверки lamc verify (--scope) | [0051-verify-scope.md](0051-verify-scope.md) | ✅ ПРОЙДЕН (отчёт: [reports/0051](../reports/0051-verify-scope.md)) |
 | 0052 | Итеративные обходы — снятие потолка стека | [0052-verify-iterative-traversal.md](0052-verify-iterative-traversal.md) | ✅ ПРОЙДЕН (отчёт: [reports/0052](../reports/0052-verify-iterative-traversal.md)) |
 | 0053 | Позиции в диагностиках (файл:строка:колонка) и настоящий file_no | [0053-diagnostics-file-id.md](0053-diagnostics-file-id.md) | ✅ ПРОЙДЕН (отчёт: [reports/0053](../reports/0053-diagnostics-file-id.md)) |
+| 0054 | Позиции в диагностиках симулятора | [0054-sim-diagnostics-positions.md](0054-sim-diagnostics-positions.md) | ✅ ПРОЙДЕН (отчёт: [reports/0054](../reports/0054-sim-diagnostics-positions.md)) |

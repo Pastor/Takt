@@ -142,4 +142,6 @@
 | 0052-02 | 0052 | nested-DFS (`check.rs`) → итеративный обход | [0052-02-nested-dfs-iterative.md](0052-02-nested-dfs-iterative.md) |
 | 0053-01 | 0053 | Реестр файлов и настоящий `file_no` | [0053-01-file-table.md](0053-01-file-table.md) |
 | 0053-02 | 0053 | Печать `путь:строка:колонка` в `lamc` | [0053-02-cli-positions.md](0053-02-cli-positions.md) |
+| 0054-01 | 0054 | Печать позиции — в общий слой `grammar::diagnostics` | [0054-01-shared-position-print.md](0054-01-shared-position-print.md) |
+| 0054-02 | 0054 | Позиция и код в диагностиках симулятора | [0054-02-sim-diagnostics.md](0054-02-sim-diagnostics.md) |
 

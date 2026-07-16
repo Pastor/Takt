@@ -288,42 +288,13 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
 fn print_compile_error(diag: &grammar::diagnostics::Diagnostic) {
     eprintln!(
         "{}Ошибка компиляции [{}]: {}",
-        position_prefix(diag),
+        grammar::diagnostics::position_prefix(diag),
         diag.code.as_deref().unwrap_or("?"),
         diag.message
     );
     for note in &diag.notes {
         eprintln!("  примечание: {}", note.message);
     }
-}
-
-/// Префикс `путь:строка:колонка: ` для диагностики (фича 0053).
-///
-/// Пустая строка, если позиции нет: `Location::Codegen`/`Implicit` координат не
-/// имеют, и **выдумывать** им `1:1` нельзя — пользователь пошёл бы искать ошибку
-/// в первой строке файла. Пусто же — если файл не читается: сообщить о причине
-/// важнее, чем промолчать из-за проблемы с показом.
-///
-/// Формат — как у `rustc`/`gcc`: машиночитаем и кликабелен в редакторах.
-///
-/// Прежде позиция не печаталась **вовсе**, и ошибка внутри импортированной
-/// библиотеки была неотличима от своей: обе давали дословно
-/// `Ошибка компиляции [SE-002]: Ссылка 'Nowhere' не найдена`.
-fn position_prefix(diag: &grammar::diagnostics::Diagnostic) -> String {
-    use grammar::diagnostics::Location;
-
-    let Some(path) = diag.file.as_deref() else {
-        return String::new();
-    };
-    let Location::Source(_, start, _) = diag.loc else {
-        return String::new();
-    };
-    // Текст нужен, чтобы перевести байтовое смещение в строку и колонку.
-    let Ok(text) = fs::read_to_string(path) else {
-        return format!("{path}: ");
-    };
-    let (line, column) = grammar::diagnostics::line_column(&text, start);
-    format!("{path}:{line}:{column}: ")
 }
 
 /// Собирает опции генерации из разобранных аргументов CLI.
