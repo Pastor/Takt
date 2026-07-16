@@ -28,21 +28,7 @@ END_VAR
 VAR_IN_OUT
     x : USINT;
 END_VAR
-    IF (c = 0) AND (v = 1) THEN
-        is_collected := TRUE;
-        RETURN;
-    ELSE
-        IF (c = 1) AND (v = 2) THEN
-            is_collected := TRUE;
-            RETURN;
-        ELSE
-            IF ((USINT_TO_BYTE(x) AND 16#04) <> 16#00) = 0 THEN
-                is_collected := TRUE;
-                RETURN;
-            END_IF;
-        END_IF;
-    END_IF;
-    is_collected := FALSE;
+    is_collected := (((c = 0) AND (v = 1)) OR ((c = 1) AND (v = 2))) OR (((USINT_TO_BYTE(x) AND 16#04) <> 16#00) = 0);
     RETURN;
 END_FUNCTION
 
