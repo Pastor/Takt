@@ -171,6 +171,36 @@ fn parser_error_to_diagnostic(
     }
 }
 
+/// Разбирает и строит модель, проставляя диагностике **путь её файла** (фича 0053).
+///
+/// Общий шаг всех целей. Заведён потому, что путь нужно разрешить там, где
+/// [`FileTable`](diagnostics::FileTable) ещё жив: реестр — деталь компиляции и
+/// наружу не выходит, а `Location` несёт лишь номер файла. Без этого диагностика
+/// из импортированной библиотеки была неотличима от своей — `lamc` печатал обе
+/// дословно одинаково.
+fn parse_and_construct(
+    filename: &str,
+    source: &str,
+    search_paths: &[String],
+) -> Result<std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>, Diagnostic> {
+    let mut files = diagnostics::FileTable::new(filename);
+
+    // Корневой файл — номер 0 (его зарегистрировал `FileTable::new`).
+    let (model_ast, _) = parse(source, 0).map_err(|ds| {
+        let d = ds.into_iter().next().unwrap();
+        stamp_file(d, &files)
+    })?;
+
+    semantic::tree::construct_model_with_files(&model_ast, None, search_paths, &mut files)
+        .map_err(|d| stamp_file(d, &files))
+}
+
+/// Разрешает номер файла диагностики в путь.
+fn stamp_file(d: Diagnostic, files: &diagnostics::FileTable) -> Diagnostic {
+    let path = files.path_of(&d.loc).map(str::to_string);
+    d.with_file_if_unset(path.as_deref())
+}
+
 /// Компилирует исходный код Lam в C-код.
 ///
 /// Выполняет полный конвейер: лексический анализ → синтаксический → семантический → генерация C.
@@ -215,11 +245,8 @@ pub fn compile_to_c(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<(), Diagnostic> {
-    // Шаг 1: Синтаксический анализ
-    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
-
-    // Шаг 2: Семантический анализ (с путями поиска для разрешения импортов)
-    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+    // Шаги 1–2: разбор и семантика; диагностика получает путь своего файла.
+    let model = parse_and_construct(filename, source, search_paths)?;
 
     // Генератор C требует именованной модели.
     // Корневая (файловая) модель всегда анонимна — задаём имя из имени файла.
@@ -265,8 +292,7 @@ pub fn compile_to_c_hal(
     external: &[address_map::AddressMapEntry],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
-    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+    let model = parse_and_construct(filename, source, search_paths)?;
 
     if model.borrow().name.is_none() {
         let stem = Path::new(filename)
@@ -327,8 +353,7 @@ pub fn compile_to_st(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<(), Diagnostic> {
-    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
-    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+    let model = parse_and_construct(filename, source, search_paths)?;
 
     if model.borrow().name.is_none() {
         let stem = Path::new(filename)
@@ -397,8 +422,7 @@ pub fn compile_to_rust(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<(), Diagnostic> {
-    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
-    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+    let model = parse_and_construct(filename, source, search_paths)?;
 
     if model.borrow().name.is_none() {
         let stem = Path::new(filename)
@@ -474,8 +498,7 @@ pub fn compile_to_sv(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<(), Diagnostic> {
-    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
-    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+    let model = parse_and_construct(filename, source, search_paths)?;
 
     if model.borrow().name.is_none() {
         let stem = Path::new(filename)
@@ -513,8 +536,7 @@ pub fn compile_to_st_at(
     external: &[address_map::AddressMapEntry],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
-    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+    let model = parse_and_construct(filename, source, search_paths)?;
 
     if model.borrow().name.is_none() {
         let stem = Path::new(filename)
@@ -568,8 +590,7 @@ pub fn compile_to_plantuml(
     output_path: &str,
     search_paths: &[String],
 ) -> Result<(), Diagnostic> {
-    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
-    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+    let model = parse_and_construct(filename, source, search_paths)?;
 
     if model.borrow().name.is_none() {
         let stem = Path::new(filename)

@@ -110,6 +110,17 @@ pub struct Note {
 /// для назначения кода существующей диагностике.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Diagnostic {
+    /// Путь файла, к которому относится [`loc`](Diagnostic::loc) (фича 0053).
+    ///
+    /// `None` — путь неизвестен либо неприменим (`Location::Codegen`,
+    /// `Implicit`, `Builtin`, `CommandLine`).
+    ///
+    /// Поле существует потому, что `loc` несёт лишь **номер** файла
+    /// ([`Location::Source`]), а таблица номеров ([`FileTable`]) — деталь
+    /// компиляции и наружу не выходит. Путь разрешается по номеру там, где
+    /// таблица ещё жива (внутри `compile_to_*`), и дальше диагностика
+    /// самодостаточна: получателю не нужно знать ни о таблице, ни о номерах.
+    pub file: Option<String>,
     /// Местоположение в исходном тексте, к которому относится диагностика.
     pub loc: Location,
     /// Уровень серьёзности сообщения.
@@ -128,6 +139,7 @@ pub struct Diagnostic {
 impl From<&str> for Diagnostic {
     fn from(s: &str) -> Diagnostic {
         Diagnostic {
+            file: None,
             loc: Default::default(),
             level: Level::Error,
             ty: ErrorType::SematicError,
@@ -142,6 +154,7 @@ impl Diagnostic {
     /// Создаёт отладочное сообщение.
     pub fn debug(loc: Location, message: String) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Debug,
             ty: ErrorType::None,
             loc,
@@ -154,6 +167,7 @@ impl Diagnostic {
     /// Создаёт информационное сообщение.
     pub fn info(loc: Location, message: String) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Info,
             ty: ErrorType::None,
             loc,
@@ -166,6 +180,7 @@ impl Diagnostic {
     /// Создаёт ошибку синтаксического/лексического анализатора.
     pub fn parser_error(loc: Location, message: String) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Error,
             ty: ErrorType::ParserError,
             loc,
@@ -178,6 +193,7 @@ impl Diagnostic {
     /// Создаёт синтаксическую ошибку.
     pub fn error(loc: Location, message: String) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Error,
             ty: ErrorType::SyntaxError,
             loc,
@@ -190,6 +206,7 @@ impl Diagnostic {
     /// Создаёт ошибку объявления (неизвестный идентификатор и т.д.).
     pub fn declaration_error(loc: Location, message: String) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Error,
             ty: ErrorType::DeclarationError,
             loc,
@@ -202,6 +219,7 @@ impl Diagnostic {
     /// Создаёт ошибку приведения типов.
     pub fn cast_error(loc: Location, message: String) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Error,
             ty: ErrorType::CastError,
             loc,
@@ -219,6 +237,7 @@ impl Diagnostic {
         note: String,
     ) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Error,
             ty: ErrorType::CastError,
             loc,
@@ -234,6 +253,7 @@ impl Diagnostic {
     /// Создаёт ошибку типизации.
     pub fn type_error(loc: Location, message: String) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Error,
             ty: ErrorType::TypeError,
             loc,
@@ -246,6 +266,7 @@ impl Diagnostic {
     /// Создаёт предупреждение о небезопасном приведении типов.
     pub fn cast_warning(loc: Location, message: String) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Warning,
             ty: ErrorType::CastError,
             loc,
@@ -258,6 +279,7 @@ impl Diagnostic {
     /// Создаёт предупреждение.
     pub fn warning(loc: Location, message: String) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Warning,
             ty: ErrorType::Warning,
             loc,
@@ -275,6 +297,7 @@ impl Diagnostic {
         note: String,
     ) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Warning,
             ty: ErrorType::Warning,
             loc,
@@ -290,6 +313,7 @@ impl Diagnostic {
     /// Создаёт предупреждение с набором вспомогательных заметок.
     pub fn warning_with_notes(loc: Location, message: String, notes: Vec<Note>) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Warning,
             ty: ErrorType::Warning,
             loc,
@@ -307,6 +331,7 @@ impl Diagnostic {
         note: String,
     ) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Error,
             ty: ErrorType::None,
             loc,
@@ -322,6 +347,7 @@ impl Diagnostic {
     /// Создаёт ошибку с набором вспомогательных заметок.
     pub fn error_with_notes(loc: Location, message: String, notes: Vec<Note>) -> Self {
         Diagnostic {
+            file: None,
             level: Level::Error,
             ty: ErrorType::None,
             loc,
@@ -350,6 +376,99 @@ impl Diagnostic {
         self
     }
 
+    /// Проставляет путь файла, если он ещё не задан (фича 0053).
+    ///
+    /// Правильный файл при вложенном импорте (`top → mid → deep`) обеспечивает
+    /// **не** эта проверка, а настоящий `file_no`: диагностика несёт номер того
+    /// файла, где её создали, и реестр разрешает его в путь виновника. Штамповка
+    /// при этом одна — в [`parse_and_construct`](crate).
+    ///
+    /// Проверка `is_none` — защита от повторного штампа: путь, уже
+    /// проставленный ближе к источнику, точнее того, что подставит внешний
+    /// слой.
+    pub fn with_file_if_unset(mut self, file: Option<&str>) -> Self {
+        if self.file.is_none() {
+            self.file = file.map(str::to_string);
+        }
+        self
+    }
+}
+
+/// Реестр файлов единицы компиляции: номер (`file_no`) → путь (фича 0053).
+///
+/// [`Location::Source`] несёт лишь **номер** файла — этого мало, чтобы назвать
+/// пользователю место ошибки. Реестр раздаёт номера при разборе (корневой файл —
+/// всегда `0`, импортируемые — по порядку загрузки) и разрешает их обратно в
+/// пути.
+///
+/// # Почему реестр не выходит наружу
+///
+/// Он — **деталь компиляции**: живёт внутри `compile_to_*` и умирает вместе с
+/// ней. Наружу выходит уже разрешённый путь в [`Diagnostic::file`], поэтому
+/// получателю диагностики не нужно знать ни о номерах, ни о реестре, а сигнатуры
+/// `construct_model` (183 вызова) и `compile_to_*` (36 в тестах) остались
+/// нетронутыми.
+///
+/// Прежде `file_no` **везде был нулём** и не читался никем: и корневой файл, и
+/// импортируемые разбирались как `parse(&content, 0)`. Из-за этого ошибка внутри
+/// импортированной библиотеки была неотличима от своей.
+#[derive(Debug, Default, Clone)]
+pub struct FileTable {
+    paths: Vec<String>,
+}
+
+impl FileTable {
+    /// Создаёт реестр, регистрируя корневой файл под номером `0`.
+    pub fn new(root: &str) -> Self {
+        FileTable {
+            paths: vec![root.to_string()],
+        }
+    }
+
+    /// Регистрирует файл и возвращает его номер.
+    ///
+    /// Один и тот же путь, загруженный дважды, получает **один** номер: номер
+    /// обозначает файл, а не факт загрузки.
+    pub fn add(&mut self, path: &str) -> u64 {
+        if let Some(i) = self.paths.iter().position(|p| p == path) {
+            return i as u64;
+        }
+        self.paths.push(path.to_string());
+        (self.paths.len() - 1) as u64
+    }
+
+    /// Путь по номеру; `None` — номер не выдавался этим реестром.
+    pub fn path(&self, file_no: u64) -> Option<&str> {
+        self.paths.get(file_no as usize).map(String::as_str)
+    }
+
+    /// Путь для позиции: `None`, если позиция не файловая
+    /// (`Codegen`/`Implicit`/`Builtin`/`CommandLine`).
+    pub fn path_of(&self, loc: &Location) -> Option<&str> {
+        match loc {
+            Location::Source(file_no, _, _) => self.path(*file_no),
+            _ => None,
+        }
+    }
+}
+
+/// Строка и колонка (с **единицы**) по байтовому смещению в тексте.
+///
+/// Смещения внутри [`Location`] байтовые и с нуля — это внутреннее представление;
+/// человеку показывается нумерация с единицы, как в `rustc`/`gcc`.
+///
+/// Колонка считается в **символах**, а не в байтах: в `.lam` встречается
+/// кириллица (комментарии, строки), и байтовая колонка указывала бы мимо.
+pub fn line_column(text: &str, offset: usize) -> (usize, usize) {
+    let clamped = offset.min(text.len());
+    let before = &text[..clamped];
+    let line = before.matches('\n').count() + 1;
+    let line_start = before.rfind('\n').map_or(0, |i| i + 1);
+    let column = text[line_start..clamped].chars().count() + 1;
+    (line, column)
+}
+
+impl Diagnostic {
     /// Возвращает форматированный префикс кода для вывода, например `[SE-001] `.
     /// Если код не задан, возвращает пустую строку.
     pub fn code_prefix(&self) -> String {

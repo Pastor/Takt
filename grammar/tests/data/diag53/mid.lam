@@ -1,0 +1,3 @@
+import "deep_bad.lam";
+start Mid { ref MidDone; }
+state MidDone;
