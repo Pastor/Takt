@@ -390,3 +390,20 @@ fn r4_guard_form_is_preserved() {
     );
     assert_eq!(out, format_source(&out).unwrap(), "идемпотентность");
 }
+
+/// A16/A17 (фича 0044): форматтер печатает `invariant` как условие (`=`, не
+/// `:=`), сохраняя форму автора (не разворачивает в `cond` + `: [Guard]`), и
+/// идемпотентно.
+#[test]
+fn invariant_is_formatted_as_condition() {
+    let out = format_source("invariant   Safe=t<=100 ;\nstart Main { always { } }")
+        .expect("форматирование invariant");
+    assert!(
+        out.contains("invariant Safe = t <= 100;"),
+        "инвариант печатается как условие (= , не :=):\n{out}"
+    );
+    assert!(!out.contains(":="), "правая часть — условие, не присваивание:\n{out}");
+    // Идемпотентность.
+    let twice = format_source(&out).expect("повторное форматирование");
+    assert_eq!(out, twice, "печать инварианта должна быть идемпотентной");
+}

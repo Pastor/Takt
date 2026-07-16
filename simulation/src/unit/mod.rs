@@ -65,6 +65,21 @@ pub(crate) enum Flow {
 pub(crate) type Execution = Rc<dyn Fn(&mut dyn Context) -> Result<Flow, Diagnostic>>;
 type Executions = HashMap<String, Vec<Execution>>;
 
+/// Проверяемое обязательство (инвариант/Guard-формула, фича 0044): предикат
+/// условия и опциональное имя инварианта для диагностики SIM-025.
+pub(crate) type Guard = (Predicate, Option<String>);
+
+/// Набор инвариантов узла: формулы модели (проверяются каждый такт) и формулы
+/// по состояниям (проверяются, пока автомат в этом состоянии). Точки проверки —
+/// эталон порождённого C (ADR 0044): модель до `always`, состояние до `always`.
+#[derive(Clone, Default)]
+pub(crate) struct Guards {
+    /// Инварианты уровня модели.
+    pub(crate) model: Vec<Guard>,
+    /// Инварианты по имени состояния.
+    pub(crate) per_state: HashMap<String, Vec<Guard>>,
+}
+
 /// Результат шага симуляции.
 ///
 /// `pub` (а не `pub(crate)`), поскольку возвращается публичным [`Unit::tick`] —
@@ -92,6 +107,8 @@ pub enum Unit {
         state: Option<String>,
 
         executions: Executions,
+        /// Инварианты модели и состояний (фича 0044), проверяются каждый такт.
+        guards: Guards,
         /// Последний сработавший переход: (из, в, имя_предиката).
         last_transition: Option<(String, String, String)>,
         /// Исполнен ли `enter` **стартового** состояния (Д5).
@@ -179,6 +196,16 @@ impl Unit {
         if let Err(diagnostic) = self.enter_initial_state() {
             return TickResult::Failed(describe(&diagnostic));
         }
+        // 0044: инварианты (Guard-формулы) проверяются ДО `always` — как в
+        // порождённом C (`assert()` до `switch`/`always`). Нарушение
+        // останавливает прогон (`Failed`), совпадая с `assert()` → `abort()`;
+        // ошибка вычисления самого условия ≠ нарушению (R15). Для композитов
+        // проверяет каждый дочерний `Node` в своём `tick`.
+        if let Unit::Node { .. } = self
+            && let Some(failed) = self.check_guards()
+        {
+            return failed;
+        }
         if let Err(diagnostic) = self.execution("always") {
             return TickResult::Failed(describe(&diagnostic));
         }
@@ -188,6 +215,40 @@ impl Unit {
             Unit::Parallel { .. } => self.tick_parallel(),
             Unit::Sequential { .. } => self.tick_sequential(),
         }
+    }
+
+    /// Проверяет инварианты модели и текущего состояния (фича 0044). Возвращает
+    /// `Some(Failed)` при нарушении или ошибке вычисления, `None` если все
+    /// обязательства выполнены. Различает нарушение (SIM-025) и ошибку самого
+    /// условия (существующий `SIM-0xx`) — как переходы в `tick_node` (R15).
+    fn check_guards(&mut self) -> Option<TickResult> {
+        let guards: Vec<Guard> = if let Unit::Node { guards, state, .. } = self {
+            let mut all = guards.model.clone();
+            if let Some(s) = state
+                && let Some(sg) = guards.per_state.get(s)
+            {
+                all.extend(sg.clone());
+            }
+            all
+        } else {
+            return None;
+        };
+        for (pred, name) in &guards {
+            match pred.evaluate(self) {
+                Ok(true) => {}
+                Ok(false) => {
+                    let named = name
+                        .as_ref()
+                        .map(|n| format!(" '{n}'"))
+                        .unwrap_or_default();
+                    return Some(TickResult::Failed(format!(
+                        "нарушен инвариант{named} (SIM-025)"
+                    )));
+                }
+                Err(diagnostic) => return Some(TickResult::Failed(describe(&diagnostic))),
+            }
+        }
+        None
     }
 
     fn tick_node(&mut self) -> TickResult {
@@ -694,6 +755,7 @@ mod tests {
             state: None,
             state_transitions: HashMap::new(),
             state_executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         }
     }
@@ -706,6 +768,7 @@ mod tests {
             state: None,
             state_transitions: HashMap::new(),
             state_executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         }
     }
@@ -961,6 +1024,7 @@ mod tests {
             state_executions: HashMap::new(),
             state: Some("A".to_string()),
             executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         };
         match u.tick() {
@@ -991,6 +1055,7 @@ mod tests {
             state_executions: HashMap::new(),
             state: Some("A".to_string()),
             executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         };
         assert_eq!(u.tick(), TickResult::Processing);
@@ -1017,6 +1082,7 @@ mod tests {
             state_executions: execs,
             state: Some("A".to_string()),
             executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         }
     }
@@ -1071,6 +1137,7 @@ mod tests {
             state: Some(name.to_string()),
             state_transitions: st,
             state_executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         }
     }
@@ -1088,6 +1155,7 @@ mod tests {
             state: Some(from.to_string()),
             state_transitions: st,
             state_executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         }
     }
@@ -1181,6 +1249,7 @@ mod tests {
             state: Some("A".to_string()),
             state_transitions: st,
             state_executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         };
         u.tick();

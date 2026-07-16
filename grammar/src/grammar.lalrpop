@@ -46,6 +46,7 @@ ModelElement: ModelElement = {
     FormulaDefine=> ModelElement::Formula(<>),
     InlineFormulaDefine => ModelElement::InlineFormula(<>),
     ConditionDefine => ModelElement::Condition(Box::new(<>)),
+    InvariantDefine => ModelElement::Invariant(Box::new(<>)),
     NamedBlockCodeDefine => ModelElement::NamedBlockCode(<>),
     <e:EnumDefine> => ModelElement::Enum(e),
     <s:StructDefine> => ModelElement::Struct(s),
@@ -78,6 +79,7 @@ StateElement: StateElement = {
     <l:@L> "ref" <i:Identifier> <e: (":" <Condition>)?> ";" <r:@R> => StateElement::Reference(Location::Source(file_no, l, r), i, e),
     <l:@L> ";" <r:@R> => StateElement::StraySemicolon(Location::Source(file_no, l, r)),
     InlineFormulaDefine => StateElement::InlineFormula(<>),
+    InvariantDefine => StateElement::Invariant(Box::new(<>)),
 }
 
 ButIdentifierPath: IdentifierPath = {
@@ -108,6 +110,17 @@ IdentifierOrError: Option<Identifier> = {
 }
 ConditionDefine: ConditionDefine = {
     <l:@L> "cond" <name:IdentifierOrError> "=" <c:Condition> <r:@R> ";" => ConditionDefine {
+        loc: Location::Source(file_no, l, r), name: name, value: c
+    },
+}
+
+// Именованный инвариант (фича 0044): `invariant Имя = <Условие>;`.
+// Одно жёсткое ключевое слово `invariant`; связка — `=` (как в `cond`), не `:=`
+// (инвариант фичи 0021). Правая часть — `Condition`: инвариант — булево
+// обязательство, `=` внутри есть равенство (инвариант ADR 0019). Семантика
+// разворачивает в `cond` + `Formula::Guard` (десахаризация, 0044-02).
+InvariantDefine: InvariantDefine = {
+    <l:@L> "invariant" <name:IdentifierOrError> "=" <c:Condition> <r:@R> ";" => InvariantDefine {
         loc: Location::Source(file_no, l, r), name: name, value: c
     },
 }
@@ -874,6 +887,7 @@ extern {
         "import" => Token::Import,
         "type" => Token::Type,
         "cond" => Token::Condition,
+        "invariant" => Token::Invariant,
         "const" => Token::Constant,
         "in"    => Token::PortIn,
         "out"   => Token::PortOut,

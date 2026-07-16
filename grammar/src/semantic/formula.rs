@@ -19,8 +19,13 @@ pub enum Formula {
     Formulas(Vec<Formula>),
     /// LTL-формула из синтаксического дерева.
     LTL(Ltl),
-    /// Охранное условие перехода.
-    Guard(ConditionNode),
+    /// Охранное условие перехода (`assert` языка Lam).
+    ///
+    /// Второе поле — **имя инварианта** (фича 0044), если формула получена
+    /// десахаризацией `invariant Имя = C;`. Для анонимной формы `: [Guard] c;` —
+    /// `None`. Имя несёт диагностику симулятора (SIM-025) и на эмиссию C **не
+    /// влияет** — генератор его игнорирует (регресс C = 0).
+    Guard(ConditionNode, Option<String>),
 }
 
 impl PartialEq for Formula {
@@ -28,7 +33,8 @@ impl PartialEq for Formula {
         match (self, other) {
             (Self::LTL(a), Self::LTL(b)) => a == b,
             (Self::Formulas(a), Self::Formulas(b)) => a == b,
-            (Self::Guard(a), Self::Guard(b)) => a == b,
+            // Имя — метаданные диагностики; равенство определяется условием.
+            (Self::Guard(a, _), Self::Guard(b, _)) => a == b,
             _ => false,
         }
     }
@@ -43,7 +49,7 @@ impl Eq for Formula {}
 pub fn condition_to_formula(cond: &ConditionNode) -> Formula {
     match cond {
         ConditionNode::None => Formula::None,
-        cond => Formula::Guard(cond.clone()),
+        cond => Formula::Guard(cond.clone(), None),
     }
 }
 

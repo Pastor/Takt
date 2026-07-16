@@ -1299,6 +1299,7 @@ pub(super) mod graph {
                 state: None,
                 state_transitions,
                 state_executions: HashMap::new(),
+                guards: Default::default(),
                 last_transition: None,
             }
         }
@@ -1394,6 +1395,7 @@ mod tests {
             state: Some("A".to_string()),
             state_transitions: transitions,
             state_executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         };
         let result = create_viewport(
@@ -1419,6 +1421,7 @@ mod test_highlight {
             state: Some("Off".to_string()),
             state_transitions: t,
             state_executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         }
     }

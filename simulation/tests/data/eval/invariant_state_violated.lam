@@ -1,0 +1,8 @@
+/// Фикстура 0044: инвариант СОСТОЯНИЯ Q проверяется, пока автомат в A.
+var c: u8 := 0;
+start A {
+    invariant Q = c = 0;
+    always { c := c + 1; }
+    ref B;
+}
+state B { ref A; }

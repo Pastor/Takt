@@ -234,6 +234,7 @@ fn element_loc(element: &ast::ModelElement) -> crate::diagnostics::Location {
         M::Import(i) => import_loc(i),
         M::Formula(f) => f.loc,
         M::Condition(c) => c.loc,
+        M::Invariant(i) => i.loc,
         M::InlineFormula(f) => inline_formula_loc(f),
         M::Address(a) => a.loc,
     }
@@ -351,6 +352,17 @@ fn print_element_inner(
             );
             Ok(())
         }
+        ast::ModelElement::Invariant(i) => {
+            // `invariant Имя = условие;` (фича 0044) — печатается ПЕЧАТЬЮ УСЛОВИЙ
+            // (как `cond`): `=` здесь равенство (инвариант ADR 0019). Форма автора
+            // сохраняется — НЕ разворачиваем в `cond` + `: [Guard]` (ADR 0024).
+            let name = i.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
+            out.node_line(
+                &loc,
+                &format!("invariant {name} = {};", expr::condition(&i.value)?),
+            );
+            Ok(())
+        }
         ast::ModelElement::InlineFormula(f) => {
             out.node_line(&loc, &expr::inline_formula(f)?);
             Ok(())
@@ -446,6 +458,7 @@ fn state_element_loc(element: &ast::StateElement) -> crate::diagnostics::Locatio
         S::Next(id) => id.loc,
         S::NamedBlockCode(b) => b.loc,
         S::InlineFormula(f) => expr::inline_formula_loc(f),
+        S::Invariant(i) => i.loc,
     }
 }
 
@@ -470,6 +483,12 @@ fn print_state_element_inner(
         ast::StateElement::InlineFormula(f) => {
             let loc = expr::inline_formula_loc(f);
             out.node_line(&loc, &expr::inline_formula(f)?);
+            Ok(())
+        }
+        ast::StateElement::Invariant(i) => {
+            // `invariant Имя = условие;` в теле состояния (фича 0044).
+            let name = i.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
+            out.node_line(&i.loc, &format!("invariant {name} = {};", expr::condition(&i.value)?));
             Ok(())
         }
     }

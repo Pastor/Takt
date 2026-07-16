@@ -208,6 +208,8 @@ pub enum Token<'input> {
     Template,
     /// Ключевое слово `cond`.
     Condition,
+    /// Ключевое слово `invariant` (фича 0044).
+    Invariant,
     /// Ключевое слово `var`.
     Variable,
     /// Ключевое слово `next`.
@@ -316,6 +318,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Reference => write!(f, "ref"),
             Token::Template => write!(f, "template"),
             Token::Condition => write!(f, "cond"),
+            Token::Invariant => write!(f, "invariant"),
             Token::PortIn => write!(f, "in"),
             Token::PortOut => write!(f, "out"),
             Token::PortInOut => write!(f, "inout"),
@@ -488,6 +491,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "ref"      => Token::Reference,
     "template" => Token::Template,
     "cond"     => Token::Condition,
+    "invariant" => Token::Invariant,
     "var"      => Token::Variable,
     "next"     => Token::Next,
     "extern"   => Token::Extern,

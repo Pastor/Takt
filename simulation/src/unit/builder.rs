@@ -260,9 +260,18 @@ fn build_node(
 
     let mut state_transitions: HashMap<String, Vec<(String, Predicate)>> = HashMap::new();
     let mut state_executions: HashMap<String, Executions> = HashMap::new();
+    // 0044: инварианты модели (проверяются каждый такт) и по состояниям.
+    let mut guards = crate::unit::Guards {
+        model: build_guards(&model.borrow().formulas),
+        per_state: HashMap::new(),
+    };
 
     for (name, state_node) in &states_snapshot {
         state_transitions.insert(name.clone(), build_transitions(state_node)?);
+        let state_guards = build_guards(state_node.formulas());
+        if !state_guards.is_empty() {
+            guards.per_state.insert(name.clone(), state_guards);
+        }
 
         let mut execs: Executions = HashMap::new();
         for block in state_node.named_blocks() {
@@ -287,8 +296,26 @@ fn build_node(
         state_executions,
         state: Some(start_name),
         executions: HashMap::new(),
+        guards,
         last_transition: None,
     })
+}
+
+/// Строит проверяемые обязательства из формул (фича 0044). `Formula::Guard` →
+/// предикат условия + имя инварианта; `Formula::LTL` — статика, симулятором
+/// игнорируется (проверяется верификатором, не здесь); `None`/`Formulas`
+/// разворачиваются/пропускаются.
+fn build_guards(formulas: &[grammar::semantic::formula::Formula]) -> Vec<crate::unit::Guard> {
+    use grammar::semantic::formula::Formula;
+    let mut out = Vec::new();
+    for f in formulas {
+        match f {
+            Formula::Guard(cond, name) => out.push((create_predicate(cond), name.clone())),
+            Formula::Formulas(inner) => out.extend(build_guards(inner)),
+            Formula::LTL(_) | Formula::None => {}
+        }
+    }
+    out
 }
 
 fn build_transitions(state: &StateNode) -> Result<Vec<(String, Predicate)>, Diagnostic> {
