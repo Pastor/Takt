@@ -1295,7 +1295,6 @@ pub(super) mod graph {
             Unit::Node {
                 entered_initial: false,
                 context: None,
-                variables: HashMap::new(),
                 executions: HashMap::new(),
                 state: None,
                 state_transitions,
@@ -1391,7 +1390,6 @@ mod tests {
         let unit = Unit::Node {
             entered_initial: false,
             context: None,
-            variables: HashMap::new(),
             executions: HashMap::new(),
             state: Some("A".to_string()),
             state_transitions: transitions,
@@ -1417,7 +1415,6 @@ mod test_highlight {
         Unit::Node {
             entered_initial: false,
             context: None,
-            variables: HashMap::new(),
             executions: HashMap::new(),
             state: Some("Off".to_string()),
             state_transitions: t,

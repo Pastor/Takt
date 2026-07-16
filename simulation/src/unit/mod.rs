@@ -91,7 +91,6 @@ pub enum Unit {
         state_executions: HashMap<String, Executions>,
         state: Option<String>,
 
-        variables: HashMap<String, Value>,
         executions: Executions,
         /// Последний сработавший переход: (из, в, имя_предиката).
         last_transition: Option<(String, String, String)>,
@@ -119,16 +118,11 @@ impl Context for Unit {
     fn get_value(&self, name: &str) -> Option<Value> {
         match self {
             Unit::None => None,
-            Unit::Node {
-                context, variables, ..
-            } => {
-                if let Some(v) = variables.get(name) {
-                    return Some(v.clone());
-                }
-                context
-                    .as_ref()
-                    .and_then(|ctx| ctx.borrow().get_value(name))
-            }
+            // 0032: единственный источник истины — контекст модели. Собственной
+            // карты значений у узла больше нет; читаем оттуда же, куда пишем.
+            Unit::Node { context, .. } => context
+                .as_ref()
+                .and_then(|ctx| ctx.borrow().get_value(name)),
             Unit::Parallel { units, .. } => {
                 units.iter().find_map(|unit| unit.borrow().get_value(name))
             }
@@ -141,10 +135,19 @@ impl Context for Unit {
     fn set_value(&mut self, name: &str, value: Value) {
         match self {
             Unit::None => {}
-            Unit::Node { variables, .. } => {
-                variables.insert(name.to_string(), value);
+            // 0032: запись идёт в контекст модели тем же путём, что присваивание
+            // в теле блока. Shared-переменные уходят по цепочке `parent` в общий
+            // родительский контекст — прежний широковещательный путь через
+            // собственную карту узла упразднён.
+            Unit::Node { context, .. } => {
+                if let Some(ctx) = context {
+                    ctx.borrow_mut().set_value(name, value);
+                }
             }
             Unit::Parallel { units, .. } => {
+                // Запись в параллельную композицию адресуется всем ветвям; каждая
+                // маршрутизирует shared-имя в ОБЩИЙ родительский контекст, поэтому
+                // повторная запись идемпотентна (одно значение, один источник).
                 for unit in units.iter() {
                     unit.borrow_mut().set_value(name, value.clone());
                 }
@@ -154,6 +157,19 @@ impl Context for Unit {
                     u.borrow_mut().set_value(name, value);
                 }
             }
+        }
+    }
+
+    fn dump(&self) -> HashMap<String, Value> {
+        match self {
+            // Снимок узла — состояние его модели (и родителей) из контекста.
+            Unit::Node { context, .. } => context
+                .as_ref()
+                .map(|ctx| ctx.borrow().dump())
+                .unwrap_or_default(),
+            // Композиты снимаются рекурсивно по детям (см. `state_io::snapshot`),
+            // собственного состояния у них нет.
+            _ => HashMap::new(),
         }
     }
 }
@@ -674,7 +690,6 @@ mod tests {
         Unit::Node {
             entered_initial: false,
             context: None,
-            variables: HashMap::new(),
             executions: HashMap::new(),
             state: None,
             state_transitions: HashMap::new(),
@@ -687,7 +702,6 @@ mod tests {
         Unit::Node {
             entered_initial: false,
             context: Some(ctx_with(key, val)),
-            variables: HashMap::new(),
             executions: HashMap::new(),
             state: None,
             state_transitions: HashMap::new(),
@@ -943,7 +957,6 @@ mod tests {
         let mut u = Unit::Node {
             entered_initial: true,
             context: None,
-            variables: HashMap::new(),
             state_transitions: st,
             state_executions: HashMap::new(),
             state: Some("A".to_string()),
@@ -974,7 +987,6 @@ mod tests {
         let mut u = Unit::Node {
             entered_initial: true,
             context: None,
-            variables: HashMap::new(),
             state_transitions: st,
             state_executions: HashMap::new(),
             state: Some("A".to_string()),
@@ -1001,7 +1013,6 @@ mod tests {
         Unit::Node {
             entered_initial: false,
             context: None,
-            variables: HashMap::new(),
             state_transitions: st,
             state_executions: execs,
             state: Some("A".to_string()),
@@ -1056,7 +1067,6 @@ mod tests {
         Unit::Node {
             entered_initial: false,
             context: None,
-            variables: HashMap::new(),
             executions: HashMap::new(),
             state: Some(name.to_string()),
             state_transitions: st,
@@ -1074,7 +1084,6 @@ mod tests {
         Unit::Node {
             entered_initial: false,
             context: None,
-            variables: HashMap::new(),
             executions: HashMap::new(),
             state: Some(from.to_string()),
             state_transitions: st,
@@ -1168,7 +1177,6 @@ mod tests {
         let mut u = Unit::Node {
             entered_initial: false,
             context: None,
-            variables: HashMap::new(),
             executions: HashMap::new(),
             state: Some("A".to_string()),
             state_transitions: st,

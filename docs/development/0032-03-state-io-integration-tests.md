@@ -46,7 +46,17 @@ fn make_node_with_var(state: &str, var: &str, val: Value) -> Unit {
 
 ## Что сделано
 
-> Планируется (разработка не начата).
+> **Выполнено** (2026-07-16). Итог: заведён `simulation/tests/state_io_tests.rs`
+> — юниты строятся из `.lam` через `build_unit` (тот же путь, что в CLI), а не
+> ручной конструкцией `Unit::Node { variables }`, скрывавшей дефект. Тесты:
+> `save_captures_variables` (A2/Д1), `roundtrip_values_match` (A3/Д2),
+> `roundtrip_model_not_frozen` (A4/Д2 — ключевая: точечную починку снимка не
+> прошла бы), `loads_pre_0032_file` (A7/R7), `constants_excluded_from_snapshot`
+> (A8/R6). Снимок проверяется по тексту сохранённого файла (без `serde_json` в
+> тестовом крейте). Ручные var-тесты `state_io.rs` (`make_node_with_var` и три
+> зависимых) удалены — переехали сюда на реальные модели. A5 (`inout`) —
+> CLI-пробой (впрыск через `Context::set_value` из интеграционного крейта
+> недоступен, механизм записи тот же, что у `restore`, покрытого A4).
 
 ### 1. Новый слой `simulation/tests/state_io_tests.rs`
 
