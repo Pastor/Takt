@@ -34,6 +34,7 @@
 //! (модуль и порты, `SV-006`/`SV-007`) · `sv_fsm` (автомат и сброс, `SV-008`) ·
 //! `sv_expr` (выражения и функции, `SV-005`).
 
+mod sv_expr;
 mod sv_map;
 mod sv_module;
 mod sv_type;
