@@ -35,8 +35,10 @@
 //! `sv_expr` (выражения и функции, `SV-005`).
 
 mod sv_expr;
+mod sv_fsm;
 mod sv_map;
 mod sv_module;
+mod sv_stmt;
 mod sv_type;
 
 use crate::diagnostics::{Diagnostic, Location};
@@ -129,15 +131,8 @@ fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
     }
     blocks.push((root_name.clone(), root));
 
-    // ⚠️ Порты СОБИРАЮТСЯ, но пока не печатаются, и это не забывчивость.
-    // Объявленный порт, которого никто не читает, даёт `UNUSEDSIGNAL` от
-    // `verilator -Wall` — то есть красный гейт. Читатель порта живёт в теле
-    // автомата (условия рёбер, блоки `always`), а тело — предмет задач 0045-05
-    // и 0045-06. Значит, задача 0045-04 в одиночку зелёной быть не может **в
-    // принципе**: порты и их использование обязаны появиться в выводе одним
-    // шагом. Сбор здесь уже боевой (диагностики `SV-006`/`SV-007`/`SV-012`
-    // работают), печать включается вместе с автоматом.
-    let _ports = sv_module::collect_ports(map, &blocks)?;
+    let ports = sv_module::collect_ports(map, &blocks)?;
+    let fsm = sv_fsm::Fsm::build(map, &blocks, &root_name, &ports)?;
     let module = normalize_lowercase_snakecase(root_name.unique().replace(':', "_"));
 
     let mut out = String::new();
@@ -156,40 +151,17 @@ fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
         .nl();
     p.nl();
 
-    sv_module::emit_module_header(&mut p, &module, &sv_module::SvPorts::default());
+    sv_module::emit_module_header(&mut p, &module, &ports);
 
     p.up();
-    p.ident("typedef enum logic [0:0] {").nl();
-    p.up();
-    p.ident("ST_START = 1'd0,").nl();
-    p.ident("ST_END   = 1'd1").nl();
-    p.down();
-    p.ident("} state_e;").nl().nl();
-    p.ident("state_e state, state_next;").nl().nl();
-
-    p.ident("always_comb begin").nl();
-    p.up();
-    // Умолчание обязательно: неполное присваивание даёт защёлку, а
-    // `verilator -Wall` — LATCH. Это не стиль, а условие гейта.
-    p.ident("state_next = state;").nl();
-    p.down();
-    p.ident("end").nl().nl();
-
-    p.ident("always_ff @(posedge clk) begin").nl();
-    p.up();
-    p.ident("if (!rst_n) begin").nl();
-    p.up();
-    p.ident("state <= ST_START;").nl();
-    p.down();
-    p.ident("end else begin").nl();
-    p.up();
-    p.ident("state <= state_next;").nl();
-    p.down();
-    p.ident("end").nl();
-    p.down();
-    p.ident("end").nl().nl();
-
-    p.ident("assign is_done = (state == ST_END);").nl();
+    sv_fsm::emit_constants(&mut p, map, &blocks)?;
+    sv_fsm::emit_enums(&mut p, &blocks)?;
+    sv_fsm::emit_state_enums(&mut p, map, &blocks)?;
+    sv_fsm::emit_signals(&mut p, &fsm);
+    sv_fsm::emit_functions(&mut p, map, &fsm, &blocks)?;
+    sv_fsm::emit_comb(&mut p, map, &fsm, &root_name)?;
+    sv_fsm::emit_ff(&mut p, map, &fsm, &blocks)?;
+    sv_fsm::emit_is_done(&mut p, &root_name);
     p.down();
     p.ident("endmodule").nl();
 
@@ -289,6 +261,153 @@ mod tests {
         assert!(
             sv.contains("state_next = state;"),
             "нет умолчания в always_comb — неполное присваивание даёт защёлку (LATCH):\n{sv}"
+        );
+    }
+
+    /// Порты модели попадают в заголовок; `bit` → `logic`, а не `int`.
+    ///
+    /// **T13/A7 — контрпример к дефекту 2 фичи 0029:** в цели `c` один провод
+    /// занимает 32 бита (`int`).
+    #[test]
+    fn ports_are_emitted_as_module_ports() {
+        let sv = program_of(
+            "in req: bit := 0; out ack: bit := 0; \
+             start S { always { ack := req; } }",
+            "Root",
+        );
+        assert!(
+            sv.contains("input  logic req,"),
+            "нет входного порта:\n{sv}"
+        );
+        assert!(
+            sv.contains("output logic ack,"),
+            "нет выходного порта:\n{sv}"
+        );
+        assert!(!sv.contains("int req"), "повторён дефект 0029:\n{sv}");
+        // Порт здесь и есть порт: ни колбэков, ни volatile, ни AT %.
+        assert!(!sv.contains("write_bit") && !sv.contains("volatile"));
+    }
+
+    /// Запись идёт в комбинационную пару, а `always_ff` её защёлкивает.
+    ///
+    /// Разделение и делает такт тактом: чтение — из регистра, запись — в
+    /// `_next`.
+    #[test]
+    fn writes_go_to_next_and_are_latched() {
+        let sv = program_of(
+            "out ack: bit := 0; start S { always { ack := 1; } }",
+            "Root",
+        );
+        assert!(
+            sv.contains("ack_next = 1;"),
+            "запись не в пару _next:\n{sv}"
+        );
+        assert!(
+            sv.contains("ack <= ack_next;"),
+            "пара не защёлкивается в always_ff:\n{sv}"
+        );
+    }
+
+    /// **Сторож семантики, ради которой выбран two-process.**
+    ///
+    /// `v := 1; w := v;` обязано дать `w = 1` — так в симуляторе и в цели `c`
+    /// (там `write(V,1)`, затем `read(V)` возвращает только что записанное).
+    /// Значит, чтение внутри такта обязано идти из рабочей копии `v_next`, а не
+    /// из регистра: регистр держит значение ПРЕДЫДУЩЕГО такта, и `w` получил бы
+    /// `0`.
+    ///
+    /// Дефект был внесён рефакторингом и пойман 2026-07-16 — причём **обоими
+    /// гейтами он не ловится**: `w_next = v;` даёт валидный синтезируемый
+    /// модуль, который просто считает не то.
+    #[test]
+    fn read_inside_tick_sees_write_made_in_same_tick() {
+        let sv = program_of(
+            "out v: bit := 0; out w: bit := 0; \
+             start S { always { v := 1; w := v; } }",
+            "Root",
+        );
+        assert!(
+            sv.contains("w_next = v_next;"),
+            "чтение внутри такта обязано видеть запись этого же такта \
+             (v_next), иначе w получит значение предыдущего такта:\n{sv}"
+        );
+    }
+
+    /// **Контракт ADR 0033:** стартовое состояние стоит в ветви сброса.
+    #[test]
+    fn start_state_is_in_reset_branch() {
+        let sv = program_of("start Idle { ref Done: 1 = 1; } state Done;", "Root");
+        assert!(
+            sv.contains("state <= ROOT_IDLE;"),
+            "стартовое состояние обязано стоять в ветви сброса:\n{sv}"
+        );
+    }
+
+    /// Переходы образуют цепочку `if / else if` — первый сработавший выигрывает.
+    ///
+    /// В C каждый переход завершается `break`; независимые `if` дали бы
+    /// срабатывание всех подходящих подряд, и последний затёр бы предыдущие.
+    #[test]
+    fn transitions_form_if_else_chain() {
+        let sv = program_of(
+            "in a: bit := 0; in b: bit := 0; \
+             start S { ref T: a = 1; ref U: b = 1; } state T; state U;",
+            "Root",
+        );
+        assert!(
+            sv.contains("else if"),
+            "переходы обязаны быть цепочкой:\n{sv}"
+        );
+    }
+
+    /// Терминальная ветвь `case` есть всегда: `unique case` требует полноты.
+    ///
+    /// Без неё `verilator -Wall` даёт `CASEINCOMPLETE`.
+    #[test]
+    fn case_covers_end_variant() {
+        let sv = program_of("start S;", "Root");
+        assert!(sv.contains("unique case (state)"), "нет unique case:\n{sv}");
+        assert!(sv.contains("ROOT_END: begin end"), "нет ветви END:\n{sv}");
+    }
+
+    /// Параллельная композиция даёт каждому уровню СВОЙ регистр состояния.
+    ///
+    /// Регистры под-моделей независимы (ADR): они сбрасываются одним фронтом,
+    /// отсюда сдвиг = 0 на любой глубине.
+    #[test]
+    fn parallel_composition_gives_each_level_its_own_state_register() {
+        let src = "model A { start S; } model B { start T; } start E = A | B;";
+        let sv = program_of(src, "Root");
+        assert!(
+            sv.contains("root_a_state_e root_a_state;"),
+            "нет регистра состояния под-модели A:\n{sv}"
+        );
+        assert!(
+            sv.contains("root_b_state_e root_b_state;"),
+            "нет регистра состояния под-модели B:\n{sv}"
+        );
+        assert!(
+            sv.contains("state_e state;"),
+            "нет регистра состояния корня:\n{sv}"
+        );
+    }
+
+    /// **Ключевой тест:** `is_done` под-модели читает `_next`, а не регистр.
+    ///
+    /// В C `_is_done` вызывается после `_tick` и видит значение, которое тик
+    /// только что записал. Чтение регистра дало бы значение ПРЕДЫДУЩЕГО такта —
+    /// то есть сдвиг, ровно тот, который осуждает ADR 0033.
+    #[test]
+    fn submodel_done_reads_next_not_register() {
+        let src = "model A { start S; } start E = A;";
+        let sv = program_of(src, "Root");
+        assert!(
+            sv.contains("(root_a_state_next == ROOT_A_END)"),
+            "готовность под-модели обязана читать _next:\n{sv}"
+        );
+        assert!(
+            !sv.contains("(root_a_state == ROOT_A_END)"),
+            "чтение регистра дало бы значение предыдущего такта:\n{sv}"
         );
     }
 
