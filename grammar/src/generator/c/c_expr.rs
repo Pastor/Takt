@@ -1499,7 +1499,9 @@ pub(super) fn generate_formula_check(
             }
         }
         Formula::LTL(_) => {
-            // LTL-формулы в C-коде пока не проверяются
+            // 0035: цель `c` LTL не верифицирует (эмиссия не меняется, R6). Это
+            // не тихая потеря: предупреждение SE-055 выдаёт `grammar::ltl_warnings`
+            // (`semantic/ltl_check.rs`) на каждую LTL-формулу любого уровня.
         }
     }
     Ok(())

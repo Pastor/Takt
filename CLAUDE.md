@@ -248,6 +248,12 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
   переписывается; нарушение → `TickResult::Failed`+`SIM-025`; точки проверки —
   эталон C; `Unit::Node.guards`; `Formula::Guard` несёт `Option<String>` имя,
   C-генератор его игнорирует). `assert` **не** ключевое слово — это `: [Guard] c;`.
+  **LTL в блоке кода разбирается** (фича 0035: `statement.rs` перестал молча
+  ронять `: [LTL]`; паритет с моделью/состоянием через `ltl_ast_to_semantic`).
+  LTL **не верифицируется** — `grammar::ltl_warnings` (`semantic/ltl_check.rs`)
+  выдаёт `SE-055` на каждую формулу и `SE-056` на неизвестный атом; вывод C
+  неизменен. Верификатор (`build_buchi`) из исходника по-прежнему не вызывается
+  (кандидат `lamc verify`).
 
 ## Добавление конструкции языка
 

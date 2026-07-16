@@ -14,6 +14,7 @@
 mod builtin;
 pub(crate) mod callgraph;
 mod condition;
+pub mod ltl_check;
 pub(crate) mod docs;
 pub mod enum_node;
 mod expression;

@@ -2,7 +2,7 @@
 
 > Фича: [../features/0035-ltl-in-blocks.md](../features/0035-ltl-in-blocks.md) · ADR: [../adr/0035-ltl-in-blocks.md](../adr/0035-ltl-in-blocks.md) · анализ: [../analyze/0035-ltl-in-blocks.md](../analyze/0035-ltl-in-blocks.md)
 
-> **Планируется (разработка не начата).** Разделы «Что сделано» и «Проверки» —
+> **Выполнено** (2026-07-16).
 > план, а не отчёт. Покрывает **R5**; критерий **A6**. Опирается на закрытую
 > фичу [0024](../features/0024-lam-formatter.md).
 

@@ -116,3 +116,77 @@ model M {
         }
     }
 }
+
+// ─── Фича 0035: семантика LTL (не АСД — риск Р6) ──────────────────────────────
+
+use grammar::semantic::tree::construct_model;
+
+fn warnings(src: &str) -> Vec<grammar::diagnostics::Diagnostic> {
+    let (ast, _) = parse(src, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    grammar::ltl_warnings(model)
+}
+
+fn codes(ws: &[grammar::diagnostics::Diagnostic]) -> Vec<String> {
+    ws.iter().filter_map(|w| w.code.clone()).collect()
+}
+
+/// A1 (сторож против тихой потери): LTL в БЛОКЕ не выбрасывается — доходит до
+/// семантики и даёт SE-055. При возврате `Vec::new()` (прежнее поведение) тест
+/// падал бы (0 предупреждений).
+#[test]
+fn ltl_in_block_is_not_silently_dropped() {
+    let ws = warnings("var b: u8 := 0; start S { always { : [LTL] G b; } }");
+    assert!(
+        codes(&ws).contains(&"SE-055".to_string()),
+        "LTL в блоке обязана дать SE-055 (не теряться молча): {ws:?}"
+    );
+}
+
+/// A4 (R3): SE-055 выдаётся с каждого уровня — модель, состояние, блок.
+#[test]
+fn ltl_se055_from_all_three_levels() {
+    let ws = warnings(
+        "var b: u8 := 0; : [LTL] F b; \
+         start S { : [LTL] G b; always { : [LTL] X b; } }",
+    );
+    let se055 = codes(&ws).iter().filter(|c| *c == "SE-055").count();
+    assert_eq!(se055, 3, "по одному SE-055 на каждый уровень: {ws:?}");
+}
+
+/// A5 (R4): неизвестный атом → SE-056; известный (`var b`) и `true`/`false` — нет.
+#[test]
+fn ltl_unknown_atom_is_se056() {
+    let unknown = warnings("start S { : [LTL] F undefined_thing; }");
+    assert!(
+        codes(&unknown).contains(&"SE-056".to_string()),
+        "неизвестный атом обязан дать SE-056: {unknown:?}"
+    );
+    let known = warnings("var b: u8 := 0; start S { : [LTL] F b; }");
+    assert!(
+        !codes(&known).contains(&"SE-056".to_string()),
+        "известный атом SE-056 давать не должен: {known:?}"
+    );
+    let literals = warnings("start S { : [LTL] G true, F false; }");
+    assert!(
+        !codes(&literals).contains(&"SE-056".to_string()),
+        "true/false — не атомы, SE-056 не дают: {literals:?}"
+    );
+}
+
+/// A2 (паритет уровней): состояние — имя `S` — валидный атом (это состояние).
+#[test]
+fn ltl_state_name_is_valid_atom() {
+    let ws = warnings("start S { : [LTL] F S; } state Done;");
+    assert!(
+        !codes(&ws).contains(&"SE-056".to_string()),
+        "имя состояния — валидный атом: {ws:?}"
+    );
+}
+
+/// R6/A7: модель без LTL — ни одного предупреждения LTL.
+#[test]
+fn no_ltl_no_warnings() {
+    let ws = warnings("var a: u8 := 0; start S { always { a := a + 1; } }");
+    assert!(ws.is_empty(), "без LTL предупреждений быть не должно: {ws:?}");
+}
