@@ -1,0 +1,4 @@
+import "lib_ok.lam";
+
+start Work { ref Done; }
+state Done;
