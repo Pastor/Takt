@@ -6,7 +6,7 @@ use crate::unit::{Execution, Predicate, Unit};
 use grammar::diagnostics::{Diagnostic, Location};
 use grammar::semantic::extend::Extend;
 use grammar::semantic::{
-    ConditionNode, ExpressionNode, ModelNode, StateNode, StateNodeKind, StatementNode, VariableNode,
+    ConditionNode, ExpressionNode, ModelNode, StateNode, StateNodeKind, VariableNode,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -93,6 +93,37 @@ impl Context for ModelNodeContext {
         } else {
             self.cache.borrow_mut().insert(name.to_string(), value);
         }
+    }
+
+    /// Перечисляет значения состояния модели для снимка (фича 0032).
+    ///
+    /// Идёт по именам `model.variables`, вычисляя значение через собственный
+    /// `get_value` (что попутно материализует ленивый кэш). **Константы
+    /// исключаются** — их значение задано исходником, восстанавливать из файла
+    /// опасно (исходник мог измениться). Родитель накладывается **первым**, затем
+    /// перекрывается значениями текущей модели — та же приоритетность, что у
+    /// `get_value` (локальное имя выигрывает у родительского).
+    fn dump(&self) -> HashMap<String, Value> {
+        let mut out: HashMap<String, Value> = self
+            .parent
+            .as_ref()
+            .map(|p| p.borrow().dump())
+            .unwrap_or_default();
+        let names: Vec<String> = {
+            let borrowed = self.model.borrow();
+            borrowed
+                .variables
+                .iter()
+                .filter(|(_, var)| !matches!(var, VariableNode::Const { .. }))
+                .map(|(name, _)| name.clone())
+                .collect()
+        };
+        for name in names {
+            if let Some(value) = self.get_value(&name) {
+                out.insert(name, value);
+            }
+        }
+        out
     }
 }
 
@@ -255,7 +286,6 @@ fn build_node(
         state_transitions,
         state_executions,
         state: Some(start_name),
-        variables: HashMap::new(),
         executions: HashMap::new(),
         last_transition: None,
     })
@@ -497,14 +527,16 @@ mod tests {
         assert!(matches!(result.get_value("x"), Some(Value::Number(5))));
     }
 
+    /// 0032: у узла нет собственной карты значений — запись через `set_value`
+    /// уходит в контекст модели и читается оттуда же (единый источник истины).
+    /// Прежде тест проверял затенение картой узла; затенения больше нет.
     #[test]
-    fn test_build_node_variables_shadow_context() {
+    fn test_build_node_set_value_routes_to_context() {
         let (ast, _) = parse("var x: u8 := 5; start S;", 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let mut result = build(model_rc).unwrap();
-        if let Unit::Node { variables, .. } = &mut result {
-            variables.insert("x".to_string(), Value::Number(99));
-        }
+        assert!(matches!(result.get_value("x"), Some(Value::Number(5))));
+        result.set_value("x", Value::Number(99));
         assert!(matches!(result.get_value("x"), Some(Value::Number(99))));
     }
 

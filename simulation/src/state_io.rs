@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::context::Context;
 use crate::eval::value::Value;
 use crate::json_input::json_to_value;
 use crate::unit::Unit;
@@ -50,11 +51,12 @@ fn value_to_json(v: &Value) -> serde_json::Value {
 pub fn snapshot(unit: &Unit) -> UnitSnapshot {
     match unit {
         Unit::None => UnitSnapshot::None,
-        Unit::Node {
-            state, variables, ..
-        } => UnitSnapshot::Node {
+        // 0032: значения берутся из контекста модели (единый источник истины)
+        // через `Context::dump`, а не из упразднённой карты узла (Д1).
+        node @ Unit::Node { state, .. } => UnitSnapshot::Node {
             current_state: state.clone(),
-            variables: variables
+            variables: node
+                .dump()
                 .iter()
                 .map(|(k, v)| (k.clone(), value_to_json(v)))
                 .collect(),
@@ -77,7 +79,7 @@ pub fn restore(unit: &mut Unit, snap: &UnitSnapshot) {
         (
             Unit::Node {
                 state,
-                variables,
+                context,
                 entered_initial,
                 ..
             },
@@ -90,9 +92,14 @@ pub fn restore(unit: &mut Unit, snap: &UnitSnapshot) {
             // Возобновление: модель уже находится в этом состоянии, поэтому
             // `enter` повторять нельзя — иначе он затрёт загруженные значения (Д5).
             *entered_initial = true;
-            for (k, v) in vars {
-                if let Some(val) = json_to_value(v) {
-                    variables.insert(k.clone(), val);
+            // 0032: восстановление идёт тем же путём, что присваивание в модели —
+            // через контекст (Д2). Прежде запись шла в приоритетную карту узла,
+            // из-за чего загруженная модель замерзала.
+            if let Some(ctx) = context {
+                for (k, v) in vars {
+                    if let Some(val) = json_to_value(v) {
+                        ctx.borrow_mut().set_value(k, val);
+                    }
                 }
             }
         }
@@ -150,30 +157,17 @@ mod tests {
     use crate::unit::Predicate;
     use std::collections::HashMap;
 
+    // 0032: узлы без контекста хранить значения не могут (единый источник
+    // истины — контекст модели). Тесты значений/кругового рейса переехали в
+    // интеграционный `simulation/tests/state_io_tests.rs`, где юниты строятся
+    // из `.lam`-фикстур через `build_unit`. Здесь остаётся лишь структурная
+    // проверка снимка состояния и путей ошибок.
     fn make_node(state: &str) -> Unit {
         let mut st = HashMap::new();
         st.insert(state.to_string(), vec![]);
         Unit::Node {
             entered_initial: false,
             context: None,
-            variables: HashMap::new(),
-            executions: HashMap::new(),
-            state: Some(state.to_string()),
-            state_transitions: st,
-            state_executions: HashMap::new(),
-            last_transition: None,
-        }
-    }
-
-    fn make_node_with_var(state: &str, var: &str, val: Value) -> Unit {
-        let mut st = HashMap::new();
-        st.insert(state.to_string(), vec![]);
-        let mut vars = HashMap::new();
-        vars.insert(var.to_string(), val);
-        Unit::Node {
-            entered_initial: false,
-            context: None,
-            variables: vars,
             executions: HashMap::new(),
             state: Some(state.to_string()),
             state_transitions: st,
@@ -190,7 +184,6 @@ mod tests {
         Unit::Node {
             entered_initial: false,
             context: None,
-            variables: HashMap::new(),
             executions: HashMap::new(),
             state: Some(from.to_string()),
             state_transitions: st,
@@ -215,15 +208,6 @@ mod tests {
     }
 
     #[test]
-    fn test_snapshot_node_captures_variables() {
-        let unit = make_node_with_var("S", "counter", Value::Number(42));
-        let UnitSnapshot::Node { variables, .. } = snapshot(&unit) else {
-            panic!("ожидался UnitSnapshot::Node");
-        };
-        assert_eq!(variables["counter"], serde_json::json!(42));
-    }
-
-    #[test]
     fn test_restore_node_state() {
         let mut unit = make_transitioning_node("Idle", "Active");
         unit.tick();
@@ -237,35 +221,6 @@ mod tests {
         };
         restore(&mut unit, &snap);
         assert_eq!(unit.current_state(), Some("Idle"));
-    }
-
-    #[test]
-    fn test_restore_node_variables() {
-        let mut unit = make_node_with_var("S", "x", Value::Number(0));
-        let snap = UnitSnapshot::Node {
-            current_state: Some("S".to_string()),
-            variables: [("x".to_string(), serde_json::json!(99))].into(),
-        };
-        restore(&mut unit, &snap);
-        use crate::context::Context;
-        let val = unit.get_value("x");
-        assert!(matches!(val, Some(Value::Number(99))));
-    }
-
-    #[test]
-    fn test_roundtrip_through_file() {
-        let unit = make_node_with_var("Running", "count", Value::Number(7));
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("state.json");
-
-        save_to_file(&unit, &path).expect("сохранение должно работать");
-
-        let mut unit2 = make_node("Running");
-        load_from_file(&mut unit2, &path).expect("загрузка должна работать");
-
-        use crate::context::Context;
-        assert_eq!(unit2.current_state(), Some("Running"));
-        assert!(matches!(unit2.get_value("count"), Some(Value::Number(7))));
     }
 
     #[test]
