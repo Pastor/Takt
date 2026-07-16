@@ -7,7 +7,7 @@
 
 ## [Не выпущено]
 
-### Добавлено (фича 0045 — бэкенд генерации в SystemVerilog, FPGA/ASIC)
+### Добавлено (фича 0045 — бэкенд генерации в SystemVerilog, FPGA/ASIC) — ЗАКРЫТА
 
 - **Шестая цель генерации и первая аппаратная: `lamc compile -t sv`** —
   синтезируемый SystemVerilog IEEE 1800 (`grammar/src/generator/sv/`,
