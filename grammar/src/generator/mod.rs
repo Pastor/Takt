@@ -3,6 +3,7 @@ mod indent;
 mod plantuml;
 mod rust;
 mod st;
+mod sv;
 
 use crate::diagnostics::Diagnostic;
 use crate::semantic::ModelNode;
@@ -35,6 +36,22 @@ pub enum Language {
     /// Карта адресов ([`GenerateOptions::address_map`]) **не потребляется**:
     /// порты идут через HAL — это аналог режима `c`, а не `c-hal`.
     Rust,
+    /// Генерация синтезируемого SystemVerilog (IEEE 1800) — FPGA/ASIC (фича 0045).
+    ///
+    /// Первая **аппаратная** цель: у `C`/`ST`/`Rust` такт — итерация цикла
+    /// сканирования, здесь такт Lam ≡ **фронт тактового сигнала** `posedge clk`.
+    /// Модель → `module`, состояния → `typedef enum` + `unique case`, порты
+    /// `in`/`out` → `input`/`output logic` (ADR 0045).
+    ///
+    /// Сброс синхронный, активный низкий (`rst_n`); стартовое состояние стоит в
+    /// ветви сброса, синтетического `INIT` нет — контракт
+    /// [ADR 0033](../../../docs/adr/0033-init-tick-alignment.md) выполняется
+    /// конструктивно, а не правкой.
+    ///
+    /// Карта адресов ([`GenerateOptions::address_map`]) **не потребляется**:
+    /// MMIO-адрес для RTL бессмыслен — сигнал приходит на вывод кристалла, а не
+    /// по адресу. Парной цели `sv-at` нет.
+    SV,
 }
 
 /// Ширина вещественного типа в порождаемом C (фича 0029, ADR Option R-C).
@@ -138,6 +155,10 @@ pub fn generate(
         }
         Language::Rust => {
             let generator = rust::Generator {};
+            generator.generate(model, output_path, options)
+        }
+        Language::SV => {
+            let generator = sv::Generator {};
             generator.generate(model, output_path, options)
         }
     }

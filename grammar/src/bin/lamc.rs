@@ -748,6 +748,8 @@ fn print_usage() {
     eprintln!("  st-at     ST + размещение портов по карте адресов (AT %...)");
     eprintln!("  rust      Генерация no_std Rust (.rs) — прошивка МК (фича 0050)");
     eprintln!("            Порты через трейт Hal; подключается в крейт через mod");
+    eprintln!("  sv        Генерация синтезируемого SystemVerilog (.sv) — FPGA/ASIC (фича 0045)");
+    eprintln!("            Такт модели ≡ posedge clk; clk/rst_n — служебные порты модуля");
     eprintln!();
     eprintln!("Примеры:");
     eprintln!("  lamc compile main.lam");
@@ -1073,9 +1075,37 @@ fn main() {
                 }
             }
         }
+        "sv" => {
+            if let Err(diag) = grammar::compile_to_sv(
+                &options.input_file,
+                &source,
+                &options.output_path,
+                &options.include_dirs,
+                &generate_options(&options),
+            ) {
+                print_compile_error(&diag);
+                process::exit(1);
+            }
+            if !options.quiet {
+                if options.verbose {
+                    eprintln!(
+                        "Скомпилировано: {} → {} (sv)",
+                        fs::canonicalize(&options.input_file)
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_else(|_| options.input_file.clone()),
+                        options.output_path,
+                    );
+                } else {
+                    eprintln!(
+                        "Скомпилировано: {} → {}/ (sv)",
+                        options.input_file, options.output_path,
+                    );
+                }
+            }
+        }
         t => {
             eprintln!(
-                "Ошибка: неизвестная цель '{}'. Поддерживается: c, c-hal, plantuml, st, st-at, rust",
+                "Ошибка: неизвестная цель '{}'. Поддерживается: c, c-hal, plantuml, st, st-at, rust, sv",
                 t
             );
             process::exit(1);

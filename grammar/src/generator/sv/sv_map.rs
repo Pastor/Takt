@@ -1,0 +1,142 @@
+//! Снимок семантической карты модели для генератора SystemVerilog.
+//!
+//! Обёртка над [`Map`] из [`crate::semantic::minimap`] по образцу `RustMap`
+//! (фича 0050) и `StMap` (0041) — снимок дерева плюс множество используемых
+//! имён ([`UsageSet`]).
+//!
+//! ## Почему `UsageSet`, а не «тонкая обёртка» как у PlantUML
+//!
+//! Открытый вопрос задач [0045-01] и [0045-04] («нужен ли `UsageSet`?») решён
+//! **пробой**: `verilator --lint-only -Wall` даёт `UNUSEDSIGNAL` на объявленный,
+//! но никем не читаемый сигнал. То есть для цели `sv` фильтр — не оптимизация
+//! размера вывода, как в C, а **условие прохождения гейта** (A3): без него
+//! линтер краснел бы на легальных моделях. Ровно тот же довод, по которому
+//! `RustMap` фильтрует состояния (там сторож — `dead_code`).
+//!
+//! Детерминизм (фича 0048) достаётся даром: `Map::elements` — `BTreeMap`,
+//! ключ `Name` имеет ручной `Ord` по паре `(unique, local)`. Собственных
+//! сортировок здесь заводить не нужно — порядок задан типом контейнера.
+//!
+//! [0045-01]: ../../../../docs/development/0045-01-sv-backend.md
+//! [0045-04]: ../../../../docs/development/0045-04-module-ports.md
+
+use crate::diagnostics::{Diagnostic, Location};
+use crate::semantic::minimap::{Element, Map, Name};
+use crate::semantic::unused::UsageSet;
+use crate::semantic::{ModelNode, StateNode};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+/// Снимок модели, подготовленный для генерации SystemVerilog.
+pub(crate) struct SvMap {
+    filename: String,
+    map: Map,
+    /// Множество используемых имён модели (фильтр неиспользуемых элементов).
+    usage: UsageSet,
+    /// Эмитить ли guard-проверки — флаг `--guard-disable` наоборот.
+    guard_enable: bool,
+}
+
+impl SvMap {
+    /// Строит снимок модели из семантического дерева.
+    ///
+    /// # Ошибки
+    /// [`Diagnostic`], если у модели нет стартового состояния (`SE-011`).
+    pub(crate) fn new(
+        filename: &str,
+        model: &ModelNode,
+        guard_enable: bool,
+    ) -> Result<Self, Diagnostic> {
+        let model_rc = Rc::new(RefCell::new(model.copy(None, None)));
+        let usage = crate::semantic::unused::compute_usage(Rc::clone(&model_rc));
+        Ok(Self {
+            filename: filename.to_string(),
+            map: Map::create(model_rc)?,
+            usage,
+            guard_enable,
+        })
+    }
+
+    /// Базовое имя выходного файла (без расширения).
+    pub(crate) fn get_filename(&self) -> &str {
+        &self.filename
+    }
+
+    /// Имя корневой модели.
+    pub(crate) fn root_name(&self) -> Name {
+        self.map.root_name()
+    }
+
+    /// Элемент корневой модели (вариант [`Element::Model`]).
+    pub(crate) fn model(&self) -> Element {
+        self.map.model()
+    }
+
+    /// Эмитить ли guard-проверки.
+    #[allow(dead_code)]
+    pub(crate) fn guard_enable(&self) -> bool {
+        self.guard_enable
+    }
+
+    /// Ссылка на множество используемых имён.
+    #[allow(dead_code)]
+    pub(crate) fn usage(&self) -> &UsageSet {
+        &self.usage
+    }
+
+    /// Подмодели, используемые через `StateExtend`.
+    #[allow(dead_code)]
+    pub(crate) fn using_models(&self) -> Vec<Element> {
+        self.map.used_models()
+    }
+
+    /// Элемент карты по имени — **только если он состояние**.
+    #[allow(dead_code)]
+    pub(crate) fn state_at(&self, name: Name) -> Option<Element> {
+        self.map
+            .element_at(name)
+            .filter(|element| element.is_state())
+    }
+
+    /// Элемент карты по имени (состояние, модель либо `StateExtend`).
+    #[allow(dead_code)]
+    pub(crate) fn element_of(&self, name: &Name) -> Option<Element> {
+        self.map.element_at(name.clone())
+    }
+
+    /// Модель по имени.
+    ///
+    /// # Ошибки
+    /// [`Diagnostic`] с кодом `SV-010`, если модели с таким именем нет.
+    #[allow(dead_code)]
+    pub(crate) fn raw_model_at(&self, name: Name) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+        self.map
+            .model_at(Some(name.unique().to_string()))
+            .ok_or_else(|| {
+                Diagnostic::error(Location::Codegen, format!("Модель '{}' не найдена", name))
+                    .with_code("SV-010")
+            })
+    }
+
+    /// Корневая модель.
+    pub(crate) fn root_model_node(&self) -> Option<Rc<RefCell<ModelNode>>> {
+        self.map.model_at(None)
+    }
+
+    /// Состояние по уникальному имени.
+    ///
+    /// # Ошибки
+    /// [`Diagnostic`] с кодом `SV-011`, если состояния с таким именем нет.
+    #[allow(dead_code)]
+    pub(crate) fn raw_state_at(&self, name: Name) -> Result<Rc<RefCell<StateNode>>, Diagnostic> {
+        self.map
+            .state_at(Some(name.unique().to_string()))
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    Location::Codegen,
+                    format!("Состояние '{}' не найдено", name),
+                )
+                .with_code("SV-011")
+            })
+    }
+}
