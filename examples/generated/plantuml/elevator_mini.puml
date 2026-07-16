@@ -5,21 +5,21 @@ title ElevatorMini
 Main : Cabin | Motor
 Main --> [*]
 
+state Cabin {
+    [*] --> Idle
+    AtFloor --> Idle
+    Idle --> Moving
+    Moving --> AtFloor
+}
+
 state Motor {
     [*] --> Idle
-    Stop --> Idle
-    Up --> Stop
     Down --> Stop
     Idle --> Up
     Idle --> Down
     Idle --> Stop
-}
-
-state Cabin {
-    [*] --> Idle
-    Moving --> AtFloor
-    AtFloor --> Idle
-    Idle --> Moving
+    Stop --> Idle
+    Up --> Stop
 }
 
 @enduml
