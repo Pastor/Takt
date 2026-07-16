@@ -263,9 +263,15 @@ fn resolve_ast_statement(
                         .collect();
                     Ok(StatementNode::InlineFormula(resolved))
                 }
-                ast::InlineFormulaDefine::Ltl { .. } => {
-                    // TODO: Реализовать поддержку LTL в блоках кода
-                    Ok(StatementNode::InlineFormula(Vec::new()))
+                ast::InlineFormulaDefine::Ltl { formulas, .. } => {
+                    // 0035: LTL в блоке разбирается той же тотальной функцией, что
+                    // на уровнях модели и состояния (`tree.rs`), — паритет уровней.
+                    // Прежде ветка молча возвращала `Vec::new()` (тихая потеря).
+                    let resolved: Vec<Formula> = formulas
+                        .iter()
+                        .map(|f| Formula::LTL(crate::semantic::formula::ltl_ast_to_semantic(f)))
+                        .collect();
+                    Ok(StatementNode::InlineFormula(resolved))
                 }
             }
         }

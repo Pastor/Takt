@@ -466,6 +466,18 @@ pub fn unused_variable_warnings(
     semantic::unused::check_unused_variables(model)
 }
 
+/// Фича 0035: предупреждения по LTL-формулам (SE-055 — формула не
+/// верифицируется; SE-056 — неизвестный атом).
+///
+/// LTL разбирается на всех уровнях (модель/состояние/блок), но не проверяется
+/// ни одной целью генерации. Функция гарантирует, что ни один путь LTL не
+/// заканчивается тишиной — по образцу [`unused_variable_warnings`].
+pub fn ltl_warnings(
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+) -> Vec<Diagnostic> {
+    semantic::ltl_check::ltl_warnings(model)
+}
+
 /// Ce14: возвращает предупреждения о недетерминированных переходах в модели.
 ///
 /// Предупреждает, если несколько `ref`-переходов из одного состояния
