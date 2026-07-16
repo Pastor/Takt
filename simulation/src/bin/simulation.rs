@@ -7,7 +7,7 @@ use clap::Parser;
 use grammar::parse;
 use grammar::parser::ast::PortDirection;
 use grammar::semantic::VariableNode;
-use grammar::semantic::tree::construct_model;
+use grammar::semantic::tree::construct_model_with_files;
 use simulation::build_unit;
 use simulation::graphics_config::GraphicsConfig;
 use simulation::json_input::load_sim_steps;
@@ -81,9 +81,13 @@ fn run(args: Args) -> Result<RunResult, String> {
     let source = std::fs::read_to_string(&args.lam_file)
         .map_err(|e| format!("Не удалось прочитать {}: {e}", args.lam_file.display()))?;
 
+    // Реестр файлов: корневой — номер 0, импортируемые получит проход 0.
+    // Нужен, чтобы назвать пользователю файл ошибки (фичи 0053, 0054).
+    let mut files = grammar::diagnostics::FileTable::new(&args.lam_file.to_string_lossy());
+
     // 2. Парсинг
     let (ast, _comments) =
-        parse(&source, 0).map_err(|diags| format_diagnostics("Ошибки парсинга", &diags))?;
+        parse(&source, 0).map_err(|diags| format_diagnostics("Ошибки парсинга", &diags, &files))?;
 
     // 3. Семантический анализ
     let search_paths: Vec<String> = args
@@ -91,8 +95,10 @@ fn run(args: Args) -> Result<RunResult, String> {
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    let model_rc = construct_model(&ast, None, &search_paths)
-        .map_err(|d| format!("Семантическая ошибка: {}", d.message))?;
+    // Позиция — в начале строки, как у `lamc` и `rustc`: так её видит редактор.
+    // Слова «Семантическая ошибка» не дублируются — об этом говорит код (`SE-…`).
+    let model_rc = construct_model_with_files(&ast, None, &search_paths, &mut files)
+        .map_err(|d| format_diagnostic(&d, &files))?;
 
     // 4. Извлекаем имена портов и имя модели
     let port_names = extract_port_names(&model_rc.borrow());
@@ -190,9 +196,56 @@ fn extract_port_names(model: &grammar::semantic::ModelNode) -> PortNames {
     }
 }
 
-fn format_diagnostics(prefix: &str, diags: &[grammar::diagnostics::Diagnostic]) -> String {
-    let messages: Vec<String> = diags.iter().map(|d| d.message.clone()).collect();
+/// Печатает диагностики с позицией и кодом (фича 0054).
+///
+/// Прежде бралось только `d.message` — терялись и позиция, и код (`SE-002`),
+/// из-за чего ошибка в своём файле была неотличима от ошибки внутри
+/// импортированной библиотеки.
+///
+/// Печатаются **все** диагностики, а не первая: у разбора их обычно несколько, и
+/// каждая — своя подсказка. (`lamc` показывает первую; здесь поведение полезнее и
+/// сохранено осознанно.)
+fn format_diagnostics(
+    prefix: &str,
+    diags: &[grammar::diagnostics::Diagnostic],
+    files: &grammar::diagnostics::FileTable,
+) -> String {
+    let messages: Vec<String> = diags.iter().map(|d| format_diagnostic(d, files)).collect();
     format!("{prefix}:\n{}", messages.join("\n"))
+}
+
+/// Одна диагностика: `путь:строка:колонка: [КОД] сообщение`.
+///
+/// Позиция печатается общей для всех бинарников функцией
+/// (`grammar::diagnostics::position_prefix`) — формат позиции един у `lamc` и
+/// симулятора физически, а не по договорённости.
+fn format_diagnostic(
+    diag: &grammar::diagnostics::Diagnostic,
+    files: &grammar::diagnostics::FileTable,
+) -> String {
+    let stamped = stamp_file(diag.clone(), files);
+    let code = stamped
+        .code
+        .as_deref()
+        .map(|c| format!("[{c}] "))
+        .unwrap_or_default();
+    format!(
+        "{}{code}{}",
+        grammar::diagnostics::position_prefix(&stamped),
+        stamped.message
+    )
+}
+
+/// Разрешает номер файла диагностики в путь (приём фичи 0053).
+///
+/// Реестр — деталь загрузки модели: он жив только здесь, а наружу выходит уже
+/// разрешённый путь в `Diagnostic::file`.
+fn stamp_file(
+    diag: grammar::diagnostics::Diagnostic,
+    files: &grammar::diagnostics::FileTable,
+) -> grammar::diagnostics::Diagnostic {
+    let path = files.path_of(&diag.loc).map(str::to_string);
+    diag.with_file_if_unset(path.as_deref())
 }
 
 fn print_result(result: &RunResult) {
