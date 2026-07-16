@@ -190,7 +190,8 @@ enum Color {
 /// `loc` — позиция для диагностики (объявление модели). Сообщение называет
 /// цепочку вызовов, замыкающую цикл.
 pub fn topological_order(graph: &CallGraph, loc: Location) -> Result<Vec<String>, Diagnostic> {
-    let mut color: BTreeMap<String, Color> = graph.keys().map(|k| (k.clone(), Color::White)).collect();
+    let mut color: BTreeMap<String, Color> =
+        graph.keys().map(|k| (k.clone(), Color::White)).collect();
     let mut order: Vec<String> = Vec::new();
 
     // Итеративный DFS с явным стеком пути — чтобы восстановить цепочку цикла.

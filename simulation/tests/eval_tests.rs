@@ -242,7 +242,10 @@ fn invariant_state_violation_stops_with_name() {
     let TickResult::Failed(msg) = last else {
         panic!("ожидался Failed на инварианте состояния, получено {last:?}");
     };
-    assert!(msg.contains("SIM-025") && msg.contains("'Q'"), "SIM-025 + имя Q: {msg}");
+    assert!(
+        msg.contains("SIM-025") && msg.contains("'Q'"),
+        "SIM-025 + имя Q: {msg}"
+    );
 }
 
 /// T17 (A10): `: c;` (assert языка Lam) в блоке нарушается — так же, как invariant.

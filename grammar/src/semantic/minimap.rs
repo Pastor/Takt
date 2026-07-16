@@ -480,7 +480,11 @@ fn build_extend(extend: &Extend, model: Rc<RefCell<ModelNode>>) -> StateExtend {
 /// - [`Extend::Concatenation`] / [`Extend::Parallel`] — рекурсирует в каждый операнд.
 /// - [`Extend::Parentless`] — прозрачная обёртка, делегирует внутрь.
 /// - [`Extend::None`] / [`Extend::Unresolved`] — пропускаются.
-fn visit_extend(extend: &Extend, model: Rc<RefCell<ModelNode>>, used: &mut BTreeMap<Name, Element>) {
+fn visit_extend(
+    extend: &Extend,
+    model: Rc<RefCell<ModelNode>>,
+    used: &mut BTreeMap<Name, Element>,
+) {
     match extend {
         Extend::Model(m_rc) => {
             let unique = unique_model_name(m_rc.clone());

@@ -402,7 +402,10 @@ fn invariant_is_formatted_as_condition() {
         out.contains("invariant Safe = t <= 100;"),
         "инвариант печатается как условие (= , не :=):\n{out}"
     );
-    assert!(!out.contains(":="), "правая часть — условие, не присваивание:\n{out}");
+    assert!(
+        !out.contains(":="),
+        "правая часть — условие, не присваивание:\n{out}"
+    );
     // Идемпотентность.
     let twice = format_source(&out).expect("повторное форматирование");
     assert_eq!(out, twice, "печать инварианта должна быть идемпотентной");

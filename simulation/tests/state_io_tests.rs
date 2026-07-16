@@ -44,22 +44,25 @@ fn saved_json(unit: &Unit) -> String {
 /// A2 (Д1): снимок захватывает значения переменных модели, а не пустой объект.
 #[test]
 fn save_captures_variables() {
-    let mut unit =
-        unit_from_src("var n: u8 := 0;\nvar t: u8 := 0;\nstart Idle { always { n := 1; t := 2; } }");
+    let mut unit = unit_from_src(
+        "var n: u8 := 0;\nvar t: u8 := 0;\nstart Idle { always { n := 1; t := 2; } }",
+    );
     run(&mut unit, 3);
     let json = saved_json(&unit);
     assert!(
         json.contains("\"n\": 1"),
         "снимок обязан содержать n=1, а не пустой variables:\n{json}"
     );
-    assert!(json.contains("\"t\": 2"), "снимок обязан содержать t=2:\n{json}");
+    assert!(
+        json.contains("\"t\": 2"),
+        "снимок обязан содержать t=2:\n{json}"
+    );
 }
 
 /// A3 (Д2): круговой рейс через файл — значения совпадают после загрузки.
 #[test]
 fn roundtrip_values_match() {
-    let src =
-        "var n: u8 := 0;\nstart A { always { n := n + 5; } ref B; }\nstate B { always { n := n + 1; } }";
+    let src = "var n: u8 := 0;\nstart A { always { n := n + 5; } ref B; }\nstate B { always { n := n + 1; } }";
     let mut unit = unit_from_src(src);
     run(&mut unit, 2);
     let saved = unit.variable("n");
@@ -82,8 +85,7 @@ fn roundtrip_values_match() {
 /// ключевая проверка: точечная починка снимка её бы не прошла.
 #[test]
 fn roundtrip_model_not_frozen() {
-    let src =
-        "var n: u8 := 0;\nstart A { always { n := n + 1; } ref B; }\nstate B { always { n := n + 1; } ref A; }";
+    let src = "var n: u8 := 0;\nstart A { always { n := n + 1; } ref B; }\nstate B { always { n := n + 1; } ref A; }";
     let mut unit = unit_from_src(src);
     run(&mut unit, 3);
     let snap = snapshot(&unit);
@@ -142,5 +144,8 @@ fn constants_excluded_from_snapshot() {
         !json.contains("MAX"),
         "константа MAX не должна быть в снимке:\n{json}"
     );
-    assert!(json.contains("\"n\": 1"), "переменная n должна быть в снимке:\n{json}");
+    assert!(
+        json.contains("\"n\": 1"),
+        "переменная n должна быть в снимке:\n{json}"
+    );
 }

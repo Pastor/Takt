@@ -188,5 +188,8 @@ fn ltl_state_name_is_valid_atom() {
 #[test]
 fn no_ltl_no_warnings() {
     let ws = warnings("var a: u8 := 0; start S { always { a := a + 1; } }");
-    assert!(ws.is_empty(), "без LTL предупреждений быть не должно: {ws:?}");
+    assert!(
+        ws.is_empty(),
+        "без LTL предупреждений быть не должно: {ws:?}"
+    );
 }

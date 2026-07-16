@@ -488,7 +488,10 @@ fn print_state_element_inner(
         ast::StateElement::Invariant(i) => {
             // `invariant Имя = условие;` в теле состояния (фича 0044).
             let name = i.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
-            out.node_line(&i.loc, &format!("invariant {name} = {};", expr::condition(&i.value)?));
+            out.node_line(
+                &i.loc,
+                &format!("invariant {name} = {};", expr::condition(&i.value)?),
+            );
             Ok(())
         }
     }
