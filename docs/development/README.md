@@ -138,5 +138,6 @@
 | 0050-08 | 0050 | Примеры, контрпримеры, документация | [0050-08-docs-tests.md](0050-08-docs-tests.md) |
 | 0051-01 | 0051 | Признак происхождения модели (`origin`) | [0051-01-verify-scope.md](0051-01-verify-scope.md) |
 | 0051-02 | 0051 | Область в `verify_all` и флаг CLI `--scope` | [0051-02-cli-scope.md](0051-02-cli-scope.md) |
-| 0052-01 | 0052 | Итеративные обходы в verification/ (снятие потолка стека) | [0052-01-verify-iterative-traversal.md](0052-01-verify-iterative-traversal.md) |
+| 0052-01 | 0052 | `minimap::visit_state` → итеративный обход (чинит все 5 целей) | [0052-01-minimap-iterative.md](0052-01-minimap-iterative.md) |
+| 0052-02 | 0052 | nested-DFS (`check.rs`) → итеративный обход | [0052-02-nested-dfs-iterative.md](0052-02-nested-dfs-iterative.md) |
 
