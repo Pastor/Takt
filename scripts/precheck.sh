@@ -284,6 +284,27 @@ for name in $SV_TRANSLATABLE; do
   fi
 done
 
+# И зеркально — НИ ОДНОГО лишнего .sv (доделка 0045-02). Пример, переставший
+# транслироваться (SV-002/SV-005 после 0045-06), оставляет в каталоге стаб от
+# каркаса: `-o` пишет только при УСПЕХЕ, отказ старый файл не трогает. Стаб
+# валиден — verilator/yosys его молча примут, — то есть каталог хранит вывод,
+# которого компилятор уже НЕ производит. Гейт «определяет правду» (0045-02),
+# значит хранить такую ложь не вправе. Симметрично ловится и обратный дрейф:
+# пример, внезапно заработавший, но не внесённый в SV_TRANSLATABLE.
+for sv_file in "$SV_OUTPUT"/*.sv; do
+  [ -e "$sv_file" ] || continue
+  name="$(basename "$sv_file" .sv)"
+  case " $SV_TRANSLATABLE " in
+    *" $name "*) ;;  # ожидаемый — в списке обязательных
+    *)
+      echo "  $name.sv → ЛИШНИЙ .sv: примера нет в SV_TRANSLATABLE, но файл есть."
+      echo "    Либо это устаревший стаб (git rm $SV_OUTPUT/${name}.sv),"
+      echo "    либо пример начал транслироваться — тогда внести его в SV_TRANSLATABLE."
+      sv_failed=1
+      ;;
+  esac
+done
+
 if command -v verilator &>/dev/null; then
   for sv_file in "$SV_OUTPUT"/*.sv; do
     [ -e "$sv_file" ] || continue
