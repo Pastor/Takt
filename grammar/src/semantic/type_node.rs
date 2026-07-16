@@ -3,7 +3,7 @@
 //! Основная функция [`construct_type`] преобразует АСД-тип [`Type`]
 //! в семантический [`TypeNode`].
 //!
-//! Вместо `&HashMap<String, TypeNode>` функция принимает `Rc<RefCell<ModelNode>>`,
+//! Вместо `&BTreeMap<String, TypeNode>` функция принимает `Rc<RefCell<ModelNode>>`,
 //! что позволяет искать типы через цепочку родительских моделей.
 //!
 //! ## Поддерживаемые типы
@@ -141,7 +141,7 @@ mod tests {
     use crate::parser::ast::{Identifier, Type};
     use crate::semantic::ModelNode;
     use std::cell::RefCell;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use std::rc::Rc;
 
     /// Вспомогательная функция: создаёт пустую модель.
@@ -275,7 +275,7 @@ mod tests {
     /// ```
     #[test]
     fn local_alias_resolves_from_map() {
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         map.insert(
             "byte8".to_string(),
             TypeNode::Array(8, Box::new(TypeNode::Bit)),
@@ -421,7 +421,7 @@ mod tests {
     /// они обрабатываются независимо.
     #[test]
     fn enum_type_ignores_type_alias_table() {
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         // В таблице типов есть "Color" как псевдоним — но Type::Enum идёт своим путём
         map.insert(
             "Color".to_string(),
