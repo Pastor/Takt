@@ -1,0 +1,13 @@
+// Фича 0051: импорт формой `import { A as B } from "файл";`
+// (ImportDefine::Rename) — самая коварная из трёх.
+//
+// Здесь в `models` кладётся не корень чужого файла, а `Rc::clone` его ВЛОЖЕННОЙ
+// модели (tree.rs:248). С точки зрения badlib.lam узел Engine локален, поэтому
+// его собственный `origin` — Local; пометить его обязан импортёр в момент
+// вставки. Забудь это — и область молча не сработает именно на этой форме.
+import { Engine as Motor } from "badlib.lam";
+
+: [LTL] F Done;
+
+start Work { ref Done; }
+state Done;

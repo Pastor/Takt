@@ -31,7 +31,7 @@ use crate::semantic::validate::{
 };
 use crate::semantic::{
     ConditionDefinitionNode, ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode,
-    ModelNode, NamedCodeBlockDefinitionNode, ReferenceNode, StateNode, StateNodeKind,
+    ModelNode, ModelOrigin, NamedCodeBlockDefinitionNode, ReferenceNode, StateNode, StateNodeKind,
     StatementNode, VariableNode, extend,
 };
 use std::cell::RefCell;
@@ -77,6 +77,21 @@ fn check_import_cycle(
         );
     }
     Ok(())
+}
+
+/// Помечает узел как пришедший через `import` (фича 0051, R2).
+///
+/// Вызывается в **каждой** из трёх точек вставки импорта — `Plain`,
+/// `GlobalSymbol` и `Rename`: иначе импортированная модель неотличима от
+/// локальной вложенной (обе живут в одном [`ModelNode::models`]), и область
+/// проверки `lamc verify --scope file` молча пропустит форму, которую забыли.
+///
+/// Для `Rename` узел приходит `Rc::clone`-ом чужого дерева. Гонки за него нет:
+/// дерево-источник дропается сразу после блока, а один и тот же файл при
+/// повторном импорте разбирается заново (кэша импортов нет).
+fn mark_imported(model: Rc<RefCell<ModelNode>>) -> Rc<RefCell<ModelNode>> {
+    model.borrow_mut().origin = ModelOrigin::Imported;
+    model
 }
 
 fn construct_model_stage0(
@@ -176,7 +191,7 @@ fn construct_model_stage0(
                             let result =
                                 construct_model_impl(&model, None, search_paths, import_stack);
                             import_stack.pop();
-                            models.insert(model_name, result?);
+                            models.insert(model_name, mark_imported(result?));
                         }
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
@@ -200,7 +215,7 @@ fn construct_model_stage0(
                             let result =
                                 construct_model_impl(&model, None, search_paths, import_stack);
                             import_stack.pop();
-                            models.insert(model_name, result?);
+                            models.insert(model_name, mark_imported(result?));
                         }
                         Err(d) => return Err(d.first().unwrap().clone()),
                     }
@@ -245,7 +260,7 @@ fn construct_model_stage0(
                                 )
                                 .with_code("SE-006"));
                             }
-                            models.insert(alias, Rc::clone(m));
+                            models.insert(alias, mark_imported(Rc::clone(m)));
                         } else if let Some(t) = src.types.get(orig) {
                             if model_node.borrow().types.contains_key(&alias) {
                                 return Err(Diagnostic::declaration_error(

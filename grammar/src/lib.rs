@@ -683,34 +683,70 @@ pub struct PropertyResult {
     pub trace: Option<String>,
 }
 
-/// Фича 0049: проверяет **все** LTL-формулы модели и её вложенных моделей.
+/// Фича 0051: область проверки — какие модели дерева проверяются.
+///
+/// Дерево модели содержит и **импортированные** модели: проход 0 кладёт их в тот
+/// же [`ModelNode::models`](semantic::ModelNode::models), что и локальные
+/// вложенные. Без области нарушенное свойство чужой библиотеки давало ненулевой
+/// код возврата тому, кто её лишь импортировал.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerifyScope {
+    /// Только модели проверяемого файла (умолчание): поддеревья импортов
+    /// отсекаются целиком.
+    #[default]
+    File,
+    /// Все модели дерева, включая импортированные (поведение фичи 0049).
+    All,
+}
+
+/// Фича 0051: итог проверки — вердикты плюс то, что **не** проверялось.
+///
+/// Пропущенное перечисляется, а не замалчивается: молчаливое сужение области —
+/// ровно тот класс дефекта, который закрывала фича 0035.
+#[derive(Debug, Clone, Default)]
+pub struct VerifyOutcome {
+    /// Вердикты по проверенным формулам.
+    pub results: Vec<PropertyResult>,
+    /// Имена моделей, пропущенных из-за области (пусто при [`VerifyScope::All`]).
+    pub skipped: Vec<String>,
+}
+
+/// Фича 0049: проверяет LTL-формулы модели и её вложенных моделей.
 ///
 /// Формулы вложенной модели говорят о состояниях **своей** модели, поэтому
 /// каждая проверяется против графа той модели, где объявлена, — а не против
 /// корневой.
 ///
+/// Область — [`VerifyScope::File`] (фича 0051): импортированные модели **не**
+/// проверяются. Их имена доступны через [`verify_all_scoped`]; здесь они
+/// отбрасываются ради краткой сигнатуры.
+///
 /// Порядок результатов детерминирован (обход `BTreeMap` моделей — гейт 0048).
 pub fn verify_all(
     model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
 ) -> Vec<PropertyResult> {
-    verify_all_traced(model, false)
+    verify_all_scoped(model, false, VerifyScope::default()).results
 }
 
-/// Фича 0049: то же, что [`verify_all`], но при `trace = true` заполняет
-/// [`PropertyResult::trace`] дампом конвейера (`lamc verify --trace`).
-pub fn verify_all_traced(
+/// Фича 0049/0051: то же, что [`verify_all`], но с явной областью и трассой.
+///
+/// При `trace = true` заполняет [`PropertyResult::trace`] дампом конвейера
+/// (`lamc verify --trace`).
+pub fn verify_all_scoped(
     model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
     trace: bool,
-) -> Vec<PropertyResult> {
-    let mut out = Vec::new();
-    verify_all_inner(&model, trace, &mut out);
+    scope: VerifyScope,
+) -> VerifyOutcome {
+    let mut out = VerifyOutcome::default();
+    verify_all_inner(&model, trace, scope, &mut out);
     out
 }
 
 fn verify_all_inner(
     model: &std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
     trace: bool,
-    out: &mut Vec<PropertyResult>,
+    scope: VerifyScope,
+    out: &mut VerifyOutcome,
 ) {
     let borrowed = model.borrow();
     let name = borrowed.name().to_string();
@@ -726,7 +762,7 @@ fn verify_all_inner(
                 None,
             )
         };
-        out.push(PropertyResult {
+        out.results.push(PropertyResult {
             model: name.clone(),
             formula,
             loc,
@@ -734,10 +770,26 @@ fn verify_all_inner(
             trace: dump,
         });
     }
-    let nested: Vec<_> = borrowed.models.values().map(std::rc::Rc::clone).collect();
+    // Имя берётся КЛЮЧОМ словаря, а не полем узла: корень импортированного файла
+    // анонимен (`name: None`), и `name()` дал бы пустую строку — пропуск
+    // перечислялся бы без имени. Ключ же и есть то имя, под которым модель
+    // видна импортёру (`import "badlib.lam";` → `Badlib`).
+    let nested: Vec<_> = borrowed
+        .models
+        .iter()
+        .map(|(key, m)| (key.clone(), std::rc::Rc::clone(m)))
+        .collect();
     drop(borrowed);
-    for m in nested {
-        verify_all_inner(&m, trace, out);
+    for (key, m) in nested {
+        // R3: у импортированного узла поддерево отсекается ЦЕЛИКОМ. Проверять
+        // `origin` каждого узла по отдельности мало: вложенные модели чужого
+        // файла локальны для него и несут `Local` — обход зашёл бы внутрь и
+        // проверил их формулы, то есть область бы не работала.
+        if scope == VerifyScope::File && m.borrow().origin == semantic::ModelOrigin::Imported {
+            out.skipped.push(key);
+            continue;
+        }
+        verify_all_inner(&m, trace, scope, out);
     }
 }
 

@@ -123,6 +123,32 @@ pub struct ModelNode {
     /// (привязка к порту, приоритет источников inline/`address`/внешняя карта) и
     /// диагностики выполняет [`check_port_addresses`](validate::check_port_addresses).
     pub address_defs: Vec<AddressBindingNode>,
+    /// Происхождение модели: объявлена здесь или пришла через `import` (фича 0051).
+    pub origin: ModelOrigin,
+}
+
+/// Происхождение модели в дереве (фича 0051).
+///
+/// Признак **относителен файлу, в дерево которого узел вставлен**, а не
+/// абсолютное свойство модели: вложенная модель `lib.lam`, взятая формой
+/// `import { A as B } from "lib.lam";`, для `lib.lam` локальна, а для `main.lam`
+/// импортирована.
+///
+/// Заведён потому, что иначе импорт **неотличим** от локальной вложенной модели:
+/// проход 0 кладёт их в один и тот же [`ModelNode::models`], а `Location` несёт
+/// `file_no`, который везде равен нулю.
+///
+/// Потребитель — область проверки [`verify_all`](crate::verify_all): встретив
+/// `Imported`, обход отсекает поддерево **целиком**. Проверять `origin` у каждого
+/// узла по отдельности недостаточно — вложенные модели импортированного файла
+/// локальны для него и несут `Local`.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelOrigin {
+    /// Модель объявлена в том же файле, что и её родитель.
+    #[default]
+    Local,
+    /// Модель пришла через `import` (любая из трёх форм).
+    Imported,
 }
 
 /// Привязка адреса к порту оператором `address` (фича 0020).
@@ -166,6 +192,7 @@ impl ModelNode {
             docs: BTreeMap::new(),
             formulas: Vec::new(),
             address_defs: Vec::new(),
+            origin: ModelOrigin::Local,
         };
         let model = Rc::new(RefCell::new(model));
         if let Some(parent) = &parent {
@@ -237,6 +264,9 @@ impl ModelNode {
             docs: self.docs.clone(),
             formulas: self.formulas.clone(),
             address_defs: self.address_defs.clone(),
+            // Копия наследует происхождение: переименование модели её источник
+            // не меняет (фича 0051).
+            origin: self.origin,
         }
     }
 }

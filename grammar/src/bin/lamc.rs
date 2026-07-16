@@ -503,6 +503,25 @@ pub struct VerifyOptions {
     pub property: Option<String>,
     /// Печатать трассу конвейера (Крипке, автомат `¬φ`, произведение).
     pub trace: bool,
+    /// Область проверки (фича 0051): `file` (умолчание) — модели своего файла,
+    /// `all` — включая импортированные.
+    pub scope: grammar::VerifyScope,
+}
+
+/// Разбирает значение флага `--scope`.
+///
+/// Негодное значение — отказ, а не молчаливое умолчание: `--scope al` иначе
+/// проверял бы свой файл, отчитавшись «все держатся», и пользователь считал бы,
+/// что импорты тоже проверены.
+fn parse_scope(value: &str) -> Result<grammar::VerifyScope, String> {
+    match value {
+        "file" => Ok(grammar::VerifyScope::File),
+        "all" => Ok(grammar::VerifyScope::All),
+        other => Err(format!(
+            "неизвестная область '{other}'; допустимо: file (модели своего файла) \
+             или all (включая импортированные)"
+        )),
+    }
 }
 
 /// Задаёт проверяемое свойство, отвергая повтор флага.
@@ -539,6 +558,13 @@ pub fn parse_verify_args(args: &[String]) -> Result<VerifyOptions, String> {
                 set_property(&mut options, value)?;
             }
             "--trace" => options.trace = true,
+            "--scope" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| format!("флаг '{arg}' требует значение: file или all"))?;
+                options.scope = parse_scope(value)?;
+            }
             "--include-dirs" | "-I" => {
                 i += 1;
                 let value = args
@@ -548,6 +574,9 @@ pub fn parse_verify_args(args: &[String]) -> Result<VerifyOptions, String> {
             }
             other if other.starts_with("--property=") => {
                 set_property(&mut options, &other["--property=".len()..])?;
+            }
+            other if other.starts_with("--scope=") => {
+                options.scope = parse_scope(&other["--scope=".len()..])?;
             }
             // Слитная форма `-I/путь` — как в подкоманде compile.
             other if other.starts_with("-I") && other.len() > 2 => {
@@ -613,7 +642,7 @@ fn run_verify(options: &VerifyOptions) -> i32 {
     };
 
     // Свойства: либо одно из --property, либо все объявленные в файле.
-    let results = match &options.property {
+    let outcome = match &options.property {
         Some(text) => {
             let phi = match grammar::parse_ltl_property(text) {
                 Ok(p) => p,
@@ -624,20 +653,23 @@ fn run_verify(options: &VerifyOptions) -> i32 {
             };
             let (verdict, trace) =
                 grammar::verification::verify::verify_model_traced(&model.borrow(), &phi);
-            // Область — корневая модель файла; помечать её именем незачем,
-            // файл назван в командной строке.
-            vec![grammar::PropertyResult {
-                model: String::new(),
-                loc: grammar::diagnostics::Location::Implicit,
-                verdict,
-                formula: phi,
-                trace: options.trace.then_some(trace),
-            }]
+            // Свойство из строки проверяется против корневой модели файла и
+            // области не касается (ADR 0051, A2): пропускать тут нечего.
+            grammar::VerifyOutcome {
+                results: vec![grammar::PropertyResult {
+                    model: String::new(),
+                    loc: grammar::diagnostics::Location::Implicit,
+                    verdict,
+                    formula: phi,
+                    trace: options.trace.then_some(trace),
+                }],
+                skipped: Vec::new(),
+            }
         }
-        None => grammar::verify_all_traced(Rc::clone(&model), options.trace),
+        None => grammar::verify_all_scoped(Rc::clone(&model), options.trace, options.scope),
     };
 
-    if results.is_empty() {
+    if outcome.results.is_empty() && outcome.skipped.is_empty() {
         eprintln!(
             "В файле '{}' нет LTL-формул. Объявите свойство как `: [LTL] φ;` \
              или задайте его флагом --property \"φ\".",
@@ -646,13 +678,14 @@ fn run_verify(options: &VerifyOptions) -> i32 {
         return 1;
     }
 
-    print_verify_results(&results)
+    print_verify_results(&outcome)
 }
 
 /// Печатает вердикты и возвращает код возврата процесса.
-fn print_verify_results(results: &[grammar::PropertyResult]) -> i32 {
+fn print_verify_results(outcome: &grammar::VerifyOutcome) -> i32 {
     use grammar::verification::verify::Verdict;
 
+    let results = &outcome.results;
     let mut failures = 0usize;
     for result in results {
         if let Some(trace) = &result.trace {
@@ -703,6 +736,17 @@ fn print_verify_results(results: &[grammar::PropertyResult]) -> i32 {
         }
     }
 
+    // Сужение области — не тишина (ADR 0051): пропущенное перечисляется, иначе
+    // «все держатся» читалось бы как «проверено всё».
+    if !outcome.skipped.is_empty() {
+        println!(
+            "\nНе проверено (вне области): {} — модели из импортов: {}",
+            outcome.skipped.len(),
+            outcome.skipped.join(", ")
+        );
+        println!("  --scope all — проверить их тоже.");
+    }
+
     // Итог печатается в stdout вместе с вердиктами: разведи их по потокам —
     // и в терминале итог всплывёт выше вердиктов из-за буферизации.
     if failures > 0 {
@@ -720,7 +764,9 @@ fn print_verify_results(results: &[grammar::PropertyResult]) -> i32 {
 fn print_usage() {
     eprintln!("Использование: lamc compile [флаги] <input.lam> [-o <output>]");
     eprintln!("               lamc fmt [--check] [--stdin] <файлы/каталоги>");
-    eprintln!("               lamc verify [--property \"φ\"] [--trace] <input.lam>");
+    eprintln!(
+        "               lamc verify [--property \"φ\"] [--scope file|all] [--trace] <input.lam>"
+    );
     eprintln!("               lamc --help");
     eprintln!();
     eprintln!("Флаги:");
@@ -768,6 +814,8 @@ fn print_usage() {
     eprintln!("Подкоманда verify (проверка LTL-свойств, model checking — фича 0049):");
     eprintln!("  --property, -p \"φ\"  Проверить одну формулу из командной строки");
     eprintln!("                      Без флага проверяются все `: [LTL] φ;` файла");
+    eprintln!("  --scope file|all    Область проверки (по умолчанию: file — модели своего файла)");
+    eprintln!("                      all — проверять и модели, пришедшие через import");
     eprintln!("  --trace             Печатать конвейер (Крипке, автомат !φ, произведение)");
     eprintln!("  -I <dirs>           Пути поиска файлов import");
     eprintln!();
@@ -1729,5 +1777,46 @@ mod tests {
     fn float_width_requires_argument() {
         let err = parse_compile_args(&["--float-width".to_string()]).unwrap_err();
         assert!(err.contains("--float-width"), "сообщение: {}", err);
+    }
+
+    // ── Область проверки verify (фича 0051, задача 0051-02) ──────────────────
+
+    #[test]
+    fn verify_scope_defaults_to_file() {
+        let o = parse_verify_args(&["m.lam".to_string()]).unwrap();
+        assert_eq!(o.scope, grammar::VerifyScope::File);
+    }
+
+    #[test]
+    fn verify_scope_is_parsed_in_both_forms() {
+        let split = parse_verify_args(&[
+            "--scope".to_string(),
+            "all".to_string(),
+            "m.lam".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(split.scope, grammar::VerifyScope::All);
+        let joined = parse_verify_args(&["--scope=all".to_string(), "m.lam".to_string()]).unwrap();
+        assert_eq!(joined.scope, grammar::VerifyScope::All);
+    }
+
+    /// A5: негодная область — отказ, а не молчаливое умолчание.
+    ///
+    /// Иначе `--scope al` проверил бы свой файл и отчитался «все держатся», а
+    /// пользователь считал бы, что импорты тоже проверены.
+    #[test]
+    fn verify_unknown_scope_is_rejected() {
+        let err = parse_verify_args(&["--scope=al".to_string(), "m.lam".to_string()]).unwrap_err();
+        assert!(err.contains("al"), "сообщение: {err}");
+        assert!(
+            err.contains("file"),
+            "подсказать допустимые значения: {err}"
+        );
+    }
+
+    #[test]
+    fn verify_scope_requires_value() {
+        let err = parse_verify_args(&["--scope".to_string()]).unwrap_err();
+        assert!(err.contains("--scope"), "сообщение: {err}");
     }
 }
