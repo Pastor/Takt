@@ -2,7 +2,8 @@
 # Предкоммит-проверка: ссылки в Markdown + fmt + check + clippy + test +
 # формат примеров (lamc fmt --check) +
 # генерация C/PlantUML/ST из примеров Lam + гейт воспроизводимости (фича 0048) +
-# сборка сгенерированного кода.
+# сборка сгенерированного кода (C — cmake/ninja, Rust — cargo + прогон проверок
+# по моделям).
 # Запускать из любого каталога.
 set -euo pipefail
 
@@ -178,6 +179,31 @@ if [ "$rust_failed" -ne 0 ]; then
   echo "  Порождённый Rust не проходит гейт — предкоммит провален (фича 0050)."
   exit 1
 fi
+
+# ГЕЙТ ИСПОЛНЕНИЯ ЦЕЛИ RUST: порождённый автомат обязан не только компилироваться,
+# но и РАБОТАТЬ. Аналог пары «cmake + ninja + запуск stacker» цели `c`.
+#
+# Гейт выше доказывает, что вывод принимают rustc и clippy, — то есть что он
+# СИНТАКСИЧЕСКИ и типово верен. Молча неверную трансляцию (перепутанный
+# приоритет, потерянный переход, не тот операнд) он не ловит: такой код
+# компилируется. Поэтому каждый `main` в `examples/generated/rust/src/bin/`
+# прогоняет свою модель на подставном железе и проверяет наблюдаемое поведение
+# через `assert!` — падение `assert!` валит предкоммит.
+#
+# Крейт НАМЕРЕННО вне workspace репозитория (своя таблица `[workspace]`), потому
+# и вызывается отдельным `--manifest-path`: его содержимое порождается `lamc`, и
+# под `cargo check`/`clippy` корня попадать не должно. По той же причине здесь
+# `build`, а не `clippy`: на `comprehensive.rs` clippy закономерно ругается
+# (известный дефект примера, фича 0030 — см. пропуск в гейте выше), а `rustc`
+# этот пример принимает.
+echo "Гейт исполнения цели rust: сборка Cargo и прогон проверок по моделям..."
+RUST_MANIFEST="$RUST_OUTPUT/Cargo.toml"
+$CARGO_CMD build --quiet --manifest-path "$RUST_MANIFEST" --bins
+for bin_src in "$RUST_OUTPUT"/src/bin/*.rs; do
+  [ -e "$bin_src" ] || continue
+  bin="$(basename "$bin_src" .rs)"
+  $CARGO_CMD run --quiet --manifest-path "$RUST_MANIFEST" --bin "$bin" | sed 's/^/  /'
+done
 
 cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -S $C_OUTPUT -B $C_OUTPUT/cmake-build-debug/
 cd $C_OUTPUT/cmake-build-debug/ && ninja
