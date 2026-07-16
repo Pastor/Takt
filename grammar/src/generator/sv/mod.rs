@@ -35,6 +35,7 @@
 //! `sv_expr` (выражения и функции, `SV-005`).
 
 mod sv_map;
+mod sv_module;
 mod sv_type;
 
 use crate::diagnostics::{Diagnostic, Location};
@@ -42,10 +43,12 @@ use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
 use crate::semantic::ModelNode;
-use crate::semantic::minimap::Element;
+use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
+use std::cell::RefCell;
 use std::fs;
 use std::path::Path;
+use std::rc::Rc;
 use sv_map::SvMap;
 
 /// Размер одного уровня отступа в порождаемом SystemVerilog.
@@ -97,10 +100,7 @@ fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
         .with_code("SV-010"));
     };
     let root_name = map.root_name();
-    // Проверяем наличие корневой модели в снимке здесь же: дальше задачи
-    // 0045-04…06 обходят её содержимое, и отсутствие обязано быть ошибкой, а не
-    // паникой на `unwrap`.
-    map.root_model_node().ok_or_else(|| {
+    let root = map.root_model_node().ok_or_else(|| {
         Diagnostic::error(
             Location::Codegen,
             format!("Корневая модель '{}' отсутствует в снимке карты", root_name),
@@ -108,6 +108,35 @@ fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
         .with_code("SV-010")
     })?;
 
+    // Модуль ОДИН на корневую модель (ADR, Option A′): композиция уплощается,
+    // поэтому порты собираются со всех уровней — в `elevator_mini.lam` они
+    // объявлены внутри под-моделей. Порядок под-моделей задан `BTreeMap` карты
+    // (фича 0048) — детерминизм достаётся даром.
+    let mut blocks: Vec<(Name, Rc<RefCell<ModelNode>>)> = Vec::new();
+    let mut submodels: Vec<Name> = map
+        .using_models()
+        .into_iter()
+        .filter_map(|element| match element {
+            Element::Model { name, .. } => Some(name),
+            _ => None,
+        })
+        .collect();
+    submodels.sort_by(|a, b| a.unique().cmp(b.unique()));
+    for name in submodels {
+        let model = map.raw_model_at(name.clone())?;
+        blocks.push((name, model));
+    }
+    blocks.push((root_name.clone(), root));
+
+    // ⚠️ Порты СОБИРАЮТСЯ, но пока не печатаются, и это не забывчивость.
+    // Объявленный порт, которого никто не читает, даёт `UNUSEDSIGNAL` от
+    // `verilator -Wall` — то есть красный гейт. Читатель порта живёт в теле
+    // автомата (условия рёбер, блоки `always`), а тело — предмет задач 0045-05
+    // и 0045-06. Значит, задача 0045-04 в одиночку зелёной быть не может **в
+    // принципе**: порты и их использование обязаны появиться в выводе одним
+    // шагом. Сбор здесь уже боевой (диагностики `SV-006`/`SV-007`/`SV-012`
+    // работают), печать включается вместе с автоматом.
+    let _ports = sv_module::collect_ports(map, &blocks)?;
     let module = normalize_lowercase_snakecase(root_name.unique().replace(':', "_"));
 
     let mut out = String::new();
@@ -126,15 +155,7 @@ fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
         .nl();
     p.nl();
 
-    p.ident(&format!("module {} (", module)).nl();
-    p.up();
-    p.ident("input  logic clk,   // служебный порт цели sv: в .lam его нет")
-        .nl();
-    p.ident("input  logic rst_n, // служебный порт цели sv: сброс, активный низкий")
-        .nl();
-    p.ident("output logic is_done").nl();
-    p.down();
-    p.ident(");").nl();
+    sv_module::emit_module_header(&mut p, &module, &sv_module::SvPorts::default());
 
     p.up();
     p.ident("typedef enum logic [0:0] {").nl();
