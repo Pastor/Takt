@@ -1,0 +1,179 @@
+//! Функции модели → свободные функции модуля (задача 0050-07).
+//!
+//! Форвард-прототипов, в отличие от цели `c`, **не требуется**: в Rust порядок
+//! объявления функций не значим. Расхождение с C осознанное — фича 0031
+//! заставила C-генератор эмитить прототипы именно потому, что там порядок
+//! значим.
+//!
+//! `extern fn` сюда не попадает: он становится методом трейта `Hal`
+//! (`rust_decl::collect_ports`) — решение (а) задачи 0050-07. Вариант
+//! `extern "C" { fn … }` отвергнут: он потребовал бы `unsafe` в порождаемом
+//! коде и уничтожил бы главную дельту фичи к цели `c` (R10).
+
+use crate::diagnostics::Diagnostic;
+use crate::generator::indent::Printer;
+use crate::generator::rust::rust_expr::{Scope, print_expression, unwrap_outer};
+use crate::generator::rust::rust_map::RustMap;
+use crate::generator::rust::rust_name::rust_value_name;
+use crate::generator::rust::rust_needs::function_needs;
+use crate::generator::rust::rust_stmt::{StmtOutput, print_block, print_statement};
+use crate::generator::rust::rust_type::rust_type;
+use crate::semantic::minimap::Name;
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{FunctionDefinitionNode, ModelNode, StatementNode};
+use std::collections::BTreeSet;
+
+/// Печатает тело функции, заменяя **завершающий** `return x;` на хвостовое `x`.
+///
+/// В Lam возврат всегда явный, в Rust идиома — хвостовое выражение, и clippy
+/// настаивает: `return x;` последним оператором это `needless_return`, то есть
+/// отказ гейта под `-D warnings`.
+///
+/// Заменяется **только последний** оператор: ранние выходы (`if a > b { return
+/// a - b; }` в `abs_diff`) остаются `return`'ами — они и в Rust идиоматичны, и
+/// clippy на них не ругается.
+fn print_body_with_tail(
+    body: &StatementNode,
+    scope: &mut Scope,
+    p: &mut Printer,
+    out: &mut StmtOutput,
+) -> Result<(), Diagnostic> {
+    let StatementNode::Block(items) = body else {
+        return print_statement(body, scope, p, out);
+    };
+    // Тело функции печатается ОБЩИМ печатником блока — иначе оно не получило бы
+    // переноса объявлений с мёртвым инициализатором (`rust_live`), и
+    // `travel_time` в `stacker.lam` остался бы с `needless_late_init`.
+    // Хвостовой `return` заменяется выражением через колбэк.
+    print_block(
+        items,
+        Some(
+            &|stmt: &StatementNode, scope: &mut Scope, p: &mut Printer, _out: &mut StmtOutput| {
+                let StatementNode::Return(Some(expr)) = stmt else {
+                    return Ok(false);
+                };
+                let text = print_expression(expr, scope)?;
+                p.ident(unwrap_outer(&text)).nl();
+                Ok(true)
+            },
+        ),
+        scope,
+        p,
+        out,
+    )
+}
+
+/// Печатает локальные функции всех моделей файла.
+pub(crate) fn emit_functions(
+    p: &mut Printer,
+    map: &RustMap,
+    blocks: &[(Name, std::rc::Rc<std::cell::RefCell<ModelNode>>)],
+    warnings: &mut Vec<Diagnostic>,
+) -> Result<(), Diagnostic> {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for (_, model_rc) in blocks {
+        let model = model_rc.borrow();
+        for def in model.functions.values() {
+            let FunctionDefinitionNode::Local {
+                name,
+                params,
+                ret,
+                body,
+                loc,
+                ..
+            } = def
+            else {
+                continue;
+            };
+            if !map.usage().functions.contains(name) {
+                continue;
+            }
+            let ident = rust_value_name(name, *loc)?;
+            if !seen.insert(ident.clone()) {
+                continue;
+            }
+
+            // Что функции нужно сверх объявленных параметров: HAL (порт /
+            // `extern fn` / `debug`) и читаемые переменные модели. Считается
+            // ТЕМ ЖЕ предикатом, каким `rust_expr::call` строит аргументы, —
+            // разойдись они, порождённый код не собрался бы.
+            let needs = function_needs(def, &model, &mut BTreeSet::new())?;
+
+            let mut signature = Vec::new();
+            for (pname, pty) in params {
+                signature.push(format!(
+                    "{}: {}",
+                    rust_value_name(pname, *loc)?,
+                    rust_type(pty, &format!("параметр '{}' функции '{}'", pname, name))?
+                ));
+            }
+            // Переменные модели — после объявленных параметров и в порядке
+            // `BTreeMap` (детерминизм, фича 0048).
+            for (vname, vty) in &needs.vars {
+                signature.push(format!(
+                    "{}: {}",
+                    rust_value_name(vname, *loc)?,
+                    rust_type(vty, &format!("переменная '{}' в функции '{}'", vname, name))?
+                ));
+            }
+            // HAL идёт ПОСЛЕДНИМ параметром, а не первым. Причина —
+            // заимствования: аргумент нередко сам читает порт
+            // (`travel_time(pos_stack, …)` в `stacker.lam`), и вызов
+            // `f(&mut hal, hal.read_u8(…))` взял бы `hal` изменяемо дважды
+            // (E0499). Аргументы вычисляются слева направо, поэтому чтение
+            // успевает отпустить заимствование до того, как его возьмёт `&mut`.
+            if needs.hal {
+                signature.push("hal: &mut H".to_string());
+            }
+            let generics = if needs.hal { "<H: Hal>" } else { "" };
+            let ret_str = match ret {
+                TypeNode::Unit | TypeNode::Inference => String::new(),
+                other => format!(
+                    " -> {}",
+                    rust_type(other, &format!("возврат функции '{}'", name))?
+                ),
+            };
+
+            // Внутри тела и объявленные параметры, и переменные модели —
+            // обычные локальные имена: `x` печатается как `x`, а не `self.x`.
+            // `self` у свободной функции нет, поэтому `has_self: false` — и это
+            // не ограничение, а следствие: всё нужное уже в параметрах.
+            let mut assigned = BTreeSet::new();
+            crate::generator::rust::rust_stmt::collect_assigned(body, &mut assigned);
+            let mut locals: Vec<String> = params.iter().map(|(pname, _)| pname.clone()).collect();
+            locals.extend(needs.vars.keys().cloned());
+            let mut scope = Scope {
+                model: &model,
+                shared: Vec::new(),
+                locals,
+                assigned,
+                hal: if needs.hal {
+                    "hal".to_string()
+                } else {
+                    String::new()
+                },
+                has_self: false,
+                // Свободная функция получает `hal: &mut H` — уже ссылку.
+                hal_is_ref: needs.hal,
+                instances: Vec::new(),
+            };
+
+            p.ident(&format!("/// Функция '{}' модели.", name)).nl();
+            p.ident(&format!(
+                "fn {}{}({}){} {{",
+                ident,
+                generics,
+                signature.join(", "),
+                ret_str
+            ))
+            .nl();
+            p.up();
+            let mut out = StmtOutput::default();
+            print_body_with_tail(body, &mut scope, p, &mut out)?;
+            warnings.append(&mut out.warnings);
+            p.down();
+            p.ident("}").nl().nl();
+        }
+    }
+    Ok(())
+}

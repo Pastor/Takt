@@ -46,6 +46,7 @@ $LAMC fmt --check examples/ || {
 C_OUTPUT="examples/generated/c"
 PLANTUML_OUTPUT="examples/generated/plantuml"
 ST_OUTPUT="examples/generated/st"
+RUST_OUTPUT="examples/generated/rust"
 
 echo "Генерация C-кода из примеров Lam..."
 for lam_file in examples/*.lam; do
@@ -58,6 +59,12 @@ for lam_file in examples/*.lam; do
   # отвечает ST-011 — это замысел («никакого тихого пропуска»), а не поломка.
   $LAMC compile "$lam_file" -t st -o "$ST_OUTPUT" \
     || echo "    [предупреждение] цель st: $lam_file не транслируется (бэкенд не закончен)"
+  # Цель rust (фича 0050). Отказ не валит предкоммит по той же причине, что и у
+  # st: на непокрытом узле бэкенд ЗАКОНОМЕРНО отвечает RS-0xx — это замысел
+  # («никакого тихого пропуска»), а не поломка. Что именно не покрыто —
+  # перечислено в README, раздел «Генерация Rust».
+  $LAMC compile "$lam_file" -t rust -o "$RUST_OUTPUT" \
+    || echo "    [предупреждение] цель rust: $lam_file не транслируется (бэкенд не закончен)"
 done
 echo "Готово. Файлы в $C_OUTPUT/"
 
@@ -76,7 +83,7 @@ echo "Гейт воспроизводимости: два прогона на к
 repro_failed=0
 for lam_file in examples/*.lam; do
   name="$(basename "$lam_file" .lam)"
-  for spec in "c:" "c-hal:-t c-hal" "plantuml:-t plantuml" "st:-t st" "st-at:-t st-at"; do
+  for spec in "c:" "c-hal:-t c-hal" "plantuml:-t plantuml" "st:-t st" "st-at:-t st-at" "rust:-t rust"; do
     tgt="${spec%%:*}"
     flag="${spec#*:}"
     d1="$(mktemp -d)"
@@ -97,6 +104,78 @@ for lam_file in examples/*.lam; do
 done
 if [ "$repro_failed" -ne 0 ]; then
   echo "  Генерация недетерминирована — предкоммит провален (фича 0048)."
+  exit 1
+fi
+
+# ГЕЙТ ЦЕЛИ RUST (фича 0050, задача 0050-02): порождённый .rs обязан приниматься
+# rustc И clippy. Гейт ЖЁСТКИЙ и мягкого пропуска не имеет: инструменты — уже
+# зависимости проекта (это Rust-репозиторий), ставить нечего. Тем он и дешевле
+# соседей: арбитр ST (`iec2c`) собирается из исходников, арбитр SV требует
+# `brew install verilator yosys`.
+#
+# ПОЧЕМУ ОБЁРТКА, А НЕ ФАЙЛ НАПРЯМУЮ. Порождённый модуль НЕ содержит `#![no_std]`:
+# этот атрибут допустим только в корне крейта, и в файле, подключённом через
+# `mod`, он даёт предупреждение «can only be used at the crate root» — то есть
+# ломал бы сборку пользователя под -D warnings. Поэтому no_std-совместимость
+# проверяется так, как модуль и будет использоваться: он кладётся в корень с
+# `#![no_std]`. Это строже проверки файла в одиночку — обращение к std всплывёт
+# именно здесь.
+#
+# ПОЛИТИКА ЛИНТОВ (R9, решение варианта (а) задачи 0050-02): `-D warnings`.
+# Пробы 2026-07-16: калька с C гейт НЕ проходит (`dead_code` на вариантах,
+# которые C эмитит всегда, а модель не конструирует). Выбрано «не эмитить
+# недостижимое», а не `#[allow]`: сторож должен остаться живым. Приватность
+# перечислений состояний — часть этого решения (у `pub enum` dead_code не
+# срабатывает вовсе, то есть публичность = глушение линта видимостью).
+echo "Гейт цели rust: rustc + clippy по порождённым .rs..."
+rust_failed=0
+rust_gate_dir="$(mktemp -d)"
+for rs_file in "$RUST_OUTPUT"/*.rs; do
+  [ -e "$rs_file" ] || continue
+  name="$(basename "$rs_file" .rs)"
+  # Известно-дефектный пример: `temperature <= 0` при `temperature : u8` —
+  # clippy::absurd_extreme_comparisons прав, на беззнаковом это может значить
+  # только `== 0`. Дефект в САМОМ ПРИМЕРЕ, а не в трансляции (C проглатывает его
+  # молча), и принадлежит фиче 0030 «Исправление примера comprehensive.lam».
+  # Пропуск объявлен ГРОМКО: молчаливый пропуск читался бы как «покрыто».
+  if [ "$name" = "comprehensive" ]; then
+    echo "  [пропуск] $name — известный дефект примера (фича 0030):"
+    echo "            clippy::absurd_extreme_comparisons на 'temperature <= 0' (u8)"
+    continue
+  fi
+  wrapper="$rust_gate_dir/gate_${name}.rs"
+  {
+    echo "#![no_std]"
+    echo "#[path = \"$(cd "$(dirname "$rs_file")" && pwd)/${name}.rs\"]"
+    echo "pub mod generated;"
+  } > "$wrapper"
+  if rustc --edition 2021 --crate-type=lib -D warnings "$wrapper" \
+      --out-dir "$rust_gate_dir/out" 2>"$rust_gate_dir/${name}.rustc"; then
+    echo "  $name → rustc принял"
+  else
+    echo "  $name → rustc ОТВЕРГ:"
+    sed 's/^/    /' "$rust_gate_dir/${name}.rustc" | head -12
+    rust_failed=1
+  fi
+  if clippy-driver --edition 2021 --crate-type=lib -D warnings "$wrapper" \
+      --out-dir "$rust_gate_dir/out" 2>"$rust_gate_dir/${name}.clippy"; then
+    echo "  $name → clippy принял"
+  else
+    echo "  $name → clippy ОТВЕРГ:"
+    sed 's/^/    /' "$rust_gate_dir/${name}.clippy" | head -12
+    rust_failed=1
+  fi
+done
+# A12/R10: unsafe в порождаемом коде отсутствует. Проверка дублирует
+# `#![forbid(unsafe_code)]` в шапке модуля НАМЕРЕННО: атрибут ловит `unsafe` в
+# коде, а grep — ещё и попытку убрать сам атрибут.
+if grep -rn "unsafe" "$RUST_OUTPUT"/*.rs 2>/dev/null | grep -v "forbid(unsafe_code)" ; then
+  echo "  В порождённом Rust найден unsafe — предкоммит провален (A12, фича 0050)."
+  rust_failed=1
+fi
+rm -rf "$rust_gate_dir"
+if [ "$rust_failed" -ne 0 ]; then
+  echo "  Порождённый Rust не проходит гейт — предкоммит провален (фича 0050)."
   exit 1
 fi
 

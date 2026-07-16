@@ -1,0 +1,184 @@
+//! Порты Lam → HAL-трейт Rust (задача 0050-05).
+//!
+//! ## Чем это отличается от цели `c`
+//!
+//! Цель `c` описывает порты парой указателей на функции плюс `void *userdata`
+//! (`examples/generated/c/elevator_mini.h`):
+//!
+//! ```c
+//! void  (*write_bit)(ElevatorMini_Out_BitPort port, bool val, void *userdata);
+//! bool  (*read_bit )(ElevatorMini_In_BitPort port, void *userdata);
+//! void  *userdata;
+//! ```
+//!
+//! Плата: тип `userdata` стёрт — за корректность приведения отвечает
+//! пользователь; забыть проставить указатель = вызов по нулевому адресу.
+//!
+//! Здесь то же самое выражено трейтом:
+//!
+//! ```rust,ignore
+//! pub trait Hal {
+//!     fn read_bit(&mut self, port: InBitPort) -> bool;
+//!     fn write_bit(&mut self, port: OutBitPort, value: bool);
+//! }
+//! ```
+//!
+//! `userdata` **исчезает как понятие**: состояние HAL живёт в самом `H`,
+//! типобезопасно, а конструктор требует `hal` — «забыть колбэк» невозможно by
+//! construction.
+//!
+//! Карта адресов ([0020](../../../../docs/features/0020-port-address-decl.md))
+//! здесь **не потребляется**: это аналог режима `c`, а не `c-hal`. MMIO-режим
+//! (`rust-hal`) — кандидат в расширения.
+
+use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::rust::rust_type::rust_type;
+use crate::semantic::type_node::TypeNode;
+
+/// Категория порта — задаёт имя перечисления и пару методов трейта.
+///
+/// Категория выводится из типа порта, поэтому состав трейта определяется
+/// **фактическим набором портов модели**: модель с одними битовыми портами
+/// получает трейт из двух методов, а не «на все случаи жизни».
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct PortClass {
+    /// Суффикс имён (`Bit` → `InBitPort`/`OutBitPort`, `read_bit`/`write_bit`).
+    tag: String,
+    /// Тип значения порта в Rust (`bool`, `u8`, `f64`).
+    value_type: String,
+}
+
+impl PortClass {
+    /// Имя перечисления входных портов этой категории.
+    pub(crate) fn in_enum(&self) -> String {
+        format!("In{}Port", self.tag)
+    }
+
+    /// Имя перечисления выходных портов этой категории.
+    pub(crate) fn out_enum(&self) -> String {
+        format!("Out{}Port", self.tag)
+    }
+
+    /// Имя метода чтения (`read_bit`).
+    pub(crate) fn read_fn(&self) -> String {
+        format!("read_{}", self.tag.to_lowercase())
+    }
+
+    /// Имя метода записи (`write_bit`).
+    pub(crate) fn write_fn(&self) -> String {
+        format!("write_{}", self.tag.to_lowercase())
+    }
+
+    /// Тип значения порта в Rust.
+    pub(crate) fn value_type(&self) -> &str {
+        &self.value_type
+    }
+}
+
+/// Определяет категорию порта по его типу.
+///
+/// # Ошибки
+/// [`RS-016`], если тип порта не ложится на метод трейта. Составные типы
+/// (массив, перечисление, структура) портами быть не могут: HAL — это граница с
+/// железом, где значение либо бит, либо число. Диагностика, а не тихий пропуск.
+pub(crate) fn port_class(
+    ty: &TypeNode,
+    port: &str,
+    loc: Location,
+) -> Result<PortClass, Diagnostic> {
+    match ty {
+        // `bit` и `bool` — одна категория: оба дают `bool` (в цели `c` — `int`,
+        // дефект 0029).
+        TypeNode::Bit | TypeNode::Bool => Ok(PortClass {
+            tag: "Bit".to_string(),
+            value_type: "bool".to_string(),
+        }),
+        TypeNode::Rational => Ok(PortClass {
+            tag: "F64".to_string(),
+            value_type: "f64".to_string(),
+        }),
+        TypeNode::Integer { bits, signed } => {
+            let value_type = rust_type(ty, &format!("порт '{}'", port))?;
+            Ok(PortClass {
+                tag: format!("{}{}", if *signed { "I" } else { "U" }, bits),
+                value_type,
+            })
+        }
+        other => Err(Diagnostic::error(
+            loc,
+            format!(
+                "Порт '{}' имеет тип '{}', непредставимый в HAL-трейте: \
+                 порт обязан быть битом или числом. Замените тип порта либо \
+                 перенесите значение в переменную модели",
+                port, other
+            ),
+        )
+        .with_code("RS-016")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn loc() -> Location {
+        Location::Codegen
+    }
+
+    /// Битовый порт даёт категорию `Bit`: `read_bit`/`write_bit`, значение `bool`.
+    #[test]
+    fn bit_port_gives_bit_class() {
+        let class = port_class(&TypeNode::Bit, "P", loc()).unwrap();
+        assert_eq!(class.in_enum(), "InBitPort");
+        assert_eq!(class.out_enum(), "OutBitPort");
+        assert_eq!(class.read_fn(), "read_bit");
+        assert_eq!(class.write_fn(), "write_bit");
+        assert_eq!(class.value_type(), "bool");
+    }
+
+    /// `bool`-порт неотличим от `bit`-порта: обе категории дают `bool`.
+    #[test]
+    fn bool_port_shares_bit_class() {
+        let a = port_class(&TypeNode::Bit, "P", loc()).unwrap();
+        let b = port_class(&TypeNode::Bool, "P", loc()).unwrap();
+        assert_eq!(a, b);
+    }
+
+    /// Числовой порт даёт категорию по своему типу.
+    #[test]
+    fn integer_port_gives_typed_class() {
+        let class = port_class(
+            &TypeNode::Integer {
+                bits: 8,
+                signed: false,
+            },
+            "P",
+            loc(),
+        )
+        .unwrap();
+        assert_eq!(class.in_enum(), "InU8Port");
+        assert_eq!(class.read_fn(), "read_u8");
+        assert_eq!(class.value_type(), "u8");
+    }
+
+    /// Вещественный порт даёт `f64` — как в симуляторе.
+    #[test]
+    fn rational_port_gives_f64_class() {
+        let class = port_class(&TypeNode::Rational, "P", loc()).unwrap();
+        assert_eq!(class.read_fn(), "read_f64");
+        assert_eq!(class.value_type(), "f64");
+    }
+
+    /// **Контрпример:** составной тип порта даёт `RS-016`, а не тихий пропуск.
+    #[test]
+    fn composite_port_type_is_rs016() {
+        let ty = TypeNode::Array(4, Box::new(TypeNode::Bit));
+        let err = port_class(&ty, "DATA", loc()).unwrap_err();
+        assert_eq!(err.code.as_deref(), Some("RS-016"));
+        assert!(
+            err.message.contains("DATA"),
+            "диагностика должна называть порт: {}",
+            err.message
+        );
+    }
+}

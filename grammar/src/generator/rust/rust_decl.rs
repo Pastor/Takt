@@ -1,0 +1,402 @@
+//! Объявления порождаемого модуля: перечисления, константы, порты, HAL-трейт,
+//! `struct` моделей (задачи 0050-03, 0050-05).
+
+use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::indent::Printer;
+use crate::generator::rust::rust_expr::{Scope, const_name, print_expression};
+use crate::generator::rust::rust_map::RustMap;
+use crate::generator::rust::rust_name::{check_name_collisions, rust_type_name, rust_value_name};
+use crate::generator::rust::rust_port::{PortClass, port_class};
+use crate::generator::rust::rust_type::{enum_repr, rust_type};
+use crate::semantic::minimap::Name;
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ModelNode, PortDirection, VariableNode};
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Один порт модели, подготовленный к эмиссии.
+///
+/// Категория и направление в поля не кладутся: порт уже разложен по нужному
+/// перечислению [`PortSet`], то есть они выражены **местом** записи, а не
+/// значением. Дублировать их полями значило бы завести второй источник истины.
+pub(crate) struct Port {
+    /// Исходное имя порта (ключ в `usage`).
+    pub(crate) raw: String,
+    /// Имя варианта перечисления (CamelCase).
+    pub(crate) variant: String,
+}
+
+/// Сводка портов всех моделей файла: состав перечислений и трейта.
+#[derive(Default)]
+pub(crate) struct PortSet {
+    /// Входные порты по категориям.
+    pub(crate) inputs: BTreeMap<String, Vec<Port>>,
+    /// Выходные порты по категориям.
+    pub(crate) outputs: BTreeMap<String, Vec<Port>>,
+    /// Категории, встретившиеся хоть раз (для состава трейта).
+    pub(crate) classes: BTreeMap<String, PortClass>,
+    /// Требуется ли метод `debug` (встроенная функция в профиле `no_std`).
+    pub(crate) needs_debug: bool,
+    /// Внешние функции (`extern fn`) → методы трейта.
+    pub(crate) externals: BTreeMap<String, String>,
+}
+
+impl PortSet {
+    /// Пуст ли трейт: нет ни портов, ни `debug`, ни `extern fn`.
+    ///
+    /// Модель без портов **не эмитит ни трейта, ни параметра типа `H`**. Это не
+    /// косметика: проба 2026-07-16 показала, что `struct M<H: Hal> { hal: H }` с
+    /// нечитаемым `hal` валит `-D warnings` («field `hal` is never read»).
+    /// Ограничивает эмиссию не «неиспользуемый параметр типа», а `dead_code` на
+    /// поле — ещё один случай общего правила R9.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.inputs.is_empty()
+            && self.outputs.is_empty()
+            && !self.needs_debug
+            && self.externals.is_empty()
+    }
+}
+
+/// Собирает порты всех моделей файла в единую сводку.
+///
+/// Порты собираются со **всех** моделей, а не только с корня: в
+/// `elevator_mini.lam` они объявлены внутри под-моделей (`out
+/// ElevatorMotor_Up: bit;` в `Motor`). Перечисления портов — общие для файла,
+/// как и в цели `c`.
+pub(crate) fn collect_ports(
+    map: &RustMap,
+    blocks: &[(Name, std::rc::Rc<std::cell::RefCell<ModelNode>>)],
+) -> Result<PortSet, Diagnostic> {
+    let mut set = PortSet::default();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for (_, model_rc) in blocks {
+        let model = model_rc.borrow();
+        for (raw, var) in &model.variables {
+            let VariableNode::Port {
+                name,
+                ty,
+                direction,
+                loc,
+                ..
+            } = var
+            else {
+                continue;
+            };
+            if !map.usage().ports.contains(name) || !seen.insert(name.clone()) {
+                continue;
+            }
+            let class = port_class(ty, name, *loc)?;
+            let port = Port {
+                raw: raw.clone(),
+                variant: rust_type_name(name, *loc)?,
+            };
+            set.classes.insert(class.in_enum(), class.clone());
+            match direction {
+                PortDirection::In => set.inputs.entry(class.in_enum()).or_default().push(port),
+                PortDirection::Out => set.outputs.entry(class.out_enum()).or_default().push(port),
+                // `inout` поддержан: в Rust он ложится на ПАРУ методов трейта без
+                // натяжки — порт попадает и во входное, и в выходное
+                // перечисление. Цель `sv` его запретила (`SV-006`), но там
+                // причина физическая: двунаправленной линии нужен сигнал `oe`,
+                // которого Lam не выражает. Здесь такой причины нет, поэтому
+                // запрещать нечего — а тихо игнорировать нельзя (фича 0032
+                // показала, что `inout` — реальный сценарий).
+                PortDirection::InOut => {
+                    set.inputs.entry(class.in_enum()).or_default().push(Port {
+                        raw: raw.clone(),
+                        variant: rust_type_name(name, *loc)?,
+                    });
+                    set.outputs.entry(class.out_enum()).or_default().push(port);
+                }
+            }
+        }
+        // `extern fn` → метод HAL (решение (а) задачи 0050-07): единообразно с
+        // портами, типобезопасно и БЕЗ `unsafe`. Вариант `extern "C"` отвергнут
+        // именно потому, что внёс бы `unsafe` в порождаемый код и тем самым
+        // уничтожил бы главную дельту фичи к цели `c` (R10).
+        for def in model.functions.values() {
+            if let crate::semantic::FunctionDefinitionNode::External {
+                name,
+                params,
+                ret,
+                loc,
+                ..
+            } = def
+            {
+                let mut signature = String::new();
+                for (pname, pty) in params {
+                    signature.push_str(&format!(
+                        ", {}: {}",
+                        rust_value_name(pname, *loc)?,
+                        rust_type(
+                            pty,
+                            &format!("параметр '{}' внешней функции '{}'", pname, name)
+                        )?
+                    ));
+                }
+                let ret_str = match ret {
+                    TypeNode::Unit => String::new(),
+                    other => format!(
+                        " -> {}",
+                        rust_type(other, &format!("возврат внешней функции '{}'", name))?
+                    ),
+                };
+                set.externals.insert(
+                    rust_value_name(name, *loc)?,
+                    format!("(&mut self{}){}", signature, ret_str),
+                );
+            }
+        }
+    }
+    Ok(set)
+}
+
+/// Печатает перечисления портов и трейт `Hal`.
+pub(crate) fn emit_hal(p: &mut Printer, set: &PortSet) -> Result<(), Diagnostic> {
+    if set.is_empty() {
+        return Ok(());
+    }
+
+    // Перечисления портов ПУБЛИЧНЫ: они стоят в сигнатуре публичного трейта, и
+    // приватными быть не могут (`private_interfaces`).
+    for (enum_name, ports) in set.inputs.iter().chain(set.outputs.iter()) {
+        let names: Vec<(String, String)> = ports
+            .iter()
+            .map(|port| (port.raw.clone(), port.variant.clone()))
+            .collect();
+        check_name_collisions(
+            &names,
+            &format!("порты перечисления {}", enum_name),
+            Location::Codegen,
+        )?;
+
+        p.ident("/// Порт ввода-вывода модели. Реализация — за трейтом [`Hal`].")
+            .nl();
+        p.ident("#[derive(Debug, Clone, Copy, PartialEq, Eq)]").nl();
+        p.ident(&format!("pub enum {} {{", enum_name)).nl();
+        p.up();
+        for port in ports {
+            p.ident(&format!("{},", port.variant)).nl();
+        }
+        p.down();
+        p.ident("}").nl().nl();
+    }
+
+    p.ident("/// Аппаратный слой модели.").nl();
+    p.ident("///").nl();
+    p.ident("/// Заменяет пару указателей на функции и `void *userdata` цели `c`:")
+        .nl();
+    p.ident("/// состояние слоя живёт в самом типе-реализации, поэтому привести")
+        .nl();
+    p.ident("/// его не к тому типу или забыть проставить колбэк невозможно.")
+        .nl();
+    p.ident("pub trait Hal {").nl();
+    p.up();
+    for enum_name in set.inputs.keys() {
+        let class = &set.classes[enum_name];
+        p.ident("/// Читает входной порт `port`.").nl();
+        p.ident(&format!(
+            "fn {}(&mut self, port: {}) -> {};",
+            class.read_fn(),
+            class.in_enum(),
+            class.value_type()
+        ))
+        .nl();
+    }
+    for enum_name in set.outputs.keys() {
+        let class = set
+            .classes
+            .values()
+            .find(|c| &c.out_enum() == enum_name)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    Location::Codegen,
+                    format!("Категория порта для '{}' не найдена", enum_name),
+                )
+                .with_code("RS-012")
+            })?;
+        p.ident("/// Пишет `value` в выходной порт `port`.").nl();
+        p.ident(&format!(
+            "fn {}(&mut self, port: {}, value: {});",
+            class.write_fn(),
+            class.out_enum(),
+            class.value_type()
+        ))
+        .nl();
+    }
+    if set.needs_debug {
+        p.ident("/// Принимает отладочное сообщение встроенной функции `debug`.")
+            .nl();
+        p.ident("///").nl();
+        p.ident("/// В профиле `no_std` printf нет, но `no_std` не означает «без")
+            .nl();
+        p.ident("/// вывода» — он означает «вывод решает пользователь».")
+            .nl();
+        p.ident("fn debug(&mut self, message: &str);").nl();
+    }
+    for (name, signature) in &set.externals {
+        p.ident("/// Внешняя функция модели (`extern fn` в исходнике .lam).")
+            .nl();
+        p.ident(&format!("fn {}{};", name, signature)).nl();
+    }
+    p.down();
+    p.ident("}").nl().nl();
+    Ok(())
+}
+
+/// Печатает пользовательские перечисления модели.
+///
+/// Перечисления **публичны**: их варианты объявил автор `.lam`, они —
+/// экспортируемый словарь модуля (цель `c` раскрывает их как `#define`).
+/// Публичность здесь не глушит `dead_code`, а честно отражает, что вариант
+/// существует по воле автора, а не по решению генератора. Перечисления
+/// состояний, наоборот, приватны — их придумывает генератор, и там `dead_code`
+/// остаётся сторожем (см. `rust_model`).
+pub(crate) fn emit_enums(
+    p: &mut Printer,
+    blocks: &[(Name, std::rc::Rc<std::cell::RefCell<ModelNode>>)],
+) -> Result<(), Diagnostic> {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for (_, model_rc) in blocks {
+        let model = model_rc.borrow();
+        for def in model.enums.values() {
+            let name = rust_type_name(&def.name, def.loc)?;
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            let variants: Vec<(String, String)> = def
+                .variants
+                .iter()
+                .map(|(v, _)| Ok((v.clone(), rust_type_name(v, def.loc)?)))
+                .collect::<Result<Vec<_>, Diagnostic>>()?;
+            check_name_collisions(
+                &variants,
+                &format!("варианты перечисления '{}'", def.name),
+                def.loc,
+            )?;
+
+            // Разрядность — ПО ДИАПАЗОНУ вариантов. `#[repr(u8)]` по умолчанию
+            // отверг бы `Idle = 670` из `elevator.lam:121` (проба 2026-07-16).
+            p.ident(&format!("/// Перечисление '{}' модели.", def.name))
+                .nl();
+            p.ident("#[derive(Debug, Clone, Copy, PartialEq, Eq)]").nl();
+            p.ident(&format!("#[repr({})]", enum_repr(&def.variants)))
+                .nl();
+            p.ident(&format!("pub enum {} {{", name)).nl();
+            p.up();
+            for ((_, value), (_, variant)) in def.variants.iter().zip(variants.iter()) {
+                p.ident(&format!("{} = {},", variant, value)).nl();
+            }
+            p.down();
+            p.ident("}").nl().nl();
+        }
+    }
+    Ok(())
+}
+
+/// Печатает константы уровня модуля.
+pub(crate) fn emit_constants(
+    p: &mut Printer,
+    map: &RustMap,
+    blocks: &[(Name, std::rc::Rc<std::cell::RefCell<ModelNode>>)],
+) -> Result<(), Diagnostic> {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for (_, model_rc) in blocks {
+        let model = model_rc.borrow();
+        let scope = Scope {
+            model: &model,
+            shared: Vec::new(),
+            locals: Vec::new(),
+            assigned: BTreeSet::new(),
+            hal: String::new(),
+            has_self: false,
+            hal_is_ref: false,
+            instances: Vec::new(),
+        };
+        for var in model.variables.values() {
+            let VariableNode::Const {
+                name,
+                ty,
+                expr,
+                loc,
+                ..
+            } = var
+            else {
+                continue;
+            };
+            if !map.usage().constants.contains(name) {
+                continue;
+            }
+            let ident = const_name(name, *loc)?;
+            if !seen.insert(ident.clone()) {
+                continue;
+            }
+            let ty_name = rust_type(ty, &format!("константа '{}'", name))?;
+            let value = print_expression(expr, &scope)?;
+            p.ident(&format!("const {}: {} = {};", ident, ty_name, value))
+                .nl();
+        }
+    }
+    if !seen.is_empty() {
+        p.nl();
+    }
+    Ok(())
+}
+
+/// Значение поля по умолчанию — когда инициализатора в `.lam` нет.
+///
+/// Rust требует инициализировать **каждое** поле в конструкторе, поэтому
+/// умолчание обязано существовать для любого представимого типа.
+pub(crate) fn default_value(ty: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic> {
+    match ty {
+        TypeNode::Bit | TypeNode::Bool => Ok("false".to_string()),
+        TypeNode::Rational => Ok("0.0".to_string()),
+        TypeNode::Integer { .. } => Ok("0".to_string()),
+        TypeNode::Array(n, elem) => Ok(format!("[{}; {}]", default_value(elem, model)?, n)),
+        // Умолчание перечисления — его ПЕРВЫЙ вариант. Нуля у перечисления может
+        // не быть вовсе (`enum Action { Idle = 670 }`), поэтому `0 as Action`
+        // было бы невалидным значением, а не умолчанием.
+        TypeNode::Enum(name) => {
+            let def = model.search_enum(name).ok_or_else(|| {
+                Diagnostic::error(
+                    Location::Codegen,
+                    format!("Перечисление '{}' не найдено", name),
+                )
+                .with_code("RS-012")
+            })?;
+            let first = def.variants.first().ok_or_else(|| {
+                Diagnostic::error(
+                    def.loc,
+                    format!("Перечисление '{}' не имеет вариантов", name),
+                )
+                .with_code("RS-014")
+            })?;
+            Ok(format!(
+                "{}::{}",
+                rust_type_name(name, def.loc)?,
+                rust_type_name(&first.0, def.loc)?
+            ))
+        }
+        other => Err(Diagnostic::error(
+            Location::Codegen,
+            format!("Значение по умолчанию для типа '{}' не строится", other),
+        )
+        .with_code("RS-014")),
+    }
+}
+
+/// Возвращает переменные модели, попадающие в её `struct` (в порядке `BTreeMap`).
+///
+/// Фильтр по фактическому использованию — как в цели `c`. Но если там это
+/// оптимизация, то здесь **условие прохождения гейта**: приватное поле, которое
+/// никто не читает, валит `-D warnings` («field is never read»).
+pub(crate) fn model_fields<'a>(
+    model: &'a ModelNode,
+    map: &RustMap,
+) -> Vec<(&'a String, &'a VariableNode)> {
+    model
+        .variables
+        .iter()
+        .filter(|(_, var)| matches!(var, VariableNode::Simple { .. }))
+        .filter(|(_, var)| map.usage().variables.contains(var.name()))
+        .collect()
+}
