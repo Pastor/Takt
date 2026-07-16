@@ -60,6 +60,16 @@ fn to_nnf(formula: &Ltl) -> Rc<Ltl> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 struct GbaNode {
+    /// Формулы, **разобранные** в этом узле: литералы (ограничения на букву) и
+    /// разложенные подформулы (`Until`, `And`, …).
+    ///
+    /// ⚠ Нелитеральные формулы здесь обязательны, а не декоративны: условие
+    /// принятия (`build_buchi`) спрашивает `old.contains(Until(..))` — держит ли
+    /// узел невыполненное обязательство. Если складывать в `old` одни литералы,
+    /// условие прогресса вырождается в тождественную истину, счётчик
+    /// дегенерализации растёт на каждом шаге, и **любой** бесконечный прогон
+    /// становится принимающим: автомат `F p` принимает слово, где `p` не
+    /// наступает никогда (фикс 0010-01).
     old: BTreeSet<Rc<Ltl>>,
     next: BTreeSet<Rc<Ltl>>,
 }
@@ -83,25 +93,32 @@ pub struct BuchiAutomaton {
 impl BuchiAutomaton {
     /// Выводит структуру автомата в стандартный поток (для отладки).
     pub fn print(&self) {
-        println!("=== Автомат Бюхи (GPVW) ===");
-        println!("Начальные состояния: {:?}", self.initial_states);
-        println!("Принимающие состояния: {:?}", self.accepting);
+        println!("{}", self.dump());
+    }
+
+    /// Текстовый дамп автомата для отладки (`lamc verify --trace`).
+    ///
+    /// Печатаются только литералы состояния — ограничения на букву; прочие
+    /// формулы `states[i]` суть темпоральные обязательства (см. [`GbaNode::old`]).
+    pub fn dump(&self) -> String {
+        let mut out = String::from("=== Автомат Бюхи (GPVW) ===\n");
+        out.push_str(&format!(
+            "Начальные состояния: {:?}\nПринимающие состояния: {:?}\n",
+            self.initial_states, self.accepting
+        ));
         for i in 0..self.states.len() {
-            print!("s{} : {{ ", i);
-            for f in &self.states[i] {
-                if matches!(f.as_ref(), Ltl::Atom(_) | Ltl::Not(_)) {
-                    print!("{} ", f);
-                }
-            }
-            println!("}}");
+            let literals: Vec<String> = self.states[i]
+                .iter()
+                .filter(|f| matches!(f.as_ref(), Ltl::Atom(_) | Ltl::Not(_)))
+                .map(|f| f.to_string())
+                .collect();
+            out.push_str(&format!("s{} : {{ {} }}\n", i, literals.join(" ")));
             if let Some(tos) = self.transitions.get(&i) {
-                print!("  переходы -> ");
-                for &to in tos {
-                    print!("s{} ", to);
-                }
-                println!();
+                let targets: Vec<String> = tos.iter().map(|&to| format!("s{}", to)).collect();
+                out.push_str(&format!("  переходы -> {}\n", targets.join(" ")));
             }
         }
+        out
     }
 }
 
@@ -126,6 +143,16 @@ fn collect_until(f: &Ltl, set: &mut BTreeSet<Rc<Ltl>>) {
 }
 
 type NodeMap = BTreeMap<(BTreeSet<Rc<Ltl>>, BTreeSet<Rc<Ltl>>), usize>;
+
+/// Добавляет подформулу в `New`, если её ещё нет в `Old` (GPVW: `New ∪ ({η'} \ Old)`).
+///
+/// Фильтр по `Old` — не оптимизация, а часть алгоритма: без него формула,
+/// уже разобранная в этом узле, разбиралась бы повторно.
+fn push_new(new: &mut BTreeSet<Rc<Ltl>>, old: &BTreeSet<Rc<Ltl>>, f: &Rc<Ltl>) {
+    if !old.contains(f) {
+        new.insert(f.clone());
+    }
+}
 
 #[allow(clippy::too_many_arguments)]
 fn expand(
@@ -209,8 +236,9 @@ fn expand(
                 );
             }
             Ltl::And(f1, f2) => {
-                new.insert(f1.clone());
-                new.insert(f2.clone());
+                push_new(&mut new, &old, f1);
+                push_new(&mut new, &old, f2);
+                old.insert(f.clone());
                 expand(
                     new,
                     old,
@@ -224,10 +252,12 @@ fn expand(
             }
             Ltl::Or(f1, f2) => {
                 let mut new1 = new.clone();
-                new1.insert(f1.clone());
+                let mut old1 = old.clone();
+                push_new(&mut new1, &old1, f1);
+                old1.insert(f.clone());
                 expand(
                     new1,
-                    old.clone(),
+                    old1,
                     next.clone(),
                     incoming.clone(),
                     nodes,
@@ -235,7 +265,8 @@ fn expand(
                     transitions,
                     initial_nodes,
                 );
-                new.insert(f2.clone());
+                push_new(&mut new, &old, f2);
+                old.insert(f.clone());
                 expand(
                     new,
                     old,
@@ -249,6 +280,7 @@ fn expand(
             }
             Ltl::Next(f1) => {
                 next.insert(f1.clone());
+                old.insert(f.clone());
                 expand(
                     new,
                     old,
@@ -262,10 +294,12 @@ fn expand(
             }
             Ltl::Until(f1, f2) => {
                 let mut new1 = new.clone();
-                new1.insert(f2.clone());
+                let mut old1 = old.clone();
+                push_new(&mut new1, &old1, f2);
+                old1.insert(f.clone());
                 expand(
                     new1,
-                    old.clone(),
+                    old1,
                     next.clone(),
                     incoming.clone(),
                     nodes,
@@ -273,7 +307,8 @@ fn expand(
                     transitions,
                     initial_nodes,
                 );
-                new.insert(f1.clone());
+                push_new(&mut new, &old, f1);
+                old.insert(f.clone());
                 next.insert(f.clone());
                 expand(
                     new,
@@ -288,11 +323,13 @@ fn expand(
             }
             Ltl::Release(f1, f2) => {
                 let mut new1 = new.clone();
-                new1.insert(f1.clone());
-                new1.insert(f2.clone());
+                let mut old1 = old.clone();
+                push_new(&mut new1, &old1, f1);
+                push_new(&mut new1, &old1, f2);
+                old1.insert(f.clone());
                 expand(
                     new1,
-                    old.clone(),
+                    old1,
                     next.clone(),
                     incoming.clone(),
                     nodes,
@@ -300,7 +337,8 @@ fn expand(
                     transitions,
                     initial_nodes,
                 );
-                new.insert(f2.clone());
+                push_new(&mut new, &old, f2);
+                old.insert(f.clone());
                 next.insert(f.clone());
                 expand(
                     new,

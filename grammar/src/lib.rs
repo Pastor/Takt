@@ -478,6 +478,207 @@ pub fn ltl_warnings(
     semantic::ltl_check::ltl_warnings(model)
 }
 
+/// Фича 0049: проверяет LTL-свойство модели методом model checking.
+///
+/// Атом формулы — **имя состояния** FSM (абстракция управляющего графа, ADR
+/// 0049): `S` истинен, когда автомат в состоянии `S`. Проверяемы свойства
+/// управления — достижимость (`F Done`), порядок состояний и живость
+/// (`G(Fault -> F Idle)`). Свойства над данными (`G(temp <= 100)`) в этой
+/// абстракции невыразимы и дают [`Verdict::Unsupported`] — не молчаливое
+/// «ложно».
+///
+/// Условия переходов абстрагированы (любой `ref` — возможный переход), поэтому
+/// [`Verdict::Holds`] надёжен, а [`Verdict::Violated`] может оказаться ложным
+/// срабатыванием (контрпример недостижим по данным).
+///
+/// # Пример
+///
+/// ```
+/// use grammar::parse;
+/// use grammar::semantic::tree::construct_model;
+/// use grammar::verification::ltl::Ltl;
+/// use grammar::verification::verify::Verdict;
+/// use std::rc::Rc;
+///
+/// let (ast, _) = parse("start Idle { ref Fault; } state Fault { ref Fault; }", 0).unwrap();
+/// let model = construct_model(&ast, None, &[]).unwrap();
+///
+/// // G(Fault -> F Idle): «после сбоя система обязана вернуться в Idle».
+/// let phi = Ltl::Globally(Rc::new(Ltl::Implies(
+///     Rc::new(Ltl::Atom("Fault".to_string())),
+///     Rc::new(Ltl::Finally(Rc::new(Ltl::Atom("Idle".to_string())))),
+/// )));
+/// // Нарушено: из Fault нет пути назад — автомат залипает в нём навсегда.
+/// assert!(matches!(grammar::verify_model(model, &phi), Verdict::Violated(_)));
+/// ```
+pub fn verify_model(
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+    phi: &verification::ltl::Ltl,
+) -> verification::verify::Verdict {
+    verification::verify::verify_model(&model.borrow(), phi)
+}
+
+/// Фича 0049: результат проверки одной LTL-формулы модели.
+#[derive(Debug, Clone)]
+pub struct PropertyResult {
+    /// Имя модели, в которой объявлена формула (пустое — анонимный корень).
+    pub model: String,
+    /// Проверенная формула.
+    pub formula: verification::ltl::Ltl,
+    /// Позиция объявления формулы в исходном тексте.
+    pub loc: diagnostics::Location,
+    /// Вердикт проверки.
+    pub verdict: verification::verify::Verdict,
+    /// Дамп конвейера для отладки (Крипке, автомат `¬φ`, произведение).
+    ///
+    /// Заполняется только при `trace = true` в [`verify_all_traced`]: дамп
+    /// стоит памяти и обычному потребителю не нужен.
+    pub trace: Option<String>,
+}
+
+/// Фича 0049: проверяет **все** LTL-формулы модели и её вложенных моделей.
+///
+/// Формулы вложенной модели говорят о состояниях **своей** модели, поэтому
+/// каждая проверяется против графа той модели, где объявлена, — а не против
+/// корневой.
+///
+/// Порядок результатов детерминирован (обход `BTreeMap` моделей — гейт 0048).
+pub fn verify_all(
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+) -> Vec<PropertyResult> {
+    verify_all_traced(model, false)
+}
+
+/// Фича 0049: то же, что [`verify_all`], но при `trace = true` заполняет
+/// [`PropertyResult::trace`] дампом конвейера (`lamc verify --trace`).
+pub fn verify_all_traced(
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+    trace: bool,
+) -> Vec<PropertyResult> {
+    let mut out = Vec::new();
+    verify_all_inner(&model, trace, &mut out);
+    out
+}
+
+fn verify_all_inner(
+    model: &std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+    trace: bool,
+    out: &mut Vec<PropertyResult>,
+) {
+    let borrowed = model.borrow();
+    let name = borrowed.name().to_string();
+    for (formula, loc) in semantic::ltl_check::model_ltl_formulas(&borrowed) {
+        let (verdict, dump) = if trace {
+            let (v, t) = verification::verify::verify_model_traced(&borrowed, &formula);
+            (v, Some(t))
+        } else {
+            (
+                verification::verify::verify_model(&borrowed, &formula),
+                None,
+            )
+        };
+        out.push(PropertyResult {
+            model: name.clone(),
+            formula,
+            loc,
+            verdict,
+            trace: dump,
+        });
+    }
+    let nested: Vec<_> = borrowed.models.values().map(std::rc::Rc::clone).collect();
+    drop(borrowed);
+    for m in nested {
+        verify_all_inner(&m, trace, out);
+    }
+}
+
+/// Фича 0049: LTL-формулы, объявленные непосредственно в модели, с позициями.
+///
+/// Вложенные модели не обходятся — их формулы проверяются против своего графа
+/// (см. [`verify_all`]).
+pub fn model_ltl_formulas(
+    model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+) -> Vec<(verification::ltl::Ltl, diagnostics::Location)> {
+    semantic::ltl_check::model_ltl_formulas(&model.borrow())
+}
+
+/// Фича 0049: разбирает LTL-формулу из строки (для `lamc verify --property`).
+///
+/// Строка разбирается **грамматикой языка** — как тело `: [LTL] φ;`, поэтому
+/// синтаксис свойства в командной строке и в `.lam`-файле совпадает буква в
+/// букву, а имена состояний могут быть любой длины.
+///
+/// Не путать с [`verification::ltl::parse_ltl`]: тот — тестовая игрушка
+/// (паникует на ошибке, атом — один символ) и в продуктовом пути не участвует
+/// (ADR 0049, A6).
+///
+/// # Пример
+///
+/// ```
+/// use grammar::parse_ltl_property;
+///
+/// let phi = parse_ltl_property("G (Fault -> F Idle)").unwrap();
+/// assert_eq!(phi.to_string(), "G (Fault -> F Idle)");
+/// assert!(parse_ltl_property("G (").is_err());
+/// ```
+pub fn parse_ltl_property(source: &str) -> Result<verification::ltl::Ltl, Diagnostic> {
+    use parser::ast::{InlineFormulaDefine, ModelElement};
+
+    let wrapped = format!(": [LTL] {};", source);
+    let (ast, _) = parse(&wrapped, 0).map_err(|diags| {
+        diags.into_iter().next().unwrap_or_else(|| {
+            Diagnostic::error(
+                diagnostics::Location::Implicit,
+                format!("не удалось разобрать LTL-формулу '{}'", source),
+            )
+        })
+    })?;
+
+    // Разобранное обязано быть РОВНО одной встроенной формулой. Строка со своей
+    // `;` закрывает обёртку досрочно, и хвост становится отдельными элементами
+    // файла: `-p "F Done; : [LTL] G Idle"` дал бы «проверено: F Done», умолчав о
+    // второй формуле, а `-p "G Idle; start X { ref X; }"` протащил бы объявление
+    // состояния. Взять первый элемент и промолчать об остальных — соврать о
+    // проверенном (тот же отказ, что и для формы через запятую).
+    let [element] = ast.elements.as_slice() else {
+        return Err(Diagnostic::error(
+            diagnostics::Location::Implicit,
+            format!(
+                "ожидалась одна LTL-формула, а строка '{}' разбирается как {} \
+                 конструкций: уберите ';' — проверяйте по одной формуле за вызов",
+                source,
+                ast.elements.len()
+            ),
+        ));
+    };
+
+    let ModelElement::InlineFormula(inline) = element else {
+        return Err(Diagnostic::error(
+            diagnostics::Location::Implicit,
+            format!("строка '{}' не является LTL-формулой", source),
+        ));
+    };
+    let InlineFormulaDefine::Ltl { formulas, loc } = inline.as_ref() else {
+        return Err(Diagnostic::error(
+            diagnostics::Location::Implicit,
+            format!("строка '{}' не является LTL-формулой", source),
+        ));
+    };
+
+    match formulas.as_slice() {
+        [single] => Ok(semantic::formula::ltl_ast_to_semantic(single)),
+        // `: [LTL] a, b;` — список формул; какую из них проверять, непонятно.
+        _ => Err(Diagnostic::error(
+            *loc,
+            format!(
+                "ожидалась одна LTL-формула, задано {}: уберите запятые или \
+                 вызовите verify для каждой формулы отдельно",
+                formulas.len()
+            ),
+        )),
+    }
+}
+
 /// Ce14: возвращает предупреждения о недетерминированных переходах в модели.
 ///
 /// Предупреждает, если несколько `ref`-переходов из одного состояния

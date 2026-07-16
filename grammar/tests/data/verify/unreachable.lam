@@ -1,0 +1,15 @@
+// Фича 0049: достижимость — F Done НАРУШЕНО.
+//
+// Done объявлено, но ни один `ref` в него не ведёт: автомат вечно крутится
+// Work -> Wait -> Work. Контрпример: [ Work -> Wait ]*
+: [LTL] F Done;
+
+start Work {
+    ref Wait;
+}
+
+state Wait {
+    ref Work;
+}
+
+state Done;

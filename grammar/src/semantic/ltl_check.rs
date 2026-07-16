@@ -1,24 +1,29 @@
-//! Диагностики LTL-формул (фича 0035): предупреждения о неверифицируемых
-//! формулах и неизвестных атомах.
+//! Диагностики LTL-формул (фича 0035): предупреждения о непроверяемых при
+//! компиляции формулах и неизвестных атомах.
 //!
 //! LTL-формула `: [LTL] φ;` разбирается на всех трёх уровнях (модель, состояние,
-//! блок кода — паритет обеспечен 0035-01), но **не верифицируется**: `build_buchi`
-//! из исходника не вызывается ниоткуда, а генератор C её не эмитит. Чтобы ни один
-//! путь LTL не заканчивался тишиной (принцип «громкий отказ», ADR 0025/0024),
-//! здесь собираются предупреждения:
+//! блок кода — паритет обеспечен 0035-01). **Компиляция её не проверяет**: ни
+//! одна цель генерации LTL не эмитит. Чтобы ни один путь LTL не заканчивался
+//! тишиной (принцип «громкий отказ», ADR 0025/0024), здесь собираются
+//! предупреждения:
 //!
-//! - **SE-055** — на КАЖДУЮ LTL-формулу: разобрана и сохранена, но верификация
-//!   LTL не реализована (ни одна цель её не проверяет).
+//! - **SE-055** — на КАЖДУЮ LTL-формулу: разобрана и сохранена, но при
+//!   компиляции не проверяется. ⚠ Фича 0049 дала формулам **потребителя** —
+//!   `lamc verify` (управляющие свойства, атом = имя состояния), поэтому текст
+//!   предупреждения указывает на него. Само предупреждение осталось: `lamc
+//!   compile` по-прежнему не верифицирует, и молчать об этом нельзя.
 //! - **SE-056** — на атом формулы, не совпадающий ни с одним именем модели
-//!   (переменная/порт/константа, состояние, `cond`). Это **проверка имени**, а не
-//!   связывание: семантика атома остаётся вопросом расширения фичи 0010. Литералы
+//!   (переменная/порт/константа, состояние, `cond`). Это **проверка имени**, а
+//!   не связывание; связывание атома с семантикой (атом = имя состояния)
+//!   делает верификатор — [`verify_model`](crate::verify_model), и он же
+//!   отказывает на атоме-переменной (`Verdict::Unsupported`). Литералы
 //!   `true`/`false` не проверяются.
 //!
 //! Функция [`ltl_warnings`] — публичный API наравне с
 //! [`unused_variable_warnings`](crate::unused_variable_warnings); `lamc` их пока
 //! не печатает (известный дефект в бэклоге), но они доступны через API и тесты.
 
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::formula::Formula;
 use crate::semantic::{FunctionDefinitionNode, ModelNode, StatementNode};
 use crate::verification::ltl::Ltl;
@@ -43,34 +48,33 @@ fn collect_model(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
         .chain(borrowed.conditions.keys())
         .cloned()
         .collect();
-    let loc = borrowed.loc;
 
-    // Формулы уровня модели.
-    for f in &borrowed.formulas {
-        check_formula(f, &known, loc, out);
-    }
-    // Формулы уровня состояний: прямые (`: [LTL]` в теле состояния) и внутри
-    // именованных блоков состояния (`always`/`enter`/`exit`).
-    for state in borrowed.states.values() {
-        for f in state.formulas() {
-            check_formula(f, &known, state.loc(), out);
-        }
-        for block in state.named_blocks() {
-            if let Some(stmt) = block.statement() {
-                walk_statement(stmt, &known, state.loc(), out);
+    for (ltl, loc) in model_ltl_formulas(&borrowed) {
+        out.push(
+            Diagnostic::warning(
+                loc,
+                "LTL-формула разобрана и сохранена, но верификация свойств над данными \
+                 не реализована: управляющие свойства проверяет `lamc verify` (фича 0049)"
+                    .to_string(),
+            )
+            .with_code("SE-055"),
+        );
+        let mut atoms = BTreeSet::new();
+        collect_atoms(&ltl, &mut atoms);
+        for atom in atoms {
+            if !known.contains(&atom) {
+                out.push(
+                    Diagnostic::warning(
+                        loc,
+                        format!(
+                            "атом '{}' LTL-формулы не соответствует ни одной переменной, \
+                             состоянию или именованному условию модели",
+                            atom
+                        ),
+                    )
+                    .with_code("SE-056"),
+                );
             }
-        }
-    }
-    // Формулы в телах именованных блоков (`enter`/`exit`/`always`).
-    for block in &borrowed.named_blocks {
-        if let Some(stmt) = block.statement() {
-            walk_statement(stmt, &known, loc, out);
-        }
-    }
-    // Формулы в телах функций.
-    for func in borrowed.functions.values() {
-        if let FunctionDefinitionNode::Local { body, .. } = func {
-            walk_statement(body, &known, loc, out);
         }
     }
 
@@ -81,40 +85,81 @@ fn collect_model(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
     }
 }
 
+/// Собирает LTL-формулы, объявленные **непосредственно** в этой модели, вместе
+/// с их позициями: уровень модели, состояний, именованных блоков и тел функций.
+///
+/// Вложенные модели **не обходятся**: их формулы говорят о состояниях своей
+/// модели и проверяются против её же графа (фича 0049).
+///
+/// Общий источник истины об «где лежат LTL-формулы»: используется
+/// диагностиками ([`ltl_warnings`]) и верификацией
+/// ([`verify_all`](crate::verify_all)). Паритет уровней — наследие 0035-01: если
+/// добавится новое место объявления формулы, добавлять его нужно здесь, иначе
+/// оно молча выпадет из обоих потребителей.
+pub(crate) fn model_ltl_formulas(model: &ModelNode) -> Vec<(Ltl, Location)> {
+    let mut out = Vec::new();
+
+    // Формулы уровня модели.
+    for f in &model.formulas {
+        collect_formula(f, model.loc, &mut out);
+    }
+    // Формулы уровня состояний: прямые (`: [LTL]` в теле состояния) и внутри
+    // именованных блоков состояния (`always`/`enter`/`exit`).
+    for state in model.states.values() {
+        for f in state.formulas() {
+            collect_formula(f, state.loc(), &mut out);
+        }
+        for block in state.named_blocks() {
+            if let Some(stmt) = block.statement() {
+                walk_statement(stmt, state.loc(), &mut out);
+            }
+        }
+    }
+    // Формулы в телах именованных блоков (`enter`/`exit`/`always`).
+    for block in &model.named_blocks {
+        if let Some(stmt) = block.statement() {
+            walk_statement(stmt, model.loc, &mut out);
+        }
+    }
+    // Формулы в телах функций.
+    for func in model.functions.values() {
+        if let FunctionDefinitionNode::Local { body, .. } = func {
+            walk_statement(body, model.loc, &mut out);
+        }
+    }
+
+    out
+}
+
 /// Обходит оператор в поисках встроенных формул (`: [LTL] …;` в блоке кода).
-fn walk_statement(
-    stmt: &StatementNode,
-    known: &BTreeSet<String>,
-    loc: crate::diagnostics::Location,
-    out: &mut Vec<Diagnostic>,
-) {
+fn walk_statement(stmt: &StatementNode, loc: Location, out: &mut Vec<(Ltl, Location)>) {
     match stmt {
         StatementNode::InlineFormula(formulas) => {
             for f in formulas {
-                check_formula(f, known, loc, out);
+                collect_formula(f, loc, out);
             }
         }
         StatementNode::Block(stmts) => {
             for s in stmts {
-                walk_statement(s, known, loc, out);
+                walk_statement(s, loc, out);
             }
         }
         StatementNode::If { then_, else_, .. } => {
-            walk_statement(then_, known, loc, out);
+            walk_statement(then_, loc, out);
             if let Some(e) = else_ {
-                walk_statement(e, known, loc, out);
+                walk_statement(e, loc, out);
             }
         }
-        StatementNode::Loop { body, .. } => walk_statement(body, known, loc, out),
+        StatementNode::Loop { body, .. } => walk_statement(body, loc, out),
         StatementNode::For { init, body, .. } => {
             if let Some(i) = init {
-                walk_statement(i, known, loc, out);
+                walk_statement(i, loc, out);
             }
-            walk_statement(body, known, loc, out);
+            walk_statement(body, loc, out);
         }
         StatementNode::Match { arms, .. } => {
             for arm in arms {
-                walk_statement(&arm.body, known, loc, out);
+                walk_statement(&arm.body, loc, out);
             }
         }
         // Прочие операторы формул не содержат.
@@ -122,54 +167,25 @@ fn walk_statement(
     }
 }
 
-/// Проверяет формулу: LTL → SE-055 + проверка атомов (SE-056).
-fn check_formula(
-    formula: &Formula,
-    known: &BTreeSet<String>,
-    loc: crate::diagnostics::Location,
-    out: &mut Vec<Diagnostic>,
-) {
+/// Разворачивает [`Formula`] в LTL-формулы (Guard/None их не несут).
+fn collect_formula(formula: &Formula, loc: Location, out: &mut Vec<(Ltl, Location)>) {
     match formula {
-        Formula::LTL(ltl) => {
-            out.push(
-                Diagnostic::warning(
-                    loc,
-                    "LTL-формула разобрана и сохранена, но верификация LTL не реализована: \
-                     ни одна цель генерации её не проверяет"
-                        .to_string(),
-                )
-                .with_code("SE-055"),
-            );
-            let mut atoms = BTreeSet::new();
-            collect_atoms(ltl, &mut atoms);
-            for atom in atoms {
-                if !known.contains(&atom) {
-                    out.push(
-                        Diagnostic::warning(
-                            loc,
-                            format!(
-                                "атом '{}' LTL-формулы не соответствует ни одной переменной, \
-                                 состоянию или именованному условию модели",
-                                atom
-                            ),
-                        )
-                        .with_code("SE-056"),
-                    );
-                }
-            }
-        }
+        Formula::LTL(ltl) => out.push((ltl.clone(), loc)),
         Formula::Formulas(inner) => {
             for f in inner {
-                check_formula(f, known, loc, out);
+                collect_formula(f, loc, out);
             }
         }
-        // Guard/None атомов LTL не несут.
         Formula::Guard(_, _) | Formula::None => {}
     }
 }
 
 /// Собирает имена атомов LTL-формулы (без `true`/`false`).
-fn collect_atoms(ltl: &Ltl, out: &mut BTreeSet<String>) {
+///
+/// Общий источник истины: используется проверкой имён (SE-056) и связыванием
+/// атомов при верификации (фича 0049,
+/// [`verify_model`](crate::verification::verify::verify_model)).
+pub(crate) fn collect_atoms(ltl: &Ltl, out: &mut BTreeSet<String>) {
     match ltl {
         Ltl::Atom(name) => {
             out.insert(name.clone());

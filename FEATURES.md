@@ -47,7 +47,7 @@
 | [0027](docs/features/0027-module-size-split.md) | Разделение переросших модулей (`validate.rs`, `lsp.rs`, `c_expr.rs`) | — | 2 | РАЗРАБОТКА |
 | [0037](docs/features/0037-windows-test-failures.md) | Сбои тестов на Windows (пути include, ресурс viewport) | — | 2 | РАЗРАБОТКА |
 | [0038](docs/features/0038-intellij-semantic-tokens.md) | Семантическая подсветка Lam в IntelliJ через `lam-lsp` | — | 2 | РАЗРАБОТКА |
-| [0049](docs/features/0049-model-checking-ltl.md) | Верификация модели (Model Checking) на основе LTL | 0010, 0035 | 2 | РАЗРАБОТКА |
+| [0049](docs/features/0049-model-checking-ltl.md) | Верификация модели (Model Checking) на основе LTL | 0010, 0035 | 2 | ТЕСТИРОВАНИЕ |
 | [0039](docs/features/0039-intellij-reformat.md) | Действие «Reformat Code» в плагине IntelliJ | — | 3 | РАЗРАБОТКА |
 | [0043](docs/features/0043-address-map-export.md) | Экспорт карты адресов во внешний формат | — | 3 | РАЗРАБОТКА |
 | [0034](docs/features/0034-sim-struct-types.md) | Структурные типы в симуляторе | — | 3 | РАЗРАБОТКА |

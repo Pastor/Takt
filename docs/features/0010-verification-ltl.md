@@ -17,4 +17,10 @@
 - Встроенные формулы в AST: `InlineFormulaDefine`, `LtlExpr`, `FormulaStatement`,
   `FormulaExpression` (`parser/ast.rs`); `semantic/formula.rs` (`Formula`).
 
+## Исправления
+
+| Фикс | Заголовок |
+|---|---|
+| [0010-01](../fixes/0010-01-buchi-acceptance.md) | Вырожденное условие принятия автомата Бюхи (GPVW): `build_buchi` принимал любой бесконечный прогон. Обнаружено зондом при разработке [фичи 0049](0049-model-checking-ltl.md), когда у затравки впервые появился потребитель. |
+
 > Ретроспективная карточка (правило 17). Детали — в истории git и `CHANGES.md`.

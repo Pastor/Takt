@@ -1,0 +1,21 @@
+// Фича 0049: свойство «после сбоя система обязана вернуться в Idle» ДЕРЖИТСЯ.
+//
+// Из Fault единственный переход ведёт в Recovery, из Recovery — только в Idle:
+// залипнуть в сбое автомат не умеет, поэтому G (Fault -> F Idle) истинно.
+: [LTL] G (Fault -> F Idle);
+
+var button: bit := false;
+var error: bit := false;
+
+start Idle {
+    ref Fault: error = 1;
+    ref Idle: error = 0;
+}
+
+state Fault {
+    ref Recovery;
+}
+
+state Recovery {
+    ref Idle;
+}

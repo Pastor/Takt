@@ -8,5 +8,6 @@
 
 | Фикс | Фича | Заголовок | Документ |
 |------|------|-----------|----------|
+| 0010-01 | 0010 | Вырожденное условие принятия автомата Бюхи (GPVW) | [0010-01-buchi-acceptance.md](0010-01-buchi-acceptance.md) |
 | 0022-01 | 0022 | Открытый верхний диапазон совместимости IDE (until-build) | [0022-01-untilbuild-open-range.md](0022-01-untilbuild-open-range.md) |
 | 0023-01 | 0023 | Проверка совместимости с новыми IDE (verifyPlugin) + валидность дескриптора | [0023-01-verifyplugin-descriptor.md](0023-01-verifyplugin-descriptor.md) |

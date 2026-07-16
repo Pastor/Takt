@@ -45,6 +45,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::rc::Rc;
 
 /// Параметры компиляции, разобранные из аргументов командной строки.
 #[derive(Debug, PartialEq)]
@@ -485,10 +486,241 @@ fn run_fmt(options: &FmtOptions) -> i32 {
     if failed > 0 { 1 } else { 0 }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Подкоманда `verify` — model checking по LTL (фича 0049, задача 0049-04)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Опции подкоманды `verify`.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct VerifyOptions {
+    /// Путь к проверяемому `.lam`-файлу.
+    pub input_file: String,
+    /// Директории поиска файлов `import`.
+    pub include_dirs: Vec<String>,
+    /// Свойство из командной строки (`--property "G (Fault -> F Idle)"`).
+    ///
+    /// `None` — проверяются все формулы `: [LTL] φ;`, объявленные в файле.
+    pub property: Option<String>,
+    /// Печатать трассу конвейера (Крипке, автомат `¬φ`, произведение).
+    pub trace: bool,
+}
+
+/// Задаёт проверяемое свойство, отвергая повтор флага.
+///
+/// Второй `--property` молча затирал бы первый, и `lamc verify -p "F Done" -p
+/// "G Idle" m.lam` отчитался бы «проверено свойств: 1; все держатся» — про
+/// первую формулу пользователь узнал бы только из исходников. Отказ по тому же
+/// правилу, что и для второго файла.
+fn set_property(options: &mut VerifyOptions, value: &str) -> Result<(), String> {
+    if let Some(first) = &options.property {
+        return Err(format!(
+            "свойство задано дважды ('{first}' и '{value}'); \
+             verify проверяет одно свойство за вызов"
+        ));
+    }
+    options.property = Some(value.to_string());
+    Ok(())
+}
+
+/// Разбирает аргументы подкоманды `verify`.
+///
+/// Принимает слайс без имени программы и без `"verify"` в начале.
+pub fn parse_verify_args(args: &[String]) -> Result<VerifyOptions, String> {
+    let mut options = VerifyOptions::default();
+    let mut i = 0;
+    while i < args.len() {
+        let arg = args[i].as_str();
+        match arg {
+            "--property" | "-p" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| format!("флаг '{arg}' требует значение — LTL-формулу"))?;
+                set_property(&mut options, value)?;
+            }
+            "--trace" => options.trace = true,
+            "--include-dirs" | "-I" => {
+                i += 1;
+                let value = args
+                    .get(i)
+                    .ok_or_else(|| format!("флаг '{arg}' требует значение"))?;
+                options.include_dirs.extend(split_include_dirs(value));
+            }
+            other if other.starts_with("--property=") => {
+                set_property(&mut options, &other["--property=".len()..])?;
+            }
+            // Слитная форма `-I/путь` — как в подкоманде compile.
+            other if other.starts_with("-I") && other.len() > 2 => {
+                options.include_dirs.extend(split_include_dirs(&other[2..]));
+            }
+            other if other.starts_with('-') => {
+                return Err(format!("неизвестный флаг '{other}'"));
+            }
+            other => {
+                if !options.input_file.is_empty() {
+                    return Err(format!(
+                        "verify принимает один файл; лишний аргумент '{other}'"
+                    ));
+                }
+                options.input_file = other.to_string();
+            }
+        }
+        i += 1;
+    }
+    if options.input_file.is_empty() {
+        return Err("укажите .lam-файл для проверки".to_string());
+    }
+    Ok(options)
+}
+
+/// Выполняет подкоманду `verify`; возвращает код возврата процесса.
+///
+/// Код `0` — все проверенные свойства держатся; `1` — есть нарушение,
+/// непроверяемое свойство или ошибка разбора (R8/A1).
+fn run_verify(options: &VerifyOptions) -> i32 {
+    let source = match fs::read_to_string(&options.input_file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Ошибка чтения файла '{}': {e}", options.input_file);
+            return 1;
+        }
+    };
+
+    let (ast, _) = match grammar::parse(&source, 0) {
+        Ok(parsed) => parsed,
+        Err(diags) => {
+            for d in diags {
+                eprintln!(
+                    "Ошибка разбора [{}]: {}",
+                    d.code.as_deref().unwrap_or("?"),
+                    d.message
+                );
+            }
+            return 1;
+        }
+    };
+
+    let model = match grammar::semantic::tree::construct_model(&ast, None, &options.include_dirs) {
+        Ok(m) => m,
+        Err(d) => {
+            eprintln!(
+                "Семантическая ошибка [{}]: {}",
+                d.code.as_deref().unwrap_or("?"),
+                d.message
+            );
+            return 1;
+        }
+    };
+
+    // Свойства: либо одно из --property, либо все объявленные в файле.
+    let results = match &options.property {
+        Some(text) => {
+            let phi = match grammar::parse_ltl_property(text) {
+                Ok(p) => p,
+                Err(d) => {
+                    eprintln!("Ошибка разбора свойства: {}", d.message);
+                    return 1;
+                }
+            };
+            let (verdict, trace) =
+                grammar::verification::verify::verify_model_traced(&model.borrow(), &phi);
+            // Область — корневая модель файла; помечать её именем незачем,
+            // файл назван в командной строке.
+            vec![grammar::PropertyResult {
+                model: String::new(),
+                loc: grammar::diagnostics::Location::Implicit,
+                verdict,
+                formula: phi,
+                trace: options.trace.then_some(trace),
+            }]
+        }
+        None => grammar::verify_all_traced(Rc::clone(&model), options.trace),
+    };
+
+    if results.is_empty() {
+        eprintln!(
+            "В файле '{}' нет LTL-формул. Объявите свойство как `: [LTL] φ;` \
+             или задайте его флагом --property \"φ\".",
+            options.input_file
+        );
+        return 1;
+    }
+
+    print_verify_results(&results)
+}
+
+/// Печатает вердикты и возвращает код возврата процесса.
+fn print_verify_results(results: &[grammar::PropertyResult]) -> i32 {
+    use grammar::verification::verify::Verdict;
+
+    let mut failures = 0usize;
+    for result in results {
+        if let Some(trace) = &result.trace {
+            print!("{trace}");
+        }
+        let scope = if result.model.is_empty() {
+            String::new()
+        } else {
+            format!(" [модель {}]", result.model)
+        };
+        match &result.verdict {
+            Verdict::Holds => {
+                println!("СВОЙСТВО ДЕРЖИТСЯ{scope}: {}", result.formula);
+            }
+            Verdict::Violated(cex) => {
+                failures += 1;
+                println!("СВОЙСТВО НАРУШЕНО{scope}: {}", result.formula);
+                println!("  контрпример: {}", cex.trace());
+                println!(
+                    "  (абстракция управления: условия переходов не учитываются — \
+                     контрпример может быть недостижим по данным)"
+                );
+            }
+            Verdict::Unsupported(atoms) => {
+                failures += 1;
+                println!("СВОЙСТВО НЕ ПРОВЕРЕНО{scope}: {}", result.formula);
+                // Причин у неизвестного атома три, и путать их нельзя: это может
+                // быть переменная (данные вне абстракции), состояние ВЛОЖЕННОЙ
+                // модели (её граф отдельный) или опечатка.
+                println!(
+                    "  атом(ы) {} — не имена состояний проверяемой модели.",
+                    atoms.join(", ")
+                );
+                println!(
+                    "  Атом обязан быть именем состояния: проверяются свойства управления \
+                     (достижимость, порядок, живость)."
+                );
+                println!(
+                    "  Вне охвата: свойства над данными (`G (temp <= 100)`) и состояния \
+                     вложенных моделей — их формулы объявляйте внутри самой модели."
+                );
+            }
+            Verdict::NoStartState => {
+                failures += 1;
+                println!("СВОЙСТВО НЕ ПРОВЕРЕНО{scope}: {}", result.formula);
+                println!("  у модели нет стартового состояния — проверять нечего");
+            }
+        }
+    }
+
+    // Итог печатается в stdout вместе с вердиктами: разведи их по потокам —
+    // и в терминале итог всплывёт выше вердиктов из-за буферизации.
+    if failures > 0 {
+        println!(
+            "\nПроверено свойств: {}; не держится/не проверено: {failures}",
+            results.len()
+        );
+        return 1;
+    }
+    println!("\nПроверено свойств: {}; все держатся", results.len());
+    0
+}
+
 /// Выводит справку по использованию утилиты в stderr.
 fn print_usage() {
     eprintln!("Использование: lamc compile [флаги] <input.lam> [-o <output>]");
     eprintln!("               lamc fmt [--check] [--stdin] <файлы/каталоги>");
+    eprintln!("               lamc verify [--property \"φ\"] [--trace] <input.lam>");
     eprintln!("               lamc --help");
     eprintln!();
     eprintln!("Флаги:");
@@ -527,6 +759,21 @@ fn print_usage() {
     eprintln!("  lamc fmt examples/            # отформатировать каталог на месте");
     eprintln!("  lamc fmt --check examples/    # проверить (CI)");
     eprintln!("  cat a.lam | lamc fmt --stdin  # отформатировать поток");
+    eprintln!();
+    eprintln!("Подкоманда verify (проверка LTL-свойств, model checking — фича 0049):");
+    eprintln!("  --property, -p \"φ\"  Проверить одну формулу из командной строки");
+    eprintln!("                      Без флага проверяются все `: [LTL] φ;` файла");
+    eprintln!("  --trace             Печатать конвейер (Крипке, автомат !φ, произведение)");
+    eprintln!("  -I <dirs>           Пути поиска файлов import");
+    eprintln!();
+    eprintln!("  Атом формулы — ИМЯ СОСТОЯНИЯ: `S` истинно, когда автомат в состоянии S.");
+    eprintln!("  Проверяются свойства управления: достижимость, порядок состояний, живость.");
+    eprintln!("  Свойства над данными (`G (temp <= 100)`) в этой абстракции не поддержаны.");
+    eprintln!("  Код возврата: 0 — все свойства держатся; 1 — нарушение/не проверено.");
+    eprintln!();
+    eprintln!("  lamc verify model.lam");
+    eprintln!("  lamc verify --property \"F Done\" model.lam       # достижимость");
+    eprintln!("  lamc verify -p \"G (Fault -> F Idle)\" model.lam  # живость");
 }
 
 fn main() {
@@ -549,9 +796,21 @@ fn main() {
         process::exit(run_fmt(&options));
     }
 
+    if args[1] == "verify" {
+        let options = match parse_verify_args(&args[2..]) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("Ошибка разбора аргументов: {e}");
+                print_usage();
+                process::exit(1);
+            }
+        };
+        process::exit(run_verify(&options));
+    }
+
     if args[1] != "compile" {
         eprintln!(
-            "Ошибка: неизвестная команда '{}'. Используйте 'compile' или 'fmt'.",
+            "Ошибка: неизвестная команда '{}'. Используйте 'compile', 'fmt' или 'verify'.",
             args[1]
         );
         print_usage();
@@ -835,6 +1094,84 @@ mod tests {
     #[test]
     fn fmt_args_without_input_is_error() {
         assert!(parse_fmt_args(&[]).is_err());
+    }
+
+    // ── Подкоманда verify (задача 0049-04) ───────────────────────────────────
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn verify_args_file_only() {
+        let o = parse_verify_args(&args(&["model.lam"])).unwrap();
+        assert_eq!(o.input_file, "model.lam");
+        assert_eq!(o.property, None, "без --property проверяются формулы файла");
+        assert!(!o.trace);
+    }
+
+    #[test]
+    fn verify_args_property_flag() {
+        let o = parse_verify_args(&args(&["--property", "G (Fault -> F Idle)", "m.lam"])).unwrap();
+        assert_eq!(o.property.as_deref(), Some("G (Fault -> F Idle)"));
+        assert_eq!(o.input_file, "m.lam");
+    }
+
+    /// Короткая форма `-p` и слитная `--property=` — синонимы длинной.
+    #[test]
+    fn verify_args_property_short_and_joined_forms() {
+        let short = parse_verify_args(&args(&["-p", "F Done", "m.lam"])).unwrap();
+        let joined = parse_verify_args(&args(&["--property=F Done", "m.lam"])).unwrap();
+        assert_eq!(short.property.as_deref(), Some("F Done"));
+        assert_eq!(joined.property.as_deref(), Some("F Done"));
+    }
+
+    #[test]
+    fn verify_args_trace_flag() {
+        let o = parse_verify_args(&args(&["--trace", "m.lam"])).unwrap();
+        assert!(o.trace);
+        assert_eq!(o.input_file, "m.lam");
+    }
+
+    #[test]
+    fn verify_args_include_dirs() {
+        let o = parse_verify_args(&args(&["-I", "/a", "-I/b", "m.lam"])).unwrap();
+        assert_eq!(o.include_dirs, vec!["/a", "/b"]);
+    }
+
+    #[test]
+    fn verify_args_without_file_is_error() {
+        // Контрпример: проверять нечего — отказ, а не пустой прогон.
+        assert!(parse_verify_args(&[]).is_err());
+        assert!(parse_verify_args(&args(&["--property", "F Done"])).is_err());
+    }
+
+    #[test]
+    fn verify_args_property_without_value_is_error() {
+        assert!(parse_verify_args(&args(&["m.lam", "--property"])).is_err());
+    }
+
+    #[test]
+    fn verify_args_duplicate_property_is_error() {
+        // Контрпример: второй -p молча затирал бы первый, и отчёт «проверено
+        // свойств: 1» умалчивал бы о невыполненной проверке.
+        assert!(parse_verify_args(&args(&["-p", "F Done", "-p", "G Idle", "m.lam"])).is_err());
+        assert!(
+            parse_verify_args(&args(&["-p", "F Done", "--property=G Idle", "m.lam"])).is_err(),
+            "смешение форм флага повтором быть не перестаёт"
+        );
+    }
+
+    #[test]
+    fn verify_args_second_file_is_error() {
+        // Контрпример: verify работает с одним файлом; второй молча
+        // проигнорировать — значит соврать о том, что проверено.
+        assert!(parse_verify_args(&args(&["a.lam", "b.lam"])).is_err());
+    }
+
+    #[test]
+    fn verify_args_unknown_flag_is_error() {
+        assert!(parse_verify_args(&args(&["--target", "c", "m.lam"])).is_err());
     }
 
     #[test]
