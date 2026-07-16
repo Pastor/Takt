@@ -1350,3 +1350,35 @@ fn cc_available() -> bool {
         .map(|o| o.status.success())
         .unwrap_or(false)
 }
+
+/// A14 (фича 0044): C для `invariant P = C;` идентичен C для пары
+/// `cond P = C; : [Guard] P;` — десахаризация не меняет эмиссию. Плюс assert
+/// присутствует (инвариант эмитится как `assert()`).
+#[test]
+fn test_invariant_c_equals_cond_guard() {
+    let inv = generate_c_content(
+        "var t: u8 := 0; invariant Safe = t <= 100; start Main { always { } }",
+        "Fsm",
+    );
+    let pair = generate_c_content(
+        "var t: u8 := 0; cond Safe = t <= 100; : [Guard] Safe; start Main { always { } }",
+        "Fsm",
+    );
+    // Извлекаем строки assert из обоих выводов и сверяем.
+    let asserts = |c: &str| {
+        c.lines()
+            .filter(|l| l.contains("assert(") && l.contains("<= 100"))
+            .map(str::trim)
+            .map(String::from)
+            .collect::<Vec<_>>()
+    };
+    assert!(
+        !asserts(&inv).is_empty(),
+        "инвариант обязан эмитить assert(... <= 100):\n{inv}"
+    );
+    assert_eq!(
+        asserts(&inv),
+        asserts(&pair),
+        "C(invariant) обязан совпадать с C(cond + Guard) по assert'ам"
+    );
+}

@@ -258,6 +258,8 @@ pub enum ModelElement {
     Formula(Box<FormulaDefine>),
     /// Определение условия.
     Condition(Box<ConditionDefine>),
+    /// Именованный инвариант (`invariant Имя = <Условие>;`, фича 0044).
+    Invariant(Box<InvariantDefine>),
     /// Определение переменной.
     Variable(Box<VariableDefine>),
     /// Определение псевдонима типа.
@@ -326,6 +328,8 @@ pub enum StateElement {
     StraySemicolon(Location),
     /// Встроенная формула в теле состояния.
     InlineFormula(Box<InlineFormulaDefine>),
+    /// Именованный инвариант состояния (`invariant Имя = <Условие>;`, фича 0044).
+    Invariant(Box<InvariantDefine>),
 }
 
 /// База наследования: `Имя[(аргументы,*)]`.
@@ -923,6 +927,24 @@ pub struct ConditionDefine {
     /// Имя условия.
     pub name: Option<Identifier>,
     /// Выражение условия.
+    pub value: Condition,
+}
+
+/// Именованный инвариант (`invariant Имя = <Условие>;`, фича 0044).
+///
+/// Семантически — сахар над парой `cond Имя = C;` + `: [Guard] Имя;`
+/// (десахаризация в семантическом проходе, ADR 0044 Option C). АСД хранит форму
+/// автора: форматтер печатает `invariant`, а не разворачивает пару (ADR 0024).
+/// Правая часть — [`Condition`], **не** `Expression`: `=` внутри есть равенство
+/// (инвариант ADR 0019), связка имени — `=`, не `:=` (инвариант фичи 0021).
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct InvariantDefine {
+    /// Местоположение в исходном тексте.
+    pub loc: Location,
+    /// Имя инварианта.
+    pub name: Option<Identifier>,
+    /// Условие-обязательство.
     pub value: Condition,
 }
 

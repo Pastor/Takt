@@ -4888,3 +4888,60 @@ fn fn_duplicate_name_is_se009() {
     );
     assert_eq!(err.code.as_deref(), Some("SE-009"), "код: {err:?}");
 }
+
+// ─── Фича 0044: инвариант (invariant) ─────────────────────────────────────────
+
+/// A1: `invariant P = C;` разбирается как элемент модели.
+#[test]
+fn invariant_parses_as_model_element() {
+    let node = build("var t: u8 := 0; invariant Safe = t <= 100; start Main { always { } }");
+    // Десахаризация: имя P попадает в условия (для LTL-атома и ref).
+    assert!(node.conditions.contains_key("Safe"), "инвариант регистрирует cond");
+    // И обязательство — Guard-формула в formulas.
+    assert!(
+        node.formulas.iter().any(|f| matches!(f, grammar::semantic::formula::Formula::Guard(_, Some(n)) if n == "Safe")),
+        "инвариант даёт именованную Guard-формулу: {:?}", node.formulas
+    );
+}
+
+/// A2: `assert` ключевым словом не стал — `var assert` валиден.
+#[test]
+fn assert_is_not_a_keyword() {
+    let node = build("var assert: u8 := 1; start Main { always { } }");
+    assert!(node.variables.contains_key("assert"));
+}
+
+/// A5 (ключевой тест фичи): имя инварианта — атом LTL. До 0044 `G(t <= 100)`
+/// невыразимо (`LtlPrimary` принимает только идентификатор); инвариант даёт имя.
+#[test]
+fn invariant_name_is_ltl_atom() {
+    // Не должно быть ошибки: G(Safe) ссылается на имя инварианта.
+    let node = build(
+        "var t: u8 := 0; invariant Safe = t <= 100; : [LTL] G(Safe); start Main { always { } }",
+    );
+    assert!(
+        node.formulas
+            .iter()
+            .any(|f| matches!(f, grammar::semantic::formula::Formula::LTL(_))),
+        "должна быть LTL-формула, ссылающаяся на инвариант"
+    );
+}
+
+/// A6: имя инварианта — условие ребра (`ref Next: P;`).
+#[test]
+fn invariant_name_is_edge_condition() {
+    // Не должно паниковать/ошибаться: ref ссылается на инвариант как на условие.
+    let _ = build(
+        "var t: u8 := 0; invariant Ready = t = 1; \
+         start A { ref B: Ready; } state B;",
+    );
+}
+
+/// A7: коллизия имени инварианта с существующим `cond` → SE-054.
+#[test]
+fn invariant_name_clash_is_se054() {
+    let err = build_err(
+        "var t: u8 := 0; cond Safe = t <= 100; invariant Safe = t <= 50; start Main { always { } }",
+    );
+    assert_eq!(err.code.as_deref(), Some("SE-054"), "код: {err:?}");
+}

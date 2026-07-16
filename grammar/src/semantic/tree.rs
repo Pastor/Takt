@@ -404,6 +404,48 @@ fn construct_model_stage0(
                     upper: Some(Rc::downgrade(&model_node)),
                 },
             );
+        } else if let ModelElement::Invariant(inv) = element {
+            // 0044: `invariant P = C;` в модели ≡ `cond P = C;` + `: [Guard] P;`
+            // (десахаризация, ADR 0044 Option C). Имя P регистрируется как условие
+            // (→ атом LTL `G(P)` и условие ребра `ref: P`), а обязательство —
+            // Guard-формула с именем инварианта (проверяется каждый такт до
+            // `switch`, эталон C: c_model.rs:549). АСД не переписывается —
+            // форматтер печатает `invariant` (ADR 0024).
+            let inv_loc = inv.name.as_ref().map(|id| id.loc).unwrap_or(Location::Implicit);
+            let name = inv
+                .clone()
+                .name
+                .ok_or_else(|| {
+                    Diagnostic::error(inv_loc, "Инвариант должен иметь имя".to_string())
+                        .with_code("SE-019")
+                })?
+                .name;
+            // SE-054: коллизия имени с уже объявленным условием или переменной.
+            // Тихая перезапись (HashMap::insert без проверки) недопустима в языке
+            // спецификации промышленных систем (правило 12).
+            if conditions.contains_key(&name) || variables.contains_key(&name) {
+                return Err(Diagnostic::error(
+                    inv_loc,
+                    format!(
+                        "Имя инварианта '{}' конфликтует с существующим условием или переменной",
+                        name
+                    ),
+                )
+                .with_code("SE-054"));
+            }
+            conditions.insert(
+                name.clone(),
+                ConditionDefinitionNode {
+                    name: name.clone(),
+                    loc: inv_loc,
+                    value: ConditionNode::Unresolved(inv.value.clone()),
+                    upper: Some(Rc::downgrade(&model_node)),
+                },
+            );
+            model_node.borrow_mut().formulas.push(Formula::Guard(
+                ConditionNode::Unresolved(inv.value.clone()),
+                Some(name),
+            ));
         } else if let ModelElement::NamedBlockCode(def) = element {
             let name = def
                 .clone()
@@ -580,7 +622,7 @@ fn construct_model_stage0(
                         model_node
                             .borrow_mut()
                             .formulas
-                            .push(Formula::Guard(ConditionNode::Unresolved(cond.clone())));
+                            .push(Formula::Guard(ConditionNode::Unresolved(cond.clone()), None));
                     }
                 }
                 ast::InlineFormulaDefine::Ltl { formulas, .. } => {
@@ -920,11 +962,11 @@ fn resolve_formula(formula: Formula, model: Rc<RefCell<ModelNode>>) -> Result<Fo
             }
             Ok(Formula::Formulas(resolved))
         }
-        Formula::Guard(cond) => match cond {
+        Formula::Guard(cond, name) => match cond {
             ConditionNode::Unresolved(ast_cond) => {
-                Ok(Formula::Guard(resolve_condition(&ast_cond, model)?))
+                Ok(Formula::Guard(resolve_condition(&ast_cond, model)?, name))
             }
-            other => Ok(Formula::Guard(other)),
+            other => Ok(Formula::Guard(other, name)),
         },
         Formula::LTL(ltl) => Ok(Formula::LTL(ltl)),
     }
@@ -1214,8 +1256,10 @@ pub fn construct_states(
                     match &**inline {
                         ast::InlineFormulaDefine::Guard { conditions, .. } => {
                             for cond in conditions {
-                                state_formulas
-                                    .push(Formula::Guard(ConditionNode::Unresolved(cond.clone())));
+                                state_formulas.push(Formula::Guard(
+                                    ConditionNode::Unresolved(cond.clone()),
+                                    None,
+                                ));
                             }
                         }
                         ast::InlineFormulaDefine::Ltl { formulas, .. } => {
@@ -1224,6 +1268,15 @@ pub fn construct_states(
                             }
                         }
                     }
+                } else if let StateElement::Invariant(inv) = element {
+                    // 0044: инвариант состояния = Guard-формула с именем инварианта
+                    // (десахаризация, ADR 0044). Условие C проверяется каждый такт,
+                    // пока автомат в этом состоянии (эталон C: c_model.rs:667).
+                    let inv_name = inv.name.as_ref().map(|id| id.name.clone());
+                    state_formulas.push(Formula::Guard(
+                        ConditionNode::Unresolved(inv.value.clone()),
+                        inv_name,
+                    ));
                 }
             }
             // Если состояние не имеет реализации (= Expr), но имеет `next`,

@@ -1491,7 +1491,8 @@ pub(super) fn generate_formula_check(
                 generate_formula_check(printer, map, owner, f)?;
             }
         }
-        Formula::Guard(cond) => {
+        // Имя инварианта (0044) на эмиссию C не влияет — `assert()` тот же.
+        Formula::Guard(cond, _) => {
             let cond_expr = generate_condition_expr(cond, map, owner)?;
             if !cond_expr.is_empty() {
                 printer.ident(&format!("assert({});", cond_expr)).nl();

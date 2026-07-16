@@ -1306,6 +1306,20 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                     None,
                 ));
             }
+            // 0044: инвариант индексируется как именованный символ (бонус к hover/goto).
+            ModelElement::Invariant(i) => {
+                let id = match i.name.as_ref() {
+                    Some(id) => id,
+                    None => continue,
+                };
+                out.push(make_sym(
+                    id.name.clone(),
+                    SymbolKind::CONSTANT,
+                    loc_to_range(&i.loc, source),
+                    loc_to_range(&id.loc, source),
+                    None,
+                ));
+            }
             ModelElement::Enum(e) => {
                 let id = match e.name.as_ref() {
                     Some(id) => id,

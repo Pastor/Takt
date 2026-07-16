@@ -207,3 +207,50 @@ fn fn_composition_is_evaluated() {
     let (unit, _) = run("fn_composition.lam", 1);
     assert_eq!(num(&unit, "r"), 16, "f→g: (5+1)+10 = 16");
 }
+
+// ── Фича 0044: инварианты и assert в симуляторе ──────────────────────────────
+
+/// T14/T15 (A9): нарушение инварианта модели останавливает прогон с SIM-025 и
+/// именем 'P'. Значение `c == 1` — проверка сработала ДО `always` второго такта
+/// (эталон C: assert до switch), а не после.
+#[test]
+fn invariant_model_violation_stops_with_sim025() {
+    let (unit, last) = run("invariant_violated.lam", 5);
+    let TickResult::Failed(msg) = last else {
+        panic!("ожидался Failed на нарушенном инварианте, получено {last:?}");
+    };
+    assert!(msg.contains("SIM-025"), "код SIM-025 в сообщении: {msg}");
+    assert!(msg.contains("'P'"), "имя инварианта P в сообщении: {msg}");
+    assert_eq!(num(&unit, "c"), 1, "остановка ДО always второго такта");
+}
+
+/// T19: истинный инвариант прогону не мешает.
+#[test]
+fn invariant_holds_does_not_interfere() {
+    let (unit, last) = run("invariant_holds.lam", 3);
+    assert!(
+        !matches!(last, TickResult::Failed(_)),
+        "истинный инвариант не должен ронять прогон: {last:?}"
+    );
+    assert_eq!(num(&unit, "c"), 2, "c растёт нормально");
+}
+
+/// T16 (A10): инвариант СОСТОЯНИЯ Q нарушается (проверяется, пока автомат в A).
+#[test]
+fn invariant_state_violation_stops_with_name() {
+    let (_unit, last) = run("invariant_state_violated.lam", 5);
+    let TickResult::Failed(msg) = last else {
+        panic!("ожидался Failed на инварианте состояния, получено {last:?}");
+    };
+    assert!(msg.contains("SIM-025") && msg.contains("'Q'"), "SIM-025 + имя Q: {msg}");
+}
+
+/// T17 (A10): `: c;` (assert языка Lam) в блоке нарушается — так же, как invariant.
+#[test]
+fn assert_in_block_violation_stops() {
+    let (_unit, last) = run("assert_in_block.lam", 3);
+    let TickResult::Failed(msg) = last else {
+        panic!("ожидался Failed на assert в блоке, получено {last:?}");
+    };
+    assert!(msg.contains("SIM-025"), "код SIM-025: {msg}");
+}

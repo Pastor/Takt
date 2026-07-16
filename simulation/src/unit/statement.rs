@@ -26,8 +26,10 @@ use crate::context::Context;
 use crate::eval::value::Value;
 use crate::eval::{self as eval_core, ops};
 use crate::expression::eval_expression;
+use crate::predicate::create_predicate;
 use crate::unit::{Execution, Flow};
 use grammar::diagnostics::{Diagnostic, Location};
+use grammar::semantic::formula::Formula;
 use grammar::semantic::type_node::TypeNode;
 use grammar::semantic::{ExpressionNode, FunctionDefinitionNode, MatchPatternNode, StatementNode};
 use std::cell::{Cell, RefCell};
@@ -231,9 +233,33 @@ pub(crate) fn exec_statement(
         }
         StatementNode::Break => Ok(Flow::Break),
         StatementNode::Continue => Ok(Flow::Continue),
-        // `Guard`/LTL — метаданные верификации, а не исполняемый код: осознанный
-        // no-op. Проверка инвариантов симулятором — кандидат «assert/invariant».
-        StatementNode::InlineFormula(_) => Ok(Flow::Normal),
+        // 0044: `assert` языка Lam (`: c;` / `: [Guard] c;`) в точке записи —
+        // как в порождённом C (`assert()`, эталон c_expr.rs:1693). Нарушение →
+        // `Err(SIM-025)` → доходит до `TickResult::Failed` (R13/R14). Ошибка
+        // вычисления самого условия → существующий `SIM-0xx` (R15). LTL — статика,
+        // явно игнорируется.
+        StatementNode::InlineFormula(formulas) => {
+            for f in formulas {
+                if let Formula::Guard(cond, name) = f {
+                    let pred = create_predicate(cond);
+                    match pred.evaluate(ctx)? {
+                        true => {}
+                        false => {
+                            let named = name
+                                .as_ref()
+                                .map(|n| format!(" '{n}'"))
+                                .unwrap_or_default();
+                            return Err(Diagnostic::error(
+                                Location::Implicit,
+                                format!("нарушен инвариант{named}"),
+                            )
+                            .with_code("SIM-025"));
+                        }
+                    }
+                }
+            }
+            Ok(Flow::Normal)
+        }
     }
 }
 

@@ -172,6 +172,7 @@ mod tests {
             state: Some(state.to_string()),
             state_transitions: st,
             state_executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         }
     }
@@ -188,6 +189,7 @@ mod tests {
             state: Some(from.to_string()),
             state_transitions: st,
             state_executions: HashMap::new(),
+            guards: Default::default(),
             last_transition: None,
         }
     }
