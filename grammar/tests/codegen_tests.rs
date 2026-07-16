@@ -791,10 +791,15 @@ state Done;
     );
 }
 
-/// Проверяет что INIT-состояние корректно переходит в стартовое состояние
+/// Проверяет что INIT-диспетчер корректно переходит в стартовое состояние
 /// с вызовом `enter`-блока после инициализации extend.
 ///
-/// Позитивный пример: `_init` вызывается ДО `enter`-блока в INIT-case.
+/// Позитивный пример: `_init` вызывается ДО установки стартового состояния.
+///
+/// Фича 0033 (Option B): вход в стартовое состояние **не расходует такт** —
+/// INIT диспетчеризуется через `if (model->state == FSM_INIT)` ДО `switch`, а не
+/// отдельным `case ... break;`. Ассерт про форму обновлён соответственно; суть
+/// (порядок `_init` → установка состояния) сохранена.
 #[test]
 fn test_init_calls_enter_after_init() {
     let src = r#"
@@ -810,17 +815,21 @@ state Done;
 "#;
     let c = generate_c_content(src, "Fsm");
 
-    // В INIT-блоке должен быть _init для Sub
+    // В INIT-диспетчере должен быть _init для Sub
     assert!(
         c.contains("FsmSub_init("),
         "INIT должен вызывать FsmSub_init:\n{c}"
     );
-    // case FSM_INIT должен присутствовать (INIT-состояние корневой модели)
+    // INIT диспетчеризуется до switch (0033) — `if`, а не `case ... break`
     assert!(
-        c.contains("case FSM_INIT:"),
-        "INIT case должен присутствовать:\n{c}"
+        c.contains("if (model->state == FSM_INIT)"),
+        "INIT должен диспетчеризоваться через if до switch (0033):\n{c}"
     );
-    // _init должен стоять ДО model->state = FSM_MAIN в INIT-блоке
+    assert!(
+        !c.contains("case FSM_INIT:"),
+        "INIT больше не должен быть case внутри switch (0033):\n{c}"
+    );
+    // _init должен стоять ДО model->state = FSM_MAIN в INIT-диспетчере
     let pos_init = c
         .find("FsmSub_init(")
         .expect("FsmSub_init должен быть в INIT");

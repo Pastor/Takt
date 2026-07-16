@@ -83,7 +83,7 @@ fn generate_model_init(
     map: &CMap,
 ) -> Result<(), Diagnostic> {
     let Element::Model {
-        start: _,
+        start,
         states: _,
         name,
     } = model
@@ -101,6 +101,13 @@ fn generate_model_init(
         .print(&name.unique_uppercase_snakecase())
         .print("_INIT;")
         .nl();
+    // 0033 (R6): инициализация вложенных элементов стартового состояния в `_init`,
+    // а не в `_tick` — память приводится в определённое состояние ДО первого
+    // `_tick`, поэтому чтение полей между `_init` и `_tick` перестаёт быть UB.
+    // Рекурсивно по уровням: `_init` вложенной модели инициализирует свои
+    // вложенные. Блоки `enter` сюда НЕ входят — они поведение и остаются в `_tick`.
+    let is_main = name.eq(&map.root_name());
+    generate_start_state_init(printer, map, start, is_main)?;
     for var in raw.variables.values() {
         let VariableNode::Simple {
             name: var_name,
@@ -128,6 +135,62 @@ fn generate_model_init(
         printer.ident(&format!("model->{} = ", var.name()));
         generate_expr(printer, map, model, vec![], expr, 0, true)?;
         printer.print(";").nl();
+    }
+    Ok(())
+}
+
+/// Эмитит инициализацию вложенных элементов стартового состояния в `_init`
+/// (фича 0033, R6). Только память (вызовы `_init` вложенных, установка стартовых
+/// служебных состояний композитов) — блоки `enter` сюда НЕ входят: это поведение,
+/// оно остаётся в `_tick`. Форма зеркальна прежней INIT-диспетчеризации, но без
+/// `enter` и без установки состояния самой модели.
+fn generate_start_state_init(
+    printer: &mut Printer,
+    map: &CMap,
+    start: &Name,
+    is_main: bool,
+) -> Result<(), Diagnostic> {
+    let append = if !is_main { ", main" } else { ", model" };
+    if let Some(Element::StateExtend {
+        name: state_name,
+        extend,
+        ..
+    }) = map.state_at(start.clone())
+    {
+        match extend {
+            StateExtend::Model(name) => {
+                printer
+                    .ident(&format!(
+                        "{}_init(&model->{}",
+                        name.unique_camelcase(),
+                        state_name.local().to_lowercase()
+                    ))
+                    .print(append)
+                    .print(");")
+                    .nl();
+            }
+            StateExtend::Parallel(steps) => {
+                let local = state_name.local_lowercase_snakecase();
+                let unique_upper = state_name.unique_uppercase_snakecase();
+                let access = format!("model->{}", local);
+                generate_parallel_items_init(printer, &access, &unique_upper, &steps, append);
+                printer
+                    .ident(&format!("model->{}.state = {}_INIT;", local, unique_upper))
+                    .nl();
+            }
+            StateExtend::Concatenation(steps) => {
+                let local = state_name.local_lowercase_snakecase();
+                let unique_upper = state_name.unique_uppercase_snakecase();
+                if let Some(first) = steps.first() {
+                    let variant =
+                        generate_concat_item_init(printer, &local, &unique_upper, first, 0, append)?;
+                    printer
+                        .ident(&format!("model->{}_state = {};", local, variant))
+                        .nl();
+                }
+            }
+            StateExtend::None => {}
+        }
     }
     Ok(())
 }
@@ -663,93 +726,32 @@ fn generate_model_tick(
         }
     }
 
-    printer.ident("switch (model->state) {").up().nl();
-    printer
-        .ident("case ")
-        .print(&*name.unique_uppercase_snakecase())
-        .print("_INIT: {")
-        .up()
-        .nl();
+    // 0033 (Option B): вход в стартовое состояние НЕ расходует такт. Работа
+    // INIT (инициализация вложенных, блоки `enter`, установка стартового
+    // состояния) диспетчеризуется в `if` ДО `switch` и НЕ завершается `break`,
+    // поэтому тело стартового состояния исполняется в ЭТОМ ЖЕ такте — как в
+    // симуляторе (`enter_initial_state`, 0025-04). Блоки `enter` остаются внутри
+    // `_tick` (могут писать в порты), а не выносятся в `_init` вне цикла
+    // сканирования. Правка рекурсивна по уровням: вложенный `_tick` делает то же,
+    // поэтому сдвиг обнуляется на любой глубине.
     let raw_state = map.raw_state_at(start.clone())?;
     let raw_state = &*raw_state.borrow();
     let append = if !is_main { ", main" } else { ", model" };
     let call_append = if !is_main { ", main" } else { ", model" };
-    match map.state_at(start.clone()) {
-        Some(Element::State { name, .. }) => {
-            // Простое стартовое состояние: enter → state
-            generate_named_blocks(printer, raw_state, map, model, "enter")?;
-            printer
-                .ident(&format!(
-                    "model->state = {};",
-                    name.unique_uppercase_snakecase()
-                ))
-                .nl();
-        }
-        Some(Element::StateExtend {
-            name: state_name,
-            extend,
-            next: _,
-        }) => {
-            if let StateExtend::Model(name) = extend {
-                // _init → enter → state
-                printer
-                    .ident(&format!(
-                        "{}_init(&model->{}",
-                        name.unique_camelcase(),
-                        state_name.local().to_lowercase()
-                    ))
-                    .print(append)
-                    .print(");")
-                    .nl();
-                generate_named_blocks(printer, raw_state, map, model, "enter")?;
-                printer
-                    .ident(&format!(
-                        "model->state = {};",
-                        state_name.unique_uppercase_snakecase()
-                    ))
-                    .nl();
-            } else if let StateExtend::Parallel(steps) = extend {
-                // parallel_init → enter → state
-                let local = state_name.local_lowercase_snakecase();
-                let unique_upper = state_name.unique_uppercase_snakecase();
-                let access = format!("model->{}", local);
-                generate_parallel_items_init(printer, &access, &unique_upper, &steps, append);
-                printer
-                    .ident(&format!("model->{}.state = {}_INIT;", local, unique_upper))
-                    .nl();
-                generate_named_blocks(printer, raw_state, map, model, "enter")?;
-                printer
-                    .ident(&format!(
-                        "model->state = {};",
-                        state_name.unique_uppercase_snakecase()
-                    ))
-                    .nl();
-            } else if let StateExtend::Concatenation(steps) = extend {
-                // concat_init → enter → state
-                let local = state_name.local_lowercase_snakecase();
-                let unique_upper = state_name.unique_uppercase_snakecase();
-                if let Some(first) = steps.first() {
-                    let variant = generate_concat_item_init(
-                        printer,
-                        &local,
-                        &unique_upper,
-                        first,
-                        0,
-                        append,
-                    )?;
-                    printer
-                        .ident(&format!("model->{}_state = {};", local, variant))
-                        .nl();
-                }
-                generate_named_blocks(printer, raw_state, map, model, "enter")?;
-                printer
-                    .ident(&format!(
-                        "model->state = {};",
-                        state_name.unique_uppercase_snakecase()
-                    ))
-                    .nl();
-            }
-        }
+    printer
+        .ident(&format!(
+            "if (model->state == {}_INIT) {{",
+            name.unique_uppercase_snakecase()
+        ))
+        .up()
+        .nl();
+    // Инициализация вложенных вынесена в `_init` (0033, R6). Здесь — только
+    // ПОВЕДЕНИЕ входа: блоки `enter` (могут писать в порты, поэтому внутри такта)
+    // и установка стартового состояния. Без `break` — тело исполняется в этом же
+    // такте.
+    let start_variant_upper = match map.state_at(start.clone()) {
+        Some(Element::State { name, .. }) => name.unique_uppercase_snakecase(),
+        Some(Element::StateExtend { name, .. }) => name.unique_uppercase_snakecase(),
         _ => {
             return Err(Diagnostic::error(
                 Location::Codegen,
@@ -757,9 +759,15 @@ fn generate_model_tick(
             )
             .with_code("CC-008"));
         }
-    }
-    printer.ident("break;").nl();
+    };
+    generate_named_blocks(printer, raw_state, map, model, "enter")?;
+    printer
+        .ident(&format!("model->state = {};", start_variant_upper))
+        .nl();
     printer.down().ident("}").nl();
+
+    // Тело стартового состояния исполняется в том же такте (без `break` выше).
+    printer.ident("switch (model->state) {").up().nl();
     let mut end_already_defined = false;
     for state_name in states.iter() {
         let raw_state = map.raw_state_at(state_name.clone())?;
@@ -944,6 +952,10 @@ fn generate_model_tick(
         printer.ident("break;").nl();
         printer.down().ident("}").nl();
     }
+    // Вариант `_INIT` до `switch` не доходит (снят диспетчером выше, 0033), но
+    // остаётся значением перечисления — `default` гасит -Wswitch, не пряча при
+    // этом реальный пропуск состояния (все достижимые состояния имеют `case`).
+    printer.ident("default: break;").nl();
     printer.down().ident("}").nl();
     Ok(())
 }

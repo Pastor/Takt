@@ -38,18 +38,21 @@
 //! порождённый C **не компилируется** (`error: must use 'struct' tag`) — дефект
 //! генератора, в бэклоге. В обёрнутом виде `typedef` эмитится.
 //!
-//! # Сверяются финальные значения, а не потактовая трасса
+//! # Потактовая сверка трасс (фича 0033)
 //!
-//! Найдено этим тестом при первом же прогоне: порождённый C заводит
-//! **синтетическое состояние `INIT`** на каждый уровень вложенности, и первые
-//! такты уходят на переходы `INIT → …` без исполнения тела. Тело модели впервые
-//! исполняется на **третьем** такте C (корень `INIT→ENTRY`, затем `Conf
-//! INIT→IDLE`), тогда как симулятор исполняет его на **первом**.
+//! Этот тест при первом прогоне (0025-07) обнаружил, что порождённый C заводил
+//! **синтетическое состояние `INIT`** на каждый уровень вложенности и тратил на
+//! него по такту: тело модели впервые исполнялось на третьем такте C, тогда как
+//! симулятор — на первом. Значения совпадали, расходилась **моментность**,
+//! поэтому сверка была вынуждена сравнивать только УСТАНОВИВШИЕСЯ значения.
 //!
-//! Значения при этом совпадают — расходится **моментность**. Поэтому сверяются
-//! установившиеся значения (обе стороны прогоняются до завершения), а сам сдвиг
-//! вынесен в бэклог как отдельная находка: потактовая сверка трасс невозможна,
-//! пока симулятор не моделирует `INIT`-такты синтезированного кода.
+//! **Фича 0033 (Option B) сдвиг устранила** на стороне генератора C: вход в
+//! стартовое состояние больше не расходует такт. Теперь сверяется значение каждой
+//! переменной **на каждом такте** (`per_tick_trace_matches_generated_c`), а сдвиг
+//! под структурной обёрткой равен нулю (`per_tick_shift_is_zero_under_wrapping`).
+//! Тесты `a8_*`/`a9_*` по-прежнему сверяют установившиеся значения — как отдельная,
+//! более грубая гарантия; сужение «только установившиеся» снято потактовыми
+//! тестами.
 
 use grammar::semantic::tree::construct_model;
 use simulation::{TickResult, Unit, Value, build_unit};
@@ -425,4 +428,197 @@ fn a8_expected_values_are_pinned() {
     assert_eq!(sim_value(&unit, "shifted"), 0, "S4: u8 1 << 8");
     assert_eq!(sim_value(&unit, "mode"), 1, "S7: enum Manual");
     assert_eq!(sim_value(&unit, "flag"), 1, "bool true");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Потактовая сверка трасс (фича 0033, R4/R5/A6/A7/A13)
+//
+// До 0033 сверка была вынуждена сравнивать только УСТАНОВИВШИЕСЯ значения:
+// порождённый C тратил такт на каждый уровень `INIT`, и трассы были смещены.
+// Option B (генератор C не тратит такт на `INIT`) сдвиг устранил, и теперь
+// сверяется значение каждой переменной НА КАЖДОМ такте.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TICKS_FIXTURE: &str = "tests/data/eval/conformance_ticks.lam";
+
+/// Максимум тактов для потактовой сверки — с запасом над длиной трассы.
+const TRACE_TICKS: usize = 6;
+
+/// Потактовая трасса симулятора: для каждого такта (до терминального включительно)
+/// вектор значений `vars` в порядке `vars`.
+fn simulate_trace(fixture: &str, vars: &[&str]) -> Vec<Vec<i64>> {
+    let source = std::fs::read_to_string(fixture).expect("фикстура читается");
+    let (ast, _) = grammar::parse(&source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let mut trace = Vec::new();
+    for _ in 0..TRACE_TICKS {
+        let result = unit.tick();
+        assert!(
+            !matches!(result, TickResult::Failed(_)),
+            "симуляция не должна падать: {result:?}"
+        );
+        trace.push(vars.iter().map(|v| sim_value(&unit, v)).collect());
+        if result == TickResult::Terminated {
+            break;
+        }
+    }
+    trace
+}
+
+/// Потактовая трасса порождённого C: тем же `lamc`, собирается `cc`, печатает
+/// значения `vars` после каждого такта. `basename` — имя файла без расширения
+/// (задаёт имя корневой структуры и файлов), `accessor` — путь к вложенной
+/// модели в структуре (например `entry`).
+fn c_trace(
+    dir: &Path,
+    fixture: &str,
+    basename: &str,
+    root: &str,
+    accessor: &str,
+    vars: &[&str],
+) -> Vec<Vec<i64>> {
+    let source = std::fs::read_to_string(fixture).expect("фикстура читается");
+    grammar::compile_to_c(
+        basename,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+
+    let prints = vars
+        .iter()
+        .map(|v| format!(r#"        printf("%d:{v}=%d\n", t, (int)m.{accessor}.{v});"#))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "{basename}.h"
+
+int main(void) {{
+    {root} m;
+    {root}_init(&m);
+    for (int t = 0; t < {TRACE_TICKS}; t++) {{
+        {root}_tick(&m);
+{prints}
+        if ({root}_is_done(&m)) break;
+    }}
+    return 0;
+}}
+"#
+    );
+    let harness_path = dir.join("trace_harness.c");
+    std::fs::write(&harness_path, harness).expect("запись харнесса");
+    let bin = dir.join("trace_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c11", "-I"])
+        .arg(dir)
+        .arg(dir.join(format!("{basename}.c")))
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "порождённый C не компилируется:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск собранного C");
+    assert!(run.status.success(), "собранный C завершился с ошибкой");
+
+    // Строки вида "T:var=val" → трасса. Индекс такта `t` начинается с 0 в C.
+    let out = String::from_utf8_lossy(&run.stdout).into_owned();
+    let mut trace: Vec<Vec<i64>> = Vec::new();
+    for line in out.lines() {
+        let (t_str, rest) = line.split_once(':').expect("формат T:var=val");
+        let t: usize = t_str.parse().expect("индекс такта");
+        let (_, val) = rest.split_once('=').expect("формат var=val");
+        let val: i64 = val.trim().parse().expect("значение");
+        if trace.len() <= t {
+            trace.resize(t + 1, Vec::new());
+        }
+        trace[t].push(val);
+    }
+    trace
+}
+
+/// A6/R4: потактовые трассы симулятора и порождённого C совпадают целиком, а не
+/// только в установившемся состоянии. Значения также **пришпилены** (A7): если
+/// обе стороны сломать одинаково, тест это заметит.
+#[test]
+fn per_tick_trace_matches_generated_c() {
+    let vars = ["n"];
+    let sim = simulate_trace(TICKS_FIXTURE, &vars);
+    // Пиннинг: n принимает 1 → 2 → 3, модель завершается за 3 такта. Возврат
+    // `break` в INIT-диспетчер сдвинул бы трассу и уронил бы это сравнение.
+    assert_eq!(
+        sim,
+        vec![vec![1], vec![2], vec![3]],
+        "ожидаемая потактовая трасса симулятора: n = 1, 2, 3"
+    );
+
+    if !cc_available() {
+        eprintln!(
+            "[ПРОПУСК] per_tick_trace_matches_generated_c: `cc` не найден — \
+             потактовая сверка с C не выполнена (трасса симулятора пришпилена выше)"
+        );
+        return;
+    }
+    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_0033_trace");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    let c = c_trace(
+        &dir,
+        TICKS_FIXTURE,
+        "conformance_ticks",
+        "ConformanceTicks",
+        "entry",
+        &vars,
+    );
+    assert_eq!(
+        sim, c,
+        "потактовые трассы симулятора и порождённого C обязаны совпадать НА КАЖДОМ \
+         такте (R4/A6), а не только в установившемся состоянии.\nсимулятор={sim:?}\nC={c:?}"
+    );
+}
+
+/// R2/A4: чисто структурная обёртка (`model Mid { start M = Counter; }`) не
+/// меняет потактовую трассу — сдвиг остаётся нулевым на любой глубине. Если бы
+/// вход в стартовое состояние стоил такта, лишний уровень сдвинул бы трассу.
+#[test]
+fn per_tick_shift_is_zero_under_wrapping() {
+    let vars = ["n"];
+    // Симулятор эталон моментности не менял — обёрнутая трасса та же [1,2,3].
+    let sim_wrapped = simulate_trace("tests/data/eval/conformance_ticks_wrapped.lam", &vars);
+    assert_eq!(
+        sim_wrapped,
+        vec![vec![1], vec![2], vec![3]],
+        "обёртка не должна менять трассу симулятора"
+    );
+
+    if !cc_available() {
+        eprintln!(
+            "[ПРОПУСК] per_tick_shift_is_zero_under_wrapping: `cc` не найден — \
+             сверка обёрнутой трассы с C не выполнена"
+        );
+        return;
+    }
+    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_0033_wrapped");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    // Лишний уровень `Mid` даёт доступ `entry.m` вместо `entry`.
+    let c_wrapped = c_trace(
+        &dir,
+        "tests/data/eval/conformance_ticks_wrapped.lam",
+        "conformance_ticks_wrapped",
+        "ConformanceTicksWrapped",
+        "entry.m",
+        &vars,
+    );
+    assert_eq!(
+        c_wrapped,
+        vec![vec![1], vec![2], vec![3]],
+        "лишний уровень иерархии НЕ должен сдвигать потактовую трассу C (R2/A4).\nC={c_wrapped:?}"
+    );
 }

@@ -1,0 +1,13 @@
+/// Та же модель, что `conformance_ticks.lam`, но обёрнута ЛИШНИМ уровнем
+/// (`Mid`). Чисто структурная обёртка не должна менять потактовую трассу —
+/// сдвиг обязан оставаться нулевым на любой глубине (фича 0033, R2/A4).
+model Counter {
+    var n: u8 := 0;
+    start S0 { always { n := 1; } ref S1; }
+    state S1 { always { n := 2; } ref S2; }
+    state S2 { always { n := 3; } }
+}
+model Mid {
+    start M = Counter;
+}
+start Entry = Mid;
