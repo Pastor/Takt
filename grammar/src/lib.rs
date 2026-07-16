@@ -349,6 +349,76 @@ pub fn compile_to_st(
     Ok(())
 }
 
+/// Компилирует исходный код Lam в `no_std` Rust — прошивку микроконтроллера.
+///
+/// Выполняет полный конвейер: лексический анализ → синтаксический →
+/// семантический → генерация `.rs`. Модель Lam отображается в `struct`,
+/// состояния — в `enum` + `match`, порты — в трейт `Hal` (ADR 0050, Option A по
+/// обеим развилкам).
+///
+/// ## Чем отличается от [`compile_to_c`]
+///
+/// Ниша та же — прошивка МК, — но дефекты отображения цели `c` здесь не
+/// воспроизводятся конструктивно: `[u8;4]` → `[u8; 4]` (а не `uint4_t`, дефект
+/// [0029]), `bit` → `bool` (а не `int`), `Rational` → `f64` (а не `float`, что
+/// делает сверку с симулятором достижимой). `void *userdata` заменён параметром
+/// типа `H: Hal`, а `unsafe` в порождаемом коде запрещён атрибутом
+/// `#![forbid(unsafe_code)]`.
+///
+/// ## Границы
+///
+/// - Порождается **один `.rs`-файл**; `Cargo.toml` генератор не порождает.
+///   Подключение — через `mod` в крейте пользователя.
+/// - Атрибут `#![no_std]` в файле **не эмитится**: он допустим только в корне
+///   крейта. Модуль не обращается к `std`, поэтому подключается и в
+///   `no_std`-крейт, и в обычный.
+/// - Карта адресов (`--address-map`) **не потребляется**: порты идут через HAL.
+/// - `--float-width=32` несовместим с целью и даёт ошибку `RS-015`, а не
+///   молчаливое игнорирование.
+///
+/// # Параметры
+///
+/// - `filename` — имя входного файла (используется для именования модели и диагностики)
+/// - `source` — исходный код на языке Lam
+/// - `output_path` — путь к выходному каталогу (создаёт `<filename>.rs`)
+/// - `search_paths` — директории для поиска файлов `import`
+/// - `options` — опции генерации
+///
+/// # Ошибки
+///
+/// Возвращает [`Diagnostic`] при синтаксической или семантической ошибке, при
+/// непереводимой конструкции (`RS-0xx`) либо при ошибке записи файла (`RS-001`).
+///
+/// [0029]: https://github.com/Pastor/BuT/blob/main/docs/features/0029-c-type-mapping.md
+pub fn compile_to_rust(
+    filename: &str,
+    source: &str,
+    output_path: &str,
+    search_paths: &[String],
+    options: &GenerateOptions,
+) -> Result<(), Diagnostic> {
+    let (model_ast, _) = parse(source, 0).map_err(|d| d.into_iter().next().unwrap())?;
+    let model = semantic::tree::construct_model(&model_ast, None, search_paths)?;
+
+    if model.borrow().name.is_none() {
+        let stem = Path::new(filename)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.split('.').next().unwrap_or(s).to_owned())
+            .unwrap_or_else(|| "Root".to_owned());
+        model.borrow_mut().name = Some(stem);
+    }
+
+    generator::generate(
+        generator::Language::Rust,
+        &model.borrow(),
+        output_path,
+        options,
+    )?;
+
+    Ok(())
+}
+
 /// Компилирует Lam в Structured Text в режиме `st-at` (фича 0041): к обычному ST
 /// добавляется размещение портов по карте адресов (`AT %IX…`/`%QX…`).
 ///

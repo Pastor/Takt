@@ -136,7 +136,7 @@ pub fn split_include_dirs(s: &str) -> Vec<String> {
 ///
 /// | Флаг                   | Описание                                  |
 /// |------------------------|-------------------------------------------|
-/// | `--target`, `-t`       | Целевой язык (`c`, по умолчанию)          |
+/// | `--target`, `-t`       | Целевой язык: `c` (по умолчанию), `c-hal`, `plantuml`, `st`, `st-at`, `rust` |
 /// | `--output`, `-o`       | Путь к выходному файлу/директории         |
 /// | `--include-dirs`, `-I` | Пути поиска импортов (`:` или `;`)        |
 /// | `-I<путь>`             | Слитная форма без пробела                 |
@@ -724,7 +724,7 @@ fn print_usage() {
     eprintln!("               lamc --help");
     eprintln!();
     eprintln!("Флаги:");
-    eprintln!("  --target, -t <c>       Целевой язык (по умолчанию: c)");
+    eprintln!("  --target, -t <цель>    Целевой язык (по умолчанию: c) — см. «Целевые платформы»");
     eprintln!("  --output, -o <путь>    Путь к выходному файлу");
     eprintln!("  --include-dirs, -I <dirs>  Пути поиска файлов import, разделённые ':' или ';'");
     eprintln!("                             Можно повторять: -I /a -I /b  или  -I /a:/b");
@@ -735,6 +735,7 @@ fn print_usage() {
     eprintln!("  --guard-disable        Выключить генерацию проверок Guard-формул");
     eprintln!("  --address-map <файл>   Внешняя карта адресов портов (.ld-подобный формат)");
     eprintln!("  --float-width=32|64    Ширина вещественного типа в C: float или double");
+    eprintln!("                         Цель rust всегда даёт f64 и флаг 32 отвергает (RS-015)");
     eprintln!(
         "                         По умолчанию 64 (double) — совпадает с точностью симулятора"
     );
@@ -745,6 +746,8 @@ fn print_usage() {
     eprintln!("  plantuml  Генерация диаграммы состояний PlantUML (.puml)");
     eprintln!("  st        Генерация Structured Text IEC 61131-3 (.st), язык ПЛК (фича 0041)");
     eprintln!("  st-at     ST + размещение портов по карте адресов (AT %...)");
+    eprintln!("  rust      Генерация no_std Rust (.rs) — прошивка МК (фича 0050)");
+    eprintln!("            Порты через трейт Hal; подключается в крейт через mod");
     eprintln!();
     eprintln!("Примеры:");
     eprintln!("  lamc compile main.lam");
@@ -1042,9 +1045,37 @@ fn main() {
                 }
             }
         }
+        "rust" => {
+            if let Err(diag) = grammar::compile_to_rust(
+                &options.input_file,
+                &source,
+                &options.output_path,
+                &options.include_dirs,
+                &generate_options(&options),
+            ) {
+                print_compile_error(&diag);
+                process::exit(1);
+            }
+            if !options.quiet {
+                if options.verbose {
+                    eprintln!(
+                        "Скомпилировано: {} → {} (rust)",
+                        fs::canonicalize(&options.input_file)
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_else(|_| options.input_file.clone()),
+                        options.output_path,
+                    );
+                } else {
+                    eprintln!(
+                        "Скомпилировано: {} → {}/ (rust)",
+                        options.input_file, options.output_path,
+                    );
+                }
+            }
+        }
         t => {
             eprintln!(
-                "Ошибка: неизвестная цель '{}'. Поддерживается: c, c-hal, plantuml, st, st-at",
+                "Ошибка: неизвестная цель '{}'. Поддерживается: c, c-hal, plantuml, st, st-at, rust",
                 t
             );
             process::exit(1);

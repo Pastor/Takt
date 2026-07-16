@@ -1,6 +1,7 @@
 mod c;
 mod indent;
 mod plantuml;
+mod rust;
 mod st;
 
 use crate::diagnostics::Diagnostic;
@@ -23,6 +24,17 @@ pub enum Language {
     /// Option A). Потребление карты адресов (`AT %…`) включается флагом
     /// [`GenerateOptions::hal`] — тем же, что и для режима `c-hal`.
     ST,
+    /// Генерация `no_std` Rust — прошивка микроконтроллера (фича 0050).
+    ///
+    /// Модель → `struct`, состояния → `enum` + `match`, порты → трейт `Hal`
+    /// вместо пары указателей на функции и `void *userdata` цели `c`
+    /// (ADR 0050, Option A по обеим развилкам). Вывод — один `.rs`-файл,
+    /// подключаемый пользователем через `mod`; `Cargo.toml` генератор не
+    /// порождает и им не владеет.
+    ///
+    /// Карта адресов ([`GenerateOptions::address_map`]) **не потребляется**:
+    /// порты идут через HAL — это аналог режима `c`, а не `c-hal`.
+    Rust,
 }
 
 /// Ширина вещественного типа в порождаемом C (фича 0029, ADR Option R-C).
@@ -122,6 +134,10 @@ pub fn generate(
         }
         Language::ST => {
             let generator = st::Generator {};
+            generator.generate(model, output_path, options)
+        }
+        Language::Rust => {
+            let generator = rust::Generator {};
             generator.generate(model, output_path, options)
         }
     }

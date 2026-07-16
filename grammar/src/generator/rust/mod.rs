@@ -1,0 +1,353 @@
+//! Генератор `no_std` Rust из семантического дерева Lam (фича 0050).
+//!
+//! Пятый целевой язык. Архитектурное решение — ADR 0050 (Option A по обеим
+//! развилкам, решение заказчика 2026-07-16): профиль **`no_std`-прошивка**,
+//! форма вывода — **один `.rs`-файл**.
+//!
+//! ## Зачем цель, если ниша занята целью `c`
+//!
+//! Ниша та же — прошивка МК. Дельта не в том, что «Rust лучше», а в конкретных
+//! дефектах цели `c`, которые здесь не воспроизводятся **конструктивно**:
+//!
+//! | Дефект цели `c` | Здесь |
+//! |---|---|
+//! | [0026](../../../../docs/features/0026-c-root-typedef.md): у модели без под-моделей нет typedef корня → C **не компилируется** | тип корня — обычная `struct` |
+//! | [0029](../../../../docs/features/0029-c-type-mapping.md): `[u8;4]` → `uint4_t`, `bit` → `int`, `Rational` → `float` ≠ f64 симулятора | `[u8; 4]`, `bool`, `f64` — точно (`rust_type`) |
+//! | `void *userdata` + указатели на функции: типобезопасности нет | `H: Hal` — параметр типа (`rust_port`) |
+//! | класс дефектов памяти | `#![forbid(unsafe_code)]` в шапке модуля |
+//!
+//! ## Форма вывода: почему в файле НЕТ `#![no_std]`
+//!
+//! ADR требовал начинать модуль с `#![no_std]` (R2). Проба при реализации
+//! **опровергла** это требование в выбранной форме вывода: `#![no_std]` —
+//! атрибут **корня крейта**, и в файле, подключённом через `mod`, он даёт
+//! предупреждение «the `#![no_std]` attribute can only be used at the crate
+//! root». То есть модуль с `#![no_std]` ломал бы сборку пользователя под
+//! `-D warnings` — ровно тем, чем цель хвалится.
+//!
+//! `no_std` — свойство **крейта**, а не модуля. Поэтому модуль просто не
+//! обращается к `std`, а `no_std`-совместимость **доказывается гейтом**: он
+//! оборачивает вывод в корень крейта с `#![no_std]` и компилирует. Это строже
+//! проверки отдельного файла и заодно подтверждает обещание ADR «работает и на
+//! хосте» (проверено: тот же модуль собирается и из `std`-крейта).
+//!
+//! ## Состав модуля
+//!
+//! `rust_name` (имена, `RS-004`/`RS-005`) · `rust_type` (типы, `repr` по
+//! диапазону) · `rust_port` (порты → HAL-трейт) · `rust_expr` (выражения и
+//! условия) · `rust_stmt` (операторы) · `rust_decl` (объявления) ·
+//! `rust_func` (функции) · `rust_model` (автомат) · `rust_map` (снимок карты).
+
+mod rust_decl;
+mod rust_expr;
+mod rust_func;
+mod rust_live;
+mod rust_map;
+mod rust_model;
+mod rust_name;
+mod rust_needs;
+mod rust_port;
+mod rust_stmt;
+mod rust_type;
+
+use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::GenerateOptions;
+use crate::generator::Generator as AsGenerator;
+use crate::generator::indent::Printer;
+use crate::semantic::ModelNode;
+use crate::semantic::minimap::{Element, Name};
+use crate::semantic::naming::normalize_lowercase_snakecase;
+use rust_map::RustMap;
+use std::cell::RefCell;
+use std::fs;
+use std::path::Path;
+use std::rc::Rc;
+
+/// Размер одного уровня отступа в порождаемом Rust (конвенция rustfmt).
+const INDENT: usize = 4;
+
+/// Генератор Rust для модели Lam.
+pub struct Generator {}
+
+impl AsGenerator for Generator {
+    fn generate(
+        &self,
+        model: &ModelNode,
+        output_path: &str,
+        options: &GenerateOptions,
+    ) -> Result<(), Diagnostic> {
+        // Молчаливое игнорирование флага недопустимо: пользователь решил бы, что
+        // получил f32, тогда как `Rational` → f64 — решение ADR.
+        rust_type::reject_float_width(options.float_width)?;
+
+        let map = RustMap::new(
+            &normalize_lowercase_snakecase(model.name().to_string()),
+            model,
+            options.guard_enable,
+        )?;
+        let program = generate_program(&map)?;
+        let filename = map.get_filename();
+        let _ = fs::create_dir(Path::new(output_path));
+        fs::write(
+            Path::new(output_path).join(filename.to_owned() + ".rs"),
+            program,
+        )
+        .map_err(|e| {
+            Diagnostic::error(Location::Codegen, format!("{:?}", e)).with_code("RS-001")
+        })?;
+        Ok(())
+    }
+}
+
+/// Собирает текст модуля Rust из снимка модели.
+fn generate_program(map: &RustMap) -> Result<String, Diagnostic> {
+    let Element::Model { .. } = map.model() else {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            "Корневой элемент карты не является моделью".to_string(),
+        )
+        .with_code("RS-012"));
+    };
+
+    // Порядок объявлений в Rust не значим, поэтому топологической сортировки —
+    // в отличие от целей `c` и `st` — не требуется. Порядок задан `BTreeMap`
+    // карты (фича 0048): детерминизм достаётся даром.
+    let mut blocks: Vec<(Name, Rc<RefCell<ModelNode>>)> = Vec::new();
+    let mut submodels: Vec<Name> = map
+        .using_models()
+        .into_iter()
+        .filter_map(|element| match element {
+            Element::Model { name, .. } => Some(name),
+            _ => None,
+        })
+        .collect();
+    submodels.sort_by(|a, b| a.unique().cmp(b.unique()));
+    for name in submodels {
+        let model = map.raw_model_at(name.clone())?;
+        blocks.push((name, model));
+    }
+    let root_name = map.root_name();
+    let root = map.root_model_node().ok_or_else(|| {
+        Diagnostic::error(
+            Location::Codegen,
+            format!("Корневая модель '{}' отсутствует в снимке карты", root_name),
+        )
+        .with_code("RS-012")
+    })?;
+    blocks.push((root_name.clone(), root));
+
+    let mut ports = rust_decl::collect_ports(map, &blocks)?;
+    // `debug` в профиле `no_std` printf не имеет. Решение (а) задачи 0050-07:
+    // метод трейта. Профиль `no_std` не означает «без вывода» — он означает
+    // «вывод решает пользователь». Тихо отбросить нельзя: ровно этот дефект
+    // закрыла фича 0035.
+    ports.needs_debug = map.usage().functions.contains("debug");
+
+    let mut out = String::new();
+    let mut p = Printer::new(INDENT, &mut out);
+    let mut warnings: Vec<Diagnostic> = Vec::new();
+
+    p.ident("// Порождено компилятором Lam (lamc) — цель: Rust (профиль no_std).")
+        .nl();
+    p.ident("// Не редактировать вручную: файл перезаписывается при каждой генерации.")
+        .nl();
+    p.ident("//").nl();
+    p.ident("// Модуль не обращается к std и подключается как `mod`:")
+        .nl();
+    p.ident("//").nl();
+    p.ident(&format!("//     #[path = \"{}.rs\"]", map.get_filename()))
+        .nl();
+    p.ident(&format!("//     pub mod {};", map.get_filename()))
+        .nl();
+    p.ident("//").nl();
+    p.ident("// Атрибута #![no_std] здесь нет намеренно: он допустим только в корне")
+        .nl();
+    p.ident("// крейта, а no_std — свойство крейта, не модуля. Совместимость с no_std")
+        .nl();
+    p.ident("// проверяется гейтом (scripts/precheck.sh).").nl();
+    p.nl();
+    // Не декорация: делает «в порождённом коде нет unsafe» свойством,
+    // проверяемым КОМПИЛЯТОРОМ, а не grep'ом (R10, A12).
+    p.ident("#![forbid(unsafe_code)]").nl().nl();
+
+    rust_decl::emit_enums(&mut p, &blocks)?;
+    rust_decl::emit_constants(&mut p, map, &blocks)?;
+    rust_decl::emit_hal(&mut p, &ports)?;
+    rust_func::emit_functions(&mut p, map, &blocks, &mut warnings)?;
+
+    for (name, model) in &blocks {
+        let is_root = name.unique() == root_name.unique();
+        rust_model::emit_model(
+            &mut p,
+            map,
+            name,
+            &model.borrow(),
+            is_root,
+            &ports,
+            &mut warnings,
+        )?;
+    }
+
+    report(&warnings);
+    Ok(out)
+}
+
+/// Показывает предупреждения генератора.
+///
+/// Молчание здесь недопустимо: `RS-010` сообщает, что LTL-формула в порождённый
+/// код не попала. Ровно эту тихую потерю закрыла фича 0035.
+fn report(warnings: &[Diagnostic]) {
+    for w in warnings {
+        let code = w.code.as_deref().unwrap_or("RS");
+        eprintln!("Предупреждение [{}]: {}", code, w.message);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::semantic::tree::construct_model;
+
+    /// Строит снимок карты из исходника Lam (по образцу `st::tests::make_map`).
+    fn make_map(src: &str, name: &str) -> RustMap {
+        let (ast, _) = crate::parse(src, 0).unwrap();
+        let model_rc = construct_model(&ast, None, &[]).unwrap();
+        model_rc.borrow_mut().name = Some(name.to_string());
+        let model = model_rc.borrow();
+        RustMap::new(name, &model, true).unwrap()
+    }
+
+    fn program_of(src: &str, name: &str) -> String {
+        generate_program(&make_map(src, name)).unwrap()
+    }
+
+    /// Корневая модель порождает `struct` и `impl`.
+    #[test]
+    fn root_model_emits_struct_and_impl() {
+        let rs = program_of("start S;", "Root");
+        assert!(rs.contains("pub struct Root"), "нет struct корня:\n{rs}");
+        assert!(rs.contains("impl Root"), "нет impl корня:\n{rs}");
+    }
+
+    /// **Сторож против дефекта 0026.**
+    ///
+    /// У цели `c` модель БЕЗ под-моделей не получает typedef корня, и
+    /// порождённый C не компилируется (8 ошибок `cc`) — простейший класс
+    /// моделей. Здесь тип корня — обычная `struct`, отдельного объявления не
+    /// требующая, поэтому класс дефекта не воспроизводится конструктивно.
+    #[test]
+    fn model_without_submodels_emits_root_type() {
+        let rs = program_of("start S; state T;", "Root");
+        assert!(
+            rs.contains("pub struct Root {"),
+            "модель без под-моделей обязана дать тип корня (дефект 0026):\n{rs}"
+        );
+    }
+
+    /// Состояния дают `enum`, а не целочисленные константы.
+    #[test]
+    fn states_emit_enum_not_integer_constants() {
+        let rs = program_of("start Idle { ref Done: 1 = 1; } state Done;", "Root");
+        assert!(rs.contains("enum RootState {"), "нет enum состояний:\n{rs}");
+        assert!(rs.contains("Idle,"), "нет варианта Idle:\n{rs}");
+        assert!(rs.contains("Done,"), "нет варианта Done:\n{rs}");
+    }
+
+    /// **Контракт ADR 0033:** вход в стартовое состояние диспетчеризуется ДО `match`.
+    ///
+    /// Проверяется порядок в тексте: `if self.state == …::Init` обязан стоять
+    /// раньше `match self.state`. Тело стартового состояния исполняется в том же
+    /// такте — иначе трасса разъедется с симулятором и с целью `c`.
+    #[test]
+    fn init_is_dispatched_before_match() {
+        let rs = program_of("start S;", "Root");
+        let init = rs
+            .find("if self.state == RootState::Init")
+            .expect("нет диспетчера Init");
+        let switch = rs.find("match self.state").expect("нет match");
+        assert!(
+            init < switch,
+            "Init обязан диспетчеризоваться ДО match (контракт 0033):\n{rs}"
+        );
+    }
+
+    /// Вывод **воспроизводим**: одна модель — один и тот же текст.
+    ///
+    /// Сторож детерминизма (фича 0048). Карта строится заново на каждой
+    /// итерации — иначе тест проверял бы кэш, а не обход.
+    #[test]
+    fn output_is_deterministic() {
+        let src = "model A { start S; } model B { start T; } model C { start U; } \
+                   start E = A | B | C;";
+        let first = program_of(src, "Root");
+        for i in 1..8 {
+            assert_eq!(
+                first,
+                program_of(src, "Root"),
+                "прогон {i} дал другой вывод — вернулся недетерминизм порядка"
+            );
+        }
+    }
+
+    /// Параллельная композиция даёт по `struct` на каждую под-модель.
+    #[test]
+    fn parallel_composition_emits_struct_per_submodel() {
+        let src = "model A { start S; } model B { start T; } start E = A | B;";
+        let rs = program_of(src, "Root");
+        assert!(rs.contains("pub struct RootA"), "нет struct A:\n{rs}");
+        assert!(rs.contains("pub struct RootB"), "нет struct B:\n{rs}");
+    }
+
+    /// **A12/R10:** в порождённом коде нет `unsafe`, и это следит компилятор.
+    #[test]
+    fn generated_code_forbids_unsafe() {
+        let rs = program_of("start S;", "Root");
+        assert!(
+            rs.contains("#![forbid(unsafe_code)]"),
+            "модуль обязан запрещать unsafe:\n{rs}"
+        );
+        assert!(!rs.contains("unsafe {"), "unsafe-блок в выводе:\n{rs}");
+    }
+
+    /// `#![no_std]` в модуле **не эмитится**.
+    ///
+    /// Сторож против возврата к букве R2: атрибут допустим только в корне
+    /// крейта, и в файле, подключаемом через `mod`, он даёт предупреждение —
+    /// то есть ломал бы сборку пользователя под `-D warnings`.
+    #[test]
+    fn no_std_attribute_is_not_emitted() {
+        let rs = program_of("start S;", "Root");
+        // Сравнение идёт по СТРОКАМ кода, а не подстрокой: шапка модуля сама
+        // объясняет, почему атрибута нет, и упоминает его текстом. Подстрочная
+        // проверка ловила бы этот комментарий — что она и сделала при первом
+        // прогоне.
+        let offender = rs
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.starts_with("//") && line.contains("#![no_std]"));
+        assert!(
+            offender.is_none(),
+            "#![no_std] в модуле даёт предупреждение 'can only be used at the \
+             crate root' — no_std обязан жить в корне крейта пользователя, \
+             найдено: {:?}",
+            offender
+        );
+    }
+
+    /// Модель без портов не эмитит ни трейта `Hal`, ни параметра типа `H`.
+    ///
+    /// Проба 2026-07-16: `struct M<H: Hal> { hal: H }` с нечитаемым `hal` валит
+    /// `-D warnings` («field `hal` is never read»).
+    #[test]
+    fn model_without_ports_emits_no_hal() {
+        let rs = program_of("start S;", "Root");
+        assert!(
+            !rs.contains("trait Hal"),
+            "трейт без портов не нужен:\n{rs}"
+        );
+        assert!(
+            !rs.contains("<H: Hal>"),
+            "параметр типа без портов не нужен:\n{rs}"
+        );
+    }
+}
