@@ -11,4 +11,5 @@
 | 0010-01 | 0010 | Вырожденное условие принятия автомата Бюхи (GPVW) | [0010-01-buchi-acceptance.md](0010-01-buchi-acceptance.md) |
 | 0022-01 | 0022 | Открытый верхний диапазон совместимости IDE (until-build) | [0022-01-untilbuild-open-range.md](0022-01-untilbuild-open-range.md) |
 | 0023-01 | 0023 | Проверка совместимости с новыми IDE (verifyPlugin) + валидность дескриптора | [0023-01-verifyplugin-descriptor.md](0023-01-verifyplugin-descriptor.md) |
+| 0045-01 | 0045 | Устаревшие стабы SV в каталоге вывода (доделка гейта 0045-02) — ИСПРАВЛЕН | [0045-01-stale-sv-artifacts.md](0045-01-stale-sv-artifacts.md) |
 | 0053-01 | 0053 | `FileTable::default()` сталкивает первый импорт с корнем (`file_no` 0) — ЗАВЕДЁН, блокирует 0056-01 | [0053-01-file-table-default-collision.md](0053-01-file-table-default-collision.md) |

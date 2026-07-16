@@ -32,7 +32,7 @@
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0045-01`…`0045-08`) |
 | Тест-план | [`docs/tests/0045-sv-backend.md`](../tests/0045-sv-backend.md) |
 | Отчёт о тестировании | [`docs/reports/`](../reports/README.md) (`0045-sv-backend.md`) |
-| Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0045-YY-*`) |
+| Исправления | [0045-01](../fixes/0045-01-stale-sv-artifacts.md) — устаревшие стабы SV (доделка гейта 0045-02) |
 
 ## Краткое описание
 
