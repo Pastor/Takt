@@ -149,4 +149,8 @@
 | 0056-01 | 0056 | Индекс различает файлы (`file_no`, `offset`) | [0056-01-file-aware-index.md](0056-01-file-aware-index.md) |
 | 0056-02 | 0056 | Точный путь вместо угадывания (`to_snake_case` удаляется) | [0056-02-goto-exact-path.md](0056-02-goto-exact-path.md) |
 | 0056-03 | 0056 | Подключить кросс-файловый переход к серверу | [0056-03-wire-server.md](0056-03-wire-server.md) |
+| 0057-01 | 0057 | Регистр шага и его enum в `Fsm`/минимапе | [0057-01-step-register.md](0057-01-step-register.md) |
+| 0057-02 | 0057 | `emit_extend` для `Concatenation` — инлайн активного шага | [0057-02-emit-concatenation.md](0057-02-emit-concatenation.md) |
+| 0057-03 | 0057 | Вложенная композиция — покрытие или явная диагностика | [0057-03-nesting-diagnostics.md](0057-03-nesting-diagnostics.md) |
+| 0057-04 | 0057 | Потактовая сверка и гейт для `+` в SV | [0057-04-conformance-gate.md](0057-04-conformance-gate.md) |
 
