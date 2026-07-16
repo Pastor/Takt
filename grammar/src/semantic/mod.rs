@@ -12,6 +12,7 @@
 //! - [`Extend`] — реализация модели: ссылка, последовательная или параллельная компоновка.
 
 mod builtin;
+pub(crate) mod callgraph;
 mod condition;
 pub(crate) mod docs;
 pub mod enum_node;
