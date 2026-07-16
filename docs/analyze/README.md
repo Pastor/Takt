@@ -47,4 +47,5 @@
 | 0046 | Устранение всех предупреждений сборки (rustc + clippy) | [0046-build-warnings-cleanup.md](0046-build-warnings-cleanup.md) | — (новая фича) |
 | 0048 | Детерминированная генерация кода (единый порядок эмиссии) | [0048-deterministic-codegen.md](0048-deterministic-codegen.md) | нет |
 | 0049 | Верификация модели (Model Checking) на основе LTL | [0049-model-checking-ltl.md](0049-model-checking-ltl.md) | нет (аддитивно: `lamc verify` — новая оснастка, синтаксис и версия языка не тронуты, вывод генераторов неизменен; зависит от закрытых 0010/0035) |
+| 0050 | Бэкенд генерации в Rust | [0050-rust-backend.md](0050-rust-backend.md) | — (новая фича) |
 
