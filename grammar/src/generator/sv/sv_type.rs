@@ -49,13 +49,6 @@
 //! у пользовательского перечисления с явными значениями — верную ширину.
 //! Отдельного правила для состояний заводить не требуется.
 
-// Часть отображения (перечисления, литералы, структуры) обретает потребителей в
-// задачах 0045-05 (состояния) и 0045-06 (выражения); до тех пор эти элементы
-// покрыты только своими юнит-тестами, и `cargo` считает их мёртвыми. Пометка
-// **временная** и снимается задачей 0045-06 — там же, где вызовется последний из
-// них. Сам `sv_type` уже вызывается из `sv_module` (0045-04).
-#![allow(dead_code)]
-
 use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
@@ -267,21 +260,6 @@ pub(crate) fn enum_width(
         }
     }
     Ok((64, true))
-}
-
-/// Печатает литерал заданной ширины: `8'd7`, `1'b1`.
-///
-/// Ширина обязательна, а не стиль: без неё `verilator -Wall` даёт
-/// `WIDTHEXPAND` — а гейт не различает «предупреждение» и «ошибка».
-pub(crate) fn sv_literal(value: i64, width: u32) -> String {
-    if value < 0 {
-        // Отрицательный литерал печатается как унарный минус над беззнаковым:
-        // `-8'sd5`. Знаковая форма (`'sd`) обязательна — иначе минус применится
-        // к беззнаковому и даст дополнение до ширины.
-        format!("-{}'sd{}", width, value.unsigned_abs())
-    } else {
-        format!("{}'d{}", width, value)
-    }
 }
 
 #[cfg(test)]
@@ -550,14 +528,5 @@ mod tests {
     fn empty_enum_is_sv004() {
         let err = enum_width(&[], "перечисление 'E'").unwrap_err();
         assert_eq!(err.code.as_deref(), Some("SV-004"));
-    }
-
-    /// Литерал печатается с явной шириной — иначе `verilator -Wall` даёт
-    /// `WIDTHEXPAND`.
-    #[test]
-    fn literals_carry_explicit_width() {
-        assert_eq!(sv_literal(7, 8), "8'd7");
-        assert_eq!(sv_literal(1, 1), "1'd1");
-        assert_eq!(sv_literal(-5, 8), "-8'sd5");
     }
 }

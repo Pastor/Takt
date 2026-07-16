@@ -104,6 +104,18 @@ impl SvMap {
         self.map.element_at(name.clone())
     }
 
+    /// Элемент **модели** по имени — корневой в том числе.
+    ///
+    /// Корень в `elements` не лежит: снимок держит его отдельным полем
+    /// (`Map::model`). Без этой развилки обход уровней спотыкался бы ровно на
+    /// корневой модели — то есть на самой частой.
+    pub(crate) fn model_element_of(&self, name: &Name) -> Option<Element> {
+        if name.unique() == self.root_name().unique() {
+            return Some(self.model());
+        }
+        self.map.element_at(name.clone())
+    }
+
     /// Модель по имени.
     ///
     /// # Ошибки
