@@ -187,8 +187,7 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
   для `BOOL` **компилируется** (не проходит лишь `b := 2;`); `FALSE`/`TRUE`
   печатаются ради стандартности, а не потому, что иначе не собирается.
 - **Генерация детерминирована** (фича
-  [0048](docs/features/0048-deterministic-codegen.md), реализована; закрытие —
-  после отчёта о тестировании). Порядок эмиссии —
+  [0048](docs/features/0048-deterministic-codegen.md), закрыта). Порядок эмиссии —
   свойство типа контейнера: словари `ModelNode` (`semantic/mod.rs`) и снимок
   `minimap::Map` — `BTreeMap` (алфавитный порядок), ключ `Name` имеет ручной
   `Ord` по паре `(unique, local)`. `c/mod.rs::topological_sort_models` сортирует
