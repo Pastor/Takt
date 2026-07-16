@@ -45,5 +45,5 @@
 | 0045 | Анализ 0045-03: Отображение типов Lam → SystemVerilog (подзадача аналитики) | [0045-03-type-mapping.md](0045-03-type-mapping.md) | см. обзор 0045 |
 | 0045 | Анализ 0045-05: Модель времени, сброс, автомат и композиция (подзадача аналитики) | [0045-05-fsm-time-reset.md](0045-05-fsm-time-reset.md) | см. обзор 0045 |
 | 0046 | Устранение всех предупреждений сборки (rustc + clippy) | [0046-build-warnings-cleanup.md](0046-build-warnings-cleanup.md) | — (новая фича) |
-| 0048 | Детерминированная генерация кода (единый порядок эмиссии) | [0048-deterministic-codegen.md](0048-deterministic-codegen.md) | — (новая фича) |
+| 0048 | Детерминированная генерация кода (единый порядок эмиссии) | [0048-deterministic-codegen.md](0048-deterministic-codegen.md) | нет |
 

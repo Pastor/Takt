@@ -118,4 +118,8 @@
 | 0045-06 | 0045 | Выражения, условия, функции | [0045-06-expressions-functions.md](0045-06-expressions-functions.md) |
 | 0045-07 | 0045 | Тестбенч и сверка с симулятором Lam | [0045-07-testbench-conformance.md](0045-07-testbench-conformance.md) |
 | 0045-08 | 0045 | Примеры, контрпримеры, документация | [0045-08-examples-docs.md](0045-08-examples-docs.md) |
+| 0048-01 | 0048 | Упорядоченный общий слой (`ModelNode`, `minimap::Map`, `Ord` для `Name`) | [0048-01-ordered-semantic-layer.md](0048-01-ordered-semantic-layer.md) |
+| 0048-02 | 0048 | Детерминированная `topological_sort_models` (цель `c`) | [0048-02-deterministic-topo-sort.md](0048-02-deterministic-topo-sort.md) |
+| 0048-03 | 0048 | Гейт воспроизводимости в `precheck.sh` + тесты-сторожа | [0048-03-reproducibility-gate.md](0048-03-reproducibility-gate.md) |
+| 0048-04 | 0048 | Перегенерация `examples/generated/` и синхронизация документации | [0048-04-regenerate-examples.md](0048-04-regenerate-examples.md) |
 
