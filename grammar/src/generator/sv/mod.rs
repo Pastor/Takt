@@ -35,6 +35,7 @@
 //! `sv_expr` (выражения и функции, `SV-005`).
 
 mod sv_map;
+mod sv_type;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::GenerateOptions;
