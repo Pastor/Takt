@@ -1185,3 +1185,84 @@ mod formatting_tests {
         );
     }
 }
+
+/// Многофайловость LSP: импорты и чужие диагностики (фича 0055).
+#[cfg(feature = "lsp")]
+mod lsp_multifile {
+    // ─── Многофайловость: импорты и чужие диагностики (фича 0055) ────────────────
+
+    const LSP55_DIR: &str = "tests/data/lsp55";
+
+    fn diagnostics_at(fixture: &str) -> Vec<lsp_types::Diagnostic> {
+        let path = format!("{LSP55_DIR}/{fixture}");
+        let source = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+        grammar::lsp::collect_diagnostics_at(&path, &source, &[])
+    }
+
+    /// Импорт разрешается в редакторе.
+    ///
+    /// Прежде `collect_diagnostics` звала `construct_model(&ast, None, &[])` — с
+    /// пустыми путями поиска, поэтому `import "lib_ok.lam";` **всегда** давал
+    /// «файл не найден», хотя файл лежит рядом.
+    #[test]
+    fn import_resolves_in_editor() {
+        let diags = diagnostics_at("uses_ok.lam");
+        assert!(
+            !diags.iter().any(|d| d.message.contains("не найден")),
+            "импорт рядом с документом обязан разрешаться: {diags:?}"
+        );
+    }
+
+    /// Ошибка ЧУЖОГО файла привязана к строке `import`, а не к чужому смещению.
+    ///
+    /// Прежде `file_no` отбрасывался, и подсветка ложилась в текущий документ по
+    /// смещению из другого файла — то есть не туда.
+    #[test]
+    fn foreign_error_is_anchored_at_the_import_line() {
+        let diags = diagnostics_at("uses_bad.lam");
+        let d = diags
+            .iter()
+            .find(|d| d.message.contains("Nowhere"))
+            .unwrap_or_else(|| panic!("ошибка библиотеки обязана быть показана: {diags:?}"));
+        assert_eq!(
+            d.range.start.line, 0,
+            "якорь — строка `import` (первая): {:?}",
+            d.range
+        );
+    }
+
+    /// Текст называет настоящее место ошибки: `в файле X:строка:колонка`.
+    ///
+    /// Без этого автор видел бы подсветку на `import` и не знал, что искать.
+    #[test]
+    fn foreign_error_names_the_real_location() {
+        let diags = diagnostics_at("uses_bad.lam");
+        let d = diags
+            .iter()
+            .find(|d| d.message.contains("Nowhere"))
+            .expect("ошибка библиотеки");
+        assert!(
+            d.message.contains("в файле") && d.message.contains("lib_bad.lam:2:"),
+            "сообщение обязано называть файл и позицию: {}",
+            d.message
+        );
+    }
+
+    /// Своя ошибка показывается на своём месте — сужение не задело обычный путь.
+    #[test]
+    fn own_error_keeps_its_own_range() {
+        let source = "start A { ref Nowhere; }";
+        let diags = grammar::lsp::collect_diagnostics_at("own.lam", source, &[]);
+        let d = diags.first().expect("ошибка своя");
+        assert!(
+            !d.message.contains("в файле"),
+            "своя ошибка не помечается как чужая: {}",
+            d.message
+        );
+        assert!(
+            d.range.start.character > 0,
+            "позиция внутри строки: {:?}",
+            d.range
+        );
+    }
+}

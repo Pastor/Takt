@@ -144,4 +144,6 @@
 | 0053-02 | 0053 | Печать `путь:строка:колонка` в `lamc` | [0053-02-cli-positions.md](0053-02-cli-positions.md) |
 | 0054-01 | 0054 | Печать позиции — в общий слой `grammar::diagnostics` | [0054-01-shared-position-print.md](0054-01-shared-position-print.md) |
 | 0054-02 | 0054 | Позиция и код в диагностиках симулятора | [0054-02-sim-diagnostics.md](0054-02-sim-diagnostics.md) |
+| 0055-01 | 0055 | Неявный путь импорта и цепочка импорта (ядро) | [0055-01-implicit-import-path.md](0055-01-implicit-import-path.md) |
+| 0055-02 | 0055 | Импорты и чужие диагностики в LSP | [0055-02-lsp-foreign-diagnostics.md](0055-02-lsp-foreign-diagnostics.md) |
 

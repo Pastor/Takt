@@ -79,6 +79,94 @@ fn check_import_cycle(
     Ok(())
 }
 
+/// Путь файла, чьи импорты сейчас обрабатываются (фича 0055).
+///
+/// Вершина стека импортов, а если он пуст (импорт из корневого файла) — корень
+/// из реестра. Реестр-однодневка (`construct_model` без путей) корня не знает —
+/// тогда `None`.
+fn importer_path<'a>(import_stack: &'a [String], files: &'a FileTable) -> Option<&'a str> {
+    import_stack
+        .last()
+        .map(String::as_str)
+        .or_else(|| files.path(0))
+}
+
+/// Пути поиска импорта с добавленным каталогом **импортирующего файла**
+/// (фича 0055).
+///
+/// Прежде импорт искался **только** по явным `-I`: файл, лежащий рядом с
+/// импортирующим, не находился — даже если компилятор запущен из его каталога.
+/// `import "lib.lam";` в `main.lam` требовал `-I <каталог main.lam>`, иначе
+/// `SE-013`. Это расходилось с интуицией (`#include "x.h"`, Python, JS ищут
+/// рядом) и делало `import` непригодным без настройки.
+///
+/// # Почему каталог добавляется В КОНЕЦ
+///
+/// Правка **строго аддитивна** (правило 11): пути из `-I` перебираются первыми,
+/// поэтому там, где импорт разрешался раньше, найдётся **тот же** файл.
+/// Меняется только случай, где раньше была ошибка. Поставь каталог первым — и
+/// проект с `-I lib`, где рядом с моделью лежит одноимённый файл, начал бы брать
+/// другой файл, молча сменив смысл сборки.
+///
+/// Каталог берётся у **импортирующего** файла: у вершины стека импортов, а если
+/// стек пуст (импорт из корневого файла) — у корня из реестра. Реестр-однодневка
+/// (`construct_model` без путей) корня не знает — тогда неявного пути нет, и
+/// поведение прежнее.
+fn search_paths_with_importer_dir(
+    search_paths: &[String],
+    import_stack: &[String],
+    files: &FileTable,
+) -> Vec<String> {
+    let mut paths = search_paths.to_vec();
+    if let Some(parent) = importer_path(import_stack, files)
+        .map(std::path::Path::new)
+        .and_then(std::path::Path::parent)
+    {
+        // Путь без каталога (`main.lam`) даёт пустого родителя — это «здесь».
+        let dir = if parent.as_os_str().is_empty() {
+            ".".to_string()
+        } else {
+            parent.to_string_lossy().into_owned()
+        };
+        if !paths.contains(&dir) {
+            paths.push(dir);
+        }
+    }
+    paths
+}
+
+/// Отмечает диагностику из импортированного файла местом её `import` (фича 0055).
+///
+/// Заметка ставится **на каждом** уровне всплытия, поэтому у ошибки из
+/// `top → mid → deep` их две: `deep` импортирован в `mid`, `mid` — в `top`. Это и
+/// есть цепочка импорта — то, что показывает `rustc`, и то, по чему редактор
+/// находит место в **открытом** документе: собственные координаты ошибки
+/// указывают в текст чужого файла.
+fn note_imported_here(
+    d: Diagnostic,
+    import_loc: Location,
+    filename: &str,
+    importer: Option<&str>,
+) -> Diagnostic {
+    let what = short_name(filename);
+    let message = match importer.map(short_name) {
+        // Сообщение самодостаточно: `lamc` печатает текст заметки, но не её
+        // позицию, поэтому «импортировано здесь» без имён не сказало бы ничего.
+        Some(where_) => format!("'{what}' импортирован в '{where_}'"),
+        None => format!("'{what}' импортирован здесь"),
+    };
+    d.with_note(import_loc, message)
+}
+
+/// Имя файла без каталога — для сообщений: полный путь в цепочке импорта только
+/// мешает читать.
+fn short_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string())
+}
+
 /// Помечает узел как пришедший через `import` (фича 0051, R2).
 ///
 /// Вызывается в **каждой** из трёх точек вставки импорта — `Plain`,
@@ -140,6 +228,11 @@ fn construct_model_stage0(
         }
     }
 
+    // Каталог импортирующего файла — неявный путь поиска (фича 0055).
+    let import_paths = search_paths_with_importer_dir(search_paths, import_stack, files);
+    let importer: Option<String> = importer_path(import_stack, files).map(str::to_string);
+    let importer = importer.as_deref();
+
     for element in model.elements.iter() {
         if let ModelElement::Model(model) = element {
             let model = construct_model_stage0(
@@ -161,7 +254,7 @@ fn construct_model_stage0(
         } else if let ModelElement::Import(def) = element {
             match def {
                 ImportDefine::Plain(path, import_loc) => {
-                    let (content, filename) = read_import_file(search_paths, path)?;
+                    let (content, filename) = read_import_file(&import_paths, path)?;
                     // Проверяем цикл ДО рекурсивной обработки файла
                     check_import_cycle(import_stack, &filename, *import_loc)?;
                     // Извлекаем только имя файла (без директории и расширения),
@@ -198,13 +291,23 @@ fn construct_model_stage0(
                                 files,
                             );
                             import_stack.pop();
-                            models.insert(model_name, mark_imported(result?));
+                            let node = result.map_err(|d| {
+                                note_imported_here(d, *import_loc, &filename, importer)
+                            })?;
+                            models.insert(model_name, mark_imported(node));
                         }
-                        Err(d) => return Err(d.first().unwrap().clone()),
+                        Err(d) => {
+                            return Err(note_imported_here(
+                                d.first().unwrap().clone(),
+                                *import_loc,
+                                &filename,
+                                importer,
+                            ));
+                        }
                     }
                 }
                 ImportDefine::GlobalSymbol(path, id, import_loc) => {
-                    let (content, filename) = read_import_file(search_paths, path)?;
+                    let (content, filename) = read_import_file(&import_paths, path)?;
                     // Проверяем цикл ДО рекурсивной обработки файла
                     check_import_cycle(import_stack, &filename, *import_loc)?;
                     let model_name = id.name.clone();
@@ -227,9 +330,19 @@ fn construct_model_stage0(
                                 files,
                             );
                             import_stack.pop();
-                            models.insert(model_name, mark_imported(result?));
+                            let node = result.map_err(|d| {
+                                note_imported_here(d, *import_loc, &filename, importer)
+                            })?;
+                            models.insert(model_name, mark_imported(node));
                         }
-                        Err(d) => return Err(d.first().unwrap().clone()),
+                        Err(d) => {
+                            return Err(note_imported_here(
+                                d.first().unwrap().clone(),
+                                *import_loc,
+                                &filename,
+                                importer,
+                            ));
+                        }
                     }
                 }
                 // `import { A, B as C } from "file.lam";`
@@ -240,7 +353,7 @@ fn construct_model_stage0(
                 // Поддерживаемые категории: модели, псевдонимы типов, переменные, условия.
                 // Приоритет поиска: модель → тип → переменная → условие.
                 ImportDefine::Rename(path, symbols, import_loc) => {
-                    let (content, filename) = read_import_file(search_paths, path)?;
+                    let (content, filename) = read_import_file(&import_paths, path)?;
                     // Проверяем цикл ДО рекурсивной обработки файла
                     check_import_cycle(import_stack, &filename, *import_loc)?;
                     import_stack.push(filename.clone());
@@ -254,11 +367,17 @@ fn construct_model_stage0(
                         ),
                         Err(d) => {
                             import_stack.pop();
-                            return Err(d.first().unwrap().clone());
+                            return Err(note_imported_here(
+                                d.first().unwrap().clone(),
+                                *import_loc,
+                                &filename,
+                                importer,
+                            ));
                         }
                     };
                     import_stack.pop();
-                    let imported = result?;
+                    let imported = result
+                        .map_err(|d| note_imported_here(d, *import_loc, &filename, importer))?;
                     let src = imported.borrow();
                     for (orig_id, alias_id) in symbols {
                         let orig = &orig_id.name;

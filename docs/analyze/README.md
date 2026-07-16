@@ -52,4 +52,5 @@
 | 0052 | Итеративные обходы в verification/ (снятие потолка стека) | [0052-verify-iterative-traversal.md](0052-verify-iterative-traversal.md) | — (новая фича) |
 | 0053 | Идентификатор файла в позициях диагностик (file_no) | [0053-diagnostics-file-id.md](0053-diagnostics-file-id.md) | — (новая фича) |
 | 0054 | Позиции в диагностиках симулятора | [0054-sim-diagnostics-positions.md](0054-sim-diagnostics-positions.md) | — (новая фича) |
+| 0055 | Многофайловость LSP: импорты и позиции диагностик | [0055-lsp-multifile.md](0055-lsp-multifile.md) | — (новая фича) |
 

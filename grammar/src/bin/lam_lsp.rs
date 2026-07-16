@@ -230,7 +230,7 @@ fn handle_notification(
             let params: DidOpenTextDocumentParams = serde_json::from_value(not.params)?;
             let uri = params.text_document.uri;
             let text = params.text_document.text;
-            let diagnostics = grammar::lsp::collect_diagnostics(&text);
+            let diagnostics = grammar::lsp::collect_diagnostics_at(&uri_to_path(&uri), &text, &[]);
             state.documents.insert(uri.clone(), text);
             publish_diagnostics(connection, uri, diagnostics)?;
         }
@@ -240,7 +240,8 @@ fn handle_notification(
             // Используем полный текст документа (sync kind FULL)
             if let Some(change) = params.content_changes.into_iter().last() {
                 let text = change.text;
-                let diagnostics = grammar::lsp::collect_diagnostics(&text);
+                let diagnostics =
+                    grammar::lsp::collect_diagnostics_at(&uri_to_path(&uri), &text, &[]);
                 state.documents.insert(uri.clone(), text);
                 publish_diagnostics(connection, uri, diagnostics)?;
             }
@@ -257,6 +258,39 @@ fn handle_notification(
         }
     }
     Ok(())
+}
+
+/// Путь файла из URI документа (фича 0055).
+///
+/// Нужен, чтобы редактор разрешал `import` так же, как `lamc`: каталог документа
+/// — неявный путь поиска. Прежде диагностики собирались вообще без путей, и
+/// `import "lib.lam";` всегда давал «файл не найден».
+///
+/// Обрабатывается только схема `file:` — иные (например, `untitled:`) пути не
+/// имеют, и импорт для них не разрешится: это честнее, чем угадывать каталог.
+fn uri_to_path(uri: &Uri) -> String {
+    let raw = uri.as_str();
+    let path = raw.strip_prefix("file://").unwrap_or(raw);
+    percent_decode(path)
+}
+
+/// Раскодирует `%XX` в пути URI: пробелы и кириллица в путях реальны.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Отправляет диагностику клиенту.

@@ -1,0 +1,2 @@
+// Библиотека с ошибкой: ссылка 'Nowhere' не существует.
+start Boot { ref Nowhere; }
