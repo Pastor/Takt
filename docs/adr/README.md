@@ -47,4 +47,5 @@
 | [0054](./0054-sim-diagnostics-positions.md) | Позиции в диагностиках симулятора | Accepted | фича 0054 |
 | [0055](./0055-lsp-multifile.md) | Многофайловость LSP: импорты и позиции диагностик | Accepted | фича 0055 |
 | [0056](./0056-lsp-goto-exact-file.md) | Точный путь вместо угадывания в goto_declaration | Accepted | фича 0056 |
+| [0057](./0057-sv-sequential-composition.md) | Последовательная композиция (`+`) в цели SystemVerilog | Accepted | фича 0057 |
 
