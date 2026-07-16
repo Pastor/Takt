@@ -255,4 +255,38 @@ mod tests {
             "отсутствует аннотация параллельной композиции:\n{diagram}"
         );
     }
+
+    /// Сторож детерминизма (фича 0048). PlantUML — единственный бэкенд без единой
+    /// локальной сортировки: порядок подмоделей и состояний он берёт напрямую из
+    /// общего слоя. Карта строится заново на каждой итерации — иначе проверялся
+    /// бы кэш, а не обход.
+    #[test]
+    fn test_generate_diagram_is_deterministic() {
+        let src = "model B { start T; } model A { start S; } model C { start U; } \
+                   start E = A | B | C;";
+        let first = generate_diagram(&make_map(src, "Root")).unwrap();
+        for i in 1..8 {
+            assert_eq!(
+                first,
+                generate_diagram(&make_map(src, "Root")).unwrap(),
+                "прогон {i} дал другую диаграмму — вернулся недетерминизм порядка"
+            );
+        }
+    }
+
+    /// Блоки подмоделей печатаются в устойчивом (лексикографическом) порядке, а
+    /// не в порядке обхода общего слоя. Модели объявлены `B`, `A` — вывод обязан
+    /// поставить `A` перед `B`. С недетерминированным обходом тест падал бы
+    /// случайно (≈половина прогонов), поэтому он и сторож (фича 0048).
+    #[test]
+    fn test_generate_diagram_submodels_in_stable_order() {
+        let src = "model B { start T; } model A { start S; } start E = A | B;";
+        let diagram = generate_diagram(&make_map(src, "Root")).unwrap();
+        let a = diagram.find("state A {").expect("нет блока A");
+        let b = diagram.find("state B {").expect("нет блока B");
+        assert!(
+            a < b,
+            "порядок подмоделей должен быть устойчивым, а не зависеть от обхода:\n{diagram}"
+        );
+    }
 }

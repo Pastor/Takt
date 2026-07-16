@@ -3615,6 +3615,44 @@ fn test_unused_variable_warning() {
     );
 }
 
+/// Сторож детерминизма диагностик (фича 0048, R6). Предупреждения Ce13
+/// собираются обходом словаря `variables`; до 0048 (`HashMap`) их порядок плавал
+/// между прогонами, теперь (`BTreeMap`) он лексикографический и устойчивый.
+/// Переменные объявлены `z_var`, `a_var`, `m_var` — предупреждения обязаны идти
+/// в порядке `a_var`, `m_var`, `z_var`, а не в порядке объявления или обхода.
+#[test]
+fn test_unused_variable_warnings_are_deterministic_and_sorted() {
+    let src = "model M { start S; var z_var: bit; var a_var: bit; var m_var: bit; }";
+    let names_of = || {
+        let (ast, _) = parse(src, 0).unwrap();
+        let model = construct_model(&ast, None, &[]).unwrap();
+        grammar::unused_variable_warnings(model)
+            .iter()
+            .map(|w| {
+                ["a_var", "m_var", "z_var"]
+                    .iter()
+                    .find(|n| w.message.contains(**n))
+                    .copied()
+                    .unwrap_or("?")
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+    };
+    let first = names_of();
+    assert_eq!(
+        first,
+        vec!["a_var", "m_var", "z_var"],
+        "предупреждения должны идти в лексикографическом порядке имён, получено: {first:?}"
+    );
+    for i in 1..8 {
+        assert_eq!(
+            first,
+            names_of(),
+            "прогон {i} дал другой порядок предупреждений — вернулся недетерминизм"
+        );
+    }
+}
+
 /// FE3: Если все переменные используются — предупреждений Ce13 нет.
 #[test]
 fn test_all_vars_used_no_warning() {
