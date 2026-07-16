@@ -48,4 +48,6 @@
 | 0048 | Детерминированная генерация кода (единый порядок эмиссии) | [0048-deterministic-codegen.md](0048-deterministic-codegen.md) | нет |
 | 0049 | Верификация модели (Model Checking) на основе LTL | [0049-model-checking-ltl.md](0049-model-checking-ltl.md) | нет (аддитивно: `lamc verify` — новая оснастка, синтаксис и версия языка не тронуты, вывод генераторов неизменен; зависит от закрытых 0010/0035) |
 | 0050 | Бэкенд генерации в Rust | [0050-rust-backend.md](0050-rust-backend.md) | — (новая фича) |
+| 0051 | Область проверки lamc verify (--scope) | [0051-verify-scope.md](0051-verify-scope.md) | — (новая фича) |
+| 0052 | Итеративные обходы в verification/ (снятие потолка стека) | [0052-verify-iterative-traversal.md](0052-verify-iterative-traversal.md) | — (новая фича) |
 

@@ -41,4 +41,6 @@
 | [0048](./0048-deterministic-codegen.md) | Детерминированная генерация кода (единый порядок эмиссии) | Accepted | фича 0048 |
 | [0049](./0049-model-checking-ltl.md) | Верификация модели (Model Checking) на основе LTL | Draft | фича 0049 |
 | [0050](./0050-rust-backend.md) | Бэкенд генерации в Rust | Accepted | фича 0050 |
+| [0051](./0051-verify-scope.md) | Область проверки lamc verify (--scope) | Accepted | фича 0051 |
+| [0052](./0052-verify-iterative-traversal.md) | Итеративные обходы в verification/ (снятие потолка стека) | Accepted | фича 0052 |
 

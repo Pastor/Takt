@@ -501,3 +501,119 @@ fn formula_in_state_named_block_is_scoped_to_the_state() {
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].formula.to_string(), "G (Fault -> F Idle)");
 }
+
+// ─── Область проверки: импорты (фича 0051) ───────────────────────────────────
+//
+// Тесты — на вердикт и на состав пропущенного, а не на поле `origin`: признак в
+// дереве — средство, а пользователь видит код возврата.
+
+/// Модель из `import` с фикстурами-импортами (нужны search_paths).
+fn model_with_imports(fixture: &str) -> Rc<RefCell<grammar::semantic::ModelNode>> {
+    let path = format!("tests/data/verify/{fixture}");
+    let source = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let (ast, _) = parse(&source, 0).unwrap_or_else(|d| panic!("{path}: разбор — {d:?}"));
+    construct_model(&ast, None, &["tests/data/verify".to_string()])
+        .unwrap_or_else(|d| panic!("{path}: семантика — {d:?}"))
+}
+
+/// A1: `import "файл";` — нарушитель из импорта не попадает в вердикт файла.
+#[test]
+fn plain_import_is_out_of_scope_by_default() {
+    let outcome = grammar::verify_all_scoped(
+        model_with_imports("scope_plain.lam"),
+        false,
+        grammar::VerifyScope::File,
+    );
+    assert!(
+        outcome.results.iter().all(|r| r.verdict == Verdict::Holds),
+        "свойства своего файла держатся; чужие не проверяются: {:?}",
+        outcome.results
+    );
+    assert_eq!(outcome.skipped, vec!["Badlib".to_string()]);
+}
+
+/// A1: `--scope all` возвращает поведение 0049 дословно.
+#[test]
+fn plain_import_is_verified_with_scope_all() {
+    let outcome = grammar::verify_all_scoped(
+        model_with_imports("scope_plain.lam"),
+        false,
+        grammar::VerifyScope::All,
+    );
+    assert!(
+        outcome
+            .results
+            .iter()
+            .any(|r| matches!(r.verdict, Verdict::Violated(_))),
+        "badlib.lam нарушает свои свойства — при scope=all это обязано всплыть"
+    );
+    assert!(
+        outcome.skipped.is_empty(),
+        "при scope=all пропускать нечего"
+    );
+}
+
+/// A3/Р1: форма `import { A as B }` — узел приходит `Rc::clone`-ом чужого
+/// дерева и его собственный `origin` — `Local`; пометить обязан импортёр.
+///
+/// Забудь пометку — и область молча не сработает именно на этой форме.
+#[test]
+fn rename_import_is_out_of_scope_by_default() {
+    let outcome = grammar::verify_all_scoped(
+        model_with_imports("scope_rename.lam"),
+        false,
+        grammar::VerifyScope::File,
+    );
+    assert_eq!(outcome.skipped, vec!["Motor".to_string()]);
+    assert!(outcome.results.iter().all(|r| r.verdict == Verdict::Holds));
+}
+
+/// A2/Р3: **контрпример к сужению** — локальная вложенная модель проверяется
+/// при любой области.
+///
+/// Без него «сузили область» неотличимо от «перестали проверять вложенные
+/// модели вообще».
+#[test]
+fn local_nested_model_is_always_verified() {
+    for scope in [grammar::VerifyScope::File, grammar::VerifyScope::All] {
+        let outcome = grammar::verify_all_scoped(model_of("scope_local_nested.lam"), false, scope);
+        assert!(
+            outcome
+                .results
+                .iter()
+                .any(|r| matches!(r.verdict, Verdict::Violated(_))),
+            "своя вложенная модель нарушает свойство — область {scope:?} не вправе её скрыть"
+        );
+        assert!(
+            outcome.skipped.is_empty(),
+            "локальная модель не пропускается"
+        );
+    }
+}
+
+/// Р2: отсечение — поддеревом целиком, а не по одному узлу.
+///
+/// У `badlib.lam` формулы есть и в корне, и во вложенной `Engine`. Вложенная
+/// несёт `origin = Local` (она локальна для своего файла), поэтому обход,
+/// проверяющий признак поузлово, зашёл бы внутрь и проверил её.
+#[test]
+fn imported_subtree_is_cut_entirely() {
+    let outcome = grammar::verify_all_scoped(
+        model_with_imports("scope_plain.lam"),
+        false,
+        grammar::VerifyScope::File,
+    );
+    assert!(
+        !outcome.results.iter().any(|r| r.model == "Engine"),
+        "Engine — вложенная модель ИМПОРТИРОВАННОГО файла: поддерево отсекается целиком, \
+         получено {:?}",
+        outcome.results.iter().map(|r| &r.model).collect::<Vec<_>>()
+    );
+}
+
+/// Умолчание публичного `verify_all` — область `file` (ADR 0051).
+#[test]
+fn verify_all_defaults_to_file_scope() {
+    let results = grammar::verify_all(model_with_imports("scope_plain.lam"));
+    assert!(results.iter().all(|r| r.verdict == Verdict::Holds));
+}
