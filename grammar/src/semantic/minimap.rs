@@ -370,85 +370,111 @@ fn state_by_unique_name(
     None
 }
 
-/// Рекурсивно обходит состояние и все достижимые из него по ссылкам и
-/// `next`-переходу. Добавляет найденные элементы в `used`.
+/// Обходит состояние и все достижимые из него по ссылкам и `next`-переходу.
+/// Добавляет найденные элементы в `used`.
+///
+/// # Обход итеративный, а не рекурсивный (фича 0052)
+///
+/// Глубина обхода равна **числу состояний**: цепочка `S0 → S1 → … → S(N-1)` даёт
+/// N вложенных шагов. Рекурсия исчерпывала стек на N ≈ 2500 (debug) — а карту
+/// строит **каждый** генератор (`c_map`, `puml_map`, `rust_map`, `st_map`,
+/// `sv_map`), поэтому падала компиляция во все пять целей, ещё до печати текста.
+/// Отказ был без диагностики — `SIGABRT`, без строки и кода.
+///
+/// Перевод дался механически: после шага «вглубь» работы не остаётся, возврата
+/// никто не читает — то есть это предпорядок, и стек кадров заменяется списком
+/// задач в куче. Заодно исчез толстый кадр: рекурсия держала в нём
+/// `StateNode::clone()` — полную копию узла.
 ///
 /// # Защита от циклов
-/// Перед рекурсией в `used` вставляется заглушка с ключом текущего
-/// состояния. При повторном входе проверка `used.contains_key(&key)`
-/// в начале функции прерывает обход.
+/// Перед обходом ссылок в `used` вставляется заглушка с ключом состояния;
+/// повторный вход отсекает проверка `used.contains_key(&key)`. Она же — страж от
+/// самоссылок. Глубину она **не** ограничивает: на ациклической цепочке каждый
+/// ключ новый.
 fn visit_state(
     state: &StateNode,
     model: Rc<RefCell<ModelNode>>,
     used: &mut BTreeMap<Name, Element>,
 ) {
-    let name_str = state.name().to_string();
-    let key = Name::new(
-        name_str.clone(),
-        unique_state_name(&name_str, model.clone()),
-    );
-    if used.contains_key(&key) {
-        return; // Уже обработано — прерываем возможный цикл
-    }
-    match state {
-        StateNode::Simple { references, .. } => {
-            let ref_names: Vec<Name> = references
-                .iter()
-                .map(|r| Name::new(r.name.clone(), unique_state_name(&r.name, model.clone())))
-                .collect();
-            // Регистрируем состояние до рекурсии (защита от самоссылок)
-            used.insert(
-                key.clone(),
-                Element::State {
-                    name: key,
-                    references: ref_names.clone(),
-                },
-            );
-            // Рекурсивно обходим все исходящие переходы
-            for ref_name in ref_names {
-                let next_opt = model.borrow().search_state(&ref_name.local);
-                if let Some(rc) = next_opt {
-                    let next = rc.borrow().clone();
-                    visit_state(&next, model.clone(), used);
+    // Список задач вместо стека кадров. `pop()` берёт с конца, поэтому потомки
+    // кладутся в обратном порядке — обход идёт ровно в том же порядке, что и
+    // прежняя рекурсия. По существу порядок не наблюдаем (`used` — BTreeMap, а
+    // элемент определяется самим состоянием), но так правка проверяется диффом
+    // вывода, а не рассуждением о нём.
+    let mut worklist: Vec<StateNode> = vec![state.clone()];
+
+    while let Some(state) = worklist.pop() {
+        let name_str = state.name().to_string();
+        let key = Name::new(
+            name_str.clone(),
+            unique_state_name(&name_str, model.clone()),
+        );
+        if used.contains_key(&key) {
+            continue; // Уже обработано — прерываем возможный цикл
+        }
+        match &state {
+            StateNode::Simple { references, .. } => {
+                let ref_names: Vec<Name> = references
+                    .iter()
+                    .map(|r| Name::new(r.name.clone(), unique_state_name(&r.name, model.clone())))
+                    .collect();
+                // Регистрируем состояние до обхода ссылок (защита от самоссылок)
+                used.insert(
+                    key.clone(),
+                    Element::State {
+                        name: key,
+                        references: ref_names.clone(),
+                    },
+                );
+                // Все исходящие переходы — в список задач (в обратном порядке).
+                for ref_name in ref_names.iter().rev() {
+                    let next_opt = model.borrow().search_state(&ref_name.local);
+                    if let Some(rc) = next_opt {
+                        let next = rc.borrow().clone();
+                        worklist.push(next);
+                    }
                 }
             }
-        }
-        StateNode::Implement {
-            implements, next, ..
-        } => {
-            let next_name = next
-                .as_ref()
-                .map(|n| Name::new(n.name.clone(), unique_state_name(&n.name, model.clone())))
-                .unwrap_or_else(|| Name::new(String::new(), String::new()));
-            // Вставляем заглушку до обхода реализации (защита от циклов)
-            used.insert(
-                key.clone(),
-                Element::StateExtend {
-                    name: key.clone(),
-                    extend: StateExtend::None,
-                    next: next_name.clone(),
-                },
-            );
-            visit_extend(implements, model.clone(), used);
-            // Обновляем запись с реальным содержимым после обхода
-            used.insert(
-                key.clone(),
-                Element::StateExtend {
-                    name: key,
-                    extend: build_extend(implements, model.clone()),
-                    next: next_name.clone(),
-                },
-            );
-            // Рекурсивно обходим next-переход
-            if !next_name.local.is_empty() {
-                let next_opt = model.borrow().search_state(&next_name.local);
-                if let Some(rc) = next_opt {
-                    let next_state = rc.borrow().clone();
-                    visit_state(&next_state, model.clone(), used);
+            StateNode::Implement {
+                implements, next, ..
+            } => {
+                let next_name = next
+                    .as_ref()
+                    .map(|n| Name::new(n.name.clone(), unique_state_name(&n.name, model.clone())))
+                    .unwrap_or_else(|| Name::new(String::new(), String::new()));
+                // Вставляем заглушку до обхода реализации (защита от циклов)
+                used.insert(
+                    key.clone(),
+                    Element::StateExtend {
+                        name: key.clone(),
+                        extend: StateExtend::None,
+                        next: next_name.clone(),
+                    },
+                );
+                // `visit_extend` рекурсивен по дереву выражения `Extend`
+                // (`A | B + C`), а не по числу состояний: его глубина — по
+                // вложенности, которую пишет человек. Стек ему не грозит.
+                visit_extend(implements, model.clone(), used);
+                // Обновляем запись с реальным содержимым после обхода
+                used.insert(
+                    key.clone(),
+                    Element::StateExtend {
+                        name: key,
+                        extend: build_extend(implements, model.clone()),
+                        next: next_name.clone(),
+                    },
+                );
+                // next-переход — в список задач
+                if !next_name.local.is_empty() {
+                    let next_opt = model.borrow().search_state(&next_name.local);
+                    if let Some(rc) = next_opt {
+                        let next_state = rc.borrow().clone();
+                        worklist.push(next_state);
+                    }
                 }
             }
+            StateNode::Unresolved => {}
         }
-        StateNode::Unresolved => {}
     }
 }
 

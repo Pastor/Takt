@@ -68,82 +68,116 @@ pub fn emptiness(product: &Product) -> Option<Lasso> {
         if outer_visited.contains(&start) {
             continue;
         }
-        let mut path = Vec::new();
-        if let Some(lasso) = outer_dfs(
-            product,
-            start,
-            &mut outer_visited,
-            &mut inner_visited,
-            &mut path,
-        ) {
+        if let Some(lasso) = outer_dfs(product, start, &mut outer_visited, &mut inner_visited) {
             return Some(lasso);
         }
     }
     None
+}
+
+/// Кадр обхода: состояние, его преемники и позиция в них.
+///
+/// Заменяет кадр вызова: обходы здесь **итеративны** (фича 0052) — рекурсия
+/// исчерпывала стек на модели в ~16000 состояний, отказывая `SIGABRT`'ом без
+/// диагностики. Позиция нужна потому, что оба обхода делают работу **после**
+/// потомков (постпорядок у внешнего, откат у внутреннего), а такой обход в
+/// простой список задач не сворачивается — нужен разбор кадра по шагам.
+struct Frame {
+    state: usize,
+    successors: Vec<usize>,
+    next_index: usize,
+}
+
+impl Frame {
+    fn new(product: &Product, state: usize) -> Self {
+        Frame {
+            state,
+            successors: product.successors(state).iter().copied().collect(),
+            next_index: 0,
+        }
+    }
 }
 
 /// Внешний DFS: обход достижимых состояний; из принимающих — внутренний DFS
 /// в постпорядке.
 ///
 /// `path` — текущий путь от начального состояния; он же становится префиксом
-/// лассо.
+/// лассо. Постпорядок существен (см. модуль): его нарушение сделало бы проверку
+/// пустоты неверной, а не медленной.
 fn outer_dfs(
     product: &Product,
-    state: usize,
+    start: usize,
     outer_visited: &mut BTreeSet<usize>,
     inner_visited: &mut BTreeSet<usize>,
-    path: &mut Vec<usize>,
 ) -> Option<Lasso> {
-    outer_visited.insert(state);
-    path.push(state);
+    let mut path: Vec<usize> = vec![start];
+    let mut stack: Vec<Frame> = vec![Frame::new(product, start)];
+    outer_visited.insert(start);
 
-    for &next in product.successors(state) {
-        if !outer_visited.contains(&next)
-            && let Some(lasso) = outer_dfs(product, next, outer_visited, inner_visited, path)
-        {
-            return Some(lasso);
+    while let Some(frame) = stack.last_mut() {
+        if frame.next_index < frame.successors.len() {
+            let next = frame.successors[frame.next_index];
+            frame.next_index += 1;
+            if !outer_visited.contains(&next) {
+                outer_visited.insert(next);
+                path.push(next);
+                stack.push(Frame::new(product, next));
+            }
+            continue;
         }
+
+        // Постпорядок: обход из `state` завершён — преемники исчерпаны.
+        let state = frame.state;
+        if product.accepting.contains(&state) {
+            let mut cycle = Vec::new();
+            if inner_dfs(product, state, inner_visited, &mut cycle) {
+                return Some(Lasso {
+                    prefix: path.clone(),
+                    cycle,
+                });
+            }
+        }
+        stack.pop();
+        path.pop();
     }
 
-    // Постпорядок: обход из `state` завершён.
-    if product.accepting.contains(&state) {
-        let mut cycle = Vec::new();
-        if inner_dfs(product, state, state, inner_visited, &mut cycle) {
-            return Some(Lasso {
-                prefix: path.clone(),
-                cycle,
-            });
-        }
-    }
-
-    path.pop();
     None
 }
 
-/// Внутренний DFS: есть ли путь из `state` обратно в `seed`.
+/// Внутренний DFS: есть ли путь из `seed` обратно в `seed`.
 ///
 /// При успехе `cycle` содержит путь `seed → … → (ребро в seed)`.
 fn inner_dfs(
     product: &Product,
-    state: usize,
     seed: usize,
     inner_visited: &mut BTreeSet<usize>,
     cycle: &mut Vec<usize>,
 ) -> bool {
-    inner_visited.insert(state);
-    cycle.push(state);
+    inner_visited.insert(seed);
+    cycle.push(seed);
+    let mut stack: Vec<Frame> = vec![Frame::new(product, seed)];
 
-    for &next in product.successors(state) {
-        if next == seed {
-            // Ребро замыкает цикл на принимающее состояние.
-            return true;
+    while let Some(frame) = stack.last_mut() {
+        if frame.next_index < frame.successors.len() {
+            let next = frame.successors[frame.next_index];
+            frame.next_index += 1;
+            if next == seed {
+                // Ребро замыкает цикл на принимающее состояние.
+                return true;
+            }
+            if !inner_visited.contains(&next) {
+                inner_visited.insert(next);
+                cycle.push(next);
+                stack.push(Frame::new(product, next));
+            }
+            continue;
         }
-        if !inner_visited.contains(&next) && inner_dfs(product, next, seed, inner_visited, cycle) {
-            return true;
-        }
+
+        // Ветка тупиковая: снимаем состояние с пути (откат рекурсии).
+        stack.pop();
+        cycle.pop();
     }
 
-    cycle.pop();
     false
 }
 
