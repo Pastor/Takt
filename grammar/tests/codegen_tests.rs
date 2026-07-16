@@ -1244,6 +1244,53 @@ fn test_single_model_generates_compilable_c() {
     );
 }
 
+/// Сторож детерминизма C-заголовка (фича 0048). Компилирует модель с портами в
+/// двух под-моделях дважды и сверяет `.h` байт-в-байт. Порты нумеруются сквозным
+/// `enumerate()` по под-моделям — их значения `enum` в `.h` есть ABI. До 0048
+/// межмодельный порядок брался из обхода `HashMap`, и два прогона расходились.
+///
+/// Тест строит вывод дважды в одном процессе. С `BTreeMap` порядок стабилен
+/// всегда; при возврате к `HashMap` тест падал бы случайно — потому и сторож.
+#[test]
+fn test_c_header_ports_are_reproducible() {
+    let src = r#"
+model Beta {
+    start S;
+    in beta_x: bit;
+    in beta_y: bit;
+}
+model Alpha {
+    start T;
+    in alpha_p: bit;
+    in alpha_q: bit;
+}
+start Main = Alpha | Beta;
+    "#;
+
+    let read_header = || {
+        let dir = tempdir().expect("временный каталог");
+        grammar::compile_to_c(
+            "ports.lam",
+            src,
+            dir.path().to_str().unwrap(),
+            &[],
+            &grammar::generator::GenerateOptions::default(),
+        )
+        .expect("компиляция в C");
+        let h = dir.path().join("ports.h");
+        fs::read_to_string(&h).expect("порождённый ports.h")
+    };
+
+    let first = read_header();
+    for i in 1..8 {
+        assert_eq!(
+            first,
+            read_header(),
+            "прогон {i} дал другой ports.h — вернулся недетерминизм порядка портов (ABI)"
+        );
+    }
+}
+
 /// Проверяет, доступен ли `cc` — без него живая проверка пропускается.
 fn cc_available() -> bool {
     std::process::Command::new("cc")

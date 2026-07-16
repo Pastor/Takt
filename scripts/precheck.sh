@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Предкоммит-проверка: ссылки в Markdown + fmt + check + clippy + test +
 # формат примеров (lamc fmt --check) +
-# генерация C/PlantUML из примеров Lam и сборка сгенерированного кода.
+# генерация C/PlantUML/ST из примеров Lam + гейт воспроизводимости (фича 0048) +
+# сборка сгенерированного кода.
 # Запускать из любого каталога.
 set -euo pipefail
 
@@ -59,6 +60,46 @@ for lam_file in examples/*.lam; do
     || echo "    [предупреждение] цель st: $lam_file не транслируется (бэкенд не закончен)"
 done
 echo "Готово. Файлы в $C_OUTPUT/"
+
+# ГЕЙТ ВОСПРОИЗВОДИМОСТИ (фича 0048): два прогона компилятора на одном входе
+# обязаны давать байт-в-байт одинаковый вывод. Порядок эмиссии — свойство общего
+# слоя (BTreeMap), а не привычка бэкенда; забытый источник недетерминизма не
+# ломает сборку и не ловится юнит-тестом — он проявляется случайно, раз в
+# несколько прогонов. Гейт ЖЁСТКИЙ: внешних инструментов не требует (сравнение —
+# diff -r), поэтому мягкого пропуска нет (в отличие от гейта ST).
+#
+# Сравниваются каталоги двух прогонов, а не сам факт генерации: если цель на
+# каком-то примере не транслируется, оба прогона одинаково пусты → это не
+# недетерминизм. Цель `st` детерминирована уже сегодня — служит контрольной
+# точкой правки общего слоя.
+echo "Гейт воспроизводимости: два прогона на каждый пример × цель..."
+repro_failed=0
+for lam_file in examples/*.lam; do
+  name="$(basename "$lam_file" .lam)"
+  for spec in "c:" "c-hal:-t c-hal" "plantuml:-t plantuml" "st:-t st" "st-at:-t st-at"; do
+    tgt="${spec%%:*}"
+    flag="${spec#*:}"
+    d1="$(mktemp -d)"
+    d2="$(mktemp -d)"
+    # shellcheck disable=SC2086
+    $LAMC compile "$lam_file" $flag -o "$d1" >/dev/null 2>&1 || true
+    # shellcheck disable=SC2086
+    $LAMC compile "$lam_file" $flag -o "$d2" >/dev/null 2>&1 || true
+    if diff -r "$d1" "$d2" >/dev/null 2>&1; then
+      echo "  $name [$tgt] → воспроизводим"
+    else
+      echo "  $name [$tgt] → НЕДЕТЕРМИНИЗМ (два прогона разошлись):"
+      diff -r "$d1" "$d2" 2>&1 | sed 's/^/    /' | head -8
+      repro_failed=1
+    fi
+    rm -rf "$d1" "$d2"
+  done
+done
+if [ "$repro_failed" -ne 0 ]; then
+  echo "  Генерация недетерминирована — предкоммит провален (фича 0048)."
+  exit 1
+fi
+
 cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -S $C_OUTPUT -B $C_OUTPUT/cmake-build-debug/
 cd $C_OUTPUT/cmake-build-debug/ && ninja
 cd -
