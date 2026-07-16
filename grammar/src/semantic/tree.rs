@@ -455,6 +455,18 @@ fn construct_model_stage0(
                 })?
                 .name
                 .clone();
+            // 0031: дубликат имени функции — ошибка SE-009 (прежде `HashMap::
+            // insert` молча перетирал, побеждала последняя). Проверка живёт здесь,
+            // а не в `construct_function`: после устранения `mem::take` карта на
+            // время разрешения тел непуста, и проверка в точке разрешения ловила
+            // бы каждую функцию как «уже определённую».
+            if functions.contains_key(&name) {
+                return Err(Diagnostic::error(
+                    def.loc,
+                    format!("Функция с именем '{}' уже определена", name),
+                )
+                .with_code("SE-009"));
+            }
             functions.insert(
                 name.clone(),
                 FunctionDefinitionNode::Unresolved(*def.clone()),
@@ -818,11 +830,42 @@ fn construct_model_stage4(
 fn construct_model_stage5(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    // Разрешаем функции на уровне текущей модели
-    let functions = std::mem::take(&mut model.borrow_mut().functions);
-    model.borrow_mut().functions = resolve_functions(functions, model.clone())?;
+    // 0031: тела функций разрешаются в ТОПОЛОГИЧЕСКОМ порядке графа вызовов —
+    // вызываемая раньше вызывающей, — БЕЗ изъятия карты (`mem::take` устранён).
+    // Тогда при разборе тела вызывающей карта модели непуста: `search_func`
+    // видит уже разрешённые локальные функции (композиция `f → g` работает).
+    // Цикл в графе (рекурсия) отвергается диагностикой SE-053.
+    let bodies: BTreeMap<String, Option<ast::Statement>> = {
+        let borrowed = model.borrow();
+        borrowed
+            .functions
+            .iter()
+            .filter_map(|(name, f)| match f {
+                FunctionDefinitionNode::Unresolved(def) => Some((name.clone(), def.body.clone())),
+                // Уже разрешённые (например, встроенные) в граф не входят.
+                _ => None,
+            })
+            .collect()
+    };
+    let loc = model.borrow().loc;
+    let graph = crate::semantic::callgraph::build_call_graph(&bodies);
+    let order = crate::semantic::callgraph::topological_order(&graph, loc)?;
 
-    // Рекурсивно обрабатываем вложенные модели с их собственным контекстом
+    for name in order {
+        // Изымаем ТОЛЬКО разрешаемую функцию; её вызываемые уже в карте и
+        // разрешены (топологический порядок), поэтому вызовы к ним встроят
+        // разрешённые узлы. Само изъятие даёт `search_func` не найти функцию в
+        // её же теле — но прямой самовызов уже отвергнут как цикл выше.
+        let func = model.borrow_mut().functions.remove(&name);
+        if let Some(func) = func {
+            let resolved = construct_function(func, model.clone())?;
+            model.borrow_mut().functions.insert(name, resolved);
+        }
+    }
+
+    // Рекурсивно обрабатываем вложенные модели с их собственным контекстом.
+    // Карта функций текущей (родительской) модели уже восстановлена — поэтому
+    // вложенные модели видят разрешённые функции родителя (межмодельный `fn→fn`).
     let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
         .borrow()
         .models
@@ -866,17 +909,6 @@ fn construct_model_stage6(
     Ok(Rc::clone(&model))
 }
 
-fn resolve_functions(
-    functions: BTreeMap<String, FunctionDefinitionNode>,
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<BTreeMap<String, FunctionDefinitionNode>, Diagnostic> {
-    let mut resolved_functions = BTreeMap::new();
-
-    for (name, function) in functions {
-        resolved_functions.insert(name, construct_function(function, model.clone())?);
-    }
-    Ok(resolved_functions)
-}
 
 fn resolve_formula(formula: Formula, model: Rc<RefCell<ModelNode>>) -> Result<Formula, Diagnostic> {
     match formula {

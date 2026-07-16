@@ -1253,6 +1253,48 @@ fn test_single_model_generates_compilable_c() {
     );
 }
 
+/// A9 (фича 0031): порождённый C для композиции `f → g` внутри одной модели
+/// собирается `cc -std=c99` без implicit-function-declaration. Требует эмиссии
+/// форвард-прототипов: `f` печатается раньше `g` (алфавит), и без прототипа
+/// вызов `g` из `f` был бы обращением к необъявленной функции.
+#[test]
+fn test_fn_composition_generates_compilable_c() {
+    if !cc_available() {
+        eprintln!("[пропуск] cc недоступен — живая проверка C композиции пропущена");
+        return;
+    }
+    let dir = tempdir().expect("временный каталог");
+    let src = "var y: u8 := 0;\n\
+               fn g(x: u8) -> u8 { return x; }\n\
+               fn f(x: u8) -> u8 { return g(x); }\n\
+               start Main { always { y := f(1); } }";
+    grammar::compile_to_c(
+        "compose.lam",
+        src,
+        dir.path().to_str().unwrap(),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("компиляция в C");
+
+    let c = fs::read_to_string(dir.path().join("compose.c")).expect("compose.c");
+    assert!(
+        c.contains("static uint8_t Compose_g(const Compose *model, uint8_t x);"),
+        "должен быть форвард-прототип Compose_g до определений:\n{c}"
+    );
+
+    let out = std::process::Command::new("cc")
+        .args(["-std=c99", "-Wall", "-Werror=implicit-function-declaration", "-fsyntax-only", "compose.c"])
+        .current_dir(dir.path())
+        .output()
+        .expect("запуск cc");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success() && !stderr.contains("error:"),
+        "C композиции функций обязан собираться (форвард-прототипы), cc сказал:\n{stderr}"
+    );
+}
+
 /// Сторож детерминизма C-заголовка (фича 0048). Компилирует модель с портами в
 /// двух под-моделях дважды и сверяет `.h` байт-в-байт. Порты нумеруются сквозным
 /// `enumerate()` по под-моделям — их значения `enum` в `.h` есть ABI. До 0048

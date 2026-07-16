@@ -40,12 +40,11 @@ pub fn construct_function(
             })?
             .name
             .clone();
-        if model.borrow().functions.contains_key(&name) {
-            Err(
-                Diagnostic::from(format!("Функция с именем '{}' уже определена", name).as_str())
-                    .with_code("SE-009"),
-            )
-        } else {
+        // 0031: проверка дубликата (SE-009) перенесена в точку вставки
+        // (`tree.rs`, проход сбора функций). Здесь её быть не должно: после
+        // устранения `mem::take` карта модели на время разрешения тел непуста, и
+        // `contains_key` срабатывал бы на КАЖДОЙ функции (её имя уже в карте).
+        {
             let mut params = Vec::new();
             for (_, param) in def.params.iter() {
                 if let Some(param) = param {

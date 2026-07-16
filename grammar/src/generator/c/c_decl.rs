@@ -128,6 +128,12 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
         let model = &*model.borrow();
         let mut external_funcs = Vec::new();
         let mut local_funcs = Vec::new();
+        // 0031: форвард-прототипы локальных функций. Композиция `f → g` (фича
+        // 0031) делает порядок определений значимым: без прототипа `Model_f`,
+        // напечатанная раньше `Model_g`, вызвала бы необъявленную функцию
+        // (`cc -std=c99`: implicit-function-declaration). Прототипы печатаются
+        // ДО определений, поэтому порядок определений (алфавитный) уже не важен.
+        let mut local_protos = Vec::new();
         for ref fun in model.functions.clone().into_values() {
             // Пропускаем функции, которые нигде не вызываются
             if !fun.name().is_empty() && !map.usage().functions.contains(fun.name()) {
@@ -164,6 +170,12 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
                         map.float_width(),
                         &format!("возвращаемое значение функции '{}'", fun.name()),
                     )?;
+                    local_protos.push(format!(
+                        "static {} {}({});",
+                        ret_type.as_str(),
+                        get_function_name(&fun),
+                        tiny_params.join(", ")
+                    ));
                     definition.push_str(
                         format!(
                             "static {} {}({}) {{\n",
@@ -234,6 +246,11 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
         }
         if !local_funcs.is_empty() {
             printer.print("///Функции моделей").nl();
+            // Прототипы — до определений (0031): порядок определений не важен.
+            local_protos.sort();
+            for proto in &local_protos {
+                printer.print(proto.as_str()).nl();
+            }
             local_funcs.sort();
             for func in local_funcs {
                 printer.print(func.as_str()).nl();
