@@ -434,3 +434,70 @@ fn verification_terminates_on_examples_corpus() {
         "корпус examples/ пуст — тест ничего не проверил"
     );
 }
+
+// ─── Область формулы состояния (задача 0049-06) ──────────────────────────────
+//
+// Формула в теле состояния `S` — сокращение для `G (S -> φ)` (решение
+// заказчика 2026-07-16, вариант «б»). Тесты — на вердикт: именно он отличает
+// новую семантику от прежней «проверять от старта».
+
+/// Пример: `: [LTL] F Idle;` внутри Fault держится — возврат гарантирован.
+#[test]
+fn state_scoped_formula_holds_when_return_is_guaranteed() {
+    assert_eq!(verdict_of("state_scope_holds.lam"), Verdict::Holds);
+}
+
+/// Контрпример и **сторож семантики области**: залипание в Fault обязано быть
+/// нарушением.
+///
+/// До 0049-06 формула проверялась от стартового состояния, и этот тест краснел
+/// бы вердиктом `Holds`: старт — Idle, поэтому `F Idle` истинно тривиально, а
+/// самопетля Fault оставалась незамеченной. То есть тест ловит ровно тот
+/// вопрос, которого автор не задавал.
+#[test]
+fn state_scoped_formula_violated_when_state_can_stick() {
+    let v = verdict_of("state_scope_fails.lam");
+    let Verdict::Violated(cex) = v else {
+        panic!("залипание в Fault нарушает «из Fault вернёмся в Idle»: получено {v:?}");
+    };
+    assert!(
+        cex.cycle.iter().all(|s| s == "Fault"),
+        "контрпример — вечное залипание в Fault: {}",
+        cex.trace()
+    );
+}
+
+/// Десахаризация видна пользователю: печатается проверенная формула
+/// `G (Fault -> F Idle)`, а не авторское `F Idle`.
+///
+/// Иначе вывод `lamc verify` врал бы об области: пользователь читал бы
+/// «СВОЙСТВО НАРУШЕНО: F Idle» и искал недостижимость Idle от старта.
+#[test]
+fn state_scoped_formula_is_reported_desugared() {
+    let results = grammar::verify_all(model_of("state_scope_fails.lam"));
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].formula.to_string(), "G (Fault -> F Idle)");
+}
+
+/// Область — свойство состояния, а не текста: формула уровня модели не
+/// связывается ничем и проверяется от старта, как и прежде.
+#[test]
+fn model_level_formula_is_not_scoped() {
+    let results = grammar::verify_all(model_of("fails.lam"));
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].formula.to_string(), "G (Fault -> F Idle)");
+    assert!(matches!(results[0].verdict, Verdict::Violated(_)));
+}
+
+/// Формула в именованном блоке состояния (`enter`/`always`) — та же область:
+/// блок исполняется, лишь когда автомат в состоянии.
+#[test]
+fn formula_in_state_named_block_is_scoped_to_the_state() {
+    let src = "start Idle { ref Fault; } \
+               state Fault { enter { : [LTL] F Idle; } ref Fault; ref Idle; }";
+    let (ast, _) = parse(src, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let results = grammar::verify_all(model);
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].formula.to_string(), "G (Fault -> F Idle)");
+}

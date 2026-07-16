@@ -1,0 +1,23 @@
+// Фича 0049 (задача 0049-06): формула, объявленная В ТЕЛЕ СОСТОЯНИЯ, — это
+// сокращение для `G (Состояние -> φ)`, а не свойство от старта.
+//
+// `: [LTL] F Idle;` внутри Fault читается «попав в Fault, автомат рано или
+// поздно вернётся в Idle» и проверяется как `G (Fault -> F Idle)`.
+// Здесь свойство ДЕРЖИТСЯ: из Fault единственный путь ведёт в Recovery, из
+// Recovery — только в Idle, залипнуть в сбое автомат не умеет.
+var error: bit := false;
+
+start Idle {
+    ref Fault: error = 1;
+    ref Idle: error = 0;
+}
+
+state Fault {
+    : [LTL] F Idle;
+
+    ref Recovery;
+}
+
+state Recovery {
+    ref Idle;
+}
