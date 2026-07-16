@@ -127,6 +127,7 @@
 | 0049-03 | 0049 | Движок верификации `verify_model` (build_buchi(¬φ) → пустота) | [0049-03-verify-engine.md](0049-03-verify-engine.md) |
 | 0049-04 | 0049 | Подкоманда `lamc verify` | [0049-04-cli-verify.md](0049-04-cli-verify.md) |
 | 0049-05 | 0049 | Документация, примеры, тесты | [0049-05-docs-tests.md](0049-05-docs-tests.md) |
+| 0049-06 | 0049 | Область LTL-формулы, объявленной в состоянии (`G (S -> φ)`) | [0049-06-state-formula-scope.md](0049-06-state-formula-scope.md) |
 | 0050-01 | 0050 | Каркас бэкенда: `Language::Rust`, `generator/rust/`, цель `-t rust` | [0050-01-scaffold.md](0050-01-scaffold.md) |
 | 0050-02 | 0050 | Гейт проверяемости: `rustc` + `clippy` по порождённому коду | [0050-02-gate.md](0050-02-gate.md) |
 | 0050-03 | 0050 | Отображение типов Lam → Rust и диагностики | [0050-03-type-mapping.md](0050-03-type-mapping.md) |

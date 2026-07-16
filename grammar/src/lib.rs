@@ -714,7 +714,9 @@ fn verify_all_inner(
 ) {
     let borrowed = model.borrow();
     let name = borrowed.name().to_string();
-    for (formula, loc) in semantic::ltl_check::model_ltl_formulas(&borrowed) {
+    for site in semantic::ltl_check::model_ltl_formulas(&borrowed) {
+        let loc = site.loc;
+        let formula = scoped_formula(site);
         let (verdict, dump) = if trace {
             let (v, t) = verification::verify::verify_model_traced(&borrowed, &formula);
             (v, Some(t))
@@ -739,14 +741,40 @@ fn verify_all_inner(
     }
 }
 
-/// Фича 0049: LTL-формулы, объявленные непосредственно в модели, с позициями.
+/// Фича 0049: LTL-формулы, объявленные непосредственно в модели, с позициями и
+/// областями ([`LtlSite`](semantic::ltl_check::LtlSite)).
 ///
-/// Вложенные модели не обходятся — их формулы проверяются против своего графа
-/// (см. [`verify_all`]).
+/// Формулы отдаются **авторскими**, без десахаризации области: развернуть
+/// формулу состояния в `G (Состояние -> φ)` — дело верификатора
+/// ([`scoped_formula`]). Вложенные модели не обходятся — их формулы проверяются
+/// против своего графа (см. [`verify_all`]).
 pub fn model_ltl_formulas(
     model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
-) -> Vec<(verification::ltl::Ltl, diagnostics::Location)> {
+) -> Vec<semantic::ltl_check::LtlSite> {
     semantic::ltl_check::model_ltl_formulas(&model.borrow())
+}
+
+/// Фича 0049 (задача 0049-06): раскрывает **область** формулы.
+///
+/// Формула, объявленная в теле состояния `S`, — сокращение для
+/// `G (S -> φ)`: «всякий раз, когда автомат в `S`, дальше держится φ». Решение
+/// заказчика 2026-07-16 (вариант «б» открытого вопроса 1 карточки фичи).
+///
+/// Без этого `state Fault { : [LTL] F Idle; }` проверялась бы от **стартового**
+/// состояния — то есть отвечала бы на вопрос, которого автор не задавал
+/// («достижим ли Idle от старта»), и на модели со стартом `Idle` держалась бы
+/// тривиально, даже если из `Fault` возврата нет вовсе.
+///
+/// Формула уровня модели областью не связана и возвращается как есть.
+fn scoped_formula(site: semantic::ltl_check::LtlSite) -> verification::ltl::Ltl {
+    use verification::ltl::Ltl;
+    match site.state {
+        None => site.formula,
+        Some(state) => Ltl::Globally(std::rc::Rc::new(Ltl::Implies(
+            std::rc::Rc::new(Ltl::Atom(state)),
+            std::rc::Rc::new(site.formula),
+        ))),
+    }
 }
 
 /// Фича 0049: разбирает LTL-формулу из строки (для `lamc verify --property`).

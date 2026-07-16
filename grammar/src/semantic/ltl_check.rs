@@ -49,7 +49,11 @@ fn collect_model(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
         .cloned()
         .collect();
 
-    for (ltl, loc) in model_ltl_formulas(&borrowed) {
+    // Диагностика — на АВТОРСКУЮ формулу (`site.formula`), а не на её
+    // десахаризацию областью: SE-056 обязан говорить об атоме, который автор
+    // написал, иначе предупреждение указывало бы на имя, добавленное нами.
+    for site in model_ltl_formulas(&borrowed) {
+        let (ltl, loc) = (site.formula, site.loc);
         out.push(
             Diagnostic::warning(
                 loc,
@@ -85,8 +89,28 @@ fn collect_model(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
     }
 }
 
+/// Место объявления LTL-формулы: сама формула, её позиция и **область**.
+///
+/// Область нужна потому, что формула, объявленная в теле состояния, говорит о
+/// прогонах **из этого состояния**, а не от старта (фича 0049, задача 0049-06 —
+/// решение заказчика 2026-07-16, вариант «б»). Десахаризацию делает
+/// потребитель-верификатор ([`verify_all`](crate::verify_all)), а не этот
+/// сборщик: диагностикам (SE-055/SE-056) нужна **авторская** формула — иначе
+/// предупреждение указывало бы на атом, которого автор не писал.
+#[derive(Debug, Clone)]
+pub struct LtlSite {
+    /// Формула, как её написал автор (без десахаризации области).
+    pub formula: Ltl,
+    /// Позиция объявления в исходном тексте.
+    pub loc: Location,
+    /// Имя состояния, в теле которого объявлена формула; `None` — уровень
+    /// модели (тело модели, её именованные блоки, тела функций).
+    pub state: Option<String>,
+}
+
 /// Собирает LTL-формулы, объявленные **непосредственно** в этой модели, вместе
-/// с их позициями: уровень модели, состояний, именованных блоков и тел функций.
+/// с их позициями и областями: уровень модели, состояний, именованных блоков и
+/// тел функций.
 ///
 /// Вложенные модели **не обходятся**: их формулы говорят о состояниях своей
 /// модели и проверяются против её же графа (фича 0049).
@@ -96,35 +120,39 @@ fn collect_model(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
 /// ([`verify_all`](crate::verify_all)). Паритет уровней — наследие 0035-01: если
 /// добавится новое место объявления формулы, добавлять его нужно здесь, иначе
 /// оно молча выпадет из обоих потребителей.
-pub(crate) fn model_ltl_formulas(model: &ModelNode) -> Vec<(Ltl, Location)> {
+pub(crate) fn model_ltl_formulas(model: &ModelNode) -> Vec<LtlSite> {
     let mut out = Vec::new();
 
     // Формулы уровня модели.
     for f in &model.formulas {
-        collect_formula(f, model.loc, &mut out);
+        collect_formula(f, model.loc, None, &mut out);
     }
     // Формулы уровня состояний: прямые (`: [LTL]` в теле состояния) и внутри
-    // именованных блоков состояния (`always`/`enter`/`exit`).
+    // именованных блоков состояния (`always`/`enter`/`exit`). И те и другие
+    // объявлены в области состояния: `enter`/`exit`/`always` исполняются, лишь
+    // когда автомат в нём, — область у них та же, что у тела.
     for state in model.states.values() {
+        let scope = Some(state.name().to_string());
         for f in state.formulas() {
-            collect_formula(f, state.loc(), &mut out);
+            collect_formula(f, state.loc(), scope.clone(), &mut out);
         }
         for block in state.named_blocks() {
             if let Some(stmt) = block.statement() {
-                walk_statement(stmt, state.loc(), &mut out);
+                walk_statement(stmt, state.loc(), scope.clone(), &mut out);
             }
         }
     }
     // Формулы в телах именованных блоков (`enter`/`exit`/`always`).
     for block in &model.named_blocks {
         if let Some(stmt) = block.statement() {
-            walk_statement(stmt, model.loc, &mut out);
+            walk_statement(stmt, model.loc, None, &mut out);
         }
     }
-    // Формулы в телах функций.
+    // Формулы в телах функций: функцию вправе позвать любое состояние, поэтому
+    // область — модель, а не состояние вызова.
     for func in model.functions.values() {
         if let FunctionDefinitionNode::Local { body, .. } = func {
-            walk_statement(body, model.loc, &mut out);
+            walk_statement(body, model.loc, None, &mut out);
         }
     }
 
@@ -132,34 +160,39 @@ pub(crate) fn model_ltl_formulas(model: &ModelNode) -> Vec<(Ltl, Location)> {
 }
 
 /// Обходит оператор в поисках встроенных формул (`: [LTL] …;` в блоке кода).
-fn walk_statement(stmt: &StatementNode, loc: Location, out: &mut Vec<(Ltl, Location)>) {
+fn walk_statement(
+    stmt: &StatementNode,
+    loc: Location,
+    scope: Option<String>,
+    out: &mut Vec<LtlSite>,
+) {
     match stmt {
         StatementNode::InlineFormula(formulas) => {
             for f in formulas {
-                collect_formula(f, loc, out);
+                collect_formula(f, loc, scope.clone(), out);
             }
         }
         StatementNode::Block(stmts) => {
             for s in stmts {
-                walk_statement(s, loc, out);
+                walk_statement(s, loc, scope.clone(), out);
             }
         }
         StatementNode::If { then_, else_, .. } => {
-            walk_statement(then_, loc, out);
+            walk_statement(then_, loc, scope.clone(), out);
             if let Some(e) = else_ {
-                walk_statement(e, loc, out);
+                walk_statement(e, loc, scope.clone(), out);
             }
         }
-        StatementNode::Loop { body, .. } => walk_statement(body, loc, out),
+        StatementNode::Loop { body, .. } => walk_statement(body, loc, scope.clone(), out),
         StatementNode::For { init, body, .. } => {
             if let Some(i) = init {
-                walk_statement(i, loc, out);
+                walk_statement(i, loc, scope.clone(), out);
             }
-            walk_statement(body, loc, out);
+            walk_statement(body, loc, scope.clone(), out);
         }
         StatementNode::Match { arms, .. } => {
             for arm in arms {
-                walk_statement(&arm.body, loc, out);
+                walk_statement(&arm.body, loc, scope.clone(), out);
             }
         }
         // Прочие операторы формул не содержат.
@@ -168,12 +201,21 @@ fn walk_statement(stmt: &StatementNode, loc: Location, out: &mut Vec<(Ltl, Locat
 }
 
 /// Разворачивает [`Formula`] в LTL-формулы (Guard/None их не несут).
-fn collect_formula(formula: &Formula, loc: Location, out: &mut Vec<(Ltl, Location)>) {
+fn collect_formula(
+    formula: &Formula,
+    loc: Location,
+    scope: Option<String>,
+    out: &mut Vec<LtlSite>,
+) {
     match formula {
-        Formula::LTL(ltl) => out.push((ltl.clone(), loc)),
+        Formula::LTL(ltl) => out.push(LtlSite {
+            formula: ltl.clone(),
+            loc,
+            state: scope,
+        }),
         Formula::Formulas(inner) => {
             for f in inner {
-                collect_formula(f, loc, out);
+                collect_formula(f, loc, scope.clone(), out);
             }
         }
         Formula::Guard(_, _) | Formula::None => {}
