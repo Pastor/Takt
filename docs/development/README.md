@@ -122,4 +122,9 @@
 | 0048-02 | 0048 | Детерминированная `topological_sort_models` (цель `c`) | [0048-02-deterministic-topo-sort.md](0048-02-deterministic-topo-sort.md) |
 | 0048-03 | 0048 | Гейт воспроизводимости в `precheck.sh` + тесты-сторожа | [0048-03-reproducibility-gate.md](0048-03-reproducibility-gate.md) |
 | 0048-04 | 0048 | Перегенерация `examples/generated/` и синхронизация документации | [0048-04-regenerate-examples.md](0048-04-regenerate-examples.md) |
+| 0049-01 | 0049 | Структура Крипке из ModelNode (управляющий граф) | [0049-01-kripke.md](0049-01-kripke.md) |
+| 0049-02 | 0049 | Произведение автоматов и проверка пустоты (nested-DFS, лассо) | [0049-02-product-emptiness.md](0049-02-product-emptiness.md) |
+| 0049-03 | 0049 | Движок верификации `verify_model` (build_buchi(¬φ) → пустота) | [0049-03-verify-engine.md](0049-03-verify-engine.md) |
+| 0049-04 | 0049 | Подкоманда `lamc verify` | [0049-04-cli-verify.md](0049-04-cli-verify.md) |
+| 0049-05 | 0049 | Документация, примеры, тесты | [0049-05-docs-tests.md](0049-05-docs-tests.md) |
 
