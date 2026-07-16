@@ -146,4 +146,7 @@
 | 0054-02 | 0054 | Позиция и код в диагностиках симулятора | [0054-02-sim-diagnostics.md](0054-02-sim-diagnostics.md) |
 | 0055-01 | 0055 | Неявный путь импорта и цепочка импорта (ядро) | [0055-01-implicit-import-path.md](0055-01-implicit-import-path.md) |
 | 0055-02 | 0055 | Импорты и чужие диагностики в LSP | [0055-02-lsp-foreign-diagnostics.md](0055-02-lsp-foreign-diagnostics.md) |
+| 0056-01 | 0056 | Индекс различает файлы (`file_no`, `offset`) | [0056-01-file-aware-index.md](0056-01-file-aware-index.md) |
+| 0056-02 | 0056 | Точный путь вместо угадывания (`to_snake_case` удаляется) | [0056-02-goto-exact-path.md](0056-02-goto-exact-path.md) |
+| 0056-03 | 0056 | Подключить кросс-файловый переход к серверу | [0056-03-wire-server.md](0056-03-wire-server.md) |
 
