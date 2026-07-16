@@ -1,0 +1,5 @@
+// top → mid → deep_bad: назван обязан быть deep_bad.lam (самый внутренний),
+// а не mid.lam и не top.lam.
+import "mid.lam";
+start Top { ref TopDone; }
+state TopDone;

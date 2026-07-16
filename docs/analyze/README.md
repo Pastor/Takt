@@ -50,4 +50,5 @@
 | 0050 | Бэкенд генерации в Rust | [0050-rust-backend.md](0050-rust-backend.md) | — (новая фича) |
 | 0051 | Область проверки lamc verify (--scope) | [0051-verify-scope.md](0051-verify-scope.md) | — (новая фича) |
 | 0052 | Итеративные обходы в verification/ (снятие потолка стека) | [0052-verify-iterative-traversal.md](0052-verify-iterative-traversal.md) | — (новая фича) |
+| 0053 | Идентификатор файла в позициях диагностик (file_no) | [0053-diagnostics-file-id.md](0053-diagnostics-file-id.md) | — (новая фича) |
 

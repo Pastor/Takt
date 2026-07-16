@@ -140,4 +140,6 @@
 | 0051-02 | 0051 | Область в `verify_all` и флаг CLI `--scope` | [0051-02-cli-scope.md](0051-02-cli-scope.md) |
 | 0052-01 | 0052 | `minimap::visit_state` → итеративный обход (чинит все 5 целей) | [0052-01-minimap-iterative.md](0052-01-minimap-iterative.md) |
 | 0052-02 | 0052 | nested-DFS (`check.rs`) → итеративный обход | [0052-02-nested-dfs-iterative.md](0052-02-nested-dfs-iterative.md) |
+| 0053-01 | 0053 | Реестр файлов и настоящий `file_no` | [0053-01-file-table.md](0053-01-file-table.md) |
+| 0053-02 | 0053 | Печать `путь:строка:колонка` в `lamc` | [0053-02-cli-positions.md](0053-02-cli-positions.md) |
 

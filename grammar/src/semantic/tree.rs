@@ -7,7 +7,7 @@
 //! - [`construct_context_state`] — строит контекст для состояния (заглушка).
 //! - [`construct_condition`] — преобразует условие АСД в семантическое условие.
 
-use crate::diagnostics::{Diagnostic, Location};
+use crate::diagnostics::{Diagnostic, FileTable, Location};
 use crate::parse;
 use crate::parser::ast;
 use crate::parser::ast::{
@@ -99,6 +99,7 @@ fn construct_model_stage0(
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
     import_stack: &mut Vec<String>,
+    files: &mut FileTable,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     let name = model.name.clone();
 
@@ -146,6 +147,7 @@ fn construct_model_stage0(
                 Some(Rc::clone(&model_node)),
                 search_paths,
                 import_stack,
+                files,
             )?;
             let model_name = model.borrow().name.clone().unwrap();
             if models.contains_key(&model_name) {
@@ -184,12 +186,17 @@ fn construct_model_stage0(
                         )
                         .with_code("SE-006"));
                     }
-                    match parse(&content, 0) {
+                    match parse(&content, files.add(&filename)) {
                         Ok((model, _)) => {
                             // Добавляем файл в стек, обрабатываем, убираем
                             import_stack.push(filename.clone());
-                            let result =
-                                construct_model_impl(&model, None, search_paths, import_stack);
+                            let result = construct_model_impl(
+                                &model,
+                                None,
+                                search_paths,
+                                import_stack,
+                                files,
+                            );
                             import_stack.pop();
                             models.insert(model_name, mark_imported(result?));
                         }
@@ -208,12 +215,17 @@ fn construct_model_stage0(
                         )
                         .with_code("SE-006"));
                     }
-                    match parse(&content, 0) {
+                    match parse(&content, files.add(&filename)) {
                         Ok((model, _)) => {
                             // Добавляем файл в стек, обрабатываем, убираем
                             import_stack.push(filename.clone());
-                            let result =
-                                construct_model_impl(&model, None, search_paths, import_stack);
+                            let result = construct_model_impl(
+                                &model,
+                                None,
+                                search_paths,
+                                import_stack,
+                                files,
+                            );
                             import_stack.pop();
                             models.insert(model_name, mark_imported(result?));
                         }
@@ -232,10 +244,14 @@ fn construct_model_stage0(
                     // Проверяем цикл ДО рекурсивной обработки файла
                     check_import_cycle(import_stack, &filename, *import_loc)?;
                     import_stack.push(filename.clone());
-                    let result = match parse(&content, 0) {
-                        Ok((ast_model, _)) => {
-                            construct_model_impl(&ast_model, None, search_paths, import_stack)
-                        }
+                    let result = match parse(&content, files.add(&filename)) {
+                        Ok((ast_model, _)) => construct_model_impl(
+                            &ast_model,
+                            None,
+                            search_paths,
+                            import_stack,
+                            files,
+                        ),
                         Err(d) => {
                             import_stack.pop();
                             return Err(d.first().unwrap().clone());
@@ -1060,8 +1076,9 @@ fn construct_model_impl(
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
     import_stack: &mut Vec<String>,
+    files: &mut FileTable,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    let model = construct_model_stage0(model, upper, search_paths, import_stack)?;
+    let model = construct_model_stage0(model, upper, search_paths, import_stack, files)?;
     let model = construct_model_stage1(model)?;
     let model = construct_model_stage2(model)?;
     let model = construct_model_stage3(model)?;
@@ -1095,10 +1112,28 @@ pub fn construct_model(
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+    // Реестр-однодневка: вызывающему пути файлов не нужны, номера никуда не
+    // уходят. Кому нужны — зовёт `construct_model_with_files` (фича 0053).
+    let mut files = FileTable::default();
+    construct_model_with_files(model, upper, search_paths, &mut files)
+}
+
+/// То же, что [`construct_model`], но с реестром файлов (фича 0053).
+///
+/// Реестр раздаёт `file_no` разбираемым файлам и позволяет вызывающему разрешить
+/// номер из [`Location`] обратно в путь — чтобы назвать пользователю, **в каком
+/// файле** ошибка. Корневой файл регистрирует вызывающий
+/// ([`FileTable::new`]); импортируемые регистрирует проход 0 по мере загрузки.
+pub fn construct_model_with_files(
+    model: &Model,
+    upper: Option<Rc<RefCell<ModelNode>>>,
+    search_paths: &[String],
+    files: &mut FileTable,
+) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     // Стек путей файлов, чьи импорты сейчас обрабатываются.
     // Пустой на входе: текущая (корневая) единица компиляции не имеет пути.
     let mut import_stack: Vec<String> = Vec::new();
-    let model = construct_model_stage0(model, upper, search_paths, &mut import_stack)?;
+    let model = construct_model_stage0(model, upper, search_paths, &mut import_stack, files)?;
     let model = construct_model_stage1(model)?;
     let model = construct_model_stage2(model)?;
     let model = construct_model_stage3(model)?;

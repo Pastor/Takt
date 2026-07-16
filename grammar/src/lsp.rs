@@ -1919,6 +1919,7 @@ start S = M;
     #[test]
     fn test_grammar_diagnostic_to_lsp_error() {
         let diag = GrammarDiagnostic {
+            file: None,
             loc: Location::Source(0, 0, 5),
             level: Level::Error,
             ty: ErrorType::ParserError,
@@ -1936,6 +1937,7 @@ start S = M;
     #[test]
     fn test_grammar_diagnostic_to_lsp_warning() {
         let diag = GrammarDiagnostic {
+            file: None,
             loc: Location::Source(0, 6, 11),
             level: Level::Warning,
             ty: ErrorType::Warning,
@@ -1954,6 +1956,7 @@ start S = M;
     #[test]
     fn test_grammar_diagnostic_to_lsp_builtin_location() {
         let diag = GrammarDiagnostic {
+            file: None,
             loc: Location::Builtin,
             level: Level::Info,
             ty: ErrorType::None,
