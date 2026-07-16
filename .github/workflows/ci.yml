@@ -28,3 +28,41 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+
+      # Гейт цели sv (фича 0045). Инструменты ловят непересекающиеся классы
+      # дефектов, поэтому обязательны ОБА: verilator пропускает `real` (для него
+      # это легальный тип симуляции), yosys — комбинационную петлю (центральный
+      # риск отображения `M1 | M2`). Проверено пробами 2026-07-15.
+      - name: Установка SV-инструментов (verilator + yosys)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator yosys
+          verilator --version
+          yosys -V
+
+      # SV_GATE_REQUIRED=1: в CI отсутствие инструмента — ОШИБКА, а не пропуск.
+      # Пропущенный гейт зелёный, то есть неотличим от пройденного: фича
+      # объявила бы себя проверенной, не имея арбитра.
+      - name: Гейт цели sv (verilator + yosys)
+        env:
+          SV_GATE_REQUIRED: 1
+        run: |
+          cargo build --bin lamc
+          mkdir -p examples/generated/sv
+          for lam in examples/*.lam; do
+            ./target/debug/lamc compile -t sv "$lam" -o examples/generated/sv || \
+              echo "  [предупреждение] цель sv: $lam не транслируется"
+          done
+          # Обязательный список ведётся явно (см. SV_TRANSLATABLE в precheck.sh):
+          # пример, переставший транслироваться, обязан ронять CI громко.
+          for name in stacker elevator_mini; do
+            test -e "examples/generated/sv/${name}.sv" || {
+              echo "::error::$name не оттранслирован целью sv, хотя обязан"
+              exit 1
+            }
+          done
+          for sv in examples/generated/sv/*.sv; do
+            name="$(basename "$sv" .sv)"
+            verilator --lint-only -Wall "$sv" || { echo "::error::verilator отверг $name"; exit 1; }
+            yosys -q -p "read_verilog -sv $sv; synth -top $name" || { echo "::error::yosys не синтезировал $name"; exit 1; }
+          done
