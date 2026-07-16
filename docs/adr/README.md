@@ -39,4 +39,5 @@
 | [0046](./0046-build-warnings-cleanup.md) | Устранение всех предупреждений сборки (rustc + clippy) | Proposed | фича 0046 |
 | [0047](0047-c-state-of-model.md) | Трансляция `S(Модель) = Состояние` в цель `c` | Accepted |
 | [0048](./0048-deterministic-codegen.md) | Детерминированная генерация кода (единый порядок эмиссии) | Accepted | фича 0048 |
+| [0049](./0049-model-checking-ltl.md) | Верификация модели (Model Checking) на основе LTL | Draft | фича 0049 |
 
