@@ -245,10 +245,8 @@ pub(crate) fn exec_statement(
                     match pred.evaluate(ctx)? {
                         true => {}
                         false => {
-                            let named = name
-                                .as_ref()
-                                .map(|n| format!(" '{n}'"))
-                                .unwrap_or_default();
+                            let named =
+                                name.as_ref().map(|n| format!(" '{n}'")).unwrap_or_default();
                             return Err(Diagnostic::error(
                                 Location::Implicit,
                                 format!("нарушен инвариант{named}"),

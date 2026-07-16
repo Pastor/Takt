@@ -14,7 +14,6 @@
 mod builtin;
 pub(crate) mod callgraph;
 mod condition;
-pub mod ltl_check;
 pub(crate) mod docs;
 pub mod enum_node;
 mod expression;
@@ -23,6 +22,7 @@ pub mod formula;
 mod function;
 mod import;
 pub mod index;
+pub mod ltl_check;
 /// Карта семантических элементов модели для генератора кода.
 ///
 /// Содержит снимок достижимых состояний и моделей в виде плоской карты [`Map`](minimap::Map),

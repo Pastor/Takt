@@ -182,8 +182,14 @@ fn generate_start_state_init(
                 let local = state_name.local_lowercase_snakecase();
                 let unique_upper = state_name.unique_uppercase_snakecase();
                 if let Some(first) = steps.first() {
-                    let variant =
-                        generate_concat_item_init(printer, &local, &unique_upper, first, 0, append)?;
+                    let variant = generate_concat_item_init(
+                        printer,
+                        &local,
+                        &unique_upper,
+                        first,
+                        0,
+                        append,
+                    )?;
                     printer
                         .ident(&format!("model->{}_state = {};", local, variant))
                         .nl();

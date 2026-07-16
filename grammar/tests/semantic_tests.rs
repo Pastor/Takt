@@ -4841,7 +4841,11 @@ fn fn_calls_parent_fn_still_works() {
 fn fn_direct_recursion_is_se053() {
     let err = build_err("fn f(x: u8) -> u8 { return f(x); } start Main { always { } }");
     assert_eq!(err.code.as_deref(), Some("SE-053"), "код: {err:?}");
-    assert!(err.message.contains("f → f"), "цепочка в сообщении: {}", err.message);
+    assert!(
+        err.message.contains("f → f"),
+        "цепочка в сообщении: {}",
+        err.message
+    );
 }
 
 /// A5 (R3): взаимная рекурсия `f → g → f` отвергается SE-053 с полной цепочкой.
@@ -4851,7 +4855,11 @@ fn fn_mutual_recursion_is_se053() {
         "fn f(x: u8) -> u8 { return g(x); } fn g(x: u8) -> u8 { return f(x); } start Main { always { } }",
     );
     assert_eq!(err.code.as_deref(), Some("SE-053"), "код: {err:?}");
-    assert!(err.message.contains("→"), "цепочка в сообщении: {}", err.message);
+    assert!(
+        err.message.contains("→"),
+        "цепочка в сообщении: {}",
+        err.message
+    );
 }
 
 /// A6 (R3): цикл длины 3 `f → g → h → f` отвергается SE-053.
@@ -4874,9 +4882,7 @@ fn fn_unknown_call_is_se004() {
 /// A8 (R5): встроенные функции (`min`) из тела `fn` работают — рёбер не дают.
 #[test]
 fn fn_calls_builtin_compiles() {
-    let node = build(
-        "fn f(x: u8) -> u8 { return min(x, 1); } start Main { always { } }",
-    );
+    let node = build("fn f(x: u8) -> u8 { return min(x, 1); } start Main { always { } }");
     assert!(node.functions.contains_key("f"));
 }
 
@@ -4896,11 +4902,17 @@ fn fn_duplicate_name_is_se009() {
 fn invariant_parses_as_model_element() {
     let node = build("var t: u8 := 0; invariant Safe = t <= 100; start Main { always { } }");
     // Десахаризация: имя P попадает в условия (для LTL-атома и ref).
-    assert!(node.conditions.contains_key("Safe"), "инвариант регистрирует cond");
+    assert!(
+        node.conditions.contains_key("Safe"),
+        "инвариант регистрирует cond"
+    );
     // И обязательство — Guard-формула в formulas.
     assert!(
-        node.formulas.iter().any(|f| matches!(f, grammar::semantic::formula::Formula::Guard(_, Some(n)) if n == "Safe")),
-        "инвариант даёт именованную Guard-формулу: {:?}", node.formulas
+        node.formulas.iter().any(
+            |f| matches!(f, grammar::semantic::formula::Formula::Guard(_, Some(n)) if n == "Safe")
+        ),
+        "инвариант даёт именованную Guard-формулу: {:?}",
+        node.formulas
     );
 }
 

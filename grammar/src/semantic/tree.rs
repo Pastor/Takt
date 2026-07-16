@@ -411,7 +411,11 @@ fn construct_model_stage0(
             // Guard-формула с именем инварианта (проверяется каждый такт до
             // `switch`, эталон C: c_model.rs:549). АСД не переписывается —
             // форматтер печатает `invariant` (ADR 0024).
-            let inv_loc = inv.name.as_ref().map(|id| id.loc).unwrap_or(Location::Implicit);
+            let inv_loc = inv
+                .name
+                .as_ref()
+                .map(|id| id.loc)
+                .unwrap_or(Location::Implicit);
             let name = inv
                 .clone()
                 .name
@@ -619,10 +623,10 @@ fn construct_model_stage0(
             match &**inline {
                 ast::InlineFormulaDefine::Guard { conditions, .. } => {
                     for cond in conditions {
-                        model_node
-                            .borrow_mut()
-                            .formulas
-                            .push(Formula::Guard(ConditionNode::Unresolved(cond.clone()), None));
+                        model_node.borrow_mut().formulas.push(Formula::Guard(
+                            ConditionNode::Unresolved(cond.clone()),
+                            None,
+                        ));
                     }
                 }
                 ast::InlineFormulaDefine::Ltl { formulas, .. } => {
@@ -950,7 +954,6 @@ fn construct_model_stage6(
 
     Ok(Rc::clone(&model))
 }
-
 
 fn resolve_formula(formula: Formula, model: Rc<RefCell<ModelNode>>) -> Result<Formula, Diagnostic> {
     match formula {

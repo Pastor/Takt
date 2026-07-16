@@ -1284,7 +1284,13 @@ fn test_fn_composition_generates_compilable_c() {
     );
 
     let out = std::process::Command::new("cc")
-        .args(["-std=c99", "-Wall", "-Werror=implicit-function-declaration", "-fsyntax-only", "compose.c"])
+        .args([
+            "-std=c99",
+            "-Wall",
+            "-Werror=implicit-function-declaration",
+            "-fsyntax-only",
+            "compose.c",
+        ])
         .current_dir(dir.path())
         .output()
         .expect("запуск cc");

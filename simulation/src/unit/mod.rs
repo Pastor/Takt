@@ -237,10 +237,7 @@ impl Unit {
             match pred.evaluate(self) {
                 Ok(true) => {}
                 Ok(false) => {
-                    let named = name
-                        .as_ref()
-                        .map(|n| format!(" '{n}'"))
-                        .unwrap_or_default();
+                    let named = name.as_ref().map(|n| format!(" '{n}'")).unwrap_or_default();
                     return Some(TickResult::Failed(format!(
                         "нарушен инвариант{named} (SIM-025)"
                     )));
