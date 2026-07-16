@@ -60,18 +60,7 @@ pub trait Hal {
 
 /// Функция 'is_collected' модели.
 fn is_collected(c: Constant, v: u8, x: u8) -> bool {
-    if (c == Constant::X) && (v == 1) {
-        return true;
-    } else {
-        if (c == Constant::Y) && (v == 2) {
-            return true;
-        } else {
-            if !(((x >> 2) & 1) != 0) {
-                return true;
-            }
-        }
-    }
-    false
+    (((c == Constant::X) && (v == 1)) || ((c == Constant::Y) && (v == 2))) || (!(((x >> 2) & 1) != 0))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
