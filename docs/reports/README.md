@@ -26,3 +26,4 @@
 | 0032 | Сохранение переменных модели в --save-state/--load-state | [0032-state-io-variables.md](0032-state-io-variables.md) | ✅ ГОТОВО (Д1/Д2/Д3 закрыты; единое хранилище; `inout` работает; 5/5 stacker) |
 | 0031 | Вызов функции из тела функции | [0031-fn-calls-fn.md](0031-fn-calls-fn.md) | ✅ ГОТОВО (композиция `f→g`; рекурсия → SE-053; форвард-прототипы в C) |
 | 0044 | Юнит-конструкции языка для симуляции (assert/invariant) | [0044-sim-assert-invariant.md](0044-sim-assert-invariant.md) | ✅ ГОТОВО (`invariant`; атом LTL; симулятор проверяет формулы — SIM-025) |
+| 0035 | LTL-формулы в блоках кода: разбор вместо тихой потери | [0035-ltl-in-blocks.md](0035-ltl-in-blocks.md) | ✅ ГОТОВО (паритет уровней; SE-055/SE-056 через `ltl_warnings`; C неизменен) |
