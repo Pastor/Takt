@@ -955,7 +955,7 @@ fn collect_type_deps(ty: &ast::Type) -> Vec<String> {
 /// Возвращает `Some(имя)` — имя псевдонима, с которого начинается цикл, если цикл найден.
 fn dfs_type_cycle(
     current: &str,
-    defs: &std::collections::HashMap<String, ast::Type>,
+    defs: &std::collections::BTreeMap<String, ast::Type>,
     visited: &mut HashSet<String>,
     stack: &mut HashSet<String>,
 ) -> Option<String> {
@@ -992,8 +992,8 @@ fn dfs_type_cycle(
 ///
 /// `type_locs` — карта `имя → позиция` для формирования диагностики с правильным Source.
 pub fn check_type_alias_cycles_ast(
-    raw_defs: &std::collections::HashMap<String, ast::Type>,
-    type_locs: &std::collections::HashMap<String, crate::diagnostics::Location>,
+    raw_defs: &std::collections::BTreeMap<String, ast::Type>,
+    type_locs: &std::collections::BTreeMap<String, crate::diagnostics::Location>,
 ) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     let mut visited: HashSet<String> = HashSet::new();
@@ -1345,8 +1345,8 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
     }
 
     // Строим граф переходов: имя_состояния -> список целей
-    let mut graph: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
+    let mut graph: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
     for (name, state) in borrowed.states.iter() {
         let targets: Vec<String> = match state {
             StateNode::Simple { references, .. } => {

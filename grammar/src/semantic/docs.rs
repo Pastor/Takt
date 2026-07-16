@@ -48,7 +48,7 @@ use crate::parser::ast::ModelElement;
 use crate::semantic::ModelNode;
 use crate::semantic::naming::normalize_camelcase_name;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 // ─── Вспомогательные функции ─────────────────────────────────────────────────
 
@@ -229,7 +229,7 @@ pub(crate) fn attach_docs(
         .collect();
 
     // Карта: имя → doc-строки
-    let mut docs_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut docs_map: BTreeMap<String, Vec<String>> = BTreeMap::new();
     // Документация вложенных моделей (для заполнения .doc дочернего узла)
     let mut nested_model_docs: Vec<(String, Vec<String>)> = Vec::new();
 

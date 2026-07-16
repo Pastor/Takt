@@ -36,7 +36,7 @@ use crate::parser::ast::Type;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, ModelNode, VariableNode};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 /// Запускает вывод типов для всех переменных с незаданным типом.
@@ -49,9 +49,9 @@ use std::rc::Rc;
 ///
 /// Пробрасывает [`Diagnostic`] из [`extract_type`].
 pub fn type_inference(
-    variables: &mut HashMap<String, VariableNode>,
+    variables: &mut BTreeMap<String, VariableNode>,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<HashMap<String, VariableNode>, Diagnostic> {
+) -> Result<BTreeMap<String, VariableNode>, Diagnostic> {
     for (name, var) in variables.clone() {
         match var {
             VariableNode::Simple {

@@ -4,7 +4,7 @@ use crate::semantic::naming::{normalize_camelcase_name, normalize_lowercase_snak
 use crate::semantic::{ModelNode, StateNode};
 use itertools::Itertools;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
@@ -51,6 +51,28 @@ impl Name {
     /// Возвращает уникальное имя в `CamelCase`.
     pub fn unique_camelcase(&self) -> String {
         normalize_camelcase_name(&self.unique.replace(":", "_"))
+    }
+}
+
+/// Порядок имён — по паре `(unique, local)`, первичный ключ `unique`.
+///
+/// Ручная реализация (а не `derive`): вывод `derive` шёл бы по `local`
+/// первым — по порядку объявления полей, — что разошлось бы с конвенцией
+/// остального кода, сортирующего по `unique()` (`st/mod.rs`, `st_model.rs`).
+/// Сравнение обоих полей согласовано с `Eq` — требование `BTreeMap`
+/// (фича 0048: `elements` — упорядоченная карта). Первичный ключ `unique`
+/// (полный путь `Root:Child:State`) группирует элементы по родителям.
+impl Ord for Name {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.unique
+            .cmp(&other.unique)
+            .then_with(|| self.local.cmp(&other.local))
+    }
+}
+
+impl PartialOrd for Name {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -167,7 +189,7 @@ impl Display for Element {
 #[derive(Debug)]
 pub struct Map {
     root: Rc<RefCell<ModelNode>>,
-    elements: HashMap<Name, Element>,
+    elements: BTreeMap<Name, Element>,
     model: Element,
 }
 
@@ -180,7 +202,7 @@ impl Map {
     /// # Ошибки
     /// Возвращает [`Diagnostic`], если у модели нет стартового состояния.
     pub fn create(model: Rc<RefCell<ModelNode>>) -> Result<Self, Diagnostic> {
-        let mut used_elements = HashMap::new();
+        let mut used_elements = BTreeMap::new();
         let Some(start) = model.borrow().get_start_state() else {
             return Err(Diagnostic::error(
                 model.borrow().loc,
@@ -358,7 +380,7 @@ fn state_by_unique_name(
 fn visit_state(
     state: &StateNode,
     model: Rc<RefCell<ModelNode>>,
-    used: &mut HashMap<Name, Element>,
+    used: &mut BTreeMap<Name, Element>,
 ) {
     let name_str = state.name().to_string();
     let key = Name::new(
@@ -458,7 +480,7 @@ fn build_extend(extend: &Extend, model: Rc<RefCell<ModelNode>>) -> StateExtend {
 /// - [`Extend::Concatenation`] / [`Extend::Parallel`] — рекурсирует в каждый операнд.
 /// - [`Extend::Parentless`] — прозрачная обёртка, делегирует внутрь.
 /// - [`Extend::None`] / [`Extend::Unresolved`] — пропускаются.
-fn visit_extend(extend: &Extend, model: Rc<RefCell<ModelNode>>, used: &mut HashMap<Name, Element>) {
+fn visit_extend(extend: &Extend, model: Rc<RefCell<ModelNode>>, used: &mut BTreeMap<Name, Element>) {
     match extend {
         Extend::Model(m_rc) => {
             let unique = unique_model_name(m_rc.clone());

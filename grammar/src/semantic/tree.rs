@@ -35,7 +35,7 @@ use crate::semantic::{
     StatementNode, VariableNode, extend,
 };
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::rc::Weak;
 
@@ -99,17 +99,17 @@ fn construct_model_stage0(
         ..Default::default()
     };
     let model_node = Rc::new(RefCell::new(model_node));
-    let mut models = HashMap::new();
-    let mut variables = HashMap::new();
-    let mut conditions = HashMap::new();
+    let mut models = BTreeMap::new();
+    let mut variables = BTreeMap::new();
+    let mut conditions = BTreeMap::new();
     let mut named_blocks = Vec::new();
-    let mut functions = HashMap::new();
+    let mut functions = BTreeMap::new();
 
     // Ce16: предварительная проверка циклических псевдонимов до вызова construct_type.
     // Собираем все AST-определения типов из текущего уровня модели.
     {
-        let mut raw_defs: HashMap<String, ast::Type> = HashMap::new();
-        let mut type_locs_pre: HashMap<String, Location> = HashMap::new();
+        let mut raw_defs: BTreeMap<String, ast::Type> = BTreeMap::new();
+        let mut type_locs_pre: BTreeMap<String, Location> = BTreeMap::new();
         for element in model.elements.iter() {
             if let ModelElement::Type(def) = element {
                 raw_defs.insert(def.name.name.clone(), def.ty.clone());
@@ -597,7 +597,7 @@ fn construct_model_stage1(
     // Клонируем состояния до мутабельного займа, чтобы construct_implement мог брать заём
     let states = model.borrow().states.clone();
 
-    let mut prepared_states = HashMap::new();
+    let mut prepared_states = BTreeMap::new();
     for (name, state) in states.iter() {
         if let StateNode::Implement {
             upper,
@@ -644,7 +644,7 @@ fn construct_model_stage1(
         .map(|(k, v)| (k.clone(), Rc::clone(v)))
         .collect();
 
-    let mut models = HashMap::new();
+    let mut models = BTreeMap::new();
     for (name, nested_model) in nested {
         models.insert(name, construct_model_stage1(Rc::clone(&nested_model))?);
     }
@@ -664,10 +664,10 @@ fn construct_model_stage1(
 /// Пробрасывает [`Diagnostic`] из [`construct_expression`], если идентификатор
 /// в инициализаторе не найден в области видимости.
 fn resolve_variable_expressions(
-    variables: &HashMap<String, VariableNode>,
+    variables: &BTreeMap<String, VariableNode>,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<HashMap<String, VariableNode>, Diagnostic> {
-    let mut result = HashMap::new();
+) -> Result<BTreeMap<String, VariableNode>, Diagnostic> {
+    let mut result = BTreeMap::new();
     for (name, var) in variables {
         let resolved = match var.clone() {
             VariableNode::Simple {
@@ -737,7 +737,7 @@ fn construct_model_stage2(
         .iter()
         .map(|(k, v)| (k.clone(), Rc::clone(v)))
         .collect();
-    let mut models = HashMap::new();
+    let mut models = BTreeMap::new();
     for (name, nested_model) in nested {
         models.insert(name, construct_model_stage2(nested_model)?);
     }
@@ -759,7 +759,7 @@ fn construct_model_stage3(
         .iter()
         .map(|(k, v)| (k.clone(), Rc::clone(v)))
         .collect();
-    let mut models = HashMap::new();
+    let mut models = BTreeMap::new();
     for (name, nested_model) in nested {
         models.insert(name, construct_model_stage3(nested_model)?);
     }
@@ -792,7 +792,7 @@ fn construct_model_stage4(
 
     // Разрешаем блоки в состояниях текущей модели
     let states = std::mem::take(&mut model.borrow_mut().states);
-    let mut resolved_states = HashMap::with_capacity(states.len());
+    let mut resolved_states = BTreeMap::new();
     for (state_name, state) in states {
         let resolved = resolve_state_named_blocks(state, model.clone())?;
         resolved_states.insert(state_name, resolved);
@@ -806,7 +806,7 @@ fn construct_model_stage4(
         .iter()
         .map(|(k, v)| (k.clone(), Rc::clone(v)))
         .collect();
-    let mut models = HashMap::new();
+    let mut models = BTreeMap::new();
     for (name, nested_model) in nested {
         models.insert(name, construct_model_stage4(nested_model)?);
     }
@@ -829,7 +829,7 @@ fn construct_model_stage5(
         .iter()
         .map(|(k, v)| (k.clone(), Rc::clone(v)))
         .collect();
-    let mut models = HashMap::new();
+    let mut models = BTreeMap::new();
     for (name, nested_model) in nested {
         models.insert(name, construct_model_stage5(nested_model)?);
     }
@@ -843,7 +843,7 @@ fn construct_model_stage6(
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     let states = model.borrow().states.clone();
 
-    let mut prepared_states = HashMap::new();
+    let mut prepared_states = BTreeMap::new();
     for (name, state) in states.iter() {
         prepared_states.insert(name.clone(), resolve_state_references(state)?);
     }
@@ -857,7 +857,7 @@ fn construct_model_stage6(
         .map(|(k, v)| (k.clone(), Rc::clone(v)))
         .collect();
 
-    let mut models = HashMap::new();
+    let mut models = BTreeMap::new();
     for (name, nested_model) in nested {
         models.insert(name, construct_model_stage6(Rc::clone(&nested_model))?);
     }
@@ -867,10 +867,10 @@ fn construct_model_stage6(
 }
 
 fn resolve_functions(
-    functions: HashMap<String, FunctionDefinitionNode>,
+    functions: BTreeMap<String, FunctionDefinitionNode>,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<HashMap<String, FunctionDefinitionNode>, Diagnostic> {
-    let mut resolved_functions = HashMap::with_capacity(functions.len());
+) -> Result<BTreeMap<String, FunctionDefinitionNode>, Diagnostic> {
+    let mut resolved_functions = BTreeMap::new();
 
     for (name, function) in functions {
         resolved_functions.insert(name, construct_function(function, model.clone())?);
@@ -1138,9 +1138,9 @@ pub fn nested_port_warnings(model: &Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
 pub fn construct_states(
     model: &Model,
     upper: Rc<RefCell<ModelNode>>,
-) -> Result<HashMap<String, StateNode>, Diagnostic> {
+) -> Result<BTreeMap<String, StateNode>, Diagnostic> {
     // Первый проход: создаём узлы с незаполненными ссылками (заглушки Unresolved).
-    let mut states: HashMap<String, Box<StateNode>> = HashMap::new();
+    let mut states: BTreeMap<String, Box<StateNode>> = BTreeMap::new();
     for element in model.elements.iter() {
         if let ModelElement::State(def) = element {
             let name = def
@@ -1264,7 +1264,7 @@ pub fn construct_states(
     }
 
     // Второй проход: заменяем Unresolved-заглушки реальными узлами.
-    let mut new_states: HashMap<String, StateNode> = HashMap::new();
+    let mut new_states: BTreeMap<String, StateNode> = BTreeMap::new();
     for (_, state) in states.iter() {
         match *state.clone() {
             StateNode::Simple {
@@ -1353,7 +1353,7 @@ pub fn construct_states(
 /// Возвращает [`Diagnostic`], если ссылка указывает на несуществующее состояние.
 fn resolve_references(
     references: Vec<ReferenceNode<StateNode>>,
-    states: &HashMap<String, Box<StateNode>>,
+    states: &BTreeMap<String, Box<StateNode>>,
 ) -> Result<Vec<ReferenceNode<StateNode>>, Diagnostic> {
     references
         .into_iter()

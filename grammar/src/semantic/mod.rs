@@ -47,7 +47,7 @@ pub use crate::semantic::formula::Formula;
 pub use crate::semantic::struct_node::StructDefinitionNode;
 use extend::Extend;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::rc::Weak;
@@ -70,35 +70,35 @@ pub struct ModelNode {
     /// Модель уровнем выше (слабая ссылка для предотвращения циклов Rc).
     pub upper: Option<Weak<RefCell<ModelNode>>>,
     /// Вложенные именованные модели.
-    pub models: HashMap<String, Rc<RefCell<ModelNode>>>,
+    pub models: BTreeMap<String, Rc<RefCell<ModelNode>>>,
     /// Именованные блоки кода (`enter`, `exit`, `always`, …).
     pub named_blocks: Vec<NamedCodeBlockDefinitionNode>,
     /// Объявленные функции.
-    pub functions: HashMap<String, FunctionDefinitionNode>,
+    pub functions: BTreeMap<String, FunctionDefinitionNode>,
     /// Объявленные переменные.
-    pub variables: HashMap<String, VariableNode>,
+    pub variables: BTreeMap<String, VariableNode>,
     /// Объявленные псевдонимы типов.
-    pub types: HashMap<String, TypeNode>,
+    pub types: BTreeMap<String, TypeNode>,
     /// Позиции объявлений псевдонимов типов: имя → позиция в исходном тексте.
-    pub type_locs: HashMap<String, Location>,
+    pub type_locs: BTreeMap<String, Location>,
     /// Сырые АСД-типы псевдонимов: имя → оригинальный AST-тип до разрешения.
     ///
     /// Используется `check_recursive_type_aliases` в `validate.rs` для обнаружения
     /// циклических ссылок между псевдонимами (Ce16).
-    pub raw_type_defs: HashMap<String, ast::Type>,
+    pub raw_type_defs: BTreeMap<String, ast::Type>,
     /// Сырые АСД-операторы именованных блоков: `(имя_блока, оригинальный_оператор)`.
     ///
     /// Используется `SemanticIndex` (I8) для индексации объявлений локальных переменных
     /// внутри `enter`/`exit`/`always`-блоков, позиции которых теряются при разрешении.
     pub named_block_raw: Vec<(String, ast::Statement)>,
     /// Объявленные условия переходов.
-    pub conditions: HashMap<String, ConditionDefinitionNode>,
+    pub conditions: BTreeMap<String, ConditionDefinitionNode>,
     /// Объявленные перечисления (Ce4).
-    pub enums: HashMap<String, EnumDefinitionNode>,
+    pub enums: BTreeMap<String, EnumDefinitionNode>,
     /// Объявленные структурные типы (NI3).
-    pub structs: HashMap<String, StructDefinitionNode>,
+    pub structs: BTreeMap<String, StructDefinitionNode>,
     /// Состояния модели: имя → узел состояния.
-    pub states: HashMap<String, StateNode>,
+    pub states: BTreeMap<String, StateNode>,
     /// Информация о реализации (зарезервировано).
     pub implements: Extend,
     /// Документация самой модели (строки из `///`-комментариев перед `model`).
@@ -112,7 +112,7 @@ pub struct ModelNode {
     /// Значение — список строк из `///`-комментариев, предшествующих объявлению.
     ///
     /// Заполняется [`construct_model_with_docs`](tree::construct_model_with_docs).
-    pub docs: HashMap<String, Vec<String>>,
+    pub docs: BTreeMap<String, Vec<String>>,
     /// Встроенные формулы модели.
     pub formulas: Vec<Formula>,
     /// Привязки адресов портов оператором `address` (фича 0020, слой AddressMap).
@@ -157,11 +157,11 @@ impl ModelNode {
             named_block_raw: vec![],
             conditions: Default::default(),
             enums: Default::default(),
-            structs: HashMap::new(),
-            states: HashMap::new(),
+            structs: BTreeMap::new(),
+            states: BTreeMap::new(),
             implements: Extend::None,
             doc: Vec::new(),
-            docs: HashMap::new(),
+            docs: BTreeMap::new(),
             formulas: Vec::new(),
             address_defs: Vec::new(),
         };

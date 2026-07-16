@@ -49,7 +49,7 @@ use crate::semantic::minimap::{Element, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -796,9 +796,9 @@ pub fn collect_extend_model_deps(extend: &StateExtend, deps: &mut Vec<String>) {
 /// Рекурсивный DFS для топологической сортировки моделей.
 pub fn topo_dfs(
     key: &str,
-    by_name: &HashMap<String, Element>,
-    deps_map: &HashMap<String, Vec<String>>,
-    visited: &mut HashSet<String>,
+    by_name: &BTreeMap<String, Element>,
+    deps_map: &BTreeMap<String, Vec<String>>,
+    visited: &mut BTreeSet<String>,
     result: &mut Vec<Element>,
 ) {
     if visited.contains(key) {
@@ -821,10 +821,16 @@ pub fn topo_dfs(
 ///
 /// Модель A зависит от B, если одно из её состояний расширяет B (`StateExtend::Model`).
 /// Алгоритм: обход в глубину (DFS) с постфиксным добавлением в результат.
-/// Нет гарантий порядка одноуровневых вершин — нужен только частичный порядок.
+///
+/// Частичного порядка достаточно для *корректности* (зависимость печатается
+/// раньше зависимого), но **не** для *воспроизводимости*: DFS со случайным
+/// порядком стартовых вершин даёт всякий раз корректный, но случайный выход.
+/// Поэтому `by_name`/`deps_map` — `BTreeMap`, а `visited` — `BTreeSet`: порядок
+/// одноуровневых вершин задан лексикографикой ключей (фича 0048). Образец —
+/// `st/mod.rs`, где вход сортируется перед топологическим обходом.
 pub fn topological_sort_models(map: &CMap, models: Vec<Element>) -> Vec<Element> {
     // Фаза 1: строим карту unique_name → Element
-    let mut by_name: HashMap<String, Element> = HashMap::new();
+    let mut by_name: BTreeMap<String, Element> = BTreeMap::new();
     for elem in models {
         if let Element::Model { name, .. } = &elem {
             by_name.insert(name.unique().to_string(), elem);
@@ -832,7 +838,7 @@ pub fn topological_sort_models(map: &CMap, models: Vec<Element>) -> Vec<Element>
     }
 
     // Фаза 2: строим граф зависимостей (только зависимости из нашего набора моделей)
-    let mut deps_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut deps_map: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let keys: Vec<String> = by_name.keys().cloned().collect();
     for key in &keys {
         if let Some(Element::Model { states, .. }) = by_name.get(key) {
@@ -849,7 +855,7 @@ pub fn topological_sort_models(map: &CMap, models: Vec<Element>) -> Vec<Element>
     }
 
     // Фаза 3: топологический обход (DFS)
-    let mut visited = HashSet::new();
+    let mut visited = BTreeSet::new();
     let mut result = Vec::new();
     for key in &keys {
         topo_dfs(key, &by_name, &deps_map, &mut visited, &mut result);

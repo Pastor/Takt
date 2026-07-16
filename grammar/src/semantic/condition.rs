@@ -4,7 +4,7 @@
 //! - [`resolve_condition`] — преобразует АСД-условие [`ast::Condition`] в разрешённое
 //!   семантическое [`ConditionNode`].
 //! - [`extract_conditions`] — разрешает все неразрешённые именованные условия
-//!   в [`HashMap`].
+//!   в [`BTreeMap`].
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
@@ -12,7 +12,7 @@ use crate::semantic::builtin::builtin_function;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionDefinitionNode, ConditionNode, ModelNode, VariableNode};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 /// Разрешает правую часть оператора `=`/`!=` с учётом типа левой части.
@@ -283,10 +283,10 @@ fn rebuild_condition(cond: &ConditionNode, model: Rc<RefCell<ModelNode>>) -> Con
 ///
 /// Пробрасывает любой [`Diagnostic`], возвращённый из [`resolve_condition`].
 pub fn extract_conditions(
-    conditions: &HashMap<String, ConditionDefinitionNode>,
+    conditions: &BTreeMap<String, ConditionDefinitionNode>,
     model: Rc<RefCell<ModelNode>>,
-) -> Result<HashMap<String, ConditionDefinitionNode>, Diagnostic> {
-    let mut result = HashMap::new();
+) -> Result<BTreeMap<String, ConditionDefinitionNode>, Diagnostic> {
+    let mut result = BTreeMap::new();
     for (name, cond) in conditions {
         if let ConditionNode::Unresolved(ast_cond) = &cond.value {
             let resolved = resolve_condition(ast_cond, model.clone())?;
