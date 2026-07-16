@@ -43,3 +43,4 @@
 | 0053 | Позиции в диагностиках (файл:строка:колонка) и настоящий file_no | [0053-diagnostics-file-id.md](0053-diagnostics-file-id.md) | ✅ ПРОЙДЕН (отчёт: [reports/0053](../reports/0053-diagnostics-file-id.md)) |
 | 0054 | Позиции в диагностиках симулятора | [0054-sim-diagnostics-positions.md](0054-sim-diagnostics-positions.md) | ✅ ПРОЙДЕН (отчёт: [reports/0054](../reports/0054-sim-diagnostics-positions.md)) |
 | 0055 | Многофайловость LSP: импорты и позиции диагностик | [0055-lsp-multifile.md](0055-lsp-multifile.md) | ✅ ПРОЙДЕН (отчёт: [reports/0055](../reports/0055-lsp-multifile.md)) |
+| 0056 | Кросс-файловый переход к декларации (точный путь) | [0056-lsp-goto-exact-file.md](0056-lsp-goto-exact-file.md) | СФОРМИРОВАН (фича в РАЗРАБОТКА) |

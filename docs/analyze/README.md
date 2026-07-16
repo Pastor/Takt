@@ -53,4 +53,5 @@
 | 0053 | Идентификатор файла в позициях диагностик (file_no) | [0053-diagnostics-file-id.md](0053-diagnostics-file-id.md) | — (новая фича) |
 | 0054 | Позиции в диагностиках симулятора | [0054-sim-diagnostics-positions.md](0054-sim-diagnostics-positions.md) | — (новая фича) |
 | 0055 | Многофайловость LSP: импорты и позиции диагностик | [0055-lsp-multifile.md](0055-lsp-multifile.md) | — (новая фича) |
+| 0056 | Точный путь вместо угадывания в goto_declaration | [0056-lsp-goto-exact-file.md](0056-lsp-goto-exact-file.md) | — (новая фича) |
 
