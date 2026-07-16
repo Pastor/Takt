@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Предкоммит-проверка: ссылки в Markdown + fmt + check + clippy + test +
 # формат примеров (lamc fmt --check) +
-# генерация C/PlantUML/ST из примеров Lam + гейт воспроизводимости (фича 0048) +
-# сборка сгенерированного кода (C — cmake/ninja, Rust — cargo + прогон проверок
-# по моделям).
+# генерация C/PlantUML/ST/Rust/SV из примеров Lam + гейт воспроизводимости
+# (фича 0048) + сборка сгенерированного кода (C — cmake/ninja, Rust — cargo +
+# прогон проверок по моделям, SV — verilator + yosys).
 # Запускать из любого каталога.
 set -euo pipefail
 
@@ -48,6 +48,16 @@ C_OUTPUT="examples/generated/c"
 PLANTUML_OUTPUT="examples/generated/plantuml"
 ST_OUTPUT="examples/generated/st"
 RUST_OUTPUT="examples/generated/rust"
+SV_OUTPUT="examples/generated/sv"
+
+# Примеры, которые цель `sv` ОБЯЗАНА транслировать (фича 0045, задача 0045-02).
+# Список ведётся ЯВНО, а не выводится как «все, кроме падающих»: иначе пример,
+# переставший транслироваться, молча выпал бы из гейта — и гейт замолчал бы
+# регресс. Остальные примеры отсекаются ЗАКОНОМЕРНО — по `extern fn` (SV-005):
+# `elevator.lam` (8 шт.), `comprehensive.lam` (2), `extend_complex.lam` (1).
+# В синтезируемом RTL вызова внешнего кода не существует; это граница цели, а не
+# недоделка (README, раздел «Генерация SystemVerilog»).
+SV_TRANSLATABLE="stacker elevator_mini"
 
 echo "Генерация C-кода из примеров Lam..."
 for lam_file in examples/*.lam; do
@@ -66,6 +76,11 @@ for lam_file in examples/*.lam; do
   # перечислено в README, раздел «Генерация Rust».
   $LAMC compile "$lam_file" -t rust -o "$RUST_OUTPUT" \
     || echo "    [предупреждение] цель rust: $lam_file не транслируется (бэкенд не закончен)"
+  # Цель sv (фича 0045). Отказ здесь не валит предкоммит, но и не остаётся
+  # безнаказанным: список обязательных примеров проверяется ниже отдельно
+  # ($SV_TRANSLATABLE) — иначе выпадение примера из гейта прошло бы молча.
+  $LAMC compile "$lam_file" -t sv -o "$SV_OUTPUT" \
+    || echo "    [предупреждение] цель sv: $lam_file не транслируется"
 done
 echo "Готово. Файлы в $C_OUTPUT/"
 
@@ -84,7 +99,7 @@ echo "Гейт воспроизводимости: два прогона на к
 repro_failed=0
 for lam_file in examples/*.lam; do
   name="$(basename "$lam_file" .lam)"
-  for spec in "c:" "c-hal:-t c-hal" "plantuml:-t plantuml" "st:-t st" "st-at:-t st-at" "rust:-t rust"; do
+  for spec in "c:" "c-hal:-t c-hal" "plantuml:-t plantuml" "st:-t st" "st-at:-t st-at" "rust:-t rust" "sv:-t sv"; do
     tgt="${spec%%:*}"
     flag="${spec#*:}"
     d1="$(mktemp -d)"
@@ -204,6 +219,103 @@ for bin_src in "$RUST_OUTPUT"/src/bin/*.rs; do
   bin="$(basename "$bin_src" .rs)"
   $CARGO_CMD run --quiet --manifest-path "$RUST_MANIFEST" --bin "$bin" | sed 's/^/  /'
 done
+
+# ГЕЙТ ЦЕЛИ SV (фича 0045, задача 0045-02): порождённый .sv обязан приниматься
+# Verilator (линт) И yosys (синтез). ДВА инструмента — не осторожность, а вывод
+# из проб 2026-07-15: они ловят НЕПЕРЕСЕКАЮЩИЕСЯ классы дефектов, причём ровно
+# те два, что критичны для решений ADR.
+#
+#   | проба                | verilator --lint-only -Wall | yosys synth          |
+#   |----------------------|-----------------------------|----------------------|
+#   | целевой модуль       | чисто, код 0                | 22 ячейки, код 0     |
+#   | `real` в always_ff   | ПРИНЯЛ МОЛЧА, код 0         | ERROR TOK_REAL, код 1|
+#   | комбинационная петля | UNOPTFLAT, код 1            | СИНТЕЗИРОВАЛ, код 0  |
+#
+# То есть расхожее «--lint-only даёт проверку синтеза» НЕВЕРНО: Verilator — линтер
+# и симулятор, для него `real` легален, и с одним лишь Verilator решение
+# «Rational → SV-003» осталось бы недоказанным. Обратно: центральный риск
+# отображения `M1 | M2` — комбинационная петля — синтезатором НЕ ловится вовсе.
+# Убрать любой из двух = ослепить гейт на целый класс дефектов.
+#
+# Мягкая деградация (образец — `cc_available()` в conformance_c_tests.rs):
+# инструмента нет → шаг пропускается с явным сообщением. Verilator и yosys для
+# сборки и тестов `lamc` не нужны (ставятся `brew install verilator yosys`), и
+# машина разработчика вправе быть без них.
+#
+# В CI мягкость недопустима: пропущенный гейт зелёный, то есть неотличим от
+# пройденного, — и фича осталась бы без арбитра, сама себя объявив проверенной.
+# Поэтому CI выставляет SV_GATE_REQUIRED=1, и тогда отсутствие инструмента —
+# ОШИБКА, а не пропуск.
+#
+# `lint_off` в порождённом коде НЕ применяется: если вывод требует глушения
+# предупреждения — это дефект генератора, а не повод глушить.
+echo "Гейт цели sv: verilator (линт) + yosys (синтез) по порождённым .sv..."
+sv_failed=0
+SV_GATE_REQUIRED="${SV_GATE_REQUIRED:-0}"
+
+# Отсутствие инструмента: пропуск локально, ошибка в CI (SV_GATE_REQUIRED=1).
+sv_tool_missing() {
+  if [ "$SV_GATE_REQUIRED" = "1" ]; then
+    echo "  $1 не найден, а SV_GATE_REQUIRED=1 — гейт sv обязателен. Провал."
+    sv_failed=1
+  else
+    echo "  [пропуск] $1 не найден — гейт пропущен (brew install $1)"
+  fi
+}
+
+# Сперва — обязательный список. Пример, переставший транслироваться, обязан
+# ронять предкоммит ГРОМКО, а не тихо исчезать из прогона гейта ниже.
+for name in $SV_TRANSLATABLE; do
+  if [ ! -e "$SV_OUTPUT/${name}.sv" ]; then
+    echo "  $name → НЕ ОТТРАНСЛИРОВАН, хотя обязан (цель sv, фича 0045)."
+    echo "    Причина — выше, в строке '[предупреждение] цель sv: examples/${name}.lam'."
+    sv_failed=1
+  fi
+done
+
+if command -v verilator &>/dev/null; then
+  for sv_file in "$SV_OUTPUT"/*.sv; do
+    [ -e "$sv_file" ] || continue
+    name="$(basename "$sv_file" .sv)"
+    sv_err="$(mktemp)"
+    if verilator --lint-only -Wall "$sv_file" >/dev/null 2>"$sv_err"; then
+      echo "  $name → verilator принял"
+    else
+      echo "  $name → verilator ОТВЕРГ:"
+      sed 's/^/    /' "$sv_err" | head -12
+      sv_failed=1
+    fi
+    rm -f "$sv_err"
+  done
+else
+  sv_tool_missing verilator
+fi
+
+if command -v yosys &>/dev/null; then
+  for sv_file in "$SV_OUTPUT"/*.sv; do
+    [ -e "$sv_file" ] || continue
+    name="$(basename "$sv_file" .sv)"
+    sv_err="$(mktemp)"
+    # -top обязателен: имя модуля выводится из имени корневой модели и совпадает
+    # с именем файла. Без него yosys выбирает верхний модуль сам и на ошибке
+    # иерархии промолчит.
+    if yosys -q -p "read_verilog -sv $sv_file; synth -top $name" >/dev/null 2>"$sv_err"; then
+      echo "  $name → yosys синтезировал"
+    else
+      echo "  $name → yosys НЕ СИНТЕЗИРОВАЛ:"
+      sed 's/^/    /' "$sv_err" | head -12
+      sv_failed=1
+    fi
+    rm -f "$sv_err"
+  done
+else
+  sv_tool_missing yosys
+fi
+
+if [ "$sv_failed" -ne 0 ]; then
+  echo "  Порождённый SystemVerilog не проходит гейт — предкоммит провален (фича 0045)."
+  exit 1
+fi
 
 cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -S $C_OUTPUT -B $C_OUTPUT/cmake-build-debug/
 cd $C_OUTPUT/cmake-build-debug/ && ninja
