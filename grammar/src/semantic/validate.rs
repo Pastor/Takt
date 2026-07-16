@@ -3453,7 +3453,7 @@ fn collect_unreachable_states(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diag
 
         while let Some(current) = queue.pop_front() {
             if let Some(state) = states.get(&current) {
-                for target in get_reachable_targets(state) {
+                for target in reachable_targets(state) {
                     if !reachable.contains(&target) {
                         reachable.insert(target.clone());
                         queue.push_back(target);
@@ -3497,7 +3497,13 @@ fn get_state_loc(state: &StateNode) -> Location {
     }
 }
 
-fn get_reachable_targets(state: &StateNode) -> Vec<String> {
+/// Имена состояний, достижимых из `state` за один переход: цели `ref`-ссылок и
+/// (для состояния-реализации) цель `next`.
+///
+/// Общий источник истины о рёбрах графа FSM: используется анализом
+/// достижимости (SE-046) и построением структуры Крипке (фича 0049,
+/// [`build_kripke`](crate::verification::kripke::build_kripke)).
+pub(crate) fn reachable_targets(state: &StateNode) -> Vec<String> {
     match state {
         StateNode::Simple { references, .. } => references.iter().map(|r| r.name.clone()).collect(),
         StateNode::Implement {
