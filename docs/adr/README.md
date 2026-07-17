@@ -56,4 +56,5 @@
 | [0063](./0063-sv-clock-enable.md) | Порт `en` (clock enable) для цели `sv` — пересмотр Option C ADR 0045 | Accepted | фича 0063 |
 | [0064](./0064-sv-divider-warning.md) | Предупреждение о делителе (`SV-009`) — только на переменный делитель | Accepted | фича 0064 |
 | [0065](./0065-st-namespace-isolation.md) | Изоляция пространства имён цели `st` (префикс POU + `ST-014`) | Accepted | фича 0065 |
+| [0066](./0066-st-bool-literals.md) | Литералы по целевому типу в телах `st` (`BOOL` и перечисления) | Accepted | фича 0066 |
 
