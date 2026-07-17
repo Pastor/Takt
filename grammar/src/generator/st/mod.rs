@@ -46,6 +46,7 @@ mod st_expr;
 mod st_func;
 mod st_map;
 mod st_model;
+mod st_reserved;
 mod st_stmt;
 mod st_type;
 
@@ -397,8 +398,13 @@ fn emit_function_block(
             .collect(),
     };
 
+    // Имя FB совпадает с эмитируемым идентификатором. У корня оно берётся из
+    // имени файла (проба 2: `concat.lam` → `FUNCTION_BLOCK Concat`, а `CONCAT` —
+    // стандартная функция IEC), поэтому проверять надо именно эту строку.
+    let fb_name = name.unique_camelcase();
+    st_reserved::check_st_name(&fb_name, model.loc)?;
     let mut header = String::new();
-    let _ = write!(header, "FUNCTION_BLOCK {}", name.unique_camelcase());
+    let _ = write!(header, "FUNCTION_BLOCK {}", fb_name);
     p.ident(&header).nl();
     st_decl::emit_declarations(p, model, map.usage(), &extras)?;
     p.print(&body);

@@ -3,7 +3,7 @@
  * Не редактировать вручную: файл перезаписывается при каждой генерации.
  *)
 
-FUNCTION clamp_temp : USINT
+FUNCTION ComprehensiveController_clamp_temp : USINT
 VAR_INPUT
     value : USINT;
 END_VAR
@@ -11,22 +11,22 @@ VAR CONSTANT
     MAX_TEMP : USINT := 100;
 END_VAR
     IF value > MAX_TEMP THEN
-        clamp_temp := MAX_TEMP;
+        ComprehensiveController_clamp_temp := MAX_TEMP;
         RETURN;
     END_IF;
-    clamp_temp := value;
+    ComprehensiveController_clamp_temp := value;
     RETURN;
 END_FUNCTION
 
-FUNCTION increment : USINT
+FUNCTION ComprehensiveController_increment : USINT
 VAR_INPUT
     n : USINT;
 END_VAR
-    increment := n + 1;
+    ComprehensiveController_increment := n + 1;
     RETURN;
 END_FUNCTION
 
-FUNCTION steps_to_limit : USINT
+FUNCTION ComprehensiveController_steps_to_limit : USINT
 VAR_INPUT
     value : USINT;
 END_VAR
@@ -44,11 +44,11 @@ END_VAR
         v := v + HEAT_STEP;
         remaining := remaining + 1;
     END_WHILE;
-    steps_to_limit := remaining;
+    ComprehensiveController_steps_to_limit := remaining;
     RETURN;
 END_FUNCTION
 
-FUNCTION steps_to_zero : USINT
+FUNCTION ComprehensiveController_steps_to_zero : USINT
 VAR_INPUT
     value : USINT;
 END_VAR
@@ -69,7 +69,7 @@ END_VAR
         END_IF;
         remaining := remaining + 1;
     END_WHILE;
-    steps_to_zero := remaining;
+    ComprehensiveController_steps_to_zero := remaining;
     RETURN;
 END_FUNCTION
 
@@ -124,7 +124,7 @@ END_VAR
                 END_IF;
                 i := i + 1;
             END_WHILE;
-            _st_discard_usint := log_count(steps_to_zero(temperature));
+            _st_discard_usint := log_count(ComprehensiveController_steps_to_zero(temperature));
             IF (temperature = 0) AND (count >= MAX_COUNT) THEN
                 temperature := 0;
                 count := 0;
@@ -136,9 +136,9 @@ END_VAR
         2: (* Done *)
             state := 5; (* END *)
         3: (* Heating *)
-            temperature := clamp_temp(temperature + HEAT_STEP);
+            temperature := ComprehensiveController_clamp_temp(temperature + HEAT_STEP);
             IF mode = 0 THEN
-                _st_discard_usint := log_count(steps_to_limit(temperature));
+                _st_discard_usint := log_count(ComprehensiveController_steps_to_limit(temperature));
             ELSIF mode = 1 THEN
                 _st_discard_usint := log_temp(temperature);
             ELSE
@@ -152,7 +152,7 @@ END_VAR
             temperature := temperature + delta;
             _st_discard_usint := log_temp(temperature);
             IF temperature > WARMUP_TEMP THEN
-                count := increment(count);
+                count := ComprehensiveController_increment(count);
                 state := 3; (* Heating *)
             END_IF;
         5: (* END *)

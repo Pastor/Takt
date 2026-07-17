@@ -21,6 +21,7 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
+use crate::generator::st::st_reserved::check_st_name;
 use crate::generator::st::st_type::get_st_type;
 use crate::semantic::minimap::Name;
 use crate::semantic::type_node::TypeNode;
@@ -204,10 +205,22 @@ pub(crate) fn emit_declarations(
     for key in names {
         match &model.variables[key] {
             VariableNode::Unresolved => {}
-            VariableNode::Simple { name, ty, expr, .. } => {
+            VariableNode::Simple {
+                name,
+                ty,
+                expr,
+                loc,
+                ..
+            } => {
                 if !usage.variables.contains(name) {
                     continue;
                 }
+                // Проверка стоит ПОСЛЕ фильтра использования: неиспользуемую
+                // переменную генератор не эмитит, `iec2c` её не увидит — значит и
+                // ST-014 на неё срабатывать не должна (иначе `var action: Action`
+                // из elevator.lam, объявленный, но не используемый, сломал бы
+                // сборку). Столкновение проверяется на самом эмитируемом имени.
+                check_st_name(name, *loc)?;
                 // Разделяемая переменная уже объявлена в `VAR_IN_OUT`: повторное
                 // объявление в `VAR` сделало бы у под-FB ДВЕ разных переменных с
                 // одним именем — то есть тихо разорвало бы связь с корнем.
@@ -220,11 +233,13 @@ pub(crate) fn emit_declarations(
                 name,
                 ty,
                 direction,
+                loc,
                 ..
             } => {
                 if !usage.ports.contains(name) {
                     continue;
                 }
+                check_st_name(name, *loc)?;
                 if extras.shared.iter().any(|(n, _)| n == name) {
                     continue;
                 }
@@ -243,10 +258,17 @@ pub(crate) fn emit_declarations(
                     PortDirection::InOut => in_outs.push(decl),
                 }
             }
-            VariableNode::Const { name, ty, expr, .. } => {
+            VariableNode::Const {
+                name,
+                ty,
+                expr,
+                loc,
+                ..
+            } => {
                 if !usage.constants.contains(name) {
                     continue;
                 }
+                check_st_name(name, *loc)?;
                 constants.push(declaration(name, ty, expr, model)?);
             }
         }

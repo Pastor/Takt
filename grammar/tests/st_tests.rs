@@ -413,3 +413,142 @@ fn test_st_output_uses_iec_comments_only() {
     assert!(!st.contains("//"), "C-комментарий недопустим в ST:\n{st}");
     assert!(!st.contains("/*"), "C-комментарий недопустим в ST:\n{st}");
 }
+
+/// Компилирует исходник в ST из строки и возвращает результат (для проверок
+/// диагностик, где ожидается **ошибка**). Имя файла задаёт имя корневой модели.
+fn compile_st_source(filename: &str, source: &str) -> Result<(), grammar::diagnostics::Diagnostic> {
+    let out_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("st_src_{}", filename));
+    let _ = fs::remove_dir_all(&out_dir);
+    fs::create_dir_all(&out_dir).unwrap();
+    grammar::compile_to_st(
+        filename,
+        source,
+        out_dir.to_str().unwrap(),
+        &[],
+        &GenerateOptions::default(),
+    )
+}
+
+/// **T5/A4 — `ST-014` на имени модели, совпавшем со стандартной библиотекой IEC.**
+///
+/// Имя корневой модели берётся из **имени файла**: `concat.lam` →
+/// `FUNCTION_BLOCK Concat`, а `CONCAT` — стандартная функция IEC. `iec2c` даёт
+/// `invalid function block name`; `ST-014` называет причину.
+#[test]
+fn test_st014_on_model_name_colliding_with_stdlib() {
+    let err = compile_st_source(
+        "concat.lam",
+        "var x: u8 := 0;\nstart S { always { x := x + 1; } }\n",
+    )
+    .expect_err("модель Concat обязана дать ST-014");
+    assert_eq!(err.code.as_deref(), Some("ST-014"), "код диагностики");
+}
+
+/// **T6/A5 — `ST-014` на переменной `left` с указанием причины.**
+///
+/// `iec2c` отвечает обманчиво: `invalid located variable declaration` (про
+/// `AT %…`, которых в объявлении нет). `ST-014` называет настоящую причину.
+#[test]
+fn test_st014_on_variable_named_left_names_the_cause() {
+    let err = compile_st_source(
+        "prog.lam",
+        "var left: u8 := 0;\nstart S { always { left := left + 1; } }\n",
+    )
+    .expect_err("переменная left обязана дать ST-014");
+    assert_eq!(err.code.as_deref(), Some("ST-014"));
+    let msg = err.message.to_lowercase();
+    assert!(
+        msg.contains("iec 61131-3") && msg.contains("переименуйте"),
+        "текст обязан называть причину и путь решения:\n{}",
+        err.message
+    );
+}
+
+/// **T7/A6 — регистронезависимость: `LEFT`, `Left`, `left` → одинаково.**
+#[test]
+fn test_st014_case_insensitive() {
+    for name in ["left", "LEFT", "Left"] {
+        let src = format!(
+            "var {n}: u8 := 0;\nstart S {{ always {{ {n} := {n} + 1; }} }}\n",
+            n = name
+        );
+        let err = compile_st_source("prog.lam", &src)
+            .expect_err(&format!("'{}' обязано дать ST-014", name));
+        assert_eq!(err.code.as_deref(), Some("ST-014"), "имя '{}'", name);
+    }
+}
+
+/// **T8 — набор стандартных имён (функции, ключевое слово SFC) → `ST-014`.**
+#[test]
+fn test_st014_various_reserved_names() {
+    for name in ["abs", "min", "sel", "limit", "step"] {
+        let src = format!(
+            "var {n}: u8 := 0;\nstart S {{ always {{ {n} := {n} + 1; }} }}\n",
+            n = name
+        );
+        let err = compile_st_source("prog.lam", &src)
+            .expect_err(&format!("'{}' обязано дать ST-014", name));
+        assert_eq!(err.code.as_deref(), Some("ST-014"), "имя '{}'", name);
+    }
+}
+
+/// Имя, которое `iec2c` **принимает**, `ST-014` давать не должна — иначе ложное
+/// срабатывание сломало бы валидную модель (`remaining` — то, во что 0030
+/// переименовала `left`).
+#[test]
+fn test_st014_accepts_valid_names() {
+    compile_st_source(
+        "prog.lam",
+        "var remaining: u8 := 0;\nstart S { always { remaining := remaining + 1; } }\n",
+    )
+    .expect("valid имя remaining должно компилироваться без ST-014");
+}
+
+/// **T1/A1, T2/A2 — сторож фикса [0041-01](../fixes/0041-01-st-fn-dedup-silent.md), Tier 1.**
+///
+/// Две модели с ОДНОИМЁННОЙ `fn helper`, но разными телами (`x+1` и `x+2`).
+/// До префиксации цель `st` дедуплицировала их по голому имени: эмитилась **одна**
+/// `FUNCTION helper` с телом первой модели, `iec2c` её принимал (rc=0), а модель B
+/// молча считала `w = 2` вместо `w = 3` — переход `Done2` не срабатывал никогда.
+///
+/// Ожидаемое (эталон — цель `c`): **две разные** функции с префиксом модели-
+/// владельца, и каждая модель зовёт **свою**.
+///
+/// ⚠️ **Гейт `iec2c` этот дефект НЕ ловит** — он и был зелёным, пока дефект жил
+/// (дублей в тексте нет — ловить нечего). Сторож — здесь; потактовую верность
+/// модели B (`w = 3`) доказывает сверка `conformance_st_tests` (задача 0065-03).
+#[test]
+fn test_st_same_named_fns_get_distinct_prefixed_functions() {
+    let st = compile_fixture("dup_fn");
+    // Две РАЗНЫЕ функции — по одной на модель (без склейки).
+    assert!(
+        st.contains("FUNCTION DupFnA_helper : USINT"),
+        "нет функции модели A с префиксом:\n{st}"
+    );
+    assert!(
+        st.contains("FUNCTION DupFnB_helper : USINT"),
+        "нет функции модели B с префиксом:\n{st}"
+    );
+    // Тела различны — тело B не должно быть потеряно (Tier-1 симптом).
+    assert!(
+        st.contains("DupFnA_helper := x + 1;"),
+        "тело функции A искажено:\n{st}"
+    );
+    assert!(
+        st.contains("DupFnB_helper := x + 2;"),
+        "тело функции B потеряно/искажено — ровно симптом фикса 0041-01:\n{st}"
+    );
+    // Ровно две `FUNCTION …helper` — не одна (склейка) и не больше.
+    let helper_fns = st.matches("_helper : USINT").count();
+    assert_eq!(helper_fns, 2, "ожидались ровно две функции helper:\n{st}");
+    // Каждая модель зовёт СВОЮ функцию (имена вызова совпадают с объявлением).
+    assert!(
+        st.contains("w := DupFnA_helper(1);") && st.contains("w := DupFnB_helper(1);"),
+        "вызовы должны адресовать функцию своей модели:\n{st}"
+    );
+    // Голого `helper` (без префикса) не осталось — склейки нет.
+    assert!(
+        !st.contains("FUNCTION helper "),
+        "голое имя FUNCTION helper означало бы возврат склейки:\n{st}"
+    );
+}
