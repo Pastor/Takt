@@ -20,7 +20,7 @@ END_VAR
     has_flag := FALSE;
 END_FUNCTION
 
-FUNCTION is_collected : BOOL
+FUNCTION ExtendComplex_is_collected : BOOL
 VAR_INPUT
     c : USINT;
     v : USINT;
@@ -28,7 +28,7 @@ END_VAR
 VAR_IN_OUT
     x : USINT;
 END_VAR
-    is_collected := (((c = 0) AND (v = 1)) OR ((c = 1) AND (v = 2))) OR (((USINT_TO_BYTE(x) AND 16#04) <> 16#00) = 0);
+    ExtendComplex_is_collected := (((c = 0) AND (v = 1)) OR ((c = 1) AND (v = 2))) OR (((USINT_TO_BYTE(x) AND 16#04) <> 16#00) = 0);
     RETURN;
 END_FUNCTION
 
@@ -117,7 +117,7 @@ END_VAR
         1: (* End *)
             state := 3; (* END *)
         2: (* Start *)
-            IF (is_collected(Constant_Y, y) AND is_collected(Constant_X, x)) AND has_flag(ENABLED) THEN
+            IF (ExtendComplex_is_collected(Constant_Y, y) AND ExtendComplex_is_collected(Constant_X, x)) AND has_flag(ENABLED) THEN
                 state := 1; (* End *)
             END_IF;
         3: (* END *)

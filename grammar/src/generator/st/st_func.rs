@@ -38,8 +38,10 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::st::st_expr::print_expression;
+use crate::generator::st::st_reserved::check_st_name;
 use crate::generator::st::st_stmt::{Hoisted, StmtOutput, print_statement};
 use crate::generator::st::st_type::get_st_type;
+use crate::semantic::minimap::Name;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::unused::{UsageSet, usage_from_stmt};
 use crate::semantic::{
@@ -79,12 +81,28 @@ pub(crate) fn return_type_of(def: &FunctionDefinitionNode) -> TypeNode {
     }
 }
 
-/// Имя функции.
-fn name_of(def: &FunctionDefinitionNode) -> Option<&str> {
+/// Итоговое имя POU в порождённом ST.
+///
+/// **Локальная** функция получает **префикс уникального имени модели-владельца** —
+/// как в цели `c` (`get_function_name`: `Stacker_travel_time`). Пространство имён
+/// `FUNCTION`/`FUNCTION_BLOCK` в IEC 61131-3 **плоское**, поэтому без префикса
+/// одноимённые `fn` разных моделей склеились бы в одну — а разошедшиеся тела
+/// давали бы **молчаливо неверный** автомат ([фикс 0041-01](../../../../docs/fixes/0041-01-st-fn-dedup-silent.md),
+/// Tier 1). Префикс берётся из **`upper`** (модель, где функция объявлена), а не
+/// из вызывающей: у вызова из под-модели вызывающая и владелец различаются, и
+/// объявление с вызовом обязаны построить **одно и то же** имя.
+///
+/// **Внешняя** (`extern`) и **встроенная** функции остаются с голым именем — как
+/// и в `c`: их имена согласованы между целями (`T4`), а extern к тому же
+/// именует реальный символ платформы, префиксовать его нельзя.
+fn pou_name(def: &FunctionDefinitionNode) -> Option<String> {
     match def {
-        FunctionDefinitionNode::Local { name, .. }
-        | FunctionDefinitionNode::External { name, .. } => Some(name),
-        FunctionDefinitionNode::Builtin(name, _, _) => Some(name),
+        FunctionDefinitionNode::Local { upper, name, .. } => {
+            let model = upper.as_ref().and_then(|w| w.upgrade())?;
+            Some(format!("{}_{}", Name::from(model).unique_camelcase(), name))
+        }
+        FunctionDefinitionNode::External { name, .. } => Some(name.clone()),
+        FunctionDefinitionNode::Builtin(name, _, _) => Some(name.to_string()),
         FunctionDefinitionNode::None | FunctionDefinitionNode::Unresolved(_) => None,
     }
 }
@@ -241,7 +259,10 @@ fn print_call_in(
     model: &ModelNode,
 ) -> Result<String, Diagnostic> {
     let def = def_rc.borrow();
-    let name = name_of(&def)
+    // Имя вызова строит `pou_name` — та же функция, что и объявление: локальная
+    // функция получает префикс модели-владельца, поэтому вызов и `FUNCTION`
+    // совпадут даже если вызов идёт из другой модели.
+    let name = pou_name(&def)
         .ok_or_else(|| unsupported("вызов неразрешённой функции (определение отсутствует)"))?;
     let mut printed: Vec<String> = args.to_vec();
     if printed.is_empty() && state_params(&def, model).is_empty() {
@@ -270,9 +291,14 @@ pub(crate) fn emit_functions(
     models: &[(crate::semantic::minimap::Name, Rc<RefCell<ModelNode>>)],
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
     let mut warnings = Vec::new();
-    // Пространство имён функций в IEC — плоское, поэтому дедупликация по имени.
-    // Одноимённые функции разных моделей столкнулись бы; столкновение поймает
-    // `iec2c` («duplicate»), то есть громко, а не молча.
+    // POU именуются с префиксом модели-владельца (`pou_name`), поэтому одноимённые
+    // **локальные** функции разных моделей больше НЕ склеиваются: их итоговые
+    // имена различны ([фикс 0041-01](../../../../docs/fixes/0041-01-st-fn-dedup-silent.md),
+    // Tier 1 — прежде склейка по голому имени молча теряла тело второй функции).
+    // Дедупликация оставлена, но ключ теперь — **итоговое** имя: единственный
+    // случай совпадения после префиксации — одноимённые `extern fn` разных
+    // моделей (голое имя, как в `c`); их заглушки идентичны, поэтому склейка
+    // безопасна и лишь не даёт `iec2c` «duplicate» на корректной модели.
     let mut emitted: Vec<String> = Vec::new();
 
     for (_, model_rc) in models {
@@ -281,13 +307,13 @@ pub(crate) fn emit_functions(
         names.sort();
         for key in names {
             let def = &model.functions[key];
-            let Some(name) = name_of(def) else {
+            let Some(name) = pou_name(def) else {
                 continue;
             };
-            if emitted.iter().any(|n| n == name) {
+            if emitted.contains(&name) {
                 continue;
             }
-            emitted.push(name.to_string());
+            emitted.push(name);
             emit_function(p, def, model, &mut warnings)?;
         }
     }
@@ -301,13 +327,17 @@ fn emit_function(
     model: &ModelNode,
     warnings: &mut Vec<Diagnostic>,
 ) -> Result<(), Diagnostic> {
-    let Some(name) = name_of(def) else {
+    let Some(name) = pou_name(def) else {
         return Ok(());
     };
     // Встроенные функции языка предоставляет сам компилятор ST — не эмитим.
     if matches!(def, FunctionDefinitionNode::Builtin(_, _, _)) {
         return Ok(());
     }
+    // Столкновение имени POU со стандартной библиотекой IEC (ST-014). У локальной
+    // функции имя префиксовано (`Stacker_travel_time`) и совпасть не может; у
+    // `extern` оно голое (`abs`, `concat`…) — вот здесь `ST-014` и сработает.
+    check_st_name(&name, def.loc())?;
     let ret_ty = get_st_type(&return_type_of(def), model)?;
     p.ident(&format!("FUNCTION {} : {}", name, ret_ty)).nl();
 
@@ -323,6 +353,10 @@ fn emit_function(
         p.ident("VAR_INPUT").nl();
         p.up();
         for (pname, pty) in &params {
+            // Имя параметра — тоже идентификатор IEC (проба 3 про `left`
+            // распространяется и на параметры). Позиции у параметра нет —
+            // берётся позиция функции.
+            check_st_name(pname, def.loc())?;
             let ty = get_st_type(pty, model)?;
             p.ident(&format!("{} : {};", pname, ty)).nl();
         }
@@ -351,7 +385,7 @@ fn emit_function(
     // Дефект вскрыт фичей 0030: до неё ни одна функция корпуса не имела
     // локальных переменных, и порядок ничего не ломал.
     let hoisted = match def {
-        FunctionDefinitionNode::Local { body, .. } => collect_hoisted(body, name, model)?,
+        FunctionDefinitionNode::Local { body, .. } => collect_hoisted(body, &name, model)?,
         // Тела нет: у `extern fn` печатается заглушка (ниже), у остальных —
         // печатать нечего, поднимать тоже нечего.
         FunctionDefinitionNode::External { .. }
@@ -359,6 +393,13 @@ fn emit_function(
         | FunctionDefinitionNode::None
         | FunctionDefinitionNode::Unresolved(_) => Vec::new(),
     };
+    // Локальная переменная тела функции — тоже идентификатор IEC. Проба 3 фичи
+    // 0065: `var left: u8` внутри функции даёт обманчивое «invalid located
+    // variable declaration». Позиции у поднятой переменной нет — берётся позиция
+    // функции.
+    for h in &hoisted {
+        check_st_name(&h.name, def.loc())?;
+    }
     emit_hoisted_var(p, &hoisted, model)?;
 
     // Константы модели дублируются внутрь функции.
@@ -409,7 +450,7 @@ fn emit_function(
             p.down();
         }
         FunctionDefinitionNode::Local { body, ret, .. } => {
-            emit_local_body(p, name, body, ret, model)?;
+            emit_local_body(p, &name, body, ret, model)?;
         }
         FunctionDefinitionNode::Builtin(_, _, _)
         | FunctionDefinitionNode::None
@@ -517,9 +558,15 @@ mod tests {
     use crate::semantic::tree::construct_model;
 
     /// Печатает все функции модели.
+    ///
+    /// Корню даётся имя `M` (как в C-тестах, `c_source.rs`): у файла имя корня
+    /// берётся из имени файла, а у анонимной модели теста оно пусто — тогда
+    /// префикс POU выродился бы в `_add1`. Имя делает префикс осмысленным
+    /// (`M_add1`) и совпадающим с тем, что даёт реальный конвейер (`Stacker_…`).
     fn functions_of(src: &str) -> (String, Vec<Diagnostic>) {
         let (ast, _) = crate::parse(src, 0).unwrap();
         let rc = construct_model(&ast, None, &[]).unwrap();
+        rc.borrow_mut().name = Some("M".to_string());
         let name = crate::semantic::minimap::Map::create(Rc::clone(&rc))
             .unwrap()
             .root_name();
@@ -539,7 +586,13 @@ mod tests {
             "fn add1(n: u8) -> u8 { return n + 1; }\nvar x: u8 := 0;\n\
              start S { always { x := add1(x); } }",
         );
-        assert!(st.contains("FUNCTION add1 : USINT"), "нет FUNCTION:\n{st}");
+        // Локальная функция префиксуется именем модели-владельца (`M`) — как в
+        // цели `c` (фикс 0041-01): без префикса одноимённые `fn` разных моделей
+        // склеились бы.
+        assert!(
+            st.contains("FUNCTION M_add1 : USINT"),
+            "нет FUNCTION с префиксом модели:\n{st}"
+        );
         assert!(st.contains("n : USINT;"), "нет параметра:\n{st}");
         assert!(st.contains("END_FUNCTION"), "нет END_FUNCTION:\n{st}");
     }
@@ -552,8 +605,8 @@ mod tests {
              start S { always { x := add1(x); } }",
         );
         assert!(
-            st.contains("add1 := n + 1;"),
-            "возврат обязан быть присваиванием имени функции:\n{st}"
+            st.contains("M_add1 := n + 1;"),
+            "возврат обязан быть присваиванием (префиксованному) имени функции:\n{st}"
         );
         assert!(st.contains("RETURN;"), "нет RETURN:\n{st}");
     }
@@ -567,11 +620,11 @@ mod tests {
         );
         assert!(st.contains("IF a > b THEN"), "нет ветвления:\n{st}");
         assert!(
-            st.contains("abs_diff := a - b;"),
+            st.contains("M_abs_diff := a - b;"),
             "нет раннего возврата:\n{st}"
         );
         assert!(
-            st.contains("abs_diff := b - a;"),
+            st.contains("M_abs_diff := b - a;"),
             "нет позднего возврата:\n{st}"
         );
     }

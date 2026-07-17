@@ -1,0 +1,20 @@
+// Фикстура фикса 0041-01 (Tier 1): две модели с ОДНОИМЁННОЙ `fn helper`, но
+// РАЗНЫМИ телами. До префиксации цель `st` дедуплицировала их по голому имени —
+// эмитилась одна `FUNCTION helper` с телом первой модели, и модель B молча
+// считала `w = 2` вместо `w = 3`, из-за чего переход `Done2` не срабатывал
+// никогда (автомат стоял). Эталон — цель `c`: `DupFnA_helper` и `DupFnB_helper`.
+model A {
+  fn helper(x: u8) -> u8 { return x + 1; }
+  var w: u8 := 0;
+  start Run1 { always { w := helper(1); } ref Done1: w = 2; }
+  state Done1 {}
+}
+
+model B {
+  fn helper(x: u8) -> u8 { return x + 2; }
+  var w: u8 := 0;
+  start Run2 { always { w := helper(1); } ref Done2: w = 3; }
+  state Done2 {}
+}
+
+start Top = A | B;

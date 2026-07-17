@@ -3,33 +3,33 @@
  * Не редактировать вручную: файл перезаписывается при каждой генерации.
  *)
 
-FUNCTION abs_diff : USINT
+FUNCTION Stacker_abs_diff : USINT
 VAR_INPUT
     a : USINT;
     b : USINT;
 END_VAR
     IF a > b THEN
-        abs_diff := a - b;
+        Stacker_abs_diff := a - b;
         RETURN;
     END_IF;
-    abs_diff := b - a;
+    Stacker_abs_diff := b - a;
     RETURN;
 END_FUNCTION
 
-FUNCTION max2 : USINT
+FUNCTION Stacker_max2 : USINT
 VAR_INPUT
     a : USINT;
     b : USINT;
 END_VAR
     IF a > b THEN
-        max2 := a;
+        Stacker_max2 := a;
         RETURN;
     END_IF;
-    max2 := b;
+    Stacker_max2 := b;
     RETURN;
 END_FUNCTION
 
-FUNCTION travel_time : USINT
+FUNCTION Stacker_travel_time : USINT
 VAR_INPUT
     to_stack : USINT;
     to_row : USINT;
@@ -72,7 +72,7 @@ END_VAR
     IF dy > t THEN
         t := dy;
     END_IF;
-    travel_time := t;
+    Stacker_travel_time := t;
     RETURN;
 END_FUNCTION
 
@@ -127,7 +127,7 @@ END_VAR
                 tgt_row := task_row_no;
                 tgt_section := task_section_no;
                 tgt_type := task_type;
-                eta := travel_time(task_stack_no, task_row_no, task_section_no);
+                eta := Stacker_travel_time(task_stack_no, task_row_no, task_section_no);
                 busy := 1;
                 cmd_ack := 1;
                 state := 1; (* AcceptingTask *)
