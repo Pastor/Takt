@@ -74,6 +74,11 @@ pub struct CompileOptions {
     pub quiet: bool,
     /// Флаг включения генерации проверок Guard-формул.
     pub guard_enable: bool,
+    /// Символы платформы для выражений адреса: сырые аргументы `--define`
+    /// (фича 0042). Разбор в среду — `grammar::parse_defines`.
+    ///
+    /// По умолчанию пусто → без флага поведение `lamc` идентично прежнему.
+    pub defines: Vec<String>,
     /// Путь к внешней карте адресов (`.ld`-подобный формат, фича 0020).
     ///
     /// Заполняется флагом `--address-map`. Если задан, карта разбирается и
@@ -174,6 +179,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     let mut input_file: Option<String> = None;
     let mut output_path: Option<String> = None;
     let mut include_dirs: Vec<String> = Vec::new();
+    let mut defines: Vec<String> = Vec::new();
     let mut verbose = false;
     let mut quiet = false;
     let mut guard_enable = true;
@@ -197,6 +203,18 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                     Some(v) => output_path = Some(v.clone()),
                     None => return Err(format!("{} требует аргумент", arg)),
                 }
+            }
+            "-D" | "--define" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => defines.push(v.clone()),
+                    None => return Err(format!("{} требует аргумент", arg)),
+                }
+            }
+            // Слитная форма: -DNAME=VALUE. Ветка стоит ПОСЛЕ раздельной — иначе
+            // она перехватывала бы сам `-D` (образец: `-I` ниже).
+            s if s.starts_with("-D") && s.len() > 2 => {
+                defines.push(s[2..].to_string());
             }
             "-I" | "--include-dirs" => {
                 i += 1;
@@ -268,6 +286,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
         input_file,
         output_path,
         include_dirs,
+        defines,
         verbose,
         quiet,
         guard_enable,
@@ -781,6 +800,11 @@ fn print_usage() {
     eprintln!("  --guard-enable         Включить генерацию проверок Guard-формул (по умолчанию)");
     eprintln!("  --guard-disable        Выключить генерацию проверок Guard-формул");
     eprintln!("  --address-map <файл>   Внешняя карта адресов портов (.ld-подобный формат)");
+    eprintln!("  -D, --define N=VALUE   Символ платформы для выражений адреса (повторяем);");
+    eprintln!("                         слитно: -DN=VALUE. Значение — 0x…/десятичное[:бит].");
+    eprintln!(
+        "                         Виден ТОЛЬКО выражениям адреса, логику автомата не меняет."
+    );
     eprintln!("  --float-width=32|64    Ширина вещественного типа в C: float или double");
     eprintln!("                         Цель rust всегда даёт f64 и флаг 32 отвергает (RS-015)");
     eprintln!(
@@ -920,17 +944,47 @@ fn main() {
             Vec::new()
         };
 
+    // Символы платформы для выражений адреса (фича 0042). Разбор один раз, до
+    // компиляции: битый аргумент — ошибка CLI, а не повод собрать не тот адрес.
+    let address_env = match grammar::parse_defines(&options.defines) {
+        Ok(env) => env,
+        Err(diags) => {
+            for d in diags {
+                eprintln!(
+                    "Ошибка --define [{}]: {}",
+                    d.code.as_deref().unwrap_or("?"),
+                    d.message
+                );
+            }
+            process::exit(1);
+        }
+    };
+
     // Адрес-потребляющие цели: только они читают карту адресов. Для остальных
     // непустая внешняя карта — повод предупредить об оверлее «в никуда».
     let consumes_addresses = matches!(options.target.as_str(), "c-hal" | "st-at");
-    if !external_entries.is_empty() && !consumes_addresses {
-        let warnings = grammar::parse(&source, 0)
-            .ok()
-            .and_then(|(ast, _)| {
-                grammar::semantic::tree::construct_model(&ast, None, &options.include_dirs).ok()
-            })
-            .map(|model| grammar::address_map_overlay_warnings(model, &external_entries))
-            .unwrap_or_default();
+    if !consumes_addresses {
+        let model = grammar::parse(&source, 0).ok().and_then(|(ast, _)| {
+            grammar::semantic::tree::construct_model(&ast, None, &options.include_dirs).ok()
+        });
+        let mut warnings = Vec::new();
+        if let Some(model) = &model {
+            // Оверлей «в никуда»: карта передана цели, которая её не читает.
+            if !external_entries.is_empty() {
+                warnings.extend(grammar::address_map_overlay_warnings(
+                    std::rc::Rc::clone(model),
+                    &external_entries,
+                ));
+            }
+            // Сломанное выражение адреса — опечатка и здесь: цель адрес не
+            // эмитит, но молчать о ней значило бы вернуть тихий пропуск,
+            // который фича 0042 и закрывает. Уровень понижен до предупреждения:
+            // сегодня такие файлы целью `c` собираются успешно (rc=0).
+            warnings.extend(grammar::address_expr_warnings(
+                std::rc::Rc::clone(model),
+                &address_env,
+            ));
+        }
         for w in warnings {
             if !options.quiet {
                 eprintln!(
@@ -950,6 +1004,7 @@ fn main() {
                 &options.output_path,
                 &options.include_dirs,
                 &external_entries,
+                &address_env,
                 &generate_options(&options),
             ) {
                 Ok(warnings) => {
@@ -1071,6 +1126,7 @@ fn main() {
                 &options.output_path,
                 &options.include_dirs,
                 &external_entries,
+                &address_env,
                 &generate_options(&options),
             ) {
                 Ok(warnings) => {
@@ -1715,6 +1771,64 @@ mod tests {
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.address_map.as_deref(), Some("stm32.map"));
+    }
+
+    /// T6: три формы флага `--define` дают одно и то же.
+    ///
+    /// Слитная форма разбирается веткой, стоящей ПОСЛЕ раздельной, — иначе она
+    /// перехватывала бы сам `-D` (образец: `-I`).
+    #[test]
+    fn define_flag_forms_are_equivalent() {
+        let expected = vec!["N=0x1".to_string()];
+        for args in [
+            vec![
+                "m.lam".to_string(),
+                "--define".to_string(),
+                "N=0x1".to_string(),
+            ],
+            vec!["m.lam".to_string(), "-D".to_string(), "N=0x1".to_string()],
+            vec!["m.lam".to_string(), "-DN=0x1".to_string()],
+        ] {
+            let opts = parse_compile_args(&args).unwrap();
+            assert_eq!(opts.defines, expected, "форма: {args:?}");
+        }
+    }
+
+    /// T7: флаг повторяем — символы копятся, а не затирают друг друга.
+    #[test]
+    fn define_flag_is_repeatable() {
+        let args = vec![
+            "m.lam".to_string(),
+            "-D".to_string(),
+            "A=0x1".to_string(),
+            "-DB=0x2".to_string(),
+        ];
+        let opts = parse_compile_args(&args).unwrap();
+        assert_eq!(opts.defines, vec!["A=0x1".to_string(), "B=0x2".to_string()]);
+    }
+
+    /// По умолчанию define'ов нет → поведение `lamc` идентично прежнему.
+    #[test]
+    fn defines_absent_by_default() {
+        let opts = parse_compile_args(&["m.lam".to_string()]).unwrap();
+        assert!(opts.defines.is_empty());
+    }
+
+    /// `-D` без аргумента — отказ (как у `--address-map`).
+    #[test]
+    fn define_requires_argument() {
+        let args = vec!["m.lam".to_string(), "-D".to_string()];
+        assert!(parse_compile_args(&args).is_err());
+    }
+
+    /// T21: разбор `-D` не проглатывает чужие флаги.
+    #[test]
+    fn unknown_flag_is_still_rejected() {
+        let args = vec!["m.lam".to_string(), "-Q".to_string(), "foo".to_string()];
+        assert!(
+            parse_compile_args(&args).is_err(),
+            "-Q обязан остаться неизвестным"
+        );
     }
 
     /// По умолчанию карта адресов не задана.

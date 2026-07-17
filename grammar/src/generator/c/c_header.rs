@@ -888,7 +888,11 @@ mod tests {
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
         model.borrow_mut().name = Some(name.to_string());
-        let resolution = crate::address_map::resolve_addresses(std::rc::Rc::clone(&model), &[]);
+        let resolution = crate::address_map::resolve_addresses(
+            std::rc::Rc::clone(&model),
+            &[],
+            &crate::address_map::AddressEnv::default(),
+        );
         let model = model.borrow();
         let map = CMap::new(model.name(), &*model, true)
             .unwrap()

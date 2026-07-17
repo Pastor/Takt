@@ -257,6 +257,7 @@ fn test_same_ports_get_locations_in_st_at() {
         out_dir.to_str().unwrap(),
         &[],
         &[],
+        &grammar::AddressEnv::default(),
         &GenerateOptions::default(),
     )
     .expect("st-at должен компилироваться");
@@ -300,6 +301,7 @@ fn compile_invalid_at(name: &str, map: Option<&str>) -> Vec<String> {
         out_dir.to_str().unwrap(),
         &[],
         &entries,
+        &grammar::AddressEnv::default(),
         &GenerateOptions::default(),
     ) {
         Ok(warnings) => warnings.iter().filter_map(|d| d.code.clone()).collect(),
@@ -369,6 +371,7 @@ fn test_external_map_overrides_mcu_addresses_with_plc_locations() {
         out_dir.to_str().unwrap(),
         &[],
         &entries,
+        &grammar::AddressEnv::default(),
         &GenerateOptions::default(),
     )
     .expect("st-at с картой должен компилироваться");

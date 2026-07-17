@@ -474,12 +474,6 @@ fn construct_model_stage0(
                     }
                     // Адрес порта необязателен — если не задан, используем None.
                     let expr = initializer
-                        .filter(|i| {
-                            matches!(
-                                i,
-                                ast::Expression::Address(..) | ast::Expression::Number(..)
-                            )
-                        })
                         .map(ExpressionNode::Unresolved)
                         .unwrap_or(ExpressionNode::None);
                     variables.insert(

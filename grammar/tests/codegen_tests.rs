@@ -1120,6 +1120,7 @@ fn c_hal_emits_address_table_and_hal() {
         out,
         &[],
         &[],
+        &grammar::AddressEnv::default(),
         &grammar::GenerateOptions::default(),
     )
     .expect("c-hal должен компилироваться");
@@ -1180,6 +1181,7 @@ fn c_hal_missing_address_is_error() {
         out,
         &[],
         &[],
+        &grammar::AddressEnv::default(),
         &grammar::GenerateOptions::default(),
     )
     .expect_err("used-порт без адреса должен давать ошибку");
@@ -1199,6 +1201,7 @@ fn c_hal_external_overrides_and_warns() {
         out,
         &[],
         &entries,
+        &grammar::AddressEnv::default(),
         &grammar::GenerateOptions::default(),
     )
     .expect("c-hal должен компилироваться");

@@ -55,8 +55,9 @@ pub mod verification;
 
 /// Внешняя карта адресов: парсер формата и предупреждения оверлея (фича 0020).
 pub use address_map::{
-    AddressMapEntry, AddressResolution, AddressSource, ResolvedAddress,
-    address_map_overlay_warnings, parse_address_map, resolve_addresses,
+    AddressEnv, AddressMapEntry, AddressResolution, AddressSource, ResolvedAddress,
+    address_expr_warnings, address_map_overlay_warnings, parse_address_map, parse_defines,
+    resolve_addresses,
 };
 /// Ширина вещественного типа в порождаемом C (фича 0029): `grammar::FloatWidth`.
 pub use generator::FloatWidth;
@@ -290,6 +291,7 @@ pub fn compile_to_c_hal(
     output_path: &str,
     search_paths: &[String],
     external: &[address_map::AddressMapEntry],
+    env: &address_map::AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
     let model = parse_and_construct(filename, source, search_paths)?;
@@ -304,7 +306,7 @@ pub fn compile_to_c_hal(
     }
 
     // Разрешаем адреса (inline < address < внешняя карта) и проверяем полноту.
-    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&model), external);
+    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&model), external, env);
     if let Some(err) = resolution
         .diagnostics
         .iter()
@@ -534,6 +536,7 @@ pub fn compile_to_st_at(
     output_path: &str,
     search_paths: &[String],
     external: &[address_map::AddressMapEntry],
+    env: &address_map::AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
     let model = parse_and_construct(filename, source, search_paths)?;
@@ -547,7 +550,7 @@ pub fn compile_to_st_at(
         model.borrow_mut().name = Some(stem);
     }
 
-    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&model), external);
+    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&model), external, env);
     if let Some(err) = resolution
         .diagnostics
         .iter()
