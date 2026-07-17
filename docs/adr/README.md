@@ -51,4 +51,5 @@
 | [0058](./0058-rust-tail-return-if-else.md) | Хвостовой разворот `return` в цели `rust` — заход в завершающий `if/else` | Accepted | фича 0058 |
 | [0059](./0059-rust-shared-struct.md) | Общие переменные корня — структура `Shared` вместо параметров по одной | Accepted | фича 0059 |
 | [0060](./0060-enum-width-shared-layer.md) | Диапазон и знак перечисления — один расчёт на все цели | Accepted | фича 0060 |
+| [0061](./0061-fixed-point-type.md) | Fixed-point Q(m.n) как тип языка (закрывает отложенный Option R-B ADR 0045) | Accepted | фича 0061 |
 
