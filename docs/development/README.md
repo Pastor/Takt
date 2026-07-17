@@ -173,4 +173,5 @@
 | 0065-03 | 0065 | Потактовая сверка цели `st` — отдача долга фичи 0041 | [0065-03-st-conformance.md](0065-03-st-conformance.md) |
 | 0066-01 | 0066 | `coerce_to` по целевому типу — `BOOL` и перечисления | [0066-01-coerce-to.md](0066-01-coerce-to.md) |
 | 0068-01 | 0068 | `build_kripke` — вершина как (состояние, значения переменных φ) | [0068-01-tracked-vars-kripke.md](0068-01-tracked-vars-kripke.md) |
+| 0069-01 | 0069 | `address_map/` — разделение по темам + снятие записи долга | [0069-01-split-by-theme.md](0069-01-split-by-theme.md) |
 

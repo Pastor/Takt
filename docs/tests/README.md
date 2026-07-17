@@ -55,3 +55,4 @@
 | 0065 | Изоляция пространства имён цели `st` | [0065-st-namespace-isolation.md](0065-st-namespace-isolation.md) | СОЗДАНА |
 | 0066 | Литералы по целевому типу в телах цели `st` | [0066-st-bool-literals.md](0066-st-bool-literals.md) | СОЗДАНА |
 | 0068 | Верификация свойств над данными | [0068-verify-data-properties.md](0068-verify-data-properties.md) | СОЗДАНА |
+| 0069 | Разделение `address_map.rs` | [0069-address-map-eval-split.md](0069-address-map-eval-split.md) | СОЗДАНА |
