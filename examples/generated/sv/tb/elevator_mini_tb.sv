@@ -10,7 +10,7 @@
 //   2. ОСЦИЛЛОГРАММА elevator_mini.vcd для gtkwave.
 //
 // Ручной прогон (из examples/generated/sv/):
-//   verilator --binary --timing --trace --top-module tb tb/elevator_mini_tb.sv elevator_mini.sv -o simtb
+//   $ verilator --binary --timing --trace --top-module tb tb/elevator_mini_tb.sv elevator_mini.sv -o simtb
 //   (cd tb && ../obj_dir/simtb)   # пишет tb/elevator_mini.vcd
 //   gtkwave tb/elevator_mini.vcd
 `timescale 1ns / 1ps
