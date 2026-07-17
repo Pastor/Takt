@@ -153,4 +153,6 @@
 | 0057-02 | 0057 | `emit_extend` для `Concatenation` — инлайн активного шага | [0057-02-emit-concatenation.md](0057-02-emit-concatenation.md) |
 | 0057-03 | 0057 | Вложенная композиция — покрытие или явная диагностика | [0057-03-nesting-diagnostics.md](0057-03-nesting-diagnostics.md) |
 | 0057-04 | 0057 | Потактовая сверка и гейт для `+` в SV | [0057-04-conformance-gate.md](0057-04-conformance-gate.md) |
+| 0058-01 | 0058 | Предикат сворачиваемости хвоста — единственный источник истины | [0058-01-tail-fold-predicate.md](0058-01-tail-fold-predicate.md) |
+| 0058-02 | 0058 | Рекурсивный печатник хвостовой позиции (заход в `if/else`) | [0058-02-recursive-tail-printer.md](0058-02-recursive-tail-printer.md) |
 

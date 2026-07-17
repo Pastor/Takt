@@ -45,3 +45,4 @@
 | 0055 | Многофайловость LSP: импорты и позиции диагностик | [0055-lsp-multifile.md](0055-lsp-multifile.md) | ✅ ПРОЙДЕН (отчёт: [reports/0055](../reports/0055-lsp-multifile.md)) |
 | 0056 | Кросс-файловый переход к декларации (точный путь) | [0056-lsp-goto-exact-file.md](0056-lsp-goto-exact-file.md) | СФОРМИРОВАН (фича в РАЗРАБОТКА) |
 | 0057 | Последовательная композиция (`+`) в цели SystemVerilog | [0057-sv-sequential-composition.md](0057-sv-sequential-composition.md) | СФОРМИРОВАН (фича в РАЗРАБОТКА) |
+| 0058 | Хвостовой разворот `return` — заход в завершающий `if/else` | [0058-rust-tail-return-if-else.md](0058-rust-tail-return-if-else.md) | СОЗДАНА |
