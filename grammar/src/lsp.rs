@@ -7,6 +7,9 @@
 //! Модуль включается только при наличии флага `lsp`.
 
 use crate::semantic;
+// Короткое `Location` в этом модуле занято LSP-структурой (uri + range),
+// поэтому позиция компилятора зовётся `DiagLoc`.
+use crate::diagnostics::Location as DiagLoc;
 use cell::RefCell;
 use lsp_types::*;
 use semantic::index::SemanticNodeRef;
@@ -545,208 +548,168 @@ pub struct Location {
 /// - Кросс-файловые декларации (импортированные элементы) не поддерживаются.
 ///   Для поддержки кросс-файловых переходов используйте [`goto_declaration_with_paths`].
 pub fn goto_declaration(source: &str, position: Position) -> Option<Range> {
+    use crate::diagnostics::ROOT_FILE_NO;
+
     let (ast, _) = crate::parse(source, 0).ok()?;
     let model = semantic::tree::construct_model(&ast, None, &[]).ok()?;
     let node = node_at_position(source, position, &model)?;
-    declaration_range_of(&node, source)
+    let DiagLoc::Source(file_no, start, end) = declaration_location_of(&node)? else {
+        return None;
+    };
+    // Однофайловый вариант отдаёт диапазон в СВОЁМ тексте: сказать, где искать
+    // чужой файл, ему нечем (путей поиска нет, реестра нет).
+    (file_no == ROOT_FILE_NO).then(|| offset_to_range(source, start, end))
 }
 
 /// Разрешает позицию декларации с поддержкой кросс-файловых переходов.
 ///
 /// Расширенная версия [`goto_declaration`], принимающая пути поиска импортов.
-/// Строит семантическую модель из исходного текста (с разрешением импортов)
-/// и возвращает [`Location`] объявления идентификатора под курсором.
+/// Строит семантическую модель (с разрешением импортов) и возвращает
+/// [`Location`] объявления идентификатора под курсором.
 ///
 /// ## Алгоритм
 ///
-/// 1. Ищет узел по позиции в семантическом дереве текущего файла.
-/// 2. Если декларация находится в текущем файле — возвращает её Range.
-/// 3. Если узел принадлежит импортированной модели — ищет файл импорта
-///    в `search_paths`, строит его семантическую модель и ищет декларацию там.
+/// 1. Ищет узел по позиции — среди узлов **своего** файла (индекс различает
+///    файлы по паре `(file_no, offset)`, фича 0056).
+/// 2. Находит позицию объявления ([`declaration_location_of`]). Она несёт номер
+///    файла.
+/// 3. Свой файл — возвращает диапазон по своему тексту, URI пустой (его
+///    подставляет вызывающий). Чужой — берёт **путь из реестра**
+///    ([`FileTable::path`]) и считает диапазон по тексту целевого файла.
+///
+/// ## Почему путь берётся из реестра, а не угадывается
+///
+/// Прежняя редакция строила кандидатов из **имени модели**
+/// (`to_snake_case(name) + ".lam"`) и перебирала `search_paths`. Это неверно
+/// в принципе: `import "engine.lam" as Motor;` связывает имя `Motor` с файлом
+/// `engine.lam`, и кандидат `motor.lam` не совпадёт **никогда**. Реестр 0053
+/// хранит точный путь по `file_no` — гадать не о чем.
 ///
 /// ## Ограничения
 ///
-/// - Кросс-файловые переходы доступны только для символов верхнего уровня
-///   (модели, переменные, функции, типы, состояния). Переходы к локальным
-///   переменным внутри функций и блоков (`enter`, `exit`, `always`)
-///   не поддерживаются даже при наличии путей поиска.
-/// - Поиск файла импорта основан на имени модели и именах файлов `.lam`.
-///   Если имя модели не совпадает с нормализованным именем файла, переход
-///   к декларации может не найти нужный файл.
+/// - Переход находит лишь то, что разрешает неявный путь импорта (каталог
+///   документа) и `search_paths`: LSP не читает `initializationOptions`
+///   (кандидат из 0055).
 ///
 /// Возвращает `None` если:
 /// - исходный текст не компилируется,
 /// - курсор вне идентификатора,
-/// - декларация не может быть разрешена ни в текущем, ни в импортированных файлах.
+/// - объявление не имеет позиции в тексте (встроенное/порождённое),
+/// - путь целевого файла неизвестен реестру либо файл не читается.
 pub fn goto_declaration_with_paths(
     source: &str,
     position: Position,
     search_paths: &[String],
 ) -> Option<Location> {
-    use crate::diagnostics::Location as DiagLoc;
+    // Путь документа неизвестен → неявный путь импорта (каталог документа,
+    // фича 0055) не работает: разрешится только то, что дают `search_paths`.
+    goto_declaration_at("", source, position, search_paths)
+}
+
+/// Переход к декларации **с путём открытого документа** — вход для сервера.
+///
+/// Зачем путь: каталог документа — **неявный путь поиска импортов** (фича 0055).
+/// Без него `import "helper.lam";` не разрешится, даже когда файл лежит рядом, и
+/// переходить будет некуда. Тот же довод и та же форма, что у
+/// [`collect_diagnostics_at`].
+///
+/// `search_paths` — дополнительные каталоги (как `-I` у `lamc`).
+pub fn goto_declaration_at(
+    path: &str,
+    source: &str,
+    position: Position,
+    search_paths: &[String],
+) -> Option<Location> {
+    use crate::diagnostics::{FileTable, ROOT_FILE_NO};
 
     let (ast, _) = crate::parse(source, 0).ok()?;
-    let model = semantic::tree::construct_model(&ast, None, search_paths).ok()?;
+    let mut files = FileTable::new(path);
+    let model =
+        semantic::tree::construct_model_with_files(&ast, None, search_paths, &mut files).ok()?;
     let node = node_at_position(source, position, &model)?;
 
-    // Пробуем найти декларацию в текущем файле
-    if let Some(range) = declaration_range_of(&node, source) {
+    let DiagLoc::Source(file_no, start, end) = declaration_location_of(&node)? else {
+        return None;
+    };
+
+    // Свой файл: диапазон считается по уже имеющемуся тексту, URI подставит
+    // вызывающий — контракт сохранён (ADR 0056, A4).
+    if file_no == ROOT_FILE_NO {
         return Some(Location {
-            uri: String::new(), // текущий файл — URI передаётся вызывающей стороной
-            range,
+            uri: String::new(),
+            range: offset_to_range(source, start, end),
         });
     }
 
-    // Кросс-файловый поиск: только для модельных узлов (Model / State / Variable и т.д.)
-    // из импортированных моделей. Определяем имя модели, которой принадлежит узел.
-    let model_rc = node.model.as_ref()?.clone();
-    let model_name = model_rc.borrow().name.clone()?;
-
-    // Проверяем: если эта модель объявлена в текущем файле — дальше не ищем
-    // (декларация_range_of уже вернула None — нечего искать кросс-файлово).
-    // Ищем файл с именем, соответствующим имени модели, в директориях поиска.
-    let candidate_stem = to_snake_case(&model_name);
-
-    for dir in search_paths {
-        let dir_path = std::path::Path::new(dir);
-        // Пробуем имя файла из имени модели (CamelCase → snake_case.lam)
-        for candidate in &[
-            format!("{}.lam", candidate_stem),
-            format!("{}.lam", model_name.to_lowercase()),
-        ] {
-            let file_path = dir_path.join(candidate);
-            if let Ok(import_source) = std::fs::read_to_string(&file_path) {
-                // Строим семантику импортированного файла
-                if let Ok((import_ast, _)) = crate::parse(&import_source, 0) {
-                    if let Ok(import_model) =
-                        semantic::tree::construct_model(&import_ast, None, search_paths)
-                    {
-                        // Ищем декларацию по имени узла в семантике импортированного файла
-                        let import_index =
-                            crate::semantic::index::SemanticIndex::build(&import_model);
-                        // Для узлов, которые являются декларациями, ищем по имени в индексе
-                        if let Some(found) =
-                            find_declaration_in_index(&import_index, &node.name, &node.kind)
-                        {
-                            if let DiagLoc::Source(_, start, end) = found.loc {
-                                return Some(Location {
-                                    uri: file_path
-                                        .canonicalize()
-                                        .map(|p| format!("file://{}", p.display()))
-                                        .unwrap_or_else(|_| {
-                                            format!("file://{}", file_path.display())
-                                        }),
-                                    range: offset_to_range(&import_source, start, end),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    None
+    // Чужой файл: точный путь — из реестра; диапазон — по ЕГО тексту (смещения
+    // чужого файла к своему не относятся).
+    let path = files.path(file_no)?;
+    let target_source = std::fs::read_to_string(path).ok()?;
+    let uri = std::path::Path::new(path)
+        .canonicalize()
+        .map(|p| format!("file://{}", p.display()))
+        .unwrap_or_else(|_| format!("file://{}", path));
+    Some(Location {
+        uri,
+        range: offset_to_range(&target_source, start, end),
+    })
 }
 
-/// Конвертирует CamelCase-имя в snake_case для поиска файла.
+/// Возвращает **позицию объявления** для семантического узла.
 ///
-/// `MyModel` → `my_model`, `Ping` → `ping`, `PingPong` → `ping_pong`.
-fn to_snake_case(name: &str) -> String {
-    let mut result = String::new();
-    for (i, ch) in name.chars().enumerate() {
-        if ch.is_uppercase() && i > 0 {
-            result.push('_');
-        }
-        result.push(ch.to_ascii_lowercase());
-    }
-    result
-}
-
-/// Ищет декларацию с заданным именем и видом в семантическом индексе.
+/// Для декларационных видов узла `loc` уже указывает на объявление. Для
+/// использований (`Reference`, `ReferenceCondition`, `ReferenceModel`) ищет
+/// целевой элемент в модели по имени.
 ///
-/// Возвращает первую запись, у которой имя и вид узла совпадают.
-/// Проверяет только декларационные виды узлов (не использования).
-fn find_declaration_in_index<'a>(
-    index: &'a crate::semantic::index::SemanticIndex,
-    name: &str,
-    kind: &crate::semantic::index::SemanticNodeKind,
-) -> Option<&'a crate::semantic::index::SemanticNodeRef> {
+/// # Почему `Location`, а не `Range`
+///
+/// [`Location`] несёт **номер файла**, а [`Range`] — только строку и колонку.
+/// Прежняя редакция возвращала `Range`, вычисляя его по тексту **текущего**
+/// документа, — даже когда объявление найдено в импортированном файле. Смещения
+/// чужого файла накладывались на свой текст, давая мусорный диапазон, и
+/// кросс-файловая ветка ниже по коду до работы не доходила: ранний возврат уже
+/// отдал «успех» (фича 0056).
+///
+/// Решать, чей это файл, обязан вызывающий: у него есть реестр путей.
+fn declaration_location_of(node: &SemanticNodeRef) -> Option<DiagLoc> {
     use crate::semantic::index::SemanticNodeKind::*;
 
-    // Только декларационные виды (не использования)
-    let is_declaration = matches!(
-        kind,
-        Variable
-            | Const
-            | Port
-            | Function
-            | ExternFunction
-            | State
-            | StartState
-            | EndState
-            | TypeAlias
-            | Condition
-            | Enum
-            | Model
-            | LocalVar
-    );
-    if !is_declaration {
-        return None;
-    }
-
-    index.find_by_name(name, kind)
-}
-
-/// Возвращает LSP-диапазон декларации для семантического узла.
-///
-/// Для декларационных видов узла `loc` уже указывает на объявление.
-/// Для использований (`Reference`, `ReferenceCondition`) выполняет поиск
-/// целевого элемента в модели по имени.
-fn declaration_range_of(node: &SemanticNodeRef, source: &str) -> Option<Range> {
-    use crate::diagnostics::Location;
-    use crate::semantic::index::SemanticNodeKind::*;
-
-    match node.kind {
+    let loc = match node.kind {
         // Декларационные виды: loc уже указывает на объявление
         Variable | Const | Port | Function | ExternFunction | State | StartState | EndState
-        | TypeAlias | Condition | Enum | Model | LocalVar => {
-            if let Location::Source(_, start, end) = node.loc {
-                Some(offset_to_range(source, start, end))
-            } else {
-                None
-            }
-        }
+        | TypeAlias | Condition | Enum | Model | LocalVar => node.loc,
         // Ссылка-переход: ищем декларацию целевого состояния
         Reference => {
             let model_rc = node.model.as_ref()?.clone();
             let state_rc = model_rc.borrow().search_state(&node.name)?;
             let loc = state_rc.borrow().loc();
-            if let Location::Source(_, start, end) = loc {
-                Some(offset_to_range(source, start, end))
-            } else {
-                None
-            }
+            loc
+        }
+        // Ссылка на модель (`= Helper`, `S(Helper)`): единственный вид, способный
+        // указать в другой файл — имя из `import` связано с корнем чужого файла.
+        ReferenceModel => {
+            let model_rc = node.model.as_ref()?.clone();
+            let target = model_rc.borrow().search_model(&node.name)?;
+            let loc = target.borrow().loc;
+            loc
         }
         // Использование в условии перехода: ищем переменную или функцию
         ReferenceCondition => {
             let model_rc = node.model.as_ref()?.clone();
             let model = model_rc.borrow();
             if let Some(var) = model.search_var(&node.name) {
-                let loc = var.loc();
-                if let Location::Source(_, start, end) = loc {
-                    return Some(offset_to_range(source, start, end));
-                }
-            }
-            if let Some(func_rc) = model.search_func(&node.name) {
+                var.loc()
+            } else if let Some(func_rc) = model.search_func(&node.name) {
                 let loc = func_rc.borrow().loc();
-                if let Location::Source(_, start, end) = loc {
-                    return Some(offset_to_range(source, start, end));
-                }
+                loc
+            } else {
+                return None;
             }
-            None
         }
-    }
+    };
+    // Позиции без файла (`Codegen`/`Implicit`/`Builtin`) переходу не годятся:
+    // объявления в тексте нет.
+    matches!(loc, DiagLoc::Source(_, _, _)).then_some(loc)
 }
 
 /// Генерирует элементы автодополнения для источника Lam.
@@ -1121,6 +1084,16 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
             }
             SemanticNodeKind::Reference => {
                 let mut text = format!("```but\nstate {}\n```", word);
+                if !doc.is_empty() {
+                    text.push_str("\n\n");
+                    text.push_str(&doc.join("\n"));
+                }
+                hover_text = text;
+            }
+            // Использование имени модели (`= Helper`, `S(Helper)`) — показываем
+            // то же, что и на её объявлении.
+            SemanticNodeKind::ReferenceModel => {
+                let mut text = format!("```but\nmodel {}\n```", word);
                 if !doc.is_empty() {
                     text.push_str("\n\n");
                     text.push_str(&doc.join("\n"));

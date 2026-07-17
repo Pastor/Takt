@@ -1,0 +1,3 @@
+import "helper.lam";
+
+start Main = Helper;

@@ -153,7 +153,7 @@ fn validate_cond(
                     && name == "S"
                     && args.len() == 1
                     && let Some(cond) = args.first()
-                    && let ConditionNode::Model(model) = *cond.clone()
+                    && let ConditionNode::Model(model, _) = *cond.clone()
                 {
                     let model = model.borrow();
                     let model_name = model
@@ -260,7 +260,7 @@ fn validate_cond(
                 .with_code("SE-027"));
             }
         }
-        ConditionNode::Model(_model) => {}
+        ConditionNode::Model(_model, _) => {}
         ConditionNode::State(_state) => {}
         ConditionNode::EnumVariant(_, _, _) => {}
     }

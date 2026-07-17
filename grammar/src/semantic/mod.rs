@@ -1314,8 +1314,13 @@ pub enum ConditionNode {
     /// Второе поле — позиция использования переменной в исходном тексте (use-site),
     /// а не позиция объявления. Позволяет индексу LSP найти узел по курсору.
     Variable(Rc<RefCell<VariableNode>>, Location),
-    /// Ссылка на модель.
-    Model(Rc<RefCell<ModelNode>>),
+    /// Ссылка на модель: `S(Ping)`.
+    ///
+    /// Второе поле — позиция **использования** (use-site), как у
+    /// [`Variable`](ConditionNode::Variable). Без неё переход к декларации на
+    /// имени модели невозможен: разрешение стирает позицию, и индексу LSP нечего
+    /// сопоставить с курсором (фича 0056).
+    Model(Rc<RefCell<ModelNode>>, Location),
     /// Ссылка на состояние.
     State(Rc<RefCell<StateNode>>),
     /// Вариант перечисления (Ce4/NI6).
@@ -1353,7 +1358,7 @@ impl PartialEq for ConditionNode {
             (Self::Bool(a), Self::Bool(b)) => a == b,
             // Location (use-site) намеренно игнорируется
             (Self::Variable(v1, _), Self::Variable(v2, _)) => v1 == v2,
-            (Self::Model(a), Self::Model(b)) => a == b,
+            (Self::Model(a, _), Self::Model(b, _)) => a == b,
             (Self::State(a), Self::State(b)) => a == b,
             _ => false,
         }
@@ -1465,6 +1470,13 @@ pub enum ExpressionNode {
     /// Ссылка на разрешённую переменную.
     Variable(Rc<RefCell<VariableNode>>),
     /// Ссылка на разрешённую модель.
+    ///
+    /// ⚠️ Позиции использования здесь **нет намеренно** (фича 0056): она нужна
+    /// только реализации состояния (`= Helper`), а та разворачивается из АСД
+    /// прямо в [`Extend::Model`](crate::semantic::extend::Extend::Model) —
+    /// см. `extend::unroll_ast_extend`. Тащить позицию через ~40 вариантов
+    /// `ExpressionNode`, где её никто не читает, значило бы ещё и втянуть её в
+    /// автовыведённое равенство узла.
     Model(Rc<RefCell<ModelNode>>),
     /// Ссылка на разрешённое именованное условие.
     Condition(Rc<RefCell<ConditionDefinitionNode>>),

@@ -33,8 +33,10 @@
 //! assert_eq!(node.unwrap().name, "x");
 //! ```
 
-use crate::diagnostics::Location;
+use crate::diagnostics::{Location, ROOT_FILE_NO};
 use crate::parser::ast;
+// Полное имя: короткое `Extend` заняла `std::iter::Extend`.
+use crate::semantic::extend::Extend as ModelExtend;
 use crate::semantic::{
     ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, NamedCodeBlockDefinitionNode,
     StateNode, StateNodeKind, StatementNode, VariableNode,
@@ -65,6 +67,15 @@ pub enum SemanticNodeKind {
     Reference,
     /// Ссылка на идентификатор внутри условия перехода (переменная или функция).
     ReferenceCondition,
+    /// Ссылка на **модель** по имени: `start Main = Helper;`, `S(Helper)`.
+    ///
+    /// Единственный вид ссылки, способный указать в **другой файл**: имя,
+    /// связанное `import`, — это корень импортированного файла. Поэтому на нём и
+    /// стоит кросс-файловый переход (фича 0056).
+    ///
+    /// ⚠️ Не путать с [`Model`](SemanticNodeKind::Model): тот — **объявление**
+    /// (`model Helper { … }`), этот — **использование** имени.
+    ReferenceModel,
     /// Начальное состояние автомата (`start`).
     StartState,
     /// Конечное состояние автомата (`end`).
@@ -109,6 +120,25 @@ struct IndexEntry {
     end: usize,
     /// Ссылка на семантический узел.
     node_ref: SemanticNodeRef,
+}
+
+impl IndexEntry {
+    /// Номер файла, которому принадлежит запись.
+    ///
+    /// **Выводится из позиции узла, а не хранится отдельным полем** — намеренно:
+    /// во всех местах построения `start`/`end` берутся из того же `Location`,
+    /// что кладётся в `node_ref.loc`. Отдельное поле пришлось бы проставлять в
+    /// каждом из них, и первое же забытое место вернуло бы файлослепоту — ровно
+    /// тот дефект, который чинит фича 0056.
+    ///
+    /// Позиция без файла (`Codegen`/`Implicit`/…) в индекс не попадает: записи
+    /// создаются только под `Location::Source`.
+    fn file_no(&self) -> u64 {
+        match self.node_ref.loc {
+            Location::Source(file_no, _, _) => file_no,
+            _ => ROOT_FILE_NO,
+        }
+    }
 }
 
 /// Индекс семантических узлов, упорядоченный по байтовому смещению.
@@ -160,13 +190,28 @@ impl SemanticIndex {
         SemanticIndex { entries }
     }
 
-    /// Возвращает наиболее конкретный семантический узел, покрывающий смещение `offset`.
+    /// Возвращает наиболее конкретный узел **корневого файла**, покрывающий
+    /// смещение `offset`.
     ///
     /// Среди всех записей, чей диапазон `[start, end]` содержит `offset`,
     /// выбирается та, у которой наименьший размер диапазона — т.е. наиболее
     /// специфичный (внутренний) узел.
     ///
-    /// Возвращает `None`, если ни один узел не покрывает `offset`.
+    /// # Почему только корневой файл
+    ///
+    /// Смещение имеет смысл лишь внутри **своего** файла: индекс строится по
+    /// всему дереву, включая импортированные модели, и их смещения относятся к
+    /// **их** тексту. Прежде поиск шёл по одному смещению, и узел чужого файла
+    /// мог выиграть — зонд фичи 0056: курсор на `Helper` в
+    /// `import "helper.lam"; start Main = Helper;` возвращал переменную `speed`
+    /// **из `helper.lam`** (её диапазон 19..37 там накрыл смещение 35 здесь).
+    /// Не «не тот файл», а **не тот узел**.
+    ///
+    /// Курсор всегда стоит в открытом документе, а он — корень единицы
+    /// компиляции ([`ROOT_FILE_NO`]). Для поиска в другом файле —
+    /// [`node_at_offset_in_file`](Self::node_at_offset_in_file).
+    ///
+    /// Возвращает `None`, если ни один узел корневого файла не покрывает `offset`.
     ///
     /// # Пример
     ///
@@ -192,13 +237,27 @@ impl SemanticIndex {
     /// assert!(node_none.is_none());
     /// ```
     pub fn node_at_offset(&self, offset: usize) -> Option<&SemanticNodeRef> {
+        self.node_at_offset_in_file(ROOT_FILE_NO, offset)
+    }
+
+    /// То же, что [`node_at_offset`](Self::node_at_offset), но в заданном файле.
+    ///
+    /// Смещение адресует текст **одного** файла, поэтому пара `(file_no, offset)`
+    /// — минимальный ключ, которым узел вообще можно найти однозначно.
+    pub fn node_at_offset_in_file(&self, file_no: u64, offset: usize) -> Option<&SemanticNodeRef> {
         let mut best: Option<&IndexEntry> = None;
         let mut best_size = usize::MAX;
 
         for entry in &self.entries {
-            // Записи отсортированы по start: как только start > offset — дальше нет смысла
+            // Записи отсортированы по start: как только start > offset — дальше
+            // нет смысла. Сортировка сквозная по всем файлам, но проверка
+            // остаётся верной: у последующих записей start только больше.
             if entry.start > offset {
                 break;
+            }
+            // Чужой файл: его смещения относятся к его тексту — сравнивать не с чем.
+            if entry.file_no() != file_no {
+                continue;
             }
             // Проверяем, что offset попадает в диапазон [start, end] (включительно)
             if entry.end >= offset {
@@ -235,6 +294,72 @@ impl SemanticIndex {
             .iter()
             .find(|e| e.node_ref.name == name && &e.node_ref.kind == kind)
             .map(|e| &e.node_ref)
+    }
+}
+
+/// Имя, под которым `target` связан в области видимости `scope`.
+///
+/// # Зачем поиск, а не `target.name`
+///
+/// Имя связывает **область видимости**, а не сам узел: `import "helper.lam";`
+/// кладёт в `models` **корень импортированного файла** под ключом из имени файла
+/// (`helper` → `Helper`), а у корня файла `name` — `None` (он анонимен).
+/// То же у `import "engine.lam" as Motor;`: ключ — алиас `Motor`, узел — корень
+/// `engine.lam`. Поэтому единственный честный источник имени — ключ в `models`,
+/// а найти его можно только по тождеству узла (`Rc::ptr_eq`).
+///
+/// Обход идёт вверх по `upper` — как [`ModelNode::search_model`], которым имя и
+/// разрешалось.
+fn binding_name_of(scope: &Rc<RefCell<ModelNode>>, target: &Rc<RefCell<ModelNode>>) -> String {
+    let mut current = Some(Rc::clone(scope));
+    while let Some(node) = current {
+        let borrowed = node.borrow();
+        for (key, candidate) in &borrowed.models {
+            if Rc::ptr_eq(candidate, target) {
+                return key.clone();
+            }
+        }
+        current = borrowed.upper.as_ref().and_then(|w| w.upgrade());
+    }
+    // Синтетическая модель (`M1 + M2`) в `models` не лежит — имени у неё нет.
+    target.borrow().name.clone().unwrap_or_default()
+}
+
+/// Собирает записи для ссылок на модели внутри реализации состояния.
+///
+/// `A + B`, `(C | D)` и прочие композиции — дерево [`Extend`], в листьях
+/// которого лежат ссылки на модели вместе с позицией использования.
+fn collect_extend_entries(
+    extend: &ModelExtend,
+    model: &Rc<RefCell<ModelNode>>,
+    entries: &mut Vec<IndexEntry>,
+) {
+    match extend {
+        ModelExtend::Model(target, loc) => {
+            // Позиции нет у синтетической модели композиции (`Location::Codegen`)
+            // и у реализации, разрешённой не из АСД — индексировать нечего.
+            if let Location::Source(_, start, end) = loc {
+                entries.push(IndexEntry {
+                    start: *start,
+                    end: *end,
+                    node_ref: SemanticNodeRef {
+                        name: binding_name_of(model, target),
+                        kind: SemanticNodeKind::ReferenceModel,
+                        // Позиция ИСПОЛЬЗОВАНИЯ: по ней запись находит курсор, и
+                        // по ней же считается «свой ли это файл».
+                        loc: *loc,
+                        model: Some(model.clone()),
+                    },
+                });
+            }
+        }
+        ModelExtend::Parentless(inner) => collect_extend_entries(inner, model, entries),
+        ModelExtend::Concatenation(items) | ModelExtend::Parallel(items) => {
+            for item in items {
+                collect_extend_entries(item, model, entries);
+            }
+        }
+        ModelExtend::None | ModelExtend::Unresolved(_) => {}
     }
 }
 
@@ -325,6 +450,13 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
                     model: Some(model.clone()),
                 },
             });
+        }
+
+        // Реализация состояния: `start Main = Helper;`. Имя `Helper` — ссылка на
+        // модель, и это единственное место, откуда переход может увести в другой
+        // файл: `import` связывает имя с корнем импортированного файла.
+        if let StateNode::Implement { implements, .. } = state {
+            collect_extend_entries(implements, model, entries);
         }
 
         for reference in state.references() {
@@ -500,6 +632,22 @@ fn collect_condition_entries(
             }
             for arg in args {
                 collect_condition_entries(arg, model, entries);
+            }
+        }
+        // Ссылка на модель в условии: `S(Helper)`. Вторая (после реализации
+        // состояния) форма, способная увести переход в другой файл.
+        ConditionNode::Model(target, loc) => {
+            if let Location::Source(_, start, end) = loc {
+                entries.push(IndexEntry {
+                    start: *start,
+                    end: *end,
+                    node_ref: SemanticNodeRef {
+                        name: binding_name_of(model, target),
+                        kind: SemanticNodeKind::ReferenceModel,
+                        loc: *loc,
+                        model: Some(model.clone()),
+                    },
+                });
             }
         }
         // Позиция использования переменной сохранена — добавляем запись

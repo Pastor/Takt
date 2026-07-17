@@ -77,7 +77,7 @@ fn condition_label(cond: &ConditionNode) -> String {
             format!("{}({})", name, arg_labels.join(", "))
         }
         ConditionNode::State(s) => s.borrow().name().to_string(),
-        ConditionNode::Model(m) => m.borrow().name.clone().unwrap_or_else(|| "?".to_string()),
+        ConditionNode::Model(m, _) => m.borrow().name.clone().unwrap_or_else(|| "?".to_string()),
         ConditionNode::EnumVariant(_, name, _) => name.clone(),
         ConditionNode::String(parts) => parts.join(""),
         ConditionNode::Unresolved(_) => "?".to_string(),
@@ -115,7 +115,7 @@ fn loc_of(cond: &ConditionNode) -> Location {
         | ConditionNode::Rational(_, _)
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)
-        | ConditionNode::Model(_)
+        | ConditionNode::Model(_, _)
         | ConditionNode::State(_)
         | ConditionNode::EnumVariant(_, _, _) => Location::Builtin,
     }
@@ -266,7 +266,7 @@ pub(crate) fn eval_condition(
             ),
         )
         .with_code("SIM-013")),
-        ConditionNode::Model(model) => Err(Diagnostic::error(
+        ConditionNode::Model(model, _) => Err(Diagnostic::error(
             Location::Builtin,
             format!(
                 "сравнение с моделью '{}' пока не поддерживается симулятором",
