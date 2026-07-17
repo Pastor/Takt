@@ -955,7 +955,7 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::None => Err(unsupported("пустое условие")),
         ConditionNode::Unresolved(_) => Err(unsupported("неразрешённое условие")),
         ConditionNode::String(_) => Err(unsupported("строковый литерал в условии")),
-        ConditionNode::Model(_) => Err(unsupported(
+        ConditionNode::Model(_, _) => Err(unsupported(
             "модель в позиции условия вне формы 'S(Модель) = Состояние'",
         )),
         ConditionNode::State(_) => Err(unsupported(
@@ -1027,14 +1027,14 @@ fn model_of(
     cond: &ConditionNode,
 ) -> Option<std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>> {
     match cond {
-        ConditionNode::Model(model) => Some(std::rc::Rc::clone(model)),
+        ConditionNode::Model(model, _) => Some(std::rc::Rc::clone(model)),
         ConditionNode::Function(fun, args, _) => {
             if !matches!(&*fun.borrow(), FunctionDefinitionNode::Builtin("S", ..)) {
                 return None;
             }
             // Арность `S` — ровно один параметр, проверена семантикой.
             match args.first().map(|a| a.as_ref())? {
-                ConditionNode::Model(model) => Some(std::rc::Rc::clone(model)),
+                ConditionNode::Model(model, _) => Some(std::rc::Rc::clone(model)),
                 _ => None,
             }
         }

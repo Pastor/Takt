@@ -239,7 +239,7 @@ fn implement_single_model_resolves() {
     let node = build("start A = M { } state B; model M { start S; }");
     if let StateNode::Implement { implements, .. } = &node.states["A"] {
         assert!(
-            matches!(implements, Extend::Model(_)),
+            matches!(implements, Extend::Model(_, _)),
             "Простая реализация должна разрешаться в Implement::Model"
         );
     } else {
@@ -712,7 +712,7 @@ fn implement_without_next_no_stack_overflow() {
     {
         assert!(next.is_none(), "next должен быть None");
         assert!(
-            matches!(implements, Extend::Model(_)),
+            matches!(implements, Extend::Model(_, _)),
             "реализация должна разрешиться в Implement::Model"
         );
     } else {

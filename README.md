@@ -1950,7 +1950,24 @@ cargo install --path grammar --bin lam-lsp --features lsp
 |-------|-------|-----------|--------|
 | Zed | `extensions/zed-lam` | через `lam-lsp` (semantic tokens) | v0.1.1 |
 | IntelliJ IDEA (и IDE на IntelliJ Platform) | `extensions/intellij-lam` | нативная лексическая (`SyntaxHighlighter`), офлайн и в Community; навигация к декларации и по `import` | фичи [0022](docs/features/0022-intellij-syntax-highlight.md), [0023](docs/features/0023-intellij-navigation-include.md) |
-| Любой LSP-клиент | `lam-lsp` | диагностика, hover, автодополнение, semantic tokens | стабильно |
+| Любой LSP-клиент | `lam-lsp` | диагностика, hover, автодополнение, semantic tokens, **переход к декларации (в т.ч. в импортированный файл)** | стабильно |
+
+**Переход к декларации в `lam-lsp`** (фича
+[0056](docs/features/0056-lsp-goto-exact-file.md)). Курсор на имени модели —
+`start Main = Helper;` или `S(Helper)` — открывает **тот файл**, где модель
+объявлена. Путь берётся из реестра файлов компилятора, а не угадывается по имени
+модели, поэтому работает и алиас:
+
+```lam
+import "engine.lam" as Motor;   // имя `Motor` связано с файлом engine.lam
+
+start Main = Motor;             // переход отсюда откроет engine.lam
+```
+
+⚠️ Импорты разрешаются по **каталогу открытого документа** (неявный путь, фича
+[0055](docs/features/0055-lsp-multifile.md)). Аналога `-I` в редакторе пока нет:
+модель, чьи импорты лежат в общей библиотеке вне её каталога, `lam-lsp` не
+найдёт, хотя `lamc -I lib` её собирает.
 
 Плагин IntelliJ даёт автономную подсветку синтаксиса (ключевые слова, операторы
 `:=`/`=`/`<=`, литералы, комментарии `//`/`///`/`/* */`) без запуска LSP-сервера,

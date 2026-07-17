@@ -482,7 +482,7 @@ fn build_extend(extend: &Extend, model: Rc<RefCell<ModelNode>>) -> StateExtend {
     match extend {
         Extend::None => StateExtend::None,
         Extend::Unresolved(_) => StateExtend::None,
-        Extend::Model(model) => StateExtend::Model(Name::from(Rc::clone(model))),
+        Extend::Model(model, _) => StateExtend::Model(Name::from(Rc::clone(model))),
         Extend::Parentless(extend) => build_extend(extend, model),
         Extend::Concatenation(extends) => StateExtend::Concatenation(
             extends
@@ -512,7 +512,7 @@ fn visit_extend(
     used: &mut BTreeMap<Name, Element>,
 ) {
     match extend {
-        Extend::Model(m_rc) => {
+        Extend::Model(m_rc, _) => {
             let unique = unique_model_name(m_rc.clone());
             let local = m_rc.borrow().name.clone().unwrap_or_default();
             let key = Name::new(local, unique);

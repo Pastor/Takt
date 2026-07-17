@@ -176,12 +176,25 @@ fn handle_request(
             let uri = &params.text_document_position_params.text_document.uri;
             let position = params.text_document_position_params.position;
             let text = state.get_text(uri).unwrap_or("");
-            let result = grammar::lsp::goto_declaration(text, position).map(|range| {
-                GotoDeclarationResponse::Scalar(Location {
-                    uri: uri.clone(),
-                    range,
-                })
-            });
+            // Кросс-файловый вариант с путём документа: каталог документа —
+            // неявный путь импорта (0055), без него переходить в чужой файл
+            // некуда. Прежде звался однофайловый `goto_declaration`, и URI ответа
+            // был ВСЕГДА текущим — переход в импортированный файл не работал
+            // вовсе (фича 0056).
+            let result = grammar::lsp::goto_declaration_at(&uri_to_path(uri), text, position, &[])
+                .and_then(|loc| {
+                    // Пустой URI — контракт «это текущий файл»: подставляет
+                    // вызывающий, у которого URI документа и так на руках.
+                    let target = if loc.uri.is_empty() {
+                        uri.clone()
+                    } else {
+                        loc.uri.parse().ok()?
+                    };
+                    Some(GotoDeclarationResponse::Scalar(Location {
+                        uri: target,
+                        range: loc.range,
+                    }))
+                });
             connection.sender.send(Message::Response(Response::new_ok(
                 req.id,
                 serde_json::to_value(result)?,

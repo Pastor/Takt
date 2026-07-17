@@ -50,7 +50,7 @@ fn find_in_extend(
     state_name: &str,
 ) -> Option<String> {
     match extend {
-        Extend::Model(m) => {
+        Extend::Model(m, _) => {
             if Rc::ptr_eq(m, target) {
                 Some(normalize_lowercase_snakecase(state_name.to_string()))
             } else {
@@ -85,7 +85,7 @@ fn find_in_concat(
     idx: usize,
 ) -> Option<String> {
     match extend {
-        Extend::Model(m) => {
+        Extend::Model(m, _) => {
             if Rc::ptr_eq(m, target) {
                 let model_name = m.borrow().name.clone().unwrap_or_default();
                 Some(format!(
@@ -131,7 +131,7 @@ fn find_in_parallel(
     idx: usize,
 ) -> Option<String> {
     match extend {
-        Extend::Model(m) => {
+        Extend::Model(m, _) => {
             if Rc::ptr_eq(m, target) {
                 let model_name = m.borrow().name.clone().unwrap_or_default();
                 Some(format!(
@@ -464,7 +464,7 @@ fn path_from_root(model: &Rc<RefCell<ModelNode>>) -> Option<String> {
 /// семантике, а не к трансляции (кандидат в `FEATURES.md`).
 fn state_of_model(cond: &ConditionNode) -> Option<&Rc<RefCell<ModelNode>>> {
     match cond {
-        ConditionNode::Model(model) => Some(model),
+        ConditionNode::Model(model, _) => Some(model),
         ConditionNode::Function(fun, args, _) => {
             if !matches!(&*fun.borrow(), FunctionDefinitionNode::Builtin("S", ..)) {
                 return None;
@@ -472,7 +472,7 @@ fn state_of_model(cond: &ConditionNode) -> Option<&Rc<RefCell<ModelNode>>> {
             // Арность встроенной `S` — ровно один параметр (`model`), проверена
             // семантикой; аргумент обязан быть моделью.
             match args.first().map(|a| a.as_ref())? {
-                ConditionNode::Model(model) => Some(model),
+                ConditionNode::Model(model, _) => Some(model),
                 _ => None,
             }
         }
@@ -822,7 +822,7 @@ pub(super) fn generate_condition_expr(
                 Ok(format!("{}({})", fn_name, args_strs.join(", ")))
             }
         }
-        ConditionNode::Model(_) | ConditionNode::State(_) => Err(Diagnostic::error(
+        ConditionNode::Model(_, _) | ConditionNode::State(_) => Err(Diagnostic::error(
             Location::Codegen,
             "Ссылки на модели и состояния не поддерживаются в условиях переходов".to_string(),
         )

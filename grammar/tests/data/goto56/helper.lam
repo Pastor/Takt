@@ -1,0 +1,5 @@
+model Helper {
+    var speed: u8 := 0;
+
+    start Idle { ref Idle; }
+}

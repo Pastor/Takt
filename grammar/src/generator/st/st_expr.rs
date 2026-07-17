@@ -221,7 +221,7 @@ pub(crate) fn print_condition(
         ConditionNode::String(_) => Err(unsupported(
             "строковый литерал: цель ST строк не поддерживает",
         )),
-        ConditionNode::Model(_) => Err(unsupported("модель как условие")),
+        ConditionNode::Model(_, _) => Err(unsupported("модель как условие")),
         ConditionNode::State(_) => Err(unsupported(
             "состояние как условие: сравнение с состоянием — задача 0041-03",
         )),

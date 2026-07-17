@@ -110,6 +110,46 @@ fn file_table_returns_none_for_unknown_and_non_source() {
     assert_eq!(files.path_of(&Location::Implicit), None);
 }
 
+/// T1 (фикс [0053-01]): импорт **никогда** не получает номер корня — при любом
+/// способе создания реестра.
+///
+/// Прежде `Default` создавал пустой реестр, и первый импорт получал `0` — тот же
+/// номер, что корень у `new`. Позиция из импортированного файла становилась
+/// неотличима от корневой: дефект, который фича 0053 как раз закрывала.
+///
+/// [0053-01]: ../../docs/fixes/0053-01-file-table-default-collision.md
+#[test]
+fn file_table_default_never_gives_import_the_root_number() {
+    let mut files = FileTable::default();
+    assert_ne!(
+        files.add("lib.lam"),
+        0,
+        "номер 0 означает «корень» и импорту достаться не может"
+    );
+}
+
+/// Слот `0` реестра без корня занят, но путь честно неизвестен.
+///
+/// Альтернатива («корень = первый добавленный») и была дефектом: реестр выдавал
+/// бы чужой файл за корневой.
+#[test]
+fn file_table_default_reports_unknown_root() {
+    let files = FileTable::default();
+    assert_eq!(
+        files.path(0),
+        None,
+        "корень неизвестен — врать о нём нельзя"
+    );
+}
+
+/// T2: у реестра с корнем нумерация не изменилась.
+#[test]
+fn file_table_new_keeps_root_at_zero_and_import_at_one() {
+    let mut files = FileTable::new("main.lam");
+    assert_eq!(files.path(0), Some("main.lam"));
+    assert_eq!(files.add("lib.lam"), 1);
+}
+
 // ─── Строка и колонка ────────────────────────────────────────────────────────
 
 /// Нумерация с единицы — как в rustc/gcc (внутри Location смещения с нуля).

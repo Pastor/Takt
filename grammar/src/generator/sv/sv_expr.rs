@@ -394,7 +394,7 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
             "вещественный литерал: в синтезируемом RTL плавающей точки нет (см. SV-003)",
         )),
         ConditionNode::String(_) => Err(sv002("строковый литерал")),
-        ConditionNode::Model(_) => Err(sv002("ссылка на модель в условии")),
+        ConditionNode::Model(_, _) => Err(sv002("ссылка на модель в условии")),
         ConditionNode::State(_) => Err(sv002("ссылка на состояние в условии")),
     }
 }
