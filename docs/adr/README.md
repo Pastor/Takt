@@ -53,4 +53,5 @@
 | [0060](./0060-enum-width-shared-layer.md) | Диапазон и знак перечисления — один расчёт на все цели | Accepted | фича 0060 |
 | [0061](./0061-fixed-point-type.md) | Fixed-point Q(m.n) как тип языка (закрывает отложенный Option R-B ADR 0045) | Accepted | фича 0061 |
 | [0062](./0062-sv-mmio-target.md) | Цель `sv-mmio` — адреса портов как регистровый файл (шинно-агностичный) | Accepted | фича 0062 |
+| [0063](./0063-sv-clock-enable.md) | Порт `en` (clock enable) для цели `sv` — пересмотр Option C ADR 0045 | Accepted | фича 0063 |
 
