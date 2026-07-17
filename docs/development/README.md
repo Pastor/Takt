@@ -167,4 +167,5 @@
 | 0062-01 | 0062 | Регистровый файл и его интерфейс (без протокола) | [0062-01-register-file-interface.md](0062-01-register-file-interface.md) |
 | 0062-02 | 0062 | Внешняя карта адресов для `sv-mmio` + потактовая сверка | [0062-02-address-map-and-conformance.md](0062-02-address-map-and-conformance.md) |
 | 0063-01 | 0063 | Вход `en` с умолчанием `1'b1` и разрешённый такт | [0063-01-enable-port.md](0063-01-enable-port.md) |
+| 0064-01 | 0064 | `SV-009` на переменный делитель + канал предупреждений цели `sv` | [0064-01-divider-warning.md](0064-01-divider-warning.md) |
 

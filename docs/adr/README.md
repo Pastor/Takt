@@ -54,4 +54,5 @@
 | [0061](./0061-fixed-point-type.md) | Fixed-point Q(m.n) как тип языка (закрывает отложенный Option R-B ADR 0045) | Accepted | фича 0061 |
 | [0062](./0062-sv-mmio-target.md) | Цель `sv-mmio` — адреса портов как регистровый файл (шинно-агностичный) | Accepted | фича 0062 |
 | [0063](./0063-sv-clock-enable.md) | Порт `en` (clock enable) для цели `sv` — пересмотр Option C ADR 0045 | Accepted | фича 0063 |
+| [0064](./0064-sv-divider-warning.md) | Предупреждение о делителе (`SV-009`) — только на переменный делитель | Accepted | фича 0064 |
 
