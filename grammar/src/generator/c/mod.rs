@@ -45,10 +45,10 @@ use crate::generator::c::c_source::generate_source;
 use crate::generator::{FloatWidth, GenerateOptions};
 use crate::semantic::ModelNode;
 use crate::semantic::PortDirection;
+use crate::semantic::enum_facts;
 use crate::semantic::minimap::{Element, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
-use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -219,24 +219,25 @@ pub(super) fn map_c_type(
             let enum_node = model
                 .search_enum(enum_name)
                 .ok_or(CTypeError::Unrepresentable)?;
-            let max = enum_node
-                .variants
-                .into_iter()
-                .sorted_by(|a, b| a.1.cmp(&b.1))
-                .collect::<Vec<(String, i64)>>()
-                .last()
-                .map(|x| x.1)
-                .unwrap_or_default();
-            let bits: u8 = if max > u32::MAX as i64 {
-                64
-            } else if max > u16::MAX as i64 {
-                32
-            } else if max > u8::MAX as i64 {
-                16
-            } else {
-                8
-            };
-            Ok(format!("uint{}_t", bits))
+            // Фикс 0005-01 (Tier 1): прежде тип брался ТОЛЬКО по `max` и был
+            // ВСЕГДА беззнаковым — отрицательный вариант молча становился
+            // `uint8_t` (`-5` → `251`, переход `== -5` тождественно ложен,
+            // автомат стоял). Теперь знак и ширина берутся из общего факта
+            // (фича 0060): цель лишь ОТОБРАЖАЕТ факт в имя типа C.
+            match enum_facts(&enum_node.variants) {
+                Some(f) => {
+                    let bits = f.machine_bits();
+                    if f.signed {
+                        Ok(format!("int{}_t", bits))
+                    } else {
+                        Ok(format!("uint{}_t", bits))
+                    }
+                }
+                // Пустое перечисление — поведение сохраняется сегодняшним
+                // (`uint8_t`); унификация с прочими целями — вопрос семантики
+                // языка, вынесен кандидатом (ADR 0060, правило 3).
+                None => Ok("uint8_t".to_string()),
+            }
         }
         TypeNode::Integer { bits, signed } => {
             if *signed {

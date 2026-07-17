@@ -27,6 +27,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::rust::rust_name::rust_type_name;
+use crate::semantic::enum_facts;
 use crate::semantic::type_node::TypeNode;
 
 /// Строит диагностику `RS-014` — тип не представим в Rust.
@@ -104,29 +105,21 @@ pub(crate) fn rust_type(ty: &TypeNode, what: &str) -> Result<String, Diagnostic>
 /// Проба 2026-07-16: `Idle = 670` (`elevator.lam:121`) в `u8` **не влезает**;
 /// «всегда `u8`» дало бы невалидный код на реальном примере корпуса.
 pub(crate) fn enum_repr(variants: &[(String, i64)]) -> &'static str {
-    let signed = variants.iter().any(|(_, v)| *v < 0);
-    if signed {
-        let fits = |lo: i64, hi: i64| variants.iter().all(|(_, v)| *v >= lo && *v <= hi);
-        if fits(i8::MIN as i64, i8::MAX as i64) {
-            "i8"
-        } else if fits(i16::MIN as i64, i16::MAX as i64) {
-            "i16"
-        } else if fits(i32::MIN as i64, i32::MAX as i64) {
-            "i32"
-        } else {
-            "i64"
-        }
-    } else {
-        let max = variants.iter().map(|(_, v)| *v).max().unwrap_or(0);
-        if max <= u8::MAX as i64 {
-            "u8"
-        } else if max <= u16::MAX as i64 {
-            "u16"
-        } else if max <= u32::MAX as i64 {
-            "u32"
-        } else {
-            "u64"
-        }
+    // Знак и ширина — из общего факта (фича 0060): цель лишь отображает его в имя
+    // repr. Свой каскад извлечения диапазона удалён (ADR 0060, правило 5).
+    match enum_facts(variants) {
+        Some(f) => match (f.signed, f.machine_bits()) {
+            (true, 8) => "i8",
+            (true, 16) => "i16",
+            (true, 32) => "i32",
+            (true, _) => "i64",
+            (false, 8) => "u8",
+            (false, 16) => "u16",
+            (false, 32) => "u32",
+            (false, _) => "u64",
+        },
+        // Пустое перечисление — поведение сохраняется сегодняшним (`u8`).
+        None => "u8",
     }
 }
 
