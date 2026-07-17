@@ -108,4 +108,146 @@ impl EnumDefinitionNode {
     pub fn has_variant(&self, variant_name: &str) -> bool {
         self.find_variant(variant_name).is_some()
     }
+
+    /// Факт о диапазоне перечисления — [`enum_facts`] по вариантам узла.
+    pub fn facts(&self) -> Option<EnumFacts> {
+        enum_facts(&self.variants)
+    }
+}
+
+/// Факт о перечислении, общий для всех целей генерации: диапазон, знак и точная
+/// минимальная ширина (фича 0060).
+///
+/// Считается один раз в семантическом слое, а не каждым бэкендом заново: четыре
+/// независимых извлечения диапазона уже разошлись (пустое перечисление давало
+/// `uint8_t`/`USINT`/`u8`/`SV-004`, а цель `c` **теряла знак молча** — фикс
+/// 0005-01, Tier 1). Факт **не знает ни одной цели**: имена типов
+/// (`uint8_t`/`USINT`/`u8`/`logic`) строит сама цель по этому факту (ADR 0060,
+/// Option A).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EnumFacts {
+    /// Наименьшее значение варианта.
+    pub min: i64,
+    /// Наибольшее значение варианта.
+    pub max: i64,
+    /// Знаковый ли диапазон (`min < 0`) — **единая** формула на все цели.
+    pub signed: bool,
+    /// ТОЧНАЯ минимальная ширина в битах, вмещающая диапазон.
+    ///
+    /// - Беззнаковое: число бит для `max` (`max == 0` → **1**; ширины 0 не бывает).
+    /// - Знаковое: наименьшая ширина дополнительного кода `w ≥ 2`, для которой
+    ///   `-2^(w-1) ≤ min` и `max ≤ 2^(w-1)-1` (однобитного знакового не бывает).
+    ///
+    /// Цель `sv` берёт её **напрямую** (аппаратная ширина точна); `c`/`st`/`rust`
+    /// округляют до машинной ([`EnumFacts::machine_bits`]).
+    pub min_bits: u32,
+}
+
+impl EnumFacts {
+    /// Машинная ширина: `min_bits`, округлённая вверх до {8, 16, 32, 64}.
+    ///
+    /// Нужна целям `c`/`st`/`rust` — у них тип из набора машинных ширин.
+    /// Округление одно, а не три расходящихся каскада `max <= u8::MAX …`.
+    pub fn machine_bits(&self) -> u32 {
+        match self.min_bits {
+            0..=8 => 8,
+            9..=16 => 16,
+            17..=32 => 32,
+            _ => 64,
+        }
+    }
+}
+
+/// Считает [`EnumFacts`] по вариантам перечисления.
+///
+/// `None` — перечисление **без вариантов**: диапазона нет, и трактовку выбирает
+/// цель (ADR 0060, правило 3 — поведение сохраняется сегодняшним:
+/// `c`/`st`/`rust` → 8 бит без знака, `sv` → `SV-004`). Факт возвращает «пусто»
+/// честно, а не подставляет молчаливое умолчание.
+pub fn enum_facts(variants: &[(String, i64)]) -> Option<EnumFacts> {
+    if variants.is_empty() {
+        return None;
+    }
+    let min = variants.iter().map(|(_, v)| *v).min().unwrap_or(0);
+    let max = variants.iter().map(|(_, v)| *v).max().unwrap_or(0);
+    let signed = min < 0;
+    let min_bits = if signed {
+        // Наименьшая ширина доп. кода w ≥ 2, вмещающая весь диапазон.
+        (2..=64u32)
+            .find(|&w| {
+                let lo = -(1i64 << (w - 1));
+                let hi = (1i64 << (w - 1)) - 1;
+                min >= lo && max <= hi
+            })
+            .unwrap_or(64)
+    } else if max == 0 {
+        1
+    } else {
+        64 - (max as u64).leading_zeros()
+    };
+    Some(EnumFacts {
+        min,
+        max,
+        signed,
+        min_bits,
+    })
+}
+
+#[cfg(test)]
+mod facts_tests {
+    use super::*;
+
+    fn vs(values: &[i64]) -> Vec<(String, i64)> {
+        values
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (format!("V{i}"), *v))
+            .collect()
+    }
+
+    #[test]
+    fn empty_enum_has_no_facts() {
+        assert_eq!(enum_facts(&[]), None);
+    }
+
+    #[test]
+    fn negative_range_is_signed_min_four_bits() {
+        // {-5, 0, 5} влезает в диапазон −8…7 доп. кода → 4 бита, машинно 8.
+        let f = enum_facts(&vs(&[-5, 0, 5])).unwrap();
+        assert!(f.signed);
+        assert_eq!(f.min_bits, 4);
+        assert_eq!(f.machine_bits(), 8);
+    }
+
+    #[test]
+    fn single_negative_one_needs_two_bits_not_one() {
+        // Однобитного знакового не бывает: −1 → 2 бита (сторож тонкости sv, T12).
+        let f = enum_facts(&vs(&[-1])).unwrap();
+        assert!(f.signed);
+        assert_eq!(f.min_bits, 2);
+    }
+
+    #[test]
+    fn value_670_needs_ten_bits_machine_sixteen() {
+        let f = enum_facts(&vs(&[670, 671])).unwrap();
+        assert!(!f.signed);
+        assert_eq!(f.min_bits, 10);
+        assert_eq!(f.machine_bits(), 16);
+    }
+
+    #[test]
+    fn zero_only_is_one_bit_unsigned() {
+        // Ширины 0 не бывает: {0} → 1 бит без знака (сторож тонкости sv).
+        let f = enum_facts(&vs(&[0])).unwrap();
+        assert!(!f.signed);
+        assert_eq!(f.min_bits, 1);
+        assert_eq!(f.machine_bits(), 8);
+    }
+
+    #[test]
+    fn unsigned_machine_boundaries() {
+        assert_eq!(enum_facts(&vs(&[255])).unwrap().machine_bits(), 8);
+        assert_eq!(enum_facts(&vs(&[256])).unwrap().machine_bits(), 16);
+        assert_eq!(enum_facts(&vs(&[65536])).unwrap().machine_bits(), 32);
+    }
 }

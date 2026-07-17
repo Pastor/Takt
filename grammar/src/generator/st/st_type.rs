@@ -34,6 +34,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::ModelNode;
+use crate::semantic::enum_facts;
 use crate::semantic::type_node::TypeNode;
 
 /// Отображает тип Lam в имя типа IEC 61131-3.
@@ -196,38 +197,14 @@ fn enum_type(name: &str, model: &ModelNode) -> Result<String, Diagnostic> {
     let node = model
         .search_enum(name)
         .ok_or_else(|| unresolved("Перечисление", name))?;
-    let (min, max) = variants_range(&node.variants);
-    if min < 0 {
-        // Знаковый диапазон: варианты с отрицательными значениями.
-        let bits = if min < i32::MIN as i64 || max > i32::MAX as i64 {
-            64
-        } else if min < i16::MIN as i64 || max > i16::MAX as i64 {
-            32
-        } else if min < i8::MIN as i64 || max > i8::MAX as i64 {
-            16
-        } else {
-            8
-        };
-        integer_type(bits, true)
-    } else {
-        let bits = if max > u32::MAX as i64 {
-            64
-        } else if max > u16::MAX as i64 {
-            32
-        } else if max > u8::MAX as i64 {
-            16
-        } else {
-            8
-        };
-        integer_type(bits, false)
+    // Знак и ширина — из общего факта (фича 0060): цель лишь отображает его в имя
+    // типа IEC через `integer_type`. Свой каскад извлечения диапазона удалён
+    // (в `generator/` не остаётся ни одного — ADR 0060, правило 5).
+    match enum_facts(&node.variants) {
+        Some(f) => integer_type(f.machine_bits() as u8, f.signed),
+        // Пустое перечисление — поведение сохраняется сегодняшним (`USINT`).
+        None => integer_type(8, false),
     }
-}
-
-/// Возвращает `(минимум, максимум)` значений вариантов; для пустого списка — `(0, 0)`.
-fn variants_range(variants: &[(String, i64)]) -> (i64, i64) {
-    let min = variants.iter().map(|(_, v)| *v).min().unwrap_or(0);
-    let max = variants.iter().map(|(_, v)| *v).max().unwrap_or(0);
-    (min, max)
 }
 
 /// T14: `Struct(name)` → ссылка на объявленный `TYPE`; объявление печатает `st_decl`.

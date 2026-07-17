@@ -50,6 +50,7 @@
 //! Отдельного правила для состояний заводить не требуется.
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::semantic::enum_facts;
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 
@@ -230,36 +231,18 @@ pub(crate) fn enum_width(
     variants: &[(String, i64)],
     what: &str,
 ) -> Result<(u32, bool), Diagnostic> {
-    if variants.is_empty() {
-        return Err(sv004(
+    // Аппаратная ширина точна, поэтому `sv` берёт `min_bits` факта НАПРЯМУЮ (без
+    // округления до машинной, в отличие от `c`/`st`/`rust`). Тонкости, которые
+    // раньше жили здесь, теперь в факте (фича 0060): знаковое — минимум 2 бита
+    // (однобитного знакового не бывает), `max == 0` → 1 (ширины 0 не бывает).
+    // Пустое перечисление → `SV-004` (сегодняшнее поведение цели).
+    match enum_facts(variants) {
+        Some(f) => Ok((f.min_bits, f.signed)),
+        None => Err(sv004(
             what,
             "перечисление без вариантов: ширина типа не определена",
-        ));
+        )),
     }
-    let signed = variants.iter().any(|(_, v)| *v < 0);
-    let max = variants.iter().map(|(_, v)| *v).max().unwrap_or(0);
-    let min = variants.iter().map(|(_, v)| *v).min().unwrap_or(0);
-
-    if !signed {
-        // Число бит, нужных для `max`: 0 → 1 (ширины 0 в SV не бывает).
-        let width = if max == 0 {
-            1
-        } else {
-            64 - (max as u64).leading_zeros()
-        };
-        return Ok((width, false));
-    }
-
-    // Знаковое: ищем наименьшую ширину дополнительного кода, вмещающую весь
-    // диапазон, — то есть такую w, что -2^(w-1) <= min и max <= 2^(w-1)-1.
-    for width in 2..=64u32 {
-        let lo = -(1i64 << (width - 1));
-        let hi = (1i64 << (width - 1)) - 1;
-        if min >= lo && max <= hi {
-            return Ok((width, true));
-        }
-    }
-    Ok((64, true))
 }
 
 #[cfg(test)]

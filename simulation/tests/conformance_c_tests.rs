@@ -217,6 +217,143 @@ fn a8_simulator_matches_generated_c() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Фикс 0005-01 (Tier 1, фича 0060): знак перечисления в цели `c`.
+//
+// Гейт `c` (cmake+ninja, без `-Werror`) этот дефект ПРИНИМАЛ: `cc` даёт лишь
+// предупреждение `-Wtautological-constant-out-of-range-compare`, а гейт его не
+// возводит в ошибку. То есть зелёный гейт про дефект НЕ говорит ничего — сверку
+// заводим вместе с правкой (уроки 0045/0050).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const NEG_ENUM_FIXTURE: &str = "tests/data/eval/conformance_neg_enum.lam";
+
+/// Переменные, сверяемые с C на модели с отрицательным перечислением.
+const NEG_ENUM_CHECKED: &[&str] = &[
+    "lv",      // эталон −5; до фикса в C было 251 (uint8_t)
+    "reached", // 1 ⇔ переход `lv == Low` сработал; до фикса — 0 (автомат стоял)
+];
+
+/// Порождает C для фикстуры с отрицательным перечислением, собирает и
+/// возвращает напечатанное. Модель — `ConformanceNegEnum` (из имени файла).
+fn run_generated_neg_enum_c(dir: &Path) -> Vec<(String, i64)> {
+    let source = std::fs::read_to_string(NEG_ENUM_FIXTURE).expect("фикстура читается");
+    grammar::compile_to_c(
+        "conformance_neg_enum",
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+
+    let prints = NEG_ENUM_CHECKED
+        .iter()
+        .map(|name| format!(r#"    printf("{name}=%d\n", (int)m.entry.{name});"#))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "conformance_neg_enum.h"
+
+int main(void) {{
+    ConformanceNegEnum m;
+    ConformanceNegEnum_init(&m);
+    for (int i = 0; i < {MAX_TICKS}; i++) {{
+        ConformanceNegEnum_tick(&m);
+        if (ConformanceNegEnum_is_done(&m)) break;
+    }}
+{prints}
+    return 0;
+}}
+"#
+    );
+    let harness_path = dir.join("harness.c");
+    std::fs::write(&harness_path, harness).expect("запись харнесса");
+
+    let bin = dir.join("neg_enum_bin");
+    let compile = Command::new("cc")
+        // `-Werror=tautological-constant-out-of-range-compare`: A8/T9 — до фикса
+        // `cc` предупреждал ровно об этом, здесь предупреждение возведено в
+        // ошибку, поэтому возврат дефекта сорвёт саму СБОРКУ теста, а не только
+        // сверку. Двойная страховка к потактовому сравнению ниже.
+        .args([
+            "-std=c11",
+            "-Werror=tautological-constant-out-of-range-compare",
+            "-I",
+        ])
+        .arg(dir)
+        .arg(dir.join("conformance_neg_enum.c"))
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "порождённый C не компилируется (или сработал -Werror=tautological — \
+         вернулся дефект 0005-01):\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+
+    let run = Command::new(&bin).output().expect("запуск собранного C");
+    assert!(run.status.success(), "собранный C завершился с ошибкой");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|line| {
+            let (name, value) = line.split_once('=')?;
+            Some((name.to_string(), value.trim().parse().ok()?))
+        })
+        .collect()
+}
+
+/// **Сторож фикса [0005-01](../../docs/fixes/0005-01-c-enum-signedness.md), Tier 1.**
+///
+/// Отрицательное перечисление: симулятор и порождённый C обязаны совпасть.
+/// Эталон — `lv = -5` (знак сохранён) и `reached = 1` (переход сработал).
+///
+/// ⚠️ **Мутация (T14):** вернуть расчёт цели `c` по `max` (беззнаковый) → C
+/// даст `lv = 251` и `reached = 0`, сверка **упадёт** по обоим, а гейт `c`
+/// (без `-Werror`) остался бы зелёным.
+#[test]
+fn neg_enum_signedness_matches_generated_c() {
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] neg_enum_signedness_matches_generated_c: компилятор `cc` не найден");
+        return;
+    }
+
+    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_0060");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+
+    let unit = simulate_fixture(NEG_ENUM_FIXTURE);
+    // Эталон: знак сохранён и переход сработал — иначе сверять не с чем.
+    assert_eq!(
+        sim_value(&unit, "lv"),
+        -5,
+        "симулятор обязан хранить знак: lv = -5"
+    );
+    assert_eq!(
+        sim_value(&unit, "reached"),
+        1,
+        "в симуляторе переход `lv == Low` обязан сработать"
+    );
+
+    let from_c = run_generated_neg_enum_c(&dir);
+    assert_eq!(
+        from_c.len(),
+        NEG_ENUM_CHECKED.len(),
+        "C напечатал не всё: {from_c:?}"
+    );
+    for (name, c_value) in &from_c {
+        let sim = sim_value(&unit, name);
+        assert_eq!(
+            sim, *c_value,
+            "расхождение по '{name}': симулятор={sim}, C={c_value}. Знак перечисления \
+             в цели C потерян — фикс 0005-01 (Tier 1)"
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // T17 (фича 0029): сверка по `Rational`
 //
 // Сужение критерия A8 фичи 0025 («не для Rational/Bit/Array») снято **частично**:
