@@ -2,8 +2,15 @@
 
 > Фича: [../features/0027-module-size-split.md](../features/0027-module-size-split.md) · ADR: [../adr/0027-module-size-split.md](../adr/0027-module-size-split.md) · анализ: [../analyze/0027-module-size-split.md](../analyze/0027-module-size-split.md) · тест-план: [../tests/0027-module-size-split.md](../tests/0027-module-size-split.md)
 
-> **Статус: Планируется (разработка не начата).** Разделы «Что сделано» и
-> «Проверки» — план; заполняются фактом по ходу выполнения.
+> **Статус: ВЫПОЛНЕНО** (2026-07-17). `c_expr.rs` (**1803**) → каталог
+> `generator/c/c_expr/`: 7 подмодулей (`names`, `resolve`, `precedence`,
+> `condition`, `call`, `expr`, `stmt`) + `mod.rs` (49: шапка и реэкспорт).
+> Максимум — `expr.rs` (518). Тестов в файле не было — переносить нечего.
+>
+> **Вывод генератора не изменился** — все 10 порождённых `.c`/`.h` побайтно
+> совпали с эталоном (`cmp`), плюс гейт детерминизма 0048 в `precheck.sh`.
+> Видимость: реэкспортируемые наружу имена — `pub(in crate::generator::c)`,
+> помощники между соседними подмодулями — `pub(super)`.
 >
 > **Предусловие:** выполнена [0027-01](0027-01-module-size-split.md) и снят
 > эталон «до» (тест-план, T0).

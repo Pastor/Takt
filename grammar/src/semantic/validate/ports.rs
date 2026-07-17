@@ -1,0 +1,177 @@
+//! Порты: направление, адреса, полнота адресации.
+//!
+//! Часть модуля `validate` (фича 0027: деление по логике).
+
+use super::*;
+
+pub(super) fn validate_variables(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let borrowed = model.borrow();
+    for variable in borrowed.variables.values() {
+        match variable {
+            VariableNode::Unresolved => {}
+            VariableNode::Simple { expr, .. }
+            | VariableNode::Port { expr, .. }
+            | VariableNode::Const { expr, .. } => {
+                validate_expression(expr, model.clone())?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Фича 0020 (задача 0020-04): предупреждения о портах без адреса, попадающих
+/// в кодогенерацию.
+///
+/// Порт считается **достижимым кодогенерацией**, если он используется в логике
+/// модели (условиях, блоках, функциях) — критерий переиспользуется из
+/// [`compute_usage`](crate::semantic::unused::compute_usage). Для такого порта адрес
+/// обязателен; источником может быть inline-инициализатор, оператор `address`
+/// или внешняя карта (`external_ports` — имена портов, покрытых картой).
+/// **Мёртвые** (неиспользуемые) порты без адреса **не** предупреждаются.
+///
+/// Возвращает предупреждения **SE-052**, отсортированные по позиции (для
+/// детерминизма). Функция аналитическая: она не вызывается конвейером
+/// `validate_model` по умолчанию (в текущей C-модели адрес не эмитится) — её
+/// подключает потребитель адресов (C-таблица/HAL, задача 0020-05).
+pub fn check_port_address_completeness(
+    model: Rc<RefCell<ModelNode>>,
+    external_ports: &HashSet<String>,
+) -> Vec<Diagnostic> {
+    let usage = crate::semantic::unused::compute_usage(Rc::clone(&model));
+    let mut out = Vec::new();
+    collect_incomplete_addresses(&model, &usage.ports, external_ports, &mut out);
+    out.sort_by_key(|d| d.loc.start());
+    out
+}
+
+/// Рекурсивно собирает используемые порты без адреса по дереву моделей.
+fn collect_incomplete_addresses(
+    model: &Rc<RefCell<ModelNode>>,
+    used_ports: &HashSet<String>,
+    external_ports: &HashSet<String>,
+    out: &mut Vec<Diagnostic>,
+) {
+    let borrowed = model.borrow();
+    for var in borrowed.variables.values() {
+        let VariableNode::Port {
+            expr, loc, name, ..
+        } = var
+        else {
+            continue;
+        };
+        if !used_ports.contains(name) {
+            continue; // мёртвый порт — адрес не требуется
+        }
+        let has_inline = !matches!(expr, ExpressionNode::None);
+        let has_operator = borrowed.address_defs.iter().any(|d| &d.port == name);
+        let has_external = external_ports.contains(name);
+        if !has_inline && !has_operator && !has_external {
+            out.push(
+                Diagnostic::warning(
+                    *loc,
+                    format!(
+                        "порт '{}' используется в кодогенерации, но не имеет адреса \
+                         (ни inline, ни оператором `address`, ни во внешней карте)",
+                        name
+                    ),
+                )
+                .with_code("SE-052"),
+            );
+        }
+    }
+    let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
+    drop(borrowed);
+    for nested_model in nested {
+        collect_incomplete_addresses(&nested_model, used_ports, external_ports, out);
+    }
+}
+
+/// Фича 0020 (задача 0020-02): проверки оператора `address` для одной модели.
+///
+/// Наполнение [`address_defs`](ModelNode::address_defs) выполняет
+/// [`construct_model`](super::tree::construct_model); здесь эти привязки
+/// сверяются с объявленными портами:
+///
+/// - **Висячая привязка (R5, SE-048).** `address` ссылается на имя, которого нет
+///   среди портов модели.
+/// - **Конфликт источников (R4, SE-049).** Адрес порта задан одновременно inline
+///   (`in P: T := <addr>;`) и оператором `address`, либо несколькими операторами
+///   `address` для одного порта.
+///
+/// Приоритет источников (inline < `address` < внешняя карта) и построение
+/// `AddressMap` для потребителей — задачи 0020-03/0020-05. Здесь достаточно
+/// гарантировать однозначность источника адреса внутри модели.
+pub(super) fn check_port_addresses(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let borrowed = model.borrow();
+    let mut bound_by_address: HashSet<&str> = HashSet::new();
+    for def in &borrowed.address_defs {
+        // R5: адрес должен ссылаться на существующий порт.
+        let Some(VariableNode::Port { expr, .. }) = borrowed.variables.get(&def.port) else {
+            return Err(Diagnostic::error(
+                def.loc,
+                format!(
+                    "оператор `address` ссылается на несуществующий порт '{}'",
+                    def.port
+                ),
+            )
+            .with_code("SE-048"));
+        };
+        // R4: несколько операторов `address` для одного порта.
+        if !bound_by_address.insert(def.port.as_str()) {
+            return Err(Diagnostic::error(
+                def.loc,
+                format!(
+                    "адрес порта '{}' задан оператором `address` более одного раза",
+                    def.port
+                ),
+            )
+            .with_code("SE-049"));
+        }
+        // R4: адрес задан и inline-инициализатором, и оператором `address`.
+        if !matches!(expr, ExpressionNode::None) {
+            return Err(Diagnostic::error(
+                def.loc,
+                format!(
+                    "адрес порта '{}' задан одновременно inline и оператором `address`",
+                    def.port
+                ),
+            )
+            .with_code("SE-049"));
+        }
+    }
+    Ok(())
+}
+
+/// Возвращает предупреждения о портах, объявленных во вложенных (не корневых) моделях.
+///
+/// Порты во вложенных моделях видны всем моделям в системе: они попадают
+/// в общие перечисления `BitPort`, `RationalPort`, `NumericPort` и доступны
+/// через колбэки корневой модели. Пользователи должны учитывать это при
+/// именовании портов.
+///
+/// Функция рекурсивно обходит все вложенные модели.
+pub fn warn_nested_model_ports(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+    let mut result = Vec::new();
+    let nested: Vec<Rc<RefCell<ModelNode>>> = model.borrow().models.values().cloned().collect();
+    for nested_model in nested {
+        let borrowed = nested_model.borrow();
+        if borrowed.upper.is_some() {
+            for var in borrowed.variables.values() {
+                if let VariableNode::Port { name, loc, .. } = var {
+                    result.push(Diagnostic::warning(
+                        *loc,
+                        format!(
+                            "Порт '{}' объявлен во вложенной модели '{}' и будет виден \
+                             всем моделям через перечисления портов корневой модели",
+                            name,
+                            borrowed.name()
+                        ),
+                    ));
+                }
+            }
+        }
+        drop(borrowed);
+        result.extend(warn_nested_model_ports(nested_model));
+    }
+    result
+}

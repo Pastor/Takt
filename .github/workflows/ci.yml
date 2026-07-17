@@ -24,6 +24,8 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: check
+      - name: Размер модулей (храповик, фича 0027)
+        run: ./scripts/check-module-size.sh
       - name: Тестики
         uses: actions-rs/cargo@v1
         with:

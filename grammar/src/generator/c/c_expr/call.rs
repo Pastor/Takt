@@ -1,0 +1,124 @@
+//! Печать вызова функции и её аргументов.
+//!
+//! Часть модуля `c_expr` (фича 0027: деление по логике).
+
+use super::*;
+
+/// Генерирует список C-аргументов для вызова функции.
+fn generate_args(
+    map: &CMap,
+    owner: &Element,
+    params: &[(String, TypeNode)],
+    args: &[ExpressionNode],
+    has_model: bool,
+) -> Result<Vec<String>, Diagnostic> {
+    let mut result = Vec::new();
+    for arg in args {
+        let mut s = String::new();
+        let mut tmp = Printer::new(4, &mut s);
+        generate_stmt_expression(&mut tmp, map, owner, params.to_vec(), arg, has_model)?;
+        result.push(s);
+    }
+    Ok(result)
+}
+
+/// Генерирует C-вызов функции.
+///
+/// - `Local` → `{ModelCamelCase}_{name}(main, args...)`
+/// - `External` → `{name}(args...)`
+/// - `Builtin("min"|"max"|"abs"|"clamp")` → раскрывается как тернарное выражение
+/// - `Builtin("debug"|"S")` → возвращает ошибку (не транслируется в C)
+pub(super) fn generate_function_call(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    fun_def: &FunctionDefinitionNode,
+    args: &[ExpressionNode],
+    has_model: bool,
+) -> Result<(), Diagnostic> {
+    match fun_def {
+        FunctionDefinitionNode::Local { upper, name, .. } => {
+            let model_rc =
+                upper
+                    .as_ref()
+                    .and_then(|w| w.upgrade())
+                    .ok_or_else(|| -> Diagnostic {
+                        "Неразрешённый owner функции".into()
+                    })?;
+            let model_name = Name::from(model_rc);
+            let func_name = format!("{}_{}", model_name.unique_camelcase(), name);
+            let arg_strs = generate_args(map, owner, &params, args, has_model)?;
+            // В корневой модели (или вне контекста tick/init) первый аргумент — `model`,
+            // в подмоделях — `main` (указатель на корневую модель)
+            let first_arg = if !has_model || owner.name().eq(&map.root_name()) {
+                "model"
+            } else {
+                "main"
+            };
+            let mut all_args = vec![first_arg.to_string()];
+            all_args.extend(arg_strs);
+            printer.print(&format!("{}({})", func_name, all_args.join(", ")));
+        }
+        FunctionDefinitionNode::External { name, .. } => {
+            let arg_strs = generate_args(map, owner, &params, args, has_model)?;
+            printer.print(&format!("{}({})", name, arg_strs.join(", ")));
+        }
+        FunctionDefinitionNode::Builtin(builtin_name, _, _) => match *builtin_name {
+            "min" => {
+                let arg_strs = generate_args(map, owner, &params, args, has_model)?;
+                if arg_strs.len() >= 2 {
+                    printer.print(&format!(
+                        "((({a}) < ({b})) ? ({a}) : ({b}))",
+                        a = arg_strs[0],
+                        b = arg_strs[1]
+                    ));
+                }
+            }
+            "max" => {
+                let arg_strs = generate_args(map, owner, &params, args, has_model)?;
+                if arg_strs.len() >= 2 {
+                    printer.print(&format!(
+                        "((({a}) > ({b})) ? ({a}) : ({b}))",
+                        a = arg_strs[0],
+                        b = arg_strs[1]
+                    ));
+                }
+            }
+            "abs" => {
+                let arg_strs = generate_args(map, owner, &params, args, has_model)?;
+                if !arg_strs.is_empty() {
+                    printer.print(&format!("((({x}) < 0) ? -({x}) : ({x}))", x = arg_strs[0]));
+                }
+            }
+            "clamp" => {
+                let arg_strs = generate_args(map, owner, &params, args, has_model)?;
+                if arg_strs.len() >= 3 {
+                    printer.print(&format!(
+                        "((({x}) < ({lo})) ? ({lo}) : ((({x}) > ({hi})) ? ({hi}) : ({x})))",
+                        x = arg_strs[0],
+                        lo = arg_strs[1],
+                        hi = arg_strs[2]
+                    ));
+                }
+            }
+            "debug" | "S" => {
+                return Err(format!(
+                    "Встроенная функция '{}' не поддерживается в C генераторе",
+                    builtin_name
+                )
+                .as_str()
+                .into());
+            }
+            other => {
+                return Err(format!("Неизвестная встроенная функция '{}'", other)
+                    .as_str()
+                    .into());
+            }
+        },
+        _ => {
+            return Err("Неразрешённое определение функции".into());
+        }
+    }
+    Ok(())
+}

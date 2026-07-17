@@ -1,0 +1,324 @@
+//! Общие помощники проверок: условия, выражения, доступ к состояниям.
+//!
+//! Часть модуля `validate` (фича 0027: деление по логике).
+
+use super::*;
+
+fn validate_cond(
+    context: Option<ConditionNode>,
+    cond: &ConditionNode,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<(), Diagnostic> {
+    let _borrowed = model.borrow();
+    match cond.clone() {
+        ConditionNode::None => {}
+        ConditionNode::Unresolved(cond) => {
+            #[allow(clippy::collapsible_if)]
+            if let Some(context) = context
+                && let ast::Condition::Variable(id) = cond.clone()
+            {
+                if let ConditionNode::Function(func, args, _) = context
+                    && let FunctionDefinitionNode::Builtin(name, ..) = *func.borrow()
+                    && name == "S"
+                    && args.len() == 1
+                    && let Some(cond) = args.first()
+                    && let ConditionNode::Model(model, _) = *cond.clone()
+                {
+                    let model = model.borrow();
+                    let model_name = model
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| "<анонимная>".to_string());
+                    model.search_state(&id.name).ok_or_else(|| {
+                        Diagnostic::error(
+                            id.loc,
+                            format!(
+                                "Состояние '{}' не найдено в моделе '{}'",
+                                &id.name, &model_name
+                            ),
+                        )
+                        .with_code("SE-033")
+                    })?;
+                    return Ok(());
+                }
+            }
+
+            if let ConditionNode::Unresolved(_) = resolve_condition(&cond, model.clone())? {
+                return Err(Diagnostic::error(
+                    cond.loc(),
+                    format!("Неразрешённое условие: {:?}", cond),
+                )
+                .with_code("SE-025"));
+            }
+        }
+        ConditionNode::ArraySubscript(_, _) => {}
+        ConditionNode::Parenthesis(cond) => {
+            validate_cond(None, &cond, model.clone())?;
+        }
+        ConditionNode::BitAccess(cond, _) => {
+            validate_cond(None, &cond, model.clone())?;
+        }
+        ConditionNode::Function(_, conds, _) => {
+            for cond in conds {
+                validate_cond(None, &cond, model.clone())?;
+            }
+        }
+        ConditionNode::Not(cond) => {
+            validate_cond(None, &cond, model.clone())?;
+        }
+        ConditionNode::Add(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        ConditionNode::Subtract(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        ConditionNode::And(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        ConditionNode::Or(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        ConditionNode::Less(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        ConditionNode::More(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        ConditionNode::LessEqual(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        ConditionNode::MoreEqual(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(None, &right, model.clone())?;
+        }
+        ConditionNode::Equal(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            validate_cond(Some(*left.clone()), &right, model.clone())?;
+        }
+        ConditionNode::NotEqual(left, right) => {
+            validate_cond(None, &left, model.clone())?;
+            // Передаём контекст левого операнда — как в Equal — для проверки
+            // паттерна `S(Model) != СостояниеИмя`: имя состояния должно быть
+            // валидным в указанной модели.
+            validate_cond(Some(*left.clone()), &right, model.clone())?;
+        }
+        ConditionNode::Number(_) => {}
+        ConditionNode::Rational(_, _) => {}
+        ConditionNode::String(_) => {}
+        ConditionNode::Bool(_) => {}
+        ConditionNode::Variable(var_rc, _) => {
+            // Чтение из `out`-порта запрещено в условии (SE-027)
+            if let VariableNode::Port {
+                direction: PortDirection::Out,
+                name,
+                loc,
+                ..
+            } = &*var_rc.borrow()
+            {
+                return Err(Diagnostic::error(
+                    *loc,
+                    format!("Чтение из выходного порта '{}' запрещено", name),
+                )
+                .with_code("SE-027"));
+            }
+        }
+        ConditionNode::Model(_model, _) => {}
+        ConditionNode::State(_state) => {}
+        ConditionNode::EnumVariant(_, _, _) => {}
+    }
+    Ok(())
+}
+
+pub(super) fn validate_expression(
+    expr: &ExpressionNode,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<(), Diagnostic> {
+    let _borrowed = model.borrow();
+    match expr {
+        ExpressionNode::None => {}
+        ExpressionNode::Unresolved(_) => {}
+        ExpressionNode::ArraySubscript(_, _) => {}
+        ExpressionNode::ArraySlice(_, _, _) => {}
+        ExpressionNode::Parenthesis(expr)
+        | ExpressionNode::BitAccess(expr, _)
+        | ExpressionNode::CodeBlock(expr, _)
+        | ExpressionNode::NamedFunctionBox(expr, _)
+        | ExpressionNode::Not(expr)
+        | ExpressionNode::UnaryPlus(expr)
+        | ExpressionNode::Negate(expr)
+        | ExpressionNode::Cast(expr, _)
+        | ExpressionNode::BitwiseNot(expr) => {
+            validate_expression(expr, model.clone())?;
+        }
+        ExpressionNode::Power(left, right)
+        | ExpressionNode::Multiply(left, right)
+        | ExpressionNode::Divide(left, right)
+        | ExpressionNode::Modulo(left, right)
+        | ExpressionNode::Add(left, right)
+        | ExpressionNode::Subtract(left, right)
+        | ExpressionNode::ShiftLeft(left, right)
+        | ExpressionNode::ShiftRight(left, right)
+        | ExpressionNode::BitwiseAnd(left, right)
+        | ExpressionNode::BitwiseXor(left, right)
+        | ExpressionNode::BitwiseOr(left, right)
+        | ExpressionNode::Less(left, right)
+        | ExpressionNode::More(left, right)
+        | ExpressionNode::LessEqual(left, right)
+        | ExpressionNode::MoreEqual(left, right)
+        | ExpressionNode::Equal(left, right)
+        | ExpressionNode::NotEqual(left, right)
+        | ExpressionNode::And(left, right)
+        | ExpressionNode::Or(left, right) => {
+            validate_expression(left, model.clone())?;
+            validate_expression(right, model.clone())?;
+        }
+        ExpressionNode::Assign(left, right) => {
+            // Запись в `in`-порт запрещена (SE-026)
+            let check_port = |expr: &ExpressionNode| {
+                if let ExpressionNode::Variable(v) = expr {
+                    return Some(v.clone());
+                }
+                if let ExpressionNode::BitAccess(inner, _) = expr
+                    && let ExpressionNode::Variable(v) = inner.as_ref()
+                {
+                    return Some(v.clone());
+                }
+                None
+            };
+            if let Some(var_rc) = check_port(left)
+                && let VariableNode::Port {
+                    direction: PortDirection::In,
+                    name,
+                    loc,
+                    ..
+                } = &*var_rc.borrow()
+            {
+                return Err(Diagnostic::error(
+                    *loc,
+                    format!("Запись в входной порт '{}' запрещена", name),
+                )
+                .with_code("SE-026"));
+            }
+            // Для BitAccess как lvalue на out-порт не рекурсируем внутрь
+            // (это запись в порт, а не чтение — SE-027 здесь неприменим).
+            let is_out_port_bitaccess = if let ExpressionNode::BitAccess(inner, _) = left.as_ref() {
+                if let ExpressionNode::Variable(v) = inner.as_ref() {
+                    matches!(
+                        &*v.borrow(),
+                        VariableNode::Port {
+                            direction: PortDirection::Out,
+                            ..
+                        }
+                    )
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            if !is_out_port_bitaccess {
+                validate_expression(left, model.clone())?;
+            }
+            validate_expression(right, model.clone())?;
+        }
+        ExpressionNode::ConditionalOperator(left, right, other) => {
+            validate_expression(left, model.clone())?;
+            validate_expression(right, model.clone())?;
+            validate_expression(other, model.clone())?;
+        }
+        ExpressionNode::Number(_) => {}
+        ExpressionNode::Rational(_, _) => {}
+        ExpressionNode::String(_) => {}
+        ExpressionNode::Type(_) => {}
+        ExpressionNode::Address(_, _) => {}
+        ExpressionNode::Bool(_) => {}
+        ExpressionNode::Variable(var_rc) => {
+            // Чтение из `out`-порта запрещено (SE-027)
+            if let VariableNode::Port {
+                direction: PortDirection::Out,
+                name,
+                loc,
+                ..
+            } = &*var_rc.borrow()
+            {
+                return Err(Diagnostic::error(
+                    *loc,
+                    format!("Чтение из выходного порта '{}' запрещено", name),
+                )
+                .with_code("SE-027"));
+            }
+        }
+        ExpressionNode::Model(_model) => {}
+        ExpressionNode::Condition(cond) => {
+            validate_cond(None, &cond.borrow().value, model.clone())?;
+        }
+        ExpressionNode::List(_) => {}
+        ExpressionNode::Array(exprs)
+        | ExpressionNode::Initializer(exprs)
+        | ExpressionNode::Function(_, exprs) => {
+            for expr in exprs {
+                validate_expression(expr, model.clone())?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn validate_reference(
+    reference: &ReferenceNode<StateNode>,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<(), Diagnostic> {
+    validate_cond(None, &reference.cond, model.clone())?;
+    Ok(())
+}
+
+pub(super) fn validate_conditions(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let borrowed = model.borrow();
+    for cond in borrowed.conditions.values() {
+        validate_cond(None, &cond.value, model.clone())?;
+    }
+    Ok(())
+}
+
+pub(super) fn get_state_name(state: &StateNode) -> &str {
+    match state {
+        StateNode::Simple { name, .. } | StateNode::Implement { name, .. } => name.as_str(),
+        StateNode::Unresolved => "",
+    }
+}
+
+pub(super) fn get_state_loc(state: &StateNode) -> Location {
+    match state {
+        StateNode::Simple { loc, .. } | StateNode::Implement { loc, .. } => *loc,
+        StateNode::Unresolved => Location::Builtin,
+    }
+}
+
+/// Имена состояний, достижимых из `state` за один переход: цели `ref`-ссылок и
+/// (для состояния-реализации) цель `next`.
+///
+/// Общий источник истины о рёбрах графа FSM: используется анализом
+/// достижимости (SE-046) и построением структуры Крипке (фича 0049,
+/// [`build_kripke`](crate::verification::kripke::build_kripke)).
+pub(crate) fn reachable_targets(state: &StateNode) -> Vec<String> {
+    match state {
+        StateNode::Simple { references, .. } => references.iter().map(|r| r.name.clone()).collect(),
+        StateNode::Implement {
+            references, next, ..
+        } => {
+            let mut targets: Vec<String> = references.iter().map(|r| r.name.clone()).collect();
+            if let Some(n) = next {
+                targets.push(n.name.clone());
+            }
+            targets
+        }
+        StateNode::Unresolved => vec![],
+    }
+}

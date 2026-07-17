@@ -23,6 +23,11 @@ fi
 $CARGO_CMD +nightly fmt
 $CARGO_CMD check
 $CARGO_CMD clippy --all-targets --all-features
+
+# Размер модулей (фича 0027): быстрая проверка идёт ДО долгих тестов — падать
+# надо раньше, а не после трёх минут прогона.
+"$(dirname "$0")/check-module-size.sh"
+
 $CARGO_CMD test -- --test-threads=1
 
 # Корень репозитория = каталог этого скрипта /..

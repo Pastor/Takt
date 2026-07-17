@@ -1,0 +1,33 @@
+# Реестр размеров модулей — УЗАКОНЕННЫЙ ДОЛГ (фича 0027).
+#
+# Правило: «Размер модуля — не больше ~1000 строк (вместе с тестами); дели по
+# логике» (CLAUDE.md). Перечисленные ниже файлы правило НАРУШАЮТ. Реестр не даёт
+# им разрешения — он их ЗАМОРАЖИВАЕТ: проверка scripts/check-module-size.sh
+# запрещает рост сверх записанного и появление новых нарушителей.
+#
+# Единственная допустимая правка записи — УМЕНЬШЕНИЕ числа. Файл, уложившийся в
+# 1000 строк, обязан быть УДАЛЁН из реестра: иначе храповик провернётся назад.
+#
+# Формат: <строк> <путь от корня репозитория>
+4959 grammar/tests/semantic_tests.rs
+1937 grammar/src/bin/lamc.rs
+1893 grammar/tests/parser_tests.rs
+1842 grammar/src/semantic/tree.rs
+1752 grammar/src/semantic/mod.rs
+1691 grammar/src/semantic/index.rs
+1460 simulation/src/unit/viewport.rs
+1409 grammar/src/lib.rs
+1393 grammar/tests/codegen_tests.rs
+1361 grammar/src/generator/rust/rust_model.rs
+1360 grammar/src/semantic/expression.rs
+1331 simulation/src/unit/mod.rs
+1297 grammar/src/generator/c/c_header.rs
+1268 grammar/tests/lsp_tests.rs
+1204 grammar/src/parser/ast.rs
+1169 grammar/src/generator/c/c_source.rs
+1162 grammar/src/semantic/type_inference.rs
+1154 grammar/src/parser/lexer.rs
+1126 grammar/src/generator/rust/rust_expr.rs
+1116 grammar/src/address_map.rs
+1084 grammar/src/generator/c/c_model.rs
+1081 grammar/tests/lexer_tests.rs
