@@ -14,3 +14,4 @@
 | 0023-01 | 0023 | Проверка совместимости с новыми IDE (verifyPlugin) + валидность дескриптора | [0023-01-verifyplugin-descriptor.md](0023-01-verifyplugin-descriptor.md) |
 | 0045-01 | 0045 | Устаревшие стабы SV в каталоге вывода (доделка гейта 0045-02) — ИСПРАВЛЕН | [0045-01-stale-sv-artifacts.md](0045-01-stale-sv-artifacts.md) |
 | 0053-01 | 0053 | `FileTable::default()` сталкивает первый импорт с корнем (`file_no` 0) — ЗАВЕДЁН, блокирует 0056-01 | [0053-01-file-table-default-collision.md](0053-01-file-table-default-collision.md) |
+| 0005-01 | 0005 (+0029) | Цель `c` теряет знак перечисления — переход мёртв молча (Tier 1) — ЗАВЕДЁН, чинится в объёме 0060 | [0005-01-c-enum-signedness.md](0005-01-c-enum-signedness.md) |
