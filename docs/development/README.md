@@ -164,4 +164,6 @@
 | 0061-03 | 0061 | Цели `c`, `rust`, `st` — Q-арифметика; ловушка C11 6.5.7p5 | [0061-03-software-targets.md](0061-03-software-targets.md) |
 | 0061-04 | 0061 | Цель `sv` — синтезируемый fixed-point | [0061-04-sv-target.md](0061-04-sv-target.md) |
 | 0061-05 | 0061 | Пример-регулятор, README, перенос примеров в документацию | [0061-05-example-and-docs.md](0061-05-example-and-docs.md) |
+| 0062-01 | 0062 | Регистровый файл и его интерфейс (без протокола) | [0062-01-register-file-interface.md](0062-01-register-file-interface.md) |
+| 0062-02 | 0062 | Внешняя карта адресов для `sv-mmio` + потактовая сверка | [0062-02-address-map-and-conformance.md](0062-02-address-map-and-conformance.md) |
 
