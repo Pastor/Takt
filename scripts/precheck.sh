@@ -344,6 +344,56 @@ else
   sv_tool_missing yosys
 fi
 
+# ГЕЙТ ТЕСТБЕНЧЕЙ ЦЕЛИ SV: линт и синтез доказывают, что RTL валиден и
+# синтезируем, но НЕ что он ведёт себя как модель (см. предупреждение README —
+# молча неверная трансляция синтезируется тоже). Тестбенчи в
+# examples/generated/sv/tb/ прогоняют модуль замкнутой средой на осмысленном
+# сценарии, проверяют наблюдаемое поведение assert-ами (провал → $fatal →
+# ненулевой код выхода) и снимают осциллограмму <name>.vcd для gtkwave.
+#
+# Тестбенчи написаны РУКАМИ (не порождаются lamc): тестбенч — принадлежность
+# проверки, а не продукта (решение 0045-07). Список модулей — тот же
+# $SV_TRANSLATABLE: у каждого обязан быть парный tb/<name>_tb.sv.
+#
+# Verilator собирает симулятор (--binary --timing) с трассировкой (--trace).
+# Отдельного мягкого/жёсткого разбора отсутствия verilator здесь нет: гейт линта
+# выше уже отметил его нехватку (пропуск локально, ошибка в CI). Если verilator
+# есть — тестбенчи ОБЯЗАНЫ собраться и пройти.
+SV_TB_DIR="$SV_OUTPUT/tb"
+if command -v verilator &>/dev/null; then
+  echo "Гейт тестбенчей sv: verilator (--binary) прогоняет tb/<name>_tb.sv..."
+  for name in $SV_TRANSLATABLE; do
+    tb_src="$SV_TB_DIR/${name}_tb.sv"
+    if [ ! -e "$tb_src" ]; then
+      echo "  $name → тестбенч $tb_src отсутствует (ожидался парный tb для \$SV_TRANSLATABLE)."
+      sv_failed=1
+      continue
+    fi
+    tb_obj="$(mktemp -d)"
+    tb_log="$(mktemp)"
+    if verilator --binary --timing --trace -Wno-fatal --top-module tb \
+        -Mdir "$tb_obj" -o simtb \
+        "$tb_src" "$SV_OUTPUT/${name}.sv" >"$tb_log" 2>&1; then
+      # Прогон в каталоге tb/: <name>.vcd ложится рядом с исходником тестбенча
+      # (путь в $dumpfile относительный). Код выхода ≠ 0 (провал assert/$fatal)
+      # валит гейт.
+      if ( cd "$SV_TB_DIR" && "$tb_obj/simtb" ) >"$tb_log" 2>&1; then
+        sed 's/^/    /' "$tb_log" | grep -E 'OK|TICK' | head -4 || true
+        echo "  $name → тестбенч ПРОШЁЛ; осциллограмма $SV_TB_DIR/${name}.vcd"
+      else
+        echo "  $name → тестбенч ПРОВАЛИЛСЯ:"
+        sed 's/^/    /' "$tb_log" | head -12
+        sv_failed=1
+      fi
+    else
+      echo "  $name → verilator НЕ СОБРАЛ тестбенч:"
+      sed 's/^/    /' "$tb_log" | head -12
+      sv_failed=1
+    fi
+    rm -rf "$tb_obj" "$tb_log"
+  done
+fi
+
 if [ "$sv_failed" -ne 0 ]; then
   echo "  Порождённый SystemVerilog не проходит гейт — предкоммит провален (фича 0045)."
   exit 1
