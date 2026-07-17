@@ -160,16 +160,11 @@ rust_gate_dir="$(mktemp -d)"
 for rs_file in "$RUST_OUTPUT"/*.rs; do
   [ -e "$rs_file" ] || continue
   name="$(basename "$rs_file" .rs)"
-  # Известно-дефектный пример: `temperature <= 0` при `temperature : u8` —
-  # clippy::absurd_extreme_comparisons прав, на беззнаковом это может значить
-  # только `== 0`. Дефект в САМОМ ПРИМЕРЕ, а не в трансляции (C проглатывает его
-  # молча), и принадлежит фиче 0030 «Исправление примера comprehensive.lam».
-  # Пропуск объявлен ГРОМКО: молчаливый пропуск читался бы как «покрыто».
-  if [ "$name" = "comprehensive" ]; then
-    echo "  [пропуск] $name — известный дефект примера (фича 0030):"
-    echo "            clippy::absurd_extreme_comparisons на 'temperature <= 0' (u8)"
-    continue
-  fi
+  # Пропусков нет: единственный, что здесь был (`comprehensive` —
+  # clippy::absurd_extreme_comparisons на `temperature <= 0` при `u8`), снят
+  # фичей 0030 вместе с причиной. Пример больше не сравнивает беззнаковое с
+  # нулём: порог выхода из охлаждения выражен именованным условием
+  # `cond Cooled = temperature = 0`.
   wrapper="$rust_gate_dir/gate_${name}.rs"
   {
     echo "#![no_std]"

@@ -1,0 +1,519 @@
+//! Корпусной гейт достижимости: примеры `examples/*.lam` **запускаются**, а не
+//! только компилируются.
+//!
+//! # Зачем этот слой существует
+//!
+//! `comprehensive.lam` объявлял недостижимый сценарий (`Cooling`/`Done` не
+//! достигались никогда) при **полностью зелёных** гейтах: пример компилировался
+//! в C, собирался cmake/ninja, был в каноне форматтера и печатался форматтером
+//! целиком. Единственное, чего не делал никто, — **не запускал его и не смотрел,
+//! куда он приходит**. Из-за этого мнимый сценарий добрался до критерия приёмки
+//! A6 чужой фичи ([0025](../../docs/features/0025-simulator-expression-eval.md)).
+//!
+//! Отсюда устройство гейта (задача
+//! [0030-02](../../docs/development/0030-02-examples-scenario-gate.md), образец —
+//! гейт непокрытых узлов фичи 0024: «отказ вместо тихого пропуска»): у **каждого**
+//! файла `examples/*.lam` обязан быть **либо** контракт сценария, **либо**
+//! исключение **с причиной**. Третьего не дано — новый пример, про который забыли,
+//! валит тест ([`every_example_is_accounted_for`]).
+//!
+//! # Границы (сознательно)
+//!
+//! - **Статический анализ достижимости не вводится** — в общем виде задача
+//!   неразрешима при свободных входных портах. Достижимость проверяется
+//!   **прогоном**: эмпирически, но честно и дёшево.
+//! - **Сверки с порождённым C нет**: наблюдается цепочка состояний **внутри**
+//!   симулятора.
+//! - **`guard`-JSON не используется**: он проверяет порты и переменные, а
+//!   состояния проверять не умеет (`simulation/src/json_input.rs`).
+
+use grammar::semantic::tree::construct_model;
+use grammar::semantic::{ModelNode, StateNode};
+use simulation::{TickResult, Unit, Value, build_unit};
+use std::cell::RefCell;
+use std::collections::BTreeSet;
+use std::rc::Rc;
+
+// ── Контракты и исключения ───────────────────────────────────────────────────
+
+/// Контракт сценария примера: что он обязан пройти при прогоне без входных данных.
+struct Contract {
+    /// Имя файла в `examples/`.
+    file: &'static str,
+    /// Состояния, которые обязаны встретиться в трассе **в этом порядке**
+    /// (подпоследовательность, а не точная цепочка: число циклов задают
+    /// константы модели и не должно быть вписано в тест).
+    chain: &'static [&'static str],
+    /// Бюджет шагов — с запасом (целевой сценарий ≈172 шага).
+    budget: usize,
+    /// Прогон обязан завершиться терминальным состоянием, а не исчерпанием лимита.
+    must_terminate: bool,
+}
+
+/// Пример без контракта: почему его сценарий не проверяется прогоном.
+struct Exception {
+    /// Имя файла в `examples/`.
+    file: &'static str,
+    /// Причина — обязательна: исключение без причины неотличимо от забывчивости.
+    reason: &'static str,
+}
+
+/// Единственный пример, задающий поведение **без внешних входов**, — то есть
+/// единственный, чей сценарий вообще можно проверить безусловным прогоном.
+const CONTRACTS: &[Contract] = &[Contract {
+    file: "comprehensive.lam",
+    chain: &["Idle", "Heating", "Cooling", "Done"],
+    budget: 400,
+    must_terminate: true,
+}];
+
+const EXCEPTIONS: &[Exception] = &[
+    Exception {
+        file: "elevator.lam",
+        reason: "стенд парсера: шапка объявляет файл позитивным тестом разбора; \
+                 корень — цепочка `next` без условий, поведения не заявлено",
+    },
+    Exception {
+        file: "extend_complex.lam",
+        reason: "стенд синтаксиса (структуры, порты с адресами, композиция \
+                 `A + B + (C | D) + E`); сценария не заявляет",
+    },
+    Exception {
+        file: "stacker.lam",
+        reason: "сценарии подаются извне — `examples/simulations/stacker_*.json`, \
+                 харнесс `scripts/run_simulations.sh`",
+    },
+    Exception {
+        file: "elevator_mini.lam",
+        reason: "ВРЕМЕННОЕ: дефект симулятора SIM-009 — порт под-модели композиции \
+                 `Cabin | Motor` не виден вычислителю (`FloorSensor_F1_Bottom` \
+                 объявлен, но «не найден»). Снять исключение после починки",
+    },
+];
+
+// ── Вспомогательное ──────────────────────────────────────────────────────────
+
+fn examples_dir() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples")
+}
+
+/// Минимальные фикстуры контрпримеров и примера (T6–T8) — не копии примера: они
+/// изолируют **класс** ошибки проектирования и переживут любую его переделку.
+fn fixture_path(file: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/data/scenario")
+        .join(file)
+}
+
+fn read_example(file: &str) -> String {
+    read_source(&examples_dir().join(file))
+}
+
+fn read_source(path: &std::path::Path) -> String {
+    std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("не прочитать модель {}: {e}", path.display()))
+}
+
+fn model_of(file: &str) -> Rc<RefCell<ModelNode>> {
+    model_at(&examples_dir().join(file))
+}
+
+fn model_at(path: &std::path::Path) -> Rc<RefCell<ModelNode>> {
+    let source = read_source(path);
+    let name = path.display();
+    let (ast, _) = grammar::parse(&source, 0).unwrap_or_else(|e| panic!("{name}: разбор: {e:?}"));
+    construct_model(&ast, None, &[]).unwrap_or_else(|e| panic!("{name}: семантика: {e:?}"))
+}
+
+/// Итог прогона примера — ровно то, что наблюдает пользователь через симулятор.
+struct Run {
+    /// Цепочка активных состояний по шагам (соседние повторы сжаты).
+    chain: Vec<String>,
+    /// Активные состояния на каждом шаге — без сжатия (сколько такт длилось).
+    per_step: Vec<String>,
+    /// Наблюдённые переходы `(из, в)` — вход проверки мёртвых рёбер.
+    transitions: BTreeSet<(String, String)>,
+    /// Завершился ли прогон терминальным состоянием (а не лимитом шагов).
+    terminated: bool,
+    /// Ошибка вычисления, если случилась.
+    failure: Option<String>,
+    /// Сколько шагов исполнено.
+    steps: usize,
+    /// Юнит после прогона — для наблюдения значений (T8).
+    unit: Unit,
+}
+
+impl Run {
+    /// Сколько подряд идущих шагов трасса провела в состоянии `name`.
+    fn steps_in(&self, name: &str) -> usize {
+        self.per_step.iter().filter(|s| s == &name).count()
+    }
+}
+
+fn run_example(file: &str, budget: usize) -> Run {
+    run_model(&examples_dir().join(file), budget)
+}
+
+fn run_fixture(file: &str, budget: usize) -> Run {
+    run_model(&fixture_path(file), budget)
+}
+
+/// Прогоняет модель так же, как `SimulationRunner::run`: тик до терминального
+/// состояния, ошибки или исчерпания бюджета.
+fn run_model(path: &std::path::Path, budget: usize) -> Run {
+    let name = path.display().to_string();
+    let mut unit: Unit =
+        build_unit(model_at(path)).unwrap_or_else(|e| panic!("{name}: построение юнита: {e:?}"));
+
+    let mut chain: Vec<String> = Vec::new();
+    let mut per_step: Vec<String> = Vec::new();
+    let mut transitions = BTreeSet::new();
+    let mut terminated = false;
+    let mut failure = None;
+    let mut steps = 0usize;
+
+    let push = |chain: &mut Vec<String>, unit: &Unit| {
+        let active = unit.active_states().join(", ");
+        if chain.last().map(String::as_str) != Some(active.as_str()) {
+            chain.push(active);
+        }
+    };
+
+    for _ in 0..budget {
+        let result = unit.tick();
+        steps += 1;
+        if let TickResult::Failed(details) = &result {
+            failure = Some(format!("{details:?}"));
+            break;
+        }
+        push(&mut chain, &unit);
+        per_step.push(unit.active_states().join(", "));
+        for (from, to, _pred) in unit.take_last_transitions() {
+            transitions.insert((from, to));
+        }
+        if result == TickResult::Terminated {
+            terminated = true;
+            break;
+        }
+    }
+
+    Run {
+        chain,
+        per_step,
+        transitions,
+        terminated,
+        failure,
+        steps,
+        unit,
+    }
+}
+
+/// Собирает объявленные рёбра `ref` по всему дереву моделей: `(из, в)`.
+fn declared_edges(model: &Rc<RefCell<ModelNode>>) -> BTreeSet<(String, String)> {
+    let mut out = BTreeSet::new();
+    collect_edges(model, &mut out);
+    out
+}
+
+fn collect_edges(model: &Rc<RefCell<ModelNode>>, out: &mut BTreeSet<(String, String)>) {
+    let node = model.borrow();
+    for state in node.states.values() {
+        let (name, references) = match state {
+            StateNode::Simple {
+                name, references, ..
+            }
+            | StateNode::Implement {
+                name, references, ..
+            } => (name, references),
+            StateNode::Unresolved => continue,
+        };
+        for reference in references {
+            out.insert((name.clone(), reference.name.clone()));
+        }
+    }
+    for nested in node.models.values() {
+        collect_edges(nested, out);
+    }
+}
+
+/// Есть ли `needle` в `haystack` как **подпоследовательность** (в порядке).
+fn is_subsequence(needle: &[&str], haystack: &[String]) -> bool {
+    let mut it = haystack.iter();
+    needle.iter().all(|want| it.any(|got| got == want))
+}
+
+/// Встречается ли слово `word` в тексте как отдельная лексема.
+fn has_word(text: &str, word: &str) -> bool {
+    text.split(|c: char| !c.is_alphanumeric() && c != '_')
+        .any(|token| token == word)
+}
+
+/// Тело примера — без шапочного комментария (иначе `grep` находит обещания шапки,
+/// а не конструкции модели: ровно та ошибка, которую фича и чинит).
+fn body_of(file: &str) -> String {
+    read_example(file)
+        .lines()
+        .skip_while(|line| {
+            let l = line.trim_start();
+            l.starts_with("///") || l.is_empty()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// ── Группа 4: корпусной гейт (задача 0030-02, T11–T14) ───────────────────────
+
+/// T11/T12: у каждого примера — контракт **либо** исключение. Третьего не дано.
+///
+/// Это и есть работающая часть гейта: пример, про который забыли, валит тест.
+#[test]
+fn every_example_is_accounted_for() {
+    let mut files: Vec<String> = std::fs::read_dir(examples_dir())
+        .expect("не прочитать каталог examples/")
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(".lam"))
+        .collect();
+    files.sort();
+
+    let mut unaccounted = Vec::new();
+    for file in &files {
+        let has_contract = CONTRACTS.iter().any(|c| c.file == file);
+        let has_exception = EXCEPTIONS.iter().any(|e| e.file == file);
+        assert!(
+            !(has_contract && has_exception),
+            "пример '{file}' одновременно имеет контракт и исключение — \
+             определитесь: он проверяется прогоном или нет"
+        );
+        if !has_contract && !has_exception {
+            unaccounted.push(file.clone());
+        }
+    }
+
+    assert!(
+        unaccounted.is_empty(),
+        "примеры не имеют ни контракта сценария, ни исключения с причиной: {unaccounted:?}\n\
+         Добавьте в CONTRACTS (ожидаемая цепочка состояний + бюджет шагов) — либо \
+         в EXCEPTIONS с причиной, почему сценарий не проверяется прогоном.\n\
+         Молча пропустить пример нельзя: именно так `comprehensive.lam` годами \
+         объявлял недостижимый сценарий при зелёных гейтах."
+    );
+
+    // Обратная сторона: контракт/исключение на несуществующий файл — тоже дефект
+    // (переименовали пример, а гейт продолжает «проверять» пустоту).
+    for contract in CONTRACTS {
+        assert!(
+            files.iter().any(|f| f == contract.file),
+            "контракт ссылается на несуществующий пример '{}'",
+            contract.file
+        );
+    }
+    for exception in EXCEPTIONS {
+        assert!(
+            files.iter().any(|f| f == exception.file),
+            "исключение ссылается на несуществующий пример '{}'",
+            exception.file
+        );
+    }
+}
+
+/// T13: у каждого исключения — непустая причина.
+#[test]
+fn every_exception_states_a_reason() {
+    for exception in EXCEPTIONS {
+        assert!(
+            exception.reason.len() > 20,
+            "исключение '{}' не объясняет причину: исключение без причины \
+             неотличимо от забывчивости",
+            exception.file
+        );
+    }
+}
+
+/// T14: контракты **исполняются**, а не просто существуют.
+#[test]
+fn contracts_are_executed() {
+    for contract in CONTRACTS {
+        let run = run_example(contract.file, contract.budget);
+
+        assert!(
+            run.failure.is_none(),
+            "{}: прогон упал: {}",
+            contract.file,
+            run.failure.unwrap_or_default()
+        );
+
+        // T1: заявленная цепочка проходится в объявленном порядке.
+        assert!(
+            is_subsequence(contract.chain, &run.chain),
+            "{}: заявленная цепочка {:?} не пройдена.\nФактическая трасса: {:?}",
+            contract.file,
+            contract.chain,
+            run.chain
+        );
+
+        // T2: сообщения различаются — «не завершился» ≠ «упёрся в лимит».
+        if contract.must_terminate {
+            assert!(
+                run.terminated,
+                "{}: прогон НЕ завершился терминальным состоянием — исчерпан бюджет \
+                 в {} шагов (исполнено {}).\nТрасса: {:?}\n\
+                 Если сценарий стал длиннее — поднимите бюджет; если модель не \
+                 приходит в терминальное состояние — это дефект модели.",
+                contract.file, contract.budget, run.steps, run.chain
+            );
+        }
+    }
+}
+
+// ── Группа 1: сценарий comprehensive.lam (ядро фичи, T1–T5) ──────────────────
+
+/// T3: достижимы **все** объявленные состояния.
+#[test]
+fn comprehensive_reaches_every_state() {
+    let run = run_example("comprehensive.lam", 400);
+    let visited: BTreeSet<&str> = run.chain.iter().map(String::as_str).collect();
+    let expected: BTreeSet<&str> = ["Idle", "Heating", "Cooling", "Done"].into_iter().collect();
+
+    assert_eq!(
+        visited,
+        expected,
+        "недостижимые состояния: {:?}\nТрасса: {:?}",
+        expected.difference(&visited).collect::<Vec<_>>(),
+        run.chain
+    );
+}
+
+/// T5: мёртвых рёбер нет — каждое объявленное `ref` срабатывает хотя бы раз.
+///
+/// Именно эта проверка ловит класс дефекта целиком: ребро, которое нельзя
+/// пройти ни при каком входе, — мёртвый код в витрине языка.
+#[test]
+fn comprehensive_has_no_dead_edges() {
+    let run = run_example("comprehensive.lam", 400);
+    let declared = declared_edges(&model_of("comprehensive.lam"));
+
+    let dead: Vec<_> = declared.difference(&run.transitions).collect();
+    assert!(
+        dead.is_empty(),
+        "мёртвые рёбра (объявлены, но не срабатывают ни разу): {dead:?}\n\
+         Наблюдённые переходы: {:?}",
+        run.transitions
+    );
+
+    let undeclared: Vec<_> = run.transitions.difference(&declared).collect();
+    assert!(
+        undeclared.is_empty(),
+        "наблюдены переходы, которых нет среди объявленных `ref`: {undeclared:?}"
+    );
+}
+
+// ── Группа 2: контрпримеры и пример (правило 16, T6–T8) ──────────────────────
+
+/// T6, контрпример «тупик»: выход из состояния недостижим по логике модели.
+///
+/// Сжатая копия дефекта, из-за которого `comprehensive.lam` годами стоял в
+/// `Heating`. Фиксирует границу ответственности: **симулятор прав, дефектна
+/// модель** — и что проверка прогоном на такое реагирует.
+#[test]
+fn t6_counterexample_deadlock_never_leaves_state() {
+    let run = run_fixture("deadlock.lam", 50);
+
+    assert_eq!(
+        run.chain,
+        vec!["Heating"],
+        "тупик обязан остаться тупиком: модель не может покинуть Heating"
+    );
+    assert!(
+        !run.terminated,
+        "прогон обязан упереться в лимит шагов, а не завершиться: `Done` недостижим"
+    );
+    assert_eq!(run.steps, 50, "модель стоит в тупике весь бюджет");
+}
+
+/// T7, контрпример «срыв удержания»: `Cooling` уходит на первом же такте.
+///
+/// Ровно тот второй дефект, который «минимальная правка» из бэклога **не
+/// чинила**: `Cooling` достигался, а `Done` — нет. Проверка, останавливающаяся
+/// на достижении `Cooling`, признала бы такую модель исправной.
+#[test]
+fn t7_counterexample_hold_break_leaves_cooling_immediately() {
+    let run = run_fixture("hold_break.lam", 50);
+
+    // `Cooling` — стартовое состояние, поэтому его тело исполняется уже на такте 1
+    // (контракт фичи 0033: вход не расходует такт), и ребро срывается там же.
+    // Состояние не удерживается **ни одного** наблюдаемого такта: сняв 3 градуса
+    // из 101, модель бросает охлаждение.
+    assert_eq!(
+        run.steps_in("Cooling"),
+        0,
+        "срыв удержания: охлаждение обязано прерваться на первом же такте.\nТрасса: {:?}",
+        run.chain
+    );
+    assert!(
+        !run.chain.iter().any(|s| s == "Done"),
+        "`Done` обязан остаться недостижимым: он и есть предмет контрпримера.\nТрасса: {:?}",
+        run.chain
+    );
+}
+
+/// T8, положительный пример: удержание до конца охлаждения.
+///
+/// Тот же контроллер, спроектированный правильно: выход из `Cooling` — только
+/// при `temperature = 0`. По правилу 16 этот пример годится для раздела
+/// документации о проектировании состояний.
+#[test]
+fn t8_example_hold_keep_leaves_cooling_only_when_cooled() {
+    let run = run_fixture("hold_keep.lam", 100);
+
+    assert!(
+        run.chain.iter().any(|s| s == "Done"),
+        "`Done` обязан достигаться.\nТрасса: {:?}",
+        run.chain
+    );
+    assert!(
+        !run.chain.iter().any(|s| s == "Idle"),
+        "при выполненной программе испытаний ветка `Cooled & !CyclesDone` не берётся"
+    );
+    // Прямая формулировка удержания: уйти можно только охладившись.
+    assert_eq!(
+        run.unit.variable("temperature"),
+        Some(Value::Number(0)),
+        "выход из Cooling обязан произойти ровно тогда, когда temperature = 0"
+    );
+    // Удержание в тактах: 101 единица по COOL_STEP=3 за такт — 34 исполнения тела.
+    // Наблюдаемых тактов на один меньше: `Cooling` — стартовое состояние (его тело
+    // идёт уже на такте 1, контракт фичи 0033), а на 34-м такте активным виден уже
+    // `Done`. Уход раньше означал бы срыв удержания (контрпример T7).
+    assert_eq!(
+        run.steps_in("Cooling"),
+        33,
+        "охлаждение обязано удерживать управление до конца.\nТрасса: {:?}",
+        run.chain
+    );
+    assert!(run.terminated, "модель обязана завершиться сама");
+}
+
+// ── Группа 3: соответствие шапки телу (T9, T10) ──────────────────────────────
+
+/// T9: каждая конструкция, заявленная шапкой примера, присутствует в теле.
+#[test]
+fn comprehensive_header_matches_body() {
+    let body = body_of("comprehensive.lam");
+    let promised = [
+        "if", "else", "loop", "while", "for", "match", "cond", "enum", "extern", "fn", "start",
+        "state",
+    ];
+
+    let missing: Vec<&str> = promised
+        .into_iter()
+        .filter(|word| !has_word(&body, word))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "шапка примера обещает конструкции, которых в теле нет: {missing:?}\n\
+         Шапка — часть документации по языку (правило 15): обещанное обязано \
+         присутствовать."
+    );
+}

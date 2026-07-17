@@ -1,4 +1,9 @@
-/// Всесторонний пример: демонстрирует возможности языка BuT.
+/// Всесторонний пример: демонстрирует возможности языка Lam.
+///
+/// Модель — контроллер термоциклирования испытательной камеры: прогреть объект
+/// до MAX_TEMP, охладить до нуля, повторить MAX_COUNT раз, завершить работу.
+/// Заявленный сценарий: Idle → Heating → Cooling → … ×MAX_COUNT → Done;
+/// он проверяется прогоном (`simulation/tests/examples_scenario_tests.rs`).
 ///
 /// Использует: переменные, константы, перечисления, внешние функции,
 /// условные операторы (if/else), циклы (loop, for, while), вызовы функций,
@@ -11,34 +16,68 @@ enum Mode { Auto = 0, Manual = 1, Emergency = 2 }
 extern fn log_temp(value: u8);
 extern fn log_count(n: u8);
 
-/// Модель управляющего контроллера температуры
+/// Модель контроллера термоциклирования
 model Controller {
     var temperature: u8 := 0;
     var count: u8 := 0;
     var mode: Mode := Auto;
     const MAX_TEMP: u8 := 100;
-    const MAX_COUNT: u8 := 10;
+    const MAX_COUNT: u8 := 3;
+    const HEAT_STEP: u8 := 8;
+    const COOL_STEP: u8 := 3;
+    const WARMUP_TEMP: u8 := 10;
 
-    /// Ограничивает значение диапазоном [0, MAX_TEMP]
+    /// Объект прогрет до порога — пора охлаждать
+    cond Overheated = temperature >= MAX_TEMP;
+    /// Объект охлаждён до нуля — цикл завершён
+    cond Cooled = temperature = 0;
+    /// Программа испытаний выполнена
+    cond CyclesDone = count >= MAX_COUNT;
+
+    /// Ограничивает значение сверху порогом MAX_TEMP
     fn clamp_temp(value: u8) -> u8 {
         if value > MAX_TEMP {
             return MAX_TEMP;
         }
-        if value < temperature {
-            return temperature;
-        }
         return value;
     }
 
-    /// Увеличивает счётчик на 1
+    /// Увеличивает счётчик циклов на 1
     fn increment(n: u8) -> u8 {
         return n + 1;
     }
 
-    /// Начальное состояние
+    /// Телеметрия: сколько ступеней нагрева осталось до порога
+    fn steps_to_limit(value: u8) -> u8 {
+        var remaining: u8 := 0;
+        var v: u8 := value;
+        while v < MAX_TEMP {
+            v := v + HEAT_STEP;
+            remaining := remaining + 1;
+        }
+        return remaining;
+    }
+
+    /// Телеметрия: сколько ступеней охлаждения осталось до нуля (loop ≡ while)
+    fn steps_to_zero(value: u8) -> u8 {
+        var remaining: u8 := 0;
+        var v: u8 := value;
+        loop v > 0 {
+            if v > COOL_STEP {
+                v := v - COOL_STEP;
+            }
+            else {
+                v := 0;
+            }
+            remaining := remaining + 1;
+        }
+        return remaining;
+    }
+
+    /// Начальное состояние: подготовка камеры — прогрев до рабочего порога.
+    /// Выход считает начатый цикл испытаний.
     start Idle {
         enter {
-            count := 0;
             temperature := 0;
         }
         always {
@@ -49,50 +88,43 @@ model Controller {
         exit {
             count := increment(count);
         }
-        ref Heating: temperature > 10;
+        ref Heating: temperature > WARMUP_TEMP;
     }
 
-    /// Состояние нагрева — демонстрация while и match
+    /// Состояние нагрева — демонстрация while (в телеметрии) и match
     state Heating {
-        enter {
-            var boost: u8 := 5;
-            temperature := temperature + boost;
-        }
         always {
-            while count < 3 {
-                count := count + 1;
-            }
+            temperature := clamp_temp(temperature + HEAT_STEP);
             match mode {
                 Auto => {
-                    log_temp(temperature);
+                    log_count(steps_to_limit(temperature));
                 }
                 Manual => {
-                    log_count(count);
+                    log_temp(temperature);
                 }
                 _ => {
-                    count := 0;
+                    mode := Auto;
                 }
             }
         }
-        ref Cooling: temperature > MAX_TEMP;
-        ref Idle: count >= MAX_COUNT;
+        ref Cooling: Overheated;
     }
 
-    /// Состояние охлаждения
+    /// Состояние охлаждения — удерживает управление до конца охлаждения
     state Cooling {
         always {
-            for var i: u8 := 0; i < 3; i := i + 1 {
+            for var i: u8 := 0; i < COOL_STEP; i := i + 1 {
                 if temperature > 0 {
                     temperature := temperature - 1;
                 }
             }
-            log_count(count);
+            log_count(steps_to_zero(temperature));
         }
-        ref Done: temperature <= 0;
-        ref Idle: temperature > 0;
+        ref Done: Cooled & CyclesDone;
+        ref Idle: Cooled & !CyclesDone;
     }
 
-    /// Конечное состояние — работа завершена (нет переходов)
+    /// Конечное состояние — программа испытаний выполнена (нет переходов)
     state Done {
         enter {
             temperature := 0;

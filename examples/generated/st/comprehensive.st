@@ -7,18 +7,11 @@ FUNCTION clamp_temp : USINT
 VAR_INPUT
     value : USINT;
 END_VAR
-VAR_IN_OUT
-    temperature : USINT;
-END_VAR
 VAR CONSTANT
     MAX_TEMP : USINT := 100;
 END_VAR
     IF value > MAX_TEMP THEN
         clamp_temp := MAX_TEMP;
-        RETURN;
-    END_IF;
-    IF value < temperature THEN
-        clamp_temp := temperature;
         RETURN;
     END_IF;
     clamp_temp := value;
@@ -30,6 +23,53 @@ VAR_INPUT
     n : USINT;
 END_VAR
     increment := n + 1;
+    RETURN;
+END_FUNCTION
+
+FUNCTION steps_to_limit : USINT
+VAR_INPUT
+    value : USINT;
+END_VAR
+VAR
+    remaining : USINT;
+    v : USINT;
+END_VAR
+VAR CONSTANT
+    HEAT_STEP : USINT := 8;
+    MAX_TEMP : USINT := 100;
+END_VAR
+    remaining := 0;
+    v := value;
+    WHILE v < MAX_TEMP DO
+        v := v + HEAT_STEP;
+        remaining := remaining + 1;
+    END_WHILE;
+    steps_to_limit := remaining;
+    RETURN;
+END_FUNCTION
+
+FUNCTION steps_to_zero : USINT
+VAR_INPUT
+    value : USINT;
+END_VAR
+VAR
+    remaining : USINT;
+    v : USINT;
+END_VAR
+VAR CONSTANT
+    COOL_STEP : USINT := 3;
+END_VAR
+    remaining := 0;
+    v := value;
+    WHILE v > 0 DO
+        IF v > COOL_STEP THEN
+            v := v - COOL_STEP;
+        ELSE
+            v := 0;
+        END_IF;
+        remaining := remaining + 1;
+    END_WHILE;
+    steps_to_zero := remaining;
     RETURN;
 END_FUNCTION
 
@@ -58,7 +98,6 @@ VAR
     i : USINT;
     _st_discard_usint : USINT;
     delta : USINT;
-    boost : USINT;
     count : USINT := 0;
     mode : USINT := 0;
     temperature : USINT := 0;
@@ -67,60 +106,53 @@ VAR CONSTANT
     Mode_Auto : USINT := 0;
     Mode_Manual : USINT := 1;
     Mode_Emergency : USINT := 2;
-    MAX_COUNT : USINT := 10;
+    COOL_STEP : USINT := 3;
+    HEAT_STEP : USINT := 8;
+    MAX_COUNT : USINT := 3;
     MAX_TEMP : USINT := 100;
+    WARMUP_TEMP : USINT := 10;
 END_VAR
     CASE state OF
         0: (* INIT *)
-            count := 0;
             temperature := 0;
             state := 4; (* Idle *)
         1: (* Cooling *)
             i := 0;
-            WHILE i < 3 DO
+            WHILE i < COOL_STEP DO
                 IF temperature > 0 THEN
                     temperature := temperature - 1;
                 END_IF;
                 i := i + 1;
             END_WHILE;
-            _st_discard_usint := log_count(count);
-            IF temperature <= 0 THEN
+            _st_discard_usint := log_count(steps_to_zero(temperature));
+            IF (temperature = 0) AND (count >= MAX_COUNT) THEN
                 temperature := 0;
                 count := 0;
                 state := 2; (* Done *)
-            ELSIF temperature > 0 THEN
-                count := 0;
+            ELSIF (temperature = 0) AND (NOT (count >= MAX_COUNT)) THEN
                 temperature := 0;
                 state := 4; (* Idle *)
             END_IF;
         2: (* Done *)
             state := 5; (* END *)
         3: (* Heating *)
-            WHILE count < 3 DO
-                count := count + 1;
-            END_WHILE;
+            temperature := clamp_temp(temperature + HEAT_STEP);
             IF mode = 0 THEN
-                _st_discard_usint := log_temp(temperature);
+                _st_discard_usint := log_count(steps_to_limit(temperature));
             ELSIF mode = 1 THEN
-                _st_discard_usint := log_count(count);
+                _st_discard_usint := log_temp(temperature);
             ELSE
-                count := 0;
+                mode := 0;
             END_IF;
-            IF temperature > MAX_TEMP THEN
+            IF temperature >= MAX_TEMP THEN
                 state := 1; (* Cooling *)
-            ELSIF count >= MAX_COUNT THEN
-                count := 0;
-                temperature := 0;
-                state := 4; (* Idle *)
             END_IF;
         4: (* Idle *)
             delta := 1;
             temperature := temperature + delta;
             _st_discard_usint := log_temp(temperature);
-            IF temperature > 10 THEN
+            IF temperature > WARMUP_TEMP THEN
                 count := increment(count);
-                boost := 5;
-                temperature := temperature + boost;
                 state := 3; (* Heating *)
             END_IF;
         5: (* END *)

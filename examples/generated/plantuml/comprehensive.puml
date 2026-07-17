@@ -11,7 +11,6 @@ state Controller {
     Cooling --> Idle
     Done --> [*]
     Heating --> Cooling
-    Heating --> Idle
     Idle --> Heating
 }
 
