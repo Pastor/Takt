@@ -49,4 +49,5 @@
 | [0056](./0056-lsp-goto-exact-file.md) | Точный путь вместо угадывания в goto_declaration | Accepted | фича 0056 |
 | [0057](./0057-sv-sequential-composition.md) | Последовательная композиция (`+`) в цели SystemVerilog | Accepted | фича 0057 |
 | [0058](./0058-rust-tail-return-if-else.md) | Хвостовой разворот `return` в цели `rust` — заход в завершающий `if/else` | Accepted | фича 0058 |
+| [0059](./0059-rust-shared-struct.md) | Общие переменные корня — структура `Shared` вместо параметров по одной | Accepted | фича 0059 |
 

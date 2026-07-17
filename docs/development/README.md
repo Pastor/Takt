@@ -155,4 +155,6 @@
 | 0057-04 | 0057 | Потактовая сверка и гейт для `+` в SV | [0057-04-conformance-gate.md](0057-04-conformance-gate.md) |
 | 0058-01 | 0058 | Предикат сворачиваемости хвоста — единственный источник истины | [0058-01-tail-fold-predicate.md](0058-01-tail-fold-predicate.md) |
 | 0058-02 | 0058 | Рекурсивный печатник хвостовой позиции (заход в `if/else`) | [0058-02-recursive-tail-printer.md](0058-02-recursive-tail-printer.md) |
+| 0059-01 | 0059 | Состав `Shared` — объединение нужд под-моделей | [0059-01-shared-needs.md](0059-01-shared-needs.md) |
+| 0059-02 | 0059 | Эмиссия `Shared` — тип, поле, доступ, снятие заглушки | [0059-02-emit-shared.md](0059-02-emit-shared.md) |
 
