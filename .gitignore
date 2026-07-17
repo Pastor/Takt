@@ -22,3 +22,4 @@ README.pdf
 /cmake-build-debug
 venv
 .DS_Store
+obj_dir

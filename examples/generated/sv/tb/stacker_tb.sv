@@ -14,7 +14,7 @@
 //      сигналов на каждом такте.
 //
 // Ручной прогон (из examples/generated/sv/):
-//   verilator --binary --timing --trace --top-module tb tb/stacker_tb.sv stacker.sv -o simtb
+//   $ verilator --binary --timing --trace --top-module tb tb/stacker_tb.sv stacker.sv -o simtb
 //   (cd tb && ../obj_dir/simtb)   # пишет tb/stacker.vcd
 //   gtkwave tb/stacker.vcd
 //
