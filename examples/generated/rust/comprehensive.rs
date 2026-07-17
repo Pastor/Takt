@@ -21,8 +21,11 @@ pub enum Mode {
     Emergency = 2,
 }
 
-const MAX_COUNT: u8 = 10;
+const COOL_STEP: u8 = 3;
+const HEAT_STEP: u8 = 8;
+const MAX_COUNT: u8 = 3;
 const MAX_TEMP: u8 = 100;
+const WARMUP_TEMP: u8 = 10;
 
 /// Аппаратный слой модели.
 ///
@@ -36,9 +39,43 @@ pub trait Hal {
     fn log_temp(&mut self, value: u8);
 }
 
+/// Функция 'clamp_temp' модели.
+fn clamp_temp(value: u8) -> u8 {
+    if value > MAX_TEMP {
+        return MAX_TEMP;
+    }
+    value
+}
+
 /// Функция 'increment' модели.
 fn increment(n: u8) -> u8 {
     n + 1
+}
+
+/// Функция 'steps_to_limit' модели.
+fn steps_to_limit(value: u8) -> u8 {
+    let mut remaining: u8 = 0;
+    let mut v: u8 = value;
+    while v < MAX_TEMP {
+        v += HEAT_STEP;
+        remaining += 1;
+    }
+    remaining
+}
+
+/// Функция 'steps_to_zero' модели.
+fn steps_to_zero(value: u8) -> u8 {
+    let mut remaining: u8 = 0;
+    let mut v: u8 = value;
+    while v > 0 {
+        if v > COOL_STEP {
+            v -= COOL_STEP;
+        } else {
+            v = 0;
+        }
+        remaining += 1;
+    }
+    remaining
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,7 +123,6 @@ impl ComprehensiveController {
     /// Один такт автомата.
     fn tick<H: Hal>(&mut self, hal: &mut H) {
         if self.state == ComprehensiveControllerState::Init {
-            self.count = 0;
             self.temperature = 0;
             self.state = ComprehensiveControllerState::Idle;
         }
@@ -94,20 +130,19 @@ impl ComprehensiveController {
             ComprehensiveControllerState::Cooling => {
                 {
                     let mut i: u8 = 0;
-                    while i < 3 {
+                    while i < COOL_STEP {
                         if self.temperature > 0 {
                             self.temperature -= 1;
                         }
                         i += 1;
                     }
                 }
-                hal.log_count(self.count);
-                if self.temperature <= 0 {
+                hal.log_count(steps_to_zero(self.temperature));
+                if (self.temperature == 0) & (self.count >= MAX_COUNT) {
                     self.temperature = 0;
                     self.count = 0;
                     self.state = ComprehensiveControllerState::Done;
-                } else if self.temperature > 0 {
-                    self.count = 0;
+                } else if (self.temperature == 0) & (!(self.count >= MAX_COUNT)) {
                     self.temperature = 0;
                     self.state = ComprehensiveControllerState::Idle;
                 }
@@ -116,32 +151,24 @@ impl ComprehensiveController {
                 self.state = ComprehensiveControllerState::End;
             }
             ComprehensiveControllerState::Heating => {
-                while self.count < 3 {
-                    self.count += 1;
-                }
+                self.temperature = clamp_temp(self.temperature + HEAT_STEP);
                 if self.mode == Mode::Auto {
-                    hal.log_temp(self.temperature);
+                    hal.log_count(steps_to_limit(self.temperature));
                 } else if self.mode == Mode::Manual {
-                    hal.log_count(self.count);
+                    hal.log_temp(self.temperature);
                 } else {
-                    self.count = 0;
+                    self.mode = Mode::Auto;
                 }
-                if self.temperature > MAX_TEMP {
+                if self.temperature >= MAX_TEMP {
                     self.state = ComprehensiveControllerState::Cooling;
-                } else if self.count >= MAX_COUNT {
-                    self.count = 0;
-                    self.temperature = 0;
-                    self.state = ComprehensiveControllerState::Idle;
                 }
             }
             ComprehensiveControllerState::Idle => {
                 let delta: u8 = 1;
                 self.temperature += delta;
                 hal.log_temp(self.temperature);
-                if self.temperature > 10 {
+                if self.temperature > WARMUP_TEMP {
                     self.count = increment(self.count);
-                    let boost: u8 = 5;
-                    self.temperature += boost;
                     self.state = ComprehensiveControllerState::Heating;
                 }
             }

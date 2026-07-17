@@ -38,7 +38,7 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::st::st_expr::print_expression;
-use crate::generator::st::st_stmt::{StmtOutput, print_statement};
+use crate::generator::st::st_stmt::{Hoisted, StmtOutput, print_statement};
 use crate::generator::st::st_type::get_st_type;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::unused::{UsageSet, usage_from_stmt};
@@ -343,6 +343,24 @@ fn emit_function(
         p.down();
         p.ident("END_VAR").nl();
     }
+    // Локальные объявления тела. Печатаются ДО `VAR CONSTANT` — и это не стиль:
+    // MatIEC протаскивает квалификатор `CONSTANT` предыдущей секции на следующий
+    // за ней `VAR`, из-за чего присваивание локальной переменной отвергается
+    // («Assignment to CONSTANT variables is not allowed»). Проверено пробой:
+    // порядок `VAR CONSTANT` → `VAR` невалиден, `VAR` → `VAR CONSTANT` валиден.
+    // Дефект вскрыт фичей 0030: до неё ни одна функция корпуса не имела
+    // локальных переменных, и порядок ничего не ломал.
+    let hoisted = match def {
+        FunctionDefinitionNode::Local { body, .. } => collect_hoisted(body, name, model)?,
+        // Тела нет: у `extern fn` печатается заглушка (ниже), у остальных —
+        // печатать нечего, поднимать тоже нечего.
+        FunctionDefinitionNode::External { .. }
+        | FunctionDefinitionNode::Builtin(_, _, _)
+        | FunctionDefinitionNode::None
+        | FunctionDefinitionNode::Unresolved(_) => Vec::new(),
+    };
+    emit_hoisted_var(p, &hoisted, model)?;
+
     // Константы модели дублируются внутрь функции.
     let consts = const_params(def, model);
     if !consts.is_empty() {
@@ -401,7 +419,52 @@ fn emit_function(
     Ok(())
 }
 
-/// Печатает тело локальной функции с подъёмом объявлений в её `VAR`.
+/// Собирает объявления, поднимаемые из тела функции в её секцию `VAR`.
+///
+/// Тело печатается «вхолостую»: в ST объявления обязаны стоять ДО тела, поэтому
+/// узнать их состав можно только пройдя тело заранее.
+fn collect_hoisted(
+    body: &crate::semantic::StatementNode,
+    name: &str,
+    model: &ModelNode,
+) -> Result<Vec<Hoisted>, Diagnostic> {
+    let mut probe = String::new();
+    let mut out = StmtOutput::default();
+    {
+        let mut probe_p = Printer::new(4, &mut probe);
+        print_statement(body, model, &mut probe_p, &mut out, Some(name))?;
+    }
+    Ok(out.hoisted)
+}
+
+/// Печатает секцию `VAR` поднятых объявлений (пустую — не печатает: пустой
+/// `VAR … END_VAR` для `iec2c` невалиден).
+fn emit_hoisted_var(
+    p: &mut Printer,
+    hoisted: &[Hoisted],
+    model: &ModelNode,
+) -> Result<(), Diagnostic> {
+    if hoisted.is_empty() {
+        return Ok(());
+    }
+    p.ident("VAR").nl();
+    p.up();
+    let mut seen: Vec<&str> = Vec::new();
+    for h in hoisted {
+        if seen.contains(&h.name.as_str()) {
+            continue;
+        }
+        seen.push(&h.name);
+        let ty = get_st_type(&h.ty, model)?;
+        p.ident(&format!("{} : {};", h.name, ty)).nl();
+    }
+    p.down();
+    p.ident("END_VAR").nl();
+    Ok(())
+}
+
+/// Печатает тело локальной функции. Секцию `VAR` печатает вызывающий — до
+/// `VAR CONSTANT` (см. `emit_function`).
 fn emit_local_body(
     p: &mut Printer,
     name: &str,
@@ -409,29 +472,6 @@ fn emit_local_body(
     ret: &TypeNode,
     model: &ModelNode,
 ) -> Result<(), Diagnostic> {
-    // Тело печатается дважды: сперва «вхолостую», чтобы собрать поднятые
-    // объявления (в ST они обязаны стоять ДО тела), затем набело.
-    let mut probe = String::new();
-    let mut out = StmtOutput::default();
-    {
-        let mut probe_p = Printer::new(4, &mut probe);
-        print_statement(body, model, &mut probe_p, &mut out, Some(name))?;
-    }
-    if !out.hoisted.is_empty() {
-        p.ident("VAR").nl();
-        p.up();
-        let mut seen: Vec<&str> = Vec::new();
-        for h in &out.hoisted {
-            if seen.contains(&h.name.as_str()) {
-                continue;
-            }
-            seen.push(&h.name);
-            let ty = get_st_type(&h.ty, model)?;
-            p.ident(&format!("{} : {};", h.name, ty)).nl();
-        }
-        p.down();
-        p.ident("END_VAR").nl();
-    }
     p.up();
     let mut out2 = StmtOutput::default();
     print_statement(body, model, p, &mut out2, Some(name))?;
@@ -547,6 +587,35 @@ mod tests {
         let body_pos = st.find("t := 0;").expect("нет тела");
         assert!(var_pos < body_pos, "VAR обязан идти до тела:\n{st}");
         assert!(st.contains("t : USINT;"), "локальная не поднята:\n{st}");
+    }
+
+    /// Локальный `VAR` обязан идти ДО `VAR CONSTANT` (фича 0030).
+    ///
+    /// Не стиль, а условие валидности: MatIEC протаскивает квалификатор
+    /// `CONSTANT` предыдущей секции на следующий за ней `VAR`, и присваивание
+    /// локальной переменной отвергается («Assignment to CONSTANT variables is
+    /// not allowed»). Проверено пробой на `iec2c`: порядок `VAR CONSTANT` → `VAR`
+    /// невалиден, обратный — валиден.
+    ///
+    /// Сторож нужен потому, что **гейт этот дефект не ловил**: до 0030 ни одна
+    /// функция корпуса не имела локальных переменных одновременно с константой,
+    /// то есть дефект был латентным при зелёном `iec2c`.
+    #[test]
+    fn test_function_var_precedes_var_constant() {
+        let (st, _) = functions_of(
+            "const LIM: u8 := 3;\n\
+             fn f(n: u8) -> u8 { var t: u8 := 0; t := n + LIM; return t; }\n\
+             var x: u8 := 0;\nstart S { always { x := f(x); } }",
+        );
+        let var_pos = st.find("\nVAR\n").expect("нет секции VAR функции");
+        let const_pos = st
+            .find("VAR CONSTANT")
+            .expect("нет секции VAR CONSTANT функции");
+        assert!(
+            var_pos < const_pos,
+            "локальный VAR обязан идти до VAR CONSTANT — иначе iec2c считает \
+             локальные переменные константами:\n{st}"
+        );
     }
 
     /// `extern fn` → заглушка с телом **плюс** предупреждение `ST-009`.
