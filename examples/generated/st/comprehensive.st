@@ -142,7 +142,7 @@ END_VAR
             ELSIF mode = 1 THEN
                 _st_discard_usint := log_temp(temperature);
             ELSE
-                mode := 0;
+                mode := Mode_Auto;
             END_IF;
             IF temperature >= MAX_TEMP THEN
                 state := 1; (* Cooling *)

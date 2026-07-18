@@ -111,14 +111,14 @@ VAR CONSTANT
 END_VAR
     CASE state OF
         0: (* INIT *)
-            cmd_ack := 0;
+            cmd_ack := FALSE;
             state := 3; (* WaitingForTask *)
         1: (* AcceptingTask *)
-            cmd_ack := 0;
+            cmd_ack := FALSE;
             state := 2; (* TaskActive *)
         2: (* TaskActive *)
             IF NOT busy THEN
-                cmd_ack := 0;
+                cmd_ack := FALSE;
                 state := 3; (* WaitingForTask *)
             END_IF;
         3: (* WaitingForTask *)
@@ -128,8 +128,8 @@ END_VAR
                 tgt_section := task_section_no;
                 tgt_type := task_type;
                 eta := Stacker_travel_time(task_stack_no, task_row_no, task_section_no);
-                busy := 1;
-                cmd_ack := 1;
+                busy := TRUE;
+                cmd_ack := TRUE;
                 state := 1; (* AcceptingTask *)
             END_IF;
         4: (* END *)
@@ -165,29 +165,29 @@ VAR CONSTANT
 END_VAR
     CASE state OF
         0: (* INIT *)
-            cmd_fork := 0;
+            cmd_fork := FALSE;
             state := 2; (* LiftIdle *)
         1: (* LiftDone *)
             IF NOT lift_request THEN
-                cmd_fork := 0;
+                cmd_fork := FALSE;
                 state := 2; (* LiftIdle *)
             END_IF;
         2: (* LiftIdle *)
             IF lift_request THEN
-                cmd_fork := 1;
+                cmd_fork := TRUE;
                 state := 3; (* LiftOperating *)
             END_IF;
         3: (* LiftOperating *)
             IF (lift_request AND (NOT lift_op)) AND sense_loaded THEN
-                cmd_fork := 0;
-                lift_done := 1;
+                cmd_fork := FALSE;
+                lift_done := TRUE;
                 state := 1; (* LiftDone *)
             ELSIF (lift_request AND lift_op) AND (NOT sense_loaded) THEN
-                cmd_fork := 0;
-                lift_done := 1;
+                cmd_fork := FALSE;
+                lift_done := TRUE;
                 state := 1; (* LiftDone *)
             ELSIF NOT lift_request THEN
-                cmd_fork := 0;
+                cmd_fork := FALSE;
                 state := 2; (* LiftIdle *)
             END_IF;
         4: (* END *)
@@ -239,7 +239,7 @@ END_VAR
             cmd_target_stack := CHARGE_STACK;
             cmd_target_row := CHARGE_ROW;
             cmd_target_section := CHARGE_SECTION;
-            cmd_done := 0;
+            cmd_done := FALSE;
             state := 3; (* MovementIdle *)
         1: (* DispatchMove *)
             IF NOT tgt_type THEN
@@ -248,8 +248,8 @@ END_VAR
                 cmd_target_section := PICKUP_SECTION;
                 state := 6; (* MovingToPickup *)
             ELSIF tgt_type THEN
-                lift_request := 0;
-                lift_done := 0;
+                lift_request := FALSE;
+                lift_done := FALSE;
                 cmd_target_stack := tgt_stack;
                 cmd_target_row := tgt_row;
                 cmd_target_section := tgt_section;
@@ -260,7 +260,7 @@ END_VAR
                 cmd_target_stack := CHARGE_STACK;
                 cmd_target_row := CHARGE_ROW;
                 cmd_target_section := CHARGE_SECTION;
-                cmd_done := 0;
+                cmd_done := FALSE;
                 state := 3; (* MovementIdle *)
             END_IF;
         3: (* MovementIdle *)
@@ -269,95 +269,95 @@ END_VAR
             END_IF;
         4: (* MovingToCell *)
             IF ((pos_stack = tgt_stack) AND (pos_row = tgt_row)) AND (pos_section = tgt_section) THEN
-                lift_request := 1;
-                lift_op := 1;
+                lift_request := TRUE;
+                lift_op := TRUE;
                 state := 9; (* WaitingForkAtCell *)
             ELSIF sense_battery_low THEN
                 cmd_target_stack := CHARGE_STACK;
                 cmd_target_row := CHARGE_ROW;
                 cmd_target_section := CHARGE_SECTION;
-                lift_request := 0;
-                lift_done := 0;
-                cmd_ack := 0;
-                cmd_done := 0;
-                busy := 0;
+                lift_request := FALSE;
+                lift_done := FALSE;
+                cmd_ack := FALSE;
+                cmd_done := FALSE;
+                busy := FALSE;
                 state := 2; (* EmergencyCharge *)
             END_IF;
         5: (* MovingToDropoff *)
             IF ((pos_stack = DROPOFF_STACK) AND (pos_row = DROPOFF_ROW)) AND (pos_section = DROPOFF_SECTION) THEN
-                lift_request := 1;
-                lift_op := 1;
+                lift_request := TRUE;
+                lift_op := TRUE;
                 state := 10; (* WaitingForkAtDropoff *)
             ELSIF sense_battery_low THEN
                 cmd_target_stack := CHARGE_STACK;
                 cmd_target_row := CHARGE_ROW;
                 cmd_target_section := CHARGE_SECTION;
-                lift_request := 0;
-                lift_done := 0;
-                cmd_ack := 0;
-                cmd_done := 0;
-                busy := 0;
+                lift_request := FALSE;
+                lift_done := FALSE;
+                cmd_ack := FALSE;
+                cmd_done := FALSE;
+                busy := FALSE;
                 state := 2; (* EmergencyCharge *)
             END_IF;
         6: (* MovingToPickup *)
             IF ((pos_stack = PICKUP_STACK) AND (pos_row = PICKUP_ROW)) AND (pos_section = PICKUP_SECTION) THEN
-                lift_request := 1;
-                lift_op := 0;
+                lift_request := TRUE;
+                lift_op := FALSE;
                 state := 11; (* WaitingForkAtPickup *)
             ELSIF sense_battery_low THEN
                 cmd_target_stack := CHARGE_STACK;
                 cmd_target_row := CHARGE_ROW;
                 cmd_target_section := CHARGE_SECTION;
-                lift_request := 0;
-                lift_done := 0;
-                cmd_ack := 0;
-                cmd_done := 0;
-                busy := 0;
+                lift_request := FALSE;
+                lift_done := FALSE;
+                cmd_ack := FALSE;
+                cmd_done := FALSE;
+                busy := FALSE;
                 state := 2; (* EmergencyCharge *)
             END_IF;
         7: (* MovingToStorage *)
             IF ((pos_stack = tgt_stack) AND (pos_row = tgt_row)) AND (pos_section = tgt_section) THEN
-                lift_request := 1;
-                lift_op := 0;
+                lift_request := TRUE;
+                lift_op := FALSE;
                 state := 12; (* WaitingForkAtStorage *)
             ELSIF sense_battery_low THEN
                 cmd_target_stack := CHARGE_STACK;
                 cmd_target_row := CHARGE_ROW;
                 cmd_target_section := CHARGE_SECTION;
-                lift_request := 0;
-                lift_done := 0;
-                cmd_ack := 0;
-                cmd_done := 0;
-                busy := 0;
+                lift_request := FALSE;
+                lift_done := FALSE;
+                cmd_ack := FALSE;
+                cmd_done := FALSE;
+                busy := FALSE;
                 state := 2; (* EmergencyCharge *)
             END_IF;
         8: (* TaskCompleting *)
-            cmd_done := 0;
+            cmd_done := FALSE;
             cmd_target_stack := CHARGE_STACK;
             cmd_target_row := CHARGE_ROW;
             cmd_target_section := CHARGE_SECTION;
-            cmd_done := 0;
+            cmd_done := FALSE;
             state := 3; (* MovementIdle *)
         9: (* WaitingForkAtCell *)
             IF lift_done THEN
-                lift_request := 0;
-                lift_done := 0;
-                busy := 0;
-                cmd_done := 1;
+                lift_request := FALSE;
+                lift_done := FALSE;
+                busy := FALSE;
+                cmd_done := TRUE;
                 state := 8; (* TaskCompleting *)
             END_IF;
         10: (* WaitingForkAtDropoff *)
             IF lift_done THEN
-                lift_request := 0;
-                lift_done := 0;
-                busy := 0;
-                cmd_done := 1;
+                lift_request := FALSE;
+                lift_done := FALSE;
+                busy := FALSE;
+                cmd_done := TRUE;
                 state := 8; (* TaskCompleting *)
             END_IF;
         11: (* WaitingForkAtPickup *)
             IF lift_done THEN
-                lift_request := 0;
-                lift_done := 0;
+                lift_request := FALSE;
+                lift_done := FALSE;
                 cmd_target_stack := tgt_stack;
                 cmd_target_row := tgt_row;
                 cmd_target_section := tgt_section;
@@ -365,8 +365,8 @@ END_VAR
             END_IF;
         12: (* WaitingForkAtStorage *)
             IF lift_done THEN
-                lift_request := 0;
-                lift_done := 0;
+                lift_request := FALSE;
+                lift_done := FALSE;
                 cmd_target_stack := DROPOFF_STACK;
                 cmd_target_row := DROPOFF_ROW;
                 cmd_target_section := DROPOFF_SECTION;

@@ -79,11 +79,11 @@ END_VAR
             state := 1; (* Start *)
         1: (* Start *)
             IF WAIT THEN
-                WORK := 0;
-                IDLE := 1;
+                WORK := FALSE;
+                IDLE := TRUE;
             ELSE
-                IDLE := 0;
-                WORK := 1;
+                IDLE := FALSE;
+                WORK := TRUE;
             END_IF;
             state := 2; (* END *)
         2: (* END *)

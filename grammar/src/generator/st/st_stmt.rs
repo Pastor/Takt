@@ -28,7 +28,9 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
-use crate::generator::st::st_expr::print_expression;
+use crate::generator::st::st_expr::{
+    assign_target_type, coerce_to, print_expression, variable_ident,
+};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, MatchPatternNode, ModelNode, StatementNode};
 
@@ -90,6 +92,19 @@ pub(crate) fn print_statement(
                 p.ident(&format!("{} := {};", sink, call)).nl();
                 return Ok(());
             }
+            // Присваивание печатается по ЦЕЛЕВОМУ типу (фича 0066): литерал
+            // bool/enum восстанавливается в `FALSE`/`TRUE` / имя константы.
+            // Покрывает и тела `enter`/`exit`/`always` — они идут сюда же через
+            // `print_statement` (site «enter» ADR 0066).
+            if let ExpressionNode::Assign(lhs, rhs) = expr.as_ref()
+                && let ExpressionNode::Variable(var) = lhs.as_ref()
+                && let Some(ty) = assign_target_type(&var.borrow())
+            {
+                let value = coerce_to(rhs, &ty, model)?;
+                p.ident(&format!("{} := {};", variable_ident(&var.borrow()), value))
+                    .nl();
+                return Ok(());
+            }
             let text = print_expression(expr, model)?;
             p.ident(&format!("{};", text)).nl();
             Ok(())
@@ -137,7 +152,9 @@ pub(crate) fn print_statement(
                 ty: ty.clone(),
             });
             if let Some(init) = init {
-                let text = print_expression(init, model)?;
+                // Инициализатор локального объявления — тоже по целевому типу
+                // (фича 0066, site «сброс/инициализация»).
+                let text = coerce_to(init, ty, model)?;
                 p.ident(&format!("{} := {};", name, text)).nl();
             }
             Ok(())
@@ -392,6 +409,83 @@ mod tests {
                 _ => None,
             })
             .expect("нет блока always")
+    }
+
+    /// Печатает тело `always` стартового состояния модели с перечислением
+    /// `Command` и переменной `command`.
+    fn enum_always(body: &str) -> String {
+        let src = format!(
+            "enum Command {{ Up, Down, Stop }}\nvar command: Command := Up;\n\
+             start S {{ always {{ {} }} }}",
+            body
+        );
+        let (ast, _) = crate::parse(&src, 0).unwrap();
+        let rc = construct_model(&ast, None, &[]).unwrap();
+        let model = rc.borrow();
+        let block = always_body(&model, "S");
+        let mut text = String::new();
+        let mut out = StmtOutput::default();
+        {
+            let mut p = Printer::new(4, &mut text);
+            print_statement(&block, &model, &mut p, &mut out, None).expect("должно печататься");
+        }
+        text
+    }
+
+    /// **0066 (A1): `bit`/`BOOL` литерал в присваивании → `FALSE`/`TRUE`.**
+    #[test]
+    fn bool_literal_coerced_to_false_true() {
+        let (st, _) = always_of("b := 0; b := 1;");
+        assert!(st.contains("b := FALSE;"), "0 обязан стать FALSE:\n{st}");
+        assert!(st.contains("b := TRUE;"), "1 обязан стать TRUE:\n{st}");
+        assert!(
+            !st.contains("b := 0;") && !st.contains("b := 1;"),
+            "число осталось:\n{st}"
+        );
+    }
+
+    /// **0066 (A2): значение перечисления в присваивании → имя константы.**
+    ///
+    /// `command := Stop` приходит числом (`Number(2)`), но печатается
+    /// `command := Command_Stop` — совпадает с объявлением константы.
+    #[test]
+    fn enum_value_coerced_to_constant_name() {
+        let st = enum_always("command := Stop;");
+        assert!(
+            st.contains("command := Command_Stop;"),
+            "значение перечисления обязано стать именем константы:\n{st}"
+        );
+        assert!(
+            !st.contains("command := 2;"),
+            "число не должно остаться:\n{st}"
+        );
+    }
+
+    /// **0066 (A4/T13, негативный сторож): значение без варианта → число.**
+    ///
+    /// Перечислимой переменной можно присвоить произвольное число; подмена его
+    /// именем «похожего» варианта — тихая ложь (правило 4). Мутация «подобрать
+    /// ближайший вариант» обязана валить этот тест.
+    #[test]
+    fn enum_value_without_variant_stays_number() {
+        let src = "enum Command { Up, Down, Stop }\nvar command: Command := Up;\nstart S;";
+        let (ast, _) = crate::parse(src, 0).unwrap();
+        let rc = construct_model(&ast, None, &[]).unwrap();
+        let model = rc.borrow();
+        let ty = TypeNode::Enum("Command".to_string());
+        // 7 не соответствует ни одному варианту (0/1/2) → печатается числом.
+        let orphan =
+            crate::generator::st::st_expr::coerce_to(&ExpressionNode::Number(7), &ty, &model)
+                .unwrap();
+        assert_eq!(
+            orphan, "7",
+            "значение без варианта обязано печататься числом"
+        );
+        // 2 соответствует Stop → имя константы.
+        let named =
+            crate::generator::st::st_expr::coerce_to(&ExpressionNode::Number(2), &ty, &model)
+                .unwrap();
+        assert_eq!(named, "Command_Stop");
     }
 
     /// `if` → `IF … THEN … END_IF;` — с обязательным закрытием.

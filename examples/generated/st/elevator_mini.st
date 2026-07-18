@@ -53,12 +53,12 @@ VAR CONSTANT
 END_VAR
     CASE state OF
         0: (* INIT *)
-            command := 2;
+            command := Command_Stop;
             state := 2; (* Idle *)
         1: (* AtFloor *)
             DoorOpen := TRUE;
             IF CabinButton_DC THEN
-                command := 2;
+                command := Command_Stop;
                 state := 2; (* Idle *)
             END_IF;
         2: (* Idle *)
@@ -176,13 +176,13 @@ END_VAR
                 current_floor := 9;
             END_IF;
             IF target_floor > current_floor THEN
-                command := 0;
+                command := Command_Up;
             END_IF;
             IF target_floor < current_floor THEN
-                command := 1;
+                command := Command_Down;
             END_IF;
             IF target_floor = current_floor THEN
-                command := 2;
+                command := Command_Stop;
                 target_floor := 0;
                 state := 1; (* AtFloor *)
             END_IF;
