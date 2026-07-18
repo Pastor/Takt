@@ -41,6 +41,9 @@ fn value_to_json(v: &Value) -> serde_json::Value {
             serde_json::Value::Number(serde_json::Number::from_f64(*f).unwrap_or(0.into()))
         }
         Value::Boolean(b) => serde_json::Value::Bool(*b),
+        // q(m, n): сохраняем **представление** целым; при загрузке `coerce_to_type`
+        // трактует Number как готовый repr (задача 0061-01) → круг-трип точен.
+        Value::Fixed { repr, .. } => serde_json::Value::Number((*repr).into()),
         Value::Array(arr) => serde_json::Value::Array(arr.iter().map(value_to_json).collect()),
     }
 }

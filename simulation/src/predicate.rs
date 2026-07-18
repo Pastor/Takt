@@ -208,7 +208,7 @@ pub(crate) fn eval_condition(
             let bits = match value {
                 Value::Number(n) => n,
                 Value::Boolean(b) => i64::from(b),
-                Value::Real(_) | Value::Array(_) => {
+                Value::Real(_) | Value::Array(_) | Value::Fixed { .. } => {
                     return Err(Diagnostic::error(
                         loc,
                         "доступ к биту возможен только у целого значения".to_string(),
