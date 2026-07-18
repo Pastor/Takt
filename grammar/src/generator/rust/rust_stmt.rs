@@ -275,6 +275,98 @@ pub(crate) fn print_block(
     Ok(())
 }
 
+/// Сворачиваемо ли последнее выражение хвостовой позиции в значение (0058-01).
+///
+/// **Единственный источник истины** правила «всё или ничего» (ADR 0058, R4):
+/// печатник [`print_tail`] вызывается только после `true` и форму узла повторно
+/// не разбирает. Разойдись предикат и печатник — тот же класс дефекта, что
+/// `function_needs` / `rust_expr::call` («разойдись они, код не собрался бы»).
+pub(crate) fn tail_foldable(stmt: &StatementNode) -> bool {
+    match stmt {
+        // `return e;` в хвосте → `e`.
+        StatementNode::Return(Some(_)) => true,
+        // Блок сворачиваем, если сворачиваем его ПОСЛЕДНИЙ оператор (операторы
+        // перед ним печатаются как есть — R8).
+        StatementNode::Block(items) => items.last().is_some_and(tail_foldable),
+        // `if/else` сворачиваем ⟺ сворачиваемы ОБЕ ветки (рекурсивно).
+        StatementNode::If {
+            then_,
+            else_: Some(else_),
+            ..
+        } => tail_foldable(then_) && tail_foldable(else_),
+        // `if` без `else` (значения ветки-пропуска нет) и всё прочее — нет.
+        _ => false,
+    }
+}
+
+/// Печатает хвостовую позицию тела/ветки как **выражение** (0058-02).
+///
+/// `return e;` → `e`; завершающий `if/else` со сворачиваемыми ветвями →
+/// `if c { <хвост> } else { <хвост> }` (рекурсивно, цепочка `else if` — та же
+/// рекурсия по `else_ = If`). Возвращает `true`, если оператор напечатан как
+/// хвост; `false` — печатать обычным путём (`return` остаётся, поведение как
+/// сегодня; ADR 0058, R5).
+///
+/// Годится как [`TailPrinter`] для [`print_block`] — сигнатура совпадает.
+pub(crate) fn print_tail(
+    stmt: &StatementNode,
+    scope: &mut Scope,
+    p: &mut Printer,
+    out: &mut StmtOutput,
+) -> Result<bool, Diagnostic> {
+    match stmt {
+        StatementNode::Return(Some(expr)) => {
+            let text = print_expression(expr, scope)?;
+            p.ident(unwrap_outer(&text)).nl();
+            Ok(true)
+        }
+        // Хвостовой `if/else` — только когда сворачиваемы ОБЕ ветки (предикат —
+        // единственное место решения). Условие через `unwrap_outer`: иначе
+        // `if (c) {…}` словил бы `unused_parens` (A-3 ADR).
+        StatementNode::If {
+            cond,
+            then_,
+            else_: Some(else_),
+        } if tail_foldable(stmt) => {
+            p.ident(&format!(
+                "if {} {{",
+                unwrap_outer(&print_as_bool(cond, scope)?)
+            ))
+            .nl();
+            p.up();
+            print_tail_branch(then_, scope, p, out)?;
+            p.down();
+            p.ident("} else {").nl();
+            p.up();
+            print_tail_branch(else_, scope, p, out)?;
+            p.down();
+            p.ident("}").nl();
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}
+
+/// Печатает ветку хвостового `if/else` — **через `print_block`** с тем же
+/// печатником хвоста.
+///
+/// Мимо `print_block` нельзя (R9): он несёт свёртку мёртвого инициализатора
+/// (`rust_live`); ветка в обход потеряла бы перенос объявлений и словила
+/// `needless_late_init`. Это же сохраняет операторы перед хвостом ветки (R8).
+fn print_tail_branch(
+    stmt: &StatementNode,
+    scope: &mut Scope,
+    p: &mut Printer,
+    out: &mut StmtOutput,
+) -> Result<(), Diagnostic> {
+    match stmt {
+        StatementNode::Block(items) => print_block(items, Some(&print_tail), scope, p, out),
+        // Не-Block сворачиваемый хвост (голый `return e` или вложенный `if/else`):
+        // предикат уже гарантировал сворачиваемость, print_tail его напечатает.
+        other => print_tail(other, scope, p, out).map(|_| ()),
+    }
+}
+
 /// Печатает оператор Lam в Rust.
 ///
 /// # Ошибки
@@ -571,5 +663,67 @@ pub(crate) fn print_statement_ctx(
             Ok(0)
         }
         StatementNode::Unresolved(_) => Err(unsupported("неразрешённый оператор")),
+    }
+}
+
+#[cfg(test)]
+mod tail_tests {
+    use super::tail_foldable;
+    use crate::semantic::{ExpressionNode, StatementNode};
+
+    fn ret(n: i64) -> StatementNode {
+        StatementNode::Return(Some(Box::new(ExpressionNode::Number(n))))
+    }
+    fn if_(then_: StatementNode, else_: Option<StatementNode>) -> StatementNode {
+        StatementNode::If {
+            cond: Box::new(ExpressionNode::Bool(true)),
+            then_: Box::new(then_),
+            else_: else_.map(Box::new),
+        }
+    }
+
+    /// `return e;` в хвосте — сворачиваем (правило 1 ADR).
+    #[test]
+    fn return_is_foldable() {
+        assert!(tail_foldable(&ret(1)));
+    }
+
+    /// `if/else` со сворачиваемыми ветвями — сворачиваем (правило 2).
+    #[test]
+    fn if_else_both_return_is_foldable() {
+        assert!(tail_foldable(&if_(ret(1), Some(ret(2)))));
+    }
+
+    /// Блок сворачиваем по СВОЕМУ последнему оператору (операторы до него — как
+    /// есть, R8).
+    #[test]
+    fn block_folds_on_last_statement() {
+        let block = StatementNode::Block(vec![
+            StatementNode::Expression(Box::new(ExpressionNode::Number(0))),
+            ret(1),
+        ]);
+        assert!(tail_foldable(&block));
+    }
+
+    /// **T11 (негативный сторож):** `if` БЕЗ `else` не сворачиваем (значения
+    /// ветки-пропуска нет, правило 3). Мутация «сворачиваем» обязана валить тест.
+    #[test]
+    fn if_without_else_is_not_foldable() {
+        assert!(!tail_foldable(&if_(ret(1), None)));
+    }
+
+    /// Смешанные ветки (одна не завершается сворачиваемым хвостом) — не
+    /// сворачиваем (правило 2: «всё или ничего»).
+    #[test]
+    fn mixed_branches_are_not_foldable() {
+        let else_no_return = StatementNode::Expression(Box::new(ExpressionNode::Number(5)));
+        assert!(!tail_foldable(&if_(ret(1), Some(else_no_return))));
+    }
+
+    /// Цепочка `else if` (вложенный `if/else` в `else_`) — сворачиваема целиком.
+    #[test]
+    fn else_if_chain_is_foldable() {
+        let inner = if_(ret(2), Some(ret(3)));
+        assert!(tail_foldable(&if_(ret(1), Some(inner))));
     }
 }

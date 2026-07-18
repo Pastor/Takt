@@ -12,11 +12,11 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
-use crate::generator::rust::rust_expr::{Scope, print_expression, unwrap_outer};
+use crate::generator::rust::rust_expr::Scope;
 use crate::generator::rust::rust_map::RustMap;
 use crate::generator::rust::rust_name::rust_value_name;
 use crate::generator::rust::rust_needs::function_needs;
-use crate::generator::rust::rust_stmt::{StmtOutput, print_block, print_statement};
+use crate::generator::rust::rust_stmt::{StmtOutput, print_block, print_statement, print_tail};
 use crate::generator::rust::rust_type::rust_type;
 use crate::semantic::minimap::Name;
 use crate::semantic::type_node::TypeNode;
@@ -44,23 +44,9 @@ fn print_body_with_tail(
     // Тело функции печатается ОБЩИМ печатником блока — иначе оно не получило бы
     // переноса объявлений с мёртвым инициализатором (`rust_live`), и
     // `travel_time` в `stacker.lam` остался бы с `needless_late_init`.
-    // Хвостовой `return` заменяется выражением через колбэк.
-    print_block(
-        items,
-        Some(
-            &|stmt: &StatementNode, scope: &mut Scope, p: &mut Printer, _out: &mut StmtOutput| {
-                let StatementNode::Return(Some(expr)) = stmt else {
-                    return Ok(false);
-                };
-                let text = print_expression(expr, scope)?;
-                p.ident(unwrap_outer(&text)).nl();
-                Ok(true)
-            },
-        ),
-        scope,
-        p,
-        out,
-    )
+    // Хвостовой `return` (и завершающий `if/else` со сворачиваемыми ветвями,
+    // фича 0058) заменяется выражением через `print_tail`.
+    print_block(items, Some(&print_tail), scope, p, out)
 }
 
 /// Печатает локальные функции всех моделей файла.
