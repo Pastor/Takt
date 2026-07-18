@@ -428,6 +428,53 @@ fn port_address_dangling_reference_is_error() {
     );
 }
 
+// ─── Фича 0061: fixed-point q(m, n) — смешение (T6) и приведение (T7) ─────────
+
+/// T6 (правило 6 ADR 0061): неявное смешение `q(8, 8)` с `u8` в арифметике →
+/// ошибка SE-059, а не молчаливая потеря точности.
+#[test]
+fn fixed_mixing_with_integer_is_se059() {
+    let err = build_file_err("tests/data/semantic/invalid/fixed_mixing.lam");
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-059"),
+        "смешение q(8, 8) и u8 должно давать SE-059, получено: {:?}",
+        err.code
+    );
+}
+
+/// T6: два разных формата `q` — тоже смешение (SE-059).
+#[test]
+fn fixed_mixing_different_formats_is_se059() {
+    let err = build_from_src(
+        "model M { var a: q(8, 8) := 1.5; var b: q(4, 4) := 1.5; \
+         start S { always { a := a + b; } ref S: a = b; } } start E = M;",
+    )
+    .expect_err("q(8,8) + q(4,4) — смешение");
+    assert_eq!(err.code.as_deref(), Some("SE-059"), "получено: {:?}", err.code);
+}
+
+/// T6: `q + q` одного формата — допустимо (тот же тип, не смешение).
+#[test]
+fn fixed_same_format_addition_is_valid() {
+    let node = build_from_src(
+        "model M { var a: q(8, 8) := 1.5; var c: q(8, 8) := 0.5; \
+         start S { always { a := a + c; } ref S: a = c; } } start E = M;",
+    );
+    assert!(node.is_ok(), "q(8,8) + q(8,8) должно быть валидно: {:?}", node.err());
+}
+
+/// T7 (правило 6 ADR): явное приведение `u8 as q(8, 8)` снимает смешение.
+#[test]
+fn fixed_cast_resolves_mixing() {
+    let node = build_file("tests/data/semantic/valid/fixed_cast.lam");
+    assert!(
+        node.is_ok(),
+        "приведение `b as q(8, 8)` должно сделать выражение валидным: {:?}",
+        node.err()
+    );
+}
+
 // ─── Тесты корневой модели ───────────────────────────────────────────────────
 
 /// Корневая модель без объявлений пуста и не имеет имени.

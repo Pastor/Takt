@@ -32,6 +32,7 @@ use std::rc::Rc;
 mod common;
 mod constant_conditions;
 mod enums;
+mod fixed;
 mod implicit_bool;
 mod nondeterminism;
 mod ports;
@@ -52,6 +53,7 @@ use common::{
     get_state_loc, get_state_name, validate_conditions, validate_expression, validate_reference,
 };
 use enums::{validate_bit_values, validate_enum_type_declarations, validate_enum_values};
+use fixed::check_fixed_mixing;
 use ports::{check_port_addresses, validate_variables};
 use states::{model_only_one_start_state, validate_state_references};
 use types::check_array_sizes;
@@ -78,6 +80,7 @@ pub fn validate_model(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     validate_conditions(model.clone())?;
     check_array_sizes(model.clone())?;
     check_port_addresses(model.clone())?;
+    check_fixed_mixing(model.clone())?; // T6 (0061): запрет смешения q(m, n)
 
     // Ce16: проверка рекурсивных псевдонимов — ошибка при первом цикле
     let recursive_diags = check_recursive_type_aliases(model.clone());

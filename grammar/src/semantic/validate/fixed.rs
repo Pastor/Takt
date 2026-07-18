@@ -1,0 +1,288 @@
+//! T6 (фича 0061): запрет неявного смешения `q(m, n)` с другими типами.
+//!
+//! Правило 6 ADR 0061: `q(m, n)` в арифметике сочетается **только** с тем же
+//! `q(m, n)`. Смешение с иным `q`, целым, `float` и т. п. — ошибка `SE-059`, а
+//! не молчаливая потеря точности (иначе [`wider_type`] вернул бы `Unsupported`,
+//! и расхождение уехало бы в кодоген). Выход — явное приведение `… as q(m, n)`
+//! (узел `Cast`), который смешение снимает.
+//!
+//! Обход повторяет [`unused`](crate::semantic::unused): выражения
+//! инициализаторов, тел функций, именованных блоков и блоков состояний.
+//! Вложенные модели обходит [`validate_model`](super::validate_model), поэтому
+//! здесь — только текущий уровень.
+//!
+//! [`wider_type`]: crate::semantic::type_inference::wider_type
+
+use super::*;
+use crate::semantic::type_inference::extract_type;
+
+/// Проверяет запрет смешения `q(m, n)` во всех выражениях **уровня** модели.
+pub(super) fn check_fixed_mixing(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    // Снимаем владельческие копии до обхода: `extract_type` не берёт
+    // `borrow_mut`, но держать borrow через `?`-возвраты незачем.
+    let (vars, funcs, blocks, states) = {
+        let b = model.borrow();
+        (
+            b.variables.values().cloned().collect::<Vec<_>>(),
+            b.functions.values().cloned().collect::<Vec<_>>(),
+            b.named_blocks.clone(),
+            b.states.values().cloned().collect::<Vec<_>>(),
+        )
+    };
+
+    for var in &vars {
+        if let Some(expr) = var_init(var) {
+            check_expr(expr, &model)?;
+        }
+    }
+    for func in &funcs {
+        if let FunctionDefinitionNode::Local { body, .. } = func {
+            check_stmt(body, &model)?;
+        }
+    }
+    for block in &blocks {
+        if let Some(stmt) = block.statement() {
+            check_stmt(stmt, &model)?;
+        }
+    }
+    for state in &states {
+        check_state(state, &model)?;
+    }
+    Ok(())
+}
+
+/// Инициализатор переменной (или `None` для `Unresolved`).
+fn var_init(var: &VariableNode) -> Option<&ExpressionNode> {
+    match var {
+        VariableNode::Simple { expr, .. }
+        | VariableNode::Port { expr, .. }
+        | VariableNode::Const { expr, .. } => Some(expr),
+        VariableNode::Unresolved => None,
+    }
+}
+
+/// Блоки и рёбра состояния (условия рёбер — отдельная грамматика, здесь не
+/// проверяются: смешение — свойство **выражений**, правило 6 ADR).
+fn check_state(state: &StateNode, model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let named_blocks = match state {
+        StateNode::Simple { named_blocks, .. } | StateNode::Implement { named_blocks, .. } => {
+            named_blocks
+        }
+        StateNode::Unresolved => return Ok(()),
+    };
+    for block in named_blocks {
+        if let Some(stmt) = block.statement() {
+            check_stmt(stmt, model)?;
+        }
+    }
+    Ok(())
+}
+
+/// Рекурсивно проходит оператор, проверяя все вложенные выражения.
+fn check_stmt(stmt: &StatementNode, model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    match stmt {
+        StatementNode::Block(stmts) => {
+            for s in stmts {
+                check_stmt(s, model)?;
+            }
+        }
+        StatementNode::Expression(e) => check_expr(e, model)?,
+        StatementNode::If { cond, then_, else_ } => {
+            check_expr(cond, model)?;
+            check_stmt(then_, model)?;
+            if let Some(e) = else_ {
+                check_stmt(e, model)?;
+            }
+        }
+        StatementNode::Loop { cond, body } => {
+            if let Some(c) = cond {
+                check_expr(c, model)?;
+            }
+            check_stmt(body, model)?;
+        }
+        StatementNode::For {
+            init,
+            cond,
+            step,
+            body,
+        } => {
+            if let Some(s) = init {
+                check_stmt(s, model)?;
+            }
+            if let Some(c) = cond {
+                check_expr(c, model)?;
+            }
+            if let Some(s) = step {
+                check_expr(s, model)?;
+            }
+            check_stmt(body, model)?;
+        }
+        StatementNode::Variable(_, _, Some(e)) => check_expr(e, model)?,
+        StatementNode::Return(Some(e)) => check_expr(e, model)?,
+        StatementNode::Match { expr, arms } => {
+            check_expr(expr, model)?;
+            for arm in arms {
+                check_stmt(&arm.body, model)?;
+            }
+        }
+        StatementNode::None
+        | StatementNode::Unresolved(_)
+        | StatementNode::Variable(_, _, None)
+        | StatementNode::Return(None)
+        | StatementNode::Continue
+        | StatementNode::Break
+        | StatementNode::InlineFormula(_) => {}
+    }
+    Ok(())
+}
+
+/// Рекурсивно проходит выражение. У арифметических бинарных узлов дополнительно
+/// проверяет запрет смешения — **после** рекурсии в операнды, чтобы самое
+/// вложенное смешение сообщалось первым.
+fn check_expr(expr: &ExpressionNode, model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    match expr {
+        // Арифметика: сюда бьёт правило 6.
+        ExpressionNode::Add(l, r)
+        | ExpressionNode::Subtract(l, r)
+        | ExpressionNode::Multiply(l, r)
+        | ExpressionNode::Divide(l, r)
+        | ExpressionNode::Modulo(l, r)
+        | ExpressionNode::Power(l, r) => {
+            check_expr(l, model)?;
+            check_expr(r, model)?;
+            check_mixing(l, r, model)?;
+        }
+        // Прочие бинарные (сравнения, логика, битовые, сдвиги, присваивание):
+        // только рекурсия — смешение ловит арифметика, а `as` — узел `Cast`.
+        ExpressionNode::ShiftLeft(l, r)
+        | ExpressionNode::ShiftRight(l, r)
+        | ExpressionNode::BitwiseAnd(l, r)
+        | ExpressionNode::BitwiseXor(l, r)
+        | ExpressionNode::BitwiseOr(l, r)
+        | ExpressionNode::Less(l, r)
+        | ExpressionNode::More(l, r)
+        | ExpressionNode::LessEqual(l, r)
+        | ExpressionNode::MoreEqual(l, r)
+        | ExpressionNode::Equal(l, r)
+        | ExpressionNode::NotEqual(l, r)
+        | ExpressionNode::And(l, r)
+        | ExpressionNode::Or(l, r)
+        | ExpressionNode::Assign(l, r) => {
+            check_expr(l, model)?;
+            check_expr(r, model)?;
+        }
+        // Унарные и обёртки. `Cast` рекурсирует в операнд, но само приведение
+        // смешением не является — оно его и снимает.
+        ExpressionNode::Parenthesis(e)
+        | ExpressionNode::BitAccess(e, _)
+        | ExpressionNode::NamedFunctionBox(e, _)
+        | ExpressionNode::Not(e)
+        | ExpressionNode::BitwiseNot(e)
+        | ExpressionNode::UnaryPlus(e)
+        | ExpressionNode::Negate(e)
+        | ExpressionNode::Cast(e, _) => check_expr(e, model)?,
+        ExpressionNode::ConditionalOperator(c, t, e) => {
+            check_expr(c, model)?;
+            check_expr(t, model)?;
+            check_expr(e, model)?;
+        }
+        ExpressionNode::CodeBlock(e, stmt) => {
+            check_expr(e, model)?;
+            check_stmt(stmt, model)?;
+        }
+        ExpressionNode::Function(_, args)
+        | ExpressionNode::Array(args)
+        | ExpressionNode::Initializer(args) => {
+            for a in args {
+                check_expr(a, model)?;
+            }
+        }
+        // Листья: подвыражений нет.
+        ExpressionNode::None
+        | ExpressionNode::Unresolved(_)
+        | ExpressionNode::ArraySubscript(_, _)
+        | ExpressionNode::ArraySlice(_, _, _)
+        | ExpressionNode::Number(_)
+        | ExpressionNode::Rational(_, _)
+        | ExpressionNode::String(_)
+        | ExpressionNode::Type(_)
+        | ExpressionNode::Address(_, _)
+        | ExpressionNode::Bool(_)
+        | ExpressionNode::Variable(_)
+        | ExpressionNode::Model(_)
+        | ExpressionNode::Condition(_)
+        | ExpressionNode::List(_) => {}
+    }
+    Ok(())
+}
+
+/// Правило 6: если хотя бы один операнд — `q(m, n)`, а типы операндов не
+/// совпадают, это смешение → `SE-059`. Типы, которые вывести не удалось,
+/// пропускаются (их ошибки поднимут свои проходы).
+fn check_mixing(
+    l: &ExpressionNode,
+    r: &ExpressionNode,
+    model: &Rc<RefCell<ModelNode>>,
+) -> Result<(), Diagnostic> {
+    let (Ok(lt), Ok(rt)) = (
+        extract_type(l, model.clone()),
+        extract_type(r, model.clone()),
+    ) else {
+        return Ok(());
+    };
+    let involves_fixed =
+        matches!(lt, TypeNode::Fixed { .. }) || matches!(rt, TypeNode::Fixed { .. });
+    if involves_fixed && lt != rt {
+        let loc = first_loc(l).or_else(|| first_loc(r)).unwrap_or(Location::Implicit);
+        return Err(se059(loc, &lt, &rt));
+    }
+    Ok(())
+}
+
+/// `SE-059` — неявное смешение `q(m, n)` с другим типом (правило 6 ADR 0061).
+fn se059(loc: Location, lt: &TypeNode, rt: &TypeNode) -> Diagnostic {
+    Diagnostic::declaration_error(
+        loc,
+        format!(
+            "неявное смешение типов '{}' и '{}' в арифметике fixed-point запрещено; \
+             приведите операнд явно ('… as q(m, n)')",
+            lt, rt
+        ),
+    )
+    .with_code("SE-059")
+}
+
+/// Позиция для диагностики: первая переменная/порт/константа в выражении.
+/// У `ExpressionNode` собственной позиции нет (фича 0056), поэтому берём её у
+/// ближайшего именованного узла.
+fn first_loc(expr: &ExpressionNode) -> Option<Location> {
+    match expr {
+        ExpressionNode::Variable(v)
+        | ExpressionNode::ArraySubscript(v, _)
+        | ExpressionNode::ArraySlice(v, _, _) => var_loc(&v.borrow()),
+        ExpressionNode::Parenthesis(e)
+        | ExpressionNode::BitAccess(e, _)
+        | ExpressionNode::Not(e)
+        | ExpressionNode::BitwiseNot(e)
+        | ExpressionNode::UnaryPlus(e)
+        | ExpressionNode::Negate(e)
+        | ExpressionNode::Cast(e, _) => first_loc(e),
+        ExpressionNode::Add(l, r)
+        | ExpressionNode::Subtract(l, r)
+        | ExpressionNode::Multiply(l, r)
+        | ExpressionNode::Divide(l, r)
+        | ExpressionNode::Modulo(l, r)
+        | ExpressionNode::Power(l, r) => first_loc(l).or_else(|| first_loc(r)),
+        _ => None,
+    }
+}
+
+/// Позиция объявления переменной.
+fn var_loc(var: &VariableNode) -> Option<Location> {
+    match var {
+        VariableNode::Simple { loc, .. }
+        | VariableNode::Port { loc, .. }
+        | VariableNode::Const { loc, .. } => Some(*loc),
+        VariableNode::Unresolved => None,
+    }
+}
