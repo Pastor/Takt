@@ -104,7 +104,7 @@ impl ElevatorEngine {
     }
 
     /// Один такт автомата.
-    fn tick<H: Hal>(&mut self, hal: &mut H, current_floor: &mut u8, has_call: &mut u8, target_floor: &mut u8) {
+    fn tick<H: Hal>(&mut self, shared: &mut ElevatorShared, hal: &mut H) {
         if self.state == ElevatorEngineState::Init {
             hal.door_open();
             self.state = ElevatorEngineState::Idle;
@@ -112,12 +112,12 @@ impl ElevatorEngine {
         match self.state {
             ElevatorEngineState::DoorClosing => {
                 hal.door_close();
-                if (((hal.read_u8(InU8Port::SensorsCab) >> 1) & 1) != 0) | ((*current_floor) == (*target_floor)) {
+                if (((hal.read_u8(InU8Port::SensorsCab) >> 1) & 1) != 0) | (shared.current_floor == shared.target_floor) {
                     hal.door_open();
                     self.state = ElevatorEngineState::Idle;
-                } else if (!(((hal.read_u8(InU8Port::SensorsCab) >> 1) & 1) != 0)) & ((*current_floor) < (*target_floor)) {
+                } else if (!(((hal.read_u8(InU8Port::SensorsCab) >> 1) & 1) != 0)) & (shared.current_floor < shared.target_floor) {
                     self.state = ElevatorEngineState::MovingUp;
-                } else if (!(((hal.read_u8(InU8Port::SensorsCab) >> 1) & 1) != 0)) & ((*current_floor) > (*target_floor)) {
+                } else if (!(((hal.read_u8(InU8Port::SensorsCab) >> 1) & 1) != 0)) & (shared.current_floor > shared.target_floor) {
                     self.state = ElevatorEngineState::MovingDown;
                 }
             }
@@ -130,7 +130,7 @@ impl ElevatorEngine {
                 if (hal.read_u8(InU8Port::SensorsCab) & 1) != 0 {
                     hal.scan_cabin_buttons();
                 }
-                if ((*has_call) == 1) & (!((*current_floor) == (*target_floor))) {
+                if (shared.has_call == 1) & (!(shared.current_floor == shared.target_floor)) {
                     self.state = ElevatorEngineState::DoorClosing;
                 }
             }
@@ -141,10 +141,10 @@ impl ElevatorEngine {
                 if (hal.read_u8(InU8Port::SensorsCab) & 1) != 0 {
                     hal.scan_cabin_buttons();
                 }
-                if (*current_floor) == (*target_floor) {
+                if shared.current_floor == shared.target_floor {
                     hal.motor_stop();
                     hal.door_open();
-                    (*has_call) = 0;
+                    shared.has_call = 0;
                     self.state = ElevatorEngineState::DoorOpening;
                 }
             }
@@ -155,10 +155,10 @@ impl ElevatorEngine {
                 if (hal.read_u8(InU8Port::SensorsCab) & 1) != 0 {
                     hal.scan_cabin_buttons();
                 }
-                if (*current_floor) == (*target_floor) {
+                if shared.current_floor == shared.target_floor {
                     hal.motor_stop();
                     hal.door_open();
-                    (*has_call) = 0;
+                    shared.has_call = 0;
                     self.state = ElevatorEngineState::DoorOpening;
                 }
             }
@@ -193,11 +193,17 @@ enum ElevatorMiddleSeq {
     Engine4,
 }
 
-/// Модель 'elevator'.
-pub struct Elevator<H: Hal> {
+/// Общие переменные модели 'elevator', разделяемые под-моделями.
+struct ElevatorShared {
     current_floor: u8,
     has_call: u8,
     target_floor: u8,
+}
+
+/// Модель 'elevator'.
+pub struct Elevator<H: Hal> {
+    /// Общие с под-моделями переменные (фича 0059).
+    shared: ElevatorShared,
     state: ElevatorState,
     /// Текущий шаг последовательной композиции состояния 'Middle'.
     middle_seq: ElevatorMiddleSeq,
@@ -219,9 +225,11 @@ impl<H: Hal> Elevator<H> {
     /// невозможно: без `hal` модель не конструируется.
     pub fn new(hal: H) -> Self {
         Self {
-            current_floor: 1,
-            has_call: 0,
-            target_floor: 1,
+            shared: ElevatorShared {
+                current_floor: 1,
+                has_call: 0,
+                target_floor: 1,
+            },
             state: ElevatorState::Init,
             middle_seq: ElevatorMiddleSeq::Engine0,
             main: ElevatorEngine::new(),
@@ -240,9 +248,9 @@ impl<H: Hal> Elevator<H> {
     /// Блоки `enter` здесь не исполняются: по контракту ADR 0033 вход
     /// в стартовое состояние — это поведение, и оно живёт в `tick`.
     pub fn init(&mut self) {
-        self.current_floor = 1;
-        self.has_call = 0;
-        self.target_floor = 1;
+        self.shared.current_floor = 1;
+        self.shared.has_call = 0;
+        self.shared.target_floor = 1;
         self.state = ElevatorState::Init;
         self.middle_seq = ElevatorMiddleSeq::Engine0;
         self.main.init();
@@ -266,40 +274,40 @@ impl<H: Hal> Elevator<H> {
             ElevatorState::End => {
             }
             ElevatorState::Main => {
-                self.main.tick(&mut self.hal, &mut self.current_floor, &mut self.has_call, &mut self.target_floor);
+                self.main.tick(&mut self.shared, &mut self.hal);
                 if self.main.is_done() {
                     self.state = ElevatorState::Middle;
                 }
             }
             ElevatorState::Middle => {
                 if self.middle_seq == ElevatorMiddleSeq::Engine0 {
-                    self.middle_engine0.tick(&mut self.hal, &mut self.current_floor, &mut self.has_call, &mut self.target_floor);
+                    self.middle_engine0.tick(&mut self.shared, &mut self.hal);
                     if self.middle_engine0.is_done() {
                         self.middle_group1_engine0.init();
                         self.middle_group1_engine1.init();
                         self.middle_seq = ElevatorMiddleSeq::Group1;
                     }
                 } else if self.middle_seq == ElevatorMiddleSeq::Group1 {
-                    self.middle_group1_engine0.tick(&mut self.hal, &mut self.current_floor, &mut self.has_call, &mut self.target_floor);
-                    self.middle_group1_engine1.tick(&mut self.hal, &mut self.current_floor, &mut self.has_call, &mut self.target_floor);
+                    self.middle_group1_engine0.tick(&mut self.shared, &mut self.hal);
+                    self.middle_group1_engine1.tick(&mut self.shared, &mut self.hal);
                     if self.middle_group1_engine0.is_done() && self.middle_group1_engine1.is_done() {
                         self.middle_engine2.init();
                         self.middle_seq = ElevatorMiddleSeq::Engine2;
                     }
                 } else if self.middle_seq == ElevatorMiddleSeq::Engine2 {
-                    self.middle_engine2.tick(&mut self.hal, &mut self.current_floor, &mut self.has_call, &mut self.target_floor);
+                    self.middle_engine2.tick(&mut self.shared, &mut self.hal);
                     if self.middle_engine2.is_done() {
                         self.middle_engine3.init();
                         self.middle_seq = ElevatorMiddleSeq::Engine3;
                     }
                 } else if self.middle_seq == ElevatorMiddleSeq::Engine3 {
-                    self.middle_engine3.tick(&mut self.hal, &mut self.current_floor, &mut self.has_call, &mut self.target_floor);
+                    self.middle_engine3.tick(&mut self.shared, &mut self.hal);
                     if self.middle_engine3.is_done() {
                         self.middle_engine4.init();
                         self.middle_seq = ElevatorMiddleSeq::Engine4;
                     }
                 } else if self.middle_seq == ElevatorMiddleSeq::Engine4 {
-                    self.middle_engine4.tick(&mut self.hal, &mut self.current_floor, &mut self.has_call, &mut self.target_floor);
+                    self.middle_engine4.tick(&mut self.shared, &mut self.hal);
                     if self.middle_engine4.is_done() {
                         self.state = ElevatorState::End;
                     }

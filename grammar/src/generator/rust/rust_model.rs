@@ -31,7 +31,7 @@ use crate::generator::rust::rust_type::rust_type;
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{Formula, ModelNode, StateNode, VariableNode};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Экземпляр под-модели, лежащий полем в `struct` родителя.
 pub(crate) struct Instance {
@@ -330,60 +330,10 @@ pub(crate) fn model_instances(
     Ok(out)
 }
 
-/// Возвращает переменные **корня**, которыми пользуется под-модель.
-///
-/// Один источник истины для параметров `tick` и для аргументов вызова: разойдись
-/// они, порождённый код не собрался бы (либо, хуже, связал бы не те переменные).
-///
-/// В цели `c` этой задачи нет — там под-модель получает указатель `main` и
-/// пишет `main->command`. В Rust так нельзя: `self.cabin.tick(&mut self)`
-/// заимствует `self` дважды. Ровно ту же задачу — и по той же причине
-/// («указателей нет») — цель `st` решает через `VAR_IN_OUT`.
-///
-/// Список считается по **фактическому** использованию, а не «все переменные
-/// корня»: лишний параметр — это лишний обязательный аргумент у каждого вызова.
-pub(crate) fn shared_variables(map: &RustMap, sub: &Name) -> Vec<(String, TypeNode)> {
-    let Some(root) = map.root_model_node() else {
-        return Vec::new();
-    };
-    let Ok(sub_model) = map.raw_model_at(sub.clone()) else {
-        return Vec::new();
-    };
-    let usage = crate::semantic::unused::compute_usage(std::rc::Rc::clone(&sub_model));
-    let own: Vec<String> = sub_model.borrow().variables.keys().cloned().collect();
-    let root_ref = root.borrow();
-
-    // Переменные корня, нужные функциям, которые под-модель ВЫЗЫВАЕТ.
-    //
-    // Без этого шага под-модели нечего было бы передать: `travel_time` объявлена
-    // в корне и читает его переменные, а `compute_usage(sub)` обходит только
-    // СВОИ тела функций — тело корневой функции в него не попадает. Цель `c`
-    // такой задачи не знает: там под-модель просто отдаёт указатель `main`.
-    let mut from_calls: BTreeSet<String> = BTreeSet::new();
-    for fname in &usage.functions {
-        let Ok(needs) = crate::generator::rust::rust_needs::needs_of_call(
-            fname,
-            &sub_model.borrow(),
-            &mut BTreeSet::new(),
-        ) else {
-            continue;
-        };
-        from_calls.extend(needs.vars.into_keys());
-    }
-
-    let mut shared = Vec::new();
-    for (name, var) in &root_ref.variables {
-        // Константы не разделяются: они неизменны и живут на уровне модуля.
-        let VariableNode::Simple { ty, .. } = var else {
-            continue;
-        };
-        let used = usage.variables.contains(name) || from_calls.contains(name);
-        if used && !own.contains(name) {
-            shared.push((name.clone(), ty.clone()));
-        }
-    }
-    shared
-}
+use crate::generator::rust::rust_shared::{
+    emit_shared_new_block, emit_shared_struct, shared_type_name, shared_union, shared_variables,
+    union_names as shared_union_names,
+};
 
 /// Печатает `struct` модели и её `impl`.
 #[allow(clippy::too_many_arguments)]
@@ -418,11 +368,15 @@ pub(crate) fn emit_model(
     let table = StateTable::build(map, name, states)?;
     let instances = model_instances(map, states)?;
     let concats = model_concats(map, states)?;
+    // Корень владеет структурой `Shared` (объединение нужд под-моделей); его
+    // scope.shared — весь союз (для доступа `self.shared.x`). Под-модель получает
+    // `&mut Shared` и разделяет лишь свою часть (фича 0059).
     let shared = if is_root {
-        Vec::new()
+        shared_union(map)
     } else {
         shared_variables(map, name)
     };
+    let union_names = shared_union_names(map, is_root);
     // HAL нужен модели, только если она к нему обращается — сама либо через
     // под-модель. Класть `hal: H` в модель, которая его не читает, нельзя:
     // `field 'hal' is never read` валит гейт (проба 2026-07-16).
@@ -431,6 +385,13 @@ pub(crate) fn emit_model(
 
     emit_state_enum(p, &table)?;
     emit_seq_enums(p, name, &concats)?;
+
+    // ── struct Shared (фича 0059) ──────────────────────────────────────────────
+    // Эмиссия — в `rust_shared` (приватная структура, правило 3 ADR); у корня и
+    // только если под-моделям есть что разделять (правило 1).
+    if is_root {
+        emit_shared_struct(p, map, name.local(), &shared)?;
+    }
 
     // ── struct ───────────────────────────────────────────────────────────────
     // Объявление параметра и его подстановка — РАЗНЫЕ строки: граница пишется
@@ -453,12 +414,21 @@ pub(crate) fn emit_model(
         else {
             continue;
         };
+        // Общая переменная уезжает в поле `shared` — прямым полем не остаётся.
+        if union_names.contains(vname) {
+            continue;
+        }
         p.ident(&format!(
             "{}: {},",
             rust_value_name(vname, *loc)?,
             rust_type(ty, &format!("переменная '{}'", vname))?
         ))
         .nl();
+    }
+    if is_root && !shared.is_empty() {
+        p.ident("/// Общие с под-моделями переменные (фича 0059).")
+            .nl();
+        p.ident(&format!("shared: {},", shared_type_name(map))).nl();
     }
     p.ident(&format!("state: {},", table.enum_name)).nl();
     for (state, steps) in &concats {
@@ -610,6 +580,7 @@ fn emit_new(
     let scope = Scope {
         model,
         shared: Vec::new(),
+        shared_via_self: false,
         locals: Vec::new(),
         assigned: BTreeSet::new(),
         hal: String::new(),
@@ -630,6 +601,15 @@ fn emit_new(
     } else {
         p.ident("/// Создаёт модель в начальном состоянии.").nl();
     }
+    // Общие переменные корня инициализируются внутри блока `shared { … }`
+    // (фича 0059). Собираем их значения, прямые поля печатаем сразу.
+    let union = if is_root {
+        shared_union(map)
+    } else {
+        Vec::new()
+    };
+    let union_names: BTreeSet<String> = union.iter().map(|(n, _)| n.clone()).collect();
+    let mut shared_inits: BTreeMap<String, String> = BTreeMap::new();
     p.ident(&format!("{}fn new({}) -> Self {{", vis, args)).nl();
     p.up();
     p.ident("Self {").nl();
@@ -649,8 +629,15 @@ fn emit_new(
             crate::semantic::ExpressionNode::None => default_value(ty, model)?,
             other => coerce_to(other, ty, &scope)?,
         };
-        p.ident(&format!("{}: {},", rust_value_name(vname, *loc)?, value))
-            .nl();
+        if union_names.contains(vname) {
+            shared_inits.insert(vname.clone(), value);
+        } else {
+            p.ident(&format!("{}: {},", rust_value_name(vname, *loc)?, value))
+                .nl();
+        }
+    }
+    if is_root {
+        emit_shared_new_block(p, map, &union, &shared_inits)?;
     }
     p.ident(&format!("state: {}::Init,", table.enum_name)).nl();
     // Счётчик шага стартует с ПЕРВОГО шага, а не с «Init»: так же поступает
@@ -706,6 +693,7 @@ fn emit_init(
     let scope = Scope {
         model,
         shared: Vec::new(),
+        shared_via_self: false,
         locals: Vec::new(),
         assigned: BTreeSet::new(),
         hal: String::new(),
@@ -720,6 +708,7 @@ fn emit_init(
         .nl();
     p.ident("/// в стартовое состояние — это поведение, и оно живёт в `tick`.")
         .nl();
+    let union_names = shared_union_names(map, is_root);
     p.ident(&format!("{}fn init(&mut self) {{", vis)).nl();
     p.up();
     for (_, var) in model_fields(model, map) {
@@ -737,12 +726,13 @@ fn emit_init(
             crate::semantic::ExpressionNode::None => default_value(ty, model)?,
             other => coerce_to(other, ty, &scope)?,
         };
-        p.ident(&format!(
-            "self.{} = {};",
-            rust_value_name(vname, *loc)?,
-            value
-        ))
-        .nl();
+        // Общая переменная живёт в `self.shared` (фича 0059).
+        let target = if union_names.contains(vname) {
+            format!("self.shared.{}", rust_value_name(vname, *loc)?)
+        } else {
+            format!("self.{}", rust_value_name(vname, *loc)?)
+        };
+        p.ident(&format!("{} = {};", target, value)).nl();
     }
     p.ident(&format!("self.state = {}::Init;", table.enum_name))
         .nl();
@@ -849,16 +839,16 @@ fn emit_tick(
     // Параметр даётся, только если он ДЕЙСТВИТЕЛЬНО нужен: неиспользуемый
     // параметр — такое же `-D warnings`, как неиспользуемое поле.
     let needs_hal_param = !is_root && uses_hal;
+    // Под-модель получает общие переменные ОДНИМ параметром `&mut Shared`
+    // (фича 0059), а не по одному. Корень владеет полем `self.shared` и параметра
+    // не получает. `hal` — ПОСЛЕДНИМ (правило 5 ADR / инвариант 0050).
+    let needs_shared_param = !is_root && !shared.is_empty();
     let mut params = String::new();
+    if needs_shared_param {
+        params.push_str(&format!(", shared: &mut {}", shared_type_name(map)));
+    }
     if needs_hal_param {
         params.push_str(", hal: &mut H");
-    }
-    for (vname, ty) in shared {
-        params.push_str(&format!(
-            ", {}: &mut {}",
-            rust_value_name(vname, Location::Codegen)?,
-            rust_type(ty, &format!("общая переменная '{}'", vname))?
-        ));
     }
     let generics = if needs_hal_param { "<H: Hal>" } else { "" };
     let vis = if is_root { "pub " } else { "" };
@@ -884,6 +874,9 @@ fn emit_tick(
     let mut scope = Scope {
         model,
         shared: shared.iter().map(|(n, _)| n.clone()).collect(),
+        // Композирующая модель (корень) владеет полем `self.shared`; под-модель
+        // получает `Shared` параметром → `shared.x` (фича 0059).
+        shared_via_self: is_root,
         locals: Vec::new(),
         assigned,
         hal: hal_access.to_string(),
@@ -906,19 +899,12 @@ fn emit_tick(
         p.ident("/// ADR 0033): его тело исполняется в этом же вызове.")
             .nl();
     }
-    // Число параметров такта диктует МОДЕЛЬ: столько переменных корня читает
-    // под-модель (плюс HAL). Это данные, а не стиль, и порог clippy (7) к ним
-    // отношения не имеет — в `stacker.lam` `MovementController` разделяет с
-    // корнем девять переменных. Единственное «лечение» — свернуть их в общую
-    // структуру; это кандидат в расширения, а не дефект эмиссии.
-    //
-    // Глушение точечное: конкретный линт на конкретном методе. Ни `dead_code`,
-    // ни прочие сторожа R9 оно не задевает.
-    // Порог clippy — 7, и `self` в них ВХОДИТ (проверено: 7 параметров плюс
-    // `self` дают «8/7»).
-    if 1 + shared.len() + usize::from(needs_hal_param) > 7 {
-        p.ident("#[allow(clippy::too_many_arguments)]").nl();
-    }
+    // Параметров такта теперь всегда ≤ 3 (`self` + `&mut Shared?` + `&mut H?`,
+    // фича 0059): общие переменные свёрнуты в одну структуру, поэтому заглушки
+    // `#[allow(clippy::too_many_arguments)]` больше нет — политика (а) ADR 0050
+    // без исключений. Раньше `MovementController` (`stacker.lam`) разделял с
+    // корнем ВОСЕМЬ переменных (девять — размер корня) и такт получал 10
+    // параметров.
     p.ident(&format!(
         "{}fn tick{}(&mut self{}) {{",
         vis, generics, params
@@ -1343,19 +1329,21 @@ fn call_args(
     })?;
 
     let mut args = Vec::new();
-    // HAL передаётся, только если он нужен ВЫЗЫВАЕМОЙ модели — тем же
-    // предикатом, каким `emit_tick` решает, объявлять ли параметр.
+    // Общие переменные — ОДНИМ аргументом `&mut Shared` (фича 0059), в порядке
+    // сигнатуры (shared, затем hal). У корня — `&mut self.shared`; у под-модели —
+    // ретрансляция полученного параметра `shared` (метод-вызов перезаимствует
+    // его автоматически). Передаётся, только если вызываемой модели он нужен.
+    if !shared_variables(map, &sub_name).is_empty() {
+        if is_root {
+            args.push("&mut self.shared".to_string());
+        } else {
+            args.push("shared".to_string());
+        }
+    }
+    // HAL — ПОСЛЕДНИМ (правило 5 ADR / инвариант 0050), тем же предикатом, каким
+    // `emit_tick` решает, объявлять ли параметр.
     if !scope.hal.is_empty() && needs_hal(map, &sub_name, false, &mut BTreeSet::new()) {
         args.push(scope.hal_argument("вызов такта под-модели")?);
-    }
-    for (vname, _) in shared_variables(map, &sub_name) {
-        let ident = rust_value_name(&vname, Location::Codegen)?;
-        if is_root {
-            args.push(format!("&mut self.{}", ident));
-        } else {
-            // В под-модели общая переменная — уже `&mut`; передаём перезаимствованием.
-            args.push(ident);
-        }
     }
     Ok(args.join(", "))
 }

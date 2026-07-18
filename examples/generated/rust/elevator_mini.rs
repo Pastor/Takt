@@ -110,143 +110,143 @@ impl ElevatorMiniCabin {
     }
 
     /// Один такт автомата.
-    fn tick<H: Hal>(&mut self, hal: &mut H, command: &mut Command, current_floor: &mut u8, target_floor: &mut u8) {
+    fn tick<H: Hal>(&mut self, shared: &mut ElevatorMiniShared, hal: &mut H) {
         if self.state == ElevatorMiniCabinState::Init {
-            (*command) = Command::Stop;
+            shared.command = Command::Stop;
             self.state = ElevatorMiniCabinState::Idle;
         }
         match self.state {
             ElevatorMiniCabinState::AtFloor => {
                 hal.write_bit(OutBitPort::DoorOpen, true);
                 if hal.read_bit(InBitPort::CabinButtonDC) {
-                    (*command) = Command::Stop;
+                    shared.command = Command::Stop;
                     self.state = ElevatorMiniCabinState::Idle;
                 }
             }
             ElevatorMiniCabinState::Idle => {
                 if hal.read_bit(InBitPort::FloorSensorF1Bottom) {
-                    (*current_floor) = 1;
+                    shared.current_floor = 1;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF2Bottom) {
-                    (*current_floor) = 2;
+                    shared.current_floor = 2;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF3Bottom) {
-                    (*current_floor) = 3;
+                    shared.current_floor = 3;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF4Bottom) {
-                    (*current_floor) = 4;
+                    shared.current_floor = 4;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF5Bottom) {
-                    (*current_floor) = 5;
+                    shared.current_floor = 5;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF6Bottom) {
-                    (*current_floor) = 6;
+                    shared.current_floor = 6;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF7Bottom) {
-                    (*current_floor) = 7;
+                    shared.current_floor = 7;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF8Bottom) {
-                    (*current_floor) = 8;
+                    shared.current_floor = 8;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF9Bottom) {
-                    (*current_floor) = 9;
+                    shared.current_floor = 9;
                 }
                 if hal.read_bit(InBitPort::CabinButtonF1) {
-                    (*target_floor) = 1;
+                    shared.target_floor = 1;
                 }
                 if hal.read_bit(InBitPort::CabinButtonF2) {
-                    (*target_floor) = 2;
+                    shared.target_floor = 2;
                 }
                 if hal.read_bit(InBitPort::CabinButtonF3) {
-                    (*target_floor) = 3;
+                    shared.target_floor = 3;
                 }
                 if hal.read_bit(InBitPort::CabinButtonF4) {
-                    (*target_floor) = 4;
+                    shared.target_floor = 4;
                 }
                 if hal.read_bit(InBitPort::CabinButtonF5) {
-                    (*target_floor) = 5;
+                    shared.target_floor = 5;
                 }
                 if hal.read_bit(InBitPort::CabinButtonF6) {
-                    (*target_floor) = 6;
+                    shared.target_floor = 6;
                 }
                 if hal.read_bit(InBitPort::CabinButtonF7) {
-                    (*target_floor) = 7;
+                    shared.target_floor = 7;
                 }
                 if hal.read_bit(InBitPort::CabinButtonF8) {
-                    (*target_floor) = 8;
+                    shared.target_floor = 8;
                 }
                 if hal.read_bit(InBitPort::CabinButtonF9) {
-                    (*target_floor) = 9;
+                    shared.target_floor = 9;
                 }
                 if hal.read_bit(InBitPort::FloorButtonF1) {
-                    (*target_floor) = 1;
+                    shared.target_floor = 1;
                 }
                 if hal.read_bit(InBitPort::FloorButtonF2) {
-                    (*target_floor) = 2;
+                    shared.target_floor = 2;
                 }
                 if hal.read_bit(InBitPort::FloorButtonF3) {
-                    (*target_floor) = 3;
+                    shared.target_floor = 3;
                 }
                 if hal.read_bit(InBitPort::FloorButtonF4) {
-                    (*target_floor) = 4;
+                    shared.target_floor = 4;
                 }
                 if hal.read_bit(InBitPort::FloorButtonF5) {
-                    (*target_floor) = 5;
+                    shared.target_floor = 5;
                 }
                 if hal.read_bit(InBitPort::FloorButtonF6) {
-                    (*target_floor) = 6;
+                    shared.target_floor = 6;
                 }
                 if hal.read_bit(InBitPort::FloorButtonF7) {
-                    (*target_floor) = 7;
+                    shared.target_floor = 7;
                 }
                 if hal.read_bit(InBitPort::FloorButtonF8) {
-                    (*target_floor) = 8;
+                    shared.target_floor = 8;
                 }
                 if hal.read_bit(InBitPort::FloorButtonF9) {
-                    (*target_floor) = 9;
+                    shared.target_floor = 9;
                 }
                 hal.write_bit(OutBitPort::DoorOpen, true);
-                if (*target_floor) != 0 {
+                if shared.target_floor != 0 {
                     self.state = ElevatorMiniCabinState::Moving;
                 }
             }
             ElevatorMiniCabinState::Moving => {
                 if hal.read_bit(InBitPort::FloorSensorF1Bottom) {
-                    (*current_floor) = 1;
+                    shared.current_floor = 1;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF2Bottom) {
-                    (*current_floor) = 2;
+                    shared.current_floor = 2;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF3Bottom) {
-                    (*current_floor) = 3;
+                    shared.current_floor = 3;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF4Bottom) {
-                    (*current_floor) = 4;
+                    shared.current_floor = 4;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF5Bottom) {
-                    (*current_floor) = 5;
+                    shared.current_floor = 5;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF6Bottom) {
-                    (*current_floor) = 6;
+                    shared.current_floor = 6;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF7Bottom) {
-                    (*current_floor) = 7;
+                    shared.current_floor = 7;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF8Bottom) {
-                    (*current_floor) = 8;
+                    shared.current_floor = 8;
                 }
                 if hal.read_bit(InBitPort::FloorSensorF9Bottom) {
-                    (*current_floor) = 9;
+                    shared.current_floor = 9;
                 }
-                if (*target_floor) > (*current_floor) {
-                    (*command) = Command::Up;
+                if shared.target_floor > shared.current_floor {
+                    shared.command = Command::Up;
                 }
-                if (*target_floor) < (*current_floor) {
-                    (*command) = Command::Down;
+                if shared.target_floor < shared.current_floor {
+                    shared.command = Command::Down;
                 }
-                if (*target_floor) == (*current_floor) {
-                    (*command) = Command::Stop;
-                    (*target_floor) = 0;
+                if shared.target_floor == shared.current_floor {
+                    shared.command = Command::Stop;
+                    shared.target_floor = 0;
                     self.state = ElevatorMiniCabinState::AtFloor;
                 }
             }
@@ -296,7 +296,7 @@ impl ElevatorMiniMotor {
     }
 
     /// Один такт автомата.
-    fn tick<H: Hal>(&mut self, hal: &mut H, command: &mut Command) {
+    fn tick<H: Hal>(&mut self, shared: &mut ElevatorMiniShared, hal: &mut H) {
         if self.state == ElevatorMiniMotorState::Init {
             hal.write_bit(OutBitPort::ElevatorMotorStop, true);
             self.state = ElevatorMiniMotorState::Idle;
@@ -304,16 +304,16 @@ impl ElevatorMiniMotor {
         match self.state {
             ElevatorMiniMotorState::Down => {
                 hal.write_bit(OutBitPort::ElevatorMotorDown, true);
-                if ((*command) == Command::Stop) | hal.read_bit(InBitPort::ElevatorMotorSensorD) {
+                if (shared.command == Command::Stop) | hal.read_bit(InBitPort::ElevatorMotorSensorD) {
                     self.state = ElevatorMiniMotorState::Stop;
                 }
             }
             ElevatorMiniMotorState::Idle => {
-                if (*command) == Command::Up {
+                if shared.command == Command::Up {
                     self.state = ElevatorMiniMotorState::Up;
-                } else if (*command) == Command::Down {
+                } else if shared.command == Command::Down {
                     self.state = ElevatorMiniMotorState::Down;
-                } else if (*command) == Command::Stop {
+                } else if shared.command == Command::Stop {
                     self.state = ElevatorMiniMotorState::Stop;
                 }
             }
@@ -324,7 +324,7 @@ impl ElevatorMiniMotor {
             }
             ElevatorMiniMotorState::Up => {
                 hal.write_bit(OutBitPort::ElevatorMotorUp, true);
-                if ((*command) == Command::Stop) | hal.read_bit(InBitPort::ElevatorMotorSensorU) {
+                if (shared.command == Command::Stop) | hal.read_bit(InBitPort::ElevatorMotorSensorU) {
                     self.state = ElevatorMiniMotorState::Stop;
                 }
             }
@@ -349,11 +349,17 @@ enum ElevatorMiniState {
     End,
 }
 
-/// Модель 'elevator_mini'.
-pub struct ElevatorMini<H: Hal> {
+/// Общие переменные модели 'elevator_mini', разделяемые под-моделями.
+struct ElevatorMiniShared {
     command: Command,
     current_floor: u8,
     target_floor: u8,
+}
+
+/// Модель 'elevator_mini'.
+pub struct ElevatorMini<H: Hal> {
+    /// Общие с под-моделями переменные (фича 0059).
+    shared: ElevatorMiniShared,
     state: ElevatorMiniState,
     main_cabin0: ElevatorMiniCabin,
     main_motor1: ElevatorMiniMotor,
@@ -368,9 +374,11 @@ impl<H: Hal> ElevatorMini<H> {
     /// невозможно: без `hal` модель не конструируется.
     pub fn new(hal: H) -> Self {
         Self {
-            command: Command::Stop,
-            current_floor: 1,
-            target_floor: 0,
+            shared: ElevatorMiniShared {
+                command: Command::Stop,
+                current_floor: 1,
+                target_floor: 0,
+            },
             state: ElevatorMiniState::Init,
             main_cabin0: ElevatorMiniCabin::new(),
             main_motor1: ElevatorMiniMotor::new(),
@@ -383,9 +391,9 @@ impl<H: Hal> ElevatorMini<H> {
     /// Блоки `enter` здесь не исполняются: по контракту ADR 0033 вход
     /// в стартовое состояние — это поведение, и оно живёт в `tick`.
     pub fn init(&mut self) {
-        self.command = Command::Stop;
-        self.current_floor = 1;
-        self.target_floor = 0;
+        self.shared.command = Command::Stop;
+        self.shared.current_floor = 1;
+        self.shared.target_floor = 0;
         self.state = ElevatorMiniState::Init;
         self.main_cabin0.init();
         self.main_motor1.init();
@@ -401,8 +409,8 @@ impl<H: Hal> ElevatorMini<H> {
         }
         match self.state {
             ElevatorMiniState::Main => {
-                self.main_cabin0.tick(&mut self.hal, &mut self.command, &mut self.current_floor, &mut self.target_floor);
-                self.main_motor1.tick(&mut self.hal, &mut self.command);
+                self.main_cabin0.tick(&mut self.shared, &mut self.hal);
+                self.main_motor1.tick(&mut self.shared, &mut self.hal);
                 if self.main_cabin0.is_done() && self.main_motor1.is_done() {
                     self.state = ElevatorMiniState::End;
                 }
