@@ -81,7 +81,7 @@ fn sv008(state: &str, loc: Location) -> Diagnostic {
 }
 
 /// Строит диагностику `SV-002` — конструкция не транслируется.
-fn sv002(what: &str) -> Diagnostic {
+pub(crate) fn sv002(what: &str) -> Diagnostic {
     Diagnostic::error(
         Location::Codegen,
         format!(
@@ -115,9 +115,12 @@ pub(crate) struct Fsm {
     /// Имена регистровых сигналов (ключи для `Scope::registered`).
     registered: BTreeSet<String>,
     /// Имя регистра состояния по уникальному имени модели.
-    state_reg: BTreeMap<String, String>,
+    pub(crate) state_reg: BTreeMap<String, String>,
     /// Варианты перечислений модели — для восстановления варианта по значению.
     enums: BTreeMap<String, Vec<(String, i64)>>,
+    /// Цепочки `+`: несущее состояние и число шагов (для эмиссии enum шага,
+    /// задача 0057-01). Порядок — обхода `build`, значит детерминирован (0048).
+    step_enums: Vec<(Name, usize)>,
 }
 
 /// Имя регистра состояния модели.
@@ -138,8 +141,27 @@ fn state_enum_name(name: &Name) -> String {
 }
 
 /// Имя варианта терминального состояния модели.
-fn end_variant(name: &Name) -> String {
+pub(crate) fn end_variant(name: &Name) -> String {
     format!("{}_END", name.unique_uppercase_snakecase())
+}
+
+/// Имя регистра шага цепочки `+`, несомой состоянием `state` (задача 0057-01).
+///
+/// Ключ — уникальное имя несущего состояния: две цепочки `+` на разных
+/// состояниях (в т.ч. в разных уровнях после уплощения) получают разные
+/// регистры автоматически, как и регистры состояний уровней.
+pub(crate) fn step_reg_name(state: &Name) -> String {
+    format!("{}_step", state.unique_lowercase_snakecase())
+}
+
+/// Имя типа-перечисления шага цепочки `+`.
+pub(crate) fn step_enum_name(state: &Name) -> String {
+    format!("{}_step_e", state.unique_lowercase_snakecase())
+}
+
+/// Имя варианта `STEP_i` шага цепочки `+`.
+pub(crate) fn step_variant(state: &Name, i: usize) -> String {
+    format!("{}_STEP_{}", state.unique_uppercase_snakecase(), i)
 }
 
 /// Имя сигнала переменной модели.
@@ -300,6 +322,7 @@ impl Fsm {
             registered: BTreeSet::new(),
             state_reg: BTreeMap::new(),
             enums: BTreeMap::new(),
+            step_enums: Vec::new(),
         };
 
         // Перечисления собираются со всех уровней: `command := Up` в АСД —
@@ -313,7 +336,7 @@ impl Fsm {
         }
 
         for (name, model_rc) in blocks {
-            let Some(Element::Model { start, .. }) = map.model_element_of(name) else {
+            let Some(Element::Model { start, states, .. }) = map.model_element_of(name) else {
                 continue;
             };
             // Регистр состояния уровня. Сбрасывается в СТАРТОВОЕ состояние —
@@ -379,6 +402,30 @@ impl Fsm {
                     reset,
                     declare_reg: true,
                 });
+            }
+            drop(model);
+
+            // Регистр шага на каждую цепочку `+` (задача 0057-01). Служебное
+            // состояние вне модели: в `is_done` и в выходные порты не попадает —
+            // это отдельный `Reg`, а не порт.
+            for state_name in &states {
+                let Some(Element::StateExtend {
+                    extend: StateExtend::Concatenation(items),
+                    ..
+                }) = map.state_at(state_name.clone())
+                else {
+                    continue;
+                };
+                let signal = step_reg_name(state_name);
+                fsm.registered.insert(signal.clone());
+                fsm.regs.push(Reg {
+                    name: signal,
+                    prefix: step_enum_name(state_name),
+                    suffix: String::new(),
+                    reset: step_variant(state_name, 0),
+                    declare_reg: true,
+                });
+                fsm.step_enums.push((state_name.clone(), items.len()));
             }
         }
 
@@ -618,6 +665,35 @@ pub(crate) fn emit_state_enums(
     Ok(())
 }
 
+/// Печатает перечисления шага для цепочек `+` (задача 0057-01).
+///
+/// Значения назначает генератор (0..n-1), поэтому ширина — ⌈log₂(n)⌉, как у
+/// перечислений состояний. Порядок — обхода `Fsm::build` (детерминизм 0048).
+pub(crate) fn emit_step_enums(p: &mut Printer, fsm: &Fsm) -> Result<(), Diagnostic> {
+    for (state, count) in &fsm.step_enums {
+        let numbered: Vec<(String, i64)> = (0..*count)
+            .map(|i| (step_variant(state, i), i as i64))
+            .collect();
+        let (width, _) = enum_width(&numbered, &format!("шаг цепочки '{}'", state))?;
+        p.ident(&format!(
+            "// Шаг последовательной композиции '{}' (`+`).",
+            state
+        ))
+        .nl();
+        p.ident(&format!("typedef enum logic [{}:0] {{", width - 1))
+            .nl();
+        p.up();
+        for (i, (variant, value)) in numbered.iter().enumerate() {
+            let comma = if i + 1 == numbered.len() { "" } else { "," };
+            p.ident(&format!("{} = {}'d{}{}", variant, width, value, comma))
+                .nl();
+        }
+        p.down();
+        p.ident(&format!("}} {};", step_enum_name(state))).nl().nl();
+    }
+    Ok(())
+}
+
 /// Печатает объявления регистров и их комбинационных пар.
 pub(crate) fn emit_signals(p: &mut Printer, fsm: &Fsm) {
     for reg in &fsm.regs {
@@ -665,7 +741,7 @@ pub(crate) fn emit_comb(
 }
 
 /// Печатает тело одного уровня: `unique case` по его состояниям.
-fn emit_model_body(
+pub(crate) fn emit_model_body(
     p: &mut Printer,
     map: &SvMap,
     fsm: &Fsm,
@@ -701,7 +777,9 @@ fn emit_model_body(
                 emit_transitions(p, map, fsm, raw, model, &states)?;
             }
             Element::StateExtend { extend, next, .. } => {
-                emit_extend(p, map, fsm, raw, model, &extend, &next)?;
+                super::sv_compose::emit_extend(
+                    p, map, fsm, state_name, raw, model, &extend, &next,
+                )?;
             }
             Element::Model { .. } => {
                 return Err(sv002("модель в позиции состояния"));
@@ -719,7 +797,7 @@ fn emit_model_body(
 }
 
 /// Печатает именованные блоки состояния (`enter`/`always`/`exit`).
-fn emit_named_blocks(
+pub(crate) fn emit_named_blocks(
     p: &mut Printer,
     state: &StateNode,
     fsm: &Fsm,
@@ -800,81 +878,6 @@ fn emit_transitions(
         p.ident(&format!("{}_next = {};", reg, end_variant(model)))
             .nl();
     }
-    Ok(())
-}
-
-/// Печатает состояние-реализацию (`S = A | B`).
-fn emit_extend(
-    p: &mut Printer,
-    map: &SvMap,
-    fsm: &Fsm,
-    state: &StateNode,
-    model: &Name,
-    extend: &StateExtend,
-    next: &Name,
-) -> Result<(), Diagnostic> {
-    let steps: Vec<&StateExtend> = match extend {
-        // Параллельная композиция: под-модели работают одновременно, родитель
-        // уходит дальше, когда завершились ВСЕ.
-        StateExtend::Parallel(items) => items.iter().collect(),
-        // Одна модель — вырожденный случай параллельной из одного шага.
-        StateExtend::Model(_) => vec![extend],
-        StateExtend::Concatenation(_) => {
-            return Err(sv002(
-                "последовательная композиция состояний (`A ; B`): не реализована \
-                 целью 'sv'. Это диагностика, а не тишина — трансляция molчанием \
-                 дала бы автомат, стоящий на месте",
-            ));
-        }
-        StateExtend::None => return Ok(()),
-    };
-
-    let mut done_exprs: Vec<String> = Vec::new();
-    for step in steps {
-        let StateExtend::Model(sub) = step else {
-            return Err(sv002("вложенная композиция внутри шага композиции"));
-        };
-        // Логика под-модели инлайнится ВНУТРЬ ветви родителя: в C её `_tick`
-        // зовётся из `case` родителя, то есть она работает, только пока родитель
-        // в этом состоянии.
-        p.ident(&format!("// Под-модель '{}' — инлайн её такта.", sub))
-            .nl();
-        emit_model_body(p, map, fsm, sub)?;
-        let sub_reg = fsm
-            .state_reg
-            .get(sub.unique())
-            .ok_or_else(|| sv002(&format!("регистр состояния под-модели '{}'", sub)))?;
-        // `_next`, а НЕ регистр: в C `_is_done` читает значение, только что
-        // записанное тиком. Регистр дал бы значение предыдущего такта.
-        done_exprs.push(format!("({}_next == {})", sub_reg, end_variant(sub)));
-    }
-
-    if done_exprs.is_empty() {
-        return Ok(());
-    }
-    p.ident(&format!("if ({}) begin", done_exprs.join(" && ")))
-        .nl();
-    p.up();
-    emit_named_blocks(p, state, fsm, "exit")?;
-    let reg = fsm
-        .state_reg
-        .get(model.unique())
-        .ok_or_else(|| sv002(&format!("регистр состояния модели '{}'", model)))?;
-    if next.local().is_empty() {
-        p.ident(&format!("{}_next = {};", reg, end_variant(model)))
-            .nl();
-    } else {
-        let next_rc = map.raw_state_at(next.clone())?;
-        emit_named_blocks(p, &next_rc.borrow(), fsm, "enter")?;
-        p.ident(&format!(
-            "{}_next = {};",
-            reg,
-            next.unique_uppercase_snakecase()
-        ))
-        .nl();
-    }
-    p.down();
-    p.ident("end").nl();
     Ok(())
 }
 

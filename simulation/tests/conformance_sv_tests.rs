@@ -359,3 +359,212 @@ fn bit_is_within_conformance_scope() {
          провод, и дефекта 0029 (`bit` → `int`) здесь нет.\nсимулятор={sim:?}\nRTL={sv:?}"
     );
 }
+
+// ── Сверка `+` идёт с целью C, а не с симулятором (0057) ──────────────────────
+//
+// ADR 0057 называет эталоном поведения `+` **обе** реализации — C
+// (`generate_concat_tick`) и симулятор (`Unit::Sequential`), — но при разработке
+// вскрылось: **симулятор не исполняет композицию, несущую переход `next`** —
+// состояние-реализация с `next` немедленно уходит по `next`, не тикнув шаги
+// (проба: `start P = A + B { next Done; }` даёт `Terminated` на такте 1, шаги не
+// исполнены). Ровно поэтому `extend_complex.lam` (корневая `+` с `next Next`)
+// **исключён** из `examples_scenario_tests`. Дефект симулятора заведён фиксом
+// `docs/fixes/0057-01-sim-composition-next.md` (Tier 2) и к цели `sv` отношения
+// не имеет.
+//
+// Поэтому сверка `+` ведётся с **порождённым C** — вторым named-эталоном ADR
+// 0057. Проба 2026-07-18 показала совпадение SV и C потактово (stage: 1,1,2,2 и
+// done на такте 5). Когда дефект симулятора будет закрыт, сюда добавится и
+// сверка sim↔SV.
+
+fn cc_available() -> bool {
+    Command::new("cc")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Потактовая трасса порождённого C для КОРНЕВЫХ переменных (`m.<var>`).
+///
+/// Собственный минимальный аналог `conformance_c_tests::c_trace` — тот адресует
+/// **вложенную** модель (`m.<accessor>.<var>`), а здесь наблюдаемые лежат в
+/// корне (shared-переменные, записанные под-моделями композиции).
+fn c_root_trace(
+    dir: &Path,
+    fixture: &str,
+    basename: &str,
+    root_type: &str,
+    vars: &[&str],
+) -> Vec<Vec<i64>> {
+    let source = std::fs::read_to_string(fixture).expect("фикстура читается");
+    grammar::compile_to_c(
+        basename,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+    let prints = vars
+        .iter()
+        .map(|v| format!(r#"        printf("%d:{v}=%d\n", t, (int)m.{v});"#))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "{basename}.h"
+int main(void) {{
+    {root_type} m;
+    {root_type}_init(&m);
+    for (int t = 0; t < {TRACE_TICKS}; t++) {{
+        {root_type}_tick(&m);
+{prints}
+        if ({root_type}_is_done(&m)) break;
+    }}
+    return 0;
+}}
+"#
+    );
+    let harness_path = dir.join("c_root_harness.c");
+    std::fs::write(&harness_path, harness).expect("запись харнесса");
+    let bin = dir.join("c_root_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c11", "-I"])
+        .arg(dir)
+        .arg(dir.join(format!("{basename}.c")))
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "порождённый C не компилируется:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск собранного C");
+    assert!(run.status.success(), "собранный C завершился с ошибкой");
+    let out = String::from_utf8_lossy(&run.stdout).into_owned();
+    let mut trace: Vec<Vec<i64>> = Vec::new();
+    for line in out.lines() {
+        let (t_str, rest) = line.split_once(':').expect("формат T:var=val");
+        let t: usize = t_str.parse().expect("индекс такта");
+        let (_, val) = rest.split_once('=').expect("формат var=val");
+        let val: i64 = val.trim().parse().expect("значение");
+        if trace.len() <= t {
+            trace.resize(t + 1, Vec::new());
+        }
+        trace[t].push(val);
+    }
+    trace
+}
+
+/// **0057 (R1/R2/R4/R5): последовательная композиция `A + B` — SV == C потактово.**
+///
+/// Каждый шаг под-модели исполняется до завершения, затем шаг-регистр
+/// продвигается, и следующий шаг тикается на такте **после** (эталон — `break`
+/// в C `generate_concat_tick`). Наблюдаемая — корневая `stage`, которую пишет
+/// текущий шаг (shared-переменная). Завершение последнего шага переводит
+/// **родительское** состояние в `Done` (R5) — видно по `is_done`.
+#[test]
+fn sequential_composition_matches_generated_c() {
+    let dir = build_dir("concat");
+    let source = "var stage: u8 := 0; \
+                  model A { start S1 { always { stage := 1; } ref S2: 1 = 1; } state S2; } \
+                  model B { start S1 { always { stage := 2; } ref S2: 1 = 1; } state S2; } \
+                  start P = A + B { next Done; } state Done;";
+    let path = fixture(&dir, "seqc", source);
+
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] sequential_composition_matches_generated_c: `cc` не найден");
+        return;
+    }
+    let c = c_root_trace(
+        &dir,
+        path.to_str().expect("путь в UTF-8"),
+        "seqc",
+        "Seqc",
+        &["stage"],
+    );
+    // Пиннинг C-эталона: `A` пишет 1 (такты 1–2), `B` — 2 (такты 3–4), затем
+    // родитель уходит в `Done`. Если обе стороны сломать одинаково — упадёт тут.
+    assert_eq!(
+        c,
+        vec![vec![1], vec![1], vec![2], vec![2], vec![2]],
+        "эталон C: шаг A держит stage=1 два такта, шаг B — stage=2, затем Done"
+    );
+
+    if !verilator_available() {
+        eprintln!("[ПРОПУСК] sequential_composition_matches_generated_c: verilator не найден");
+        return;
+    }
+    let sv = sv_trace(
+        &dir,
+        path.to_str().expect("путь в UTF-8"),
+        "seqc",
+        &["seqc_stage"],
+        c.len(),
+    );
+    assert_eq!(
+        c, sv,
+        "потактовые трассы `+` (SV и C) обязаны совпадать: шаг активируется на \
+         такте ПОСЛЕ завершения предыдущего (регистр шага разрывает такт, как \
+         `break` в C).\nC={c:?}\nRTL={sv:?}"
+    );
+}
+
+/// **0057 (R3): параллельный шаг `(B | C)` внутри цепочки `+` — SV == C.**
+///
+/// Средний шаг — параллельная композиция: цепочка переходит к следующему шагу,
+/// когда завершены **обе** ветви (конъюнкция done). `s1` пишет шаг A, `s2` —
+/// обе ветви параллельного шага (идемпотентно, порядок ветвей не важен).
+#[test]
+fn parallel_step_inside_concatenation_matches_generated_c() {
+    let dir = build_dir("concat_par");
+    let source = "var s1: u8 := 0; var s2: u8 := 0; \
+                  model A { start S1 { always { s1 := 1; } ref S2: 1 = 1; } state S2; } \
+                  model B { start S1 { always { s2 := 1; } ref S2: 1 = 1; } state S2; } \
+                  model C { start S1 { always { s2 := 1; } ref S2: 1 = 1; } state S2; } \
+                  start P = A + (B | C) { next Done; } state Done;";
+    let path = fixture(&dir, "parc", source);
+
+    if !cc_available() {
+        eprintln!(
+            "[ПРОПУСК] parallel_step_inside_concatenation_matches_generated_c: `cc` не найден"
+        );
+        return;
+    }
+    let c = c_root_trace(
+        &dir,
+        path.to_str().expect("путь в UTF-8"),
+        "parc",
+        "Parc",
+        &["s1", "s2"],
+    );
+    assert_eq!(
+        c,
+        vec![vec![1, 0], vec![1, 0], vec![1, 1], vec![1, 1], vec![1, 1]],
+        "эталон C: A даёт s1=1 (такты 1–2), затем параллельный шаг даёт s2=1 по \
+         завершении обеих ветвей"
+    );
+
+    if !verilator_available() {
+        eprintln!(
+            "[ПРОПУСК] parallel_step_inside_concatenation_matches_generated_c: verilator не найден"
+        );
+        return;
+    }
+    let sv = sv_trace(
+        &dir,
+        path.to_str().expect("путь в UTF-8"),
+        "parc",
+        &["parc_s1", "parc_s2"],
+        c.len(),
+    );
+    assert_eq!(
+        c, sv,
+        "потактовые трассы `(|)` внутри `+` (SV и C) обязаны совпадать: \
+         параллельный шаг завершается по конъюнкции done обеих ветвей.\nC={c:?}\nRTL={sv:?}"
+    );
+}
