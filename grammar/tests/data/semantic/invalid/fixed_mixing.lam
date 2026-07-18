@@ -1,0 +1,12 @@
+// T6 (фича 0061): неявное смешение q(m, n) с целым в арифметике — ошибка SE-059.
+model Probe {
+    var a: q(8, 8) := 1.5;
+    var b: u8 := 3;
+
+    start Idle {
+        always { a := a + b; }
+        ref Idle: b = 0;
+    }
+}
+
+start Entry = Probe;

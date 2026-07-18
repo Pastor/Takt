@@ -92,7 +92,12 @@ pub fn type_inference(
                     },
                 );
             }
-            _ => {}
+            // q(m,n) (0061): понижение литерала в представление v — см. type_node.
+            ref other => {
+                if let Some(nv) = crate::semantic::type_node::lower_fixed_var(other)? {
+                    variables.insert(name.clone(), nv);
+                }
+            }
         }
     }
     Ok(variables.clone())
@@ -128,12 +133,7 @@ fn type_of_var(var: &VariableNode) -> TypeNode {
 /// | `Bit` + `Bit`                       | `Bit`                      |
 /// | иначе                               | `Unsupported`              |
 ///
-/// # Примеры
-///
-/// ```rust,ignore
-/// // wider_type — pub(crate), вызывается только внутри пакета.
-/// // Полные тесты смотрите в модуле tests ниже.
-/// ```
+/// `wider_type` — `pub(crate)`; тесты — в модуле `tests` ниже.
 #[inline]
 pub(crate) fn wider_type(a: TypeNode, b: TypeNode) -> TypeNode {
     match (&a, &b) {
@@ -155,6 +155,14 @@ pub(crate) fn wider_type(a: TypeNode, b: TypeNode) -> TypeNode {
         (TypeNode::Bit, TypeNode::Bit) => TypeNode::Bit,
         (TypeNode::Bool, TypeNode::Bool) => TypeNode::Bool,
         (TypeNode::Bool, TypeNode::Bit) | (TypeNode::Bit, TypeNode::Bool) => TypeNode::Bit,
+        // q(m,n) (0061): два одинаковых fixed-point → тот же тип; смешение с любым
+        // другим типом (иное q, целое, float, …) даёт `Unsupported` и ловится
+        // стражем T6 (`validate::fixed`) — см. правило 6 ADR 0061.
+        (TypeNode::Fixed { m: ma, n: na }, TypeNode::Fixed { m: mb, n: nb })
+            if ma == mb && na == nb =>
+        {
+            TypeNode::Fixed { m: *ma, n: *na }
+        }
         _ => TypeNode::Unsupported,
     }
 }
@@ -196,6 +204,22 @@ fn infer_int_type(n: i64) -> TypeNode {
 /// | `Type::Alias(local)` | `TypeNode::Unsupported`       |
 /// | `Type::Function`     | `TypeNode::Unsupported`       |
 /// | `Type::Address`      | `TypeNode::Unsupported`       |
+/// Строит [`TypeNode::Fixed`] из конструктора `q(m, n)` без диагностики (для
+/// цели приведения `as`, где путь инфраллибелен). Конструктор не `q` или
+/// границы вне правила 1 ADR 0061 (`m ≥ 1`, `n ≥ 1`, `m + n ≤ 64`) →
+/// [`TypeNode::Unsupported`]; объявление типа тот же случай ловит `SE-057`
+/// (`construct_fixed`).
+fn fixed_node_or_unsupported(ctor: &str, m: i64, n: i64) -> TypeNode {
+    if ctor == "q" && m >= 1 && n >= 1 && m + n <= 64 {
+        TypeNode::Fixed {
+            m: m as u8,
+            n: n as u8,
+        }
+    } else {
+        TypeNode::Unsupported
+    }
+}
+
 pub(crate) fn ast_type_to_node(ty: &Type) -> TypeNode {
     match ty {
         Type::Bit => TypeNode::Bit,
@@ -207,6 +231,9 @@ pub(crate) fn ast_type_to_node(ty: &Type) -> TypeNode {
             element_type,
             ..
         } => TypeNode::Array(*element_count, Box::new(ast_type_to_node(element_type))),
+        // q(m, n) (0061): цель приведения `x as q(m, n)`. Границы — те же, что у
+        // объявления (правило 1 ADR); нарушение даёт `Unsupported` (страж T6/T7).
+        Type::Fixed(_, ctor, m, n) => fixed_node_or_unsupported(ctor, *m, *n),
         // Ce4: перечисление по имени — без проверки существования (нет контекста)
         Type::Enum(name) => TypeNode::Enum(name.clone()),
         // Ce6: разрешаем встроенные псевдонимы типов без контекста модели
@@ -252,6 +279,8 @@ pub(crate) fn ast_type_to_node_ctx(ty: &Type, model: Rc<RefCell<ModelNode>>) -> 
             *element_count,
             Box::new(ast_type_to_node_ctx(element_type, model)),
         ),
+        // q(m, n) (0061): цель приведения `x as q(m, n)` (см. `ast_type_to_node`).
+        Type::Fixed(_, ctor, m, n) => fixed_node_or_unsupported(ctor, *m, *n),
         // Ce4: перечисление по имени — проверяем наличие в контексте модели
         Type::Enum(name) => {
             let borrowed = model.borrow();
@@ -291,7 +320,7 @@ pub(crate) fn ast_type_to_node_ctx(ty: &Type, model: Rc<RefCell<ModelNode>>) -> 
 /// В текущей реализации всегда успешен. Возвращает `Unsupported`
 /// для выражений, тип которых не поддаётся автоматическому выводу
 /// (например, вызовы функций с неизвестной сигнатурой).
-fn extract_type(
+pub(crate) fn extract_type(
     expr: &ExpressionNode,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<TypeNode, Diagnostic> {

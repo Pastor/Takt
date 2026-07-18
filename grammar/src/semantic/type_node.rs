@@ -32,7 +32,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast::Type;
-use crate::semantic::ModelNode;
+use crate::semantic::{ExpressionNode, ModelNode, VariableNode};
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
@@ -190,6 +190,131 @@ pub(crate) fn fixed_storage_bits(w: u8) -> u8 {
         9..=16 => 16,
         17..=32 => 32,
         _ => 64,
+    }
+}
+
+/// Диапазон **представлений** `v` типа `q(m, n)` (знаковое `intW`,
+/// `W = m + n`): `[-2^(W-1), 2^(W-1) - 1]`.
+pub(crate) fn fixed_repr_range(m: u8, n: u8) -> (i128, i128) {
+    let w = (m + n) as u32;
+    let half = 1i128 << (w - 1);
+    (-half, half - 1)
+}
+
+/// Переводит числовой литерал (`ExpressionNode::Number`/`Rational`) в
+/// **представление** `v` типа `q(m, n)` — правило 2 ADR 0061.
+///
+/// Перевод **точный** (без `f64`): `x = мантисса / 10^exp`, представление
+/// `v = x · 2^n`. Если `v` **не целое** (`x` непредставим в формате) или **вне
+/// диапазона** типа — ошибка `SE-058`, а не тихое округление (драйвер 3 ADR).
+///
+/// - `Ok(Some(v))` — литерал понижен в представление `v` (цели эмитят целое);
+/// - `Ok(None)` — `expr` не числовой литерал (арифметика/приведение — не здесь);
+/// - `Err(_)` — непредставим или вне диапазона (`SE-058`).
+pub(crate) fn lower_fixed_literal(
+    expr: &ExpressionNode,
+    m: u8,
+    n: u8,
+    loc: Location,
+) -> Result<Option<i128>, Diagnostic> {
+    // (мантисса, десятичный порядок): значение = мантисса / 10^exp.
+    let (mantissa, exp): (i128, u32) = match expr {
+        ExpressionNode::Number(k) => (*k as i128, 0),
+        ExpressionNode::Rational(s, neg) => {
+            let (int_part, frac_part) = s.split_once('.').unwrap_or((s.as_str(), ""));
+            let digits = format!("{}{}", int_part, frac_part);
+            let raw: i128 = digits
+                .parse()
+                .map_err(|_| se058(loc, m, n, s, "не число"))?;
+            (if *neg { -raw } else { raw }, frac_part.len() as u32)
+        }
+        _ => return Ok(None),
+    };
+
+    // v = мантисса · 2^n / 10^exp — целое ⟺ делится нацело.
+    let num = mantissa
+        .checked_mul(1i128 << n)
+        .ok_or_else(|| se058(loc, m, n, &expr_text(expr), "слишком большой литерал"))?;
+    let den = 10i128.checked_pow(exp).unwrap_or(i128::MAX);
+    if num % den != 0 {
+        return Err(se058(
+            loc,
+            m,
+            n,
+            &expr_text(expr),
+            "не представим точно (дробь не кратна 2⁻ⁿ)",
+        ));
+    }
+    let v = num / den;
+    let (min, max) = fixed_repr_range(m, n);
+    if v < min || v > max {
+        return Err(se058(loc, m, n, &expr_text(expr), "вне диапазона типа"));
+    }
+    Ok(Some(v))
+}
+
+/// Понижает числовой литерал-инициализатор `q(m, n)`-переменной в
+/// **представление** `Number(v)` (фича 0061). Возвращает новый узел, если
+/// переменная — `Simple`/`Const` с типом `Fixed` и литеральным инициализатором;
+/// иначе `None` (тип не `q` либо инициализатор — не литерал). Тело вынесено сюда
+/// из [`type_inference`](super::type_inference) ради лимита размера модуля.
+pub(crate) fn lower_fixed_var(var: &VariableNode) -> Result<Option<VariableNode>, Diagnostic> {
+    use crate::semantic::VariableNode as V;
+    match var {
+        V::Simple {
+            upper,
+            loc,
+            name,
+            ty: TypeNode::Fixed { m, n },
+            expr,
+        } => Ok(lower_fixed_literal(expr, *m, *n, *loc)?.map(|v| V::Simple {
+            upper: upper.clone(),
+            loc: *loc,
+            name: name.clone(),
+            ty: TypeNode::Fixed { m: *m, n: *n },
+            expr: ExpressionNode::Number(v as i64),
+        })),
+        V::Const {
+            upper,
+            loc,
+            name,
+            ty: TypeNode::Fixed { m, n },
+            expr,
+        } => Ok(lower_fixed_literal(expr, *m, *n, *loc)?.map(|v| V::Const {
+            upper: upper.clone(),
+            loc: *loc,
+            name: name.clone(),
+            ty: TypeNode::Fixed { m: *m, n: *n },
+            expr: ExpressionNode::Number(v as i64),
+        })),
+        _ => Ok(None),
+    }
+}
+
+/// `SE-058` — литерал не представим точно в `q(m, n)` (правило 2 ADR 0061).
+fn se058(loc: Location, m: u8, n: u8, lit: &str, why: &str) -> Diagnostic {
+    Diagnostic::declaration_error(
+        loc,
+        format!(
+            "литерал '{}' не представим в fixed-point 'q({}, {})': {}",
+            lit, m, n, why
+        ),
+    )
+    .with_code("SE-058")
+}
+
+/// Текстовое представление числового литерала для диагностики.
+fn expr_text(expr: &ExpressionNode) -> String {
+    match expr {
+        ExpressionNode::Number(k) => k.to_string(),
+        ExpressionNode::Rational(s, neg) => {
+            if *neg {
+                format!("-{}", s)
+            } else {
+                s.clone()
+            }
+        }
+        _ => "<выражение>".to_string(),
     }
 }
 
@@ -592,6 +717,58 @@ mod tests {
         assert_eq!(fixed_storage_bits(16), 16);
         assert_eq!(fixed_storage_bits(24), 32);
         assert_eq!(fixed_storage_bits(64), 64);
+    }
+
+    fn rat(s: &str, neg: bool) -> ExpressionNode {
+        ExpressionNode::Rational(s.to_string(), neg)
+    }
+
+    /// Литерал точен: `1.5` в `q(8, 8)` → представление `384` (T4).
+    #[test]
+    fn fixed_literal_1_5_is_384() {
+        let v = lower_fixed_literal(&rat("1.5", false), 8, 8, Location::Implicit).unwrap();
+        assert_eq!(v, Some(384));
+    }
+
+    /// Отрицательный литерал: `-1.5` → `-384`.
+    #[test]
+    fn fixed_literal_negative() {
+        let v = lower_fixed_literal(&rat("1.5", true), 8, 8, Location::Implicit).unwrap();
+        assert_eq!(v, Some(-384));
+    }
+
+    /// Целочисленный литерал масштабируется: `3` в `q(8, 8)` → `768` (3·2⁸).
+    #[test]
+    fn fixed_literal_integer_scales() {
+        let v = lower_fixed_literal(&ExpressionNode::Number(3), 8, 8, Location::Implicit).unwrap();
+        assert_eq!(v, Some(768));
+    }
+
+    /// Непредставимый литерал `0.001` → `SE-058` (T3), а не тихое округление.
+    #[test]
+    fn fixed_literal_unrepresentable_is_se058() {
+        let err = lower_fixed_literal(&rat("0.001", false), 8, 8, Location::Implicit).unwrap_err();
+        assert_eq!(err.code.as_deref(), Some("SE-058"));
+    }
+
+    /// Вне диапазона: `200.0` в `q(8, 8)` (max = 127.996…) → `SE-058`.
+    #[test]
+    fn fixed_literal_out_of_range_is_se058() {
+        let err = lower_fixed_literal(&rat("200.0", false), 8, 8, Location::Implicit).unwrap_err();
+        assert_eq!(err.code.as_deref(), Some("SE-058"));
+    }
+
+    /// Не литерал (переменная и т. п.) → `None` (обрабатывается арифметикой).
+    #[test]
+    fn fixed_literal_non_literal_is_none() {
+        let v = lower_fixed_literal(&ExpressionNode::None, 8, 8, Location::Implicit).unwrap();
+        assert_eq!(v, None);
+    }
+
+    /// Диапазон представлений `q(8, 8)` — `[-32768, 32767]` (знаковое i16).
+    #[test]
+    fn fixed_repr_range_is_signed_width() {
+        assert_eq!(fixed_repr_range(8, 8), (-32768, 32767));
     }
 }
 

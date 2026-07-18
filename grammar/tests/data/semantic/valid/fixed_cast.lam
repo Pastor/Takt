@@ -1,0 +1,17 @@
+// T7 (фича 0061): явное приведение снимает смешение — q(m, n) + (u8 as q(m, n)).
+// Плюс q + q того же формата допустимо без приведения.
+model Probe {
+    var a: q(8, 8) := 1.5;
+    var b: u8 := 3;
+    var c: q(8, 8) := 0.5;
+
+    start Idle {
+        always {
+            a := a + c;
+            a := a + (b as q(8, 8));
+        }
+        ref Idle: b = 0;
+    }
+}
+
+start Entry = Probe;
