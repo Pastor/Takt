@@ -77,7 +77,7 @@
 | [0066](./0066-st-bool-literals.md) | Булевы литералы в телах цели `st` печатаются числом | [ADR](../adr/0066-st-bool-literals.md) · [анализ](../analyze/0066-st-bool-literals.md) · [dev 01](../development/0066-01-coerce-to.md) · [тест-план](../tests/0066-st-bool-literals.md) · [отчёт](../reports/0066-st-bool-literals.md) | ✅ ГОТОВО |
 | [0067](./0067-intellij-rename-psi-import.md) | Rename и `PsiReference` для `import` в плагине IntelliJ | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0068](./0068-verify-data-properties.md) | Верификация свойств над данными (атом-предикат LTL) | — (стадия 1: проработки нет) | СОЗДАНА |
-| [0069](./0069-address-map-eval-split.md) | Вынос вычислителя адреса из `address_map.rs` (лимит размера) | — (стадия 1: проработки нет) | СОЗДАНА |
+| [0069](./0069-address-map-eval-split.md) | Вынос вычислителя адреса из `address_map.rs` (лимит размера) | [ADR](../adr/0069-address-map-eval-split.md) · [анализ](../analyze/0069-address-map-eval-split.md) · [dev 01](../development/0069-01-split-by-theme.md) · [тест-план](../tests/0069-address-map-eval-split.md) · [отчёт](../reports/0069-address-map-eval-split.md) | ✅ ГОТОВО |
 | [0070](./0070-port-initializer-address-role.md) | Инициализатор порта — это адрес, но проверяется как значение | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0071](./0071-lsp-goto-state-name.md) | Переход на имя состояния в `S(Ping) = End` не работает | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0072](./0072-lsp-initialization-options.md) | LSP не читает `initializationOptions` (пути поиска импортов) | — (стадия 1: проработки нет) | СОЗДАНА |
