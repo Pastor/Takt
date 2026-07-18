@@ -221,6 +221,71 @@ mod tests {
         generate_program(&make_map(src, name)).unwrap()
     }
 
+    /// Вырезает тело функции `fn <name>` из порождённого текста (для точечных
+    /// проверок свёртки хвоста).
+    fn fn_body(rs: &str, name: &str) -> String {
+        let start = rs
+            .find(&format!("fn {}(", name))
+            .unwrap_or_else(|| panic!("нет функции '{name}':\n{rs}"));
+        let tail = &rs[start..];
+        // Тело функции завершается строкой из одной `}` на нулевом отступе.
+        let end = tail.find("\n}\n").map(|i| i + 3).unwrap_or(tail.len());
+        tail[..end].to_string()
+    }
+
+    /// **0058 (A1): хвостовой `if/else` со сворачиваемыми ветвями → выражение.**
+    ///
+    /// `if a > b { return a; } else { return b; }` печатается как
+    /// `if a > b { a } else { b }` — `return` исчезает, `needless_return` не
+    /// возникает.
+    #[test]
+    fn tail_if_else_folds_to_expression() {
+        let src = "fn pick(a: u8, b: u8) -> u8 { if a > b { return a; } else { return b; } } \
+                   var v: u8 := 0; start S { always { v := pick(1, 2); } }";
+        let body = fn_body(&program_of(src, "Root"), "pick");
+        assert!(
+            !body.contains("return"),
+            "хвостовой if/else обязан свернуться — `return` исчезает:\n{body}"
+        );
+        assert!(
+            body.contains("} else {"),
+            "ветки обязаны сохраниться как if/else:\n{body}"
+        );
+    }
+
+    /// **0058 (A5): цепочка `if / else if / else` с `return` сворачивается.**
+    #[test]
+    fn tail_else_if_chain_folds() {
+        let src = "fn grade(a: u8) -> u8 { \
+                   if a > 10 { return 3; } else if a > 5 { return 2; } else { return 1; } } \
+                   var v: u8 := 0; start S { always { v := grade(7); } }";
+        let body = fn_body(&program_of(src, "Root"), "grade");
+        assert!(
+            !body.contains("return"),
+            "цепочка else if обязана свернуться целиком:\n{body}"
+        );
+    }
+
+    /// **0058 (A3/A4): несворачиваемый хвост печатается как сегодня (`return`
+    /// остаётся).**
+    ///
+    /// `if` без `else` в НЕхвостовой позиции + завершающий `return` — только
+    /// последний сворачивается; ранний `if`-выход сохраняет `return` (правило 5).
+    #[test]
+    fn non_tail_if_keeps_return() {
+        let src = "fn clip(a: u8) -> u8 { if a > 10 { return 3; } return 1; } \
+                   var v: u8 := 0; start S { always { v := clip(20); } }";
+        let body = fn_body(&program_of(src, "Root"), "clip");
+        assert!(
+            body.contains("return 3;"),
+            "ранний if-выход обязан сохранить `return`:\n{body}"
+        );
+        assert!(
+            body.trim_end().ends_with("1\n}") || body.contains("\n    1\n"),
+            "завершающий `return 1;` обязан свернуться в `1`:\n{body}"
+        );
+    }
+
     /// Корневая модель порождает `struct` и `impl`.
     #[test]
     fn root_model_emits_struct_and_impl() {
