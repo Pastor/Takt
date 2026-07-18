@@ -139,7 +139,7 @@ pub(crate) fn eval_expression(
             let bits = match value {
                 Value::Number(n) => n,
                 Value::Boolean(b) => i64::from(b),
-                Value::Real(_) | Value::Array(_) => {
+                Value::Real(_) | Value::Array(_) | Value::Fixed { .. } => {
                     return Err(Diagnostic::error(
                         loc,
                         "доступ к биту возможен только у целого значения".to_string(),
@@ -198,10 +198,12 @@ pub(crate) fn eval_expression(
                 eval_expression(else_, ctx)
             }
         }
-        // Приведение типа опирается на то же ядро, что и запись в переменную.
+        // Приведение типа. Для q(m, n) каст **масштабирует** (int/float ↔ q),
+        // тогда как запись в переменную трактует Number как готовое
+        // представление — поэтому отдельное ядро `cast_to_type` (фича 0061).
         ExpressionNode::Cast(inner, ty) => {
             let value = eval_expression(inner, ctx)?;
-            eval_core::coerce_to_type(value, ty).map_err(|e| e.to_diagnostic(loc_of(inner)))
+            eval_core::cast_to_type(value, ty).map_err(|e| e.to_diagnostic(loc_of(inner)))
         }
         ExpressionNode::Array(items) | ExpressionNode::Initializer(items) => {
             let values = items

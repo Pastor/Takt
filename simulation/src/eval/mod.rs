@@ -32,6 +32,7 @@
 #![deny(clippy::wildcard_enum_match_arm)]
 
 pub(crate) mod error;
+pub(crate) mod fixed;
 pub(crate) mod ops;
 pub(crate) mod value;
 
@@ -77,17 +78,28 @@ pub(crate) fn coerce_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalE
         // видит бит-вектор скаляром, симулятор — массивом из N значений. Это
         // вопрос семантики языка (кандидат в `FEATURES.md`), а не дефект эталона.
         TypeNode::Bit => Ok(Value::Number(to_integer(&value, ty)? & 1)),
+        // q(m, n) (0061): запись в fixed-point-переменную. `Number` — **сырое**
+        // представление (грамматика уже понизила литерал: `1.5` → `384`, задача
+        // 0061-01), поэтому НЕ масштабируется; `Real` (прямое `a := 2.0`)
+        // масштабируется; `Fixed` — пересчёт формата (обычно тождественный).
+        // Отличие от каста (`cast_to_type`): там `int` масштабируется — рантайм-
+        // целое ещё не в представлении. Оба пути дают один результат, т.к.
+        // литерал предмасштабирован грамматикой, а рантайм-целое — нет.
+        TypeNode::Fixed { m, n } => coerce_to_fixed_store(value, *m, *n),
         TypeNode::Bool => match &value {
             Value::Boolean(b) => Ok(Value::Boolean(*b)),
             Value::Number(n) => Ok(Value::Boolean(*n != 0)),
-            Value::Real(_) | Value::Array(_) => Err(EvalError::NotCoercible {
-                value: value_kind(&value),
-                ty: "bool".to_string(),
-            }),
+            Value::Real(_) | Value::Array(_) | Value::Fixed { .. } => {
+                Err(EvalError::NotCoercible {
+                    value: value_kind(&value),
+                    ty: "bool".to_string(),
+                })
+            }
         },
         TypeNode::Rational => match &value {
             Value::Real(f) => Ok(Value::Real(*f)),
             Value::Number(n) => Ok(Value::Real(*n as f64)),
+            Value::Fixed { repr, n, .. } => Ok(Value::Real(fixed::to_real(*repr, *n))),
             Value::Boolean(_) | Value::Array(_) => Err(EvalError::NotCoercible {
                 value: value_kind(&value),
                 ty: "float".to_string(),
@@ -98,10 +110,12 @@ pub(crate) fn coerce_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalE
         TypeNode::Address(_, _) => match &value {
             Value::Number(n) => Ok(Value::Number(*n)),
             Value::Boolean(b) => Ok(Value::Number(i64::from(*b))),
-            Value::Real(_) | Value::Array(_) => Err(EvalError::NotCoercible {
-                value: value_kind(&value),
-                ty: "адресный порт".to_string(),
-            }),
+            Value::Real(_) | Value::Array(_) | Value::Fixed { .. } => {
+                Err(EvalError::NotCoercible {
+                    value: value_kind(&value),
+                    ty: "адресный порт".to_string(),
+                })
+            }
         },
         // Пробел `Value`: структуры симулятором не представимы. Явная диагностика
         // вместо тихого `None` — контрпример T22 тест-плана.
@@ -127,7 +141,7 @@ pub(crate) fn coerce_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalE
             ty: "состояние".to_string(),
         }),
         TypeNode::BuiltinNumeric => match &value {
-            Value::Number(_) | Value::Real(_) => Ok(value),
+            Value::Number(_) | Value::Real(_) | Value::Fixed { .. } => Ok(value),
             Value::Boolean(_) | Value::Array(_) => Err(EvalError::NotCoercible {
                 value: value_kind(&value),
                 ty: "числовой тип".to_string(),
@@ -148,11 +162,68 @@ fn to_integer(value: &Value, ty: &TypeNode) -> Result<i64, EvalError> {
         Value::Boolean(b) => Ok(i64::from(*b)),
         // C усекает float→int в сторону нуля.
         Value::Real(f) => Ok(*f as i64),
+        // q(m, n) → целая часть (floor): `repr >> n`. Штатно сюда не попадает
+        // (смешение q с целым — `SE-059`); перевод q→int идёт через `cast_to_type`.
+        Value::Fixed { repr, n, .. } => Ok(fixed::to_integer_part(*repr, *n)),
         Value::Array(_) => Err(EvalError::NotCoercible {
             value: value_kind(value),
             ty: format!("{ty:?}"),
         }),
     }
+}
+
+/// Запись значения в переменную типа `q(m, n)` (см. арм `TypeNode::Fixed` в
+/// [`coerce_to_type`]).
+fn coerce_to_fixed_store(value: Value, m: u8, n: u8) -> Result<Value, EvalError> {
+    let repr: i128 = match &value {
+        Value::Number(k) => *k as i128, // сырое представление (грамматика масштабировала)
+        Value::Fixed { repr, n: n2, .. } => {
+            // Пересчёт дробных разрядов (обычно n == n2 → тождество).
+            if *n2 >= n {
+                (*repr as i128) >> (*n2 - n)
+            } else {
+                (*repr as i128) << (n - *n2)
+            }
+        }
+        Value::Real(f) => (f * (1u64 << n) as f64).floor() as i128,
+        Value::Boolean(_) | Value::Array(_) => {
+            return Err(EvalError::NotCoercible {
+                value: value_kind(&value),
+                ty: format!("q({m}, {n})"),
+            });
+        }
+    };
+    Ok(Value::Fixed {
+        repr: fixed::wrap(repr, m + n),
+        m,
+        n,
+    })
+}
+
+/// Приведение `expr as ty` (узел `Cast`, фича 0061). В отличие от
+/// [`coerce_to_type`] (запись — представление уже готово), каст **семантически
+/// конвертирует** значение между доменами: `int`/`float`/`bool` ↔ `q(m, n)`
+/// масштабируют на 2ⁿ (правило 6 ADR: приведения только явные).
+///
+/// `#[allow(wildcard_enum_match_arm)]`: цель, отличная от `Rational`, приводится
+/// единым путём (целая часть → усечение по типу); перечислять все варианты
+/// `#[non_exhaustive]`-типа — шум, как и у [`coerce_to_type`].
+#[allow(clippy::wildcard_enum_match_arm)]
+pub(crate) fn cast_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalError> {
+    // Цель — q(m, n): масштабируем значение к представлению.
+    if let TypeNode::Fixed { m, n } = ty {
+        return fixed::cast_to_fixed(&value, *m, *n);
+    }
+    // Источник — q(m, n), цель иная: разворачиваем и приводим обычным путём.
+    if let Value::Fixed { repr, n, .. } = value {
+        return match ty {
+            TypeNode::Rational => Ok(Value::Real(fixed::to_real(repr, n))),
+            // int/bit/enum: целая часть (floor), затем усечение по цели.
+            _ => coerce_to_type(Value::Number(fixed::to_integer_part(repr, n)), ty),
+        };
+    }
+    // Ни источник, ни цель не q — прежнее поведение каста (= запись).
+    coerce_to_type(value, ty)
 }
 
 /// S1/S2/S9: усечение (беззнаковые) либо проверка диапазона (знаковые).

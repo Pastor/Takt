@@ -90,6 +90,7 @@ pub(crate) fn value_kind(value: &Value) -> &'static str {
         Value::Real(_) => "вещественное",
         Value::Boolean(_) => "логическое",
         Value::Array(_) => "массив",
+        Value::Fixed { .. } => "fixed-point",
     }
 }
 

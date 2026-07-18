@@ -57,7 +57,7 @@ pub(crate) enum UnOp {
 
 impl BinOp {
     /// Символ операции — для текстов диагностик.
-    fn symbol(self) -> &'static str {
+    pub(crate) fn symbol(self) -> &'static str {
         match self {
             BinOp::Add => "+",
             BinOp::Subtract => "-",
@@ -101,7 +101,7 @@ pub(crate) fn to_bool(value: &Value) -> Result<bool, EvalError> {
     match value {
         Value::Boolean(b) => Ok(*b),
         Value::Number(n) => Ok(*n != 0),
-        Value::Real(_) | Value::Array(_) => Err(EvalError::TypeMismatch {
+        Value::Real(_) | Value::Array(_) | Value::Fixed { .. } => Err(EvalError::TypeMismatch {
             op: "логическое условие",
             lhs: value_kind(value),
             rhs: None,
@@ -120,11 +120,14 @@ fn as_num(value: &Value, op: BinOp, other: Option<&Value>) -> Result<Num, EvalEr
     match value {
         Value::Number(n) => Ok(Num::Int(*n)),
         Value::Real(f) => Ok(Num::Real(*f)),
-        Value::Boolean(_) | Value::Array(_) => Err(EvalError::TypeMismatch {
-            op: op.symbol(),
-            lhs: value_kind(value),
-            rhs: other.map(value_kind),
-        }),
+        // q(m, n) сюда не доходит: `apply_binary` перехватывает Fixed раньше.
+        Value::Boolean(_) | Value::Array(_) | Value::Fixed { .. } => {
+            Err(EvalError::TypeMismatch {
+                op: op.symbol(),
+                lhs: value_kind(value),
+                rhs: other.map(value_kind),
+            })
+        }
     }
 }
 
@@ -163,6 +166,11 @@ fn as_ints(lhs: &Value, rhs: &Value, op: BinOp) -> Result<(i64, i64), EvalError>
 ///
 /// Паники недостижимы: любое неопределённое сочетание — [`EvalError`] (R4).
 pub(crate) fn apply_binary(op: BinOp, lhs: &Value, rhs: &Value) -> Result<Value, EvalError> {
+    // q(m, n) (0061): fixed-point самоописателен — Q-семантика (сдвиг на n у
+    // `*`/`/`) живёт в `fixed`, а не размазана по обычной целочисленной ветке.
+    if matches!(lhs, Value::Fixed { .. }) || matches!(rhs, Value::Fixed { .. }) {
+        return crate::eval::fixed::binary(op, lhs, rhs);
+    }
     match op {
         BinOp::Add => arith(op, lhs, rhs, i64::checked_add, |a, b| a + b),
         BinOp::Subtract => arith(op, lhs, rhs, i64::checked_sub, |a, b| a - b),
@@ -350,8 +358,11 @@ fn equality(op: BinOp, lhs: &Value, rhs: &Value, negate: bool) -> Result<Value, 
         }
         // Массивы и смешение bool с числом (S8) — ошибка, а не тихое `false`:
         // тихое `false` неотличимо от честного неравенства (дефект Д8).
+        // q(m, n) сюда не доходит: `apply_binary` перехватывает Fixed раньше.
         (Value::Array(_), _)
         | (_, Value::Array(_))
+        | (Value::Fixed { .. }, _)
+        | (_, Value::Fixed { .. })
         | (Value::Boolean(_), Value::Number(_) | Value::Real(_))
         | (Value::Number(_) | Value::Real(_), Value::Boolean(_)) => {
             return Err(EvalError::TypeMismatch {
@@ -370,11 +381,13 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
         UnOp::Not => Ok(Value::Boolean(!to_bool(value)?)),
         UnOp::BitwiseNot => match value {
             Value::Number(n) => Ok(Value::Number(!n)),
-            Value::Real(_) | Value::Boolean(_) | Value::Array(_) => Err(EvalError::TypeMismatch {
-                op: op.symbol(),
-                lhs: value_kind(value),
-                rhs: None,
-            }),
+            Value::Real(_) | Value::Boolean(_) | Value::Array(_) | Value::Fixed { .. } => {
+                Err(EvalError::TypeMismatch {
+                    op: op.symbol(),
+                    lhs: value_kind(value),
+                    rhs: None,
+                })
+            }
         },
         UnOp::Negate => match value {
             Value::Number(n) => n
@@ -382,6 +395,8 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
                 .map(Value::Number)
                 .ok_or(EvalError::ArithmeticOverflow { op: op.symbol() }),
             Value::Real(f) => Ok(Value::Real(-f)),
+            // q(m, n): унарный минус над представлением с wraparound.
+            Value::Fixed { repr, m, n } => Ok(crate::eval::fixed::negate(*repr, *m, *n)),
             Value::Boolean(_) | Value::Array(_) => Err(EvalError::TypeMismatch {
                 op: op.symbol(),
                 lhs: value_kind(value),
@@ -391,6 +406,11 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
         UnOp::UnaryPlus => match value {
             Value::Number(n) => Ok(Value::Number(*n)),
             Value::Real(f) => Ok(Value::Real(*f)),
+            Value::Fixed { repr, m, n } => Ok(Value::Fixed {
+                repr: *repr,
+                m: *m,
+                n: *n,
+            }),
             Value::Boolean(_) | Value::Array(_) => Err(EvalError::TypeMismatch {
                 op: op.symbol(),
                 lhs: value_kind(value),

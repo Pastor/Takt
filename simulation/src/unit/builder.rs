@@ -5,6 +5,7 @@ use crate::unit::statement::compile_block_body;
 use crate::unit::{Execution, Predicate, Unit};
 use grammar::diagnostics::{Diagnostic, Location};
 use grammar::semantic::extend::Extend;
+use grammar::semantic::type_node::TypeNode;
 use grammar::semantic::{
     ConditionNode, ExpressionNode, ModelNode, StateNode, StateNodeKind, VariableNode,
 };
@@ -72,7 +73,7 @@ impl Context for ModelNodeContext {
             borrowed
                 .variables
                 .get(name)
-                .and_then(|var| eval_expr(var_expr(var)))
+                .and_then(|var| eval_expr(var_expr(var)).map(|v| coerce_initial(v, var)))
         };
         if let Some(value) = value {
             self.cache
@@ -133,6 +134,34 @@ fn var_expr(var: &VariableNode) -> &ExpressionNode {
         | VariableNode::Port { expr, .. }
         | VariableNode::Const { expr, .. } => expr,
         VariableNode::Unresolved => &ExpressionNode::None,
+    }
+}
+
+/// Объявленный тип переменной (или `None` для `Unresolved`).
+fn var_type(var: &VariableNode) -> Option<&TypeNode> {
+    match var {
+        VariableNode::Simple { ty, .. }
+        | VariableNode::Port { ty, .. }
+        | VariableNode::Const { ty, .. } => Some(ty),
+        VariableNode::Unresolved => None,
+    }
+}
+
+/// Приводит начальное значение к типу `q(m, n)`, чтобы переменная хранилась как
+/// [`Value::Fixed`] (фича 0061). Иначе арифметика над ней пошла бы целочисленным
+/// путём (представление без сдвига у `*`/`/`) → молча неверный результат.
+///
+/// Для **прочих** типов начальное значение оставляем как есть: историческое
+/// поведение симулятора (усечение init по типу не выполнялось, а его добавление —
+/// смена поведения вне объёма этой фичи). Литерал `q` уже понижен грамматикой в
+/// представление, поэтому `coerce_to_type(Number, Fixed)` трактует его как сырой
+/// repr — двойного масштабирования нет.
+fn coerce_initial(value: Value, var: &VariableNode) -> Value {
+    match var_type(var) {
+        Some(ty @ TypeNode::Fixed { .. }) => {
+            crate::eval::coerce_to_type(value.clone(), ty).unwrap_or(value)
+        }
+        _ => value,
     }
 }
 

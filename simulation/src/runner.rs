@@ -447,6 +447,8 @@ fn format_value(v: &Value) -> String {
         Value::Number(n) => n.to_string(),
         Value::Real(f) => format!("{f:.4}"),
         Value::Boolean(b) => b.to_string(),
+        // q(m, n): показываем вещественное значение repr·2⁻ⁿ.
+        Value::Fixed { repr, n, .. } => format!("{:.4}", *repr as f64 / (1u64 << n) as f64),
         Value::Array(arr) => format!(
             "[{}]",
             arr.iter().map(format_value).collect::<Vec<_>>().join(",")

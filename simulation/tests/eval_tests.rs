@@ -58,6 +58,32 @@ fn num(unit: &Unit, name: &str) -> i64 {
     }
 }
 
+/// Представление `q(m, n)`-переменной — иначе внятный провал.
+fn fixed_repr(unit: &Unit, name: &str) -> i64 {
+    match unit.variable(name) {
+        Some(Value::Fixed { repr, .. }) => repr,
+        other => panic!("переменная '{name}': ожидалось fixed-point, получено {other:?}"),
+    }
+}
+
+// ── Фича 0061: Q-арифметика симулятора (эталон сверки) ────────────────────────
+
+/// Полный путь: инициализация литерала → арифметика в теле → наблюдение.
+/// T9 (floor к −∞ на отрицательном) и T19 (wraparound) — через `.lam`, а не
+/// только юниты `eval::fixed`.
+#[test]
+fn fixed_point_arithmetic_matches_normative_rules() {
+    let (unit, _) = run("fixed_point.lam", 1);
+    // sum = 1.5 + 0.5 = 2.0 → 512 (сложение представлений).
+    assert_eq!(fixed_repr(&unit, "sum"), 512, "q: сложение представлений");
+    // prod = −1.5 · 2.0 = −3.0 → −768 (floor к −∞; на положительном был бы невидим).
+    assert_eq!(fixed_repr(&unit, "prod"), -768, "T9: `*` округляет floor к −∞");
+    // scaled = 1.5 + (3 as q) = 4.5 → 1152 (каст масштабирует 3 → 768).
+    assert_eq!(fixed_repr(&unit, "scaled"), 1152, "T7: каст масштабирует");
+    // wrap = 100.0 + 100.0 = 200.0 (вне q(8,8)) → 51200 mod 2¹⁶ = −14336 (−56.0).
+    assert_eq!(fixed_repr(&unit, "wrap"), -14336, "T19: переполнение `+` — wraparound");
+}
+
 // ── Д1/Д2: арифметика в теле блока ───────────────────────────────────────────
 
 #[test]
