@@ -215,6 +215,7 @@ mod tests {
             states: vec!["A".to_string(), "B".to_string()],
             initial: 0,
             transitions: BTreeMap::from([(0, BTreeSet::from([1])), (1, BTreeSet::from([1]))]),
+            labels: Vec::new(),
         }
     }
 

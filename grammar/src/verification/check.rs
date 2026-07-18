@@ -211,6 +211,7 @@ mod tests {
             states: vec!["A".to_string(), "B".to_string()],
             initial: 0,
             transitions: BTreeMap::from([(0, BTreeSet::from([1])), (1, BTreeSet::from([1]))]),
+            labels: Vec::new(),
         }
     }
 
@@ -285,6 +286,7 @@ mod tests {
             states: vec!["Idle".to_string(), "Fault".to_string()],
             initial: 0,
             transitions: BTreeMap::from([(0, BTreeSet::from([1])), (1, BTreeSet::from([1]))]),
+            labels: Vec::new(),
         };
         let p = Product {
             states: vec![(0, 0), (1, 0), (1, 1)],
