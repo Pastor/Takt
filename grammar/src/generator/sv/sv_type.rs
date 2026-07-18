@@ -154,6 +154,10 @@ pub(crate) fn sv_type(ty: &TypeNode, what: &str) -> Result<SvType, Diagnostic> {
         TypeNode::Bit | TypeNode::Bool => Ok(SvType::scalar("logic")),
         // Отдельного `real` нет и быть не может: см. шапку модуля.
         TypeNode::Rational => Err(sv003(what)),
+        // Fixed-point q(m, n) (фича 0061): знаковое целое ширины W = m + n.
+        // В отличие от `float`, синтезируется — ради этого фича и делалась.
+        // Арифметика (масштабирование при `*`/`/`) — задача 0061-04.
+        TypeNode::Fixed { m, n } => Ok(SvType::scalar(format!("logic signed [{}:0]", (m + n) - 1))),
         TypeNode::Integer { bits, signed } => {
             if *bits == 0 {
                 return Err(sv004(
