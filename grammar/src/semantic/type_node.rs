@@ -30,7 +30,7 @@
 //! `validate_enum_type_declarations`. Данное разделение позволяет обрабатывать
 //! взаимные ссылки между перечислениями и переменными.
 
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast::Type;
 use crate::semantic::ModelNode;
 use std::cell::RefCell;
@@ -58,6 +58,7 @@ pub(crate) fn construct_type(
         Type::Bit => Ok(TypeNode::Bit),
         Type::Bool => Ok(TypeNode::Bool),
         Type::Rational => Ok(TypeNode::Rational),
+        Type::Fixed(loc, ctor, m, n) => construct_fixed(loc, &ctor, m, n),
         Type::Alias(def) => {
             // Примитивные типы: «bit», «bool», «float», «unit» — жёстко связаны.
             match def.name.as_str() {
@@ -129,6 +130,66 @@ pub(crate) fn construct_type(
         Type::Enum(name) => Ok(TypeNode::Enum(name.clone())),
         // Type::Struct — ссылка на объявленный структурный тип.
         Type::Struct(name) => Ok(TypeNode::Struct(name.clone())),
+    }
+}
+
+/// Строит [`TypeNode::Fixed`] из `q(m, n)`, проверяя конструктор и границы
+/// (правило 1 ADR 0061): `ctor == "q"`, `m ≥ 1`, `n ≥ 1`, `m + n ≤ 64`.
+///
+/// # Коды диагностик
+///
+/// - `SE-057` — конструктор типа не `q` (единственный fixed-point-конструктор),
+///   либо границы `m`/`n`/`W` нарушены.
+fn construct_fixed(loc: Location, ctor: &str, m: i64, n: i64) -> Result<TypeNode, Diagnostic> {
+    if ctor != "q" {
+        return Err(Diagnostic::declaration_error(
+            loc,
+            format!(
+                "неизвестный конструктор типа '{}(…, …)'; единственный параметрический \
+                 тип — fixed-point 'q(m, n)'",
+                ctor
+            ),
+        )
+        .with_code("SE-057"));
+    }
+    // `m` включает знаковый бит, поэтому `m ≥ 1`; `n ≥ 1` — тип обязан иметь
+    // дробную часть, иначе это просто знаковое целое `i{m}`. `W ≤ 64` —
+    // представление умещается в `i64` (правило 1).
+    let bound = |what: &str| {
+        Diagnostic::declaration_error(
+            loc,
+            format!(
+                "fixed-point 'q({}, {})': {} (требуется m ≥ 1, n ≥ 1, m + n ≤ 64)",
+                m, n, what
+            ),
+        )
+        .with_code("SE-057")
+    };
+    if m < 1 {
+        return Err(bound("целых бит m < 1 (m включает знаковый бит)"));
+    }
+    if n < 1 {
+        return Err(bound("дробных бит n < 1"));
+    }
+    if m + n > 64 {
+        return Err(bound("полная ширина m + n > 64"));
+    }
+    Ok(TypeNode::Fixed {
+        m: m as u8,
+        n: n as u8,
+    })
+}
+
+/// Машинная ширина хранения fixed-point `q(m, n)` для **программных** целей
+/// (`c`/`rust`/`st`): наименьшая из 8/16/32/64, вмещающая `W` бит — в этих
+/// целях нет `i12`. Цель `sv` ширину **не** округляет (`logic signed [W-1:0]`).
+/// `W ≤ 64` гарантирован построением типа ([`construct_fixed`]).
+pub(crate) fn fixed_storage_bits(w: u8) -> u8 {
+    match w {
+        0..=8 => 8,
+        9..=16 => 16,
+        17..=32 => 32,
+        _ => 64,
     }
 }
 
@@ -476,6 +537,61 @@ mod tests {
         assert_eq!(TypeNode::Enum("Color".to_string()).to_string(), "Color");
         assert_eq!(TypeNode::Struct("Packet".to_string()).to_string(), "Packet");
         assert_eq!(TypeNode::Inference.to_string(), "_");
+        assert_eq!(TypeNode::Fixed { m: 8, n: 8 }.to_string(), "q(8, 8)");
+    }
+
+    // ── Fixed-point q(m, n) (фича 0061, задача 01) ────────────────────────────
+
+    fn fixed(ctor: &str, m: i64, n: i64) -> Result<TypeNode, Diagnostic> {
+        construct_type(
+            Some(Type::Fixed(Location::Implicit, ctor.to_string(), m, n)),
+            empty_model(),
+        )
+    }
+
+    /// `q(8, 8)` → `TypeNode::Fixed { m: 8, n: 8 }` (T1).
+    #[test]
+    fn fixed_q_8_8_builds() {
+        assert_eq!(fixed("q", 8, 8).unwrap(), TypeNode::Fixed { m: 8, n: 8 });
+    }
+
+    /// Границы `m ≥ 1`, `n ≥ 1`, `m + n ≤ 64` — ошибка `SE-057` (T2).
+    #[test]
+    fn fixed_bounds_are_rejected() {
+        for (m, n) in [(0, 8), (8, 0), (40, 40), (-1, 8)] {
+            let err = fixed("q", m, n).unwrap_err();
+            assert_eq!(
+                err.code.as_deref(),
+                Some("SE-057"),
+                "q({m}, {n}) обязан быть ошибкой границ"
+            );
+        }
+    }
+
+    /// Граница ровно `m + n = 64` допустима.
+    #[test]
+    fn fixed_width_exactly_64_ok() {
+        assert_eq!(
+            fixed("q", 32, 32).unwrap(),
+            TypeNode::Fixed { m: 32, n: 32 }
+        );
+    }
+
+    /// Конструктор не `q` → `SE-057` (иных параметрических типов нет, T17-смежно).
+    #[test]
+    fn fixed_non_q_constructor_is_rejected() {
+        let err = fixed("foo", 8, 8).unwrap_err();
+        assert_eq!(err.code.as_deref(), Some("SE-057"));
+    }
+
+    /// Машинная ширина хранения: округление вверх до 8/16/32/64.
+    #[test]
+    fn fixed_storage_bits_rounds_up() {
+        assert_eq!(fixed_storage_bits(8), 8);
+        assert_eq!(fixed_storage_bits(12), 16);
+        assert_eq!(fixed_storage_bits(16), 16);
+        assert_eq!(fixed_storage_bits(24), 32);
+        assert_eq!(fixed_storage_bits(64), 64);
     }
 }
 
@@ -505,6 +621,16 @@ pub enum TypeNode {
     Bool,
     /// Тип с плавающей точкой (`float`).
     Rational,
+    /// Fixed-point `q(m, n)` (фича 0061): знаковый, дополнительный код; `m`
+    /// целых бит **включая знак**, `n` дробных, полная ширина `W = m + n ≤ 64`.
+    /// Представимое значение — `v · 2⁻ⁿ`, где `v : intW`. Границы гарантированы
+    /// построением ([`construct_type`]); арифметика — нормативная (ADR 0061).
+    Fixed {
+        /// Целые биты, включая знаковый (`m ≥ 1`).
+        m: u8,
+        /// Дробные биты (`n ≥ 1`).
+        n: u8,
+    },
     /// Массив фиксированного размера: `(количество_элементов, тип_элемента)`.
     Array(u16, Box<TypeNode>),
     /// Перечисление (Ce4): именованный тип с фиксированным набором значений.
@@ -548,6 +674,7 @@ impl fmt::Display for TypeNode {
             TypeNode::Bit => write!(f, "bit"),
             TypeNode::Bool => write!(f, "bool"),
             TypeNode::Rational => write!(f, "float"),
+            TypeNode::Fixed { m, n } => write!(f, "q({}, {})", m, n),
             TypeNode::Unit => write!(f, "unit"),
             TypeNode::Integer { bits, signed } => {
                 write!(f, "{}{}", if *signed { "i" } else { "u" }, bits)

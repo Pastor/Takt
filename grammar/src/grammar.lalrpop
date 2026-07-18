@@ -349,6 +349,12 @@ LtlPrimary: LtlExpr = {
 
 Type: Type = {
     <name:Identifier> => Type::Alias(name),
+    // Fixed-point q(m, n) (фича 0061). `q` НЕ ключевое слово: конструктор —
+    // обычный identifier, а имя `q` проверяет семантика (construct_fixed) —
+    // иначе `q` перестал бы работать как имя переменной/типа. m, n — сырые
+    // литералы; границы проверяет семантика.
+    <l:@L> <ctor:identifier> "(" <m:number> "," <n:number> ")" <r:@R> =>
+        Type::Fixed(Location::Source(file_no, l, r), ctor.to_string(), m, n),
     <l:@L> "[" <ty:Type> ";" <n:number> "]" <r:@R> => {
         Type::Array {
             loc: Location::Source(file_no, l, r),

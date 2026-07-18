@@ -175,6 +175,9 @@ pub(crate) fn ty(t: &ast::Type) -> Result<String, FormatError> {
         T::Bit => "bit".to_string(),
         T::Bool => "bool".to_string(),
         T::Rational => "float".to_string(),
+        // Fixed-point q(m, n) (фича 0061): печатаем как объявлено, канон — с
+        // пробелом после запятой (как в аргументах).
+        T::Fixed(_, ctor, m, n) => format!("{ctor}({m}, {n})"),
         T::Unit => "()".to_string(),
         T::Alias(id) => id.name.clone(),
         T::Enum(name) | T::Struct(name) => name.clone(),
