@@ -287,6 +287,60 @@ mod tests {
         );
     }
 
+    /// **0059 (A7, правило 2): переменная корня, не нужная НИ ОДНОЙ под-модели, в
+    /// `Shared` не входит — остаётся прямым полем корня.**
+    ///
+    /// Иначе имя типа лжёт («общая»), а поле ловит `dead_code`.
+    #[test]
+    fn shared_union_excludes_variables_no_submodel_needs() {
+        let src = "var for_sub: u8 := 0; var only_root: u8 := 0; \
+                   model M { start S { always { for_sub := 1; } } } \
+                   start Root = M { always { only_root := 2; } }";
+        let map = make_map(src, "Root");
+        let union: Vec<String> = crate::generator::rust::rust_shared::shared_union(&map)
+            .into_iter()
+            .map(|(n, _)| n)
+            .collect();
+        assert!(
+            union.contains(&"for_sub".to_string()),
+            "for_sub нужна под-модели M → обязана быть в Shared: {union:?}"
+        );
+        assert!(
+            !union.contains(&"only_root".to_string()),
+            "only_root не нужна ни одной под-модели → в Shared не входит: {union:?}"
+        );
+    }
+
+    /// **0059 (A6, правило 1): модель без под-моделей структуры `Shared` не
+    /// получает** (иначе `dead_code` на неиспользуемом типе).
+    #[test]
+    fn model_without_submodels_has_no_shared_struct() {
+        let rs = program_of("var x: u8 := 0; start S { always { x := 1; } }", "Root");
+        assert!(
+            !rs.contains("struct RootShared"),
+            "модель без под-моделей не должна иметь Shared:\n{rs}"
+        );
+    }
+
+    /// **0059 (A5): такт под-модели не превышает трёх параметров** (`self` +
+    /// `&mut Shared?` + `&mut H?`) — заглушки `#[allow]` больше нет.
+    #[test]
+    fn submodel_tick_has_at_most_three_params() {
+        let src = "var a: u8 := 0; var b: u8 := 0; var c: u8 := 0; var d: u8 := 0; \
+                   model M { start S { always { a := 1; b := 1; c := 1; d := 1; } } } \
+                   start Root = M;";
+        let rs = program_of(src, "Root");
+        assert!(
+            !rs.contains("allow(clippy::too_many_arguments)"),
+            "заглушка линта не должна эмититься (фича 0059):\n{rs}"
+        );
+        // Под-модель получает общие переменные ОДНИМ параметром `&mut RootShared`.
+        assert!(
+            rs.contains("shared: &mut RootShared"),
+            "под-модель обязана принимать &mut Shared:\n{rs}"
+        );
+    }
+
     /// Корневая модель порождает `struct` и `impl`.
     #[test]
     fn root_model_emits_struct_and_impl() {
