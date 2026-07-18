@@ -157,6 +157,60 @@ pub(crate) fn print_expression(
     }
 }
 
+/// Печатает значение по ЦЕЛЕВОМУ типу присваивания (фича 0066).
+///
+/// Тела цели `st` печатали `cmd_fork := 0` и `command := 2`, тогда как
+/// объявления канонично дают `FALSE` и объявляют константы `Command_Stop` —
+/// вывод противоречил сам себе. Причина: `print_expression` целевого типа не
+/// видит. Здесь он известен, поэтому литерал восстанавливается:
+///
+/// - `BOOL`/`bit` + `0`/`1` → `FALSE`/`TRUE`;
+/// - перечисление + число → **имя константы** (`Command_Stop`), совпадающее с её
+///   объявлением (`st_decl::enum_constants` печатает `{enum}_{variant}`).
+///
+/// Приём — тот же, что у целей `rust` и `sv` (`coerce_to` по целевому типу).
+/// `print_expression` **не меняется** (ADR 0066, правило 1): она зовётся из всех
+/// узлов, и протаскивать тип через каждый — цена, несоизмеримая с задачей.
+///
+/// ⚠️ **Догадываться нельзя** (правило 4): значение без соответствующего варианта
+/// печатается **числом** — перечислимой переменной можно присвоить произвольное
+/// число, и подмена его именем «похожего» варианта была бы тихой ложью.
+pub(crate) fn coerce_to(
+    value: &ExpressionNode,
+    target: &TypeNode,
+    model: &ModelNode,
+) -> Result<String, Diagnostic> {
+    match (target, value) {
+        (TypeNode::Enum(enum_name), ExpressionNode::Number(n)) => {
+            if let Some(def) = model.search_enum(enum_name)
+                && let Some((variant, _)) = def.variants.iter().find(|(_, v)| v == n)
+            {
+                // Совпадает с именем константы из `st_decl::enum_constants`.
+                return Ok(format!("{}_{}", enum_name, variant));
+            }
+            Ok(n.to_string())
+        }
+        (TypeNode::Bool | TypeNode::Bit, ExpressionNode::Number(n)) => match n {
+            0 => Ok(bool_literal(false)),
+            1 => Ok(bool_literal(true)),
+            // Прочие числа для BOOL MatIEC и так отвергает (`b := 2` → ошибка);
+            // печатаем как есть, не выдумывая.
+            _ => print_expression(value, model),
+        },
+        _ => print_expression(value, model),
+    }
+}
+
+/// Тип переменной, которой присваивают (для [`coerce_to`]).
+pub(crate) fn assign_target_type(var: &VariableNode) -> Option<TypeNode> {
+    variable_type(var)
+}
+
+/// Имя переменной для печати присваивания (реэкспорт для `st_stmt`).
+pub(crate) fn variable_ident(var: &VariableNode) -> String {
+    variable_name(var)
+}
+
 /// Печатает условие Lam в текст ST.
 ///
 /// Отдельный печатник — инвариант ADR 0019: в условии `=` это **равенство**,
