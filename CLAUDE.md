@@ -117,8 +117,10 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
   лишь привязка токенов в `grammar.lalrpop` (токен `:=` = `Token::ColonAssign`).
 - **Адрес порта (фича 0020, версия языка 0.2.0):** три источника адреса с
   приоритетом **inline `:=` < оператор `address Имя = <адрес>;` < внешняя карта**
-  (`--address-map`, `.ld`-подобный формат `address_map.rs`). Слой
-  `AddressMap` (`resolve_addresses`). Диагностики: SE-048 (висячая привязка),
+  (`--address-map`, `.ld`-подобный формат `address_map/parse.rs`). Слой
+  `AddressMap` (`resolve_addresses`, `address_map/resolve.rs`; каталог
+  `address_map/` разделён по темам фичей 0069 — `parse`/`env`/`eval`/`resolve`,
+  `mod.rs`-реэкспорт держит пути импорта). Диагностики: SE-048 (висячая привязка),
   SE-049 (конфликт inline + `address`), SE-050 (оверлей карты), SE-051 (висячая
   запись карты), SE-052 (used-порт без адреса), AM-001…006 (формат карты).
   **Выражение адреса вычисляется** (фича 0042, закрыта): имена (`--define` →
