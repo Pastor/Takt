@@ -208,7 +208,7 @@ impl ExtendComplexC {
     }
 
     /// Один такт автомата.
-    fn tick<H: Hal>(&mut self, hal: &mut H, x: &mut u8, y: &mut u8) {
+    fn tick<H: Hal>(&mut self, shared: &mut ExtendComplexShared, hal: &mut H) {
         if self.state == ExtendComplexCState::Init {
             self.state = ExtendComplexCState::Start;
         }
@@ -216,7 +216,7 @@ impl ExtendComplexC {
             ExtendComplexCState::End => {
             }
             ExtendComplexCState::Start => {
-                self.start_c10.tick(&mut *hal, x, y);
+                self.start_c10.tick(shared, &mut *hal);
                 self.start_c21.tick();
                 if self.start_c10.is_done() && self.start_c21.is_done() {
                     self.state = ExtendComplexCState::End;
@@ -263,7 +263,7 @@ impl ExtendComplexCC1 {
     }
 
     /// Один такт автомата.
-    fn tick<H: Hal>(&mut self, hal: &mut H, x: &mut u8, y: &mut u8) {
+    fn tick<H: Hal>(&mut self, shared: &mut ExtendComplexShared, hal: &mut H) {
         if self.state == ExtendComplexCC1State::Init {
             self.state = ExtendComplexCC1State::Start;
         }
@@ -271,7 +271,7 @@ impl ExtendComplexCC1 {
             ExtendComplexCC1State::End => {
             }
             ExtendComplexCC1State::Start => {
-                if (is_collected(Constant::Y, *y, *x) & is_collected(Constant::X, *x, *x)) & hal.has_flag(ENABLED) {
+                if (is_collected(Constant::Y, shared.y, shared.x) & is_collected(Constant::X, shared.x, shared.x)) & hal.has_flag(ENABLED) {
                     self.state = ExtendComplexCC1State::End;
                 }
             }
@@ -537,10 +537,16 @@ enum ExtendComplexStartSeq {
     E3,
 }
 
-/// Модель 'extend_complex'.
-pub struct ExtendComplex<H: Hal> {
+/// Общие переменные модели 'extend_complex', разделяемые под-моделями.
+struct ExtendComplexShared {
     x: u8,
     y: u8,
+}
+
+/// Модель 'extend_complex'.
+pub struct ExtendComplex<H: Hal> {
+    /// Общие с под-моделями переменные (фича 0059).
+    shared: ExtendComplexShared,
     state: ExtendComplexState,
     /// Текущий шаг последовательной композиции состояния 'Start'.
     start_seq: ExtendComplexStartSeq,
@@ -561,8 +567,10 @@ impl<H: Hal> ExtendComplex<H> {
     /// невозможно: без `hal` модель не конструируется.
     pub fn new(hal: H) -> Self {
         Self {
-            x: 1,
-            y: 2,
+            shared: ExtendComplexShared {
+                x: 1,
+                y: 2,
+            },
             state: ExtendComplexState::Init,
             start_seq: ExtendComplexStartSeq::A0,
             next: ExtendComplexF::new(),
@@ -580,8 +588,8 @@ impl<H: Hal> ExtendComplex<H> {
     /// Блоки `enter` здесь не исполняются: по контракту ADR 0033 вход
     /// в стартовое состояние — это поведение, и оно живёт в `tick`.
     pub fn init(&mut self) {
-        self.x = 1;
-        self.y = 2;
+        self.shared.x = 1;
+        self.shared.y = 2;
         self.state = ExtendComplexState::Init;
         self.start_seq = ExtendComplexStartSeq::A0;
         self.next.init();
@@ -609,7 +617,7 @@ impl<H: Hal> ExtendComplex<H> {
             }
             ExtendComplexState::Start => {
                 assert!(self.start_e3.state != ExtendComplexEState::End);
-                assert!(self.x > 0);
+                assert!(self.shared.x > 0);
                 if self.start_seq == ExtendComplexStartSeq::A0 {
                     self.start_a0.tick();
                     if self.start_a0.is_done() {
@@ -624,7 +632,7 @@ impl<H: Hal> ExtendComplex<H> {
                         self.start_seq = ExtendComplexStartSeq::Group2;
                     }
                 } else if self.start_seq == ExtendComplexStartSeq::Group2 {
-                    self.start_group2_c0.tick(&mut self.hal, &mut self.x, &mut self.y);
+                    self.start_group2_c0.tick(&mut self.shared, &mut self.hal);
                     self.start_group2_d1.tick();
                     if self.start_group2_c0.is_done() && self.start_group2_d1.is_done() {
                         self.start_e3.init();

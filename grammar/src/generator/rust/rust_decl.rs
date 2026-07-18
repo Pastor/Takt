@@ -305,6 +305,7 @@ pub(crate) fn emit_constants(
         let scope = Scope {
             model: &model,
             shared: Vec::new(),
+            shared_via_self: false,
             locals: Vec::new(),
             assigned: BTreeSet::new(),
             hal: String::new(),

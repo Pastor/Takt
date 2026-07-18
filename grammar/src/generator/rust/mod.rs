@@ -47,6 +47,7 @@ mod rust_model;
 mod rust_name;
 mod rust_needs;
 mod rust_port;
+mod rust_shared;
 mod rust_stmt;
 mod rust_type;
 

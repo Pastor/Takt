@@ -123,8 +123,7 @@ impl StackerCommandReceiver {
     }
 
     /// Один такт автомата.
-    #[allow(clippy::too_many_arguments)]
-    fn tick<H: Hal>(&mut self, hal: &mut H, busy: &mut bool, eta: &mut u8, tgt_row: &mut u8, tgt_section: &mut u8, tgt_stack: &mut u8, tgt_type: &mut bool) {
+    fn tick<H: Hal>(&mut self, shared: &mut StackerShared, hal: &mut H) {
         if self.state == StackerCommandReceiverState::Init {
             hal.write_bit(OutBitPort::CmdAck, false);
             self.state = StackerCommandReceiverState::WaitingForTask;
@@ -135,19 +134,19 @@ impl StackerCommandReceiver {
                 self.state = StackerCommandReceiverState::TaskActive;
             }
             StackerCommandReceiverState::TaskActive => {
-                if !(*busy) {
+                if !shared.busy {
                     hal.write_bit(OutBitPort::CmdAck, false);
                     self.state = StackerCommandReceiverState::WaitingForTask;
                 }
             }
             StackerCommandReceiverState::WaitingForTask => {
-                if (hal.read_bit(InBitPort::TaskValid) & (!(*busy))) & (!hal.read_bit(InBitPort::SenseBatteryLow)) {
-                    (*tgt_stack) = hal.read_u8(InU8Port::TaskStackNo);
-                    (*tgt_row) = hal.read_u8(InU8Port::TaskRowNo);
-                    (*tgt_section) = hal.read_u8(InU8Port::TaskSectionNo);
-                    (*tgt_type) = hal.read_bit(InBitPort::TaskType);
-                    (*eta) = travel_time(hal.read_u8(InU8Port::TaskStackNo), hal.read_u8(InU8Port::TaskRowNo), hal.read_u8(InU8Port::TaskSectionNo), &mut *hal);
-                    (*busy) = true;
+                if (hal.read_bit(InBitPort::TaskValid) & (!shared.busy)) & (!hal.read_bit(InBitPort::SenseBatteryLow)) {
+                    shared.tgt_stack = hal.read_u8(InU8Port::TaskStackNo);
+                    shared.tgt_row = hal.read_u8(InU8Port::TaskRowNo);
+                    shared.tgt_section = hal.read_u8(InU8Port::TaskSectionNo);
+                    shared.tgt_type = hal.read_bit(InBitPort::TaskType);
+                    shared.eta = travel_time(hal.read_u8(InU8Port::TaskStackNo), hal.read_u8(InU8Port::TaskRowNo), hal.read_u8(InU8Port::TaskSectionNo), &mut *hal);
+                    shared.busy = true;
                     hal.write_bit(OutBitPort::CmdAck, true);
                     self.state = StackerCommandReceiverState::AcceptingTask;
                 }
@@ -197,30 +196,30 @@ impl StackerLiftController {
     }
 
     /// Один такт автомата.
-    fn tick<H: Hal>(&mut self, hal: &mut H, lift_done: &mut bool, lift_op: &mut bool, lift_request: &mut bool) {
+    fn tick<H: Hal>(&mut self, shared: &mut StackerShared, hal: &mut H) {
         if self.state == StackerLiftControllerState::Init {
             hal.write_bit(OutBitPort::CmdFork, false);
             self.state = StackerLiftControllerState::LiftIdle;
         }
         match self.state {
             StackerLiftControllerState::LiftDone => {
-                if !(*lift_request) {
+                if !shared.lift_request {
                     hal.write_bit(OutBitPort::CmdFork, false);
                     self.state = StackerLiftControllerState::LiftIdle;
                 }
             }
             StackerLiftControllerState::LiftIdle => {
-                if *lift_request {
+                if shared.lift_request {
                     hal.write_bit(OutBitPort::CmdFork, true);
                     self.state = StackerLiftControllerState::LiftOperating;
                 }
             }
             StackerLiftControllerState::LiftOperating => {
-                if (((*lift_request) & (!(*lift_op))) & hal.read_bit(InBitPort::SenseLoaded)) || (((*lift_request) & (*lift_op)) & (!hal.read_bit(InBitPort::SenseLoaded))) {
+                if ((shared.lift_request & (!shared.lift_op)) & hal.read_bit(InBitPort::SenseLoaded)) || ((shared.lift_request & shared.lift_op) & (!hal.read_bit(InBitPort::SenseLoaded))) {
                     hal.write_bit(OutBitPort::CmdFork, false);
-                    (*lift_done) = true;
+                    shared.lift_done = true;
                     self.state = StackerLiftControllerState::LiftDone;
-                } else if !(*lift_request) {
+                } else if !shared.lift_request {
                     hal.write_bit(OutBitPort::CmdFork, false);
                     self.state = StackerLiftControllerState::LiftIdle;
                 }
@@ -279,8 +278,7 @@ impl StackerMovementController {
     }
 
     /// Один такт автомата.
-    #[allow(clippy::too_many_arguments)]
-    fn tick<H: Hal>(&mut self, hal: &mut H, busy: &mut bool, lift_done: &mut bool, lift_op: &mut bool, lift_request: &mut bool, tgt_row: &mut u8, tgt_section: &mut u8, tgt_stack: &mut u8, tgt_type: &mut bool) {
+    fn tick<H: Hal>(&mut self, shared: &mut StackerShared, hal: &mut H) {
         if self.state == StackerMovementControllerState::Init {
             hal.write_u8(OutU8Port::CmdTargetStack, CHARGE_STACK);
             hal.write_u8(OutU8Port::CmdTargetRow, CHARGE_ROW);
@@ -290,17 +288,17 @@ impl StackerMovementController {
         }
         match self.state {
             StackerMovementControllerState::DispatchMove => {
-                if !(*tgt_type) {
+                if !shared.tgt_type {
                     hal.write_u8(OutU8Port::CmdTargetStack, PICKUP_STACK);
                     hal.write_u8(OutU8Port::CmdTargetRow, PICKUP_ROW);
                     hal.write_u8(OutU8Port::CmdTargetSection, PICKUP_SECTION);
                     self.state = StackerMovementControllerState::MovingToPickup;
-                } else if *tgt_type {
-                    (*lift_request) = false;
-                    (*lift_done) = false;
-                    hal.write_u8(OutU8Port::CmdTargetStack, *tgt_stack);
-                    hal.write_u8(OutU8Port::CmdTargetRow, *tgt_row);
-                    hal.write_u8(OutU8Port::CmdTargetSection, *tgt_section);
+                } else if shared.tgt_type {
+                    shared.lift_request = false;
+                    shared.lift_done = false;
+                    hal.write_u8(OutU8Port::CmdTargetStack, shared.tgt_stack);
+                    hal.write_u8(OutU8Port::CmdTargetRow, shared.tgt_row);
+                    hal.write_u8(OutU8Port::CmdTargetSection, shared.tgt_section);
                     self.state = StackerMovementControllerState::MovingToStorage;
                 }
             }
@@ -314,75 +312,75 @@ impl StackerMovementController {
                 }
             }
             StackerMovementControllerState::MovementIdle => {
-                if (*busy) & (!hal.read_bit(InBitPort::SenseBatteryLow)) {
+                if shared.busy & (!hal.read_bit(InBitPort::SenseBatteryLow)) {
                     self.state = StackerMovementControllerState::DispatchMove;
                 }
             }
             StackerMovementControllerState::MovingToCell => {
-                if ((hal.read_u8(InU8Port::PosStack) == (*tgt_stack)) & (hal.read_u8(InU8Port::PosRow) == (*tgt_row))) & (hal.read_u8(InU8Port::PosSection) == (*tgt_section)) {
-                    (*lift_request) = true;
-                    (*lift_op) = true;
+                if ((hal.read_u8(InU8Port::PosStack) == shared.tgt_stack) & (hal.read_u8(InU8Port::PosRow) == shared.tgt_row)) & (hal.read_u8(InU8Port::PosSection) == shared.tgt_section) {
+                    shared.lift_request = true;
+                    shared.lift_op = true;
                     self.state = StackerMovementControllerState::WaitingForkAtCell;
                 } else if hal.read_bit(InBitPort::SenseBatteryLow) {
                     hal.write_u8(OutU8Port::CmdTargetStack, CHARGE_STACK);
                     hal.write_u8(OutU8Port::CmdTargetRow, CHARGE_ROW);
                     hal.write_u8(OutU8Port::CmdTargetSection, CHARGE_SECTION);
-                    (*lift_request) = false;
-                    (*lift_done) = false;
+                    shared.lift_request = false;
+                    shared.lift_done = false;
                     hal.write_bit(OutBitPort::CmdAck, false);
                     hal.write_bit(OutBitPort::CmdDone, false);
-                    (*busy) = false;
+                    shared.busy = false;
                     self.state = StackerMovementControllerState::EmergencyCharge;
                 }
             }
             StackerMovementControllerState::MovingToDropoff => {
                 if ((hal.read_u8(InU8Port::PosStack) == DROPOFF_STACK) & (hal.read_u8(InU8Port::PosRow) == DROPOFF_ROW)) & (hal.read_u8(InU8Port::PosSection) == DROPOFF_SECTION) {
-                    (*lift_request) = true;
-                    (*lift_op) = true;
+                    shared.lift_request = true;
+                    shared.lift_op = true;
                     self.state = StackerMovementControllerState::WaitingForkAtDropoff;
                 } else if hal.read_bit(InBitPort::SenseBatteryLow) {
                     hal.write_u8(OutU8Port::CmdTargetStack, CHARGE_STACK);
                     hal.write_u8(OutU8Port::CmdTargetRow, CHARGE_ROW);
                     hal.write_u8(OutU8Port::CmdTargetSection, CHARGE_SECTION);
-                    (*lift_request) = false;
-                    (*lift_done) = false;
+                    shared.lift_request = false;
+                    shared.lift_done = false;
                     hal.write_bit(OutBitPort::CmdAck, false);
                     hal.write_bit(OutBitPort::CmdDone, false);
-                    (*busy) = false;
+                    shared.busy = false;
                     self.state = StackerMovementControllerState::EmergencyCharge;
                 }
             }
             StackerMovementControllerState::MovingToPickup => {
                 if ((hal.read_u8(InU8Port::PosStack) == PICKUP_STACK) & (hal.read_u8(InU8Port::PosRow) == PICKUP_ROW)) & (hal.read_u8(InU8Port::PosSection) == PICKUP_SECTION) {
-                    (*lift_request) = true;
-                    (*lift_op) = false;
+                    shared.lift_request = true;
+                    shared.lift_op = false;
                     self.state = StackerMovementControllerState::WaitingForkAtPickup;
                 } else if hal.read_bit(InBitPort::SenseBatteryLow) {
                     hal.write_u8(OutU8Port::CmdTargetStack, CHARGE_STACK);
                     hal.write_u8(OutU8Port::CmdTargetRow, CHARGE_ROW);
                     hal.write_u8(OutU8Port::CmdTargetSection, CHARGE_SECTION);
-                    (*lift_request) = false;
-                    (*lift_done) = false;
+                    shared.lift_request = false;
+                    shared.lift_done = false;
                     hal.write_bit(OutBitPort::CmdAck, false);
                     hal.write_bit(OutBitPort::CmdDone, false);
-                    (*busy) = false;
+                    shared.busy = false;
                     self.state = StackerMovementControllerState::EmergencyCharge;
                 }
             }
             StackerMovementControllerState::MovingToStorage => {
-                if ((hal.read_u8(InU8Port::PosStack) == (*tgt_stack)) & (hal.read_u8(InU8Port::PosRow) == (*tgt_row))) & (hal.read_u8(InU8Port::PosSection) == (*tgt_section)) {
-                    (*lift_request) = true;
-                    (*lift_op) = false;
+                if ((hal.read_u8(InU8Port::PosStack) == shared.tgt_stack) & (hal.read_u8(InU8Port::PosRow) == shared.tgt_row)) & (hal.read_u8(InU8Port::PosSection) == shared.tgt_section) {
+                    shared.lift_request = true;
+                    shared.lift_op = false;
                     self.state = StackerMovementControllerState::WaitingForkAtStorage;
                 } else if hal.read_bit(InBitPort::SenseBatteryLow) {
                     hal.write_u8(OutU8Port::CmdTargetStack, CHARGE_STACK);
                     hal.write_u8(OutU8Port::CmdTargetRow, CHARGE_ROW);
                     hal.write_u8(OutU8Port::CmdTargetSection, CHARGE_SECTION);
-                    (*lift_request) = false;
-                    (*lift_done) = false;
+                    shared.lift_request = false;
+                    shared.lift_done = false;
                     hal.write_bit(OutBitPort::CmdAck, false);
                     hal.write_bit(OutBitPort::CmdDone, false);
-                    (*busy) = false;
+                    shared.busy = false;
                     self.state = StackerMovementControllerState::EmergencyCharge;
                 }
             }
@@ -395,37 +393,37 @@ impl StackerMovementController {
                 self.state = StackerMovementControllerState::MovementIdle;
             }
             StackerMovementControllerState::WaitingForkAtCell => {
-                if *lift_done {
-                    (*lift_request) = false;
-                    (*lift_done) = false;
-                    (*busy) = false;
+                if shared.lift_done {
+                    shared.lift_request = false;
+                    shared.lift_done = false;
+                    shared.busy = false;
                     hal.write_bit(OutBitPort::CmdDone, true);
                     self.state = StackerMovementControllerState::TaskCompleting;
                 }
             }
             StackerMovementControllerState::WaitingForkAtDropoff => {
-                if *lift_done {
-                    (*lift_request) = false;
-                    (*lift_done) = false;
-                    (*busy) = false;
+                if shared.lift_done {
+                    shared.lift_request = false;
+                    shared.lift_done = false;
+                    shared.busy = false;
                     hal.write_bit(OutBitPort::CmdDone, true);
                     self.state = StackerMovementControllerState::TaskCompleting;
                 }
             }
             StackerMovementControllerState::WaitingForkAtPickup => {
-                if *lift_done {
-                    (*lift_request) = false;
-                    (*lift_done) = false;
-                    hal.write_u8(OutU8Port::CmdTargetStack, *tgt_stack);
-                    hal.write_u8(OutU8Port::CmdTargetRow, *tgt_row);
-                    hal.write_u8(OutU8Port::CmdTargetSection, *tgt_section);
+                if shared.lift_done {
+                    shared.lift_request = false;
+                    shared.lift_done = false;
+                    hal.write_u8(OutU8Port::CmdTargetStack, shared.tgt_stack);
+                    hal.write_u8(OutU8Port::CmdTargetRow, shared.tgt_row);
+                    hal.write_u8(OutU8Port::CmdTargetSection, shared.tgt_section);
                     self.state = StackerMovementControllerState::MovingToCell;
                 }
             }
             StackerMovementControllerState::WaitingForkAtStorage => {
-                if *lift_done {
-                    (*lift_request) = false;
-                    (*lift_done) = false;
+                if shared.lift_done {
+                    shared.lift_request = false;
+                    shared.lift_done = false;
                     hal.write_u8(OutU8Port::CmdTargetStack, DROPOFF_STACK);
                     hal.write_u8(OutU8Port::CmdTargetRow, DROPOFF_ROW);
                     hal.write_u8(OutU8Port::CmdTargetSection, DROPOFF_SECTION);
@@ -453,8 +451,8 @@ enum StackerState {
     End,
 }
 
-/// Модель 'stacker'.
-pub struct Stacker<H: Hal> {
+/// Общие переменные модели 'stacker', разделяемые под-моделями.
+struct StackerShared {
     busy: bool,
     eta: u8,
     lift_done: bool,
@@ -464,6 +462,12 @@ pub struct Stacker<H: Hal> {
     tgt_section: u8,
     tgt_stack: u8,
     tgt_type: bool,
+}
+
+/// Модель 'stacker'.
+pub struct Stacker<H: Hal> {
+    /// Общие с под-моделями переменные (фича 0059).
+    shared: StackerShared,
     state: StackerState,
     stacker_command_receiver0: StackerCommandReceiver,
     stacker_movement_controller1: StackerMovementController,
@@ -479,15 +483,17 @@ impl<H: Hal> Stacker<H> {
     /// невозможно: без `hal` модель не конструируется.
     pub fn new(hal: H) -> Self {
         Self {
-            busy: false,
-            eta: 0,
-            lift_done: false,
-            lift_op: false,
-            lift_request: false,
-            tgt_row: 0,
-            tgt_section: 0,
-            tgt_stack: 0,
-            tgt_type: false,
+            shared: StackerShared {
+                busy: false,
+                eta: 0,
+                lift_done: false,
+                lift_op: false,
+                lift_request: false,
+                tgt_row: 0,
+                tgt_section: 0,
+                tgt_stack: 0,
+                tgt_type: false,
+            },
             state: StackerState::Init,
             stacker_command_receiver0: StackerCommandReceiver::new(),
             stacker_movement_controller1: StackerMovementController::new(),
@@ -501,15 +507,15 @@ impl<H: Hal> Stacker<H> {
     /// Блоки `enter` здесь не исполняются: по контракту ADR 0033 вход
     /// в стартовое состояние — это поведение, и оно живёт в `tick`.
     pub fn init(&mut self) {
-        self.busy = false;
-        self.eta = 0;
-        self.lift_done = false;
-        self.lift_op = false;
-        self.lift_request = false;
-        self.tgt_row = 0;
-        self.tgt_section = 0;
-        self.tgt_stack = 0;
-        self.tgt_type = false;
+        self.shared.busy = false;
+        self.shared.eta = 0;
+        self.shared.lift_done = false;
+        self.shared.lift_op = false;
+        self.shared.lift_request = false;
+        self.shared.tgt_row = 0;
+        self.shared.tgt_section = 0;
+        self.shared.tgt_stack = 0;
+        self.shared.tgt_type = false;
         self.state = StackerState::Init;
         self.stacker_command_receiver0.init();
         self.stacker_movement_controller1.init();
@@ -526,9 +532,9 @@ impl<H: Hal> Stacker<H> {
         }
         match self.state {
             StackerState::Stacker => {
-                self.stacker_command_receiver0.tick(&mut self.hal, &mut self.busy, &mut self.eta, &mut self.tgt_row, &mut self.tgt_section, &mut self.tgt_stack, &mut self.tgt_type);
-                self.stacker_movement_controller1.tick(&mut self.hal, &mut self.busy, &mut self.lift_done, &mut self.lift_op, &mut self.lift_request, &mut self.tgt_row, &mut self.tgt_section, &mut self.tgt_stack, &mut self.tgt_type);
-                self.stacker_lift_controller2.tick(&mut self.hal, &mut self.lift_done, &mut self.lift_op, &mut self.lift_request);
+                self.stacker_command_receiver0.tick(&mut self.shared, &mut self.hal);
+                self.stacker_movement_controller1.tick(&mut self.shared, &mut self.hal);
+                self.stacker_lift_controller2.tick(&mut self.shared, &mut self.hal);
                 if self.stacker_command_receiver0.is_done() && self.stacker_movement_controller1.is_done() && self.stacker_lift_controller2.is_done() {
                     self.state = StackerState::End;
                 }

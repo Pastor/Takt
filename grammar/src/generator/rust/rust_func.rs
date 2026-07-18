@@ -131,6 +131,7 @@ pub(crate) fn emit_functions(
             let mut scope = Scope {
                 model: &model,
                 shared: Vec::new(),
+                shared_via_self: false,
                 locals,
                 assigned,
                 hal: if needs.hal {
