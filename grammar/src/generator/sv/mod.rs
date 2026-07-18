@@ -34,6 +34,7 @@
 //! (модуль и порты, `SV-006`/`SV-007`) · `sv_fsm` (автомат и сброс, `SV-008`) ·
 //! `sv_expr` (выражения и функции, `SV-005`).
 
+mod sv_compose;
 mod sv_expr;
 mod sv_fsm;
 mod sv_map;
@@ -157,6 +158,7 @@ fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
     sv_fsm::emit_constants(&mut p, map, &blocks)?;
     sv_fsm::emit_enums(&mut p, &blocks)?;
     sv_fsm::emit_state_enums(&mut p, map, &blocks)?;
+    sv_fsm::emit_step_enums(&mut p, &fsm)?;
     sv_fsm::emit_signals(&mut p, &fsm);
     sv_fsm::emit_functions(&mut p, map, &fsm, &blocks)?;
     sv_fsm::emit_comb(&mut p, map, &fsm, &root_name)?;
@@ -408,6 +410,67 @@ mod tests {
         assert!(
             !sv.contains("(root_a_state == ROOT_A_END)"),
             "чтение регистра дало бы значение предыдущего такта:\n{sv}"
+        );
+    }
+
+    /// **0057-01:** цепочка `+` получает служебный регистр шага.
+    ///
+    /// Регистр `<state>_step` сброшен в `STEP_0` и **не течёт наружу**: он не
+    /// выходной порт и не участвует в `is_done` (тот смотрит на регистр корня).
+    #[test]
+    fn sequential_composition_emits_step_register() {
+        let src = "model A { start S; } model B { start S; } start P = A + B;";
+        let sv = program_of(src, "Root");
+        assert!(
+            sv.contains("root_p_step_e root_p_step;"),
+            "нет регистра шага цепочки `+`:\n{sv}"
+        );
+        assert!(
+            sv.contains("ROOT_P_STEP_0 = 1'd0"),
+            "нет варианта STEP_0 перечисления шага:\n{sv}"
+        );
+        assert!(
+            sv.contains("root_p_step <= ROOT_P_STEP_0;"),
+            "регистр шага обязан сбрасываться в STEP_0:\n{sv}"
+        );
+        assert!(
+            !sv.contains("output logic root_p_step"),
+            "служебный регистр шага не должен быть выходным портом:\n{sv}"
+        );
+        assert!(
+            sv.contains("assign is_done = (state == ROOT_END);"),
+            "is_done обязан смотреть только на регистр состояния корня:\n{sv}"
+        );
+    }
+
+    /// **0057-01/02:** активен ровно один шаг; продвижение — по done на `_next`.
+    #[test]
+    fn sequential_composition_inlines_one_active_step() {
+        let src = "model A { start S; } model B { start S; } start P = A + B;";
+        let sv = program_of(src, "Root");
+        assert!(
+            sv.contains("unique case (root_p_step)"),
+            "нет case по регистру шага:\n{sv}"
+        );
+        // Продвижение шага — по готовности предыдущего, читаемой из `_next`.
+        assert!(
+            sv.contains("(root_a_state_next == ROOT_A_END)")
+                && sv.contains("root_p_step_next = ROOT_P_STEP_1;"),
+            "нет продвижения шага по done под-модели A:\n{sv}"
+        );
+    }
+
+    /// **0057-03 (R7):** вложенная `+` внутри параллельного шага — **явная**
+    /// диагностика `SV-002`, а НЕ молчаливо стоящий автомат (ср. `RS-021` у C).
+    #[test]
+    fn nested_concatenation_in_parallel_is_diagnosed_not_silent() {
+        let src =
+            "model A { start S; } model B { start S; } model C { start S; } start P = (A + B) | C;";
+        let err = generate_program(&make_map(src, "Root")).unwrap_err();
+        assert_eq!(
+            err.code.as_deref(),
+            Some("SV-002"),
+            "вложенная `+` внутри `|` обязана дать явную SV-002, а не тишину: {err:?}"
         );
     }
 
