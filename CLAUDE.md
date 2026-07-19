@@ -401,9 +401,9 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
   anti-windup — `examples/pid_regulator.lam` (фича [0097](docs/features/0097-pid-regulator-example.md),
   закрыта; ⚠️ имена `integral`/`pv` заняты ФБ `INTEGRAL` IEC → `i_acc`/`meas`).
 - **Прозрачный `float` через глобальную Q-точность — фича
-  [0096](docs/features/0096-fixed-point-native-float.md), В РАБОТЕ** (ADR
-  **Accepted**, заказчик подтвердил вопросы 1–4). ПЛАН РЕАЛИЗАЦИИ для продолжения
-  в новой сессии:
+  [0096](docs/features/0096-fixed-point-native-float.md), ЗАКРЫТА** (2026-07-19,
+  `precheck.sh` зелёный). Автор пишет `float`, представление выбирают флаги
+  `--float-as-q=m.n` / `--float-embedded`:
   - **Идея (ADR 0096):** автор пишет `float`, представление выбирается флагами
     генерации. `--float-as-q=m.n` (уже есть, 0096-01) задаёт глобальную точность:
     цель `sv` подставляет `float → q(m, n)` **всегда** (снимая `SV-003`), цели
@@ -411,6 +411,12 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
     **вторым** флагом `--float-embedded`. Симулятор **двухрежимный** (`float` как
     `f64` либо как `q`) — иначе q-режим/`sv` сверять не с чем (драйвер 2). native
     и Q — **разные** численные семантики; сверка **внутри** режима.
+  - ⚠️ **A-7 (ослабление принципа 0042):** `--float-as-q`/`--float-embedded`
+    **сознательно** меняют численную семантику (профиль FPU / embedded без FPU /
+    RTL), в отличие от `--define` (0042), который логику автомата **НЕ** меняет.
+    Это осознанное исключение: оба режима **документированы** и **сверяются**
+    (не «CLI тихо меняет логику»). Прецедент из 0042 — «CLI не меняет автомат» —
+    остаётся в силе для `--define`; `--float-*` — явно названное исключение.
   - **Сделано (0096-01, `8412c69`):** флаги `GenerateOptions.float_as_q:
     Option<(u8,u8)>` / `float_embedded: bool` + разбор/валидация в `lamc.rs`.
   - **Сделано (0096-02):** цель `sv` — трансформация `float → q(m, n)`
@@ -429,8 +435,10 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
     q-двойником (`conformance_float_q_twin.lam`; поля приватны, q-выходной порт
     rust — `RS-016`); сторож режимов `float_native_and_q_modes_differ` +
     native-гейты (`conformance_float_modes_tests.rs`).
-  - **Осталось: 0096-04** (корпусной пример-регулятор на `float` + yosys-гейт в
-    `precheck.sh` + README + `CLAUDE.md` A-7 + отчёт → закрытие фичи).
+  - **Сделано (0096-04):** пример `examples/float_regulator.lam` (native на
+    `c`/`rust`/`st`, `sv` → `SV-003` закономерно — не в `SV_TRANSLATABLE`; sv
+    float→q покрывает q-регулятор + conformance), README §«Прозрачный `float`»,
+    отчёт `docs/reports/0096-*`. `precheck.sh` зелёный. Фича закрыта.
   - **МЕХАНИЗМ (реализован):** единая **мутирующая** трансформация `float → q(m, n)`
     над `ModelNode` ПЕРЕД генерацией/`build_unit` (`lower_float.rs`, обход по
     образцу `validate/fixed.rs`, но мутирующий; покрыты все варианты

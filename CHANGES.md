@@ -7,8 +7,16 @@
 
 ## [Не выпущено]
 
-### Добавлено (фича [0096](docs/features/0096-fixed-point-native-float.md) — прозрачный `float` через глобальную Q-точность) — В РАБОТЕ (задачи 0096-01…03)
+### Добавлено (фича [0096](docs/features/0096-fixed-point-native-float.md) — прозрачный `float` через глобальную Q-точность) — **ЗАКРЫТА**
 
+- **`examples/float_regulator.lam`** — пропорциональный регулятор на прозрачном
+  `float` (задача 0096-04): тот же, что `regulator.lam`, но на `float`. Показывает
+  выбор представления флагами: `c`/`rust`/`st` — native `double`/`f64`/`LREAL` по
+  умолчанию; `--float-embedded` — целочисленный `q(m, n)`; `-t sv --float-as-q` —
+  синтезируемый RTL. Проходит гейты корпуса (c/plantuml/st/rust/симулятор; `sv` →
+  `SV-003` закономерно, не в `SV_TRANSLATABLE`). README §«Прозрачный `float`» +
+  `CLAUDE.md` (A-7: `--float-*` — осознанное ослабление принципа 0042, оба режима
+  сверяются). Компилятор не изменён.
 - **Цели `c`/`rust`/`st`: embedded-путь `float → q(m, n)` при `--float-embedded`**
   (задача 0096-03): под `--float-as-q=m.n --float-embedded` `float` реализуется
   целочисленным `q(m, n)` (embedded без FPU) — `c` → `int{W}_t`, `rust` → `i{W}`,
