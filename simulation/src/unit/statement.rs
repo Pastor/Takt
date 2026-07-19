@@ -23,15 +23,18 @@
 //! далее в `write_ctx`).
 
 use crate::context::Context;
+use crate::eval::ops;
 use crate::eval::value::Value;
-use crate::eval::{self as eval_core, ops};
 use crate::expression::eval_expression;
 use crate::predicate::create_predicate;
 use crate::unit::{Execution, Flow};
 use grammar::diagnostics::{Diagnostic, Location};
+use grammar::parser::ast::Member;
 use grammar::semantic::formula::Formula;
 use grammar::semantic::type_node::TypeNode;
-use grammar::semantic::{ExpressionNode, FunctionDefinitionNode, MatchPatternNode, StatementNode};
+use grammar::semantic::{
+    ExpressionNode, FunctionDefinitionNode, MatchPatternNode, StatementNode, VariableNode,
+};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -72,6 +75,13 @@ impl Context for BlockScope<'_> {
             self.write.borrow_mut().set_value(name, value);
         }
     }
+
+    /// Реестр структур берётся из `write` — контекста модели (0032, единый
+    /// источник), а не из `outer` (им может быть `Unit`, не знающий структур):
+    /// так `Unit` не приходится растить методом `find_struct`.
+    fn find_struct(&self, name: &str) -> Option<grammar::semantic::StructDefinitionNode> {
+        self.write.borrow().find_struct(name)
+    }
 }
 
 /// Область видимости тела функции: параметры и локальные `var`.
@@ -95,6 +105,10 @@ impl Context for FunctionScope<'_> {
             // Запись в глобальное имя из тела функции уходит наружу по цепочке.
             self.outer.set_value(name, value);
         }
+    }
+
+    fn find_struct(&self, name: &str) -> Option<grammar::semantic::StructDefinitionNode> {
+        self.outer.find_struct(name)
     }
 }
 
@@ -203,7 +217,7 @@ pub(crate) fn exec_statement(
                 return Ok(Flow::Normal);
             };
             let value = eval_expression(init, ctx)?;
-            let value = eval_core::coerce_to_type(value, ty)
+            let value = crate::context::coerce_via(ctx, value, ty)
                 .map_err(|e| e.to_diagnostic(Location::Builtin))?;
             ctx.set_value(name, value);
             Ok(Flow::Normal)
@@ -261,6 +275,41 @@ pub(crate) fn exec_statement(
     }
 }
 
+/// Раскладывает левую часть присваивания в корневую переменную + путь полей.
+///
+/// `Some((var, [поля]))` для `Variable` (path пуст), `p.x` (`[x]`), `o.i.v`
+/// (`[i, v]`); `None` для прочих lvalue (индекс массива, бит) — их запись пока
+/// даёт `SIM-017`. Разбор рекурсивный (не строковый разбор имени).
+fn resolve_place<'a>(
+    lhs: &'a ExpressionNode,
+    path: &mut Vec<String>,
+) -> Option<&'a Rc<RefCell<VariableNode>>> {
+    match lhs {
+        ExpressionNode::Variable(v) => Some(v),
+        ExpressionNode::Parenthesis(inner) => resolve_place(inner, path),
+        ExpressionNode::BitAccess(inner, Member::Identifier(field)) => {
+            let root = resolve_place(inner, path)?;
+            path.push(field.name.clone());
+            Some(root)
+        }
+        _ => None,
+    }
+}
+
+/// Позиция для диагностики `SIM-017` (неподдержанная левая часть присваивания) —
+/// вместо `Location::Builtin`.
+fn loc_of_assign(lhs: &ExpressionNode) -> Location {
+    match lhs {
+        ExpressionNode::Variable(v)
+        | ExpressionNode::ArraySubscript(v, _)
+        | ExpressionNode::ArraySlice(v, _, _) => v.borrow().loc(),
+        ExpressionNode::Parenthesis(inner) | ExpressionNode::BitAccess(inner, _) => {
+            loc_of_assign(inner)
+        }
+        _ => Location::Builtin,
+    }
+}
+
 /// Исполняет выражение-оператор.
 ///
 /// Присваивание — с приведением к типу цели (S9). Прочие выражения (в первую
@@ -268,10 +317,15 @@ pub(crate) fn exec_statement(
 fn exec_expression(expr: &ExpressionNode, ctx: &mut dyn Context) -> Result<Flow, Diagnostic> {
     match expr {
         ExpressionNode::Assign(lhs, rhs) => {
-            let ExpressionNode::Variable(var_rc) = lhs.as_ref() else {
+            // Левая часть раскладывается в корень + путь полей (`p.x` →
+            // root `p`, path `[x]`; `o.i.v` → `[i, v]`). Присваивание всей
+            // переменной — path пуст (сюда же копия структуры `q := p`).
+            let mut path: Vec<String> = Vec::new();
+            let Some(var_rc) = resolve_place(lhs, &mut path) else {
                 return Err(Diagnostic::error(
-                    Location::Builtin,
-                    "присваивание не в переменную пока не поддерживается симулятором".to_string(),
+                    loc_of_assign(lhs),
+                    "присваивание не в переменную или поле пока не поддерживается симулятором"
+                        .to_string(),
                 )
                 .with_code("SIM-017"));
             };
@@ -279,9 +333,23 @@ fn exec_expression(expr: &ExpressionNode, ctx: &mut dyn Context) -> Result<Flow,
                 let b = var_rc.borrow();
                 (b.name().to_string(), b.ty().clone(), b.loc())
             };
-            let value = eval_expression(rhs, ctx)?;
-            let value = eval_core::coerce_to_type(value, &ty).map_err(|e| e.to_diagnostic(loc))?;
-            ctx.set_value(&name, value);
+            let rhs_value = eval_expression(rhs, ctx)?;
+            if path.is_empty() {
+                // Присваивание всей переменной (в т.ч. копия структуры `q := p`).
+                let value = crate::context::coerce_via(ctx, rhs_value, &ty)
+                    .map_err(|e| e.to_diagnostic(loc))?;
+                ctx.set_value(&name, value);
+            } else {
+                // Запись в поле (фича 0034): читаем текущее значение, обновляем по
+                // пути (лист приводится к типу поля), пишем обратно.
+                let current = ctx.get_value(&name).ok_or_else(|| {
+                    Diagnostic::error(loc, format!("переменная '{name}' не найдена"))
+                        .with_code("SIM-009")
+                })?;
+                let updated = crate::context::update_place_via(ctx, current, &path, rhs_value)
+                    .map_err(|e| e.to_diagnostic(loc))?;
+                ctx.set_value(&name, updated);
+            }
             Ok(Flow::Normal)
         }
         // Д3: вызов-оператор (`log_temp(x);`) — раньше молча отбрасывался.
@@ -492,7 +560,7 @@ fn call_local(
     let mut locals = HashMap::new();
     for ((param, ty), value) in params.iter().zip(args) {
         let coerced =
-            eval_core::coerce_to_type(value.clone(), ty).map_err(|e| e.to_diagnostic(loc))?;
+            crate::context::coerce_via(ctx, value.clone(), ty).map_err(|e| e.to_diagnostic(loc))?;
         locals.insert(param.clone(), coerced);
     }
     let mut declared = Vec::new();
@@ -504,7 +572,7 @@ fn call_local(
 
     match flow {
         Flow::Return(Some(value)) => {
-            eval_core::coerce_to_type(value, ret).map_err(|e| e.to_diagnostic(loc))
+            crate::context::coerce_via(&scope, value, ret).map_err(|e| e.to_diagnostic(loc))
         }
         // Процедура без значения либо `return;` — числовой ноль как нейтральное
         // значение (вызов-оператор результат игнорирует).

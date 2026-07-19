@@ -101,11 +101,13 @@ pub(crate) fn to_bool(value: &Value) -> Result<bool, EvalError> {
     match value {
         Value::Boolean(b) => Ok(*b),
         Value::Number(n) => Ok(*n != 0),
-        Value::Real(_) | Value::Array(_) | Value::Fixed { .. } => Err(EvalError::TypeMismatch {
-            op: "логическое условие",
-            lhs: value_kind(value),
-            rhs: None,
-        }),
+        Value::Real(_) | Value::Array(_) | Value::Fixed { .. } | Value::Struct { .. } => {
+            Err(EvalError::TypeMismatch {
+                op: "логическое условие",
+                lhs: value_kind(value),
+                rhs: None,
+            })
+        }
     }
 }
 
@@ -121,11 +123,13 @@ fn as_num(value: &Value, op: BinOp, other: Option<&Value>) -> Result<Num, EvalEr
         Value::Number(n) => Ok(Num::Int(*n)),
         Value::Real(f) => Ok(Num::Real(*f)),
         // q(m, n) сюда не доходит: `apply_binary` перехватывает Fixed раньше.
-        Value::Boolean(_) | Value::Array(_) | Value::Fixed { .. } => Err(EvalError::TypeMismatch {
-            op: op.symbol(),
-            lhs: value_kind(value),
-            rhs: other.map(value_kind),
-        }),
+        Value::Boolean(_) | Value::Array(_) | Value::Fixed { .. } | Value::Struct { .. } => {
+            Err(EvalError::TypeMismatch {
+                op: op.symbol(),
+                lhs: value_kind(value),
+                rhs: other.map(value_kind),
+            })
+        }
     }
 }
 
@@ -357,10 +361,15 @@ fn equality(op: BinOp, lhs: &Value, rhs: &Value, negate: bool) -> Result<Value, 
         // Массивы и смешение bool с числом (S8) — ошибка, а не тихое `false`:
         // тихое `false` неотличимо от честного неравенства (дефект Д8).
         // q(m, n) сюда не доходит: `apply_binary` перехватывает Fixed раньше.
+        // Сравнение структур (`p = q`) — тоже TypeMismatch, осознанно: C
+        // запрещает `==` на структурах, и симулятор, «умеющий больше» эталона,
+        // дал бы ложную уверенность (фича 0034, драйвер 3).
         (Value::Array(_), _)
         | (_, Value::Array(_))
         | (Value::Fixed { .. }, _)
         | (_, Value::Fixed { .. })
+        | (Value::Struct { .. }, _)
+        | (_, Value::Struct { .. })
         | (Value::Boolean(_), Value::Number(_) | Value::Real(_))
         | (Value::Number(_) | Value::Real(_), Value::Boolean(_)) => {
             return Err(EvalError::TypeMismatch {
@@ -379,13 +388,15 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
         UnOp::Not => Ok(Value::Boolean(!to_bool(value)?)),
         UnOp::BitwiseNot => match value {
             Value::Number(n) => Ok(Value::Number(!n)),
-            Value::Real(_) | Value::Boolean(_) | Value::Array(_) | Value::Fixed { .. } => {
-                Err(EvalError::TypeMismatch {
-                    op: op.symbol(),
-                    lhs: value_kind(value),
-                    rhs: None,
-                })
-            }
+            Value::Real(_)
+            | Value::Boolean(_)
+            | Value::Array(_)
+            | Value::Fixed { .. }
+            | Value::Struct { .. } => Err(EvalError::TypeMismatch {
+                op: op.symbol(),
+                lhs: value_kind(value),
+                rhs: None,
+            }),
         },
         UnOp::Negate => match value {
             Value::Number(n) => n
@@ -395,11 +406,13 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
             Value::Real(f) => Ok(Value::Real(-f)),
             // q(m, n): унарный минус над представлением с wraparound.
             Value::Fixed { repr, m, n } => Ok(crate::eval::fixed::negate(*repr, *m, *n)),
-            Value::Boolean(_) | Value::Array(_) => Err(EvalError::TypeMismatch {
-                op: op.symbol(),
-                lhs: value_kind(value),
-                rhs: None,
-            }),
+            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } => {
+                Err(EvalError::TypeMismatch {
+                    op: op.symbol(),
+                    lhs: value_kind(value),
+                    rhs: None,
+                })
+            }
         },
         UnOp::UnaryPlus => match value {
             Value::Number(n) => Ok(Value::Number(*n)),
@@ -409,11 +422,13 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
                 m: *m,
                 n: *n,
             }),
-            Value::Boolean(_) | Value::Array(_) => Err(EvalError::TypeMismatch {
-                op: op.symbol(),
-                lhs: value_kind(value),
-                rhs: None,
-            }),
+            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } => {
+                Err(EvalError::TypeMismatch {
+                    op: op.symbol(),
+                    lhs: value_kind(value),
+                    rhs: None,
+                })
+            }
         },
     }
 }

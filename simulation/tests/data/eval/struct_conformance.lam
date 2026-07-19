@@ -1,0 +1,19 @@
+struct Point { x: u8, y: u16 }
+model Conf {
+    var p: Point;
+    var t: u8 := 0;
+    start Idle {
+        always {
+            p.x := 7;
+            p.y := 300;
+            t := t + 1;
+        }
+        ref Done: t >= 1;
+    }
+    state Done {
+        always {
+            t := t;
+        }
+    }
+}
+start Entry = Conf;

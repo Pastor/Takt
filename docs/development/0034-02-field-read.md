@@ -1,5 +1,12 @@
 # Задача 0034-02: Чтение поля и разрешение неоднозначности `BitAccess`
 
+> ✅ **СДЕЛАНО (2026-07-19).** Диспетчеризация `a.b` — по **вычисленному
+> значению** в общем ядре `eval/access.rs::read_member` (адаптеры `expression`
+> и `predicate` его **не дублируют** — иначе разошлись бы, класс дефекта 0025):
+> `Struct` + `Identifier` → поле; `Number`/`Boolean` + `Number` → бит (как
+> прежде, регресс `BTN.0` цел); `Struct` + `Number` → SIM-029; поле у не-структуры
+> → SIM-012; неизвестное поле → SIM-027. Итог — [отчёт](../reports/0034-sim-struct-types.md).
+
 > Фича: [../features/0034-sim-struct-types.md](../features/0034-sim-struct-types.md) · ADR: [../adr/0034-sim-struct-types.md](../adr/0034-sim-struct-types.md) · анализ: [../analyze/0034-sim-struct-types.md](../analyze/0034-sim-struct-types.md)
 >
 > Покрывает требование **R3** (чтение поля). Зависит от [0034-01](0034-01-sim-struct-types.md).
