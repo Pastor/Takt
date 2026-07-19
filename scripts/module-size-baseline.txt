@@ -10,7 +10,7 @@
 #
 # Формат: <строк> <путь от корня репозитория>
 5015 grammar/tests/semantic_tests.rs
-1937 grammar/src/bin/lamc.rs
+2039 grammar/src/bin/lamc.rs
 1893 grammar/tests/parser_tests.rs
 1842 grammar/src/semantic/tree.rs
 1752 grammar/src/semantic/mod.rs

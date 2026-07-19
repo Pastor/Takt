@@ -2,8 +2,8 @@
 
 > Фича: [../features/0096-fixed-point-native-float.md](../features/0096-fixed-point-native-float.md) · ADR: [../adr/0096-fixed-point-native-float.md](../adr/0096-fixed-point-native-float.md) · анализ: [../analyze/0096-fixed-point-native-float.md](../analyze/0096-fixed-point-native-float.md)
 
-> **Стадия: проработка** — код не начат (фича ЗАБЛОКИРОВАНА до закрытия 0061).
-> Ниже — декомпозиция и объём первой задачи.
+> **Задача 0096-01 реализована** (2026-07-19); 0061 закрыта. Ниже — декомпозиция
+> фичи и что сделано в первой задаче.
 
 ## Декомпозиция фичи (намечено)
 
@@ -22,16 +22,24 @@
 `float_width` (0029). Флага точности fixed-point для `float` нет; `--float-width`
 задаёт лишь ширину нативного float (32/64).
 
-### Что нужно сделать
+### Что сделано
 
-- `lamc.rs`: разобрать `--float-as-q=<m>.<n>` (→ `Option<(u8, u8)>`) и
-  `--float-embedded` (→ `bool`); валидация `m ≥ 1`, `n ≥ 1`, `m + n ≤ 64` (тот же
-  предикат, что `construct_fixed` 0061-01) — иначе ошибка CLI (T3).
-- `GenerateOptions`: поля `float_as_q: Option<(u8, u8)>`, `float_embedded: bool`.
-- Пока **не** менять кодоген: задача инфраструктурная, вывод байт-в-байт прежний
-  (T1). Поведение включают 0096-02/03.
+- `GenerateOptions` (`generator/mod.rs`): поля `float_as_q: Option<(u8, u8)>`,
+  `float_embedded: bool` (`new`/`Default` — `None`/`false`).
+- `lamc.rs`: разбор `--float-as-q=<m>.<n>` (обе формы) и `--float-embedded`;
+  `parse_float_as_q` валидирует границы правила 1 ADR 0061 (`m ≥ 1`, `n ≥ 1`,
+  `m + n ≤ 64`) и формат — иначе **ошибка CLI**, а не молчаливое умолчание (T3).
+  Прокидывание в `GenerateOptions` (`generate_options`), строки help.
+- Кодоген **не тронут**: вывод байт-в-байт прежний (T1). Поведение включают
+  0096-02/03.
+
+⚠️ `lamc.rs` (монолитный CLI, уже в реестре размера) вырос на CLI-флаги →
+baseline синхронизирован; **вынос парсера аргументов в подмодуль** — отдельный
+кандидат (тесты флагов зовут `parse_compile_args`, поэтому точечно не выносятся).
 
 ### Проверки
 
-- `cargo build --bin lamc`; юнит на разбор флага (валид/контрпримеры T2/T3).
-- `git diff examples/generated` пуст (T1: флаги без значений ничего не меняют).
+- `cargo build --bin lamc` ✅; юнит-тесты `parse_float_as_q_valid`,
+  `float_as_q_defaults_to_none`, `float_as_q_rejects_out_of_bounds_and_bad_format`,
+  `parse_float_embedded_flag` (валид/умолчание/контрпримеры T2/T3) — зелёные.
+- `git diff examples/generated` пуст (T1) ✅.

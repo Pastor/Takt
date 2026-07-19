@@ -91,6 +91,14 @@ pub struct CompileOptions {
     /// что совпадает с точностью симулятора (f64). Значение 32 (`float`) — для
     /// платформ, где 8-байтное чтение недопустимо.
     pub float_width: grammar::FloatWidth,
+    /// Глобальная точность `q(m, n)` для реализации `float` (фича 0096).
+    ///
+    /// Заполняется флагом `--float-as-q=<m>.<n>` (границы правила 1 ADR 0061:
+    /// `m ≥ 1`, `n ≥ 1`, `m + n ≤ 64`). `None` без флага — прежнее поведение.
+    pub float_as_q: Option<(u8, u8)>,
+    /// Реализовать `float` целочисленным Q-путём в `c`/`rust`/`st` (embedded) —
+    /// флаг `--float-embedded` (фича 0096). Действует только с `--float-as-q`.
+    pub float_embedded: bool,
 }
 
 /// Разбивает строку путей на отдельные директории.
@@ -185,6 +193,8 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     let mut guard_enable = true;
     let mut address_map: Option<String> = None;
     let mut float_width = grammar::FloatWidth::default();
+    let mut float_as_q: Option<(u8, u8)> = None;
+    let mut float_embedded = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -259,6 +269,18 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
             a if a.starts_with("--float-width=") => {
                 float_width = parse_float_width(&a["--float-width=".len()..])?;
             }
+            // `--float-as-q=m.n` — глобальная точность реализации float (0096).
+            "--float-as-q" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => float_as_q = Some(parse_float_as_q(v)?),
+                    None => return Err(format!("{} требует аргумент: m.n (напр. 10.22)", arg)),
+                }
+            }
+            a if a.starts_with("--float-as-q=") => {
+                float_as_q = Some(parse_float_as_q(&a["--float-as-q=".len()..])?);
+            }
+            "--float-embedded" => float_embedded = true,
             // Позиционный аргумент — входной файл
             a if !a.starts_with('-') => {
                 input_file = Some(a.to_string());
@@ -292,6 +314,8 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
         guard_enable,
         address_map,
         float_width,
+        float_as_q,
+        float_embedded,
     })
 }
 
@@ -325,6 +349,8 @@ fn print_compile_error(diag: &grammar::diagnostics::Diagnostic) {
 fn generate_options(options: &CompileOptions) -> grammar::GenerateOptions {
     let mut generate = grammar::GenerateOptions::new(options.guard_enable);
     generate.float_width = options.float_width;
+    generate.float_as_q = options.float_as_q;
+    generate.float_embedded = options.float_embedded;
     generate
 }
 
@@ -342,6 +368,29 @@ fn parse_float_width(value: &str) -> Result<grammar::FloatWidth, String> {
             other
         )),
     }
+}
+
+/// Разбирает значение флага `--float-as-q=<m>.<n>` в точность `q(m, n)` (0096).
+///
+/// Границы — те же, что у типа `q` (правило 1 ADR 0061): `m ≥ 1`, `n ≥ 1`,
+/// `m + n ≤ 64`. Нарушение или неверный формат — **ошибка CLI**, а не молчаливое
+/// умолчание: угадывать точность нельзя (ровно довод, по которому 0045/0061
+/// отвергли автоугадывание формата).
+fn parse_float_as_q(value: &str) -> Result<(u8, u8), String> {
+    let (m_str, n_str) = value.split_once('.').ok_or_else(|| {
+        format!("--float-as-q: ожидался формат m.n (напр. 10.22), получено '{value}'")
+    })?;
+    let parse = |s: &str, what: &str| -> Result<u8, String> {
+        s.parse::<u8>()
+            .map_err(|_| format!("--float-as-q: {what} '{s}' — не целое 0..255"))
+    };
+    let (m, n) = (parse(m_str, "m")?, parse(n_str, "n")?);
+    if m < 1 || n < 1 || (m as u16) + (n as u16) > 64 {
+        return Err(format!(
+            "--float-as-q: q({m}, {n}) вне границ (m ≥ 1, n ≥ 1, m + n ≤ 64)"
+        ));
+    }
+    Ok((m, n))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -806,6 +855,12 @@ fn print_usage() {
         "                         Виден ТОЛЬКО выражениям адреса, логику автомата не меняет."
     );
     eprintln!("  --float-width=32|64    Ширина вещественного типа в C: float или double");
+    eprintln!(
+        "  --float-as-q=m.n       Точность q(m,n) для реализации float (0096): sv → q; c/rust/st → q с --float-embedded"
+    );
+    eprintln!(
+        "  --float-embedded       Реализовать float целочисленным q в c/rust/st (embedded без FPU)"
+    );
     eprintln!("                         Цель rust всегда даёт f64 и флаг 32 отвергает (RS-015)");
     eprintln!(
         "                         По умолчанию 64 (double) — совпадает с точностью симулятора"
@@ -1892,6 +1947,53 @@ mod tests {
     fn float_width_requires_argument() {
         let err = parse_compile_args(&["--float-width".to_string()]).unwrap_err();
         assert!(err.contains("--float-width"), "сообщение: {}", err);
+    }
+
+    // ── Флаги float→q (фича 0096, задача 0096-01) ───────────────────────────────
+
+    /// T2: `--float-as-q=10.22` → точность `(10, 22)`; обе формы флага.
+    #[test]
+    fn parse_float_as_q_valid() {
+        let slit =
+            parse_compile_args(&["m.lam".to_string(), "--float-as-q=10.22".to_string()]).unwrap();
+        assert_eq!(slit.float_as_q, Some((10, 22)));
+        let sep = parse_compile_args(&[
+            "m.lam".to_string(),
+            "--float-as-q".to_string(),
+            "8.8".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(sep.float_as_q, Some((8, 8)));
+    }
+
+    /// Умолчание: без флага — `None` (прежнее поведение, T1).
+    #[test]
+    fn float_as_q_defaults_to_none() {
+        let o = parse_compile_args(&["m.lam".to_string()]).unwrap();
+        assert_eq!(o.float_as_q, None);
+        assert!(!o.float_embedded);
+    }
+
+    /// T3: контрпримеры границ (правило 1 ADR 0061) и формата — ошибка CLI.
+    #[test]
+    fn float_as_q_rejects_out_of_bounds_and_bad_format() {
+        for bad in ["40.40", "0.8", "8.0", "abc", "8", "8.x"] {
+            let arg = format!("--float-as-q={bad}");
+            let err = parse_compile_args(&["m.lam".to_string(), arg]).unwrap_err();
+            assert!(err.contains("--float-as-q"), "для '{bad}' сообщение: {err}");
+        }
+    }
+
+    /// `--float-embedded` — булев флаг.
+    #[test]
+    fn parse_float_embedded_flag() {
+        let o = parse_compile_args(&[
+            "m.lam".to_string(),
+            "--float-as-q=8.8".to_string(),
+            "--float-embedded".to_string(),
+        ])
+        .unwrap();
+        assert!(o.float_embedded);
     }
 
     // ── Область проверки verify (фича 0051, задача 0051-02) ──────────────────
