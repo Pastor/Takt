@@ -1,5 +1,14 @@
 # Задача 0039-03: Сверка «байт-в-байт» с `lamc fmt` и версия плагина
 
+> ⚠️ **ПЕРЕНАПРАВЛЕНА (2026-07-19).** Развилка 0039 разрешена в пользу **Option B
+> (LSP4IJ)**. Идея этой задачи — «байт-в-байт с `lamc fmt` автотестом, эталон
+> вычисляется прогоном ядра» — **выполнена**, но на LSP-пути: тест
+> `a2_reformat_matches_lamc_fmt_over_corpus` (`grammar/tests/lsp_tests.rs`) сверяет
+> вывод `formatting_edits` с `format_source` на всём корпусе `examples/`. Часть
+> про внешний процесс `lamc`/EOL/stdout **неактуальна** (процесса нет). Версия
+> плагина — уже `0.5.0` (фича 0038). См.
+> [отчёт 0039](../reports/0039-intellij-reformat.md).
+
 > Фича: [../features/0039-intellij-reformat.md](../features/0039-intellij-reformat.md) · ADR: [../adr/0039-intellij-reformat.md](../adr/0039-intellij-reformat.md) · анализ: [../analyze/0039-intellij-reformat.md](../analyze/0039-intellij-reformat.md) · тест-план: [../tests/0039-intellij-reformat.md](../tests/0039-intellij-reformat.md) · предыдущие: [0039-01](0039-01-intellij-reformat.md), [0039-02](0039-02-lamc-settings.md)
 
 > **Статус: Планируется (разработка не начата).** «Что было» — реальное состояние

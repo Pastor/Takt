@@ -1,5 +1,12 @@
 # Задача 0039-01: Внешний форматтер — `AsyncDocumentFormattingService` + `lamc fmt --stdin`
 
+> ⚠️ **СНЯТА как неактуальная (2026-07-19).** Развилка фичи 0039 разрешена в
+> пользу **Option B (LSP4IJ)** после принятия LSP4IJ в фиче 0038 — форматирование
+> приходит от `lam-lsp` `textDocument/formatting`, внешний форматтер `lamc fmt
+> --stdin` **не реализуется**. Задача сохранена как история решения (Option C).
+> См. [ADR, «Обновление решения (2026-07-19)»](../adr/0039-intellij-reformat.md) и
+> [карточку фичи, «Итог»](../features/0039-intellij-reformat.md).
+
 > Фича: [../features/0039-intellij-reformat.md](../features/0039-intellij-reformat.md) · ADR: [../adr/0039-intellij-reformat.md](../adr/0039-intellij-reformat.md) · анализ: [../analyze/0039-intellij-reformat.md](../analyze/0039-intellij-reformat.md) · тест-план: [../tests/0039-intellij-reformat.md](../tests/0039-intellij-reformat.md) · следующие: [0039-02](0039-02-lamc-settings.md), [0039-03](0039-03-golden-tests.md)
 
 > **Статус: Планируется (разработка не начата).** Раздел «Что было» — реальное

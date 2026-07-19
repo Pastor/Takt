@@ -29,7 +29,7 @@
 | [0036](./0036-sim-visibility.md) | Согласование видимости публичного API крейта simulation | Accepted | фича 0036 |
 | [0037](./0037-windows-test-failures.md) | Кросс-платформенность тестов и Windows в матрице CI | Accepted | фича 0037 |
 | [0038](./0038-intellij-semantic-tokens.md) | Семантическая подсветка Lam в IntelliJ через lam-lsp | Accepted | фича 0038 |
-| [0039](./0039-intellij-reformat.md) | Действие Reformat Code в плагине IntelliJ | Accepted | фича 0039 |
+| [0039](./0039-intellij-reformat.md) | Действие Reformat Code в плагине IntelliJ | Accepted (обновление 2026-07-19: развилка → Option B, LSP4IJ) | фича 0039 |
 | [0040](./0040-intellij-psi-parser.md) | Полноценный PSI-парсер плагина IntelliJ — собственный PSI, LSP4IJ или гибрид | Accepted | фича 0040 |
 | [0041](./0041-st-backend.md) | Бэкенд генерации в Structured Text (IEC 61131-3) | Accepted | фича 0041 |
 | [0042](./0042-address-defines.md) | Инъекция define'ов для адресов — среда символов адреса (`--define`) | Accepted | фича 0042 |
