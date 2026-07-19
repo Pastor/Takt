@@ -94,6 +94,19 @@ pub struct GenerateOptions {
     /// Ширина вещественного типа в порождаемом C (фича 0029). Умолчание —
     /// [`FloatWidth::W64`]; CLI-флаг `--float-width=32|64`.
     pub float_width: FloatWidth,
+    /// Глобальная точность `q(m, n)`, которой реализуется `float` (фича 0096).
+    ///
+    /// `None` (умолчание) — прежнее поведение: `float` нативен (`c`/`rust`/`st`)
+    /// либо `SV-003` (`sv`). `Some((m, n))` (CLI-флаг `--float-as-q=m.n`) —
+    /// глобальная точность подстановки `float → q(m, n)`: цель `sv` применяет её
+    /// всегда (снимая `SV-003`), цели `c`/`rust`/`st` — только при
+    /// [`float_embedded`](Self::float_embedded). Границы — правило 1 ADR 0061.
+    pub float_as_q: Option<(u8, u8)>,
+    /// Для целей `c`/`rust`/`st`: реализовать `float` целочисленным Q-путём
+    /// (embedded без FPU) вместо нативного (фича 0096, CLI-флаг
+    /// `--float-embedded`). Действует только вместе с [`float_as_q`](Self::float_as_q);
+    /// на `sv` не влияет (там `float` всегда `q`).
+    pub float_embedded: bool,
 }
 
 impl GenerateOptions {
@@ -104,6 +117,8 @@ impl GenerateOptions {
             hal: false,
             address_map: std::collections::HashMap::new(),
             float_width: FloatWidth::default(),
+            float_as_q: None,
+            float_embedded: false,
         }
     }
 }
@@ -116,6 +131,8 @@ impl Default for GenerateOptions {
             hal: false,
             address_map: std::collections::HashMap::new(),
             float_width: FloatWidth::default(),
+            float_as_q: None,
+            float_embedded: false,
         }
     }
 }
