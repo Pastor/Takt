@@ -59,4 +59,5 @@
 | [0066](./0066-st-bool-literals.md) | Литералы по целевому типу в телах `st` (`BOOL` и перечисления) | Accepted | фича 0066 |
 | [0068](./0068-verify-data-properties.md) | Верификация свойств над данными — абстракция по формуле | Accepted | фича 0068 |
 | [0069](./0069-address-map-eval-split.md) | Разделение `address_map.rs` — по темам, а не по лимиту | Accepted | фича 0069 |
+| [0096](./0096-fixed-point-native-float.md) | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | Accepted | фича 0096 |
 
