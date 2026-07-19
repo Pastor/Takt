@@ -396,10 +396,17 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
   `sv`: ширина НЕ округляется** (`logic signed [W-1:0]`); `*` расширяет операнды
   `{2W}'($signed(..))` (иначе `a*b` в контексте `W` теряет старшую половину), floor
   через `>>>`; знаковость восстанавливается `$signed(..)` на каждом уровне.
-  Пример-потребитель — `examples/regulator.lam` (пропорциональный регулятор,
-  сходится и завершается — контракт `examples_scenario_tests`). Полный ПИД с
-  anti-windup — `examples/pid_regulator.lam` (фича [0097](docs/features/0097-pid-regulator-example.md),
-  закрыта; ⚠️ имена `integral`/`pv` заняты ФБ `INTEGRAL` IEC → `i_acc`/`meas`).
+  Пример-потребитель **явного `q(m, n)` как типа языка** — `examples/regulator.lam`
+  (пропорциональный регулятор, сходится и завершается — контракт
+  `examples_scenario_tests`). ⚠️ Полный ПИД `examples/pid_regulator.lam` (фича
+  [0097](docs/features/0097-pid-regulator-example.md), закрыта; имена
+  `integral`/`pv` заняты ФБ `INTEGRAL` IEC → `i_acc`/`meas`) **переведён с явного
+  `q` на прозрачный `float`** ([фикс 0097-01](docs/fixes/0097-01-pid-native-float.md)):
+  тип в исходнике — `float`, q формируется флагами сборки (sv — `--float-as-q=8.8`;
+  встраиваемые c-hal/st-at — `--float-embedded --float-as-q=8.8`; float→q(8,8)
+  байт-в-байт равно явному q). Тест 0097 anti-windup читает значения `f64`
+  (native-режим), не q-repr. `precheck.sh` — гейт «представления float» (c-hal/st-at
+  под `--float-embedded` обязаны собираться в q).
 - **Прозрачный `float` через глобальную Q-точность — фича
   [0096](docs/features/0096-fixed-point-native-float.md), ЗАКРЫТА** (2026-07-19,
   `precheck.sh` зелёный). Автор пишет `float`, представление выбирают флаги

@@ -7,6 +7,23 @@
 
 ## [Не выпущено]
 
+### Изменено (фикс [0097-01](docs/fixes/0097-01-pid-native-float.md) — пример ПИД на прозрачном `float`)
+
+- **`examples/pid_regulator.lam`: `q(8, 8) → float`** (механизм фичи 0096,
+  запрошено заказчиком). Автор пишет `float`, представление выбирают флаги:
+  цели `c`/`rust`/`st` — нативный `double`/`f64`/`LREAL`; встраиваемые
+  `c-hal`/`st-at` — q через `--float-embedded --float-as-q=8.8`; `sv` — q через
+  `--float-as-q=8.8` (float→q(8,8) **байт-в-байт** равно прежнему явному q, поэтому
+  committed `.sv` и тестбенч не изменились). Соседний `regulator.lam` **оставлен**
+  на явном `q(8, 8)` как демонстрация типа языка (фича 0061).
+- **`scripts/precheck.sh`:** цель `sv` для float-примеров получает `--float-as-q`
+  (иначе `SV-003`); добавлен **гейт представления float** — `pid_regulator` под
+  `--float-embedded` обязан собираться в q для `c-hal`/`st-at`.
+- **`simulation/tests/examples_scenario_tests.rs`:** тест 0097 anti-windup
+  переписан с q-repr на значения `f64` (native-режим симулятора); helper
+  `real_val`. Регенерирован нативный `examples/generated/{c,rust,st}/pid_regulator.*`.
+- `precheck.sh` зелёный (EXIT=0); тесты 2057 (default) / 2183 (`lsp`).
+
 ### Добавлено (фича [0039](docs/features/0039-intellij-reformat.md) — действие Reformat Code в плагине IntelliJ) — **ЗАКРЫТА**
 
 - **Развилка разрешена в пользу LSP4IJ-варианта (Option B).** ADR 0039 принимал

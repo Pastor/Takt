@@ -1,13 +1,6 @@
 #include "pid_regulator.h"
 #include <assert.h>
 #include <math.h>
-static int64_t lam_q_floordiv(int64_t x, int64_t d) {
-    int64_t q = x / d;
-    return ((x % d != 0) && ((x < 0) != (d < 0))) ? q - 1 : q;
-}
-static int64_t lam_q_mul(int64_t a, int64_t b, unsigned n) {
-    return lam_q_floordiv(a * b, (int64_t)1 << n);
-}
 /// Model functions 'Pid (PidRegulator:Pid)'
 static void PidRegulatorPid_init(PidRegulatorPid *model, PidRegulator *main);
 static void PidRegulatorPid_tick(PidRegulatorPid *model, PidRegulator *main);
@@ -17,20 +10,20 @@ static bool PidRegulatorPid_is_done(const PidRegulatorPid *model, PidRegulator *
 void PidRegulatorPid_init(PidRegulatorPid *model, PidRegulator *main) {
     assert(0 != model);
     model->state = PID_REGULATOR_PID_INIT;
-    model->ctrl = 0;
-    model->deriv = 0;
-    model->eps = 32;
-    model->err = 0;
-    model->err_prev = 0;
-    model->i_acc = 0;
-    model->imax = 8192;
-    model->kd = 64;
-    model->ki = 16;
-    model->kp = 128;
-    model->kplant = 128;
-    model->meas = 0;
-    model->neg_imax = -8192;
-    model->target = 2048;
+    model->ctrl = 0.0;
+    model->deriv = 0.0;
+    model->eps = 0.125;
+    model->err = 0.0;
+    model->err_prev = 0.0;
+    model->i_acc = 0.0;
+    model->imax = 32.0;
+    model->kd = 0.25;
+    model->ki = 0.0625;
+    model->kp = 0.5;
+    model->kplant = 0.5;
+    model->meas = 0.0;
+    model->neg_imax = -32.0;
+    model->target = 8.0;
 }
 
 /// Функция обработки модели Pid (PidRegulator:Pid)
@@ -42,17 +35,17 @@ void PidRegulatorPid_tick(PidRegulatorPid *model, PidRegulator *main) {
     }
     switch (model->state) {
         case PID_REGULATOR_PID_CONTROL: {
-            model->err = (int16_t)((int64_t)(model->target) - (int64_t)(model->meas));
-            model->i_acc = (int16_t)((int64_t)(model->i_acc) + (int64_t)(model->err));
+            model->err = model->target - model->meas;
+            model->i_acc = model->i_acc + model->err;
             if (model->i_acc > model->imax) {
                 model->i_acc = model->imax;
             }
             if (model->i_acc < model->neg_imax) {
                 model->i_acc = model->neg_imax;
             }
-            model->deriv = (int16_t)((int64_t)(model->err) - (int64_t)(model->err_prev));
-            model->ctrl = (int16_t)((int64_t)((int16_t)((int64_t)((int16_t)(lam_q_mul((int64_t)(model->kp), (int64_t)(model->err), 8))) + (int64_t)((int16_t)(lam_q_mul((int64_t)(model->ki), (int64_t)(model->i_acc), 8))))) + (int64_t)((int16_t)(lam_q_mul((int64_t)(model->kd), (int64_t)(model->deriv), 8))));
-            model->meas = (int16_t)((int64_t)(model->meas) + (int64_t)((int16_t)(lam_q_mul((int64_t)(model->kplant), (int64_t)(model->ctrl), 8))));
+            model->deriv = model->err - model->err_prev;
+            model->ctrl = model->kp * model->err + model->ki * model->i_acc + model->kd * model->deriv;
+            model->meas = model->meas + model->kplant * model->ctrl;
             model->err_prev = model->err;
             if (model->err < model->eps) {
                 model->state = PID_REGULATOR_PID_SETTLED;

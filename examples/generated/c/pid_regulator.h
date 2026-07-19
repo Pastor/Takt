@@ -15,20 +15,20 @@ typedef enum {
 /* Model Pid (PidRegulator:Pid) */
 struct PidRegulatorPid {
     // NOTICE: Определение переменных модели
-    int16_t ctrl;
-    int16_t deriv;
-    int16_t eps;
-    int16_t err;
-    int16_t err_prev;
-    int16_t i_acc;
-    int16_t imax;
-    int16_t kd;
-    int16_t ki;
-    int16_t kp;
-    int16_t kplant;
-    int16_t meas;
-    int16_t neg_imax;
-    int16_t target;
+    double ctrl;
+    double deriv;
+    double eps;
+    double err;
+    double err_prev;
+    double i_acc;
+    double imax;
+    double kd;
+    double ki;
+    double kp;
+    double kplant;
+    double meas;
+    double neg_imax;
+    double target;
     enum {
         PID_REGULATOR_PID_INIT,
         PID_REGULATOR_PID_CONTROL,

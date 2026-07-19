@@ -76,6 +76,24 @@ SV_OUTPUT="examples/generated/sv"
 #                               гейта по НЕ связанным с композицией причинам.
 SV_TRANSLATABLE="stacker elevator_mini regulator pid_regulator"
 
+# Примеры на `float` (фича 0096, «прозрачный float»), которым цель `sv` требует
+# понижения float→q(m.n) флагом `--float-as-q`: нативного float в синтезируемом
+# RTL нет, без флага — `SV-003`. float→q(8,8) байт-в-байт равно явному q
+# (0096-02), поэтому committed `.sv` таких примеров НЕ меняется от перевода
+# исходника с q на float. Значение — точность q(m.n). Цели `c`/`rust`/`st` берут
+# float нативно (double/f64/LREAL); встраиваемые `c-hal`/`st-at` — q через
+# `--float-embedded` (отдельный гейт ниже).
+FLOAT_AS_Q_EXAMPLES="pid_regulator"
+FLOAT_AS_Q_PREC="8.8"
+
+# Доп. флаги генерации `sv` для float-примера (пусто для остальных).
+sv_float_flags() {  # $1 = имя примера
+  case " $FLOAT_AS_Q_EXAMPLES " in
+    *" $1 "*) printf -- '--float-as-q=%s' "$FLOAT_AS_Q_PREC" ;;
+    *) : ;;
+  esac
+}
+
 echo "Генерация C-кода из примеров Lam..."
 for lam_file in examples/*.lam; do
   name="$(basename "$lam_file" .lam)"
@@ -96,7 +114,9 @@ for lam_file in examples/*.lam; do
   # Цель sv (фича 0045). Отказ здесь не валит предкоммит, но и не остаётся
   # безнаказанным: список обязательных примеров проверяется ниже отдельно
   # ($SV_TRANSLATABLE) — иначе выпадение примера из гейта прошло бы молча.
-  $LAMC compile "$lam_file" -t sv -o "$SV_OUTPUT" \
+  # float-примерам (0096) добавляется --float-as-q (иначе SV-003).
+  # shellcheck disable=SC2046,SC2086
+  $LAMC compile "$lam_file" -t sv $(sv_float_flags "$name") -o "$SV_OUTPUT" \
     || echo "    [предупреждение] цель sv: $lam_file не транслируется"
 done
 echo "Готово. Файлы в $C_OUTPUT/"
@@ -119,6 +139,11 @@ for lam_file in examples/*.lam; do
   for spec in "c:" "c-hal:-t c-hal" "plantuml:-t plantuml" "st:-t st" "st-at:-t st-at" "rust:-t rust" "sv:-t sv"; do
     tgt="${spec%%:*}"
     flag="${spec#*:}"
+    # float-примерам (0096) цель sv требует --float-as-q — иначе оба прогона
+    # пусты (SV-003) и детерминизм sv-вывода не проверился бы вовсе.
+    if [ "$tgt" = "sv" ]; then
+      flag="$flag $(sv_float_flags "$name")"
+    fi
     d1="$(mktemp -d)"
     d2="$(mktemp -d)"
     # shellcheck disable=SC2086
@@ -137,6 +162,32 @@ for lam_file in examples/*.lam; do
 done
 if [ "$repro_failed" -ne 0 ]; then
   echo "  Генерация недетерминирована — предкоммит провален (фича 0048)."
+  exit 1
+fi
+
+# ГЕЙТ ПРЕДСТАВЛЕНИЯ FLOAT (фича 0096, применение к примерам): пример на `float`
+# на встраиваемом профиле без FPU (`c-hal`/`st-at`) обязан давать q через
+# `--float-embedded --float-as-q` — «q там, где аппаратного float нет». Гейт
+# проверяет, что понижение float→q СОБИРАЕТСЯ (не тихо теряется): q-путь у
+# c-hal/st-at — то же ядро, что и явный q, и потактово сверен с симулятором в
+# conformance_float_*_tests. Жёсткий: флаги и ядро 0096 — уже в репозитории.
+echo "Гейт представления float: встраиваемые профили (c-hal/st-at) → q..."
+float_embed_failed=0
+for name in $FLOAT_AS_Q_EXAMPLES; do
+  for etgt in c-hal st-at; do
+    d="$(mktemp -d)"
+    if $LAMC compile "examples/${name}.lam" -t "$etgt" \
+         --float-embedded --float-as-q="$FLOAT_AS_Q_PREC" -o "$d" >/dev/null 2>&1; then
+      echo "  $name [$etgt] → q сформирован (--float-embedded --float-as-q=$FLOAT_AS_Q_PREC)"
+    else
+      echo "  $name [$etgt] → float→q НЕ собрался под --float-embedded"
+      float_embed_failed=1
+    fi
+    rm -rf "$d"
+  done
+done
+if [ "$float_embed_failed" -ne 0 ]; then
+  echo "  float→q для встраиваемых профилей не собрался — предкоммит провален (фича 0096)."
   exit 1
 fi
 
