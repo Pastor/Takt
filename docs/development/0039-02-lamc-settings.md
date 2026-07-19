@@ -1,5 +1,11 @@
 # Задача 0039-02: Настройки пути к `lamc` и диагностика отсутствия бинарника
 
+> ⚠️ **СНЯТА как неактуальная (2026-07-19).** Развилка 0039 разрешена в пользу
+> **Option B (LSP4IJ)**: путь к бинарнику — это путь к `lam-lsp` (уже есть,
+> `LamLspSettings`, фича 0038), а не к `lamc`. Отдельные настройки `lamc` **не
+> реализуются**. История решения (Option C). См.
+> [ADR, «Обновление решения (2026-07-19)»](../adr/0039-intellij-reformat.md).
+
 > Фича: [../features/0039-intellij-reformat.md](../features/0039-intellij-reformat.md) · ADR: [../adr/0039-intellij-reformat.md](../adr/0039-intellij-reformat.md) · анализ: [../analyze/0039-intellij-reformat.md](../analyze/0039-intellij-reformat.md) · тест-план: [../tests/0039-intellij-reformat.md](../tests/0039-intellij-reformat.md) · предыдущая: [0039-01](0039-01-intellij-reformat.md) · следующая: [0039-03](0039-03-golden-tests.md)
 
 > **Статус: Планируется (разработка не начата).** «Что было» — реальное состояние
