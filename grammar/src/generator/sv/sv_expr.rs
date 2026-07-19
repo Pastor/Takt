@@ -48,11 +48,12 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::sv::sv_type::sv_enum_type_name;
 use crate::parser::ast::Member;
+use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionNode, ExpressionNode, FunctionDefinitionNode, VariableNode};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Строит диагностику `SV-002` — узел АСД не покрыт печатью.
-fn sv002(what: &str) -> Diagnostic {
+pub(crate) fn sv002(what: &str) -> Diagnostic {
     Diagnostic::error(
         Location::Codegen,
         format!(
@@ -412,22 +413,40 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
             print_expression(r, scope)?
         ))
     };
+    // Q-путь бинарной операции (0061): `Some` ⇔ узел имеет тип q(m, n).
+    let fixed_bin = |node: &ExpressionNode,
+                     op: super::sv_fixed::FixedOp,
+                     l: &ExpressionNode,
+                     r: &ExpressionNode|
+     -> Option<Result<String, Diagnostic>> {
+        super::sv_fixed::fixed_format(node)
+            .map(|(m, n)| super::sv_fixed::binary(op, l, r, scope, m, n))
+    };
     match node {
         ExpressionNode::Number(n) => Ok(n.to_string()),
         ExpressionNode::Bool(v) => Ok(if *v { "1'b1" } else { "1'b0" }.to_string()),
         ExpressionNode::Parenthesis(inner) => Ok(format!("({})", print_expression(inner, scope)?)),
         ExpressionNode::Not(inner) => Ok(format!("(!{})", print_expression(inner, scope)?)),
         ExpressionNode::BitwiseNot(inner) => Ok(format!("(~{})", print_expression(inner, scope)?)),
-        ExpressionNode::Negate(inner) => Ok(format!("(-{})", print_expression(inner, scope)?)),
+        ExpressionNode::Negate(inner) => match super::sv_fixed::fixed_format(node) {
+            Some((m, n)) => super::sv_fixed::negate(inner, scope, m, n),
+            None => Ok(format!("(-{})", print_expression(inner, scope)?)),
+        },
         ExpressionNode::UnaryPlus(inner) => Ok(format!("(+{})", print_expression(inner, scope)?)),
-        ExpressionNode::Multiply(l, r) => bin(l, "*", r),
+        // Над q(m, n) — масштабирующая Q-арифметика (0061); иначе прямая.
+        ExpressionNode::Multiply(l, r) => fixed_bin(node, super::sv_fixed::FixedOp::Multiply, l, r)
+            .unwrap_or_else(|| bin(l, "*", r)),
         // `/` и `%` синтезируются в аппаратный делитель — крупный и медленный
         // блок. Предупреждать о цене (кандидат `SV-009` задачи 0045-06) —
         // отдельное решение; здесь трансляция прямая.
-        ExpressionNode::Divide(l, r) => bin(l, "/", r),
+        ExpressionNode::Divide(l, r) => fixed_bin(node, super::sv_fixed::FixedOp::Divide, l, r)
+            .unwrap_or_else(|| bin(l, "/", r)),
         ExpressionNode::Modulo(l, r) => bin(l, "%", r),
-        ExpressionNode::Add(l, r) => bin(l, "+", r),
-        ExpressionNode::Subtract(l, r) => bin(l, "-", r),
+        ExpressionNode::Add(l, r) => {
+            fixed_bin(node, super::sv_fixed::FixedOp::Add, l, r).unwrap_or_else(|| bin(l, "+", r))
+        }
+        ExpressionNode::Subtract(l, r) => fixed_bin(node, super::sv_fixed::FixedOp::Subtract, l, r)
+            .unwrap_or_else(|| bin(l, "-", r)),
         ExpressionNode::ShiftLeft(l, r) => bin(l, "<<", r),
         ExpressionNode::ShiftRight(l, r) => bin(l, ">>", r),
         ExpressionNode::BitwiseAnd(l, r) => bin(l, "&", r),
@@ -497,7 +516,17 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::List(_) => Err(sv002("список параметров в позиции выражения")),
         ExpressionNode::Array(_) => Err(sv002("литерал массива")),
         ExpressionNode::Initializer(_) => Err(sv002("инициализатор структуры")),
-        ExpressionNode::Cast(_, _) => Err(sv002("приведение типа (`as`)")),
+        // Fixed-point (0061): масштабирующее приведение, когда источник либо цель
+        // — q(m, n). Прочие `as` целью sv по-прежнему не транслируются.
+        ExpressionNode::Cast(inner, ty) => {
+            if matches!(ty, TypeNode::Fixed { .. })
+                || super::sv_fixed::fixed_format(inner).is_some()
+            {
+                super::sv_fixed::cast(inner, ty, scope)
+            } else {
+                Err(sv002("приведение типа (`as`)"))
+            }
+        }
     }
 }
 
