@@ -8,6 +8,7 @@
 module elevator_mini (
     input  logic clk,   // служебный порт цели sv: в .lam его нет
     input  logic rst_n, // служебный порт цели sv: сброс, активный низкий
+    input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)
     input  logic CabinButton_DC,
     input  logic CabinButton_F1,
     input  logic CabinButton_F2,
@@ -308,7 +309,7 @@ module elevator_mini (
             ElevatorMotor_Up <= '0;
             elevator_mini_command <= COMMAND_STOP;
             ElevatorMotor_Stop <= 1'b1;
-        end else begin
+        end else if (en) begin
             elevator_mini_cabin_state <= elevator_mini_cabin_state_next;
             elevator_mini_motor_state <= elevator_mini_motor_state_next;
             state <= state_next;

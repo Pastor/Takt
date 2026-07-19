@@ -8,6 +8,7 @@
 module pid_regulator (
     input  logic clk,   // служебный порт цели sv: в .lam его нет
     input  logic rst_n, // служебный порт цели sv: сброс, активный низкий
+    input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)
     output logic ready,
     output logic is_done
 );
@@ -147,7 +148,7 @@ module pid_regulator (
             pid_regulator_pid_target <= 2048;
             state <= PID_REGULATOR_MAIN;
             ready <= '0;
-        end else begin
+        end else if (en) begin
             pid_regulator_pid_state <= pid_regulator_pid_state_next;
             pid_regulator_pid_ctrl <= pid_regulator_pid_ctrl_next;
             pid_regulator_pid_deriv <= pid_regulator_pid_deriv_next;

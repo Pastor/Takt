@@ -928,7 +928,11 @@ pub(crate) fn emit_ff(
         p.ident(&format!("{} <= {};", signal, value)).nl();
     }
     p.down();
-    p.ident("end else begin").nl();
+    // `en` гейтит ТОЛЬКО защёлкивание: сброс выше проверяется первым и от `en`
+    // не зависит (правило 3 ADR 0063) — иначе модуль нельзя сбросить, пока он
+    // не разрешён. `en == 1` при неподключённом порте (умолчание) → шаг каждый
+    // такт, как прежде.
+    p.ident("end else if (en) begin").nl();
     p.up();
     for reg in &fsm.regs {
         p.ident(&format!("{} <= {}_next;", reg.name, reg.name)).nl();
