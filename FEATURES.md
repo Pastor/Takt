@@ -126,12 +126,11 @@
 
 | № | Фича | Зависит от | Tier | Статус |
 |---|------|------------|------|--------|
-| [0036](docs/features/0036-sim-visibility.md) | Согласование видимости публичного API крейта `simulation` | — | 3 | РАЗРАБОТКА |
 | [0061](docs/features/0061-fixed-point-type.md) | Fixed-point Q(m.n) как тип языка (закрывает отложенный R-B ADR 0045) | нет | 3 | ГОТОВО |
 | [0062](docs/features/0062-sv-mmio-target.md) | Цель `sv-mmio`: адреса портов → регистровый файл (вскрыла [фикс 0020-01](docs/fixes/0020-01-port-bit-out-of-range.md), Tier 1) | [0020-01](docs/fixes/0020-01-port-bit-out-of-range.md) (фикс) | 3 | РАЗРАБОТКА |
 | [0063](docs/features/0063-sv-clock-enable.md) | Порт `en` (clock enable) для цели `sv` — пересмотр Option C ADR 0045 | нет (после 0057) | 3 | РАЗРАБОТКА |
 | [0064](docs/features/0064-sv-divider-warning.md) | Предупреждение о делителе (`SV-009`) — только на переменный делитель | нет | 3 | РАЗРАБОТКА |
-| [0046](docs/features/0046-build-warnings-cleanup.md) | Устранение всех предупреждений сборки (rustc + clippy) | 0036 | — | СОЗДАНА · **ЗАБЛОКИРОВАНА** |
+| [0046](docs/features/0046-build-warnings-cleanup.md) | Устранение всех предупреждений сборки (rustc + clippy) | 0036 (закрыта) | — | СОЗДАНА |
 | [0067](docs/features/0067-intellij-rename-psi-import.md) | Rename и `PsiReference` для `import` в плагине IntelliJ | 0038 (закрыта) | — | СОЗДАНА |
 | [0070](docs/features/0070-port-initializer-address-role.md) | Инициализатор порта — это адрес, но проверяется как значение | — | — | СОЗДАНА |
 | [0071](docs/features/0071-lsp-goto-state-name.md) | Переход на имя состояния в `S(Ping) = End` не работает | — | — | СОЗДАНА |
@@ -160,6 +159,22 @@
 | [0094](docs/features/0094-new-feature-script-fixes.md) | Доработка `scripts/new-feature.sh` (статус ADR, поздние стадии, идемпотентность) | — | — | СОЗДАНА |
 | [0097](docs/features/0097-pid-regulator-example.md) | Пример ПИД-регулятора на Lam (fixed-point, anti-windup) | 0061 | 3 | ГОТОВО |
 | [0037](docs/features/0037-windows-test-failures.md) | Сбои тестов на Windows (пути include, ресурс viewport) | — | 2 | РАЗРАБОТКА |
+
+> Фича **0036** «Согласование видимости публичного API крейта `simulation`»
+> **закрыта** (`ГОТОВО`, 2026-07-19) и удалена из таблицы (правило 10) — итог в её
+> [карточке](docs/features/0036-sim-visibility.md). `Unit` инкапсулирован (ADR
+> 0036, Option B): `pub enum Unit` → непрозрачный `pub struct Unit(UnitKind)` с
+> приватным полем и приватным `pub(crate) enum UnitKind`; внутренние типы
+> (`Context`/`Flow`/`Predicate`/`Guards`) честно остались `pub(crate)`.
+> Предупреждений `private_interfaces` — **16 → 0** (10 из базы задачи опередила
+> 0044); защёлка `#![deny(private_interfaces)]` **доказана пробой** (утечка →
+> `error`). Публичный API не пополнился ни одним типом. Крейт `simulation` —
+> `0.3.0 → 0.4.0` (слом формы публичного `Unit`); язык не менялся. **Разблокировала
+> 0046** (снят `ЗАБЛОКИРОВАНА`). ⚠️ Лимит размера модуля вынудил вынести
+> тест-модуль `unit/mod.rs` в `unit/tests.rs` без изменения утверждений (долг
+> 21 → 20). ⚠️ Урок: *план задачи — снимок; объём сверяй с кодом на момент взятия
+> в работу* (версия крейта, число предупреждений и `unused import` из базы
+> устарели за 4 дня).
 
 > Фича **0096** «Прозрачный `float` через глобальную Q-точность» **закрыта**
 > (`ГОТОВО`, 2026-07-19) и удалена из таблицы (правило 10) — итог в её

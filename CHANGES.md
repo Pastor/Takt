@@ -7,6 +7,27 @@
 
 ## [Не выпущено]
 
+### Изменено (фича [0036](docs/features/0036-sim-visibility.md) — согласование видимости API `simulation`) — **ЗАКРЫТА**
+
+- **`Unit` инкапсулирован** (ADR 0036, Option B): `pub enum Unit` →
+  непрозрачный `pub struct Unit(UnitKind)` с **приватным** полем и приватным
+  `pub(crate) enum UnitKind`. Разбор внутри крейта — через `.0`, вне модуля
+  `unit` (`state_io`) — через `pub(crate)`-хелперы `from_kind`/`kind`/`kind_mut`.
+  Внутренние типы (`Context`/`Flow`/`Predicate`/`Guards`/`Execution`) честно
+  остались `pub(crate)`; публичный API **не пополнился** ни одним типом
+  (`pub use unit::{TickResult, Unit}` неизменен, `UnitKind` не реэкспортирован).
+- **Предупреждений `private_interfaces` — 16 → 0** (10 из базы задачи опережены
+  фичей 0044, добавившей `guards: Guards` с приватным `Predicate`). Защёлка
+  `#![deny(private_interfaces)]` в `lib.rs` держит согласованность механически —
+  **доказано пробой**: утечка `pub fn leak() -> Flow` даёт `error`, а не warning.
+  Именно точечный линт, **не** `#![deny(warnings)]` (запрещён `docs/CODE.md`).
+- **Крейт `simulation` 0.3.0 → 0.4.0** (слом формы публичного `Unit`, SemVer
+  0.x; язык Lam не менялся, правило 18). Поведение симулятора неизменно
+  (`cargo test` 2099 passed, `run_simulations.sh` — вывод прежний).
+  ⚠️ Тест-модуль `unit/mod.rs` вынесен в новый `unit/tests.rs` **без изменения
+  утверждений** — лимит размера модуля запретил рост записи реестра; `mod.rs`
+  ужат 1331 → 761, запись удалена (долг 21 → 20). `precheck.sh` зелёный.
+
 ### Добавлено (фича [0034](docs/features/0034-sim-struct-types.md) — структурные типы в симуляторе) — **ЗАКРЫТА**
 
 - **Симулятор представляет и исполняет структуры.** `Value::Struct { name, fields }`

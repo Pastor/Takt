@@ -13,6 +13,14 @@
 //! let model = construct_model(&ast, None, &[]).unwrap();
 //! let map = Map::create(model).unwrap();
 //! ```
+//!
+//! Видимость публичного API согласована фичей 0036: типы, достижимые из
+//! публичных элементов, обязаны быть публичными. Линт держит это механически —
+//! утечка `pub(crate)`-типа наружу валит сборку. Именно точечный `deny` одного
+//! правила, а **не** `#![deny(warnings)]` (запрещён `docs/CODE.md`: ломает
+//! сборку при обновлении компилятора).
+#![deny(private_interfaces)]
+
 mod context;
 pub(crate) mod eval;
 pub(crate) mod expression;
