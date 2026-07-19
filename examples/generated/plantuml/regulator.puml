@@ -1,0 +1,15 @@
+@startuml
+title Regulator
+
+[*] --> Main
+Main : Regulator
+Main --> [*]
+
+state Regulator {
+    [*] --> Adjust
+    Adjust --> Settled
+    Done --> [*]
+    Settled --> Done
+}
+
+@enduml

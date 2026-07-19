@@ -120,19 +120,21 @@ pub(crate) fn binary(
     n: u8,
 ) -> Result<String, Diagnostic> {
     let s = storage(m, n);
+    // Операнды НЕ оборачиваются в скобки: `print_expression` уже скобкует
+    // составные узлы, а лишняя пара → clippy::double_parens под `-D warnings`.
+    // Приоритет `as` выше `+`/`*`/`>>`, поэтому `la as i64 + lb as i64` группирует
+    // верно и без скобок вокруг операндов.
     let (la, lb) = (print_expression(a, scope)?, print_expression(b, scope)?);
     Ok(match op {
-        FixedOp::Add => format!("((({la}) as i64 + ({lb}) as i64) as {s})"),
-        FixedOp::Subtract => format!("((({la}) as i64 - ({lb}) as i64) as {s})"),
+        FixedOp::Add => format!("(({la} as i64 + {lb} as i64) as {s})"),
+        FixedOp::Subtract => format!("(({la} as i64 - {lb} as i64) as {s})"),
         // Точное произведение 2W, floor к −∞ через арифметический `>>` (в Rust
         // определён для знакового — правило 4 ADR, C-цель обходит C11 хелпером).
-        FixedOp::Multiply => {
-            format!("(((({la}) as i128 * ({lb}) as i128) >> {n}) as {s})")
-        }
+        FixedOp::Multiply => format!("((({la} as i128 * {lb} as i128) >> {n}) as {s})"),
         // Делимое ← n влево (в Rust `<<` знакового определён), деление к нулю.
-        FixedOp::Divide => {
-            format!("(((({la}) as i128) << {n}) / ({lb}) as i128) as {s}")
-        }
+        // Скобка вокруг `(la as i128)` обязательна: `la as i128 << n` Rust парсит
+        // как generic `i128<...>`, а не сдвиг (E0747-подобная ошибка).
+        FixedOp::Divide => format!("(((({la} as i128) << {n}) / {lb} as i128) as {s})"),
     })
 }
 
@@ -144,7 +146,7 @@ pub(crate) fn negate(
     n: u8,
 ) -> Result<String, Diagnostic> {
     Ok(format!(
-        "((-(({}) as i64)) as {})",
+        "((-{} as i64) as {})",
         print_expression(inner, scope)?,
         storage(m, n)
     ))
@@ -166,20 +168,22 @@ pub(crate) fn cast(
         // q → q: пересчёт дробных разрядов (влево — сдвиг, вправо — floor `>>`).
         (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn }) => {
             let s = storage(*tm, *tn);
+            // Скобка вокруг `(printed as i128)` обязательна перед `<<`/`>>`
+            // (иначе Rust парсит `i128<...>` как generic, не сдвиг).
             if tn >= &from_n {
-                Ok(format!("((({printed}) as i128) << {}) as {s}", tn - from_n))
+                Ok(format!("((({printed} as i128) << {}) as {s})", tn - from_n))
             } else {
-                Ok(format!("((({printed}) as i128) >> {}) as {s}", from_n - tn))
+                Ok(format!("((({printed} as i128) >> {}) as {s})", from_n - tn))
             }
         }
         // q → float: repr / 2^n (точно представимо в f64).
         (Some((_, from_n)), TypeNode::Rational) => {
-            Ok(format!("(({printed}) as f64 / {}.0)", pow2(from_n)))
+            Ok(format!("({printed} as f64 / {}.0)", pow2(from_n)))
         }
         // q → целое/бит: floor(repr / 2^n) = целая часть (арифметический `>>`).
         (Some((_, from_n)), _) => {
             let t = rust_type(target, "приведение q → целое")?;
-            Ok(format!("((({printed}) as i64 >> {from_n}) as {t})"))
+            Ok(format!("((({printed} as i64) >> {from_n}) as {t})"))
         }
         // float → q: floor(f · 2^n) — нет в no_std без libm.
         (None, TypeNode::Fixed { .. })
@@ -192,7 +196,7 @@ pub(crate) fn cast(
         }
         // целое/бит → q: repr = v · 2^n с wraparound к W.
         (None, TypeNode::Fixed { m: tm, n: tn }) => Ok(format!(
-            "((({printed}) as i64) << {tn}) as {}",
+            "((({printed} as i64) << {tn}) as {})",
             storage(*tm, *tn)
         )),
         // Ни источник, ни цель не q — вызывающий не должен был звать сюда.

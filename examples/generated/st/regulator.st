@@ -1,0 +1,75 @@
+(*
+ * Порождено компилятором Lam (lamc) — цель: Structured Text (IEC 61131-3).
+ * Не редактировать вручную: файл перезаписывается при каждой генерации.
+ *)
+
+FUNCTION LAM_Q_FLOORDIV : LINT
+VAR_INPUT
+    x : LINT;
+    d : LINT;
+END_VAR
+VAR
+    q : LINT;
+END_VAR
+    q := x / d;
+    IF (x MOD d <> 0) AND ((x < 0) <> (d < 0)) THEN
+        LAM_Q_FLOORDIV := q - 1;
+    ELSE
+        LAM_Q_FLOORDIV := q;
+    END_IF;
+END_FUNCTION
+
+FUNCTION_BLOCK RegulatorRegulator
+VAR_OUTPUT
+    is_done : BOOL;
+    ready : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+    half : INT := 128;
+    near : INT := 2432;
+    setpoint : INT := 2560;
+    value : INT := 0;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 1; (* Adjust *)
+        1: (* Adjust *)
+            value := LINT_TO_INT(INT_TO_LINT(value) + INT_TO_LINT(LINT_TO_INT(LAM_Q_FLOORDIV(INT_TO_LINT((LINT_TO_INT(INT_TO_LINT(setpoint) - INT_TO_LINT(value)))) * INT_TO_LINT(half), 256))));
+            IF value >= near THEN
+                state := 3; (* Settled *)
+            END_IF;
+        2: (* Done *)
+            ready := TRUE;
+            state := 4; (* END *)
+        3: (* Settled *)
+            value := setpoint;
+            state := 2; (* Done *)
+        4: (* END *)
+            state := 4;
+    END_CASE;
+    is_done := state = 4;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK Regulator
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+    regulator0 : RegulatorRegulator;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 1; (* Main *)
+        1: (* Main *)
+            regulator0();
+            IF regulator0.is_done THEN
+                state := 2; (*  *)
+            END_IF;
+        2: (* END *)
+            state := 2;
+    END_CASE;
+    is_done := state = 2;
+END_FUNCTION_BLOCK
+
