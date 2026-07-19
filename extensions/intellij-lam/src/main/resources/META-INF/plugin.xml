@@ -29,6 +29,12 @@
              LSP4IJ, поэтому сервис регистрируется всегда (не в опциональном
              config-file) — путь можно хранить независимо от наличия LSP4IJ. -->
         <applicationService serviceImplementation="org.lam.intellij.lsp.LamLspSettings"/>
+        <!-- 0038: страница настроек «Lam Language Server» (путь к lam-lsp). -->
+        <applicationConfigurable
+                parentId="tools"
+                instance="org.lam.intellij.lsp.LamLspConfigurable"
+                id="org.lam.intellij.lsp.LamLspConfigurable"
+                displayName="Lam Language Server"/>
 
         <!-- 0022-01: регистрация типа файла `.lam` → язык Lam (R1, A1). -->
         <fileType
