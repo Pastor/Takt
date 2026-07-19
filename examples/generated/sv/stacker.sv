@@ -8,6 +8,7 @@
 module stacker (
     input  logic clk,   // служебный порт цели sv: в .lam его нет
     input  logic rst_n, // служебный порт цели sv: сброс, активный низкий
+    input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)
     input  logic [7:0] pos_row,
     input  logic [7:0] pos_section,
     input  logic [7:0] pos_stack,
@@ -426,7 +427,7 @@ module stacker (
             cmd_target_row <= CHARGE_ROW;
             cmd_target_section <= CHARGE_SECTION;
             cmd_done <= 0;
-        end else begin
+        end else if (en) begin
             stacker_command_receiver_state <= stacker_command_receiver_state_next;
             stacker_lift_controller_state <= stacker_lift_controller_state_next;
             stacker_movement_controller_state <= stacker_movement_controller_state_next;

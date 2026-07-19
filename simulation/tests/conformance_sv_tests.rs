@@ -790,3 +790,131 @@ fn float_without_flag_is_sv003() {
         "без флага float в sv — SV-003 (флаг = выбор формата автором)"
     );
 }
+
+/// **0063 (A2/A4): `en` гейтит шаг, но НЕ сброс — доказано СИМУЛЯЦИЕЙ.**
+///
+/// Гейт (verilator lint + yosys) доказывает лишь валидность/синтезируемость;
+/// что неподключённый `en` **значит `1`** и что `en=0` **замораживает** —
+/// доказывает только прогон (урок 0045: `real` verilator принимает молча). Один
+/// тестбенч на четыре экземпляра одной модели `conformance_ticks` (счётчик
+/// `n`: 1 → 2 → 3, сброс `n = 0`):
+///
+/// - `dut_unc` — `en` **не подключён** (умолчание `1'b1`);
+/// - `dut_en1` — `en = 1'b1` явно;
+/// - `dut_en0` — `en = 1'b0` (заморожен);
+/// - `dut_rst` — `en = 1` три такта (n → 3), затем `en = 0` **и** `rst_n = 0`
+///   одним фронтом (A4: сброс обязан сработать при `en = 0`).
+///
+/// Утверждения: `unc ≡ en1` **побитово** на каждом такте (A2, умолчание = `1`);
+/// `en0 = 0` всё время (A2, заморозка); `rst` возвращается к `0` (A4, сброс не
+/// гейтится `en` — правило 3 ADR 0063).
+#[test]
+fn clock_enable_gates_step_but_not_reset() {
+    if !verilator_available() {
+        eprintln!(
+            "[ПРОПУСК] clock_enable_gates_step_but_not_reset: verilator не найден — \
+             семантика en не проверена (форма выхода закреплена юнит-тестами генератора)"
+        );
+        return;
+    }
+    let dir = build_dir("clock_enable");
+    let source = std::fs::read_to_string(TICKS_FIXTURE).expect("фикстура читается");
+    grammar::compile_to_sv(
+        "conformance_ticks",
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("порождение SystemVerilog");
+
+    // `en` у `dut_unc` НЕ подключён намеренно — это и есть проверка умолчания
+    // (сверка `sv_trace` тоже его не подключает). `dut_rst.en` — регистр `en_rst`.
+    let tb = r#"module tb;
+    logic clk = 0, rst_n = 0, en_rst;
+    logic d0, d1, d2, d3;
+    conformance_ticks dut_unc (.clk(clk), .rst_n(rst_n),               .is_done(d0));
+    conformance_ticks dut_en1 (.clk(clk), .rst_n(rst_n), .en(1'b1),    .is_done(d1));
+    conformance_ticks dut_en0 (.clk(clk), .rst_n(rst_n), .en(1'b0),    .is_done(d2));
+    conformance_ticks dut_rst (.clk(clk), .rst_n(rst_n), .en(en_rst),  .is_done(d3));
+    always #5 clk = ~clk;
+    initial begin
+        en_rst = 1'b1;
+        @(posedge clk);
+        rst_n <= 1'b1;
+        repeat (3) begin
+            @(posedge clk);
+            #1 $display("STEP %0d %0d %0d %0d",
+                dut_unc.conformance_ticks_counter_n,
+                dut_en1.conformance_ticks_counter_n,
+                dut_en0.conformance_ticks_counter_n,
+                dut_rst.conformance_ticks_counter_n);
+        end
+        // A4: сброс при en=0 — глушим en_rst и одновременно опускаем rst_n.
+        en_rst <= 1'b0;
+        rst_n  <= 1'b0;
+        @(posedge clk);
+        #1 $display("RST %0d", dut_rst.conformance_ticks_counter_n);
+        $finish;
+    end
+endmodule
+"#;
+    std::fs::write(dir.join("tb.sv"), tb).expect("запись тестбенча");
+    let build = Command::new("verilator")
+        .current_dir(&dir)
+        .args([
+            "--binary",
+            "--timing",
+            "-Wno-fatal",
+            "--top-module",
+            "tb",
+            "tb.sv",
+            "conformance_ticks.sv",
+            "-o",
+            "simtb",
+        ])
+        .output()
+        .expect("запуск verilator");
+    assert!(
+        build.status.success(),
+        "verilator не собрал тестбенч en:\n{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let run = Command::new(dir.join("obj_dir").join("simtb"))
+        .current_dir(&dir)
+        .output()
+        .expect("запуск собранной симуляции");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+
+    let steps: Vec<Vec<i64>> = stdout
+        .lines()
+        .filter_map(|l| l.strip_prefix("STEP "))
+        .map(|r| r.split_whitespace().map(|v| v.parse().unwrap()).collect())
+        .collect();
+    let rst: i64 = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("RST "))
+        .expect("строка RST")
+        .trim()
+        .parse()
+        .expect("значение RST — целое");
+
+    assert_eq!(steps.len(), 3, "ожидались 3 такта STEP:\n{stdout}");
+    for (i, s) in steps.iter().enumerate() {
+        let (unc, en1, en0, _) = (s[0], s[1], s[2], s[3]);
+        // A2: неподключённый en ПОБИТОВО тождествен en=1.
+        assert_eq!(
+            unc, en1,
+            "такт {i}: неподключённый en ≠ en=1 (умолчание сломано)"
+        );
+        // A2: неподключённый = ожидаемая эволюция счётчика (1,2,3).
+        assert_eq!(unc, (i as i64) + 1, "такт {i}: en=1 не даёт n = {}", i + 1);
+        // A2: en=0 замораживает автомат на сбросовом значении.
+        assert_eq!(en0, 0, "такт {i}: en=0 не заморозил счётчик (n = {en0})");
+    }
+    // A4: сброс сработал при en=0 — n вернулся к сбросовому 0 (правило 3 ADR).
+    assert_eq!(
+        rst, 0,
+        "сброс при en=0 не сработал: n = {rst} (правило 3 ADR 0063)"
+    );
+}

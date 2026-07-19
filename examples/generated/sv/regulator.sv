@@ -8,6 +8,7 @@
 module regulator (
     input  logic clk,   // служебный порт цели sv: в .lam его нет
     input  logic rst_n, // служебный порт цели sv: сброс, активный низкий
+    input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)
     output logic ready,
     output logic is_done
 );
@@ -96,7 +97,7 @@ module regulator (
             regulator_regulator_value <= 0;
             state <= REGULATOR_MAIN;
             ready <= '0;
-        end else begin
+        end else if (en) begin
             regulator_regulator_state <= regulator_regulator_state_next;
             regulator_regulator_half <= regulator_regulator_half_next;
             regulator_regulator_near <= regulator_regulator_near_next;

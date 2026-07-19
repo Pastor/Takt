@@ -14,11 +14,15 @@
 //! потому что у процессора порта нет — есть адрес или вызов. У RTL порт **и
 //! есть** порт.
 //!
-//! ## Служебные порты `clk`/`rst_n`: почему их нет в языке
+//! ## Служебные порты `clk`/`rst_n`/`en`: почему их нет в языке
 //!
-//! Такт Lam ≡ `posedge clk` (ADR, вопрос 1, Option A), поэтому модулю нужны два
-//! сигнала, которых в `.lam` не существует. Они добавляются **генератором**, а
-//! имена для цели `sv` **зарезервированы**: коллизия → [`SV-007`].
+//! Такт Lam ≡ `posedge clk` (ADR, вопрос 1, Option A), поэтому модулю нужны
+//! сигналы, которых в `.lam` не существует. Они добавляются **генератором**, а
+//! имена для цели `sv` **зарезервированы**: коллизия → [`SV-007`]. Кроме
+//! `clk`/`rst_n` это **`en`** (clock enable, фича 0063): вход с умолчанием
+//! `1'b1`, гейтящий защёлкивание в `always_ff` (`end else if (en)`), но **не**
+//! сброс (правило 3 ADR 0063). Неподключённый `en` тождествен `en=1`, поэтому
+//! порт необязателен и существующие потребители его не замечают.
 //!
 //! Отвергнутая альтернатива (Option B — объявлять `clock`/`reset` в самом языке)
 //! сломала бы аддитивность фичи и была бы **ложью для четырёх целей из пяти**:
@@ -54,7 +58,8 @@ use std::rc::Rc;
 /// причине**, по которой заведены те двое: генератор объявляет эти имена сам.
 /// Цена расширения нулевая — в корпусе нет ни одного такого имени (проверено
 /// `grep` 2026-07-16).
-pub(crate) const RESERVED_NAMES: &[&str] = &["clk", "rst_n", "is_done", "state", "state_next"];
+pub(crate) const RESERVED_NAMES: &[&str] =
+    &["clk", "rst_n", "en", "is_done", "state", "state_next"];
 
 /// Ключевые слова SystemVerilog (IEEE 1800-2017), непригодные как идентификаторы.
 ///
@@ -354,8 +359,9 @@ fn sv007(name: &str, loc: Location) -> Diagnostic {
         loc,
         format!(
             "имя '{}' зарезервировано целью 'sv': генератор объявляет его сам \
-             (clk/rst_n — служебные порты такта и сброса, is_done — выход \
-             терминальности, state/state_next — регистр автомата). Это НЕ \
+             (clk/rst_n — служебные порты такта и сброса, en — clock enable, \
+             is_done — выход терминальности, state/state_next — регистр \
+             автомата). Это НЕ \
              ключевое слово языка Lam: модель остаётся полностью валидной для \
              целей 'c', 'c-hal', 'plantuml', 'st' и 'rust'. Переименуйте элемент \
              в исходнике .lam, если модель нужна в аппаратуре",
@@ -492,6 +498,10 @@ pub(crate) fn emit_module_header(p: &mut Printer, module: &str, ports: &SvPorts)
         .nl();
     p.ident("input  logic rst_n, // служебный порт цели sv: сброс, активный низкий")
         .nl();
+    // Умолчание `1'b1` (IEEE 1800 §23.2.2.4): неподключённый `en` тождествен `en=1`,
+    // поэтому существующие потребители не обязаны его подключать (фича 0063).
+    p.ident("input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)")
+        .nl();
     for port in &ports.inputs {
         p.ident(&format!("input  {},", port.ty.declare(&port.name)))
             .nl();
@@ -517,7 +527,7 @@ mod tests {
     /// Служебные имена цели отвергаются с `SV-007`.
     #[test]
     fn service_names_are_sv007() {
-        for name in ["clk", "rst_n", "is_done", "state", "state_next"] {
+        for name in ["clk", "rst_n", "en", "is_done", "state", "state_next"] {
             let err = check_sv_name(name, loc()).unwrap_err();
             assert_eq!(err.code.as_deref(), Some("SV-007"), "имя {}", name);
         }
@@ -590,6 +600,22 @@ mod tests {
         assert!(out.contains("input  logic rst_n,"), "нет rst_n:\n{out}");
         assert!(out.contains("output logic is_done"), "нет is_done:\n{out}");
         assert!(out.contains("module stacker ("), "нет имени модуля:\n{out}");
+    }
+
+    /// **0063 (A1):** заголовок несёт вход `en` с умолчанием `1'b1`.
+    ///
+    /// Умолчание (IEEE 1800 §23.2.2.4) делает порт необязательным: неподключённый
+    /// `en` тождествен `en=1`, поэтому существующая сверка (`en` не подключает)
+    /// остаётся зелёной (A3).
+    #[test]
+    fn header_carries_clock_enable_with_default() {
+        let mut out = String::new();
+        let mut p = Printer::new(4, &mut out);
+        emit_module_header(&mut p, "stacker", &SvPorts::default());
+        assert!(
+            out.contains("input  logic en = 1'b1,"),
+            "нет en с умолчанием 1'b1:\n{out}"
+        );
     }
 
     /// **T19:** `in` → `input logic`, `out` → `output logic`; порядок — вход, выход.
