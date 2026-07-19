@@ -16,7 +16,7 @@
 1753 grammar/src/semantic/mod.rs
 1691 grammar/src/semantic/index.rs
 1460 simulation/src/unit/viewport.rs
-1415 grammar/src/lib.rs
+1450 grammar/src/lib.rs
 1393 grammar/tests/codegen_tests.rs
 1349 grammar/src/generator/rust/rust_model.rs
 1360 grammar/src/semantic/expression.rs

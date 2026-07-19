@@ -619,13 +619,36 @@ fn c_trace(
     accessor: &str,
     vars: &[&str],
 ) -> Vec<Vec<i64>> {
+    c_trace_opts(
+        dir,
+        fixture,
+        basename,
+        root,
+        accessor,
+        vars,
+        &grammar::generator::GenerateOptions::default(),
+    )
+}
+
+/// Как [`c_trace`], но с явными опциями генерации (фича 0096: Q-режим `float`
+/// через `--float-as-q`/`--float-embedded`).
+#[allow(clippy::too_many_arguments)]
+fn c_trace_opts(
+    dir: &Path,
+    fixture: &str,
+    basename: &str,
+    root: &str,
+    accessor: &str,
+    vars: &[&str],
+    opts: &grammar::generator::GenerateOptions,
+) -> Vec<Vec<i64>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     grammar::compile_to_c(
         basename,
         &source,
         dir.to_str().expect("путь в UTF-8"),
         &[],
-        &grammar::generator::GenerateOptions::default(),
+        opts,
     )
     .expect("порождение C");
 
@@ -868,3 +891,84 @@ fn generated_c_fixed_has_no_right_shift() {
          отрицательного — implementation-defined). Floor — через floor-деление.\n{c}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Прозрачный float → q(m, n), embedded-путь (фича 0096, задача 0096-03): T6/T8/T9
+//
+// Под `--float-as-q=8.8 --float-embedded` цель `c` реализует `float` целочисленным
+// q(8,8) (embedded без FPU). Трасса `acc` обязана совпасть с q-версией
+// (`conformance_fixed`) ПОБИТОВО. Без `--float-embedded` — прежний native `double`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.lam";
+
+/// Опции embedded-Q для `float` (фича 0096): точность + Q-путь для c/rust/st.
+#[allow(clippy::field_reassign_with_default)] // GenerateOptions — #[non_exhaustive]
+fn float_embedded_opts(m: u8, n: u8) -> grammar::generator::GenerateOptions {
+    let mut o = grammar::generator::GenerateOptions::default();
+    o.float_as_q = Some((m, n));
+    o.float_embedded = true;
+    o
+}
+
+/// Q-режим эталона: понижает `float → q(m, n)` в модели симулятора тем же
+/// проходом, что и цель (ADR 0096, драйвер 2 — сверка ВНУТРИ режима).
+fn simulate_trace_float_q(fixture: &str, m: u8, n: u8, vars: &[&str]) -> Vec<Vec<i64>> {
+    let source = std::fs::read_to_string(fixture).expect("фикстура читается");
+    let (ast, _) = grammar::parse(&source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    grammar::semantic::lower_float::lower_float_to_fixed(model.clone(), m, n)
+        .expect("float → q(m, n)");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let mut trace = Vec::new();
+    for _ in 0..TRACE_TICKS {
+        let result = unit.tick();
+        assert!(
+            !matches!(result, TickResult::Failed(_)),
+            "симуляция не должна падать: {result:?}"
+        );
+        trace.push(vars.iter().map(|v| sim_value(&unit, v)).collect());
+        if result == TickResult::Terminated {
+            break;
+        }
+    }
+    trace
+}
+
+/// T6/A4 (цель C, embedded-путь): под `--float-embedded` `float` → q(8,8),
+/// **побитовая** потактовая сверка с Q-эталоном симулятора. Трасса — та же, что у
+/// явной q-версии `conformance_fixed` (float→q(8,8) ≡ q(8,8)).
+#[test]
+fn float_embedded_q_matches_generated_c() {
+    let vars = ["acc"];
+    let sim = simulate_trace_float_q(FLOAT_Q_FIXTURE, 8, 8, &vars);
+    assert_eq!(
+        sim,
+        vec![vec![-768], vec![-384], vec![-2], vec![510]],
+        "Q-эталон float→q(8,8) обязан совпасть с трассой явной q-версии (0061)"
+    );
+
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] float_embedded_q_matches_generated_c: `cc` не найден");
+        return;
+    }
+    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_float_q");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    let c = c_trace_opts(
+        &dir,
+        FLOAT_Q_FIXTURE,
+        "conformance_float_q",
+        "ConformanceFloatQ",
+        "entry",
+        &vars,
+        &float_embedded_opts(8, 8),
+    );
+    assert_eq!(
+        sim, c,
+        "float→q(8,8) в симуляторе и порождённом C обязаны совпасть ПОБИТОВО.\n\
+         сим={sim:?}\nC={c:?}"
+    );
+}
+
+// Сторож двухрежимного эталона (native vs Q) и native-гейты c/rust/st вынесены
+// в conformance_float_modes_tests.rs (лимит размера этого файла).

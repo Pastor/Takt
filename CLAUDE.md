@@ -419,11 +419,18 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
     float_as_q_matches_generated_sv` (float→q(8,8) ≡ явная q-версия, verilator),
     сторож направления — `float_without_flag_is_sv003`. 5 юнит-тестов в
     `lower_float`. Корпус без флага байт-в-байт прежний (T1).
-  - **Осталось: 0096-03** (цели `c`/`rust`/`st` embedded-путь при
-    `--float-embedded` + сверки ×режимы; для `sv` симулятор уже двухрежимен
-    **через ту же трансформацию** — Q-режим = проход применён, native = не
-    применён, `eval::fixed` не трогался), **0096-04** (корпусной пример-регулятор
-    на `float` + yosys-гейт в `precheck.sh` + README + `CLAUDE.md` A-7 + отчёт).
+  - **Сделано (0096-03):** цели `c`/`rust`/`st` embedded-путь при
+    `--float-embedded` (общий помощник `lib.rs::apply_float_lowering` с
+    embedded-гейтом во всех точках `c`/`c-hal`/`st`/`st-at`/`rust`; без флага —
+    native `double`/`f64`/`LREAL`). Симулятор двухрежимен **через ту же
+    трансформацию** — Q = проход применён, native = нет; `eval::fixed` **не
+    трогался** (риск A-1 снят конструктивно). Сверки: `c` — потактовая runtime
+    (`float_embedded_q_matches_generated_c`); `rust`/`st` — **byte-equality** с
+    q-двойником (`conformance_float_q_twin.lam`; поля приватны, q-выходной порт
+    rust — `RS-016`); сторож режимов `float_native_and_q_modes_differ` +
+    native-гейты (`conformance_float_modes_tests.rs`).
+  - **Осталось: 0096-04** (корпусной пример-регулятор на `float` + yosys-гейт в
+    `precheck.sh` + README + `CLAUDE.md` A-7 + отчёт → закрытие фичи).
   - **МЕХАНИЗМ (реализован):** единая **мутирующая** трансформация `float → q(m, n)`
     над `ModelNode` ПЕРЕД генерацией/`build_unit` (`lower_float.rs`, обход по
     образцу `validate/fixed.rs`, но мутирующий; покрыты все варианты
