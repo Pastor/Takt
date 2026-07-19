@@ -2,6 +2,17 @@
 
 > Фича: [../features/0043-address-map-export.md](../features/0043-address-map-export.md) · ADR: [../adr/0043-address-map-export.md](../adr/0043-address-map-export.md) · анализ: [../analyze/0043-address-map-export.md](../analyze/0043-address-map-export.md) · тест-план: [../tests/0043-address-map-export.md](../tests/0043-address-map-export.md)
 
+> ✅ **СДЕЛАНО (2026-07-19).** Подкоманда `lamc address-map [--emit map|json]
+> [--address-map <файл>] [-D N=V] [-I <dirs>] [-o <out>] <input.lam>`. `SE-052`
+> (достижимый порт без адреса) обрывает экспорт (rc=1) — как `c-hal`;
+> предупреждения (`SE-050`/`051`) → **stderr**, stdout — чистая карта. `--emit svd`
+> → ошибка с упоминанием, что SVD не поставляется. ⚠️ Логика — в библиотеке
+> (`address_map/export_cli.rs::run_export_subcommand`), а не в `bin/lamc.rs`:
+> тот пришпилен к baseline размера, в бинарнике — тонкий диспетчер (3 строки).
+> `split_include_dirs` переехал в библиотеку (нужен и обвязке); baseline
+> `lamc.rs` понижён 2039 → 2009. Тесты — T1, T15–T19, K5. Итог —
+> [отчёт 0043](../reports/0043-address-map-export.md).
+
 ## Что было
 
 *Реальное состояние `grammar/src/bin/lamc.rs` на 2026-07-15 (проверено чтением

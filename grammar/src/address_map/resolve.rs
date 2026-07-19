@@ -6,7 +6,8 @@ use super::env::AddressEnv;
 use super::eval::eval_addr_expr;
 use super::parse::AddressMapEntry;
 use crate::diagnostics::{Diagnostic, Location};
-use crate::semantic::{ExpressionNode, ModelNode, VariableNode};
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, ModelNode, PortDirection, VariableNode};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -23,6 +24,12 @@ pub enum AddressSource {
 }
 
 /// Разрешённый адрес порта: числовое значение, бит и источник-победитель.
+///
+/// Поля `ty`/`direction` заполняются «бесплатно» тем же обходом, что и адрес
+/// ([`resolve_model`] уже деструктурирует `VariableNode::Port`), и нужны
+/// **выгрузке** карты наружу (фича 0043): формат `map` их не печатает, но
+/// `json` эмитит тип и направление порта для генераторов HAL. Формат `map`
+/// потребляет только `addr`/`bit`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedAddress {
     /// Числовой адрес.
@@ -31,6 +38,24 @@ pub struct ResolvedAddress {
     pub bit: Option<i64>,
     /// Источник, из которого взят адрес (после разрешения приоритета).
     pub source: AddressSource,
+    /// Тип порта (для выгрузки `json` — фича 0043).
+    pub ty: TypeNode,
+    /// Направление порта (`in`/`out`/`inout`) — для выгрузки `json` (фича 0043).
+    pub direction: PortDirection,
+}
+
+/// Метаданные порта **без** разрешённого адреса — для выгрузки `json` (фича
+/// 0043): она перечисляет и мёртвые порты, помечая отсутствие адреса **явно**
+/// (не `0x0`, R8). Заполняется тем же обходом, что и [`AddressResolution::map`]
+/// (второго прохода по модели нет).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortMeta {
+    /// Имя порта.
+    pub name: String,
+    /// Тип порта.
+    pub ty: TypeNode,
+    /// Направление (`in`/`out`/`inout`).
+    pub direction: PortDirection,
 }
 
 /// Результат разрешения адресов модели (фича 0020-05).
@@ -38,6 +63,10 @@ pub struct ResolvedAddress {
 pub struct AddressResolution {
     /// Итоговая карта: имя порта → разрешённый адрес.
     pub map: HashMap<String, ResolvedAddress>,
+    /// Порты **без** адреса ни из одного источника (для выгрузки `json`, фича
+    /// 0043). Достижимые из них дают `SE-052` (ошибка); недостижимые — просто
+    /// мёртвые. Экспорт `json` перечисляет их с `"address": null`.
+    pub address_less: Vec<PortMeta>,
     /// Диагностики: ошибки полноты (SE-052) и предупреждения оверлея
     /// (SE-050) / висячих записей карты (SE-051).
     pub diagnostics: Vec<Diagnostic>,
@@ -164,7 +193,12 @@ fn resolve_model(
     let borrowed = model.borrow();
     for var in borrowed.variables.values() {
         let VariableNode::Port {
-            expr, loc, name, ..
+            expr,
+            loc,
+            name,
+            ty,
+            direction,
+            ..
         } = var
         else {
             continue;
@@ -215,18 +249,24 @@ fn resolve_model(
                 addr: e.addr,
                 bit: e.bit,
                 source: AddressSource::External,
+                ty: ty.clone(),
+                direction: *direction,
             })
         } else if let Some((addr, bit)) = operator {
             Some(ResolvedAddress {
                 addr,
                 bit,
                 source: AddressSource::Operator,
+                ty: ty.clone(),
+                direction: *direction,
             })
         } else {
             inline.map(|(addr, bit)| ResolvedAddress {
                 addr,
                 bit,
                 source: AddressSource::Inline,
+                ty: ty.clone(),
+                direction: *direction,
             })
         };
 
@@ -235,6 +275,14 @@ fn resolve_model(
                 out.map.insert(name.clone(), r);
             }
             None => {
+                // Порт без адреса — записать для выгрузки json (мёртвый порт
+                // помечается явным отсутствием адреса, R8), а не только
+                // диагностировать. Тот же обход, второго прохода нет.
+                out.address_less.push(PortMeta {
+                    name: name.clone(),
+                    ty: ty.clone(),
+                    direction: *direction,
+                });
                 // SE-052: используемый порт без адреса ни из одного источника.
                 // Если источник был, но его выражение не вычислилось, причина
                 // уже названа (`SE-054`/`SE-055`) — второй диагностики не надо.

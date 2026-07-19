@@ -2,6 +2,15 @@
 
 > Фича: [../features/0043-address-map-export.md](../features/0043-address-map-export.md) · ADR: [../adr/0043-address-map-export.md](../adr/0043-address-map-export.md) · анализ: [../analyze/0043-address-map-export.md](../analyze/0043-address-map-export.md) · тест-план: [../tests/0043-address-map-export.md](../tests/0043-address-map-export.md)
 
+> ✅ **СДЕЛАНО (2026-07-19).** `export_address_map_json` (`address_map/export.rs`):
+> объект `{format, format_version, ports[]}`; на порт — имя/тип (печать Lam:
+> `bit`/`u8`/`[bit;8]`/…)/направление/адрес (hex-строка)/бит/источник. Мёртвый
+> порт — `"address": null` (явно, не `0x0`, R8). JSON печатается **вручную**
+> (имена — идентификаторы; не тянет `serde_json` в дефолтный `lamc`, тот без
+> фичи `lsp`); валидность доказывает `serde_json::from_str` в тесте. Перечень
+> источников открыт (R7). Тесты — T10–T12, T14 (json-ветвь). Итог —
+> [отчёт 0043](../reports/0043-address-map-export.md).
+
 ## Что было
 
 *Реальное состояние кода на 2026-07-15.*

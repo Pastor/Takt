@@ -40,6 +40,7 @@
 //! - `st` — генерация Structured Text (IEC 61131-3), язык ПЛК (фича 0041)
 //! - `st-at` — ST плюс размещение портов по карте адресов (`AT %…`)
 
+use grammar::address_map::split_include_dirs;
 use std::env;
 use std::fs;
 use std::io;
@@ -99,45 +100,6 @@ pub struct CompileOptions {
     /// Реализовать `float` целочисленным Q-путём в `c`/`rust`/`st` (embedded) —
     /// флаг `--float-embedded` (фича 0096). Действует только с `--float-as-q`.
     pub float_embedded: bool,
-}
-
-/// Разбивает строку путей на отдельные директории.
-///
-/// Платформо-зависимые разделители:
-/// - `:`  — на Unix/macOS (стандарт POSIX, аналогично `PATH`).
-/// - `;`  — на Windows (стандарт Windows, аналогично `%PATH%`).
-///
-/// На Unix `:`  всегда является разделителем.
-/// На Windows `;` всегда является разделителем.
-/// Пустые сегменты и пробелы по краям отбрасываются.
-///
-/// Для кросс-платформенных сценариев предпочтительнее использовать
-/// несколько флагов `-I`: `-I /a -I /b`.
-///
-/// # Примеры
-///
-/// ```text
-/// # Unix
-/// split_include_dirs("/a:/b:/c")  →  ["/a", "/b", "/c"]
-/// split_include_dirs("/a::/b")    →  ["/a", "/b"]
-/// split_include_dirs("")          →  []
-///
-/// # Windows
-/// split_include_dirs("C:\\a;C:\\b")  →  ["C:\\a", "C:\\b"]
-/// ```
-pub fn split_include_dirs(s: &str) -> Vec<String> {
-    // На Windows путь может начинаться с буквы диска «X:», поэтому разделителем
-    // служит точка с запятой. На Unix используется двоеточие (стандарт POSIX).
-    #[cfg(windows)]
-    let sep = ';';
-    #[cfg(not(windows))]
-    let sep = ':';
-
-    s.split(sep)
-        .map(str::trim)
-        .filter(|seg| !seg.is_empty())
-        .map(String::from)
-        .collect()
 }
 
 /// Разбирает аргументы подкоманды `compile` в [`CompileOptions`].
@@ -836,6 +798,9 @@ fn print_usage() {
     eprintln!(
         "               lamc verify [--property \"φ\"] [--scope file|all] [--trace] <input.lam>"
     );
+    eprintln!(
+        "               lamc address-map [--emit map|json] [--address-map <файл>] [-D N=V] [-o <out>] <input.lam>"
+    );
     eprintln!("               lamc --help");
     eprintln!();
     eprintln!("Флаги:");
@@ -941,9 +906,14 @@ fn main() {
         process::exit(run_verify(&options));
     }
 
+    if args[1] == "address-map" {
+        // Логика — в библиотеке (`bin/lamc.rs` пришпилен к baseline размера).
+        process::exit(grammar::address_map::run_export_subcommand(&args[2..]));
+    }
+
     if args[1] != "compile" {
         eprintln!(
-            "Ошибка: неизвестная команда '{}'. Используйте 'compile', 'fmt' или 'verify'.",
+            "Ошибка: неизвестная команда '{}'. Используйте 'compile', 'fmt', 'verify' или 'address-map'.",
             args[1]
         );
         print_usage();

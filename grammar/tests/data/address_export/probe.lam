@@ -1,0 +1,11 @@
+type byte = [bit;8];
+in BTN: byte := 0x00200000;
+out LED: bit;
+in SW: bit := 0x00300000:3;
+address LED = 0x00200004;
+start Idle {
+    ref On: BTN;
+}
+state On {
+    ref Idle: SW;
+}
