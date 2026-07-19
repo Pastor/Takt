@@ -412,3 +412,80 @@ fn fixed_point_arithmetic_matches_generated_rust() {
          (биты f64 наблюдаемого porta).\nсимулятор={sim:?}\nRust={rs:?}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Прозрачный float → q(m, n), embedded-путь (фича 0096, задача 0096-03)
+//
+// Поля цели rust приватны, а q-выходной порт rust не поддерживает (RS-016 — порт
+// только бит/число), поэтому Q-модель без портов рантайм-наблюдать нечем. Сверка —
+// **byte-equality**: вывод float-фикстуры под --float-embedded обязан совпасть
+// БАЙТ-В-БАЙТ с выводом явного q-двойника (одинаковый basename). Так float→q
+// наследует уже проверенную 0061 rust-Q-арифметику (fixed_point_..._rust выше).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.lam";
+const FLOAT_Q_TWIN: &str = "tests/data/eval/conformance_float_q_twin.lam";
+
+/// Опции embedded-Q для `float` (фича 0096).
+#[allow(clippy::field_reassign_with_default)] // GenerateOptions — #[non_exhaustive]
+fn float_embedded_opts(m: u8, n: u8) -> grammar::generator::GenerateOptions {
+    let mut o = grammar::generator::GenerateOptions::default();
+    o.float_as_q = Some((m, n));
+    o.float_embedded = true;
+    o
+}
+
+/// T6/A4 (цель rust, embedded): `float` под `--float-embedded` даёт БАЙТ-В-БАЙТ
+/// тот же rust, что явный `q(8, 8)`. Одинаковый basename → символы совпадают, а
+/// содержимое — только если трансформация даёт ровно проверенный q-кодоген.
+#[test]
+fn float_embedded_matches_explicit_q_rust() {
+    let dir = build_dir("float_eq");
+    let float_src = std::fs::read_to_string(FLOAT_Q_FIXTURE).expect("float-фикстура");
+    let twin_src = std::fs::read_to_string(FLOAT_Q_TWIN).expect("q-двойник");
+    let out_f = dir.join("f");
+    let out_q = dir.join("q");
+    std::fs::create_dir_all(&out_f).unwrap();
+    std::fs::create_dir_all(&out_q).unwrap();
+    grammar::compile_to_rust(
+        "twin",
+        &float_src,
+        out_f.to_str().unwrap(),
+        &[],
+        &float_embedded_opts(8, 8),
+    )
+    .expect("float → rust");
+    grammar::compile_to_rust(
+        "twin",
+        &twin_src,
+        out_q.to_str().unwrap(),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("q → rust");
+    let rs_f = std::fs::read_to_string(out_f.join("twin.rs")).expect(".rs float");
+    let rs_q = std::fs::read_to_string(out_q.join("twin.rs")).expect(".rs q");
+    assert_eq!(
+        rs_f, rs_q,
+        "float→q(8,8) под --float-embedded обязан дать ровно тот же rust, что явный q(8,8)"
+    );
+}
+
+/// A3/T5 (цель rust native по умолчанию): `--float-as-q` без `--float-embedded`
+/// оставляет `float` нативным `f64`. Гейт переключения: с `--float-embedded` —
+/// `i16`. Молчаливого Q быть не должно.
+#[test]
+#[allow(clippy::field_reassign_with_default)] // GenerateOptions — #[non_exhaustive]
+fn float_as_q_without_embedded_is_native_rust() {
+    let dir = build_dir("float_native");
+    let source = std::fs::read_to_string(FLOAT_Q_FIXTURE).expect("фикстура");
+    let mut opts = grammar::generator::GenerateOptions::default();
+    opts.float_as_q = Some((8, 8)); // точность задана, embedded НЕ включён
+    grammar::compile_to_rust("cfq", &source, dir.to_str().unwrap(), &[], &opts)
+        .expect("порождение rust");
+    let rs = std::fs::read_to_string(dir.join("cfq.rs")).expect(".rs");
+    assert!(
+        rs.contains("f64"),
+        "без --float-embedded float остаётся native f64 (не i16).\n{rs}"
+    );
+}

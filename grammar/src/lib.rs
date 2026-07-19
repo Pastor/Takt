@@ -202,6 +202,27 @@ fn stamp_file(d: Diagnostic, files: &diagnostics::FileTable) -> Diagnostic {
     d.with_file_if_unset(path.as_deref())
 }
 
+/// Применяет трансформацию `float → q(m, n)` (фича 0096), если она включена для
+/// цели опциями генерации. `embedded_gate` — требуется ли `--float-embedded`:
+/// `true` для программных целей `c`/`rust`/`st` (native по умолчанию, Q — только
+/// с флагом), `false` для `sv` (нативного `float` там нет, `q` подставляется
+/// всегда при заданной точности).
+///
+/// Без `--float-as-q` не делает ничего (корпус неизменен). Мутирует модель на
+/// месте — вызывать **перед** [`generator::generate`].
+fn apply_float_lowering(
+    model: &std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+    options: &GenerateOptions,
+    embedded_gate: bool,
+) -> Result<(), Diagnostic> {
+    if let Some((m, n)) = options.float_as_q {
+        if !embedded_gate || options.float_embedded {
+            semantic::lower_float::lower_float_to_fixed(std::rc::Rc::clone(model), m, n)?;
+        }
+    }
+    Ok(())
+}
+
 /// Компилирует исходный код Lam в C-код.
 ///
 /// Выполняет полный конвейер: лексический анализ → синтаксический → семантический → генерация C.
@@ -267,6 +288,10 @@ pub fn compile_to_c(
         model.borrow_mut().name = Some(stem);
     }
 
+    // Фича 0096: embedded-путь `float → q(m, n)` при `--float-as-q` +
+    // `--float-embedded` (иначе `float` остаётся нативным `double`).
+    apply_float_lowering(&model, options, true)?;
+
     // Шаг 3: Генерация C-кода
     generator::generate(
         generator::Language::C,
@@ -319,6 +344,9 @@ pub fn compile_to_c_hal(
     hal_options.hal = true;
     hal_options.address_map = resolution.map;
 
+    // Фича 0096: embedded-путь `float → q(m, n)` (c-hal — основная embedded-цель).
+    apply_float_lowering(&model, options, true)?;
+
     generator::generate(
         generator::Language::C,
         &model.borrow(),
@@ -365,6 +393,9 @@ pub fn compile_to_st(
             .unwrap_or_else(|| "Root".to_owned());
         model.borrow_mut().name = Some(stem);
     }
+
+    // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
+    apply_float_lowering(&model, options, true)?;
 
     generator::generate(
         generator::Language::ST,
@@ -434,6 +465,9 @@ pub fn compile_to_rust(
             .unwrap_or_else(|| "Root".to_owned());
         model.borrow_mut().name = Some(stem);
     }
+
+    // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
+    apply_float_lowering(&model, options, true)?;
 
     generator::generate(
         generator::Language::Rust,
@@ -512,10 +546,8 @@ pub fn compile_to_sv(
     }
 
     // Фича 0096: при `--float-as-q=m.n` понижаем `float → q(m, n)` (снимая
-    // `SV-003`). Для `sv` флаг применяется всегда (не требует `--float-embedded`).
-    if let Some((m, n)) = options.float_as_q {
-        semantic::lower_float::lower_float_to_fixed(model.clone(), m, n)?;
-    }
+    // `SV-003`). Для `sv` флаг применяется всегда (без `--float-embedded`).
+    apply_float_lowering(&model, options, false)?;
 
     generator::generate(
         generator::Language::SV,
@@ -568,6 +600,9 @@ pub fn compile_to_st_at(
     let mut at_options = options.clone();
     at_options.hal = true;
     at_options.address_map = resolution.map;
+
+    // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
+    apply_float_lowering(&model, options, true)?;
 
     generator::generate(
         generator::Language::ST,

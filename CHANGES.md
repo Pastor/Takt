@@ -7,8 +7,20 @@
 
 ## [Не выпущено]
 
-### Добавлено (фича [0096](docs/features/0096-fixed-point-native-float.md) — прозрачный `float` через глобальную Q-точность) — В РАБОТЕ (задачи 0096-01, 0096-02)
+### Добавлено (фича [0096](docs/features/0096-fixed-point-native-float.md) — прозрачный `float` через глобальную Q-точность) — В РАБОТЕ (задачи 0096-01…03)
 
+- **Цели `c`/`rust`/`st`: embedded-путь `float → q(m, n)` при `--float-embedded`**
+  (задача 0096-03): под `--float-as-q=m.n --float-embedded` `float` реализуется
+  целочисленным `q(m, n)` (embedded без FPU) — `c` → `int{W}_t`, `rust` → `i{W}`,
+  `st` → `INT`/`LINT` + `LAM_Q_FLOORDIV`. **Без** `--float-embedded` — прежний
+  нативный `double`/`f64`/`LREAL` (точность влияет лишь на `sv`). Общий помощник
+  `apply_float_lowering` (embedded-гейт) во всех точках входа `c`/`c-hal`/`st`/
+  `st-at`/`rust`. Симулятор двухрежимен **через ту же трансформацию** (Q = проход
+  применён, native = нет; `eval::fixed` не тронут). Сверки: `c` — потактовая
+  runtime (`float_embedded_q_matches_generated_c`); `rust`/`st` — **byte-equality**
+  с явным q-двойником (поля приватны, q-выходной порт rust — `RS-016`); сторож
+  режимов `float_native_and_q_modes_differ` (native `Value::Real` ≠ Q
+  `Value::Fixed`) + native-гейты `float_as_q_without_embedded_is_native_{c,rust,st}`.
 - **Цель `sv`: `float` → `q(m, n)` под `--float-as-q=m.n`** (задача 0096-02): при
   заданной глобальной точности каждый `float` понижается в `q(m, n)` — **`SV-003`
   для `float` снимается**, вещественные модели становятся синтезируемыми **без**

@@ -405,3 +405,82 @@ fn fixed_point_arithmetic_matches_generated_st() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Прозрачный float → q(m, n), embedded-путь (фича 0096, задача 0096-03)
+//
+// Как и у rust: наблюдение Q-модели без портов затруднено, поэтому сверка —
+// **byte-equality**: вывод float-фикстуры под --float-embedded обязан совпасть
+// БАЙТ-В-БАЙТ с выводом явного q-двойника (одинаковый basename). Так float→q
+// наследует уже проверенную 0061 ST-Q-арифметику (fixed_point_..._st выше).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.lam";
+const FLOAT_Q_TWIN: &str = "tests/data/eval/conformance_float_q_twin.lam";
+
+/// Опции embedded-Q для `float` (фича 0096).
+#[allow(clippy::field_reassign_with_default)] // GenerateOptions — #[non_exhaustive]
+fn float_embedded_opts(m: u8, n: u8) -> grammar::generator::GenerateOptions {
+    let mut o = grammar::generator::GenerateOptions::default();
+    o.float_as_q = Some((m, n));
+    o.float_embedded = true;
+    o
+}
+
+/// T6/A4 (цель st, embedded): `float` под `--float-embedded` даёт БАЙТ-В-БАЙТ тот
+/// же ST, что явный `q(8, 8)`. Одинаковый basename → символы совпадают, а
+/// содержимое — только если трансформация даёт ровно проверенный q-кодоген.
+#[test]
+fn float_embedded_matches_explicit_q_st() {
+    let dir = std::env::temp_dir().join(format!("st_conf_float_eq_{}", std::process::id()));
+    let out_f = dir.join("f");
+    let out_q = dir.join("q");
+    std::fs::create_dir_all(&out_f).unwrap();
+    std::fs::create_dir_all(&out_q).unwrap();
+    let float_src = std::fs::read_to_string(FLOAT_Q_FIXTURE).expect("float-фикстура");
+    let twin_src = std::fs::read_to_string(FLOAT_Q_TWIN).expect("q-двойник");
+    grammar::compile_to_st(
+        "twin",
+        &float_src,
+        out_f.to_str().unwrap(),
+        &[],
+        &float_embedded_opts(8, 8),
+    )
+    .expect("float → st");
+    grammar::compile_to_st(
+        "twin",
+        &twin_src,
+        out_q.to_str().unwrap(),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("q → st");
+    let st_f = std::fs::read_to_string(out_f.join("twin.st")).expect(".st float");
+    let st_q = std::fs::read_to_string(out_q.join("twin.st")).expect(".st q");
+    assert_eq!(
+        st_f, st_q,
+        "float→q(8,8) под --float-embedded обязан дать ровно тот же ST, что явный q(8,8)"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A3/T5 (цель st native по умолчанию): `--float-as-q` без `--float-embedded`
+/// оставляет `float` нативным `LREAL`. Гейт переключения: с `--float-embedded` —
+/// `INT`. Молчаливого Q быть не должно.
+#[test]
+#[allow(clippy::field_reassign_with_default)] // GenerateOptions — #[non_exhaustive]
+fn float_as_q_without_embedded_is_native_st() {
+    let dir = std::env::temp_dir().join(format!("st_conf_float_native_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let source = std::fs::read_to_string(FLOAT_Q_FIXTURE).expect("фикстура");
+    let mut opts = grammar::generator::GenerateOptions::default();
+    opts.float_as_q = Some((8, 8)); // точность задана, embedded НЕ включён
+    grammar::compile_to_st("cfq", &source, dir.to_str().unwrap(), &[], &opts)
+        .expect("порождение st");
+    let st = std::fs::read_to_string(dir.join("cfq.st")).expect(".st");
+    assert!(
+        st.contains("LREAL"),
+        "без --float-embedded float остаётся native LREAL (не INT).\n{st}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
