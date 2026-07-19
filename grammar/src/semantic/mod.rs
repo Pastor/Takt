@@ -833,18 +833,13 @@ pub struct MatchArmNode {
 }
 
 /// Семантический образец ветки `match`.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub enum MatchPatternNode {
     /// Конкретное значение.
     Value(Box<ExpressionNode>),
     /// Подстановочный образец `_`.
+    #[default]
     Wildcard,
-}
-
-impl Default for MatchPatternNode {
-    fn default() -> Self {
-        Self::Wildcard
-    }
 }
 
 /// Семантический узел переменной.
@@ -1619,7 +1614,7 @@ mod tests {
     fn diagnostic_from_str() {
         let d: Diagnostic = "что-то пошло не так".into();
         let Diagnostic { message: msgs, .. } = d;
-        assert!(msgs.len() > 0);
+        assert!(!msgs.is_empty());
         assert_eq!(msgs, "что-то пошло не так");
     }
 

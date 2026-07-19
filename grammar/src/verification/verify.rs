@@ -205,7 +205,7 @@ fn counterexample(prefix: Vec<String>, cycle: Vec<String>) -> Counterexample {
 /// Минимальный период последовательности: `[F, F]` → `[F]`, `[W, K]` → `[W, K]`.
 fn minimal_period(cycle: &[String]) -> Vec<String> {
     for period in 1..=cycle.len() {
-        if cycle.len() % period != 0 {
+        if !cycle.len().is_multiple_of(period) {
             continue;
         }
         if cycle
@@ -228,8 +228,8 @@ mod tests {
     fn verdict(src: &str, phi: &Ltl) -> Verdict {
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
-        let v = verify_model(&model.borrow(), phi);
-        v
+
+        verify_model(&model.borrow(), phi)
     }
 
     fn atom(name: &str) -> Rc<Ltl> {

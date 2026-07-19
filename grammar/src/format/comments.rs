@@ -21,10 +21,9 @@
 use crate::diagnostics::Location;
 use crate::parser::ast;
 
-/// Комментарий, приведённый к смещениям и сырому тексту.
+/// Комментарий, приведённый к смещению начала и сырому тексту.
 struct Item {
     start: usize,
-    end: usize,
     text: String,
 }
 
@@ -44,12 +43,11 @@ impl<'a> Comments<'a> {
         let mut items: Vec<Item> = comments
             .iter()
             .filter_map(|c| {
-                let Location::Source(_, start, end) = *location(c) else {
+                let Location::Source(_, start, _) = *location(c) else {
                     return None;
                 };
                 Some(Item {
-                    start,
-                    end,
+                    start: start as usize,
                     text: c.value().trim_end().to_string(),
                 })
             })
@@ -130,7 +128,7 @@ fn location(c: &ast::Comment) -> &Location {
 /// Достаёт байтовые смещения из `Location`.
 pub(crate) fn span(loc: &Location) -> Option<(usize, usize)> {
     match loc {
-        Location::Source(_, start, end) => Some((*start, *end)),
+        Location::Source(_, start, end) => Some((*start as usize, *end as usize)),
         Location::Builtin | Location::CommandLine | Location::Implicit | Location::Codegen => None,
     }
 }

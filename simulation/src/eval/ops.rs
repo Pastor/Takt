@@ -205,6 +205,10 @@ fn arith(
     }
 }
 
+// Проверка делителя `if b == 0.0` не сводится к паттерну `0.0`: буквальный
+// float в паттерне даёт `illegal_floating_point_literal_pattern` (future-incompat),
+// то есть лечение линта породило бы худшее предупреждение.
+#[allow(clippy::redundant_guards)]
 fn divide(op: BinOp, lhs: &Value, rhs: &Value) -> Result<Value, EvalError> {
     match coerce_pair(lhs, rhs, op)? {
         // S3: деление на ноль — UB в C; выдаём ошибку, а не паникуем и не врём.
@@ -218,6 +222,7 @@ fn divide(op: BinOp, lhs: &Value, rhs: &Value) -> Result<Value, EvalError> {
     }
 }
 
+#[allow(clippy::redundant_guards)] // см. `divide`: паттерн `0.0` — future-incompat
 fn modulo(op: BinOp, lhs: &Value, rhs: &Value) -> Result<Value, EvalError> {
     match coerce_pair(lhs, rhs, op)? {
         Pair::Ints(_, 0) => Err(EvalError::DivisionByZero),

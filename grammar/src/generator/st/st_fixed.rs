@@ -179,7 +179,7 @@ pub(crate) fn cast(
         // целое/бит → q: repr = v · 2^n с wraparound к W.
         (None, TypeNode::Fixed { m: tm, n: tn }) => {
             let ts = iec_signed(fixed_storage_bits(tm + tn));
-            let src_ty = inner_expr_type(inner).ok_or_else(|| untyped_source())?;
+            let src_ty = inner_expr_type(inner).ok_or_else(untyped_source)?;
             let src_name = match src_ty {
                 TypeNode::Integer { bits, signed } => iec_int(bits, signed),
                 TypeNode::Bit | TypeNode::Bool => "BOOL",

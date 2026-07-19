@@ -140,7 +140,7 @@ fn parser_error_to_diagnostic(
 ) -> Diagnostic {
     match error {
         ParseError::InvalidToken { location } => Diagnostic::parser_error(
-            Location::Source(file_no, *location, *location),
+            Location::source(file_no, *location, *location),
             "недопустимый токен".to_string(),
         )
         .with_code("SY-001"),
@@ -148,7 +148,7 @@ fn parser_error_to_diagnostic(
             token: (l, token, r),
             expected,
         } => Diagnostic::parser_error(
-            Location::Source(file_no, *l, *r),
+            Location::source(file_no, *l, *r),
             format!(
                 "нераспознанный токен '{}', ожидалось {}",
                 token,
@@ -160,12 +160,12 @@ fn parser_error_to_diagnostic(
             Diagnostic::parser_error(error.loc(), error.to_string()).with_code(error.code())
         }
         ParseError::ExtraToken { token } => Diagnostic::parser_error(
-            Location::Source(file_no, token.0, token.2),
+            Location::source(file_no, token.0, token.2),
             format!("лишний токен '{}'", token.1),
         )
         .with_code("SY-003"),
         ParseError::UnrecognizedEof { expected, location } => Diagnostic::parser_error(
-            Location::Source(file_no, *location, *location),
+            Location::source(file_no, *location, *location),
             format!("неожиданный конец файла, ожидалось {}", expected.join(", ")),
         )
         .with_code("SY-004"),
@@ -215,10 +215,10 @@ fn apply_float_lowering(
     options: &GenerateOptions,
     embedded_gate: bool,
 ) -> Result<(), Diagnostic> {
-    if let Some((m, n)) = options.float_as_q {
-        if !embedded_gate || options.float_embedded {
-            semantic::lower_float::lower_float_to_fixed(std::rc::Rc::clone(model), m, n)?;
-        }
+    if let Some((m, n)) = options.float_as_q
+        && (!embedded_gate || options.float_embedded)
+    {
+        semantic::lower_float::lower_float_to_fixed(std::rc::Rc::clone(model), m, n)?;
     }
     Ok(())
 }
@@ -1114,19 +1114,19 @@ fn collect_unknown_named_blocks_model(model: &ast::Model, out: &mut Vec<Diagnost
 }
 
 fn check_named_block_def(def: &ast::NamedBlockCodeDefine, out: &mut Vec<Diagnostic>) {
-    if let Some(name_id) = &def.name {
-        if !KNOWN_NAMED_BLOCKS.contains(&name_id.name.as_str()) {
-            out.push(
-                Diagnostic::warning(
-                    name_id.loc,
-                    format!(
-                        "неизвестный именованный блок '{}'; допустимые имена: enter, exit, always",
-                        name_id.name
-                    ),
-                )
-                .with_code("SE-045"),
-            );
-        }
+    if let Some(name_id) = &def.name
+        && !KNOWN_NAMED_BLOCKS.contains(&name_id.name.as_str())
+    {
+        out.push(
+            Diagnostic::warning(
+                name_id.loc,
+                format!(
+                    "неизвестный именованный блок '{}'; допустимые имена: enter, exit, always",
+                    name_id.name
+                ),
+            )
+            .with_code("SE-045"),
+        );
     }
 }
 

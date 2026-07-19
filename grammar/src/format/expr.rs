@@ -140,7 +140,7 @@ pub(crate) fn condition(cond: &ast::Condition) -> Result<String, FormatError> {
         C::Function(_, id, args) => {
             let args = args
                 .iter()
-                .map(|a| condition(a))
+                .map(condition)
                 .collect::<Result<Vec<_>, _>>()?
                 .join(", ");
             format!("{}({args})", id.name)

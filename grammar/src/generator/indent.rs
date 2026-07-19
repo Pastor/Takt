@@ -92,7 +92,7 @@ impl<'a> Printer<'a> {
     /// Записывает строку `message` с текущим отступом.
     pub fn ident(&mut self, message: &str) -> &mut Self {
         self.writer
-            .write_fmt(format_args!("{}{}", &*self.padding.borrow(), message))
+            .write_fmt(format_args!("{}{}", *self.padding.borrow(), message))
             .unwrap();
         self
     }

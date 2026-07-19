@@ -74,7 +74,7 @@ pub fn resolve_condition(
                     Box::new(resolved_idx),
                 ));
             }
-            Err(format!("Массив '{}' не найден", &name).as_str().into())
+            Err(format!("Массив '{}' не найден", name).as_str().into())
         }
         ast::Condition::Parenthesis(_, cond) => Ok(ConditionNode::Parenthesis(Box::new(
             resolve_condition(cond, model.clone())?,

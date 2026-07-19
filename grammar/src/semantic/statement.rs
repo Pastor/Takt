@@ -845,7 +845,7 @@ mod tests {
 
         // После разрешения блока `inner` не должна оставаться в модели
         assert!(
-            m.borrow().variables.get("inner").is_none(),
+            !m.borrow().variables.contains_key("inner"),
             "inner не должна быть в модели после выхода из блока"
         );
         // Но Statement::Variable(inner) должен быть внутри блока

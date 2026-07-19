@@ -59,7 +59,7 @@ fn valid_files_parse_without_errors() {
     let entries: Vec<_> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("Не удалось прочитать директорию {:?}: {}", dir, e))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "lam"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "lam"))
         .collect();
 
     assert!(
@@ -89,7 +89,7 @@ fn invalid_files_produce_parse_errors() {
     let entries: Vec<_> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("Не удалось прочитать директорию {:?}: {}", dir, e))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "lam"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "lam"))
         .collect();
 
     assert!(
@@ -351,7 +351,7 @@ fn parse_mutable_variable() {
     assert!(var.is_some(), "Ожидалась переменная");
     if let VariableDefine::Variable { .. } = var.unwrap() {
     } else {
-        assert!(false, "Ожидалась переменная");
+        panic!("Ожидалась переменная");
     }
 }
 
@@ -369,7 +369,7 @@ fn parse_const_variable() {
     assert!(cst.is_some(), "Ожидалась константа");
     if let VariableDefine::Constant { .. } = cst.unwrap() {
     } else {
-        assert!(false, "Ожидалась константа");
+        panic!("Ожидалась константа");
     }
 }
 
@@ -389,7 +389,7 @@ fn parse_port_with_address() {
     assert!(port.is_some(), "Ожидался порт");
     if let VariableDefine::Port { .. } = port.unwrap() {
     } else {
-        assert!(false, "Ожидался порт");
+        panic!("Ожидался порт");
     }
 }
 
@@ -1792,16 +1792,16 @@ fn test_inline_formula_in_model_parsed() {
 fn test_inline_formula_in_state_parsed() {
     let src = "model M { start S { : true, false; } }";
     let (ast, _) = grammar::parse(src, 0).expect("ошибка разбора");
-    if let grammar::parser::ast::ModelElement::Model(model) = &ast.elements[0] {
-        if let grammar::parser::ast::ModelElement::State(state) = &model.elements[0] {
-            assert!(
-                state
-                    .elements
-                    .iter()
-                    .any(|e| matches!(e, grammar::parser::ast::StateElement::InlineFormula(_))),
-                "ожидался StateElement::InlineFormula в теле состояния S"
-            );
-        }
+    if let grammar::parser::ast::ModelElement::Model(model) = &ast.elements[0]
+        && let grammar::parser::ast::ModelElement::State(state) = &model.elements[0]
+    {
+        assert!(
+            state
+                .elements
+                .iter()
+                .any(|e| matches!(e, grammar::parser::ast::StateElement::InlineFormula(_))),
+            "ожидался StateElement::InlineFormula в теле состояния S"
+        );
     }
 }
 

@@ -495,7 +495,7 @@ impl FileTable {
     /// (`Codegen`/`Implicit`/`Builtin`/`CommandLine`).
     pub fn path_of(&self, loc: &Location) -> Option<&str> {
         match loc {
-            Location::Source(file_no, _, _) => self.path(*file_no),
+            Location::Source(file_no, _, _) => self.path(*file_no as u64),
             _ => None,
         }
     }
@@ -533,7 +533,7 @@ pub fn position_prefix(diag: &Diagnostic) -> String {
     let Ok(text) = std::fs::read_to_string(path) else {
         return format!("{path}: ");
     };
-    let (line, column) = line_column(&text, start);
+    let (line, column) = line_column(&text, start as usize);
     format!("{path}:{line}:{column}: ")
 }
 
@@ -568,6 +568,13 @@ impl Diagnostic {
 ///
 /// Вариант [`Source`](Location::Source) хранит номер файла, байтовое смещение
 /// начала и байтовое смещение конца (не включительно).
+///
+/// Поля — `u32` (фича 0046): номера файлов и байтовые смещения `.lam`-исходников
+/// с запасом влезают в 32 бита, а `u32×3` даёт варианту 16 байт вместо 32 у
+/// `(u64, usize, usize)` — это опускает `Diagnostic` ниже порога 128 байт линта
+/// `clippy::result_large_err` (иначе 414 предупреждений на `Result<_,
+/// Diagnostic>`). Публичный API методов остаётся в `usize`/`String` — каст
+/// локализован в аксессорах, поэтому большинство читающих сайтов не затронуто.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub enum Location {
@@ -580,7 +587,7 @@ pub enum Location {
     /// Элемент, сгенерированный кодогенератором.
     Codegen,
     /// Элемент в исходном файле: `(файл, начало, конец)`.
-    Source(u64, usize, usize),
+    Source(u32, u32, u32),
 }
 
 impl Default for Location {
@@ -598,6 +605,18 @@ fn not_a_file() -> ! {
 }
 
 impl Location {
+    /// Конструирует [`Location::Source`] из «широких» типов вызывающего.
+    ///
+    /// Фича 0046: внутреннее представление — `u32` (см. [`Location`]), но
+    /// лексер/парсер оперируют `u64`-номером файла и `usize`-смещениями `@L`/`@R`.
+    /// Каст локализован здесь: `Location::source(file_no, l, r)` вместо ручного
+    /// `Location::Source(file_no as u32, l as u32, r as u32)` в сотнях мест
+    /// грамматики. Значения `.lam`-исходников с запасом влезают в 32 бита.
+    #[inline]
+    pub fn source(file: u64, start: usize, end: usize) -> Self {
+        Location::Source(file as u32, start as u32, end as u32)
+    }
+
     /// Возвращает [`Location`] нулевой длины, указывающий на начало данного диапазона.
     #[inline]
     pub fn begin_range(&self) -> Self {
@@ -649,7 +668,7 @@ impl Location {
     #[inline]
     pub fn start(&self) -> usize {
         match self {
-            Location::Source(_, start, _) => *start,
+            Location::Source(_, start, _) => *start as usize,
             _ => not_a_file(),
         }
     }
@@ -678,7 +697,7 @@ impl Location {
     #[inline]
     pub fn end(&self) -> usize {
         match self {
-            Location::Source(_, _, end) => *end,
+            Location::Source(_, _, end) => *end as usize,
             _ => not_a_file(),
         }
     }
@@ -776,7 +795,7 @@ impl Location {
     #[inline]
     pub fn with_start(self, start: usize) -> Self {
         match self {
-            Self::Source(no, _, end) => Self::Source(no, start, end),
+            Self::Source(no, _, end) => Self::Source(no, start as u32, end),
             _ => not_a_file(),
         }
     }
@@ -790,7 +809,7 @@ impl Location {
     #[inline]
     pub fn with_end(self, end: usize) -> Self {
         match self {
-            Self::Source(no, start, _) => Self::Source(no, start, end),
+            Self::Source(no, start, _) => Self::Source(no, start, end as u32),
             _ => not_a_file(),
         }
     }
@@ -804,7 +823,7 @@ impl Location {
     #[inline]
     pub fn range(self) -> std::ops::Range<usize> {
         match self {
-            Self::Source(_, start, end) => start..end,
+            Self::Source(_, start, end) => start as usize..end as usize,
             _ => not_a_file(),
         }
     }
@@ -831,7 +850,7 @@ impl Location {
     #[inline]
     pub fn try_start(&self) -> Option<usize> {
         match self {
-            Location::Source(_, start, _) => Some(*start),
+            Location::Source(_, start, _) => Some(*start as usize),
             _ => None,
         }
     }
@@ -855,7 +874,7 @@ impl Location {
     #[inline]
     pub fn try_end(&self) -> Option<usize> {
         match self {
-            Location::Source(_, _, end) => Some(*end),
+            Location::Source(_, _, end) => Some(*end as usize),
             _ => None,
         }
     }
@@ -879,7 +898,7 @@ impl Location {
     #[inline]
     pub fn try_range(&self) -> Option<std::ops::Range<usize>> {
         match self {
-            Location::Source(_, start, end) => Some(*start..*end),
+            Location::Source(_, start, end) => Some(*start as usize..*end as usize),
             _ => None,
         }
     }

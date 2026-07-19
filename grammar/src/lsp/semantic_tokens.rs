@@ -194,7 +194,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             Comment::Line(loc, _) | Comment::DocLine(loc, _) | Comment::Block(loc, _) => loc,
         };
         if let Location::Source(_, start, end) = loc {
-            raw.push((*start, *end, TT_COMMENT));
+            raw.push((*start as usize, *end as usize, TT_COMMENT));
         }
     }
 

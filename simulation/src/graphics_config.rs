@@ -35,6 +35,7 @@ pub enum OutputMode {
 /// которые нужно переопределить.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct GraphicsConfig {
     /// Режим сохранения: "gif" (по умолчанию) или "svg".
     pub output_mode: OutputMode,
@@ -54,22 +55,6 @@ pub struct GraphicsConfig {
     pub model_name: ModelNameConfig,
     /// Параметры алгоритма раскладки графа.
     pub layout: LayoutConfig,
-}
-
-impl Default for GraphicsConfig {
-    fn default() -> Self {
-        Self {
-            output_mode: OutputMode::default(),
-            canvas: CanvasConfig::default(),
-            node: NodeConfig::default(),
-            edge: EdgeConfig::default(),
-            edge_label: EdgeLabelConfig::default(),
-            legend: LegendConfig::default(),
-            highlight: HighlightConfig::default(),
-            model_name: ModelNameConfig::default(),
-            layout: LayoutConfig::default(),
-        }
-    }
 }
 
 impl GraphicsConfig {

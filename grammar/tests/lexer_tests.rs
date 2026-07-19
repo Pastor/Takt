@@ -65,7 +65,7 @@ fn first_comment_is_doc(input: &str) -> bool {
     {
         let _: Vec<_> = Lexer::new(&src, 0, &mut comments, &mut errors).collect();
     }
-    comments.first().map_or(false, |c| c.is_doc())
+    comments.first().is_some_and(|c| c.is_doc())
 }
 
 // ─────────────────────────── Позитивные тесты (по файлам) ────────────────────
@@ -664,14 +664,14 @@ fn lexical_error_loc_for_all_variants() {
     let loc = Location::Source(0, 5, 10);
 
     let cases = vec![
-        LexicalError::EndOfFileInComment(loc.clone()),
-        LexicalError::EndOfFileInString(loc.clone()),
-        LexicalError::EndOfFileInHex(loc.clone()),
-        LexicalError::MissingNumber(loc.clone()),
-        LexicalError::InvalidCharacterInHexLiteral(loc.clone(), 'Z'),
-        LexicalError::UnrecognisedToken(loc.clone(), "@".to_string()),
-        LexicalError::MissingExponent(loc.clone()),
-        LexicalError::ExpectedFrom(loc.clone(), "foo".to_string()),
+        LexicalError::EndOfFileInComment(loc),
+        LexicalError::EndOfFileInString(loc),
+        LexicalError::EndOfFileInHex(loc),
+        LexicalError::MissingNumber(loc),
+        LexicalError::InvalidCharacterInHexLiteral(loc, 'Z'),
+        LexicalError::UnrecognisedToken(loc, "@".to_string()),
+        LexicalError::MissingExponent(loc),
+        LexicalError::ExpectedFrom(loc, "foo".to_string()),
     ];
 
     for err in &cases {
@@ -691,35 +691,35 @@ fn lexical_error_display_messages() {
 
     let cases: Vec<(LexicalError, &str)> = vec![
         (
-            LexicalError::EndOfFileInComment(loc.clone()),
+            LexicalError::EndOfFileInComment(loc),
             "неожиданный конец файла внутри комментария",
         ),
         (
-            LexicalError::EndOfFileInString(loc.clone()),
+            LexicalError::EndOfFileInString(loc),
             "неожиданный конец файла внутри строкового литерала",
         ),
         (
-            LexicalError::EndOfFileInHex(loc.clone()),
+            LexicalError::EndOfFileInHex(loc),
             "неожиданный конец файла внутри шестнадцатеричного литерала",
         ),
         (
-            LexicalError::MissingNumber(loc.clone()),
+            LexicalError::MissingNumber(loc),
             "отсутствует число после '0x'",
         ),
         (
-            LexicalError::InvalidCharacterInHexLiteral(loc.clone(), 'Z'),
+            LexicalError::InvalidCharacterInHexLiteral(loc, 'Z'),
             "недопустимый символ 'Z'",
         ),
         (
-            LexicalError::UnrecognisedToken(loc.clone(), "@".into()),
+            LexicalError::UnrecognisedToken(loc, "@".into()),
             "нераспознанный токен '@'",
         ),
         (
-            LexicalError::MissingExponent(loc.clone()),
+            LexicalError::MissingExponent(loc),
             "отсутствует показатель степени",
         ),
         (
-            LexicalError::ExpectedFrom(loc.clone(), "bar".into()),
+            LexicalError::ExpectedFrom(loc, "bar".into()),
             "ожидалось ключевое слово 'from', но найдено 'bar'",
         ),
     ];

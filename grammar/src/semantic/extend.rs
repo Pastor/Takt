@@ -248,7 +248,7 @@ fn unroll_ast_extend(
                 .borrow()
                 .search_model(&id.name)
                 .ok_or_else(|| {
-                    Diagnostic::error(id.loc, format!("Модель '{}' не найдена", &id.name))
+                    Diagnostic::error(id.loc, format!("Модель '{}' не найдена", id.name))
                         .with_code("SE-001")
                 })?;
             // Позиция имени — то, ради чего разворот идёт по АСД.

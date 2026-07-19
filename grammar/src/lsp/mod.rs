@@ -231,13 +231,13 @@ start S = M;
             hover.is_some(),
             "hover над переменной должен возвращать данные"
         );
-        if let Some(h) = hover {
-            if let HoverContents::Markup(mc) = h.contents {
-                assert!(
-                    mc.value.contains("counter"),
-                    "hover должен содержать имя переменной"
-                );
-            }
+        if let Some(h) = hover
+            && let HoverContents::Markup(mc) = h.contents
+        {
+            assert!(
+                mc.value.contains("counter"),
+                "hover должен содержать имя переменной"
+            );
         }
     }
 
@@ -251,13 +251,13 @@ start S = M;
             hover.is_some(),
             "hover над функцией должен возвращать данные"
         );
-        if let Some(h) = hover {
-            if let HoverContents::Markup(mc) = h.contents {
-                assert!(
-                    mc.value.contains("myFunc"),
-                    "hover должен содержать имя функции"
-                );
-            }
+        if let Some(h) = hover
+            && let HoverContents::Markup(mc) = h.contents
+        {
+            assert!(
+                mc.value.contains("myFunc"),
+                "hover должен содержать имя функции"
+            );
         }
     }
 
@@ -296,18 +296,18 @@ start S = M;
             hover.is_some(),
             "hover над функцией с документацией должен возвращать данные"
         );
-        if let Some(h) = hover {
-            if let HoverContents::Markup(mc) = h.contents {
-                assert!(
-                    mc.value.contains("process"),
-                    "hover должен содержать имя функции"
-                );
-                assert!(
-                    mc.value.contains("Обработка данных"),
-                    "hover должен содержать документацию функции: {}",
-                    mc.value
-                );
-            }
+        if let Some(h) = hover
+            && let HoverContents::Markup(mc) = h.contents
+        {
+            assert!(
+                mc.value.contains("process"),
+                "hover должен содержать имя функции"
+            );
+            assert!(
+                mc.value.contains("Обработка данных"),
+                "hover должен содержать документацию функции: {}",
+                mc.value
+            );
         }
     }
 
@@ -324,18 +324,18 @@ start S = M;
             hover.is_some(),
             "hover над переменной с документацией должен возвращать данные"
         );
-        if let Some(h) = hover {
-            if let HoverContents::Markup(mc) = h.contents {
-                assert!(
-                    mc.value.contains("counter"),
-                    "hover должен содержать имя переменной"
-                );
-                assert!(
-                    mc.value.contains("Счётчик тактов"),
-                    "hover должен содержать документацию переменной: {}",
-                    mc.value
-                );
-            }
+        if let Some(h) = hover
+            && let HoverContents::Markup(mc) = h.contents
+        {
+            assert!(
+                mc.value.contains("counter"),
+                "hover должен содержать имя переменной"
+            );
+            assert!(
+                mc.value.contains("Счётчик тактов"),
+                "hover должен содержать документацию переменной: {}",
+                mc.value
+            );
         }
     }
 
@@ -350,19 +350,19 @@ start S = M;
             hover.is_some(),
             "hover без документации должен возвращать данные"
         );
-        if let Some(h) = hover {
-            if let HoverContents::Markup(mc) = h.contents {
-                assert!(
-                    mc.value.contains("counter"),
-                    "hover должен содержать имя переменной"
-                );
-                // Без документации не должно быть двойного переноса строки + текста
-                // Достаточно убедиться, что нет лишнего текста за пределами code-блока
-                assert!(
-                    mc.value.starts_with("```but"),
-                    "hover без документации должен начинаться с блока кода"
-                );
-            }
+        if let Some(h) = hover
+            && let HoverContents::Markup(mc) = h.contents
+        {
+            assert!(
+                mc.value.contains("counter"),
+                "hover должен содержать имя переменной"
+            );
+            // Без документации не должно быть двойного переноса строки + текста
+            // Достаточно убедиться, что нет лишнего текста за пределами code-блока
+            assert!(
+                mc.value.starts_with("```but"),
+                "hover без документации должен начинаться с блока кода"
+            );
         }
     }
 

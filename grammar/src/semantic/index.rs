@@ -135,7 +135,7 @@ impl IndexEntry {
     /// создаются только под `Location::Source`.
     fn file_no(&self) -> u64 {
         match self.node_ref.loc {
-            Location::Source(file_no, _, _) => file_no,
+            Location::Source(file_no, _, _) => file_no as u64,
             _ => ROOT_FILE_NO,
         }
     }
@@ -340,8 +340,8 @@ fn collect_extend_entries(
             // и у реализации, разрешённой не из АСД — индексировать нечего.
             if let Location::Source(_, start, end) = loc {
                 entries.push(IndexEntry {
-                    start: *start,
-                    end: *end,
+                    start: *start as usize,
+                    end: *end as usize,
                     node_ref: SemanticNodeRef {
                         name: binding_name_of(model, target),
                         kind: SemanticNodeKind::ReferenceModel,
@@ -372,8 +372,8 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
         && let Location::Source(_, start, end) = borrowed.loc
     {
         entries.push(IndexEntry {
-            start,
-            end,
+            start: start as usize,
+            end: end as usize,
             node_ref: SemanticNodeRef {
                 name: name.clone(),
                 kind: SemanticNodeKind::Model,
@@ -393,8 +393,8 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
         };
         if let Location::Source(_, start, end) = loc {
             entries.push(IndexEntry {
-                start,
-                end,
+                start: start as usize,
+                end: end as usize,
                 node_ref: SemanticNodeRef {
                     name: name.clone(),
                     kind,
@@ -416,8 +416,8 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
         };
         if let Location::Source(_, start, end) = loc {
             entries.push(IndexEntry {
-                start,
-                end,
+                start: start as usize,
+                end: end as usize,
                 node_ref: SemanticNodeRef {
                     name: name.clone(),
                     kind,
@@ -441,8 +441,8 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
         };
         if let Location::Source(_, start, end) = loc {
             entries.push(IndexEntry {
-                start,
-                end,
+                start: start as usize,
+                end: end as usize,
                 node_ref: SemanticNodeRef {
                     name: name.clone(),
                     kind,
@@ -463,8 +463,8 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
             let loc = reference.location;
             if let Location::Source(_, start, end) = loc {
                 entries.push(IndexEntry {
-                    start,
-                    end,
+                    start: start as usize,
+                    end: end as usize,
                     node_ref: SemanticNodeRef {
                         name: reference.name.clone(),
                         kind: SemanticNodeKind::Reference,
@@ -495,8 +495,8 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
         }
         if let Location::Source(_, start, end) = loc {
             entries.push(IndexEntry {
-                start: *start,
-                end: *end,
+                start: *start as usize,
+                end: *end as usize,
                 node_ref: SemanticNodeRef {
                     name: name.clone(),
                     kind: SemanticNodeKind::TypeAlias,
@@ -511,8 +511,8 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
     for (name, cond) in &borrowed.conditions {
         if let Location::Source(_, start, end) = cond.loc {
             entries.push(IndexEntry {
-                start,
-                end,
+                start: start as usize,
+                end: end as usize,
                 node_ref: SemanticNodeRef {
                     name: name.clone(),
                     kind: SemanticNodeKind::Condition,
@@ -527,8 +527,8 @@ fn collect_model_entries(model: &Rc<RefCell<ModelNode>>, entries: &mut Vec<Index
     for (name, enum_node) in &borrowed.enums {
         if let Location::Source(_, start, end) = enum_node.loc {
             entries.push(IndexEntry {
-                start,
-                end,
+                start: start as usize,
+                end: end as usize,
                 node_ref: SemanticNodeRef {
                     name: name.clone(),
                     kind: SemanticNodeKind::Enum,
@@ -620,8 +620,8 @@ fn collect_condition_entries(
             if let Location::Source(_, start, end) = loc {
                 let name = func_rc.borrow().name().to_string();
                 entries.push(IndexEntry {
-                    start: *start,
-                    end: *end,
+                    start: *start as usize,
+                    end: *end as usize,
                     node_ref: SemanticNodeRef {
                         name,
                         kind: SemanticNodeKind::ReferenceCondition,
@@ -639,8 +639,8 @@ fn collect_condition_entries(
         ConditionNode::Model(target, loc) => {
             if let Location::Source(_, start, end) = loc {
                 entries.push(IndexEntry {
-                    start: *start,
-                    end: *end,
+                    start: *start as usize,
+                    end: *end as usize,
                     node_ref: SemanticNodeRef {
                         name: binding_name_of(model, target),
                         kind: SemanticNodeKind::ReferenceModel,
@@ -655,8 +655,8 @@ fn collect_condition_entries(
             if let Location::Source(_, start, end) = loc {
                 let name = var_rc.borrow().name().to_string();
                 entries.push(IndexEntry {
-                    start: *start,
-                    end: *end,
+                    start: *start as usize,
+                    end: *end as usize,
                     node_ref: SemanticNodeRef {
                         name,
                         kind: SemanticNodeKind::ReferenceCondition,
@@ -707,8 +707,8 @@ fn collect_ast_condition_entries(
         ast::Condition::Variable(id) => {
             if let Location::Source(_, start, end) = id.loc {
                 entries.push(IndexEntry {
-                    start,
-                    end,
+                    start: start as usize,
+                    end: end as usize,
                     node_ref: SemanticNodeRef {
                         name: id.name.clone(),
                         kind: SemanticNodeKind::ReferenceCondition,
@@ -721,8 +721,8 @@ fn collect_ast_condition_entries(
         ast::Condition::Function(_, id, args) => {
             if let Location::Source(_, start, end) = id.loc {
                 entries.push(IndexEntry {
-                    start,
-                    end,
+                    start: start as usize,
+                    end: end as usize,
                     node_ref: SemanticNodeRef {
                         name: id.name.clone(),
                         kind: SemanticNodeKind::ReferenceCondition,
@@ -738,8 +738,8 @@ fn collect_ast_condition_entries(
         ast::Condition::ArraySubscript(_, id, _) => {
             if let Location::Source(_, start, end) = id.loc {
                 entries.push(IndexEntry {
-                    start,
-                    end,
+                    start: start as usize,
+                    end: end as usize,
                     node_ref: SemanticNodeRef {
                         name: id.name.clone(),
                         kind: SemanticNodeKind::ReferenceCondition,
@@ -939,8 +939,8 @@ fn collect_ast_statement_entries(
             };
             if let Location::Source(_, start, end) = id_loc {
                 entries.push(IndexEntry {
-                    start,
-                    end,
+                    start: start as usize,
+                    end: end as usize,
                     node_ref: SemanticNodeRef {
                         name: name.clone(),
                         kind: SemanticNodeKind::LocalVar,
@@ -997,8 +997,8 @@ fn collect_ast_expression_entries(
         ast::Expression::Variable(id) => {
             if let Location::Source(_, start, end) = id.loc {
                 entries.push(IndexEntry {
-                    start,
-                    end,
+                    start: start as usize,
+                    end: end as usize,
                     node_ref: SemanticNodeRef {
                         name: id.name.clone(),
                         kind: SemanticNodeKind::ReferenceCondition,
@@ -1011,8 +1011,8 @@ fn collect_ast_expression_entries(
         ast::Expression::Function(_, id, args) => {
             if let Location::Source(_, start, end) = id.loc {
                 entries.push(IndexEntry {
-                    start,
-                    end,
+                    start: start as usize,
+                    end: end as usize,
                     node_ref: SemanticNodeRef {
                         name: id.name.clone(),
                         kind: SemanticNodeKind::ReferenceCondition,
@@ -1028,8 +1028,8 @@ fn collect_ast_expression_entries(
         ast::Expression::ArraySubscript(_, id, _) => {
             if let Location::Source(_, start, end) = id.loc {
                 entries.push(IndexEntry {
-                    start,
-                    end,
+                    start: start as usize,
+                    end: end as usize,
                     node_ref: SemanticNodeRef {
                         name: id.name.clone(),
                         kind: SemanticNodeKind::ReferenceCondition,
@@ -1042,8 +1042,8 @@ fn collect_ast_expression_entries(
         ast::Expression::ArraySlice(_, id, _, _) => {
             if let Location::Source(_, start, end) = id.loc {
                 entries.push(IndexEntry {
-                    start,
-                    end,
+                    start: start as usize,
+                    end: end as usize,
                     node_ref: SemanticNodeRef {
                         name: id.name.clone(),
                         kind: SemanticNodeKind::ReferenceCondition,

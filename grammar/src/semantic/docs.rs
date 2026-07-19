@@ -214,7 +214,7 @@ pub(crate) fn attach_docs(
                 // Location::Builtin не имеет числовых позиций — пропускаем
                 && let Location::Source(_, start, end) = loc
             {
-                return Some((*start, *end, strip_doc_prefix(text)));
+                return Some((*start as usize, *end as usize, strip_doc_prefix(text)));
             }
             None
         })

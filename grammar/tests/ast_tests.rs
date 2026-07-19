@@ -15,7 +15,7 @@ use grammar::parser::ast::{
 // ═══════════════════════════════════════════════════════════════════
 
 fn loc(start: usize, end: usize) -> Location {
-    Location::Source(0, start, end)
+    Location::source(0, start, end)
 }
 
 fn num(n: i64) -> Expression {

@@ -63,7 +63,7 @@ fn position_points_at_the_offending_reference() {
         panic!("ожидалась файловая позиция, получено {:?}", d.loc);
     };
     let text = std::fs::read_to_string("tests/data/diag53/lib_bad.lam").expect("чтение");
-    let (line, column) = line_column(&text, start);
+    let (line, column) = line_column(&text, start as usize);
     assert_eq!(line, 4, "ссылка 'Nowhere' — на 4-й строке");
     assert!(
         column > 1,

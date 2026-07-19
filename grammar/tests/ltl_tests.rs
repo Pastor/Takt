@@ -25,14 +25,14 @@ model M {
             .iter()
             .find(|e| matches!(e, ModelElement::NamedBlockCode(_)))
             .unwrap();
-        if let ModelElement::NamedBlockCode(nb) = always {
-            if let Statement::Block { statements, .. } = &nb.statement {
-                assert_eq!(statements.len(), 4);
-                for stmt in statements {
-                    assert!(matches!(stmt, Statement::InlineFormula(_)));
-                    if let Statement::InlineFormula(f) = stmt {
-                        assert!(matches!(**f, InlineFormulaDefine::Ltl { .. }));
-                    }
+        if let ModelElement::NamedBlockCode(nb) = always
+            && let Statement::Block { statements, .. } = &nb.statement
+        {
+            assert_eq!(statements.len(), 4);
+            for stmt in statements {
+                assert!(matches!(stmt, Statement::InlineFormula(_)));
+                if let Statement::InlineFormula(f) = stmt {
+                    assert!(matches!(**f, InlineFormulaDefine::Ltl { .. }));
                 }
             }
         }
@@ -61,14 +61,14 @@ model M {
             .iter()
             .find(|e| matches!(e, ModelElement::NamedBlockCode(_)))
             .unwrap();
-        if let ModelElement::NamedBlockCode(nb) = always {
-            if let Statement::Block { statements, .. } = &nb.statement {
-                assert_eq!(statements.len(), 2);
-                for stmt in statements {
-                    assert!(matches!(stmt, Statement::InlineFormula(_)));
-                    if let Statement::InlineFormula(f) = stmt {
-                        assert!(matches!(**f, InlineFormulaDefine::Guard { .. }));
-                    }
+        if let ModelElement::NamedBlockCode(nb) = always
+            && let Statement::Block { statements, .. } = &nb.statement
+        {
+            assert_eq!(statements.len(), 2);
+            for stmt in statements {
+                assert!(matches!(stmt, Statement::InlineFormula(_)));
+                if let Statement::InlineFormula(f) = stmt {
+                    assert!(matches!(**f, InlineFormulaDefine::Guard { .. }));
                 }
             }
         }
@@ -97,21 +97,21 @@ model M {
             .iter()
             .find(|e| matches!(e, ModelElement::NamedBlockCode(_)))
             .unwrap();
-        if let ModelElement::NamedBlockCode(nb) = always {
-            if let Statement::Block { statements, .. } = &nb.statement {
-                assert_eq!(statements.len(), 2);
+        if let ModelElement::NamedBlockCode(nb) = always
+            && let Statement::Block { statements, .. } = &nb.statement
+        {
+            assert_eq!(statements.len(), 2);
 
-                if let Statement::InlineFormula(f) = &statements[0] {
-                    assert!(matches!(**f, InlineFormulaDefine::Ltl { .. }));
-                } else {
-                    panic!("Expected LTL formula");
-                }
+            if let Statement::InlineFormula(f) = &statements[0] {
+                assert!(matches!(**f, InlineFormulaDefine::Ltl { .. }));
+            } else {
+                panic!("Expected LTL formula");
+            }
 
-                if let Statement::InlineFormula(f) = &statements[1] {
-                    assert!(matches!(**f, InlineFormulaDefine::Guard { .. }));
-                } else {
-                    panic!("Expected Guard formula");
-                }
+            if let Statement::InlineFormula(f) = &statements[1] {
+                assert!(matches!(**f, InlineFormulaDefine::Guard { .. }));
+            } else {
+                panic!("Expected Guard formula");
             }
         }
     }

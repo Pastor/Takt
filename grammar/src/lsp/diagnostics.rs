@@ -4,6 +4,12 @@
 
 use super::*;
 
+/// Диагностики документа **без известного пути** — тонкая обёртка над
+/// [`collect_diagnostics_at`] с пустым путём и без путей поиска импортов.
+///
+/// Без пути неявный путь импорта (каталог документа, фича 0055) не работает:
+/// разрешится лишь то, что даёт исходный текст. Для полноценного разрешения
+/// импортов зовите [`collect_diagnostics_at`].
 pub fn collect_diagnostics(source: &str) -> Vec<Diagnostic> {
     collect_diagnostics_at("", source, &[])
 }
@@ -106,7 +112,9 @@ fn diagnostic_to_lsp(
         .notes
         .iter()
         .find_map(|n| match n.loc {
-            Location::Source(0, start, end) => Some(offset_to_range(source, start, end)),
+            Location::Source(0, start, end) => {
+                Some(offset_to_range(source, start as usize, end as usize))
+            }
             _ => None,
         })
         .unwrap_or(Range {
@@ -144,7 +152,9 @@ pub fn grammar_diagnostic_to_lsp(
 
     // Конвертируем байтовое смещение в позицию строка:столбец
     let range = match diag.loc {
-        crate::diagnostics::Location::Source(_, start, end) => offset_to_range(source, start, end),
+        crate::diagnostics::Location::Source(_, start, end) => {
+            offset_to_range(source, start as usize, end as usize)
+        }
         _ => Range {
             start: Position::new(0, 0),
             end: Position::new(0, 0),

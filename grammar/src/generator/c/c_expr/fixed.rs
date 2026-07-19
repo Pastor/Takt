@@ -68,6 +68,7 @@ fn widened(
 }
 
 /// Печатает бинарную q-операцию: результат сужается к `int{W}_t` (wraparound к W).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn binary(
     printer: &mut Printer,
     map: &CMap,
@@ -112,6 +113,7 @@ pub(super) fn binary(
 }
 
 /// Печатает унарный минус над `q(m, n)`: `−repr` с wraparound к W.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn negate(
     printer: &mut Printer,
     map: &CMap,
@@ -134,6 +136,7 @@ pub(super) fn negate(
 /// на `2^n`, `float` ↔ `q` — деление/умножение на `2^n`, `q` ↔ `q` — пересчёт
 /// разницы дробных разрядов. Сдвиги не используются (ловушка C11 и UB `<<`
 /// отрицательного).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn cast(
     printer: &mut Printer,
     map: &CMap,
@@ -187,6 +190,7 @@ pub(super) fn cast(
 
 /// Пересчёт представления `q` между дробными разрядностями (без сужения — его
 /// делает вызывающий приведением к типу хранения цели).
+#[allow(clippy::too_many_arguments)]
 fn rescale(
     printer: &mut Printer,
     map: &CMap,
@@ -252,8 +256,6 @@ pub(in crate::generator::c) fn insert_fixed_helpers(source: String) -> String {
         None => format!("{helpers}{source}"),
     }
 }
-
-/// Истина, если тип источника приведения — вещественный (`float`).
 
 /// Истина, если тип источника приведения — вещественный (`float`).
 fn source_is_real(map: &CMap, owner: &Element, expr: &ExpressionNode) -> bool {

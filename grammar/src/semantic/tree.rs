@@ -246,7 +246,7 @@ fn construct_model_stage0(
             if models.contains_key(&model_name) {
                 return Err(Diagnostic::declaration_error(
                     model.borrow().loc,
-                    format!("Модель с именем '{}' уже объявлена", &model_name),
+                    format!("Модель с именем '{}' уже объявлена", model_name),
                 )
                 .with_code("SE-006"));
             }
@@ -275,7 +275,7 @@ fn construct_model_stage0(
                     if models.contains_key(&model_name) {
                         return Err(Diagnostic::declaration_error(
                             *import_loc,
-                            format!("Модель с именем '{}' уже объявлена", &model_name),
+                            format!("Модель с именем '{}' уже объявлена", model_name),
                         )
                         .with_code("SE-006"));
                     }
@@ -314,7 +314,7 @@ fn construct_model_stage0(
                     if models.contains_key(&model_name) {
                         return Err(Diagnostic::declaration_error(
                             id.loc,
-                            format!("Модель с именем '{}' уже объявлена", &model_name),
+                            format!("Модель с именем '{}' уже объявлена", model_name),
                         )
                         .with_code("SE-006"));
                     }
@@ -1413,7 +1413,7 @@ pub fn construct_states(
                     if next.is_some() {
                         return Err(Diagnostic::error(
                             id.loc,
-                            format!("Состояние '{}' уже содержит оператор next", &id.name),
+                            format!("Состояние '{}' уже содержит оператор next", id.name),
                         )
                         .with_code("SE-012"));
                     }
@@ -1516,7 +1516,7 @@ pub fn construct_states(
 
     // Второй проход: заменяем Unresolved-заглушки реальными узлами.
     let mut new_states: BTreeMap<String, StateNode> = BTreeMap::new();
-    for (_, state) in states.iter() {
+    for state in states.values() {
         match *state.clone() {
             StateNode::Simple {
                 upper,
@@ -1560,7 +1560,7 @@ pub fn construct_states(
                             let target = states.get(&r.name).ok_or_else(|| {
                                 Diagnostic::error(
                                     r.location,
-                                    format!("Ссылка '{}' не найдена", &r.name),
+                                    format!("Ссылка '{}' не найдена", r.name),
                                 )
                                 .with_code("SE-002")
                             })?;
@@ -1611,7 +1611,7 @@ fn resolve_references(
         .map(|r| {
             if let StateNode::Unresolved = *r.object {
                 let target = states.get(&r.name).ok_or_else(|| {
-                    Diagnostic::error(r.location, format!("Ссылка '{}' не найдена", &r.name))
+                    Diagnostic::error(r.location, format!("Ссылка '{}' не найдена", r.name))
                         .with_code("SE-002")
                 })?;
                 Ok(ReferenceNode {

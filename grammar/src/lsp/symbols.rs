@@ -21,7 +21,7 @@ pub fn document_symbols(source: &str) -> Vec<DocumentSymbol> {
 fn loc_to_range(loc: &crate::diagnostics::Location, source: &str) -> Range {
     match loc {
         crate::diagnostics::Location::Source(_, start, end) => {
-            offset_to_range(source, *start, *end)
+            offset_to_range(source, *start as usize, *end as usize)
         }
         _ => Range {
             start: Position::new(0, 0),
