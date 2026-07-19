@@ -1,0 +1,33 @@
+/// Эталонная фикстура классификации семантических токенов (фича 0038, задача 0038-03).
+// Один представитель каждой категории: fn (объявление+использование), type-псевдоним,
+// enum с вариантами + использование варианта, model/start/state, var/const,
+// встроенный тип, число, строка, комментарии (///, //, /* */), операторы (:=, =, <=).
+type Celsius = i16;
+
+enum Level {
+    Low = 0,
+    High = 1
+}
+
+model Thermostat {
+    var count: u8 := 0;
+    const LIMIT: u8 := 100;
+    var lvl: Level := 0;
+
+    fn scale(x: u8) -> u8 {
+        return x;
+    }
+
+    /* блочный комментарий */
+    start Idle {
+        always {
+            count := scale(count);
+            lvl := High;
+        }
+        ref Done: count <= LIMIT;
+    }
+    state Done {
+    }
+}
+
+start Main = Thermostat;
