@@ -43,6 +43,7 @@
 mod st_at;
 mod st_decl;
 mod st_expr;
+mod st_fixed;
 mod st_func;
 mod st_map;
 mod st_model;
@@ -187,7 +188,8 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     }
 
     report(&warnings);
-    Ok(out)
+    // Q-хелпер LAM_Q_FLOORDIV (0061) вставляется перед первым POU по факту вызова.
+    Ok(st_fixed::insert_helper(out))
 }
 
 /// Печатает `PROGRAM` и `CONFIGURATION` с размещёнными портами (цель `st-at`).

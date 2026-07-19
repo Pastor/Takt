@@ -121,13 +121,11 @@ fn as_num(value: &Value, op: BinOp, other: Option<&Value>) -> Result<Num, EvalEr
         Value::Number(n) => Ok(Num::Int(*n)),
         Value::Real(f) => Ok(Num::Real(*f)),
         // q(m, n) сюда не доходит: `apply_binary` перехватывает Fixed раньше.
-        Value::Boolean(_) | Value::Array(_) | Value::Fixed { .. } => {
-            Err(EvalError::TypeMismatch {
-                op: op.symbol(),
-                lhs: value_kind(value),
-                rhs: other.map(value_kind),
-            })
-        }
+        Value::Boolean(_) | Value::Array(_) | Value::Fixed { .. } => Err(EvalError::TypeMismatch {
+            op: op.symbol(),
+            lhs: value_kind(value),
+            rhs: other.map(value_kind),
+        }),
     }
 }
 

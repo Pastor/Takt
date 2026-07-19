@@ -9,7 +9,7 @@
 # 1000 строк, обязан быть УДАЛЁН из реестра: иначе храповик провернётся назад.
 #
 # Формат: <строк> <путь от корня репозитория>
-4959 grammar/tests/semantic_tests.rs
+5015 grammar/tests/semantic_tests.rs
 1937 grammar/src/bin/lamc.rs
 1893 grammar/tests/parser_tests.rs
 1842 grammar/src/semantic/tree.rs
@@ -25,8 +25,8 @@
 1268 grammar/tests/lsp_tests.rs
 1204 grammar/src/parser/ast.rs
 1169 grammar/src/generator/c/c_source.rs
-1162 grammar/src/semantic/type_inference.rs
+1191 grammar/src/semantic/type_inference.rs
 1154 grammar/src/parser/lexer.rs
-1125 grammar/src/generator/rust/rust_expr.rs
+1112 grammar/src/generator/rust/rust_expr.rs
 1084 grammar/src/generator/c/c_model.rs
 1081 grammar/tests/lexer_tests.rs

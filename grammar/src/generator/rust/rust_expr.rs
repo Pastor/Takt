@@ -19,6 +19,7 @@
 //! `ExpressionNode` обязан **валить сборку**, а не тихо проходить мимо.
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::rust::rust_fixed::{self, FixedOp};
 use crate::generator::rust::rust_name::{rust_type_name, rust_value_name};
 use crate::generator::rust::rust_needs::function_needs;
 use crate::generator::rust::rust_port::port_class;
@@ -290,6 +291,18 @@ fn binary(
     ))
 }
 
+/// Q-путь бинарной операции (0061): `Some` тогда и только тогда, когда `expr`
+/// имеет тип `q(m, n)` — иначе вызывающий печатает обычную арифметику.
+fn fixed_binary(
+    expr: &ExpressionNode,
+    op: FixedOp,
+    a: &ExpressionNode,
+    b: &ExpressionNode,
+    scope: &Scope,
+) -> Option<Result<String, Diagnostic>> {
+    rust_fixed::fixed_format(expr).map(|(m, n)| rust_fixed::binary(op, a, b, scope, m, n))
+}
+
 /// Печатает сравнение, приводя операнды друг к другу по типу.
 ///
 /// Нужно ровно там же, где и [`coerce_to`]: вариант перечисления приходит из
@@ -390,14 +403,21 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
         // В Rust `!` — и логическое, и побитовое отрицание (в C — `~`).
         ExpressionNode::BitwiseNot(a) => Ok(format!("(!{})", print_expression(a, scope)?)),
         ExpressionNode::UnaryPlus(a) => print_expression(a, scope),
-        ExpressionNode::Negate(a) => Ok(format!("(-{})", print_expression(a, scope)?)),
+        ExpressionNode::Negate(a) => match rust_fixed::fixed_format(expr) {
+            Some((m, n)) => rust_fixed::negate(a, scope, m, n),
+            None => Ok(format!("(-{})", print_expression(a, scope)?)),
+        },
 
-        // Арифметика.
-        ExpressionNode::Multiply(a, b) => binary(a, "*", b, scope),
-        ExpressionNode::Divide(a, b) => binary(a, "/", b, scope),
+        // Арифметика. Над q(m, n) — масштабирующая Q-арифметика (0061).
+        ExpressionNode::Multiply(a, b) => fixed_binary(expr, FixedOp::Multiply, a, b, scope)
+            .unwrap_or_else(|| binary(a, "*", b, scope)),
+        ExpressionNode::Divide(a, b) => fixed_binary(expr, FixedOp::Divide, a, b, scope)
+            .unwrap_or_else(|| binary(a, "/", b, scope)),
         ExpressionNode::Modulo(a, b) => binary(a, "%", b, scope),
-        ExpressionNode::Add(a, b) => binary(a, "+", b, scope),
-        ExpressionNode::Subtract(a, b) => binary(a, "-", b, scope),
+        ExpressionNode::Add(a, b) => fixed_binary(expr, FixedOp::Add, a, b, scope)
+            .unwrap_or_else(|| binary(a, "+", b, scope)),
+        ExpressionNode::Subtract(a, b) => fixed_binary(expr, FixedOp::Subtract, a, b, scope)
+            .unwrap_or_else(|| binary(a, "-", b, scope)),
 
         // Побитовые — нативны (в ST требовали бы BYTE_TO_USINT(...)).
         ExpressionNode::ShiftLeft(a, b) => binary(a, "<<", b, scope),
@@ -444,12 +464,18 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::Function(def, args) => call(def, args, scope),
 
         ExpressionNode::Cast(inner, ty) => {
-            let target = crate::generator::rust::rust_type::rust_type(ty, "приведение типа")?;
-            Ok(format!(
-                "({} as {})",
-                print_expression(inner, scope)?,
-                target
-            ))
+            // Fixed-point (0061): масштабирующее приведение, когда источник либо
+            // цель — q(m, n); иначе обычный `as`.
+            if matches!(ty, TypeNode::Fixed { .. }) || rust_fixed::fixed_format(inner).is_some() {
+                rust_fixed::cast(inner, ty, scope)
+            } else {
+                let target = crate::generator::rust::rust_type::rust_type(ty, "приведение типа")?;
+                Ok(format!(
+                    "({} as {})",
+                    print_expression(inner, scope)?,
+                    target
+                ))
+            }
         }
 
         ExpressionNode::Array(items) | ExpressionNode::Initializer(items) => {
@@ -540,6 +566,13 @@ fn compound_assign(
     value: &ExpressionNode,
     scope: &Scope,
 ) -> Result<Option<String>, Diagnostic> {
+    // Q-арифметика (0061) НЕ сворачивается: `x := x * y` над q — это масштабный
+    // `lam_q`-путь, а не нативное `x *= y` (то дало бы целочисленное умножение
+    // представлений без сдвига на n — молча неверный результат и паника на
+    // переполнении в debug).
+    if rust_fixed::fixed_format(value).is_some() {
+        return Ok(None);
+    }
     let (op, lhs, rhs) = match value {
         ExpressionNode::Add(a, b) => ("+=", a, b),
         ExpressionNode::Subtract(a, b) => ("-=", a, b),
@@ -787,56 +820,10 @@ fn escape(text: &str) -> String {
     text.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-/// Возвращает тип выражения, если он выводится статически.
-///
-/// Нужен для приведения к `bool` в позиции условия: в C `if (x)` при `x : u8`
-/// законно, в Rust — ошибка типа. Без типа операнда угадывать нельзя — тот же
-/// урок, что у ST (`ST-011`: «без типа операнда имя функции не построить»).
-pub(crate) fn expression_type(expr: &ExpressionNode) -> Option<TypeNode> {
-    match expr {
-        ExpressionNode::Bool(_) => Some(TypeNode::Bool),
-        ExpressionNode::Number(_) => Some(TypeNode::Integer {
-            bits: 32,
-            signed: true,
-        }),
-        ExpressionNode::Rational(_, _) => Some(TypeNode::Rational),
-        ExpressionNode::Variable(var) => Some(var.borrow().ty().clone()),
-        ExpressionNode::Parenthesis(inner) => expression_type(inner),
-        ExpressionNode::Cast(_, ty) => Some(ty.clone()),
-        // Сравнения и логические операции дают `bool` независимо от операндов.
-        ExpressionNode::Less(_, _)
-        | ExpressionNode::More(_, _)
-        | ExpressionNode::LessEqual(_, _)
-        | ExpressionNode::MoreEqual(_, _)
-        | ExpressionNode::Equal(_, _)
-        | ExpressionNode::NotEqual(_, _)
-        | ExpressionNode::And(_, _)
-        | ExpressionNode::Or(_, _)
-        | ExpressionNode::Not(_)
-        | ExpressionNode::BitAccess(_, _) => Some(TypeNode::Bool),
-        ExpressionNode::ArraySubscript(var, _) => match var.borrow().ty() {
-            TypeNode::Array(_, elem) => Some((**elem).clone()),
-            _ => None,
-        },
-        // Тип вызова — ОБЪЯВЛЕННЫЙ возврат функции. Без этого `if is_ready()`
-        // при `fn is_ready() -> bool` не приводится к bool: тип «не выводится»,
-        // и честная диагностика RS-011 срабатывает там, где всё известно.
-        ExpressionNode::Function(def, _) => function_return(&def.borrow()),
-        _ => None,
-    }
-}
-
-/// Возвращает объявленный тип результата функции.
-fn function_return(def: &FunctionDefinitionNode) -> Option<TypeNode> {
-    match def {
-        FunctionDefinitionNode::Local { ret, .. }
-        | FunctionDefinitionNode::External { ret, .. } => Some(ret.clone()),
-        // У встроенных возврат описан тем же полем (`min`/`max`/… — Numeric,
-        // `debug` — Unit): угадывать не требуется.
-        FunctionDefinitionNode::Builtin(_, _, ret) => Some(ret.clone()),
-        FunctionDefinitionNode::None | FunctionDefinitionNode::Unresolved(_) => None,
-    }
-}
+// `expression_type`/`function_return` вынесены в `rust_fixed` (0061): вывод типа
+// тематически рядом с детектором Q-формата, а места в этом baseline-файле нет.
+pub(crate) use crate::generator::rust::rust_fixed::expression_type;
+use crate::generator::rust::rust_fixed::function_return;
 
 /// Печатает выражение в позиции **условия**, приводя его к `bool`.
 ///

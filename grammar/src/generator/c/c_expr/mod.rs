@@ -27,6 +27,7 @@ use std::rc::Rc;
 mod call;
 mod condition;
 mod expr;
+mod fixed;
 mod names;
 mod precedence;
 mod resolve;
@@ -43,6 +44,7 @@ use resolve::find_in_extend;
 // Контракт модуля — свойство `mod.rs`, а не расположения функций внутри него.
 pub(super) use condition::generate_condition_expr;
 pub(super) use expr::generate_expr;
+pub(super) use fixed::insert_fixed_helpers;
 pub(super) use names::{condition_macro_name, field_name_in_parent, get_function_name};
 pub(super) use precedence::expr_precedence;
 pub(super) use resolve::{resolve_simple_var_in_context, resolve_variable_c_expr};

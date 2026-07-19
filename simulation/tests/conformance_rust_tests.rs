@@ -275,3 +275,140 @@ fn per_tick_trace_matches_generated_rust() {
         "потактовые трассы обязаны совпадать.\nсимулятор={sim:?}\nRust={rs:?}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Q-арифметика fixed-point (фича 0061, задача 0061-03): T10 для цели rust
+//
+// Наблюдение — через ВЫХОДНОЙ float-порт `probe := acc as float`: поля модели
+// приватны, а `repr·2⁻ⁿ` точно представимо в f64, поэтому сверка идёт по
+// **битам** f64 (`to_bits`), то есть по представлению q.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Значение вещественного порта симулятора в битах f64 (точная сверка).
+fn sim_f64_bits(unit: &Unit, name: &str) -> u64 {
+    match unit.variable(name) {
+        Some(Value::Real(f)) => f.to_bits(),
+        other => panic!("порт '{name}': ожидался Real, получено {other:?}"),
+    }
+}
+
+/// Потактовая трасса `probe` (биты f64) симулятора.
+fn simulate_f64_trace(fixture: &Path, port: &str) -> Vec<u64> {
+    let source = std::fs::read_to_string(fixture).expect("фикстура читается");
+    let (ast, _) = grammar::parse(&source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let mut trace = Vec::new();
+    for _ in 0..TRACE_TICKS {
+        let result = unit.tick();
+        assert!(
+            !matches!(result, TickResult::Failed(_)),
+            "симуляция: {result:?}"
+        );
+        trace.push(sim_f64_bits(&unit, port));
+        if result == TickResult::Terminated {
+            break;
+        }
+    }
+    trace
+}
+
+/// Потактовая трасса `probe` (биты f64) порождённой прошивки rust.
+fn rust_f64_trace(
+    dir: &Path,
+    fixture: &Path,
+    basename: &str,
+    root: &str,
+    ticks: usize,
+) -> Vec<u64> {
+    let source = std::fs::read_to_string(fixture).expect("фикстура читается");
+    grammar::compile_to_rust(
+        basename,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("порождение Rust");
+
+    let module = dir.join(format!("{basename}.rs"));
+    let driver = format!(
+        r#"#[path = "{module}"]
+mod generated;
+use generated::{{Hal, OutF64Port, {root}}};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+struct Probe {{ reg: Rc<RefCell<f64>> }}
+
+impl Hal for Probe {{
+    fn write_f64(&mut self, port: OutF64Port, value: f64) {{
+        assert!(matches!(port, OutF64Port::Probe), "неожиданный порт");
+        *self.reg.borrow_mut() = value;
+    }}
+}}
+
+fn main() {{
+    let reg = Rc::new(RefCell::new(0f64));
+    let mut model = {root}::new(Probe {{ reg: Rc::clone(&reg) }});
+    model.init();
+    for _ in 0..{ticks} {{
+        model.tick();
+        println!("TICK {{}}", reg.borrow().to_bits());
+    }}
+}}
+"#,
+        module = module.display(),
+    );
+    std::fs::write(dir.join("driver.rs"), driver).expect("запись драйвера");
+    let build = Command::new("rustc")
+        .current_dir(dir)
+        .args(["--edition", "2021", "driver.rs", "-o", "driver"])
+        .output()
+        .expect("запуск rustc");
+    assert!(
+        build.status.success(),
+        "rustc не собрал драйвер:\n{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let run = Command::new(dir.join("driver"))
+        .current_dir(dir)
+        .output()
+        .expect("запуск драйвера");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|line| line.strip_prefix("TICK "))
+        .map(|v| v.trim().parse::<u64>().expect("биты f64 — целое"))
+        .collect()
+}
+
+/// T10/A4 (цель rust): побитовая потактовая сверка Q-арифметики с симулятором —
+/// включая отрицательные и floor к −∞ у `*` (S2: repr −2, т.е. −0.0078125).
+#[test]
+fn fixed_point_arithmetic_matches_generated_rust() {
+    let dir = build_dir("rsfixed");
+    let fixture = Path::new("tests/data/eval/conformance_fixed_probe.lam");
+    let sim = simulate_f64_trace(fixture, "probe");
+    // Пиннинг битов: -3.0, -1.5, -0.0078125, 1.9921875 (все точны в f64).
+    assert_eq!(
+        sim,
+        vec![
+            (-3.0f64).to_bits(),
+            (-1.5f64).to_bits(),
+            (-0.0078125f64).to_bits(),
+            (1.9921875f64).to_bits(),
+        ],
+        "трасса probe (repr q(8,8) / 256) — эталон Q-арифметики симулятора"
+    );
+
+    if !rustc_available() {
+        eprintln!("[ПРОПУСК] fixed_point_arithmetic_matches_generated_rust: rustc не найден");
+        return;
+    }
+    let rs = rust_f64_trace(&dir, fixture, "rsfixed", "Rsfixed", sim.len());
+    assert_eq!(
+        sim, rs,
+        "Q-арифметика симулятора и порождённого Rust обязана совпасть ПОБИТОВО \
+         (биты f64 наблюдаемого porta).\nсимулятор={sim:?}\nRust={rs:?}"
+    );
+}

@@ -35,7 +35,7 @@ mod statement;
 pub mod struct_node;
 mod test_constants;
 pub mod tree;
-mod type_inference;
+pub(crate) mod type_inference;
 pub mod type_node;
 pub mod unused;
 pub(crate) mod validate;

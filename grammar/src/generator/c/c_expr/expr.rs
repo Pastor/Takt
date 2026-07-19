@@ -62,8 +62,13 @@ pub(in crate::generator::c) fn generate_expr(
             generate_expr(printer, map, owner, params, e, 14, has_model)?;
         }
         ExpressionNode::Negate(e) => {
-            printer.print("-");
-            generate_expr(printer, map, owner, params, e, 14, has_model)?;
+            // Унарный минус над q(m, n): −repr с wraparound к W (правило 3 ADR).
+            if let Some((m, n)) = super::fixed::fixed_of(map, owner, expr) {
+                super::fixed::negate(printer, map, owner, params, e, m, n, has_model)?;
+            } else {
+                printer.print("-");
+                generate_expr(printer, map, owner, params, e, 14, has_model)?;
+            }
         }
 
         // ── Степень → pow() ────────────────────────────────────────────────────
@@ -79,14 +84,44 @@ pub(in crate::generator::c) fn generate_expr(
         // Левый операнд: допускается тот же приоритет (левоассоциативность).
         // Правый операнд: требует более высокого приоритета (wrap при равном).
         ExpressionNode::Multiply(l, r) => {
-            generate_expr(printer, map, owner, params.clone(), l, 12, has_model)?;
-            printer.print(" * ");
-            generate_expr(printer, map, owner, params, r, 13, has_model)?;
+            if let Some((m, n)) = super::fixed::fixed_of(map, owner, expr) {
+                super::fixed::binary(
+                    printer,
+                    map,
+                    owner,
+                    params,
+                    super::fixed::FixedOp::Multiply,
+                    l,
+                    r,
+                    m,
+                    n,
+                    has_model,
+                )?;
+            } else {
+                generate_expr(printer, map, owner, params.clone(), l, 12, has_model)?;
+                printer.print(" * ");
+                generate_expr(printer, map, owner, params, r, 13, has_model)?;
+            }
         }
         ExpressionNode::Divide(l, r) => {
-            generate_expr(printer, map, owner, params.clone(), l, 12, has_model)?;
-            printer.print(" / ");
-            generate_expr(printer, map, owner, params, r, 13, has_model)?;
+            if let Some((m, n)) = super::fixed::fixed_of(map, owner, expr) {
+                super::fixed::binary(
+                    printer,
+                    map,
+                    owner,
+                    params,
+                    super::fixed::FixedOp::Divide,
+                    l,
+                    r,
+                    m,
+                    n,
+                    has_model,
+                )?;
+            } else {
+                generate_expr(printer, map, owner, params.clone(), l, 12, has_model)?;
+                printer.print(" / ");
+                generate_expr(printer, map, owner, params, r, 13, has_model)?;
+            }
         }
         ExpressionNode::Modulo(l, r) => {
             generate_expr(printer, map, owner, params.clone(), l, 12, has_model)?;
@@ -94,14 +129,44 @@ pub(in crate::generator::c) fn generate_expr(
             generate_expr(printer, map, owner, params, r, 13, has_model)?;
         }
         ExpressionNode::Add(l, r) => {
-            generate_expr(printer, map, owner, params.clone(), l, 11, has_model)?;
-            printer.print(" + ");
-            generate_expr(printer, map, owner, params, r, 12, has_model)?;
+            if let Some((m, n)) = super::fixed::fixed_of(map, owner, expr) {
+                super::fixed::binary(
+                    printer,
+                    map,
+                    owner,
+                    params,
+                    super::fixed::FixedOp::Add,
+                    l,
+                    r,
+                    m,
+                    n,
+                    has_model,
+                )?;
+            } else {
+                generate_expr(printer, map, owner, params.clone(), l, 11, has_model)?;
+                printer.print(" + ");
+                generate_expr(printer, map, owner, params, r, 12, has_model)?;
+            }
         }
         ExpressionNode::Subtract(l, r) => {
-            generate_expr(printer, map, owner, params.clone(), l, 11, has_model)?;
-            printer.print(" - ");
-            generate_expr(printer, map, owner, params, r, 12, has_model)?;
+            if let Some((m, n)) = super::fixed::fixed_of(map, owner, expr) {
+                super::fixed::binary(
+                    printer,
+                    map,
+                    owner,
+                    params,
+                    super::fixed::FixedOp::Subtract,
+                    l,
+                    r,
+                    m,
+                    n,
+                    has_model,
+                )?;
+            } else {
+                generate_expr(printer, map, owner, params.clone(), l, 11, has_model)?;
+                printer.print(" - ");
+                generate_expr(printer, map, owner, params, r, 12, has_model)?;
+            }
         }
 
         // ── Битовые сдвиги ────────────────────────────────────────────────────
@@ -419,10 +484,18 @@ pub(in crate::generator::c) fn generate_expr(
             // молча превращался в `(int)`, то есть приведение к ДРУГОМУ типу,
             // принятое C-компилятором без замечаний.
             let type_c = c_type_or_diagnostic(typ, model, map.float_width(), "приведение типа")?;
-            // Приводимое выражение оборачивается при prec < UNARY (13),
-            // то есть при наличии бинарных операторов: (int)(a + b).
-            printer.print("(").print(&type_c).print(")");
-            generate_expr(printer, map, owner, params, expr, 13, has_model)?;
+            // Fixed-point (0061): масштабирующее приведение, когда источник либо
+            // цель — q(m, n). Сдвиги не используются (ловушка C11, UB `<<`).
+            if matches!(typ, TypeNode::Fixed { .. })
+                || super::fixed::fixed_of(map, owner, expr).is_some()
+            {
+                super::fixed::cast(printer, map, owner, params, expr, typ, &type_c, has_model)?;
+            } else {
+                // Приводимое выражение оборачивается при prec < UNARY (13),
+                // то есть при наличии бинарных операторов: (int)(a + b).
+                printer.print("(").print(&type_c).print(")");
+                generate_expr(printer, map, owner, params, expr, 13, has_model)?;
+            }
         }
 
         // ── Неподдерживаемые ──────────────────────────────────────────────────

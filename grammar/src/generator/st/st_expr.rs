@@ -39,6 +39,7 @@
 //! (`USINT`), а преобразование делается **в месте операции**, а не в объявлении.
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::st::st_fixed;
 use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionNode, ExpressionNode, ModelNode, VariableNode};
@@ -64,14 +65,26 @@ pub(crate) fn print_expression(
         ExpressionNode::And(a, b) => binary(a, "AND", b, model),
         ExpressionNode::Or(a, b) => binary(a, "OR", b, model),
         // Арифметика: синтаксис совпадает, кроме остатка (`%` → `MOD`).
-        ExpressionNode::Add(a, b) => binary(a, "+", b, model),
-        ExpressionNode::Subtract(a, b) => binary(a, "-", b, model),
-        ExpressionNode::Multiply(a, b) => binary(a, "*", b, model),
-        ExpressionNode::Divide(a, b) => binary(a, "/", b, model),
+        // Над q(m, n) — масштабирующая Q-арифметика (0061) через LINT-хелперы.
+        ExpressionNode::Add(a, b) => fixed_binary(expr, st_fixed::FixedOp::Add, a, b, model)
+            .unwrap_or_else(|| binary(a, "+", b, model)),
+        ExpressionNode::Subtract(a, b) => {
+            fixed_binary(expr, st_fixed::FixedOp::Subtract, a, b, model)
+                .unwrap_or_else(|| binary(a, "-", b, model))
+        }
+        ExpressionNode::Multiply(a, b) => {
+            fixed_binary(expr, st_fixed::FixedOp::Multiply, a, b, model)
+                .unwrap_or_else(|| binary(a, "*", b, model))
+        }
+        ExpressionNode::Divide(a, b) => fixed_binary(expr, st_fixed::FixedOp::Divide, a, b, model)
+            .unwrap_or_else(|| binary(a, "/", b, model)),
         ExpressionNode::Modulo(a, b) => binary(a, "MOD", b, model),
         ExpressionNode::Power(a, b) => binary(a, "**", b, model),
         ExpressionNode::UnaryPlus(a) => Ok(format!("+{}", wrap_expr(a, model)?)),
-        ExpressionNode::Negate(a) => Ok(format!("-{}", wrap_expr(a, model)?)),
+        ExpressionNode::Negate(a) => match st_fixed::fixed_format(expr) {
+            Some((m, n)) => st_fixed::negate(a, model, m, n),
+            None => Ok(format!("-{}", wrap_expr(a, model)?)),
+        },
         // Сравнения: `!=` в ST записывается `<>`, остальные совпадают.
         ExpressionNode::Equal(a, b) => binary(a, "=", b, model),
         ExpressionNode::NotEqual(a, b) => binary(a, "<>", b, model),
@@ -116,7 +129,15 @@ pub(crate) fn print_expression(
             print_expression(else_, model)?,
             print_expression(then_, model)?
         )),
-        ExpressionNode::Cast(inner, ty) => cast(inner, ty, model),
+        ExpressionNode::Cast(inner, ty) => {
+            // Fixed-point (0061): масштабирующее приведение, когда источник либо
+            // цель — q(m, n); иначе обычный `cast`.
+            if matches!(ty, TypeNode::Fixed { .. }) || st_fixed::fixed_format(inner).is_some() {
+                st_fixed::cast(inner, ty, model)
+            } else {
+                cast(inner, ty, model)
+            }
+        }
         // Узлы без представления в ST. Каждый назван поимённо — ветки `_` здесь
         // НЕТ: `ExpressionNode` не помечен `#[non_exhaustive]`, поэтому новый
         // вариант ЗАВАЛИТ сборку (гарантия ADR 0025), а не проскочит молча.
@@ -334,6 +355,18 @@ fn binary(
     ))
 }
 
+/// Q-путь бинарной операции (0061): `Some` тогда и только тогда, когда `expr`
+/// имеет тип `q(m, n)` — иначе вызывающий печатает обычную арифметику.
+fn fixed_binary(
+    expr: &ExpressionNode,
+    op: st_fixed::FixedOp,
+    a: &ExpressionNode,
+    b: &ExpressionNode,
+    model: &ModelNode,
+) -> Option<Result<String, Diagnostic>> {
+    st_fixed::fixed_format(expr).map(|(m, n)| st_fixed::binary(op, a, b, model, m, n))
+}
+
 /// Печатает операнд, заключая составное выражение в скобки.
 fn wrap_expr(expr: &ExpressionNode, model: &ModelNode) -> Result<String, Diagnostic> {
     let text = print_expression(expr, model)?;
@@ -437,7 +470,7 @@ fn bit_string_of_type(ty: &TypeNode) -> Option<BitString> {
 /// Определяется только для переменных и скобок вокруг них: этого хватает корпусу,
 /// а общий вывод типов выражения — не дело печатника. Если тип неизвестен,
 /// вызывающий обязан вернуть `ST-011`, а не догадываться.
-fn inner_expr_type(expr: &ExpressionNode) -> Option<TypeNode> {
+pub(crate) fn inner_expr_type(expr: &ExpressionNode) -> Option<TypeNode> {
     match expr {
         ExpressionNode::Variable(var) => variable_type(&var.borrow()),
         ExpressionNode::Parenthesis(inner) => inner_expr_type(inner),

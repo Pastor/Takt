@@ -25,7 +25,7 @@ pub(super) fn generate_source(filename: &str, map: &CMap) -> Result<String, Diag
         generate_model_functions(&mut printer, &model, map)?;
     }
     generate_model_functions(&mut printer, &map.model(), map)?;
-    Ok(source)
+    Ok(super::c_expr::insert_fixed_helpers(source)) // Q-хелперы (0061) — по вызову
 }
 
 #[cfg(test)]
