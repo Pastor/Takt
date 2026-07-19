@@ -81,6 +81,14 @@ const CONTRACTS: &[Contract] = &[
         budget: 300,
         must_terminate: true,
     },
+    // Регулятор на ПРОЗРАЧНОМ float (фича 0096): симулятор считает нативным f64
+    // (native-режим), сходится так же, как q-версия, и завершается.
+    Contract {
+        file: "float_regulator.lam",
+        chain: &["Adjust", "Settled", "Done"],
+        budget: 50,
+        must_terminate: true,
+    },
 ];
 
 const EXCEPTIONS: &[Exception] = &[

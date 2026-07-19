@@ -1,0 +1,48 @@
+// Пропорциональный регулятор на ПРОЗРАЧНОМ `float` — пример фичи 0096.
+//
+// Тот же регулятор, что `regulator.lam`, но записан на `float`, а не на явном
+// `q(8, 8)`. Демонстрирует «прозрачную» плавающую точку: автор пишет `float`, а
+// представление выбирается ФЛАГАМИ генерации, не текстом типа:
+//   • по умолчанию цели `c`/`rust`/`st` — НАТИВНЫЙ float (`double`/`f64`/`LREAL`);
+//   • `--float-embedded --float-as-q=m.n` — те же цели идут целочисленным `q(m,n)`
+//     (embedded без FPU), побитово как `regulator.lam`;
+//   • `-t sv --float-as-q=m.n` — `float → q(m, n)`, синтезируемо (снятие `SV-003`).
+//
+// Тела — только на переменных (литерал `float` в теле не понижается в Q; паритет
+// с явным `q` 0061). Сценарий БЕЗ входов (гейт достижимости 0030): регулятор
+// сходится сам и завершается — Adjust → Settled → Done.
+//
+// Обёрнут под-моделью (`start Main = FloatRegulator`): модель без под-моделей не
+// даёт typedef корня в цели `c` (дефект 0026). Выходной порт `ready` нужен и цели
+// `rust` (модель без портов → clippy::new_without_default).
+model FloatRegulator {
+    out ready: bit := 0;
+
+    var setpoint: float := 10.0; // уставка
+    var value: float := 0.0; // регулируемая величина
+    var half: float := 0.5; // коэффициент пропорциональности Kp
+    var near: float := 9.5; // порог «достаточно близко»
+
+    // Каждый такт: value += Kp · (setpoint − value). Сходится к setpoint.
+    start Adjust {
+        always {
+            value := value + (setpoint - value) * half;
+        }
+        ref Settled: value >= near;
+    }
+    // Близко — доводим точно до уставки.
+    state Settled {
+        always {
+            value := setpoint;
+        }
+        ref Done;
+    }
+    // Установившееся состояние: поднимаем флаг готовности.
+    state Done {
+        always {
+            ready := 1;
+        }
+    }
+}
+
+start Main = FloatRegulator;

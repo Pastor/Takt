@@ -1,0 +1,15 @@
+@startuml
+title FloatRegulator
+
+[*] --> Main
+Main : FloatRegulator
+Main --> [*]
+
+state FloatRegulator {
+    [*] --> Adjust
+    Adjust --> Settled
+    Done --> [*]
+    Settled --> Done
+}
+
+@enduml
