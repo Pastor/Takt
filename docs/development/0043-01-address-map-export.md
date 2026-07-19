@@ -2,6 +2,14 @@
 
 > Фича: [../features/0043-address-map-export.md](../features/0043-address-map-export.md) · ADR: [../adr/0043-address-map-export.md](../adr/0043-address-map-export.md) · анализ: [../analyze/0043-address-map-export.md](../analyze/0043-address-map-export.md) · тест-план: [../tests/0043-address-map-export.md](../tests/0043-address-map-export.md)
 
+> ✅ **СДЕЛАНО (2026-07-19).** `ResolvedAddress` обогащён полями `ty`/`direction`
+> (заполняются тем же обходом `resolve_model` — второго прохода нет); мёртвые
+> порты пишутся в новое `AddressResolution::address_less`. Эмиттер `map` —
+> `address_map/export.rs::export_address_map` (сортировка по имени, формат
+> `{:#010x}`, порт без адреса опускается — `0x0` не эмитится). Круговой рейс —
+> `export_map_entries` (общий печатник `write_map_line`). Тесты — T2–T9, T14,
+> T20, T21 в `address_export_tests.rs`. Итог — [отчёт 0043](../reports/0043-address-map-export.md).
+
 ## Что было
 
 *Реальное состояние кода на 2026-07-15 (проверено чтением и живой пробой).*

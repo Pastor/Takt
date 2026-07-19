@@ -168,6 +168,8 @@ mod tests {
             addr,
             bit,
             source: AddressSource::Inline,
+            ty: crate::semantic::type_node::TypeNode::Bit,
+            direction: crate::semantic::PortDirection::In,
         }
     }
 

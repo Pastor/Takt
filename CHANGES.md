@@ -7,6 +7,25 @@
 
 ## [Не выпущено]
 
+### Добавлено (фича [0043](docs/features/0043-address-map-export.md) — экспорт карты адресов) — **ЗАКРЫТА**
+
+- **Подкоманда `lamc address-map --emit map|json`.** Выгружает фактически
+  разрешённую карту адресов портов (как `-t c-hal`, с приоритетом источников
+  inline `<` `address` `<` внешняя карта). `map` — `.ld`-формат, замыкается через
+  `--address-map` (круговой рейс байт-в-байт); `json` — версионированный контракт
+  с генераторами HAL (тип/направление/адрес/бит/источник; мёртвый порт —
+  `"address": null`, не `0x0`). CMSIS-SVD не поставляется — `--emit svd` даёт
+  внятную ошибку (ADR). `SE-052` (достижимый порт без адреса) обрывает экспорт;
+  предупреждения — в stderr, stdout — чистая выгрузка.
+- **Крейт `grammar` 0.5.0 → 0.6.0** (язык не менялся, 0.2.0): `ResolvedAddress`
+  обогащён `ty`/`direction`; `AddressResolution::address_less` (мёртвые порты).
+  Эмиттеры — `address_map/export.rs`; CLI-обвязка — `address_map/export_cli.rs`.
+  ⚠️ Логика вынесена в библиотеку: `bin/lamc.rs` пришпилен к baseline размера —
+  в бинарнике тонкий диспетчер; `split_include_dirs` переехал в библиотеку;
+  baseline `lamc.rs` понижён 2039 → 2009.
+- Тесты: `grammar/tests/address_export_tests.rs` (15) + юниты `export_cli` (11).
+  `precheck.sh` зелёный; вывод целей `c`/`c-hal`/`st`/… байт-в-байт прежний.
+
 ### Изменено (фикс [0097-01](docs/fixes/0097-01-pid-native-float.md) — пример ПИД на прозрачном `float`)
 
 - **`examples/pid_regulator.lam`: `q(8, 8) → float`** (механизм фичи 0096,

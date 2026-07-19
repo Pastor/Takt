@@ -38,11 +38,21 @@
 
 mod env;
 mod eval;
+mod export;
+mod export_cli;
 mod parse;
 mod resolve;
 
 pub use env::{AddressEnv, parse_defines};
+pub use export::{
+    EXPORT_FORMAT_VERSION, export_address_map, export_address_map_json, export_map_entries,
+};
+pub use export_cli::{
+    AddressMapOptions, EmitFormat, parse_address_map_args, run_export_subcommand,
+    split_include_dirs,
+};
 pub use parse::{AddressMapEntry, address_map_overlay_warnings, parse_address_map};
 pub use resolve::{
-    AddressResolution, AddressSource, ResolvedAddress, address_expr_warnings, resolve_addresses,
+    AddressResolution, AddressSource, PortMeta, ResolvedAddress, address_expr_warnings,
+    resolve_addresses,
 };
