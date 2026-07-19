@@ -65,6 +65,9 @@ fn sim_value(unit: &Unit, name: &str) -> i64 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
         Some(Value::Boolean(b)) => i64::from(b),
+        // q(m, n) (0061): наблюдаемое — представление (сигнал `logic signed [W-1:0]`
+        // = repr), ровно то, что тестбенч читает через `$signed(dut.<сигнал>)`.
+        Some(Value::Fixed { repr, .. }) => repr,
         other => panic!("переменная '{name}': неожиданное значение {other:?}"),
     }
 }
@@ -566,5 +569,125 @@ fn parallel_step_inside_concatenation_matches_generated_c() {
         c, sv,
         "потактовые трассы `(|)` внутри `+` (SV и C) обязаны совпадать: \
          параллельный шаг завершается по конъюнкции done обеих ветвей.\nC={c:?}\nRTL={sv:?}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Q-арифметика fixed-point (фича 0061, задача 0061-04): T8/T9/T10 для цели sv
+//
+// Сигнал q — `logic signed [W-1:0]` = repr; наблюдается `$signed(dut.<сигнал>)`
+// (знаковая печать) и сверяется потактово с симулятором. Гейты verilator+yosys
+// доказывают синтезируемость (T8), сверка — верность (T10, включая floor T9).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Как [`sv_trace`], но наблюдаемые сигналы печатаются **знаково**
+/// (`$signed(dut.<сигнал>)`): представление q бывает отрицательным, а `%0d` над
+/// `logic` печатает без знака.
+fn sv_trace_signed(
+    dir: &Path,
+    fixture: &str,
+    basename: &str,
+    signals: &[&str],
+    ticks: usize,
+) -> Vec<Vec<i64>> {
+    let source = std::fs::read_to_string(fixture).expect("фикстура читается");
+    grammar::compile_to_sv(
+        basename,
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("порождение SystemVerilog");
+
+    let prints = signals
+        .iter()
+        .map(|s| format!("$signed(dut.{})", s))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let fmt = vec!["%0d"; signals.len()].join(" ");
+    let tb = format!(
+        r#"module tb;
+    logic clk = 0, rst_n = 0;
+    logic is_done;
+    {basename} dut (.clk(clk), .rst_n(rst_n), .is_done(is_done));
+    always #5 clk = ~clk;
+    initial begin
+        @(posedge clk);
+        rst_n <= 1'b1;
+        repeat ({ticks}) begin
+            @(posedge clk);
+            #1 $display("TICK {fmt}", {prints});
+        end
+        $finish;
+    end
+endmodule
+"#
+    );
+    std::fs::write(dir.join("tb.sv"), tb).expect("запись тестбенча");
+    let build = Command::new("verilator")
+        .current_dir(dir)
+        .args([
+            "--binary",
+            "--timing",
+            "-Wno-fatal",
+            "--top-module",
+            "tb",
+            "tb.sv",
+            &format!("{}.sv", basename),
+            "-o",
+            "simtb",
+        ])
+        .output()
+        .expect("запуск verilator");
+    assert!(
+        build.status.success(),
+        "verilator не собрал Q-тестбенч:\n{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let run = Command::new(dir.join("obj_dir").join("simtb"))
+        .current_dir(dir)
+        .output()
+        .expect("запуск симуляции");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|line| line.strip_prefix("TICK "))
+        .map(|rest| {
+            rest.split_whitespace()
+                .map(|v| v.parse::<i64>().expect("значение — целое"))
+                .collect()
+        })
+        .collect()
+}
+
+/// T10/A4 (цель sv, **ради которой фича**): побитовая потактовая сверка
+/// Q-арифметики с симулятором — включая отрицательные и floor к −∞ у `*` (S2:
+/// repr −2, а не −1). Гейты verilator/yosys прогоняются в `precheck.sh`.
+#[test]
+fn fixed_point_arithmetic_matches_generated_sv() {
+    let vars = ["acc"];
+    let sim = simulate_trace("tests/data/eval/conformance_fixed.lam", &vars);
+    assert_eq!(
+        sim,
+        vec![vec![-768], vec![-384], vec![-2], vec![510]],
+        "трасса представлений q(8,8) — эталон Q-арифметики симулятора"
+    );
+
+    if !verilator_available() {
+        eprintln!("[ПРОПУСК] fixed_point_arithmetic_matches_generated_sv: verilator не найден");
+        return;
+    }
+    let dir = build_dir("fixed");
+    let sv = sv_trace_signed(
+        &dir,
+        "tests/data/eval/conformance_fixed.lam",
+        "conformance_fixed",
+        &["conformance_fixed_fixed_acc"],
+        sim.len(),
+    );
+    assert_eq!(
+        sim, sv,
+        "Q-арифметика симулятора и порождённого RTL обязана совпасть ПОБИТОВО на \
+         каждом такте (repr q(8,8)).\nсимулятор={sim:?}\nRTL={sv:?}"
     );
 }

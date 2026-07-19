@@ -36,6 +36,7 @@
 
 mod sv_compose;
 mod sv_expr;
+mod sv_fixed;
 mod sv_fsm;
 mod sv_map;
 mod sv_module;
