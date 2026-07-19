@@ -40,6 +40,7 @@
 
 mod rust_decl;
 mod rust_expr;
+mod rust_fixed;
 mod rust_func;
 mod rust_live;
 mod rust_map;

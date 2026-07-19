@@ -113,6 +113,10 @@ fn sim_value(unit: &Unit, name: &str) -> i64 {
         Some(Value::Number(n)) => n,
         // bool в C печатается как 0/1 — приводим к тому же виду.
         Some(Value::Boolean(b)) => i64::from(b),
+        // q(m, n) (0061): наблюдаемое — **представление** (сырые биты `intW`),
+        // ровно то же читает C из поля структуры `(int)m.entry.<var>`. Сверка
+        // идёт по repr, а не по вещественному приближению — побитово (A4).
+        Some(Value::Fixed { repr, .. }) => repr,
         other => panic!("переменная '{name}': неожиданное значение {other:?}"),
     }
 }
@@ -757,5 +761,110 @@ fn per_tick_shift_is_zero_under_wrapping() {
         c_wrapped,
         vec![vec![1], vec![2], vec![3]],
         "лишний уровень иерархии НЕ должен сдвигать потактовую трассу C (R2/A4).\nC={c_wrapped:?}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Q-арифметика fixed-point (фича 0061, задача 0061-03): T10/T11/T19
+//
+// Гейт `cc` доказывает лишь, что вывод компилируется; неверная Q-арифметика
+// компилируется тоже. Основной критерий — **побитовая** потактовая сверка repr.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FIXED_FIXTURE: &str = "tests/data/eval/conformance_fixed.lam";
+
+/// T10/A4 (цель C): побитовая потактовая сверка Q-арифметики с симулятором —
+/// **включая отрицательные** значения и floor к −∞ у `*` (T9: на S2 усечение к
+/// нулю дало бы −1 вместо −2).
+#[test]
+fn fixed_point_arithmetic_matches_generated_c() {
+    let vars = ["acc"];
+    let sim = simulate_trace(FIXED_FIXTURE, &vars);
+    // Пиннинг представлений q(8,8): -3.0, -1.5, -2·2⁻⁸ (floor!), +2.0-ish.
+    assert_eq!(
+        sim,
+        vec![vec![-768], vec![-384], vec![-2], vec![510]],
+        "трасса представлений q(8,8) — эталон Q-арифметики симулятора"
+    );
+
+    if !cc_available() {
+        eprintln!(
+            "[ПРОПУСК] fixed_point_arithmetic_matches_generated_c: `cc` не найден \
+             (трасса симулятора пришпилена выше)"
+        );
+        return;
+    }
+    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_fixed");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    let c = c_trace(
+        &dir,
+        FIXED_FIXTURE,
+        "conformance_fixed",
+        "ConformanceFixed",
+        "entry",
+        &vars,
+    );
+    assert_eq!(
+        sim, c,
+        "Q-арифметика симулятора и порождённого C обязана совпасть ПОБИТОВО на \
+         каждом такте (repr q(8,8)).\nсимулятор={sim:?}\nC={c:?}"
+    );
+}
+
+/// T19/A4 (цель C): переполнение `+` над q — wraparound (перенос), не насыщение.
+#[test]
+fn fixed_point_addition_wraps_matches_generated_c() {
+    let vars = ["big"];
+    let fixture = "tests/data/eval/conformance_fixed_wrap.lam";
+    let sim = simulate_trace(fixture, &vars);
+    assert_eq!(
+        sim,
+        vec![vec![-32768]],
+        "q(8,8): 32767 + 1 → −32768 (перенос, правило 3 ADR)"
+    );
+
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] fixed_point_addition_wraps_matches_generated_c: `cc` не найден");
+        return;
+    }
+    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_fixed_wrap");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    let c = c_trace(
+        &dir,
+        fixture,
+        "conformance_fixed_wrap",
+        "ConformanceFixedWrap",
+        "entry",
+        &vars,
+    );
+    assert_eq!(
+        sim, c,
+        "wraparound `+` q обязан совпасть с C.\nсим={sim:?}\nC={c:?}"
+    );
+}
+
+/// T11/A5 (ловушка C11 6.5.7p5): порождённый C Q-модели НЕ содержит `>>` — тем
+/// более над знаковым отрицательным. Floor идёт floor-делением (`/`/`%`
+/// стандартно-определены). Греп по исходнику **и** сверка значений выше — оба
+/// обязательны (T12): на **нашем** компиляторе (clang) неверный `>>` дал бы тот
+/// же результат, и одна сверка дефект не поймала бы.
+#[test]
+fn generated_c_fixed_has_no_right_shift() {
+    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_fixed_shift");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    let source = std::fs::read_to_string(FIXED_FIXTURE).expect("фикстура читается");
+    grammar::compile_to_c(
+        "conformance_fixed",
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("порождение C");
+    let c = std::fs::read_to_string(dir.join("conformance_fixed.c")).expect("читается .c");
+    assert!(
+        !c.contains(">>"),
+        "Q-арифметика C обязана обходиться без `>>` (C11 6.5.7p5: `>>` знакового \
+         отрицательного — implementation-defined). Floor — через floor-деление.\n{c}"
     );
 }

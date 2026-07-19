@@ -451,7 +451,12 @@ fn fixed_mixing_different_formats_is_se059() {
          start S { always { a := a + b; } ref S: a = b; } } start E = M;",
     )
     .expect_err("q(8,8) + q(4,4) — смешение");
-    assert_eq!(err.code.as_deref(), Some("SE-059"), "получено: {:?}", err.code);
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SE-059"),
+        "получено: {:?}",
+        err.code
+    );
 }
 
 /// T6: `q + q` одного формата — допустимо (тот же тип, не смешение).
@@ -461,7 +466,11 @@ fn fixed_same_format_addition_is_valid() {
         "model M { var a: q(8, 8) := 1.5; var c: q(8, 8) := 0.5; \
          start S { always { a := a + c; } ref S: a = c; } } start E = M;",
     );
-    assert!(node.is_ok(), "q(8,8) + q(8,8) должно быть валидно: {:?}", node.err());
+    assert!(
+        node.is_ok(),
+        "q(8,8) + q(8,8) должно быть валидно: {:?}",
+        node.err()
+    );
 }
 
 /// T7 (правило 6 ADR): явное приведение `u8 as q(8, 8)` снимает смешение.

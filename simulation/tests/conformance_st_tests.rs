@@ -115,6 +115,8 @@ fn sim_value(unit: &Unit, name: &str) -> i64 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
         Some(Value::Boolean(b)) => i64::from(b),
+        // q(m, n) (0061): наблюдаемое — представление (INT-поле в POUS = repr).
+        Some(Value::Fixed { repr, .. }) => repr,
         other => panic!("переменная '{name}': неожиданное значение {other:?}"),
     }
 }
@@ -250,5 +252,156 @@ fn per_tick_trace_matches_generated_st() {
          (класс фикса 0041-01)"
     );
 
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Q-арифметика fixed-point (фича 0061, задача 0061-03): T10 для цели st
+//
+// В IEC сдвигов над числами нет → floor у `*` и `q → int` идут через
+// `FUNCTION LAM_Q_FLOORDIV`. Наблюдаемое — INT-поле `FIXED0.ACC` (= repr q(8,8)),
+// сверяется потактово с симулятором.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FIXED_FIXTURE: &str = "tests/data/eval/conformance_fixed.lam";
+
+/// Потактовая трасса `acc` (repr q(8,8)) симулятора.
+fn simulate_fixed_trace() -> Vec<i64> {
+    let source = std::fs::read_to_string(FIXED_FIXTURE).expect("фикстура читается");
+    let (ast, _) = grammar::parse(&source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let mut trace = Vec::new();
+    for _ in 0..MAX_TICKS {
+        let result = unit.tick();
+        assert!(
+            !matches!(result, TickResult::Failed(_)),
+            "симуляция: {result:?}"
+        );
+        trace.push(sim_value(&unit, "acc"));
+        if result == TickResult::Terminated {
+            break;
+        }
+    }
+    trace
+}
+
+/// Потактовая трасса `acc` порождённого ST (через iec2c → C).
+fn run_generated_st_fixed(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i64> {
+    let source = std::fs::read_to_string(FIXED_FIXTURE).expect("фикстура читается");
+    let st_dir = dir.join("st");
+    std::fs::create_dir_all(&st_dir).expect("каталог ST");
+    grammar::compile_to_st(
+        "qfix.lam",
+        &source,
+        st_dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect("порождение ST");
+
+    let work = dir.join("iec2c");
+    std::fs::create_dir_all(&work).expect("рабочий каталог iec2c");
+    let transpile = Command::new(iec2c)
+        .arg("-I")
+        .arg(lib)
+        .arg(st_dir.join("qfix.st"))
+        .current_dir(&work)
+        .output()
+        .expect("запуск iec2c");
+    assert!(
+        transpile.status.success() && work.join("POUS.c").is_file(),
+        "iec2c не оттранслировал Q-ST:\n{}",
+        String::from_utf8_lossy(&transpile.stderr)
+    );
+
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "iec_std_lib.h"
+TIME __CURRENT_TIME;
+BOOL __DEBUG = 0;
+#include "POUS.h"
+#include "POUS.c"
+
+int main(void) {{
+    QFIX_data__ fb = {{0}};
+    QFIX_init__(&fb, __BOOL_LITERAL(FALSE));
+    for (int i = 0; i < {MAX_TICKS}; i++) {{
+        QFIX_body__(&fb);
+        printf("%d:acc=%d\n", i, (int)fb.FIXED0.ACC.value);
+        if (fb.IS_DONE.value) break;
+    }}
+    return 0;
+}}
+"#
+    );
+    let harness_path = work.join("harness.c");
+    std::fs::write(&harness_path, harness).expect("запись драйвера");
+    let bin = work.join("qfix_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c99", "-w", "-I"])
+        .arg(lib.join("C"))
+        .arg("-I")
+        .arg(&work)
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "Q-ST (через iec2c) не собирается:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск драйвера ST");
+    assert!(run.status.success(), "драйвер Q-ST завершился с ошибкой");
+    let out = String::from_utf8_lossy(&run.stdout).into_owned();
+    let mut trace: Vec<(usize, i64)> = out
+        .lines()
+        .filter_map(|line| {
+            let (t, rest) = line.split_once(':')?;
+            let (_, v) = rest.split_once('=')?;
+            Some((t.parse().ok()?, v.trim().parse().ok()?))
+        })
+        .collect();
+    trace.sort_by_key(|(t, _)| *t);
+    trace.into_iter().map(|(_, v)| v).collect()
+}
+
+/// T10/A4 (цель st): побитовая потактовая сверка Q-арифметики с симулятором —
+/// floor к −∞ у `*` строится `LAM_Q_FLOORDIV` (сдвигов над числами в IEC нет).
+#[test]
+fn fixed_point_arithmetic_matches_generated_st() {
+    let sim = simulate_fixed_trace();
+    assert_eq!(
+        sim,
+        vec![-768, -384, -2, 510],
+        "трасса представлений q(8,8) — эталон Q-арифметики симулятора"
+    );
+
+    let Some((iec2c, lib)) = iec2c_available() else {
+        eprintln!("iec2c/MatIEC недоступны — сверка Q-ST пропущена (трасса симулятора пришпилена)");
+        return;
+    };
+    if !cc_available() {
+        eprintln!("cc недоступен — сверка Q-ST пропущена");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("st_conf_fixed_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("рабочий каталог");
+    let st = run_generated_st_fixed(&dir, &iec2c, &lib);
+
+    // ⚠️ Цель ST тратит такт на вход в каждый уровень стартового состояния
+    // (INIT-сдвиг рантайма MatIEC) — существующий `per_tick_trace_matches...`
+    // обходит это, сверяя финал. Здесь сверяется ПОТАКТОВО, но с поправкой на
+    // сдвиг: `sim`-трасса обязана быть суффиксом ST-трассы, а её префикс —
+    // нулями (init `acc = 0` до первого содержательного такта). Сдвиг —
+    // отдельный долг цели ST (контракт 0033 «вход не стоит такта»), НЕ дефект
+    // Q-арифметики: значения repr совпадают побитово.
+    assert!(
+        st.ends_with(&sim) && st[..st.len() - sim.len()].iter().all(|&v| v == 0),
+        "Q-арифметика ST обязана совпасть с симулятором побитово (с поправкой на \
+         INIT-сдвиг цели ST).\nсимулятор={sim:?}\nST={st:?}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

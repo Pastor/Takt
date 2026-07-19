@@ -1,0 +1,19 @@
+// Сверка Q-арифметики через ВЫХОДНОЙ float-порт (0061): цели `rust`/`st`
+// наблюдают q не полем (приватно/недоступно), а `probe := acc as float`.
+// `acc as float` = repr·2⁻ⁿ — точно представимо в f64/LREAL, поэтому наблюдение
+// побитово несёт представление q.
+//
+// Трасса `probe` (= repr/256): -3.0, -1.5, -0.0078125 (floor!), 1.9921875.
+model Fixed {
+    var x: q(8, 8) := -1.5;
+    var two: q(8, 8) := 2.0;
+    var tiny: q(8, 8) := 0.00390625;
+    var acc: q(8, 8) := 0.0;
+    out probe: float := 0.0;
+
+    start S0 { always { acc := x * two;  probe := acc as float; } ref S1; }
+    state S1 { always { acc := acc / two; probe := acc as float; } ref S2; }
+    state S2 { always { acc := x * tiny;  probe := acc as float; } ref S3; }
+    state S3 { always { acc := acc + two; probe := acc as float; } }
+}
+start Entry = Fixed;

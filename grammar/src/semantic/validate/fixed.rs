@@ -233,7 +233,9 @@ fn check_mixing(
     let involves_fixed =
         matches!(lt, TypeNode::Fixed { .. }) || matches!(rt, TypeNode::Fixed { .. });
     if involves_fixed && lt != rt {
-        let loc = first_loc(l).or_else(|| first_loc(r)).unwrap_or(Location::Implicit);
+        let loc = first_loc(l)
+            .or_else(|| first_loc(r))
+            .unwrap_or(Location::Implicit);
         return Err(se059(loc, &lt, &rt));
     }
     Ok(())
