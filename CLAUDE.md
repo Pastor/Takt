@@ -411,44 +411,46 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
     **вторым** флагом `--float-embedded`. Симулятор **двухрежимный** (`float` как
     `f64` либо как `q`) — иначе q-режим/`sv` сверять не с чем (драйвер 2). native
     и Q — **разные** численные семантики; сверка **внутри** режима.
-  - **Сделано (0096-01, коммит `8412c69`):** флаги `GenerateOptions.float_as_q:
-    Option<(u8,u8)>` / `float_embedded: bool` + разбор/валидация в `lamc.rs`
-    (`parse_float_as_q`, границы правила 1 ADR 0061). **Кодоген не тронут** —
-    корпус байт-в-байт прежний.
-  - **Осталось: 0096-02** (sv: применить трансформацию, снять `SV-003`, сверка +
-    гейты), **0096-03** (двухрежимный симулятор + `c`/`rust`/`st` embedded-путь +
-    сверки ×режимы), **0096-04** (пример-регулятор на `float` + README + отчёт).
-  - **МЕХАНИЗМ (рекомендация):** единая **трансформация `float → q(m, n)` над
-    `ModelNode` ПЕРЕД генерацией/`build_unit`** — заменяет `TypeNode::Rational →
-    Fixed(m,n)` и `ExpressionNode::Rational(text) → Number(repr)` (через
-    `semantic::type_node::lower_fixed_literal`, переиспользуя всю q-инфраструктуру
-    0061: `c_expr/fixed`, `rust_fixed`, `st_fixed`, `sv_fixed`, `eval/fixed`).
-    Применять к **цели И к эталону-симулятору** (сверка внутри режима). `sv` —
-    всегда при флаге; `c`/`rust`/`st` — при `float_embedded`.
-  - ⚠️⚠️ **ГЛАВНАЯ ЗАСАДА:** `VariableNode` существует в **ДВУХ** представлениях —
-    owned в `model.variables` (`BTreeMap`, для объявлений/struct-полей) **и** за
-    `Rc<RefCell>` в `ExpressionNode::Variable`/`ConditionNode::Variable` (для
-    `fixed_format` целей, читающих `var.borrow().ty()`). Трансформация обязана
-    мутировать **ОБА**, иначе объявление станет `q`, а арифметика останется `float`
-    (или наоборот) — **компилируется, но считает не то** (ровно класс дефекта, ради
-    которого ADR требует сверку). Обход мутирует `variables`-map И `Rc` при встрече
-    `Variable` в выражениях/условиях (`borrow_mut().ty`).
-  - ⚠️ **Идемпотентность:** понижать **только** `Rational → Number(repr)`;
-    `Number` НЕ трогать (повторный проход дал бы `repr·2ⁿ` — двойное понижение).
-    `Rc`-переменные разделяются → `ty`-мутация многократна, но идемпотентна
-    (`Fixed → Fixed`). Обход выражений — по образцу `semantic/validate/fixed.rs`
-    (`check_stmt`/`check_expr`), но **мутирующий**; покрыть ВСЕ варианты
-    `ExpressionNode`/`ConditionNode`/`StatementNode` + `Cast` ty + `Function`
-    ret/params + вложенные модели (рекурсия по `Rc<RefCell<ModelNode>>`).
-  - **Точки применения:** `lib.rs::compile_to_*` (перед генерацией, по
-    `GenerateOptions.float_as_q`/`float_embedded`); `simulation build_unit`
-    (перед построением — conformance-тест применяет тот же режим). Без флага —
-    ничего не трансформируется (корпус неизменен, T1).
-  - **Обязательно (ADR A-2):** conformance-сверка **внутри режима**
-    (`native↔native` биты f64, `Q↔Q` repr) + сторож направления (мутация «эталон
-    native, цель Q» обязана завалить сверку). Артефакты: ADR
-    `docs/adr/0096-*`, тест-план `docs/tests/0096-*`, декомпозиция
-    `docs/development/0096-01-*`.
+  - **Сделано (0096-01, `8412c69`):** флаги `GenerateOptions.float_as_q:
+    Option<(u8,u8)>` / `float_embedded: bool` + разбор/валидация в `lamc.rs`.
+  - **Сделано (0096-02):** цель `sv` — трансформация `float → q(m, n)`
+    (`semantic::lower_float::lower_float_to_fixed`) применяется в `compile_to_sv`
+    при флаге; **`SV-003` для `float` снят**. Сверка — `conformance_sv_tests::
+    float_as_q_matches_generated_sv` (float→q(8,8) ≡ явная q-версия, verilator),
+    сторож направления — `float_without_flag_is_sv003`. 5 юнит-тестов в
+    `lower_float`. Корпус без флага байт-в-байт прежний (T1).
+  - **Осталось: 0096-03** (цели `c`/`rust`/`st` embedded-путь при
+    `--float-embedded` + сверки ×режимы; для `sv` симулятор уже двухрежимен
+    **через ту же трансформацию** — Q-режим = проход применён, native = не
+    применён, `eval::fixed` не трогался), **0096-04** (корпусной пример-регулятор
+    на `float` + yosys-гейт в `precheck.sh` + README + `CLAUDE.md` A-7 + отчёт).
+  - **МЕХАНИЗМ (реализован):** единая **мутирующая** трансформация `float → q(m, n)`
+    над `ModelNode` ПЕРЕД генерацией/`build_unit` (`lower_float.rs`, обход по
+    образцу `validate/fixed.rs`, но мутирующий; покрыты все варианты
+    `Expression/Condition/Statement` + `Cast` ty + `Function` ret/params + вложенные
+    модели, visited-set по указателю). Применяется к цели И эталону-симулятору
+    (сверка внутри режима). `sv` — всегда при флаге; `c`/`rust`/`st` — при
+    `float_embedded` (0096-03).
+  - ⚠️⚠️ **ГЛАВНАЯ ЗАСАДА (подтверждена):** `VariableNode` в **ДВУХ**
+    представлениях — owned в `model.variables` **и** за `Rc<RefCell>` в
+    `Expression/Condition::Variable` (тип читает `fixed_format`/`extract_type`).
+    Проход мутирует **ОБА** `ty` (иначе объявление `q`, арифметика `float` — `*` без
+    сдвига, молча неверно). Сторож — `variable_cell_in_body_is_retyped`.
+  - ⚠️ **Литерал понижается ТОЛЬКО в инициализаторе объявления** (`variables`-map,
+    через `lower_fixed_var`), **не** в телах. Рекомендация «понижать
+    `Rational → Number` везде» **скорректирована**: `x + 1.5` → `Fixed + Number(384)`
+    даёт в `sv` верный repr, но `eval::fixed::binary` симулятора требует **оба**
+    операнда `Fixed` → упал бы (расхождение). Паритет с явным `q` 0061: тела на
+    `float` пишутся **на переменных** (образец `regulator`); литерал в теле → громкая
+    `SV-003`. Смешение `float`/`q` в арифметике уже ловит `SE-059` на validate
+    (Rational≠Fixed) — до трансформации, поэтому понижение безопасно.
+  - ⚠️ **Идемпотентность** — гейт «исходный тип был `Rational`»: понижать
+    инициализатор только для бывшего `float`. Иначе `lower_fixed_var` понизила бы
+    уже понижённый `Number(repr)` **ещё раз** (трактуя repr как целое → `repr·2ⁿ`,
+    `SE-058`); тот же гейт защищает **явный** `q` 0061 (уже понижён при построении).
+    Сторож — `transformation_is_idempotent`. Рёбра `ref` — `Unresolved(ast)`,
+    кодоген разрешает их против понижённой map, проход их не трогает (обход `object`
+    дал бы цикл).
 - **Генерация детерминирована** (фича
   [0048](docs/features/0048-deterministic-codegen.md), закрыта). Порядок эмиссии —
   свойство типа контейнера: словари `ModelNode` (`semantic/mod.rs`) и снимок

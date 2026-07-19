@@ -126,7 +126,7 @@
 | [0092](docs/features/0092-adr-0018-retrofit.md) | У фичи 0018 нет ADR | — | — | СОЗДАНА |
 | [0093](docs/features/0093-wildcard-match-rule.md) | Правило о запрете `_ =>` в семантических узлах + конфликт с `#[non_exhaustive]` | — | — | СОЗДАНА |
 | [0094](docs/features/0094-new-feature-script-fixes.md) | Доработка `scripts/new-feature.sh` (статус ADR, поздние стадии, идемпотентность) | — | — | СОЗДАНА |
-| [0096](docs/features/0096-fixed-point-native-float.md) | Прозрачный `float`: глобальная Q-точность файла → `q` в `sv`, нативный float / Q по флагу в `c`/`rust`/`st` | 0061 | 3 | РАЗРАБОТКА (0096-01 ✅ флаги; 02–04 — кодоген/симулятор/пример) |
+| [0096](docs/features/0096-fixed-point-native-float.md) | Прозрачный `float`: глобальная Q-точность файла → `q` в `sv`, нативный float / Q по флагу в `c`/`rust`/`st` | 0061 | 3 | РАЗРАБОТКА (0096-01 ✅ флаги; 0096-02 ✅ `sv` float→q, `SV-003` снят; 03–04 — c/rust/st/пример) |
 | [0097](docs/features/0097-pid-regulator-example.md) | Пример ПИД-регулятора на Lam (fixed-point, anti-windup) | 0061 | 3 | ГОТОВО |
 | [0037](docs/features/0037-windows-test-failures.md) | Сбои тестов на Windows (пути include, ресурс viewport) | — | 2 | РАЗРАБОТКА |
 
