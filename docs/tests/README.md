@@ -56,3 +56,4 @@
 | 0066 | Литералы по целевому типу в телах цели `st` | [0066-st-bool-literals.md](0066-st-bool-literals.md) | СОЗДАНА |
 | 0068 | Верификация свойств над данными | [0068-verify-data-properties.md](0068-verify-data-properties.md) | СОЗДАНА |
 | 0069 | Разделение `address_map.rs` | [0069-address-map-eval-split.md](0069-address-map-eval-split.md) | СОЗДАНА |
+| 0096 | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | [0096-fixed-point-native-float.md](0096-fixed-point-native-float.md) | СОЗДАНА |
