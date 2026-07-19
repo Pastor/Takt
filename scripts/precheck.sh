@@ -74,7 +74,7 @@ SV_OUTPUT="examples/generated/sv"
 #                               `x.2`). Композиция `A + B + (C|D) + E` целью sv
 #                               теперь ПОДДЕРЖАНА (фича 0057) — пример остаётся вне
 #                               гейта по НЕ связанным с композицией причинам.
-SV_TRANSLATABLE="stacker elevator_mini"
+SV_TRANSLATABLE="stacker elevator_mini regulator pid_regulator"
 
 echo "Генерация C-кода из примеров Lam..."
 for lam_file in examples/*.lam; do

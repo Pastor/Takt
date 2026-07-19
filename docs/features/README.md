@@ -105,3 +105,4 @@
 | [0094](./0094-new-feature-script-fixes.md) | Доработка `scripts/new-feature.sh` (статус ADR, поздние стадии, идемпотентность) | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0095](./0095-sv-testbenches.md) | Тестбенчи цели SystemVerilog + осциллограммы для GTKWave | аддитивная (ADR/анализ не заводились; решение tb — из 0045-07) | ГОТОВО |
 | [0096](./0096-fixed-point-native-float.md) | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | [ADR](../adr/0096-fixed-point-native-float.md) · [анализ](../analyze/0096-fixed-point-native-float.md) · [тест-план](../tests/README.md) · [отчёт](../reports/README.md) | СОЗДАНА |
+| [0097](./0097-pid-regulator-example.md) | Пример ПИД-регулятора на языке Lam (fixed-point) | [ADR](../adr/0097-pid-regulator-example.md) · [анализ](../analyze/0097-pid-regulator-example.md) · [тест-план](../tests/README.md) · [отчёт](../reports/README.md) | СОЗДАНА |

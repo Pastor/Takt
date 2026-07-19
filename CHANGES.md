@@ -7,6 +7,23 @@
 
 ## [Не выпущено]
 
+### Добавлено (фича [0097](docs/features/0097-pid-regulator-example.md) — пример ПИД-регулятора на Lam) — **ЗАКРЫТА**
+
+- **`examples/pid_regulator.lam`** — ПИД-регулятор (позиционная дискретная форма)
+  на fixed-point `q(8, 8)`: `err = target − meas; i_acc += err (clamp);
+  deriv = err − err_prev; ctrl = Kp·err + Ki·i_acc + Kd·deriv; meas += Kplant·ctrl`.
+  Замкнутый контур с объектом 1-го порядка внутри модели → сходится **без входов**
+  и завершается (`Control → Settled → Done`).
+- **Anti-windup обязателен:** арифметика `q` — wraparound (не насыщение), поэтому
+  интеграл `i_acc` ограничен `[−Imax, Imax]` условиями — иначе переполнился бы и
+  «перевернулся» (регулятор неустойчив). Проверено зондом
+  `pid_integral_stays_bounded_and_converges` (интеграл в пределах на каждом такте).
+- **Проходит все гейты корпуса:** `c` (cmake+ninja: `ready=1` за 9 шагов), `st`
+  (iec2c), `rust` (rustc+clippy `-D warnings`), `sv` (verilator+yosys), симулятор
+  (`examples_scenario_tests`). ⚠️ Имена `integral`/`pv` конфликтуют со
+  стандартными ФБ IEC 61131-3 (`INTEGRAL`; идентификаторы регистронезависимы) →
+  `i_acc`/`meas`. Компилятор **не изменён** (пример; теория — ADR 0097).
+
 ### Добавлено (фича [0061](docs/features/0061-fixed-point-type.md) — fixed-point `q(m, n)` как тип языка) — **ЗАКРЫТА**
 
 - **Новый примитив `q(m, n)`** — знаковый fixed-point: `m` целых бит **включая
