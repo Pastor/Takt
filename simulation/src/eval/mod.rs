@@ -31,15 +31,37 @@
 
 #![deny(clippy::wildcard_enum_match_arm)]
 
+pub(crate) mod access;
 pub(crate) mod error;
 pub(crate) mod fixed;
 pub(crate) mod ops;
+pub(crate) mod place;
 pub(crate) mod value;
 
+use grammar::semantic::StructDefinitionNode;
 use grammar::semantic::type_node::TypeNode;
 
 use crate::eval::error::{EvalError, value_kind};
 use crate::eval::value::Value;
+
+/// Реестр структурных типов (фича 0034): даёт определение `struct` по имени.
+///
+/// Живёт в ядре (семантика приведения — здесь), реализуется адаптером над
+/// [`grammar::semantic::ModelNode::search_struct`] (учитывает поиск вверх по
+/// родительским моделям). Без реестра [`coerce_to_type`] не может привести
+/// `{1, 2}` к `Point`: ей неизвестны ни число полей, ни их типы, ни порядок.
+pub(crate) trait StructRegistry {
+    fn find_struct(&self, name: &str) -> Option<StructDefinitionNode>;
+}
+
+/// Пустой реестр — для приведений вне модели (тесты, каст): структур нет.
+pub(crate) struct EmptyStructs;
+
+impl StructRegistry for EmptyStructs {
+    fn find_struct(&self, _name: &str) -> Option<StructDefinitionNode> {
+        None
+    }
+}
 
 /// Приводит значение к объявленному типу переменной (S1, S2, S6, S7, S9).
 ///
@@ -65,8 +87,21 @@ use crate::eval::value::Value;
 // Ветка `_` здесь безопасна: она возвращает **ошибку**, а не `None`. Неизвестный
 // тип приведёт к диагностике, а не к тихому пропуску — то есть к тому же
 // наблюдаемому поведению, что и явно перечисленный неподдерживаемый тип.
-#[allow(clippy::wildcard_enum_match_arm)]
+/// Приведение к типу **без** реестра структур — для вызовов вне модели (тесты,
+/// каст). Структурная цель без реестра даёт диагностику, а не тихий пропуск.
 pub(crate) fn coerce_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalError> {
+    coerce_to_type_with(value, ty, &EmptyStructs)
+}
+
+/// Приведение к типу с реестром структур (фича 0034): та же семантика, что и
+/// [`coerce_to_type`], но структурная цель (`Struct`/массив структур) приводится
+/// по определению из `structs`.
+#[allow(clippy::wildcard_enum_match_arm)]
+pub(crate) fn coerce_to_type_with(
+    value: Value,
+    ty: &TypeNode,
+    structs: &dyn StructRegistry,
+) -> Result<Value, EvalError> {
     match ty {
         TypeNode::Integer { bits, signed } => coerce_integer(value, *bits, *signed),
         // S7: вариант enum — целое; разрядность подбирает генератор C по максимуму.
@@ -89,7 +124,7 @@ pub(crate) fn coerce_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalE
         TypeNode::Bool => match &value {
             Value::Boolean(b) => Ok(Value::Boolean(*b)),
             Value::Number(n) => Ok(Value::Boolean(*n != 0)),
-            Value::Real(_) | Value::Array(_) | Value::Fixed { .. } => {
+            Value::Real(_) | Value::Array(_) | Value::Fixed { .. } | Value::Struct { .. } => {
                 Err(EvalError::NotCoercible {
                     value: value_kind(&value),
                     ty: "bool".to_string(),
@@ -100,28 +135,29 @@ pub(crate) fn coerce_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalE
             Value::Real(f) => Ok(Value::Real(*f)),
             Value::Number(n) => Ok(Value::Real(*n as f64)),
             Value::Fixed { repr, n, .. } => Ok(Value::Real(fixed::to_real(*repr, *n))),
-            Value::Boolean(_) | Value::Array(_) => Err(EvalError::NotCoercible {
-                value: value_kind(&value),
-                ty: "float".to_string(),
-            }),
+            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } => {
+                Err(EvalError::NotCoercible {
+                    value: value_kind(&value),
+                    ty: "float".to_string(),
+                })
+            }
         },
-        TypeNode::Array(size, elem) => coerce_array(value, *size, elem),
+        TypeNode::Array(size, elem) => coerce_array(value, *size, elem, structs),
         // Адресный тип порта: значение порта — целое машинное слово.
         TypeNode::Address(_, _) => match &value {
             Value::Number(n) => Ok(Value::Number(*n)),
             Value::Boolean(b) => Ok(Value::Number(i64::from(*b))),
-            Value::Real(_) | Value::Array(_) | Value::Fixed { .. } => {
+            Value::Real(_) | Value::Array(_) | Value::Fixed { .. } | Value::Struct { .. } => {
                 Err(EvalError::NotCoercible {
                     value: value_kind(&value),
                     ty: "адресный порт".to_string(),
                 })
             }
         },
-        // Пробел `Value`: структуры симулятором не представимы. Явная диагностика
-        // вместо тихого `None` — контрпример T22 тест-плана.
-        TypeNode::Struct(name) => Err(EvalError::UnsupportedType {
-            ty: format!("структура '{name}'"),
-        }),
+        // Структурная цель (фича 0034): инициализатор `{…}` (пришёл как `Array`,
+        // адаптер не знает типа) приводится по определению; `Struct` того же типа
+        // копируется целиком (`q := p`).
+        TypeNode::Struct(name) => coerce_struct(value, name, structs),
         TypeNode::Inference => Err(EvalError::UnsupportedType {
             ty: "невыведенный тип".to_string(),
         }),
@@ -142,10 +178,12 @@ pub(crate) fn coerce_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalE
         }),
         TypeNode::BuiltinNumeric => match &value {
             Value::Number(_) | Value::Real(_) | Value::Fixed { .. } => Ok(value),
-            Value::Boolean(_) | Value::Array(_) => Err(EvalError::NotCoercible {
-                value: value_kind(&value),
-                ty: "числовой тип".to_string(),
-            }),
+            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } => {
+                Err(EvalError::NotCoercible {
+                    value: value_kind(&value),
+                    ty: "числовой тип".to_string(),
+                })
+            }
         },
         // Вынужденная ветка: `TypeNode` — `#[non_exhaustive]` (см. комментарий
         // над функцией). Отказ с диагностикой, а не тихий пропуск.
@@ -165,7 +203,7 @@ fn to_integer(value: &Value, ty: &TypeNode) -> Result<i64, EvalError> {
         // q(m, n) → целая часть (floor): `repr >> n`. Штатно сюда не попадает
         // (смешение q с целым — `SE-059`); перевод q→int идёт через `cast_to_type`.
         Value::Fixed { repr, n, .. } => Ok(fixed::to_integer_part(*repr, *n)),
-        Value::Array(_) => Err(EvalError::NotCoercible {
+        Value::Array(_) | Value::Struct { .. } => Err(EvalError::NotCoercible {
             value: value_kind(value),
             ty: format!("{ty:?}"),
         }),
@@ -186,7 +224,7 @@ fn coerce_to_fixed_store(value: Value, m: u8, n: u8) -> Result<Value, EvalError>
             }
         }
         Value::Real(f) => (f * (1u64 << n) as f64).floor() as i128,
-        Value::Boolean(_) | Value::Array(_) => {
+        Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } => {
             return Err(EvalError::NotCoercible {
                 value: value_kind(&value),
                 ty: format!("q({m}, {n})"),
@@ -250,8 +288,14 @@ fn coerce_integer(value: Value, bits: u8, signed: bool) -> Result<Value, EvalErr
     }
 }
 
-/// Поэлементное приведение массива с проверкой длины.
-fn coerce_array(value: Value, size: u16, elem: &TypeNode) -> Result<Value, EvalError> {
+/// Поэлементное приведение массива с проверкой длины. `structs` протаскивается —
+/// элементом может быть структура (`[Point; 4]`).
+fn coerce_array(
+    value: Value,
+    size: u16,
+    elem: &TypeNode,
+    structs: &dyn StructRegistry,
+) -> Result<Value, EvalError> {
     let Value::Array(items) = value else {
         return Err(EvalError::NotCoercible {
             value: value_kind(&value),
@@ -266,9 +310,69 @@ fn coerce_array(value: Value, size: u16, elem: &TypeNode) -> Result<Value, EvalE
     }
     let coerced = items
         .into_iter()
-        .map(|item| coerce_to_type(item, elem))
+        .map(|item| coerce_to_type_with(item, elem, structs))
         .collect::<Result<Vec<Value>, EvalError>>()?;
     Ok(Value::Array(coerced))
+}
+
+/// Приведение к структурному типу `name` (фича 0034).
+///
+/// Инициализатор `{…}` приходит как [`Value::Array`] (адаптер типа не знает) —
+/// приводится **по позиции** в объявленном порядке полей (рекурсивно). Значение
+/// [`Value::Struct`] того же типа копируется как есть (`q := p`); другого типа —
+/// `StructTypeMismatch` (симметрия с C, запрещающим неявную конверсию структур).
+fn coerce_struct(
+    value: Value,
+    name: &str,
+    structs: &dyn StructRegistry,
+) -> Result<Value, EvalError> {
+    let def = structs
+        .find_struct(name)
+        .ok_or_else(|| EvalError::UnsupportedType {
+            ty: format!("структура '{name}' (определение не найдено)"),
+        })?;
+    match value {
+        // Позиционный инициализатор `{1, 2}` → поля в объявленном порядке.
+        Value::Array(items) => {
+            if items.len() != def.fields.len() {
+                return Err(EvalError::StructArity {
+                    name: name.to_string(),
+                    expected: def.fields.len(),
+                    got: items.len(),
+                });
+            }
+            let fields = def
+                .fields
+                .iter()
+                .zip(items)
+                .map(|((fname, fty), item)| {
+                    coerce_to_type_with(item, fty, structs).map(|v| (fname.clone(), v))
+                })
+                .collect::<Result<Vec<(String, Value)>, EvalError>>()?;
+            Ok(Value::Struct {
+                name: name.to_string(),
+                fields,
+            })
+        }
+        // Копирование структуры целиком: имена типов обязаны совпасть.
+        Value::Struct { name: got, fields } => {
+            if got != name {
+                return Err(EvalError::StructTypeMismatch {
+                    expected: name.to_string(),
+                    got,
+                });
+            }
+            Ok(Value::Struct { name: got, fields })
+        }
+        // Прочие значения к структуре не приводятся (модуль под
+        // `deny(wildcard_enum_match_arm)` — варианты перечислены явно).
+        scalar @ (Value::Number(_) | Value::Real(_) | Value::Boolean(_) | Value::Fixed { .. }) => {
+            Err(EvalError::NotCoercible {
+                value: value_kind(&scalar),
+                ty: format!("структура '{name}'"),
+            })
+        }
+    }
 }
 
 #[cfg(test)]

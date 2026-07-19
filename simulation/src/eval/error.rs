@@ -33,6 +33,24 @@ pub(crate) enum EvalError {
     NotCoercible { value: &'static str, ty: String },
     /// Тип не поддерживается симулятором (например, структуры — пробел `Value`).
     UnsupportedType { ty: String },
+    /// Доступ к полю (`.имя`) у значения, не являющегося структурой (фича 0034).
+    FieldOfNonStruct { value: &'static str },
+    /// Число полей инициализатора `{…}` не совпадает с объявлением структуры.
+    StructArity {
+        name: String,
+        expected: usize,
+        got: usize,
+    },
+    /// У структуры нет поля с таким именем (чтение/запись/приведение).
+    UnknownField { name: String, field: String },
+    /// Присваивание структуры другого типа (`q := p` при разных `struct`).
+    StructTypeMismatch { expected: String, got: String },
+    /// Обращение к структуре по номеру бита (`p.0`) — бита у структуры нет.
+    BitIndexOfStruct { name: String },
+    /// Доступ к биту (`.N`) у значения, не являющегося целым/логическим.
+    BitOfNonInteger { value: &'static str },
+    /// Номер бита вне диапазона `0..64`.
+    BitIndexOutOfRange { bit: i64 },
 }
 
 impl EvalError {
@@ -59,6 +77,31 @@ impl EvalError {
             EvalError::UnsupportedType { ty } => {
                 format!("тип {ty} не поддерживается симулятором")
             }
+            EvalError::FieldOfNonStruct { value } => {
+                format!("доступ к полю возможен только у структуры, а не у значения {value}")
+            }
+            EvalError::StructArity {
+                name,
+                expected,
+                got,
+            } => format!(
+                "инициализатор структуры '{name}' содержит {got} полей, а объявлено {expected}"
+            ),
+            EvalError::UnknownField { name, field } => {
+                format!("структура '{name}' не имеет поля '{field}'")
+            }
+            EvalError::StructTypeMismatch { expected, got } => {
+                format!("ожидалась структура '{expected}', получена '{got}'")
+            }
+            EvalError::BitIndexOfStruct { name } => {
+                format!("к структуре '{name}' нельзя обратиться по номеру бита")
+            }
+            EvalError::BitOfNonInteger { value } => {
+                format!("доступ к биту возможен только у целого значения, а не у {value}")
+            }
+            EvalError::BitIndexOutOfRange { bit } => {
+                format!("номер бита {bit} вне диапазона 0..64")
+            }
         }
     }
 
@@ -72,6 +115,13 @@ impl EvalError {
             EvalError::TypeMismatch { .. } => "SIM-005",
             EvalError::NotCoercible { .. } => "SIM-006",
             EvalError::UnsupportedType { .. } => "SIM-007",
+            EvalError::FieldOfNonStruct { .. } => "SIM-012",
+            EvalError::StructArity { .. } => "SIM-026",
+            EvalError::UnknownField { .. } => "SIM-027",
+            EvalError::StructTypeMismatch { .. } => "SIM-028",
+            EvalError::BitIndexOfStruct { .. } => "SIM-029",
+            // SIM-011 — прежний код доступа к биту (адаптер), теперь в ядре.
+            EvalError::BitOfNonInteger { .. } | EvalError::BitIndexOutOfRange { .. } => "SIM-011",
         }
     }
 
@@ -91,6 +141,7 @@ pub(crate) fn value_kind(value: &Value) -> &'static str {
         Value::Boolean(_) => "логическое",
         Value::Array(_) => "массив",
         Value::Fixed { .. } => "fixed-point",
+        Value::Struct { .. } => "структура",
     }
 }
 

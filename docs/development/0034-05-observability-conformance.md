@@ -1,5 +1,15 @@
 # Задача 0034-05: Наблюдаемость значений и сверка с эталоном C
 
+> ✅ **СДЕЛАНО (2026-07-19).** `Unit::variable("p")` возвращает `Value::Struct`
+> целиком; текстовый вывод (`runner::format_value`) печатает `Point{x=7,y=44}`.
+> Сверка с эталоном C — `conformance_struct_tests.rs` (cc: `p.x=7`, `p.y=300`,
+> `t=1` совпали с симулятором); фикстура `struct_conformance.lam` без
+> инициализатора структуры (иначе невалидный C — brace-init), поля через `always`.
+> `state_io` сохраняет структуру (`value_to_json` → объект). ⚠️ **Загрузка**
+> структур (`--load-state`) не реализована (JSON-объект без имени типа) — корпус
+> структур не содержит, регресс-тест без структур зелёный. Итог —
+> [отчёт](../reports/0034-sim-struct-types.md).
+
 > Фича: [../features/0034-sim-struct-types.md](../features/0034-sim-struct-types.md) · ADR: [../adr/0034-sim-struct-types.md](../adr/0034-sim-struct-types.md) · анализ: [../analyze/0034-sim-struct-types.md](../analyze/0034-sim-struct-types.md)
 >
 > Покрывает требования **R8** (наблюдаемость), **R9** (достоверность относительно C).

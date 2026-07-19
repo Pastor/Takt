@@ -1,4 +1,7 @@
+use crate::eval::error::EvalError;
 use crate::eval::value::Value;
+use grammar::semantic::StructDefinitionNode;
+use grammar::semantic::type_node::TypeNode;
 use std::collections::HashMap;
 
 /// Контекст выполнения: предоставляет доступ к переменным текущей области видимости.
@@ -7,6 +10,14 @@ pub(crate) trait Context {
     fn get_value(&self, name: &str) -> Option<Value>;
     /// Устанавливает значение переменной в текущей области видимости.
     fn set_value(&mut self, name: &str, value: Value);
+    /// Определение структурного типа по имени (фича 0034) — для приведения
+    /// инициализатора `{…}` к `Value::Struct`. Умолчание — `None` (контекст без
+    /// модели, напр. мок в тестах): структур нет. Контексты над моделью
+    /// переопределяют, делегируя `ModelNode::search_struct` (учитывает родителей),
+    /// а вложенные области — своему `outer`.
+    fn find_struct(&self, _name: &str) -> Option<StructDefinitionNode> {
+        None
+    }
     /// Перечисляет значения, составляющие состояние модели (для снимка, фича 0032).
     ///
     /// Включает значения родительских контекстов: для параллельных подмоделей
@@ -16,6 +27,40 @@ pub(crate) trait Context {
     fn dump(&self) -> HashMap<String, Value> {
         HashMap::new()
     }
+}
+
+/// Приводит значение к типу цели, используя реестр структур из контекста
+/// (фича 0034). Мост между слоем адаптеров (у которых есть `Context`) и ядром
+/// [`crate::eval::coerce_to_type_with`] (которому нужен `StructRegistry`).
+pub(crate) fn coerce_via(
+    ctx: &dyn Context,
+    value: Value,
+    ty: &TypeNode,
+) -> Result<Value, EvalError> {
+    struct Reg<'a>(&'a dyn Context);
+    impl crate::eval::StructRegistry for Reg<'_> {
+        fn find_struct(&self, name: &str) -> Option<StructDefinitionNode> {
+            self.0.find_struct(name)
+        }
+    }
+    crate::eval::coerce_to_type_with(value, ty, &Reg(ctx))
+}
+
+/// Обновляет значение по пути полей (`p.x := …`), используя реестр структур из
+/// контекста (фича 0034). Мост к ядру [`crate::eval::place::update`].
+pub(crate) fn update_place_via(
+    ctx: &dyn Context,
+    value: Value,
+    path: &[String],
+    new: Value,
+) -> Result<Value, EvalError> {
+    struct Reg<'a>(&'a dyn Context);
+    impl crate::eval::StructRegistry for Reg<'_> {
+        fn find_struct(&self, name: &str) -> Option<StructDefinitionNode> {
+            self.0.find_struct(name)
+        }
+    }
+    crate::eval::place::update(value, path, new, &Reg(ctx))
 }
 
 #[cfg(test)]

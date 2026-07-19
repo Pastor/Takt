@@ -1,5 +1,14 @@
 # Задача 0034-03: Запись в поле — lvalue-путь вместо SIM-017
 
+> ✅ **СДЕЛАНО (2026-07-19).** Адаптер (`statement.rs::resolve_place`)
+> раскладывает левую часть в корень + путь полей (`p.x`→`[x]`, `o.i.v`→`[i,v]`);
+> ядро `eval/place.rs::update` заменяет значение **точечно** (лист приводится к
+> **типу поля** — `p.y := 300` при `u8` → `44`, T22). `Context` не расширен —
+> цикл `get_value(root) → update → set_value`. Копия структуры `q := p` — ветка
+> `Variable` + `coerce_via` (сверка имени типа, SIM-028). Сравнение `p = q` —
+> `TypeMismatch` (не реализуется). `SIM-017` сохранён для прочих lvalue, но с
+> позицией. Итог — [отчёт](../reports/0034-sim-struct-types.md).
+
 > Фича: [../features/0034-sim-struct-types.md](../features/0034-sim-struct-types.md) · ADR: [../adr/0034-sim-struct-types.md](../adr/0034-sim-struct-types.md) · анализ: [../analyze/0034-sim-struct-types.md](../analyze/0034-sim-struct-types.md)
 >
 > Покрывает требования **R4** (запись в поле), **R6** (копирование структуры).

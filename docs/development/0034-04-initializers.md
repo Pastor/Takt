@@ -1,5 +1,17 @@
 # Задача 0034-04: Инициализаторы структур и устранение второго вычислителя
 
+> ✅ **СДЕЛАНО (2026-07-19), с осознанным отклонением.** `eval_expr` (второй
+> вычислитель) получил `Initializer`-арм (→ `Array`); `coerce_initial` приводит
+> его к `Value::Struct` по типу переменной (`ModelStructs` над `search_struct`);
+> `var p: Point;` **без** инициализатора → нулевые поля (`default_struct`, как
+> default-init в C — понадобилось conformance-фикстуре). ⚠️ **Отклонение:**
+> `eval_expr` **не удалён** (слияние в единый вычислитель — риск порт-регресса,
+> «страховка `run_simulations`»); структуры больше не уходят в `_ => None`, но
+> `_ => None` для прочих неконстантных init остаётся (кандидат в бэклог).
+> `get_value` возврат `Option` не сужен до `Result` (невалидный init → `Array`,
+> ошибка при доступе). Регресс портов: `run_simulations.sh` 5/5. Итог —
+> [отчёт](../reports/0034-sim-struct-types.md).
+
 > Фича: [../features/0034-sim-struct-types.md](../features/0034-sim-struct-types.md) · ADR: [../adr/0034-sim-struct-types.md](../adr/0034-sim-struct-types.md) · анализ: [../analyze/0034-sim-struct-types.md](../analyze/0034-sim-struct-types.md)
 >
 > Покрывает требование **R5** (инициализаторы, единственный вычислитель).

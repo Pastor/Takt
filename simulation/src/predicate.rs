@@ -19,7 +19,6 @@ use crate::eval::ops::{self, BinOp, UnOp};
 use crate::eval::value::Value;
 use crate::unit::Predicate;
 use grammar::diagnostics::{Diagnostic, Location};
-use grammar::parser::ast::Member;
 use grammar::semantic::ConditionNode;
 
 /// Строит предикат перехода из условия.
@@ -195,35 +194,13 @@ pub(crate) fn eval_condition(
                 })?;
             Ok(element.clone())
         }
+        // `a.b`: поле структуры (`p.x`) или бит целого (`BTN.0`) — тем же ядром
+        // `eval::access`, что и адаптер выражений (симметрия обязательна: иначе
+        // два вычислителя разошлись бы — корневая причина 0025).
         ConditionNode::BitAccess(inner, member) => {
-            let loc = loc_of(cond);
             let value = eval_condition(inner, ctx)?;
-            let Member::Number(bit) = member else {
-                return Err(Diagnostic::error(
-                    loc,
-                    "доступ к биту возможен только по номеру".to_string(),
-                )
-                .with_code("SIM-011"));
-            };
-            let bits = match value {
-                Value::Number(n) => n,
-                Value::Boolean(b) => i64::from(b),
-                Value::Real(_) | Value::Array(_) | Value::Fixed { .. } => {
-                    return Err(Diagnostic::error(
-                        loc,
-                        "доступ к биту возможен только у целого значения".to_string(),
-                    )
-                    .with_code("SIM-011"));
-                }
-            };
-            if !(0..64).contains(bit) {
-                return Err(Diagnostic::error(
-                    loc,
-                    format!("номер бита {bit} вне диапазона 0..64"),
-                )
-                .with_code("SIM-011"));
-            }
-            Ok(Value::Boolean(bits & (1 << bit) != 0))
+            crate::eval::access::read_member(&value, member)
+                .map_err(|e| e.to_diagnostic(loc_of(cond)))
         }
 
         // ── Операции: семантика делегируется ядру ────────────────────────────

@@ -45,6 +45,15 @@ fn value_to_json(v: &Value) -> serde_json::Value {
         // трактует Number как готовый repr (задача 0061-01) → круг-трип точен.
         Value::Fixed { repr, .. } => serde_json::Value::Number((*repr).into()),
         Value::Array(arr) => serde_json::Value::Array(arr.iter().map(value_to_json).collect()),
+        // Структура (фича 0034): объект `{ поле: значение }`. Порядок полей при
+        // загрузке восстанавливает `coerce_to_type` по определению структуры,
+        // поэтому имена полей достаточно сохранить (значение — рекурсивно).
+        Value::Struct { fields, .. } => serde_json::Value::Object(
+            fields
+                .iter()
+                .map(|(k, v)| (k.clone(), value_to_json(v)))
+                .collect(),
+        ),
     }
 }
 

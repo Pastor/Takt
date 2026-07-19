@@ -453,6 +453,16 @@ fn format_value(v: &Value) -> String {
             "[{}]",
             arr.iter().map(format_value).collect::<Vec<_>>().join(",")
         ),
+        // Структура (фича 0034): `Point{x=7,y=300}` — читаемо и в объявленном
+        // порядке полей.
+        Value::Struct { name, fields } => format!(
+            "{name}{{{}}}",
+            fields
+                .iter()
+                .map(|(f, v)| format!("{f}={}", format_value(v)))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
     }
 }
 

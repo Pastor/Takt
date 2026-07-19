@@ -1,5 +1,14 @@
 # Задача 0034-01: Ядро — `Value::Struct`, реестр структур, `coerce_to_type`
 
+> ✅ **СДЕЛАНО (2026-07-19).** `Value::Struct { name, fields: Vec<(String, Value)> }`
+> (порядок объявления, не `BTreeMap`); трейт `StructRegistry` + `EmptyStructs`
+> в `eval/`; `coerce_to_type_with(value, ty, structs)` (2-арг `coerce_to_type`
+> делегирует пустому реестру — тесты не тронуты). Ветка `Struct` приводит `{…}`
+> по позиции, копию `Struct` — по имени типа. Коды: SIM-026 (арность), SIM-027
+> (поле), SIM-028 (тип), SIM-012/029 (доступ). Арифметика/сравнение над структурой
+> → `TypeMismatch` (C запрещает `==`). `Value` не `#[non_exhaustive]`. Итог —
+> [отчёт](../reports/0034-sim-struct-types.md).
+
 > Фича: [../features/0034-sim-struct-types.md](../features/0034-sim-struct-types.md) · ADR: [../adr/0034-sim-struct-types.md](../adr/0034-sim-struct-types.md) · анализ: [../analyze/0034-sim-struct-types.md](../analyze/0034-sim-struct-types.md)
 >
 > Покрывает требования **R1** (структурное значение), **R2** (приведение по типу).

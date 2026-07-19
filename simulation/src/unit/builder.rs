@@ -70,10 +70,15 @@ impl Context for ModelNodeContext {
         }
         let value = {
             let borrowed = self.model.borrow();
-            borrowed
-                .variables
-                .get(name)
-                .and_then(|var| eval_expr(var_expr(var)).map(|v| coerce_initial(v, var)))
+            borrowed.variables.get(name).and_then(|var| {
+                match eval_expr(var_expr(var)) {
+                    Some(v) => Some(coerce_initial(v, var, &borrowed)),
+                    // Структура без инициализатора → нулевые поля (как default-init
+                    // в C, фича 0034); прочие типы без init по-прежнему не
+                    // регистрируются (гэп 0034-04, вне объёма).
+                    None => default_struct(var, &borrowed),
+                }
+            })
         };
         if let Some(value) = value {
             self.cache
@@ -94,6 +99,12 @@ impl Context for ModelNodeContext {
         } else {
             self.cache.borrow_mut().insert(name.to_string(), value);
         }
+    }
+
+    /// Определение структуры по имени (фича 0034): `search_struct` учитывает
+    /// родительские модели по слабым ссылкам `upper`.
+    fn find_struct(&self, name: &str) -> Option<grammar::semantic::StructDefinitionNode> {
+        self.model.borrow().search_struct(name)
     }
 
     /// Перечисляет значения состояния модели для снимка (фича 0032).
@@ -156,10 +167,20 @@ fn var_type(var: &VariableNode) -> Option<&TypeNode> {
 /// смена поведения вне объёма этой фичи). Литерал `q` уже понижен грамматикой в
 /// представление, поэтому `coerce_to_type(Number, Fixed)` трактует его как сырой
 /// repr — двойного масштабирования нет.
-fn coerce_initial(value: Value, var: &VariableNode) -> Value {
+fn coerce_initial(value: Value, var: &VariableNode, model: &ModelNode) -> Value {
     match var_type(var) {
         Some(ty @ TypeNode::Fixed { .. }) => {
             crate::eval::coerce_to_type(value.clone(), ty).unwrap_or(value)
+        }
+        // Структура (фича 0034): инициализатор `{…}` (пришёл как `Array`)
+        // приводится к `Value::Struct` по определению из модели. При неудаче
+        // (арность/тип) значение остаётся `Array` — ошибка тогда всплывёт при
+        // ДОСТУПЕ к полю (`read_member` → `FieldOfNonStruct`), а не молча: та же
+        // консервативность, что и у `Fixed` выше (get_value ленив и Result не
+        // возвращает — задача сузить его контракт вынесена, см. 0034-04 п.4).
+        Some(ty @ TypeNode::Struct(_)) => {
+            crate::eval::coerce_to_type_with(value.clone(), ty, &ModelStructs(model))
+                .unwrap_or(value)
         }
         _ => value,
     }
@@ -180,13 +201,75 @@ fn eval_expr(expr: &ExpressionNode) -> Option<Value> {
             _ => None,
         },
         ExpressionNode::Parenthesis(inner) => eval_expr(inner),
-        ExpressionNode::Array(items) => {
+        // Инициализатор `{…}` структуры (фича 0034) и массивный литерал `[…]` —
+        // оба дают список значений; тип цели (структура/массив) различит
+        // `coerce_initial` по объявленному типу переменной.
+        ExpressionNode::Array(items) | ExpressionNode::Initializer(items) => {
             let values: Option<Vec<Value>> = items.iter().map(eval_expr).collect();
             Some(Value::Array(values?))
         }
         // Адресные порты (bit = 0x600:0) инициализируются нулём по умолчанию
         ExpressionNode::Address(_, _) => Some(Value::Number(0)),
         _ => None,
+    }
+}
+
+/// Значение поля по умолчанию (нулевое) по его типу — для структуры без
+/// инициализатора (фича 0034). Совпадает с default-init полей структуры в C.
+fn default_field(ty: &TypeNode, model: &ModelNode) -> Value {
+    match ty {
+        TypeNode::Bool => Value::Boolean(false),
+        TypeNode::Rational => Value::Real(0.0),
+        TypeNode::Fixed { m, n } => Value::Fixed {
+            repr: 0,
+            m: *m,
+            n: *n,
+        },
+        TypeNode::Array(size, elem) => {
+            Value::Array((0..*size).map(|_| default_field(elem, model)).collect())
+        }
+        TypeNode::Struct(name) => model
+            .search_struct(name)
+            .map(|def| Value::Struct {
+                name: name.clone(),
+                fields: def
+                    .fields
+                    .iter()
+                    .map(|(f, t)| (f.clone(), default_field(t, model)))
+                    .collect(),
+            })
+            .unwrap_or(Value::Number(0)),
+        // Integer/Enum/Bit/Address/прочее — целочисленный ноль.
+        _ => Value::Number(0),
+    }
+}
+
+/// Строит нулевое значение структуры для переменной **без** инициализатора
+/// (`var p: Point;`); `None`, если тип переменной — не структура (гэп «var без
+/// init» для скаляров не чинится, см. 0034-04).
+fn default_struct(var: &VariableNode, model: &ModelNode) -> Option<Value> {
+    let TypeNode::Struct(name) = var_type(var)? else {
+        return None;
+    };
+    let def = model.search_struct(name)?;
+    let fields = def
+        .fields
+        .iter()
+        .map(|(f, t)| (f.clone(), default_field(t, model)))
+        .collect();
+    Some(Value::Struct {
+        name: name.clone(),
+        fields,
+    })
+}
+
+/// Реестр структур над семантической моделью (фича 0034): поиск учитывает
+/// родительские модели через [`ModelNode::search_struct`].
+struct ModelStructs<'a>(&'a ModelNode);
+
+impl crate::eval::StructRegistry for ModelStructs<'_> {
+    fn find_struct(&self, name: &str) -> Option<grammar::semantic::StructDefinitionNode> {
+        self.0.search_struct(name)
     }
 }
 

@@ -1,0 +1,13 @@
+struct Inner { v: u8 }
+struct Outer { i: Inner, k: u8 }
+model Conf {
+    var o: Outer := {{10}, 20};
+    var rv: u8 := 0;
+    start Idle {
+        always {
+            o.i.v := 5;
+            rv := o.i.v;
+        }
+    }
+}
+start Entry = Conf;
