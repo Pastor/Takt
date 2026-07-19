@@ -74,7 +74,9 @@ const CONTRACTS: &[Contract] = &[
         budget: 50,
         must_terminate: true,
     },
-    // ПИД-регулятор на q(8, 8) (фича 0097): сходится с anti-windup и завершается.
+    // ПИД-регулятор на ПРОЗРАЧНОМ float (фича 0097 поверх 0096): симулятор считает
+    // нативным f64, сходится с anti-windup и завершается. q(8, 8) формируется под
+    // sv/встраиваемые флагами сборки (--float-as-q / --float-embedded).
     Contract {
         file: "pid_regulator.lam",
         chain: &["Control", "Settled", "Done"],
@@ -542,25 +544,31 @@ fn comprehensive_header_matches_body() {
     );
 }
 
-/// Представление q(m, n) переменной модели (repr) на текущем такте.
-fn fixed_repr(unit: &Unit, name: &str) -> i64 {
+/// Значение `float`-переменной модели (native-режим симулятора — `f64`) на
+/// текущем такте. `pid_regulator.lam` переведён на `float` (фича 0097 поверх
+/// механизма 0096): симулятор без флага понижения считает нативным `f64`, то
+/// есть переменные приходят [`Value::Real`], а не [`Value::Fixed`].
+fn real_val(unit: &Unit, name: &str) -> f64 {
     match unit.variable(name) {
-        Some(Value::Fixed { repr, .. }) => repr,
-        other => panic!("переменная '{name}': ожидался Fixed, получено {other:?}"),
+        Some(Value::Real(x)) => x,
+        other => panic!("переменная '{name}': ожидался Real, получено {other:?}"),
     }
 }
 
 /// **T2/A4 (фича 0097): anti-windup работает** — интеграл ПИД НЕ переполняется, а
-/// PV сходится к уставке. Без clamp интеграл `q(8, 8)` «перевернулся» бы
-/// (wraparound) и регулятор стал бы неустойчивым.
+/// PV сходится к уставке. Пример переведён на `float` (фича 0097 поверх 0096):
+/// симулятор в native-режиме считает `f64`, поэтому проверка идёт в **значениях**
+/// (не в q-repr). Anti-windup оставлен ради единой логики во всех представлениях
+/// (в q-версии — sv/встраиваемые — без clamp интеграл `q(8, 8)` «перевернулся» бы
+/// wraparound'ом; для native float clamp безвреден, но активен).
 #[test]
 fn pid_integral_stays_bounded_and_converges() {
     let path = examples_dir().join("pid_regulator.lam");
     let mut unit = build_unit(model_at(&path)).expect("построение юнита");
 
-    // q(8, 8): imax = 32.0 → repr 8192; setpoint = 8.0 → repr 2048; eps repr 32.
-    const IMAX_REPR: i64 = 32 * 256;
-    const SP_REPR: i64 = 8 * 256;
+    // float (native f64): imax = 32.0; setpoint = 8.0; eps = 0.125.
+    const IMAX: f64 = 32.0;
+    const SP: f64 = 8.0;
     let mut converged = false;
 
     for _ in 0..300 {
@@ -570,26 +578,26 @@ fn pid_integral_stays_bounded_and_converges() {
             "ПИД не должен падать: {result:?}"
         );
         // Anti-windup: интеграл в пределах [−Imax, Imax] на КАЖДОМ такте.
-        let i = fixed_repr(&unit, "i_acc");
+        let i = real_val(&unit, "i_acc");
         assert!(
-            (-IMAX_REPR..=IMAX_REPR).contains(&i),
-            "интеграл вышел за anti-windup [{}, {}]: repr={i} — clamp не работает",
-            -IMAX_REPR,
-            IMAX_REPR
+            (-IMAX..=IMAX).contains(&i),
+            "интеграл вышел за anti-windup [{}, {}]: {i} — clamp не работает",
+            -IMAX,
+            IMAX
         );
         // PV не должен «взорваться» (следствие переполнения интеграла).
-        let pv = fixed_repr(&unit, "meas");
+        let pv = real_val(&unit, "meas");
         assert!(
-            pv.abs() <= 2 * SP_REPR,
-            "PV разошёлся: repr={pv} (регулятор неустойчив?)"
+            pv.abs() <= 2.0 * SP,
+            "PV разошёлся: {pv} (регулятор неустойчив?)"
         );
         if result == TickResult::Terminated {
             converged = true;
-            // На завершении PV доведён до уставки (состояние Settled).
-            assert_eq!(
-                fixed_repr(&unit, "meas"),
-                SP_REPR,
-                "PV не доведён до уставки"
+            // На завершении PV доведён до уставки (состояние Settled: meas := target).
+            assert!(
+                (real_val(&unit, "meas") - SP).abs() < 1e-9,
+                "PV не доведён до уставки: {}",
+                real_val(&unit, "meas")
             );
             break;
         }

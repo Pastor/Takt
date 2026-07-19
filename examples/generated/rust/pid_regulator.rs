@@ -41,20 +41,20 @@ enum PidRegulatorPidState {
 
 /// Модель 'Pid'.
 pub struct PidRegulatorPid {
-    ctrl: i16,
-    deriv: i16,
-    eps: i16,
-    err: i16,
-    err_prev: i16,
-    i_acc: i16,
-    imax: i16,
-    kd: i16,
-    ki: i16,
-    kp: i16,
-    kplant: i16,
-    meas: i16,
-    neg_imax: i16,
-    target: i16,
+    ctrl: f64,
+    deriv: f64,
+    eps: f64,
+    err: f64,
+    err_prev: f64,
+    i_acc: f64,
+    imax: f64,
+    kd: f64,
+    ki: f64,
+    kp: f64,
+    kplant: f64,
+    meas: f64,
+    neg_imax: f64,
+    target: f64,
     state: PidRegulatorPidState,
 }
 
@@ -62,20 +62,20 @@ impl PidRegulatorPid {
     /// Создаёт модель в начальном состоянии.
     fn new() -> Self {
         Self {
-            ctrl: 0,
-            deriv: 0,
-            eps: 32,
-            err: 0,
-            err_prev: 0,
-            i_acc: 0,
-            imax: 8192,
-            kd: 64,
-            ki: 16,
-            kp: 128,
-            kplant: 128,
-            meas: 0,
-            neg_imax: -8192,
-            target: 2048,
+            ctrl: 0.0,
+            deriv: 0.0,
+            eps: 0.125,
+            err: 0.0,
+            err_prev: 0.0,
+            i_acc: 0.0,
+            imax: 32.0,
+            kd: 0.25,
+            ki: 0.0625,
+            kp: 0.5,
+            kplant: 0.5,
+            meas: 0.0,
+            neg_imax: -32.0,
+            target: 8.0,
             state: PidRegulatorPidState::Init,
         }
     }
@@ -85,20 +85,20 @@ impl PidRegulatorPid {
     /// Блоки `enter` здесь не исполняются: по контракту ADR 0033 вход
     /// в стартовое состояние — это поведение, и оно живёт в `tick`.
     fn init(&mut self) {
-        self.ctrl = 0;
-        self.deriv = 0;
-        self.eps = 32;
-        self.err = 0;
-        self.err_prev = 0;
-        self.i_acc = 0;
-        self.imax = 8192;
-        self.kd = 64;
-        self.ki = 16;
-        self.kp = 128;
-        self.kplant = 128;
-        self.meas = 0;
-        self.neg_imax = -8192;
-        self.target = 2048;
+        self.ctrl = 0.0;
+        self.deriv = 0.0;
+        self.eps = 0.125;
+        self.err = 0.0;
+        self.err_prev = 0.0;
+        self.i_acc = 0.0;
+        self.imax = 32.0;
+        self.kd = 0.25;
+        self.ki = 0.0625;
+        self.kp = 0.5;
+        self.kplant = 0.5;
+        self.meas = 0.0;
+        self.neg_imax = -32.0;
+        self.target = 8.0;
         self.state = PidRegulatorPidState::Init;
     }
 
@@ -109,17 +109,17 @@ impl PidRegulatorPid {
         }
         match self.state {
             PidRegulatorPidState::Control => {
-                self.err = (self.target as i64 - self.meas as i64) as i16;
-                self.i_acc = (self.i_acc as i64 + self.err as i64) as i16;
+                self.err = self.target - self.meas;
+                self.i_acc += self.err;
                 if self.i_acc > self.imax {
                     self.i_acc = self.imax;
                 }
                 if self.i_acc < self.neg_imax {
                     self.i_acc = self.neg_imax;
                 }
-                self.deriv = (self.err as i64 - self.err_prev as i64) as i16;
-                self.ctrl = ((((((self.kp as i128 * self.err as i128) >> 8) as i16) as i64 + (((self.ki as i128 * self.i_acc as i128) >> 8) as i16) as i64) as i16) as i64 + (((self.kd as i128 * self.deriv as i128) >> 8) as i16) as i64) as i16;
-                self.meas = (self.meas as i64 + (((self.kplant as i128 * self.ctrl as i128) >> 8) as i16) as i64) as i16;
+                self.deriv = self.err - self.err_prev;
+                self.ctrl = ((self.kp * self.err) + (self.ki * self.i_acc)) + (self.kd * self.deriv);
+                self.meas += self.kplant * self.ctrl;
                 self.err_prev = self.err;
                 if self.err < self.eps {
                     self.state = PidRegulatorPidState::Settled;
