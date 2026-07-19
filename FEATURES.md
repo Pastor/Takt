@@ -95,7 +95,7 @@
 | [0043](docs/features/0043-address-map-export.md) | Экспорт карты адресов во внешний формат | — | 3 | РАЗРАБОТКА |
 | [0034](docs/features/0034-sim-struct-types.md) | Структурные типы в симуляторе | — | 3 | РАЗРАБОТКА |
 | [0036](docs/features/0036-sim-visibility.md) | Согласование видимости публичного API крейта `simulation` | — | 3 | РАЗРАБОТКА |
-| [0061](docs/features/0061-fixed-point-type.md) | Fixed-point Q(m.n) как тип языка (закрывает отложенный R-B ADR 0045) | нет | 3 | РАЗРАБОТКА |
+| [0061](docs/features/0061-fixed-point-type.md) | Fixed-point Q(m.n) как тип языка (закрывает отложенный R-B ADR 0045) | нет | 3 | ГОТОВО |
 | [0062](docs/features/0062-sv-mmio-target.md) | Цель `sv-mmio`: адреса портов → регистровый файл (вскрыла [фикс 0020-01](docs/fixes/0020-01-port-bit-out-of-range.md), Tier 1) | [0020-01](docs/fixes/0020-01-port-bit-out-of-range.md) (фикс) | 3 | РАЗРАБОТКА |
 | [0063](docs/features/0063-sv-clock-enable.md) | Порт `en` (clock enable) для цели `sv` — пересмотр Option C ADR 0045 | нет (после 0057) | 3 | РАЗРАБОТКА |
 | [0064](docs/features/0064-sv-divider-warning.md) | Предупреждение о делителе (`SV-009`) — только на переменный делитель | нет | 3 | РАЗРАБОТКА |

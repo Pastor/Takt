@@ -60,12 +60,21 @@ struct Exception {
 
 /// Единственный пример, задающий поведение **без внешних входов**, — то есть
 /// единственный, чей сценарий вообще можно проверить безусловным прогоном.
-const CONTRACTS: &[Contract] = &[Contract {
-    file: "comprehensive.lam",
-    chain: &["Idle", "Heating", "Cooling", "Done"],
-    budget: 400,
-    must_terminate: true,
-}];
+const CONTRACTS: &[Contract] = &[
+    Contract {
+        file: "comprehensive.lam",
+        chain: &["Idle", "Heating", "Cooling", "Done"],
+        budget: 400,
+        must_terminate: true,
+    },
+    // Регулятор на q(8, 8) (фича 0061): сходится сам и завершается.
+    Contract {
+        file: "regulator.lam",
+        chain: &["Adjust", "Settled", "Done"],
+        budget: 50,
+        must_terminate: true,
+    },
+];
 
 const EXCEPTIONS: &[Exception] = &[
     Exception {
