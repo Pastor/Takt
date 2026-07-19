@@ -3,6 +3,70 @@
 //! Часть модуля `lsp` (фича 0027: деление по логике).
 
 use super::*;
+use crate::semantic::ModelNode;
+use std::cell::RefCell;
+use std::collections::HashSet;
+use std::rc::Rc;
+
+/// Имена, объявленные во **всём** дереве моделей файла, сгруппированные по
+/// категории подсветки (фикс [0038-01]: классификация обязана видеть члены
+/// под-моделей, а не только корня).
+///
+/// Функции `ModelNode::search_*` ищут в текущей модели и идут **вверх** по
+/// `upper` — это верно для разрешения области видимости из вложенной точки, но
+/// `semantic_tokens` строит **корневую** модель файла, и «вверх» от неё ничего
+/// не находит. Поэтому здесь собираем имена спуском **вниз** по `models`.
+#[derive(Default)]
+struct DeclNames {
+    /// Имена функций (`fn`).
+    functions: HashSet<String>,
+    /// Имена типов: псевдонимы (`type`) и перечисления (`enum`).
+    types: HashSet<String>,
+    /// Имена вариантов перечислений.
+    variants: HashSet<String>,
+    /// Имена состояний и моделей (категория `CLASS`).
+    classes: HashSet<String>,
+}
+
+/// Собирает имена деклараций всего дерева моделей (корень + все под-модели).
+/// Разделяемые под-модели (композиция) обходятся однократно (набор посещённых
+/// по указателю) — защита от повторной работы и от циклов.
+fn collect_decl_names(root: &Rc<RefCell<ModelNode>>) -> DeclNames {
+    let mut names = DeclNames::default();
+    let mut visited: HashSet<*const RefCell<ModelNode>> = HashSet::new();
+    walk_decls(root, &mut names, &mut visited);
+    names
+}
+
+fn walk_decls(
+    model: &Rc<RefCell<ModelNode>>,
+    names: &mut DeclNames,
+    visited: &mut HashSet<*const RefCell<ModelNode>>,
+) {
+    if !visited.insert(Rc::as_ptr(model)) {
+        return;
+    }
+    let m = model.borrow();
+    for k in m.functions.keys() {
+        names.functions.insert(k.clone());
+    }
+    for k in m.types.keys() {
+        names.types.insert(k.clone());
+    }
+    for (k, e) in &m.enums {
+        names.types.insert(k.clone());
+        for (variant, _) in &e.variants {
+            names.variants.insert(variant.clone());
+        }
+    }
+    for k in m.states.keys() {
+        names.classes.insert(k.clone());
+    }
+    for (k, child) in &m.models {
+        names.classes.insert(k.clone());
+        walk_decls(child, names, visited);
+    }
+}
 
 /// Генерирует семантические токены для подсветки синтаксиса документа.
 ///
@@ -14,11 +78,12 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
     use crate::diagnostics::Location;
     use crate::parser::lexer::{Lexer, Token};
 
-    // Строим семантическую модель для обогащения идентификаторов
+    // Строим семантическую модель для обогащения идентификаторов и собираем
+    // имена деклараций всего дерева (корень + под-модели, фикс 0038-01).
     let model_opt = crate::parse(source, 0)
         .ok()
         .and_then(|(ast, _)| semantic::tree::construct_model(&ast, None, &[]).ok());
-    let borrowed_model = model_opt.as_ref().map(|m| m.borrow());
+    let decl_names = model_opt.as_ref().map(collect_decl_names);
 
     // Собираем токены и комментарии через лексер
     let mut comments: Vec<Comment> = Vec::new();
@@ -31,16 +96,20 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
         let tt = match token {
             Token::Identifier(name) => {
                 // Встроенные типы имеют приоритет над пользовательскими именами
+                // Встроенные типы имеют приоритет над пользовательскими именами.
+                // Далее — членство в декларациях всего дерева (фикс 0038-01), в том
+                // же порядке приоритета, что и прежний поиск по корню:
+                // функция → тип → вариант enum → состояние/модель → иначе переменная.
                 if BUT_BUILTIN_TYPES.iter().any(|(t, _)| *t == name) {
                     TT_TYPE
-                } else if let Some(ref b) = borrowed_model {
-                    if b.search_func(name).is_some() {
+                } else if let Some(ref n) = decl_names {
+                    if n.functions.contains(name) {
                         TT_FUNCTION
-                    } else if b.types.contains_key(name) || b.enums.contains_key(name) {
+                    } else if n.types.contains(name) {
                         TT_TYPE
-                    } else if b.search_enum_variant(name).is_some() {
+                    } else if n.variants.contains(name) {
                         TT_ENUM_MEMBER
-                    } else if b.search_state(name).is_some() || b.models.contains_key(name) {
+                    } else if n.classes.contains(name) {
                         TT_CLASS
                     } else {
                         TT_VARIABLE
