@@ -65,9 +65,29 @@ LSP4IJ в `build.gradle.kts` не подключён, внешние проце�
 
 ## Что сделано
 
-> **Планируется (разработка не начата).** Ниже — план задачи по
-> [ADR 0038](../adr/0038-intellij-semantic-tokens.md) (Option A) и требованиям
-> R1–R3, R8 анализа. Раздел заполняется фактом по ходу реализации.
+> **Этап 1 — миграция платформы (2026-07-19).** Клиентский Kotlin-слой
+> (`LamLspServerSupportProvider`, резолвинг пути, настройки, деградация) — далее.
+
+⚠️ **Пересмотр драйвера 1 ADR (см. врезку в [ADR 0038](../adr/0038-intellij-semantic-tokens.md)).**
+Реализация вскрыла: **LSP4IJ несовместим с build 241** — все актуальные версии
+(0.19+, 0.20.1) требуют `sinceBuild = 242` (2024.2 → JDK 21). Плагин был на
+2024.1.7/JDK 17. Решение заказчика — **поднять платформу**, не пиннить старый
+LSP4IJ. Сделано:
+
+- `settings.gradle.kts` — foojay-резолвер (`org.gradle.toolchains.foojay-resolver-convention`):
+  toolchain **авто-провизионирует JDK 21** (проверено — скачивается и компилирует).
+- `gradle.properties` — `platformVersion 2024.1.7 → 2024.2.5`, `pluginSinceBuild
+  241 → 242`, `pluginVersion 0.4.0 → 0.5.0`. `platformType = IC` (Community цел).
+- `build.gradle.kts` — `jvmToolchain(17 → 21)`; зависимость
+  `plugin("com.redhat.devtools.lsp4ij:0.20.1")` (опциональность — в plugin.xml);
+  `testImplementation("org.opentest4j:opentest4j:1.3.0")` — тест-фреймворк 2024.2
+  требует opentest4j на classpath (при 2024.1 подтягивался транзитивно).
+- **Фикс дрейфа (побочно):** `LamTokenTypes.KEYWORDS` не содержал `invariant`
+  (ключевое слово фичи 0044) — `LamKeywordSyncTest` это ловит, но был **закэширован
+  зелёным** на старой платформе; свежий прогон под 2024.2 вскрыл. Добавлено.
+- **53 существующих теста плагина зелёные** под 2024.2.5/JDK 21 (`./gradlew test`).
+
+### План клиентского слоя (этап 2)
 
 Тонкий слой интеграции LSP4IJ в `extensions/intellij-lam`, включающий сервер
 `lam-lsp` **опционально** и деградирующий молча при его отсутствии.
