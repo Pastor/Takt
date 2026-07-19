@@ -20,7 +20,6 @@
 1393 grammar/tests/codegen_tests.rs
 1349 grammar/src/generator/rust/rust_model.rs
 1360 grammar/src/semantic/expression.rs
-1331 simulation/src/unit/mod.rs
 1297 grammar/src/generator/c/c_header.rs
 1268 grammar/tests/lsp_tests.rs
 1204 grammar/src/parser/ast.rs

@@ -2,7 +2,7 @@ use crate::context::Context;
 use crate::eval::value::Value;
 use crate::predicate::create_predicate;
 use crate::unit::statement::compile_block_body;
-use crate::unit::{Execution, Predicate, Unit};
+use crate::unit::{Execution, Predicate, Unit, UnitKind};
 use grammar::diagnostics::{Diagnostic, Location};
 use grammar::semantic::extend::Extend;
 use grammar::semantic::type_node::TypeNode;
@@ -401,7 +401,7 @@ fn build_node(
         state_executions.insert(name.clone(), execs);
     }
 
-    Ok(Unit::Node {
+    Ok(Unit::from_kind(UnitKind::Node {
         entered_initial: false,
         context: Some(ctx_rc),
         state_transitions,
@@ -410,7 +410,7 @@ fn build_node(
         executions: HashMap::new(),
         guards,
         last_transition: None,
-    })
+    }))
 }
 
 /// Строит проверяемые обязательства из формул (фича 0044). `Formula::Guard` →
@@ -452,10 +452,10 @@ fn build_extend(
     shared_parent: Option<Rc<RefCell<dyn Context>>>,
 ) -> Result<Unit, Diagnostic> {
     match extend {
-        Extend::None | Extend::Unresolved(_) => Ok(Unit::None),
+        Extend::None | Extend::Unresolved(_) => Ok(Unit::default()),
         Extend::Model(rc, _) => build_impl(Rc::clone(rc), shared_parent),
         Extend::Parentless(inner) => build_extend(inner, shared_parent),
-        Extend::Concatenation(items) => items.iter().try_fold(Unit::None, |acc, item| {
+        Extend::Concatenation(items) => items.iter().try_fold(Unit::default(), |acc, item| {
             Ok(acc.add(&build_extend(item, shared_parent.clone())?))
         }),
         Extend::Parallel(items) => {
@@ -472,7 +472,7 @@ fn build_extend(
                             as Rc<RefCell<dyn Context>>
                     })
             };
-            items.iter().try_fold(Unit::None, |acc, item| {
+            items.iter().try_fold(Unit::default(), |acc, item| {
                 Ok(acc.union(&build_extend(item, shared.clone())?))
             })
         }
@@ -609,7 +609,7 @@ mod tests {
     #[test]
     fn test_build_empty_model_returns_none() {
         let model = Rc::new(RefCell::new(ModelNode::default()));
-        assert!(matches!(build(model).unwrap(), Unit::None));
+        assert!(matches!(build(model).unwrap().kind(), UnitKind::None));
     }
 
     #[test]
@@ -617,7 +617,7 @@ mod tests {
         let (ast, _) = parse("start S;", 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let result = build(model_rc).unwrap();
-        let Unit::Node { state: Some(s), .. } = &result else {
+        let UnitKind::Node { state: Some(s), .. } = result.kind() else {
             panic!("ожидался Unit::Node");
         };
         assert_eq!(s, "S");
@@ -646,16 +646,16 @@ mod tests {
         let (ast, _) = parse("start A { ref B; } state B;", 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();
         let result = build(model_rc).unwrap();
-        let Unit::Node {
+        let UnitKind::Node {
             state_transitions, ..
-        } = &result
+        } = result.kind()
         else {
             panic!("ожидался Unit::Node");
         };
         let trans = state_transitions.get("A").unwrap();
         assert_eq!(trans.len(), 1);
         assert_eq!(trans[0].0, "B");
-        assert!(trans[0].1.evaluate(&mut Unit::None).unwrap());
+        assert!(trans[0].1.evaluate(&mut Unit::default()).unwrap());
     }
 
     #[test]
@@ -690,7 +690,7 @@ mod tests {
             panic!("Entry должен быть Implement");
         };
         let result = build_extend(implements, None).unwrap();
-        let Unit::Sequential { units, .. } = &result else {
+        let UnitKind::Sequential { units, .. } = result.kind() else {
             panic!("ожидался Unit::Sequential");
         };
         assert_eq!(units.len(), 2);
@@ -707,7 +707,7 @@ mod tests {
             panic!("Entry должен быть Implement");
         };
         let result = build_extend(implements, None).unwrap();
-        let Unit::Parallel { units, .. } = &result else {
+        let UnitKind::Parallel { units, .. } = result.kind() else {
             panic!("ожидался Unit::Parallel");
         };
         assert_eq!(units.len(), 2);

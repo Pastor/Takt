@@ -739,7 +739,7 @@ pub(super) mod graph {
 
     use super::Positions;
     use crate::graphics_config::GraphicsConfig;
-    use crate::unit::Unit;
+    use crate::unit::{Unit, UnitKind};
 
     // ── Преобразование Unit → Graph ───────────────────────────────────────────
 
@@ -768,9 +768,9 @@ pub(super) mod graph {
     /// Метка ребра — `String` из кортежа `Predicate = Rc<(String, dyn Fn)>`,
     /// то есть имя предиката (`pred.0`).
     fn populate_graph(unit: &Unit, graph: &mut Graph<String, String>) {
-        match unit {
-            Unit::None => {}
-            Unit::Node {
+        match unit.kind() {
+            UnitKind::None => {}
+            UnitKind::Node {
                 state_transitions, ..
             } => {
                 let mut node_map: HashMap<String, NodeIndex> = HashMap::new();
@@ -786,7 +786,7 @@ pub(super) mod graph {
                     }
                 }
             }
-            Unit::Parallel { units, .. } | Unit::Sequential { units, .. } => {
+            UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => {
                 for u in units {
                     populate_graph(&u.borrow(), graph);
                 }
@@ -1149,7 +1149,7 @@ pub(super) mod graph {
 
         #[test]
         fn test_unit_to_graph_none_is_empty() {
-            let g = unit_to_graph(&Unit::None);
+            let g = unit_to_graph(&Unit::default());
             assert_eq!(g.node_count(), 0);
             assert_eq!(g.edge_count(), 0);
         }
@@ -1199,10 +1199,10 @@ pub(super) mod graph {
                 t.insert("B".to_string(), vec![]);
                 make_node(t)
             };
-            let unit = Unit::Parallel {
+            let unit = Unit::from_kind(UnitKind::Parallel {
                 units: vec![Rc::new(RefCell::new(child1)), Rc::new(RefCell::new(child2))],
                 executions: HashMap::new(),
-            };
+            });
             let g = unit_to_graph(&unit);
             assert_eq!(g.node_count(), 2);
         }
@@ -1222,11 +1222,11 @@ pub(super) mod graph {
                 t.insert("Z".to_string(), vec![]);
                 make_node(t)
             };
-            let unit = Unit::Sequential {
+            let unit = Unit::from_kind(UnitKind::Sequential {
                 units: vec![Rc::new(RefCell::new(child1)), Rc::new(RefCell::new(child2))],
                 index: 0,
                 executions: HashMap::new(),
-            };
+            });
             let g = unit_to_graph(&unit);
             assert_eq!(g.node_count(), 3);
         }
@@ -1292,7 +1292,7 @@ pub(super) mod graph {
         fn make_node(
             state_transitions: HashMap<String, Vec<(String, crate::unit::Predicate)>>,
         ) -> Unit {
-            Unit::Node {
+            Unit::from_kind(UnitKind::Node {
                 entered_initial: false,
                 context: None,
                 executions: HashMap::new(),
@@ -1301,7 +1301,7 @@ pub(super) mod graph {
                 state_executions: HashMap::new(),
                 guards: Default::default(),
                 last_transition: None,
-            }
+            })
         }
     }
 }
@@ -1311,7 +1311,7 @@ pub(super) mod graph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::unit::Unit;
+    use crate::unit::{Unit, UnitKind};
 
     // ── rect_overlaps_circle ──────────────────────────────────────────────────
 
@@ -1372,7 +1372,7 @@ mod tests {
     #[test]
     fn test_create_viewport_empty_unit_returns_ok() {
         let result = create_viewport(
-            &Unit::None,
+            &Unit::default(),
             crate::graphics_config::GraphicsConfig::default(),
             &[],
             None,
@@ -1388,7 +1388,7 @@ mod tests {
         let mut transitions = HashMap::new();
         transitions.insert("A".to_string(), vec![("B".to_string(), pred)]);
         transitions.insert("B".to_string(), vec![]);
-        let unit = Unit::Node {
+        let unit = Unit::from_kind(UnitKind::Node {
             entered_initial: false,
             context: None,
             executions: HashMap::new(),
@@ -1397,7 +1397,7 @@ mod tests {
             state_executions: HashMap::new(),
             guards: Default::default(),
             last_transition: None,
-        };
+        });
         let result = create_viewport(
             &unit,
             crate::graphics_config::GraphicsConfig::default(),
@@ -1414,7 +1414,7 @@ mod test_highlight {
     use std::collections::HashMap;
 
     fn make_node(t: HashMap<String, Vec<(String, crate::unit::Predicate)>>) -> Unit {
-        Unit::Node {
+        Unit::from_kind(crate::unit::UnitKind::Node {
             entered_initial: false,
             context: None,
             executions: HashMap::new(),
@@ -1423,7 +1423,7 @@ mod test_highlight {
             state_executions: HashMap::new(),
             guards: Default::default(),
             last_transition: None,
-        }
+        })
     }
 
     #[test]

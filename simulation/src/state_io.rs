@@ -10,7 +10,7 @@ use std::path::Path;
 use crate::context::Context;
 use crate::eval::value::Value;
 use crate::json_input::json_to_value;
-use crate::unit::Unit;
+use crate::unit::{Unit, UnitKind};
 
 // ── Структуры снимка ──────────────────────────────────────────────────────────
 
@@ -61,22 +61,22 @@ fn value_to_json(v: &Value) -> serde_json::Value {
 
 /// Создаёт снимок текущего состояния Unit-дерева.
 pub fn snapshot(unit: &Unit) -> UnitSnapshot {
-    match unit {
-        Unit::None => UnitSnapshot::None,
+    match unit.kind() {
+        UnitKind::None => UnitSnapshot::None,
         // 0032: значения берутся из контекста модели (единый источник истины)
         // через `Context::dump`, а не из упразднённой карты узла (Д1).
-        node @ Unit::Node { state, .. } => UnitSnapshot::Node {
+        UnitKind::Node { state, .. } => UnitSnapshot::Node {
             current_state: state.clone(),
-            variables: node
+            variables: unit
                 .dump()
                 .iter()
                 .map(|(k, v)| (k.clone(), value_to_json(v)))
                 .collect(),
         },
-        Unit::Parallel { units, .. } => UnitSnapshot::Parallel {
+        UnitKind::Parallel { units, .. } => UnitSnapshot::Parallel {
             children: units.iter().map(|u| snapshot(&u.borrow())).collect(),
         },
-        Unit::Sequential { units, index, .. } => UnitSnapshot::Sequential {
+        UnitKind::Sequential { units, index, .. } => UnitSnapshot::Sequential {
             index: *index,
             children: units.iter().map(|u| snapshot(&u.borrow())).collect(),
         },
@@ -87,9 +87,9 @@ pub fn snapshot(unit: &Unit) -> UnitSnapshot {
 ///
 /// Несовпадения структуры (например, снимок Parallel для Node) игнорируются.
 pub fn restore(unit: &mut Unit, snap: &UnitSnapshot) {
-    match (unit, snap) {
+    match (unit.kind_mut(), snap) {
         (
-            Unit::Node {
+            UnitKind::Node {
                 state,
                 context,
                 entered_initial,
@@ -115,13 +115,13 @@ pub fn restore(unit: &mut Unit, snap: &UnitSnapshot) {
                 }
             }
         }
-        (Unit::Parallel { units, .. }, UnitSnapshot::Parallel { children }) => {
+        (UnitKind::Parallel { units, .. }, UnitSnapshot::Parallel { children }) => {
             for (u, snap_child) in units.iter().zip(children.iter()) {
                 restore(&mut u.borrow_mut(), snap_child);
             }
         }
         (
-            Unit::Sequential { units, index, .. },
+            UnitKind::Sequential { units, index, .. },
             UnitSnapshot::Sequential {
                 index: snap_idx,
                 children,
@@ -177,7 +177,7 @@ mod tests {
     fn make_node(state: &str) -> Unit {
         let mut st = HashMap::new();
         st.insert(state.to_string(), vec![]);
-        Unit::Node {
+        Unit::from_kind(UnitKind::Node {
             entered_initial: false,
             context: None,
             executions: HashMap::new(),
@@ -186,7 +186,7 @@ mod tests {
             state_executions: HashMap::new(),
             guards: Default::default(),
             last_transition: None,
-        }
+        })
     }
 
     fn make_transitioning_node(from: &str, to: &str) -> Unit {
@@ -194,7 +194,7 @@ mod tests {
         let mut st = HashMap::new();
         st.insert(from.to_string(), vec![(to.to_string(), pred)]);
         st.insert(to.to_string(), vec![]);
-        Unit::Node {
+        Unit::from_kind(UnitKind::Node {
             entered_initial: false,
             context: None,
             executions: HashMap::new(),
@@ -203,12 +203,12 @@ mod tests {
             state_executions: HashMap::new(),
             guards: Default::default(),
             last_transition: None,
-        }
+        })
     }
 
     #[test]
     fn test_snapshot_none_is_none() {
-        let snap = snapshot(&Unit::None);
+        let snap = snapshot(&Unit::default());
         assert!(matches!(snap, UnitSnapshot::None));
     }
 
