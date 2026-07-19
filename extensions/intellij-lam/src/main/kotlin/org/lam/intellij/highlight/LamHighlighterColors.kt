@@ -31,4 +31,13 @@ object LamHighlighterColors {
     @JvmField val BRACES = key("LAM_BRACES", DefaultLanguageHighlighterColors.BRACES)
     @JvmField val BRACKETS = key("LAM_BRACKETS", DefaultLanguageHighlighterColors.BRACKETS)
     @JvmField val BAD_CHARACTER = key("LAM_BAD_CHARACTER", HighlighterColors.BAD_CHARACTER)
+
+    // ── Семантические ключи (фича 0038): различают имена по СМЫСЛУ, чего
+    // лексический слой дать не может (лексер видит любое имя как IDENTIFIER).
+    // Накладываются поверх лексики LSP4IJ-слоем (LamSemanticTokensColorsProvider),
+    // наследуют цвет от стандартных семантических категорий платформы.
+    @JvmField val FUNCTION = key("LAM_FUNCTION", DefaultLanguageHighlighterColors.FUNCTION_DECLARATION)
+    @JvmField val TYPE = key("LAM_TYPE", DefaultLanguageHighlighterColors.CLASS_REFERENCE)
+    @JvmField val ENUM_MEMBER = key("LAM_ENUM_MEMBER", DefaultLanguageHighlighterColors.STATIC_FIELD)
+    @JvmField val CLASS = key("LAM_CLASS", DefaultLanguageHighlighterColors.CLASS_NAME)
 }

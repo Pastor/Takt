@@ -1,0 +1,95 @@
+package org.lam.intellij
+
+import junit.framework.TestCase
+import org.lam.intellij.lsp.LamSemanticTokensColorsProvider
+import java.io.File
+
+/**
+ * Полнота маппинга типов семантических токенов в цвета (фича 0038, задача 0038-02,
+ * критерии A4/A5).
+ *
+ * A4 — каждый из 10 типов легенды получает `TextAttributesKey` (нет `null`).
+ * A5 — набор маппинга **синхронизирован** с источником истины
+ * `grammar/src/lsp/keywords.rs` (`SEMANTIC_TOKEN_TYPES`): тест читает Rust-исходник,
+ * извлекает имена типов и краснеет, если в легенду добавили тип без маппинга (тот
+ * молча потерял бы цвет). Приём — как у `LamKeywordSyncTest` (0022).
+ */
+class LamSemanticTokensColorsTest : TestCase() {
+
+    /** 10 типов легенды (имена LSP), захваченные из кода. */
+    private val legend = listOf(
+        "keyword", "variable", "function", "type", "enumMember",
+        "string", "number", "comment", "operator", "class",
+    )
+
+    /** A4: каждый тип легенды сопоставлен ключу цвета (нет несопоставленных). */
+    fun testEveryLegendTypeHasKey() {
+        for (t in legend) {
+            assertNotNull("тип токена '$t' обязан иметь ключ цвета", LamSemanticTokensColorsProvider.keyFor(t))
+        }
+    }
+
+    /** Неизвестный тип → `null` (цвет не навязывается). */
+    fun testUnknownTypeIsNull() {
+        assertNull(LamSemanticTokensColorsProvider.keyFor("namespace"))
+        assertNull(LamSemanticTokensColorsProvider.keyFor(""))
+    }
+
+    /**
+     * A5: набор типов маппинга совпадает с `SEMANTIC_TOKEN_TYPES` из Rust. Если
+     * Rust-исходник недоступен (сборка вне монорепозитория) — сверка пропускается,
+     * но локальный набор всё равно проверен (A4 выше).
+     */
+    fun testLegendMatchesRustSource() {
+        val keywordsFile = findRustFile("grammar/src/lsp/keywords.rs")
+        if (keywordsFile == null) {
+            println("[LamSemanticTokensColorsTest] grammar/src/lsp/keywords.rs не найден — сверка пропущена")
+            return
+        }
+        val expected = extractLegend(keywordsFile.readText())
+        assertTrue("не удалось извлечь SEMANTIC_TOKEN_TYPES из ${keywordsFile.path}", expected.isNotEmpty())
+
+        // Множество совпадает с локальным.
+        assertEquals("рассинхрон легенды с keywords.rs", expected.toSortedSet(), legend.toSortedSet())
+        // И каждый тип из Rust сопоставлен ключу (тип без маппинга → null → красный).
+        for (t in expected) {
+            assertNotNull("тип '$t' из легенды Rust без маппинга цвета", LamSemanticTokensColorsProvider.keyFor(t))
+        }
+    }
+
+    /** Ищет файл относительно корня репозитория, поднимаясь от рабочего каталога. */
+    private fun findRustFile(rel: String): File? {
+        var dir: File? = File("").absoluteFile
+        repeat(8) {
+            val candidate = dir?.resolve(rel)
+            if (candidate != null && candidate.isFile) return candidate
+            dir = dir?.parentFile
+        }
+        return null
+    }
+
+    /**
+     * Извлекает имена типов легенды из блока
+     * `SEMANTIC_TOKEN_TYPES: &[SemanticTokenType] = &[ … ];` (записи
+     * `SemanticTokenType::ENUM_MEMBER`) и переводит их в имена LSP
+     * (`ENUM_MEMBER` → `enumMember`).
+     */
+    private fun extractLegend(source: String): Set<String> {
+        val start = source.indexOf("SEMANTIC_TOKEN_TYPES")
+        if (start < 0) return emptySet()
+        val open = source.indexOf("= &[", start)
+        val close = source.indexOf("];", open)
+        if (open < 0 || close < 0) return emptySet()
+        val block = source.substring(open, close)
+        return Regex("SemanticTokenType::([A-Z_]+)")
+            .findAll(block)
+            .map { screamingSnakeToLowerCamel(it.groupValues[1]) }
+            .toSet()
+    }
+
+    /** `ENUM_MEMBER` → `enumMember`, `KEYWORD` → `keyword`. */
+    private fun screamingSnakeToLowerCamel(name: String): String {
+        val parts = name.lowercase().split('_')
+        return parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercase) }
+    }
+}
