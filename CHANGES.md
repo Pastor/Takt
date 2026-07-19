@@ -7,7 +7,22 @@
 
 ## [Не выпущено]
 
-### Добавлено (фича [0038](docs/features/0038-intellij-semantic-tokens.md) — семантическая подсветка Lam в IntelliJ) — В РАБОТЕ (0038-03 сервер + 0038-01 миграция платформы)
+### Добавлено (фича [0038](docs/features/0038-intellij-semantic-tokens.md) — семантическая подсветка Lam в IntelliJ) — В РАБОТЕ (0038-03 сервер + 0038-01/02 клиент LSP4IJ)
+
+- **Клиентский слой LSP4IJ** (задачи 0038-01 этап 2 + 0038-02): плагин запускает
+  `lam-lsp` через LSP4IJ и красит идентификаторы по смыслу. Пакет
+  `org.lam.intellij.lsp`: `LamLspBinary` (резолвинг пути — настройка → `PATH` →
+  `null`, тихая деградация), `LamLspSettings` (`PersistentStateComponent`),
+  `LamLspServerFactory` + `OSProcessStreamConnectionProvider` (stdio),
+  `LamSemanticTokensColorsProvider` (маппинг 10 типов легенды →
+  `LamHighlighterColors`; добавлены семантические ключи `FUNCTION`/`TYPE`/
+  `ENUM_MEMBER`/`CLASS`). Регистрация — `<depends optional>` + `lam-lsp4ij.xml`
+  (`server`/`languageMapping`/`semanticTokensColorsProvider`). Без LSP4IJ плагин
+  грузится как 0.4.0 (R1). Тесты: `LamLspBinaryTest` (6), `LamSemanticTokensColorsTest`
+  (3, включая **сверку легенды** с `SEMANTIC_TOKEN_TYPES` из Rust). `./gradlew
+  clean buildPlugin test` — BUILD SUCCESSFUL. ⚠️ Отложено (GUI, слабо проверяемо):
+  `Configurable`-панель настроек, уведомление о ненайденном бинарнике; A11 (цвета
+  в редакторе) — только визуально в `runIde`.
 
 - **Миграция платформы плагина под LSP4IJ** (задача 0038-01, этап 1; **пересмотр
   драйвера 1 ADR 0038**): современный LSP4IJ несовместим с build 241 (требует 242 →

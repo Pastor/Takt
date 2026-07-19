@@ -41,11 +41,23 @@
 **Проблема:** в плагине нет ничего, что превращает `token_type` в цвет. Токены,
 которые сервер уже готов отдать, некому принять.
 
-## Что сделано
+## Что сделано (2026-07-19)
 
-> **Планируется (разработка не начата).** Ниже — план по
-> [ADR 0038](../adr/0038-intellij-semantic-tokens.md) (Option A) и требованиям
-> R4, R5 анализа. Раздел заполняется фактом по ходу реализации.
+- **`LamSemanticTokensColorsProvider`** (`SemanticTokensColorsProvider` LSP4IJ):
+  маппинг **всех 10** типов легенды в `TextAttributesKey` (`keyFor`); неизвестный
+  тип → `null` (цвет не навязывается). Зарегистрирован в `lam-lsp4ij.xml`
+  (`<semanticTokensColorsProvider serverId="lamLsp" class="…"/>`).
+- **`LamHighlighterColors`** дополнен семантическими ключами `FUNCTION`/`TYPE`/
+  `ENUM_MEMBER`/`CLASS` (наследуют цвет от `DefaultLanguageHighlighterColors`:
+  `FUNCTION_DECLARATION`/`CLASS_REFERENCE`/`STATIC_FIELD`/`CLASS_NAME`); прочие
+  типы переиспользуют ключи 0022 (`KEYWORD`/`IDENTIFIER`/`NUMBER`/`STRING`/
+  `LINE_COMMENT`/`OPERATOR`) — палитра лексики уважается (R4/R5).
+- **Сторож синхронизации (A5):** `LamSemanticTokensColorsTest` читает
+  `SEMANTIC_TOKEN_TYPES` из `grammar/src/lsp/keywords.rs`, сверяет множество с
+  локальным и требует ненулевого ключа для каждого — добавление типа в легенду без
+  маппинга краснит тест (приём `LamKeywordSyncTest`). A4 — все 10 типов сопоставлены.
+
+### План (исходный)
 
 Маппинг легенды в палитру плагина поверх интеграции LSP4IJ из
 [0038-01](0038-01-intellij-semantic-tokens.md).

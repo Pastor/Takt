@@ -87,7 +87,35 @@ LSP4IJ. Сделано:
   зелёным** на старой платформе; свежий прогон под 2024.2 вскрыл. Добавлено.
 - **53 существующих теста плагина зелёные** под 2024.2.5/JDK 21 (`./gradlew test`).
 
-### План клиентского слоя (этап 2)
+### Клиентский слой (этап 2, 2026-07-19)
+
+Реализован в пакете `org.lam.intellij.lsp` (LSP4IJ 0.20.1):
+
+- **`LamLspBinary`** — резолвинг пути (настройка → `PATH` → `null`), чистая логика,
+  тест `LamLspBinaryTest` (6 тестов: приоритеты, деградация без исключений).
+- **`LamLspSettings`** — `PersistentStateComponent` уровня приложения (путь к
+  серверу); зарегистрирован `applicationService` в `plugin.xml` (класс не зависит
+  от LSP4IJ, доступен всегда).
+- **`LamLspServerFactory`** (`LanguageServerFactory`) + `LamLspConnectionProvider`
+  (`OSProcessStreamConnectionProvider`, stdio): поднимает `lam-lsp`. Тихая
+  деградация (R3): нет бинарника → `commandLine` не задан → `start()` бросает
+  `CannotStartProcessException`, LSP4IJ показывает сервер остановленным **без**
+  модального диалога.
+- **`plugin.xml`**: `<depends optional="true" config-file="lam-lsp4ij.xml">com.redhat.devtools.lsp4ij</depends>`
+  (R1 — без LSP4IJ плагин грузится). **`lam-lsp4ij.xml`**: `<server>` +
+  `<languageMapping>` + `<semanticTokensColorsProvider>` (⚠️ атрибут класса —
+  `class`, не `className`; вскрыто `buildSearchableOptions`).
+- **Проверки:** `./gradlew clean buildPlugin test` — BUILD SUCCESSFUL, все тесты
+  зелёные (53 регресс 0022/0023 + 6 резолвер + 3 цвета 0038-02); плагин
+  `0.5.0.zip` собран, LSP4IJ-провайдеры инстанцируются без ошибок.
+
+⚠️ **Отложено (GUI-уточнения R3, слабо проверяемы без `runIde`):** страница
+настроек (`Configurable`) для правки пути в UI и одноразовое уведомление о
+ненайденном бинарнике. Ядро работает без них: `PATH`-автопоиск даёт сервер
+«из коробки», путь хранится в `LamLspSettings`. **A11** (цвета в редакторе) —
+только визуально в среде с GUI.
+
+### План клиентского слоя (исходный)
 
 Тонкий слой интеграции LSP4IJ в `extensions/intellij-lam`, включающий сервер
 `lam-lsp` **опционально** и деградирующий молча при его отсутствии.

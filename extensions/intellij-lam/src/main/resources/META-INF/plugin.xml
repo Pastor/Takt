@@ -19,7 +19,17 @@
 
     <depends>com.intellij.modules.platform</depends>
 
+    <!-- 0038: опциональная интеграция LSP4IJ (семантическая подсветка через
+         lam-lsp). Без установленного LSP4IJ плагин грузится и работает как
+         лексический (0022) — отсутствие зависимости не срывает загрузку. -->
+    <depends optional="true" config-file="lam-lsp4ij.xml">com.redhat.devtools.lsp4ij</depends>
+
     <extensions defaultExtensionNs="com.intellij">
+        <!-- 0038: настройки LSP-слоя (путь к `lam-lsp`). Класс не зависит от
+             LSP4IJ, поэтому сервис регистрируется всегда (не в опциональном
+             config-file) — путь можно хранить независимо от наличия LSP4IJ. -->
+        <applicationService serviceImplementation="org.lam.intellij.lsp.LamLspSettings"/>
+
         <!-- 0022-01: регистрация типа файла `.lam` → язык Lam (R1, A1). -->
         <fileType
                 name="Lam"
