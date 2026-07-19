@@ -59,5 +59,7 @@ object LamTokenTypes {
         "assembly", "formula", "in", "out", "inout", "address", "model", "state",
         "start", "ref", "template", "cond", "var", "next", "extern", "enum",
         "struct", "from", "X", "F", "G", "U", "R", "LTL", "Guard",
+        // `invariant` — сахар над `cond`+Guard (фича 0044); был пропущен в плагине.
+        "invariant",
     )
 }

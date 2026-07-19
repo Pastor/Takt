@@ -30,8 +30,18 @@ dependencies {
         // CLI IntelliJ Plugin Verifier — для задачи verifyPlugin (проверка
         // бинарной совместимости с новыми IDE).
         pluginVerifier()
+        // LSP4IJ (фича 0038): зависимость на клиент LSP от Red Hat. Версия
+        // фиксируется явно (API LSP4IJ моложе платформенных, риск ADR).
+        // Опциональность объявляется в plugin.xml (`<depends optional="true"
+        // config-file="lam-lsp4ij.xml">`): плагин ставится и работает без LSP4IJ
+        // (лексический слой 0022), семантический слой включается лишь при её наличии.
+        plugin("com.redhat.devtools.lsp4ij:0.20.1")
     }
     testImplementation("junit:junit:4.13.2")
+    // Тест-фреймворк платформы 2024.2 ожидает opentest4j на classpath
+    // (`org.opentest4j.AssertionFailedError`) — при подъёме с 2024.1 (фича 0038)
+    // его перестало подтягивать транзитивно; добавляем явно.
+    testImplementation("org.opentest4j:opentest4j:1.3.0")
 }
 
 intellijPlatform {
@@ -69,7 +79,7 @@ intellijPlatform {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
 }
 
 tasks.test {
