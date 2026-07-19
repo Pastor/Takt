@@ -74,6 +74,13 @@ const CONTRACTS: &[Contract] = &[
         budget: 50,
         must_terminate: true,
     },
+    // ПИД-регулятор на q(8, 8) (фича 0097): сходится с anti-windup и завершается.
+    Contract {
+        file: "pid_regulator.lam",
+        chain: &["Control", "Settled", "Done"],
+        budget: 300,
+        must_terminate: true,
+    },
 ];
 
 const EXCEPTIONS: &[Exception] = &[
@@ -524,5 +531,63 @@ fn comprehensive_header_matches_body() {
         "шапка примера обещает конструкции, которых в теле нет: {missing:?}\n\
          Шапка — часть документации по языку (правило 15): обещанное обязано \
          присутствовать."
+    );
+}
+
+/// Представление q(m, n) переменной модели (repr) на текущем такте.
+fn fixed_repr(unit: &Unit, name: &str) -> i64 {
+    match unit.variable(name) {
+        Some(Value::Fixed { repr, .. }) => repr,
+        other => panic!("переменная '{name}': ожидался Fixed, получено {other:?}"),
+    }
+}
+
+/// **T2/A4 (фича 0097): anti-windup работает** — интеграл ПИД НЕ переполняется, а
+/// PV сходится к уставке. Без clamp интеграл `q(8, 8)` «перевернулся» бы
+/// (wraparound) и регулятор стал бы неустойчивым.
+#[test]
+fn pid_integral_stays_bounded_and_converges() {
+    let path = examples_dir().join("pid_regulator.lam");
+    let mut unit = build_unit(model_at(&path)).expect("построение юнита");
+
+    // q(8, 8): imax = 32.0 → repr 8192; setpoint = 8.0 → repr 2048; eps repr 32.
+    const IMAX_REPR: i64 = 32 * 256;
+    const SP_REPR: i64 = 8 * 256;
+    let mut converged = false;
+
+    for _ in 0..300 {
+        let result = unit.tick();
+        assert!(
+            !matches!(result, TickResult::Failed(_)),
+            "ПИД не должен падать: {result:?}"
+        );
+        // Anti-windup: интеграл в пределах [−Imax, Imax] на КАЖДОМ такте.
+        let i = fixed_repr(&unit, "i_acc");
+        assert!(
+            (-IMAX_REPR..=IMAX_REPR).contains(&i),
+            "интеграл вышел за anti-windup [{}, {}]: repr={i} — clamp не работает",
+            -IMAX_REPR,
+            IMAX_REPR
+        );
+        // PV не должен «взорваться» (следствие переполнения интеграла).
+        let pv = fixed_repr(&unit, "meas");
+        assert!(
+            pv.abs() <= 2 * SP_REPR,
+            "PV разошёлся: repr={pv} (регулятор неустойчив?)"
+        );
+        if result == TickResult::Terminated {
+            converged = true;
+            // На завершении PV доведён до уставки (состояние Settled).
+            assert_eq!(
+                fixed_repr(&unit, "meas"),
+                SP_REPR,
+                "PV не доведён до уставки"
+            );
+            break;
+        }
+    }
+    assert!(
+        converged,
+        "ПИД обязан сойтись и завершиться за бюджет (anti-windup + сходимость)"
     );
 }

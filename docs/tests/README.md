@@ -57,3 +57,4 @@
 | 0068 | Верификация свойств над данными | [0068-verify-data-properties.md](0068-verify-data-properties.md) | СОЗДАНА |
 | 0069 | Разделение `address_map.rs` | [0069-address-map-eval-split.md](0069-address-map-eval-split.md) | СОЗДАНА |
 | 0096 | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | [0096-fixed-point-native-float.md](0096-fixed-point-native-float.md) | СОЗДАНА |
+| 0097 | Пример ПИД-регулятора на языке Lam (fixed-point) | [0097-pid-regulator-example.md](0097-pid-regulator-example.md) | СОЗДАНА |

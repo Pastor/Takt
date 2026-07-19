@@ -175,4 +175,5 @@
 | 0068-01 | 0068 | `build_kripke` — вершина как (состояние, значения переменных φ) | [0068-01-tracked-vars-kripke.md](0068-01-tracked-vars-kripke.md) |
 | 0069-01 | 0069 | `address_map/` — разделение по темам + снятие записи долга | [0069-01-split-by-theme.md](0069-01-split-by-theme.md) |
 | 0096-01 | 0096 | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | [0096-01-fixed-point-native-float.md](0096-01-fixed-point-native-float.md) |
+| 0097-01 | 0097 | Пример ПИД-регулятора на языке Lam (fixed-point) | [0097-01-pid-regulator-example.md](0097-01-pid-regulator-example.md) |
 
