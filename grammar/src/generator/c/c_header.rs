@@ -880,10 +880,8 @@ mod tests {
         .unwrap()
     }
 
-    /// Строит `.h` цели `c-hal` с разрешёнными адресами.
-    ///
-    /// Адреса разрешаются тем же путём, что и `lamc -t c-hal`
-    /// (`resolve_addresses`), — таблица `*__ADDR` иначе не эмитится.
+    /// Строит `.h` цели `c-hal` с разрешёнными адресами (тем же `resolve_addresses`,
+    /// что и `lamc -t c-hal`, — иначе таблица `*__ADDR` не эмитится).
     fn generate_hal_h(src: &str, name: &str, float_width: crate::generator::FloatWidth) -> String {
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
@@ -897,10 +895,12 @@ mod tests {
         let map = CMap::new(model.name(), &*model, true)
             .unwrap()
             .with_float_width(float_width);
-        let mut options = crate::generator::GenerateOptions::default();
-        options.hal = true;
-        options.address_map = resolution.map;
-        options.float_width = float_width;
+        let options = crate::generator::GenerateOptions {
+            hal: true,
+            address_map: resolution.map,
+            float_width,
+            ..Default::default()
+        };
         generate_header(map.get_filename(), &map, &options).unwrap()
     }
 

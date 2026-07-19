@@ -281,7 +281,7 @@ fn emit_composition(
     collect_models(extend, &mut group)?;
     // Переменные корня под-FB видит через `VAR_IN_OUT`: в ST указателей нет, а
     // `main->lift_request` цели `c` выразить нечем (О1-в, проба П7).
-    let done_terms = vec![emit_group(p, map, &group, "", out)];
+    let done_terms = [emit_group(p, map, &group, "", out)];
 
     let target = if next.unique().is_empty() {
         table.end

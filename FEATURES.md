@@ -130,7 +130,6 @@
 | [0062](docs/features/0062-sv-mmio-target.md) | Цель `sv-mmio`: адреса портов → регистровый файл (вскрыла [фикс 0020-01](docs/fixes/0020-01-port-bit-out-of-range.md), Tier 1) | [0020-01](docs/fixes/0020-01-port-bit-out-of-range.md) (фикс) | 3 | РАЗРАБОТКА |
 | [0063](docs/features/0063-sv-clock-enable.md) | Порт `en` (clock enable) для цели `sv` — пересмотр Option C ADR 0045 | нет (после 0057) | 3 | РАЗРАБОТКА |
 | [0064](docs/features/0064-sv-divider-warning.md) | Предупреждение о делителе (`SV-009`) — только на переменный делитель | нет | 3 | РАЗРАБОТКА |
-| [0046](docs/features/0046-build-warnings-cleanup.md) | Устранение всех предупреждений сборки (rustc + clippy) | 0036 (закрыта) | — | СОЗДАНА |
 | [0067](docs/features/0067-intellij-rename-psi-import.md) | Rename и `PsiReference` для `import` в плагине IntelliJ | 0038 (закрыта) | — | СОЗДАНА |
 | [0070](docs/features/0070-port-initializer-address-role.md) | Инициализатор порта — это адрес, но проверяется как значение | — | — | СОЗДАНА |
 | [0071](docs/features/0071-lsp-goto-state-name.md) | Переход на имя состояния в `S(Ping) = End` не работает | — | — | СОЗДАНА |
@@ -159,6 +158,22 @@
 | [0094](docs/features/0094-new-feature-script-fixes.md) | Доработка `scripts/new-feature.sh` (статус ADR, поздние стадии, идемпотентность) | — | — | СОЗДАНА |
 | [0097](docs/features/0097-pid-regulator-example.md) | Пример ПИД-регулятора на Lam (fixed-point, anti-windup) | 0061 | 3 | ГОТОВО |
 | [0037](docs/features/0037-windows-test-failures.md) | Сбои тестов на Windows (пути include, ресурс viewport) | — | 2 | РАЗРАБОТКА |
+
+> Фича **0046** «Устранение всех предупреждений сборки (rustc + clippy)»
+> **закрыта** (`ГОТОВО`, 2026-07-19) и удалена из таблицы (правило 10) — итог в её
+> [карточке](docs/features/0046-build-warnings-cleanup.md). Предупреждения обоих
+> крейтов сведены к **нулю** (rustc 0, clippy 0) и закреплены `-D warnings` на
+> шаге clippy в `precheck.sh` и CI (Option B ADR; CLI-уровень, **не** запрещённый
+> `#![deny(warnings)]`). ⚠️ Инвентарь карточки (2026-07-15, ~125) устарел за 4 дня:
+> свежий — **549 clippy**, из них **414 — один класс `result_large_err`** (clippy
+> 0.1.99, `Diagnostic` = 136 Б > 128). Разрешено **ужатием `Location::Source`
+> u64/usize → u32×3** (`Diagnostic` → 120 Б; решение заказчика, без `Box` и без
+> крейт-`#[allow]`), каст локализован в аксессорах/хелпере `Location::source`.
+> Остаток — `clippy --fix` + ручные `#[allow]` с обоснованием. Вывод генераторов
+> байт-в-байт неизменен. Крейт `grammar` **0.6.0 → 0.7.0** (ломающая смена типов
+> публичного `Location::Source`); язык не менялся. ⚠️ Уроки: *кэш clippy даёт
+> ложный 0*; *`build --all-targets` не компилирует inline `#[cfg(test)]` lib*;
+> *база карточки — снимок* (урок 0036 повторился).
 
 > Фича **0036** «Согласование видимости публичного API крейта `simulation`»
 > **закрыта** (`ГОТОВО`, 2026-07-19) и удалена из таблицы (правило 10) — итог в её

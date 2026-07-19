@@ -6,7 +6,7 @@ use lalrpop_util::ErrorRecovery;
 grammar<'input, 'err>(input: &'input str, file_no: u64 , parser_errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, LexicalError>> );
 
 pub SourceUnit: Model = {
-    <l:@L> <elements:(<ModelElement>)*> <r:@R> => Model{loc: Location::Source(file_no, l, r), name: None, elements, implements: None},
+    <l:@L> <elements:(<ModelElement>)*> <r:@R> => Model{loc: Location::source(file_no, l, r), name: None, elements, implements: None},
 }
 
 ImportPath: ImportPath = {
@@ -15,13 +15,13 @@ ImportPath: ImportPath = {
 }
 
 Import: ModelElement = {
-    <l:@L> "import" <s:ImportPath> <r:@R> ";" => ModelElement::Import(ImportDefine::Plain(s, Location::Source(file_no, l, r))),
-    <l:@L> "import" <s:ImportPath> "as" <id:Identifier> <r:@R> ";" => ModelElement::Import(ImportDefine::GlobalSymbol(s, id, Location::Source(file_no, l, r))),
+    <l:@L> "import" <s:ImportPath> <r:@R> ";" => ModelElement::Import(ImportDefine::Plain(s, Location::source(file_no, l, r))),
+    <l:@L> "import" <s:ImportPath> "as" <id:Identifier> <r:@R> ";" => ModelElement::Import(ImportDefine::GlobalSymbol(s, id, Location::source(file_no, l, r))),
     <l:@L> "import" "*" "as" <id:Identifier> "from" <s:ImportPath> <r:@R> ";" => {
-        ModelElement::Import(ImportDefine::GlobalSymbol(s, id, Location::Source(file_no, l, r)))
+        ModelElement::Import(ImportDefine::GlobalSymbol(s, id, Location::source(file_no, l, r)))
     },
     <l:@L> "import" "{" <rename:CommaOne<ImportRename>> "}" "from" <s:ImportPath> <r:@R> ";" => {
-        ModelElement::Import(ImportDefine::Rename(s,rename,Location::Source(file_no, l, r)))
+        ModelElement::Import(ImportDefine::Rename(s,rename,Location::source(file_no, l, r)))
     },
 }
 
@@ -33,7 +33,7 @@ ImportRename: (Identifier, Option<Identifier>) = {
 Model: Box<Model> = {
     <l:@L> "model" <name:IdentifierOrError> <implements: ("=" <Expression>)?>
     "{" <elements:(<ModelElement>)*> "}" <r:@R> => {
-        Box::new(Model{loc: Location::Source(file_no, l, r), name, elements, implements})
+        Box::new(Model{loc: Location::source(file_no, l, r), name, elements, implements})
     }
 }
 ModelElement: ModelElement = {
@@ -51,7 +51,7 @@ ModelElement: ModelElement = {
     <e:EnumDefine> => ModelElement::Enum(e),
     <s:StructDefine> => ModelElement::Struct(s),
     AddressDefine => ModelElement::Address(Box::new(<>)),
-    <l:@L> ";" <r:@R> => ModelElement::StraySemicolon(Location::Source(file_no, l, r)),
+    <l:@L> ";" <r:@R> => ModelElement::StraySemicolon(Location::source(file_no, l, r)),
 }
 
 
@@ -62,7 +62,7 @@ StateKind: Option<StateKind> = {
 StateDefine: Box<StateDefine> = {
     <l:@L> <kind:StateKind> <name:IdentifierOrError> <implements: ("=" <Expression>)?>
     <elements:StateDefineEnd> <r:@R> => {
-        Box::new(StateDefine{loc: Location::Source(file_no, l, r), name, elements, implements, kind})
+        Box::new(StateDefine{loc: Location::source(file_no, l, r), name, elements, implements, kind})
     }
 }
 
@@ -76,8 +76,8 @@ StateDefineEnd: Vec<StateElement> = {
 StateElement: StateElement = {
     NamedBlockCodeDefine => StateElement::NamedBlockCode(<>),
     "next" <name:Identifier> ";" => StateElement::Next(name),
-    <l:@L> "ref" <i:Identifier> <e: (":" <Condition>)?> ";" <r:@R> => StateElement::Reference(Location::Source(file_no, l, r), i, e),
-    <l:@L> ";" <r:@R> => StateElement::StraySemicolon(Location::Source(file_no, l, r)),
+    <l:@L> "ref" <i:Identifier> <e: (":" <Condition>)?> ";" <r:@R> => StateElement::Reference(Location::source(file_no, l, r), i, e),
+    <l:@L> ";" <r:@R> => StateElement::StraySemicolon(Location::source(file_no, l, r)),
     InlineFormulaDefine => StateElement::InlineFormula(<>),
     InvariantDefine => StateElement::Invariant(Box::new(<>)),
 }
@@ -86,19 +86,19 @@ ButIdentifierPath: IdentifierPath = {
     <l:@L> <e:Identifier> <v:(":" ":" <Identifier>)*> <r:@R> => {
         let mut v = v;
         v.insert(0, e);
-        IdentifierPath { loc: Location::Source(file_no, l, r), identifiers: v }
+        IdentifierPath { loc: Location::source(file_no, l, r), identifiers: v }
     }
 }
 
 Identifier: Identifier = {
-    <l:@L> <n:identifier> <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: n.to_string()},
-    <l:@L> "X" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "X".to_string()},
-    <l:@L> "F" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "F".to_string()},
-    <l:@L> "G" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "G".to_string()},
-    <l:@L> "U" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "U".to_string()},
-    <l:@L> "R" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "R".to_string()},
-    <l:@L> "LTL" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "LTL".to_string()},
-    <l:@L> "Guard" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "Guard".to_string()},
+    <l:@L> <n:identifier> <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: n.to_string()},
+    <l:@L> "X" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "X".to_string()},
+    <l:@L> "F" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "F".to_string()},
+    <l:@L> "G" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "G".to_string()},
+    <l:@L> "U" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "U".to_string()},
+    <l:@L> "R" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "R".to_string()},
+    <l:@L> "LTL" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "LTL".to_string()},
+    <l:@L> "Guard" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "Guard".to_string()},
 }
 
 IdentifierOrError: Option<Identifier> = {
@@ -110,7 +110,7 @@ IdentifierOrError: Option<Identifier> = {
 }
 ConditionDefine: ConditionDefine = {
     <l:@L> "cond" <name:IdentifierOrError> "=" <c:Condition> <r:@R> ";" => ConditionDefine {
-        loc: Location::Source(file_no, l, r), name: name, value: c
+        loc: Location::source(file_no, l, r), name: name, value: c
     },
 }
 
@@ -121,7 +121,7 @@ ConditionDefine: ConditionDefine = {
 // разворачивает в `cond` + `Formula::Guard` (десахаризация, 0044-02).
 InvariantDefine: InvariantDefine = {
     <l:@L> "invariant" <name:IdentifierOrError> "=" <c:Condition> <r:@R> ";" => InvariantDefine {
-        loc: Location::Source(file_no, l, r), name: name, value: c
+        loc: Location::source(file_no, l, r), name: name, value: c
     },
 }
 
@@ -131,36 +131,36 @@ InvariantDefine: InvariantDefine = {
 // семантика (0020-02).
 AddressDefine: AddressDefine = {
     <l:@L> "address" <name:IdentifierOrError> "=" <e:Expression> <r:@R> ";" => AddressDefine {
-        loc: Location::Source(file_no, l, r), name, value: e
+        loc: Location::source(file_no, l, r), name, value: e
     },
 }
 
 VariableDefine: Box<VariableDefine> = {
     <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Variable {
-            loc: Location::Source(file_no, l, r), typ, name, initializer: e
+            loc: Location::source(file_no, l, r), typ, name, initializer: e
         })
     },
     <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> ":=" <e:Expression> <r:@R> ";" => {
         Box::new(VariableDefine::Constant {
-            loc: Location::Source(file_no, l, r), typ, name, initializer: e
+            loc: Location::source(file_no, l, r), typ, name, initializer: e
         })
     },
     <l:@L> "in" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
-            loc: Location::Source(file_no, l, r), typ, name, initializer: e,
+            loc: Location::source(file_no, l, r), typ, name, initializer: e,
             direction: PortDirection::In,
         })
     },
     <l:@L> "out" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
-            loc: Location::Source(file_no, l, r), typ, name, initializer: e,
+            loc: Location::source(file_no, l, r), typ, name, initializer: e,
             direction: PortDirection::Out,
         })
     },
     <l:@L> "inout" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
-            loc: Location::Source(file_no, l, r), typ, name, initializer: e,
+            loc: Location::source(file_no, l, r), typ, name, initializer: e,
             direction: PortDirection::InOut,
         })
     },
@@ -175,38 +175,38 @@ VariableDefine: Box<VariableDefine> = {
 LocalVariableDefine: Box<VariableDefine> = {
     <l:@L> "var" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> => {
         Box::new(VariableDefine::Variable {
-            loc: Location::Source(file_no, l, r), typ, name, initializer: e
+            loc: Location::source(file_no, l, r), typ, name, initializer: e
         })
     },
     <l:@L> "const" <name:IdentifierOrError> <typ:(":" <Type>)?> ":=" <e:Expression> <r:@R> => {
         Box::new(VariableDefine::Constant {
-            loc: Location::Source(file_no, l, r), typ, name, initializer: e
+            loc: Location::source(file_no, l, r), typ, name, initializer: e
         })
     },
 }
 
 FunctionCall: Expression = {
     <a:@L> <i:Identifier> "(" <v:Comma<Expression>> ")" <b:@R> => {
-        Expression::Function(Location::Source(file_no, a, b), i, v)
+        Expression::Function(Location::source(file_no, a, b), i, v)
     },
 }
 
 TypeDefine: Box<TypeDefine> = {
     <l:@L> "type" <name:Identifier> "=" <ty:Type> <r:@R> ";" => {
         Box::new(TypeDefine{
-            loc: Location::Source(file_no, l, r), name, ty
+            loc: Location::source(file_no, l, r), name, ty
         })
     },
 }
 
 EnumVariant: EnumVariant = {
     <l:@L> <name:Identifier> "=" <value:number> <r:@R> => EnumVariant {
-        loc: Location::Source(file_no, l, r),
+        loc: Location::source(file_no, l, r),
         name,
         value: Some(value),
     },
     <l:@L> <name:Identifier> <r:@R> => EnumVariant {
-        loc: Location::Source(file_no, l, r),
+        loc: Location::source(file_no, l, r),
         name,
         value: None,
     },
@@ -215,7 +215,7 @@ EnumVariant: EnumVariant = {
 EnumDefine: Box<EnumDefine> = {
     <l:@L> "enum" <name:IdentifierOrError> "{" <variants:CommaOne<EnumVariant>> "}" <r:@R> => {
         Box::new(EnumDefine {
-            loc: Location::Source(file_no, l, r),
+            loc: Location::source(file_no, l, r),
             name,
             variants,
         })
@@ -223,7 +223,7 @@ EnumDefine: Box<EnumDefine> = {
     <l:@L> "enum" <name:IdentifierOrError> "{" <false_token:!> "}" <r:@R> => {
         parser_errors.push(false_token);
         Box::new(EnumDefine {
-            loc: Location::Source(file_no, l, r),
+            loc: Location::source(file_no, l, r),
             name,
             variants: Vec::new(),
         })
@@ -232,7 +232,7 @@ EnumDefine: Box<EnumDefine> = {
 
 StructField: StructField = {
     <l:@L> <name:Identifier> ":" <ty:Type> <r:@R> => StructField {
-        loc: Location::Source(file_no, l, r),
+        loc: Location::source(file_no, l, r),
         name,
         ty,
     },
@@ -241,7 +241,7 @@ StructField: StructField = {
 StructDefine: Box<StructDefine> = {
     <l:@L> "struct" <name:IdentifierOrError> "{" <fields:Comma<StructField>> "}" <r:@R> => {
         Box::new(StructDefine {
-            loc: Location::Source(file_no, l, r),
+            loc: Location::source(file_no, l, r),
             name,
             fields,
         })
@@ -249,7 +249,7 @@ StructDefine: Box<StructDefine> = {
     <l:@L> "struct" <name:IdentifierOrError> "{" <false_token:!> "}" <r:@R> => {
         parser_errors.push(false_token);
         Box::new(StructDefine {
-            loc: Location::Source(file_no, l, r),
+            loc: Location::source(file_no, l, r),
             name,
             fields: Vec::new(),
         })
@@ -265,9 +265,9 @@ FunctionDefine: Box<FunctionDefine> = {
     <l:@L> <e: ("extern")?> "fn" <nl:@L> <name:IdentifierOrError> <nr:@R> <params:ParameterList>
     <return_type:("->" <Type>)?> <r:@R> <body:BlockStatementOrSemiColon> => {
         Box::new(FunctionDefine {
-            loc: Location::Source(file_no, l, r),
+            loc: Location::source(file_no, l, r),
             name,
-            name_loc: Location::Source(file_no, nl, nr),
+            name_loc: Location::source(file_no, nl, nr),
             params,
             return_type,
             body,
@@ -279,7 +279,7 @@ FunctionDefine: Box<FunctionDefine> = {
 NamedBlockCodeDefine: Box<NamedBlockCodeDefine> = {
     <l:@L> <name:IdentifierOrError> <statement:BlockStatement> <r:@R> => {
         Box::new(NamedBlockCodeDefine {
-            loc: Location::Source(file_no, l, r),
+            loc: Location::source(file_no, l, r),
             name,
             statement,
         })
@@ -289,7 +289,7 @@ NamedBlockCodeDefine: Box<NamedBlockCodeDefine> = {
 FormulaDefine: Box<FormulaDefine> = {
     <l:@L> "formula" <dialect:StringLiteral?> <block:FormulaBlock> <r:@R> => {
         Box::new(FormulaDefine {
-            loc: Location::Source(file_no, l, r),
+            loc: Location::source(file_no, l, r),
             formula: block
         })
     },
@@ -297,54 +297,54 @@ FormulaDefine: Box<FormulaDefine> = {
 
 InlineFormulaDefine: Box<InlineFormulaDefine> = {
     <l:@L> ":" <conditions:CommaOne<Condition>> ";" <r:@R> => {
-        Box::new(InlineFormulaDefine::Guard { loc: Location::Source(file_no, l, r), conditions, explicit: false })
+        Box::new(InlineFormulaDefine::Guard { loc: Location::source(file_no, l, r), conditions, explicit: false })
     },
     <l:@L> ":" "[" "LTL" "]" <formulas:CommaOne<LtlExpr>> ";" <r:@R> => {
-        Box::new(InlineFormulaDefine::Ltl { loc: Location::Source(file_no, l, r), formulas })
+        Box::new(InlineFormulaDefine::Ltl { loc: Location::source(file_no, l, r), formulas })
     },
     // Явная форма `: [Guard] условия;` — синоним краткой. Признак `explicit`
     // нужен форматтеру (фича 0024), чтобы печатать форму автора.
     <l:@L> ":" "[" "Guard" "]" <conditions:CommaOne<Condition>> ";" <r:@R> => {
-        Box::new(InlineFormulaDefine::Guard { loc: Location::Source(file_no, l, r), conditions, explicit: true })
+        Box::new(InlineFormulaDefine::Guard { loc: Location::source(file_no, l, r), conditions, explicit: true })
     }
 }
 
 LtlExpr: LtlExpr = LtlImplies;
 
 LtlImplies: LtlExpr = {
-    <l_loc:@L> <l:LtlOr> "->" <r:LtlImplies> <r_loc:@R> => LtlExpr::Implies(Location::Source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
+    <l_loc:@L> <l:LtlOr> "->" <r:LtlImplies> <r_loc:@R> => LtlExpr::Implies(Location::source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
     LtlOr
 };
 
 LtlOr: LtlExpr = {
-    <l_loc:@L> <l:LtlOr> "|" <r:LtlAnd> <r_loc:@R> => LtlExpr::Or(Location::Source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
+    <l_loc:@L> <l:LtlOr> "|" <r:LtlAnd> <r_loc:@R> => LtlExpr::Or(Location::source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
     LtlAnd
 };
 
 LtlAnd: LtlExpr = {
-    <l_loc:@L> <l:LtlAnd> "&" <r:LtlUntilRelease> <r_loc:@R> => LtlExpr::And(Location::Source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
+    <l_loc:@L> <l:LtlAnd> "&" <r:LtlUntilRelease> <r_loc:@R> => LtlExpr::And(Location::source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
     LtlUntilRelease
 };
 
 LtlUntilRelease: LtlExpr = {
-    <l_loc:@L> <l:LtlUntilRelease> "U" <r:LtlUnary> <r_loc:@R> => LtlExpr::Until(Location::Source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
-    <l_loc:@L> <l:LtlUntilRelease> "R" <r:LtlUnary> <r_loc:@R> => LtlExpr::Release(Location::Source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
+    <l_loc:@L> <l:LtlUntilRelease> "U" <r:LtlUnary> <r_loc:@R> => LtlExpr::Until(Location::source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
+    <l_loc:@L> <l:LtlUntilRelease> "R" <r:LtlUnary> <r_loc:@R> => LtlExpr::Release(Location::source(file_no, l_loc, r_loc), Box::new(l), Box::new(r)),
     LtlUnary
 };
 
 LtlUnary: LtlExpr = {
-    <l:@L> "!" <e:LtlUnary> <r:@R> => LtlExpr::Not(Location::Source(file_no, l, r), Box::new(e)),
-    <l:@L> "X" <e:LtlUnary> <r:@R> => LtlExpr::Next(Location::Source(file_no, l, r), Box::new(e)),
-    <l:@L> "F" <e:LtlUnary> <r:@R> => LtlExpr::Finally(Location::Source(file_no, l, r), Box::new(e)),
-    <l:@L> "G" <e:LtlUnary> <r:@R> => LtlExpr::Globally(Location::Source(file_no, l, r), Box::new(e)),
+    <l:@L> "!" <e:LtlUnary> <r:@R> => LtlExpr::Not(Location::source(file_no, l, r), Box::new(e)),
+    <l:@L> "X" <e:LtlUnary> <r:@R> => LtlExpr::Next(Location::source(file_no, l, r), Box::new(e)),
+    <l:@L> "F" <e:LtlUnary> <r:@R> => LtlExpr::Finally(Location::source(file_no, l, r), Box::new(e)),
+    <l:@L> "G" <e:LtlUnary> <r:@R> => LtlExpr::Globally(Location::source(file_no, l, r), Box::new(e)),
     LtlPrimary
 };
 
 LtlPrimary: LtlExpr = {
-    <l:@L> "true" <r:@R> => LtlExpr::True(Location::Source(file_no, l, r)),
-    <l:@L> "false" <r:@R> => LtlExpr::False(Location::Source(file_no, l, r)),
-    <l:@L> <n:identifier> <r:@R> => LtlExpr::Atom(Identifier{loc: Location::Source(file_no, l, r), name: n.to_string()}),
-    <l:@L> "(" <e:LtlExpr> ")" <r:@R> => LtlExpr::Parenthesis(Location::Source(file_no, l, r), Box::new(e)),
+    <l:@L> "true" <r:@R> => LtlExpr::True(Location::source(file_no, l, r)),
+    <l:@L> "false" <r:@R> => LtlExpr::False(Location::source(file_no, l, r)),
+    <l:@L> <n:identifier> <r:@R> => LtlExpr::Atom(Identifier{loc: Location::source(file_no, l, r), name: n.to_string()}),
+    <l:@L> "(" <e:LtlExpr> ")" <r:@R> => LtlExpr::Parenthesis(Location::source(file_no, l, r), Box::new(e)),
 };
 
 Type: Type = {
@@ -354,10 +354,10 @@ Type: Type = {
     // иначе `q` перестал бы работать как имя переменной/типа. m, n — сырые
     // литералы; границы проверяет семантика.
     <l:@L> <ctor:identifier> "(" <m:number> "," <n:number> ")" <r:@R> =>
-        Type::Fixed(Location::Source(file_no, l, r), ctor.to_string(), m, n),
+        Type::Fixed(Location::source(file_no, l, r), ctor.to_string(), m, n),
     <l:@L> "[" <ty:Type> ";" <n:number> "]" <r:@R> => {
         Type::Array {
-            loc: Location::Source(file_no, l, r),
+            loc: Location::source(file_no, l, r),
             element_count: n as u16,
             element_type: Box::new(ty)
         }
@@ -369,60 +369,60 @@ Condition: Condition= {
 }
 
 Condition6: Condition = {
-    <a:@L> <l:Condition6> "|" <r:Condition5> <b:@R> => Condition::Or(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Condition6> "|" <r:Condition5> <b:@R> => Condition::Or(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Condition5,
 }
 
 Condition5: Condition = {
-    <a:@L> <l:Condition5> "&" <r:Condition4> <b:@R> => Condition::And(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Condition5> "&" <r:Condition4> <b:@R> => Condition::And(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Condition4,
 }
 
 Condition4: Condition = {
-    <a:@L> <l:Condition4> "=" <r:Condition3> <b:@R> => Condition::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Condition4> "!=" <r:Condition3> <b:@R> => Condition::NotEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Condition4> "=" <r:Condition3> <b:@R> => Condition::Equal(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Condition4> "!=" <r:Condition3> <b:@R> => Condition::NotEqual(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Condition3,
 }
 
 Condition3: Condition = {
-    <a:@L> <l:Condition3> "<" <r:Condition2> <b:@R> => Condition::Less(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Condition3> ">" <r:Condition2> <b:@R> => Condition::More(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Condition3> "<=" <r:Condition2> <b:@R> => Condition::LessEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Condition3> ">=" <r:Condition2> <b:@R> => Condition::MoreEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Condition3> "<" <r:Condition2> <b:@R> => Condition::Less(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Condition3> ">" <r:Condition2> <b:@R> => Condition::More(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Condition3> "<=" <r:Condition2> <b:@R> => Condition::LessEqual(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Condition3> ">=" <r:Condition2> <b:@R> => Condition::MoreEqual(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Condition2,
 }
 
 Condition2: Condition = {
-    <a:@L> <l:Condition2> "+" <r:Condition1> <b:@R> => Condition::Add(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Condition2> "-" <r:Condition1> <b:@R> => Condition::Subtract(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Condition2> "+" <r:Condition1> <b:@R> => Condition::Add(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Condition2> "-" <r:Condition1> <b:@R> => Condition::Subtract(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Condition1,
 }
 
 Condition1: Condition = {
-    <a:@L> "!" <e:Condition1> <b:@R> => Condition::Not(Location::Source(file_no, a, b), Box::new(e)),
+    <a:@L> "!" <e:Condition1> <b:@R> => Condition::Not(Location::source(file_no, a, b), Box::new(e)),
     Condition0
 }
 
 Condition0: Condition = {
   <Identifier> => Condition::Variable(<>),
   <a:@L> <i:Identifier> "(" <v:Comma<Condition>> ")" <b:@R> => {
-      Condition::Function(Location::Source(file_no, a, b), i, v)
+      Condition::Function(Location::source(file_no, a, b), i, v)
   },
-  <a:@L> "(" <e:Condition> ")" <b:@R> => Condition::Parenthesis(Location::Source(file_no, a, b), Box::new(e)),
-  <a:@L> <e:Condition0> "." <i:Member> <b:@R> => Condition::BitAccess(Location::Source(file_no, a, b), Box::new(e), i),
-  <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Condition::ArraySubscript(Location::Source(file_no, a, b), i, Box::new(Condition::Number(Location::Source(file_no, a, b), n))),
-  <a:@L> <i:Identifier> "[" <idx:Identifier> "]" <b:@R> => Condition::ArraySubscript(Location::Source(file_no, a, b), i, Box::new(Condition::Variable(idx))),
+  <a:@L> "(" <e:Condition> ")" <b:@R> => Condition::Parenthesis(Location::source(file_no, a, b), Box::new(e)),
+  <a:@L> <e:Condition0> "." <i:Member> <b:@R> => Condition::BitAccess(Location::source(file_no, a, b), Box::new(e), i),
+  <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Condition::ArraySubscript(Location::source(file_no, a, b), i, Box::new(Condition::Number(Location::source(file_no, a, b), n))),
+  <a:@L> <i:Identifier> "[" <idx:Identifier> "]" <b:@R> => Condition::ArraySubscript(Location::source(file_no, a, b), i, Box::new(Condition::Variable(idx))),
   ConditionExpression,
 }
 
 ConditionExpression: Condition = {
-    <a:@L> "true" <b:@R> => Condition::Bool(Location::Source(file_no, a, b), true),
-    <a:@L> "false" <b:@R> => Condition::Bool(Location::Source(file_no, a, b), false),
+    <a:@L> "true" <b:@R> => Condition::Bool(Location::source(file_no, a, b), true),
+    <a:@L> "false" <b:@R> => Condition::Bool(Location::source(file_no, a, b), false),
     <l:@L> <n:number> <r:@R> => {
-        Condition::Number(Location::Source(file_no, l, r), n)
+        Condition::Number(Location::source(file_no, l, r), n)
     },
     <l:@L> <n:rational> <r:@R> => {
-        Condition::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1)
+        Condition::Rational(Location::source(file_no, l, r), n.0.to_string(), n.1)
     },
 }
 
@@ -461,81 +461,81 @@ Expression: Expression = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 Chain14<Atom>: Expression = {
-    <a:@L> <l:Chain13<Atom>> ":=" <r:Chain14<Precedence1Full>> <b:@R> => Expression::Assign(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain13<Atom>> ":=" <r:Chain14<Precedence1Full>> <b:@R> => Expression::Assign(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     // Тернарный оператор: cond ? then : else (правоассоциативный, ниже присваивания)
-    <a:@L> <c:Chain13<Atom>> "?" <t:Chain14<Precedence1Full>> ":" <e:Chain14<Precedence1Full>> <b:@R> => Expression::ConditionalOperator(Location::Source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
+    <a:@L> <c:Chain13<Atom>> "?" <t:Chain14<Precedence1Full>> ":" <e:Chain14<Precedence1Full>> <b:@R> => Expression::ConditionalOperator(Location::source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
     Chain13<Atom>,
 }
 
 Chain13<Atom>: Expression = {
-    <a:@L> <l:Chain13<Atom>> "||" <r:Chain12<Precedence1Full>> <b:@R> => Expression::Or(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain13<Atom>> "||" <r:Chain12<Precedence1Full>> <b:@R> => Expression::Or(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Chain12<Atom>,
 }
 
 Chain12<Atom>: Expression = {
-    <a:@L> <l:Chain12<Atom>> "&&" <r:Chain11<Precedence1Full>> <b:@R> => Expression::And(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain12<Atom>> "&&" <r:Chain11<Precedence1Full>> <b:@R> => Expression::And(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Chain11<Atom>,
 }
 
 Chain11<Atom>: Expression = {
-    <a:@L> <l:Chain11<Atom>> "=" <r:Chain10<Precedence1Full>> <b:@R> => Expression::Equal(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Chain11<Atom>> "!=" <r:Chain10<Precedence1Full>> <b:@R> => Expression::NotEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain11<Atom>> "=" <r:Chain10<Precedence1Full>> <b:@R> => Expression::Equal(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain11<Atom>> "!=" <r:Chain10<Precedence1Full>> <b:@R> => Expression::NotEqual(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Chain10<Atom>,
 }
 
 Chain10<Atom>: Expression = {
-    <a:@L> <l:Chain10<Atom>> "<" <r:Chain9<Precedence1Full>> <b:@R> => Expression::Less(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Chain10<Atom>> ">" <r:Chain9<Precedence1Full>> <b:@R> => Expression::More(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Chain10<Atom>> "<=" <r:Chain9<Precedence1Full>> <b:@R> => Expression::LessEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Chain10<Atom>> ">=" <r:Chain9<Precedence1Full>> <b:@R> => Expression::MoreEqual(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain10<Atom>> "<" <r:Chain9<Precedence1Full>> <b:@R> => Expression::Less(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain10<Atom>> ">" <r:Chain9<Precedence1Full>> <b:@R> => Expression::More(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain10<Atom>> "<=" <r:Chain9<Precedence1Full>> <b:@R> => Expression::LessEqual(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain10<Atom>> ">=" <r:Chain9<Precedence1Full>> <b:@R> => Expression::MoreEqual(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Chain9<Atom>,
 }
 
 Chain9<Atom>: Expression = {
-    <a:@L> <l:Chain9<Atom>> "|" <r:Chain8<Precedence1Full>> <b:@R> => Expression::BitwiseOr(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain9<Atom>> "|" <r:Chain8<Precedence1Full>> <b:@R> => Expression::BitwiseOr(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Chain8<Atom>,
 }
 
 Chain8<Atom>: Expression = {
-    <a:@L> <l:Chain8<Atom>> "^" <r:Chain7<Precedence1Full>> <b:@R> => Expression::BitwiseXor(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain8<Atom>> "^" <r:Chain7<Precedence1Full>> <b:@R> => Expression::BitwiseXor(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Chain7<Atom>,
 }
 
 Chain7<Atom>: Expression = {
-    <a:@L> <l:Chain7<Atom>> "&" <r:Chain6<Precedence1Full>> <b:@R> => Expression::BitwiseAnd(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <e:Chain7<Atom>> "as" <ty:Type> <b:@R> => Expression::Cast(Location::Source(file_no, a, b), Box::new(e), ty),
+    <a:@L> <l:Chain7<Atom>> "&" <r:Chain6<Precedence1Full>> <b:@R> => Expression::BitwiseAnd(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <e:Chain7<Atom>> "as" <ty:Type> <b:@R> => Expression::Cast(Location::source(file_no, a, b), Box::new(e), ty),
     Chain6<Atom>,
 }
 
 Chain6<Atom>: Expression = {
-    <a:@L> <l:Chain6<Atom>> "<<" <r:Chain5<Precedence1Full>> <b:@R> => Expression::ShiftLeft(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Chain6<Atom>> ">>" <r:Chain5<Precedence1Full>> <b:@R> => Expression::ShiftRight(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain6<Atom>> "<<" <r:Chain5<Precedence1Full>> <b:@R> => Expression::ShiftLeft(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain6<Atom>> ">>" <r:Chain5<Precedence1Full>> <b:@R> => Expression::ShiftRight(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Chain5<Atom>,
 }
 
 Chain5<Atom>: Expression = {
-    <a:@L> <l:Chain5<Atom>> "+" <r:Chain4<Precedence1Full>> <b:@R> => Expression::Add(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Chain5<Atom>> "-" <r:Chain4<Precedence1Full>> <b:@R> => Expression::Subtract(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain5<Atom>> "+" <r:Chain4<Precedence1Full>> <b:@R> => Expression::Add(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain5<Atom>> "-" <r:Chain4<Precedence1Full>> <b:@R> => Expression::Subtract(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Chain4<Atom>,
 }
 
 Chain4<Atom>: Expression = {
-    <a:@L> <l:Chain4<Atom>> "*" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Multiply(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Chain4<Atom>> "/" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Divide(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
-    <a:@L> <l:Chain4<Atom>> "%" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Modulo(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain4<Atom>> "*" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Multiply(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain4<Atom>> "/" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Divide(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain4<Atom>> "%" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Modulo(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Chain3<Atom>,
 }
 
 Chain3<Atom>: Expression = {
-    <a:@L> <l:Chain2<Atom>> "**" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Power(Location::Source(file_no, a, b), Box::new(l), Box::new(r)),
+    <a:@L> <l:Chain2<Atom>> "**" <r:Chain3<Precedence1Full>> <b:@R> => Expression::Power(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     Chain2<Atom>,
 }
 
 Chain2<Atom>: Expression = {
-    <a:@L> "!" <e:Chain2<Atom>> <b:@R> => Expression::Not(Location::Source(file_no, a, b), Box::new(e)),
-    <a:@L> "~" <e:Chain2<Atom>> <b:@R> => Expression::BitwiseNot(Location::Source(file_no, a, b), Box::new(e)),
-    <a:@L> "+" <e:Chain2<Atom>> <b:@R>  => Expression::UnaryPlus(Location::Source(file_no, a, b), Box::new(e)),
-    <a:@L> "-" <e:Chain2<Atom>> <b:@R> => Expression::Negate(Location::Source(file_no, a, b), Box::new(e)),
+    <a:@L> "!" <e:Chain2<Atom>> <b:@R> => Expression::Not(Location::source(file_no, a, b), Box::new(e)),
+    <a:@L> "~" <e:Chain2<Atom>> <b:@R> => Expression::BitwiseNot(Location::source(file_no, a, b), Box::new(e)),
+    <a:@L> "+" <e:Chain2<Atom>> <b:@R>  => Expression::UnaryPlus(Location::source(file_no, a, b), Box::new(e)),
+    <a:@L> "-" <e:Chain2<Atom>> <b:@R> => Expression::Negate(Location::source(file_no, a, b), Box::new(e)),
     Atom,
 }
 
@@ -543,16 +543,16 @@ Precedence1Full: Expression = {
     // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта с тернарным `?:`)
     <l:@L> <a:address> <r:@R> => {
         let (addr_val, bit_val) = parse_address_literal(a);
-        Expression::Address(Location::Source(file_no, l, r), addr_val, bit_val)
+        Expression::Address(Location::source(file_no, l, r), addr_val, bit_val)
     },
     <l:@L> <n:number> <r:@R> => {
-        Expression::Number(Location::Source(file_no, l, r), n)
+        Expression::Number(Location::source(file_no, l, r), n)
     },
     <l:@L> <n:rational> <r:@R> => {
-        Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1)
+        Expression::Rational(Location::source(file_no, l, r), n.0.to_string(), n.1)
     },
     <l:@L> "{" <v:CommaOne<Expression>> "}" <r:@R> => {
-        Expression::Initializer(Location::Source(file_no, l, r), v)
+        Expression::Initializer(Location::source(file_no, l, r), v)
     },
     Precedence0
 }
@@ -561,13 +561,13 @@ Precedence1NoBrace: Expression = {
     // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта с тернарным `?:`)
     <l:@L> <a:address> <r:@R> => {
         let (addr_val, bit_val) = parse_address_literal(a);
-        Expression::Address(Location::Source(file_no, l, r), addr_val, bit_val)
+        Expression::Address(Location::source(file_no, l, r), addr_val, bit_val)
     },
     <l:@L> <n:number> <r:@R> => {
-        Expression::Number(Location::Source(file_no, l, r), n)
+        Expression::Number(Location::source(file_no, l, r), n)
     },
     <l:@L> <n:rational> <r:@R> => {
-        Expression::Rational(Location::Source(file_no, l, r), n.0.to_string(), n.1)
+        Expression::Rational(Location::source(file_no, l, r), n.0.to_string(), n.1)
     },
     // Инициализатор массива `{…}` намеренно отсутствует: в loop-условии
     // ведущая `{` всегда начинает тело цикла. Для инициализатора — скобки:
@@ -586,12 +586,12 @@ Precedence0: Expression = {
           }
       }
 
-      Expression::List(Location::Source(file_no, l, r), a)
+      Expression::List(Location::source(file_no, l, r), a)
   },
-  <a:@L> <e:Precedence0> "." <i:Member> <b:@R> => Expression::BitAccess(Location::Source(file_no, a, b), Box::new(e), i),
-  <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Expression::ArraySubscript(Location::Source(file_no, a, b), i, Box::new(Expression::Number(Location::Source(file_no, a, b), n))),
-  <a:@L> <i:Identifier> "[" <idx:Identifier> "]" <b:@R> => Expression::ArraySubscript(Location::Source(file_no, a, b), i, Box::new(Expression::Variable(idx))),
-  <a:@L> <i:Identifier> "[" <l:number?> ":" <r:number?> "]" <b:@R> => Expression::ArraySlice(Location::Source(file_no, a, b), i, l, r),
+  <a:@L> <e:Precedence0> "." <i:Member> <b:@R> => Expression::BitAccess(Location::source(file_no, a, b), Box::new(e), i),
+  <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Expression::ArraySubscript(Location::source(file_no, a, b), i, Box::new(Expression::Number(Location::source(file_no, a, b), n))),
+  <a:@L> <i:Identifier> "[" <idx:Identifier> "]" <b:@R> => Expression::ArraySubscript(Location::source(file_no, a, b), i, Box::new(Expression::Variable(idx))),
+  <a:@L> <i:Identifier> "[" <l:number?> ":" <r:number?> "]" <b:@R> => Expression::ArraySlice(Location::source(file_no, a, b), i, l, r),
   LiteralExpression,
 }
 
@@ -603,9 +603,9 @@ ParameterTypeExpr: Expression = {
     // Составной тип [тип;N] → Expression::Type(loc, Type::Array)
     <l:@L> "[" <ty:Type> ";" <n:number> "]" <r:@R> => {
         Expression::Type(
-            Location::Source(file_no, l, r),
+            Location::source(file_no, l, r),
             Type::Array {
-                loc: Location::Source(file_no, l, r),
+                loc: Location::source(file_no, l, r),
                 element_count: n as u16,
                 element_type: Box::new(ty),
             }
@@ -616,22 +616,22 @@ ParameterTypeExpr: Expression = {
 
 Parameter: Parameter = {
     <l:@L> <name:Identifier> ":" <ty:ParameterTypeExpr> <r:@R> => {
-        let loc = Location::Source(file_no, l, r);
+        let loc = Location::source(file_no, l, r);
         Parameter{loc, ty, name: Some(name)}
     },
     <l:@L> <ty:ParameterTypeExpr> <r:@R> => {
-        let loc = Location::Source(file_no, l, r);
+        let loc = Location::source(file_no, l, r);
         Parameter{loc, ty: ty, name: None}
     }
 }
 
 OptParameter: (Location, Option<Parameter>) = {
-    <l:@L> <p:Parameter?> <r:@R> => (Location::Source(file_no, l, r), p),
+    <l:@L> <p:Parameter?> <r:@R> => (Location::source(file_no, l, r), p),
 }
 
 ParameterList: Vec<(Location, Option<Parameter>)> = {
     "(" ")" => Vec::new(),
-    "(" <l:@L> <p:Parameter> <r:@R> ")" => vec!((Location::Source(file_no, l, r), Some(p))),
+    "(" <l:@L> <p:Parameter> <r:@R> ")" => vec!((Location::source(file_no, l, r), Some(p))),
     "(" <CommaTwo<OptParameter>> ")" => <>,
     "(" <false_token:!> ")"=> {
         parser_errors.push(<>);
@@ -639,23 +639,23 @@ ParameterList: Vec<(Location, Option<Parameter>)> = {
     }
 }
 LiteralExpression: Expression = {
-    <a:@L> "true" <b:@R> => Expression::Bool(Location::Source(file_no, a, b), true),
-    <a:@L> "false" <b:@R> => Expression::Bool(Location::Source(file_no, a, b), false),
+    <a:@L> "true" <b:@R> => Expression::Bool(Location::source(file_no, a, b), true),
+    <a:@L> "false" <b:@R> => Expression::Bool(Location::source(file_no, a, b), false),
     <StringLiteral+> => Expression::String(<>),
 }
 
 BlockStatement: Statement = {
     <l:@L> "{" <statements:Statement*> "}" <r:@R> => {
-        Statement::Block { loc: Location::Source(file_no, l, r), unchecked: false, statements }
+        Statement::Block { loc: Location::source(file_no, l, r), unchecked: false, statements }
     },
 }
 
 OpenStatement: Statement = {
     <l:@L> "if" <cond:Expression> <body:BlockStatement> <r:@R> => {
-        Statement::If(Location::Source(file_no, l, r), cond, Box::new(body), None)
+        Statement::If(Location::source(file_no, l, r), cond, Box::new(body), None)
     },
     <l:@L> "if" <cond:Expression> <body:BlockStatement> "else" <o:OpenStatement> <r:@R> => {
-        Statement::If(Location::Source(file_no, l, r), cond, Box::new(body), Some(Box::new(o)))
+        Statement::If(Location::source(file_no, l, r), cond, Box::new(body), Some(Box::new(o)))
     },
     // С1 (вариант A): while/for не могут быть OpenStatement, так как их тело — всегда
     // BlockStatement (закрытый). OpenStatement содержит только незакрытые if-цепочки.
@@ -664,44 +664,44 @@ OpenStatement: Statement = {
 ClosedStatement: Statement = {
     NonIfStatement,
     <l:@L> "if" <cond:Expression> <body:BlockStatement> "else" <o:ClosedStatement> <r:@R> => {
-        Statement::If(Location::Source(file_no, l, r), cond, Box::new(body), Some(Box::new(o)))
+        Statement::If(Location::source(file_no, l, r), cond, Box::new(body), Some(Box::new(o)))
     },
     // Цикл loop без условия (бесконечный): loop { тело }
     // '{' безусловно начинает тело — неоднозначности нет
     <l:@L> "loop" <b:BlockStatement> <r:@R> => {
-        Statement::Loop(Location::Source(file_no, l, r), None, Box::new(b), LoopKeyword::Loop)
+        Statement::Loop(Location::source(file_no, l, r), None, Box::new(b), LoopKeyword::Loop)
     },
     // Цикл loop с условием: loop условие { тело }
     // LoopCond не начинается с '{', что устраняет LR(1)-конфликт с BlockStatement
     <l:@L> "loop" <e:LoopCond> <b:BlockStatement> <r:@R> => {
-        Statement::Loop(Location::Source(file_no, l, r), Some(e), Box::new(b), LoopKeyword::Loop)
+        Statement::Loop(Location::source(file_no, l, r), Some(e), Box::new(b), LoopKeyword::Loop)
     },
     // `while условие { тело }` — синоним `loop условие { тело }`.
     // Различает их только LoopKeyword: он нужен форматтеру (фича 0024), чтобы
     // печатать слово автора; семантика оба варианта не различает.
     <l:@L> "while" <e:LoopCond> <b:BlockStatement> <r:@R> => {
-        Statement::Loop(Location::Source(file_no, l, r), Some(e), Box::new(b), LoopKeyword::While)
+        Statement::Loop(Location::source(file_no, l, r), Some(e), Box::new(b), LoopKeyword::While)
     },
     // С1 (вариант A): for без скобок вокруг заголовка; тело — обязательный блок в {}.
     <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> <block:BlockStatement> <r:@R> => {
-        Statement::For(Location::Source(file_no, l, r), b.map(Box::new), c.map(Box::new), n.map(Box::new), Some(Box::new(block)))
+        Statement::For(Location::source(file_no, l, r), b.map(Box::new), c.map(Box::new), n.map(Box::new), Some(Box::new(block)))
     },
     // С1 (вариант A): for без тела (пустой цикл с завершающей ';')
     <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> <r:@R> ";" => {
-        Statement::For(Location::Source(file_no, l, r), b.map(Box::new), c.map(Box::new), n.map(Box::new), None)
+        Statement::For(Location::source(file_no, l, r), b.map(Box::new), c.map(Box::new), n.map(Box::new), None)
     }
 }
 
 // Образец в ветке match: конкретное значение или `_` (wildcard).
 MatchPattern: MatchPattern = {
-    <l:@L> "_" <r:@R> => MatchPattern::Wildcard(Location::Source(file_no, l, r)),
+    <l:@L> "_" <r:@R> => MatchPattern::Wildcard(Location::source(file_no, l, r)),
     <e:LoopCond> => MatchPattern::Value(e),
 }
 
 // Одна ветка match: `образец (, образец)* => { тело }`.
 MatchArm: MatchArm = {
     <l:@L> <pats:CommaOne<MatchPattern>> "=>" <body:BlockStatement> <r:@R> => MatchArm {
-        loc: Location::Source(file_no, l, r),
+        loc: Location::source(file_no, l, r),
         patterns: pats,
         body: Box::new(body),
     },
@@ -712,11 +712,11 @@ Statement: Statement = {
     ClosedStatement,
     // Оператор match: `match выражение { ветки }`.
     <l:@L> "match" <e:LoopCond> "{" <arms:MatchArm*> "}" <r:@R> => {
-        Statement::Match(Location::Source(file_no, l, r), Box::new(e), arms)
+        Statement::Match(Location::source(file_no, l, r), Box::new(e), arms)
     },
     <l:@L> <false_token:!> <r:@R> => {
         parser_errors.push(false_token);
-        Statement::Error(Location::Source(file_no, l, r))
+        Statement::Error(Location::source(file_no, l, r))
     },
 }
 
@@ -724,10 +724,10 @@ SimpleStatement: Statement = {
     // С4: var/const внутри блока — LocalVariableDefine не включает ";",
     // который добавляет NonIfStatement через <SimpleStatement> ";".
     <l:@L> <v:LocalVariableDefine> <r:@R> => {
-        Statement::Variable(Location::Source(file_no, l, r), v, None)
+        Statement::Variable(Location::source(file_no, l, r), v, None)
     },
     <l:@L> <e:Expression> <r:@R> => {
-        Statement::Expression(Location::Source(file_no, l, r), e)
+        Statement::Expression(Location::source(file_no, l, r), e)
     }
 }
 
@@ -735,7 +735,7 @@ NonIfStatement: Statement = {
     BlockStatement => <>,
     <l:@L> "assembly" <dialect:StringLiteral?> <block:BlockStatement> <r:@R> => {
         Statement::Assembly {
-            loc: Location::Source(file_no, l, r),
+            loc: Location::source(file_no, l, r),
             dialect: dialect.map(|dialect| dialect.to_owned()),
             flags: None,
             block: Box::new(block)
@@ -743,7 +743,7 @@ NonIfStatement: Statement = {
     },
     <l:@L> "formula" <dialect:StringLiteral?> <block:FormulaBlock> <r:@R> => {
         Statement::Formula {
-            loc: Location::Source(file_no, l, r),
+            loc: Location::source(file_no, l, r),
             dialect: dialect.map(|dialect| dialect.to_owned()),
             flags: None,
             block: Box::new(block)
@@ -754,31 +754,31 @@ NonIfStatement: Statement = {
     },
     <SimpleStatement> ";" => <>,
     <l:@L> "continue" <r:@R> ";" => {
-        Statement::Continue(Location::Source(file_no, l, r))
+        Statement::Continue(Location::source(file_no, l, r))
     },
     <l:@L> "break" <r:@R> ";" => {
-        Statement::Break(Location::Source(file_no, l, r))
+        Statement::Break(Location::source(file_no, l, r))
     },
     <l:@L> "return" <r:@R> ";" => {
-        Statement::Return(Location::Source(file_no, l, r), None)
+        Statement::Return(Location::source(file_no, l, r), None)
     },
     <l:@L> "return" <e:Expression> <r:@R> ";" => {
-        Statement::Return(Location::Source(file_no, l, r), Some(e))
+        Statement::Return(Location::source(file_no, l, r), Some(e))
     },
 }
 
 
 StringLiteral: StringLiteral = {
     <l:@L> <s:string> <r:@R> => {
-        StringLiteral{ loc: Location::Source(file_no, l, r), unicode: s.0, string: s.1.to_string() }
+        StringLiteral{ loc: Location::source(file_no, l, r), unicode: s.0, string: s.1.to_string() }
     }
 }
 
 FormulaIdentifier: Identifier = {
-    <l:@L> <n:identifier> <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: n.to_string()},
-    <l:@L> "extern" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "extern".to_string()},
-    <l:@L> "import" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "import".to_string()},
-    <l:@L> "as" <r:@R> => Identifier{loc: Location::Source(file_no, l, r), name: "as".to_string()},
+    <l:@L> <n:identifier> <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: n.to_string()},
+    <l:@L> "extern" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "extern".to_string()},
+    <l:@L> "import" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "import".to_string()},
+    <l:@L> "as" <r:@R> => Identifier{loc: Location::source(file_no, l, r), name: "as".to_string()},
 }
 
 FormulaStatement: FormulaStatement = {
@@ -786,19 +786,19 @@ FormulaStatement: FormulaStatement = {
     <FormulaFunction> => FormulaStatement::Function(Box::new(<>)),
     <l:@L><false_token:!><r:@R> => {
         parser_errors.push(false_token);
-        FormulaStatement::Error(Location::Source(file_no, l ,r))
+        FormulaStatement::Error(Location::source(file_no, l ,r))
     },
 }
 
 FormulaBlock: FormulaBlock = {
-    <l:@L> "{" <statements:FormulaStatement*> "}" <r:@R> => FormulaBlock{loc: Location::Source(file_no, l, r), statements},
+    <l:@L> "{" <statements:FormulaStatement*> "}" <r:@R> => FormulaBlock{loc: Location::source(file_no, l, r), statements},
 }
 
 FormulaLiteral: FormulaExpression = {
-    <a:@L> "true" <t_type:(":" <FormulaIdentifier>)?> <b:@R> => FormulaExpression::Bool(Location::Source(file_no, a, b), true, t_type),
-    <a:@L> "false" <t_type:(":" <FormulaIdentifier>)?> <b:@R> => FormulaExpression::Bool(Location::Source(file_no, a, b), false, t_type),
+    <a:@L> "true" <t_type:(":" <FormulaIdentifier>)?> <b:@R> => FormulaExpression::Bool(Location::source(file_no, a, b), true, t_type),
+    <a:@L> "false" <t_type:(":" <FormulaIdentifier>)?> <b:@R> => FormulaExpression::Bool(Location::source(file_no, a, b), false, t_type),
     <l:@L> <n:number> <t_type:(":" <FormulaIdentifier>)?> <r:@R> => {
-        FormulaExpression::Number(Location::Source(file_no, l, r), n, t_type)
+        FormulaExpression::Number(Location::source(file_no, l, r), n, t_type)
     },
     <str:StringLiteral> <t_type:(":" <FormulaIdentifier>)?> => {
         FormulaExpression::String(str, t_type)
@@ -807,14 +807,14 @@ FormulaLiteral: FormulaExpression = {
 
 FormulaFunction: FormulaFunction = {
     <l:@L> <id:FormulaIdentifier> "(" <arguments:Comma<FormulaExpression>> ")" <r:@R> => {
-        FormulaFunction{loc: Location::Source(file_no, l, r), id, arguments}
+        FormulaFunction{loc: Location::source(file_no, l, r), id, arguments}
     }
 }
 
 FormulaPath: FormulaExpression = {
     <FormulaIdentifier> => FormulaExpression::Variable(<>),
     <l:@L> <array:FormulaPath> "." <member:FormulaIdentifier> <r:@R> => {
-        FormulaExpression::SuffixAccess(Location::Source(file_no, l, r), Box::new(array), member)
+        FormulaExpression::SuffixAccess(Location::source(file_no, l, r), Box::new(array), member)
     },
 }
 

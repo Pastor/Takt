@@ -320,7 +320,7 @@ fn unique_state_name(local_name: &str, model: Rc<RefCell<ModelNode>>) -> String 
     if name.is_empty() {
         return local_name.to_string();
     }
-    format!("{}:{}", &name, local_name)
+    format!("{}:{}", name, local_name)
 }
 
 /// Ищет модель по уникальному имени вида `"Root:Child:Grandchild"`.

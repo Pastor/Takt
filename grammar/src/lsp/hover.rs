@@ -152,7 +152,7 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
     // Если cursor_word = "Robot", а position_node.name = "Main" (объявление покрывает
     // всю строку), поиск пропускается и уступает место резервному поиску по имени.
     use crate::semantic::index::SemanticNodeKind;
-    if let Some(ref node_ref) = position_node.as_ref().filter(|n| n.name == word) {
+    if let Some(node_ref) = position_node.as_ref().filter(|n| n.name == word) {
         // Клонируем Rc в именованный биндинг, чтобы продлить его жизнь на весь блок
         let node_model_rc = node_ref.model.clone().unwrap_or_else(|| model.clone());
         let node_model = node_model_rc.borrow();
@@ -162,13 +162,13 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
         match node_ref.kind {
             SemanticNodeKind::Variable | SemanticNodeKind::Const | SemanticNodeKind::Port => {
                 if let Some(var) = node_model.search_var(&word) {
-                    hover_text = make_var_hover(&var, &word, &doc);
+                    hover_text = make_var_hover(&var, &word, doc);
                 }
             }
             SemanticNodeKind::Function | SemanticNodeKind::ExternFunction => {
                 if let Some(func_rc) = node_model.search_func(&word) {
                     let func = func_rc.borrow();
-                    hover_text = make_func_hover(&func, &word, &doc);
+                    hover_text = make_func_hover(&func, &word, doc);
                 }
             }
             SemanticNodeKind::TypeAlias => {
@@ -253,10 +253,10 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
             SemanticNodeKind::ReferenceCondition => {
                 // Ищем переменную или функцию в модели, содержащей условие
                 if let Some(var) = node_model.search_var(&word) {
-                    hover_text = make_var_hover(&var, &word, &doc);
+                    hover_text = make_var_hover(&var, &word, doc);
                 } else if let Some(func_rc) = node_model.search_func(&word) {
                     let func = func_rc.borrow();
-                    hover_text = make_func_hover(&func, &word, &doc);
+                    hover_text = make_func_hover(&func, &word, doc);
                 } else {
                     // Запасной вариант: показываем имя как есть
                     hover_text = format!("```but\n{}\n```", word);
@@ -276,12 +276,12 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
         let doc = borrowed.element_doc(&word);
         // Ищем переменную
         if let Some(var) = borrowed.search_var(&word) {
-            hover_text = make_var_hover(&var, &word, &doc);
+            hover_text = make_var_hover(&var, &word, doc);
         }
         // Ищем функцию
         else if let Some(func_rc) = borrowed.search_func(&word) {
             let func = func_rc.borrow();
-            hover_text = make_func_hover(&func, &word, &doc);
+            hover_text = make_func_hover(&func, &word, doc);
         }
         // Ищем псевдоним типа
         else if let Some(ty) = borrowed.types.get(&word) {
@@ -330,11 +330,11 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
         }
         // Ищем вариант перечисления
         else if let Some((enum_node, value)) = borrowed.search_enum_variant(&word) {
-            hover_text = format!("```but\n{}::{} = {}\n```", &enum_node.name, word, value);
+            hover_text = format!("```but\n{}::{} = {}\n```", enum_node.name, word, value);
         }
         // Ищем модель
         else if borrowed.search_model(&word).is_some() {
-            let mut text = format!("```but\nmodel {}\n```", &word);
+            let mut text = format!("```but\nmodel {}\n```", word);
             if !doc.is_empty() {
                 text.push_str("\n\n");
                 text.push_str(&doc.join("\n"));

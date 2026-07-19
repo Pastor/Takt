@@ -86,7 +86,7 @@ fn generate_state_comparison(
         .ok_or_else(|| {
             Diagnostic::error(
                 Location::Codegen,
-                format!("Модель {} не найдена", &model_name),
+                format!("Модель {} не найдена", model_name),
             )
             .with_code("CC-012")
         })?;
@@ -94,7 +94,7 @@ fn generate_state_comparison(
     let Element::Model { states, .. } = element else {
         return Err(Diagnostic::error(
             Location::Codegen,
-            format!("Элемент {} не является моделью", &model_name),
+            format!("Элемент {} не является моделью", model_name),
         )
         .with_code("CC-006"));
     };
@@ -105,7 +105,7 @@ fn generate_state_comparison(
         .ok_or_else(|| {
             Diagnostic::error(
                 Location::Codegen,
-                format!("Состояние {} не найдено в модели {}", eq_name, &model_name),
+                format!("Состояние {} не найдено в модели {}", eq_name, model_name),
             )
             .with_code("CC-011")
         })?;
@@ -157,7 +157,7 @@ fn generate_state_comparison(
                 format!(
                     "состояние модели '{}' недостижимо из '{}': модель не \
                      встроена ни в одно состояние родителя",
-                    &model_name,
+                    model_name,
                     owner.name()
                 ),
             )

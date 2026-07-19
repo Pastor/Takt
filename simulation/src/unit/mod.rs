@@ -23,6 +23,10 @@ fn describe(diagnostic: &Diagnostic) -> String {
 /// `name` — отображается как метка ребра в SVG-графе.
 /// Клонирование дёшево (`Rc` под капотом).
 #[derive(Clone)]
+// Тип `func` — замыкание-предикат за `Rc<dyn Fn>`; это и есть суть Predicate,
+// вынос в псевдоним лишь спрятал бы её (сигнатура отличается от `Execution`
+// возвращаемым `bool`, не `Flow`).
+#[allow(clippy::type_complexity)]
 pub(crate) struct Predicate {
     pub(crate) name: String,
     func: Rc<dyn Fn(&mut dyn Context) -> Result<bool, Diagnostic>>,
@@ -106,6 +110,10 @@ pub struct Unit(UnitKind);
 
 /// Внутренняя форма [`Unit`]. `pub(crate)`: имя доступно потребителям крейта
 /// (`state_io`, `builder`, `viewport`), но наружу не реэкспортируется.
+// `Node` — доминирующий вариант (реальные автоматы), `None`/композиты редки:
+// боксировать `Node` ради выравнивания размера значило бы платить за общий
+// случай. Осознанный компромисс (как было и у прежнего `enum Unit`).
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Default)]
 pub(crate) enum UnitKind {
     #[default]
@@ -619,7 +627,7 @@ impl Unit {
                 //        будут ошибочно считаться терминальными.
                 state_transitions
                     .get(state_name)
-                    .map_or(true, |t| t.is_empty())
+                    .is_none_or(|t| t.is_empty())
             }
             UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => {
                 units.iter().all(|u| u.borrow().is_terminal())

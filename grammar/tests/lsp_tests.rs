@@ -8,10 +8,7 @@
 
 #[cfg(feature = "lsp")]
 mod lsp_integration {
-    use grammar::lsp::{
-        completion_items, goto_declaration, hover_info, node_at_position, position_to_offset,
-        semantic_tokens,
-    };
+    use grammar::lsp::{goto_declaration, hover_info, node_at_position, position_to_offset};
     use grammar::parse;
     use grammar::semantic::index::{SemanticIndex, SemanticNodeKind};
     use grammar::semantic::tree::construct_model;
@@ -797,7 +794,8 @@ start Main = Robot;
         let src = r#"import "ping.lam"; start Main;"#;
         // Позиция 7 — символ '"' (начало строки импорта) — за пределами идентификатора
         // Проверяем что функция не паникует при отсутствии узла
-        let _ = goto_declaration_with_paths(src, Position::new(0, 7), &[dir_str.clone()]);
+        let _ =
+            goto_declaration_with_paths(src, Position::new(0, 7), std::slice::from_ref(&dir_str));
 
         // Нет паники — тест прошёл
         // (полное кросс-файловое разрешение зависит от наличия идентификатора в индексе)

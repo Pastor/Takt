@@ -109,30 +109,30 @@ pub fn construct_expression(
         // проверка пропускается — она будет повторно вычислена после вывода типов.
         ast::Expression::ArraySubscript(_, id, idx_expr) => {
             let var = model.borrow().search_var(&id.name).ok_or_else(|| {
-                Diagnostic::from(format!("Переменная '{}' не найдена", &id.name).as_str())
+                Diagnostic::from(format!("Переменная '{}' не найдена", id.name).as_str())
                     .with_code("SE-003")
             })?;
             // Проверяем тип (для динамических индексов проверку границ пропускаем)
             match var_type(&var) {
                 TypeNode::Array(size, _) => {
                     // Статическая проверка границ только для числовых литералов
-                    if let ast::Expression::Number(_, n) = idx_expr.as_ref() {
-                        if *n < 0 || *n >= size as i64 {
-                            return Err(Diagnostic::from(
-                                format!(
-                                    "Индекс {} выходит за границы массива '{}' (размер {})",
-                                    n, &id.name, size
-                                )
-                                .as_str(),
+                    if let ast::Expression::Number(_, n) = idx_expr.as_ref()
+                        && (*n < 0 || *n >= size as i64)
+                    {
+                        return Err(Diagnostic::from(
+                            format!(
+                                "Индекс {} выходит за границы массива '{}' (размер {})",
+                                n, id.name, size
                             )
-                            .with_code("SE-028"));
-                        }
+                            .as_str(),
+                        )
+                        .with_code("SE-028"));
                     }
                 }
                 TypeNode::Inference => {} // тип ещё не выведен — пропускаем проверку
                 _ => {
                     return Err(Diagnostic::from(
-                        format!("Переменная '{}' не является массивом", &id.name).as_str(),
+                        format!("Переменная '{}' не является массивом", id.name).as_str(),
                     )
                     .with_code("SE-030"));
                 }
@@ -145,7 +145,7 @@ pub fn construct_expression(
         }
         ast::Expression::ArraySlice(_, id, start, end) => {
             let var = model.borrow().search_var(&id.name).ok_or_else(|| {
-                Diagnostic::from(format!("Переменная '{}' не найдена", &id.name).as_str())
+                Diagnostic::from(format!("Переменная '{}' не найдена", id.name).as_str())
                     .with_code("SE-003")
             })?;
             // Проверяем тип и границы среза (если тип известен)
@@ -156,7 +156,7 @@ pub fn construct_expression(
                 TypeNode::Inference => {} // тип ещё не выведен — пропускаем
                 _ => {
                     return Err(Diagnostic::from(
-                        format!("Переменная '{}' не является массивом", &id.name).as_str(),
+                        format!("Переменная '{}' не является массивом", id.name).as_str(),
                     )
                     .with_code("SE-030"));
                 }

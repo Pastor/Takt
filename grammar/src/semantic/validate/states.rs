@@ -220,7 +220,7 @@ fn collect_transition_completeness(model: &Rc<RefCell<ModelNode>>, out: &mut Vec
     }
 
     // Правила Ce5.3 и Ce5.4: проверка next совместно с ref
-    for (_state_name, state) in borrowed.states.iter() {
+    for state in borrowed.states.values() {
         if let StateNode::Implement {
             name,
             references,

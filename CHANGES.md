@@ -7,6 +7,31 @@
 
 ## [Не выпущено]
 
+### Изменено (фича [0046](docs/features/0046-build-warnings-cleanup.md) — устранение всех предупреждений сборки) — **ЗАКРЫТА**
+
+- **rustc 0 / clippy 0 предупреждений** в обоих крейтах, закреплено `-D warnings`
+  на шаге clippy в `scripts/precheck.sh` и `.github/workflows/ci.yml` (Option B
+  ADR). Clippy гоняет и clippy-, и rustc-линты — один флаг покрывает оба набора;
+  это CLI-уровень, **не** запрещённый `#![deny(warnings)]` в коде (`docs/CODE.md`).
+- **`Diagnostic` ужат ниже порога 128 байт** (`clippy::result_large_err`): смена
+  типов полей `Location::Source(u64, usize, usize) → (u32, u32, u32)` (вариант 16
+  байт вместо 32, `Diagnostic` 136 → 120). Сняла **414** предупреждений на
+  `Result<_, Diagnostic>` без `#[allow]` и без правки сигнатур. Публичный API
+  методов `Location` остался в `usize`/`String` — каст локализован в аксессорах и
+  новом хелпере-конструкторе `Location::source(u64, usize, usize)` (им заменены
+  160 конструирований в `grammar.lalrpop`/лексере).
+  ⚠️ Инвентарь карточки (2026-07-15, ~125) устарел за 4 дня: свежий прогон дал
+  **549 clippy** (414 — `result_large_err`, включён по умолчанию в clippy 0.1.99).
+- **Остаток (~135):** `cargo clippy --fix` (needless_ref/collapsible_if/
+  clone_on_copy/…) + ручные (`too_many_arguments`, `large_enum_variant`,
+  `type_complexity`, `upper_case_acronyms`, `redundant_guards` → `#[allow]` с
+  обоснованием; `doc_lazy_continuation`, `field_reassign_with_default`,
+  `assertions_on_constants`, `needless_range_loop`, `get().is_none()` → правки) +
+  3 rustc (`unused_imports`, `missing_docs`, `dead_code`).
+- **Крейт `grammar` 0.6.0 → 0.7.0** (ломающая смена типов публичного
+  `Location::Source`; язык не менялся, правило 18). Вывод генераторов
+  байт-в-байт неизменен (`git diff examples/generated` пуст); `precheck.sh` EXIT=0.
+
 ### Изменено (фича [0036](docs/features/0036-sim-visibility.md) — согласование видимости API `simulation`) — **ЗАКРЫТА**
 
 - **`Unit` инкапсулирован** (ADR 0036, Option B): `pub enum Unit` →

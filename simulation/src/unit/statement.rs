@@ -367,10 +367,10 @@ fn exec_loop(
 ) -> Result<Flow, Diagnostic> {
     let mut iterations = 0_u32;
     loop {
-        if let Some(cond) = cond {
-            if !eval_bool(cond, ctx)? {
-                break;
-            }
+        if let Some(cond) = cond
+            && !eval_bool(cond, ctx)?
+        {
+            break;
         }
         match exec_statement(body, ctx)? {
             Flow::Normal | Flow::Continue => {}
@@ -402,10 +402,10 @@ fn exec_for(
     }
     let mut iterations = 0_u32;
     loop {
-        if let Some(cond) = cond {
-            if !eval_bool(cond, ctx)? {
-                break;
-            }
+        if let Some(cond) = cond
+            && !eval_bool(cond, ctx)?
+        {
+            break;
         }
         match exec_statement(body, ctx)? {
             Flow::Normal | Flow::Continue => {}

@@ -23,6 +23,8 @@ type Positions = Vec<(f64, f64)>;
 // ── Перечисления вывода ───────────────────────────────────────────────────────
 
 /// Результат отрисовки: обёртка над конкретным документом.
+// `SVG` — устоявшийся акроним формата (как `HTML`/`PNG`); `Svg` читался бы хуже.
+#[allow(clippy::upper_case_acronyms)]
 pub(crate) enum Viewport {
     SVG(Document),
 }
@@ -170,7 +172,7 @@ fn rects_intersection_area(
 /// - `edges_vec` — рёбра `(индекс_источника, индекс_цели, подпись)`.
 /// - `positions` — координаты центров узлов, соответствующие `node_labels`.
 /// - `cfg` — конфигурация с размерами холста и параметрами отрисовки.
-
+#[allow(clippy::too_many_arguments)]
 fn create_svg(
     node_labels: &[String],
     node_aliases: &[String],
@@ -258,17 +260,15 @@ fn create_svg(
     );
 
     // Фон (SVG-режим): покрывает всю ширину включая панели легенды.
-    if is_svg {
-        if let Some(ref bg) = cfg.canvas.svg_background {
-            document = document.add(
-                Rectangle::new()
-                    .set("x", 0)
-                    .set("y", 0)
-                    .set("width", total_width)
-                    .set("height", cfg.canvas.height)
-                    .set("fill", bg.as_str()),
-            );
-        }
+    if is_svg && let Some(ref bg) = cfg.canvas.svg_background {
+        document = document.add(
+            Rectangle::new()
+                .set("x", 0)
+                .set("y", 0)
+                .set("width", total_width)
+                .set("height", cfg.canvas.height)
+                .set("fill", bg.as_str()),
+        );
     }
 
     // ── Граф (рёбра + узлы + шапка) в сдвинутой группе ──────────────────────
@@ -310,7 +310,7 @@ fn create_svg(
 
     // ── Рёбра ────────────────────────────────────────────────────────────────
     for (idx, (i, j, edge_label)) in edges_vec.iter().enumerate() {
-        let is_highlighted = highlighted_edge.map_or(false, |(hi, hj)| *i == hi && *j == hj);
+        let is_highlighted = highlighted_edge.is_some_and(|(hi, hj)| *i == hi && *j == hj);
         let multiplicity = edge_multiplicities[idx];
         let (x1, y1) = positions[*i];
         let (x2, y2) = positions[*j];
@@ -950,16 +950,14 @@ pub(super) mod graph {
         w_cross: f64,
         cross_penalty: f64,
     ) -> f64 {
-        let n = positions.len();
         let min_d = 2.0 * radius + min_distance;
         let mut delta = 0.0;
 
         // Перекрытие: пары (idx, j) для всех j ≠ idx
-        for j in 0..n {
+        for (j, &pj) in positions.iter().enumerate() {
             if j == idx {
                 continue;
             }
-            let pj = positions[j];
             let old_d = dist(old_pos, pj);
             if old_d < min_d {
                 delta -= w_overlap * (min_d - old_d).powi(2);

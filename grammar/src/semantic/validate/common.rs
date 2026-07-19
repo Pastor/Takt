@@ -34,7 +34,7 @@ fn validate_cond(
                             id.loc,
                             format!(
                                 "Состояние '{}' не найдено в моделе '{}'",
-                                &id.name, &model_name
+                                id.name, model_name
                             ),
                         )
                         .with_code("SE-033")

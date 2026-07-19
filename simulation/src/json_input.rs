@@ -45,10 +45,8 @@ pub fn json_to_value(v: &serde_json::Value) -> Option<Value> {
         serde_json::Value::Number(n) => {
             if let Some(i) = n.as_i64() {
                 Some(Value::Number(i))
-            } else if let Some(f) = n.as_f64() {
-                Some(Value::Real(f))
             } else {
-                None
+                n.as_f64().map(Value::Real)
             }
         }
         serde_json::Value::Array(arr) => {

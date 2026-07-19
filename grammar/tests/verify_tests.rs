@@ -265,7 +265,7 @@ fn oracle_finally(kripke: &grammar::verification::kripke::Kripke, atom: &str) ->
     if !ok(kripke.initial) {
         return true; // старт — уже X
     }
-    let sub = reachable_from_start(kripke, &ok);
+    let sub = reachable_from_start(kripke, ok);
     // Итеративно отбрасываем вершины без преемников внутри подграфа; остаток —
     // вершины на циклах и ведущие к ним. Пусто ⟹ цикла нет ⟹ X неизбежно.
     let mut alive = sub;

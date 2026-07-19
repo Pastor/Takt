@@ -86,6 +86,7 @@ pub struct SimulationRunner {
 }
 
 impl SimulationRunner {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         unit: Unit,
         sim_steps: Vec<SimStep>,
@@ -180,11 +181,11 @@ impl SimulationRunner {
             }
 
             // Проверяем guard
-            if let Some(step) = &sim_step {
-                if let Some(guard) = &step.guard {
-                    let guard = guard.clone();
-                    self.check_guard(&guard, step_no + 1)?;
-                }
+            if let Some(step) = &sim_step
+                && let Some(guard) = &step.guard
+            {
+                let guard = guard.clone();
+                self.check_guard(&guard, step_no + 1)?;
             }
 
             // Проверяем терминальность

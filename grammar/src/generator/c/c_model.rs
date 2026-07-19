@@ -1049,7 +1049,7 @@ pub(super) fn generate_model_functions(
         .nl();
     printer
         .up()
-        .ident(format!("{}_init(model", &struct_name).as_str())
+        .ident(format!("{}_init(model", struct_name).as_str())
         .print(&call_append)
         .print(");")
         .down()

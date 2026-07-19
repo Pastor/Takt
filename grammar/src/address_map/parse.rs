@@ -86,7 +86,7 @@ impl Scanner {
     }
 
     fn loc(&self, start: usize, end: usize) -> Location {
-        Location::Source(self.file_no, start, end)
+        Location::source(self.file_no, start, end)
     }
 }
 

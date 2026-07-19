@@ -228,7 +228,7 @@ pub(crate) fn print_statement(
 /// `ST-011`, если тело содержит `continue`: в си-образном `for` шаг выполняется и
 /// после `continue`, а в `WHILE` — нет. Развернуть такой цикл, не изменив
 /// семантику, нельзя, поэтому отказ громкий, а не тихое расхождение.
-#[allow(clippy::ref_option)]
+#[allow(clippy::ref_option, clippy::too_many_arguments)]
 fn print_for(
     init: &Option<Box<StatementNode>>,
     cond: &Option<Box<ExpressionNode>>,

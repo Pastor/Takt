@@ -24,6 +24,14 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: check
+      # Ноль-долг предупреждений (фича 0046): `-D warnings` валит CI на ЛЮБОМ
+      # предупреждении — clippy гоняет и clippy-, и rustc-линты. Держит долг на
+      # нуле механически; точечные исключения — `#[allow(...)]` у места.
+      - name: Линты (0 предупреждений, фича 0046)
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all-targets --all-features -- -D warnings
       - name: Размер модулей (храповик, фича 0027)
         run: ./scripts/check-module-size.sh
       - name: Тестики

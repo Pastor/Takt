@@ -333,7 +333,7 @@ fn define_alone_is_not_an_address_source() {
     let model = model_of("in BTN: bit; start Idle { ref Done: BTN; } state Done;");
     let env = env_of(&["BTN=0x00200000"]);
     let r = resolve_addresses(model, &[], &env);
-    assert!(r.map.get("BTN").is_none(), "define — не источник адреса");
+    assert!(!r.map.contains_key("BTN"), "define — не источник адреса");
     let codes = codes_of(&r);
     assert!(codes.contains(&"SE-052"), "{codes:?}");
     assert!(codes.contains(&"DF-004"), "{codes:?}");
@@ -373,9 +373,7 @@ fn parse_defines_rejects_bad_format() {
 /// T13: `DF-002` — негодный литерал значения.
 #[test]
 fn parse_defines_rejects_bad_value() {
-    let diags = grammar::parse_defines(&["N=0xZZ".to_string()])
-        .err()
-        .expect("отказ");
+    let diags = grammar::parse_defines(&["N=0xZZ".to_string()]).expect_err("отказ");
     assert_eq!(diags[0].code.as_deref(), Some("DF-002"));
 }
 
@@ -385,9 +383,8 @@ fn parse_defines_rejects_bad_value() {
 /// зависящим от порядка флагов (симметрия с `AM-006`).
 #[test]
 fn parse_defines_rejects_duplicate() {
-    let diags = grammar::parse_defines(&["N=0x1".to_string(), "N=0x2".to_string()])
-        .err()
-        .expect("отказ");
+    let diags =
+        grammar::parse_defines(&["N=0x1".to_string(), "N=0x2".to_string()]).expect_err("отказ");
     assert_eq!(diags[0].code.as_deref(), Some("DF-003"));
 }
 

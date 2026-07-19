@@ -43,7 +43,7 @@ pub fn goto_declaration(source: &str, position: Position) -> Option<Range> {
     };
     // Однофайловый вариант отдаёт диапазон в СВОЁМ тексте: сказать, где искать
     // чужой файл, ему нечем (путей поиска нет, реестра нет).
-    (file_no == ROOT_FILE_NO).then(|| offset_to_range(source, start, end))
+    (file_no as u64 == ROOT_FILE_NO).then(|| offset_to_range(source, start as usize, end as usize))
 }
 
 /// Разрешает позицию декларации с поддержкой кросс-файловых переходов.
@@ -119,16 +119,16 @@ pub fn goto_declaration_at(
 
     // Свой файл: диапазон считается по уже имеющемуся тексту, URI подставит
     // вызывающий — контракт сохранён (ADR 0056, A4).
-    if file_no == ROOT_FILE_NO {
+    if file_no as u64 == ROOT_FILE_NO {
         return Some(Location {
             uri: String::new(),
-            range: offset_to_range(source, start, end),
+            range: offset_to_range(source, start as usize, end as usize),
         });
     }
 
     // Чужой файл: точный путь — из реестра; диапазон — по ЕГО тексту (смещения
     // чужого файла к своему не относятся).
-    let path = files.path(file_no)?;
+    let path = files.path(file_no as u64)?;
     let target_source = std::fs::read_to_string(path).ok()?;
     let uri = std::path::Path::new(path)
         .canonicalize()
@@ -136,7 +136,7 @@ pub fn goto_declaration_at(
         .unwrap_or_else(|_| format!("file://{}", path));
     Some(Location {
         uri,
-        range: offset_to_range(&target_source, start, end),
+        range: offset_to_range(&target_source, start as usize, end as usize),
     })
 }
 
@@ -167,16 +167,16 @@ fn declaration_location_of(node: &SemanticNodeRef) -> Option<DiagLoc> {
         Reference => {
             let model_rc = node.model.as_ref()?.clone();
             let state_rc = model_rc.borrow().search_state(&node.name)?;
-            let loc = state_rc.borrow().loc();
-            loc
+
+            state_rc.borrow().loc()
         }
         // Ссылка на модель (`= Helper`, `S(Helper)`): единственный вид, способный
         // указать в другой файл — имя из `import` связано с корнем чужого файла.
         ReferenceModel => {
             let model_rc = node.model.as_ref()?.clone();
             let target = model_rc.borrow().search_model(&node.name)?;
-            let loc = target.borrow().loc;
-            loc
+
+            target.borrow().loc
         }
         // Использование в условии перехода: ищем переменную или функцию
         ReferenceCondition => {
@@ -184,11 +184,10 @@ fn declaration_location_of(node: &SemanticNodeRef) -> Option<DiagLoc> {
             let model = model_rc.borrow();
             if let Some(var) = model.search_var(&node.name) {
                 var.loc()
-            } else if let Some(func_rc) = model.search_func(&node.name) {
-                let loc = func_rc.borrow().loc();
-                loc
             } else {
-                return None;
+                let func_rc = model.search_func(&node.name)?;
+
+                func_rc.borrow().loc()
             }
         }
     };

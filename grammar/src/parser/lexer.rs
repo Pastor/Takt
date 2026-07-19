@@ -559,14 +559,14 @@ impl<'input> Lexer<'input> {
             let mut end = match self.chars.next() {
                 Some((end, ch)) if ch.is_ascii_hexdigit() => end,
                 Some((..)) => {
-                    return Err(LexicalError::MissingNumber(Location::Source(
+                    return Err(LexicalError::MissingNumber(Location::source(
                         self.file_no,
                         start,
                         start + 1,
                     )));
                 }
                 None => {
-                    return Err(LexicalError::EndOfFileInHex(Location::Source(
+                    return Err(LexicalError::EndOfFileInHex(Location::source(
                         self.file_no,
                         start,
                         self.input.len(),
@@ -677,7 +677,7 @@ impl<'input> Lexer<'input> {
             }
 
             if exp_start > end {
-                return Err(LexicalError::MissingExponent(Location::Source(
+                return Err(LexicalError::MissingExponent(Location::source(
                     self.file_no,
                     start,
                     self.input.len(),
@@ -737,7 +737,7 @@ impl<'input> Lexer<'input> {
                     last_was_escape = false;
                 }
             } else {
-                return Err(LexicalError::EndOfFileInString(Location::Source(
+                return Err(LexicalError::EndOfFileInString(Location::source(
                     self.file_no,
                     token_start,
                     self.input.len(),
@@ -835,13 +835,13 @@ impl<'input> Lexer<'input> {
                             if doc_comment {
                                 // Документационный комментарий `///`
                                 self.comments.push(Comment::DocLine(
-                                    Location::Source(self.file_no, start, last),
+                                    Location::source(self.file_no, start, last),
                                     self.input[start..last].to_owned(),
                                 ));
                             } else {
                                 // Обычный строчный комментарий `//`
                                 self.comments.push(Comment::Line(
-                                    Location::Source(self.file_no, start, last),
+                                    Location::source(self.file_no, start, last),
                                     self.input[start..last].to_owned(),
                                 ));
                             }
@@ -857,7 +857,7 @@ impl<'input> Lexer<'input> {
                                         None => {
                                             // Неожиданный конец файла внутри комментария
                                             self.errors.push(LexicalError::EndOfFileInComment(
-                                                Location::Source(
+                                                Location::source(
                                                     self.file_no,
                                                     start,
                                                     self.input.len(),
@@ -878,7 +878,7 @@ impl<'input> Lexer<'input> {
 
                             // Блочный комментарий не производит токены, только собирается
                             self.comments.push(Comment::Block(
-                                Location::Source(self.file_no, start, last),
+                                Location::source(self.file_no, start, last),
                                 self.input[start..last].to_owned(),
                             ));
                         }
@@ -1058,7 +1058,7 @@ impl<'input> Lexer<'input> {
                     }
 
                     self.errors.push(LexicalError::UnrecognisedToken(
-                        Location::Source(self.file_no, start, end),
+                        Location::source(self.file_no, start, end),
                         self.input[start..end].to_owned(),
                     ));
                 }
