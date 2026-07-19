@@ -22,6 +22,7 @@ pub mod formula;
 mod function;
 mod import;
 pub mod index;
+pub mod lower_float;
 pub mod ltl_check;
 /// Карта семантических элементов модели для генератора кода.
 ///

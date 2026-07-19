@@ -511,6 +511,12 @@ pub fn compile_to_sv(
         model.borrow_mut().name = Some(stem);
     }
 
+    // Фича 0096: при `--float-as-q=m.n` понижаем `float → q(m, n)` (снимая
+    // `SV-003`). Для `sv` флаг применяется всегда (не требует `--float-embedded`).
+    if let Some((m, n)) = options.float_as_q {
+        semantic::lower_float::lower_float_to_fixed(model.clone(), m, n)?;
+    }
+
     generator::generate(
         generator::Language::SV,
         &model.borrow(),

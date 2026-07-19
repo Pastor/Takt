@@ -589,6 +589,7 @@ fn sv_trace_signed(
     basename: &str,
     signals: &[&str],
     ticks: usize,
+    opts: &grammar::generator::GenerateOptions,
 ) -> Vec<Vec<i64>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     grammar::compile_to_sv(
@@ -596,7 +597,7 @@ fn sv_trace_signed(
         &source,
         dir.to_str().expect("путь в UTF-8"),
         &[],
-        &grammar::generator::GenerateOptions::default(),
+        opts,
     )
     .expect("порождение SystemVerilog");
 
@@ -684,10 +685,108 @@ fn fixed_point_arithmetic_matches_generated_sv() {
         "conformance_fixed",
         &["conformance_fixed_fixed_acc"],
         sim.len(),
+        &grammar::generator::GenerateOptions::default(),
     );
     assert_eq!(
         sim, sv,
         "Q-арифметика симулятора и порождённого RTL обязана совпасть ПОБИТОВО на \
          каждом такте (repr q(8,8)).\nсимулятор={sim:?}\nRTL={sv:?}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Прозрачный float → q(m, n) (фича 0096, задача 0096-02): T4/T7/T9 для цели sv
+//
+// Под флагом `--float-as-q=8.8` цель sv понижает `float` в q(8,8) — SV-003
+// снимается, вещественная модель синтезируется. Трасса `acc` обязана совпасть с
+// q-версией (`conformance_fixed`) ПОБИТОВО: float→q(8,8) — это и есть q(8,8).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Опции генерации с глобальной Q-точностью `q(m, n)` для `float` (фича 0096).
+#[allow(clippy::field_reassign_with_default)] // GenerateOptions — #[non_exhaustive]
+fn float_as_q_opts(m: u8, n: u8) -> grammar::generator::GenerateOptions {
+    let mut o = grammar::generator::GenerateOptions::default();
+    o.float_as_q = Some((m, n));
+    o
+}
+
+/// Q-режим эталона: понижает `float → q(m, n)` в модели симулятора тем же
+/// проходом, что и цель (ADR 0096, драйвер 2 — сверка ВНУТРИ режима).
+fn simulate_trace_float_q(fixture: &str, m: u8, n: u8, vars: &[&str]) -> Vec<Vec<i64>> {
+    let source = std::fs::read_to_string(fixture).expect("фикстура читается");
+    let (ast, _) = grammar::parse(&source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    grammar::semantic::lower_float::lower_float_to_fixed(model.clone(), m, n)
+        .expect("float → q(m, n)");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let mut trace = Vec::new();
+    for _ in 0..TRACE_TICKS {
+        let result = unit.tick();
+        assert!(
+            !matches!(result, TickResult::Failed(_)),
+            "симуляция не должна падать: {result:?}"
+        );
+        trace.push(vars.iter().map(|v| sim_value(&unit, v)).collect());
+        if result == TickResult::Terminated {
+            break;
+        }
+    }
+    trace
+}
+
+/// T4/T7/A2/A5 (цель sv, **ради которой фича 0096**): под `--float-as-q=8.8`
+/// `float` → q(8,8), `SV-003` снят, RTL синтезируется (verilator) и **побитово**
+/// совпадает с Q-эталоном симулятора на каждом такте. Ожидаемая трасса — та же,
+/// что у явной q-версии `conformance_fixed` (float→q(8,8) ≡ q(8,8)).
+#[test]
+fn float_as_q_matches_generated_sv() {
+    let sim = simulate_trace_float_q("tests/data/eval/conformance_float_q.lam", 8, 8, &["acc"]);
+    assert_eq!(
+        sim,
+        vec![vec![-768], vec![-384], vec![-2], vec![510]],
+        "Q-эталон float→q(8,8) обязан совпасть с трассой явной q-версии (0061)"
+    );
+
+    if !verilator_available() {
+        eprintln!("[ПРОПУСК] float_as_q_matches_generated_sv: verilator не найден");
+        return;
+    }
+    let dir = build_dir("float_q");
+    let sv = sv_trace_signed(
+        &dir,
+        "tests/data/eval/conformance_float_q.lam",
+        "conformance_float_q",
+        &["conformance_float_q_float_fixed_acc"],
+        sim.len(),
+        &float_as_q_opts(8, 8),
+    );
+    assert_eq!(
+        sim, sv,
+        "float→q(8,8) в симуляторе и порождённом RTL обязаны совпасть ПОБИТОВО на \
+         каждом такте (repr q(8,8)).\nсимулятор={sim:?}\nRTL={sv:?}"
+    );
+}
+
+/// T9/A1 (сторож направления): без флага `float` в цели sv остаётся `SV-003`.
+/// Это и есть «выбор формата автором» (ADR 0061/0096): флаг — единственное, что
+/// снимает запрет. Мутация «убрать флаг у цели» обязана вернуть ошибку, а не
+/// молча собрать несопоставимый (native) вывод.
+#[test]
+fn float_without_flag_is_sv003() {
+    let source = std::fs::read_to_string("tests/data/eval/conformance_float_q.lam")
+        .expect("фикстура читается");
+    let dir = build_dir("float_no_flag");
+    let err = grammar::compile_to_sv(
+        "conformance_float_q",
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &grammar::generator::GenerateOptions::default(),
+    )
+    .expect_err("float без --float-as-q обязан дать SV-003");
+    assert_eq!(
+        err.code.as_deref(),
+        Some("SV-003"),
+        "без флага float в sv — SV-003 (флаг = выбор формата автором)"
     );
 }
