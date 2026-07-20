@@ -32,6 +32,7 @@
 
 mod c_decl;
 mod c_expr;
+mod c_hal;
 mod c_header;
 mod c_map;
 mod c_model;

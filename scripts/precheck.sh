@@ -461,6 +461,45 @@ cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -S $C_OUTPUT -B $C_OUTPUT/cmake-build-de
 cd $C_OUTPUT/cmake-build-debug/ && ninja
 cd -
 
+# Гейт компиляции цели c-hal (фикс 0020-01 / фича 0098). Прежде c-hal НИГДЕ не
+# компилировалась — только диффилась на детерминизм (её вывод сверяли сам с
+# собой). Ровно эта дыра покрытия дала дожить UB в дефолтном HAL (сдвиг бита
+# ≥ ширины типа). Теперь каждый пример генерируется в c-hal и компилируется в
+# объект (`cc -c`); линковка не нужна — extern fn и main здесь ни при чём.
+# Примеры без адресов портов (elevator_mini → SE-052) в c-hal не транслируются —
+# это не отказ гейта, а отсутствие адресов; такие пропускаются.
+if command -v cc >/dev/null 2>&1; then
+  echo "Гейт c-hal: компиляция порождённого дефолтного HAL (фикс 0020-01)..."
+  chal_failed=0
+  for lam_file in examples/*.lam; do
+    name="$(basename "$lam_file" .lam)"
+    chal_dir="$(mktemp -d)"
+    if ! "$LAMC" compile "$lam_file" -t c-hal -o "$chal_dir" >"$chal_dir/gen.log" 2>&1; then
+      echo "  $name [c-hal] → пропуск (не транслируется: $(head -1 "$chal_dir/gen.log" | cut -c1-40))"
+      rm -rf "$chal_dir"
+      continue
+    fi
+    ok=1
+    for c in "$chal_dir"/*.c; do
+      [ -e "$c" ] || continue
+      if ! cc -std=c11 -I "$chal_dir" -c "$c" -o /dev/null 2>"$chal_dir/cc.log"; then
+        echo "  $name [c-hal] → НЕ КОМПИЛИРУЕТСЯ:"
+        sed 's/^/    /' "$chal_dir/cc.log" | head -8
+        ok=0
+        chal_failed=1
+      fi
+    done
+    [ "$ok" -eq 1 ] && echo "  $name [c-hal] → компилируется"
+    rm -rf "$chal_dir"
+  done
+  if [ "$chal_failed" -ne 0 ]; then
+    echo "  Порождённый c-hal не компилируется — предкоммит провален (фикс 0020-01)."
+    exit 1
+  fi
+else
+  echo "  [пропуск] cc не найден — гейт c-hal пропущен"
+fi
+
 BUILD_DIR="$ROOT/$C_OUTPUT/cmake-build-debug"
 if [ -x "$BUILD_DIR/stacker" ]; then
   echo "Запуск симуляции stacker..."
