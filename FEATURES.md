@@ -127,7 +127,7 @@
 | № | Фича | Зависит от | Tier | Статус |
 |---|------|------------|------|--------|
 | [0061](docs/features/0061-fixed-point-type.md) | Fixed-point Q(m.n) как тип языка (закрывает отложенный R-B ADR 0045) | нет | 3 | ГОТОВО |
-| [0090](docs/features/0090-ci-precheck.md) | CI прогоняет весь `precheck.sh` (живые гейты + check-links) | нет | 2 | РАЗРАБОТКА |
+| [0090](docs/features/0090-ci-precheck.md) | CI прогоняет весь `precheck.sh` (живые гейты + check-links) | нет | 2 | ТЕСТИРОВАНИЕ |
 | [0067](docs/features/0067-intellij-rename-psi-import.md) | Rename и `PsiReference` для `import` в плагине IntelliJ | 0038 (закрыта) | — | СОЗДАНА |
 | [0070](docs/features/0070-port-initializer-address-role.md) | Инициализатор порта — это адрес, но проверяется как значение | — | — | СОЗДАНА |
 | [0071](docs/features/0071-lsp-goto-state-name.md) | Переход на имя состояния в `S(Ping) = End` не работает | — | — | СОЗДАНА |
