@@ -71,13 +71,6 @@ fn location_end_range_builtin() {
     assert_eq!(Location::Codegen.end_range(), Location::Codegen);
 }
 
-/// `filename()` возвращает строковое представление номера файла.
-#[test]
-fn location_filename() {
-    let l = Location::Source(7, 0, 0);
-    assert_eq!(l.filename(), "7");
-}
-
 /// `try_file_no()` возвращает Some для Source.
 #[test]
 fn location_try_file_no_source() {

@@ -64,4 +64,5 @@
 | [0090](./0090-ci-precheck.md) | CI прогоняет весь `precheck.sh` — единый источник истины гейтов | Accepted | фича 0090 |
 | [0070](./0070-port-initializer-address-role.md) | Инициализатор порта — это адрес, а не значение (SE-035 снимается с портов) | Accepted | фича 0070 |
 | [0071](./0071-lsp-goto-state-name.md) | Переход на имя состояния в условии — `ConditionNode::State` несёт use-site | Accepted | фича 0071 |
+| [0073](./0073-location-filename-path.md) | `Location::filename()` — удалить, а не «чинить путь» | Accepted | фича 0073 |
 
