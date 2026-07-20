@@ -62,4 +62,5 @@
 | [0096](./0096-fixed-point-native-float.md) | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | Accepted | фича 0096 |
 | [0097](./0097-pid-regulator-example.md) | Пример ПИД-регулятора на языке Lam (fixed-point) | Accepted | фича 0097 |
 | [0090](./0090-ci-precheck.md) | CI прогоняет весь `precheck.sh` — единый источник истины гейтов | Accepted | фича 0090 |
+| [0070](./0070-port-initializer-address-role.md) | Инициализатор порта — это адрес, а не значение (SE-035 снимается с портов) | Accepted | фича 0070 |
 
