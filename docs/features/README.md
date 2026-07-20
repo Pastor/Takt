@@ -82,7 +82,7 @@
 | [0071](./0071-lsp-goto-state-name.md) | Переход на имя состояния в `S(Ping) = End` не работает | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0072](./0072-lsp-initialization-options.md) | LSP не читает `initializationOptions` (пути поиска импортов) | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0073](./0073-location-filename-path.md) | `Location::filename()` возвращает номер, а не путь | — (стадия 1: проработки нет) | СОЗДАНА |
-| [0074](./0074-parenthesised-state-of.md) | Скобочная форма `S(…)` отвергается семантикой | — (стадия 1: проработки нет) | СОЗДАНА |
+| [0074](./0074-parenthesised-state-of.md) | Скобочная форма `S(…)` отвергается семантикой | [ADR](../adr/0074-parenthesised-state-of.md) · [анализ](../analyze/0074-parenthesised-state-of.md) · [dev 01](../development/0074-01-canonicalize-state-of-parens.md) · [тест-план](../tests/0074-parenthesised-state-of.md) · [отчёт](../reports/0074-parenthesised-state-of.md) | ✅ ГОТОВО |
 | [0075](./0075-lib-src-reference-model.md) | Эталонная модель порождает компилируемый C (разделён `SRC`/`SYNTH_SRC`) | [ADR](../adr/0075-lib-src-reference-model.md) · [анализ](../analyze/0075-lib-src-reference-model.md) · [dev 01](../development/0075-01-split-reference-model.md) · [тест-план](../tests/0075-lib-src-reference-model.md) · [отчёт](../reports/0075-lib-src-reference-model.md) | ✅ ГОТОВО |
 | [0076](./0076-sim-arrays.md) | Симулятор не исполняет массивы вовсе | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0077](./0077-diagnostic-code-registry.md) | Реестр кодов диагностик (конфликт: `CC-014` занят дважды) | — (стадия 1: проработки нет) | СОЗДАНА |

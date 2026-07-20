@@ -67,3 +67,4 @@
 | [0073](./0073-location-filename-path.md) | `Location::filename()` — удалить, а не «чинить путь» | Accepted | фича 0073 |
 | [0086](./0086-sim-var-without-initializer.md) | `var` без инициализатора — нулевое значение по типу, а не `SIM-009` | Accepted | фича 0086 |
 
+| [0074](./0074-parenthesised-state-of.md) | Скобочная форма `S(Модель)` — канонизация в единой воронке `resolve_condition` | Accepted | фича 0074 |
