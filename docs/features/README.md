@@ -100,6 +100,7 @@
 | [0089](./0089-intellij-residual-checks.md) | Остаточные проверки плагина IntelliJ (0022/0023) | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0090](./0090-ci-precheck.md) | CI прогоняет весь `precheck.sh` (живые гейты + check-links) | [ADR](../adr/0090-ci-precheck.md) · [анализ](../analyze/0090-ci-precheck.md) · [тест-план](../tests/0090-ci-precheck.md) · [отчёт](../reports/0090-ci-precheck.md) | ГОТОВО (с оговоркой: A5 в CI не проверен — биллинг-блок Actions) |
 | [0070](./0070-port-initializer-address-role.md) | Инициализатор порта — это адрес, а не значение | [ADR](../adr/0070-port-initializer-address-role.md) · [анализ](../analyze/0070-port-initializer-address-role.md) · [тест-план](../tests/0070-port-initializer-address-role.md) · [отчёт](../reports/0070-port-initializer-address-role.md) | ГОТОВО |
+| [0071](./0071-lsp-goto-state-name.md) | Переход на имя состояния в `S(Ping) = End` | [ADR](../adr/0071-lsp-goto-state-name.md) · [анализ](../analyze/0071-lsp-goto-state-name.md) · [тест-план](../tests/0071-lsp-goto-state-name.md) | РАЗРАБОТКА |
 | [0091](./0091-module-size-rule-in-code-md.md) | Правило о размере модуля живёт не в своде правил кода | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0092](./0092-adr-0018-retrofit.md) | У фичи 0018 нет ADR | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0093](./0093-wildcard-match-rule.md) | Правило о запрете `_ =>` в семантических узлах + конфликт с `#[non_exhaustive]` | — (стадия 1: проработки нет) | СОЗДАНА |
