@@ -1,0 +1,435 @@
+//! Дефолтный HAL цели `c-hal` (фича 0020-05): таблица адресов портов и
+//! реализации `read_*`/`write_*` через `*(volatile T*)addr`.
+//!
+//! Вынесено из `c_header.rs` (фикс 0020-01 / фича 0098): файл упирался в лимит
+//! размера модуля, а HAL — самостоятельная тема. `c_header::generate_header`
+//! вызывает [`generate_hal`] в режиме `options.hal`.
+//!
+//! ## Ширина доступа к бит-порту — по слову, а не по типу (фикс 0020-01)
+//!
+//! Прежде `read_bit`/`write_bit` читали **один байт** и сдвигали на `b.bit`:
+//! бит 8…31 давал **молча ноль** (сдвиг за пределы загруженного байта после
+//! продвижения до `int`), бит ≥ 32 — **UB** (`int >> 33`, C11 6.5.7p3). Оба гейта
+//! `cc` принимали это молча (`b.bit` — значение времени выполнения). Теперь
+//! ширина доступа бит-порта — минимальное слово, содержащее бит
+//! ([`word_bytes_for_bit`]), а `read_bit`/`write_bit` выбирают тип по `b.width`
+//! (`switch`, как numeric). Бит вне [0, 63] отсекается `SE-060` до кодогенерации.
+
+use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::c;
+use crate::generator::c::c_header::collect_ports_by_class;
+use crate::generator::c::c_map::CMap;
+use crate::generator::c::{
+    FUNCTION_PORT_READ_BIT, FUNCTION_PORT_READ_FLOAT, FUNCTION_PORT_READ_NUMERIC,
+    FUNCTION_PORT_WRITE_BIT, FUNCTION_PORT_WRITE_FLOAT, FUNCTION_PORT_WRITE_NUMERIC, PortClass,
+};
+use crate::generator::indent::Printer;
+use crate::semantic::minimap::Name;
+use crate::semantic::naming::normalize_lowercase_snakecase;
+use crate::semantic::{PortDirection, VariableNode};
+
+/// Ширина разыменования (в байтах) по C-типу порта из [`get_c_type`](c::get_c_type).
+///
+/// **Перечисление исчерпывающее** (0029-02, R9). Прежде здесь стояло `_ => 4`,
+/// и всё неузнанное читалось четырьмя байтами **молча** — тот же класс дефекта,
+/// против которого заведена вся фича 0029. Пробы показали, что ветка достижима
+/// и даёт неверный результат: битовый порт читался 4 байтами (через `Bit` →
+/// `int`), а порт структурного типа `Point` (2 байта) читается 4 байтами и
+/// сегодня. На железе это доступ за пределы регистра.
+///
+/// `None` — ширина неизвестна: вызывающий обязан дать `CC-016`, а не выбрать
+/// число за пользователя.
+fn width_from_ctype(ct: &str) -> Option<u8> {
+    match ct {
+        "uint8_t" | "int8_t" | "bool" => Some(1),
+        "uint16_t" | "int16_t" => Some(2),
+        "uint32_t" | "int32_t" | "float" => Some(4),
+        "uint64_t" | "int64_t" | "double" => Some(8),
+        _ => None,
+    }
+}
+
+/// Ширина доступа (в байтах) к бит-порту — минимальное слово, содержащее бит.
+///
+/// Фикс 0020-01 / ADR 0098 (правило 2): ширину доступа бит-порта задаёт **не тип
+/// порта** (`bool` → 1 байт), а бит адреса. Читать один байт и сдвигать на
+/// `b.bit` нельзя: бит 8…31 дал бы **молча ноль** (после продвижения до `int`
+/// сдвиг за пределы загруженного байта), бит ≥ 32 — **UB** (`>> ≥ ширины`).
+/// Минимальное слово по биту убирает оба класса конструктивно; бит вне [0, 63]
+/// уже отсечён `SE-060`, поэтому здесь всегда 1/2/4/8.
+fn word_bytes_for_bit(bit: i64) -> u8 {
+    match bit {
+        b if b < 8 => 1,
+        b if b < 16 => 2,
+        b if b < 32 => 4,
+        _ => 8,
+    }
+}
+
+/// C-тип порта `(model, name)` через [`get_c_type`](c::get_c_type) (для ширины доступа).
+fn port_ctype(map: &CMap, model_name: &Name, port_name: &str) -> Option<String> {
+    let model = map.raw_model_at(model_name.clone()).ok()?;
+    let borrowed = model.borrow();
+    let VariableNode::Port { ty, .. } = borrowed.variables.get(port_name)? else {
+        return None;
+    };
+    c::get_c_type(ty, &borrowed, map.float_width())
+}
+
+/// Фича 0020-05: эмитит таблицу адресов портов и дефолтную реализацию HAL.
+///
+/// Для каждой пары `(класс, направление)` генерируется `static const`-таблица
+/// `{Enum}__ADDR[]`, индексируемая enum-вариантами порта, и дефолтные
+/// `read_*`/`write_*` через `*(volatile T*)addr`. Помощник `bind_default_hal`
+/// связывает указатели структуры с этими функциями (только для присутствующих
+/// классов/направлений).
+pub(super) fn generate_hal(
+    printer: &mut Printer,
+    map: &CMap,
+    options: &crate::generator::GenerateOptions,
+) -> Result<(), Diagnostic> {
+    let root = map.root_name().unique_camelcase();
+    let by_class = collect_ports_by_class(map)?;
+    let addr_map = &options.address_map;
+    let has = |c: PortClass, d: PortDirection| by_class.contains_key(&(c, d));
+
+    printer.nl();
+    printer
+        .print("/* 0020: карта адресов портов и дефолтный HAL */")
+        .nl();
+    printer
+        .print(&format!(
+            "typedef struct {{ uintptr_t addr; int8_t bit; uint8_t width; }} {}_PortBinding;",
+            root
+        ))
+        .nl();
+    printer.nl();
+
+    // Таблицы адресов для всех присутствующих (класс, направление).
+    for cls in [PortClass::Bit, PortClass::Rational, PortClass::Numeric] {
+        for dir in [PortDirection::In, PortDirection::Out] {
+            let Some(ports) = by_class.get(&(cls, dir)) else {
+                continue;
+            };
+            let enum_type = cls.qualified_enum_name_with_dir(&root, dir);
+            printer
+                .print(&format!(
+                    "static const {root}_PortBinding {enum_type}__ADDR[] = {{"
+                ))
+                .nl();
+            printer.up();
+            for (model_name, port_name) in ports {
+                let variant = format!(
+                    "{}_{}",
+                    model_name.unique_uppercase_snakecase(),
+                    normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
+                );
+                let resolved = addr_map.get(port_name);
+                let addr = resolved.map(|r| r.addr).unwrap_or(0);
+                let bit = resolved.and_then(|r| r.bit).unwrap_or(-1);
+                // 0029-02: было `.unwrap_or(4)` поверх `_ => 4` — два молчаливых
+                // умолчания подряд. Ширина доступа к MMIO угадыванию не подлежит.
+                let ct = port_ctype(map, model_name, port_name).ok_or_else(|| {
+                    Diagnostic::error(
+                        Location::Codegen,
+                        format!(
+                            "порт '{}' модели '{}': тип не представим в C — \
+                             ширина доступа к регистру неизвестна",
+                            port_name, model_name
+                        ),
+                    )
+                    .with_code("CC-015")
+                })?;
+                let mut width = width_from_ctype(&ct).ok_or_else(|| {
+                    Diagnostic::error(
+                        Location::Codegen,
+                        format!(
+                            "порт '{}' модели '{}': ширина доступа к регистру \
+                             неизвестна для типа C '{}'",
+                            port_name, model_name, ct
+                        ),
+                    )
+                    .with_code("CC-016")
+                })?;
+                // Бит-порт: ширина доступа — минимальное слово, содержащее бит
+                // (ADR 0098 правило 2), а НЕ ширина типа `bool` (1 байт). Иначе
+                // `read_bit`/`write_bit` сдвигали бы за пределы одного байта.
+                if cls == PortClass::Bit {
+                    width = word_bytes_for_bit(bit);
+                }
+                printer
+                    .ident(&format!(
+                        "[{variant}] = {{ (uintptr_t)0x{addr:X}u, {bit}, {width} }},",
+                        addr = addr as u64,
+                    ))
+                    .nl();
+            }
+            printer.down();
+            printer.print("};").nl();
+        }
+    }
+    printer.nl();
+
+    // Дефолтные функции чтения/записи (только для присутствующих классов).
+    // ⚠️ Бит-порт: тип чтения выбирается по `b.width` (минимальное слово по биту,
+    // фикс 0020-01) — иначе `>> b.bit` при бите ≥ 8 читает не тот бит либо даёт UB.
+    if has(PortClass::Bit, PortDirection::In) {
+        let e = PortClass::Bit.qualified_enum_name_with_dir(&root, PortDirection::In);
+        printer
+            .print(&format!(
+                "static bool {root}_default_{f}({e} p, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; int s = b.bit < 0 ? 0 : b.bit; \
+             switch (b.width) {{ \
+             case 2: return ((*(volatile uint16_t*)b.addr) >> s) & 1u; \
+             case 4: return ((*(volatile uint32_t*)b.addr) >> s) & 1u; \
+             case 8: return (bool)(((*(volatile uint64_t*)b.addr) >> s) & 1u); \
+             default: return ((*(volatile uint8_t*)b.addr) >> s) & 1u; }} }}",
+                f = FUNCTION_PORT_READ_BIT,
+            ))
+            .nl();
+    }
+    if has(PortClass::Bit, PortDirection::Out) {
+        let e = PortClass::Bit.qualified_enum_name_with_dir(&root, PortDirection::Out);
+        printer.print(&format!(
+            "static void {root}_default_{f}({e} p, bool val, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; int s = b.bit < 0 ? 0 : b.bit; \
+             switch (b.width) {{ \
+             case 2: {{ volatile uint16_t *r = (volatile uint16_t*)b.addr; \
+             uint16_t m = (uint16_t)((uint16_t)1u << s); \
+             if (val) *r |= m; else *r &= (uint16_t)~m; }} break; \
+             case 4: {{ volatile uint32_t *r = (volatile uint32_t*)b.addr; \
+             uint32_t m = (uint32_t)1u << s; \
+             if (val) *r |= m; else *r &= ~m; }} break; \
+             case 8: {{ volatile uint64_t *r = (volatile uint64_t*)b.addr; \
+             uint64_t m = (uint64_t)1u << s; \
+             if (val) *r |= m; else *r &= ~m; }} break; \
+             default: {{ volatile uint8_t *r = (volatile uint8_t*)b.addr; \
+             uint8_t m = (uint8_t)((uint8_t)1u << s); \
+             if (val) *r |= m; else *r &= (uint8_t)~m; }} break; }} }}",
+            f = FUNCTION_PORT_WRITE_BIT,
+        )).nl();
+    }
+    if has(PortClass::Rational, PortDirection::In) {
+        let e = PortClass::Rational.qualified_enum_name_with_dir(&root, PortDirection::In);
+        printer
+            .print(&format!(
+                "static float {root}_default_{f}({e} p, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; return *(volatile float*)b.addr; }}",
+                f = FUNCTION_PORT_READ_FLOAT,
+            ))
+            .nl();
+    }
+    if has(PortClass::Rational, PortDirection::Out) {
+        let e = PortClass::Rational.qualified_enum_name_with_dir(&root, PortDirection::Out);
+        printer.print(&format!(
+            "static void {root}_default_{f}({e} p, float val, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; *(volatile float*)b.addr = val; }}",
+            f = FUNCTION_PORT_WRITE_FLOAT,
+        )).nl();
+    }
+    if has(PortClass::Numeric, PortDirection::In) {
+        let e = PortClass::Numeric.qualified_enum_name_with_dir(&root, PortDirection::In);
+        printer
+            .print(&format!(
+                "static int64_t {root}_default_{f}({e} p, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; switch (b.width) {{ \
+             case 1: return (int64_t)*(volatile uint8_t*)b.addr; \
+             case 2: return (int64_t)*(volatile uint16_t*)b.addr; \
+             case 8: return (int64_t)*(volatile uint64_t*)b.addr; \
+             default: return (int64_t)*(volatile uint32_t*)b.addr; }} }}",
+                f = FUNCTION_PORT_READ_NUMERIC,
+            ))
+            .nl();
+    }
+    if has(PortClass::Numeric, PortDirection::Out) {
+        let e = PortClass::Numeric.qualified_enum_name_with_dir(&root, PortDirection::Out);
+        printer.print(&format!(
+            "static void {root}_default_{f}({e} p, int64_t val, void *userdata) {{ (void)userdata; \
+             {root}_PortBinding b = {e}__ADDR[p]; switch (b.width) {{ \
+             case 1: *(volatile uint8_t*)b.addr = (uint8_t)val; break; \
+             case 2: *(volatile uint16_t*)b.addr = (uint16_t)val; break; \
+             case 8: *(volatile uint64_t*)b.addr = (uint64_t)val; break; \
+             default: *(volatile uint32_t*)b.addr = (uint32_t)val; break; }} }}",
+            f = FUNCTION_PORT_WRITE_NUMERIC,
+        )).nl();
+    }
+    printer.nl();
+
+    // Помощник связывания дефолтного HAL со структурой модели.
+    printer
+        .print(&format!(
+            "static void {root}_bind_default_hal({root} *m) {{"
+        ))
+        .nl();
+    printer.up();
+    let bindings: [(bool, &str); 6] = [
+        (
+            has(PortClass::Bit, PortDirection::In),
+            FUNCTION_PORT_READ_BIT,
+        ),
+        (
+            has(PortClass::Bit, PortDirection::Out),
+            FUNCTION_PORT_WRITE_BIT,
+        ),
+        (
+            has(PortClass::Rational, PortDirection::In),
+            FUNCTION_PORT_READ_FLOAT,
+        ),
+        (
+            has(PortClass::Rational, PortDirection::Out),
+            FUNCTION_PORT_WRITE_FLOAT,
+        ),
+        (
+            has(PortClass::Numeric, PortDirection::In),
+            FUNCTION_PORT_READ_NUMERIC,
+        ),
+        (
+            has(PortClass::Numeric, PortDirection::Out),
+            FUNCTION_PORT_WRITE_NUMERIC,
+        ),
+    ];
+    for (present, field) in bindings {
+        if present {
+            printer
+                .ident(&format!("m->{field} = {root}_default_{field};"))
+                .nl();
+        }
+    }
+    printer.down();
+    printer.print("}").nl();
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generator::c::c_header::generate_header;
+    use crate::generator::c::c_map::CMap;
+    use crate::{parse, semantic};
+
+    /// Строит `.h` цели `c-hal` с разрешёнными адресами (тем же `resolve_addresses`,
+    /// что и `lamc -t c-hal`, — иначе таблица `*__ADDR` не эмитится).
+    fn generate_hal_h(src: &str, name: &str, float_width: crate::generator::FloatWidth) -> String {
+        let (model_ast, _) = parse(src, 0).unwrap();
+        let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
+        model.borrow_mut().name = Some(name.to_string());
+        let resolution = crate::address_map::resolve_addresses(
+            std::rc::Rc::clone(&model),
+            &[],
+            &crate::address_map::AddressEnv::default(),
+        );
+        let model = model.borrow();
+        let map = CMap::new(model.name(), &*model, true)
+            .unwrap()
+            .with_float_width(float_width);
+        let options = crate::generator::GenerateOptions {
+            hal: true,
+            address_map: resolution.map,
+            float_width,
+            ..Default::default()
+        };
+        generate_header(map.get_filename(), &map, &options).unwrap()
+    }
+
+    /// Исходник цели `c-hal` с портами трёх ширин.
+    const HAL_SRC: &str = r#"
+in temperature: float;
+in sensor: bit;
+in level: u16;
+
+address temperature = 0x1000;
+address sensor = 0x2000;
+address level = 0x3000;
+
+var reading: float := 0.0;
+
+start Idle {
+    always {
+        reading := temperature + 1.0;
+    }
+}
+"#;
+
+    /// **T10 (0029-02/03).** Ширина доступа к MMIO по типу порта.
+    ///
+    /// Значения **захвачены зондом** (`lamc -t c-hal`), а не угаданы. Ловит два
+    /// исправления фичи 0029 сразу:
+    /// - битовый порт — **1** байт (было 4: `Bit` → `int` → `_ => 4`); чтение
+    ///   4 байтами из однобайтового регистра — доступ за его пределы;
+    /// - вещественный порт — **8** байт (было 4: `Rational` → `float`); это
+    ///   ожидаемая цена умолчания `--float-width=64`, решение заказчика.
+    #[test]
+    fn test_hal_port_width_follows_c_type() {
+        let header = generate_hal_h(HAL_SRC, "Hal", crate::generator::FloatWidth::W64);
+        assert!(
+            header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, -1, 1 },"),
+            "битовый порт обязан читаться 1 байтом:\n{header}"
+        );
+        assert!(
+            header.contains("[HAL_TEMPERATURE] = { (uintptr_t)0x1000u, -1, 8 },"),
+            "вещественный порт при умолчании W64 — 8 байт:\n{header}"
+        );
+        assert!(
+            header.contains("[HAL_LEVEL] = { (uintptr_t)0x3000u, -1, 2 },"),
+            "u16 — 2 байта, без изменений:\n{header}"
+        );
+    }
+
+    /// **T11 (0029-03).** `--float-width=32` возвращает вещественному порту 4
+    /// байта — для платформ, где 8-байтное чтение недопустимо.
+    #[test]
+    fn test_hal_float_port_width_is_4_with_float_width_32() {
+        let header = generate_hal_h(HAL_SRC, "Hal", crate::generator::FloatWidth::W32);
+        assert!(
+            header.contains("[HAL_TEMPERATURE] = { (uintptr_t)0x1000u, -1, 4 },"),
+            "при W32 вещественный порт — 4 байта:\n{header}"
+        );
+        // Прочие ширины от флага не зависят.
+        assert!(
+            header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, -1, 1 },"),
+            "битовый порт от --float-width не зависит:\n{header}"
+        );
+    }
+
+    /// **R9 (0029-02).** Таблица ширин исчерпывающая: неузнанный тип даёт
+    /// `None`, а не молчаливые 4 байта.
+    ///
+    /// Достижимость проверена зондом: порт структурного типа `Point` (2 байта)
+    /// получал `width 4` — доступ за пределы регистра, выданный молча.
+    #[test]
+    fn test_width_from_ctype_has_no_silent_default() {
+        assert_eq!(width_from_ctype("uint8_t"), Some(1));
+        assert_eq!(width_from_ctype("bool"), Some(1));
+        assert_eq!(width_from_ctype("uint16_t"), Some(2));
+        assert_eq!(width_from_ctype("float"), Some(4));
+        assert_eq!(width_from_ctype("uint32_t"), Some(4));
+        assert_eq!(width_from_ctype("double"), Some(8));
+        assert_eq!(width_from_ctype("uint64_t"), Some(8));
+        assert_eq!(
+            width_from_ctype("Point"),
+            None,
+            "структурный тип: ширина неизвестна → CC-016, а не 4 байта молча"
+        );
+        assert_eq!(
+            width_from_ctype("int"),
+            None,
+            "`int` больше не порождается get_c_type; узнавать его нечего"
+        );
+    }
+
+    /// Фикс 0020-01: ширина доступа бит-порта — минимальное слово, содержащее
+    /// бит (границы степеней двойки). Бит 33 → 8 байт (uint64), а не 1 (UB).
+    #[test]
+    fn bit_word_width_by_bit_index() {
+        assert_eq!(word_bytes_for_bit(0), 1, "бит 0 → байт");
+        assert_eq!(word_bytes_for_bit(7), 1, "бит 7 — ещё байт");
+        assert_eq!(word_bytes_for_bit(8), 2, "бит 8 → 2 байта");
+        assert_eq!(word_bytes_for_bit(15), 2);
+        assert_eq!(word_bytes_for_bit(16), 4, "бит 16 → 4 байта");
+        assert_eq!(word_bytes_for_bit(31), 4);
+        assert_eq!(word_bytes_for_bit(32), 8, "бит 32 → 8 байт");
+        assert_eq!(word_bytes_for_bit(33), 8, "бит 33 → uint64, не UB");
+        assert_eq!(word_bytes_for_bit(63), 8);
+        assert_eq!(word_bytes_for_bit(-1), 1, "«нет бита» → байт, сдвиг 0");
+    }
+}
