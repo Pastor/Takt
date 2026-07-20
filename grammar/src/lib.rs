@@ -1160,8 +1160,6 @@ fn collect_stray_semicolons_model(model: &ast::Model, out: &mut Vec<Diagnostic>)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generator::{Language, generate};
-    use crate::semantic::tree::construct_model;
 
     const SRC: &str = r#"
 //Алиас типа
@@ -1274,55 +1272,12 @@ always {
         }
     }
 
-    /// Инвариант: условия рёбер `ref` **не разрешаются** семантикой.
-    ///
-    /// `ref Stop: S(Ping) = End;` обязан пережить конвейер как
-    /// `Condition::Unresolved`. Проход `resolve_state_references` добавлять
-    /// нельзя — он ломает эту конструкцию (см. `CLAUDE.md`, критические
-    /// инварианты). Именно это здесь и охраняется.
-    #[test]
-    fn syntax_simple() {
-        let (model, _) = parse(SRC, 0).unwrap();
-        let model = construct_model(&model, None, &[]).unwrap();
-        assert!(model.borrow().has_states());
-        model.borrow_mut().name = Some(String::from("ThisIsMyModel"));
-
-        // Успех здесь ЗНАЧИМ, а не формален. История этой строки:
-        //
-        // 1. Был `.unwrap()`, и тест был зелёным — но не потому, что переход
-        //    генерировался: генератор ПРОГЛАТЫВАЛ ошибку `CC-003`, печатая
-        //    вместо перехода комментарий. Тест подтверждал успех там, где
-        //    автомат молча терял ребро.
-        // 2. Фича 0028 сняла заглушку — и тест честно покраснел, вскрыв, что
-        //    `S(Ping) = End` в C не переводился ВОВСЕ.
-        // 3. Фича 0047 трансляцию реализовала, и успех снова достижим —
-        //    теперь по-настоящему.
-        //
-        // Поэтому проверяется не только `Ok`, но и наличие самого перехода в
-        // порождённом C: иначе тест вернётся к тому, чем был, — к подтверждению
-        // успеха без проверки результата.
-        generate(
-            Language::C,
-            &model.borrow(),
-            ".output",
-            &GenerateOptions::default(),
-        )
-        .expect("порождение C");
-
-        let source = std::fs::read_to_string(".output/this_is_my_model.c").expect(".c порождён");
-        // Строка захвачена из реального вывода, не угадана. `Ping` — сестра
-        // владельца условия (`Pong`) внутри `(Ping | Pong) + Toggle`, поэтому
-        // база пути — `main`, а не `model`: своя структура чужого поля не имеет.
-        assert!(
-            source
-                .contains("if (main->entry_parallel0.ping0.state == THIS_IS_MY_MODEL_PING_END) {"),
-            "условие `S(Ping) = End` обязано попасть в C сравнением состояния:\n{source}"
-        );
-        assert!(
-            !source.contains("TODO") && !source.contains("FIXME"),
-            "заглушек в выводе быть не должно:\n{source}"
-        );
-    }
+    // Инвариант «условия рёбер `ref` не разрешаются» (`ref Stop: S(Ping) = End;`
+    // переживает конвейер как `Condition::Unresolved`, прохода
+    // `resolve_state_references` быть не должно) охраняется компиляционным тестом
+    // `tests/reference_model_tests.rs` (фича 0075): перевод `S(Ping) = End` в C
+    // доказывает, что ссылка пережила конвейер. `syntax_simple` переехал туда же —
+    // он стоял на некомпилируемом `SRC` и мог проверять лишь строку, а не `cc`.
 
     // ── Тесты ошибок парсера ──────────────────────────────────────────────────
 
