@@ -2,77 +2,53 @@ on: [ push ]
 
 name: build
 
+# Единый барьер (фича 0090): CI прогоняет ВЕСЬ scripts/precheck.sh под строгим
+# режимом. Логики гейтов в этом workflow НЕТ — только установка инструментов и
+# один вызов скрипта. Причина: до 0090 CI нёс СВОЮ реализацию гейтов (SV) рядом
+# с precheck.sh — два источника расходились (дрейф). Теперь источник один: гейт,
+# добавленный в precheck.sh, автоматически идёт и в CI без правки этого файла.
+# ADR: docs/adr/0090-ci-precheck.md.
+
 jobs:
   ubuntu:
-    name: Ubuntu
+    name: Ubuntu — полный precheck.sh (строгий режим)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Install latest nightly
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+
+      # nightly нужен precheck.sh: `cargo +nightly fmt`, а также rustc/clippy-driver
+      # для гейта цели rust. Компоненты — rustfmt + clippy.
+      - name: Toolchain (nightly + rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly
-          override: true
           components: rustfmt, clippy
 
-      - name: Сборка
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --all-features --all-targets --examples
-      - name: Проверка
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-      # Ноль-долг предупреждений (фича 0046): `-D warnings` валит CI на ЛЮБОМ
-      # предупреждении — clippy гоняет и clippy-, и rustc-линты. Держит долг на
-      # нуле механически; точечные исключения — `#[allow(...)]` у места.
-      - name: Линты (0 предупреждений, фича 0046)
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets --all-features -- -D warnings
-      - name: Размер модулей (храповик, фича 0027)
-        run: ./scripts/check-module-size.sh
-      - name: Тестики
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-
-      # Гейт цели sv (фича 0045). Инструменты ловят непересекающиеся классы
-      # дефектов, поэтому обязательны ОБА: verilator пропускает `real` (для него
-      # это легальный тип симуляции), yosys — комбинационную петлю (центральный
-      # риск отображения `M1 | M2`). Проверено пробами 2026-07-15.
-      - name: Установка SV-инструментов (verilator + yosys)
+      # Инструменты живых гейтов precheck.sh. python3, cc/gcc и git — уже на
+      # образе ubuntu-latest. bison ≥ 2.4 + flex — для сборки MatIEC iec2c
+      # (ubuntu несёт bison 3.x; на macOS системный 2.3 сборку валит).
+      - name: Системные инструменты гейтов
         run: |
           sudo apt-get update
-          sudo apt-get install -y verilator yosys
-          verilator --version
-          yosys -V
+          sudo apt-get install -y \
+            cmake ninja-build verilator yosys \
+            bison flex build-essential
+          cmake --version | head -1
+          ninja --version
+          verilator --version | head -1
+          yosys -V | head -1
+          bison --version | head -1
 
-      # SV_GATE_REQUIRED=1: в CI отсутствие инструмента — ОШИБКА, а не пропуск.
-      # Пропущенный гейт зелёный, то есть неотличим от пройденного: фича
-      # объявила бы себя проверенной, не имея арбитра.
-      - name: Гейт цели sv (verilator + yosys)
+      # Арбитр ST: собирается из исходников (лицензия открытая). Скрипт сам по
+      # себе не валит сборку; строгость обеспечивает ST-гейт precheck.sh под
+      # PRECHECK_STRICT=1 (нет iec2c → ОШИБКА, а не мягкий пропуск).
+      - name: Сборка арбитра ST (MatIEC iec2c)
+        run: ./scripts/ensure-iec2c.sh
+
+      # PRECHECK_STRICT=1: в CI отсутствие любого инструмента гейта — ОШИБКА, а не
+      # пропуск (пропущенный гейт зелёный, то есть неотличим от пройденного —
+      # урок 0045). SV_GATE_REQUIRED наследует этот флаг внутри скрипта.
+      # Под строгим режимом формат ПРОВЕРЯЕТСЯ (`fmt --check`), а не применяется.
+      - name: precheck.sh (fmt-check + линты + тесты + живые гейты всех целей)
         env:
-          SV_GATE_REQUIRED: 1
-        run: |
-          cargo build --bin lamc
-          mkdir -p examples/generated/sv
-          for lam in examples/*.lam; do
-            ./target/debug/lamc compile -t sv "$lam" -o examples/generated/sv || \
-              echo "  [предупреждение] цель sv: $lam не транслируется"
-          done
-          # Обязательный список ведётся явно (см. SV_TRANSLATABLE в precheck.sh):
-          # пример, переставший транслироваться, обязан ронять CI громко.
-          for name in stacker elevator_mini; do
-            test -e "examples/generated/sv/${name}.sv" || {
-              echo "::error::$name не оттранслирован целью sv, хотя обязан"
-              exit 1
-            }
-          done
-          for sv in examples/generated/sv/*.sv; do
-            name="$(basename "$sv" .sv)"
-            verilator --lint-only -Wall "$sv" || { echo "::error::verilator отверг $name"; exit 1; }
-            yosys -q -p "read_verilog -sv $sv; synth -top $name" || { echo "::error::yosys не синтезировал $name"; exit 1; }
-          done
+          PRECHECK_STRICT: 1
+        run: ./scripts/precheck.sh
