@@ -103,8 +103,11 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
 - **Условия рёбер `ref` не разрешаются.** `ref Next: expr;` хранится как
   `Condition::Unresolved(ast::Condition)`. НЕ добавлять проход
   `resolve_state_references` — ломает `S(Ping) = End`. Охраняется тестом
-  `syntax_simple`. (`semantic/reference.rs` — это структура данных
-  `ReferenceNode`, а НЕ запрещённый проход разрешения.)
+  `grammar/tests/reference_model_tests.rs::reference_model_compiles_and_translates_state_ref`
+  (фича 0075: перевод `S(Ping) = End` в C доказывает, что ссылка пережила
+  конвейер; переехал из `lib.rs::syntax_simple`, который стоял на некомпилируемом
+  `SRC`). (`semantic/reference.rs` — это структура данных `ReferenceNode`, а НЕ
+  запрещённый проход разрешения.)
 - **Разделение `Condition` / `Expression` — намеренное, НЕ унифицировать**
   (фича 0019, `ADR 0019` отверг полное слияние). Это две грамматики с **разной
   семантикой `=`**: в условии — равенство (`Condition::Equal`), в выражении —
@@ -215,6 +218,17 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
   разрядность (`[u8; 4]` → невалидный `uint4_t`); `Bit` → `int`; `Rational` →
   `float` (f32), тогда как симулятор считает в f64. **Не используй вывод C как
   эталон** для этих типов (сверка — только `Integer`/`Enum`/`Bool`).
+  ⚠️ **Эталонный `SRC` (`lib.rs::parse_simple`) НЕ компилируется целью `c`** (фича
+  0075): `out`-порт типа `u8` (= `[bit;8]`) с бит-доступом (`A.0 := true`) зовёт
+  `read_numeric`, которого нет в структуре (эмитится только `write_numeric` для
+  `out`-порта); `const` типа `[bit;8]` с инициализатором `{…}` печатается
+  макросом-массивом, а бит-доступ `MATRIX.5` трактует его числом (`{…} >> 5` —
+  ошибка cc). Оба дефекта упираются в семантику `[bit;N]` (число или массив? —
+  фича 0078) и **не** чинятся 0075. Компиляционная проверка перенесена на
+  **отдельную** компилируемую модель `tests/reference_model_tests.rs::SYNTH_SRC`
+  (композиция + `S(Ping)=End` + `cc -c`); полный `SRC` остался в `parse_simple`
+  как покрытие **парсера**. То есть `parse_simple` доказывает разбор, а не
+  компилируемость.
   ⚠️ **`Enum` доверен лишь для НЕОТРИЦАТЕЛЬНЫХ диапазонов.** Прежде цель `c`
   теряла знак перечисления молча (`enum Level { Low = -5 }` → `uint8_t`, `-5` →
   `251`, переход `== -5` тождественно ложен — [фикс 0005-01](docs/fixes/0005-01-c-enum-signedness.md),

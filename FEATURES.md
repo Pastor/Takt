@@ -134,7 +134,6 @@
 | [0072](docs/features/0072-lsp-initialization-options.md) | LSP не читает `initializationOptions` (пути поиска импортов) | — | — | СОЗДАНА |
 | [0073](docs/features/0073-location-filename-path.md) | `Location::filename()` возвращает номер, а не путь | — | — | СОЗДАНА |
 | [0074](docs/features/0074-parenthesised-state-of.md) | Скобочная форма `S(…)` отвергается семантикой | — | — | СОЗДАНА |
-| [0075](docs/features/0075-lib-src-reference-model.md) | Эталонный `SRC` в `lib.rs` порождает C с 11 ошибками `cc` | — | — | СОЗДАНА |
 | [0076](docs/features/0076-sim-arrays.md) | Симулятор не исполняет массивы вовсе | — | — | СОЗДАНА |
 | [0077](docs/features/0077-diagnostic-code-registry.md) | Реестр кодов диагностик (конфликт: `CC-014` занят дважды) | — | — | СОЗДАНА |
 | [0078](docs/features/0078-bit-array-semantics.md) | Семантика `[bit;N]` расходится втрое | — | — | СОЗДАНА |
@@ -155,6 +154,19 @@
 | [0094](docs/features/0094-new-feature-script-fixes.md) | Доработка `scripts/new-feature.sh` (статус ADR, поздние стадии, идемпотентность) | — | — | СОЗДАНА |
 | [0097](docs/features/0097-pid-regulator-example.md) | Пример ПИД-регулятора на Lam (fixed-point, anti-windup) | 0061 | 3 | ГОТОВО |
 | [0037](docs/features/0037-windows-test-failures.md) | Сбои тестов на Windows (пути include, ресурс viewport) | — | 2 | РАЗРАБОТКА |
+
+> Фича **0075** «Эталонная модель порождает компилируемый C» **закрыта** (`ГОТОВО`,
+> 2026-07-20) и удалена из таблицы (правило 10) — итог в её
+> [карточке](docs/features/0075-lib-src-reference-model.md). **Tier 2:** тест
+> `syntax_simple` стоял на модели-«всё сразу» (`SRC`), которая никогда не давала
+> компилируемый C (11 ошибок `cc`: `read_numeric` у `out`-порта с бит-доступом;
+> const `[bit;8]` печатается массивом, бит-доступ — числом), и мог проверять лишь
+> строку. Обе беды упираются в семантику `[bit;N]` ([0078](docs/features/0078-bit-array-semantics.md)).
+> Option A ADR: эталон **разделён** — `parse_simple` держит полный `SRC` (покрытие
+> парсера), компиляционная проверка переехала на `SYNTH_SRC`
+> (`tests/reference_model_tests.rs`, `cc -c`), сохранив `S(Ping)=End`. `syntax_simple`
+> удалён (`lib.rs` 1450→1405). Дефекты генератора — кандидаты (`read_numeric`
+> локален; const `[bit;N]` — за 0078). Язык не менялся, версия не поднята.
 
 > Фича **0081** «`lamc compile` печатает предупреждения» **закрыта** (`ГОТОВО`,
 > 2026-07-20) и удалена из таблицы (правило 10) — итог в её
