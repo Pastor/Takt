@@ -944,7 +944,7 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::Model(_, _) => Err(unsupported(
             "модель в позиции условия вне формы 'S(Модель) = Состояние'",
         )),
-        ConditionNode::State(_) => Err(unsupported(
+        ConditionNode::State(..) => Err(unsupported(
             "состояние в позиции условия вне формы 'S(Модель) = Состояние'",
         )),
     }
@@ -978,7 +978,7 @@ fn state_comparison(
         ConditionNode::Unresolved(crate::parser::ast::Condition::Variable(id)) => id.name.clone(),
         // Имя, случайно совпавшее с состоянием объемлющей модели: семантика
         // разрешила его в ЧУЖОЙ области. Берём только имя.
-        ConditionNode::State(state) => state.borrow().name().to_string(),
+        ConditionNode::State(state, _) => state.borrow().name().to_string(),
         _ => return Ok(None),
     };
 

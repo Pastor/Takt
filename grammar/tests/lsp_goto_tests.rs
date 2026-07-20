@@ -229,3 +229,132 @@ mod goto_exact_file {
         );
     }
 }
+
+/// Переход на имя состояния в условии (фича 0071).
+///
+/// Продолжение 0056: там позицию использования получил `ConditionNode::Model`
+/// (`Ping`), здесь — имя **состояния** в условии. До 0071 goto на нём возвращал
+/// `None` (узел индексировался как рядовая `ReferenceCondition` без ссылки на
+/// декларацию либо не индексировался вовсе).
+///
+/// ⚠️ **Два разных механизма** (выяснено пробой при разработке — предпосылка ADR
+/// была неполной):
+/// - **кросс-модельный** `S(Ping) = Done` (headline): `Done` — состояние
+///   модели-аргумента `Ping`, текущая модель `Pong` его не видит, резолвер
+///   оставляет `ConditionNode::Unresolved(Variable)`. Разбор `S(Модель) =
+///   Состояние` — на уровне `ConditionNode::Equal` (`try_collect_state_of_model`),
+///   имя резолвится в области `Ping`.
+/// - **внутримодельный** `x = Done`, где `Done` — состояние **той же** модели:
+///   резолвер даёт `ConditionNode::State(Rc, use-site)`; его индексирует ветка
+///   `ConditionNode::State`.
+///
+/// Зонд: строка декларации вычисляется из исходника, а не угадывается.
+#[cfg(feature = "lsp")]
+mod goto_state_in_condition {
+    use grammar::lsp::goto_declaration;
+    use lsp_types::Position;
+
+    // `Done` — состояние-сестра (в Ping), приходит `Unresolved(Variable)` и
+    // резолвится через `S(Ping)`; узел индексируется как `ReferenceState`.
+    const SRC: &str = "model Ping {\n    start Run { ref Done: true; }\n    state Done;\n}\nmodel Pong {\n    start Go { ref Stop: S(Ping) = Done; }\n    state Stop;\n}\nstart Entry = (Ping | Pong);\n";
+
+    /// Курсор на `needle` в первой позиции `hay` (все — ASCII).
+    fn cursor_on(src: &str, hay: &str, needle: &str) -> Position {
+        let anchor = src.find(hay).expect("нет фрагмента") + hay.find(needle).unwrap();
+        let head = &src[..anchor];
+        let line = head.matches('\n').count() as u32;
+        let col = head.rsplit('\n').next().map_or(0, |l| l.chars().count()) as u32;
+        Position::new(line, col)
+    }
+
+    /// Строка объявления `state <name>;` в исходнике.
+    fn decl_line(src: &str, decl: &str) -> u32 {
+        src[..src.find(decl).unwrap()].matches('\n').count() as u32
+    }
+
+    /// T2: кросс-модельный `S(Ping) = Done`, курсор на `Done` → декларация в Ping.
+    #[test]
+    fn goto_state_name_in_condition_resolves_to_declaration() {
+        let range = goto_declaration(SRC, cursor_on(SRC, "S(Ping) = Done", "Done"));
+        assert!(
+            range.is_some(),
+            "goto на имени состояния в условии должен вернуть декларацию (фича 0071)"
+        );
+        assert_eq!(
+            range.unwrap().start.line,
+            decl_line(SRC, "state Done;"),
+            "переход должен открыть декларацию `state Done;`"
+        );
+    }
+
+    /// T4 (без регресса 0056): курсор на `Ping` в `S(Ping)` — это ссылка на
+    /// **модель** (`ReferenceModel`), переход ведёт к её объявлению, а не к
+    /// состоянию. Спецразбор `S(Модель) = Состояние` не должен перехватывать имя
+    /// модели.
+    #[test]
+    fn goto_model_name_in_state_of_still_resolves_to_model() {
+        let range = goto_declaration(SRC, cursor_on(SRC, "S(Ping)", "Ping"));
+        assert!(
+            range.is_some(),
+            "goto на имени модели в S(...) не должен ломаться"
+        );
+        let model_line = SRC[..SRC.find("model Ping").unwrap()].matches('\n').count() as u32;
+        assert_eq!(
+            range.unwrap().start.line,
+            model_line,
+            "переход должен открыть объявление `model Ping`"
+        );
+    }
+
+    // Внутримодельный случай: `Done` — состояние ТОЙ ЖЕ модели, резолвится в
+    // `ConditionNode::State(Rc, use-site)`. Сравнение `x = Done` бессмысленно
+    // семантически, но индексу/навигации это безразлично — проверяется путь узла
+    // `State`, а не типизация.
+    const SRC_SAME: &str = "model M {\n    var x: bit := false;\n    start A { ref B: x = Done; }\n    state B;\n    state Done;\n}\n";
+
+    /// T2b: внутримодельный `x = Done` (узел `ConditionNode::State`), курсор на
+    /// `Done` → декларация `state Done;` в той же модели.
+    #[test]
+    fn goto_same_model_state_node_resolves_to_declaration() {
+        let range = goto_declaration(SRC_SAME, cursor_on(SRC_SAME, "x = Done", "Done"));
+        assert!(
+            range.is_some(),
+            "goto на имени состояния той же модели (ConditionNode::State) должен вернуть декларацию"
+        );
+        assert_eq!(
+            range.unwrap().start.line,
+            decl_line(SRC_SAME, "state Done;"),
+            "переход должен открыть декларацию `state Done;`"
+        );
+    }
+}
+
+/// T7 (фича 0071): `ConditionNode::State` игнорирует use-site позицию в равенстве.
+///
+/// Две ссылки на **одно** состояние из разных мест текста обязаны быть равны.
+/// ⚠️ Сторож обязателен: `ConditionNode` сравнивается транзитивно через
+/// `ModelNode::PartialEq`, и автовыведённое равенство расщепило бы такие ссылки в
+/// разные узлы → поехал бы детерминированный кодоген (урок 0056-04). Ловушка
+/// взведена **разными** `Location` — мутация ручного `PartialEq` на сравнение
+/// позиций провалит тест. Тест чисто семантический (без LSP) — потому вне
+/// `#[cfg(feature = "lsp")]`-модулей выше.
+#[test]
+fn condition_state_equality_ignores_use_site() {
+    use grammar::diagnostics::Location;
+    use grammar::semantic::{ConditionNode, StateNode, StateNodeKind};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let state = Rc::new(RefCell::new(StateNode::Simple {
+        upper: None,
+        name: "End".to_string(),
+        named_blocks: vec![],
+        references: vec![],
+        kind: StateNodeKind::Simple,
+        loc: Location::Source(0, 100, 103),
+        formulas: vec![],
+    }));
+    let a = ConditionNode::State(state.clone(), Location::Source(0, 10, 13));
+    let b = ConditionNode::State(state.clone(), Location::Source(0, 40, 43));
+    assert_eq!(a, b, "use-site позиция не должна влиять на равенство");
+}

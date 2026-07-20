@@ -232,7 +232,9 @@ pub fn hover_info(source: &str, position: Position) -> Option<Hover> {
                 }
                 hover_text = text;
             }
-            SemanticNodeKind::Reference => {
+            // Цель `ref`-перехода или имя состояния в условии (`S(Ping) = End`,
+            // фича 0071) — показываем как объявление состояния.
+            SemanticNodeKind::Reference | SemanticNodeKind::ReferenceState => {
                 let mut text = format!("```but\nstate {}\n```", word);
                 if !doc.is_empty() {
                     text.push_str("\n\n");

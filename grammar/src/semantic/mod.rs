@@ -1316,8 +1316,8 @@ pub enum ConditionNode {
     /// имени модели невозможен: разрешение стирает позицию, и индексу LSP нечего
     /// сопоставить с курсором (фича 0056).
     Model(Rc<RefCell<ModelNode>>, Location),
-    /// Ссылка на состояние.
-    State(Rc<RefCell<StateNode>>),
+    /// Имя состояния той же модели в условии (`x = Done`); 2-е поле — use-site для LSP (фича 0071).
+    State(Rc<RefCell<StateNode>>, Location),
     /// Вариант перечисления (Ce4/NI6).
     ///
     /// Поля: `(определение перечисления, имя варианта, числовое значение варианта)`.
@@ -1354,7 +1354,7 @@ impl PartialEq for ConditionNode {
             // Location (use-site) намеренно игнорируется
             (Self::Variable(v1, _), Self::Variable(v2, _)) => v1 == v2,
             (Self::Model(a, _), Self::Model(b, _)) => a == b,
-            (Self::State(a), Self::State(b)) => a == b,
+            (Self::State(a, _), Self::State(b, _)) => a == b,
             _ => false,
         }
     }

@@ -163,8 +163,10 @@ fn declaration_location_of(node: &SemanticNodeRef) -> Option<DiagLoc> {
         // Декларационные виды: loc уже указывает на объявление
         Variable | Const | Port | Function | ExternFunction | State | StartState | EndState
         | TypeAlias | Condition | Enum | Model | LocalVar => node.loc,
-        // Ссылка-переход: ищем декларацию целевого состояния
-        Reference => {
+        // Ссылка-переход (`ref Имя`) ИЛИ имя состояния в условии (`S(Ping) = End`,
+        // фича 0071): ищем декларацию целевого состояния тем же поиском, каким
+        // состояние разрешилось (`search_state` в области условия).
+        Reference | ReferenceState => {
             let model_rc = node.model.as_ref()?.clone();
             let state_rc = model_rc.borrow().search_state(&node.name)?;
 
