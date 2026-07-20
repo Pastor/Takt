@@ -635,20 +635,6 @@ impl Location {
         }
     }
 
-    /// Возвращает строковое представление номера файла.
-    ///
-    /// # Паника
-    ///
-    /// Паникует, если `self` не является вариантом [`Location::Source`].
-    #[track_caller]
-    #[inline]
-    pub fn filename(&self) -> String {
-        match self {
-            Location::Source(file_no, _, _) => format!("{}", file_no),
-            _ => not_a_file(),
-        }
-    }
-
     /// Возвращает `Some(номер_файла)` для варианта [`Source`](Location::Source),
     /// или `None` для остальных вариантов.
     #[inline]

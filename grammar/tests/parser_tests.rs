@@ -941,7 +941,6 @@ fn location_methods() {
     assert_eq!(loc.start(), 10);
     assert_eq!(loc.end(), 20);
     assert_eq!(loc.exclusive_end(), 21);
-    assert_eq!(loc.filename(), "0");
     assert_eq!(loc.try_file_no(), Some("0".to_string()));
 
     let begin = loc.begin_range();
