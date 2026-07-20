@@ -65,4 +65,5 @@
 | [0070](./0070-port-initializer-address-role.md) | Инициализатор порта — это адрес, а не значение (SE-035 снимается с портов) | Accepted | фича 0070 |
 | [0071](./0071-lsp-goto-state-name.md) | Переход на имя состояния в условии — `ConditionNode::State` несёт use-site | Accepted | фича 0071 |
 | [0073](./0073-location-filename-path.md) | `Location::filename()` — удалить, а не «чинить путь» | Accepted | фича 0073 |
+| [0086](./0086-sim-var-without-initializer.md) | `var` без инициализатора — нулевое значение по типу, а не `SIM-009` | Accepted | фича 0086 |
 
