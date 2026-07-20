@@ -327,6 +327,7 @@ impl Fsm {
         blocks: &[Block],
         root: &Name,
         ports: &SvPorts,
+        mmio: Option<&crate::generator::sv::sv_mmio::Mmio>,
     ) -> Result<Self, Diagnostic> {
         let mut fsm = Fsm {
             regs: Vec::new(),
@@ -453,6 +454,27 @@ impl Fsm {
                 reset: "'0".to_string(),
                 declare_reg: false,
             });
+        }
+
+        // Адресованные `out`-порты цели `sv-mmio` (фича 0062): в отличие от портов
+        // модуля, объявляются ВНУТРИ (`declare_reg: true`) — это биты регистрового
+        // файла, а не выводы кристалла. Запись `_next` автоматом и защёлкивание —
+        // те же, что у выходного порта; шина их только читает (мультиплексор
+        // `reg_rdata` в `sv_mmio`). `in`-биты регистрами автомата не становятся:
+        // их пишет шина, и обслуживает их отдельный `always_ff` в `sv_mmio`.
+        if let Some(m) = mmio {
+            for port in m.outputs() {
+                let ty = crate::generator::sv::sv_mmio::port_sv_type(port)?;
+                let name = crate::generator::sv::sv_mmio::port_signal_name(port).to_string();
+                fsm.registered.insert(name.clone());
+                fsm.regs.push(Reg {
+                    name,
+                    prefix: ty.prefix,
+                    suffix: ty.suffix,
+                    reset: "'0".to_string(),
+                    declare_reg: true,
+                });
+            }
         }
         Ok(fsm)
     }

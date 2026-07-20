@@ -444,6 +444,7 @@ pub(crate) struct SvPorts {
 pub(crate) fn collect_ports(
     map: &SvMap,
     blocks: &[(Name, Rc<RefCell<ModelNode>>)],
+    addressed: &BTreeSet<String>,
 ) -> Result<SvPorts, Diagnostic> {
     let mut ports = SvPorts::default();
     let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -460,6 +461,12 @@ pub(crate) fn collect_ports(
             else {
                 continue;
             };
+            // Порт **с** адресом (режим `sv-mmio`, фича 0062) портом модуля не
+            // становится — он бит регистрового файла (объявляется и обслуживается
+            // в `sv_mmio`). В режиме `sv` множество пусто → фильтр прозрачен.
+            if addressed.contains(name) {
+                continue;
+            }
             // `inout` проверяется ДО фильтра использования: молча пропустить
             // невыразимое направление лишь потому, что порт нигде не читается,
             // значило бы отложить отказ до момента, когда его начнут читать.
@@ -491,7 +498,12 @@ pub(crate) fn collect_ports(
 /// Порядок — служебные, затем `in`, затем `out`, затем `is_done` (форма ADR).
 /// Внутри направления порядок задан `BTreeMap` карты модели, то есть
 /// детерминирован даром (фича 0048).
-pub(crate) fn emit_module_header(p: &mut Printer, module: &str, ports: &SvPorts) {
+pub(crate) fn emit_module_header(
+    p: &mut Printer,
+    module: &str,
+    ports: &SvPorts,
+    mmio: Option<&crate::generator::sv::sv_mmio::Mmio>,
+) {
     p.ident(&format!("module {} (", module)).nl();
     p.up();
     p.ident("input  logic clk,   // служебный порт цели sv: в .lam его нет")
@@ -502,6 +514,11 @@ pub(crate) fn emit_module_header(p: &mut Printer, module: &str, ports: &SvPorts)
     // поэтому существующие потребители не обязаны его подключать (фича 0063).
     p.ident("input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)")
         .nl();
+    // Регистровый интерфейс цели `sv-mmio` (фича 0062) — после служебных портов,
+    // до пользовательских. В режиме `sv` (`mmio == None`) не эмитится.
+    if let Some(m) = mmio {
+        crate::generator::sv::sv_mmio::emit_reg_iface_lines(p, m);
+    }
     for port in &ports.inputs {
         p.ident(&format!("input  {},", port.ty.declare(&port.name)))
             .nl();
@@ -595,7 +612,7 @@ mod tests {
     fn header_carries_service_ports() {
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
-        emit_module_header(&mut p, "stacker", &SvPorts::default());
+        emit_module_header(&mut p, "stacker", &SvPorts::default(), None);
         assert!(out.contains("input  logic clk,"), "нет clk:\n{out}");
         assert!(out.contains("input  logic rst_n,"), "нет rst_n:\n{out}");
         assert!(out.contains("output logic is_done"), "нет is_done:\n{out}");
@@ -611,7 +628,7 @@ mod tests {
     fn header_carries_clock_enable_with_default() {
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
-        emit_module_header(&mut p, "stacker", &SvPorts::default());
+        emit_module_header(&mut p, "stacker", &SvPorts::default(), None);
         assert!(
             out.contains("input  logic en = 1'b1,"),
             "нет en с умолчанием 1'b1:\n{out}"
@@ -633,7 +650,7 @@ mod tests {
                 ty: sv_type(&crate::semantic::type_node::TypeNode::Bit, "тест").unwrap(),
             }],
         };
-        emit_module_header(&mut p, "stacker", &ports);
+        emit_module_header(&mut p, "stacker", &ports, None);
         assert!(
             out.contains("input  logic lift_request,"),
             "нет входного порта:\n{out}"
@@ -668,7 +685,7 @@ mod tests {
             }],
             outputs: Vec::new(),
         };
-        emit_module_header(&mut p, "stacker", &ports);
+        emit_module_header(&mut p, "stacker", &ports, None);
         assert!(
             out.contains("input  logic [7:0] task_stack_no,"),
             "нет ширины порта:\n{out}"

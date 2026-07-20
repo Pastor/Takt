@@ -39,6 +39,7 @@ mod sv_expr;
 mod sv_fixed;
 mod sv_fsm;
 mod sv_map;
+mod sv_mmio;
 mod sv_module;
 mod sv_stmt;
 mod sv_type;
@@ -60,7 +61,15 @@ use sv_map::SvMap;
 const INDENT: usize = 4;
 
 /// Генератор SystemVerilog для модели Lam.
-pub struct Generator {}
+///
+/// Флаг [`mmio`](Generator::mmio) выбирает форму вывода: `false` — цель `sv`
+/// (порты Lam → порты модуля, адрес не потребляется, ADR 0045); `true` — цель
+/// `sv-mmio` (порт с адресом → бит регистрового файла на шинно-агностичном
+/// интерфейсе, фича 0062).
+pub struct Generator {
+    /// Режим регистрового файла (цель `sv-mmio`, фича 0062).
+    pub mmio: bool,
+}
 
 impl AsGenerator for Generator {
     fn generate(
@@ -74,7 +83,7 @@ impl AsGenerator for Generator {
             model,
             options.guard_enable,
         )?;
-        let program = generate_program(&map)?;
+        let program = generate_program(&map, self.mmio, &options.address_map)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));
         fs::write(
@@ -96,7 +105,11 @@ impl AsGenerator for Generator {
 /// вырожденный случай целевой формы: он проходит оба гейта (0045-02), которые
 /// тем самым ставятся **сразу**, а не после накопления кода. Содержательное
 /// наполнение — задачи 0045-03…0045-06.
-fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
+fn generate_program(
+    map: &SvMap,
+    mmio: bool,
+    address_map: &std::collections::HashMap<String, crate::address_map::ResolvedAddress>,
+) -> Result<String, Diagnostic> {
     let Element::Model { .. } = map.model() else {
         return Err(Diagnostic::error(
             Location::Codegen,
@@ -133,8 +146,24 @@ fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
     }
     blocks.push((root_name.clone(), root));
 
-    let ports = sv_module::collect_ports(map, &blocks)?;
-    let fsm = sv_fsm::Fsm::build(map, &blocks, &root_name, &ports)?;
+    // Режим `sv-mmio` (фича 0062): порт **с** адресом → бит регистрового файла,
+    // порт **без** адреса → порт модуля. Карта адресов уже разрешена
+    // (`resolve_addresses`, приоритет inline < `address` < внешняя) и передана в
+    // `options.address_map` библиотечной обёрткой `compile_to_sv_mmio` — как для
+    // `c-hal`. В режиме `sv` (`mmio == false`) `mmio_map` пуст и всё ниже
+    // вырождается в прежний вывод (T3/A3 — побайтовое равенство).
+    let mmio_map = if mmio {
+        Some(sv_mmio::Mmio::build(&blocks, address_map)?)
+    } else {
+        None
+    };
+    let addressed = mmio_map
+        .as_ref()
+        .map(|m| m.addressed_names())
+        .unwrap_or_default();
+
+    let ports = sv_module::collect_ports(map, &blocks, &addressed)?;
+    let fsm = sv_fsm::Fsm::build(map, &blocks, &root_name, &ports, mmio_map.as_ref())?;
     let module = normalize_lowercase_snakecase(root_name.unique().replace(':', "_"));
 
     let mut out = String::new();
@@ -153,7 +182,7 @@ fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
         .nl();
     p.nl();
 
-    sv_module::emit_module_header(&mut p, &module, &ports);
+    sv_module::emit_module_header(&mut p, &module, &ports, mmio_map.as_ref());
 
     p.up();
     sv_fsm::emit_constants(&mut p, map, &blocks)?;
@@ -164,6 +193,13 @@ fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
     sv_fsm::emit_functions(&mut p, map, &fsm, &blocks)?;
     sv_fsm::emit_comb(&mut p, map, &fsm, &root_name)?;
     sv_fsm::emit_ff(&mut p, map, &fsm, &blocks)?;
+    // Регистровый файл (фича 0062): объявление входных регистров, их защёлкивание
+    // шиной (`reg_wen`) и комбинационное чтение (`reg_rdata`). Выходные адресуемые
+    // порты — уже регистры автомата (защёлкнуты в `always_ff` выше), их только
+    // читает мультиплексор чтения. Ничего не эмитится в режиме `sv`.
+    if let Some(m) = &mmio_map {
+        sv_mmio::emit_register_file(&mut p, m);
+    }
     sv_fsm::emit_is_done(&mut p, &root_name);
     p.down();
     p.ident("endmodule").nl();
@@ -205,7 +241,12 @@ mod tests {
     }
 
     fn program_of(src: &str, name: &str) -> String {
-        generate_program(&make_map(src, name)).unwrap()
+        generate_program(
+            &make_map(src, name),
+            false,
+            &std::collections::HashMap::new(),
+        )
+        .unwrap()
     }
 
     /// Корневая модель порождает `module` с именем в `snake_case`.
@@ -486,7 +527,12 @@ mod tests {
     fn nested_concatenation_in_parallel_is_diagnosed_not_silent() {
         let src =
             "model A { start S; } model B { start S; } model C { start S; } start P = (A + B) | C;";
-        let err = generate_program(&make_map(src, "Root")).unwrap_err();
+        let err = generate_program(
+            &make_map(src, "Root"),
+            false,
+            &std::collections::HashMap::new(),
+        )
+        .unwrap_err();
         assert_eq!(
             err.code.as_deref(),
             Some("SV-002"),

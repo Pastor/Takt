@@ -1,0 +1,577 @@
+// Порождено компилятором Lam (lamc) — цель: SystemVerilog (IEEE 1800).
+// Не редактировать вручную: файл перезаписывается при каждой генерации.
+//
+// Такт модели Lam ≡ фронт clk (posedge). Сброс синхронный, активный низкий:
+// ветвь if (!rst_n) несёт стартовое состояние — синтетического INIT нет,
+// поэтому тело стартового состояния исполняется на такте 1 (контракт 0033).
+
+module stacker (
+    input  logic clk,   // служебный порт цели sv: в .lam его нет
+    input  logic rst_n, // служебный порт цели sv: сброс, активный низкий
+    input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)
+    input  logic [10:0] reg_addr,   // регистровый интерфейс цели sv-mmio (фича 0062): адрес
+    input  logic [7:0] reg_wdata,  // данные записи (бит out игнорирует запись)
+    input  logic reg_wen,        // строб записи
+    output logic [7:0] reg_rdata,  // данные чтения (комбинационные)
+    output logic is_done
+);
+    localparam logic [7:0] CHARGE_ROW = 0;
+    localparam logic [7:0] CHARGE_SECTION = 0;
+    localparam logic [7:0] CHARGE_STACK = 0;
+    localparam logic [7:0] DROPOFF_ROW = 1;
+    localparam logic [7:0] DROPOFF_SECTION = 1;
+    localparam logic [7:0] DROPOFF_STACK = 11;
+    localparam logic [7:0] PICKUP_ROW = 1;
+    localparam logic [7:0] PICKUP_SECTION = 1;
+    localparam logic [7:0] PICKUP_STACK = 0;
+
+    // Состояния модели 'CommandReceiver (Stacker:CommandReceiver)'. Синтетического INIT нет: стартовое
+    // состояние живёт в ветви сброса (контракт ADR 0033).
+    typedef enum logic [1:0] {
+        STACKER_COMMAND_RECEIVER_ACCEPTING_TASK = 2'd0,
+        STACKER_COMMAND_RECEIVER_TASK_ACTIVE = 2'd1,
+        STACKER_COMMAND_RECEIVER_WAITING_FOR_TASK = 2'd2,
+        STACKER_COMMAND_RECEIVER_END = 2'd3
+    } stacker_command_receiver_state_e;
+
+    // Состояния модели 'LiftController (Stacker:LiftController)'. Синтетического INIT нет: стартовое
+    // состояние живёт в ветви сброса (контракт ADR 0033).
+    typedef enum logic [1:0] {
+        STACKER_LIFT_CONTROLLER_LIFT_DONE = 2'd0,
+        STACKER_LIFT_CONTROLLER_LIFT_IDLE = 2'd1,
+        STACKER_LIFT_CONTROLLER_LIFT_OPERATING = 2'd2,
+        STACKER_LIFT_CONTROLLER_END = 2'd3
+    } stacker_lift_controller_state_e;
+
+    // Состояния модели 'MovementController (Stacker:MovementController)'. Синтетического INIT нет: стартовое
+    // состояние живёт в ветви сброса (контракт ADR 0033).
+    typedef enum logic [3:0] {
+        STACKER_MOVEMENT_CONTROLLER_DISPATCH_MOVE = 4'd0,
+        STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE = 4'd1,
+        STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE = 4'd2,
+        STACKER_MOVEMENT_CONTROLLER_MOVING_TO_CELL = 4'd3,
+        STACKER_MOVEMENT_CONTROLLER_MOVING_TO_DROPOFF = 4'd4,
+        STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP = 4'd5,
+        STACKER_MOVEMENT_CONTROLLER_MOVING_TO_STORAGE = 4'd6,
+        STACKER_MOVEMENT_CONTROLLER_TASK_COMPLETING = 4'd7,
+        STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_CELL = 4'd8,
+        STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_DROPOFF = 4'd9,
+        STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_PICKUP = 4'd10,
+        STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_STORAGE = 4'd11,
+        STACKER_MOVEMENT_CONTROLLER_END = 4'd12
+    } stacker_movement_controller_state_e;
+
+    // Состояния модели 'stacker (Stacker)'. Синтетического INIT нет: стартовое
+    // состояние живёт в ветви сброса (контракт ADR 0033).
+    typedef enum logic [0:0] {
+        STACKER_STACKER = 1'd0,
+        STACKER_END = 1'd1
+    } stacker_state_e;
+
+    stacker_command_receiver_state_e stacker_command_receiver_state;
+    stacker_command_receiver_state_e stacker_command_receiver_state_next;
+    stacker_lift_controller_state_e stacker_lift_controller_state;
+    stacker_lift_controller_state_e stacker_lift_controller_state_next;
+    stacker_movement_controller_state_e stacker_movement_controller_state;
+    stacker_movement_controller_state_e stacker_movement_controller_state_next;
+    stacker_state_e state;
+    stacker_state_e state_next;
+    logic stacker_busy;
+    logic stacker_busy_next;
+    logic [7:0] stacker_eta;
+    logic [7:0] stacker_eta_next;
+    logic stacker_lift_done;
+    logic stacker_lift_done_next;
+    logic stacker_lift_op;
+    logic stacker_lift_op_next;
+    logic stacker_lift_request;
+    logic stacker_lift_request_next;
+    logic [7:0] stacker_tgt_row;
+    logic [7:0] stacker_tgt_row_next;
+    logic [7:0] stacker_tgt_section;
+    logic [7:0] stacker_tgt_section_next;
+    logic [7:0] stacker_tgt_stack;
+    logic [7:0] stacker_tgt_stack_next;
+    logic stacker_tgt_type;
+    logic stacker_tgt_type_next;
+    logic cmd_ack;
+    logic cmd_ack_next;
+    logic cmd_done;
+    logic cmd_done_next;
+    logic cmd_fork;
+    logic cmd_fork_next;
+    logic [7:0] cmd_target_row;
+    logic [7:0] cmd_target_row_next;
+    logic [7:0] cmd_target_section;
+    logic [7:0] cmd_target_section_next;
+    logic [7:0] cmd_target_stack;
+    logic [7:0] cmd_target_stack_next;
+
+    function automatic logic [7:0] travel_time(input logic [7:0] to_stack, input logic [7:0] to_row, input logic [7:0] to_section);
+        logic [7:0] ds;
+        logic [7:0] dr;
+        logic [7:0] dy;
+        logic [7:0] t;
+        ds = 0;
+        dr = 0;
+        dy = 0;
+        t = 0;
+        if ((pos_stack > to_stack)) begin
+            ds = (pos_stack - to_stack);
+        end else begin
+            ds = (to_stack - pos_stack);
+        end
+        if ((pos_row > to_row)) begin
+            dr = (pos_row - to_row);
+        end else begin
+            dr = (to_row - pos_row);
+        end
+        if ((pos_section > to_section)) begin
+            dy = (pos_section - to_section);
+        end else begin
+            dy = (to_section - pos_section);
+        end
+        t = ds;
+        if ((dr > t)) begin
+            t = dr;
+        end
+        if ((dy > t)) begin
+            t = dy;
+        end
+        travel_time = t;
+    endfunction
+
+    // Комбинационная часть: БЛОКИРУЮЩИЕ присваивания, поэтому порядок
+    // операторов и видимость записей внутри такта — в точности как в C.
+    always_comb begin
+        // Умолчание «остаться как есть». Без него неполное присваивание
+        // даёт защёлку (verilator: LATCH).
+        stacker_command_receiver_state_next = stacker_command_receiver_state;
+        stacker_lift_controller_state_next = stacker_lift_controller_state;
+        stacker_movement_controller_state_next = stacker_movement_controller_state;
+        state_next = state;
+        stacker_busy_next = stacker_busy;
+        stacker_eta_next = stacker_eta;
+        stacker_lift_done_next = stacker_lift_done;
+        stacker_lift_op_next = stacker_lift_op;
+        stacker_lift_request_next = stacker_lift_request;
+        stacker_tgt_row_next = stacker_tgt_row;
+        stacker_tgt_section_next = stacker_tgt_section;
+        stacker_tgt_stack_next = stacker_tgt_stack;
+        stacker_tgt_type_next = stacker_tgt_type;
+        cmd_ack_next = cmd_ack;
+        cmd_done_next = cmd_done;
+        cmd_fork_next = cmd_fork;
+        cmd_target_row_next = cmd_target_row;
+        cmd_target_section_next = cmd_target_section;
+        cmd_target_stack_next = cmd_target_stack;
+
+        unique case (state)
+            STACKER_STACKER: begin
+                // Под-модель 'CommandReceiver (Stacker:CommandReceiver)' — инлайн её такта.
+                unique case (stacker_command_receiver_state)
+                    STACKER_COMMAND_RECEIVER_ACCEPTING_TASK: begin
+                        begin
+                            cmd_ack_next = 0;
+                            stacker_command_receiver_state_next = STACKER_COMMAND_RECEIVER_TASK_ACTIVE;
+                        end
+                    end
+                    STACKER_COMMAND_RECEIVER_TASK_ACTIVE: begin
+                        if ((!stacker_busy_next)) begin
+                            cmd_ack_next = 0;
+                            stacker_command_receiver_state_next = STACKER_COMMAND_RECEIVER_WAITING_FOR_TASK;
+                        end
+                    end
+                    STACKER_COMMAND_RECEIVER_WAITING_FOR_TASK: begin
+                        if (((task_valid && (!stacker_busy_next)) && (!sense_battery_low))) begin
+                            stacker_tgt_stack_next = task_stack_no;
+                            stacker_tgt_row_next = task_row_no;
+                            stacker_tgt_section_next = task_section_no;
+                            stacker_tgt_type_next = task_type;
+                            stacker_eta_next = travel_time(task_stack_no, task_row_no, task_section_no);
+                            stacker_busy_next = 1;
+                            cmd_ack_next = 1;
+                            stacker_command_receiver_state_next = STACKER_COMMAND_RECEIVER_ACCEPTING_TASK;
+                        end
+                    end
+                    STACKER_COMMAND_RECEIVER_END: begin end
+                endcase
+                // Под-модель 'MovementController (Stacker:MovementController)' — инлайн её такта.
+                unique case (stacker_movement_controller_state)
+                    STACKER_MOVEMENT_CONTROLLER_DISPATCH_MOVE: begin
+                        if ((!stacker_tgt_type_next)) begin
+                            cmd_target_stack_next = PICKUP_STACK;
+                            cmd_target_row_next = PICKUP_ROW;
+                            cmd_target_section_next = PICKUP_SECTION;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP;
+                        end
+                        else if (stacker_tgt_type_next) begin
+                            stacker_lift_request_next = 0;
+                            stacker_lift_done_next = 0;
+                            cmd_target_stack_next = stacker_tgt_stack_next;
+                            cmd_target_row_next = stacker_tgt_row_next;
+                            cmd_target_section_next = stacker_tgt_section_next;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_STORAGE;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE: begin
+                        if (sense_at_charge) begin
+                            cmd_target_stack_next = CHARGE_STACK;
+                            cmd_target_row_next = CHARGE_ROW;
+                            cmd_target_section_next = CHARGE_SECTION;
+                            cmd_done_next = 0;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE: begin
+                        if ((stacker_busy_next && (!sense_battery_low))) begin
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_DISPATCH_MOVE;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_MOVING_TO_CELL: begin
+                        if ((((pos_stack == stacker_tgt_stack_next) && (pos_row == stacker_tgt_row_next)) && (pos_section == stacker_tgt_section_next))) begin
+                            stacker_lift_request_next = 1;
+                            stacker_lift_op_next = 1;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_CELL;
+                        end
+                        else if (sense_battery_low) begin
+                            cmd_target_stack_next = CHARGE_STACK;
+                            cmd_target_row_next = CHARGE_ROW;
+                            cmd_target_section_next = CHARGE_SECTION;
+                            stacker_lift_request_next = 0;
+                            stacker_lift_done_next = 0;
+                            cmd_ack_next = 0;
+                            cmd_done_next = 0;
+                            stacker_busy_next = 0;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_MOVING_TO_DROPOFF: begin
+                        if ((((pos_stack == DROPOFF_STACK) && (pos_row == DROPOFF_ROW)) && (pos_section == DROPOFF_SECTION))) begin
+                            stacker_lift_request_next = 1;
+                            stacker_lift_op_next = 1;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_DROPOFF;
+                        end
+                        else if (sense_battery_low) begin
+                            cmd_target_stack_next = CHARGE_STACK;
+                            cmd_target_row_next = CHARGE_ROW;
+                            cmd_target_section_next = CHARGE_SECTION;
+                            stacker_lift_request_next = 0;
+                            stacker_lift_done_next = 0;
+                            cmd_ack_next = 0;
+                            cmd_done_next = 0;
+                            stacker_busy_next = 0;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP: begin
+                        if ((((pos_stack == PICKUP_STACK) && (pos_row == PICKUP_ROW)) && (pos_section == PICKUP_SECTION))) begin
+                            stacker_lift_request_next = 1;
+                            stacker_lift_op_next = 0;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_PICKUP;
+                        end
+                        else if (sense_battery_low) begin
+                            cmd_target_stack_next = CHARGE_STACK;
+                            cmd_target_row_next = CHARGE_ROW;
+                            cmd_target_section_next = CHARGE_SECTION;
+                            stacker_lift_request_next = 0;
+                            stacker_lift_done_next = 0;
+                            cmd_ack_next = 0;
+                            cmd_done_next = 0;
+                            stacker_busy_next = 0;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_MOVING_TO_STORAGE: begin
+                        if ((((pos_stack == stacker_tgt_stack_next) && (pos_row == stacker_tgt_row_next)) && (pos_section == stacker_tgt_section_next))) begin
+                            stacker_lift_request_next = 1;
+                            stacker_lift_op_next = 0;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_STORAGE;
+                        end
+                        else if (sense_battery_low) begin
+                            cmd_target_stack_next = CHARGE_STACK;
+                            cmd_target_row_next = CHARGE_ROW;
+                            cmd_target_section_next = CHARGE_SECTION;
+                            stacker_lift_request_next = 0;
+                            stacker_lift_done_next = 0;
+                            cmd_ack_next = 0;
+                            cmd_done_next = 0;
+                            stacker_busy_next = 0;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_TASK_COMPLETING: begin
+                        cmd_done_next = 0;
+                        begin
+                            cmd_target_stack_next = CHARGE_STACK;
+                            cmd_target_row_next = CHARGE_ROW;
+                            cmd_target_section_next = CHARGE_SECTION;
+                            cmd_done_next = 0;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_CELL: begin
+                        if (stacker_lift_done_next) begin
+                            stacker_lift_request_next = 0;
+                            stacker_lift_done_next = 0;
+                            stacker_busy_next = 0;
+                            cmd_done_next = 1;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_TASK_COMPLETING;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_DROPOFF: begin
+                        if (stacker_lift_done_next) begin
+                            stacker_lift_request_next = 0;
+                            stacker_lift_done_next = 0;
+                            stacker_busy_next = 0;
+                            cmd_done_next = 1;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_TASK_COMPLETING;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_PICKUP: begin
+                        if (stacker_lift_done_next) begin
+                            stacker_lift_request_next = 0;
+                            stacker_lift_done_next = 0;
+                            cmd_target_stack_next = stacker_tgt_stack_next;
+                            cmd_target_row_next = stacker_tgt_row_next;
+                            cmd_target_section_next = stacker_tgt_section_next;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_CELL;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_STORAGE: begin
+                        if (stacker_lift_done_next) begin
+                            stacker_lift_request_next = 0;
+                            stacker_lift_done_next = 0;
+                            cmd_target_stack_next = DROPOFF_STACK;
+                            cmd_target_row_next = DROPOFF_ROW;
+                            cmd_target_section_next = DROPOFF_SECTION;
+                            stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_DROPOFF;
+                        end
+                    end
+                    STACKER_MOVEMENT_CONTROLLER_END: begin end
+                endcase
+                // Под-модель 'LiftController (Stacker:LiftController)' — инлайн её такта.
+                unique case (stacker_lift_controller_state)
+                    STACKER_LIFT_CONTROLLER_LIFT_DONE: begin
+                        if ((!stacker_lift_request_next)) begin
+                            cmd_fork_next = 0;
+                            stacker_lift_controller_state_next = STACKER_LIFT_CONTROLLER_LIFT_IDLE;
+                        end
+                    end
+                    STACKER_LIFT_CONTROLLER_LIFT_IDLE: begin
+                        if (stacker_lift_request_next) begin
+                            cmd_fork_next = 1;
+                            stacker_lift_controller_state_next = STACKER_LIFT_CONTROLLER_LIFT_OPERATING;
+                        end
+                    end
+                    STACKER_LIFT_CONTROLLER_LIFT_OPERATING: begin
+                        if (((stacker_lift_request_next && (!stacker_lift_op_next)) && sense_loaded)) begin
+                            cmd_fork_next = 0;
+                            stacker_lift_done_next = 1;
+                            stacker_lift_controller_state_next = STACKER_LIFT_CONTROLLER_LIFT_DONE;
+                        end
+                        else if (((stacker_lift_request_next && stacker_lift_op_next) && (!sense_loaded))) begin
+                            cmd_fork_next = 0;
+                            stacker_lift_done_next = 1;
+                            stacker_lift_controller_state_next = STACKER_LIFT_CONTROLLER_LIFT_DONE;
+                        end
+                        else if ((!stacker_lift_request_next)) begin
+                            cmd_fork_next = 0;
+                            stacker_lift_controller_state_next = STACKER_LIFT_CONTROLLER_LIFT_IDLE;
+                        end
+                    end
+                    STACKER_LIFT_CONTROLLER_END: begin end
+                endcase
+                if ((stacker_command_receiver_state_next == STACKER_COMMAND_RECEIVER_END) && (stacker_movement_controller_state_next == STACKER_MOVEMENT_CONTROLLER_END) && (stacker_lift_controller_state_next == STACKER_LIFT_CONTROLLER_END)) begin
+                    state_next = STACKER_END;
+                end
+            end
+            STACKER_END: begin end
+        endcase
+    end
+
+    // Регистровая часть: НЕБЛОКИРУЮЩИЕ присваивания. Ветвь сброса несёт
+    // стартовые состояния ВСЕХ уровней — они сбрасываются одним фронтом,
+    // поэтому сдвиг такта равен нулю на любой глубине (контракт 0033).
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            stacker_command_receiver_state <= STACKER_COMMAND_RECEIVER_WAITING_FOR_TASK;
+            stacker_lift_controller_state <= STACKER_LIFT_CONTROLLER_LIFT_IDLE;
+            stacker_movement_controller_state <= STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE;
+            state <= STACKER_STACKER;
+            stacker_busy <= 0;
+            stacker_eta <= 0;
+            stacker_lift_done <= 0;
+            stacker_lift_op <= 0;
+            stacker_lift_request <= 0;
+            stacker_tgt_row <= 0;
+            stacker_tgt_section <= 0;
+            stacker_tgt_stack <= 0;
+            stacker_tgt_type <= 0;
+            cmd_ack <= '0;
+            cmd_done <= '0;
+            cmd_fork <= '0;
+            cmd_target_row <= '0;
+            cmd_target_section <= '0;
+            cmd_target_stack <= '0;
+            cmd_ack <= 0;
+            cmd_fork <= 0;
+            cmd_target_stack <= CHARGE_STACK;
+            cmd_target_row <= CHARGE_ROW;
+            cmd_target_section <= CHARGE_SECTION;
+            cmd_done <= 0;
+        end else if (en) begin
+            stacker_command_receiver_state <= stacker_command_receiver_state_next;
+            stacker_lift_controller_state <= stacker_lift_controller_state_next;
+            stacker_movement_controller_state <= stacker_movement_controller_state_next;
+            state <= state_next;
+            stacker_busy <= stacker_busy_next;
+            stacker_eta <= stacker_eta_next;
+            stacker_lift_done <= stacker_lift_done_next;
+            stacker_lift_op <= stacker_lift_op_next;
+            stacker_lift_request <= stacker_lift_request_next;
+            stacker_tgt_row <= stacker_tgt_row_next;
+            stacker_tgt_section <= stacker_tgt_section_next;
+            stacker_tgt_stack <= stacker_tgt_stack_next;
+            stacker_tgt_type <= stacker_tgt_type_next;
+            cmd_ack <= cmd_ack_next;
+            cmd_done <= cmd_done_next;
+            cmd_fork <= cmd_fork_next;
+            cmd_target_row <= cmd_target_row_next;
+            cmd_target_section <= cmd_target_section_next;
+            cmd_target_stack <= cmd_target_stack_next;
+        end
+    end
+
+    // Входные регистры sv-mmio: их значение приходит от шины (reg_wen),
+    // а не от автомата, поэтому пары _next у них нет.
+    logic [7:0] pos_row;
+    logic [7:0] pos_section;
+    logic [7:0] pos_stack;
+    logic sense_at_charge;
+    logic sense_battery_low;
+    logic sense_loaded;
+    logic [7:0] task_row_no;
+    logic [7:0] task_section_no;
+    logic [7:0] task_stack_no;
+    logic task_type;
+    logic task_valid;
+
+    // Запись входных регистров шиной. Сброс — в 0; при reg_wen адрес
+    // декодируется в регистр (запись в бит out сюда не попадает — R5).
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            pos_row <= '0;
+            pos_section <= '0;
+            pos_stack <= '0;
+            sense_at_charge <= '0;
+            sense_battery_low <= '0;
+            sense_loaded <= '0;
+            task_row_no <= '0;
+            task_section_no <= '0;
+            task_stack_no <= '0;
+            task_type <= '0;
+            task_valid <= '0;
+        end else if (reg_wen) begin
+            unique case (reg_addr)
+                11'h100: begin
+                    task_valid <= reg_wdata[0 +: 1];
+                end
+                11'h101: begin
+                    task_type <= reg_wdata[0 +: 1];
+                end
+                11'h102: begin
+                    task_stack_no <= reg_wdata[0 +: 8];
+                end
+                11'h103: begin
+                    task_row_no <= reg_wdata[0 +: 8];
+                end
+                11'h104: begin
+                    task_section_no <= reg_wdata[0 +: 8];
+                end
+                11'h200: begin
+                    pos_stack <= reg_wdata[0 +: 8];
+                end
+                11'h201: begin
+                    pos_row <= reg_wdata[0 +: 8];
+                end
+                11'h202: begin
+                    pos_section <= reg_wdata[0 +: 8];
+                end
+                11'h300: begin
+                    sense_loaded <= reg_wdata[0 +: 1];
+                end
+                11'h301: begin
+                    sense_at_charge <= reg_wdata[0 +: 1];
+                end
+                11'h302: begin
+                    sense_battery_low <= reg_wdata[0 +: 1];
+                end
+                default: ; // адрес без in-порта — запись игнорируется
+            endcase
+        end
+    end
+
+    // Чтение регистров шиной (комбинационное). Слово собирается из всех
+    // портов адреса; чтение бита in возвращает записанное шиной (R5).
+    always_comb begin
+        reg_rdata = '0;
+        unique case (reg_addr)
+            11'h100: begin
+                reg_rdata[0 +: 1] = task_valid;
+            end
+            11'h101: begin
+                reg_rdata[0 +: 1] = task_type;
+            end
+            11'h102: begin
+                reg_rdata[0 +: 8] = task_stack_no;
+            end
+            11'h103: begin
+                reg_rdata[0 +: 8] = task_row_no;
+            end
+            11'h104: begin
+                reg_rdata[0 +: 8] = task_section_no;
+            end
+            11'h200: begin
+                reg_rdata[0 +: 8] = pos_stack;
+            end
+            11'h201: begin
+                reg_rdata[0 +: 8] = pos_row;
+            end
+            11'h202: begin
+                reg_rdata[0 +: 8] = pos_section;
+            end
+            11'h300: begin
+                reg_rdata[0 +: 1] = sense_loaded;
+            end
+            11'h301: begin
+                reg_rdata[0 +: 1] = sense_at_charge;
+            end
+            11'h302: begin
+                reg_rdata[0 +: 1] = sense_battery_low;
+            end
+            11'h400: begin
+                reg_rdata[0 +: 8] = cmd_target_stack;
+            end
+            11'h401: begin
+                reg_rdata[0 +: 8] = cmd_target_row;
+            end
+            11'h402: begin
+                reg_rdata[0 +: 8] = cmd_target_section;
+            end
+            11'h500: begin
+                reg_rdata[0 +: 1] = cmd_fork;
+            end
+            11'h600: begin
+                reg_rdata[0 +: 1] = cmd_ack;
+            end
+            11'h601: begin
+                reg_rdata[0 +: 1] = cmd_done;
+            end
+            default: reg_rdata = '0;
+        endcase
+    end
+
+    // Терминальность модели наблюдаема снаружи — аналог _is_done() цели c.
+    assign is_done = (state == STACKER_END);
+endmodule
