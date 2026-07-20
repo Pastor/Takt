@@ -168,7 +168,26 @@ fn generate_program(map: &SvMap) -> Result<String, Diagnostic> {
     p.down();
     p.ident("endmodule").nl();
 
+    // Доставка предупреждений генератора (фича 0064). До неё у цели `sv` канала
+    // не было вовсе (греп по `generator/sv/`): без него `SV-009` была бы немой.
+    report(&fsm.warnings.borrow());
+
     Ok(out)
+}
+
+/// Показывает предупреждения генератора цели `sv` (`SV-009`).
+///
+/// ⚠️ Образец `rust`/`st` воспроизведён **вместе с его дефектом** (action A-6
+/// ADR 0064): `report` печатает `eprintln!` **из библиотеки** и диагностику
+/// вызывающему не возвращает (`compile_to_sv` → `Result<(), Diagnostic>`),
+/// поэтому `--quiet` его не глушит, а LSP получит вывод в свой stderr. Чинить
+/// здесь нельзя — фича превратилась бы в рефакторинг доставки; дефект заведён
+/// кандидатом.
+fn report(warnings: &[Diagnostic]) {
+    for w in warnings {
+        let code = w.code.as_deref().unwrap_or("SV");
+        eprintln!("Предупреждение [{}]: {}", code, w.message);
+    }
 }
 
 #[cfg(test)]

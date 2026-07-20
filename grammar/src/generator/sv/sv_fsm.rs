@@ -121,6 +121,17 @@ pub(crate) struct Fsm {
     /// Цепочки `+`: несущее состояние и число шагов (для эмиссии enum шага,
     /// задача 0057-01). Порядок — обхода `build`, значит детерминирован (0048).
     step_enums: Vec<(Name, usize)>,
+    /// Предупреждения генератора, собранные при печати выражений (фича 0064).
+    ///
+    /// Ячейка, а не поле-вектор: печать выражения идёт через `&Scope`
+    /// (неизменяемая ссылка), а `SV-009` (переменный делитель) обнаруживается
+    /// именно там — в единственной точке трансляции всех выражений. Отсюда
+    /// интерьерная мутабельность: `print_expression` дописывает сюда через
+    /// `scope.warnings`, а `generate_program` доставляет их пользователем
+    /// (`report`). ⚠️ Канал печатает `eprintln!` из библиотеки и вызывающему
+    /// диагностики не возвращает — сложившийся образец `rust`/`st` со своим
+    /// дефектом (`--quiet` не глушит); чинить его в 0064 нельзя (кандидат).
+    pub(crate) warnings: std::cell::RefCell<Vec<Diagnostic>>,
 }
 
 /// Имя регистра состояния модели.
@@ -323,6 +334,7 @@ impl Fsm {
             state_reg: BTreeMap::new(),
             enums: BTreeMap::new(),
             step_enums: Vec::new(),
+            warnings: std::cell::RefCell::new(Vec::new()),
         };
 
         // Перечисления собираются со всех уровней: `command := Up` в АСД —
@@ -451,6 +463,7 @@ impl Fsm {
             registered: &self.registered,
             function: None,
             enums: &self.enums,
+            warnings: &self.warnings,
         }
     }
 }
@@ -615,6 +628,7 @@ pub(crate) fn emit_functions(
                 registered: &fsm.registered,
                 function: Some(name),
                 enums: &fsm.enums,
+                warnings: &fsm.warnings,
             };
             print_statement(p, body, &scope)?;
             p.down();
