@@ -134,6 +134,10 @@ pub(crate) fn emit_body(
     };
     let mut out = BodyOutput::default();
 
+    // Фича 0083: model-level `always` (вне состояния) — каждый такт до `CASE`,
+    // безусловно по состоянию (эталон — шаг 2 `execution("always")` симулятора).
+    emit_model_block(p, model, "always", &mut out.stmt)?;
+
     p.ident("CASE state OF").nl();
     p.up();
 
@@ -470,6 +474,26 @@ fn emit_block(
         StateNode::Unresolved => return Ok(()),
     };
     for block in blocks {
+        let body = match (kind, block) {
+            ("enter", NamedCodeBlockDefinitionNode::Enter { body, .. })
+            | ("exit", NamedCodeBlockDefinitionNode::Exit { body, .. })
+            | ("always", NamedCodeBlockDefinitionNode::Always { body, .. }) => body,
+            _ => continue,
+        };
+        print_statement(body, model, p, out, None)?;
+    }
+    Ok(())
+}
+
+/// Печатает тело именованного блока **уровня модели** (фича 0083): `always` вне
+/// состояния. Аналог [`emit_block`], но источник — сама модель.
+fn emit_model_block(
+    p: &mut Printer,
+    model: &ModelNode,
+    kind: &str,
+    out: &mut StmtOutput,
+) -> Result<(), Diagnostic> {
+    for block in &model.named_blocks {
         let body = match (kind, block) {
             ("enter", NamedCodeBlockDefinitionNode::Enter { body, .. })
             | ("exit", NamedCodeBlockDefinitionNode::Exit { body, .. })

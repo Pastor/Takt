@@ -30,6 +30,7 @@
 #![allow(clippy::needless_borrow)]
 #![allow(clippy::explicit_auto_deref)]
 
+mod c_blocks;
 mod c_decl;
 mod c_expr;
 mod c_hal;
