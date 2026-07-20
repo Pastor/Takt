@@ -179,4 +179,5 @@
 | 0090-01 | 0090 | Обобщённый строгий режим `precheck.sh` (`PRECHECK_STRICT=1`) | [0090-01-precheck-strict-mode.md](0090-01-precheck-strict-mode.md) |
 | 0090-02 | 0090 | `ci.yml` вызывает `precheck.sh` под строгим режимом | [0090-02-ci-runs-precheck.md](0090-02-ci-runs-precheck.md) |
 | 0070-01 | 0070 | Снять `SE-035` с инициализатора порта (это адрес) | [0070-01-skip-port-bit-value-check.md](0070-01-skip-port-bit-value-check.md) |
+| 0071-01 | 0071 | use-site `Location` на `ConditionNode::State` + индекс/goto | [0071-01-condition-state-location.md](0071-01-condition-state-location.md) |
 
