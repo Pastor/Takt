@@ -176,4 +176,6 @@
 | 0069-01 | 0069 | `address_map/` — разделение по темам + снятие записи долга | [0069-01-split-by-theme.md](0069-01-split-by-theme.md) |
 | 0096-01 | 0096 | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | [0096-01-fixed-point-native-float.md](0096-01-fixed-point-native-float.md) |
 | 0097-01 | 0097 | Пример ПИД-регулятора на языке Lam (fixed-point) | [0097-01-pid-regulator-example.md](0097-01-pid-regulator-example.md) |
+| 0090-01 | 0090 | Обобщённый строгий режим `precheck.sh` (`PRECHECK_STRICT=1`) | [0090-01-precheck-strict-mode.md](0090-01-precheck-strict-mode.md) |
+| 0090-02 | 0090 | `ci.yml` вызывает `precheck.sh` под строгим режимом | [0090-02-ci-runs-precheck.md](0090-02-ci-runs-precheck.md) |
 
