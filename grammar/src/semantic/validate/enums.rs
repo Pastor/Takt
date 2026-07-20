@@ -38,9 +38,17 @@ fn check_bit_variable_value(
     Ok(())
 }
 
-/// Проверяет все переменные модели на корректность начальных значений для типа `bit`.
+/// Проверяет начальные значения `bit` у `Simple`- и `Const`-переменных.
 ///
-/// Обходит `Simple`-, `Const`- и `Port`-переменные текущего уровня.
+/// **Порт исключён намеренно (фича 0070).** Инициализатор порта — это его
+/// **адрес** (ADR 0020, поле `VariableNode::Port.expr` — «Адрес порта»), а не
+/// значение: `in BTN: bit := 0x00100000;` есть адрес, и `check_bit_variable_value`
+/// давал бы ложную `SE-035` «плохое значение бита». Адрес порта проверяет и
+/// потребляет слой `address_map/resolve.rs` (`SE-052`/`SE-049` и пр.). Проверка
+/// значения бита остаётся только там, где инициализатор — действительно значение
+/// (`var`/`const`). Прежде порт проверялся наравне с ними — отсюда асимметрия
+/// (`u8 := 0xADDR` проходил, `bit := 0xADDR` — нет).
+///
 /// Рекурсия по вложенным моделям не нужна — [`validate_model`] уже обходит
 /// их самостоятельно, вызывая `validate_bit_values` для каждой вложенной модели.
 ///
@@ -52,11 +60,11 @@ pub(super) fn validate_bit_values(model: Rc<RefCell<ModelNode>>) -> Result<(), D
     for var in borrowed.variables.values() {
         match var {
             VariableNode::Simple { name, ty, expr, .. }
-            | VariableNode::Const { name, ty, expr, .. }
-            | VariableNode::Port { name, ty, expr, .. } => {
+            | VariableNode::Const { name, ty, expr, .. } => {
                 check_bit_variable_value(name, ty, expr, var.loc())?;
             }
-            VariableNode::Unresolved => {}
+            // Порт: инициализатор — адрес, не значение (фича 0070); не проверяем.
+            VariableNode::Port { .. } | VariableNode::Unresolved => {}
         }
     }
     Ok(())
