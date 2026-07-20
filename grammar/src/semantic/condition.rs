@@ -10,10 +10,78 @@ use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::builtin::builtin_function;
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::{ConditionDefinitionNode, ConditionNode, ModelNode, VariableNode};
+use crate::semantic::{
+    ConditionDefinitionNode, ConditionNode, FunctionDefinitionNode, ModelNode, VariableNode,
+};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+
+/// Снимает прозрачные обёртки [`ConditionNode::Parenthesis`], возвращая
+/// внутреннее условие.
+///
+/// Скобки в языке — грамматическая группировка; для *значения* и для
+/// *распознавания паттерна* `S(Модель) = Состояние` они прозрачны. Снимать их
+/// **вообще везде** нельзя: генераторы печатают `Parenthesis` как `(…)`, и это
+/// сохраняет группировку операндов (в цели `rust` приоритеты иначе расходятся с
+/// C — см. `CLAUDE.md`). Поэтому хелпер применяется **только** к операндам
+/// паттерна `S(…)` (фича 0074), где скобки не несут ни группировки, ни вывода.
+fn strip_cond_parens(mut cond: ConditionNode) -> ConditionNode {
+    while let ConditionNode::Parenthesis(inner) = cond {
+        cond = *inner;
+    }
+    cond
+}
+
+/// Является ли условие паттерном «текущее состояние модели»: встроенная
+/// `S(Модель)` либо её краткая форма `Модель`.
+///
+/// Общий предикат для канонизации скобочных форм в [`resolve_condition`]
+/// (фича 0074) — распознаётся так же, как в генераторе C
+/// (`c_expr::condition::state_of_model`).
+fn is_state_of(cond: &ConditionNode) -> bool {
+    match cond {
+        ConditionNode::Model(..) => true,
+        ConditionNode::Function(fun, ..) => {
+            matches!(&*fun.borrow(), FunctionDefinitionNode::Builtin(name, ..) if *name == "S")
+        }
+        _ => false,
+    }
+}
+
+/// Канонизирует скобочные формы паттерна `S(Модель) = Состояние` (фича 0074).
+///
+/// Если левый операнд `=`/`!=` (со снятыми скобками) — «текущее состояние
+/// модели» ([`is_state_of`]), скобки вокруг всей левой части (`(S(Ping)) = End`)
+/// и вокруг имени состояния (`S(Ping) = (End)`) семантически прозрачны, но их
+/// обёртка `Parenthesis` ломает распознавание паттерна во **всех** потребителях
+/// (спецслучай `validate.rs` → `SE-025`, генератор C → `CC-003`). Снимаем их
+/// здесь, в единственной воронке разбора, чтобы паттерн дошёл каноничным до
+/// семантики, всех генераторов и симулятора.
+///
+/// Возвращает `Some((левый_без_скобок, правый_без_скобок))`, если паттерн
+/// распознан; `None` — если это обычное сравнение (тогда вызывающий сохраняет
+/// прежнюю логику, включая разрешение варианта перечисления справа).
+///
+/// Имя состояния справа **намеренно не разрешается вариантом перечисления**:
+/// левая часть — модель, а не переменная-перечисление, поэтому ветка
+/// `resolve_rval_as_enum_variant` здесь неприменима (она включается лишь при
+/// `ConditionNode::Variable` слева). Правая часть остаётся `Unresolved`, как и
+/// у бесскобочной формы — имя состояния ищется в области видимости
+/// модели-аргумента потребителем (инвариант `resolve_state_references`, `CLAUDE.md`).
+#[allow(clippy::type_complexity)]
+fn canonicalize_state_of(
+    left: ConditionNode,
+    right: &ast::Condition,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<Option<(ConditionNode, ConditionNode)>, Diagnostic> {
+    let left = strip_cond_parens(left);
+    if !is_state_of(&left) {
+        return Ok(None);
+    }
+    let right = strip_cond_parens(resolve_condition(right, model)?);
+    Ok(Some((left, right)))
+}
 
 /// Разрешает правую часть оператора `=`/`!=` с учётом типа левой части.
 ///
@@ -87,7 +155,7 @@ pub fn resolve_condition(
             let name = id.name.clone();
             // Собираем условия аргументов, немедленно пробрасывая ошибку вместо
             // паники через `.unwrap()`.
-            let args: Vec<Box<ConditionNode>> = args
+            let mut args: Vec<Box<ConditionNode>> = args
                 .iter()
                 .map(|c| resolve_condition(c, model.clone()).map(Box::new))
                 .collect::<Result<Vec<_>, _>>()?;
@@ -96,6 +164,16 @@ pub fn resolve_condition(
                 Some(f) => f,
                 None => Rc::new(RefCell::new(builtin_function(&id.name)?.clone())),
             };
+            // Канонизация `S((Модель))` (фича 0074): скобки вокруг модели
+            // прозрачны, но обёртка `Parenthesis` ломает распознавание паттерна
+            // `S(Модель)` во всех потребителях (семантика `SE-025`, генераторы).
+            // Снимаем их здесь — в единственной воронке разбора условий.
+            if matches!(&*function.borrow(), FunctionDefinitionNode::Builtin(name, ..) if *name == "S")
+            {
+                for a in &mut args {
+                    **a = strip_cond_parens((**a).clone());
+                }
+            }
             Ok(ConditionNode::Function(function, args, id.loc))
         }
         ast::Condition::Not(_, cond) => Ok(ConditionNode::Not(Box::new(resolve_condition(
@@ -144,6 +222,10 @@ pub fn resolve_condition(
         }
         ast::Condition::Equal(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
+            if let Some((left, right)) = canonicalize_state_of(left.clone(), right, model.clone())?
+            {
+                return Ok(ConditionNode::Equal(Box::new(left), Box::new(right)));
+            }
             let right = if let ConditionNode::Variable(var_rc, _) = &left {
                 let ty = var_rc.borrow().ty().clone();
                 if let TypeNode::Enum(enum_name) = ty {
@@ -158,6 +240,10 @@ pub fn resolve_condition(
         }
         ast::Condition::NotEqual(_, left, right) => {
             let left = resolve_condition(left, model.clone())?;
+            if let Some((left, right)) = canonicalize_state_of(left.clone(), right, model.clone())?
+            {
+                return Ok(ConditionNode::NotEqual(Box::new(left), Box::new(right)));
+            }
             let right = if let ConditionNode::Variable(var_rc, _) = &left {
                 let ty = var_rc.borrow().ty().clone();
                 if let TypeNode::Enum(enum_name) = ty {
@@ -725,6 +811,90 @@ start Main = Motor;
         } else {
             panic!("ожидалось условие NotEqual, получено {:?}", c);
         }
+    }
+
+    // ─── канонизация скобок паттерна S(Модель) (фича 0074) ────────────────
+
+    /// Возвращает разрешённое условие первого `ref`-ребра стартового состояния
+    /// под-модели `sub` корневой модели `node`.
+    fn ref_cond(node: &ModelNode, sub: &str) -> ConditionNode {
+        let submodel = node.search_model(sub).expect("под-модель");
+        let submodel = submodel.borrow();
+        let start = submodel.states.values().find_map(|s| match s {
+            crate::semantic::StateNode::Simple { references, .. }
+            | crate::semantic::StateNode::Implement { references, .. }
+                if !references.is_empty() =>
+            {
+                Some(references[0].cond.clone())
+            }
+            _ => None,
+        });
+        start.expect("ref-ребро со стартового состояния")
+    }
+
+    /// Общая база: `Pong` со ссылкой на состояние `Ping` через `S(…)`.
+    /// `%COND%` подставляется тестом.
+    fn state_of_src(cond: &str) -> String {
+        format!(
+            r#"
+model Ping {{ start A {{ ref End: true; }} state End; }}
+model Pong {{ start Go {{ ref Stop: {cond}; }} state Stop; }}
+start Entry = Ping | Pong;
+"#
+        )
+    }
+
+    /// Каноничная ли форма `Equal(Function(S, [Model]), Unresolved(Variable
+    /// "End"))` — без обёрток `Parenthesis` ни слева, ни у аргумента, ни справа.
+    ///
+    /// Сравнение по **структуре**, а не `==`: полное равенство включает
+    /// `Location`, а скобки сдвигают смещения — при этом C байт-в-байт совпадает
+    /// (позиции на вывод не влияют), что и проверяет `c_state_ref_tests`.
+    fn is_canonical_state_of(cond: &ConditionNode) -> bool {
+        let ConditionNode::Equal(l, r) = cond else {
+            return false;
+        };
+        let left_ok = matches!(&**l, ConditionNode::Function(fun, args, _)
+            if matches!(&*fun.borrow(), FunctionDefinitionNode::Builtin(n, ..) if *n == "S")
+            && args.len() == 1
+            && matches!(&*args[0], ConditionNode::Model(..)));
+        let right_ok = matches!(&**r,
+            ConditionNode::Unresolved(ast::Condition::Variable(id)) if id.name == "End");
+        left_ok && right_ok
+    }
+
+    /// Скобочные формы `S(Модель) = Состояние` канонизируются в **одну** форму
+    /// `Equal(Function(S, …), Unresolved(Variable))` — без обёрток `Parenthesis`.
+    #[test]
+    fn parenthesised_state_of_canonicalizes() {
+        for form in [
+            "S(Ping) = End", // эталон — тоже обязан быть каноничным
+            "(S(Ping)) = End",
+            "S((Ping)) = End",
+            "S(Ping) = (End)",
+            "((S((Ping)))) = (End)",
+        ] {
+            let node = build(&state_of_src(form)).unwrap();
+            let cond = ref_cond(&node, "Pong");
+            assert!(
+                is_canonical_state_of(&cond),
+                "форма `{form}` обязана дать каноничную Equal(Function(S,[Model]), \
+                 Unresolved(Variable \"End\")) без Parenthesis, получено {cond:?}"
+            );
+        }
+    }
+
+    /// Сторож против пере-снятия скобок: скобки вокруг **обычного** операнда
+    /// (не паттерн `S(…)`) сохраняются — иначе изменился бы вывод генераторов.
+    #[test]
+    fn ordinary_parentheses_are_preserved() {
+        // `(flag) = true`: слева переменная, не состояние модели → скобка цела.
+        let node = build("var flag: bit := false; cond c = (flag) = true;").unwrap();
+        let c = cond_val(&node, "c");
+        assert!(
+            matches!(&c, ConditionNode::Equal(l, _) if matches!(**l, ConditionNode::Parenthesis(_))),
+            "скобка вокруг обычного операнда обязана сохраниться, получено {c:?}"
+        );
     }
 
     /// Отрицательный тест: `command = Foo` где `Foo` не вариант `Command` — ошибка.

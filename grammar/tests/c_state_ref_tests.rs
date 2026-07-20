@@ -193,28 +193,69 @@ fn not_equal_uses_not_equal_operator() {
     assert_c_compiles(&dir, "sref");
 }
 
-/// **Скобочная форма отвергается семантикой** — граница, а не трансляция.
+/// **Скобочная форма `S(…)` канонизируется — скобки прозрачны** (фича 0074).
 ///
-/// Ожидание «скобки ничего не меняют» **опровергнуто пробой**: спецслучай
-/// `validate.rs` ищет `Function(S, [Model])` непосредственно, и обёртка
-/// `Parenthesis` его ломает — условие остаётся неразрешённым (`SE-025`).
-/// Поэтому разворот скобок в генераторе был бы **мёртвым кодом**.
+/// До 0074 обёртка `Parenthesis` ломала распознавание паттерна `S(Модель) =
+/// Состояние` и давала `SE-025`. Теперь `resolve_condition` снимает прозрачные
+/// скобки в трёх позициях паттерна (вокруг `S(…)`, вокруг модели-аргумента,
+/// вокруг имени состояния), поэтому любая скобочная форма даёт C, **байт-в-байт
+/// равный** бесскобочной `S(Ping) = Done`.
 ///
-/// Тест фиксирует границу явно: если семантика научится скобкам, он упадёт и
-/// заставит добавить разворот в трансляцию, а не оставит расхождение молча.
+/// Это и есть граница из ADR 0074: старый сторож
+/// `parenthesised_state_of_is_rejected_by_semantics` инвертирован — «отвергается»
+/// стало «принимается и канонично».
 #[test]
-fn parenthesised_state_of_is_rejected_by_semantics() {
-    let dir = temp_dir("paren");
-    for form in ["(S(Ping)) = Done", "S((Ping)) = Done"] {
+fn parenthesised_state_of_is_canonical() {
+    let canon = generate(SIBLING, "sref", &temp_dir("paren_canon")).expect("эталон C");
+    for form in [
+        "(S(Ping)) = Done",
+        "S((Ping)) = Done",
+        "S(Ping) = (Done)",
+        "((S((Ping)))) = (Done)",
+    ] {
+        let dir = temp_dir("paren");
         let src = SIBLING.replace("S(Ping) = Done", form);
-        let diag = generate(&src, "sref", &dir)
-            .expect_err("скобочная форма ожидаемо отвергается семантикой");
+        let c = generate(&src, "sref", &dir)
+            .unwrap_or_else(|e| panic!("форма `{form}` должна компилироваться, получено {e:?}"));
         assert_eq!(
-            diag.code.as_deref(),
-            Some("SE-025"),
-            "форма `{form}`: ожидалась SE-025, получено {diag:?}"
+            c, canon,
+            "форма `{form}`: C обязан быть байт-в-байт равен бесскобочному эталону"
         );
+        assert_c_compiles(&dir, "sref");
     }
+}
+
+/// Отрицание с любой скобочной формой — так же канонично (та же трансляция `!=`).
+#[test]
+fn parenthesised_state_of_not_equal_is_canonical() {
+    let canon_src = SIBLING.replace("S(Ping) = Done", "S(Ping) != Done");
+    let canon = generate(&canon_src, "sref", &temp_dir("pneq_canon")).expect("эталон C");
+    for form in ["(S(Ping)) != Done", "S((Ping)) != (Done)"] {
+        let dir = temp_dir("pneq");
+        let src = SIBLING.replace("S(Ping) = Done", form);
+        let c = generate(&src, "sref", &dir)
+            .unwrap_or_else(|e| panic!("форма `{form}` должна компилироваться, получено {e:?}"));
+        assert_eq!(
+            c, canon,
+            "форма `{form}`: C обязан совпасть с бесскобочным `!=`"
+        );
+        assert_c_compiles(&dir, "sref");
+    }
+}
+
+/// Скобочная форма с несуществующим состоянием отсекается **семантикой**
+/// (`SE-033`), как и бесскобочная — канонизация не меняет диагностику по
+/// существу, лишь снимает обёртку до сопоставления.
+#[test]
+fn parenthesised_unknown_state_is_se033() {
+    let dir = temp_dir("paren_se033");
+    let src = SIBLING.replace("S(Ping) = Done", "(S(Ping)) = NoSuchState");
+    let diag = generate(&src, "sref", &dir).expect_err("состояния нет — ожидается отказ");
+    assert_eq!(
+        diag.code.as_deref(),
+        Some("SE-033"),
+        "скобочная форма с неизвестным состоянием: ожидалась SE-033, получено {diag:?}"
+    );
 }
 
 /// Состояние, которого у модели-аргумента нет, отсекает **семантика**
