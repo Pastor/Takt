@@ -643,6 +643,13 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
   `c-hal`/`st-at` те же ситуации — ошибки `SE-052`/`SE-054`). ⚠️ Находка 0081:
   `examples/elevator.lam` содержит неиспользуемую `action` (`SE-036`) — кандидат на
   чистку.
+  ⚠️ **Ce13 (`SE-036`) обходит формулы** (фича 0082): переменная только в
+  LTL/Guard-формуле (`: [LTL] G flag;`, `invariant`) — это **использование**
+  (`unused.rs::collect_from_formula`/`collect_from_ltl` обходят
+  `ModelNode::formulas` и `StateNode::formulas`). Добавляя новый вид использования
+  переменной (напр. новый узел АСД), обнови обход `unused.rs`, иначе Ce13 даст
+  **ложное** предупреждение — тем заметнее, что с 0081 оно печатается. Атом LTL
+  может быть именем состояния — в `used` безвредно.
 - **Обходы по числу состояний — итеративные, не рекурсивные** (фича 0052,
   закрыта). `minimap::visit_state` (карту строит **каждый** генератор через
   `Map::create` — `c_map`/`puml_map`/`rust_map`/`st_map`/`sv_map`) и nested-DFS

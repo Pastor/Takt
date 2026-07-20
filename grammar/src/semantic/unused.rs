@@ -9,9 +9,10 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::semantic::{
-    ConditionDefinitionNode, ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode,
-    NamedCodeBlockDefinitionNode, StatementNode, VariableNode,
+    ConditionDefinitionNode, ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode,
+    ModelNode, NamedCodeBlockDefinitionNode, StatementNode, VariableNode,
 };
+use crate::verification::ltl::Ltl;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -377,6 +378,11 @@ fn collect_from_model_tree(model: &Rc<RefCell<ModelNode>>, used: &mut HashSet<St
     for block in &borrowed.named_blocks {
         collect_from_named_block(block, used);
     }
+    // Формулы уровня модели (`invariant`, LTL): переменная, используемая только в
+    // свойстве верификации, — тоже использование (фича 0082).
+    for formula in &borrowed.formulas {
+        collect_from_formula(formula, used);
+    }
     let states: Vec<_> = borrowed.states.values().cloned().collect();
     let nested: Vec<Rc<RefCell<ModelNode>>> = borrowed.models.values().map(Rc::clone).collect();
     drop(borrowed);
@@ -551,6 +557,48 @@ fn collect_from_stmt(stmt: &StatementNode, used: &mut HashSet<String>) {
     }
 }
 
+/// Собирает использования из формулы состояния/модели (фича 0082).
+///
+/// Переменная, встречающаяся **только** в LTL/Guard-формуле (`: [G] flag = 1;`,
+/// `invariant Имя = flag;`), — это использование: свойство верификации на неё
+/// опирается. Без обхода формул Ce13 (`SE-036`) давал **ложное** предупреждение
+/// «переменная не используется».
+fn collect_from_formula(formula: &Formula, used: &mut HashSet<String>) {
+    match formula {
+        Formula::None => {}
+        Formula::Formulas(inner) => {
+            for f in inner {
+                collect_from_formula(f, used);
+            }
+        }
+        // Guard несёт `ConditionNode` — тот же обход, что и у условий рёбер.
+        Formula::Guard(cond, _) => collect_from_condition(cond, used),
+        Formula::LTL(ltl) => collect_from_ltl(ltl, used),
+    }
+}
+
+/// Собирает имена атомов LTL-формулы. Атом — имя переменной **или** состояния;
+/// имя состояния в `used` безвредно (проверяются только имена переменных).
+fn collect_from_ltl(ltl: &Ltl, used: &mut HashSet<String>) {
+    match ltl {
+        Ltl::True | Ltl::False => {}
+        Ltl::Atom(name) => {
+            used.insert(name.clone());
+        }
+        Ltl::Not(a) | Ltl::Next(a) | Ltl::Finally(a) | Ltl::Globally(a) => {
+            collect_from_ltl(a, used)
+        }
+        Ltl::And(a, b)
+        | Ltl::Or(a, b)
+        | Ltl::Implies(a, b)
+        | Ltl::Until(a, b)
+        | Ltl::Release(a, b) => {
+            collect_from_ltl(a, used);
+            collect_from_ltl(b, used);
+        }
+    }
+}
+
 fn collect_from_condition(cond: &ConditionNode, used: &mut HashSet<String>) {
     match cond {
         ConditionNode::Variable(var_rc, _) => {
@@ -617,11 +665,13 @@ fn collect_from_state(state: &crate::semantic::StateNode, used: &mut HashSet<Str
         StateNode::Simple {
             named_blocks,
             references,
+            formulas,
             ..
         }
         | StateNode::Implement {
             named_blocks,
             references,
+            formulas,
             ..
         } => {
             for block in named_blocks {
@@ -629,6 +679,11 @@ fn collect_from_state(state: &crate::semantic::StateNode, used: &mut HashSet<Str
             }
             for reference in references {
                 collect_from_condition(&reference.cond, used);
+            }
+            // Формулы состояния (`: [G] φ;`): переменная в свойстве — использование
+            // (фича 0082).
+            for formula in formulas {
+                collect_from_formula(formula, used);
             }
         }
         StateNode::Unresolved => {}

@@ -90,7 +90,7 @@
 | [0079](./0079-sim-composition-ports.md) | `elevator_mini.lam` не исполняется: порты под-модели композиции | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0080](./0080-c-struct-defects.md) | Дефекты генератора C по структурам | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0081](./0081-lamc-print-warnings.md) | `lamc compile` печатает предупреждения (Ce13/Ce14 и прочие) | [ADR](../adr/0081-lamc-print-warnings.md) · [анализ](../analyze/0081-lamc-print-warnings.md) · [dev 01](../development/0081-01-collect-and-print-warnings.md) · [тест-план](../tests/0081-lamc-print-warnings.md) · [отчёт](../reports/0081-lamc-print-warnings.md) | ✅ ГОТОВО |
-| [0082](./0082-unused-formulas.md) | `semantic/unused.rs` не обходит `formulas` | — (стадия 1: проработки нет) | СОЗДАНА |
+| [0082](./0082-unused-formulas.md) | `unused.rs` обходит формулы — Ce13 не ложный на переменных свойств | [ADR](../adr/0082-unused-formulas.md) · [анализ](../analyze/0082-unused-formulas.md) · [dev 01](../development/0082-01-traverse-formulas.md) · [тест-план](../tests/0082-unused-formulas.md) · [отчёт](../reports/0082-unused-formulas.md) | ✅ ГОТОВО |
 | [0083](./0083-model-always-block-c.md) | Тело `always` на уровне модели не эмитится в C | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0084](./0084-address-map-qualified-key.md) | Ключ карты адресов — голое имя порта | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0085](./0085-language-version-constant.md) | Константы `LANGUAGE_VERSION` в коде нет | — (стадия 1: проработки нет) | СОЗДАНА |
