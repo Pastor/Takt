@@ -985,35 +985,35 @@ fn main() {
         }
     };
 
-    // Адрес-потребляющие цели: только они читают карту адресов. Для остальных
-    // непустая внешняя карта — повод предупредить об оверлее «в никуда».
+    // Предупреждения компилятора (фича 0081): единая точка `collect_model_warnings`
+    // печатается для **всех** целей (до 0081 CLI не звал ни `SE-036`, ни `SE-037`).
+    // Адрес-специфичные (оверлей карты, сломанное выражение адреса) — только у
+    // целей, адрес НЕ потребляющих: у `c-hal`/`st-at` это ошибки при генерации.
     let consumes_addresses = matches!(options.target.as_str(), "c-hal" | "st-at");
-    if !consumes_addresses {
-        let model = grammar::parse(&source, 0).ok().and_then(|(ast, _)| {
-            grammar::semantic::tree::construct_model(&ast, None, &options.include_dirs).ok()
-        });
-        let mut warnings = Vec::new();
-        if let Some(model) = &model {
-            // Оверлей «в никуда»: карта передана цели, которая её не читает.
+    if let Some((ast, model)) = grammar::parse(&source, 0).ok().and_then(|(ast, _)| {
+        grammar::semantic::tree::construct_model(&ast, None, &options.include_dirs)
+            .ok()
+            .map(|m| (ast, m))
+    }) {
+        let mut warnings = grammar::semantic::warnings::collect_model_warnings(&ast, &model);
+        if !consumes_addresses {
             if !external_entries.is_empty() {
                 warnings.extend(grammar::address_map_overlay_warnings(
-                    std::rc::Rc::clone(model),
+                    std::rc::Rc::clone(&model),
                     &external_entries,
                 ));
             }
-            // Сломанное выражение адреса — опечатка и здесь: цель адрес не
-            // эмитит, но молчать о ней значило бы вернуть тихий пропуск,
-            // который фича 0042 и закрывает. Уровень понижен до предупреждения:
-            // сегодня такие файлы целью `c` собираются успешно (rc=0).
             warnings.extend(grammar::address_expr_warnings(
-                std::rc::Rc::clone(model),
+                std::rc::Rc::clone(&model),
                 &address_env,
             ));
         }
-        for w in warnings {
-            if !options.quiet {
+        if !options.quiet {
+            // Формат общий с ошибкой (`print_compile_error`): позиция + код + текст.
+            for w in &warnings {
                 eprintln!(
-                    "Предупреждение [{}]: {}",
+                    "{}Предупреждение [{}]: {}",
+                    grammar::diagnostics::position_prefix(w),
                     w.code.as_deref().unwrap_or("?"),
                     w.message
                 );

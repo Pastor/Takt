@@ -13,7 +13,7 @@
 2009 grammar/src/bin/lamc.rs
 1893 grammar/tests/parser_tests.rs
 1842 grammar/src/semantic/tree.rs
-1748 grammar/src/semantic/mod.rs
+1747 grammar/src/semantic/mod.rs
 1691 grammar/src/semantic/index.rs
 1458 simulation/src/unit/viewport.rs
 1450 grammar/src/lib.rs

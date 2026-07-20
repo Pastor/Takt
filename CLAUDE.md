@@ -614,6 +614,21 @@ CI (`.github/workflows/ci.yml`): `cargo build --all-features --all-targets
   **символах** (в `.lam` есть кириллица). Урок 0053: *латентный дефект и боль
   пользователя — разные вещи* (кандидат винил `file_no ≡ 0`, а `lamc` не печатал
   позиций вовсе).
+  **Предупреждения `lamc compile` идут через одну точку** (фича 0081, закрыта):
+  `semantic::warnings::collect_model_warnings(ast, model)` (вынесен из `bin/lamc.rs`
+  — тот пришпилен к лимиту размера) собирает **все** предупреждения
+  публичного API над построенной моделью (`unused_variable` = `SE-036`,
+  `nondeterministic` = `SE-037/042`, `unreachable_state`, `constant_condition`,
+  `ltl`, `stray_semicolon`, `unknown_named_block`), печать — `print_compile_warning`
+  (формат **общий с ошибкой**: `position_prefix` + код). ⚠️ **Новое предупреждение
+  доезжает до пользователя, только если добавлено в `collect_model_warnings`** —
+  до 0081 CLI не звал ни Ce13, ни Ce14, и диагностика публичного API была немой.
+  Печать — для **всех** целей, `--quiet` глушит, код возврата не меняется
+  (предупреждение, не ошибка). Адрес-специфичные (`address_expr`/`address_map_overlay`,
+  0042) добавляются **отдельно** и только для целей, адрес не потребляющих (у
+  `c-hal`/`st-at` те же ситуации — ошибки `SE-052`/`SE-054`). ⚠️ Находка 0081:
+  `examples/elevator.lam` содержит неиспользуемую `action` (`SE-036`) — кандидат на
+  чистку.
 - **Обходы по числу состояний — итеративные, не рекурсивные** (фича 0052,
   закрыта). `minimap::visit_state` (карту строит **каждый** генератор через
   `Map::create` — `c_map`/`puml_map`/`rust_map`/`st_map`/`sv_map`) и nested-DFS
