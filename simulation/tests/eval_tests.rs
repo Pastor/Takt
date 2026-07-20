@@ -291,3 +291,33 @@ fn assert_in_block_violation_stops() {
     };
     assert!(msg.contains("SIM-025"), "код SIM-025: {msg}");
 }
+
+/// Фича 0086: переменная без инициализатора существует со значением по умолчанию
+/// (нулевым, как default-init в C), а не даёт SIM-009 «переменная не найдена».
+///
+/// До фикса `var q: u8;` (и любой скаляр без init) в симуляторе не
+/// регистрировался — чтение давало SIM-009 (гэп 0034-04, регистрировалась лишь
+/// структура). Зонд-значения захвачены прогоном, не угаданы.
+#[test]
+fn var_without_initializer_defaults_to_zero() {
+    let (unit, last) = run("var_no_init.lam", 1);
+    assert!(
+        !matches!(last, TickResult::Failed(_)),
+        "прогон не должен падать (в т.ч. SIM-009), получено {last:?}"
+    );
+
+    // Прямое чтение переменных без инициализатора → нулевое значение по типу.
+    assert_eq!(num(&unit, "q"), 0, "u8 без init → 0");
+    assert_eq!(num(&unit, "flag"), 0, "bit без init → 0");
+    assert_eq!(fixed_repr(&unit, "ratio"), 0, "q(8,8) без init → repr 0");
+
+    // Чтение в теле (`seen := var`) прошло без SIM-009 и увидело нули —
+    // значит переменная существует, а не «не найдена».
+    assert_eq!(num(&unit, "seen_q"), 0, "seen_q := q → 0");
+    assert_eq!(num(&unit, "seen_flag"), 0, "seen_flag := flag → 0");
+    assert_eq!(
+        fixed_repr(&unit, "seen_ratio"),
+        0,
+        "seen_ratio := ratio → repr 0"
+    );
+}

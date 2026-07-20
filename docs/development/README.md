@@ -181,4 +181,5 @@
 | 0070-01 | 0070 | Снять `SE-035` с инициализатора порта (это адрес) | [0070-01-skip-port-bit-value-check.md](0070-01-skip-port-bit-value-check.md) |
 | 0071-01 | 0071 | use-site `Location` на `ConditionNode::State` + индекс/goto | [0071-01-condition-state-location.md](0071-01-condition-state-location.md) |
 | 0073-01 | 0073 | Удалить `Location::filename()`, тесты — на `try_file_no` | [0073-01-remove-filename.md](0073-01-remove-filename.md) |
+| 0086-01 | 0086 | Нулевой дефолт по типу для переменной без инициализатора | [0086-01-default-scalar-value.md](0086-01-default-scalar-value.md) |
 

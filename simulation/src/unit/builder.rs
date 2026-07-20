@@ -73,10 +73,13 @@ impl Context for ModelNodeContext {
             borrowed.variables.get(name).and_then(|var| {
                 match eval_expr(var_expr(var)) {
                     Some(v) => Some(coerce_initial(v, var, &borrowed)),
-                    // Структура без инициализатора → нулевые поля (как default-init
-                    // в C, фича 0034); прочие типы без init по-прежнему не
-                    // регистрируются (гэп 0034-04, вне объёма).
-                    None => default_struct(var, &borrowed),
+                    // Переменная без инициализатора → нулевое значение по типу
+                    // (как default-init в C). Прежде так делалась только структура
+                    // (фича 0034), а скаляр (`var q: u8;`) оставался
+                    // незарегистрированным → SIM-009 (гэп 0034-04). Фича 0086
+                    // распространяет политику на все типы: `default_field`
+                    // покрывает bool/rational/fixed/array/struct/целое единообразно.
+                    None => var_type(var).map(|ty| default_field(ty, &borrowed)),
                 }
             })
         };
@@ -242,25 +245,6 @@ fn default_field(ty: &TypeNode, model: &ModelNode) -> Value {
         // Integer/Enum/Bit/Address/прочее — целочисленный ноль.
         _ => Value::Number(0),
     }
-}
-
-/// Строит нулевое значение структуры для переменной **без** инициализатора
-/// (`var p: Point;`); `None`, если тип переменной — не структура (гэп «var без
-/// init» для скаляров не чинится, см. 0034-04).
-fn default_struct(var: &VariableNode, model: &ModelNode) -> Option<Value> {
-    let TypeNode::Struct(name) = var_type(var)? else {
-        return None;
-    };
-    let def = model.search_struct(name)?;
-    let fields = def
-        .fields
-        .iter()
-        .map(|(f, t)| (f.clone(), default_field(t, model)))
-        .collect();
-    Some(Value::Struct {
-        name: name.clone(),
-        fields,
-    })
 }
 
 /// Реестр структур над семантической моделью (фича 0034): поиск учитывает
