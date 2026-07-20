@@ -140,7 +140,6 @@
 | [0078](docs/features/0078-bit-array-semantics.md) | Семантика `[bit;N]` расходится втрое | — | — | СОЗДАНА |
 | [0079](docs/features/0079-sim-composition-ports.md) | `elevator_mini.lam` не исполняется: порты под-модели композиции | — | — | СОЗДАНА |
 | [0080](docs/features/0080-c-struct-defects.md) | Дефекты генератора C по структурам | — | — | СОЗДАНА |
-| [0081](docs/features/0081-lamc-print-warnings.md) | `lamc` не печатает предупреждения вообще | — | — | СОЗДАНА |
 | [0082](docs/features/0082-unused-formulas.md) | `semantic/unused.rs` не обходит `formulas` | — | — | СОЗДАНА |
 | [0083](docs/features/0083-model-always-block-c.md) | Тело `always` на уровне модели не эмитится в C | — | — | СОЗДАНА |
 | [0084](docs/features/0084-address-map-qualified-key.md) | Ключ карты адресов — голое имя порта | — | — | СОЗДАНА |
@@ -156,6 +155,18 @@
 | [0094](docs/features/0094-new-feature-script-fixes.md) | Доработка `scripts/new-feature.sh` (статус ADR, поздние стадии, идемпотентность) | — | — | СОЗДАНА |
 | [0097](docs/features/0097-pid-regulator-example.md) | Пример ПИД-регулятора на Lam (fixed-point, anti-windup) | 0061 | 3 | ГОТОВО |
 | [0037](docs/features/0037-windows-test-failures.md) | Сбои тестов на Windows (пути include, ресурс viewport) | — | 2 | РАЗРАБОТКА |
+
+> Фича **0081** «`lamc compile` печатает предупреждения» **закрыта** (`ГОТОВО`,
+> 2026-07-20) и удалена из таблицы (правило 10) — итог в её
+> [карточке](docs/features/0081-lamc-print-warnings.md). **Tier 2:** предупреждения
+> публичного API (`unused_variable` = `SE-036`, `nondeterministic` = `SE-037/042`
+> и прочие) из CLI **не вызывались вовсе** — доставка была частичной (два
+> адрес-специфичных предупреждения, только для не-адрес-потребляющих целей). Option
+> A ADR: единая точка `collect_model_warnings` + `print_compile_warning` (формат
+> общий с ошибкой) для **всех** целей, `--quiet` уважается. Замер корпуса: одно
+> реальное `SE-036` (`elevator.lam`, unused `action`), прочие категории молчат.
+> Аналитик отмечал 0081 как разблокирующую доставку **любого** нового
+> предупреждения — так и есть. Язык не менялся, версия не поднята.
 
 > Фича **0098** «Проверка диапазона бита адреса порта и безопасный дефолтный HAL»
 > **закрыта** (`ГОТОВО`, 2026-07-20) и в таблицу не заносилась (заведена как
