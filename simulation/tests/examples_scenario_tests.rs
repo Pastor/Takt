@@ -111,9 +111,12 @@ const EXCEPTIONS: &[Exception] = &[
     },
     Exception {
         file: "elevator_mini.lam",
-        reason: "ВРЕМЕННОЕ: дефект симулятора SIM-009 — порт под-модели композиции \
-                 `Cabin | Motor` не виден вычислителю (`FloorSensor_F1_Bottom` \
-                 объявлен, но «не найден»). Снять исключение после починки",
+        reason: "реактивный автомат (`Cabin | Motor`): без входов стоит в Idle и \
+                 не завершается — сценарии подаются извне, \
+                 `examples/simulations/elevator_mini_floor2.json`. Дефект 0079 \
+                 (порт под-модели композиции не перечислялся драйвером → SIM-009) \
+                 ИСПРАВЛЕН: `PortNames::from_model` рекурсивна, порты драйвятся; \
+                 регрессия — `composition_ports_tests.rs`",
     },
 ];
 
