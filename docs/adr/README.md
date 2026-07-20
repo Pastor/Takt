@@ -61,4 +61,5 @@
 | [0069](./0069-address-map-eval-split.md) | Разделение `address_map.rs` — по темам, а не по лимиту | Accepted | фича 0069 |
 | [0096](./0096-fixed-point-native-float.md) | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | Accepted | фича 0096 |
 | [0097](./0097-pid-regulator-example.md) | Пример ПИД-регулятора на языке Lam (fixed-point) | Accepted | фича 0097 |
+| [0090](./0090-ci-precheck.md) | CI прогоняет весь `precheck.sh` — единый источник истины гейтов | Accepted | фича 0090 |
 
