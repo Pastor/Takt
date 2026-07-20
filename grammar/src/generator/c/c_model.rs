@@ -4,9 +4,7 @@
 //! [`generate_model_functions`], [`generate_function_prototypes`]
 //! и вспомогательные функции для работы с параллельными и последовательными состояниями.
 
-use super::c_expr::{
-    generate_code_block, generate_condition_expr, generate_expr, generate_formula_check,
-};
+use super::c_expr::{generate_condition_expr, generate_expr, generate_formula_check};
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::c;
 use crate::generator::c::c_map::CMap;
@@ -16,22 +14,7 @@ use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, StateNode, VariableNode};
 
 /// Генерирует именованные блоки состояния (enter/exit/always).
-fn generate_named_blocks(
-    printer: &mut Printer,
-    state: &StateNode,
-    map: &CMap,
-    owner: &Element,
-    block_name: &str,
-) -> Result<(), Diagnostic> {
-    let blocks = state.get_named_blocks(block_name);
-    for block in blocks {
-        let Some(stmt) = block.statement() else {
-            continue;
-        };
-        generate_code_block(printer, map, owner, vec![], stmt, true)?;
-    }
-    Ok(())
-}
+use super::c_blocks::{generate_model_named_blocks, generate_named_blocks};
 
 /// Генерирует прототипы функций для всех используемых моделей.
 pub(super) fn generate_function_prototypes(
@@ -771,6 +754,14 @@ fn generate_model_tick(
         .ident(&format!("model->state = {};", start_variant_upper))
         .nl();
     printer.down().ident("}").nl();
+
+    // Фича 0083: именованные блоки **уровня модели** (`always` вне состояния)
+    // исполняются КАЖДЫЙ такт до диспетчеризации состояния, безусловно по
+    // состоянию — как шаг 2 `execution("always")` симулятора (эталон). Прежде
+    // блок молча терялся: `generate_model_tick` эмитил только state-level
+    // (`always` на композите работал, т.к. он — тело синтетического состояния).
+    let raw_model = map.raw_model_at(model_name.clone())?;
+    generate_model_named_blocks(printer, &raw_model.borrow(), map, model, "always")?;
 
     // Тело стартового состояния исполняется в том же такте (без `break` выше).
     printer.ident("switch (model->state) {").up().nl();

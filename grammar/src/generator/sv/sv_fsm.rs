@@ -42,6 +42,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
+use crate::generator::sv::sv_blocks::{emit_model_named_blocks, emit_named_blocks};
 use crate::generator::sv::sv_expr::{Scope, print_condition, sv_enum_variant_name};
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_module::{SvPorts, check_sv_name};
@@ -480,7 +481,7 @@ impl Fsm {
     }
 
     /// Контекст печати выражений с собранными отображениями.
-    fn scope(&self) -> Scope<'_> {
+    pub(crate) fn scope(&self) -> Scope<'_> {
         Scope {
             registered: &self.registered,
             function: None,
@@ -793,6 +794,13 @@ pub(crate) fn emit_model_body(
         .state_reg
         .get(model.unique())
         .ok_or_else(|| sv002(&format!("регистр состояния модели '{}'", model)))?;
+
+    // Фича 0083: model-level `always` (вне состояния) — каждый такт до `unique
+    // case`, безусловно по состоянию (эталон — шаг 2 `execution("always")`
+    // симулятора). В `always_comb` работает над `_next` (умолчания уже заданы).
+    let raw_model = map.raw_model_at(model.clone())?;
+    emit_model_named_blocks(p, &raw_model.borrow(), fsm, "always")?;
+
     p.ident(&format!("unique case ({})", reg)).nl();
     p.up();
     for state_name in &states {
@@ -829,21 +837,6 @@ pub(crate) fn emit_model_body(
     p.ident(&format!("{}: begin end", end_variant(model))).nl();
     p.down();
     p.ident("endcase").nl();
-    Ok(())
-}
-
-/// Печатает именованные блоки состояния (`enter`/`always`/`exit`).
-pub(crate) fn emit_named_blocks(
-    p: &mut Printer,
-    state: &StateNode,
-    fsm: &Fsm,
-    block: &str,
-) -> Result<(), Diagnostic> {
-    for b in state.get_named_blocks(block) {
-        if let Some(stmt) = b.statement() {
-            print_statement(p, stmt, &fsm.scope())?;
-        }
-    }
     Ok(())
 }
 

@@ -749,6 +749,28 @@ fn per_tick_trace_matches_generated_c() {
     );
 }
 
+/// Фича 0083: model-level `always` исполняется КАЖДЫЙ такт и потактово совпадает
+/// с C. Прежде блок молча терялся (и в C, и в симуляторе).
+#[test]
+fn model_level_always_matches_generated_c() {
+    let vars = ["n"];
+    let f = "tests/data/eval/conformance_model_always.lam";
+    let sim = simulate_trace(f, &vars);
+    // `always { n := n + 1; }`: 1 → 2 → 3 (переход n > 2) → 4 (такт в `Done`).
+    assert_eq!(sim, vec![vec![1], vec![2], vec![3], vec![4]], "n = 1,2,3,4");
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] model_level_always: `cc` не найден");
+        return;
+    }
+    let dir = std::env::temp_dir().join("lam_conf_0083_ma");
+    std::fs::create_dir_all(&dir).expect("каталог сборки");
+    let c = c_trace(&dir, f, "conf_ma", "ConfMa", "entry", &vars);
+    assert_eq!(
+        sim, c,
+        "потактовая сверка model-level `always` (0083):\n{sim:?}\n{c:?}"
+    );
+}
+
 /// R2/A4: чисто структурная обёртка (`model Mid { start M = Counter; }`) не
 /// меняет потактовую трассу — сдвиг остаётся нулевым на любой глубине. Если бы
 /// вход в стартовое состояние стоил такта, лишний уровень сдвинул бы трассу.

@@ -7,7 +7,8 @@ use grammar::diagnostics::{Diagnostic, Location};
 use grammar::semantic::extend::Extend;
 use grammar::semantic::type_node::TypeNode;
 use grammar::semantic::{
-    ConditionNode, ExpressionNode, ModelNode, StateNode, StateNodeKind, VariableNode,
+    ConditionNode, ExpressionNode, ModelNode, NamedCodeBlockDefinitionNode, StateNode,
+    StateNodeKind, VariableNode,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -385,13 +386,33 @@ fn build_node(
         state_executions.insert(name.clone(), execs);
     }
 
+    // Фича 0083: именованные блоки **уровня модели** (`always` вне состояния).
+    // Прежде поле было `HashMap::new()` — model-level `always` молча терялся
+    // (как и в генераторах). `execution("always")` (шаг 2, `unit.rs`) исполняет
+    // их **каждый такт до диспетчеризации состояния**, безусловно по состоянию —
+    // эталон для потактовой сверки с генераторами (`always` = каждый такт).
+    let model_blocks: Vec<NamedCodeBlockDefinitionNode> = model.borrow().named_blocks.clone();
+    let mut executions: Executions = HashMap::new();
+    for block in &model_blocks {
+        let kind = block.name();
+        if kind.is_empty() {
+            continue;
+        }
+        if let Some(body) = block.statement() {
+            let fns = compile_block_body(body, ctx_rc.clone());
+            if !fns.is_empty() {
+                executions.entry(kind.to_string()).or_default().extend(fns);
+            }
+        }
+    }
+
     Ok(Unit::from_kind(UnitKind::Node {
         entered_initial: false,
         context: Some(ctx_rc),
         state_transitions,
         state_executions,
         state: Some(start_name),
-        executions: HashMap::new(),
+        executions,
         guards,
         last_transition: None,
     }))

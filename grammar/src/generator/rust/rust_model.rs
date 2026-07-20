@@ -22,11 +22,12 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
+use crate::generator::rust::rust_blocks::{emit_model_named_blocks, emit_named_blocks};
 use crate::generator::rust::rust_decl::{PortSet, default_value, model_fields};
 use crate::generator::rust::rust_expr::{Scope, coerce_to, condition_as_bool, unwrap_outer};
 use crate::generator::rust::rust_map::RustMap;
 use crate::generator::rust::rust_name::{check_name_collisions, rust_type_name, rust_value_name};
-use crate::generator::rust::rust_stmt::{StmtOutput, print_statement};
+use crate::generator::rust::rust_stmt::StmtOutput;
 use crate::generator::rust::rust_type::rust_type;
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::type_node::TypeNode;
@@ -871,6 +872,13 @@ fn emit_tick(
             }
         }
     }
+    // Фича 0083: присваивания из model-level `always` тоже участвуют в расчёте
+    // мутабельности локальных `let` (печать потоковая — будущие записи не видны).
+    for block in model.get_named_blocks("always") {
+        if let Some(stmt) = block.statement() {
+            crate::generator::rust::rust_stmt::collect_assigned(stmt, &mut assigned);
+        }
+    }
     let mut scope = Scope {
         model,
         shared: shared.iter().map(|(n, _)| n.clone()).collect(),
@@ -934,6 +942,10 @@ fn emit_tick(
         .nl();
     p.down();
     p.ident("}").nl();
+
+    // Фича 0083: model-level `always` (вне состояния) — каждый такт до `match`,
+    // безусловно по состоянию (эталон — шаг 2 `execution("always")` симулятора).
+    emit_model_named_blocks(p, model, "always", &mut scope, &mut out)?;
 
     // ── Разбор состояний ─────────────────────────────────────────────────────
     p.ident("match self.state {").nl();
@@ -1031,22 +1043,6 @@ fn emit_guard(p: &mut Printer, formula: &Formula, scope: &Scope) -> Result<(), D
         // прошивки. Цель `c` поступает так же.
         Formula::LTL(_) | Formula::None => Ok(()),
     }
-}
-
-/// Печатает именованные блоки (`enter`/`exit`/`always`).
-fn emit_named_blocks(
-    p: &mut Printer,
-    state: &StateNode,
-    kind: &str,
-    scope: &mut Scope,
-    out: &mut StmtOutput,
-) -> Result<(), Diagnostic> {
-    for block in state.get_named_blocks(kind) {
-        if let Some(stmt) = block.statement() {
-            print_statement(stmt, scope, p, out)?;
-        }
-    }
-    Ok(())
 }
 
 /// Печатает переходы состояния. Возвращает `true`, если эмитирован безусловный.

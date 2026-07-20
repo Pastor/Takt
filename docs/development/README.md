@@ -184,3 +184,4 @@
 | 0086-01 | 0086 | Нулевой дефолт по типу для переменной без инициализатора | [0086-01-default-scalar-value.md](0086-01-default-scalar-value.md) |
 
 | 0074-01 | 0074 | Канонизация скобок паттерна `S(Модель)` в `resolve_condition` | [0074-01-canonicalize-state-of-parens.md](0074-01-canonicalize-state-of-parens.md) |
+| 0083-01 | 0083 | Model-level `always` в симуляторе и всех целях + вынос помощников блоков | [0083-01-model-always-all-targets.md](0083-01-model-always-all-targets.md) |
