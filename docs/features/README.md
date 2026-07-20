@@ -71,8 +71,8 @@
 | [0060](./0060-enum-width-shared-layer.md) | Расчёт ширины перечисления — вынести в общий слой | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0061](./0061-fixed-point-type.md) | Fixed-point Q(m.n) как тип языка | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0062](./0062-sv-mmio-target.md) | Цель `sv-mmio`: адреса портов → регистровый файл на шине | — (стадия 1: проработки нет) | СОЗДАНА |
-| [0063](./0063-sv-clock-enable.md) | Порт `en` (clock enable) для цели `sv` | — (стадия 1: проработки нет) | СОЗДАНА |
-| [0064](./0064-sv-divider-warning.md) | Предупреждение о делителе (`SV-009`) в цели `sv` | — (стадия 1: проработки нет) | СОЗДАНА |
+| [0063](./0063-sv-clock-enable.md) | Порт `en` (clock enable) для цели `sv` | [ADR](../adr/0063-sv-clock-enable.md) · [анализ](../analyze/0063-sv-clock-enable.md) · [тест-план](../tests/0063-sv-clock-enable.md) · [отчёт](../reports/0063-sv-clock-enable.md) | ✅ ГОТОВО |
+| [0064](./0064-sv-divider-warning.md) | Предупреждение о делителе (`SV-009`) в цели `sv` | [ADR](../adr/0064-sv-divider-warning.md) · [анализ](../analyze/0064-sv-divider-warning.md) · [dev 01](../development/0064-01-divider-warning.md) · [тест-план](../tests/0064-sv-divider-warning.md) · [отчёт](../reports/0064-sv-divider-warning.md) | ✅ ГОТОВО |
 | [0065](./0065-st-namespace-isolation.md) | Изоляция пространства имён цели `st` (POU и переменные) | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0066](./0066-st-bool-literals.md) | Булевы литералы в телах цели `st` печатаются числом | [ADR](../adr/0066-st-bool-literals.md) · [анализ](../analyze/0066-st-bool-literals.md) · [dev 01](../development/0066-01-coerce-to.md) · [тест-план](../tests/0066-st-bool-literals.md) · [отчёт](../reports/0066-st-bool-literals.md) | ✅ ГОТОВО |
 | [0067](./0067-intellij-rename-psi-import.md) | Rename и `PsiReference` для `import` в плагине IntelliJ | — (стадия 1: проработки нет) | СОЗДАНА |

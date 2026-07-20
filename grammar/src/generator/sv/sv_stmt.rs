@@ -316,10 +316,12 @@ mod tests {
     fn if_is_printed_with_begin_end() {
         let set = empty_registered();
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
@@ -341,10 +343,12 @@ mod tests {
     fn loop_is_sv002() {
         let set = empty_registered();
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
@@ -364,10 +368,12 @@ mod tests {
     fn inline_formula_is_skipped() {
         let set = empty_registered();
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);

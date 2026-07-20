@@ -84,6 +84,52 @@ fn sv005(name: &str, loc: Location) -> Diagnostic {
     .with_code("SV-005")
 }
 
+/// Строит предупреждение `SV-009` — переменный делитель (фича 0064).
+///
+/// **Предупреждение, а не ошибка** (правило 1 ADR 0064): деление синтезируется
+/// корректно, и отказывать в трансляции рабочего кода цель не вправе.
+///
+/// Текст называет **причину** (в RTL нет аппаратного делителя) и **следствие**
+/// (длинный комбинационный путь → потолок частоты), но **без** конкретных LUT:
+/// они технологичны (`synth_ice40` ≠ `synth_xilinx`) и устареют (правило 5 ADR,
+/// action A-1). Про `*` умолчание обосновано замером (DSP, дешевле сложения),
+/// про делитель-константу — тоже (17…106 LUT); срабатывает лишь переменный.
+fn sv009() -> Diagnostic {
+    Diagnostic::warning(
+        Location::Codegen,
+        "деление или остаток по переменному делителю: в синтезируемом RTL нет \
+         аппаратного делителя, поэтому '/' и '%' разворачиваются в крупный \
+         комбинационный блок (на порядок больше сложения) с длинным путём — это \
+         снижает достижимый потолок тактовой частоты. Делитель-константа так не \
+         стоит (сворачивается в сдвиги/умножение на обратное); если делитель по \
+         существу постоянен, вынесите его в константу"
+            .to_string(),
+    )
+    .with_code("SV-009")
+}
+
+/// Делитель — константа времени компиляции (числовой литерал)?
+///
+/// Правила 2–3 ADR 0064: константный делитель молчит (замер: `a / 2` → 17 LUT,
+/// `a / 3` → 106 LUT — дёшево), переменный → `SV-009` (558 LUT, ноль DSP).
+/// Проверка **синтаксическая** и **консервативная** (action A-2): `b := 3; a / b`
+/// предупредит, хотя синтезатор свернул бы, — лишнее предупреждение честнее
+/// пропущенного. Скобки снимаются: `a / (2)` — та же константа.
+fn is_constant_divisor(node: &ExpressionNode) -> bool {
+    match node {
+        ExpressionNode::Number(_) => true,
+        ExpressionNode::Parenthesis(inner) => is_constant_divisor(inner),
+        _ => false,
+    }
+}
+
+/// Дописывает `SV-009` в приёмник, если делитель не константа (фича 0064).
+fn warn_variable_divisor(scope: &Scope, divisor: &ExpressionNode) {
+    if !is_constant_divisor(divisor) {
+        scope.warnings.borrow_mut().push(sv009());
+    }
+}
+
 /// Контекст печати выражения.
 pub(crate) struct Scope<'a> {
     /// Сигналы, имеющие регистровую пару `<имя>_next`.
@@ -120,6 +166,14 @@ pub(crate) struct Scope<'a> {
     /// восстанавливается в имя варианта, и приведение остаётся запасным путём
     /// для значения, которому варианта нет.
     pub(crate) enums: &'a BTreeMap<String, Vec<(String, i64)>>,
+    /// Приёмник предупреждений генератора (фича 0064).
+    ///
+    /// `print_expression` берётся по `&Scope`, но `SV-009` (переменный делитель)
+    /// рождается именно здесь — в единственной точке трансляции всех выражений
+    /// (тела, условия, функции). Интерьерная мутабельность позволяет дописать
+    /// диагностику, не протаскивая `&mut` сквозь 32 места вызова печатника.
+    /// Владелец ячейки — [`super::sv_fsm::Fsm`], доставку делает `generate_program`.
+    pub(crate) warnings: &'a std::cell::RefCell<Vec<Diagnostic>>,
 }
 
 impl Scope<'_> {
@@ -437,11 +491,19 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::Multiply(l, r) => fixed_bin(node, super::sv_fixed::FixedOp::Multiply, l, r)
             .unwrap_or_else(|| bin(l, "*", r)),
         // `/` и `%` синтезируются в аппаратный делитель — крупный и медленный
-        // блок. Предупреждать о цене (кандидат `SV-009` задачи 0045-06) —
-        // отдельное решение; здесь трансляция прямая.
-        ExpressionNode::Divide(l, r) => fixed_bin(node, super::sv_fixed::FixedOp::Divide, l, r)
-            .unwrap_or_else(|| bin(l, "/", r)),
-        ExpressionNode::Modulo(l, r) => bin(l, "%", r),
+        // блок (фича 0064). Трансляция прямая (и для q(m, n) через `fixed_bin`,
+        // action A-3), но переменный делитель порождает `SV-009`: автор `.lam`
+        // цену потолка частоты из текста модели иначе не увидит. Константа —
+        // молча (замер: дёшево).
+        ExpressionNode::Divide(l, r) => {
+            warn_variable_divisor(scope, r);
+            fixed_bin(node, super::sv_fixed::FixedOp::Divide, l, r)
+                .unwrap_or_else(|| bin(l, "/", r))
+        }
+        ExpressionNode::Modulo(l, r) => {
+            warn_variable_divisor(scope, r);
+            bin(l, "%", r)
+        }
         ExpressionNode::Add(l, r) => {
             fixed_bin(node, super::sv_fixed::FixedOp::Add, l, r).unwrap_or_else(|| bin(l, "+", r))
         }
@@ -553,10 +615,12 @@ mod tests {
     fn binary_nodes_are_fully_parenthesized() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         let node = ConditionNode::Or(Box::new(ConditionNode::Equal(num(2), num(2))), num(1));
         assert_eq!(print_condition(&node, &scope).unwrap(), "((2 == 2) || 1)");
@@ -570,10 +634,12 @@ mod tests {
     fn condition_and_or_are_logical_like_c() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         let and = ConditionNode::And(num(1), num(0));
         let or = ConditionNode::Or(num(1), num(0));
@@ -590,10 +656,12 @@ mod tests {
     fn literals_are_printed_unsized() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         assert_eq!(
             print_condition(&ConditionNode::Number(7), &scope).unwrap(),
@@ -610,10 +678,12 @@ mod tests {
     fn bool_literals_are_one_bit() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         assert_eq!(
             print_condition(&ConditionNode::Bool(true), &scope).unwrap(),
@@ -631,10 +701,12 @@ mod tests {
         let mut set = BTreeSet::new();
         set.insert("cmd_fork".to_string());
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         assert_eq!(scope.write("cmd_fork"), "cmd_fork_next");
         // У локальной переменной функции пары нет.
@@ -652,10 +724,12 @@ mod tests {
         let mut set = BTreeSet::new();
         set.insert("cabin_counter".to_string());
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         assert_eq!(scope.write("cabin_counter"), "cabin_counter_next");
     }
@@ -668,10 +742,12 @@ mod tests {
     fn bit_access_is_plain_indexing() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         let node = ConditionNode::BitAccess(num(5), Member::Number(0));
         assert_eq!(print_condition(&node, &scope).unwrap(), "5[0]");
@@ -693,10 +769,12 @@ mod tests {
     fn rational_literal_is_sv002() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         let err = print_condition(&ConditionNode::Rational("1.5".to_string(), false), &scope)
             .unwrap_err();
@@ -708,10 +786,12 @@ mod tests {
     fn untranslatable_expression_nodes_are_sv002() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             enums: &enums,
+            warnings: &warnings,
         };
         for node in [
             ExpressionNode::None,
@@ -722,5 +802,123 @@ mod tests {
             let err = print_expression(&node, &scope).unwrap_err();
             assert_eq!(err.code.as_deref(), Some("SV-002"), "узел {:?}", node);
         }
+    }
+
+    // --- Фича 0064: предупреждение `SV-009` о переменном делителе ---
+
+    /// Строит `ExpressionNode::Variable` без владельца (сигнал = имя).
+    fn var(name: &str) -> Box<ExpressionNode> {
+        Box::new(ExpressionNode::Variable(std::rc::Rc::new(
+            std::cell::RefCell::new(VariableNode::Simple {
+                upper: None,
+                loc: Location::Implicit,
+                name: name.to_string(),
+                ty: TypeNode::Integer {
+                    bits: 8,
+                    signed: false,
+                },
+                expr: ExpressionNode::None,
+            }),
+        )))
+    }
+
+    /// Печатает выражение и возвращает вместе с собранными предупреждениями.
+    fn print_with_warnings(node: &ExpressionNode) -> (String, Vec<Diagnostic>) {
+        let set = empty_scope();
+        let enums = std::collections::BTreeMap::new();
+        let warnings = std::cell::RefCell::new(Vec::new());
+        let scope = Scope {
+            registered: &set,
+            function: None,
+            enums: &enums,
+            warnings: &warnings,
+        };
+        let out = print_expression(node, &scope).unwrap();
+        (out, warnings.into_inner())
+    }
+
+    fn codes(warnings: &[Diagnostic]) -> Vec<&str> {
+        warnings.iter().filter_map(|w| w.code.as_deref()).collect()
+    }
+
+    /// T1/A1: `a / b` (переменный делитель) → `SV-009`; трансляция успешна.
+    #[test]
+    fn variable_divide_warns_sv009() {
+        let node = ExpressionNode::Divide(var("a"), var("b"));
+        let (out, warnings) = print_with_warnings(&node);
+        assert_eq!(out, "(a / b)", "трансляция обязана состояться");
+        assert_eq!(codes(&warnings), ["SV-009"]);
+    }
+
+    /// T3/A3: `a % b` (переменный делитель) → `SV-009`.
+    #[test]
+    fn variable_modulo_warns_sv009() {
+        let node = ExpressionNode::Modulo(var("a"), var("b"));
+        let (out, warnings) = print_with_warnings(&node);
+        assert_eq!(out, "(a % b)");
+        assert_eq!(codes(&warnings), ["SV-009"]);
+    }
+
+    /// T2/A2: `a / 2` (константа — степень двойки) → **молчание** (замер: 17 LUT).
+    #[test]
+    fn constant_power_of_two_divide_is_silent() {
+        let node = ExpressionNode::Divide(var("a"), Box::new(ExpressionNode::Number(2)));
+        let (_, warnings) = print_with_warnings(&node);
+        assert!(
+            warnings.is_empty(),
+            "константа-делитель обязана молчать: {warnings:?}"
+        );
+    }
+
+    /// T4/A2: `a / 3` (константа — не степень двойки) → **молчание** (≈106 LUT).
+    #[test]
+    fn constant_non_power_of_two_divide_is_silent() {
+        let node = ExpressionNode::Divide(var("a"), Box::new(ExpressionNode::Number(3)));
+        let (_, warnings) = print_with_warnings(&node);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// T6/A3: `a % 4` (константа) → **молчание**.
+    #[test]
+    fn constant_modulo_is_silent() {
+        let node = ExpressionNode::Modulo(var("a"), Box::new(ExpressionNode::Number(4)));
+        let (_, warnings) = print_with_warnings(&node);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// Скобки вокруг константы не превращают её в переменную: `a / (2)` — молчит.
+    #[test]
+    fn parenthesised_constant_divisor_is_silent() {
+        let inner = Box::new(ExpressionNode::Parenthesis(Box::new(
+            ExpressionNode::Number(2),
+        )));
+        let node = ExpressionNode::Divide(var("a"), inner);
+        let (_, warnings) = print_with_warnings(&node);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// T5/A4: `a * b` → **молчание** (замер: 3 DSP + 17 LUT — дешевле сложения).
+    #[test]
+    fn multiply_is_silent() {
+        let node = ExpressionNode::Multiply(var("a"), var("b"));
+        let (out, warnings) = print_with_warnings(&node);
+        assert_eq!(out, "(a * b)");
+        assert!(warnings.is_empty(), "умножение молчит (DSP): {warnings:?}");
+    }
+
+    /// T8/A5: текст называет причину (нет аппаратного делителя) и следствие
+    /// (потолок частоты), **без** конкретных LUT (они технологичны, action A-1).
+    #[test]
+    fn sv009_text_names_cause_and_consequence_without_luts() {
+        let msg = &sv009().message;
+        assert!(msg.contains("аппаратного делителя"), "нет причины:\n{msg}");
+        assert!(
+            msg.contains("частот"),
+            "нет следствия (потолок частоты):\n{msg}"
+        );
+        assert!(
+            !msg.contains("LUT") && !msg.contains("558"),
+            "текст не должен называть конкретные LUT (устареют):\n{msg}"
+        );
     }
 }
