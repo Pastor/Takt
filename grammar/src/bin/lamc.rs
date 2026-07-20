@@ -1231,7 +1231,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-
+    const SEP: &str = if cfg!(windows) { ";" } else { ":" }; // разделитель `-I` на платформе; тесты параметризуются им (фича 0037)
     // ── Подкоманда fmt (задача 0024-03) ──────────────────────────────────────
 
     #[test]
@@ -1455,12 +1455,12 @@ mod tests {
         assert_eq!(opts.include_dirs, vec!["/lib/lam"]);
     }
 
-    /// Флаг `-I` с двоеточием — два пути.
+    /// Флаг `-I` с разделителем платформы — два пути.
     #[test]
-    fn parse_include_dirs_colon() {
+    fn parse_include_dirs_separator() {
         let args = vec![
             "-I".to_string(),
-            "/lib/lam:/usr/lam".to_string(),
+            format!("/lib/lam{SEP}/usr/lam"),
             "main.lam".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
@@ -1486,7 +1486,7 @@ mod tests {
     fn parse_include_dirs_long_flag() {
         let args = vec![
             "--include-dirs".to_string(),
-            "/lib:/usr".to_string(),
+            format!("/lib{SEP}/usr"),
             "main.lam".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
@@ -1501,10 +1501,10 @@ mod tests {
         assert_eq!(opts.include_dirs, vec!["/lib/lam"]);
     }
 
-    /// Слитная форма с двоеточием: `-I/a:/b`.
+    /// Слитная форма с разделителем платформы: `-I/a:/b` (Unix) / `-I/a;/b` (Windows).
     #[test]
-    fn parse_include_dir_glued_colon() {
-        let args = vec!["-I/a:/b".to_string(), "main.lam".to_string()];
+    fn parse_include_dir_glued_separator() {
+        let args = vec![format!("-I/a{SEP}/b"), "main.lam".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/a", "/b"]);
     }
@@ -1516,7 +1516,7 @@ mod tests {
             "--target".to_string(),
             "c".to_string(),
             "-I".to_string(),
-            "/lib/lam:/usr/lam".to_string(),
+            format!("/lib/lam{SEP}/usr/lam"),
             "-I".to_string(),
             "/local/but".to_string(),
             "main.lam".to_string(),
@@ -1639,7 +1639,7 @@ mod tests {
     fn parse_include_filters_empty_segments() {
         let args = vec![
             "-I".to_string(),
-            "/a::/b".to_string(),
+            format!("/a{SEP}{SEP}/b"),
             "main.lam".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();

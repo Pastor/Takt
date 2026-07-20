@@ -1447,12 +1447,12 @@ mod test_highlight {
         .unwrap();
         let Viewport::SVG(doc) = vp;
         let svg_str = doc.to_string();
-        std::fs::write("/tmp/highlight_test.svg", &svg_str).unwrap();
-        println!("SVG saved to /tmp/highlight_test.svg");
+        // Усечение по границам символов (`&svg_str[..500]` паникует на короткой/
+        // многобайтовой строке). Запись в `/tmp` убрана: нет на Windows (фича 0037).
+        let head: String = svg_str.chars().take(500).collect();
         assert!(
             svg_str.contains("FFF3DC") || svg_str.contains("FF8C00"),
-            "SVG should contain orange colors: {}",
-            &svg_str[..500]
+            "в SVG нет оранжевых цветов подсветки: {head}"
         );
     }
 }

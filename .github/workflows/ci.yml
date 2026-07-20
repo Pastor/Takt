@@ -52,3 +52,34 @@ jobs:
         env:
           PRECHECK_STRICT: 1
         run: ./scripts/precheck.sh
+
+  # Windows — узкая проверка портируемости Rust-тестов (фича 0037). Job гоняет
+  # `cargo test`, а НЕ весь precheck.sh. Отступление от принципа 0090 («логика
+  # гейтов только в precheck.sh») осознанное: цель 0037 — доказать, что шесть
+  # тестов (5 разбора `-I` в lamc + 1 `viewport`) работают на Windows, а не
+  # прогнать аппаратные гейты C/SV/ST — verilator/yosys/iec2c на windows-latest
+  # неподъёмны и к портируемости Rust-тестов отношения не имеют. Полный precheck
+  # на Windows — вопрос отдельной фичи.
+  #
+  # continue-on-error (0037-03, R8): job неблокирующий, пока Windows не разобран —
+  # иначе первый прогон, полный ещё не расклассифицированных чужих падений
+  # (аппаратные тесты без инструментов), завалил бы весь CI. Флаг снимается
+  # отдельным коммитом ПОСЛЕ первого зелёного прогона (критерий A11) — до тех пор
+  # фича 0037 в ГОТОВО не переводится.
+  #
+  # ⚠️ CI Actions в проекте заблокирован по биллингу (как у 0090): job добавлен
+  # готовым, но пока не исполняется, поэтому A8/A9/A11 остаются непроверёнными.
+  windows:
+    name: Windows — cargo test (портируемость, фича 0037)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain (nightly)
+        uses: dtolnay/rust-toolchain@nightly
+
+      # Однопоточно — как требуют CLAUDE.md и precheck.sh (иначе гонки за общие
+      # файлы; на Windows с его блокировками файлов цена гонки выше).
+      - name: cargo test (все фичи, однопоточно)
+        run: cargo test --all-features -- --test-threads=1
