@@ -60,6 +60,7 @@ PLANTUML_OUTPUT="examples/generated/plantuml"
 ST_OUTPUT="examples/generated/st"
 RUST_OUTPUT="examples/generated/rust"
 SV_OUTPUT="examples/generated/sv"
+SV_MMIO_OUTPUT="examples/generated/sv-mmio"
 
 # Примеры, которые цель `sv` ОБЯЗАНА транслировать (фича 0045, задача 0045-02).
 # Список ведётся ЯВНО, а не выводится как «все, кроме падающих»: иначе пример,
@@ -81,6 +82,13 @@ SV_OUTPUT="examples/generated/sv"
 #                               теперь ПОДДЕРЖАНА (фича 0057) — пример остаётся вне
 #                               гейта по НЕ связанным с композицией причинам.
 SV_TRANSLATABLE="stacker elevator_mini regulator pid_regulator"
+
+# Примеры для цели `sv-mmio` (фича 0062): порты с адресом → регистровый файл на
+# шине. Демонстрируется на `stacker` — его 17 адресов (`0x100`…`0x601`) суть
+# готовая карта регистров. Прочие sv-транслируемые примеры адресов не несут: под
+# `sv-mmio` они дали бы обычный модуль без регистрового файла, то есть дубль
+# гейта `sv`. Единственный содержательный пример — `stacker`.
+SV_MMIO_TRANSLATABLE="stacker"
 
 # Примеры на `float` (фича 0096, «прозрачный float»), которым цель `sv` требует
 # понижения float→q(m.n) флагом `--float-as-q`: нативного float в синтезируемом
@@ -125,6 +133,14 @@ for lam_file in examples/*.lam; do
   $LAMC compile "$lam_file" -t sv $(sv_float_flags "$name") -o "$SV_OUTPUT" \
     || echo "    [предупреждение] цель sv: $lam_file не транслируется"
 done
+
+# Цель sv-mmio (фича 0062): регистровый файл из адресов портов — только stacker
+# (см. $SV_MMIO_TRANSLATABLE). Отказ не валит предкоммит здесь: обязательность
+# проверяется гейтом ниже (как у sv).
+for name in $SV_MMIO_TRANSLATABLE; do
+  $LAMC compile "examples/${name}.lam" -t sv-mmio -o "$SV_MMIO_OUTPUT" \
+    || echo "    [предупреждение] цель sv-mmio: examples/${name}.lam не транслируется"
+done
 echo "Готово. Файлы в $C_OUTPUT/"
 
 # ГЕЙТ ВОСПРОИЗВОДИМОСТИ (фича 0048): два прогона компилятора на одном входе
@@ -142,12 +158,12 @@ echo "Гейт воспроизводимости: два прогона на к
 repro_failed=0
 for lam_file in examples/*.lam; do
   name="$(basename "$lam_file" .lam)"
-  for spec in "c:" "c-hal:-t c-hal" "plantuml:-t plantuml" "st:-t st" "st-at:-t st-at" "rust:-t rust" "sv:-t sv"; do
+  for spec in "c:" "c-hal:-t c-hal" "plantuml:-t plantuml" "st:-t st" "st-at:-t st-at" "rust:-t rust" "sv:-t sv" "sv-mmio:-t sv-mmio"; do
     tgt="${spec%%:*}"
     flag="${spec#*:}"
-    # float-примерам (0096) цель sv требует --float-as-q — иначе оба прогона
-    # пусты (SV-003) и детерминизм sv-вывода не проверился бы вовсе.
-    if [ "$tgt" = "sv" ]; then
+    # float-примерам (0096) цели sv/sv-mmio требуют --float-as-q — иначе оба
+    # прогона пусты (SV-003) и детерминизм вывода не проверился бы вовсе.
+    if [ "$tgt" = "sv" ] || [ "$tgt" = "sv-mmio" ]; then
       flag="$flag $(sv_float_flags "$name")"
     fi
     d1="$(mktemp -d)"
@@ -393,6 +409,67 @@ if command -v yosys &>/dev/null; then
       echo "  $name → yosys синтезировал"
     else
       echo "  $name → yosys НЕ СИНТЕЗИРОВАЛ:"
+      sed 's/^/    /' "$sv_err" | head -12
+      sv_failed=1
+    fi
+    rm -f "$sv_err"
+  done
+else
+  sv_tool_missing yosys
+fi
+
+# ГЕЙТ ЦЕЛИ SV-MMIO (фича 0062): регистровый файл из адресов портов обязан
+# приниматься verilator И yosys, как и цель `sv` (те же два инструмента ловят
+# непересекающиеся классы). Наблюдение поведения — потактовая сверка ЧЕРЕЗ
+# РЕГИСТРЫ (simulation/tests/conformance_sv_mmio_tests.rs), а не этот гейт: линт и
+# синтез верности не доказывают (урок 0045). Тот же $sv_failed и мягкая
+# деградация, что у гейта `sv`.
+echo "Гейт цели sv-mmio: verilator (линт) + yosys (синтез) по регистровым файлам..."
+# Обязательные примеры на месте?
+for name in $SV_MMIO_TRANSLATABLE; do
+  if [ ! -e "$SV_MMIO_OUTPUT/${name}.sv" ]; then
+    echo "  $name → НЕ ОТТРАНСЛИРОВАН целью sv-mmio, хотя обязан (фича 0062)."
+    sv_failed=1
+  fi
+done
+# Ни одного лишнего .sv (тот же принцип, что у гейта sv).
+for sv_file in "$SV_MMIO_OUTPUT"/*.sv; do
+  [ -e "$sv_file" ] || continue
+  name="$(basename "$sv_file" .sv)"
+  case " $SV_MMIO_TRANSLATABLE " in
+    *" $name "*) ;;
+    *)
+      echo "  $name.sv → ЛИШНИЙ .sv sv-mmio: примера нет в SV_MMIO_TRANSLATABLE."
+      sv_failed=1
+      ;;
+  esac
+done
+if command -v verilator &>/dev/null; then
+  for sv_file in "$SV_MMIO_OUTPUT"/*.sv; do
+    [ -e "$sv_file" ] || continue
+    name="$(basename "$sv_file" .sv)"
+    sv_err="$(mktemp)"
+    if verilator --lint-only -Wall "$sv_file" >/dev/null 2>"$sv_err"; then
+      echo "  $name → verilator принял (sv-mmio)"
+    else
+      echo "  $name → verilator ОТВЕРГ (sv-mmio):"
+      sed 's/^/    /' "$sv_err" | head -12
+      sv_failed=1
+    fi
+    rm -f "$sv_err"
+  done
+else
+  sv_tool_missing verilator
+fi
+if command -v yosys &>/dev/null; then
+  for sv_file in "$SV_MMIO_OUTPUT"/*.sv; do
+    [ -e "$sv_file" ] || continue
+    name="$(basename "$sv_file" .sv)"
+    sv_err="$(mktemp)"
+    if yosys -q -p "read_verilog -sv $sv_file; synth -top $name" >/dev/null 2>"$sv_err"; then
+      echo "  $name → yosys синтезировал (sv-mmio)"
+    else
+      echo "  $name → yosys НЕ СИНТЕЗИРОВАЛ (sv-mmio):"
       sed 's/^/    /' "$sv_err" | head -12
       sv_failed=1
     fi

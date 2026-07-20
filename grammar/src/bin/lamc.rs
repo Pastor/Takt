@@ -316,6 +316,69 @@ fn generate_options(options: &CompileOptions) -> grammar::GenerateOptions {
     generate
 }
 
+/// Печатает результат простой цели (`Result<(), Diagnostic>`: `plantuml`/`st`/
+/// `rust`/`sv`) и завершает процесс при ошибке. verbose даёт полный путь входа.
+/// Цель `c` не пользуется этим: её сообщение перечисляет пути поиска.
+fn report_simple_result(
+    result: Result<(), grammar::diagnostics::Diagnostic>,
+    target: &str,
+    options: &CompileOptions,
+) {
+    if let Err(diag) = result {
+        print_compile_error(&diag);
+        process::exit(1);
+    }
+    if options.quiet {
+        return;
+    }
+    if options.verbose {
+        eprintln!(
+            "Скомпилировано: {} → {} ({})",
+            fs::canonicalize(&options.input_file)
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| options.input_file.clone()),
+            options.output_path,
+            target,
+        );
+    } else {
+        eprintln!(
+            "Скомпилировано: {} → {}/ ({})",
+            options.input_file, options.output_path, target
+        );
+    }
+}
+
+/// Печатает результат адрес-потребляющей цели (`c-hal`/`st-at`/`sv-mmio`) и
+/// завершает процесс при ошибке. Тело идентично (возвращают `Ok(warnings)` либо
+/// `Err`), поэтому вынесено сюда.
+fn report_hal_result(
+    result: Result<Vec<grammar::diagnostics::Diagnostic>, grammar::diagnostics::Diagnostic>,
+    target: &str,
+    options: &CompileOptions,
+) {
+    match result {
+        Ok(warnings) => {
+            if !options.quiet {
+                for w in warnings {
+                    eprintln!(
+                        "Предупреждение [{}]: {}",
+                        w.code.as_deref().unwrap_or("?"),
+                        w.message
+                    );
+                }
+                eprintln!(
+                    "Скомпилировано: {} → {}/ ({})",
+                    options.input_file, options.output_path, target
+                );
+            }
+        }
+        Err(diag) => {
+            print_compile_error(&diag);
+            process::exit(1);
+        }
+    }
+}
+
 /// Разбирает значение флага `--float-width` (фича 0029).
 ///
 /// Допустимы только 32 и 64: иных вещественных типов у цели `c` нет. Прочее —
@@ -841,6 +904,8 @@ fn print_usage() {
     eprintln!("            Порты через трейт Hal; подключается в крейт через mod");
     eprintln!("  sv        Генерация синтезируемого SystemVerilog (.sv) — FPGA/ASIC (фича 0045)");
     eprintln!("            Такт модели ≡ posedge clk; clk/rst_n — служебные порты модуля");
+    eprintln!("  sv-mmio   SV + порты с адресом → регистровый файл на шине (фича 0062)");
+    eprintln!("            Порт с адресом = бит регистра; интерфейс reg_addr/wdata/wen/rdata");
     eprintln!();
     eprintln!("Примеры:");
     eprintln!("  lamc compile main.lam");
@@ -989,7 +1054,7 @@ fn main() {
     // печатается для **всех** целей (до 0081 CLI не звал ни `SE-036`, ни `SE-037`).
     // Адрес-специфичные (оверлей карты, сломанное выражение адреса) — только у
     // целей, адрес НЕ потребляющих: у `c-hal`/`st-at` это ошибки при генерации.
-    let consumes_addresses = matches!(options.target.as_str(), "c-hal" | "st-at");
+    let consumes_addresses = matches!(options.target.as_str(), "c-hal" | "st-at" | "sv-mmio");
     if let Some((ast, model)) = grammar::parse(&source, 0).ok().and_then(|(ast, _)| {
         grammar::semantic::tree::construct_model(&ast, None, &options.include_dirs)
             .ok()
@@ -1023,37 +1088,19 @@ fn main() {
 
     match options.target.as_str() {
         "c-hal" => {
-            match grammar::compile_to_c_hal(
-                &options.input_file,
-                &source,
-                &options.output_path,
-                &options.include_dirs,
-                &external_entries,
-                &address_env,
-                &generate_options(&options),
-            ) {
-                Ok(warnings) => {
-                    for w in warnings {
-                        if !options.quiet {
-                            eprintln!(
-                                "Предупреждение [{}]: {}",
-                                w.code.as_deref().unwrap_or("?"),
-                                w.message
-                            );
-                        }
-                    }
-                    if !options.quiet {
-                        eprintln!(
-                            "Скомпилировано: {} → {}/ (c-hal)",
-                            options.input_file, options.output_path
-                        );
-                    }
-                }
-                Err(diag) => {
-                    print_compile_error(&diag);
-                    process::exit(1);
-                }
-            }
+            report_hal_result(
+                grammar::compile_to_c_hal(
+                    &options.input_file,
+                    &source,
+                    &options.output_path,
+                    &options.include_dirs,
+                    &external_entries,
+                    &address_env,
+                    &generate_options(&options),
+                ),
+                "c-hal",
+                &options,
+            );
         }
         "c" => {
             if let Err(diag) = grammar::compile_to_c(
@@ -1090,152 +1137,89 @@ fn main() {
             }
         }
         "plantuml" => {
-            if let Err(diag) = grammar::compile_to_plantuml(
-                &options.input_file,
-                &source,
-                &options.output_path,
-                &options.include_dirs,
-            ) {
-                print_compile_error(&diag);
-                process::exit(1);
-            }
-            if !options.quiet {
-                if options.verbose {
-                    eprintln!(
-                        "Скомпилировано: {} → {} (plantuml)",
-                        fs::canonicalize(&options.input_file)
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_else(|_| options.input_file.clone()),
-                        options.output_path,
-                    );
-                } else {
-                    eprintln!(
-                        "Скомпилировано: {} → {}/ (plantuml)",
-                        options.input_file, options.output_path,
-                    );
-                }
-            }
+            report_simple_result(
+                grammar::compile_to_plantuml(
+                    &options.input_file,
+                    &source,
+                    &options.output_path,
+                    &options.include_dirs,
+                ),
+                "plantuml",
+                &options,
+            );
         }
         "st" => {
-            if let Err(diag) = grammar::compile_to_st(
-                &options.input_file,
-                &source,
-                &options.output_path,
-                &options.include_dirs,
-                &generate_options(&options),
-            ) {
-                print_compile_error(&diag);
-                process::exit(1);
-            }
-            if !options.quiet {
-                if options.verbose {
-                    eprintln!(
-                        "Скомпилировано: {} → {} (st)",
-                        fs::canonicalize(&options.input_file)
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_else(|_| options.input_file.clone()),
-                        options.output_path,
-                    );
-                } else {
-                    eprintln!(
-                        "Скомпилировано: {} → {}/ (st)",
-                        options.input_file, options.output_path,
-                    );
-                }
-            }
+            report_simple_result(
+                grammar::compile_to_st(
+                    &options.input_file,
+                    &source,
+                    &options.output_path,
+                    &options.include_dirs,
+                    &generate_options(&options),
+                ),
+                "st",
+                &options,
+            );
         }
         "st-at" => {
-            match grammar::compile_to_st_at(
-                &options.input_file,
-                &source,
-                &options.output_path,
-                &options.include_dirs,
-                &external_entries,
-                &address_env,
-                &generate_options(&options),
-            ) {
-                Ok(warnings) => {
-                    for w in warnings {
-                        if !options.quiet {
-                            eprintln!(
-                                "Предупреждение [{}]: {}",
-                                w.code.as_deref().unwrap_or("?"),
-                                w.message
-                            );
-                        }
-                    }
-                    if !options.quiet {
-                        eprintln!(
-                            "Скомпилировано: {} → {}/ (st-at)",
-                            options.input_file, options.output_path
-                        );
-                    }
-                }
-                Err(diag) => {
-                    print_compile_error(&diag);
-                    process::exit(1);
-                }
-            }
+            report_hal_result(
+                grammar::compile_to_st_at(
+                    &options.input_file,
+                    &source,
+                    &options.output_path,
+                    &options.include_dirs,
+                    &external_entries,
+                    &address_env,
+                    &generate_options(&options),
+                ),
+                "st-at",
+                &options,
+            );
         }
         "rust" => {
-            if let Err(diag) = grammar::compile_to_rust(
-                &options.input_file,
-                &source,
-                &options.output_path,
-                &options.include_dirs,
-                &generate_options(&options),
-            ) {
-                print_compile_error(&diag);
-                process::exit(1);
-            }
-            if !options.quiet {
-                if options.verbose {
-                    eprintln!(
-                        "Скомпилировано: {} → {} (rust)",
-                        fs::canonicalize(&options.input_file)
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_else(|_| options.input_file.clone()),
-                        options.output_path,
-                    );
-                } else {
-                    eprintln!(
-                        "Скомпилировано: {} → {}/ (rust)",
-                        options.input_file, options.output_path,
-                    );
-                }
-            }
+            report_simple_result(
+                grammar::compile_to_rust(
+                    &options.input_file,
+                    &source,
+                    &options.output_path,
+                    &options.include_dirs,
+                    &generate_options(&options),
+                ),
+                "rust",
+                &options,
+            );
         }
         "sv" => {
-            if let Err(diag) = grammar::compile_to_sv(
-                &options.input_file,
-                &source,
-                &options.output_path,
-                &options.include_dirs,
-                &generate_options(&options),
-            ) {
-                print_compile_error(&diag);
-                process::exit(1);
-            }
-            if !options.quiet {
-                if options.verbose {
-                    eprintln!(
-                        "Скомпилировано: {} → {} (sv)",
-                        fs::canonicalize(&options.input_file)
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_else(|_| options.input_file.clone()),
-                        options.output_path,
-                    );
-                } else {
-                    eprintln!(
-                        "Скомпилировано: {} → {}/ (sv)",
-                        options.input_file, options.output_path,
-                    );
-                }
-            }
+            report_simple_result(
+                grammar::compile_to_sv(
+                    &options.input_file,
+                    &source,
+                    &options.output_path,
+                    &options.include_dirs,
+                    &generate_options(&options),
+                ),
+                "sv",
+                &options,
+            );
+        }
+        "sv-mmio" => {
+            report_hal_result(
+                grammar::compile_to_sv_mmio(
+                    &options.input_file,
+                    &source,
+                    &options.output_path,
+                    &options.include_dirs,
+                    &external_entries,
+                    &address_env,
+                    &generate_options(&options),
+                ),
+                "sv-mmio",
+                &options,
+            );
         }
         t => {
             eprintln!(
-                "Ошибка: неизвестная цель '{}'. Поддерживается: c, c-hal, plantuml, st, st-at, rust, sv",
+                "Ошибка: неизвестная цель '{}'. Поддерживается: c, c-hal, plantuml, st, st-at, rust, sv, sv-mmio",
                 t
             );
             process::exit(1);

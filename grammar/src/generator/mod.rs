@@ -50,8 +50,21 @@ pub enum Language {
     ///
     /// Карта адресов ([`GenerateOptions::address_map`]) **не потребляется**:
     /// MMIO-адрес для RTL бессмыслен — сигнал приходит на вывод кристалла, а не
-    /// по адресу. Парной цели `sv-at` нет.
+    /// по адресу. Парная цель — [`SvMmio`](Language::SvMmio).
     SV,
+    /// Генерация синтезируемого SystemVerilog с **регистровым файлом** — порты с
+    /// адресом становятся битами регистров на шинно-агностичном интерфейсе (фича
+    /// 0062).
+    ///
+    /// Парная к [`SV`](Language::SV), как `c-hal` парная к `c` (прецедент
+    /// 0020-05). В отличие от `sv`, карта адресов
+    /// ([`GenerateOptions::address_map`]) **потребляется**: порт **с** адресом →
+    /// бит регистра (направление принадлежит биту, ADR 0062, правило 4); порт
+    /// **без** адреса → порт модуля. Модуль получает синхронный регистровый
+    /// интерфейс (`reg_addr`/`reg_wdata`/`reg_wen`/`reg_rdata`) **без протокола**:
+    /// адаптеры APB/AXI-Lite/Wishbone — отдельные фичи по требованию (ADR 0062,
+    /// Option B). Автомат, композиция и сброс — те же, что у `sv`.
+    SvMmio,
 }
 
 /// Ширина вещественного типа в порождаемом C (фича 0029, ADR Option R-C).
@@ -175,7 +188,11 @@ pub fn generate(
             generator.generate(model, output_path, options)
         }
         Language::SV => {
-            let generator = sv::Generator {};
+            let generator = sv::Generator { mmio: false };
+            generator.generate(model, output_path, options)
+        }
+        Language::SvMmio => {
+            let generator = sv::Generator { mmio: true };
             generator.generate(model, output_path, options)
         }
     }

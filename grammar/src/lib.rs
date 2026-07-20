@@ -53,6 +53,11 @@ pub mod semantic;
 /// Модуль проверки формальных свойств (LTL-формулы, автоматы Бюхи).
 pub mod verification;
 
+/// Публичная точка входа цели `sv-mmio` (фича 0062) — вынесена из `lib.rs`
+/// (лимит размера); реэкспортируется как `grammar::compile_to_sv_mmio`.
+mod compile_sv_mmio;
+pub use compile_sv_mmio::compile_to_sv_mmio;
+
 /// Внешняя карта адресов: парсер формата и предупреждения оверлея (фича 0020).
 pub use address_map::{
     AddressEnv, AddressMapEntry, AddressResolution, AddressSource, ResolvedAddress,
@@ -179,7 +184,7 @@ fn parser_error_to_diagnostic(
 /// наружу не выходит, а `Location` несёт лишь номер файла. Без этого диагностика
 /// из импортированной библиотеки была неотличима от своей — `lamc` печатал обе
 /// дословно одинаково.
-fn parse_and_construct(
+pub(crate) fn parse_and_construct(
     filename: &str,
     source: &str,
     search_paths: &[String],
@@ -210,7 +215,7 @@ fn stamp_file(d: Diagnostic, files: &diagnostics::FileTable) -> Diagnostic {
 ///
 /// Без `--float-as-q` не делает ничего (корпус неизменен). Мутирует модель на
 /// месте — вызывать **перед** [`generator::generate`].
-fn apply_float_lowering(
+pub(crate) fn apply_float_lowering(
     model: &std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
     options: &GenerateOptions,
     embedded_gate: bool,
@@ -511,14 +516,6 @@ pub fn compile_to_rust(
 /// - Карта адресов (`--address-map`) **не потребляется**: MMIO-адрес для RTL
 ///   бессмыслен. Парной цели `sv-at` нет.
 /// - Один тактовый домен и один сброс; CDC и множественные домены — вне объёма.
-///
-/// # Параметры
-///
-/// - `filename` — имя входного файла (используется для именования модели и диагностики)
-/// - `source` — исходный код на языке Lam
-/// - `output_path` — путь к выходному каталогу (создаёт `<filename>.sv`)
-/// - `search_paths` — директории для поиска файлов `import`
-/// - `options` — опции генерации
 ///
 /// # Ошибки
 ///
