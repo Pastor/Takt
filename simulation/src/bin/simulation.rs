@@ -5,8 +5,6 @@
 
 use clap::Parser;
 use grammar::parse;
-use grammar::parser::ast::PortDirection;
-use grammar::semantic::VariableNode;
 use grammar::semantic::tree::construct_model_with_files;
 use simulation::build_unit;
 use simulation::graphics_config::GraphicsConfig;
@@ -165,35 +163,9 @@ fn run(args: Args) -> Result<RunResult, String> {
 // ── Вспомогательные функции ───────────────────────────────────────────────────
 
 fn extract_port_names(model: &grammar::semantic::ModelNode) -> PortNames {
-    let mut in_ports = Vec::new();
-    let mut out_ports = Vec::new();
-    let mut inout_ports = Vec::new();
-    let mut vars = Vec::new();
-
-    for (name, var) in &model.variables {
-        match var {
-            VariableNode::Port { direction, .. } => match direction {
-                PortDirection::In => in_ports.push(name.clone()),
-                PortDirection::Out => out_ports.push(name.clone()),
-                PortDirection::InOut => inout_ports.push(name.clone()),
-            },
-            VariableNode::Simple { .. } => vars.push(name.clone()),
-            _ => {}
-        }
-    }
-
-    // Сортируем для стабильного порядка
-    in_ports.sort();
-    out_ports.sort();
-    inout_ports.sort();
-    vars.sort();
-
-    PortNames {
-        in_ports,
-        out_ports,
-        inout_ports,
-        vars,
-    }
+    // 0079: сбор рекурсивен (включая под-модели композиции) — вынесен в
+    // библиотеку `PortNames::from_model` ради тестируемости.
+    PortNames::from_model(model)
 }
 
 /// Печатает диагностики с позицией и кодом (фича 0054).

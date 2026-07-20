@@ -51,6 +51,55 @@ pub struct PortNames {
     pub vars: Vec<String>,
 }
 
+impl PortNames {
+    /// Собирает имена портов/переменных модели и всех её под-моделей композиции.
+    ///
+    /// 0079: обход **рекурсивный** — прежде перечислялся только корень, поэтому
+    /// порты под-моделей композиции (`Cabin | Motor`) не попадали в драйвер/
+    /// дисплей и не подавались из sim-файла (модель «не реагировала на датчики»).
+    /// Читать их симулятор мог (`Unit::get_value` обходит все ветви), а подать
+    /// вход было нечем. Одноимённые порты разных под-моделей делят значение
+    /// (плоское пространство имён; дедуп по имени).
+    pub fn from_model(model: &grammar::semantic::ModelNode) -> Self {
+        let mut names = Self {
+            in_ports: Vec::new(),
+            out_ports: Vec::new(),
+            inout_ports: Vec::new(),
+            vars: Vec::new(),
+        };
+        names.collect_recursive(model);
+        for v in [
+            &mut names.in_ports,
+            &mut names.out_ports,
+            &mut names.inout_ports,
+            &mut names.vars,
+        ] {
+            v.sort();
+            v.dedup();
+        }
+        names
+    }
+
+    fn collect_recursive(&mut self, model: &grammar::semantic::ModelNode) {
+        use grammar::parser::ast::PortDirection;
+        use grammar::semantic::VariableNode;
+        for (name, var) in &model.variables {
+            match var {
+                VariableNode::Port { direction, .. } => match direction {
+                    PortDirection::In => self.in_ports.push(name.clone()),
+                    PortDirection::Out => self.out_ports.push(name.clone()),
+                    PortDirection::InOut => self.inout_ports.push(name.clone()),
+                },
+                VariableNode::Simple { .. } => self.vars.push(name.clone()),
+                _ => {}
+            }
+        }
+        for sub in model.models.values() {
+            self.collect_recursive(&sub.borrow());
+        }
+    }
+}
+
 // ── Результат симуляции ──────────────────────────────────────────────────────
 
 #[derive(Debug)]

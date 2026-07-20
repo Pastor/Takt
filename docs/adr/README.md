@@ -70,3 +70,4 @@
 | [0074](./0074-parenthesised-state-of.md) | Скобочная форма `S(Модель)` — канонизация в единой воронке `resolve_condition` | Accepted | фича 0074 |
 | [0083](./0083-model-always-block.md) | Model-level `always` — исполнять каждый такт во всех целях (Option B) | Accepted | фича 0083 |
 | [0080](./0080-c-struct-defects.md) | Дефекты C по структурам: составной литерал, static const, SE-061 | Accepted | фича 0080 |
+| [0079](./0079-sim-composition-ports.md) | Порты под-модели композиции — перечислять рекурсивно (PortNames::from_model) | Accepted | фича 0079 |

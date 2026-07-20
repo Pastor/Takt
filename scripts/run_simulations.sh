@@ -26,13 +26,26 @@ for sim_file in "$SIM_DIR"/*.json; do
   # Имя файла без пути и расширения: stacker_loading
   base="$(basename "$sim_file" .json)"
 
-  # Имя модели — часть до первого подчёркивания: stacker
-  model="${base%%_*}"
-  lam_file="$ROOT/examples/${model}.lam"
+  # Имя модели — самый ДЛИННЫЙ префикс `base` (по `_`), для которого есть .lam.
+  # Прежде бралась часть до ПЕРВОГО `_` (`${base%%_*}`), что ломалось на именах
+  # моделей с подчёркиванием: `elevator_mini_floor2` → `elevator` вместо
+  # `elevator_mini` (фича 0079). Отсекаем суффикс справа, пока не найдём .lam.
+  candidate="$base"
+  lam_file=""
+  model="$candidate"
+  while :; do
+    if [[ -f "$ROOT/examples/${candidate}.lam" ]]; then
+      model="$candidate"
+      lam_file="$ROOT/examples/${candidate}.lam"
+      break
+    fi
+    [[ "$candidate" == *_* ]] || break
+    candidate="${candidate%_*}"
+  done
   output_path="$ROOT/examples/simulations/graphics"
   config_file="$ROOT/examples/graphics-configs/default_svg.json"
 
-  if [[ ! -f "$lam_file" ]]; then
+  if [[ -z "$lam_file" ]]; then
     echo "[ ПРОПУСК ] $base  (не найден ${model}.lam)"
     ((skip++)) || true
     continue
