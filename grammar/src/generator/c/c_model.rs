@@ -14,7 +14,7 @@ use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, StateNode, VariableNode};
 
 /// Генерирует именованные блоки состояния (enter/exit/always).
-use super::c_blocks::{generate_model_named_blocks, generate_named_blocks};
+use super::c_blocks::{generate_model_named_blocks, generate_named_blocks, generate_scalar_init};
 
 /// Генерирует прототипы функций для всех используемых моделей.
 pub(super) fn generate_function_prototypes(
@@ -115,9 +115,7 @@ fn generate_model_init(
             generate_array_init(printer, map, model, &var.name(), ty, expr)?;
             continue;
         }
-        printer.ident(&format!("model->{} = ", var.name()));
-        generate_expr(printer, map, model, vec![], expr, 0, true)?;
-        printer.print(";").nl();
+        generate_scalar_init(printer, map, model, &var.name(), ty, expr)?;
     }
     Ok(())
 }

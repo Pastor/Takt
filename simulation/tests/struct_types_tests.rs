@@ -114,12 +114,24 @@ fn failure(fixture: &str) -> String {
     }
 }
 
-/// T12 (A7): чтение неизвестного поля `p.z` → диагностика (SIM-027), а не `None`.
+/// T12 (A7): чтение неизвестного поля `p.z`.
+///
+/// **Фича 0080 (SE-061):** ошибка теперь ловится на **компиляции**
+/// (`construct_model` → `validate`), а не в рантайме симулятора (`SIM-027`) —
+/// компайл-тайм диагностика строго лучше: до исполнения дело не доходит. Сам
+/// механизм `SIM-027` остаётся страховкой для базы, статически не разрешимой в
+/// структуру, и покрыт юнит-тестами `eval/{access,place}.rs`.
 #[test]
-fn unknown_field_read_is_diagnostic() {
-    let msg = failure("struct_unknown_field.lam");
-    assert!(msg.contains("SIM-027"), "ожидался SIM-027: {msg}");
-    assert!(msg.contains("не имеет поля"), "{msg}");
+fn unknown_field_read_is_se061_at_compile_time() {
+    let path = "tests/data/eval/struct_unknown_field.lam";
+    let source = std::fs::read_to_string(path).expect("фикстура");
+    let (ast, _) = grammar::parse(&source, 0).expect("разбор");
+    let err = construct_model(&ast, None, &[]).expect_err("ожидался отказ семантики SE-061");
+    assert_eq!(err.code.as_deref(), Some("SE-061"), "{err:?}");
+    assert!(
+        format!("{err:?}").contains("не содержит поля"),
+        "текст должен называть отсутствующее поле: {err:?}"
+    );
 }
 
 /// T13 (A7): обращение к структуре по номеру бита `p.0` → диагностика (SIM-029).

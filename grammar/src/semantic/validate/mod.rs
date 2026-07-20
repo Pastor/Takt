@@ -34,6 +34,7 @@ mod constant_conditions;
 mod enums;
 mod fixed;
 mod implicit_bool;
+mod member_access;
 mod nondeterminism;
 mod ports;
 mod states;
@@ -97,6 +98,9 @@ pub fn validate_model(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     if let Some(diag) = check_struct_field_types(model.clone()) {
         return Err(diag);
     }
+
+    // Ce19 (SE-061): доступ к несуществующему полю структуры (0080, дефект 3)
+    member_access::check_struct_field_access(model.clone())?;
 
     let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
         .borrow()

@@ -5,12 +5,38 @@
 //! обе печати идут в одинаковых условиях (`owner` — модель), различаясь лишь
 //! источником списка блоков.
 
-use super::c_expr::generate_code_block;
+use super::c_expr::{generate_code_block, generate_expr};
 use crate::diagnostics::Diagnostic;
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
 use crate::semantic::minimap::Element;
-use crate::semantic::{ModelNode, StateNode};
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, ModelNode, StateNode};
+
+/// Инициализация скалярной (не массивной) переменной в `_init`:
+/// `model->name = <expr>;`.
+///
+/// 0080-01: **структура** присваивается СОСТАВНЫМ ЛИТЕРАЛОМ `(Type){...}` —
+/// голый `model->p = {1, 2};` невалиден (`cc: expected expression`): фигурный
+/// инициализатор допустим только в объявлении, не в присваивании.
+pub(super) fn generate_scalar_init(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    var_name: &str,
+    ty: &TypeNode,
+    expr: &ExpressionNode,
+) -> Result<(), Diagnostic> {
+    let cast = if let TypeNode::Struct(s) = ty {
+        format!("({})", s)
+    } else {
+        String::new()
+    };
+    printer.ident(&format!("model->{} = {}", var_name, cast));
+    generate_expr(printer, map, owner, vec![], expr, 0, true)?;
+    printer.print(";").nl();
+    Ok(())
+}
 
 /// Генерирует именованные блоки состояния (`enter`/`exit`/`always`).
 pub(super) fn generate_named_blocks(

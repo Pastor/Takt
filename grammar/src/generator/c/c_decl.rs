@@ -10,6 +10,7 @@ use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
 use crate::semantic::minimap::Element;
 use crate::semantic::naming::normalize_lowercase_snakecase;
+use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, FunctionDefinitionNode, VariableNode};
 
 fn const_expr_string(expr: &ExpressionNode, name: &str) -> Result<String, Diagnostic> {
@@ -64,7 +65,12 @@ pub(super) fn generate_constants_and_ports_and_enums(
                 VariableNode::Port { .. } => {
                     // Порты генерируются как enum в заголовочном файле (ModelNamePorts).
                 }
-                VariableNode::Const { name, ref expr, .. } => {
+                VariableNode::Const {
+                    name,
+                    ref expr,
+                    ref ty,
+                    ..
+                } => {
                     // Пропускаем неиспользуемые константы
                     if !map.usage().constants.contains(&name) {
                         continue;
@@ -75,7 +81,20 @@ pub(super) fn generate_constants_and_ports_and_enums(
                             .to_uppercase()
                             .as_str();
                     let value = const_expr_string(expr, &name)?;
-                    lines.push(format!("#define CONST_{} {}", name, value));
+                    // 0080-02: структурная константа — `static const`, а НЕ
+                    // `#define`. Макрос `#define X {…}` при доступе `X.field`
+                    // разворачивается в `{…}.field` — невалидный C (фигурный
+                    // литерал вне объявления). `static const Type X = {…};`
+                    // делает `X.field` корректным. Скаляр/массив — прежним
+                    // `#define` (массив с полевым доступом — территория 0078).
+                    if let TypeNode::Struct(struct_name) = ty {
+                        lines.push(format!(
+                            "static const {} CONST_{} = {};",
+                            struct_name, name, value
+                        ));
+                    } else {
+                        lines.push(format!("#define CONST_{} {}", name, value));
+                    }
                 }
             }
         }
