@@ -520,7 +520,7 @@ fn lower_cond(cond: &mut ConditionNode, m: u8, n: u8) -> Result<(), Diagnostic> 
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)
         | ConditionNode::Model(_, _)
-        | ConditionNode::State(_)
+        | ConditionNode::State(..)
         | ConditionNode::EnumVariant(_, _, _) => {}
     }
     Ok(())

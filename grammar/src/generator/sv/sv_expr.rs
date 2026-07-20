@@ -450,7 +450,7 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         )),
         ConditionNode::String(_) => Err(sv002("строковый литерал")),
         ConditionNode::Model(_, _) => Err(sv002("ссылка на модель в условии")),
-        ConditionNode::State(_) => Err(sv002("ссылка на состояние в условии")),
+        ConditionNode::State(..) => Err(sv002("ссылка на состояние в условии")),
     }
 }
 

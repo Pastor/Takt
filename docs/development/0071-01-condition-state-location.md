@@ -63,3 +63,42 @@ use-site позицию. `condition.rs:195` отбрасывает доступ�
 - Сборка `--features lsp`; `cargo test --features lsp -- --test-threads=1`.
 - `./scripts/precheck.sh` зелёный; `git diff examples/generated/` пуст (A3).
 - Регресс goto: существующие `lsp_tests`/`lsp_goto_tests` зелёные (A2).
+
+## ⚠️ Уточнение при разработке: предпосылка ADR была неполной
+
+**Зонд headline-случая `S(Ping) = End` опроверг ключевую предпосылку ADR** («`End`
+разрешается в `condition.rs:185` → `ConditionNode::State`, ветка теряет `id.loc`»).
+Фактически (проба над `S(Ping) = Done`, где `Done` — состояние сестры `Ping`):
+
+```text
+S(Ping) = Done  →  ConditionNode::Equal(
+                       Function(Builtin "S", [Model(Ping)]),   // левая часть РАЗРЕШЕНА
+                       Unresolved(ast::Variable("Done")))      // правая — НЕ State!
+```
+
+Причина: `resolve_condition` ищет состояние в области **текущей** модели (`Pong`),
+а `Done` объявлено в сестре `Ping` — та невидима, поэтому имя падает в
+`Unresolved(Variable)`, а **не** в `ConditionNode::State`. `ConditionNode::State`
+рождается лишь когда имя — состояние **той же** модели (`x = Done` внутри `M`).
+
+Итог — **два** механизма (оба реализованы, оба под тестом):
+
+1. **Кросс-модельный `S(Ping) = End`** (headline, T2). Разбор — на уровне
+   `ConditionNode::Equal` в `index::collect_condition_entries`
+   (`try_collect_state_of_model` + `state_of_model_cond`, зеркало
+   `c_expr::condition::state_of_model`): левая часть распознаётся как «состояние
+   модели-аргумента», имя из правой резолвится в области **этой** модели и кладётся
+   `ReferenceState` с ней в контексте. Имя-лист `Done` при этом **не**
+   индексируется как рядовая `ReferenceCondition` (иначе goto вёл бы в никуда).
+2. **Внутримодельный `x = Done`** (T2b). Здесь работает ровно Option A ADR: поле
+   `Location` на `ConditionNode::State` + ветка `ConditionNode::State` в индексе.
+
+Соответственно `condition.rs:195` (передача `id.loc` в `State`) и правки ~10
+match-мест из плана — **нужны** (механизм 2), но headline-случай ими **не**
+закрывается — он потребовал разбора на уровне `ConditionNode::Equal`. План выше
+описывал только механизм 2; фактическая реализация добавила механизм 1.
+
+Мёртвый код из первой редакции (разбор `S(...) = state` на уровне **сырого АСД**
+`collect_ast_condition_entries`) снят: условие ребра резолвится в
+`ConditionNode::Equal` (левая часть `S` — встроенная функция, всегда разрешима),
+до сырого АСД `Equal` с `S(...)` не доходит.

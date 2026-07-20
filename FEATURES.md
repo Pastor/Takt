@@ -127,10 +127,8 @@
 | № | Фича | Зависит от | Tier | Статус |
 |---|------|------------|------|--------|
 | [0061](docs/features/0061-fixed-point-type.md) | Fixed-point Q(m.n) как тип языка (закрывает отложенный R-B ADR 0045) | нет | 3 | ГОТОВО |
-| [0071](docs/features/0071-lsp-goto-state-name.md) | Переход на имя состояния в `S(Ping) = End` (goto) | нет | 3 | РАЗРАБОТКА |
 | [0067](docs/features/0067-intellij-rename-psi-import.md) | Rename и `PsiReference` для `import` в плагине IntelliJ | 0038 (закрыта) | — | СОЗДАНА |
 | [0070](docs/features/0070-port-initializer-address-role.md) | Инициализатор порта — это адрес, но проверяется как значение | — | — | СОЗДАНА |
-| [0071](docs/features/0071-lsp-goto-state-name.md) | Переход на имя состояния в `S(Ping) = End` не работает | — | — | СОЗДАНА |
 | [0072](docs/features/0072-lsp-initialization-options.md) | LSP не читает `initializationOptions` (пути поиска импортов) | — | — | СОЗДАНА |
 | [0073](docs/features/0073-location-filename-path.md) | `Location::filename()` возвращает номер, а не путь | — | — | СОЗДАНА |
 | [0074](docs/features/0074-parenthesised-state-of.md) | Скобочная форма `S(…)` отвергается семантикой | — | — | СОЗДАНА |

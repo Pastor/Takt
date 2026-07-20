@@ -371,7 +371,7 @@ fn walk_condition(
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)
         | ConditionNode::Model(_, _)
-        | ConditionNode::State(_)
+        | ConditionNode::State(..)
         | ConditionNode::EnumVariant(_, _, _) => {}
     }
     Ok(())

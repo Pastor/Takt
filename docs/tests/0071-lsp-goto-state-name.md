@@ -29,11 +29,28 @@
 
 | Функциональность | Условие | Статус |
 |---|---|---|
-| Индекс (`ReferenceState`) | запись под use-site `End` | ⬜ |
-| LSP goto | `End` → декларация состояния | ⬜ |
-| goto модели/ребра/переменной | без регресса | ⬜ |
-| Кодоген всех целей | вывод байт-в-байт неизменен | ⬜ |
-| Равенство `ConditionNode` | позиция игнорируется | ⬜ |
+| Индекс (`ReferenceState`) | запись под use-site `End` | ✅ (зонд подтвердил узел `ReferenceState`) |
+| LSP goto (кросс-модельный `S(Ping)=Done`) | `Done` → декларация состояния | ✅ `goto_state_name_in_condition_resolves_to_declaration` |
+| LSP goto (внутримодельный `x=Done`) | `Done` → декларация состояния | ✅ `goto_same_model_state_node_resolves_to_declaration` |
+| goto модели `S(Ping)` / ребра / переменной | без регресса | ✅ `goto_model_name_in_state_of_still_resolves_to_model` + `goto_exact_file::*` |
+| Кодоген всех целей | вывод байт-в-байт неизменен | ✅ `git diff examples/generated/` пуст |
+| Равенство `ConditionNode` | позиция игнорируется | ✅ `condition_state_equality_ignores_use_site` |
+
+## Уточнение (выяснено при разработке)
+
+Предпосылка ADR («`End` → `ConditionNode::State`, ветка теряет `id.loc`») —
+**неполна**. Зонд headline-случая: `S(Ping) = End` резолвится в
+`Equal(Function(Builtin S, [Model(Ping)]), Unresolved(Variable("End")))` — `End`
+остаётся `Unresolved` (сестра `Ping` невидима резолверу текущей модели), а **не**
+становится `State`. Поэтому:
+
+- **T2 переформулирован**: разбор `S(Модель) = Состояние` живёт на уровне
+  `ConditionNode::Equal` в индексе (`try_collect_state_of_model`), а не через
+  поле `ConditionNode::State`.
+- **T2b добавлен** (внутримодельный `x = Done`): именно там рождается
+  `ConditionNode::State` — это и есть покрытие Option A ADR.
+- Подробности — `docs/development/0071-01-condition-state-location.md`,
+  раздел «⚠️ Уточнение при разработке».
 
 ## Тестовые данные и окружение
 

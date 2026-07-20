@@ -68,7 +68,7 @@ fn generate_state_comparison(
         // Имя состояния, случайно совпавшее с состоянием объемлющей модели:
         // семантика разрешила его в ЧУЖОЙ области видимости. Берём только имя —
         // искать всё равно в модели-аргументе.
-        ConditionNode::State(state) => state.borrow().name().to_string(),
+        ConditionNode::State(state, _) => state.borrow().name().to_string(),
         other => {
             return Err(Diagnostic::error(
                 Location::Codegen,
@@ -382,7 +382,7 @@ pub(in crate::generator::c) fn generate_condition_expr(
                 Ok(format!("{}({})", fn_name, args_strs.join(", ")))
             }
         }
-        ConditionNode::Model(_, _) | ConditionNode::State(_) => Err(Diagnostic::error(
+        ConditionNode::Model(_, _) | ConditionNode::State(_, _) => Err(Diagnostic::error(
             Location::Codegen,
             "Ссылки на модели и состояния не поддерживаются в условиях переходов".to_string(),
         )

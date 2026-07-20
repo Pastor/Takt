@@ -75,7 +75,7 @@ fn condition_label(cond: &ConditionNode) -> String {
             let arg_labels: Vec<String> = args.iter().map(|a| condition_label(a)).collect();
             format!("{}({})", name, arg_labels.join(", "))
         }
-        ConditionNode::State(s) => s.borrow().name().to_string(),
+        ConditionNode::State(s, _) => s.borrow().name().to_string(),
         ConditionNode::Model(m, _) => m.borrow().name.clone().unwrap_or_else(|| "?".to_string()),
         ConditionNode::EnumVariant(_, name, _) => name.clone(),
         ConditionNode::String(parts) => parts.join(""),
@@ -115,7 +115,7 @@ fn loc_of(cond: &ConditionNode) -> Location {
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)
         | ConditionNode::Model(_, _)
-        | ConditionNode::State(_)
+        | ConditionNode::State(..)
         | ConditionNode::EnumVariant(_, _, _) => Location::Builtin,
     }
 }
@@ -235,7 +235,7 @@ pub(crate) fn eval_condition(
         }
         // Требует доступа к текущему состоянию под-модели через `Context` —
         // отдельная задача внутри фичи 0025 (решение ADR).
-        ConditionNode::State(state) => Err(Diagnostic::error(
+        ConditionNode::State(state, _) => Err(Diagnostic::error(
             Location::Builtin,
             format!(
                 "сравнение с состоянием '{}' пока не поддерживается симулятором",

@@ -192,7 +192,10 @@ pub fn resolve_condition(
             } else if let Some(model) = model.borrow().search_model(&name) {
                 return Ok(ConditionNode::Model(model.clone(), id.loc));
             } else if let Some(state) = model.borrow().search_state(&name) {
-                return Ok(ConditionNode::State(state.clone()));
+                // Второе поле — use-site позиция имени состояния (фича 0071),
+                // как у `Model`/`Variable` рядом. Позволяет LSP-переходу найти
+                // узел под курсором.
+                return Ok(ConditionNode::State(state.clone(), id.loc));
             } else if let Some((edn, val)) = model.borrow().search_enum_variant(&name) {
                 return Ok(ConditionNode::EnumVariant(
                     Rc::new(RefCell::new(edn)),
