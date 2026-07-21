@@ -62,8 +62,12 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         ..Default::default()
     })?;
 
-    // Выполняем инициализационное рукопожатие
-    let (init_id, _init_params) = connection.initialize_start()?;
+    // Выполняем инициализационное рукопожатие. Параметры клиента больше НЕ
+    // игнорируются (фича 0072): из `initializationOptions.searchPaths` берутся
+    // пути поиска импортов (аналог `-I` у `lamc`), иначе импорт из общей
+    // библиотеки вне каталога документа в редакторе не находится.
+    let (init_id, init_params) = connection.initialize_start()?;
+    let search_paths = search_paths_from_init(&init_params);
     let init_result = InitializeResult {
         capabilities: serde_json::from_value(server_capabilities)?,
         server_info: Some(ServerInfo {
@@ -74,22 +78,48 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     connection.initialize_finish(init_id, serde_json::to_value(init_result)?)?;
 
     // Запускаем основной цикл обработки сообщений
-    main_loop(connection)?;
+    main_loop(connection, search_paths)?;
     io_threads.join()?;
 
     Ok(())
 }
 
-/// Состояние сервера: открытые документы.
+/// Пути поиска импортов из `initializationOptions` клиента (фича 0072).
+///
+/// `init_params` — сырой JSON `InitializeParams` из `initialize_start()`.
+/// Относительные пути `searchPaths` разрешаются от корня рабочей области
+/// (`root_uri`); разбор и устойчивость к плохому конфигу — в библиотеке
+/// `grammar::lsp::search_paths_from_options` (ради тестируемости: бинарник
+/// юнит-тестами не покрыть).
+fn search_paths_from_init(init_params: &serde_json::Value) -> Vec<String> {
+    let params: InitializeParams = match serde_json::from_value(init_params.clone()) {
+        Ok(p) => p,
+        // Нечитаемые параметры инициализации — работаем без путей поиска
+        // (прежнее поведение), а не падаем на старте.
+        Err(e) => {
+            eprintln!("[lam-lsp] initializationOptions не разобраны: {e}");
+            return Vec::new();
+        }
+    };
+    #[allow(deprecated)] // root_uri помечен устаревшим, но именно его шлют клиенты (Zed).
+    let root = params.root_uri.as_ref().map(uri_to_path);
+    grammar::lsp::search_paths_from_options(params.initialization_options.as_ref(), root.as_deref())
+}
+
+/// Состояние сервера: открытые документы + пути поиска импортов.
 struct ServerState {
     /// Содержимое открытых документов: URI → текст.
     documents: HashMap<Uri, String>,
+    /// Пути поиска импортов (аналог `-I` у `lamc`), из `initializationOptions`
+    /// (фича 0072). Пустой список = прежнее поведение (только каталог документа).
+    search_paths: Vec<String>,
 }
 
 impl ServerState {
-    fn new() -> Self {
+    fn new(search_paths: Vec<String>) -> Self {
         ServerState {
             documents: HashMap::new(),
+            search_paths,
         }
     }
 
@@ -100,8 +130,11 @@ impl ServerState {
 }
 
 /// Основной цикл обработки LSP-сообщений.
-fn main_loop(connection: Connection) -> Result<(), Box<dyn Error + Sync + Send>> {
-    let mut state = ServerState::new();
+fn main_loop(
+    connection: Connection,
+    search_paths: Vec<String>,
+) -> Result<(), Box<dyn Error + Sync + Send>> {
+    let mut state = ServerState::new(search_paths);
 
     for msg in &connection.receiver {
         match msg {
@@ -181,20 +214,25 @@ fn handle_request(
             // некуда. Прежде звался однофайловый `goto_declaration`, и URI ответа
             // был ВСЕГДА текущим — переход в импортированный файл не работал
             // вовсе (фича 0056).
-            let result = grammar::lsp::goto_declaration_at(&uri_to_path(uri), text, position, &[])
-                .and_then(|loc| {
-                    // Пустой URI — контракт «это текущий файл»: подставляет
-                    // вызывающий, у которого URI документа и так на руках.
-                    let target = if loc.uri.is_empty() {
-                        uri.clone()
-                    } else {
-                        loc.uri.parse().ok()?
-                    };
-                    Some(GotoDeclarationResponse::Scalar(Location {
-                        uri: target,
-                        range: loc.range,
-                    }))
-                });
+            let result = grammar::lsp::goto_declaration_at(
+                &uri_to_path(uri),
+                text,
+                position,
+                &state.search_paths,
+            )
+            .and_then(|loc| {
+                // Пустой URI — контракт «это текущий файл»: подставляет
+                // вызывающий, у которого URI документа и так на руках.
+                let target = if loc.uri.is_empty() {
+                    uri.clone()
+                } else {
+                    loc.uri.parse().ok()?
+                };
+                Some(GotoDeclarationResponse::Scalar(Location {
+                    uri: target,
+                    range: loc.range,
+                }))
+            });
             connection.sender.send(Message::Response(Response::new_ok(
                 req.id,
                 serde_json::to_value(result)?,
@@ -243,7 +281,11 @@ fn handle_notification(
             let params: DidOpenTextDocumentParams = serde_json::from_value(not.params)?;
             let uri = params.text_document.uri;
             let text = params.text_document.text;
-            let diagnostics = grammar::lsp::collect_diagnostics_at(&uri_to_path(&uri), &text, &[]);
+            let diagnostics = grammar::lsp::collect_diagnostics_at(
+                &uri_to_path(&uri),
+                &text,
+                &state.search_paths,
+            );
             state.documents.insert(uri.clone(), text);
             publish_diagnostics(connection, uri, diagnostics)?;
         }
@@ -253,8 +295,11 @@ fn handle_notification(
             // Используем полный текст документа (sync kind FULL)
             if let Some(change) = params.content_changes.into_iter().last() {
                 let text = change.text;
-                let diagnostics =
-                    grammar::lsp::collect_diagnostics_at(&uri_to_path(&uri), &text, &[]);
+                let diagnostics = grammar::lsp::collect_diagnostics_at(
+                    &uri_to_path(&uri),
+                    &text,
+                    &state.search_paths,
+                );
                 state.documents.insert(uri.clone(), text);
                 publish_diagnostics(connection, uri, diagnostics)?;
             }

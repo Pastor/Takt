@@ -21,6 +21,7 @@ mod diagnostics;
 mod formatting;
 mod goto;
 mod hover;
+mod init_options;
 mod keywords;
 mod position;
 mod semantic_tokens;
@@ -35,6 +36,7 @@ pub use diagnostics::{collect_diagnostics, collect_diagnostics_at, grammar_diagn
 pub use formatting::formatting_edits;
 pub use goto::{Location, goto_declaration, goto_declaration_at, goto_declaration_with_paths};
 pub use hover::{hover_info, word_at_position};
+pub use init_options::search_paths_from_options;
 pub use keywords::SEMANTIC_TOKEN_TYPES;
 pub use position::{node_at_position, offset_to_position, offset_to_range, position_to_offset};
 pub use semantic_tokens::semantic_tokens;

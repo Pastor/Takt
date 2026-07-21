@@ -1,0 +1,4 @@
+// Общая библиотека вне каталога документа. Разрешается только через searchPaths.
+model Shared {
+    start Idle { ref Idle; }
+}
