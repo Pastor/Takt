@@ -46,12 +46,15 @@ pub(crate) fn coerce_via(
     crate::eval::coerce_to_type_with(value, ty, &Reg(ctx))
 }
 
-/// Обновляет значение по пути полей (`p.x := …`), используя реестр структур из
-/// контекста (фича 0034). Мост к ядру [`crate::eval::place::update`].
+/// Обновляет значение по пути сегментов (`p.x := …`, `data[i] := …`), используя
+/// реестр структур из контекста (фичи 0034, 0076). `ty` — объявленный тип
+/// корневой переменной (для приведения листа к типу поля/элемента). Мост к ядру
+/// [`crate::eval::place::update`].
 pub(crate) fn update_place_via(
     ctx: &dyn Context,
     value: Value,
-    path: &[String],
+    ty: Option<&TypeNode>,
+    path: &[crate::eval::place::PlaceSegment],
     new: Value,
 ) -> Result<Value, EvalError> {
     struct Reg<'a>(&'a dyn Context);
@@ -60,7 +63,7 @@ pub(crate) fn update_place_via(
             self.0.find_struct(name)
         }
     }
-    crate::eval::place::update(value, path, new, &Reg(ctx))
+    crate::eval::place::update(value, ty, path, new, &Reg(ctx))
 }
 
 #[cfg(test)]

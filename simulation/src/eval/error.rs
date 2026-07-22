@@ -51,6 +51,10 @@ pub(crate) enum EvalError {
     BitOfNonInteger { value: &'static str },
     /// Номер бита вне диапазона `0..64`.
     BitIndexOutOfRange { bit: i64 },
+    /// Индексная запись (`x[i] := …`) в значение, не являющееся массивом (0076).
+    IndexOfNonArray { value: &'static str },
+    /// Индекс записи вне границ массива (`data[i] := …`, `i ≥ длины`) (0076).
+    ArrayIndexOutOfBounds { index: usize, len: usize },
 }
 
 impl EvalError {
@@ -102,6 +106,12 @@ impl EvalError {
             EvalError::BitIndexOutOfRange { bit } => {
                 format!("номер бита {bit} вне диапазона 0..64")
             }
+            EvalError::IndexOfNonArray { value } => {
+                format!("индексная запись возможна только в массив, а не в значение {value}")
+            }
+            EvalError::ArrayIndexOutOfBounds { index, len } => {
+                format!("индекс {index} вне границ массива (длина {len})")
+            }
         }
     }
 
@@ -122,6 +132,11 @@ impl EvalError {
             EvalError::BitIndexOfStruct { .. } => "SIM-029",
             // SIM-011 — прежний код доступа к биту (адаптер), теперь в ядре.
             EvalError::BitOfNonInteger { .. } | EvalError::BitIndexOutOfRange { .. } => "SIM-011",
+            // SIM-010 — тот же код, что у ошибок ЧТЕНИЯ массива (`expression.rs`):
+            // «не массив» и «вне границ» едины для чтения и записи (0076).
+            EvalError::IndexOfNonArray { .. } | EvalError::ArrayIndexOutOfBounds { .. } => {
+                "SIM-010"
+            }
         }
     }
 

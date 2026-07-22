@@ -68,3 +68,4 @@
 | 0080 | Дефекты генератора C по структурам | [0080-c-struct-defects.md](0080-c-struct-defects.md) | ✅ ГОТОВО (T1–T8; составной литерал + static const компилируются cc; SE-061 на неизвестном поле; корпус неизменен) |
 | 0079 | `elevator_mini.lam` не исполняется: порты под-модели композиции | [0079-sim-composition-ports.md](0079-sim-composition-ports.md) | ✅ ГОТОВО (T1–T7; порты под-моделей перечисляются/драйвятся; elevator_mini реагирует на датчик; stacker не сломан) |
 | 0072 | LSP не читает initializationOptions (пути поиска импортов) | [0072-lsp-initialization-options.md](0072-lsp-initialization-options.md) | ✅ ГОТОВО |
+| 0076 | Симулятор не исполняет массивы вовсе | [0076-sim-arrays.md](0076-sim-arrays.md) | СОЗДАНА |
