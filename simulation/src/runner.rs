@@ -117,6 +117,15 @@ pub enum RunResult {
     /// Отличает сломанную модель от честно неактивного перехода (R5 фичи 0025):
     /// раньше ошибка вычисления сводилась к `false` и была неотличима.
     EvalFailed { step: usize, details: String },
+    /// Прогон в **мягком** режиме инвариантов (фича 0087) завершился, но по ходу
+    /// были нарушения — записаны, а не прерваны. `terminated` = дошёл ли автомат
+    /// до терминального состояния (иначе — исчерпал бюджет шагов). `violations`
+    /// — пары `(шаг, детали)` в порядке возникновения.
+    CompletedWithInvariantViolations {
+        steps: usize,
+        terminated: bool,
+        violations: Vec<(usize, String)>,
+    },
 }
 
 // ── Бегун симуляции ──────────────────────────────────────────────────────────
@@ -132,6 +141,9 @@ pub struct SimulationRunner {
     gif_config: GraphicsConfig,
     // Раскладка графа вычисляется один раз перед первым кадром.
     cached_layout: Option<CachedLayout>,
+    /// Мягкий режим инвариантов (фича 0087): нарушение записывается и прогон
+    /// продолжается, вместо останова. Умолчание — `false` (жёсткий режим 0044).
+    soft_invariants: bool,
 }
 
 impl SimulationRunner {
@@ -182,7 +194,14 @@ impl SimulationRunner {
             model_name,
             gif_config,
             cached_layout: None,
+            soft_invariants: false,
         })
+    }
+
+    /// Включает/выключает мягкий режим инвариантов (фича 0087). По умолчанию
+    /// выключен (жёсткий режим 0044 — совпадает с `assert()` в C).
+    pub fn set_invariant_soft(&mut self, on: bool) {
+        self.soft_invariants = on;
     }
 
     /// Запускает главный цикл симуляции.
@@ -196,6 +215,8 @@ impl SimulationRunner {
             self.max_steps.unwrap_or(usize::MAX)
         };
         let mut completed = 0usize;
+        // Фича 0087: накопленные нарушения инвариантов мягкого режима, с шагом.
+        let mut soft_violations: Vec<(usize, String)> = Vec::new();
 
         for step_no in 0..limit {
             let sim_step: Option<SimStep> = self.sim_steps.get(step_no).cloned();
@@ -205,8 +226,17 @@ impl SimulationRunner {
                 self.apply_step_inputs(step);
             }
 
-            // Выполняем шаг
-            let tick_result = self.unit.tick();
+            // Выполняем шаг. В мягком режиме нарушения инвариантов не прерывают
+            // такт, а записываются (фича 0087) — сливаем их и тегируем шагом.
+            let tick_result = if self.soft_invariants {
+                let r = self.unit.tick_soft();
+                for details in self.unit.take_invariant_violations() {
+                    soft_violations.push((completed + 1, details));
+                }
+                r
+            } else {
+                self.unit.tick()
+            };
             if let TickResult::Failed(details) = &tick_result {
                 return Ok(RunResult::EvalFailed {
                     step: completed + 1,
@@ -239,10 +269,24 @@ impl SimulationRunner {
 
             // Проверяем терминальность
             if tick_result == TickResult::Terminated {
+                if !soft_violations.is_empty() {
+                    return Ok(RunResult::CompletedWithInvariantViolations {
+                        steps: completed,
+                        terminated: true,
+                        violations: soft_violations,
+                    });
+                }
                 return Ok(RunResult::Terminated { steps: completed });
             }
         }
 
+        if !soft_violations.is_empty() {
+            return Ok(RunResult::CompletedWithInvariantViolations {
+                steps: completed,
+                terminated: false,
+                violations: soft_violations,
+            });
+        }
         Ok(RunResult::StepsReached { steps: completed })
     }
 

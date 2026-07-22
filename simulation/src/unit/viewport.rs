@@ -1044,8 +1044,6 @@ pub(super) mod graph {
         use petgraph::graph::Graph;
         use std::collections::HashMap;
 
-        // ── dist ──────────────────────────────────────────────────────────────
-
         #[test]
         fn test_dist_pythagorean_triple() {
             let d = dist((0.0, 0.0), (3.0, 4.0));
@@ -1062,8 +1060,6 @@ pub(super) mod graph {
             let d = dist((0.0, 0.0), (7.0, 0.0));
             assert!((d - 7.0).abs() < 1e-10);
         }
-
-        // ── segments_intersect ────────────────────────────────────────────────
 
         #[test]
         fn test_segments_cross_at_center() {
@@ -1117,8 +1113,6 @@ pub(super) mod graph {
                 (6.0, 6.0),
             ));
         }
-
-        // ── clamp_to_canvas ───────────────────────────────────────────────────
 
         #[test]
         fn test_clamp_point_within_bounds_unchanged() {
@@ -1298,6 +1292,7 @@ pub(super) mod graph {
                 state_transitions,
                 state_executions: HashMap::new(),
                 guards: Default::default(),
+                invariant_violations: Vec::new(),
                 last_transition: None,
             })
         }
@@ -1394,6 +1389,7 @@ mod tests {
             state_transitions: transitions,
             state_executions: HashMap::new(),
             guards: Default::default(),
+            invariant_violations: Vec::new(),
             last_transition: None,
         });
         let result = create_viewport(
@@ -1420,6 +1416,7 @@ mod test_highlight {
             state_transitions: t,
             state_executions: HashMap::new(),
             guards: Default::default(),
+            invariant_violations: Vec::new(),
             last_transition: None,
         })
     }

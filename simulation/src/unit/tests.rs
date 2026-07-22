@@ -37,6 +37,7 @@ fn node() -> Unit {
         state_transitions: HashMap::new(),
         state_executions: HashMap::new(),
         guards: Default::default(),
+        invariant_violations: Vec::new(),
         last_transition: None,
     })
 }
@@ -50,6 +51,7 @@ fn node_with(key: &str, val: Value) -> Unit {
         state_transitions: HashMap::new(),
         state_executions: HashMap::new(),
         guards: Default::default(),
+        invariant_violations: Vec::new(),
         last_transition: None,
     })
 }
@@ -306,6 +308,7 @@ fn r5_eval_error_is_distinguishable_from_false_condition() {
         state: Some("A".to_string()),
         executions: HashMap::new(),
         guards: Default::default(),
+        invariant_violations: Vec::new(),
         last_transition: None,
     });
     match u.tick() {
@@ -337,6 +340,7 @@ fn r5_false_condition_is_not_an_error() {
         state: Some("A".to_string()),
         executions: HashMap::new(),
         guards: Default::default(),
+        invariant_violations: Vec::new(),
         last_transition: None,
     });
     assert_eq!(u.tick(), TickResult::Processing);
@@ -364,6 +368,7 @@ fn node_with_enter(counter: Rc<Cell<u32>>) -> Unit {
         state: Some("A".to_string()),
         executions: HashMap::new(),
         guards: Default::default(),
+        invariant_violations: Vec::new(),
         last_transition: None,
     })
 }
@@ -419,6 +424,7 @@ fn node_terminal(name: &str) -> Unit {
         state_transitions: st,
         state_executions: HashMap::new(),
         guards: Default::default(),
+        invariant_violations: Vec::new(),
         last_transition: None,
     })
 }
@@ -437,6 +443,7 @@ fn node_with_transition(from: &str, to: &str, cond: bool) -> Unit {
         state_transitions: st,
         state_executions: HashMap::new(),
         guards: Default::default(),
+        invariant_violations: Vec::new(),
         last_transition: None,
     })
 }
@@ -531,6 +538,7 @@ fn test_tick_node_only_first_matching_transition_taken() {
         state_transitions: st,
         state_executions: HashMap::new(),
         guards: Default::default(),
+        invariant_violations: Vec::new(),
         last_transition: None,
     });
     u.tick();
