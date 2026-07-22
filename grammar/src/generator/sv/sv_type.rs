@@ -175,8 +175,22 @@ pub(crate) fn sv_type(ty: &TypeNode, what: &str) -> Result<SvType, Diagnostic> {
             let sign = if *signed { "signed " } else { "" };
             Ok(SvType::scalar(format!("logic {}[{}:0]", sign, bits - 1)))
         }
-        // Настоящий (распакованный) массив. В цели `c` — `uint{N}_t`, где N —
-        // ЧИСЛО ЭЛЕМЕНТОВ, то есть несуществующий тип (дефект 0029, Д1).
+        // Бит-вектор `[bit;N]` (фича 0078): SV умеет вектор ПРОИЗВОЛЬНОЙ ширины
+        // нативно, поэтому упаковка — просто `logic [N-1:0]` при любом N (массив
+        // слов, как в C/rust/st, ему не нужен). Так `[bit;8]` ≡ `u8` (тоже
+        // `logic [7:0]`).
+        TypeNode::Array(n, elem) if crate::semantic::bit_vector::is_bit_vector(ty).is_some() => {
+            let _ = elem;
+            if *n == 0 {
+                return Err(sv004(
+                    what,
+                    "бит-вектор нулевой ширины: `logic [-1:0]` не является \
+                     допустимым диапазоном",
+                ));
+            }
+            Ok(SvType::scalar(format!("logic [{}:0]", n - 1)))
+        }
+        // Настоящий (распакованный) массив скаляров (0076).
         TypeNode::Array(n, elem) => {
             if *n == 0 {
                 return Err(sv004(
@@ -355,11 +369,16 @@ mod tests {
         assert_eq!(ty.declare("a"), "logic [7:0] a [0:1][0:3]");
     }
 
-    /// Массив бит даёт распакованный массив однобитных `logic`.
+    /// Бит-вектор `[bit;N]` (фича 0078) — нативный УПАКОВАННЫЙ вектор `logic
+    /// [N-1:0]` любой ширины (SV умеет вектор произвольной ширины); так `[bit;8]`
+    /// ≡ `u8`. Прежде был распакованный массив `logic flags [0:7]`.
     #[test]
-    fn array_of_bit_maps_to_unpacked_logic() {
+    fn array_of_bit_maps_to_packed_logic_vector() {
         let ty = sv_type(&TypeNode::Array(8, Box::new(TypeNode::Bit)), "тест").unwrap();
-        assert_eq!(ty.declare("flags"), "logic flags [0:7]");
+        assert_eq!(ty.declare("flags"), "logic [7:0] flags");
+        // Произвольная ширина, в т.ч. > 64, — нативно, без массива слов.
+        let ty100 = sv_type(&TypeNode::Array(100, Box::new(TypeNode::Bit)), "тест").unwrap();
+        assert_eq!(ty100.declare("wide"), "logic [99:0] wide");
     }
 
     /// **T11:** перечисление отображается в именованный тип с суффиксом `_e`.

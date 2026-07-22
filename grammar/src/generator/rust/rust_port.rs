@@ -33,6 +33,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::rust::rust_type::rust_type;
+use crate::semantic::bit_vector::{self, BitVectorLayout};
 use crate::semantic::type_node::TypeNode;
 
 /// Категория порта — задаёт имя перечисления и пару методов трейта.
@@ -86,6 +87,21 @@ pub(crate) fn port_class(
     port: &str,
     loc: Location,
 ) -> Result<PortClass, Diagnostic> {
+    // Бит-вектор `[bit;N]`, N ≤ 64 (фича 0078) — упакованное беззнаковое число
+    // ширины `round_up(N)`: нормализуем к `Integer`, дальше как обычное порт-число
+    // (`[bit;8]` ≡ `u8`). N > 64 (массив слов) остаётся `Array` → `RS-016` ниже:
+    // HAL-числом слова быть не могут.
+    let normalized;
+    let ty = match bit_vector::is_bit_vector(ty).map(bit_vector::layout) {
+        Some(BitVectorLayout::Scalar { width }) => {
+            normalized = TypeNode::Integer {
+                bits: u8::try_from(width).unwrap_or(64),
+                signed: false,
+            };
+            &normalized
+        }
+        _ => ty,
+    };
     match ty {
         // `bit` и `bool` — одна категория: оба дают `bool` (в цели `c` — `int`,
         // дефект 0029).
@@ -169,16 +185,41 @@ mod tests {
         assert_eq!(class.value_type(), "f64");
     }
 
-    /// **Контрпример:** составной тип порта даёт `RS-016`, а не тихий пропуск.
+    /// Бит-вектор `[bit;N]`, N ≤ 64 (фича 0078) — порт-**число** `u{round_up(N)}`
+    /// (`[bit;12]` → `u16`), а не `RS-016`: упаковка делает его скаляром.
+    #[test]
+    fn bit_vector_port_is_packed_number() {
+        let class = port_class(&TypeNode::Array(12, Box::new(TypeNode::Bit)), "R", loc()).unwrap();
+        assert_eq!(class.value_type(), "u16");
+        let byte = port_class(&TypeNode::Array(8, Box::new(TypeNode::Bit)), "R", loc()).unwrap();
+        assert_eq!(byte.value_type(), "u8");
+    }
+
+    /// **Контрпример:** тип порта, не сводимый к HAL-числу, даёт `RS-016`, а не
+    /// тихий пропуск. Настоящий массив скаляров (`[u8;4]`) и бит-вектор из слов
+    /// (`[bit;128]` → `[u64;2]`) HAL-числом быть не могут.
     #[test]
     fn composite_port_type_is_rs016() {
-        let ty = TypeNode::Array(4, Box::new(TypeNode::Bit));
-        let err = port_class(&ty, "DATA", loc()).unwrap_err();
+        let real_array = TypeNode::Array(
+            4,
+            Box::new(TypeNode::Integer {
+                bits: 8,
+                signed: false,
+            }),
+        );
+        let err = port_class(&real_array, "DATA", loc()).unwrap_err();
         assert_eq!(err.code.as_deref(), Some("RS-016"));
         assert!(
             err.message.contains("DATA"),
-            "диагностика должна называть порт: {}",
+            "называет порт: {}",
             err.message
+        );
+
+        // Бит-вектор N > 64 — массив слов, не HAL-число.
+        let words = TypeNode::Array(128, Box::new(TypeNode::Bit));
+        assert_eq!(
+            port_class(&words, "W", loc()).unwrap_err().code.as_deref(),
+            Some("RS-016")
         );
     }
 }

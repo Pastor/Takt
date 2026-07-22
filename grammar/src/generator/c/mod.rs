@@ -47,6 +47,7 @@ use crate::generator::c::c_source::generate_source;
 use crate::generator::{FloatWidth, GenerateOptions};
 use crate::semantic::ModelNode;
 use crate::semantic::PortDirection;
+use crate::semantic::bit_vector::{self, BitVectorLayout};
 use crate::semantic::enum_facts;
 use crate::semantic::minimap::{Element, StateExtend};
 use crate::semantic::naming::normalize_lowercase_snakecase;
@@ -158,8 +159,6 @@ impl AsGenerator for Generator {
 /// найдена» — при том что переменная найдена, невыразим её тип).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum CTypeError {
-    /// Бит-вектор `[bit;N]` при N ∉ {8,16,32,64} — целого типа такой ширины в C нет.
-    BitVectorWidth(u16),
     /// Тип (или тип элемента массива) представления в C не имеет вовсе.
     Unrepresentable,
 }
@@ -169,15 +168,6 @@ impl CTypeError {
     /// (`переменная 'x'`, `параметр 'p'`), чтобы сообщение указывало на место.
     fn into_diagnostic(self, what: &str) -> Diagnostic {
         match self {
-            Self::BitVectorWidth(n) => Diagnostic::error(
-                Location::Codegen,
-                format!(
-                    "{}: бит-вектор [bit;{}] не представим в C — \
-                     целого типа такой ширины нет (допустимо 8, 16, 32, 64)",
-                    what, n
-                ),
-            )
-            .with_code("CC-014"),
             Self::Unrepresentable => Diagnostic::error(
                 Location::Codegen,
                 format!("{}: тип не представим в C", what),
@@ -211,9 +201,12 @@ pub(super) fn map_c_type(
         // Д1 (фича 0029): было `uint{size}_t`, где `size` — ЧИСЛО ЭЛЕМЕНТОВ, а не
         // разрядность: `[u8;4]` давало невалидный `uint4_t`. Тип массива без
         // имени переменной в C не выражается (`elem name[N]` — объявитель, а не
-        // тип), поэтому здесь остаётся только бит-вектор; настоящий массив
-        // печатает `get_typed_variable`.
-        TypeNode::Array(size, elem) => bit_vector_type(*size, elem),
+        // тип), поэтому здесь остаётся только скалярный бит-вектор (N ≤ 64);
+        // настоящий массив и бит-вектор из слов (N > 64) печатает `map_typed_variable`.
+        TypeNode::Array(..) => match bit_vector::is_bit_vector(typ) {
+            Some(n) => bit_vector_type(n),
+            None => Err(CTypeError::Unrepresentable),
+        },
         TypeNode::Unit => Ok("void".to_string()),
         TypeNode::BuiltinString => Ok("char *".to_string()),
         TypeNode::Struct(struct_name) => Ok(struct_name.to_string()),
@@ -297,27 +290,18 @@ pub(super) fn typed_variable_or_diagnostic(
     map_typed_variable(typ, name, model, float_width).map_err(|e| e.into_diagnostic(what))
 }
 
-/// Отображает бит-вектор `[bit; N]` в целочисленный тип C.
+/// Отображает бит-вектор `[bit; N]` в **скалярный** целый тип C (фича 0078).
 ///
-/// **Доминирующая идиома корпуса** (45 из 46 вхождений массивов): `[bit;8]`,
-/// `[bit;16]`, `[bit;32]` — так в Lam записывают `u8`/`u16`/`u32`. Для неё число
-/// элементов и есть разрядность, поэтому `uint{N}_t` — верное отображение, и оно
-/// **не меняется** фичей 0029.
-///
-/// Для иной ширины (`[bit;128]`, штатно объявлен в `examples/include/std.lam`)
-/// типа в C нет: `uint128_t` не существует. Возвращается
-/// [`CTypeError::BitVectorWidth`] → вызывающий даёт `CC-014`, а не печатает
-/// невалидный тип.
-///
-/// Массив НЕ бит: тип в C выражается только вместе с именем (`elem name[N]`),
-/// поэтому здесь отказ — печатает его [`map_typed_variable`].
-fn bit_vector_type(size: u16, elem: &TypeNode) -> Result<String, CTypeError> {
-    if !matches!(elem, TypeNode::Bit) {
-        return Err(CTypeError::Unrepresentable);
-    }
-    match size {
-        8 | 16 | 32 | 64 => Ok(format!("uint{}_t", size)),
-        _ => Err(CTypeError::BitVectorWidth(size)),
+/// `[bit;N]` — упакованный N-битный вектор (единый слой `semantic::bit_vector`).
+/// При **N ≤ 64** — один скаляр `uint{round_up(N)}_t` (`[bit;8]`→`uint8_t`,
+/// `[bit;12]`→`uint16_t`; так в Lam записывают `u8`/`u16`/…). Это тип **без
+/// имени**, поэтому здесь возвращается только скалярный случай; **N > 64** — это
+/// массив слов `uint64_t[⌈N/64⌉]`, а тип массива в C неотделим от имени, поэтому
+/// он даёт [`CTypeError::Unrepresentable`] — печатает его [`map_typed_variable`].
+fn bit_vector_type(size: u16) -> Result<String, CTypeError> {
+    match bit_vector::layout(size) {
+        BitVectorLayout::Scalar { width } => Ok(format!("uint{}_t", width)),
+        BitVectorLayout::Words { .. } => Err(CTypeError::Unrepresentable),
     }
 }
 
@@ -334,9 +318,15 @@ pub(super) fn map_typed_variable(
 ) -> Result<String, CTypeError> {
     match typ {
         TypeNode::Array(size, elem) => {
-            // Бит-вектор — целое, а не массив: `[bit;8]` это u8.
-            if matches!(**elem, TypeNode::Bit) {
-                return bit_vector_type(*size, elem).map(|t| format!("{} {}", t, name));
+            // Бит-вектор (фича 0078): N ≤ 64 — скаляр `uint{W}_t name`; N > 64 —
+            // массив слов `uint64_t name[⌈N/64⌉]`.
+            if let Some(n) = bit_vector::is_bit_vector(typ) {
+                return Ok(match bit_vector::layout(n) {
+                    BitVectorLayout::Scalar { width } => format!("uint{}_t {}", width, name),
+                    BitVectorLayout::Words { count } => {
+                        format!("uint{}_t {}[{}]", bit_vector::WORD_BITS, name, count)
+                    }
+                });
             }
             // Д1 (фича 0029): настоящий массив. Прежде здесь печаталось
             // `uint{N}_t name` (число элементов как разрядность) для всего, кроме
@@ -476,42 +466,36 @@ mod tests {
         assert_eq!(typed(&ty, "data").as_deref(), Some("uint8_t data[4]"));
     }
 
-    /// **Д1 (0029).** Бит-вектор `[bit;8]` остаётся `uint8_t` — доминирующая
-    /// идиома корпуса (45 из 46 вхождений) и НЕ меняется.
+    /// **Д1 (0029) / фича 0078.** Бит-вектор `[bit;8]` → `uint8_t`; промежуточная
+    /// ширина округляется вверх (`[bit;12]`→`uint16_t`).
     #[test]
     fn test_bit_vector_stays_integer_type() {
         let ty = TypeNode::Array(8, Box::new(TypeNode::Bit));
         assert_eq!(typed(&ty, "b").as_deref(), Some("uint8_t b"));
         let ty32 = TypeNode::Array(32, Box::new(TypeNode::Bit));
         assert_eq!(typed(&ty32, "w").as_deref(), Some("uint32_t w"));
+        // Округление вверх до родной ширины (0078).
+        let ty12 = TypeNode::Array(12, Box::new(TypeNode::Bit));
+        assert_eq!(typed(&ty12, "d").as_deref(), Some("uint16_t d"));
+        let ty3 = TypeNode::Array(3, Box::new(TypeNode::Bit));
+        assert_eq!(typed(&ty3, "t").as_deref(), Some("uint8_t t"));
     }
 
-    /// Бит-вектор нестандартной ширины типа в C не имеет → `None`.
-    ///
-    /// `[bit;128]` штатно объявлен в `examples/include/std.lam`, а `uint128_t` не
-    /// существует. Прежде печатался именно он — невалидный C.
+    /// **Фича 0078.** Бит-вектор `N > 64` → массив слов `uint64_t name[⌈N/64⌉]`
+    /// (прежде `[bit;128]` давал `CC-014` — невыразим). Тип-без-имени (для скаляра)
+    /// у него нет, но объявление с именем — есть.
     #[test]
-    fn test_bit_vector_of_unsupported_width_has_no_c_type() {
-        let ty = TypeNode::Array(128, Box::new(TypeNode::Bit));
-        assert_eq!(typed(&ty, "big"), None, "uint128_t не существует");
-    }
-
-    /// **0029-01.** Отказ по ширине бит-вектора несёт причину → `CC-014`.
-    ///
-    /// Без причины вызывающий не мог отличить `[bit;128]` от невыразимого типа
-    /// и выдавал CC-009 «Variable not found» — ошибку не по адресу: переменная
-    /// найдена, невыразим её тип.
-    #[test]
-    fn test_bit_vector_width_error_carries_reason_and_maps_to_cc_014() {
-        let err = typed_err(&TypeNode::Array(128, Box::new(TypeNode::Bit)), "big");
-        assert_eq!(err, CTypeError::BitVectorWidth(128));
-
-        let diag = err.into_diagnostic("переменная 'big'");
-        assert_eq!(diag.code.as_deref(), Some("CC-014"));
-        assert!(
-            diag.message.contains("[bit;128]") && diag.message.contains("переменная 'big'"),
-            "сообщение обязано называть и ширину, и место: {}",
-            diag.message
+    fn test_bit_vector_over_64_is_word_array() {
+        let ty128 = TypeNode::Array(128, Box::new(TypeNode::Bit));
+        assert_eq!(typed(&ty128, "big").as_deref(), Some("uint64_t big[2]"));
+        let ty100 = TypeNode::Array(100, Box::new(TypeNode::Bit));
+        assert_eq!(typed(&ty100, "m").as_deref(), Some("uint64_t m[2]"));
+        let ty129 = TypeNode::Array(129, Box::new(TypeNode::Bit));
+        assert_eq!(typed(&ty129, "x").as_deref(), Some("uint64_t x[3]"));
+        // Как тип-без-имени бит-вектор из слов не выразим (это массив).
+        assert_eq!(
+            get_c_type(&ty128, &empty_model().borrow(), FloatWidth::default()),
+            None
         );
     }
 

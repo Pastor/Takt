@@ -1161,8 +1161,8 @@ mod tests {
     const SRC: &str = r#"
 //Алиас типа
 type u8 = [bit;8];
-//Константа
-const MATRIX: u8 := { 0, 0, 0, 0, 0, 0, 0, 0 };
+//Константа: u8 = [bit;8] — упакованный скаляр (фича 0078), init скалярный
+const MATRIX: u8 := 0xA5;
 const NUMB: u8 := 0xFF;
 cond  IsEmpty = it = 0;
 //Порт с указанием отображаемого адреса

@@ -82,10 +82,23 @@ pub(crate) fn rust_type(ty: &TypeNode, what: &str) -> Result<String, Diagnostic>
                 )),
             }
         }
-        // Нативный массив. В цели `c` — `uint{N}_t`, где N — ЧИСЛО ЭЛЕМЕНТОВ:
-        // `[u8; 4]` → `uint4_t` (дефект 0029, Д1). Здесь вложенность тоже
-        // бесплатна — в отличие от ST, где `ARRAY OF ARRAY` отвергается MatIEC.
-        TypeNode::Array(n, elem) => Ok(format!("[{}; {}]", rust_type(elem, what)?, n)),
+        // Бит-вектор `[bit;N]` (фича 0078): упакованный скаляр `u{round_up(N)}`
+        // (N ≤ 64) либо массив слов `[u64; ⌈N/64⌉]` (N > 64) — как в цели C. Так
+        // `[bit;8]` и `u8` дают один тип.
+        TypeNode::Array(n, elem) => {
+            if let Some(nbits) = crate::semantic::bit_vector::is_bit_vector(ty) {
+                use crate::semantic::bit_vector::{self, BitVectorLayout};
+                return Ok(match bit_vector::layout(nbits) {
+                    BitVectorLayout::Scalar { width } => format!("u{}", width),
+                    BitVectorLayout::Words { count } => {
+                        format!("[u{}; {}]", bit_vector::WORD_BITS, count)
+                    }
+                });
+            }
+            // Настоящий массив скаляров (0076). Вложенность бесплатна — в отличие
+            // от ST, где `ARRAY OF ARRAY` отвергается MatIEC.
+            Ok(format!("[{}; {}]", rust_type(elem, what)?, n))
+        }
         TypeNode::Enum(name) => rust_type_name(name, Location::Codegen),
         TypeNode::Struct(name) => rust_type_name(name, Location::Codegen),
         TypeNode::Unit => Ok("()".to_string()),
@@ -216,15 +229,15 @@ mod tests {
         assert!(!out.contains("uint4_t"), "повторён дефект 0029: {}", out);
     }
 
-    /// Вложенный массив отображается нативно.
+    /// Вложенный массив отображается нативно; внутренний бит-вектор упаковывается.
     ///
-    /// В ST это невозможно (`ARRAY OF ARRAY` отвергается MatIEC — нужна
-    /// многомерная форма); в Rust — бесплатно.
+    /// `[[bit;4];2]` — массив из 2 бит-векторов `[bit;4]`, каждый упакован в
+    /// `u8` (фича 0078, округление вверх), поэтому внешний → `[u8; 2]`.
     #[test]
     fn nested_array_maps_natively() {
         let inner = TypeNode::Array(4, Box::new(TypeNode::Bit));
         let outer = TypeNode::Array(2, Box::new(inner));
-        assert_eq!(rust_type(&outer, "тест").unwrap(), "[[bool; 4]; 2]");
+        assert_eq!(rust_type(&outer, "тест").unwrap(), "[u8; 2]");
     }
 
     /// Перечисление отображается в тип с именем в CamelCase.
