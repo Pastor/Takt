@@ -13,10 +13,7 @@
 //!
 //! let src = "model M { start S; }";
 //! match parse(src, 0) {
-//!     Ok((model, comments)) => {
-//!         // Успешный разбор: model — корневой узел АСД
-//!         assert!(!model.elements.is_empty());
-//!     }
+//!     Ok((model, _)) => assert!(!model.elements.is_empty()), // корневой узел АСД
 //!     Err(diagnostics) => {
 //!         for d in diagnostics {
 //!             eprintln!("[{}] {}", d.level, d.message);
@@ -52,6 +49,9 @@ pub mod parser;
 pub mod semantic;
 /// Модуль проверки формальных свойств (LTL-формулы, автоматы Бюхи).
 pub mod verification;
+/// Версия языка Lam — единственный источник истины в коде (фича 0085).
+pub mod version;
+pub use version::LANGUAGE_VERSION;
 
 /// Публичная точка входа цели `sv-mmio` (фича 0062) — вынесена из `lib.rs`
 /// (лимит размера); реэкспортируется как `grammar::compile_to_sv_mmio`.
