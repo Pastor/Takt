@@ -73,3 +73,4 @@
 | [0079](./0079-sim-composition-ports.md) | Порты под-модели композиции — перечислять рекурсивно (PortNames::from_model) | Accepted | фича 0079 |
 | [0072](./0072-lsp-initialization-options.md) | LSP не читает initializationOptions (пути поиска импортов) | Accepted | фича 0072 |
 | [0076](./0076-sim-arrays.md) | Симулятор не исполняет массивы вовсе | Accepted | фича 0076 |
+| [0077](./0077-diagnostic-code-registry.md) | Реестр кодов диагностик — единый источник + машинный гейт (Option A) | Accepted | фича 0077 |

@@ -62,6 +62,10 @@ $CARGO_CMD clippy --all-targets --all-features -- -D warnings
 # надо раньше, а не после трёх минут прогона.
 "$(dirname "$0")/check-module-size.sh"
 
+# Реестр кодов диагностик (фича 0077): каждый код диагностики согласован с
+# docs/diagnostics/README.md. Тоже быстрая — до тестов.
+"$(dirname "$0")/check-diagnostic-codes.sh"
+
 $CARGO_CMD test -- --test-threads=1
 
 # Корень репозитория = каталог этого скрипта /..
