@@ -39,6 +39,7 @@ pub(crate) mod place;
 pub(crate) mod value;
 
 use grammar::semantic::StructDefinitionNode;
+use grammar::semantic::bit_vector::{self, BitVectorLayout};
 use grammar::semantic::type_node::TypeNode;
 
 use crate::eval::error::{EvalError, value_kind};
@@ -143,7 +144,13 @@ pub(crate) fn coerce_to_type_with(
                 })
             }
         },
-        TypeNode::Array(size, elem) => coerce_array(value, *size, elem, structs),
+        // Бит-вектор `[bit;N]` (фича 0078): упакованный скаляр (N ≤ 64) либо
+        // массив 64-битных слов (N > 64) — как в целях. Настоящий массив
+        // скаляров (0076) идёт своим путём.
+        TypeNode::Array(size, elem) => match bit_vector::is_bit_vector(ty) {
+            Some(n) => coerce_bit_vector(value, n),
+            None => coerce_array(value, *size, elem, structs),
+        },
         // Адресный тип порта: значение порта — целое машинное слово.
         TypeNode::Address(_, _) => match &value {
             Value::Number(n) => Ok(Value::Number(*n)),
@@ -291,6 +298,48 @@ fn coerce_integer(value: Value, bits: u8, signed: bool) -> Result<Value, EvalErr
 
 /// Поэлементное приведение массива с проверкой длины. `structs` протаскивается —
 /// элементом может быть структура (`[Point; 4]`).
+/// Приведение к бит-вектору `[bit;N]` (фича 0078).
+///
+/// **N ≤ 64** — упакованный **скаляр** `Value::Number`, приведённый как
+/// беззнаковое целое ширины `round_up(N)` (то есть идентично `uN` — `[bit;8]` ≡
+/// `u8`). Битовый паттерн в `i64` достаточен: бит-доступ его читает.
+///
+/// **N > 64** — `Value::Array` из `⌈N/64⌉` слов-`Number`: одиночное `Number`
+/// раскладывается в младшее слово (остальные — 0), готовый массив слов —
+/// усекается/дополняется до нужного числа.
+fn coerce_bit_vector(value: Value, n: u16) -> Result<Value, EvalError> {
+    match bit_vector::layout(n) {
+        BitVectorLayout::Scalar { width } => {
+            coerce_integer(value, u8::try_from(width).unwrap_or(64), false)
+        }
+        BitVectorLayout::Words { count } => {
+            let count = usize::from(count);
+            let words = match value {
+                Value::Number(v) => {
+                    let mut w = vec![Value::Number(0); count];
+                    w[0] = Value::Number(v);
+                    w
+                }
+                Value::Array(items) => {
+                    let mut w: Vec<Value> = items.into_iter().take(count).collect();
+                    w.resize(count, Value::Number(0));
+                    w
+                }
+                other @ (Value::Boolean(_)
+                | Value::Real(_)
+                | Value::Fixed { .. }
+                | Value::Struct { .. }) => {
+                    return Err(EvalError::NotCoercible {
+                        value: value_kind(&other),
+                        ty: format!("[bit;{n}]"),
+                    });
+                }
+            };
+            Ok(Value::Array(words))
+        }
+    }
+}
+
 fn coerce_array(
     value: Value,
     size: u16,

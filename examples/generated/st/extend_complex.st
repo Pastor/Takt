@@ -6,9 +6,9 @@
 TYPE
     Coord :
     STRUCT
-        x : ARRAY [0..31] OF BOOL;
-        y : ARRAY [0..31] OF BOOL;
-        z : ARRAY [0..31] OF BOOL;
+        x : UDINT;
+        y : UDINT;
+        z : UDINT;
     END_STRUCT;
 END_TYPE
 

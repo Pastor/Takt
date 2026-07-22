@@ -69,8 +69,21 @@ pub(crate) fn get_st_type(typ: &TypeNode, model: &ModelNode) -> Result<String, D
         // T11. LREAL — 64-битное вещественное, совпадает с f64 симулятора
         // (`simulation/src/eval/`). `REAL` (f32) повторил бы дефект Д3.
         TypeNode::Rational => Ok("LREAL".to_string()),
-        // T12.
-        TypeNode::Array(_, _) => array_type(typ, model),
+        // T12 / фича 0078. Бит-вектор `[bit;N]` — упакованный скаляр
+        // `USINT/UINT/UDINT/ULINT` (round_up, N ≤ 64) либо массив слов
+        // `ARRAY [0..count-1] OF ULINT` (N > 64). Иначе — настоящий массив.
+        TypeNode::Array(_, _) => {
+            if let Some(nbits) = crate::semantic::bit_vector::is_bit_vector(typ) {
+                use crate::semantic::bit_vector::{self, BitVectorLayout};
+                return match bit_vector::layout(nbits) {
+                    BitVectorLayout::Scalar { width } => integer_type(width as u8, false),
+                    BitVectorLayout::Words { count } => {
+                        Ok(format!("ARRAY [0..{}] OF ULINT", count - 1))
+                    }
+                };
+            }
+            array_type(typ, model)
+        }
         // T13. Откат Option C: перечислимый тип MatIEC не принимает (проба П4).
         TypeNode::Enum(name) => enum_type(name, model),
         // T14. Ссылка на объявление `TYPE … STRUCT … END_STRUCT; END_TYPE`,

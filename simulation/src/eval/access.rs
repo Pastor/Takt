@@ -42,6 +42,9 @@ pub(crate) fn read_member(value: &Value, member: &Member) -> Result<Value, EvalE
         }
         (Value::Number(n), Member::Number(bit)) => read_bit(*n, *bit),
         (Value::Boolean(b), Member::Number(bit)) => read_bit(i64::from(*b), *bit),
+        // Бит-вектор `[bit;N]` при N > 64 (фича 0078) — упакован в массив
+        // 64-битных слов: бит `k` живёт в слове `k / 64`, смещение `k % 64`.
+        (Value::Array(words), Member::Number(bit)) => read_bit_words(words, *bit),
         (
             Value::Number(_)
             | Value::Boolean(_)
@@ -52,7 +55,7 @@ pub(crate) fn read_member(value: &Value, member: &Member) -> Result<Value, EvalE
         ) => Err(EvalError::FieldOfNonStruct {
             value: value_kind(value),
         }),
-        (Value::Real(_) | Value::Array(_) | Value::Fixed { .. }, Member::Number(_)) => {
+        (Value::Real(_) | Value::Fixed { .. }, Member::Number(_)) => {
             Err(EvalError::BitOfNonInteger {
                 value: value_kind(value),
             })
@@ -66,6 +69,20 @@ fn read_bit(bits: i64, bit: i64) -> Result<Value, EvalError> {
         return Err(EvalError::BitIndexOutOfRange { bit });
     }
     Ok(Value::Boolean(bits & (1 << bit) != 0))
+}
+
+/// Извлекает бит `bit` из бит-вектора `[bit;N]` (N > 64), упакованного в массив
+/// 64-битных слов (фича 0078): слово `bit / 64`, смещение `bit % 64`. Бит вне
+/// набранных слов или слово-не-целое → `BitIndexOutOfRange`.
+fn read_bit_words(words: &[Value], bit: i64) -> Result<Value, EvalError> {
+    let Ok(k) = u32::try_from(bit) else {
+        return Err(EvalError::BitIndexOutOfRange { bit });
+    };
+    let (w, off) = grammar::semantic::bit_vector::bit_slot(k);
+    match words.get(usize::from(w)) {
+        Some(Value::Number(word)) => Ok(Value::Boolean(word & (1 << off) != 0)),
+        _ => Err(EvalError::BitIndexOutOfRange { bit }),
+    }
 }
 
 #[cfg(test)]

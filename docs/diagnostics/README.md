@@ -79,7 +79,7 @@
 | `CC-011` | Состояние … не найдено в модели … | `grammar/src/generator/c/c_expr/condition.rs:111` |
 | `CC-012` | Модель … не найдена | `grammar/src/generator/c/c_expr/condition.rs:92` |
 | `CC-013` | Выражение … не разыменовано | `grammar/src/generator/c/c_expr/condition.rs:78` |
-| `CC-014` | Бит-вектор непредставимой ширины (`[bit;128]`; допустимо 8/16/32/64) | `grammar/src/generator/c/mod.rs:180` |
+| `CC-014` | ~~Бит-вектор непредставимой ширины~~ — выведен фичей 0078 (`[bit;N]` теперь упаковывается: N≤64 скаляр, N>64 массив `uint64_t[⌈N/64⌉]`) | RETIRED |
 | `CC-015` | Тип не представим в C (в т.ч. тип элемента массива) | `grammar/src/generator/c/c_hal.rs:141` |
 | `CC-016` | Ширина доступа к регистру порта неизвестна для его типа C (`c-hal`) | `grammar/src/generator/c/c_hal.rs:152` |
 | `CC-017` | Инициализатор массива не выразим в C (скалярный либо иной длины) | `grammar/src/generator/c/c_model.rs:230` |
