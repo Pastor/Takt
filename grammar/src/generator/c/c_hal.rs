@@ -124,7 +124,14 @@ pub(super) fn generate_hal(
                     model_name.unique_uppercase_snakecase(),
                     normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
                 );
-                let resolved = addr_map.get(port_name);
+                // Фича 0084: карта ключуется квалифицированно (модель+порт) —
+                // строим тот же ключ хелвером, что и продюсер `resolve_model`.
+                // `model_name.unique()` == `unique_model_name(ModelNode)` (обе
+                // из обхода `upper`), поэтому lookup попадает.
+                let resolved = addr_map.get(&crate::address_map::qualified_port_key(
+                    model_name.unique(),
+                    port_name,
+                ));
                 let addr = resolved.map(|r| r.addr).unwrap_or(0);
                 let bit = resolved.and_then(|r| r.bit).unwrap_or(-1);
                 // 0029-02: было `.unwrap_or(4)` поверх `_ => 4` — два молчаливых
@@ -388,6 +395,48 @@ start Idle {
         assert!(
             header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, -1, 1 },"),
             "битовый порт от --float-width не зависит:\n{header}"
+        );
+    }
+
+    /// Композиция с **одноимёнными адресованными портами** двух под-моделей.
+    /// Сторож фичи 0084: до неё карта ключевалась голым именем `sig`, оба
+    /// варианта `COLL_A_SIG`/`COLL_B_SIG` брали адрес по `sig` и получали ОДИН
+    /// (последний, 0x20) — адрес первого порта терялся. С квалифицированным
+    /// ключом каждый порт получает **свой** адрес.
+    const COLLISION_SRC: &str = r#"
+model A {
+    out sig: bit := 0x10:0;
+    start S {
+        always { sig := true; }
+        ref S: 1 = 1;
+    }
+}
+model B {
+    out sig: bit := 0x20:0;
+    start S {
+        always { sig := true; }
+        ref S: 1 = 1;
+    }
+}
+start Main = A | B;
+"#;
+
+    /// **A1 (0084).** Одноимённые порты под-моделей → каждый свой адрес в c-hal.
+    #[test]
+    fn address_collision_qualified_key_distinct_addresses() {
+        let header = generate_hal_h(COLLISION_SRC, "Coll", crate::generator::FloatWidth::W64);
+        assert!(
+            header.contains("[COLL_A_SIG] = { (uintptr_t)0x10u,"),
+            "порт sig под-модели A обязан получить СВОЙ адрес 0x10:\n{header}"
+        );
+        assert!(
+            header.contains("[COLL_B_SIG] = { (uintptr_t)0x20u,"),
+            "порт sig под-модели B обязан получить СВОЙ адрес 0x20:\n{header}"
+        );
+        // До 0084 адрес 0x10 терялся (оба варианта брали 0x20 по голому `sig`).
+        assert!(
+            header.contains("0x10u") && header.contains("0x20u"),
+            "оба адреса обязаны присутствовать (коллизия исправлена):\n{header}"
         );
     }
 

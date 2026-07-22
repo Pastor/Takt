@@ -184,7 +184,10 @@ impl Mmio {
         }
 
         let mut ports: Vec<MmioPort> = Vec::new();
-        for (name, resolved) in address_map {
+        for resolved in address_map.values() {
+            // Фича 0084: ключ карты квалифицирован моделью; имя регистра
+            // (пользовательское) — голое `resolved.name`, не ключ.
+            let name = &resolved.name;
             let what = format!("порт '{}'", name);
             let width = bit_width(&resolved.ty, &enums, &what)
                 .ok_or_else(|| sv002_width(name, &resolved.ty))?;

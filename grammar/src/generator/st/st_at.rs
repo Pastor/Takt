@@ -170,6 +170,7 @@ mod tests {
             source: AddressSource::Inline,
             ty: crate::semantic::type_node::TypeNode::Bit,
             direction: crate::semantic::PortDirection::In,
+            name: "port".to_string(),
         }
     }
 

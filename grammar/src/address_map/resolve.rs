@@ -42,6 +42,28 @@ pub struct ResolvedAddress {
     pub ty: TypeNode,
     /// Направление порта (`in`/`out`/`inout`) — для выгрузки `json` (фича 0043).
     pub direction: PortDirection,
+    /// **Голое** имя порта (без квалификации моделью) — фича 0084.
+    ///
+    /// Ключ [`AddressResolution::map`] с 0084 **квалифицирован** моделью
+    /// ([`qualified_port_key`]), чтобы одноимённые порты разных под-моделей не
+    /// затирали друг друга. Но публичные форматы (регистры `sv-mmio`, выгрузка
+    /// `map`/`json` фичи 0043) показывают порт **пользовательским** именем —
+    /// его и несёт это поле. Так квалификация ключа не протекает в выгрузку
+    /// (аддитивность корпуса, правило 11).
+    pub name: String,
+}
+
+/// Квалифицированный ключ порта в [`AddressResolution::map`] (фича 0084).
+///
+/// `model_unique` — уникальный путь модели (`Root:Child`, из
+/// `Name::unique()` у потребителей и `unique_model_name` у продюсера — обе
+/// строки идентичны), `port` — голое имя порта. Разделитель `\u{1}` в
+/// идентификаторах невозможен, поэтому ключ однозначен без разбора (это ключ
+/// `HashMap`, парсить его не нужно). Продюсер и **все** потребители обязаны
+/// строить ключ **этим** хелвером — иначе lookup промахнётся молча (драйвер 3
+/// ADR 0084).
+pub fn qualified_port_key(model_unique: &str, port: &str) -> String {
+    format!("{model_unique}\u{1}{port}")
 }
 
 /// Метаданные порта **без** разрешённого адреса — для выгрузки `json` (фича
@@ -157,9 +179,12 @@ pub fn resolve_addresses(
         );
     }
 
-    // SE-051: записи карты без соответствующего порта.
+    // SE-051: записи карты без соответствующего порта. Ключ карты с 0084
+    // квалифицирован моделью, поэтому наличие порта проверяется по **голому**
+    // имени среди значений (`ResolvedAddress::name`), а не `contains_key`
+    // (внешняя `.ld` адресует по голому имени — драйвер 4 ADR 0084).
     for e in external {
-        if !result.map.contains_key(&e.name) {
+        if !result.map.values().any(|r| r.name == e.name) {
             result.diagnostics.push(
                 Diagnostic::warning(
                     e.loc,
@@ -183,6 +208,25 @@ pub fn resolve_addresses(
 }
 
 /// Рекурсивный обход дерева моделей для разрешения адресов портов.
+/// Уникальный путь модели (`Root:Child`) — совпадает с `minimap::Name::unique()`
+/// (фича 0084). Реплика `minimap::unique_model_name`: обход `upper` вверх до
+/// корня, разделитель `:`. Согласие с потребителем `c-hal` (он берёт
+/// `Name::unique()`) — критический инвариант ключа карты (драйвер 3 ADR 0084):
+/// продюсер и потребитель строят одну и ту же строку.
+fn model_unique_name(model: &Rc<RefCell<ModelNode>>) -> String {
+    let name = model.borrow().name.clone().unwrap_or_default();
+    if let Some(upper) = model.borrow().upper.as_ref()
+        && let Some(parent) = upper.upgrade()
+    {
+        let parent_name = model_unique_name(&parent);
+        if parent_name.is_empty() {
+            return name;
+        }
+        return format!("{parent_name}:{name}");
+    }
+    name
+}
+
 fn resolve_model(
     model: &Rc<RefCell<ModelNode>>,
     used_ports: &std::collections::HashSet<String>,
@@ -251,6 +295,7 @@ fn resolve_model(
                 source: AddressSource::External,
                 ty: ty.clone(),
                 direction: *direction,
+                name: name.clone(),
             })
         } else if let Some((addr, bit)) = operator {
             Some(ResolvedAddress {
@@ -259,6 +304,7 @@ fn resolve_model(
                 source: AddressSource::Operator,
                 ty: ty.clone(),
                 direction: *direction,
+                name: name.clone(),
             })
         } else {
             inline.map(|(addr, bit)| ResolvedAddress {
@@ -267,6 +313,7 @@ fn resolve_model(
                 source: AddressSource::Inline,
                 ty: ty.clone(),
                 direction: *direction,
+                name: name.clone(),
             })
         };
 
@@ -295,7 +342,10 @@ fn resolve_model(
                         .with_code("SE-060"),
                     );
                 }
-                out.map.insert(name.clone(), r);
+                // Фича 0084: ключ квалифицирован моделью, иначе одноимённые
+                // порты разных под-моделей затирали бы друг друга.
+                out.map
+                    .insert(qualified_port_key(&model_unique_name(model), name), r);
             }
             None => {
                 // Порт без адреса — записать для выгрузки json (мёртвый порт

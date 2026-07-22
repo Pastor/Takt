@@ -76,3 +76,4 @@
 | [0077](./0077-diagnostic-code-registry.md) | Реестр кодов диагностик — единый источник + машинный гейт (Option A) | Accepted | фича 0077 |
 | [0078](./0078-bit-array-semantics.md) | Семантика `[bit;N]` — упакованный бит-вектор в родных типах (Option A) | Accepted | фича 0078 |
 | [0085](./0085-language-version-constant.md) | Константа версии языка в коде + гейт синхронизации с README | Accepted | фича 0085 |
+| [0084](./0084-address-map-qualified-key.md) | Ключ карты адресов — квалифицированный (модель+порт) | Accepted | фича 0084 |
