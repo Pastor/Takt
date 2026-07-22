@@ -54,5 +54,5 @@ pub use export_cli::{
 pub use parse::{AddressMapEntry, address_map_overlay_warnings, parse_address_map};
 pub use resolve::{
     AddressResolution, AddressSource, PortMeta, ResolvedAddress, address_expr_warnings,
-    resolve_addresses,
+    qualified_port_key, resolve_addresses,
 };

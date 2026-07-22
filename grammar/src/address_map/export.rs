@@ -44,13 +44,34 @@ fn direction_name(direction: PortDirection) -> &'static str {
     }
 }
 
-/// Записи разрешённой карты, отсортированные по имени порта.
+/// Записи разрешённой карты, **схлопнутые по голому имени** и отсортированные.
+///
+/// Публичные форматы (`.ld` `map`, `json`) — **плоские** по имени порта: одна
+/// запись на имя (фича 0043, риск Р2). Ключ карты с 0084 квалифицирован моделью,
+/// поэтому одноимённые порты разных под-моделей дают **несколько** значений с
+/// одним `name`; для плоской выгрузки они схлопываются, **побеждает последний**
+/// (детерминированно — с максимальным квалифицированным ключом, т.е. последняя
+/// под-модель в порядке обхода, как было до 0084). Так круговой рейс (R4 0043)
+/// остаётся тождеством, а вывод корпуса — байт-в-байт (коллизий в корпусе нет).
+/// Полный список обоих портов виден цели `c-hal` (карта не потеряла данных) —
+/// это и есть исправление 0084; плоскую выгрузку оно не меняет.
 ///
 /// Порядок **детерминирован** (`map` — `HashMap`, иначе выгрузка «плавала» бы и
 /// ломала идемпотентность кругового рейса и `diff` между ревизиями).
-fn sorted_entries(resolution: &AddressResolution) -> Vec<(&String, &ResolvedAddress)> {
-    let mut entries: Vec<_> = resolution.map.iter().collect();
-    entries.sort_by(|a, b| a.0.cmp(b.0));
+fn sorted_entries(resolution: &AddressResolution) -> Vec<&ResolvedAddress> {
+    let mut by_name: std::collections::HashMap<&str, (&str, &ResolvedAddress)> =
+        std::collections::HashMap::new();
+    for (key, ra) in &resolution.map {
+        match by_name.get(ra.name.as_str()) {
+            // Побеждает запись с максимальным квалиф. ключом (порядок моделей).
+            Some((prev_key, _)) if *prev_key >= key.as_str() => {}
+            _ => {
+                by_name.insert(ra.name.as_str(), (key.as_str(), ra));
+            }
+        }
+    }
+    let mut entries: Vec<&ResolvedAddress> = by_name.into_values().map(|(_, ra)| ra).collect();
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
     entries
 }
 
@@ -80,8 +101,8 @@ fn write_map_line(out: &mut String, name: &str, addr: i64, bit: Option<i64>) {
 /// [`parse_address_map`](super::parse::parse_address_map) без диагностик.
 pub fn export_address_map(resolution: &AddressResolution) -> String {
     let mut out = String::new();
-    for (name, ra) in sorted_entries(resolution) {
-        write_map_line(&mut out, name, ra.addr, ra.bit);
+    for ra in sorted_entries(resolution) {
+        write_map_line(&mut out, &ra.name, ra.addr, ra.bit);
     }
     out
 }
@@ -144,9 +165,13 @@ struct JsonPort<'a> {
 /// задокументировано, не чинится в 0043.
 pub fn export_address_map_json(resolution: &AddressResolution) -> String {
     let mut ports: Vec<JsonPort> = Vec::new();
-    for (name, ra) in &resolution.map {
+    for ra in sorted_entries(resolution) {
+        // Фича 0084: ключ карты квалифицирован моделью; в выгрузку идёт
+        // **голое** имя порта (`ra.name`), а не ключ, и через тот же плоский
+        // дедуп по имени, что и формат `map` — публичный контракт `json`
+        // неизменен (плоский ключ при коллизии — граница, см. заметку).
         ports.push(JsonPort {
-            name,
+            name: &ra.name,
             ty: ra.ty.to_string(),
             direction: direction_name(ra.direction),
             resolved: Some(ra),

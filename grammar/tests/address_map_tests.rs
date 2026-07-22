@@ -15,6 +15,16 @@ fn model_of(src: &str) -> std::rc::Rc<std::cell::RefCell<grammar::semantic::Mode
     construct_model(&ast, None, &[]).expect("ошибка построения модели")
 }
 
+/// Ищет разрешённый адрес порта по **голому** имени (фича 0084: ключ карты
+/// квалифицирован моделью, поэтому `map.get(имя)` больше не работает — адрес
+/// адресуется через `ResolvedAddress::name`).
+fn find_addr<'a>(
+    r: &'a grammar::AddressResolution,
+    name: &str,
+) -> Option<&'a grammar::ResolvedAddress> {
+    r.map.values().find(|a| a.name == name)
+}
+
 /// Коды всех предупреждений оверлея для пары (модель, карта).
 fn overlay_codes(model_src: &str, map_src: &str) -> Vec<String> {
     let model = model_of(model_src);
@@ -87,7 +97,7 @@ fn mixed_overlay_and_dangling() {
 fn resolve_inline_only() {
     let model = model_of("type u8 = [bit;8]; in BTN: u8 := 0x00200000; start Idle;");
     let r = resolve_addresses(model, &[], &grammar::AddressEnv::default());
-    let a = r.map.get("BTN").expect("BTN должен быть разрешён");
+    let a = find_addr(&r, "BTN").expect("BTN должен быть разрешён");
     assert_eq!(a.addr, 0x0020_0000);
     assert_eq!(a.bit, None);
     assert_eq!(a.source, AddressSource::Inline);
@@ -99,7 +109,7 @@ fn resolve_inline_only() {
 fn resolve_operator_with_bit() {
     let model = model_of("out LED: bit; address LED = 0x00200004:3; start Idle;");
     let r = resolve_addresses(model, &[], &grammar::AddressEnv::default());
-    let a = r.map.get("LED").expect("LED должен быть разрешён");
+    let a = find_addr(&r, "LED").expect("LED должен быть разрешён");
     assert_eq!(a.addr, 0x0020_0004);
     assert_eq!(a.bit, Some(3));
     assert_eq!(a.source, AddressSource::Operator);
@@ -111,7 +121,7 @@ fn resolve_external_overrides_inline() {
     let model = model_of("type u8 = [bit;8]; in BTN: u8 := 0x00100000; start Idle;");
     let entries = parse_address_map("BTN = 0x00200000;", 0).unwrap();
     let r = resolve_addresses(model, &entries, &grammar::AddressEnv::default());
-    let a = r.map.get("BTN").unwrap();
+    let a = find_addr(&r, "BTN").unwrap();
     assert_eq!(a.addr, 0x0020_0000);
     assert_eq!(a.source, AddressSource::External);
     assert_eq!(
@@ -128,7 +138,7 @@ fn resolve_external_overrides_inline() {
 fn resolve_used_port_without_address_is_se052() {
     let model = model_of("in BTN: bit; start S { ref T: BTN; } state T;");
     let r = resolve_addresses(model, &[], &grammar::AddressEnv::default());
-    assert!(!r.map.contains_key("BTN"));
+    assert!(find_addr(&r, "BTN").is_none());
     assert_eq!(
         r.diagnostics
             .iter()
@@ -144,7 +154,10 @@ fn resolve_external_fills_used_port() {
     let model = model_of("in BTN: bit; start S { ref T: BTN; } state T;");
     let entries = parse_address_map("BTN = 0x00200000;", 0).unwrap();
     let r = resolve_addresses(model, &entries, &grammar::AddressEnv::default());
-    assert_eq!(r.map.get("BTN").unwrap().source, AddressSource::External);
+    assert_eq!(
+        find_addr(&r, "BTN").unwrap().source,
+        AddressSource::External
+    );
     assert!(
         r.diagnostics
             .iter()
@@ -199,7 +212,7 @@ fn eval_symbol_from_model_const() {
         "const BTN_ADDR: u32 := 0x00200000; out LED: bit; address LED = BTN_ADDR; start Idle;",
     );
     let r = resolve_addresses(model, &[], &grammar::AddressEnv::default());
-    let a = r.map.get("LED").expect("адрес обязан вычислиться из const");
+    let a = find_addr(&r, "LED").expect("адрес обязан вычислиться из const");
     assert_eq!(a.addr, 0x0020_0000);
     assert_eq!(a.source, AddressSource::Operator);
 }
@@ -209,7 +222,7 @@ fn eval_symbol_from_model_const() {
 fn eval_folds_arithmetic() {
     let model = model_of("out LED: bit; address LED = 0x00200000 + 4; start Idle;");
     let r = resolve_addresses(model, &[], &grammar::AddressEnv::default());
-    assert_eq!(r.map.get("LED").expect("адрес").addr, 0x0020_0004);
+    assert_eq!(find_addr(&r, "LED").expect("адрес").addr, 0x0020_0004);
 }
 
 /// T1: define подставляется в выражение адреса.
@@ -218,7 +231,7 @@ fn eval_symbol_from_define() {
     let model = model_of("out LED: bit; address LED = BTN_ADDR; start Idle;");
     let env = env_of(&["BTN_ADDR=0x00200000"]);
     let r = resolve_addresses(model, &[], &env);
-    assert_eq!(r.map.get("LED").expect("адрес").addr, 0x0020_0000);
+    assert_eq!(find_addr(&r, "LED").expect("адрес").addr, 0x0020_0000);
 }
 
 /// T2: `-D BASE=…` + арифметика в модели — платформа даёт базу, модель раскладку.
@@ -227,7 +240,7 @@ fn eval_define_plus_arithmetic() {
     let model = model_of("out LED: bit; address LED = BASE + 4; start Idle;");
     let env = env_of(&["BASE=0x00200000"]);
     let r = resolve_addresses(model, &[], &env);
-    assert_eq!(r.map.get("LED").expect("адрес").addr, 0x0020_0004);
+    assert_eq!(find_addr(&r, "LED").expect("адрес").addr, 0x0020_0004);
 }
 
 /// T5: форма `адрес:бит` в значении define — та же грамматика, что у карты.
@@ -236,7 +249,7 @@ fn eval_define_carries_bit() {
     let model = model_of("out LED: bit; address LED = PIN; start Idle;");
     let env = env_of(&["PIN=0x00200000:3"]);
     let r = resolve_addresses(model, &[], &env);
-    let a = r.map.get("LED").expect("адрес");
+    let a = find_addr(&r, "LED").expect("адрес");
     assert_eq!((a.addr, a.bit), (0x0020_0000, Some(3)));
 }
 
@@ -251,7 +264,7 @@ fn eval_define_overrides_const_with_warning() {
     let env = env_of(&["BTN_ADDR=0x00300000"]);
     let r = resolve_addresses(model, &[], &env);
     assert_eq!(
-        r.map.get("LED").expect("адрес").addr,
+        find_addr(&r, "LED").expect("адрес").addr,
         0x0030_0000,
         "define обязан победить const (решение D2)"
     );
@@ -315,7 +328,7 @@ fn define_does_not_raise_layer_priority() {
     let entries = parse_address_map("LED = 0x00300000;", 0).unwrap();
     let env = env_of(&["BTN_ADDR=0x00200000"]);
     let r = resolve_addresses(model, &entries, &env);
-    let a = r.map.get("LED").expect("адрес");
+    let a = find_addr(&r, "LED").expect("адрес");
     assert_eq!(
         a.addr, 0x0030_0000,
         "внешняя карта главнее (инвариант 0020)"
@@ -333,7 +346,10 @@ fn define_alone_is_not_an_address_source() {
     let model = model_of("in BTN: bit; start Idle { ref Done: BTN; } state Done;");
     let env = env_of(&["BTN=0x00200000"]);
     let r = resolve_addresses(model, &[], &env);
-    assert!(!r.map.contains_key("BTN"), "define — не источник адреса");
+    assert!(
+        find_addr(&r, "BTN").is_none(),
+        "define — не источник адреса"
+    );
     let codes = codes_of(&r);
     assert!(codes.contains(&"SE-052"), "{codes:?}");
     assert!(codes.contains(&"DF-004"), "{codes:?}");
@@ -394,6 +410,6 @@ fn parse_defines_accepts_several_symbols() {
     let model = model_of("out A: bit; out B: bit; address A = X; address B = Y; start Idle;");
     let env = env_of(&["X=0x1", "Y=0x2"]);
     let r = resolve_addresses(model, &[], &env);
-    assert_eq!(r.map.get("A").expect("A").addr, 1);
-    assert_eq!(r.map.get("B").expect("B").addr, 2);
+    assert_eq!(find_addr(&r, "A").expect("A").addr, 1);
+    assert_eq!(find_addr(&r, "B").expect("B").addr, 2);
 }

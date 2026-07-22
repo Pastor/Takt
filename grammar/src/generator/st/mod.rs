@@ -224,7 +224,7 @@ fn emit_configuration(
     // они объявлены внутри под-моделей (`out ElevatorMotor_Up: bit;` в `Motor`).
     // Пропустить их значило бы оставить `VAR_EXTERNAL` без глобала — «the
     // external variable does not match with any global variable».
-    for (_, model_rc) in blocks {
+    for (model_name, model_rc) in blocks {
         let root = &*model_rc.borrow();
         let mut names: Vec<&String> = root.variables.keys().collect();
         names.sort();
@@ -243,7 +243,10 @@ fn emit_configuration(
             }
             // Порт без адреса при `st-at` — уже ошибка слоя 0020 (SE-052), сюда
             // он не доходит; но если карта пуста, размещать нечего.
-            let Some(resolved) = map.address_of(pname) else {
+            // Фича 0084: карта ключуется квалифицированно (модель+порт) — тот же
+            // ключ, что строит продюсер `resolve_model`.
+            let key = crate::address_map::qualified_port_key(model_name.unique(), pname);
+            let Some(resolved) = map.address_of(&key) else {
                 continue;
             };
             seen.push(pname.clone());
