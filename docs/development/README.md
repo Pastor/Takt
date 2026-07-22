@@ -188,3 +188,4 @@
 | 0080-01 | 0080 | Три дефекта C по структурам: составной литерал, static const, SE-061 | [0080-01-c-struct-defects.md](0080-01-c-struct-defects.md) |
 | 0079-01 | 0079 | Рекурсивное перечисление портов композиции + матчинг run_simulations | [0079-01-sim-composition-ports.md](0079-01-sim-composition-ports.md) |
 | 0072-01 | 0072 | LSP не читает initializationOptions (пути поиска импортов) | [0072-01-lsp-initialization-options.md](0072-01-lsp-initialization-options.md) |
+| 0076-01 | 0076 | Симулятор не исполняет массивы вовсе | [0076-01-sim-arrays.md](0076-01-sim-arrays.md) |

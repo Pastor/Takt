@@ -24,6 +24,7 @@
 
 use crate::context::Context;
 use crate::eval::ops;
+use crate::eval::place::PlaceSegment;
 use crate::eval::value::Value;
 use crate::expression::eval_expression;
 use crate::predicate::create_predicate;
@@ -277,22 +278,52 @@ pub(crate) fn exec_statement(
 
 /// Раскладывает левую часть присваивания в корневую переменную + путь полей.
 ///
-/// `Some((var, [поля]))` для `Variable` (path пуст), `p.x` (`[x]`), `o.i.v`
-/// (`[i, v]`); `None` для прочих lvalue (индекс массива, бит) — их запись пока
-/// даёт `SIM-017`. Разбор рекурсивный (не строковый разбор имени).
+/// `Ok(Some((var, [сегменты])))` для `Variable` (path пуст), `p.x`
+/// (`[Field(x)]`), `o.i.v` (`[Field(i), Field(v)]`), `data[i]` (`[Index(i)]`,
+/// индекс **вычислен** через `ctx`), `data[i].f` (`[Index(i), Field(f)]`);
+/// `Ok(None)` для прочих lvalue — их запись даёт `SIM-017`. `Err` — индекс не
+/// вычислился/не целый (`SIM-010`). Разбор рекурсивный (не строковый разбор имени).
 fn resolve_place<'a>(
     lhs: &'a ExpressionNode,
-    path: &mut Vec<String>,
-) -> Option<&'a Rc<RefCell<VariableNode>>> {
+    path: &mut Vec<PlaceSegment>,
+    ctx: &mut dyn Context,
+) -> Result<Option<&'a Rc<RefCell<VariableNode>>>, Diagnostic> {
     match lhs {
-        ExpressionNode::Variable(v) => Some(v),
-        ExpressionNode::Parenthesis(inner) => resolve_place(inner, path),
+        ExpressionNode::Variable(v) => Ok(Some(v)),
+        ExpressionNode::Parenthesis(inner) => resolve_place(inner, path, ctx),
         ExpressionNode::BitAccess(inner, Member::Identifier(field)) => {
-            let root = resolve_place(inner, path)?;
-            path.push(field.name.clone());
-            Some(root)
+            let root = resolve_place(inner, path, ctx)?;
+            if root.is_some() {
+                path.push(PlaceSegment::Field(field.name.clone()));
+            }
+            Ok(root)
         }
-        _ => None,
+        // Запись в элемент массива (фича 0076): индекс вычисляем тем же
+        // вычислителем, что и чтение (`expression.rs`), чтобы `data[i] := …` и
+        // `data[i]` смотрели на одну переменную. Индекс — часть места, а не
+        // корня, поэтому кладём его сегментом.
+        ExpressionNode::ArraySubscript(var, index_expr) => {
+            let (name, loc) = {
+                let b = var.borrow();
+                (b.name().to_string(), b.loc())
+            };
+            let Value::Number(idx) = eval_expression(index_expr, ctx)? else {
+                return Err(
+                    Diagnostic::error(loc, "индекс массива должен быть целым".to_string())
+                        .with_code("SIM-010"),
+                );
+            };
+            let Ok(index) = usize::try_from(idx) else {
+                return Err(Diagnostic::error(
+                    loc,
+                    format!("индекс {idx} вне границ массива '{name}'"),
+                )
+                .with_code("SIM-010"));
+            };
+            path.push(PlaceSegment::Index(index));
+            Ok(Some(var))
+        }
+        _ => Ok(None),
     }
 }
 
@@ -317,14 +348,15 @@ fn loc_of_assign(lhs: &ExpressionNode) -> Location {
 fn exec_expression(expr: &ExpressionNode, ctx: &mut dyn Context) -> Result<Flow, Diagnostic> {
     match expr {
         ExpressionNode::Assign(lhs, rhs) => {
-            // Левая часть раскладывается в корень + путь полей (`p.x` →
-            // root `p`, path `[x]`; `o.i.v` → `[i, v]`). Присваивание всей
-            // переменной — path пуст (сюда же копия структуры `q := p`).
-            let mut path: Vec<String> = Vec::new();
-            let Some(var_rc) = resolve_place(lhs, &mut path) else {
+            // Левая часть раскладывается в корень + путь сегментов (`p.x` →
+            // root `p`, `[Field(x)]`; `data[i]` → `[Index(i)]`). Присваивание
+            // всей переменной — path пуст (сюда же копия структуры `q := p`).
+            let mut path: Vec<PlaceSegment> = Vec::new();
+            let Some(var_rc) = resolve_place(lhs, &mut path, ctx)? else {
                 return Err(Diagnostic::error(
                     loc_of_assign(lhs),
-                    "присваивание не в переменную или поле пока не поддерживается симулятором"
+                    "присваивание не в переменную, поле или элемент массива пока не \
+                     поддерживается симулятором"
                         .to_string(),
                 )
                 .with_code("SIM-017"));
@@ -340,14 +372,16 @@ fn exec_expression(expr: &ExpressionNode, ctx: &mut dyn Context) -> Result<Flow,
                     .map_err(|e| e.to_diagnostic(loc))?;
                 ctx.set_value(&name, value);
             } else {
-                // Запись в поле (фича 0034): читаем текущее значение, обновляем по
-                // пути (лист приводится к типу поля), пишем обратно.
+                // Запись в поле (0034) или элемент массива (0076): читаем текущее
+                // значение, обновляем по пути сегментов (лист приводится к типу
+                // поля/элемента), пишем обратно. `ty` корня даёт тип элемента.
                 let current = ctx.get_value(&name).ok_or_else(|| {
                     Diagnostic::error(loc, format!("переменная '{name}' не найдена"))
                         .with_code("SIM-009")
                 })?;
-                let updated = crate::context::update_place_via(ctx, current, &path, rhs_value)
-                    .map_err(|e| e.to_diagnostic(loc))?;
+                let updated =
+                    crate::context::update_place_via(ctx, current, Some(&ty), &path, rhs_value)
+                        .map_err(|e| e.to_diagnostic(loc))?;
                 ctx.set_value(&name, updated);
             }
             Ok(Flow::Normal)

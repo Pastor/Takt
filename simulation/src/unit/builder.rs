@@ -186,6 +186,16 @@ fn coerce_initial(value: Value, var: &VariableNode, model: &ModelNode) -> Value 
             crate::eval::coerce_to_type_with(value.clone(), ty, &ModelStructs(model))
                 .unwrap_or(value)
         }
+        // Массив (фича 0076): список-инициализатор `{…}`/`[…]` (пришёл как
+        // `Array`) приводится поэлементно к типу элемента с проверкой длины
+        // (`coerce_array`). При неудаче — значение как есть: **скалярный**
+        // инициализатор массива (`[u8;4] := 0`) не приводится и остаётся скаляром
+        // (в C он вовсе не выразим, CC-017; определить его — вопрос семантики
+        // 0078, не этой фичи). Та же консервативность, что у `Fixed`/`Struct`.
+        Some(ty @ TypeNode::Array(..)) => {
+            crate::eval::coerce_to_type_with(value.clone(), ty, &ModelStructs(model))
+                .unwrap_or(value)
+        }
         _ => value,
     }
 }

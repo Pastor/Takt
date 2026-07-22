@@ -321,3 +321,47 @@ fn var_without_initializer_defaults_to_zero() {
         "seen_ratio := ratio → repr 0"
     );
 }
+
+// ── Фича 0076: исполнение массивов симулятором ────────────────────────────────
+
+/// Элемент массива по индексу — иначе внятный провал.
+fn arr_elem(unit: &Unit, name: &str, i: usize) -> i64 {
+    match unit.variable(name) {
+        Some(Value::Array(items)) => match items.get(i) {
+            Some(Value::Number(n)) => *n,
+            other => panic!("{name}[{i}]: ожидалось целое, получено {other:?}"),
+        },
+        other => panic!("переменная '{name}': ожидался массив, получено {other:?}"),
+    }
+}
+
+/// Полный путь: список-инициализатор → запись элемента → чтение элемента.
+///
+/// Прежде запись `data[0] :=` давала `SIM-017`, а скалярно проинициализированный
+/// массив — `SIM-010` при чтении (массив стал скаляром). Теперь массив исполняется.
+#[test]
+fn array_element_write_and_read() {
+    let (unit, last) = run("arrays.lam", 1);
+    assert!(
+        !matches!(last, TickResult::Failed(_)),
+        "прогон массивов не должен падать (в т.ч. SIM-017/010), получено {last:?}"
+    );
+
+    // Запись элемента исполнена, соседи не тронуты (точечность).
+    assert_eq!(arr_elem(&unit, "data", 0), 7, "data[0] := 7");
+    assert_eq!(arr_elem(&unit, "data", 1), 2, "data[1] не тронут (init)");
+    assert_eq!(arr_elem(&unit, "data", 2), 3, "data[2] не тронут (init)");
+    assert_eq!(arr_elem(&unit, "data", 3), 99, "data[3] := 99");
+
+    // Чтение элемента в теле: `first := data[0]` увидел записанное в этом же такте.
+    assert_eq!(num(&unit, "first"), 7, "first := data[0] после записи → 7");
+    assert_eq!(num(&unit, "third"), 3, "third := data[2] → 3");
+
+    // Список-инициализатор приводит элементы к типу (u8): 300 → 44 (усечение).
+    assert_eq!(
+        arr_elem(&unit, "big", 0),
+        44,
+        "big[0]: 300 усечено к u8 → 44"
+    );
+    assert_eq!(arr_elem(&unit, "big", 1), 5, "big[1] := 5");
+}

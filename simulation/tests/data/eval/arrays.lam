@@ -1,0 +1,17 @@
+// Фича 0076: исполнение массивов симулятором — запись/чтение элемента,
+// список-инициализатор с поэлементным приведением.
+model Arrays {
+    var data: [u8;4] := {1, 2, 3, 4};
+    var big: [u8;2] := {300, 5};
+    var first: u8 := 0;
+    var third: u8 := 0;
+    start Idle {
+        always {
+            data[0] := 7;
+            data[3] := 99;
+            first := data[0];
+            third := data[2];
+        }
+    }
+}
+start Entry = Arrays;
