@@ -191,3 +191,4 @@
 | 0076-01 | 0076 | Симулятор не исполняет массивы вовсе | [0076-01-sim-arrays.md](0076-01-sim-arrays.md) |
 | 0077-01 | 0077 | Реестр кодов диагностик + гейт check-diagnostic-codes.sh | [0077-01-diagnostic-code-registry.md](0077-01-diagnostic-code-registry.md) |
 | 0078-01 | 0078 | Семантика `[bit;N]`: единый слой bit_vector + упаковка во все цели | [0078-01-bit-array-semantics.md](0078-01-bit-array-semantics.md) |
+| 0085-01 | 0085 | Константа версии языка в коде + гейт синхронизации с README | [0085-01-language-version-constant.md](0085-01-language-version-constant.md) |

@@ -66,6 +66,9 @@ $CARGO_CMD clippy --all-targets --all-features -- -D warnings
 # docs/diagnostics/README.md. Тоже быстрая — до тестов.
 "$(dirname "$0")/check-diagnostic-codes.sh"
 
+# Версия языка (фича 0085): LANGUAGE_VERSION в коде согласована с README. Быстрая.
+"$(dirname "$0")/check-language-version.sh"
+
 $CARGO_CMD test -- --test-threads=1
 
 # Корень репозитория = каталог этого скрипта /..
