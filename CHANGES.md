@@ -7,6 +7,33 @@
 
 ## [Не выпущено]
 
+### Добавлено (фича [0087](docs/features/0087-invariant-soft-mode.md) — мягкий режим инвариантов) — **ЗАКРЫТА**
+
+- **Мягкий режим инвариантов симулятора** (`--invariant-soft` / `Unit::tick_soft`):
+  при нарушении инварианта (`SIM-025`) нарушение **записывается**, а прогон
+  **продолжается**, вместо останова. Для отладки («когда и сколько раз нарушается»)
+  — продолжение [0044](docs/features/0044-sim-assert-invariant.md). Решение —
+  Option A [ADR 0087](docs/adr/0087-invariant-soft-mode.md).
+- **Жёсткий режим — умолчание, неизменен:** `Unit::tick` останавливает прогон на
+  первом нарушении (`Failed`, как `assert()`→`abort()` в C) — нужно для потактовой
+  сверки. Логика вынесена в `tick_mode(soft)`; `tick = tick_mode(false)`,
+  `tick_soft = tick_mode(true)`. `soft` протаскивается в `check_guards`.
+- **Ошибка вычисления** условия инварианта — `Failed` в **обоих** режимах: мягкий
+  режим глушит только «инвариант ложен» (`SIM-025`), не «условие не вычислилось».
+- **Композиция:** нарушения дочерних `Node` всплывают рекурсивным
+  `take_invariant_violations` (зеркало `take_last_transitions`); `runner` тегирует
+  их номером шага.
+- **CLI/бегун:** флаг `--invariant-soft`, `RunResult::CompletedWithInvariantViolations
+  { steps, terminated, violations }`, печать нарушений с шагами, **ненулевой** код
+  возврата при их наличии (не молчим — нарушения это находки).
+- **Аддитивно (правило 11):** умолчание (жёсткий) неизменно, корпус и сверки с C
+  байт-в-байт; мягкий режим в сверке с C намеренно не участвует. Язык не менялся
+  (правило 22); крейт `simulation` **0.5.0 → 0.6.0** (новое поле `UnitKind::Node`,
+  метод `tick_soft`, вариант `RunResult`). Тесты:
+  `invariant_soft_records_and_continues`, `…_does_not_swallow_eval_error`,
+  `…_collects_from_composition` + жёсткие тесты 0044 без правок.
+  `./scripts/precheck.sh` зелёный.
+
 ### Исправлено (фича [0084](docs/features/0084-address-map-qualified-key.md) — ключ карты адресов) — **ЗАКРЫТА**
 
 - **Латентный дефект ядра [0020](docs/features/0020-port-address-decl.md):**

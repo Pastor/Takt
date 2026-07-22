@@ -424,6 +424,7 @@ fn build_node(
         state: Some(start_name),
         executions,
         guards,
+        invariant_violations: Vec::new(),
         last_transition: None,
     }))
 }

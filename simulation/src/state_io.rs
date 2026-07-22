@@ -185,6 +185,7 @@ mod tests {
             state_transitions: st,
             state_executions: HashMap::new(),
             guards: Default::default(),
+            invariant_violations: Vec::new(),
             last_transition: None,
         })
     }
@@ -202,6 +203,7 @@ mod tests {
             state_transitions: st,
             state_executions: HashMap::new(),
             guards: Default::default(),
+            invariant_violations: Vec::new(),
             last_transition: None,
         })
     }

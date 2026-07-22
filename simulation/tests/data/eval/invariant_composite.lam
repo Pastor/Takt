@@ -1,0 +1,11 @@
+/// Фикстура 0087: инвариант нарушается в ПОД-модели композиции. Мягкий режим
+/// обязан собрать нарушение из ветви (take_invariant_violations рекурсивно).
+model A {
+    var ca: u8 := 0;
+    invariant PA = ca = 0;
+    start S { always { ca := ca + 1; } ref S; }
+}
+model B {
+    start T { ref T; }
+}
+start Main = A | B;

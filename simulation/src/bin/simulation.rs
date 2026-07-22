@@ -51,6 +51,11 @@ struct Args {
     /// (см. examples/graphics-configs/*.json)
     #[arg(long = "graphics-config", value_name = "FILE")]
     graphics_config: Option<PathBuf>,
+
+    /// Мягкий режим инвариантов (фича 0087): нарушение записывается, и прогон
+    /// продолжается, вместо останова. Для отладки — сверки с C у него нет.
+    #[arg(long = "invariant-soft")]
+    invariant_soft: bool,
 }
 
 // ── Точка входа ───────────────────────────────────────────────────────────────
@@ -63,7 +68,11 @@ fn main() -> ExitCode {
         Ok(result) => {
             print_result(&result);
             match &result {
-                RunResult::GuardFailed { .. } | RunResult::EvalFailed { .. } => ExitCode::FAILURE,
+                // Мягкий режим (0087) завершает прогон, но нарушения — находки:
+                // не молчим кодом возврата.
+                RunResult::GuardFailed { .. }
+                | RunResult::EvalFailed { .. }
+                | RunResult::CompletedWithInvariantViolations { .. } => ExitCode::FAILURE,
                 _ => ExitCode::SUCCESS,
             }
         }
@@ -145,6 +154,7 @@ fn run(args: Args) -> Result<RunResult, String> {
         model_name,
         gif_config,
     )?;
+    runner.set_invariant_soft(args.invariant_soft);
 
     let result = runner.run()?;
 
@@ -242,6 +252,25 @@ fn print_result(result: &RunResult) {
         RunResult::EvalFailed { step, details } => {
             eprintln!("ОШИБКА вычисления на шаге {step}: {details}");
             eprintln!("Симуляция остановлена: результат недостоверен.");
+        }
+        RunResult::CompletedWithInvariantViolations {
+            steps,
+            terminated,
+            violations,
+        } => {
+            let how = if *terminated {
+                "модель достигла терминального состояния"
+            } else {
+                "лимит шагов достигнут"
+            };
+            println!("Прогон завершён ({how}) за {steps} шагов; мягкий режим инвариантов.");
+            eprintln!(
+                "Нарушений инвариантов: {} (режим --invariant-soft — прогон продолжен):",
+                violations.len()
+            );
+            for (step, details) in violations {
+                eprintln!("  шаг {step}: {details}");
+            }
         }
     }
 }

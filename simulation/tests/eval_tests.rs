@@ -282,6 +282,85 @@ fn invariant_state_violation_stops_with_name() {
     );
 }
 
+// ── Фича 0087: мягкий режим инвариантов (записать и продолжить) ──────────────
+
+/// Прогоняет фикстуру в **мягком** режиме (`tick_soft`): нарушения инвариантов
+/// записываются и прогон продолжается. Возвращает (unit, нарушения с шагом,
+/// последний результат). Ошибка вычисления (`Failed`) обрывает, как и в бегуне.
+fn run_soft(fixture: &str, steps: usize) -> (Unit, Vec<(usize, String)>, TickResult) {
+    let mut unit = unit_from(fixture);
+    let mut violations: Vec<(usize, String)> = Vec::new();
+    let mut last = TickResult::Processing;
+    for step in 1..=steps {
+        last = unit.tick_soft();
+        for d in unit.take_invariant_violations() {
+            violations.push((step, d));
+        }
+        if last == TickResult::Terminated || matches!(last, TickResult::Failed(_)) {
+            break;
+        }
+    }
+    (unit, violations, last)
+}
+
+/// A2 (0087): мягкий режим не останавливает прогон на нарушении инварианта —
+/// записывает нарушение и идёт дальше. `invariant_violated.lam`: P = c = 0
+/// ложно со 2-го такта, автомат осциллирует A↔B (не терминирует).
+#[test]
+fn invariant_soft_records_and_continues() {
+    let (unit, violations, last) = run_soft("invariant_violated.lam", 5);
+    // Прогон НЕ упал (в отличие от жёсткого режима, где стоп на шаге 2).
+    assert!(
+        !matches!(last, TickResult::Failed(_)),
+        "мягкий режим не должен ронять прогон: {last:?}"
+    );
+    // Нарушения на шагах 2..=5 (на шаге 1 c == 0, P держится).
+    let steps: Vec<usize> = violations.iter().map(|(s, _)| *s).collect();
+    assert_eq!(steps, vec![2, 3, 4, 5], "нарушения на каждом шаге со 2-го");
+    assert!(
+        violations
+            .iter()
+            .all(|(_, d)| d.contains("SIM-025") && d.contains("'P'")),
+        "каждое нарушение — SIM-025 с именем P: {violations:?}"
+    );
+    // Прогон реально продолжился: c рос дальше 1 (жёсткий режим стоял на c == 1).
+    assert!(num(&unit, "c") > 1, "c продолжил расти в мягком режиме");
+}
+
+/// A3 (0087): ошибка вычисления условия инварианта (индекс за границей массива,
+/// SIM-010) — `Failed` ДАЖЕ в мягком режиме. Мягкий режим глушит только
+/// «инвариант ложен» (SIM-025), не «условие не вычислилось» (R4).
+#[test]
+fn invariant_soft_does_not_swallow_eval_error() {
+    let (_unit, violations, last) = run_soft("invariant_eval_error.lam", 5);
+    let TickResult::Failed(msg) = last else {
+        panic!("ошибка вычисления обязана дать Failed даже в мягком режиме: {last:?}");
+    };
+    assert!(
+        msg.contains("SIM-010"),
+        "индекс за границей → SIM-010: {msg}"
+    );
+    assert!(
+        violations.is_empty(),
+        "ошибка вычисления не записывается как нарушение инварианта: {violations:?}"
+    );
+}
+
+/// A4 (0087): нарушение инварианта в ПОД-модели композиции всплывает в мягком
+/// режиме (рекурсивный слив по дереву Unit).
+#[test]
+fn invariant_soft_collects_from_composition() {
+    let (_unit, violations, last) = run_soft("invariant_composite.lam", 4);
+    assert!(
+        !matches!(last, TickResult::Failed(_)),
+        "мягкий режим не роняет композитный прогон: {last:?}"
+    );
+    assert!(
+        !violations.is_empty() && violations.iter().all(|(_, d)| d.contains("'PA'")),
+        "нарушения инварианта PA под-модели A всплыли: {violations:?}"
+    );
+}
+
 /// T17 (A10): `: c;` (assert языка Lam) в блоке нарушается — так же, как invariant.
 #[test]
 fn assert_in_block_violation_stops() {

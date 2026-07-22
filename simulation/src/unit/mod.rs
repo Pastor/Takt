@@ -128,6 +128,14 @@ pub(crate) enum UnitKind {
         executions: Executions,
         /// Инварианты модели и состояний (фича 0044), проверяются каждый такт.
         guards: Guards,
+        /// Нарушения инвариантов, записанные в **мягком** режиме (фича 0087).
+        ///
+        /// В жёстком режиме (умолчание, 0044) нарушение останавливает прогон и
+        /// сюда не пишется. В мягком (`tick_soft`) — накапливается за такт и
+        /// сливается `runner`'ом (`take_invariant_violations`, зеркало
+        /// `take_last_transitions`), который тегирует номером шага. Каждый такт
+        /// поле опустошается сливом.
+        invariant_violations: Vec<String>,
         /// Последний сработавший переход: (из, в, имя_предиката).
         last_transition: Option<(String, String, String)>,
         /// Исполнен ли `enter` **стартового** состояния (Д5).
@@ -229,17 +237,35 @@ impl Context for Unit {
 }
 
 impl Unit {
+    /// Один такт симуляции — **жёсткий** режим (умолчание, фича 0044): нарушение
+    /// инварианта останавливает прогон (`Failed`, `SIM-025`), совпадая с
+    /// `assert()` → `abort()` в порождённом C. Публичный контракт; через него
+    /// идут все потактовые сверки с C и корпус.
     pub fn tick(&mut self) -> TickResult {
+        self.tick_mode(false)
+    }
+
+    /// Один такт в **мягком** режиме (фича 0087): нарушение инварианта
+    /// **записывается** (в `Node.invariant_violations`) и такт **продолжается**
+    /// (иначе состояние не сменится → ливлок). Осмыслен только для отладки —
+    /// сверки с C у него нет (C бы уже упал). Нарушения сливает `runner`
+    /// (`take_invariant_violations`).
+    pub fn tick_soft(&mut self) -> TickResult {
+        self.tick_mode(true)
+    }
+
+    fn tick_mode(&mut self, soft: bool) -> TickResult {
         if let Err(diagnostic) = self.enter_initial_state() {
             return TickResult::Failed(describe(&diagnostic));
         }
         // 0044: инварианты (Guard-формулы) проверяются ДО `always` — как в
-        // порождённом C (`assert()` до `switch`/`always`). Нарушение
-        // останавливает прогон (`Failed`), совпадая с `assert()` → `abort()`;
-        // ошибка вычисления самого условия ≠ нарушению (R15). Для композитов
-        // проверяет каждый дочерний `Node` в своём `tick`.
+        // порождённом C (`assert()` до `switch`/`always`). Жёсткий режим:
+        // нарушение → `Failed` (стоп). Мягкий (0087): нарушение записано,
+        // `None` → такт продолжается. Ошибка вычисления самого условия ≠
+        // нарушению (R15) — `Failed` в обоих режимах. Для композитов проверяет
+        // каждый дочерний `Node` в своём `tick_mode`.
         if matches!(self.0, UnitKind::Node { .. })
-            && let Some(failed) = self.check_guards()
+            && let Some(failed) = self.check_guards(soft)
         {
             return failed;
         }
@@ -256,16 +282,18 @@ impl Unit {
             return self.tick_node();
         }
         if matches!(self.0, UnitKind::Parallel { .. }) {
-            return self.tick_parallel();
+            return self.tick_parallel(soft);
         }
-        self.tick_sequential()
+        self.tick_sequential(soft)
     }
 
     /// Проверяет инварианты модели и текущего состояния (фича 0044). Возвращает
-    /// `Some(Failed)` при нарушении или ошибке вычисления, `None` если все
-    /// обязательства выполнены. Различает нарушение (SIM-025) и ошибку самого
-    /// условия (существующий `SIM-0xx`) — как переходы в `tick_node` (R15).
-    fn check_guards(&mut self) -> Option<TickResult> {
+    /// `Some(Failed)` при нарушении (жёсткий режим) или ошибке вычисления,
+    /// `None` если обязательства выполнены **или** нарушение записано в мягком
+    /// режиме (фича 0087). Различает нарушение (SIM-025) и ошибку самого условия
+    /// (существующий `SIM-0xx`) — как переходы в `tick_node` (R15): ошибка
+    /// условия — `Failed` в **обоих** режимах.
+    fn check_guards(&mut self, soft: bool) -> Option<TickResult> {
         let guards: Vec<Guard> = if let UnitKind::Node { guards, state, .. } = &self.0 {
             let mut all = guards.model.clone();
             if let Some(s) = state
@@ -282,10 +310,22 @@ impl Unit {
                 Ok(true) => {}
                 Ok(false) => {
                     let named = name.as_ref().map(|n| format!(" '{n}'")).unwrap_or_default();
-                    return Some(TickResult::Failed(format!(
-                        "нарушен инвариант{named} (SIM-025)"
-                    )));
+                    let details = format!("нарушен инвариант{named} (SIM-025)");
+                    if soft {
+                        // Мягкий режим: записать и продолжить (не прерывать такт).
+                        if let UnitKind::Node {
+                            invariant_violations,
+                            ..
+                        } = &mut self.0
+                        {
+                            invariant_violations.push(details);
+                        }
+                    } else {
+                        return Some(TickResult::Failed(details));
+                    }
                 }
+                // Ошибка вычисления условия — недостоверность прогона, а не
+                // «инвариант ложен»: `Failed` в обоих режимах (R15/R4).
                 Err(diagnostic) => return Some(TickResult::Failed(describe(&diagnostic))),
             }
         }
@@ -417,6 +457,24 @@ impl Unit {
         }
     }
 
+    /// Сливает нарушения инвариантов, записанные мягким режимом (фича 0087), из
+    /// всего дерева `Unit` — рекурсивно, как [`take_last_transitions`]. `runner`
+    /// зовёт после каждого такта и тегирует нарушения номером шага (у `Unit`
+    /// номера шага нет — его ведёт `runner`). Опустошает поля узлов.
+    pub fn take_invariant_violations(&mut self) -> Vec<String> {
+        match &mut self.0 {
+            UnitKind::Node {
+                invariant_violations,
+                ..
+            } => std::mem::take(invariant_violations),
+            UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => units
+                .iter()
+                .flat_map(|u| u.borrow_mut().take_invariant_violations())
+                .collect(),
+            UnitKind::None => vec![],
+        }
+    }
+
     /// Возвращает имена состояний, достижимых из активных за один переход.
     pub fn reachable_from_active(&self) -> Vec<String> {
         match &self.0 {
@@ -442,10 +500,13 @@ impl Unit {
         }
     }
 
-    fn tick_parallel(&mut self) -> TickResult {
+    fn tick_parallel(&mut self, soft: bool) -> TickResult {
         // Тикаем ВСЕ дочерние и собираем результаты — нельзя прерываться раньше
         let results: Vec<TickResult> = if let UnitKind::Parallel { units, .. } = &self.0 {
-            units.iter().map(|u| u.borrow_mut().tick()).collect()
+            units
+                .iter()
+                .map(|u| u.borrow_mut().tick_mode(soft))
+                .collect()
         } else {
             unreachable!()
         };
@@ -464,7 +525,7 @@ impl Unit {
         }
     }
 
-    fn tick_sequential(&mut self) -> TickResult {
+    fn tick_sequential(&mut self, soft: bool) -> TickResult {
         let (index, len) = if let UnitKind::Sequential { units, index, .. } = &self.0 {
             (*index, units.len())
         } else {
@@ -474,7 +535,7 @@ impl Unit {
             return TickResult::Terminated;
         }
         let child_result = if let UnitKind::Sequential { units, index, .. } = &self.0 {
-            units[*index].borrow_mut().tick()
+            units[*index].borrow_mut().tick_mode(soft)
         } else {
             unreachable!()
         };

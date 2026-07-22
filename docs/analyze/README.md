@@ -84,3 +84,4 @@
 | 0078 | Семантика `[bit;N]` расходится втрое | [0078-bit-array-semantics.md](0078-bit-array-semantics.md) | — (новая фича) |
 | 0085 | Константа версии языка в коде + гейт синхронизации с README | [0085-language-version-constant.md](0085-language-version-constant.md) | нет (самодостаточна) |
 | 0084 | Ключ карты адресов — квалифицированный (модель+порт) | [0084-address-map-qualified-key.md](0084-address-map-qualified-key.md) | нет (аддитивно для `.lam` и корпуса; ключ карты + поле API) |
+| 0087 | Мягкий режим инвариантов симулятора (записать и продолжить) | [0087-invariant-soft-mode.md](0087-invariant-soft-mode.md) | аддитивно (умолчание — жёсткий режим 0044 неизменно; opt-in флаг) |
