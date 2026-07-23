@@ -76,6 +76,11 @@
   попытка пересекла закрытие mod → `unexpected closing delimiter`). `cargo test
   --features lsp --test lsp_tests` — 69 passed. `lsp_tests.rs` **1266 → 809**
   (more — 467), реестр **12 → 11**.
+- **0088-08 — готово.** Разбиение `grammar/tests/codegen_tests.rs` (39 плоских
+  тестов): вторая половина → подмодуль `tests/codegen_tests/part2.rs` (helpers из
+  родителя через `use super::*`, `mod part2` на корне, `#[path]` от `tests/`).
+  `cargo test --test codegen_tests` — 39 passed. `codegen_tests.rs` **1393 → 715**
+  (part2 690), реестр **11 → 10**.
 
 - **Взята в работу фича 0088** (продолжение 0027): вынести оставшихся нарушителей
   лимита размера модуля из реестра `module-size-baseline.txt` (18 файлов).
