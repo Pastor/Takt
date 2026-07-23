@@ -78,3 +78,4 @@
 | [0085](./0085-language-version-constant.md) | Константа версии языка в коде + гейт синхронизации с README | Accepted | фича 0085 |
 | [0084](./0084-address-map-qualified-key.md) | Ключ карты адресов — квалифицированный (модель+порт) | Accepted | фича 0084 |
 | [0087](./0087-invariant-soft-mode.md) | Мягкий режим инвариантов симулятора (записать и продолжить) | Accepted | фича 0087 |
+| [0094](./0094-new-feature-script-fixes.md) | Доработка scripts/new-feature.sh (идемпотентность, статус ADR, поздние стадии) | Accepted | фича 0094 |

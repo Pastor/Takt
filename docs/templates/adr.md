@@ -1,6 +1,6 @@
 # ADR XXXX: <заголовок>
 
-- **Status:** Accepted
+- **Status:** Draft
 - **Date:** YYYY-MM-DD
 - **Authors:** <роли: Архитектор + …>
 - **Related issues:** [Фича XXXX](../features/XXXX-slug.md)<; связь с ADR YYYY-…>
