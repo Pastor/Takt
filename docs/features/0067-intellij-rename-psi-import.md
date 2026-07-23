@@ -1,7 +1,7 @@
 # Фича 0067: Rename и `PsiReference` для `import` в плагине IntelliJ
 
 - **Номер:** 0067
-- **Статус:** АРХИТЕКТУРА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** **0038** ([семантическая подсветка через `lam-lsp`](0038-intellij-semantic-tokens.md)) — **закрыта**; зависимость подтверждена ADR 0067 (контрольная точка ADR 0040 исполнена: R2/R4/R6 закрыты 0038, остаток — только R3+R5)
 - **Приоритет / Tier:** **Tier 3** (аддитивная редакторная возможность; ничего не сломано, язык не трогается) — проставлен ADR 0067
 - **Крейт:** плагин IntelliJ (`extensions/intellij-lam/`)
@@ -12,7 +12,7 @@
 | Стадия | Артефакт |
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0067-intellij-rename-psi-import.md`](../adr/0067-intellij-rename-psi-import.md) — **Accepted** (Option B: хирургический структурный PSI) |
-| Анализ | [`docs/analyze/`](../analyze/README.md) (`0067-*` — при проработке) |
+| Анализ | [`docs/analyze/0067-intellij-rename-psi-import.md`](../analyze/0067-intellij-rename-psi-import.md) — декомпозиция 0067-01/02/03 |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0067-YY-*`) |
 | Тест-план | [`docs/tests/`](../tests/README.md) (`0067-*`) |
 | Отчёт о тестировании | [`docs/reports/`](../reports/README.md) (`0067-*`) |
