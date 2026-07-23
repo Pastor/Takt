@@ -39,6 +39,7 @@
 //! `rust_func` (функции) · `rust_model` (автомат) · `rust_map` (снимок карты).
 
 mod rust_blocks;
+mod rust_cond;
 mod rust_decl;
 mod rust_expr;
 mod rust_fixed;
