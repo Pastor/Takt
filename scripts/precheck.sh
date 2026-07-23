@@ -74,6 +74,11 @@ $CARGO_CMD clippy --all-targets --all-features -- -D warnings
 # трогает. Быстрая — до долгих тестов.
 "$(dirname "$0")/test-new-feature.sh"
 
+# Исчерпывающий разбор семантических узлов (фича 0093, ADR 0025): узлы-диспетчеры
+# не помечены #[non_exhaustive], eval/ хранит deny(wildcard_enum_match_arm).
+# Защита инварианта от «тихой смерти». Быстрая — до долгих тестов.
+"$(dirname "$0")/check-exhaustive-nodes.sh"
+
 $CARGO_CMD test -- --test-threads=1
 
 # Корень репозитория = каталог этого скрипта /..
