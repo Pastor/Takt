@@ -13,7 +13,9 @@ import com.intellij.psi.tree.IFileElementType
 import com.intellij.psi.tree.TokenSet
 import org.lam.intellij.LamLanguage
 import org.lam.intellij.lexer.LamLexer
+import org.lam.intellij.psi.LamElementTypes
 import org.lam.intellij.psi.LamFile
+import org.lam.intellij.psi.LamImportPath
 import org.lam.intellij.psi.LamTokenSets
 
 /**
@@ -38,9 +40,12 @@ class LamParserDefinition : ParserDefinition {
 
     override fun getWhitespaceTokens(): TokenSet = LamTokenSets.WHITESPACES
 
-    // В плоском дереве составных узлов (кроме FILE) нет, поэтому createElement
-    // фактически не вызывается; безопасная обёртка на случай изменений.
-    override fun createElement(node: ASTNode): PsiElement = ASTWrapperPsiElement(node)
+    // Композит IMPORT_PATH (0067) → узел-носитель файловой ссылки; прочие
+    // (если появятся) — безопасная обёртка. FILE обрабатывается createFile.
+    override fun createElement(node: ASTNode): PsiElement = when (node.elementType) {
+        LamElementTypes.IMPORT_PATH -> LamImportPath(node)
+        else -> ASTWrapperPsiElement(node)
+    }
 
     override fun createFile(viewProvider: FileViewProvider): PsiFile = LamFile(viewProvider)
 

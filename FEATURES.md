@@ -128,7 +128,7 @@
 
 | № | Фича | Зависит от | Tier | Статус |
 |---|------|------------|------|--------|
-| [0067](docs/features/0067-intellij-rename-psi-import.md) | Rename и `PsiReference` для `import` в плагине IntelliJ | 0038 (закрыта) | 3 | АНАЛИЗ |
+| [0067](docs/features/0067-intellij-rename-psi-import.md) | Rename и `PsiReference` для `import` в плагине IntelliJ | 0038 (закрыта) | 3 | РАЗРАБОТКА |
 | [0088](docs/features/0088-module-size-remaining.md) | Остальные нарушители лимита размера модуля (17 файлов) | — | — | СОЗДАНА |
 | [0089](docs/features/0089-intellij-residual-checks.md) | Остаточные проверки плагина IntelliJ (0022/0023) | — | — | СОЗДАНА |
 | [0092](docs/features/0092-adr-0018-retrofit.md) | У фичи 0018 нет ADR | — | — | СОЗДАНА |

@@ -63,5 +63,14 @@
         <!-- 0023: переход к декларации (Go to Declaration) и к файлам `import`. -->
         <gotoDeclarationHandler
                 implementation="org.lam.intellij.navigation.LamGotoDeclarationHandler"/>
+
+        <!-- 0067 (R5): манипулятор текста узла IMPORT_PATH — нужен, чтобы
+             FileReference (rename-on-move) мог переписать строку-путь при
+             переименовании/перемещении целевого файла средствами IDEA. Сам
+             узел LamImportPath несёт ссылку через getReferences() (композит, а
+             не лист — проба 0067), поэтому psi.referenceContributor не требуется. -->
+        <lang.elementManipulator
+                forClass="org.lam.intellij.psi.LamImportPath"
+                implementationClass="org.lam.intellij.psi.LamImportPathManipulator"/>
     </extensions>
 </idea-plugin>

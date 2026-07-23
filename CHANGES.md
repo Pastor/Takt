@@ -7,7 +7,17 @@
 
 ## [Не выпущено]
 
-### В работе (фича [0067](docs/features/0067-intellij-rename-psi-import.md) — Rename и `PsiReference` для `import`) — **АРХИТЕКТУРА**
+### В работе (фича [0067](docs/features/0067-intellij-rename-psi-import.md) — Rename и `PsiReference` для `import`) — **РАЗРАБОТКА**
+
+- **0067-01 (R5) — готово.** Строка-путь `import` оборачивается в композитный
+  PSI-узел `IMPORT_PATH` (`LamImportPath`), несущий настоящую файловую ссылку
+  (`FileReferenceSet` через `getReferences()`): Ctrl+Click к файлу + **rename-on-move**
+  (перемещение/переименование целевого файла обновляет путь в `.lam`, через
+  `LamImportPathManipulator`). Резолв — от каталога импортирующего файла (ядро
+  0055). `LamImports.isImportPathElement` переведён на структурный признак
+  (родитель — `IMPORT_PATH`). `./gradlew --offline test` зелёный, **69 тестов**
+  (62 + 7 новых `LamImportPsiReferenceTest`), регресс 0022/0023 без правок.
+
 
 - **Взята в работу фича 0067** (плагин IntelliJ, `extensions/intellij-lam/`):
   остаток отменённой 0040 — R3 (нативный rename имён Lam) + R5 (настоящий
