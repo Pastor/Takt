@@ -2,9 +2,13 @@
 
 Плагин для JetBrains IntelliJ IDEA (и IDE на IntelliJ Platform) с поддержкой
 языка **Lam** (Language of Automata Models): распознавание файлов `.lam`,
-**подсветка синтаксиса** и **навигация**. Часть монорепозитория проекта Lam
-(фичи [`0022`](../../docs/features/0022-intellij-syntax-highlight.md),
-[`0023`](../../docs/features/0023-intellij-navigation-include.md)).
+**подсветка синтаксиса**, **навигация**, **rename** и **ссылки на `import`**.
+Часть монорепозитория проекта Lam (фичи
+[`0022`](../../docs/features/0022-intellij-syntax-highlight.md),
+[`0023`](../../docs/features/0023-intellij-navigation-include.md),
+[`0038`](../../docs/features/0038-intellij-semantic-tokens.md),
+[`0039`](../../docs/features/0039-intellij-reformat.md),
+[`0067`](../../docs/features/0067-intellij-rename-psi-import.md)).
 
 ## Возможности
 
@@ -20,6 +24,16 @@
   `fn` и имён, введённых `import … as`.
 - **Навигация по `import`** (0023) — переход от строки-пути (`import "файл.lam";`
   и `import { … } from "файл.lam";`) к самому файлу `.lam`.
+- **Настоящая ссылка на файл `import`** (0067, R5) — строка-путь несёт
+  `PsiReference` (`FileReference`): не только `Ctrl/⌘+Click`, но и
+  **автообновление пути при переименовании/перемещении файла** средствами
+  рефакторинга IDEA (rename-on-move). Работает офлайн, без `lam-lsp`.
+- **Rename имён Lam** (0067, R3) — штатный рефакторинг **Rename** (`Shift+F6`)
+  для `model`/`state`/`start`/`type`/`enum` и его вариантов/`cond`/`var`/`const`/
+  `fn`/портов/алиасов `import`: переименовывает декларацию и её использования **в
+  файле**; одноимённые подстроки в комментариях и строках не задеваются;
+  ключевые слова Lam как имена отвергаются. Кросс-файловый rename — за LSP (0038).
+  Работает офлайн, без `lam-lsp`.
 - **Семантическая подсветка** (0038, через LSP4IJ + `lam-lsp`) — идентификаторы
   окрашиваются по **смыслу**: функции, типы, варианты `enum`, состояния/модели и
   переменные — каждый своим цветом (лексер их красит одинаково). Опциональна и
@@ -30,11 +44,17 @@
   Тот же слой, что и семантическая подсветка (см. раздел ниже).
 
 Базовая подсветка **лексическая** и работает офлайн (без LSP-сервера) в любой
-редакции, включая Community. Навигация — лёгкий путь поверх лексера (без
-полноценного PSI-парсера): переход к декларации через `GotoDeclarationHandler`,
-разрешение имён эвристикой по токенам одного файла. Find usages/rename/структура/
-инспекции — задел на будущее. **Семантическая подсветка** (0038) уже есть —
-надстройка через `lam-lsp`, включается при наличии LSP4IJ и сервера.
+редакции, включая Community. Навигация — лёгкий путь поверх лексера: переход к
+декларации через `GotoDeclarationHandler`, разрешение имён эвристикой по токенам
+одного файла. **Rename и ссылки на файлы `import`** (0067) — поверх
+**хирургического** структурного PSI: парсер оборачивает в композитные узлы
+**только** строки-пути `import` (`IMPORT_PATH`) и идентификаторы деклараций/
+использований (`NAME_DECL`/`NAME_REF`), остальное остаётся плоскими листьями —
+грамматика выражений/типов не дублируется (единый источник форм —
+`LamSymbolScanner`, антидивергенция сверяется round-trip-тестом по всему корпусу).
+Структура/инспекции/кросс-файловость — от `lam-lsp` (0038). **Семантическая
+подсветка** (0038) — надстройка через `lam-lsp`, включается при наличии LSP4IJ и
+сервера.
 
 ## Требования
 
@@ -156,10 +176,14 @@ src/main/kotlin/org/lam/intellij/
   highlight/    LamSyntaxHighlighter(+Factory),
                 LamHighlighterColors, LamColorSettingsPage    — подсветка/цвета
   editor/       LamCommenter, LamBraceMatcher     — эргономика (0022-03)
-  psi/          LamFile, LamTokenSets             — плоский PSI (0023)
-  parser/       LamParserDefinition, LamParser    — плоский разбор (0023)
+  psi/          LamFile, LamTokenSets             — почти плоский PSI (0023)
+                LamElementTypes                   — композиты IMPORT_PATH/NAME_DECL/NAME_REF (0067)
+                LamImportPath(+Manipulator)       — ссылка на файл import, R5 (0067)
+                LamNameElements, LamNameReference — PsiNamedElement/PsiReference, R3 (0067)
+  parser/       LamParserDefinition, LamParser    — разбор + хирургическое оборачивание (0023/0067)
   navigation/   LamSymbolScanner, LamImports,
                 LamGotoDeclarationHandler         — навигация/import (0023)
+  refactoring/  LamNamesValidator                 — валидатор имён для rename (0067)
 src/main/resources/META-INF/plugin.xml           — точки расширения
 src/main/resources/icons/lam.svg                 — иконка типа файла
 ```

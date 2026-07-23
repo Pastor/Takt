@@ -7,7 +7,7 @@
 
 ## [Не выпущено]
 
-### В работе (фича [0067](docs/features/0067-intellij-rename-psi-import.md) — Rename и `PsiReference` для `import`) — **РАЗРАБОТКА**
+### Добавлено (фича [0067](docs/features/0067-intellij-rename-psi-import.md) — Rename и `PsiReference` для `import` в плагине IntelliJ) — **ЗАКРЫТА**
 
 - **0067-01 (R5) — готово.** Строка-путь `import` оборачивается в композитный
   PSI-узел `IMPORT_PATH` (`LamImportPath`), несущий настоящую файловую ссылку
@@ -28,8 +28,11 @@
   `.lam` (`examples/`, `grammar/tests/data/`) и требует round-trip байт-в-байт
   (`psi.node.text == исходник`) + отсутствие `PsiErrorElement`. Сверка вердикта с
   оракулом `lamc` для Option B вырождена (парсер тотальный, ошибок не даёт).
-- **Итог этапа разработки:** `./gradlew --offline test` — **80 тестов, 0 падений**;
-  `buildPlugin` собирается; регресс 0022/0023 без правки ожиданий. Язык не меняется.
+- **Итог (закрытие):** `./gradlew --offline test` — **80 тестов, 0 падений**;
+  `buildPlugin` собирается; `verifyPlugin` — **Compatible** на IC-2024.3/2025.1/2025.2;
+  регресс 0022/0023 без правки ожиданий. Язык **не меняется** (версия языка не
+  поднята); версия плагина **0.5.0 → 0.6.0** (минор). Остаток — визуальный
+  (`runIde`): диалог/превью/Undo rename, арбитраж двойной навигации. Плагин не в CI.
 
 
 - **Взята в работу фича 0067** (плагин IntelliJ, `extensions/intellij-lam/`):
