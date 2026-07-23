@@ -207,3 +207,4 @@
 | 0088-03 | 0088 | Остальные нарушители лимита размера модуля | [0088-03-module-size-remaining.md](0088-03-module-size-remaining.md) |
 | 0088-04 | 0088 | Остальные нарушители лимита размера модуля | [0088-04-module-size-remaining.md](0088-04-module-size-remaining.md) |
 | 0088-05 | 0088 | Остальные нарушители лимита размера модуля | [0088-05-module-size-remaining.md](0088-05-module-size-remaining.md) |
+| 0088-06 | 0088 | Остальные нарушители лимита размера модуля | [0088-06-module-size-remaining.md](0088-06-module-size-remaining.md) |
