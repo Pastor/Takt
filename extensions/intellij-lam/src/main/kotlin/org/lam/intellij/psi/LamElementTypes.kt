@@ -12,4 +12,10 @@ package org.lam.intellij.psi
 object LamElementTypes {
     /** Строка-путь директивы `import` (носитель файловой `PsiReference`, R5). */
     @JvmField val IMPORT_PATH = LamElementType("IMPORT_PATH")
+
+    /** Идентификатор-**декларация** имени Lam (носитель `PsiNamedElement`, R3). */
+    @JvmField val NAME_DECL = LamElementType("NAME_DECL")
+
+    /** Идентификатор-**использование** имени Lam (носитель `PsiReference`, R3). */
+    @JvmField val NAME_REF = LamElementType("NAME_REF")
 }

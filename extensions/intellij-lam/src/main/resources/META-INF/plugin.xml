@@ -72,5 +72,12 @@
         <lang.elementManipulator
                 forClass="org.lam.intellij.psi.LamImportPath"
                 implementationClass="org.lam.intellij.psi.LamImportPathManipulator"/>
+
+        <!-- 0067 (R3): валидатор имён для нативного rename (отвергает ключевые
+             слова Lam). Декларации — PsiNamedElement (NAME_DECL), использования —
+             PsiReference (NAME_REF); их строит парсер, регистрация не требуется. -->
+        <lang.namesValidator
+                language="Lam"
+                implementationClass="org.lam.intellij.refactoring.LamNamesValidator"/>
     </extensions>
 </idea-plugin>

@@ -17,6 +17,19 @@
   0055). `LamImports.isImportPathElement` переведён на структурный признак
   (родитель — `IMPORT_PATH`). `./gradlew --offline test` зелёный, **69 тестов**
   (62 + 7 новых `LamImportPsiReferenceTest`), регресс 0022/0023 без правок.
+- **0067-02 (R3) — готово.** Нативный **rename** имён Lam: идентификатор-декларация
+  оборачивается в `NAME_DECL` (`PsiNameIdentifierOwner`), использование — в
+  `NAME_REF` (`PsiReferenceBase`, soft, резолв к декларации файла). Декларации от
+  использований отличает **эвристика `LamSymbolScanner`** (единый источник форм) —
+  грамматика выражений/типов не дублируется. `LamNamesValidator` отвергает ключевые
+  слова. Rename работает для всех видов имён (`model`/`state`/`type`/`enum`/вариант/
+  `cond`/`var`/`const`/`fn`/порт/алиас `import`); комментарии и строки не задеты.
+- **0067-03 — антидивергенция.** `LamPsiCorpusTest` прогоняет парсер по **195**
+  `.lam` (`examples/`, `grammar/tests/data/`) и требует round-trip байт-в-байт
+  (`psi.node.text == исходник`) + отсутствие `PsiErrorElement`. Сверка вердикта с
+  оракулом `lamc` для Option B вырождена (парсер тотальный, ошибок не даёт).
+- **Итог этапа разработки:** `./gradlew --offline test` — **80 тестов, 0 падений**;
+  `buildPlugin` собирается; регресс 0022/0023 без правки ожиданий. Язык не меняется.
 
 
 - **Взята в работу фича 0067** (плагин IntelliJ, `extensions/intellij-lam/`):

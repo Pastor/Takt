@@ -198,3 +198,5 @@
 | 0093-01 | 0093 | Запрет _ => в семантических узлах и разрешение конфликта с #[non_exhaustive] | [0093-01-wildcard-match-rule.md](0093-01-wildcard-match-rule.md) |
 | 0091-01 | 0091 | Правило о размере модуля переносится в docs/CODE.md | [0091-01-module-size-rule-in-code-md.md](0091-01-module-size-rule-in-code-md.md) |
 | 0067-01 | 0067 | Rename и PsiReference для import в плагине IntelliJ | [0067-01-intellij-rename-psi-import.md](0067-01-intellij-rename-psi-import.md) |
+| 0067-02 | 0067 | Rename и PsiReference для import в плагине IntelliJ | [0067-02-intellij-rename-psi-import.md](0067-02-intellij-rename-psi-import.md) |
+| 0067-03 | 0067 | Rename и PsiReference для import в плагине IntelliJ | [0067-03-intellij-rename-psi-import.md](0067-03-intellij-rename-psi-import.md) |
