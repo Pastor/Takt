@@ -91,3 +91,4 @@
 | 0067 | Rename и PsiReference для import в плагине IntelliJ | [0067-intellij-rename-psi-import.md](0067-intellij-rename-psi-import.md) | — (новая фича) |
 | 0088 | Остальные нарушители лимита размера модуля | [0088-module-size-remaining.md](0088-module-size-remaining.md) | — (новая фича) |
 | 0089 | Остаточные проверки плагина IntelliJ (0022/0023) | [0089-intellij-residual-checks.md](0089-intellij-residual-checks.md) | — (новая фича) |
+| 0092 | У фичи 0018 нет ADR | [0092-adr-0018-retrofit.md](0092-adr-0018-retrofit.md) | — (новая фича) |
