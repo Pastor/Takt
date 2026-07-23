@@ -18,6 +18,5 @@
 1402 grammar/src/lib.rs
 1393 grammar/tests/codegen_tests.rs
 1360 grammar/src/semantic/expression.rs
-1266 grammar/tests/lsp_tests.rs
 1169 grammar/src/generator/c/c_source.rs
 1191 grammar/src/semantic/type_inference.rs
