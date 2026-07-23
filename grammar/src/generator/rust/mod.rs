@@ -52,6 +52,7 @@ mod rust_needs;
 mod rust_port;
 mod rust_shared;
 mod rust_stmt;
+mod rust_tick;
 mod rust_type;
 
 use crate::diagnostics::{Diagnostic, Location};
