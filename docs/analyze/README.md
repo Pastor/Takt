@@ -87,3 +87,4 @@
 | 0087 | Мягкий режим инвариантов симулятора (записать и продолжить) | [0087-invariant-soft-mode.md](0087-invariant-soft-mode.md) | аддитивно (умолчание — жёсткий режим 0044 неизменно; opt-in флаг) |
 | 0094 | Доработка scripts/new-feature.sh (идемпотентность, статус ADR, поздние стадии) | [0094-new-feature-script-fixes.md](0094-new-feature-script-fixes.md) | нет (инфраструктура; дефолт неизменен) |
 | 0093 | Запрет _ => в семантических узлах и разрешение конфликта с #[non_exhaustive] | [0093-wildcard-match-rule.md](0093-wildcard-match-rule.md) | аддитивно (правка свода + гейт; код не тронут) |
+| 0091 | Правило о размере модуля переносится в docs/CODE.md | [0091-module-size-rule-in-code-md.md](0091-module-size-rule-in-code-md.md) | нет (документация; код не тронут) |
