@@ -55,6 +55,12 @@
   `pub use crate::parser::token::Token;` — от него зависит lalrpop
   (`extern { enum Token }`) и doc-тесты (правило 11). Разбор/вывод неизменны.
   `lexer.rs` **1154 → 851** (уложился), реестр **15 → 14**.
+- **0088-05 — готово.** Вынос узла АСД **`Expression`** (`pub enum Expression` +
+  `impl`) из `parser/ast.rs` в новый `parser/ast_expr.rs`. Путь
+  `parser::ast::Expression` сохранён реэкспортом `pub use
+  crate::parser::ast_expr::Expression;` — от него зависят lalrpop, семантика и
+  генераторы (правило 11; взаимная ссылка `ast` ↔ `ast_expr` — Rust допускает).
+  Разбор/вывод неизменны. `ast.rs` **1204 → 902** (уложился), реестр **14 → 13**.
 
 - **Взята в работу фича 0088** (продолжение 0027): вынести оставшихся нарушителей
   лимита размера модуля из реестра `module-size-baseline.txt` (18 файлов).

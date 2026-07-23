@@ -127,10 +127,11 @@
 > ⚠️ **0088 в работе (возобновлена 2026-07-23).** Выполнены и закоммичены:
 > **0088-01** (init-группа генератора C → `c_model_init.rs`), **0088-02** (печатник
 > условий Rust → `rust_cond.rs`), **0088-03** (такт+переходы Rust → `rust_tick.rs`;
-> `rust_model.rs` 1345 → 819) и **0088-04** (`Token` → `parser/token.rs`;
-> `lexer.rs` 1154 → 851). Реестр **18 → 14**, `precheck.sh` зелёный на каждом
-> коммите. Остаётся **8 файлов** безопасной части: генератор `c_source` 1169;
-> парсер `ast` 1204; `unit/viewport` 1455; тесты `lexer_tests` 1081,
+> `rust_model.rs` 1345 → 819), **0088-04** (`Token` → `parser/token.rs`;
+> `lexer.rs` 1154 → 851) и **0088-05** (`Expression` → `parser/ast_expr.rs`;
+> `ast.rs` 1204 → 902). Реестр **18 → 13**, `precheck.sh` зелёный на каждом
+> коммите. Остаётся **7 файлов** безопасной части: генератор `c_source` 1169;
+> `unit/viewport` 1455; тесты `lexer_tests` 1081,
 > `lsp_tests` 1266, `codegen_tests` 1393, `parser_tests` 1892, `semantic_tests`
 > 5015.
 
