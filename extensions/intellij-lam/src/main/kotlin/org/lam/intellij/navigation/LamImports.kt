@@ -5,36 +5,30 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFileSystemItem
 import com.intellij.psi.PsiManager
-import com.intellij.psi.TokenType
+import org.lam.intellij.psi.LamElementTypes
 import org.lam.intellij.psi.LamTokenTypes
 
 /**
- * Разрешение путей в директивах `import` (фича 0023, задача 0023-01).
+ * Разрешение путей в директивах `import` (фича 0023, задача 0023-01; уточнена
+ * фичей 0067).
  *
- * Навигация по `import` реализована через `GotoDeclarationHandler`
- * ([LamGotoDeclarationHandler]), а не через `PsiReferenceContributor`: листовые
- * токены (`LeafPsiElement`) не являются `ContributedReferenceHost`, поэтому
- * ссылки из контрибьютора к ним не привязываются. Ctrl/⌘+Click/`B` при этом
- * работает одинаково.
+ * С фичи 0067 строка-путь `import` оборачивается парсером в композит
+ * [LamElementTypes.IMPORT_PATH] (носитель настоящей `PsiReference`, R5). Ctrl+Click
+ * работает и через ссылку, и через `GotoDeclarationHandler`
+ * ([LamGotoDeclarationHandler]) — платформа дедуплицирует одинаковую цель-файл.
+ * `LamImports` остаётся источником резолва пути для обоих путей.
  */
 object LamImports {
 
-    /** Строковый токен — путь `import`, если ближайший слева значимый токен — `import`/`from`. */
+    /**
+     * Является ли элемент строкой-путём `import`. После 0067 признак структурный:
+     * листовой токен `STRING`, чей родитель — [LamElementTypes.IMPORT_PATH]
+     * (парсер оборачивает только пути `import`/`from`, поэтому строка в `formula`
+     * родителя-`IMPORT_PATH` не имеет).
+     */
     fun isImportPathElement(element: PsiElement): Boolean {
         if (element.node?.elementType != LamTokenTypes.STRING) return false
-        var prev: PsiElement? = element.prevSibling
-        while (prev != null) {
-            val type = prev.node?.elementType
-            val isTrivia = type == TokenType.WHITE_SPACE ||
-                type == LamTokenTypes.LINE_COMMENT ||
-                type == LamTokenTypes.DOC_COMMENT ||
-                type == LamTokenTypes.BLOCK_COMMENT
-            if (!isTrivia) {
-                return type == LamTokenTypes.KEYWORD && (prev.text == "import" || prev.text == "from")
-            }
-            prev = prev.prevSibling
-        }
-        return false
+        return element.parent?.node?.elementType == LamElementTypes.IMPORT_PATH
     }
 
     /** Содержимое строки-пути (между кавычками) или `null`, если это не путь/пусто. */
