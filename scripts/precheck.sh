@@ -69,6 +69,11 @@ $CARGO_CMD clippy --all-targets --all-features -- -D warnings
 # Версия языка (фича 0085): LANGUAGE_VERSION в коде согласована с README. Быстрая.
 "$(dirname "$0")/check-language-version.sh"
 
+# Генератор заготовок (фича 0094): идемпотентность --register, статус ADR Draft,
+# добор поздних стадий. Гоняется в temp-дереве (NF_ROOT), рабочие реестры не
+# трогает. Быстрая — до долгих тестов.
+"$(dirname "$0")/test-new-feature.sh"
+
 $CARGO_CMD test -- --test-threads=1
 
 # Корень репозитория = каталог этого скрипта /..

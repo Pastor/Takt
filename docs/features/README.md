@@ -104,7 +104,7 @@
 | [0091](./0091-module-size-rule-in-code-md.md) | Правило о размере модуля живёт не в своде правил кода | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0092](./0092-adr-0018-retrofit.md) | У фичи 0018 нет ADR | — (стадия 1: проработки нет) | СОЗДАНА |
 | [0093](./0093-wildcard-match-rule.md) | Правило о запрете `_ =>` в семантических узлах + конфликт с `#[non_exhaustive]` | — (стадия 1: проработки нет) | СОЗДАНА |
-| [0094](./0094-new-feature-script-fixes.md) | Доработка `scripts/new-feature.sh` (статус ADR, поздние стадии, идемпотентность) | — (стадия 1: проработки нет) | СОЗДАНА |
+| [0094](./0094-new-feature-script-fixes.md) | Доработка `scripts/new-feature.sh` (идемпотентность, статус ADR, поздние стадии) | [ADR](../adr/0094-new-feature-script-fixes.md) · [анализ](../analyze/0094-new-feature-script-fixes.md) · [dev 01](../development/0094-01-new-feature-script-fixes.md) · [тест-план](../tests/0094-new-feature-script-fixes.md) · [отчёт](../reports/0094-new-feature-script-fixes.md) | ✅ ГОТОВО |
 | [0095](./0095-sv-testbenches.md) | Тестбенчи цели SystemVerilog + осциллограммы для GTKWave | аддитивная (ADR/анализ не заводились; решение tb — из 0045-07) | ГОТОВО |
 | [0096](./0096-fixed-point-native-float.md) | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | [ADR](../adr/0096-fixed-point-native-float.md) · [анализ](../analyze/0096-fixed-point-native-float.md) · [тест-план](../tests/README.md) · [отчёт](../reports/README.md) | СОЗДАНА |
 | [0097](./0097-pid-regulator-example.md) | Пример ПИД-регулятора на языке Lam (fixed-point) | [ADR](../adr/0097-pid-regulator-example.md) · [анализ](../analyze/0097-pid-regulator-example.md) · [тест-план](../tests/README.md) · [отчёт](../reports/README.md) | СОЗДАНА |
