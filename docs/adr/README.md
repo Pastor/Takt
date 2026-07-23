@@ -82,3 +82,4 @@
 | [0093](./0093-wildcard-match-rule.md) | Запрет _ => в семантических узлах и разрешение конфликта с #[non_exhaustive] | Accepted | фича 0093 |
 | [0091](./0091-module-size-rule-in-code-md.md) | Правило о размере модуля переносится в docs/CODE.md | Accepted | фича 0091 |
 | [0067](./0067-intellij-rename-psi-import.md) | Rename и PsiReference для import в плагине IntelliJ (Option B: хирургический структурный PSI) | Accepted | фича 0067 |
+| [0088](./0088-module-size-remaining.md) | Остальные нарушители лимита размера модуля | Accepted | фича 0088 |
