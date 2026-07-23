@@ -49,6 +49,12 @@
   помощники остатка (`seq_enum_name`/`seq_field_name`/`needs_hal`/`submodel_name` +
   поле `StateTable::emit_end`) повышены до `pub(crate)`. Вывод Rust байт-в-байт
   неизменен. `rust_model.rs` **1345 → 819** (уложился), реестр **16 → 15**.
+- **0088-04 — готово.** Вынос перечисления токенов: `pub enum Token` (все
+  терминалы грамматики) + `impl fmt::Display` переехали из `parser/lexer.rs` в
+  новый `parser/token.rs`. Путь `parser::lexer::Token` сохранён реэкспортом
+  `pub use crate::parser::token::Token;` — от него зависит lalrpop
+  (`extern { enum Token }`) и doc-тесты (правило 11). Разбор/вывод неизменны.
+  `lexer.rs` **1154 → 851** (уложился), реестр **15 → 14**.
 
 - **Взята в работу фича 0088** (продолжение 0027): вынести оставшихся нарушителей
   лимита размера модуля из реестра `module-size-baseline.txt` (18 файлов).
