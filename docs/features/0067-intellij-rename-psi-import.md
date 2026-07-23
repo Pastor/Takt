@@ -13,7 +13,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0067-intellij-rename-psi-import.md`](../adr/0067-intellij-rename-psi-import.md) — **Accepted** (Option B: хирургический структурный PSI) |
 | Анализ | [`docs/analyze/0067-intellij-rename-psi-import.md`](../analyze/0067-intellij-rename-psi-import.md) — декомпозиция 0067-01/02/03 |
-| Разработка | [`0067-01`](../development/0067-01-intellij-rename-psi-import.md) — R5 (готово); 0067-02 (R3), 0067-03 (антидивергенция) — далее |
+| Разработка | [`0067-01`](../development/0067-01-intellij-rename-psi-import.md) R5 · [`0067-02`](../development/0067-02-intellij-rename-psi-import.md) R3 · [`0067-03`](../development/0067-03-intellij-rename-psi-import.md) антидивергенция — **все готовы** |
 | Тест-план | [`docs/tests/`](../tests/README.md) (`0067-*`) |
 | Отчёт о тестировании | [`docs/reports/`](../reports/README.md) (`0067-*`) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0067-YY-*`) |

@@ -16,6 +16,8 @@ import org.lam.intellij.lexer.LamLexer
 import org.lam.intellij.psi.LamElementTypes
 import org.lam.intellij.psi.LamFile
 import org.lam.intellij.psi.LamImportPath
+import org.lam.intellij.psi.LamNameDecl
+import org.lam.intellij.psi.LamNameRef
 import org.lam.intellij.psi.LamTokenSets
 
 /**
@@ -44,6 +46,8 @@ class LamParserDefinition : ParserDefinition {
     // (если появятся) — безопасная обёртка. FILE обрабатывается createFile.
     override fun createElement(node: ASTNode): PsiElement = when (node.elementType) {
         LamElementTypes.IMPORT_PATH -> LamImportPath(node)
+        LamElementTypes.NAME_DECL -> LamNameDecl(node)
+        LamElementTypes.NAME_REF -> LamNameRef(node)
         else -> ASTWrapperPsiElement(node)
     }
 
