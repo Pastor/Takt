@@ -68,6 +68,14 @@
   в `tests/`, не в подкаталоге). Один бинарник сохранён. `cargo test --test
   lexer_tests` — 62 passed. `lexer_tests.rs` **1081 → 529** (part2 — 561), реестр
   **13 → 12**.
+- **0088-07 — готово.** Разбиение `grammar/tests/lsp_tests.rs`: три меньших
+  `#[cfg(feature="lsp")] mod`-блока (`diagnostic_location_tests`,
+  `formatting_tests`, `lsp_multifile`) вынесены целиком в подмодуль
+  `tests/lsp_tests/more.rs` (`mod more` на корне бинарника, `#[path]` от `tests/`).
+  Резать тестовый файл нужно **по границам mod**, а не по номеру строки (первая
+  попытка пересекла закрытие mod → `unexpected closing delimiter`). `cargo test
+  --features lsp --test lsp_tests` — 69 passed. `lsp_tests.rs` **1266 → 809**
+  (more — 467), реестр **12 → 11**.
 
 - **Взята в работу фича 0088** (продолжение 0027): вынести оставшихся нарушителей
   лимита размера модуля из реестра `module-size-baseline.txt` (18 файлов).
