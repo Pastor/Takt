@@ -35,6 +35,13 @@
   переехали из `generator/c/c_model.rs` в новый `generator/c/c_model_init.rs`.
   Чистое перемещение (вывод C байт-в-байт неизменен — `codegen_tests` 39 passed).
   `c_model.rs` **1073 → 782** (уложился), запись удалена из реестра (**18 → 17**).
+- **0088-02 — готово.** Вынос печатника **условий** генератора Rust:
+  `print_condition` и спутники (`state_comparison`/`model_of`/`cond_binary`/
+  `cond_bool_binary`/`condition_type`/`condition_as_bool`) переехали из
+  `generator/rust/rust_expr.rs` в новый `generator/rust/rust_cond.rs`. Наружу —
+  `condition_as_bool` через реэкспорт (путь `rust_expr::condition_as_bool` цел,
+  правило 11). Вывод Rust байт-в-байт неизменен (детерминизм-гейт +
+  `conformance_rust`). `rust_expr.rs` **1112 → 847** (уложился), реестр **17 → 16**.
 
 - **Взята в работу фича 0088** (продолжение 0027): вынести оставшихся нарушителей
   лимита размера модуля из реестра `module-size-baseline.txt` (18 файлов).
