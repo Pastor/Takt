@@ -7,7 +7,14 @@
 
 ## [Не выпущено]
 
-### В работе (фича [0088](docs/features/0088-module-size-remaining.md) — нарушители лимита размера модуля, безопасная часть) — **АРХИТЕКТУРА**
+### В работе (фича [0088](docs/features/0088-module-size-remaining.md) — нарушители лимита размера модуля, безопасная часть) — **РАЗРАБОТКА**
+
+- **0088-01 — готово.** Вынос init-группы генератора C: `_init`-функции
+  (`generate_model_init`/`generate_start_state_init`/`is_real_array`/
+  `generate_array_init`/`generate_parallel_items_init`/`generate_concat_item_init`)
+  переехали из `generator/c/c_model.rs` в новый `generator/c/c_model_init.rs`.
+  Чистое перемещение (вывод C байт-в-байт неизменен — `codegen_tests` 39 passed).
+  `c_model.rs` **1073 → 782** (уложился), запись удалена из реестра (**18 → 17**).
 
 - **Взята в работу фича 0088** (продолжение 0027): вынести оставшихся нарушителей
   лимита размера модуля из реестра `module-size-baseline.txt` (18 файлов).

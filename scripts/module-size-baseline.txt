@@ -25,5 +25,4 @@
 1191 grammar/src/semantic/type_inference.rs
 1154 grammar/src/parser/lexer.rs
 1112 grammar/src/generator/rust/rust_expr.rs
-1073 grammar/src/generator/c/c_model.rs
 1081 grammar/tests/lexer_tests.rs

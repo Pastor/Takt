@@ -200,3 +200,4 @@
 | 0067-01 | 0067 | Rename и PsiReference для import в плагине IntelliJ | [0067-01-intellij-rename-psi-import.md](0067-01-intellij-rename-psi-import.md) |
 | 0067-02 | 0067 | Rename и PsiReference для import в плагине IntelliJ | [0067-02-intellij-rename-psi-import.md](0067-02-intellij-rename-psi-import.md) |
 | 0067-03 | 0067 | Rename и PsiReference для import в плагине IntelliJ | [0067-03-intellij-rename-psi-import.md](0067-03-intellij-rename-psi-import.md) |
+| 0088-01 | 0088 | Остальные нарушители лимита размера модуля | [0088-01-module-size-remaining.md](0088-01-module-size-remaining.md) |
