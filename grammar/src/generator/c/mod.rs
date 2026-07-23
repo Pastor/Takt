@@ -37,6 +37,7 @@ mod c_hal;
 mod c_header;
 mod c_map;
 mod c_model;
+mod c_model_init;
 mod c_source;
 
 use crate::diagnostics::{Diagnostic, Location};
