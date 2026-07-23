@@ -17,7 +17,6 @@
 1455 simulation/src/unit/viewport.rs
 1402 grammar/src/lib.rs
 1393 grammar/tests/codegen_tests.rs
-1345 grammar/src/generator/rust/rust_model.rs
 1360 grammar/src/semantic/expression.rs
 1266 grammar/tests/lsp_tests.rs
 1204 grammar/src/parser/ast.rs

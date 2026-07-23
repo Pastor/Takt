@@ -42,6 +42,13 @@
   `condition_as_bool` через реэкспорт (путь `rust_expr::condition_as_bool` цел,
   правило 11). Вывод Rust байт-в-байт неизменен (детерминизм-гейт +
   `conformance_rust`). `rust_expr.rs` **1112 → 847** (уложился), реестр **17 → 16**.
+- **0088-03 — готово.** Вынос эмиссии **такта и переходов** генератора Rust:
+  `emit_tick`/`emit_guard`/`emit_transitions`/`emit_enter_of`/`emit_extend`/
+  `emit_extend_transition`/`call_args` переехали из `generator/rust/rust_model.rs`
+  в новый `generator/rust/rust_tick.rs`. Наружу — `emit_tick` (`pub(crate)`);
+  помощники остатка (`seq_enum_name`/`seq_field_name`/`needs_hal`/`submodel_name` +
+  поле `StateTable::emit_end`) повышены до `pub(crate)`. Вывод Rust байт-в-байт
+  неизменен. `rust_model.rs` **1345 → 819** (уложился), реестр **16 → 15**.
 
 - **Взята в работу фича 0088** (продолжение 0027): вынести оставшихся нарушителей
   лимита размера модуля из реестра `module-size-baseline.txt` (18 файлов).
