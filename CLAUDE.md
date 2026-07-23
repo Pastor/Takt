@@ -966,6 +966,18 @@ yosys/bison/flex + сборка `iec2c`) и делает один вызов `./
 `tests/data/semantic/{valid,invalid}/`. Изменение языка → рост версии языка
 (правило 22).
 
+> **Плагин IntelliJ (фича 0067).** PSI плагина `extensions/intellij-lam` —
+> **почти плоский**: парсер оборачивает в композиты **только** носители ссылок/имён
+> (строка-путь `import` → `IMPORT_PATH`; идентификатор-декларация/использование →
+> `NAME_DECL`/`NAME_REF`), решение «декларация/использование/путь» берётся из
+> **единого** источника форм `navigation/LamSymbolScanner`, а не из второй
+> грамматики. Меняешь формы деклараций/импорта в языке — обнови `LamSymbolScanner`
+> (иначе rename/ссылки разъедутся), и держи зелёным `LamPsiCorpusTest` (round-trip
+> байт-в-байт по всему корпусу `.lam` — ловит потерю текста при любом углублении
+> PSI). Ключевые слова плагина — `LamTokenTypes.KEYWORDS`, сторож
+> `LamKeywordSyncTest`. Плагин собирается **только локально** (`./gradlew
+> --offline test`), не в `precheck.sh`/CI.
+
 ## Форматтер
 
 Ядро печати — `grammar/src/format/` (`format_source`), потребители: `lamc fmt`
