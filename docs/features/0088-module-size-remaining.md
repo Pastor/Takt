@@ -13,7 +13,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0088-module-size-remaining.md`](../adr/0088-module-size-remaining.md) — **Accepted** (Option B: безопасная часть, 12 файлов; ядро+пришпиленные — новая фича) |
 | Анализ | [`docs/analyze/0088-module-size-remaining.md`](../analyze/0088-module-size-remaining.md) — декомпозиция 0088-01…06 |
-| Разработка | [`0088-01`](../development/0088-01-module-size-remaining.md) c_model init · [`0088-02`](../development/0088-02-module-size-remaining.md) rust_cond · [`0088-03`](../development/0088-03-module-size-remaining.md) rust_tick · [`0088-04`](../development/0088-04-module-size-remaining.md) Token · [`0088-05`](../development/0088-05-module-size-remaining.md) Expression (готовы); далее — 7 файлов |
+| Разработка | [`0088-01`](../development/0088-01-module-size-remaining.md) c_model init · [`0088-02`](../development/0088-02-module-size-remaining.md) rust_cond · [`0088-03`](../development/0088-03-module-size-remaining.md) rust_tick · [`0088-04`](../development/0088-04-module-size-remaining.md) Token · [`0088-05`](../development/0088-05-module-size-remaining.md) Expression · [`0088-06`](../development/0088-06-module-size-remaining.md) lexer_tests (готовы); далее — 6 файлов |
 | Тест-план | [`docs/tests/`](../tests/README.md) (`0088-*`) |
 | Отчёт о тестировании | [`docs/reports/`](../reports/README.md) (`0088-*`) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0088-YY-*`) |
