@@ -7,6 +7,26 @@
 
 ## [Не выпущено]
 
+### В работе (фича [0067](docs/features/0067-intellij-rename-psi-import.md) — Rename и `PsiReference` для `import`) — **АРХИТЕКТУРА**
+
+- **Взята в работу фича 0067** (плагин IntelliJ, `extensions/intellij-lam/`):
+  остаток отменённой 0040 — R3 (нативный rename имён Lam) + R5 (настоящий
+  `PsiReference` для путей `import` с rename-on-move). Исполнена контрольная точка
+  ADR 0040 «после закрытия 0038»: R2/R4/R6 закрыты LSP4IJ (0038), собственную
+  ценность сохраняют только R3 и R5.
+- **Живая проба (архитектура):** попытка навесить `PsiReference` (`FileReferenceSet`)
+  на строку-путь `import` при текущем **плоском** PSI (headless `./gradlew test`)
+  показала — ссылка **не** привязывается к листовому токену (`LeafPsiElement`
+  не опрашивает `ReferenceProvidersRegistry`). Эмпирически подтверждено, что нужен
+  **композитный** PSI-узел; аналитическое утверждение 0040 доказано зондом.
+- **[ADR 0067](docs/adr/0067-intellij-rename-psi-import.md) — Accepted, Option B
+  (хирургическое оборачивание одиночных токенов):** в композиты оборачиваются
+  **только** строка-путь `import` (`IMPORT_PATH` → `FileReferenceSet` → R5) и
+  идентификаторы деклараций/использований (`NAME_DECL : PsiNamedElement` /
+  `NAME_REF : PsiReference` → R3); выражения/условия/типы остаются плоскими
+  листьями (грамматика не дублируется). Антидивергенция — `LamPsiCorpusTest`
+  (round-trip + оракул `lamc`). Tier 3, язык не меняется.
+
 ### Изменено (фича [0091](docs/features/0091-module-size-rule-in-code-md.md) — правило размера модуля в свод) — **ЗАКРЫТА**
 
 - **Правило о размере модуля перенесено в свод `docs/CODE.md`** (новая секция
