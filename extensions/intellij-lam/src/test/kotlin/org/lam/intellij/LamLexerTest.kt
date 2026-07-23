@@ -56,6 +56,17 @@ class LamLexerTest : BasePlatformTestCase() {
         assertEquals("==", bad[0].second)
     }
 
+    fun testArbitraryNonAlphaIsBadCharacter() {
+        // CT3 (0022, остаточная проверка 0089): произвольный неалфавитный символ
+        // вне операторов/пунктуации языка — BAD_CHARACTER. Лексер покрывает весь
+        // ввод, не «проглатывая» чужой символ (инвариант подсветки).
+        for (ch in listOf("@", "$", "`", "\\", "№")) {
+            val bad = lex(ch).filter { it.first == TokenType.BAD_CHARACTER }
+            assertEquals("символ '$ch' должен быть BAD_CHARACTER", 1, bad.size)
+            assertEquals(ch, bad[0].second)
+        }
+    }
+
     fun testKeywordsHighlighted() {
         val src = "model state start ref next cond var fn type enum struct import from as if else"
         assertTrue(types(src).all { it == LamTokenTypes.KEYWORD })
