@@ -779,7 +779,13 @@ yosys/bison/flex + сборка `iec2c`) и делает один вызов `./
   добавляй в `eval/`, а не в адаптеры. Модуль `eval` под
   `deny(clippy::wildcard_enum_match_arm)`: ветка `_` по вариантам узла завалит
   сборку (так и задумано; исключение — `coerce_to_type`, т.к. `TypeNode` помечен
-  `#[non_exhaustive]`). Тесты симуляции пиши на **значения** (`Unit::variable`),
+  `#[non_exhaustive]`). ⚠️ **Правило + защита (фича 0093):** инвариант «узлы
+  `ExpressionNode`/`ConditionNode`/`StatementNode` разбираются исчерпывающе, без
+  `_ =>`» записан в `docs/CODE.md`; эти узлы **нельзя** помечать `#[non_exhaustive]`
+  (атрибут тихо отключит инвариант). Оба пути «тихой смерти» (пометка узла / снятие
+  `deny` в `eval/`) ловит гейт `scripts/check-exhaustive-nodes.sh` в `precheck.sh`.
+  ⚠️ Второй вычислитель `unit/builder.rs::eval_expr` с `_ => None` **гейтом не
+  покрыт** — кандидат (владелец 0034). Тесты симуляции пиши на **значения** (`Unit::variable`),
   а не на факт перехода, в `simulation/tests/eval_tests.rs` (фикстуры —
   `tests/data/eval/`): именно отсутствие этого слоя дало восемь дефектов при
   зелёных тестах. Сверка с порождённым C — `conformance_c_tests.rs`.
