@@ -135,3 +135,4 @@
 | [0120](./0120-book-error-notes.md) | Заметки о возможных ошибках в разделах документа | [ADR](../adr/0120-book-error-notes.md) · [анализ](../analyze/0120-book-error-notes.md) | ГОТОВО |
 | [0121](./0121-book-example-walkthrough.md) | Разбор примеров в разделах с упором на тему | [ADR](../adr/0121-book-example-walkthrough.md) · [анализ](../analyze/0121-book-example-walkthrough.md) | ГОТОВО |
 | [0122](./0122-book-pdf-latexmk.md) | Сборка PDF через latexmk (корректные кросс-ссылки) + Makefile | [ADR](../adr/0122-book-pdf-latexmk.md) · [анализ](../analyze/0122-book-pdf-latexmk.md) | ГОТОВО |
+| [0123](./0123-book-keyword-highlight.md) | Подсветка ключевых слов языка в тексте документа | [ADR](../adr/0123-book-keyword-highlight.md) · [анализ](../analyze/0123-book-keyword-highlight.md) | ГОТОВО |
