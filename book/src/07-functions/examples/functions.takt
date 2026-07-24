@@ -1,0 +1,27 @@
+// Внешняя функция: объявлена здесь, реализована снаружи (в целевом коде).
+extern fn log_value(v: u8);
+
+in trigger: bit;
+out result: u8;
+
+var x: u8 := 3;
+
+// Функция с параметром и возвращаемым значением.
+fn double(n: u8) -> u8 {
+    return n * 2;
+}
+
+// Композиция: quad вызывает double дважды (f вызывает g).
+fn quad(n: u8) -> u8 {
+    return double(double(n));
+}
+
+start Idle {
+    always {
+        result := quad(x);
+        log_value(result);
+    }
+    // вызов функции в теле блока
+    // вызов внешней функции
+    ref Idle: trigger = 0;
+}
