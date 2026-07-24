@@ -94,3 +94,4 @@
 | [0089](./0089-intellij-residual-checks.md) | Остаточные проверки плагина IntelliJ (0022/0023) | Accepted | фича 0089 |
 | [0092](./0092-adr-0018-retrofit.md) | У фичи 0018 нет ADR | Accepted | фича 0092 |
 | [0100](./0100-language-rename-takt.md) | Переименование языка Lam → Takt | Accepted | фича 0100 |
+| [0101](./0101-language-book.md) | Документ описания языка Takt | Accepted | фича 0101 |

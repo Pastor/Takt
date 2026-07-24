@@ -23,3 +23,6 @@ README.pdf
 venv
 .DS_Store
 obj_dir
+
+# mdBook — каталог сборки документа описания языка (book/)
+/book/book/
