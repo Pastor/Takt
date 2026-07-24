@@ -1,35 +1,28 @@
-// Обзор системы типов на одной модели: примитивы, целые, перечисление,
-// структура, фикс-точка и массив.
+// Кабина лифта: едет к целевому этажу и открывает двери по прибытии.
 
-enum Mode { Idle = 0, Run = 1, Halt = 2 }   // (1)
+enum Direction { Up, Down, Idle }      // (1) перечисление направлений
+struct Trip { origin: u8, dest: u8 }   // (2) структура: откуда и куда
 
-struct Point {                               // (2)
-    x: u16,
-    y: u16
+in floor_sensor: u8;                   // текущий этаж от датчика
+out motor: bit;                        // (3) привод (1 бит)
+out door: bool;                        // (4) двери открыты/закрыты
+
+const TOP: u8 := 9;
+
+var direction: Direction := Idle;
+var current: u8 := 1;                  // (5) целое: текущий этаж
+var target: u8 := 5;
+var speed: q(4, 4) := 0.0;             // (6) фикс-точка: доля номинала
+var log: [u8; 3] := {1, 1, 1};         // (7) массив последних этажей
+var last: Trip := {1, 1};
+
+start Waiting {
+    enter { motor := 0; door := true; direction := Idle; }
+    ref Moving: target > current;      // (8) сравнение этажей
 }
 
-in start_btn: bit;                           // (3)
-out active: bool;                            // (4)
-
-const ORIGIN: Point := {0, 0};
-const GAIN: q(4, 4) := 1.5;                  // (5)
-
-var mode: Mode := Idle;
-var counter: u16 := 0;                       // (6)
-var level: q(4, 4) := 0.0;
-var samples: [u8; 4] := {0, 0, 0, 0};        // (7)
-
-start Idle {
-    enter { active := false; mode := Idle; counter := ORIGIN.x; }
-    ref Working: start_btn = 1;              // (8)
-}
-
-state Working {
-    enter { active := true; mode := Run; }
-    always {
-        counter := counter + 1;
-        level := level + GAIN;
-        samples[0] := 1;
-    }
-    ref Idle: start_btn = 0;
+state Moving {
+    enter { direction := Up; door := false; motor := 1; speed := 1.0; last := {current, target}; }
+    always { current := floor_sensor; log[0] := current; }
+    ref Waiting: current = target;
 }
