@@ -1,0 +1,48 @@
+enum Mode { Slow, Fast, Stop }
+
+in mode_in: u8;
+out speed: u8;
+
+var mode: Mode := Slow;
+var ticks: u8 := 0;
+
+// Функция с циклом, break и return.
+fn ramp(target: u8) -> u8 {
+    var v: u8 := 0;
+    while v < target {
+        v := v + 1;
+        if v >= 100 {
+            break;
+        }
+    }
+    return v;
+}
+
+start Running {
+    always {
+        match mode {
+            Slow => {
+                speed := ramp(20);
+            }
+            Fast => {
+                speed := ramp(80);
+            }
+            _ => {
+                speed := 0;
+            }
+        }
+        for var i: u8 := 0; i < 3; i := i + 1 {
+            ticks := ticks + 1;
+        }
+        if ticks > 200 {
+            ticks := 0;
+        }
+        else {
+            ticks := ticks;
+        }
+    }
+    // Ветвление match по перечислению.
+    // Цикл for со счётчиком.
+    // if / else.
+    ref Running: mode_in = 0;
+}
