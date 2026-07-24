@@ -1,4 +1,4 @@
-// Условия используют & | ! как логические И/ИЛИ/НЕ; выражения — арифметику,
+// Условия используют & | ! как логические; выражения — арифметику,
 // присваивание := и сравнение =.
 const LIMIT: u8 := 100;
 
@@ -14,8 +14,7 @@ start Idle {
         running := 0;
         count := 0;
     }
-    // Условие: логическое И (&) и сравнение = (одиночный знак).
-    ref Working: start_btn = 1 & stop_btn = 0;
+    ref Working: start_btn = 1 & stop_btn = 0;   // (1) логическое И в условии
 }
 
 state Working {
@@ -23,14 +22,11 @@ state Working {
         running := 1;
     }
     always {
-        count := count + 1;
-        doubled := count * 2;
-        if count >= LIMIT {
+        count := count + 1;         // (2) присваивание :=
+        doubled := count * 2;       // (3) арифметика
+        if count >= LIMIT {         // (4) сравнение в условии
             count := 0;
         }
     }
-    // Выражения: арифметика и присваивание :=.
-    // Сравнение = в условии if.
-    // Условие: логическое ИЛИ (|).
-    ref Idle: stop_btn = 1 | count >= LIMIT;
+    ref Idle: stop_btn = 1 | count >= LIMIT;      // (5) логическое ИЛИ
 }
