@@ -133,3 +133,4 @@
 | [0118](./0118-book-showcase.md) | Раздел документа «Развёрнутый пример» | [ADR](../adr/0118-book-showcase.md) · [анализ](../analyze/0118-book-showcase.md) | ГОТОВО |
 | [0119](./0119-book-appendices.md) | Приложения документа + приложение «Ошибки» | [ADR](../adr/0119-book-appendices.md) · [анализ](../analyze/0119-book-appendices.md) | ГОТОВО |
 | [0120](./0120-book-error-notes.md) | Заметки о возможных ошибках в разделах документа | [ADR](../adr/0120-book-error-notes.md) · [анализ](../analyze/0120-book-error-notes.md) | ГОТОВО |
+| [0121](./0121-book-example-walkthrough.md) | Разбор примеров в разделах с упором на тему | [ADR](../adr/0121-book-example-walkthrough.md) · [анализ](../analyze/0121-book-example-walkthrough.md) | ГОТОВО |
