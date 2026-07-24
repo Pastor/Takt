@@ -1,44 +1,44 @@
-enum Mode { Slow, Fast, Stop }
+// Сортировочный конвейер: направляет деталь в лоток по её классу и ведёт счёт
+// обработанных деталей.
 
-in mode_in: u8;
-out speed: u8;
+enum Item { Small, Large, Reject }
 
-var mode: Mode := Slow;
-var ticks: u8 := 0;
+in sensor: u8;
+in class_off: u8;
+out gate: u8;
+out belt: bit;
 
-fn ramp(target: u8) -> u8 {
-    var v: u8 := 0;
-    while v < target {          // (4) цикл while
-        v := v + 1;
-        if v >= 100 {
-            break;              // (5) досрочный выход
-        }
+var counter: u8 := 0;
+var kind: Item := Small;
+
+// Отсчитывает такты стабилизации детали, но не дольше предела.
+fn settle(target: u8) -> u8 {
+    var t: u8 := 0;
+    while t < target {          // (4) цикл while
+        t := t + 1;
+        if t >= 50 { break; }   // (5) досрочный выход
     }
-    return v;                   // (6) возврат из функции
+    return t;                   // (6) возврат из функции
 }
 
 start Running {
+    enter { belt := 1; }
     always {
-        match mode {            // (1) выбор по перечислению
-            Slow => {
-                speed := ramp(20);
-            }
-            Fast => {
-                speed := ramp(80);
-            }
-            _ => {
-                speed := 0;
-            }
+        match kind {            // (1) выбор ветви по классу детали
+            Small => { gate := 1; }
+            Large => { gate := 2; }
+            _ => { gate := 0; }
         }
+        counter := settle(sensor);
         for var i: u8 := 0; i < 3; i := i + 1 {   // (2) цикл со счётчиком
-            ticks := ticks + 1;
+            counter := counter + 1;
         }
-        if ticks > 200 {        // (3) ветвление
-            ticks := 0;
+        if counter > 100 {      // (3) ветвление
+            counter := 0;
         }
         else {
-            ticks := ticks;
+            counter := counter;
         }
     }
-    ref Running: mode_in = 0;
+    ref Running: class_off = 0;
 }

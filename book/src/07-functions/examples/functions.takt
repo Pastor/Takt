@@ -1,22 +1,38 @@
-extern fn log_value(v: u8);     // (1) внешняя функция: без тела
+// Насосная станция: по запросу включает насос и удерживает давление, не давая
+// ему превысить допустимый предел.
 
-in trigger: bit;
-out result: u8;
+extern fn read_pressure() -> u8;   // (1) внешняя функция: чтение датчика
+extern fn drive_pump(on: bit);     //     внешняя функция: команда насосу
 
-var x: u8 := 3;
+in demand: bit;
+out running: bit;
+out margin: u8;
 
-fn double(n: u8) -> u8 {        // (2) функция с параметром и возвратом
-    return n * 2;
-}
+const MAX_P: u8 := 100;
 
-fn quad(n: u8) -> u8 {          // (3) композиция: quad вызывает double
-    return double(double(n));
-}
+var pressure: u8 := 0;
 
-start Idle {
-    always {
-        result := quad(x);      // (4) вызов функции в теле блока
-        log_value(result);      // (5) вызов внешней функции
+fn clamp(p: u8) -> u8 {             // (2) ограничение сверху
+    if p > MAX_P {
+        return MAX_P;
     }
-    ref Idle: trigger = 0;
+    return p;
+}
+
+fn headroom(p: u8) -> u8 {          // (3) композиция: headroom использует clamp
+    return MAX_P - clamp(p);
+}
+
+start Off {
+    enter { running := 0; drive_pump(0); }
+    ref On: demand = 1;
+}
+
+state On {
+    enter { running := 1; drive_pump(1); }             // (5) вызов внешней функции
+    always {
+        pressure := clamp(read_pressure());            // (4) вызов над результатом внешней
+        margin := headroom(pressure);
+    }
+    ref Off: demand = 0;
 }

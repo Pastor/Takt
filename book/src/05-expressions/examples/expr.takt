@@ -1,32 +1,22 @@
-// Условия используют & | ! как логические; выражения — арифметику,
-// присваивание := и сравнение =.
-const LIMIT: u8 := 100;
+// Бойлер: греет воду, когда она остыла и давление в норме; выключает нагрев
+// при достижении верхнего порога или падении давления.
 
-in start_btn: bit;
-in stop_btn: bit;
-out running: bit;
+const MAX_TEMP: u8 := 90;
+const MIN_TEMP: u8 := 60;
 
-var count: u8 := 0;
-var doubled: u8 := 0;
+in temp: u8;
+in pressure_ok: bit;
+out heater: bit;
+
+var cycles: u8 := 0;
 
 start Idle {
-    enter {
-        running := 0;
-        count := 0;
-    }
-    ref Working: start_btn = 1 & stop_btn = 0;   // (1) логическое И в условии
+    enter { heater := 0; }
+    ref Heating: temp < MIN_TEMP & pressure_ok = 1;   // (1) логическое И в условии
 }
 
-state Working {
-    enter {
-        running := 1;
-    }
-    always {
-        count := count + 1;         // (2) присваивание :=
-        doubled := count * 2;       // (3) арифметика
-        if count >= LIMIT {         // (4) сравнение в условии
-            count := 0;
-        }
-    }
-    ref Idle: stop_btn = 1 | count >= LIMIT;      // (5) логическое ИЛИ
+state Heating {
+    enter { heater := 1; }
+    always { cycles := cycles + 1; }                  // (2) присваивание и арифметика
+    ref Idle: temp >= MAX_TEMP | pressure_ok = 0;     // (3) логическое ИЛИ
 }
