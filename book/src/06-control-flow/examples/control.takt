@@ -1,44 +1,59 @@
-// Сортировочный конвейер: направляет деталь в лоток по её классу и ведёт счёт
-// обработанных деталей.
+// Сортировочный конвейер: как только деталь доезжает до развилки, определяет её
+// класс, направляет в нужный лоток и наращивает счёт обслуженных деталей,
+// сообщая число набранных паллет.
 
 enum Item { Small, Large, Reject }
 
-in sensor: u8;
-in class_off: u8;
-out gate: u8;
+in part_ready: bit;      // деталь доехала до развилки
+in class_code: u8;       // код класса от датчика
+out gate: u8;            // номер лотка (0 — брак)
 out belt: bit;
+out pallet_count: u8;    // сколько паллет уже набрано
 
-var counter: u8 := 0;
-var kind: Item := Small;
+const PALLET: u8 := 24;  // деталей в одной паллете
 
-// Отсчитывает такты стабилизации детали, но не дольше предела.
-fn settle(target: u8) -> u8 {
-    var t: u8 := 0;
-    while t < target {          // (4) цикл while
-        t := t + 1;
-        if t >= 50 { break; }   // (5) досрочный выход
-    }
-    return t;                   // (6) возврат из функции
+var kind: Item := Reject;
+var count: u8 := 0;
+
+start Waiting {
+    enter { belt := 1; gate := 0; }
+    ref Sorting: part_ready = 1;
 }
 
-start Running {
-    enter { belt := 1; }
-    always {
-        match kind {            // (1) выбор ветви по классу детали
+state Sorting {
+    enter {
+        if class_code = 0 {          // (1) определить класс по коду датчика
+            kind := Small;
+        }
+        else {
+            if class_code = 1 {
+                kind := Large;
+            }
+            else {
+                kind := Reject;
+            }
+        }
+        match kind {                 // (2) направить деталь в лоток по классу
             Small => { gate := 1; }
             Large => { gate := 2; }
             _ => { gate := 0; }
         }
-        counter := settle(sensor);
-        for var i: u8 := 0; i < 3; i := i + 1 {   // (2) цикл со счётчиком
-            counter := counter + 1;
-        }
-        if counter > 100 {      // (3) ветвление
-            counter := 0;
-        }
-        else {
-            counter := counter;
+        count := count + 1;          // (3) учесть обслуженную деталь
+        pallet_count := pallets(count);
+    }
+    ref Waiting: part_ready = 0;
+}
+
+// Сколько полных паллет умещается в total деталей (деление повторным вычитанием).
+fn pallets(total: u8) -> u8 {
+    var p: u8 := 0;
+    var t: u8 := total;
+    while t >= PALLET {              // (4) цикл while
+        t := t - PALLET;
+        p := p + 1;
+        if p >= 100 {
+            break;                   // (5) страховочный досрочный выход
         }
     }
-    ref Running: class_off = 0;
+    return p;                        // (6) возврат из функции
 }
