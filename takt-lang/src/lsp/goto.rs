@@ -98,7 +98,7 @@ pub fn goto_declaration_with_paths(
 /// переходить будет некуда. Тот же довод и та же форма, что у
 /// [`collect_diagnostics_at`].
 ///
-/// `search_paths` — дополнительные каталоги (как `-I` у `lamc`).
+/// `search_paths` — дополнительные каталоги (как `-I` у `taktc`).
 pub fn goto_declaration_at(
     path: &str,
     source: &str,

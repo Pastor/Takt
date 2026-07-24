@@ -456,7 +456,7 @@ fn test_include_dirs_end_to_end_integration() {
     let src_file = src_dir.path().join("main.lam");
     fs::write(&src_file, src_content).unwrap();
 
-    // Имитируем то, что делает lamc: parse_compile_args → compile_to_c
+    // Имитируем то, что делает taktc: parse_compile_args → compile_to_c
     let lib_path = lib_dir.path().to_string_lossy().into_owned();
     let args = vec![
         "-I".to_string(),
@@ -464,7 +464,7 @@ fn test_include_dirs_end_to_end_integration() {
         src_file.to_string_lossy().into_owned(),
     ];
 
-    // Вместо вызова main() напрямую используем логику из lamc.rs
+    // Вместо вызова main() напрямую используем логику из taktc.rs
     // Убеждаемся, что include_dirs передаётся в compile_to_c
     let out_dir = tempdir().unwrap();
     let search_paths = vec![lib_path];

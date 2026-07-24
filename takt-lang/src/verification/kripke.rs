@@ -96,7 +96,7 @@ impl Kripke {
             .collect()
     }
 
-    /// Текстовый дамп графа для отладки (`lamc verify --trace`).
+    /// Текстовый дамп графа для отладки (`taktc verify --trace`).
     pub fn trace(&self) -> String {
         let mut out = String::from("=== Структура Крипке (абстракция управления) ===\n");
         for (k, name) in self.states.iter().enumerate() {

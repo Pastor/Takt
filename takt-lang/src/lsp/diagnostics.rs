@@ -21,11 +21,11 @@ pub fn collect_diagnostics(source: &str) -> Vec<Diagnostic> {
 /// 1. **Импорты разрешаются.** Прежде звался `construct_model(&ast, None, &[])`
 ///    — с пустыми путями поиска, поэтому `import "lib.lam";` в редакторе **всегда**
 ///    давал `SE-013` «файл не найден», даже когда файл лежит рядом. Каталог
-///    документа — неявный путь поиска (общий для ядра и `lamc`).
+///    документа — неявный путь поиска (общий для ядра и `taktc`).
 /// 2. **Ошибку чужого файла есть к чему привязать.** Её координаты указывают в
 ///    текст, которого в открытом документе нет.
 ///
-/// `search_paths` — дополнительные каталоги (как `-I` у `lamc`).
+/// `search_paths` — дополнительные каталоги (как `-I` у `taktc`).
 pub fn collect_diagnostics_at(
     path: &str,
     source: &str,
@@ -177,7 +177,7 @@ pub fn grammar_diagnostic_to_lsp(
         range,
         severity,
         message,
-        source: Some("lam-lsp".to_string()),
+        source: Some("takt-lsp".to_string()),
         ..Default::default()
     }
 }

@@ -1,7 +1,7 @@
 //! Тесты экспорта карты адресов наружу (фича 0043).
 //!
 //! Два уровня: библиотечный (`resolve_addresses` + эмиттеры `export_*`) и CLI
-//! (подкоманда `lamc address-map`, через `CARGO_BIN_EXE_lamc`). Ожидаемые
+//! (подкоманда `taktc address-map`, через `CARGO_BIN_EXE_taktc`). Ожидаемые
 //! значения — из живой пробы 2026-07-19 (CLAUDE.md: сперва зонд, затем
 //! assertions против захваченного), а не из догадок.
 
@@ -258,18 +258,18 @@ fn corpus_round_trip_is_identity() {
 
 // ── CLI-уровень (подкоманда address-map) ─────────────────────────────────────
 
-fn lamc() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_lamc"))
+fn taktc() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_taktc"))
 }
 
 /// T1: разбор флагов подкоманды; `--emit` по умолчанию `map`. Проверяем прогоном
 /// без `--emit` — выгрузка в формате `map`.
 #[test]
 fn cli_default_emit_is_map() {
-    let out = lamc()
+    let out = taktc()
         .args(["address-map", &format!("{DIR}/probe.lam")])
         .output()
-        .expect("запуск lamc");
+        .expect("запуск taktc");
     assert!(out.status.success(), "rc=0 ожидался");
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
@@ -281,7 +281,7 @@ fn cli_default_emit_is_map() {
 /// чистая выгрузка, целиком разбираемая `parse_address_map`.
 #[test]
 fn cli_warnings_go_to_stderr_not_stdout() {
-    let out = lamc()
+    let out = taktc()
         .args([
             "address-map",
             "--address-map",
@@ -308,7 +308,7 @@ fn cli_reachable_port_without_address_is_se052() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap();
-    let out = lamc()
+    let out = taktc()
         .args(["address-map"])
         .arg(root.join("examples/elevator_mini.lam"))
         .output()
@@ -325,7 +325,7 @@ fn cli_reachable_port_without_address_is_se052() {
 /// что SVD не поставляется (а не пустой файл).
 #[test]
 fn cli_unknown_format_is_rejected() {
-    let out = lamc()
+    let out = taktc()
         .args(["address-map", "--emit", "svd", &format!("{DIR}/probe.lam")])
         .output()
         .expect("запуск");
@@ -339,12 +339,12 @@ fn cli_unknown_format_is_rejected() {
 /// T19: вывод в файл (`-o`) — содержимое совпадает со stdout-вариантом.
 #[test]
 fn cli_output_to_file_matches_stdout() {
-    let stdout_run = lamc()
+    let stdout_run = taktc()
         .args(["address-map", &format!("{DIR}/probe.lam")])
         .output()
         .expect("запуск stdout");
     let out_file = std::env::temp_dir().join("lam_0043_out.map");
-    let file_run = lamc()
+    let file_run = taktc()
         .args([
             "address-map",
             "-o",
@@ -366,7 +366,7 @@ fn cli_output_to_file_matches_stdout() {
 /// код, выгрузки нет.
 #[test]
 fn cli_broken_input_map_is_rejected() {
-    let out = lamc()
+    let out = taktc()
         .args([
             "address-map",
             "--address-map",

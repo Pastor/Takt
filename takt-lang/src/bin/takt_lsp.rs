@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         declaration_provider: Some(DeclarationCapability::Simple(true)),
         document_symbol_provider: Some(OneOf::Left(true)),
-        // Фича 0024: канонический форматтер. То же ядро, что у `lamc fmt`, —
+        // Фича 0024: канонический форматтер. То же ядро, что у `taktc fmt`, —
         // расхождение стилей между CLI и редактором невозможно по построению.
         document_formatting_provider: Some(OneOf::Left(true)),
         semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
@@ -64,14 +64,14 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
 
     // Выполняем инициализационное рукопожатие. Параметры клиента больше НЕ
     // игнорируются (фича 0072): из `initializationOptions.searchPaths` берутся
-    // пути поиска импортов (аналог `-I` у `lamc`), иначе импорт из общей
+    // пути поиска импортов (аналог `-I` у `taktc`), иначе импорт из общей
     // библиотеки вне каталога документа в редакторе не находится.
     let (init_id, init_params) = connection.initialize_start()?;
     let search_paths = search_paths_from_init(&init_params);
     let init_result = InitializeResult {
         capabilities: serde_json::from_value(server_capabilities)?,
         server_info: Some(ServerInfo {
-            name: "lam-lsp".to_string(),
+            name: "takt-lsp".to_string(),
             version: Some(env!("CARGO_PKG_VERSION").to_string()),
         }),
     };
@@ -97,7 +97,7 @@ fn search_paths_from_init(init_params: &serde_json::Value) -> Vec<String> {
         // Нечитаемые параметры инициализации — работаем без путей поиска
         // (прежнее поведение), а не падаем на старте.
         Err(e) => {
-            eprintln!("[lam-lsp] initializationOptions не разобраны: {e}");
+            eprintln!("[takt-lsp] initializationOptions не разобраны: {e}");
             return Vec::new();
         }
     };
@@ -113,7 +113,7 @@ fn search_paths_from_init(init_params: &serde_json::Value) -> Vec<String> {
 struct ServerState {
     /// Содержимое открытых документов: URI → текст.
     documents: HashMap<Uri, String>,
-    /// Пути поиска импортов (аналог `-I` у `lamc`), из `initializationOptions`
+    /// Пути поиска импортов (аналог `-I` у `taktc`), из `initializationOptions`
     /// (фича 0072). Пустой список = прежнее поведение (только каталог документа).
     search_paths: Vec<String>,
 }
@@ -187,7 +187,7 @@ fn handle_request(
             let result = match takt_lang::lsp::formatting_edits(text) {
                 Ok(edits) => edits,
                 Err(e) => {
-                    eprintln!("[lam-lsp] форматирование не выполнено: {e}");
+                    eprintln!("[takt-lsp] форматирование не выполнено: {e}");
                     None
                 }
             };
@@ -323,7 +323,7 @@ fn handle_notification(
 
 /// Путь файла из URI документа (фича 0055).
 ///
-/// Нужен, чтобы редактор разрешал `import` так же, как `lamc`: каталог документа
+/// Нужен, чтобы редактор разрешал `import` так же, как `taktc`: каталог документа
 /// — неявный путь поиска. Прежде диагностики собирались вообще без путей, и
 /// `import "lib.lam";` всегда давал «файл не найден».
 ///

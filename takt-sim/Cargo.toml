@@ -12,8 +12,8 @@ edition = "2024"
 include = ["Cargo.toml", "src/**/*", "README.md", "LICENSE*"]
 
 [[bin]]
-name = "simulation"
-path = "src/bin/simulation.rs"
+name = "takt-sim"
+path = "src/bin/takt_sim.rs"
 
 [dependencies]
 takt-lang = { path = "../takt-lang" }

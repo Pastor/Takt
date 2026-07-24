@@ -9,6 +9,16 @@
 
 ### Добавлено (фича [0100](docs/features/0100-language-rename-takt.md) — переименование языка Lam → Takt) — **РАЗРАБОТКА**
 
+- **0100-02 — готово (бинарники).** `lamc`→`taktc`, `lam-lsp`→`takt-lsp`,
+  `simulation`→`takt-sim` (`git mv` файлов + `[[bin]]`-блоки). ⚠️ `env!("CARGO_BIN_EXE_…")`
+  переехали по имени бинарника **дословно** (`CARGO_BIN_EXE_taktc`,
+  `CARGO_BIN_EXE_takt-sim` — с дефисом, не подчёркиванием; иначе тесты не компилируются);
+  функциональное чтение `src/bin/lam_lsp.rs` в `lsp_goto_tests` → `takt_lsp.rs`;
+  LSP-идентичность `ServerInfo.name`/`source` `"lam-lsp"`→`"takt-lsp"` + лог-префиксы;
+  usage-строки CLI и упоминания в коде/тестах `lamc`→`taktc` и т.д. Скрипты
+  (`precheck.sh --bin taktc/takt-lsp`, `run_simulations.sh --bin takt-sim`) и
+  реестр размера (`bin/taktc.rs`). Плагин IntelliJ (ищет старый бинарник) — слой
+  0100-05. `precheck.sh` зелёный.
 - **0100-01 — готово (крейты + пути импорта).** Каталоги `grammar/`→`takt-lang/`,
   `simulation/`→`takt-sim/` (`git mv`, 476 переименований); пакеты `takt-lang`/
   `takt-sim`, зависимость `takt-sim`→`takt-lang`; массово `grammar::`→`takt_lang::`,

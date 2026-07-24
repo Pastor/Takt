@@ -216,8 +216,8 @@ mod goto_exact_file {
     /// а вся работа 0056 осталась бы невидимой в редакторе.
     #[test]
     fn t10_server_calls_cross_file_goto() {
-        let server =
-            std::fs::read_to_string("src/bin/lam_lsp.rs").expect("не прочитать src/bin/lam_lsp.rs");
+        let server = std::fs::read_to_string("src/bin/takt_lsp.rs")
+            .expect("не прочитать src/bin/takt_lsp.rs");
         assert!(
             server.contains("goto_declaration_at("),
             "сервер обязан звать кросс-файловый вариант с путём документа"

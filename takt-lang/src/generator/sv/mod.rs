@@ -170,7 +170,7 @@ fn generate_program(
     let mut out = String::new();
     let mut p = Printer::new(INDENT, &mut out);
 
-    p.ident("// Порождено компилятором Lam (lamc) — цель: SystemVerilog (IEEE 1800).")
+    p.ident("// Порождено компилятором Lam (taktc) — цель: SystemVerilog (IEEE 1800).")
         .nl();
     p.ident("// Не редактировать вручную: файл перезаписывается при каждой генерации.")
         .nl();

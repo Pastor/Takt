@@ -182,7 +182,7 @@ fn parser_error_to_diagnostic(
 /// Общий шаг всех целей. Заведён потому, что путь нужно разрешить там, где
 /// [`FileTable`](diagnostics::FileTable) ещё жив: реестр — деталь компиляции и
 /// наружу не выходит, а `Location` несёт лишь номер файла. Без этого диагностика
-/// из импортированной библиотеки была неотличима от своей — `lamc` печатал обе
+/// из импортированной библиотеки была неотличима от своей — `taktc` печатал обе
 /// дословно одинаково.
 pub(crate) fn parse_and_construct(
     filename: &str,
@@ -793,7 +793,7 @@ pub fn verify_all(
 /// Фича 0049/0051: то же, что [`verify_all`], но с явной областью и трассой.
 ///
 /// При `trace = true` заполняет [`PropertyResult::trace`] дампом конвейера
-/// (`lamc verify --trace`).
+/// (`taktc verify --trace`).
 pub fn verify_all_scoped(
     model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
     trace: bool,
@@ -891,7 +891,7 @@ fn scoped_formula(site: semantic::ltl_check::LtlSite) -> verification::ltl::Ltl 
     }
 }
 
-/// Фича 0049: разбирает LTL-формулу из строки (для `lamc verify --property`).
+/// Фича 0049: разбирает LTL-формулу из строки (для `taktc verify --property`).
 ///
 /// Строка разбирается **грамматикой языка** — как тело `: [LTL] φ;`, поэтому
 /// синтаксис свойства в командной строке и в `.lam`-файле совпадает буква в

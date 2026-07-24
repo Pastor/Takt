@@ -164,7 +164,7 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
                 } => {
                     let mut definition = String::new();
                     // 0029-01: было `.unwrap()` — невыразимый тип параметра ронял
-                    // `lamc` паникой (проба: `fn pick(data: [u8;4])`). Параметр
+                    // `taktc` паникой (проба: `fn pick(data: [u8;4])`). Параметр
                     // печатается формой объявления: тип массива в C неотделим от
                     // имени (`uint8_t data[4]`).
                     let mut tiny_params = params

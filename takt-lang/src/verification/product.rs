@@ -55,7 +55,7 @@ impl Product {
         kripke.states[self.states[s].0].as_str()
     }
 
-    /// Текстовый дамп произведения для отладки (`lamc verify --trace`).
+    /// Текстовый дамп произведения для отладки (`taktc verify --trace`).
     pub fn trace(&self, kripke: &Kripke) -> String {
         let mut out = format!(
             "=== Произведение K x A_!phi ({} состояний, {} принимающих) ===\n",

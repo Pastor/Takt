@@ -1,7 +1,7 @@
-//! CLI-обвязка подкоманды `lamc address-map` (фича 0043).
+//! CLI-обвязка подкоманды `taktc address-map` (фича 0043).
 //!
-//! Логика вынесена из бинарника `lamc` в библиотеку по правилу размера модуля
-//! (`bin/lamc.rs` пришпилен к baseline и расти не может): бинарник держит лишь
+//! Логика вынесена из бинарника `taktc` в библиотеку по правилу размера модуля
+//! (`bin/taktc.rs` пришпилен к baseline и расти не может): бинарник держит лишь
 //! тонкий диспетчер `args[1] == "address-map" → run_export_subcommand`.
 //!
 //! Подкоманда разрешает адреса портов (тем же [`resolve_addresses`], что
@@ -152,14 +152,14 @@ pub fn parse_address_map_args(args: &[String]) -> Result<AddressMapOptions, Stri
 }
 
 /// Разбирает аргументы и исполняет подкоманду; возвращает код завершения.
-/// Точка входа для тонкого диспетчера в `bin/lamc.rs`.
+/// Точка входа для тонкого диспетчера в `bin/taktc.rs`.
 pub fn run_export_subcommand(args: &[String]) -> i32 {
     match parse_address_map_args(args) {
         Ok(options) => run(&options),
         Err(e) => {
             eprintln!("Ошибка разбора аргументов: {e}");
             eprintln!(
-                "Использование: lamc address-map [--emit map|json] [--address-map <файл>] \
+                "Использование: taktc address-map [--emit map|json] [--address-map <файл>] \
                  [-D N=V] [-I <dirs>] [-o <out>] <input.lam>"
             );
             1
