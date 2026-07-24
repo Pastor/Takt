@@ -37,9 +37,9 @@ trap 'rm -rf "$TMP"' EXIT
 
 # EMITTED: коды, реально выдаваемые исходником. Берём строковые литералы вида
 # "XX-NNN" из крейтов (both `.with_code("…")` и армы диспетчеров `code()` — это
-# тоже строковые литералы). Тесты (`grammar/tests`, `simulation/tests`) сюда НЕ
+# тоже строковые литералы). Тесты (`takt-lang/tests`, `takt-sim/tests`) сюда НЕ
 # входят: их `assert_eq!(…, "SIM-010")` — сверка того же кода, не новый источник.
-grep -rhoE "\"$CODE_RE\"" "$ROOT/grammar/src" "$ROOT/simulation/src" \
+grep -rhoE "\"$CODE_RE\"" "$ROOT/takt-lang/src" "$ROOT/takt-sim/src" \
     | tr -d '"' | sort -u > "$TMP/emitted"
 
 # REGISTERED: коды из строк-записей реестра — только строки таблицы вида
@@ -67,7 +67,7 @@ fi
 # Условие 3: формат. Реестр по построению матчится шаблоном; дополнительно
 # проверяем, что среди эмитируемых нет чего-то за пределами формата — на случай
 # литерала вроде "SE-4" или "SEE-0001". Ищем «код-подобные» литералы шире.
-BADFMT="$(grep -rho '"[A-Z][A-Z0-9]*-[0-9]*"' "$ROOT/grammar/src" "$ROOT/simulation/src" \
+BADFMT="$(grep -rho '"[A-Z][A-Z0-9]*-[0-9]*"' "$ROOT/takt-lang/src" "$ROOT/takt-sim/src" \
     | tr -d '"' | sort -u | grep -vxE "[A-Z]{2,4}-[0-9]{3}" || true)"
 if [ -n "$BADFMT" ]; then
     echo "ОТКАЗ (0077): код-подобный литерал нарушает формат XX-NNN:" >&2

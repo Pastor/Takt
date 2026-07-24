@@ -7,8 +7,17 @@
 
 ## [Не выпущено]
 
-### Добавлено (фича [0100](docs/features/0100-language-rename-takt.md) — переименование языка Lam → Takt) — **АНАЛИЗ**
+### Добавлено (фича [0100](docs/features/0100-language-rename-takt.md) — переименование языка Lam → Takt) — **РАЗРАБОТКА**
 
+- **0100-01 — готово (крейты + пути импорта).** Каталоги `grammar/`→`takt-lang/`,
+  `simulation/`→`takt-sim/` (`git mv`, 476 переименований); пакеты `takt-lang`/
+  `takt-sim`, зависимость `takt-sim`→`takt-lang`; массово `grammar::`→`takt_lang::`,
+  `simulation::`→`takt_sim::` во всех `.rs`. ⚠️ Защищена единственная LALRPOP-ссылка
+  `grammar::SourceUnitParser` (`lib.rs:117`) — `mod grammar` парсера, не крейт.
+  Скрипты-гейты и `module-size-baseline.txt` — пути каталогов переехали; `.gitignore`
+  тоже; 9 битых markdown-ссылок `](…/grammar/src/…)` в `docs/features/{0041,0045,
+  0057,0059}` → `takt-lang/` (только цели ссылок, правило 14). Бинарники
+  (`lamc`/`lam-lsp`), расширение и тексты — следующие слои. `precheck.sh` зелёный.
 - **Зарегистрирована фича переименования языка** (запрос заказчика): `Lam → Takt`
   (Typed, Automata, Known Timing), расширение `.lam → .takt`, компилятор
   `lamc → taktc`, крейты `takt-lang`/`takt-sim`; ключевые слова и семантика

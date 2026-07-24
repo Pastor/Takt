@@ -210,3 +210,8 @@
 | 0088-06 | 0088 | Остальные нарушители лимита размера модуля | [0088-06-module-size-remaining.md](0088-06-module-size-remaining.md) |
 | 0088-07 | 0088 | Остальные нарушители лимита размера модуля | [0088-07-module-size-remaining.md](0088-07-module-size-remaining.md) |
 | 0088-08 | 0088 | Остальные нарушители лимита размера модуля | [0088-08-module-size-remaining.md](0088-08-module-size-remaining.md) |
+| 0088-09 | 0088 | Остальные нарушители лимита размера модуля | [0088-09-module-size-remaining.md](0088-09-module-size-remaining.md) |
+| 0088-10 | 0088 | Остальные нарушители лимита размера модуля | [0088-10-module-size-remaining.md](0088-10-module-size-remaining.md) |
+| 0088-11 | 0088 | Остальные нарушители лимита размера модуля | [0088-11-module-size-remaining.md](0088-11-module-size-remaining.md) |
+| 0088-12 | 0088 | Остальные нарушители лимита размера модуля | [0088-12-module-size-remaining.md](0088-12-module-size-remaining.md) |
+| 0100-01 | 0100 | Переименование языка Lam → Takt | [0100-01-language-rename-takt.md](0100-01-language-rename-takt.md) |

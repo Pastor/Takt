@@ -39,7 +39,7 @@
 Четвёртый целевой язык генерации наряду с C, PlantUML и (прорабатываемым
 параллельно) Structured Text: `generator::Language` сегодня имеет ровно два
 варианта — `C` и `PlantUML`
-([`generator/mod.rs:14`](../../grammar/src/generator/mod.rs)). Фича добавляет
+([`generator/mod.rs:14`](../../takt-lang/src/generator/mod.rs)). Фича добавляет
 вариант `SV` и модуль `grammar/src/generator/sv/`, транслирующий семантическое
 дерево модели в **синтезируемый SystemVerilog (IEEE 1800)** — язык описания
 аппаратуры для FPGA/ASIC.
@@ -69,7 +69,7 @@
   **не потребляется**: адрес MMIO для RTL бессмыслен.
 
 Изменение **аддитивно**: `Language` помечен `#[non_exhaustive]`
-([`generator/mod.rs:13`](../../grammar/src/generator/mod.rs)), существующие цели
+([`generator/mod.rs:13`](../../takt-lang/src/generator/mod.rs)), существующие цели
 `c`/`c-hal`/`plantuml` байт-в-байт не меняются, `.lam` не тронут.
 
 > Фича зарегистрирована **по прямому запросу заказчика**; далее проходит

@@ -21,8 +21,8 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-NODES_FILE="$ROOT/grammar/src/semantic/mod.rs"
-EVAL_MOD="$ROOT/simulation/src/eval/mod.rs"
+NODES_FILE="$ROOT/takt-lang/src/semantic/mod.rs"
+EVAL_MOD="$ROOT/takt-sim/src/eval/mod.rs"
 DENY='#![deny(clippy::wildcard_enum_match_arm)]'
 
 for f in "$NODES_FILE" "$EVAL_MOD"; do

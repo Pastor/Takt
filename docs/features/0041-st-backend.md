@@ -33,12 +33,12 @@
 
 Третий целевой язык генерации наряду с C и PlantUML: `generator::Language` сейчас
 имеет ровно два варианта — `C` и `PlantUML`
-([`generator/mod.rs:14`](../../grammar/src/generator/mod.rs)). Фича добавляет
+([`generator/mod.rs:14`](../../takt-lang/src/generator/mod.rs)). Фича добавляет
 вариант `ST` и модуль `grammar/src/generator/st/`, транслирующий семантическое
 дерево модели в **Structured Text (IEC 61131-3)** — стандартный язык ПЛК, куда FSM
 ложится естественно: модель → `FUNCTION_BLOCK`, состояния → `CASE state OF` (прямой
 аналог `switch (model->state)`, который уже эмитит C-бэкенд,
-[`c_model.rs:554`](../../grammar/src/generator/c/c_model.rs)).
+[`c_model.rs:554`](../../takt-lang/src/generator/c/c_model.rs)).
 
 Фича **включает потребителя карты адресов** из фичи
 [0020](0020-port-address-decl.md): `AddressMap` → размещённые переменные
@@ -47,7 +47,7 @@
 `-t st-at` (порты как `VAR_GLOBAL … AT %…`).
 
 Изменение **аддитивно**: `Language` помечен `#[non_exhaustive]`
-([`generator/mod.rs:13`](../../grammar/src/generator/mod.rs)), существующие цели
+([`generator/mod.rs:13`](../../takt-lang/src/generator/mod.rs)), существующие цели
 `c`/`c-hal`/`plantuml` байт-в-байт не меняются, `.lam` не тронут.
 
 > Фича зарегистрирована из бэклога кандидатов (`FEATURES.md`, блок 2); далее

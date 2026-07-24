@@ -9,9 +9,9 @@
 # 1000 строк, обязан быть УДАЛЁН из реестра: иначе храповик провернётся назад.
 #
 # Формат: <строк> <путь от корня репозитория>
-1993 grammar/src/bin/lamc.rs
-1842 grammar/src/semantic/tree.rs
-1747 grammar/src/semantic/mod.rs
-1402 grammar/src/lib.rs
-1360 grammar/src/semantic/expression.rs
-1191 grammar/src/semantic/type_inference.rs
+1994 takt-lang/src/bin/lamc.rs
+1842 takt-lang/src/semantic/tree.rs
+1747 takt-lang/src/semantic/mod.rs
+1402 takt-lang/src/lib.rs
+1360 takt-lang/src/semantic/expression.rs
+1191 takt-lang/src/semantic/type_inference.rs
