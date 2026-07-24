@@ -49,7 +49,7 @@ mod goto_exact_file {
     /// T3 (сторож зонда): узел под курсором — из **текущего** файла.
     ///
     /// Зонд фичи 0056: курсор на `Helper` возвращал переменную `speed` **из
-    /// `helper.lam`** — её диапазон (19..37) там накрыл смещение курсора (35)
+    /// `helper.takt`** — её диапазон (19..37) там накрыл смещение курсора (35)
     /// здесь. Не «не тот файл», а **не тот узел**.
     ///
     /// ⚠️ Тест сначала доказывает, что **ловушка взведена**: в чужом файле есть
@@ -62,11 +62,11 @@ mod goto_exact_file {
         use takt_lang::semantic::index::SemanticIndex;
         use takt_lang::semantic::tree::construct_model_with_files;
 
-        let source = goto56_source("uses_helper.lam");
+        let source = goto56_source("uses_helper.takt");
         let offset = source.find("= Helper").expect("нет использования") + 2;
 
         let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
-        let mut files = FileTable::new("uses_helper.lam");
+        let mut files = FileTable::new("uses_helper.takt");
         let model =
             construct_model_with_files(&ast, None, &[goto56_dir()], &mut files).expect("семантика");
         let index = SemanticIndex::build(&model);
@@ -74,7 +74,7 @@ mod goto_exact_file {
         // Шаг 1. Ловушка взведена? В чужом файле обязан быть узел, накрывающий
         // смещение курсора, — иначе путать нечего и сторож зеленеет впустую.
         let foreign = index.node_at_offset_in_file(1, offset).expect(
-            "ЛОВУШКА РАЗОРУЖЕНА: в helper.lam нет узла, накрывающего смещение курсора. \
+            "ЛОВУШКА РАЗОРУЖЕНА: в helper.takt нет узла, накрывающего смещение курсора. \
              Верните фикстуры к виду, где смещения пересекаются",
         );
         assert!(
@@ -85,7 +85,7 @@ mod goto_exact_file {
         assert_eq!(
             foreign.name, "speed",
             "ЛОВУШКА РАЗОРУЖЕНА: ожидался узел `speed` из зонда 0056 (его диапазон \
-             19..37 в helper.lam накрывает смещение курсора здесь)"
+             19..37 в helper.takt накрывает смещение курсора здесь)"
         );
 
         // Шаг 2. То, ради чего сторож: под курсором — узел СВОЕГО файла.
@@ -106,14 +106,14 @@ mod goto_exact_file {
     fn t5_goto_opens_imported_file() {
         use takt_lang::lsp::goto_declaration_at;
 
-        let source = goto56_source("uses_helper.lam");
+        let source = goto56_source("uses_helper.takt");
         let pos = cursor_on_use(&source, "Helper");
-        let loc = goto_declaration_at("uses_helper.lam", &source, pos, &[goto56_dir()])
+        let loc = goto_declaration_at("uses_helper.takt", &source, pos, &[goto56_dir()])
             .expect("переход на имени импортированной модели обязан находиться");
 
         assert!(
-            loc.uri.ends_with("goto56/helper.lam"),
-            "обязан открыться helper.lam, получено: {}",
+            loc.uri.ends_with("goto56/helper.takt"),
+            "обязан открыться helper.takt, получено: {}",
             loc.uri
         );
         assert_eq!(
@@ -124,21 +124,21 @@ mod goto_exact_file {
 
     /// T6/A2: **контрпример угадыванию** — алиас.
     ///
-    /// `import "engine.lam" as Motor;` связывает имя `Motor` с файлом
-    /// `engine.lam`. Прежний код строил кандидатов из ИМЕНИ МОДЕЛИ
-    /// (`to_snake_case("Motor")` → `motor.lam`) и не нашёл бы цель **никогда**.
+    /// `import "engine.takt" as Motor;` связывает имя `Motor` с файлом
+    /// `engine.takt`. Прежний код строил кандидатов из ИМЕНИ МОДЕЛИ
+    /// (`to_snake_case("Motor")` → `motor.takt`) и не нашёл бы цель **никогда**.
     #[test]
     fn t6_goto_follows_alias_not_model_name() {
         use takt_lang::lsp::goto_declaration_at;
 
-        let source = goto56_source("uses_alias.lam");
+        let source = goto56_source("uses_alias.takt");
         let pos = cursor_on_use(&source, "Motor");
-        let loc = goto_declaration_at("uses_alias.lam", &source, pos, &[goto56_dir()])
+        let loc = goto_declaration_at("uses_alias.takt", &source, pos, &[goto56_dir()])
             .expect("переход по алиасу обязан находиться");
 
         assert!(
-            loc.uri.ends_with("goto56/engine.lam"),
-            "обязан открыться engine.lam (а не выдуманный motor.lam), получено: {}",
+            loc.uri.ends_with("goto56/engine.takt"),
+            "обязан открыться engine.takt (а не выдуманный motor.takt), получено: {}",
             loc.uri
         );
         assert!(
@@ -156,20 +156,20 @@ mod goto_exact_file {
     fn t8_range_in_foreign_file_uses_its_own_text() {
         use takt_lang::lsp::goto_declaration_at;
 
-        let source = goto56_source("uses_alias.lam");
-        let target = goto56_source("engine.lam");
+        let source = goto56_source("uses_alias.takt");
+        let target = goto56_source("engine.takt");
         let pos = cursor_on_use(&source, "Motor");
-        let loc = goto_declaration_at("uses_alias.lam", &source, pos, &[goto56_dir()])
+        let loc = goto_declaration_at("uses_alias.takt", &source, pos, &[goto56_dir()])
             .expect("переход обязан находиться");
 
         // `model Engine` объявлена после шапки-комментария — на 4-й строке.
         let declaration_line = target
             .lines()
             .position(|l| l.starts_with("model Engine"))
-            .expect("в engine.lam нет объявления модели") as u32;
+            .expect("в engine.takt нет объявления модели") as u32;
         assert_eq!(
             loc.range.start.line, declaration_line,
-            "диапазон обязан указывать на объявление в engine.lam (строка {}), \
+            "диапазон обязан указывать на объявление в engine.takt (строка {}), \
              а не на случайное место: {:?}",
             declaration_line, loc.range
         );
@@ -184,7 +184,7 @@ mod goto_exact_file {
         use takt_lang::lsp::goto_declaration_at;
 
         let src = "var counter: [bit;8] := 0;\nstart S;";
-        let loc = goto_declaration_at("main.lam", src, Position::new(0, 4), &[])
+        let loc = goto_declaration_at("main.takt", src, Position::new(0, 4), &[])
             .expect("переменная своего файла обязана находиться");
         assert!(
             loc.uri.is_empty(),

@@ -4,7 +4,7 @@
 //!
 //! Форматтер печатает **всё** дерево, поэтому его нельзя проверить парой
 //! фикстур: любой непокрытый узел молча испортил бы исходник пользователя.
-//! Поэтому основная проверка — прогон по **всему корпусу** `.lam` репозитория
+//! Поэтому основная проверка — прогон по **всему корпусу** `.takt` репозитория
 //! (`examples/`, `grammar/tests/data/`, `simulation/tests/data/`) с двумя
 //! инвариантами:
 //!
@@ -19,7 +19,7 @@
 use std::path::{Path, PathBuf};
 use takt_lang::format::{FormatError, format_source};
 
-/// Собирает все `.lam` репозитория.
+/// Собирает все `.takt` репозитория.
 fn corpus() -> Vec<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -41,7 +41,7 @@ fn collect(dir: &Path, out: &mut Vec<PathBuf>) {
         let path = entry.path();
         if path.is_dir() {
             collect(&path, out);
-        } else if path.extension().is_some_and(|e| e == "lam") {
+        } else if path.extension().is_some_and(|e| e == "takt") {
             out.push(path);
         }
     }
@@ -78,7 +78,7 @@ fn ast_eq_ignoring_locations(
 #[test]
 fn a1_a3_corpus_report() {
     let files = corpus();
-    assert!(!files.is_empty(), "корпус .lam не найден");
+    assert!(!files.is_empty(), "корпус .takt не найден");
 
     let mut formatted = 0usize;
     let mut unsupported: Vec<(String, String)> = Vec::new();
@@ -129,7 +129,7 @@ fn a1_a3_corpus_report() {
     // Сводка покрытия — печатается всегда: это метрика прогресса задачи 0024-01.
     let total = files.len();
     eprintln!("\n── Форматтер: покрытие корпуса ──");
-    eprintln!("  всего .lam:            {total}");
+    eprintln!("  всего .takt:            {total}");
     eprintln!("  отформатировано:       {formatted}");
     eprintln!("  не разбирается:        {parse_failures} (невалидные фикстуры — норма)");
     eprintln!("  узел не поддержан:     {}", unsupported.len());
@@ -244,7 +244,7 @@ fn a4_fmt_check_exit_codes() {
     let dir = std::env::temp_dir().join("lam_fmt_0024_03");
     std::fs::create_dir_all(&dir).unwrap();
 
-    let messy = dir.join("messy.lam");
+    let messy = dir.join("messy.takt");
     std::fs::write(&messy, "var   x :u8:=0;\nstart   S ;\n").unwrap();
     let out = taktc(&["fmt", "--check", messy.to_str().unwrap()]);
     assert!(
@@ -252,7 +252,7 @@ fn a4_fmt_check_exit_codes() {
         "--check на НЕотформатированном обязан вернуть ненулевой код (контракт CI)"
     );
 
-    let canon = dir.join("canon.lam");
+    let canon = dir.join("canon.takt");
     std::fs::write(&canon, "var x: u8 := 0;\nstart S;\n").unwrap();
     let out = taktc(&["fmt", "--check", canon.to_str().unwrap()]);
     assert!(
@@ -267,7 +267,7 @@ fn a4_fmt_check_does_not_write() {
     // `--check` — режим для CI: он обязан быть НЕразрушающим.
     let dir = std::env::temp_dir().join("lam_fmt_0024_03_nowrite");
     std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("messy.lam");
+    let file = dir.join("messy.takt");
     let original = "var   x :u8:=0;\n";
     std::fs::write(&file, original).unwrap();
 
@@ -283,7 +283,7 @@ fn a4_fmt_check_does_not_write() {
 fn fmt_rewrites_file_in_place() {
     let dir = std::env::temp_dir().join("lam_fmt_0024_03_inplace");
     std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("messy.lam");
+    let file = dir.join("messy.takt");
     std::fs::write(&file, "var   x :u8:=0;\nstart   S ;\n").unwrap();
 
     let out = taktc(&["fmt", file.to_str().unwrap()]);
@@ -330,7 +330,7 @@ fn r5_blank_lines_are_restored_and_normalised() {
 
 #[test]
 fn r5_no_spurious_blank_after_multiline_function() {
-    // Регресс, пойманный harness'ом на type_alias_inference.lam: `fn.loc` покрывает
+    // Регресс, пойманный harness'ом на type_alias_inference.takt: `fn.loc` покрывает
     // только сигнатуру, поэтому замер «от loc.end» проезжал через тело функции и
     // вставлял пустую строку. Проверяем именно этот случай.
     let source =

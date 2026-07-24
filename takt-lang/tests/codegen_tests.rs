@@ -8,12 +8,12 @@ use tempfile::tempdir;
 
 // ── Вспомогательные функции ──────────────────────────────────────────────────
 
-/// Создаёт временный `.lam`-файл и возвращает (директория, полный_путь).
+/// Создаёт временный `.takt`-файл и возвращает (директория, полный_путь).
 #[allow(dead_code)]
 fn tmp_but_file(name: &str, content: &str) -> (tempfile::TempDir, String) {
     let dir = tempdir().expect("не удалось создать временный каталог");
     let path = dir.path().join(name);
-    fs::write(&path, content).expect("не удалось записать .lam-файл");
+    fs::write(&path, content).expect("не удалось записать .takt-файл");
     (dir, path.to_string_lossy().into_owned())
 }
 
@@ -68,7 +68,7 @@ model Traffic {
     );
 }
 
-const MODEL_FILENAME: &str = "model.lam";
+const MODEL_FILENAME: &str = "model.takt";
 
 /// FE5: Синтаксически неверный код возвращает ошибку.
 #[test]
@@ -133,7 +133,7 @@ fn test_compile_with_search_path_resolves_import() {
     // Создаём временную "библиотеку"
     let lib_dir = tempdir().unwrap();
     fs::write(
-        lib_dir.path().join("timer.lam"),
+        lib_dir.path().join("timer.takt"),
         r#"
 model Timer {
     start Idle;
@@ -146,7 +146,7 @@ model Timer {
     // Главный файл использует import и объявляет состояния на верхнем уровне.
     // compile_to_c генерирует для корневой модели, у которой должен быть start-state.
     let main_src = r#"
-import "timer.lam";
+import "timer.takt";
 start Ready;
 state Done;
 "#;
@@ -174,7 +174,7 @@ state Done;
 /// но без `-I` → ошибка «файл импорта не найден».
 #[test]
 fn test_compile_missing_import_without_search_path_is_error() {
-    let main_src = r#"import "nonexistent_library.lam"; start S;"#;
+    let main_src = r#"import "nonexistent_library.takt"; start S;"#;
     let out_dir = tempdir().unwrap();
 
     // Пустые пути поиска → импорт не найдёт файл
@@ -203,12 +203,12 @@ fn test_compile_second_search_path_wins() {
     let dir1 = tempdir().unwrap(); // пустая директория
     let dir2 = tempdir().unwrap();
     fs::write(
-        dir2.path().join("utils.lam"),
+        dir2.path().join("utils.takt"),
         "model Utils { start Ready; }",
     )
     .unwrap();
 
-    let main_src = r#"import "utils.lam"; start Ready; state Done;"#;
+    let main_src = r#"import "utils.takt"; start Ready; state Done;"#;
     let out_dir = tempdir().unwrap();
     let search_paths = vec![
         dir1.path().to_string_lossy().into_owned(),
@@ -232,7 +232,7 @@ fn test_compile_second_search_path_wins() {
 /// Путь поиска указан, но файл отсутствует даже там → ошибка.
 #[test]
 fn test_compile_wrong_search_path_is_error() {
-    let main_src = r#"import "missing.lam"; start S;"#;
+    let main_src = r#"import "missing.takt"; start S;"#;
     let out_dir = tempdir().unwrap();
     let search_paths = vec!["/nonexistent_path_xyz_abc".to_string()];
 
@@ -253,12 +253,12 @@ fn test_compile_identifier_import_with_search_path() {
     let subdir = lib_root.path().join("sensors");
     fs::create_dir(&subdir).unwrap();
     fs::write(
-        subdir.join("light.lam"),
+        subdir.join("light.takt"),
         "model Light { start Off; state On; }",
     )
     .unwrap();
 
-    // import sensors::light;  →  ищем sensors/light.lam в search_paths
+    // import sensors::light;  →  ищем sensors/light.takt в search_paths
     let main_src = r#"import {Light} from sensors::light; start Ready = Light; state Done;"#;
     let out_dir = tempdir().unwrap();
     let search_paths = vec![lib_root.path().to_string_lossy().into_owned()];
@@ -281,12 +281,12 @@ fn test_compile_identifier_import_with_search_path() {
 #[test]
 fn test_compile_multiple_imports_single_search_path() {
     let lib_dir = tempdir().unwrap();
-    fs::write(lib_dir.path().join("a.lam"), "model A { start S; }").unwrap();
-    fs::write(lib_dir.path().join("b.lam"), "model B { start S; }").unwrap();
+    fs::write(lib_dir.path().join("a.takt"), "model A { start S; }").unwrap();
+    fs::write(lib_dir.path().join("b.takt"), "model B { start S; }").unwrap();
 
     let main_src = r#"
-import {A} from "a.lam";
-import "b.lam";
+import {A} from "a.takt";
+import "b.takt";
 start Ready = A;
 state Done;
 "#;
@@ -307,7 +307,7 @@ state Done;
     );
 }
 
-// ── Тесты через тестовые .lam-файлы ─────────────────────────────────────────
+// ── Тесты через тестовые .takt-файлы ─────────────────────────────────────────
 
 /// Файл примера из `tests/data/semantic/valid/` компилируется с путём к `include/`.
 #[test]
@@ -315,9 +315,9 @@ fn test_compile_example_file_with_include_path() {
     let data_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data");
     let include_dir = format!("{}/include", data_dir);
 
-    // cli_import_with_search_path.lam использует `import "std.lam";`
+    // cli_import_with_search_path.takt использует `import "std.takt";`
     let src_path = format!(
-        "{}/semantic/valid/cli_import_with_search_path.lam",
+        "{}/semantic/valid/cli_import_with_search_path.takt",
         data_dir
     );
     let src = match fs::read_to_string(&src_path) {
@@ -445,15 +445,16 @@ fn test_include_dirs_end_to_end_integration() {
     // Создаём библиотеку во временной директории
     let lib_dir = tempdir().unwrap();
     fs::write(
-        lib_dir.path().join("fsm_base.lam"),
+        lib_dir.path().join("fsm_base.takt"),
         "model FsmBase { start Idle; state Active; }",
     )
     .unwrap();
 
-    // Создаём входной .lam файл во временной директории
+    // Создаём входной .takt файл во временной директории
     let src_dir = tempdir().unwrap();
-    let src_content = r#"import {FsmBase} from "fsm_base.lam"; start Ready = FsmBase; state Done;"#;
-    let src_file = src_dir.path().join("main.lam");
+    let src_content =
+        r#"import {FsmBase} from "fsm_base.takt"; start Ready = FsmBase; state Done;"#;
+    let src_file = src_dir.path().join("main.takt");
     fs::write(&src_file, src_content).unwrap();
 
     // Имитируем то, что делает taktc: parse_compile_args → compile_to_c

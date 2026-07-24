@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn d7_parenthesis_is_evaluated_recursively() {
-        // Проба paren.lam: (t + 1) > 2 при t = 5 → истина.
+        // Проба paren.takt: (t + 1) > 2 при t = 5 → истина.
         // Прежний flat возвращал внутренний узел невычисленным → было ложно.
         let mut ctx = empty_ctx();
         let inner = ConditionNode::Add(num(5), num(1));
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn d6_mixed_int_real_does_not_panic() {
-        // Проба mix.lam: t + 2.5 > 3 при t = 1. Прежний flat падал на unwrap().
+        // Проба mix.takt: t + 2.5 > 3 при t = 1. Прежний flat падал на unwrap().
         let mut ctx = MockContext::new(&[]);
         let sum = ConditionNode::Add(
             num(1),

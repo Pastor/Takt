@@ -65,7 +65,7 @@ fn ty_name(ty: u32) -> &'static str {
         .unwrap_or("<?>")
 }
 
-const FIXTURE: &str = include_str!("data/lsp/semantic_tokens.lam");
+const FIXTURE: &str = include_str!("data/lsp/semantic_tokens.takt");
 
 /// Зонд: печатает реальную классификацию токенов фикстуры (правило проекта —
 /// «сперва зонд для захвата вывода, затем assertions против захваченного»).
@@ -175,7 +175,7 @@ fn semantic_tokens_non_identifier_kinds() {
 /// нужна; классификация строки от семантики не зависит).
 #[test]
 fn semantic_tokens_string_literal() {
-    let src = "import \"lib.lam\";\nstart S;";
+    let src = "import \"lib.takt\";\nstart S;";
     let toks = decode(src, &semantic_tokens(src));
     let strings: Vec<_> = toks.iter().filter(|t| ty_name(t.ty) == "string").collect();
     assert_eq!(
@@ -184,7 +184,7 @@ fn semantic_tokens_string_literal() {
         "ожидался ровно один STRING-токен (путь импорта), получено: {toks:?}"
     );
     assert!(
-        strings[0].text.contains("lib.lam"),
+        strings[0].text.contains("lib.takt"),
         "STRING-токен обязан покрывать литерал пути: {:?}",
         strings[0].text
     );

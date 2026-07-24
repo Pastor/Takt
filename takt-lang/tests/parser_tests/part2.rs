@@ -265,7 +265,7 @@ fn parse_if_in_for_with_braces() {
 /// `import * as X from "path"` — глобальный импорт.
 #[test]
 fn parse_import_global_symbol() {
-    let root = must_parse(r#"import * as Lib from "lib.lam"; model M { start S; }"#);
+    let root = must_parse(r#"import * as Lib from "lib.takt"; model M { start S; }"#);
     let has_import = root
         .elements
         .iter()
@@ -277,7 +277,7 @@ fn parse_import_global_symbol() {
 #[test]
 fn parse_import_rename() {
     let root = must_parse(
-        r#"import { MyModel, OldName as NewName } from "path.lam"; model M { start S; }"#,
+        r#"import { MyModel, OldName as NewName } from "path.takt"; model M { start S; }"#,
     );
     let has_import = root
         .elements
@@ -733,10 +733,10 @@ start S {
     must_parse(src);
 }
 
-/// Интеграционный тест: файл `ternary_operator.lam` разбирается без ошибок.
+/// Интеграционный тест: файл `ternary_operator.takt` разбирается без ошибок.
 #[test]
 fn ternary_operator_file_parses() {
-    let path = Path::new("tests/data/parser/valid/ternary_operator.lam");
+    let path = Path::new("tests/data/parser/valid/ternary_operator.takt");
     let src = fs::read_to_string(path).expect("не удалось прочитать файл");
     must_parse(&src);
 }
@@ -805,10 +805,10 @@ start S;
     must_parse(src);
 }
 
-/// Интеграционный тест: файл `struct_types.lam` разбирается без ошибок.
+/// Интеграционный тест: файл `struct_types.takt` разбирается без ошибок.
 #[test]
 fn struct_types_file_parses() {
-    let path = Path::new("tests/data/parser/valid/struct_types.lam");
+    let path = Path::new("tests/data/parser/valid/struct_types.takt");
     let src = fs::read_to_string(path).expect("не удалось прочитать файл");
     must_parse(&src);
 }

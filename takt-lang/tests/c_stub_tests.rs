@@ -15,9 +15,9 @@
 //!
 //! Фикстуры отличаются **ровно одним** — типом порта, что отделяет проверяемое
 //! поведение от всего прочего:
-//! - `float_bit_access.lam` — `BitAccess` на `float`-порт: в C не транслируется
+//! - `float_bit_access.takt` — `BitAccess` на `float`-порт: в C не транслируется
 //!   (`CC-001`) → ожидается `CC-018`;
-//! - `u8_bit_access.lam` — тот же автомат на `u8`: транслируется → переходы на
+//! - `u8_bit_access.takt` — тот же автомат на `u8`: транслируется → переходы на
 //!   месте, поведение **не изменилось**.
 //!
 //! Контрпример охраняет от переусердствования: ошибка не должна расползтись на
@@ -33,8 +33,8 @@ use takt_lang::diagnostics::Location;
 use takt_lang::semantic::tree::construct_model;
 use takt_lang::{GenerateOptions, compile_to_c};
 
-const FIXTURE_ERR: &str = "tests/data/c_stubs/float_bit_access.lam";
-const FIXTURE_OK: &str = "tests/data/c_stubs/u8_bit_access.lam";
+const FIXTURE_ERR: &str = "tests/data/c_stubs/float_bit_access.takt";
+const FIXTURE_OK: &str = "tests/data/c_stubs/u8_bit_access.takt";
 
 /// Порождает C во временный каталог, возвращая результат как есть.
 fn compile(
@@ -197,7 +197,7 @@ fn corpus_generates_no_stubs() {
     let mut checked = 0;
     for entry in std::fs::read_dir("../examples").expect("каталог examples") {
         let path = entry.expect("запись каталога").path();
-        if path.extension().and_then(|e| e.to_str()) != Some("lam") {
+        if path.extension().and_then(|e| e.to_str()) != Some("takt") {
             continue;
         }
         let name = path

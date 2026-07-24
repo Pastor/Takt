@@ -4,10 +4,10 @@
 
 use super::*;
 
-/// `tests/data/semantic/valid/type_aliases.lam` — псевдонимы типов разрешаются.
+/// `tests/data/semantic/valid/type_aliases.takt` — псевдонимы типов разрешаются.
 #[test]
 fn example_type_aliases_is_valid() {
-    let node = build_file("tests/data/semantic/valid/type_aliases.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/type_aliases.takt").unwrap();
     assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
     assert!(
         node.types.contains_key("u16"),
@@ -23,10 +23,10 @@ fn example_type_aliases_is_valid() {
     );
 }
 
-/// `tests/data/semantic/valid/conditions.lam` — все условия разрешаются.
+/// `tests/data/semantic/valid/conditions.takt` — все условия разрешаются.
 #[test]
 fn example_conditions_is_valid() {
-    let node = build_file("tests/data/semantic/valid/conditions.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/conditions.takt").unwrap();
     assert!(
         node.conditions.contains_key("always_true"),
         "условие always_true должно быть"
@@ -49,10 +49,10 @@ fn example_conditions_is_valid() {
     );
 }
 
-/// `tests/data/semantic/valid/composition.lam` — компоновка моделей корректна.
+/// `tests/data/semantic/valid/composition.takt` — компоновка моделей корректна.
 #[test]
 fn example_composition_is_valid() {
-    let node = build_file("tests/data/semantic/valid/composition.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/composition.takt").unwrap();
     // Модели Step1, Step2, Step3 должны быть в контексте
     assert!(
         node.search_model("Step1").is_some(),
@@ -81,66 +81,69 @@ fn example_composition_is_valid() {
     );
 }
 
-/// `tests/data/semantic/invalid/missing_var.lam` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/missing_var.takt` — должна возникнуть ошибка.
 #[test]
 fn example_missing_var_is_error() {
-    let result = build_file("tests/data/semantic/invalid/missing_var.lam");
+    let result = build_file("tests/data/semantic/invalid/missing_var.takt");
     assert!(
         result.is_err(),
-        "missing_var.lam должен давать ошибку семантики"
+        "missing_var.takt должен давать ошибку семантики"
     );
 }
 
-/// `tests/data/semantic/invalid/unknown_model.lam` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/unknown_model.takt` — должна возникнуть ошибка.
 #[test]
 fn example_unknown_model_is_error() {
-    let result = build_file("tests/data/semantic/invalid/unknown_model.lam");
+    let result = build_file("tests/data/semantic/invalid/unknown_model.takt");
     assert!(
         result.is_err(),
-        "unknown_model.lam должен давать ошибку семантики"
+        "unknown_model.takt должен давать ошибку семантики"
     );
 }
 
-/// `tests/data/semantic/invalid/double_next.lam` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/double_next.takt` — должна возникнуть ошибка.
 #[test]
 fn example_double_next_is_error() {
-    let result = build_file("tests/data/semantic/invalid/double_next.lam");
+    let result = build_file("tests/data/semantic/invalid/double_next.takt");
     assert!(
         result.is_err(),
-        "double_next.lam должен давать ошибку семантики"
+        "double_next.takt должен давать ошибку семантики"
     );
 }
 
-/// `tests/data/semantic/invalid/dangling_ref.lam` — должна возникнуть ошибка.
+/// `tests/data/semantic/invalid/dangling_ref.takt` — должна возникнуть ошибка.
 #[test]
 fn example_dangling_ref_is_error() {
-    let result = build_file("tests/data/semantic/invalid/dangling_ref.lam");
+    let result = build_file("tests/data/semantic/invalid/dangling_ref.takt");
     assert!(
         result.is_err(),
-        "dangling_ref.lam должен давать ошибку семантики"
+        "dangling_ref.takt должен давать ошибку семантики"
     );
 }
 
-// ─── Тесты импорта std.lam ────────────────────────────────────────────────────
+// ─── Тесты импорта std.takt ────────────────────────────────────────────────────
 
-/// `import "std.lam"` из стандартной библиотеки подключается без ошибок.
+/// `import "std.takt"` из стандартной библиотеки подключается без ошибок.
 #[test]
 fn std_but_import_works() {
-    let src = r#"import "std.lam";"#;
+    let src = r#"import "std.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &["tests/data/include".to_string()]);
-    assert!(root.is_ok(), "импорт std.lam должен завершаться без ошибок");
+    assert!(
+        root.is_ok(),
+        "импорт std.takt должен завершаться без ошибок"
+    );
     let root = root.unwrap();
-    // Нормализованное имя файла std.lam → Std
+    // Нормализованное имя файла std.takt → Std
     assert!(
         root.borrow().search_model("Std").is_some(),
-        "модель Std должна быть зарегистрирована после импорта std.lam"
+        "модель Std должна быть зарегистрирована после импорта std.takt"
     );
 }
 
 // ─── Тесты выборочного импорта (ImportDefine::Rename) ────────────────────────
 
-/// Вспомогательная функция: строит модель из inline-кода с путём поиска shared.lam.
+/// Вспомогательная функция: строит модель из inline-кода с путём поиска shared.takt.
 fn build_with_includes(
     src: &str,
 ) -> Result<takt_lang::semantic::ModelNode, takt_lang::diagnostics::Diagnostic> {
@@ -148,11 +151,11 @@ fn build_with_includes(
     construct_model(&ast, None, &["tests/data/include".to_string()]).map(|m| m.take())
 }
 
-/// `import { SharedModel } from "shared.lam"` — модель доступна под оригинальным именем.
+/// `import { SharedModel } from "shared.takt"` — модель доступна под оригинальным именем.
 #[test]
 fn rename_import_model_no_alias() {
     let node = build_with_includes(
-        r#"import { SharedModel } from "shared.lam"; start E = SharedModel { }"#,
+        r#"import { SharedModel } from "shared.takt"; start E = SharedModel { }"#,
     )
     .unwrap();
     assert!(
@@ -161,11 +164,11 @@ fn rename_import_model_no_alias() {
     );
 }
 
-/// `import { SharedModel as M } from "shared.lam"` — модель доступна под псевдонимом M.
+/// `import { SharedModel as M } from "shared.takt"` — модель доступна под псевдонимом M.
 #[test]
 fn rename_import_model_with_alias() {
     let node =
-        build_with_includes(r#"import { SharedModel as M } from "shared.lam"; start E = M { }"#)
+        build_with_includes(r#"import { SharedModel as M } from "shared.takt"; start E = M { }"#)
             .unwrap();
     assert!(
         node.search_model("M").is_some(),
@@ -177,11 +180,11 @@ fn rename_import_model_with_alias() {
     );
 }
 
-/// `import { SharedType } from "shared.lam"` — тип-псевдоним импортируется в контекст.
+/// `import { SharedType } from "shared.takt"` — тип-псевдоним импортируется в контекст.
 #[test]
 fn rename_import_type() {
     let node = build_with_includes(
-        r#"import { SharedType } from "shared.lam"; var x: SharedType := 0; start S;"#,
+        r#"import { SharedType } from "shared.takt"; var x: SharedType := 0; start S;"#,
     )
     .unwrap();
     assert!(
@@ -198,7 +201,7 @@ fn rename_import_type() {
 #[test]
 fn rename_import_type_with_alias() {
     let node = build_with_includes(
-        r#"import { SharedType as ST } from "shared.lam"; var x: ST := 0; start S;"#,
+        r#"import { SharedType as ST } from "shared.takt"; var x: ST := 0; start S;"#,
     )
     .unwrap();
     assert!(
@@ -214,7 +217,8 @@ fn rename_import_type_with_alias() {
 /// `import { shared_var }` — переменная импортируется в контекст.
 #[test]
 fn rename_import_variable() {
-    let node = build_with_includes(r#"import { shared_var } from "shared.lam"; start S;"#).unwrap();
+    let node =
+        build_with_includes(r#"import { shared_var } from "shared.takt"; start S;"#).unwrap();
     assert!(
         node.search_var("shared_var").is_some(),
         "переменная shared_var должна быть в контексте после импорта"
@@ -225,7 +229,7 @@ fn rename_import_variable() {
 #[test]
 fn rename_import_variable_with_alias() {
     let node =
-        build_with_includes(r#"import { shared_var as sv } from "shared.lam"; start S;"#).unwrap();
+        build_with_includes(r#"import { shared_var as sv } from "shared.takt"; start S;"#).unwrap();
     assert!(
         node.search_var("sv").is_some(),
         "переменная должна быть видна под псевдонимом sv"
@@ -240,7 +244,7 @@ fn rename_import_variable_with_alias() {
 #[test]
 fn rename_import_condition() {
     let node = build_with_includes(
-        r#"import { shared_cond } from "shared.lam"; start S { ref E: shared_cond; } state E;"#,
+        r#"import { shared_cond } from "shared.takt"; start S { ref E: shared_cond; } state E;"#,
     )
     .unwrap();
     assert!(
@@ -253,7 +257,7 @@ fn rename_import_condition() {
 #[test]
 fn rename_import_multiple_symbols() {
     let node = build_with_includes(
-        r#"import { SharedModel as M, SharedType as ST, shared_var as sv } from "shared.lam"; start E = M { }"#,
+        r#"import { SharedModel as M, SharedType as ST, shared_var as sv } from "shared.takt"; start E = M { }"#,
     ).unwrap();
     assert!(node.search_model("M").is_some(), "M должна быть видна");
     assert!(node.types.contains_key("ST"), "ST должен быть виден");
@@ -263,7 +267,7 @@ fn rename_import_multiple_symbols() {
 /// Импорт несуществующего символа — ошибка.
 #[test]
 fn rename_import_missing_symbol_is_error() {
-    let result = build_with_includes(r#"import { NonExistent } from "shared.lam"; start S;"#);
+    let result = build_with_includes(r#"import { NonExistent } from "shared.takt"; start S;"#);
     assert!(
         result.is_err(),
         "импорт несуществующего символа должен давать ошибку"
@@ -281,16 +285,16 @@ fn rename_import_missing_symbol_is_error() {
 fn rename_import_duplicate_alias_is_error() {
     // Объявляем модель M локально, затем пробуем импортировать SharedModel as M
     let result = build_with_includes(
-        r#"model M { start S; } import { SharedModel as M } from "shared.lam"; start E = M { }"#,
+        r#"model M { start S; } import { SharedModel as M } from "shared.takt"; start E = M { }"#,
     );
     assert!(result.is_err(), "дублирующееся имя M должно давать ошибку");
 }
 
-/// `example_rename_import.lam` — файл-пример строится без ошибок.
+/// `example_rename_import.takt` — файл-пример строится без ошибок.
 #[test]
 fn example_rename_import_is_valid() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/rename_import.lam")
-        .expect("файл rename_import.lam не найден");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/rename_import.takt")
+        .expect("файл rename_import.takt не найден");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
     let node = construct_model(&ast, None, &["tests/data/include".to_string()])
         .map(|m| m.take())
@@ -359,31 +363,31 @@ fn array_subscript_on_bit_is_error() {
     );
 }
 
-/// `example_array_access.lam` — файл с корректными операциями над массивом строится без ошибок.
+/// `example_array_access.takt` — файл с корректными операциями над массивом строится без ошибок.
 #[test]
 fn example_array_access_is_valid() {
-    let result = build_file("tests/data/semantic/valid/array_access.lam").unwrap();
+    let result = build_file("tests/data/semantic/valid/array_access.takt").unwrap();
     assert!(result.search_var("bit0").is_some());
     assert!(result.search_var("bit7").is_some());
 }
 
-/// `example_array_out_of_bounds.lam` — должна возникнуть ошибка.
+/// `example_array_out_of_bounds.takt` — должна возникнуть ошибка.
 #[test]
 fn example_array_out_of_bounds_is_error() {
-    let result = build_file("tests/data/semantic/invalid/array_out_of_bounds.lam");
+    let result = build_file("tests/data/semantic/invalid/array_out_of_bounds.takt");
     assert!(
         result.is_err(),
-        "array_out_of_bounds.lam должен давать ошибку"
+        "array_out_of_bounds.takt должен давать ошибку"
     );
 }
 
-/// `example_non_array_subscript.lam` — должна возникнуть ошибка.
+/// `example_non_array_subscript.takt` — должна возникнуть ошибка.
 #[test]
 fn example_non_array_subscript_is_error() {
-    let result = build_file("tests/data/semantic/invalid/non_array_subscript.lam");
+    let result = build_file("tests/data/semantic/invalid/non_array_subscript.takt");
     assert!(
         result.is_err(),
-        "non_array_subscript.lam должен давать ошибку"
+        "non_array_subscript.takt должен давать ошибку"
     );
 }
 
@@ -415,10 +419,10 @@ fn while_loop_is_valid() {
     assert!(node.search_var("x").is_some());
 }
 
-/// `example_rename_import_missing.lam` — должна возникнуть ошибка.
+/// `example_rename_import_missing.takt` — должна возникнуть ошибка.
 #[test]
 fn example_rename_import_missing_is_error() {
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/rename_import_missing.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/rename_import_missing.takt")
         .expect("файл не найден");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &["tests/data/include".to_string()]).map(|m| m.take());
@@ -428,36 +432,36 @@ fn example_rename_import_missing_is_error() {
     );
 }
 
-/// После импорта `std.lam` типы u8, u16, … доступны внутри импортированной модели.
+/// После импорта `std.takt` типы u8, u16, … доступны внутри импортированной модели.
 #[test]
 fn std_but_contains_u8_u16_types() {
-    let src = r#"import "std.lam";"#;
+    let src = r#"import "std.takt";"#;
     let (ast, _) = parse(src, 0).unwrap();
     let root = construct_model(&ast, None, &["tests/data/include".to_string()]).unwrap();
     let std_model = root.borrow().search_model("Std").unwrap();
     assert!(
         std_model.borrow().types.contains_key("u8"),
-        "std.lam должен содержать тип u8"
+        "std.takt должен содержать тип u8"
     );
     assert!(
         std_model.borrow().types.contains_key("u16"),
-        "std.lam должен содержать тип u16"
+        "std.takt должен содержать тип u16"
     );
     assert!(
         std_model.borrow().types.contains_key("u32"),
-        "std.lam должен содержать тип u32"
+        "std.takt должен содержать тип u32"
     );
     assert!(
         std_model.borrow().types.contains_key("u64"),
-        "std.lam должен содержать тип u64"
+        "std.takt должен содержать тип u64"
     );
     assert!(
         std_model.borrow().types.contains_key("u128"),
-        "std.lam должен содержать тип u128"
+        "std.takt должен содержать тип u128"
     );
     assert!(
         std_model.borrow().types.contains_key("bool"),
-        "std.lam должен содержать тип bool"
+        "std.takt должен содержать тип bool"
     );
 }
 
@@ -619,11 +623,14 @@ always {
     construct_model(&ast, None, &[]).expect("construct_model не должен паниковать");
 }
 
-/// Файл named_blocks.lam строится без ошибок, named_blocks заполнены.
+/// Файл named_blocks.takt строится без ошибок, named_blocks заполнены.
 #[test]
 fn example_named_blocks_is_valid() {
-    let node = build_file("tests/data/semantic/valid/named_blocks.lam").unwrap();
-    assert!(node.has_states(), "named_blocks.lam должен иметь состояния");
+    let node = build_file("tests/data/semantic/valid/named_blocks.takt").unwrap();
+    assert!(
+        node.has_states(),
+        "named_blocks.takt должен иметь состояния"
+    );
     let active = node.states.get("Active").expect("Active не найдено");
     assert!(
         active.get_named_block("enter").is_some(),
@@ -639,16 +646,16 @@ fn example_named_blocks_is_valid() {
     );
 }
 
-/// Файл if_while_for.lam строится без ошибок.
+/// Файл if_while_for.takt строится без ошибок.
 #[test]
 fn example_if_while_for_is_valid() {
-    build_file("tests/data/semantic/valid/if_while_for.lam").unwrap();
+    build_file("tests/data/semantic/valid/if_while_for.takt").unwrap();
 }
 
-/// Файл nested_model_blocks.lam строится без ошибок, enter разрешён.
+/// Файл nested_model_blocks.takt строится без ошибок, enter разрешён.
 #[test]
 fn example_nested_model_blocks_is_valid() {
-    let node = build_file("tests/data/semantic/valid/nested_model_blocks.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/nested_model_blocks.takt").unwrap();
     let inner = node.search_model("Inner").expect("Inner не найдена");
     let inner = inner.borrow();
     let on = inner.states.get("On").expect("On не найдено");
@@ -658,10 +665,10 @@ fn example_nested_model_blocks_is_valid() {
     );
 }
 
-/// named_block_undeclared_var.lam (порт без адреса) → теперь корректен, адрес опционален.
+/// named_block_undeclared_var.takt (порт без адреса) → теперь корректен, адрес опционален.
 #[test]
 fn example_named_block_port_without_address_is_valid() {
-    let result = build_file("tests/data/semantic/invalid/named_block_undeclared_var.lam");
+    let result = build_file("tests/data/semantic/invalid/named_block_undeclared_var.takt");
     assert!(
         result.is_ok(),
         "порт без адреса должен быть принят (адрес опционален): {:?}",
@@ -706,10 +713,10 @@ fn multiple_model_level_always_blocks() {
     }
 }
 
-/// Файл multiple_named_blocks.lam строится без ошибок, блоки извлекаются.
+/// Файл multiple_named_blocks.takt строится без ошибок, блоки извлекаются.
 #[test]
 fn example_multiple_named_blocks_is_valid() {
-    let node = build_file("tests/data/semantic/valid/multiple_named_blocks.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/multiple_named_blocks.takt").unwrap();
     let initial = node.states.get("Initial").expect("Initial не найдено");
     assert_eq!(
         initial.get_named_blocks("enter").len(),
@@ -730,12 +737,12 @@ fn example_multiple_named_blocks_is_valid() {
 
 // ─── Тесты корректности значений типа bit ──────────────────────────────────────
 
-/// `tests/data/semantic/valid/bit_values.lam` — допустимые значения bit строятся без ошибок.
+/// `tests/data/semantic/valid/bit_values.takt` — допустимые значения bit строятся без ошибок.
 ///
 /// Проверяет: 0, 1, true, false, ссылка на переменную, константы, массив [bit;N].
 #[test]
 fn example_bit_values_valid_is_valid() {
-    let node = build_file("tests/data/semantic/valid/bit_values.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/bit_values.takt").unwrap();
     assert!(
         node.search_var("a").is_some(),
         "переменная a должна быть найдена"
@@ -754,15 +761,15 @@ fn example_bit_values_valid_is_valid() {
     );
 }
 
-/// `tests/data/semantic/invalid/bit_out_of_range.lam` — недопустимое bit-значение → ошибка.
+/// `tests/data/semantic/invalid/bit_out_of_range.takt` — недопустимое bit-значение → ошибка.
 ///
 /// Тип `bit` принимает только 0, 1, true, false. Значение 2 — ошибка.
 #[test]
 fn example_bit_out_of_range_is_error() {
-    let result = build_file("tests/data/semantic/invalid/bit_out_of_range.lam");
+    let result = build_file("tests/data/semantic/invalid/bit_out_of_range.takt");
     assert!(
         result.is_err(),
-        "bit_out_of_range.lam должен давать ошибку семантики"
+        "bit_out_of_range.takt должен давать ошибку семантики"
     );
     let err = result.unwrap_err();
     assert!(
@@ -772,12 +779,12 @@ fn example_bit_out_of_range_is_error() {
     );
 }
 
-/// `tests/data/semantic/valid/type_inference_numbers.lam` — вывод целочисленных типов.
+/// `tests/data/semantic/valid/type_inference_numbers.takt` — вывод целочисленных типов.
 ///
 /// 0..=255 → `[bit;8]`, 256..=65535 → `[bit;16]`, 65536..= → `[bit;32]`.
 #[test]
 fn example_type_inference_numbers_is_valid() {
-    let node = build_file("tests/data/semantic/valid/type_inference_numbers.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/type_inference_numbers.takt").unwrap();
     // 8-битные
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("a") {
         assert_eq!(
@@ -818,14 +825,14 @@ fn example_type_inference_numbers_is_valid() {
     }
 }
 
-/// `tests/data/semantic/valid/type_inference_bool.lam` — вывод типа bool из литерала.
+/// `tests/data/semantic/valid/type_inference_bool.takt` — вывод типа bool из литерала.
 ///
 /// `true`/`false` без аннотации → `TypeNode::Bool`.
 /// Явная аннотация `: bool` → `TypeNode::Bool`.
 /// Явная аннотация `: bit` → `TypeNode::Bit`.
 #[test]
 fn example_type_inference_bool_is_valid() {
-    let node = build_file("tests/data/semantic/valid/type_inference_bool.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/type_inference_bool.takt").unwrap();
     // Вывод из литерала
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("flag") {
         assert_eq!(ty, TypeNode::Bool, "flag=true → Bool");
@@ -845,10 +852,10 @@ fn example_type_inference_bool_is_valid() {
 
 // ─── Тесты новых файлов-примеров ─────────────────────────────────────────────
 
-/// `tests/data/semantic/valid/functions.lam` — локальные и внешние функции.
+/// `tests/data/semantic/valid/functions.takt` — локальные и внешние функции.
 #[test]
 fn example_functions_is_valid() {
-    let node = build_file("tests/data/semantic/valid/functions.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/functions.takt").unwrap();
     assert!(node.functions.contains_key("send"), "внешняя функция send");
     assert!(node.functions.contains_key("recv"), "внешняя функция recv");
     assert!(node.functions.contains_key("noop"), "внешняя функция noop");
@@ -862,10 +869,10 @@ fn example_functions_is_valid() {
     );
 }
 
-/// `tests/data/semantic/valid/bool_type.lam` — переменные типа bool.
+/// `tests/data/semantic/valid/bool_type.takt` — переменные типа bool.
 #[test]
 fn example_bool_type_is_valid() {
-    let node = build_file("tests/data/semantic/valid/bool_type.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/bool_type.takt").unwrap();
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("ready") {
         assert_eq!(ty, TypeNode::Bool, "ready: bool → TypeNode::Bool");
     } else {
@@ -878,10 +885,10 @@ fn example_bool_type_is_valid() {
     }
 }
 
-/// `tests/data/semantic/valid/integer_types.lam` — числовые псевдонимы типов.
+/// `tests/data/semantic/valid/integer_types.takt` — числовые псевдонимы типов.
 #[test]
 fn example_integer_types_is_valid() {
-    let node = build_file("tests/data/semantic/valid/integer_types.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/integer_types.takt").unwrap();
     assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
     assert!(
         node.types.contains_key("u16"),
@@ -915,10 +922,10 @@ fn example_integer_types_is_valid() {
     }
 }
 
-/// `tests/data/semantic/valid/state_machine_full.lam` — полный автомат светофора.
+/// `tests/data/semantic/valid/state_machine_full.takt` — полный автомат светофора.
 #[test]
 fn example_state_machine_full_is_valid() {
-    let node = build_file("tests/data/semantic/valid/state_machine_full.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/state_machine_full.takt").unwrap();
     let tl = node
         .search_model("TrafficLight")
         .expect("модель TrafficLight не найдена");
@@ -928,10 +935,10 @@ fn example_state_machine_full_is_valid() {
     assert!(tl.states.contains_key("Yellow"), "состояние Yellow");
 }
 
-/// `tests/data/semantic/invalid/duplicate_model.lam` — дублирующееся имя модели → ошибка.
+/// `tests/data/semantic/invalid/duplicate_model.takt` — дублирующееся имя модели → ошибка.
 #[test]
 fn example_duplicate_model_is_error() {
-    let result = build_file("tests/data/semantic/invalid/duplicate_model.lam");
+    let result = build_file("tests/data/semantic/invalid/duplicate_model.takt");
     assert!(
         result.is_err(),
         "дублирующееся имя модели должно давать ошибку"

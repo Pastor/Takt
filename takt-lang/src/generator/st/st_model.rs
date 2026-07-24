@@ -53,7 +53,7 @@ const INIT_STATE: usize = 0;
 ///
 /// Аналог поля `StackerCommandReceiver command_receiver0;` в структуре цели `c`
 /// (Ф6). Числовой суффикс обязателен: одна и та же модель может входить в
-/// композицию **несколько раз** (`elevator.lam:198` включает `Engine` пять раз).
+/// композицию **несколько раз** (`elevator.takt:198` включает `Engine` пять раз).
 #[derive(Debug)]
 pub(crate) struct Instance {
     /// Имя переменной-экземпляра.
@@ -705,7 +705,7 @@ mod tests {
 
     /// Экземпляры нумеруются: одна модель может входить в композицию несколько раз.
     ///
-    /// Вход не гипотетический: `elevator.lam:198` включает `Engine` пять раз.
+    /// Вход не гипотетический: `elevator.takt:198` включает `Engine` пять раз.
     #[test]
     fn test_repeated_model_gets_distinct_instances() {
         let st = body_of("model A { start Q { } }\nvar n: u8 := 0;\nstart Main = A | A;");

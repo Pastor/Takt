@@ -146,7 +146,7 @@ fn se11_resolved_number_literal_in_ref_has_value_in_message() {
 /// Пример файла с разрешёнными условиями — без ошибок и предупреждений.
 #[test]
 fn ref_cond_resolved_file_is_valid() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/ref_cond_resolved.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/ref_cond_resolved.takt")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения семантики");
@@ -161,7 +161,7 @@ fn ref_cond_resolved_file_is_valid() {
 /// Контрпример файла с арифметическим условием — одно предупреждение Се11.
 #[test]
 fn ref_cond_arithmetic_file_gives_warning() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/ref_cond_arithmetic.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/ref_cond_arithmetic.takt")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения семантики");
@@ -288,7 +288,7 @@ fn variable_node_name_and_ty_methods() {
 
 // ─── С4: интеграционные тесты локальных переменных в блоках ──────────────────
 
-/// `tests/data/semantic/valid/local_var_in_block.lam` — var внутри always — без ошибок.
+/// `tests/data/semantic/valid/local_var_in_block.takt` — var внутри always — без ошибок.
 ///
 /// # Пример (Takt)
 /// ```but
@@ -303,10 +303,10 @@ fn variable_node_name_and_ty_methods() {
 /// ```
 #[test]
 fn example_local_var_in_block_is_valid() {
-    build_file("tests/data/semantic/valid/local_var_in_block.lam").unwrap();
+    build_file("tests/data/semantic/valid/local_var_in_block.takt").unwrap();
 }
 
-/// `tests/data/semantic/valid/local_var_in_for.lam` — var в инициализаторе for — без ошибок.
+/// `tests/data/semantic/valid/local_var_in_for.takt` — var в инициализаторе for — без ошибок.
 ///
 /// # Пример (Takt)
 /// ```but
@@ -319,10 +319,10 @@ fn example_local_var_in_block_is_valid() {
 /// ```
 #[test]
 fn example_local_var_in_for_is_valid() {
-    build_file("tests/data/semantic/valid/local_var_in_for.lam").unwrap();
+    build_file("tests/data/semantic/valid/local_var_in_for.takt").unwrap();
 }
 
-/// `tests/data/semantic/valid/local_var_nested.lam` — вложенные блоки с затенением — без ошибок.
+/// `tests/data/semantic/valid/local_var_nested.takt` — вложенные блоки с затенением — без ошибок.
 ///
 /// # Пример (Takt)
 /// ```but
@@ -336,7 +336,7 @@ fn example_local_var_in_for_is_valid() {
 /// ```
 #[test]
 fn example_local_var_nested_is_valid() {
-    build_file("tests/data/semantic/valid/local_var_nested.lam").unwrap();
+    build_file("tests/data/semantic/valid/local_var_nested.takt").unwrap();
 }
 
 /// Переменная через `upper()` позволяет найти другие переменные той же модели.
@@ -524,61 +524,61 @@ fn ce5_only_next_no_ref_no_warn() {
     );
 }
 
-/// Файл ce5_terminal_states.lam — нет предупреждений.
+/// Файл ce5_terminal_states.takt — нет предупреждений.
 #[test]
 fn example_ce5_terminal_states_valid() {
-    let root = build_file_rc("tests/data/semantic/valid/ce5_terminal_states.lam")
+    let root = build_file_rc("tests/data/semantic/valid/ce5_terminal_states.takt")
         .expect("ошибка построения");
     let warns = transition_completeness_warnings(&root);
     assert!(
         warns.is_empty(),
-        "ce5_terminal_states.lam не должен давать предупреждений: {:?}",
+        "ce5_terminal_states.takt не должен давать предупреждений: {:?}",
         warns
     );
 }
 
-/// Файл ce5_no_warn_terminal.lam — нет предупреждений.
+/// Файл ce5_no_warn_terminal.takt — нет предупреждений.
 #[test]
 fn example_ce5_no_warn_terminal_valid() {
-    let root = build_file_rc("tests/data/semantic/valid/ce5_no_warn_terminal.lam")
+    let root = build_file_rc("tests/data/semantic/valid/ce5_no_warn_terminal.takt")
         .expect("ошибка построения");
     let warns = transition_completeness_warnings(&root);
     assert!(
         warns.is_empty(),
-        "ce5_no_warn_terminal.lam не должен давать предупреждений: {:?}",
+        "ce5_no_warn_terminal.takt не должен давать предупреждений: {:?}",
         warns
     );
 }
 
-/// Файл ce5_no_terminal.lam — предупреждение о нет терминальных.
+/// Файл ce5_no_terminal.takt — предупреждение о нет терминальных.
 #[test]
 fn example_ce5_no_terminal_warns() {
-    let root = build_file_rc("tests/data/semantic/invalid/ce5_no_terminal.lam")
+    let root = build_file_rc("tests/data/semantic/invalid/ce5_no_terminal.takt")
         .expect("ошибка построения");
     let warns = transition_completeness_warnings(&root);
     assert!(
         !warns.is_empty(),
-        "ce5_no_terminal.lam должен давать предупреждение"
+        "ce5_no_terminal.takt должен давать предупреждение"
     );
 }
 
-/// Файл ce5_double_next.lam — ошибка семантики (два next).
+/// Файл ce5_double_next.takt — ошибка семантики (два next).
 #[test]
 fn example_ce5_double_next_error() {
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/ce5_double_next.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/ce5_double_next.takt")
         .expect("файл не найден");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_err(),
-        "ce5_double_next.lam должен давать ошибку семантики"
+        "ce5_double_next.takt должен давать ошибку семантики"
     );
 }
 
-/// Файл ce5_next_with_ref.lam — предупреждение Ce5.3.
+/// Файл ce5_next_with_ref.takt — предупреждение Ce5.3.
 #[test]
 fn example_ce5_next_with_ref_warns() {
-    let root = build_file_rc("tests/data/semantic/invalid/ce5_next_with_ref.lam")
+    let root = build_file_rc("tests/data/semantic/invalid/ce5_next_with_ref.takt")
         .expect("ошибка построения");
     let warns = transition_completeness_warnings(&root);
     let has_warn = warns
@@ -586,7 +586,7 @@ fn example_ce5_next_with_ref_warns() {
         .any(|w| w.message.contains("ref") && w.message.contains("next"));
     assert!(
         has_warn,
-        "ce5_next_with_ref.lam должен давать предупреждение Ce5.3: {:?}",
+        "ce5_next_with_ref.takt должен давать предупреждение Ce5.3: {:?}",
         warns
     );
 }
@@ -683,11 +683,11 @@ fn ce4_enum_nodes_equal() {
     assert_eq!(a, b);
 }
 
-/// Файл ce4_enum_basic.lam разбирается без ошибок.
+/// Файл ce4_enum_basic.takt разбирается без ошибок.
 #[test]
 fn example_ce4_enum_basic_valid() {
-    build_file("tests/data/semantic/valid/ce4_enum_basic.lam")
-        .expect("ce4_enum_basic.lam должен разбираться без ошибок");
+    build_file("tests/data/semantic/valid/ce4_enum_basic.takt")
+        .expect("ce4_enum_basic.takt должен разбираться без ошибок");
 }
 
 /// ModelNode с enums корректно сравнивается (PartialEq включает enums).
@@ -788,18 +788,18 @@ fn ce6_explicit_type_not_overwritten_by_function() {
     );
 }
 
-/// Ce6: Файл ce6_type_from_func.lam разбирается без ошибок.
+/// Ce6: Файл ce6_type_from_func.takt разбирается без ошибок.
 #[test]
 fn example_ce6_type_from_func_valid() {
-    build_file("tests/data/semantic/valid/ce6_type_from_func.lam")
-        .expect("ce6_type_from_func.lam должен разбираться без ошибок");
+    build_file("tests/data/semantic/valid/ce6_type_from_func.takt")
+        .expect("ce6_type_from_func.takt должен разбираться без ошибок");
 }
 
-/// Ce6: Файл ce6_type_inference_chain.lam разбирается без ошибок.
+/// Ce6: Файл ce6_type_inference_chain.takt разбирается без ошибок.
 #[test]
 fn example_ce6_type_inference_chain_valid() {
-    build_file("tests/data/semantic/valid/ce6_type_inference_chain.lam")
-        .expect("ce6_type_inference_chain.lam должен разбираться без ошибок");
+    build_file("tests/data/semantic/valid/ce6_type_inference_chain.takt")
+        .expect("ce6_type_inference_chain.takt должен разбираться без ошибок");
 }
 
 // ─── Тесты FE6: Составные типы в параметрах функций ──────────────────────────
@@ -807,8 +807,8 @@ fn example_ce6_type_inference_chain_valid() {
 /// FE6: Функция с параметром типа [bit;8] — разбирается без ошибок.
 #[test]
 fn test_fn_array_param() {
-    let node = build_file("tests/data/semantic/valid/fn_array_param.lam")
-        .expect("fn_array_param.lam должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/fn_array_param.takt")
+        .expect("fn_array_param.takt должен разбираться без ошибок");
     let m = node
         .search_model("M")
         .expect("модель M должна быть найдена");
@@ -841,11 +841,11 @@ fn test_fn_alias_param() {
 #[test]
 fn test_unused_variable_warning() {
     use takt_lang::diagnostics::Level;
-    let _node = build_file("tests/data/semantic/valid/unused_variable.lam")
-        .expect("unused_variable.lam должен разбираться без ошибок");
+    let _node = build_file("tests/data/semantic/valid/unused_variable.takt")
+        .expect("unused_variable.takt должен разбираться без ошибок");
     let model_rc = {
         let (ast, _) = parse(
-            &std::fs::read_to_string("tests/data/semantic/valid/unused_variable.lam").unwrap(),
+            &std::fs::read_to_string("tests/data/semantic/valid/unused_variable.takt").unwrap(),
             0,
         )
         .unwrap();
@@ -917,7 +917,7 @@ fn test_unused_variable_warnings_are_deterministic_and_sorted() {
 #[test]
 fn test_all_vars_used_no_warning() {
     let (ast, _) = parse(
-        &std::fs::read_to_string("tests/data/semantic/valid/all_vars_used.lam").unwrap(),
+        &std::fs::read_to_string("tests/data/semantic/valid/all_vars_used.takt").unwrap(),
         0,
     )
     .unwrap();

@@ -19,7 +19,7 @@ use takt_sim::state_io;
 #[derive(Parser)]
 #[command(name = "simulation", about = "Симуляция Takt-моделей", version)]
 struct Args {
-    /// Путь к .lam файлу (обязательный)
+    /// Путь к .takt файлу (обязательный)
     lam_file: PathBuf,
 
     /// Директории поиска include (можно указать несколько)

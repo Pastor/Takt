@@ -1,7 +1,0 @@
-// Импорты (позитивный тест парсера)
-import "std.lam";
-import "utils.lam" as Utils;
-
-model M {
-    start S;
-}

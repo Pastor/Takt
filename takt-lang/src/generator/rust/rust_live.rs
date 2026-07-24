@@ -3,7 +3,7 @@
 //! ## Задача
 //!
 //! Takt объявляет локальную переменную со значением, даже когда оно тут же
-//! затирается — это обычная идиома корпуса (`stacker.lam`, `travel_time`):
+//! затирается — это обычная идиома корпуса (`stacker.takt`, `travel_time`):
 //!
 //! ```lam
 //! var ds: u8 := 0;
@@ -153,7 +153,7 @@ pub(crate) enum Folded<'a> {
 /// советует clippy («move the declaration here»). Между старым и новым местом
 /// переменная **не упоминается**: вердикт `Overwritten` выдаётся на ПЕРВОМ
 /// решающем событии, то есть ни чтения, ни присваивания до него нет. Значит
-/// перенос ничего не наблюдает и ничего не меняет — в `stacker.lam` он
+/// перенос ничего не наблюдает и ничего не меняет — в `stacker.takt` он
 /// проносит `ds` мимо объявлений `dr`/`dy`/`t`, которые её не касаются.
 pub(crate) fn fold_target(name: &str, rest: &[StatementNode]) -> Option<usize> {
     let idx = rest
@@ -435,7 +435,7 @@ mod tests {
         initializer_is_dead(name, &items[idx + 1..])
     }
 
-    /// **Ключевой случай корпуса** (`stacker.lam`, `travel_time`): обе ветки
+    /// **Ключевой случай корпуса** (`stacker.takt`, `travel_time`): обе ветки
     /// `if/else` переписывают переменную → инициализатор мёртв.
     #[test]
     fn both_branches_assign_kills_initializer() {

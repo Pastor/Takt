@@ -6,7 +6,7 @@
 //! ## Подъём объявлений (главное отличие от C)
 //!
 //! В Takt переменная объявляется по месту: `enter { var boost: u8 := 5; … }`
-//! (`comprehensive.lam:58`). В IEC 61131-3 объявления живут **только в шапке
+//! (`comprehensive.takt:58`). В IEC 61131-3 объявления живут **только в шапке
 //! POU**, а не в теле. Поэтому [`print_statement`] **поднимает** объявление в
 //! [`Hoisted`], а на его месте оставляет присваивание инициализатора.
 //!
@@ -533,7 +533,7 @@ mod tests {
 
     /// Объявление в теле поднимается, а инициализатор остаётся на месте.
     ///
-    /// Вход из `comprehensive.lam:58`: `enter { var boost: u8 := 5; … }`.
+    /// Вход из `comprehensive.takt:58`: `enter { var boost: u8 := 5; … }`.
     /// В IEC объявления живут только в шапке POU.
     #[test]
     fn test_local_variable_declaration_is_hoisted_but_initializer_stays() {

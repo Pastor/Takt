@@ -29,18 +29,18 @@ fn error_of(fixture: &str) -> takt_lang::diagnostics::Diagnostic {
 /// A1: ошибка своего файла названа своим файлом.
 #[test]
 fn error_in_own_file_names_own_file() {
-    let d = error_of("lib_bad.lam");
-    assert_eq!(d.file.as_deref(), Some("tests/data/diag53/lib_bad.lam"));
+    let d = error_of("lib_bad.takt");
+    assert_eq!(d.file.as_deref(), Some("tests/data/diag53/lib_bad.takt"));
 }
 
 /// A2: ошибка ВНУТРИ импортированного файла названа именем библиотеки, а не
 /// импортёра. Это и есть суть фичи.
 #[test]
 fn error_inside_import_names_the_library() {
-    let d = error_of("importer.lam");
+    let d = error_of("importer.takt");
     assert_eq!(
         d.file.as_deref(),
-        Some("tests/data/diag53/lib_bad.lam"),
+        Some("tests/data/diag53/lib_bad.takt"),
         "виновник — библиотека; импортёр её не писал и чинить не вправе"
     );
 }
@@ -51,18 +51,18 @@ fn error_inside_import_names_the_library() {
 /// уровне всплытия дало бы имя импортёра вместо имени виновника.
 #[test]
 fn nested_import_names_the_deepest_file() {
-    let d = error_of("top.lam");
-    assert_eq!(d.file.as_deref(), Some("tests/data/diag53/deep_bad.lam"));
+    let d = error_of("top.takt");
+    assert_eq!(d.file.as_deref(), Some("tests/data/diag53/deep_bad.takt"));
 }
 
 /// Координаты указывают на место ошибки, а не на начало файла.
 #[test]
 fn position_points_at_the_offending_reference() {
-    let d = error_of("lib_bad.lam");
+    let d = error_of("lib_bad.takt");
     let Location::Source(_, start, _) = d.loc else {
         panic!("ожидалась файловая позиция, получено {:?}", d.loc);
     };
-    let text = std::fs::read_to_string("tests/data/diag53/lib_bad.lam").expect("чтение");
+    let text = std::fs::read_to_string("tests/data/diag53/lib_bad.takt").expect("чтение");
     let (line, column) = line_column(&text, start as usize);
     assert_eq!(line, 4, "ссылка 'Nowhere' — на 4-й строке");
     assert!(
@@ -77,7 +77,7 @@ fn position_points_at_the_offending_reference() {
 /// было отличить от своей.
 #[test]
 fn imported_file_gets_its_own_file_no() {
-    let d = error_of("importer.lam");
+    let d = error_of("importer.takt");
     let Location::Source(file_no, _, _) = d.loc else {
         panic!("ожидалась файловая позиция");
     };
@@ -88,23 +88,23 @@ fn imported_file_gets_its_own_file_no() {
 
 #[test]
 fn file_table_registers_root_as_zero() {
-    let files = FileTable::new("main.lam");
-    assert_eq!(files.path(0), Some("main.lam"));
+    let files = FileTable::new("main.takt");
+    assert_eq!(files.path(0), Some("main.takt"));
 }
 
 /// Один путь — один номер: номер обозначает файл, а не факт загрузки.
 #[test]
 fn file_table_deduplicates_paths() {
-    let mut files = FileTable::new("main.lam");
-    let first = files.add("lib.lam");
-    let second = files.add("lib.lam");
+    let mut files = FileTable::new("main.takt");
+    let first = files.add("lib.takt");
+    let second = files.add("lib.takt");
     assert_eq!(first, second);
     assert_ne!(first, 0);
 }
 
 #[test]
 fn file_table_returns_none_for_unknown_and_non_source() {
-    let files = FileTable::new("main.lam");
+    let files = FileTable::new("main.takt");
     assert_eq!(files.path(42), None);
     assert_eq!(files.path_of(&Location::Codegen), None);
     assert_eq!(files.path_of(&Location::Implicit), None);
@@ -122,7 +122,7 @@ fn file_table_returns_none_for_unknown_and_non_source() {
 fn file_table_default_never_gives_import_the_root_number() {
     let mut files = FileTable::default();
     assert_ne!(
-        files.add("lib.lam"),
+        files.add("lib.takt"),
         0,
         "номер 0 означает «корень» и импорту достаться не может"
     );
@@ -145,9 +145,9 @@ fn file_table_default_reports_unknown_root() {
 /// T2: у реестра с корнем нумерация не изменилась.
 #[test]
 fn file_table_new_keeps_root_at_zero_and_import_at_one() {
-    let mut files = FileTable::new("main.lam");
-    assert_eq!(files.path(0), Some("main.lam"));
-    assert_eq!(files.add("lib.lam"), 1);
+    let mut files = FileTable::new("main.takt");
+    assert_eq!(files.path(0), Some("main.takt"));
+    assert_eq!(files.add("lib.takt"), 1);
 }
 
 // ─── Строка и колонка ────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ fn line_column_counts_from_one() {
     assert_eq!(line_column("abc\ndef", 6), (2, 3));
 }
 
-/// Колонка — в СИМВОЛАХ, а не в байтах: в `.lam` есть кириллица (комментарии,
+/// Колонка — в СИМВОЛАХ, а не в байтах: в `.takt` есть кириллица (комментарии,
 /// строки), и байтовая колонка указывала бы мимо.
 #[test]
 fn line_column_counts_characters_not_bytes() {

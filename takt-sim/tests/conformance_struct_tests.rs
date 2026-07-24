@@ -13,7 +13,7 @@ use std::process::Command;
 use takt_lang::semantic::tree::construct_model;
 use takt_sim::{TickResult, Unit, Value, build_unit};
 
-const FIXTURE: &str = "tests/data/eval/struct_conformance.lam";
+const FIXTURE: &str = "tests/data/eval/struct_conformance.takt";
 const MAX_TICKS: usize = 10;
 
 fn cc_available() -> bool {

@@ -40,7 +40,7 @@ use takt_sim::{TickResult, Unit, Value, build_unit};
 
 /// Фикстура фикса 0041-01: две модели с одноимённой `fn helper` (тела `x+1` и
 /// `x+2`), переменные названы по-разному (`wa`/`wb`) ради раздельного наблюдения.
-const FIXTURE: &str = "tests/data/eval/st_dup_fn.lam";
+const FIXTURE: &str = "tests/data/eval/st_dup_fn.takt";
 
 /// Имя корневой модели в C-символах `iec2c`. Идентификаторы IEC
 /// **регистронезависимы**, и iec2c печатает их в ВЕРХНЕМ регистре
@@ -129,7 +129,7 @@ fn run_generated_st(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<(String, i64)> 
     let st_dir = dir.join("st");
     std::fs::create_dir_all(&st_dir).expect("каталог ST");
     takt_lang::compile_to_st(
-        "st_dup_fn.lam",
+        "st_dup_fn.takt",
         &source,
         st_dir.to_str().expect("путь в UTF-8"),
         &[],
@@ -263,7 +263,7 @@ fn per_tick_trace_matches_generated_st() {
 // сверяется потактово с симулятором.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FIXED_FIXTURE: &str = "tests/data/eval/conformance_fixed.lam";
+const FIXED_FIXTURE: &str = "tests/data/eval/conformance_fixed.takt";
 
 /// Потактовая трасса `acc` (repr q(8,8)) симулятора.
 fn simulate_fixed_trace() -> Vec<i64> {
@@ -292,7 +292,7 @@ fn run_generated_st_fixed(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i64> {
     let st_dir = dir.join("st");
     std::fs::create_dir_all(&st_dir).expect("каталог ST");
     takt_lang::compile_to_st(
-        "qfix.lam",
+        "qfix.takt",
         &source,
         st_dir.to_str().expect("путь в UTF-8"),
         &[],
@@ -415,8 +415,8 @@ fn fixed_point_arithmetic_matches_generated_st() {
 // наследует уже проверенную 0061 ST-Q-арифметику (fixed_point_..._st выше).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.lam";
-const FLOAT_Q_TWIN: &str = "tests/data/eval/conformance_float_q_twin.lam";
+const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.takt";
+const FLOAT_Q_TWIN: &str = "tests/data/eval/conformance_float_q_twin.takt";
 
 /// Опции embedded-Q для `float` (фича 0096).
 #[allow(clippy::field_reassign_with_default)] // GenerateOptions — #[non_exhaustive]

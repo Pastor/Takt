@@ -1,0 +1,6 @@
+// Документ в каталоге proj/: импортирует библиотеку из СОСЕДНЕГО каталога lib/.
+// Без searchPaths (аналог -I) редактор её не найдёт (0055 даёт лишь каталог
+// документа proj/); с searchPaths=["…/lib"] — найдёт, как `lamc -I lib`.
+import "shared.takt";
+
+start Main = Shared;

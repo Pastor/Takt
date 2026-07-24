@@ -54,7 +54,7 @@ pub trait Hal {
     fn read_bit(&mut self, port: InBitPort) -> bool;
     /// Пишет `value` в выходной порт `port`.
     fn write_bit(&mut self, port: OutBitPort, value: bool);
-    /// Внешняя функция модели (`extern fn` в исходнике .lam).
+    /// Внешняя функция модели (`extern fn` в исходнике .takt).
     fn has_flag(&mut self, v: bool) -> bool;
 }
 

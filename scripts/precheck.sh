@@ -118,11 +118,11 @@ SV_MMIO_OUTPUT="examples/generated/sv-mmio"
 # отсекаются по extern fn / SV-005»): до `extern fn` дело у двух из них просто
 # не доходит.
 #
-#   elevator.lam        SV-005  extern fn (8 шт.) — как и предполагалось
-#   comprehensive.lam   SV-002  цикл `for`: в синтезируемом RTL цикл обязан
+#   elevator.takt        SV-005  extern fn (8 шт.) — как и предполагалось
+#   comprehensive.takt   SV-002  цикл `for`: в синтезируемом RTL цикл обязан
 #                               разворачиваться в схему, то есть иметь границы,
 #                               известные на этапе синтеза
-#   extend_complex.lam  SV-005  extern fn `has_flag` (плюс struct/битовый доступ
+#   extend_complex.takt  SV-005  extern fn `has_flag` (плюс struct/битовый доступ
 #                               `x.2`). Композиция `A + B + (C|D) + E` целью sv
 #                               теперь ПОДДЕРЖАНА (фича 0057) — пример остаётся вне
 #                               гейта по НЕ связанным с композицией причинам.
@@ -154,8 +154,8 @@ sv_float_flags() {  # $1 = имя примера
 }
 
 echo "Генерация C-кода из примеров Lam..."
-for lam_file in examples/*.lam; do
-  name="$(basename "$lam_file" .lam)"
+for lam_file in examples/*.takt; do
+  name="$(basename "$lam_file" .takt)"
   echo "  $lam_file → $C_OUTPUT/${name}.c / ${name}.h"
   $LAMC compile "$lam_file" -o "$C_OUTPUT" || echo "    [предупреждение] ошибка генерации $lam_file"
   $LAMC compile "$lam_file" -t plantuml -o "$PLANTUML_OUTPUT" || echo "    [предупреждение] ошибка генерации $lam_file"
@@ -183,8 +183,8 @@ done
 # (см. $SV_MMIO_TRANSLATABLE). Отказ не валит предкоммит здесь: обязательность
 # проверяется гейтом ниже (как у sv).
 for name in $SV_MMIO_TRANSLATABLE; do
-  $LAMC compile "examples/${name}.lam" -t sv-mmio -o "$SV_MMIO_OUTPUT" \
-    || echo "    [предупреждение] цель sv-mmio: examples/${name}.lam не транслируется"
+  $LAMC compile "examples/${name}.takt" -t sv-mmio -o "$SV_MMIO_OUTPUT" \
+    || echo "    [предупреждение] цель sv-mmio: examples/${name}.takt не транслируется"
 done
 echo "Готово. Файлы в $C_OUTPUT/"
 
@@ -201,8 +201,8 @@ echo "Готово. Файлы в $C_OUTPUT/"
 # точкой правки общего слоя.
 echo "Гейт воспроизводимости: два прогона на каждый пример × цель..."
 repro_failed=0
-for lam_file in examples/*.lam; do
-  name="$(basename "$lam_file" .lam)"
+for lam_file in examples/*.takt; do
+  name="$(basename "$lam_file" .takt)"
   for spec in "c:" "c-hal:-t c-hal" "plantuml:-t plantuml" "st:-t st" "st-at:-t st-at" "rust:-t rust" "sv:-t sv" "sv-mmio:-t sv-mmio"; do
     tgt="${spec%%:*}"
     flag="${spec#*:}"
@@ -243,7 +243,7 @@ float_embed_failed=0
 for name in $FLOAT_AS_Q_EXAMPLES; do
   for etgt in c-hal st-at; do
     d="$(mktemp -d)"
-    if $LAMC compile "examples/${name}.lam" -t "$etgt" \
+    if $LAMC compile "examples/${name}.takt" -t "$etgt" \
          --float-embedded --float-as-q="$FLOAT_AS_Q_PREC" -o "$d" >/dev/null 2>&1; then
       echo "  $name [$etgt] → q сформирован (--float-embedded --float-as-q=$FLOAT_AS_Q_PREC)"
     else
@@ -399,7 +399,7 @@ sv_tool_missing() {
 for name in $SV_TRANSLATABLE; do
   if [ ! -e "$SV_OUTPUT/${name}.sv" ]; then
     echo "  $name → НЕ ОТТРАНСЛИРОВАН, хотя обязан (цель sv, фича 0045)."
-    echo "    Причина — выше, в строке '[предупреждение] цель sv: examples/${name}.lam'."
+    echo "    Причина — выше, в строке '[предупреждение] цель sv: examples/${name}.takt'."
     sv_failed=1
   fi
 done
@@ -594,8 +594,8 @@ cd -
 if require_tool cc "гейт c-hal, фикс 0020-01; обычно есть на всех платформах"; then
   echo "Гейт c-hal: компиляция порождённого дефолтного HAL (фикс 0020-01)..."
   chal_failed=0
-  for lam_file in examples/*.lam; do
-    name="$(basename "$lam_file" .lam)"
+  for lam_file in examples/*.takt; do
+    name="$(basename "$lam_file" .takt)"
     chal_dir="$(mktemp -d)"
     if ! "$LAMC" compile "$lam_file" -t c-hal -o "$chal_dir" >"$chal_dir/gen.log" 2>&1; then
       echo "  $name [c-hal] → пропуск (не транслируется: $(head -1 "$chal_dir/gen.log" | cut -c1-40))"

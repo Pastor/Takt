@@ -412,7 +412,7 @@ fn c_hal_emits_address_table_and_hal() {
     let src = "type u8 = [bit;8]; in BTN: u8 := 0x00200000; out LED: bit; \
                address LED = 0x00200004; start Idle { ref On: BTN; } state On { ref Idle: BTN; }";
     let warnings = takt_lang::compile_to_c_hal(
-        "demo.lam",
+        "demo.takt",
         src,
         out,
         &[],
@@ -450,7 +450,7 @@ fn plain_c_has_no_hal_artifacts() {
     let out = tmp.path().to_str().unwrap();
     let src = "type u8 = [bit;8]; in BTN: u8 := 0x00200000; start Idle { ref On: BTN; } state On;";
     takt_lang::compile_to_c(
-        "demo.lam",
+        "demo.takt",
         src,
         out,
         &[],
@@ -473,7 +473,7 @@ fn c_hal_missing_address_is_error() {
     let out = tmp.path().to_str().unwrap();
     let src = "in BTN: bit; start S { ref T: BTN; } state T;";
     let err = takt_lang::compile_to_c_hal(
-        "demo.lam",
+        "demo.takt",
         src,
         out,
         &[],
@@ -493,7 +493,7 @@ fn c_hal_external_overrides_and_warns() {
     let src = "type u8 = [bit;8]; in BTN: u8 := 0x00100000; start Idle { ref On: BTN; } state On;";
     let entries = takt_lang::parse_address_map("BTN = 0x40000000;", 0).unwrap();
     let warnings = takt_lang::compile_to_c_hal(
-        "demo.lam",
+        "demo.takt",
         src,
         out,
         &[],
@@ -520,7 +520,7 @@ fn c_hal_external_overrides_and_warns() {
 ///
 /// Тест живой: он вызывает настоящий `cc`. Снапшот тут бесполезен — он
 /// зафиксировал бы невалидный C ровно так же охотно, как валидный. Дефект дожил
-/// до сих пор именно потому, что все пять `examples/*.lam`, на которых
+/// до сих пор именно потому, что все пять `examples/*.takt`, на которых
 /// `precheck.sh` собирает C, содержат под-модели и попадали в рабочую ветку.
 #[test]
 fn test_single_model_generates_compilable_c() {
@@ -531,7 +531,7 @@ fn test_single_model_generates_compilable_c() {
     let dir = tempdir().expect("временный каталог");
     let src = "var n: u8 := 0;\nstart S { always { n := n + 1; } }";
     takt_lang::compile_to_c(
-        "single.lam",
+        "single.takt",
         src,
         dir.path().to_str().unwrap(),
         &[],
@@ -569,7 +569,7 @@ fn test_fn_composition_generates_compilable_c() {
                fn f(x: u8) -> u8 { return g(x); }\n\
                start Main { always { y := f(1); } }";
     takt_lang::compile_to_c(
-        "compose.lam",
+        "compose.takt",
         src,
         dir.path().to_str().unwrap(),
         &[],
@@ -627,7 +627,7 @@ start Main = Alpha | Beta;
     let read_header = || {
         let dir = tempdir().expect("временный каталог");
         takt_lang::compile_to_c(
-            "ports.lam",
+            "ports.takt",
             src,
             dir.path().to_str().unwrap(),
             &[],

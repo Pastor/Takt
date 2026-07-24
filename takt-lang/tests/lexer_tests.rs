@@ -5,7 +5,7 @@
 //! - **Негативные по файлам** — файлы из `tests/data/lexer/invalid/` порождают ошибку.
 //! - **Модульные** — проверяют конкретные свойства лексера напрямую.
 //!
-//! При добавлении нового `.lam`-файла в директорию тест автоматически его подхватит.
+//! При добавлении нового `.takt`-файла в директорию тест автоматически его подхватит.
 
 use std::fs;
 use std::path::Path;
@@ -70,19 +70,19 @@ fn first_comment_is_doc(input: &str) -> bool {
 
 // ─────────────────────────── Позитивные тесты (по файлам) ────────────────────
 
-/// Проверяет, что все `.lam`-файлы из директории `valid` лексируются без ошибок.
+/// Проверяет, что все `.takt`-файлы из директории `valid` лексируются без ошибок.
 #[test]
 fn valid_files_lex_without_errors() {
     let dir = Path::new("tests/data/lexer/valid");
     let entries: Vec<_> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("Не удалось прочитать директорию {:?}: {}", dir, e))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "lam"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "takt"))
         .collect();
 
     assert!(
         !entries.is_empty(),
-        "Директория {:?} не содержит .lam файлов",
+        "Директория {:?} не содержит .takt файлов",
         dir
     );
 
@@ -103,19 +103,19 @@ fn valid_files_lex_without_errors() {
 
 // ─────────────────── Негативные тесты (контр-примеры по файлам) ──────────────
 
-/// Проверяет, что все `.lam`-файлы из директории `invalid` порождают ошибку лексера.
+/// Проверяет, что все `.takt`-файлы из директории `invalid` порождают ошибку лексера.
 #[test]
 fn invalid_files_produce_lex_errors() {
     let dir = Path::new("tests/data/lexer/invalid");
     let entries: Vec<_> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("Не удалось прочитать директорию {:?}: {}", dir, e))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "lam"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "takt"))
         .collect();
 
     assert!(
         !entries.is_empty(),
-        "Директория {:?} не содержит .lam файлов",
+        "Директория {:?} не содержит .takt файлов",
         dir
     );
 

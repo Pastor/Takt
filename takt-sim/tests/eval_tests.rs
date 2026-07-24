@@ -1,10 +1,10 @@
-//! Интеграционные тесты вычислителя: модель `.lam` → прогон → **значения**.
+//! Интеграционные тесты вычислителя: модель `.takt` → прогон → **значения**.
 //!
 //! # Зачем этот слой существует
 //!
 //! Восемь дефектов фичи 0025 прожили при 1484 зелёных тестах, потому что такого
 //! слоя не было: `simulation` покрывался только inline-юнитами, и **ни один тест
-//! не брал `.lam`, не прогонял его и не сверял вычисленные значения**.
+//! не брал `.takt`, не прогонял его и не сверял вычисленные значения**.
 //! Проверялся факт перехода — а он у сломанного вычислителя выглядел
 //! правдоподобно.
 //!
@@ -69,11 +69,11 @@ fn fixed_repr(unit: &Unit, name: &str) -> i64 {
 // ── Фича 0061: Q-арифметика симулятора (эталон сверки) ────────────────────────
 
 /// Полный путь: инициализация литерала → арифметика в теле → наблюдение.
-/// T9 (floor к −∞ на отрицательном) и T19 (wraparound) — через `.lam`, а не
+/// T9 (floor к −∞ на отрицательном) и T19 (wraparound) — через `.takt`, а не
 /// только юниты `eval::fixed`.
 #[test]
 fn fixed_point_arithmetic_matches_normative_rules() {
-    let (unit, _) = run("fixed_point.lam", 1);
+    let (unit, _) = run("fixed_point.takt", 1);
     // sum = 1.5 + 0.5 = 2.0 → 512 (сложение представлений).
     assert_eq!(fixed_repr(&unit, "sum"), 512, "q: сложение представлений");
     // prod = −1.5 · 2.0 = −3.0 → −768 (floor к −∞; на положительном был бы невидим).
@@ -97,7 +97,7 @@ fn fixed_point_arithmetic_matches_normative_rules() {
 #[test]
 fn t1_arithmetic_in_always_is_evaluated() {
     // Ядро фичи: `c := a + 1` молча пропускалось (c оставалось 0).
-    let (unit, _) = run("assign_arith.lam", 1);
+    let (unit, _) = run("assign_arith.takt", 1);
     assert_eq!(num(&unit, "a"), 5);
     assert_eq!(num(&unit, "b"), 5, "присваивание переменной из переменной");
     assert_eq!(num(&unit, "c"), 6, "Д1/Д2: арифметика обязана исполняться");
@@ -108,7 +108,7 @@ fn t1_arithmetic_in_always_is_evaluated() {
 #[test]
 fn t9_t17_assignment_truncates_to_declared_type() {
     // Сверено с cc -std=c11: uint8_t a=255; a+1 → 0; uint8_t b = 300 → 44.
-    let (unit, _) = run("overflow_u8.lam", 1);
+    let (unit, _) = run("overflow_u8.takt", 1);
     assert_eq!(num(&unit, "wrapped"), 0, "S1: 255 + 1 в u8 обязано дать 0");
     assert_eq!(num(&unit, "truncated"), 44, "S9: 300 в u8 обязано дать 44");
 }
@@ -117,7 +117,7 @@ fn t9_t17_assignment_truncates_to_declared_type() {
 fn t12_shift_promotes_then_truncates_like_c() {
     // S4: в C `uint8_t x = 1; x = x << 8;` даёт 0 БЕЗ UB (продвижение до int).
     // Первоначальная формулировка S4 (UB → диагностика) была ошибочной.
-    let (unit, result) = run("shift_promo.lam", 1);
+    let (unit, result) = run("shift_promo.takt", 1);
     assert_eq!(num(&unit, "x"), 0);
     assert_ne!(
         result,
@@ -131,7 +131,7 @@ fn t12_shift_promotes_then_truncates_like_c() {
 #[test]
 fn t3_bare_extern_procedure_call_does_not_block_block() {
     // `log_temp(x);` молча отбрасывался; проверяем, что блок исполняется целиком.
-    let (unit, _) = run("call_stmt.lam", 3);
+    let (unit, _) = run("call_stmt.takt", 3);
     assert_eq!(unit.current_state(), Some("Hot"), "переход при x > 7");
     assert_eq!(num(&unit, "x"), 8);
 }
@@ -139,7 +139,7 @@ fn t3_bare_extern_procedure_call_does_not_block_block() {
 #[test]
 fn t20_local_function_call_returns_correct_value() {
     // Критерий A7: метрика Чебышёва max(5, 3, 7) = 7 — как travel_time в stacker.
-    let (unit, _) = run("local_fn_call.lam", 1);
+    let (unit, _) = run("local_fn_call.takt", 1);
     assert_eq!(
         num(&unit, "eta"),
         7,
@@ -152,28 +152,28 @@ fn t20_local_function_call_returns_correct_value() {
 #[test]
 fn t4_function_call_in_condition_fires_transition() {
     // Раньше: паника unimplemented!().
-    let (unit, _) = run("fn_cond.lam", 1);
+    let (unit, _) = run("fn_cond.takt", 1);
     assert_eq!(unit.current_state(), Some("Hot"));
 }
 
 #[test]
 fn t6_mixed_int_real_condition_fires_transition() {
     // Раньше: паника unwrap() on None. 1 + 2.5 = 3.5 > 3.
-    let (unit, _) = run("mixed_num_cond.lam", 1);
+    let (unit, _) = run("mixed_num_cond.takt", 1);
     assert_eq!(unit.current_state(), Some("Hot"));
 }
 
 #[test]
 fn t7_parenthesised_condition_fires_transition() {
     // Раньше: скобки не вычислялись → (5 + 1) > 2 было ложным.
-    let (unit, _) = run("paren_cond.lam", 1);
+    let (unit, _) = run("paren_cond.takt", 1);
     assert_eq!(unit.current_state(), Some("Hot"));
 }
 
 #[test]
 fn t8_enum_variant_condition_fires_transition() {
     // Раньше: EnumVariant → Err → «условие ложно».
-    let (unit, _) = run("enum_cond.lam", 1);
+    let (unit, _) = run("enum_cond.takt", 1);
     assert_eq!(unit.current_state(), Some("Hot"));
 }
 
@@ -181,7 +181,7 @@ fn t8_enum_variant_condition_fires_transition() {
 
 #[test]
 fn t5_enter_of_start_state_runs_exactly_once() {
-    let (unit, _) = run("start_enter.lam", 4);
+    let (unit, _) = run("start_enter.takt", 4);
     assert_eq!(
         num(&unit, "e"),
         7,
@@ -196,7 +196,7 @@ fn t5_enter_of_start_state_runs_exactly_once() {
 #[test]
 fn t11_division_by_zero_fails_loudly() {
     // R5: ошибка вычисления обязана быть ОТЛИЧИМА от «ничего не произошло».
-    let (_, result) = run("div_zero.lam", 1);
+    let (_, result) = run("div_zero.takt", 1);
     match result {
         TickResult::Failed(details) => {
             assert!(details.contains("деление на ноль"), "детали: {details}");
@@ -212,7 +212,7 @@ fn t11_division_by_zero_fails_loudly() {
 #[test]
 fn t23_extern_function_with_return_fails_loudly() {
     // Решение ADR: тела нет → отказ, а не тихий ноль.
-    let (_, result) = run("extern_ret.lam", 1);
+    let (_, result) = run("extern_ret.takt", 1);
     match result {
         TickResult::Failed(details) => {
             assert!(details.contains("SIM-019"), "детали: {details}");
@@ -225,7 +225,7 @@ fn t23_extern_function_with_return_fails_loudly() {
 fn healthy_model_is_not_reported_as_failed() {
     // Контрпример к контрпримерам: исправная модель НЕ должна давать Failed.
     // Без этого теста «объявлять ошибкой всё подряд» прошло бы проверки выше.
-    let (_, result) = run("assign_arith.lam", 1);
+    let (_, result) = run("assign_arith.takt", 1);
     assert!(
         !matches!(result, TickResult::Failed(_)),
         "исправная модель не должна отмечаться как ошибочная: {result:?}"
@@ -238,7 +238,7 @@ fn healthy_model_is_not_reported_as_failed() {
 /// r = f(5) = g(5) + 10 = (5 + 1) + 10 = 16. Сверено с порождённым C (r=16).
 #[test]
 fn fn_composition_is_evaluated() {
-    let (unit, _) = run("fn_composition.lam", 1);
+    let (unit, _) = run("fn_composition.takt", 1);
     assert_eq!(num(&unit, "r"), 16, "f→g: (5+1)+10 = 16");
 }
 
@@ -249,7 +249,7 @@ fn fn_composition_is_evaluated() {
 /// (эталон C: assert до switch), а не после.
 #[test]
 fn invariant_model_violation_stops_with_sim025() {
-    let (unit, last) = run("invariant_violated.lam", 5);
+    let (unit, last) = run("invariant_violated.takt", 5);
     let TickResult::Failed(msg) = last else {
         panic!("ожидался Failed на нарушенном инварианте, получено {last:?}");
     };
@@ -261,7 +261,7 @@ fn invariant_model_violation_stops_with_sim025() {
 /// T19: истинный инвариант прогону не мешает.
 #[test]
 fn invariant_holds_does_not_interfere() {
-    let (unit, last) = run("invariant_holds.lam", 3);
+    let (unit, last) = run("invariant_holds.takt", 3);
     assert!(
         !matches!(last, TickResult::Failed(_)),
         "истинный инвариант не должен ронять прогон: {last:?}"
@@ -272,7 +272,7 @@ fn invariant_holds_does_not_interfere() {
 /// T16 (A10): инвариант СОСТОЯНИЯ Q нарушается (проверяется, пока автомат в A).
 #[test]
 fn invariant_state_violation_stops_with_name() {
-    let (_unit, last) = run("invariant_state_violated.lam", 5);
+    let (_unit, last) = run("invariant_state_violated.takt", 5);
     let TickResult::Failed(msg) = last else {
         panic!("ожидался Failed на инварианте состояния, получено {last:?}");
     };
@@ -304,11 +304,11 @@ fn run_soft(fixture: &str, steps: usize) -> (Unit, Vec<(usize, String)>, TickRes
 }
 
 /// A2 (0087): мягкий режим не останавливает прогон на нарушении инварианта —
-/// записывает нарушение и идёт дальше. `invariant_violated.lam`: P = c = 0
+/// записывает нарушение и идёт дальше. `invariant_violated.takt`: P = c = 0
 /// ложно со 2-го такта, автомат осциллирует A↔B (не терминирует).
 #[test]
 fn invariant_soft_records_and_continues() {
-    let (unit, violations, last) = run_soft("invariant_violated.lam", 5);
+    let (unit, violations, last) = run_soft("invariant_violated.takt", 5);
     // Прогон НЕ упал (в отличие от жёсткого режима, где стоп на шаге 2).
     assert!(
         !matches!(last, TickResult::Failed(_)),
@@ -332,7 +332,7 @@ fn invariant_soft_records_and_continues() {
 /// «инвариант ложен» (SIM-025), не «условие не вычислилось» (R4).
 #[test]
 fn invariant_soft_does_not_swallow_eval_error() {
-    let (_unit, violations, last) = run_soft("invariant_eval_error.lam", 5);
+    let (_unit, violations, last) = run_soft("invariant_eval_error.takt", 5);
     let TickResult::Failed(msg) = last else {
         panic!("ошибка вычисления обязана дать Failed даже в мягком режиме: {last:?}");
     };
@@ -350,7 +350,7 @@ fn invariant_soft_does_not_swallow_eval_error() {
 /// режиме (рекурсивный слив по дереву Unit).
 #[test]
 fn invariant_soft_collects_from_composition() {
-    let (_unit, violations, last) = run_soft("invariant_composite.lam", 4);
+    let (_unit, violations, last) = run_soft("invariant_composite.takt", 4);
     assert!(
         !matches!(last, TickResult::Failed(_)),
         "мягкий режим не роняет композитный прогон: {last:?}"
@@ -364,7 +364,7 @@ fn invariant_soft_collects_from_composition() {
 /// T17 (A10): `: c;` (assert языка Takt) в блоке нарушается — так же, как invariant.
 #[test]
 fn assert_in_block_violation_stops() {
-    let (_unit, last) = run("assert_in_block.lam", 3);
+    let (_unit, last) = run("assert_in_block.takt", 3);
     let TickResult::Failed(msg) = last else {
         panic!("ожидался Failed на assert в блоке, получено {last:?}");
     };
@@ -379,7 +379,7 @@ fn assert_in_block_violation_stops() {
 /// структура). Зонд-значения захвачены прогоном, не угаданы.
 #[test]
 fn var_without_initializer_defaults_to_zero() {
-    let (unit, last) = run("var_no_init.lam", 1);
+    let (unit, last) = run("var_no_init.takt", 1);
     assert!(
         !matches!(last, TickResult::Failed(_)),
         "прогон не должен падать (в т.ч. SIM-009), получено {last:?}"
@@ -420,7 +420,7 @@ fn arr_elem(unit: &Unit, name: &str, i: usize) -> i64 {
 /// массив — `SIM-010` при чтении (массив стал скаляром). Теперь массив исполняется.
 #[test]
 fn array_element_write_and_read() {
-    let (unit, last) = run("arrays.lam", 1);
+    let (unit, last) = run("arrays.takt", 1);
     assert!(
         !matches!(last, TickResult::Failed(_)),
         "прогон массивов не должен падать (в т.ч. SIM-017/010), получено {last:?}"

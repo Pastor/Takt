@@ -1,6 +1,6 @@
 //! Поиск и чтение файлов импорта для Takt.
 //!
-//! Основная функция [`read_import_file`] ищет `.lam`-файл по списку директорий,
+//! Основная функция [`read_import_file`] ищет `.takt`-файл по списку директорий,
 //! проверяет расширение и возвращает содержимое вместе с полным путём к файлу.
 
 use crate::diagnostics::Diagnostic;
@@ -15,8 +15,8 @@ use std::fs::{exists, read_to_string};
 /// # Параметры
 ///
 /// - `search_paths` — список директорий для поиска файлов (например, `["/src", "/lib"]`).
-/// - `path` — путь импорта: строковый литерал (`"file.lam"`) или
-///   идентификаторный путь (`a::b::c` → `a/b/c.lam`).
+/// - `path` — путь импорта: строковый литерал (`"file.takt"`) или
+///   идентификаторный путь (`a::b::c` → `a/b/c.takt`).
 ///
 /// # Возвращает
 ///
@@ -26,15 +26,15 @@ use std::fs::{exists, read_to_string};
 ///
 /// Возвращает [`Diagnostic`], если:
 /// - файл не найден ни в одной из директорий поиска;
-/// - файл имеет расширение, отличное от `.lam`;
+/// - файл имеет расширение, отличное от `.takt`;
 /// - файл не удалось прочитать (нет прав, ошибка ввода-вывода и т.д.).
 ///
 /// # Примеры
 ///
 /// Использование через интеграционные тесты — см. `tests/semantic_tests.rs`:
 /// ```text
-/// import "model.lam";            // Plain-импорт
-/// import "engine.lam" as Motor;  // GlobalSymbol-импорт с алиасом
+/// import "model.takt";            // Plain-импорт
+/// import "engine.takt" as Motor;  // GlobalSymbol-импорт с алиасом
 /// ```
 pub(crate) fn read_import_file(
     search_paths: &[String],
@@ -42,18 +42,18 @@ pub(crate) fn read_import_file(
 ) -> Result<(String, String), Diagnostic> {
     // Формируем список кандидатов: cross-product (search_paths × path)
     let files: Vec<String> = match path {
-        // Строковый литерал: `import "file.lam";`
+        // Строковый литерал: `import "file.takt";`
         ImportPath::Filename(filename) => search_paths
             .iter()
             .map(|dir| format!("{}/{}", dir, filename.string))
             .collect(),
 
-        // Идентификаторный путь: `import a::b::c;` → ищем `a/b/c.lam`
+        // Идентификаторный путь: `import a::b::c;` → ищем `a/b/c.takt`
         ImportPath::Path(id_path) => {
             let inner = id_path.identifiers.iter().map(|i| i.name.clone()).join("/");
             search_paths
                 .iter()
-                .map(|dir| format!("{}/{}.lam", dir, inner))
+                .map(|dir| format!("{}/{}.takt", dir, inner))
                 .collect()
         }
     };
@@ -121,8 +121,8 @@ pub(crate) fn read_import_file(
         }
     }
 
-    // Проверяем, что файл имеет расширение .lam
-    if !filename.ends_with(".lam") {
+    // Проверяем, что файл имеет расширение .takt
+    if !filename.ends_with(".takt") {
         return Err(Diagnostic::from(
             format!("Недопустимое расширение файла импорта: «{}»", filename).as_str(),
         )
@@ -148,7 +148,7 @@ mod tests {
 
     // ─── Вспомогательные функции ──────────────────────────────────────────────
 
-    /// Создаёт временный `.lam`-файл с заданным содержимым.
+    /// Создаёт временный `.takt`-файл с заданным содержимым.
     /// Возвращает (директория, полный_путь_к_файлу).
     fn make_tmp_but(name: &str, content: &str) -> (tempfile::TempDir, String) {
         let dir = tempfile::tempdir().unwrap();
@@ -171,13 +171,13 @@ mod tests {
     /// Файл найден по строковому литералу: содержимое и путь возвращаются корректно.
     #[test]
     fn filename_found_returns_content_and_path() {
-        let (dir, _) = make_tmp_but("model.lam", "start S;");
+        let (dir, _) = make_tmp_but("model.takt", "start S;");
         let search = vec![dir.path().to_string_lossy().into_owned()];
-        let path = filename_path("model.lam");
+        let path = filename_path("model.takt");
 
         let (content, fullpath) = read_import_file(&search, &path).unwrap();
         assert_eq!(content, "start S;");
-        assert!(fullpath.ends_with("model.lam"));
+        assert!(fullpath.ends_with("model.takt"));
     }
 
     /// Первый файл в нескольких путях поиска возвращается (порядок поиска).
@@ -185,21 +185,21 @@ mod tests {
     fn first_search_path_wins() {
         let dir1 = tempfile::tempdir().unwrap();
         let dir2 = tempfile::tempdir().unwrap();
-        fs::write(dir1.path().join("x.lam"), "start A;").unwrap();
-        fs::write(dir2.path().join("x.lam"), "start B;").unwrap();
+        fs::write(dir1.path().join("x.takt"), "start A;").unwrap();
+        fs::write(dir2.path().join("x.takt"), "start B;").unwrap();
 
         let search = vec![
             dir1.path().to_string_lossy().into_owned(),
             dir2.path().to_string_lossy().into_owned(),
         ];
-        let (content, _) = read_import_file(&search, &filename_path("x.lam")).unwrap();
+        let (content, _) = read_import_file(&search, &filename_path("x.takt")).unwrap();
         assert_eq!(
             content, "start A;",
             "должна вернуться версия из первого пути"
         );
     }
 
-    /// Идентификаторный путь `a::b` ищет файл `a/b.lam`.
+    /// Идентификаторный путь `a::b` ищет файл `a/b.takt`.
     #[test]
     fn identifier_path_appends_but_extension() {
         use crate::parser::ast::Identifier;
@@ -207,7 +207,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let subdir = dir.path().join("a");
         fs::create_dir(&subdir).unwrap();
-        fs::write(subdir.join("b.lam"), "start S;").unwrap();
+        fs::write(subdir.join("b.takt"), "start S;").unwrap();
 
         let search = vec![dir.path().to_string_lossy().into_owned()];
         let path = ImportPath::Path(IdentifierPath {
@@ -227,8 +227,8 @@ mod tests {
         let (content, fullpath) = read_import_file(&search, &path).unwrap();
         assert_eq!(content, "start S;");
         assert!(
-            fullpath.ends_with("a/b.lam") || fullpath.ends_with("a\\b.lam"),
-            "путь должен заканчиваться на a/b.lam"
+            fullpath.ends_with("a/b.takt") || fullpath.ends_with("a\\b.takt"),
+            "путь должен заканчиваться на a/b.takt"
         );
     }
 
@@ -239,7 +239,7 @@ mod tests {
     fn missing_file_returns_error() {
         let err = read_import_file(
             &["/nonexistent_dir_xyz".to_string()],
-            &filename_path("ghost.lam"),
+            &filename_path("ghost.takt"),
         )
         .unwrap_err();
         assert!(
@@ -252,11 +252,11 @@ mod tests {
     /// Пустой список путей поиска → ошибка.
     #[test]
     fn empty_search_paths_returns_error() {
-        let err = read_import_file(&[], &filename_path("any.lam")).unwrap_err();
+        let err = read_import_file(&[], &filename_path("any.takt")).unwrap_err();
         assert!(err.message.contains("не найден"));
     }
 
-    /// Файл существует, но не имеет расширения `.lam` → ошибка.
+    /// Файл существует, но не имеет расширения `.takt` → ошибка.
     #[test]
     fn non_but_extension_is_error() {
         let dir = tempfile::tempdir().unwrap();
@@ -293,17 +293,17 @@ mod tests {
         let victim_dir = tempfile::tempdir().unwrap();
 
         // Кладём целевой файл в директорию «жертву» (не в search_paths).
-        fs::write(victim_dir.path().join("secret.lam"), "start S;").unwrap();
+        fs::write(victim_dir.path().join("secret.takt"), "start S;").unwrap();
 
         // Строим относительный путь, выходящий за пределы allowed_dir.
-        // Например: "../<victim_basename>/secret.lam"
+        // Например: "../<victim_basename>/secret.takt"
         let victim_dirname = victim_dir
             .path()
             .file_name()
             .unwrap()
             .to_string_lossy()
             .into_owned();
-        let traversal = format!("../{}/secret.lam", victim_dirname);
+        let traversal = format!("../{}/secret.takt", victim_dirname);
 
         let search = vec![allowed_dir.path().to_string_lossy().into_owned()];
         let path = filename_path(&traversal);
@@ -331,10 +331,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let subdir = dir.path().join("sub");
         fs::create_dir(&subdir).unwrap();
-        fs::write(subdir.join("ok.lam"), "start S;").unwrap();
+        fs::write(subdir.join("ok.takt"), "start S;").unwrap();
 
         let search = vec![dir.path().to_string_lossy().into_owned()];
-        let path = filename_path("sub/ok.lam");
+        let path = filename_path("sub/ok.takt");
 
         // Должно успешно читаться — файл внутри search_dir.
         let (content, _) = read_import_file(&search, &path).unwrap();
@@ -348,12 +348,12 @@ mod tests {
     fn unreadable_file_returns_io_error() {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("secret.lam");
+        let p = dir.path().join("secret.takt");
         fs::write(&p, "start S;").unwrap();
         fs::set_permissions(&p, fs::Permissions::from_mode(0o000)).unwrap();
 
         let search = vec![dir.path().to_string_lossy().into_owned()];
-        let err = read_import_file(&search, &filename_path("secret.lam")).unwrap_err();
+        let err = read_import_file(&search, &filename_path("secret.takt")).unwrap_err();
         // Восстанавливаем права, чтобы tempdir мог удалить файл
         fs::set_permissions(&p, fs::Permissions::from_mode(0o644)).unwrap();
         assert!(

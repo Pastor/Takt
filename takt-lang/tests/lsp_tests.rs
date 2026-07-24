@@ -749,10 +749,10 @@ start Main = Robot;
         assert_eq!(node.kind, SemanticNodeKind::LocalVar);
     }
 
-    /// I8: тестовый файл local_var_in_blocks.lam — все локальные переменные индексируются.
+    /// I8: тестовый файл local_var_in_blocks.takt — все локальные переменные индексируются.
     #[test]
     fn i8_file_local_vars_indexed() {
-        let src = std::fs::read_to_string("tests/data/lsp/local_var_in_blocks.lam")
+        let src = std::fs::read_to_string("tests/data/lsp/local_var_in_blocks.takt")
             .expect("не удалось прочитать файл");
         let (ast, _) = parse(&src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
@@ -786,12 +786,12 @@ start Main = Robot;
 
         // Создаём временный файл с моделью
         let dir = tempfile::tempdir().unwrap();
-        let ping_path = dir.path().join("ping.lam");
+        let ping_path = dir.path().join("ping.takt");
         std::fs::write(&ping_path, "model Ping { start S; }").unwrap();
         let dir_str = dir.path().to_string_lossy().into_owned();
 
         // Исходный файл с импортом
-        let src = r#"import "ping.lam"; start Main;"#;
+        let src = r#"import "ping.takt"; start Main;"#;
         // Позиция 7 — символ '"' (начало строки импорта) — за пределами идентификатора
         // Проверяем что функция не паникует при отсутствии узла
         let _ =

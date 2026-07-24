@@ -54,7 +54,7 @@ fn field(unit: &Unit, var: &str, field: &str) -> Value {
 /// в объявленном порядке.
 #[test]
 fn struct_variable_is_observable() {
-    let (unit, _) = run("struct_var.lam", 1);
+    let (unit, _) = run("struct_var.takt", 1);
     match unit.variable("p") {
         Some(Value::Struct { name, fields }) => {
             assert_eq!(name, "Point");
@@ -72,7 +72,7 @@ fn struct_variable_is_observable() {
 /// `p.x`. T22 (A9): `p.y := 300` при `y: u8` усекается до `44` (S9 внутри поля).
 #[test]
 fn field_write_is_pointwise_and_truncates() {
-    let (unit, _) = run("struct_var.lam", 1);
+    let (unit, _) = run("struct_var.takt", 1);
     assert_eq!(field(&unit, "p", "x"), Value::Number(7), "p.x := 7");
     assert_eq!(
         field(&unit, "p", "y"),
@@ -84,7 +84,7 @@ fn field_write_is_pointwise_and_truncates() {
 /// T3 (A3): чтение поля `rx := p.x`, `ry := p.y` (после записи и усечения).
 #[test]
 fn field_read_returns_value() {
-    let (unit, _) = run("struct_var.lam", 1);
+    let (unit, _) = run("struct_var.takt", 1);
     assert_eq!(num(&unit, "rx"), 7, "rx = p.x = 7");
     assert_eq!(num(&unit, "ry"), 44, "ry = p.y = 44 (усечено)");
 }
@@ -92,7 +92,7 @@ fn field_read_returns_value() {
 /// T8 (A4): запись во **вложенное** поле `o.i.v := 5` — путь рекурсивен.
 #[test]
 fn nested_field_write() {
-    let (unit, _) = run("struct_nested.lam", 1);
+    let (unit, _) = run("struct_nested.takt", 1);
     match field(&unit, "o", "i") {
         Value::Struct { fields, .. } => {
             assert_eq!(fields[0].0, "v");
@@ -123,7 +123,7 @@ fn failure(fixture: &str) -> String {
 /// структуру, и покрыт юнит-тестами `eval/{access,place}.rs`.
 #[test]
 fn unknown_field_read_is_se061_at_compile_time() {
-    let path = "tests/data/eval/struct_unknown_field.lam";
+    let path = "tests/data/eval/struct_unknown_field.takt";
     let source = std::fs::read_to_string(path).expect("фикстура");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let err = construct_model(&ast, None, &[]).expect_err("ожидался отказ семантики SE-061");
@@ -137,7 +137,7 @@ fn unknown_field_read_is_se061_at_compile_time() {
 /// T13 (A7): обращение к структуре по номеру бита `p.0` → диагностика (SIM-029).
 #[test]
 fn bit_index_on_struct_is_diagnostic() {
-    let msg = failure("struct_bit_index.lam");
+    let msg = failure("struct_bit_index.takt");
     assert!(msg.contains("SIM-029"), "ожидался SIM-029: {msg}");
     assert!(msg.contains("по номеру бита"), "{msg}");
 }
@@ -146,7 +146,7 @@ fn bit_index_on_struct_is_diagnostic() {
 /// структурах) → диагностика (SIM-005 TypeMismatch), а не тихое `false`.
 #[test]
 fn struct_comparison_is_diagnostic_not_false() {
-    let msg = failure("struct_compare.lam");
+    let msg = failure("struct_compare.takt");
     assert!(
         msg.contains("SIM-005"),
         "ожидался SIM-005 (TypeMismatch): {msg}"

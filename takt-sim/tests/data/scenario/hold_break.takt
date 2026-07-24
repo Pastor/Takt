@@ -1,0 +1,41 @@
+/// Контрпример T7 (фича 0030): **срыв удержания** — состояние не удерживает
+/// управление до конца работы.
+///
+/// Это второй, независимый дефект `comprehensive.takt`, который «минимальная
+/// правка» из бэклога (нагрев в `always`) **не чинила**: охлаждение снимает
+/// 3 единицы за такт, а ребро «уйти, если temperature > 0» срабатывает на
+/// **первом же** такте — модель покидает охлаждение, не охладив ничего, и `Done`
+/// остаётся недостижимым при любом нагреве.
+///
+/// Мораль: `Cooling` спроектирован как «шаг охлаждения», а не как «состояние
+/// охлаждения». Положительный образец — `hold_keep.takt`.
+model HoldBreak {
+    var temperature: u8 := 101;
+    const COOL_STEP: u8 := 3;
+
+    start Cooling {
+        always {
+            for var i: u8 := 0; i < COOL_STEP; i := i + 1 {
+                if temperature > 0 {
+                    temperature := temperature - 1;
+                }
+            }
+        }
+        ref Done: temperature <= 0;
+        ref Idle: temperature > 0;
+    }
+
+    state Idle {
+        enter {
+            temperature := 0;
+        }
+    }
+
+    state Done {
+        enter {
+            temperature := 0;
+        }
+    }
+}
+
+start Entry = HoldBreak;

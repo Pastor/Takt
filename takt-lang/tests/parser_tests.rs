@@ -52,19 +52,19 @@ fn first_named_model(src: &str) -> takt_lang::parser::ast::Model {
 
 // ─────────────────────────── Позитивные тесты (по файлам) ───────────────────
 
-/// Проверяет, что все `.lam`-файлы из директории `valid` разбираются без ошибок.
+/// Проверяет, что все `.takt`-файлы из директории `valid` разбираются без ошибок.
 #[test]
 fn valid_files_parse_without_errors() {
     let dir = Path::new("tests/data/parser/valid");
     let entries: Vec<_> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("Не удалось прочитать директорию {:?}: {}", dir, e))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "lam"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "takt"))
         .collect();
 
     assert!(
         !entries.is_empty(),
-        "Директория {:?} не содержит .lam файлов",
+        "Директория {:?} не содержит .takt файлов",
         dir
     );
 
@@ -82,19 +82,19 @@ fn valid_files_parse_without_errors() {
 
 // ─────────────────────── Негативные тесты (контр-примеры по файлам) ─────────
 
-/// Проверяет, что все `.lam`-файлы из директории `invalid` порождают диагностику.
+/// Проверяет, что все `.takt`-файлы из директории `invalid` порождают диагностику.
 #[test]
 fn invalid_files_produce_parse_errors() {
     let dir = Path::new("tests/data/parser/invalid");
     let entries: Vec<_> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("Не удалось прочитать директорию {:?}: {}", dir, e))
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "lam"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "takt"))
         .collect();
 
     assert!(
         !entries.is_empty(),
-        "Директория {:?} не содержит .lam файлов",
+        "Директория {:?} не содержит .takt файлов",
         dir
     );
 
@@ -746,7 +746,7 @@ fn parse_cast_expression() {
 /// `import "path";`.
 #[test]
 fn parse_import_plain() {
-    let root = must_parse(r#"import "std.lam"; model M { start S; }"#);
+    let root = must_parse(r#"import "std.takt"; model M { start S; }"#);
     let has_import = root
         .elements
         .iter()
@@ -757,7 +757,7 @@ fn parse_import_plain() {
 /// `import "path" as Alias;`.
 #[test]
 fn parse_import_with_alias() {
-    must_parse(r#"import "utils.lam" as Utils; model M { start S; }"#);
+    must_parse(r#"import "utils.takt" as Utils; model M { start S; }"#);
 }
 
 // ──────────────────────── Тесты функций ────────────────────────────────────

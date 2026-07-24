@@ -128,7 +128,7 @@ fn generate_program(
     })?;
 
     // Модуль ОДИН на корневую модель (ADR, Option A′): композиция уплощается,
-    // поэтому порты собираются со всех уровней — в `elevator_mini.lam` они
+    // поэтому порты собираются со всех уровней — в `elevator_mini.takt` они
     // объявлены внутри под-моделей. Порядок под-моделей задан `BTreeMap` карты
     // (фича 0048) — детерминизм достаётся даром.
     let mut blocks: Vec<(Name, Rc<RefCell<ModelNode>>)> = Vec::new();
@@ -258,7 +258,7 @@ mod tests {
         assert!(sv.contains("endmodule"), "нет endmodule:\n{sv}");
     }
 
-    /// Служебные порты `clk`/`rst_n` эмитятся всегда: в `.lam` их нет.
+    /// Служебные порты `clk`/`rst_n` эмитятся всегда: в `.takt` их нет.
     #[test]
     fn service_ports_are_emitted() {
         let sv = program_of("start S;", "Root");

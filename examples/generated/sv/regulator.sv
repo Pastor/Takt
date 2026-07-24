@@ -6,7 +6,7 @@
 // поэтому тело стартового состояния исполняется на такте 1 (контракт 0033).
 
 module regulator (
-    input  logic clk,   // служебный порт цели sv: в .lam его нет
+    input  logic clk,   // служебный порт цели sv: в .takt его нет
     input  logic rst_n, // служебный порт цели sv: сброс, активный низкий
     input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)
     output logic ready,

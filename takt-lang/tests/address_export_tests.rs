@@ -39,7 +39,7 @@ fn resolve_fixture(
 /// (`SW`), оператор `address` (`LED`), формат `0x` + 8 цифр, бит сохранён.
 #[test]
 fn map_export_three_sources_probe() {
-    let res = resolve_fixture("probe.lam", None, &[]);
+    let res = resolve_fixture("probe.takt", None, &[]);
     assert_eq!(
         export_address_map(&res),
         "BTN = 0x00200000;\nLED = 0x00200004;\nSW = 0x00300000:3;\n"
@@ -50,7 +50,7 @@ fn map_export_three_sources_probe() {
 /// inline (`0x00200000`). Приоритет источников (R2).
 #[test]
 fn map_export_external_overrides_model() {
-    let res = resolve_fixture("probe.lam", Some("BTN = 0x40000000;\n"), &[]);
+    let res = resolve_fixture("probe.takt", Some("BTN = 0x40000000;\n"), &[]);
     let out = export_address_map(&res);
     assert!(
         out.contains("BTN = 0x40000000;"),
@@ -67,7 +67,7 @@ fn map_export_external_overrides_model() {
 /// T6: выгрузка разбирается `parse_address_map` без диагностик `AM-*` (замыкание).
 #[test]
 fn round_trip_reparses_without_diagnostics() {
-    let res = resolve_fixture("probe.lam", Some("BTN = 0x40000000;\n"), &[]);
+    let res = resolve_fixture("probe.takt", Some("BTN = 0x40000000;\n"), &[]);
     let text = export_address_map(&res);
     parse_address_map(&text, 0).expect("выгрузка обязана разбираться без AM-*");
 }
@@ -76,7 +76,7 @@ fn round_trip_reparses_without_diagnostics() {
 /// Идемпотентность — свойство общего печатника (`write_map_line`).
 #[test]
 fn round_trip_is_byte_identical() {
-    let res = resolve_fixture("probe.lam", Some("BTN = 0x40000000;\n"), &[]);
+    let res = resolve_fixture("probe.takt", Some("BTN = 0x40000000;\n"), &[]);
     let text1 = export_address_map(&res);
     let entries = parse_address_map(&text1, 0).expect("разбор");
     let text2 = export_map_entries(&entries);
@@ -92,7 +92,7 @@ fn round_trip_is_byte_identical() {
 /// источник/тип/направление) и версионирован.
 #[test]
 fn json_export_is_valid_complete_and_versioned() {
-    let res = resolve_fixture("probe.lam", Some("BTN = 0x40000000;\n"), &[]);
+    let res = resolve_fixture("probe.takt", Some("BTN = 0x40000000;\n"), &[]);
     let text = export_address_map_json(&res);
     let v: serde_json::Value = serde_json::from_str(&text).expect("json валиден (T10)");
 
@@ -131,7 +131,7 @@ fn json_export_is_valid_complete_and_versioned() {
 /// способ соврать в выгрузке); в `json` — явная пометка `null`.
 #[test]
 fn dead_port_absent_in_map_and_null_in_json() {
-    let res = resolve_fixture("dead_port.lam", None, &[]);
+    let res = resolve_fixture("dead_port.takt", None, &[]);
 
     let map = export_address_map(&res);
     assert_eq!(map, "USED = 0x00100000;\n", "мёртвый DEAD не в map: {map}");
@@ -167,7 +167,7 @@ fn dead_port_absent_in_map_and_null_in_json() {
 /// границу формата.
 #[test]
 fn flat_key_collision_last_wins() {
-    let res = resolve_fixture("collide.lam", None, &[]);
+    let res = resolve_fixture("collide.takt", None, &[]);
     // Карта после 0084 содержит ОБА порта (квалиф. ключи) — это исправление:
     assert_eq!(
         res.map.values().filter(|r| r.name == "SIG").count(),
@@ -189,7 +189,7 @@ fn flat_key_collision_last_wins() {
 /// `PROBE_BTN=0x40000000`, `PROBE_LED=0x200004`, `PROBE_SW=0x300000:3`.
 #[test]
 fn export_addresses_match_chal_table() {
-    let res = resolve_fixture("probe.lam", Some("BTN = 0x40000000;\n"), &[]);
+    let res = resolve_fixture("probe.takt", Some("BTN = 0x40000000;\n"), &[]);
     // Фича 0084: ключ карты квалифицирован моделью — ищем по голому имени
     // (`ResolvedAddress::name`) среди значений, а не `res.map["BTN"]`.
     let by_name = |n: &str| {
@@ -206,7 +206,7 @@ fn export_addresses_match_chal_table() {
 
 // ── Библиотечный уровень: корпусный круговой рейс (T20) ───────────────────────
 
-/// T20: для каждого `examples/*.lam`, разрешающегося без ошибок, круговой рейс
+/// T20: для каждого `examples/*.takt`, разрешающегося без ошибок, круговой рейс
 /// `export → parse → export` = тождество. Примеры с достижимым портом без адреса
 /// (SE-052) пропускаются — у них нет полной карты для выгрузки.
 #[test]
@@ -218,7 +218,7 @@ fn corpus_round_trip_is_identity() {
     let mut checked = 0usize;
     for entry in std::fs::read_dir(&examples).unwrap() {
         let path = entry.unwrap().path();
-        if path.extension().and_then(|e| e.to_str()) != Some("lam") {
+        if path.extension().and_then(|e| e.to_str()) != Some("takt") {
             continue;
         }
         let source = std::fs::read_to_string(&path).unwrap();
@@ -267,7 +267,7 @@ fn taktc() -> Command {
 #[test]
 fn cli_default_emit_is_map() {
     let out = taktc()
-        .args(["address-map", &format!("{DIR}/probe.lam")])
+        .args(["address-map", &format!("{DIR}/probe.takt")])
         .output()
         .expect("запуск taktc");
     assert!(out.status.success(), "rc=0 ожидался");
@@ -286,7 +286,7 @@ fn cli_warnings_go_to_stderr_not_stdout() {
             "address-map",
             "--address-map",
             &format!("{DIR}/plat.map"),
-            &format!("{DIR}/probe.lam"),
+            &format!("{DIR}/probe.takt"),
         ])
         .output()
         .expect("запуск");
@@ -310,7 +310,7 @@ fn cli_reachable_port_without_address_is_se052() {
         .unwrap();
     let out = taktc()
         .args(["address-map"])
-        .arg(root.join("examples/elevator_mini.lam"))
+        .arg(root.join("examples/elevator_mini.takt"))
         .output()
         .expect("запуск");
     assert!(!out.status.success(), "SE-052 обязан дать ненулевой код");
@@ -326,7 +326,7 @@ fn cli_reachable_port_without_address_is_se052() {
 #[test]
 fn cli_unknown_format_is_rejected() {
     let out = taktc()
-        .args(["address-map", "--emit", "svd", &format!("{DIR}/probe.lam")])
+        .args(["address-map", "--emit", "svd", &format!("{DIR}/probe.takt")])
         .output()
         .expect("запуск");
     assert!(!out.status.success(), "неизвестный формат → ненулевой код");
@@ -340,7 +340,7 @@ fn cli_unknown_format_is_rejected() {
 #[test]
 fn cli_output_to_file_matches_stdout() {
     let stdout_run = taktc()
-        .args(["address-map", &format!("{DIR}/probe.lam")])
+        .args(["address-map", &format!("{DIR}/probe.takt")])
         .output()
         .expect("запуск stdout");
     let out_file = std::env::temp_dir().join("lam_0043_out.map");
@@ -349,7 +349,7 @@ fn cli_output_to_file_matches_stdout() {
             "address-map",
             "-o",
             out_file.to_str().unwrap(),
-            &format!("{DIR}/probe.lam"),
+            &format!("{DIR}/probe.takt"),
         ])
         .output()
         .expect("запуск -o");
@@ -371,7 +371,7 @@ fn cli_broken_input_map_is_rejected() {
             "address-map",
             "--address-map",
             &format!("{DIR}/broken.map"),
-            &format!("{DIR}/probe.lam"),
+            &format!("{DIR}/probe.takt"),
         ])
         .output()
         .expect("запуск");

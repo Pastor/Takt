@@ -508,7 +508,7 @@ mod tests {
 
     #[test]
     fn s5_mixed_int_real_compare_does_not_panic() {
-        // Проба mix.lam: `t + 2.5 > 3` при t=1 → 3.5 > 3 → истина.
+        // Проба mix.takt: `t + 2.5 > 3` при t=1 → 3.5 > 3 → истина.
         let sum = apply_binary(BinOp::Add, &int(1), &real(2.5)).unwrap();
         assert_eq!(
             apply_binary(BinOp::More, &sum, &int(3)),

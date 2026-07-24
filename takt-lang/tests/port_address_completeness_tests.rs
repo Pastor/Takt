@@ -7,7 +7,7 @@ use takt_lang::port_address_completeness_warnings;
 use takt_lang::semantic::tree::construct_model;
 
 fn model_of(src: &str) -> std::rc::Rc<std::cell::RefCell<takt_lang::semantic::ModelNode>> {
-    let (ast, _) = takt_lang::parse(src, 0).expect("ошибка разбора .lam");
+    let (ast, _) = takt_lang::parse(src, 0).expect("ошибка разбора .takt");
     construct_model(&ast, None, &[]).expect("ошибка построения модели")
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Запускает все симуляции из examples/simulations/ по очереди.
-# Для каждого файла вида <модель>_<сценарий>.json ищет examples/<модель>.lam.
+# Для каждого файла вида <модель>_<сценарий>.json ищет examples/<модель>.takt.
 # Запускать из любого каталога.
 
 set -euo pipefail
@@ -26,17 +26,17 @@ for sim_file in "$SIM_DIR"/*.json; do
   # Имя файла без пути и расширения: stacker_loading
   base="$(basename "$sim_file" .json)"
 
-  # Имя модели — самый ДЛИННЫЙ префикс `base` (по `_`), для которого есть .lam.
+  # Имя модели — самый ДЛИННЫЙ префикс `base` (по `_`), для которого есть .takt.
   # Прежде бралась часть до ПЕРВОГО `_` (`${base%%_*}`), что ломалось на именах
   # моделей с подчёркиванием: `elevator_mini_floor2` → `elevator` вместо
-  # `elevator_mini` (фича 0079). Отсекаем суффикс справа, пока не найдём .lam.
+  # `elevator_mini` (фича 0079). Отсекаем суффикс справа, пока не найдём .takt.
   candidate="$base"
   lam_file=""
   model="$candidate"
   while :; do
-    if [[ -f "$ROOT/examples/${candidate}.lam" ]]; then
+    if [[ -f "$ROOT/examples/${candidate}.takt" ]]; then
       model="$candidate"
-      lam_file="$ROOT/examples/${candidate}.lam"
+      lam_file="$ROOT/examples/${candidate}.takt"
       break
     fi
     [[ "$candidate" == *_* ]] || break
@@ -46,7 +46,7 @@ for sim_file in "$SIM_DIR"/*.json; do
   config_file="$ROOT/examples/graphics-configs/default_svg.json"
 
   if [[ -z "$lam_file" ]]; then
-    echo "[ ПРОПУСК ] $base  (не найден ${model}.lam)"
+    echo "[ ПРОПУСК ] $base  (не найден ${model}.takt)"
     ((skip++)) || true
     continue
   fi

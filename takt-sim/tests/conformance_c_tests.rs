@@ -61,7 +61,7 @@ use std::process::Command;
 use takt_lang::semantic::tree::construct_model;
 use takt_sim::{TickResult, Unit, Value, build_unit};
 
-const FIXTURE: &str = "tests/data/eval/conformance_u8.lam";
+const FIXTURE: &str = "tests/data/eval/conformance_u8.takt";
 
 /// Тактов на прогон каждой стороны до установившегося состояния.
 ///
@@ -231,7 +231,7 @@ fn a8_simulator_matches_generated_c() {
 // заводим вместе с правкой (уроки 0045/0050).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const NEG_ENUM_FIXTURE: &str = "tests/data/eval/conformance_neg_enum.lam";
+const NEG_ENUM_FIXTURE: &str = "tests/data/eval/conformance_neg_enum.takt";
 
 /// Переменные, сверяемые с C на модели с отрицательным перечислением.
 const NEG_ENUM_CHECKED: &[&str] = &[
@@ -370,7 +370,7 @@ fn neg_enum_signedness_matches_generated_c() {
 // про `[bit;N]` — шапку модуля (вне сверки, вопрос семантики 0078).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FLOAT_FIXTURE: &str = "tests/data/eval/conformance_float.lam";
+const FLOAT_FIXTURE: &str = "tests/data/eval/conformance_float.takt";
 
 /// Вещественные переменные, сверяемые с C.
 const CHECKED_FLOAT: &[&str] = &[
@@ -539,7 +539,7 @@ fn a8_expected_values_are_pinned() {
 // сверяется значение каждой переменной НА КАЖДОМ такте.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TICKS_FIXTURE: &str = "tests/data/eval/conformance_ticks.lam";
+const TICKS_FIXTURE: &str = "tests/data/eval/conformance_ticks.takt";
 
 /// Максимум тактов для потактовой сверки — с запасом над длиной трассы.
 const TRACE_TICKS: usize = 6;
@@ -712,7 +712,7 @@ fn per_tick_trace_matches_generated_c() {
 #[test]
 fn model_level_always_matches_generated_c() {
     let vars = ["n"];
-    let f = "tests/data/eval/conformance_model_always.lam";
+    let f = "tests/data/eval/conformance_model_always.takt";
     let sim = simulate_trace(f, &vars);
     // `always { n := n + 1; }`: 1 → 2 → 3 (переход n > 2) → 4 (такт в `Done`).
     assert_eq!(sim, vec![vec![1], vec![2], vec![3], vec![4]], "n = 1,2,3,4");
@@ -736,7 +736,7 @@ fn model_level_always_matches_generated_c() {
 fn per_tick_shift_is_zero_under_wrapping() {
     let vars = ["n"];
     // Симулятор эталон моментности не менял — обёрнутая трасса та же [1,2,3].
-    let sim_wrapped = simulate_trace("tests/data/eval/conformance_ticks_wrapped.lam", &vars);
+    let sim_wrapped = simulate_trace("tests/data/eval/conformance_ticks_wrapped.takt", &vars);
     assert_eq!(
         sim_wrapped,
         vec![vec![1], vec![2], vec![3]],
@@ -755,7 +755,7 @@ fn per_tick_shift_is_zero_under_wrapping() {
     // Лишний уровень `Mid` даёт доступ `entry.m` вместо `entry`.
     let c_wrapped = c_trace(
         &dir,
-        "tests/data/eval/conformance_ticks_wrapped.lam",
+        "tests/data/eval/conformance_ticks_wrapped.takt",
         "conformance_ticks_wrapped",
         "ConformanceTicksWrapped",
         "entry.m",
@@ -775,7 +775,7 @@ fn per_tick_shift_is_zero_under_wrapping() {
 // компилируется тоже. Основной критерий — **побитовая** потактовая сверка repr.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FIXED_FIXTURE: &str = "tests/data/eval/conformance_fixed.lam";
+const FIXED_FIXTURE: &str = "tests/data/eval/conformance_fixed.takt";
 
 /// T10/A4 (цель C): побитовая потактовая сверка Q-арифметики с симулятором —
 /// **включая отрицательные** значения и floor к −∞ у `*` (T9: на S2 усечение к
@@ -819,7 +819,7 @@ fn fixed_point_arithmetic_matches_generated_c() {
 #[test]
 fn fixed_point_addition_wraps_matches_generated_c() {
     let vars = ["big"];
-    let fixture = "tests/data/eval/conformance_fixed_wrap.lam";
+    let fixture = "tests/data/eval/conformance_fixed_wrap.takt";
     let sim = simulate_trace(fixture, &vars);
     assert_eq!(
         sim,
@@ -881,7 +881,7 @@ fn generated_c_fixed_has_no_right_shift() {
 // (`conformance_fixed`) ПОБИТОВО. Без `--float-embedded` — прежний native `double`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.lam";
+const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.takt";
 
 /// Опции embedded-Q для `float` (фича 0096): точность + Q-путь для c/rust/st.
 #[allow(clippy::field_reassign_with_default)] // GenerateOptions — #[non_exhaustive]

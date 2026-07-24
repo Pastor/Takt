@@ -1,0 +1,15 @@
+// Контр-пример: импорт без указания пути поиска завершается ошибкой.
+//
+// Этот файл использует `import "std.takt"`. Если не указать -I, компилятор
+// выдаст ошибку: «Файл импорта не найден: std.takt. Пути поиска: []»
+//
+// Демонстрация ошибки:
+//   lamc compile cli_import_no_search_path.takt   # → ошибка!
+//
+// Правильный вызов:
+//   lamc compile -I grammar/tests/data/include cli_import_no_search_path.takt
+
+import "std.takt";
+
+var x: u8 := 0;
+start S;

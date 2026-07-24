@@ -51,21 +51,21 @@ pub enum InU8Port {
 pub trait Hal {
     /// Читает входной порт `port`.
     fn read_u8(&mut self, port: InU8Port) -> u8;
-    /// Внешняя функция модели (`extern fn` в исходнике .lam).
+    /// Внешняя функция модели (`extern fn` в исходнике .takt).
     fn door_close(&mut self);
-    /// Внешняя функция модели (`extern fn` в исходнике .lam).
+    /// Внешняя функция модели (`extern fn` в исходнике .takt).
     fn door_open(&mut self);
-    /// Внешняя функция модели (`extern fn` в исходнике .lam).
+    /// Внешняя функция модели (`extern fn` в исходнике .takt).
     fn motor_down(&mut self);
-    /// Внешняя функция модели (`extern fn` в исходнике .lam).
+    /// Внешняя функция модели (`extern fn` в исходнике .takt).
     fn motor_stop(&mut self);
-    /// Внешняя функция модели (`extern fn` в исходнике .lam).
+    /// Внешняя функция модели (`extern fn` в исходнике .takt).
     fn motor_up(&mut self);
-    /// Внешняя функция модели (`extern fn` в исходнике .lam).
+    /// Внешняя функция модели (`extern fn` в исходнике .takt).
     fn read_floor_sensors(&mut self);
-    /// Внешняя функция модели (`extern fn` в исходнике .lam).
+    /// Внешняя функция модели (`extern fn` в исходнике .takt).
     fn scan_cabin_buttons(&mut self);
-    /// Внешняя функция модели (`extern fn` в исходнике .lam).
+    /// Внешняя функция модели (`extern fn` в исходнике .takt).
     fn scan_floor_buttons(&mut self);
 }
 

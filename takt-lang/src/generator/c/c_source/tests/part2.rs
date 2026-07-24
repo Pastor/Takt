@@ -294,12 +294,12 @@ state End;";
     );
 }
 
-/// Генерация extend_complex.lam не должна возвращать ошибку.
+/// Генерация extend_complex.takt не должна возвращать ошибку.
 #[test]
 fn test_extend_complex_generates_without_error() {
-    let src = std::fs::read_to_string("../examples/extend_complex.lam")
-        .expect("не удалось прочитать extend_complex.lam");
-    let (ast, _) = parse(&src, 0).expect("ошибка разбора extend_complex.lam");
+    let src = std::fs::read_to_string("../examples/extend_complex.takt")
+        .expect("не удалось прочитать extend_complex.takt");
+    let (ast, _) = parse(&src, 0).expect("ошибка разбора extend_complex.takt");
     let model_rc =
         semantic::tree::construct_model(&ast, None, &[]).expect("ошибка построения модели");
     model_rc.borrow_mut().name = Some("extend_complex".to_string());

@@ -218,7 +218,7 @@ pub(crate) fn emit_declarations(
                 // Проверка стоит ПОСЛЕ фильтра использования: неиспользуемую
                 // переменную генератор не эмитит, `iec2c` её не увидит — значит и
                 // ST-014 на неё срабатывать не должна (иначе `var action: Action`
-                // из elevator.lam, объявленный, но не используемый, сломал бы
+                // из elevator.takt, объявленный, но не используемый, сломал бы
                 // сборку). Столкновение проверяется на самом эмитируемом имени.
                 check_st_name(name, *loc)?;
                 // Разделяемая переменная уже объявлена в `VAR_IN_OUT`: повторное
@@ -520,7 +520,7 @@ mod tests {
 
     /// Варианты перечисления становятся именованными константами.
     ///
-    /// Значения — из зонда по `examples/elevator.lam:117`: `Floor { Bottom = 80,
+    /// Значения — из зонда по `examples/elevator.takt:117`: `Floor { Bottom = 80,
     /// Top }` даёт `[("Bottom", 80), ("Top", 81)]`.
     #[test]
     fn test_emit_declarations_enum_variants_become_named_constants() {
@@ -571,7 +571,7 @@ mod tests {
 
     /// Перечисление шире байта не усекается — тип константы расширяется.
     ///
-    /// Вход из `examples/elevator.lam:121`: `Action { Idle = 670, Closing }`.
+    /// Вход из `examples/elevator.takt:121`: `Action { Idle = 670, Closing }`.
     #[test]
     fn test_emit_declarations_wide_enum_constant_is_not_truncated() {
         let src = "enum Action { Idle = 670, Closing }\nvar a: u8 := 0;\nstart S { always { a := a + 1; } }";
