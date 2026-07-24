@@ -12,7 +12,6 @@
 1993 grammar/src/bin/lamc.rs
 1842 grammar/src/semantic/tree.rs
 1747 grammar/src/semantic/mod.rs
-1455 simulation/src/unit/viewport.rs
 1402 grammar/src/lib.rs
 1360 grammar/src/semantic/expression.rs
 1191 grammar/src/semantic/type_inference.rs
