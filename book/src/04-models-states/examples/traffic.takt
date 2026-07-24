@@ -1,26 +1,25 @@
 // Светофор: три состояния по кругу, переключение по таймеру.
-// Демонстрирует стартовое состояние, переходы ref и блоки enter/always.
+
 out red: bit;
 out yellow: bit;
 out green: bit;
 
 var timer: u8 := 0;
 
-// Ровно одно стартовое состояние — с него начинается работа автомата.
-start Red {
-    enter {
+start Red {                 // (1) стартовое состояние
+    enter {                 // (2) при входе
         red := 1;
         yellow := 0;
         green := 0;
         timer := 0;
     }
-    always {
+    always {                // (3) каждый такт
         timer := timer + 1;
     }
-    ref Green: timer >= 30;
+    ref Green: timer >= 30; // (4) переход по условию
 }
 
-state Green {
+state Green {               // (5) обычное состояние
     enter {
         red := 0;
         green := 1;
@@ -32,7 +31,7 @@ state Green {
     ref Yellow: timer >= 30;
 }
 
-state Yellow {
+state Yellow {              // (6)
     enter {
         green := 0;
         yellow := 1;
