@@ -22,6 +22,10 @@
 - [Симуляция](14-simulation/index.md)
 - [Диагностики](15-diagnostics/index.md)
 
+# Применение
+
+- [Инструментарий](16-tools/index.md)
+
 # Приложения
 
 - [Грамматика (EBNF)](appendix-grammar/index.md)
