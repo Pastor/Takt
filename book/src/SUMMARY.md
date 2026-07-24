@@ -29,6 +29,7 @@
 
 # Приложения
 
+- [Ошибки и предупреждения](appendix-errors/index.md)
 - [Грамматика (EBNF)](appendix-grammar/index.md)
 - [Литература](appendix-references/index.md)
 - [Глоссарий](appendix-glossary/index.md)
