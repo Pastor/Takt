@@ -81,7 +81,7 @@
 ADR 0050 стала безысключительной.
 
 - **Крейт `grammar`** (`generator/rust/`): новый модуль
-  [`rust_shared.rs`](../../grammar/src/generator/rust/rust_shared.rs) — вся
+  [`rust_shared.rs`](../../takt-lang/src/generator/rust/rust_shared.rs) — вся
   логика общих переменных (`shared_variables` перенесён из `rust_model.rs`,
   `shared_union` = объединение нужд под-моделей, `shared_type_name`,
   `emit_shared_struct`, `emit_shared_new_block`). Вынос держит `rust_model.rs` под

@@ -2,7 +2,7 @@
 # Гейт синхронизации версии языка (фича 0085) — единый источник истины в коде.
 #
 # Правило (ADR 0085): номер версии языка Lam живёт в коде ровно один раз —
-# константа `grammar::version::LANGUAGE_VERSION` (`grammar/src/version.rs`).
+# константа `takt_lang::version::LANGUAGE_VERSION` (`takt-lang/src/version.rs`).
 # `README.md` обязан ей соответствовать. Прежде версия жила ТОЛЬКО в README, и
 # рассинхрон дока↔факт ничем не ловился: фича 0078 подняла язык 0.3.0 → 0.4.0, а
 # README остался на 0.3.0 — незамеченно. README без гейта повторяет судьбу
@@ -21,7 +21,7 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION_RS="$ROOT/grammar/src/version.rs"
+VERSION_RS="$ROOT/takt-lang/src/version.rs"
 README="$ROOT/README.md"
 VER_RE='[0-9]+\.[0-9]+\.[0-9]+'
 

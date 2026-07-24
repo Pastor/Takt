@@ -1,0 +1,345 @@
+//! Печать операторов, блоков кода и проверок формул.
+//!
+//! Часть модуля `c_expr` (фича 0027: деление по логике).
+
+use super::*;
+
+/// Генерирует C-выражение из семантического узла выражения.
+///
+/// Функция пишет в `printer` без начального отступа и без завершающего `;\n`.
+/// Отступ и разделители добавляет вызывающий код.
+/// Является обёрткой над [`generate_expr`] с `min_prec = 0`.
+pub(in crate::generator::c) fn generate_stmt_expression(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    expr: &ExpressionNode,
+    has_model: bool,
+) -> Result<(), Diagnostic> {
+    generate_expr(printer, map, owner, params, expr, 0, has_model)
+}
+
+pub(in crate::generator::c) fn generate_formula_check(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    formula: &Formula,
+) -> Result<(), Diagnostic> {
+    match formula {
+        Formula::None => {}
+        Formula::Formulas(formulas) => {
+            for f in formulas {
+                generate_formula_check(printer, map, owner, f)?;
+            }
+        }
+        // Имя инварианта (0044) на эмиссию C не влияет — `assert()` тот же.
+        Formula::Guard(cond, _) => {
+            let cond_expr = generate_condition_expr(cond, map, owner)?;
+            if !cond_expr.is_empty() {
+                printer.ident(&format!("assert({});", cond_expr)).nl();
+            }
+        }
+        Formula::LTL(_) => {
+            // 0035: цель `c` LTL не верифицирует (эмиссия не меняется, R6). Это
+            // не тихая потеря: предупреждение SE-055 выдаёт `takt_lang::ltl_warnings`
+            // (`semantic/ltl_check.rs`) на каждую LTL-формулу любого уровня.
+        }
+    }
+    Ok(())
+}
+
+/// Генерирует C-оператор из семантического узла.
+///
+/// Для `Block` рекурсивно генерирует все вложенные операторы.
+/// Для `Expression` генерирует выражение с отступом и `;`.
+/// Поддерживает `If`, `Loop`, `For`, `Variable`, `Return`, `Continue`, `Break`.
+pub(in crate::generator::c) fn generate_code_block(
+    printer: &mut Printer,
+    map: &CMap,
+    owner: &Element,
+    params: Vec<(String, TypeNode)>,
+    body: &StatementNode,
+    has_model: bool,
+) -> Result<(), Diagnostic> {
+    match body {
+        StatementNode::None => {}
+        StatementNode::Unresolved(_) => {}
+
+        StatementNode::Block(block) => {
+            for stmt in block {
+                generate_code_block(printer, map, owner, params.clone(), stmt, has_model)?;
+            }
+        }
+
+        StatementNode::Expression(expr) => {
+            // Генерируем во временный буфер, чтобы безопасно пропустить
+            // неподдерживаемые встроенные функции (debug, S) без порчи вывода
+            let mut expr_buf = String::new();
+            let result = {
+                let mut tmp = Printer::new(4, &mut expr_buf);
+                generate_stmt_expression(&mut tmp, map, owner, params, expr, has_model)
+            };
+            match result {
+                Ok(()) if !expr_buf.is_empty() => {
+                    printer.ident(&expr_buf).print(";").nl();
+                }
+                Ok(()) => {}
+                Err(_) => {
+                    // Пропускаем неподдерживаемые выражения (S и т.п.)
+                }
+            }
+        }
+
+        StatementNode::If { cond, then_, else_ } => {
+            // Печатаем первый if
+            printer.ident("if (");
+            generate_stmt_expression(printer, map, owner, params.clone(), cond, has_model)?;
+            printer.print(") {").up().nl();
+            generate_code_block(printer, map, owner, params.clone(), then_, has_model)?;
+
+            // Обходим цепочку else/else-if: если else-ветка — одиночный if,
+            // схлопываем в `} else if (...)`, чтобы не создавать лишней вложенности
+            let mut current_else = else_.as_deref();
+            loop {
+                match current_else {
+                    None => {
+                        // Нет else — закрываем последний блок
+                        printer.down().ident("}").nl();
+                        break;
+                    }
+                    Some(StatementNode::If {
+                        cond: ec,
+                        then_: et,
+                        else_: ee,
+                    }) => {
+                        // else-ветка — одиночный if: схлопываем в else if
+                        printer.down().ident("} else if (");
+                        generate_stmt_expression(
+                            printer,
+                            map,
+                            owner,
+                            params.clone(),
+                            ec,
+                            has_model,
+                        )?;
+                        printer.print(") {").up().nl();
+                        generate_code_block(printer, map, owner, params.clone(), et, has_model)?;
+                        current_else = ee.as_deref();
+                    }
+                    Some(else_stmt) => {
+                        // else-ветка — произвольный блок
+                        printer.down().ident("} else {").up().nl();
+                        generate_code_block(
+                            printer,
+                            map,
+                            owner,
+                            params.clone(),
+                            else_stmt,
+                            has_model,
+                        )?;
+                        printer.down().ident("}").nl();
+                        break;
+                    }
+                }
+            }
+        }
+
+        StatementNode::Loop { cond, body } => {
+            match cond {
+                None => {
+                    // Бесконечный цикл
+                    printer.ident("while (true) {").up().nl();
+                }
+                Some(cond_expr) => {
+                    // Цикл с условием
+                    printer.ident("while (");
+                    generate_stmt_expression(
+                        printer,
+                        map,
+                        owner,
+                        params.clone(),
+                        cond_expr,
+                        has_model,
+                    )?;
+                    printer.print(") {").up().nl();
+                }
+            }
+            generate_code_block(printer, map, owner, params.clone(), body, has_model)?;
+            printer.down().ident("}").nl();
+        }
+
+        StatementNode::For {
+            init,
+            cond,
+            step,
+            body,
+        } => {
+            let has_var_init = matches!(
+                init.as_ref().map(|b| b.as_ref()),
+                Some(StatementNode::Variable(..))
+            );
+
+            if has_var_init {
+                // Объявление переменной выносим перед `for` в обёртку `{}`
+                printer.ident("{").nl();
+                printer.up();
+                if let Some(init_stmt) = init {
+                    generate_code_block(printer, map, owner, params.clone(), init_stmt, has_model)?;
+                }
+                printer.ident("for (;");
+                if let Some(cond_expr) = cond {
+                    printer.print(" ");
+                    generate_stmt_expression(
+                        printer,
+                        map,
+                        owner,
+                        params.clone(),
+                        cond_expr,
+                        has_model,
+                    )?;
+                }
+                printer.print(";");
+                if let Some(step_expr) = step {
+                    printer.print(" ");
+                    generate_stmt_expression(
+                        printer,
+                        map,
+                        owner,
+                        params.clone(),
+                        step_expr,
+                        has_model,
+                    )?;
+                }
+                printer.print(") {").up().nl();
+                generate_code_block(printer, map, owner, params.clone(), body, has_model)?;
+                printer.down().ident("}").nl();
+                printer.down();
+                printer.ident("}").nl();
+            } else {
+                printer.ident("for (");
+                if let Some(init_stmt) = init {
+                    // Инициализация — только выражение (без отступа и точки с запятой)
+                    if let StatementNode::Expression(expr) = init_stmt.as_ref() {
+                        generate_stmt_expression(
+                            printer,
+                            map,
+                            owner,
+                            params.clone(),
+                            expr,
+                            has_model,
+                        )?;
+                    }
+                }
+                printer.print(";");
+                if let Some(cond_expr) = cond {
+                    printer.print(" ");
+                    generate_stmt_expression(
+                        printer,
+                        map,
+                        owner,
+                        params.clone(),
+                        cond_expr,
+                        has_model,
+                    )?;
+                }
+                printer.print(";");
+                if let Some(step_expr) = step {
+                    printer.print(" ");
+                    generate_stmt_expression(
+                        printer,
+                        map,
+                        owner,
+                        params.clone(),
+                        step_expr,
+                        has_model,
+                    )?;
+                }
+                printer.print(") {").up().nl();
+                generate_code_block(printer, map, owner, params.clone(), body, has_model)?;
+                printer.down().ident("}").nl();
+            }
+        }
+
+        StatementNode::Variable(name, ty, init) => {
+            let model = map.raw_model_at(owner.name())?;
+            let model_ref = model.borrow();
+            let snake_name = normalize_lowercase_snakecase(name.clone());
+            // 0029-01: было `unwrap_or_else(|| format!("int {}"))` — локальная
+            // переменная невыразимого типа молча объявлялась как `int`.
+            let decl = typed_variable_or_diagnostic(
+                ty,
+                &snake_name,
+                &*model_ref,
+                map.float_width(),
+                &format!("локальная переменная '{}'", name),
+            )?;
+            printer.ident(&decl);
+            if let Some(init_expr) = init {
+                printer.print(" = ");
+                generate_stmt_expression(printer, map, owner, params, init_expr, has_model)?;
+            }
+            printer.print(";").nl();
+        }
+
+        StatementNode::Return(ret) => {
+            printer.ident("return");
+            if let Some(expr) = ret {
+                printer.print(" ");
+                generate_stmt_expression(printer, map, owner, params, expr, has_model)?;
+            }
+            printer.print(";").nl();
+        }
+
+        StatementNode::Continue => {
+            printer.ident("continue;").nl();
+        }
+
+        StatementNode::Break => {
+            printer.ident("break;").nl();
+        }
+
+        StatementNode::InlineFormula(formulas) => {
+            if map.guard_enable() {
+                for formula in formulas {
+                    generate_formula_check(printer, map, owner, formula)?;
+                }
+            }
+        }
+
+        StatementNode::Match { expr, arms } => {
+            printer.ident("switch (");
+            generate_stmt_expression(printer, map, owner, params.clone(), expr, has_model)?;
+            printer.print(") {").nl();
+            for MatchArmNode { patterns, body } in arms {
+                let has_wildcard = patterns
+                    .iter()
+                    .any(|p| matches!(p, MatchPatternNode::Wildcard));
+                if has_wildcard {
+                    printer.ident("default:").nl();
+                } else {
+                    for pat in patterns {
+                        if let MatchPatternNode::Value(val_expr) = pat {
+                            printer.ident("case ");
+                            generate_stmt_expression(
+                                printer,
+                                map,
+                                owner,
+                                params.clone(),
+                                val_expr,
+                                has_model,
+                            )?;
+                            printer.print(":").nl();
+                        }
+                    }
+                }
+                printer.ident("{").nl().up();
+                generate_code_block(printer, map, owner, params.clone(), body, has_model)?;
+                printer.ident("break;").nl();
+                printer.down().ident("}").nl();
+            }
+            printer.ident("}").nl();
+        }
+    }
+    Ok(())
+}

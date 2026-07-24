@@ -21,13 +21,13 @@
 
 Цель `-t sv` отвергает последовательную композицию состояний `A + B + (C | D) + E`
 диагностикой `SV-002` («не реализована целью 'sv'»,
-[`sv_fsm.rs`](../../grammar/src/generator/sv/sv_fsm.rs) `emit_extend`,
+[`sv_fsm.rs`](../../takt-lang/src/generator/sv/sv_fsm.rs) `emit_extend`,
 `StateExtend::Concatenation`). Параллельная `|` уже поддержана (уплощение в один
 `always_comb`, ADR 0045 Option A′). Фича реализует **отложенный `+`** по тому же
 дизайну.
 
 Механизм (зеркалит C-эталон `generate_concat_tick` в
-[`c_model.rs`](../../grammar/src/generator/c/c_model.rs) и существующую ветку
+[`c_model.rs`](../../takt-lang/src/generator/c/c_model.rs) и существующую ветку
 `Parallel` в SV): каждой цепочке `+` даётся **регистр шага** (`<state>_step`,
 `typedef enum`, независимый `always_ff`, сброс в `STEP_0`); в `always_comb` внутри
 `case`-ветви родительского состояния — вложенный `case (<step>)`, где активен
@@ -52,7 +52,7 @@
 инлайн активного шага).
 
 - **Крейт `grammar`** (`generator/sv/`): новый модуль
-  [`sv_compose.rs`](../../grammar/src/generator/sv/sv_compose.rs) — вся композиция
+  [`sv_compose.rs`](../../takt-lang/src/generator/sv/sv_compose.rs) — вся композиция
   (`|` и `+`) вынесена из `sv_fsm.rs` (тот упирался в лимит 1000 строк). Каждой
   цепочке `+` даётся регистр шага `<state>_step` (`typedef enum`, сброс `STEP_0`,
   независимый `always_ff`); в `always_comb` внутри ветви несущего состояния —

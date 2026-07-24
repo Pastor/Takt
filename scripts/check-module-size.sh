@@ -34,8 +34,8 @@ fi
 
 # Файлы под правилом: модули крейтов и интеграционные тесты («вместе с тестами»).
 find_sources() {
-    find "$ROOT/grammar/src" "$ROOT/simulation/src" \
-         "$ROOT/grammar/tests" "$ROOT/simulation/tests" \
+    find "$ROOT/takt-lang/src" "$ROOT/takt-sim/src" \
+         "$ROOT/takt-lang/tests" "$ROOT/takt-sim/tests" \
          -name '*.rs' -type f 2>/dev/null | sed "s|^$ROOT/||" | sort
 }
 
