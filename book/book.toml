@@ -15,6 +15,11 @@ description = "Справочное описание языка Takt (Typed, Aut
 output-file = "takt-language.pdf"
 to = "pdf"
 pdf-engine = "xelatex"
+# Подсветка синтаксиса Takt: KDE/kate-определение подключается в skylighting
+# (движок pandoc). Блоки ```takt подсвечиваются согласно takt.kate.xml. Путь —
+# относительно каталога book/ (откуда mdbook-pandoc запускает pandoc).
+syntax-definitions = ["takt.kate.xml"]
+highlight-style = "tango"
 
 # Опции pandoc: оглавление с нумерацией разделов (дублирует автонумерацию mdBook в
 # структуре документа), ссылки.
