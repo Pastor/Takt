@@ -509,7 +509,7 @@ fn empty_input_produces_nothing() {
 
 // ──────────────────────────── Тест `pragma` как идентификатора ───────────────
 
-/// `pragma` не является ключевым словом в Lam — распознаётся как идентификатор.
+/// `pragma` не является ключевым словом в Takt — распознаётся как идентификатор.
 #[test]
 fn pragma_is_not_a_keyword_and_lexes_as_identifier() {
     let strings = collect_token_strings("pragma");
@@ -518,13 +518,13 @@ fn pragma_is_not_a_keyword_and_lexes_as_identifier() {
     assert_eq!(collect_errors("pragma").len(), 0);
 }
 
-// ─────────────────── Тест полного набора Lam-конструкций ─────────────────────
+// ─────────────────── Тест полного набора Takt-конструкций ─────────────────────
 
 /// Полный пример программы лексируется без ошибок.
 #[test]
 fn complete_but_program_lexes_without_errors() {
     let src = r#"
-/// Пример полной Lam-программы
+/// Пример полной Takt-программы
 type u8 = [bit;8];
 const MAX: u8 = 0xFF;
 out LED: u8 = 00100000;

@@ -75,7 +75,7 @@ fn parse_emit_format(s: &str) -> Result<EmitFormat, String> {
         "json" => Ok(EmitFormat::Json),
         other => Err(format!(
             "неизвестный формат выгрузки '{other}' (допустимо: map, json). \
-             Формат CMSIS-SVD не поставляется — у Lam нет требуемых им данных (ADR 0043)"
+             Формат CMSIS-SVD не поставляется — у Takt нет требуемых им данных (ADR 0043)"
         )),
     }
 }

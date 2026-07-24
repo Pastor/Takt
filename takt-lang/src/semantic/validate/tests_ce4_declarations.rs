@@ -2,7 +2,7 @@
 
 use super::*;
 
-/// Вспомогательная функция: строит Rc<RefCell<ModelNode>> из Lam-исходника.
+/// Вспомогательная функция: строит Rc<RefCell<ModelNode>> из Takt-исходника.
 fn build_rc(src: &str) -> Rc<RefCell<ModelNode>> {
     let (ast, _) = crate::parse(src, 0).expect("ошибка разбора");
     crate::semantic::tree::construct_model(&ast, None, &[]).expect("ошибка семантики")
@@ -12,7 +12,7 @@ fn build_rc(src: &str) -> Rc<RefCell<ModelNode>> {
 
 /// Переменная с типом enum, где перечисление объявлено — ошибок нет.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```text
 /// enum Color { Red = 0, Green = 1 }
 /// var c: Color = 0;   // ✓ Color объявлен
@@ -46,7 +46,7 @@ fn ce4_declared_enum_type_is_ok() {
 
 /// Переменная с обычным (не-enum) типом не проверяется Ce4.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```text
 /// var x: [bit;8] = 0;  // ✓ обычный тип, Ce4 не применяется
 /// start S;
@@ -79,7 +79,7 @@ fn ce4_inference_type_not_checked() {
 
 /// Переменная типа необъявленного перечисления → ошибка Ce4.
 ///
-/// # Контр-пример (Lam)
+/// # Контр-пример (Takt)
 /// ```text
 /// var s: Size = 0;  // ✗ Size не объявлен
 /// start S;
@@ -121,7 +121,7 @@ fn ce4_undeclared_enum_type_is_error() {
 
 /// Константа с необъявленным enum-типом также проверяется.
 ///
-/// # Контр-пример (Lam)
+/// # Контр-пример (Takt)
 /// ```text
 /// const C: Status = 0;  // ✗ Status не объявлен
 /// start S;

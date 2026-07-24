@@ -1,4 +1,4 @@
-//! Построение семантических выражений языка Lam.
+//! Построение семантических выражений языка Takt.
 //!
 //! Основная функция [`construct_expression`] преобразует АСД-выражение
 //! [`ast::Expression`] в разрешённое семантическое [`ExpressionNode`].
@@ -60,7 +60,7 @@ pub fn construct_expression(
         //
         // Приоритет поиска: переменная → модель → именованное условие.
         // Такой порядок гарантирует, что объявленная переменная затеняет одноимённую
-        // модель или условие, что соответствует ожидаемой семантике языка Lam.
+        // модель или условие, что соответствует ожидаемой семантике языка Takt.
         ast::Expression::Variable(id) => {
             let name = &id.name;
             for (param_name, param_type) in params {
@@ -466,7 +466,7 @@ mod tests {
     use crate::semantic::{ConditionNode, ModelNode, VariableNode};
     // ── Вспомогательные функции ───────────────────────────────────────────────
 
-    /// Строит семантическую модель из исходного кода Lam.
+    /// Строит семантическую модель из исходного кода Takt.
     fn build(src: &str) -> Result<ModelNode, Diagnostic> {
         let (ast, _) = parse(src, 0).expect("ошибка разбора");
         construct_model(&ast, None, &[]).map(|m| m.take())
@@ -525,7 +525,7 @@ mod tests {
 
     /// Переменная в инициализаторе разрешается в `Expression::Variable`.
     ///
-    /// # Пример (Lam)
+    /// # Пример (Takt)
     /// ```but
     /// var a: bit = false;
     /// var b: bit = a;
@@ -541,7 +541,7 @@ mod tests {
 
     /// Условие в инициализаторе разрешается в `Expression::Condition`.
     ///
-    /// # Пример (Lam)
+    /// # Пример (Takt)
     /// ```but
     /// cond done = true;
     /// var flag: bit = done;
@@ -675,7 +675,7 @@ mod tests {
 
     /// Переменная без аннотации типа с булевым литералом: выводится `TypeNode::Bool`.
     ///
-    /// # Пример (Lam)
+    /// # Пример (Takt)
     /// ```but
     /// var flag = false;   // тип выводится как bool
     /// ```
@@ -738,7 +738,7 @@ mod tests {
 
     /// Индексирование массива в инициализаторе разрешается в `ArraySubscript`.
     ///
-    /// # Пример (Lam)
+    /// # Пример (Takt)
     /// ```but
     /// var buf: [bit; 8];
     /// var x: bit = buf[3];
@@ -1066,7 +1066,7 @@ mod tests {
 
     /// Тернарный оператор через `construct_expression` → `ConditionalOperator`.
     ///
-    /// Синтаксис `? :` не поддерживается парсером Lam, поэтому
+    /// Синтаксис `? :` не поддерживается парсером Takt, поэтому
     /// тестируем напрямую через `construct_expression`.
     #[test]
     fn conditional_operator_via_construct_expression() {
@@ -1089,7 +1089,7 @@ mod tests {
     /// Проверяем, что все три ветви (условие, then, else) разрешаются
     /// внутри конкретного контекста модели (с переменной).
     ///
-    /// # Пример (псевдокод Lam):
+    /// # Пример (псевдокод Takt):
     /// ```text
     /// var flag: bit = true;
     /// // flag ? 10 : 20  →  ConditionalOperator(Variable("flag"), Number(10), Number(20))

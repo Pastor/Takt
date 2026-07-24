@@ -1,4 +1,4 @@
-//! Генератор Structured Text (IEC 61131-3) из семантического дерева Lam.
+//! Генератор Structured Text (IEC 61131-3) из семантического дерева Takt.
 //!
 //! Модуль транслирует семантическое дерево [`ModelNode`] в файл `.st` —
 //! текстовый язык программируемых логических контроллеров (ПЛК), стандарт
@@ -6,10 +6,10 @@
 //!
 //! ## Схема отображения
 //!
-//! - Модель Lam → `FUNCTION_BLOCK` (единственная конструкция IEC с сохраняемым
+//! - Модель Takt → `FUNCTION_BLOCK` (единственная конструкция IEC с сохраняемым
 //!   между вызовами состоянием — прямой аналог `struct` + `_tick()` цели `c`).
 //! - Состояния → `CASE state OF` по переменной состояния.
-//! - Тело `FUNCTION_BLOCK` = один цикл сканирования ПЛК = один такт Lam.
+//! - Тело `FUNCTION_BLOCK` = один цикл сканирования ПЛК = один такт Takt.
 //!
 //! ## Цели
 //!
@@ -68,7 +68,7 @@ use std::rc::Rc;
 /// Размер одного уровня отступа в порождаемом ST.
 const INDENT: usize = 4;
 
-/// Генератор Structured Text для модели Lam.
+/// Генератор Structured Text для модели Takt.
 pub struct Generator {}
 
 impl AsGenerator for Generator {
@@ -117,7 +117,7 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     let mut p = Printer::new(INDENT, &mut out);
 
     p.ident("(*").nl();
-    p.ident(" * Порождено компилятором Lam (taktc) — цель: Structured Text (IEC 61131-3).")
+    p.ident(" * Порождено компилятором Takt (taktc) — цель: Structured Text (IEC 61131-3).")
         .nl();
     p.ident(" * Не редактировать вручную: файл перезаписывается при каждой генерации.")
         .nl();
@@ -424,7 +424,7 @@ mod tests {
     use super::*;
     use crate::semantic::tree::construct_model;
 
-    /// Строит снимок ST-карты из исходника Lam (по образцу `plantuml::tests::make_map`).
+    /// Строит снимок ST-карты из исходника Takt (по образцу `plantuml::tests::make_map`).
     fn make_map(src: &str, name: &str) -> StMap {
         let (ast, _) = crate::parse(src, 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();

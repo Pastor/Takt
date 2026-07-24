@@ -151,7 +151,7 @@ pub(crate) fn print(out: &mut Out, statement: &ast::Statement) -> Result<(), For
             out.line("}");
             Ok(())
         }
-        // 0044: `assert` языка Lam в блоке кода (`: c;` / `: [Guard] c;`). Форма
+        // 0044: `assert` языка Takt в блоке кода (`: c;` / `: [Guard] c;`). Форма
         // автора сохраняется печатью инлайн-формулы (синонимы не канонизируются).
         S::InlineFormula(f) => {
             out.line(&expr::inline_formula(f)?);

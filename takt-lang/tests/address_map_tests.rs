@@ -9,7 +9,7 @@ use takt_lang::{
     AddressSource, address_map_overlay_warnings, parse, parse_address_map, resolve_addresses,
 };
 
-/// Строит семантическую модель из исходника Lam.
+/// Строит семантическую модель из исходника Takt.
 fn model_of(src: &str) -> std::rc::Rc<std::cell::RefCell<takt_lang::semantic::ModelNode>> {
     let (ast, _) = parse(src, 0).expect("ошибка разбора .lam");
     construct_model(&ast, None, &[]).expect("ошибка построения модели")

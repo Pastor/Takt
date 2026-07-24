@@ -547,7 +547,7 @@ fn multi_line_doc_for_model() {
 
 /// Явное сравнение в условии перехода — нет предупреждений.
 ///
-/// # Lam
+/// # Takt
 /// ```but
 /// var timer: [bit;8] = 0;
 /// start S { ref T: timer != 0; }
@@ -567,7 +567,7 @@ fn se11_explicit_comparison_no_warnings() {
 
 /// Числовая переменная без сравнения — предупреждение Се11.
 ///
-/// # Lam
+/// # Takt
 /// ```but
 /// var timer: [bit;8] = 0;
 /// start S { ref T: timer; }   // ← Предупреждение
@@ -858,7 +858,7 @@ fn se11_warning_contains_source_state_name() {
 
 /// Условие ref с bit-переменной разрешается в `Condition::Variable`, не в `Condition::Unresolved`.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// var flag: bit = false;
 /// start A { ref B: flag; }
@@ -884,7 +884,7 @@ fn ref_cond_bit_var_is_resolved() {
 
 /// Условие ref с bool-переменной разрешается в `Condition::Variable`.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// var done: bool = false;
 /// start A { ref B: done; }
@@ -908,7 +908,7 @@ fn ref_cond_bool_var_is_resolved() {
 
 /// Именованное условие (`cond`) в ref разрешается до его значения (не `Unresolved`).
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// var x: [bit;8] = 0;
 /// cond full = x = 255;

@@ -32,7 +32,7 @@ start Main { always { log_val(double_it(0)); } }
 #[test]
 fn test_generate_if_no_double_parens() {
     // Проверяет, что условие `if` генерируется без двойных скобок: `if (cond)` а не `if ((cond))`.
-    // В Lam условие `if` пишется без скобок (как в Rust): `if cond { ... }`.
+    // В Takt условие `if` пишется без скобок (как в Rust): `if cond { ... }`.
     // Генератор добавляет ровно одну пару скобок для C.
     // Функция вызывается в always, чтобы попасть в UsageSet.
     let src = r#"
@@ -107,7 +107,7 @@ start Entry = Controller;
 #[test]
 fn test_generate_loop_no_double_parens() {
     // Проверяет, что условие `loop` (→ `while` в C) генерируется без двойных скобок.
-    // В Lam: `loop cond { ... }` — без скобок вокруг условия.
+    // В Takt: `loop cond { ... }` — без скобок вокруг условия.
     // Генератор добавляет ровно одну пару скобок для C: `while (cond)`.
     // Функция вызывается в always, чтобы попасть в UsageSet.
     let src = r#"
@@ -134,7 +134,7 @@ start Main { always { check(0); } }
 
 // ── Тесты расширенных состояний: Parallel / Concatenation ─────────────────
 
-/// Вспомогательная функция: генерирует полный `.c`-исходник из Lam-строки.
+/// Вспомогательная функция: генерирует полный `.c`-исходник из Takt-строки.
 fn generate_source_str(src: &str) -> String {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let model_rc = semantic::tree::construct_model(&ast, None, &[]).unwrap();

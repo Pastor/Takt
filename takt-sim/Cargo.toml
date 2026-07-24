@@ -2,11 +2,11 @@
 name = "takt-sim"
 version = "0.6.0"
 authors = ["Pastor <viruszold@gmail.com>"]
-description = "Lam"
+description = "Takt"
 homepage = "https://but.ru"
 repository = "https://github.com/Pastor/BuT"
 readme = "../README.md"
-keywords = ["Lam", "framework", "simulation"]
+keywords = ["Takt", "framework", "simulation"]
 license = "BSD"
 edition = "2024"
 include = ["Cargo.toml", "src/**/*", "README.md", "LICENSE*"]

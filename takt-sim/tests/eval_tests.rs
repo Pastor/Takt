@@ -361,7 +361,7 @@ fn invariant_soft_collects_from_composition() {
     );
 }
 
-/// T17 (A10): `: c;` (assert языка Lam) в блоке нарушается — так же, как invariant.
+/// T17 (A10): `: c;` (assert языка Takt) в блоке нарушается — так же, как invariant.
 #[test]
 fn assert_in_block_violation_stops() {
     let (_unit, last) = run("assert_in_block.lam", 3);

@@ -1,7 +1,7 @@
 # Фича 0100: Переименование языка Lam → Takt (крейты, тулы, расширение, документация)
 
 - **Номер:** 0100
-- **Статус:** РАЗРАБОТКА (0100-01, 0100-02 готовы)
+- **Статус:** РАЗРАБОТКА (0100-01…03 готовы)
 - **Зависит от:** нет (жёстких зависимостей; см. анализ — рекомендация брать
   **до** [0099](0099-module-size-core.md) из-за общих файлов и реестра размера)
 - **Связанные issue (анализ):** новая фича (запрос заказчика 2026-07-24)
@@ -15,7 +15,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0100-language-rename-takt.md`](../adr/0100-language-rename-takt.md) — **Accepted** (Option A: сквозной жёсткий ренейм) |
 | Анализ | [`docs/analyze/0100-language-rename-takt.md`](../analyze/0100-language-rename-takt.md) — декомпозиция 0100-01…06 |
-| Разработка | [`0100-01`](../development/0100-01-language-rename-takt.md) крейты+пути · [`0100-02`](../development/0100-02-language-rename-takt.md) бинарники (готовы); далее 0100-03…06 |
+| Разработка | [`01`](../development/0100-01-language-rename-takt.md) крейты+пути · [`02`](../development/0100-02-language-rename-takt.md) бинарники · [`03`](../development/0100-03-language-rename-takt.md) текст Lam→Takt (готовы); далее 04 (расширение+примеры)…06 |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0100-YY-*`) |

@@ -1,4 +1,4 @@
-//! Дополнительные интеграционные тесты семантического анализа Lam.
+//! Дополнительные интеграционные тесты семантического анализа Takt.
 //!
 //! Проверяют:
 //! - поиск моделей и переменных в дереве видимости;
@@ -21,7 +21,7 @@ use takt_lang::semantic::type_node::TypeNode;
 use takt_lang::semantic::{StateNode, VariableNode};
 // ─── Вспомогательная функция ──────────────────────────────────────────────────
 
-/// Разбирает Lam-программу и возвращает корневой [`ModelNode`].
+/// Разбирает Takt-программу и возвращает корневой [`ModelNode`].
 fn build(src: &str) -> takt_lang::semantic::ModelNode {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     construct_model(&ast, None, &[])
@@ -29,7 +29,7 @@ fn build(src: &str) -> takt_lang::semantic::ModelNode {
         .take()
 }
 
-/// Разбирает Lam-программу и ожидает ошибку семантического анализа.
+/// Разбирает Takt-программу и ожидает ошибку семантического анализа.
 fn build_err(src: &str) -> takt_lang::diagnostics::Diagnostic {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     construct_model(&ast, None, &[]).expect_err("ожидалась ошибка")
@@ -303,7 +303,7 @@ fn implement_unknown_model_is_error() {
 /// первое (`start S`) в HashMap, после чего модель остаётся без start-состояния.
 /// Это корректно обнаруживается валидатором как ошибка.
 ///
-/// # Контрпример (Lam)
+/// # Контрпример (Takt)
 /// ```but
 /// start S;   // добавляется как Start
 /// state S;   // перезаписывает — Start исчезает → ошибка валидации
@@ -905,7 +905,7 @@ fn build_file(
     construct_model(&ast, None, &[]).map(|m| m.take())
 }
 
-/// Строит семантическую модель из исходного кода Lam.
+/// Строит семантическую модель из исходного кода Takt.
 fn build_from_src(
     src: &str,
 ) -> Result<takt_lang::semantic::ModelNode, takt_lang::diagnostics::Diagnostic> {
@@ -913,7 +913,7 @@ fn build_from_src(
     construct_model(&ast, None, &[]).map(|m| m.take())
 }
 
-/// Разбирает Lam-файл и ожидает семантическую ошибку.
+/// Разбирает Takt-файл и ожидает семантическую ошибку.
 fn build_file_err(path: &str) -> takt_lang::diagnostics::Diagnostic {
     let src = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("не могу прочитать {}: {}", path, e));

@@ -1,4 +1,4 @@
-//! Вывод типов для переменных языка Lam.
+//! Вывод типов для переменных языка Takt.
 //!
 //! Основная функция [`type_inference`] обходит таблицу переменных и для
 //! каждой переменной с [`TypeNode::Inference`] (тип не задан явно) вызывает
@@ -472,7 +472,7 @@ mod tests {
     use crate::parse;
     use crate::semantic::tree::construct_model;
 
-    /// Строит модель из Lam-кода и возвращает корневой ModelNode.
+    /// Строит модель из Takt-кода и возвращает корневой ModelNode.
     fn build(src: &str) -> Result<ModelNode, Diagnostic> {
         let (ast, _) = parse(src, 0).expect("ошибка разбора");
         construct_model(&ast, None, &[]).map(|m| m.take())

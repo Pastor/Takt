@@ -1,4 +1,4 @@
-//! Построение семантического дерева из АСД языка Lam.
+//! Построение семантического дерева из АСД языка Takt.
 //!
 //! Основные функции модуля:
 //! - [`construct_model`] — главная точка входа, строит [`ModelNode`] из [`Model`].
@@ -1313,14 +1313,14 @@ pub fn construct_model_with_docs(
 /// # Примеры
 ///
 /// ```rust,ignore
-/// // Lam-код с числовым условием → предупреждение
+/// // Takt-код с числовым условием → предупреждение
 /// let src = "var timer: [bit;8] = 0; start S { ref T: timer; } state T;";
 /// let (ast, _) = parse(src, 0)?;
 /// let root = construct_model(&ast, None, &[])?;
 /// let warnings = implicit_bool_warnings(&root);
 /// assert!(!warnings.is_empty());
 ///
-/// // Lam-код с явным сравнением → без предупреждений
+/// // Takt-код с явным сравнением → без предупреждений
 /// let src = "var timer: [bit;8] = 0; start S { ref T: timer != 0; } state T;";
 /// let (ast, _) = parse(src, 0)?;
 /// let root = construct_model(&ast, None, &[])?;
@@ -1686,7 +1686,7 @@ mod tests {
 
     // ─── вспомогательная функция ────────────────────────────────────────────
 
-    /// Разбирает Lam-программу и строит семантическую модель.
+    /// Разбирает Takt-программу и строит семантическую модель.
     fn build(src: &str) -> Result<ModelNode, Diagnostic> {
         let (ast, _) = parse(src, 0).expect("parse error");
         construct_model(&ast, None, &[]).map(|model| model.take())

@@ -156,7 +156,7 @@ fn test_enum_with_values() {
 
 /// Ce4: переменная с явным типом-перечислением разбирается без ошибок.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```text
 /// enum Direction { North = 0, South = 1, East = 2, West = 3 }
 /// var dir: Direction = 0;
@@ -179,7 +179,7 @@ fn ce4_enum_typed_var_valid() {
 
 /// Ce4: переменная с типом необъявленного перечисления → ошибка Ce4.
 ///
-/// # Контр-пример (Lam)
+/// # Контр-пример (Takt)
 /// ```text
 /// var current: Status = 0;   // Status не объявлен → ошибка Ce4
 /// start S;
@@ -196,7 +196,7 @@ fn ce4_undeclared_enum_type_gives_error() {
 
 /// Ce4: переменная с enum-типом и недопустимым значением → ошибка NI6.
 ///
-/// # Контр-пример (Lam)
+/// # Контр-пример (Takt)
 /// ```text
 /// enum Color { Red = 0, Green = 1, Blue = 2 }
 /// var c: Color = 99;   // 99 не является вариантом Color → NI6
@@ -233,7 +233,7 @@ fn ce4_enum_variant_used_as_initializer() {
 
 /// Ce4: два перечисления в одной модели — оба доступны независимо.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```text
 /// enum Color { Red = 0, Green = 1 }
 /// enum Priority { Low = 0, High = 1 }
@@ -267,7 +267,7 @@ fn ce4_two_enums_in_model() {
 /// где объявлен enum (аналогично псевдонимам `type`). Но `search_enum_variant`
 /// поднимается по цепочке `upper` и находит вариант из внешней модели.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```text
 /// enum Dir { N = 0, S = 1 }
 /// model Inner {
