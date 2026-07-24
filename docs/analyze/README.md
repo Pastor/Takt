@@ -100,3 +100,4 @@
 | 0120 | Заметки о возможных ошибках в разделах документа | [0120-book-error-notes.md](0120-book-error-notes.md) | — (новая фича) |
 | 0121 | Разбор примеров в разделах с упором на тему | [0121-book-example-walkthrough.md](0121-book-example-walkthrough.md) | — (новая фича) |
 | 0122 | Сборка PDF через latexmk (корректные кросс-ссылки) + Makefile | [0122-book-pdf-latexmk.md](0122-book-pdf-latexmk.md) | — (новая фича) |
+| 0123 | Подсветка ключевых слов языка в тексте документа | [0123-book-keyword-highlight.md](0123-book-keyword-highlight.md) | — (новая фича) |

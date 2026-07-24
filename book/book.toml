@@ -20,6 +20,11 @@ to = "pdf"
 # ручных повторных проходов.
 pdf-engine = "latexmk"
 pdf-engine-opts = ["-xelatex", "-interaction=nonstopmode"]
+# Подсветка ключевых слов языка В ТЕКСТЕ (не в блоках кода): lua-фильтр pandoc
+# `keywords.lua` печатает инлайн-код, равный ключевому слову Takt (`model`, `if`,
+# …), моноширинным+жирным+цветом (tango KeywordTok #204A87), чтобы отличать его от
+# постороннего слова. Путь — относительно каталога book/.
+filters = ["keywords.lua"]
 # Подсветка синтаксиса Takt: KDE/kate-определение подключается в skylighting
 # (движок pandoc). Блоки ```takt подсвечиваются согласно takt.kate.xml. Путь —
 # относительно каталога book/ (откуда mdbook-pandoc запускает pandoc).
