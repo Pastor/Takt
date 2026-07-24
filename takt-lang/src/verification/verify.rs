@@ -120,7 +120,7 @@ pub fn verify_model(model: &ModelNode, phi: &Ltl) -> Verdict {
 }
 
 /// То же, что [`verify_model`], плюс текстовый дамп конвейера для отладки
-/// (`lamc verify --trace`): структура Крипке, автомат `¬φ`, произведение.
+/// (`taktc verify --trace`): структура Крипке, автомат `¬φ`, произведение.
 pub fn verify_model_traced(model: &ModelNode, phi: &Ltl) -> (Verdict, String) {
     let mut trace = Some(String::new());
     let verdict = run(model, phi, &mut trace);

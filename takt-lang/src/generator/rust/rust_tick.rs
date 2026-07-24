@@ -242,7 +242,7 @@ fn emit_guard(p: &mut Printer, formula: &Formula, scope: &Scope) -> Result<(), D
             }
             Ok(())
         }
-        // LTL описывает бесконечные прогоны — предмет `lamc verify`, а не
+        // LTL описывает бесконечные прогоны — предмет `taktc verify`, а не
         // прошивки. Цель `c` поступает так же.
         Formula::LTL(_) | Formula::None => Ok(()),
     }

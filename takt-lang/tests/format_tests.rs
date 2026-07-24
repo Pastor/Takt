@@ -229,14 +229,14 @@ fn a2_comments_are_idempotent() {
     );
 }
 
-// ── Контракт CLI `lamc fmt` (задача 0024-03, критерий A4) ────────────────────
+// ── Контракт CLI `taktc fmt` (задача 0024-03, критерий A4) ────────────────────
 
-/// Прогоняет настоящий бинарник `lamc` — тот же путь, что у пользователя.
-fn lamc(args: &[&str]) -> std::process::Output {
-    std::process::Command::new(env!("CARGO_BIN_EXE_lamc"))
+/// Прогоняет настоящий бинарник `taktc` — тот же путь, что у пользователя.
+fn taktc(args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_taktc"))
         .args(args)
         .output()
-        .expect("запуск lamc")
+        .expect("запуск taktc")
 }
 
 #[test]
@@ -246,7 +246,7 @@ fn a4_fmt_check_exit_codes() {
 
     let messy = dir.join("messy.lam");
     std::fs::write(&messy, "var   x :u8:=0;\nstart   S ;\n").unwrap();
-    let out = lamc(&["fmt", "--check", messy.to_str().unwrap()]);
+    let out = taktc(&["fmt", "--check", messy.to_str().unwrap()]);
     assert!(
         !out.status.success(),
         "--check на НЕотформатированном обязан вернуть ненулевой код (контракт CI)"
@@ -254,7 +254,7 @@ fn a4_fmt_check_exit_codes() {
 
     let canon = dir.join("canon.lam");
     std::fs::write(&canon, "var x: u8 := 0;\nstart S;\n").unwrap();
-    let out = lamc(&["fmt", "--check", canon.to_str().unwrap()]);
+    let out = taktc(&["fmt", "--check", canon.to_str().unwrap()]);
     assert!(
         out.status.success(),
         "--check на каноническом обязан вернуть 0; stderr: {}",
@@ -271,7 +271,7 @@ fn a4_fmt_check_does_not_write() {
     let original = "var   x :u8:=0;\n";
     std::fs::write(&file, original).unwrap();
 
-    let _ = lamc(&["fmt", "--check", file.to_str().unwrap()]);
+    let _ = taktc(&["fmt", "--check", file.to_str().unwrap()]);
     assert_eq!(
         std::fs::read_to_string(&file).unwrap(),
         original,
@@ -286,7 +286,7 @@ fn fmt_rewrites_file_in_place() {
     let file = dir.join("messy.lam");
     std::fs::write(&file, "var   x :u8:=0;\nstart   S ;\n").unwrap();
 
-    let out = lamc(&["fmt", file.to_str().unwrap()]);
+    let out = taktc(&["fmt", file.to_str().unwrap()]);
     assert!(
         out.status.success(),
         "{}",
@@ -298,7 +298,7 @@ fn fmt_rewrites_file_in_place() {
     );
 
     // Повторный прогон ничего не меняет и остаётся каноничным (A1 через CLI).
-    let out = lamc(&["fmt", "--check", file.to_str().unwrap()]);
+    let out = taktc(&["fmt", "--check", file.to_str().unwrap()]);
     assert!(
         out.status.success(),
         "после форматирования --check обязан быть зелёным"

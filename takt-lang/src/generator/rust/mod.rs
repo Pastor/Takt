@@ -152,7 +152,7 @@ fn generate_program(map: &RustMap) -> Result<String, Diagnostic> {
     let mut p = Printer::new(INDENT, &mut out);
     let mut warnings: Vec<Diagnostic> = Vec::new();
 
-    p.ident("// Порождено компилятором Lam (lamc) — цель: Rust (профиль no_std).")
+    p.ident("// Порождено компилятором Lam (taktc) — цель: Rust (профиль no_std).")
         .nl();
     p.ident("// Не редактировать вручную: файл перезаписывается при каждой генерации.")
         .nl();

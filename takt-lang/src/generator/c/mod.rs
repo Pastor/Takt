@@ -525,7 +525,7 @@ mod tests {
     ///
     /// Прежде параметр шёл через `get_c_type`, который для массива даёт `None`,
     /// а вызывающий делал `.unwrap()` — то есть `fn pick(data: [u8;4])` ронял
-    /// `lamc` **паникой** (проба `fnarr.lam`). Тип массива в C неотделим от
+    /// `taktc` **паникой** (проба `fnarr.lam`). Тип массива в C неотделим от
     /// имени, поэтому параметр обязан печататься `uint8_t data[4]`.
     #[test]
     fn test_array_parameter_is_printed_as_declarator_not_panic() {

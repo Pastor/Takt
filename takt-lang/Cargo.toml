@@ -13,12 +13,12 @@ exclude = ["src/grammar.lalrpop"]
 include = ["Cargo.toml", "src/**/*", "src/ast.rs", "README.md", "LICENSE*"]
 
 [[bin]]
-name = "lamc"
-path = "src/bin/lamc.rs"
+name = "taktc"
+path = "src/bin/taktc.rs"
 
 [[bin]]
-name = "lam-lsp"
-path = "src/bin/lam_lsp.rs"
+name = "takt-lsp"
+path = "src/bin/takt_lsp.rs"
 required-features = ["lsp"]
 
 [build-dependencies]

@@ -3,9 +3,9 @@
 //! # Использование
 //!
 //! ```text
-//! lamc compile [--target c] [-I dir1:dir2] [--verbose | --quiet] <input.lam> [-o output_dir]
-//! lamc compile input.lam           # вывод в ./output
-//! lamc --help                      # справка
+//! taktc compile [--target c] [-I dir1:dir2] [--verbose | --quiet] <input.lam> [-o output_dir]
+//! taktc compile input.lam           # вывод в ./output
+//! taktc --help                      # справка
 //! ```
 //!
 //! # Поиск файлов импорта
@@ -16,13 +16,13 @@
 //!
 //! ```text
 //! # Unix: два пути через двоеточие
-//! lamc compile -I /usr/lib/lam:/home/user/lam main.lam -o out
+//! taktc compile -I /usr/lib/lam:/home/user/lam main.lam -o out
 //!
 //! # Несколько флагов -I
-//! lamc compile -I /usr/lib/lam -I /home/user/lam main.lam
+//! taktc compile -I /usr/lib/lam -I /home/user/lam main.lam
 //!
 //! # Слитная форма без пробела
-//! lamc compile -I/usr/lib/lam main.lam
+//! taktc compile -I/usr/lib/lam main.lam
 //! ```
 //!
 //! # Уровни диагностики
@@ -78,7 +78,7 @@ pub struct CompileOptions {
     /// Символы платформы для выражений адреса: сырые аргументы `--define`
     /// (фича 0042). Разбор в среду — `takt_lang::parse_defines`.
     ///
-    /// По умолчанию пусто → без флага поведение `lamc` идентично прежнему.
+    /// По умолчанию пусто → без флага поведение `taktc` идентично прежнему.
     pub defines: Vec<String>,
     /// Путь к внешней карте адресов (`.ld`-подобный формат, фича 0020).
     ///
@@ -620,7 +620,7 @@ fn parse_scope(value: &str) -> Result<takt_lang::VerifyScope, String> {
 
 /// Задаёт проверяемое свойство, отвергая повтор флага.
 ///
-/// Второй `--property` молча затирал бы первый, и `lamc verify -p "F Done" -p
+/// Второй `--property` молча затирал бы первый, и `taktc verify -p "F Done" -p
 /// "G Idle" m.lam` отчитался бы «проверено свойств: 1; все держатся» — про
 /// первую формулу пользователь узнал бы только из исходников. Отказ по тому же
 /// правилу, что и для второго файла.
@@ -857,15 +857,15 @@ fn print_verify_results(outcome: &takt_lang::VerifyOutcome) -> i32 {
 
 /// Выводит справку по использованию утилиты в stderr.
 fn print_usage() {
-    eprintln!("Использование: lamc compile [флаги] <input.lam> [-o <output>]");
-    eprintln!("               lamc fmt [--check] [--stdin] <файлы/каталоги>");
+    eprintln!("Использование: taktc compile [флаги] <input.lam> [-o <output>]");
+    eprintln!("               taktc fmt [--check] [--stdin] <файлы/каталоги>");
     eprintln!(
-        "               lamc verify [--property \"φ\"] [--scope file|all] [--trace] <input.lam>"
+        "               taktc verify [--property \"φ\"] [--scope file|all] [--trace] <input.lam>"
     );
     eprintln!(
-        "               lamc address-map [--emit map|json] [--address-map <файл>] [-D N=V] [-o <out>] <input.lam>"
+        "               taktc address-map [--emit map|json] [--address-map <файл>] [-D N=V] [-o <out>] <input.lam>"
     );
-    eprintln!("               lamc --help");
+    eprintln!("               taktc --help");
     eprintln!();
     eprintln!("Флаги:");
     eprintln!("  --target, -t <цель>    Целевой язык (по умолчанию: c) — см. «Целевые платформы»");
@@ -909,18 +909,18 @@ fn print_usage() {
     eprintln!("            Порт с адресом = бит регистра; интерфейс reg_addr/wdata/wen/rdata");
     eprintln!();
     eprintln!("Примеры:");
-    eprintln!("  lamc compile main.lam");
-    eprintln!("  lamc compile -I /lib/lam:/home/user/lam main.lam -o build/");
-    eprintln!("  lamc compile -I /lib/lam -I /home/user/lam --target c main.lam");
-    eprintln!("  lamc compile --verbose main.lam");
-    eprintln!("  lamc compile --quiet main.lam -o dist/");
+    eprintln!("  taktc compile main.lam");
+    eprintln!("  taktc compile -I /lib/lam:/home/user/lam main.lam -o build/");
+    eprintln!("  taktc compile -I /lib/lam -I /home/user/lam --target c main.lam");
+    eprintln!("  taktc compile --verbose main.lam");
+    eprintln!("  taktc compile --quiet main.lam -o dist/");
     eprintln!();
     eprintln!("Подкоманда fmt (канонический форматтер):");
     eprintln!("  --check      Не писать файлы; ненулевой код, если нужен формат (для CI)");
     eprintln!("  --stdin      Читать из stdin, писать в stdout");
-    eprintln!("  lamc fmt examples/            # отформатировать каталог на месте");
-    eprintln!("  lamc fmt --check examples/    # проверить (CI)");
-    eprintln!("  cat a.lam | lamc fmt --stdin  # отформатировать поток");
+    eprintln!("  taktc fmt examples/            # отформатировать каталог на месте");
+    eprintln!("  taktc fmt --check examples/    # проверить (CI)");
+    eprintln!("  cat a.lam | taktc fmt --stdin  # отформатировать поток");
     eprintln!();
     eprintln!("Подкоманда verify (проверка LTL-свойств, model checking — фича 0049):");
     eprintln!("  --property, -p \"φ\"  Проверить одну формулу из командной строки");
@@ -935,9 +935,9 @@ fn print_usage() {
     eprintln!("  Свойства над данными (`G (temp <= 100)`) в этой абстракции не поддержаны.");
     eprintln!("  Код возврата: 0 — все свойства держатся; 1 — нарушение/не проверено.");
     eprintln!();
-    eprintln!("  lamc verify model.lam");
-    eprintln!("  lamc verify --property \"F Done\" model.lam       # достижимость");
-    eprintln!("  lamc verify -p \"G (Fault -> F Idle)\" model.lam  # живость");
+    eprintln!("  taktc verify model.lam");
+    eprintln!("  taktc verify --property \"F Done\" model.lam       # достижимость");
+    eprintln!("  taktc verify -p \"G (Fault -> F Idle)\" model.lam  # живость");
 }
 
 fn main() {
@@ -973,7 +973,7 @@ fn main() {
     }
 
     if args[1] == "address-map" {
-        // Логика — в библиотеке (`bin/lamc.rs` пришпилен к baseline размера).
+        // Логика — в библиотеке (`bin/taktc.rs` пришпилен к baseline размера).
         process::exit(takt_lang::address_map::run_export_subcommand(&args[2..]));
     }
 
@@ -1817,7 +1817,7 @@ mod tests {
         assert_eq!(opts.defines, vec!["A=0x1".to_string(), "B=0x2".to_string()]);
     }
 
-    /// По умолчанию define'ов нет → поведение `lamc` идентично прежнему.
+    /// По умолчанию define'ов нет → поведение `taktc` идентично прежнему.
     #[test]
     fn defines_absent_by_default() {
         let opts = parse_compile_args(&["m.lam".to_string()]).unwrap();

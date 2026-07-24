@@ -28,7 +28,7 @@ mod semantic_tokens;
 mod symbols;
 
 // ⚠️ ПУБЛИЧНЫЙ API КРЕЙТА (правило 11). `takt_lang::lsp::*` — контракт для
-// `bin/lam_lsp.rs`, `tests/lsp_tests.rs` и плагинов IDE. Реэкспорт держит пути
+// `bin/takt_lsp.rs`, `tests/lsp_tests.rs` и плагинов IDE. Реэкспорт держит пути
 // импорта прежними: где лежит функция внутри — деталь, которую потребитель знать
 // не обязан. Ни один потребитель этой фичей не правится.
 pub use completion::completion_items;
@@ -385,7 +385,7 @@ start S = M;
         let lsp_diag = grammar_diagnostic_to_lsp(&diag, "hello");
         assert_eq!(lsp_diag.severity, Some(DiagnosticSeverity::ERROR));
         assert_eq!(lsp_diag.message, "тестовая ошибка");
-        assert_eq!(lsp_diag.source, Some("lam-lsp".to_string()));
+        assert_eq!(lsp_diag.source, Some("takt-lsp".to_string()));
     }
 
     /// Предупреждение конвертируется в LSP DiagnosticSeverity::WARNING.

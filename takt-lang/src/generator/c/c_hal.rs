@@ -315,7 +315,7 @@ mod tests {
     use crate::{parse, semantic};
 
     /// Строит `.h` цели `c-hal` с разрешёнными адресами (тем же `resolve_addresses`,
-    /// что и `lamc -t c-hal`, — иначе таблица `*__ADDR` не эмитится).
+    /// что и `taktc -t c-hal`, — иначе таблица `*__ADDR` не эмитится).
     fn generate_hal_h(src: &str, name: &str, float_width: crate::generator::FloatWidth) -> String {
         let (model_ast, _) = parse(src, 0).unwrap();
         let model = semantic::tree::construct_model(&model_ast, None, &[]).unwrap();
@@ -359,7 +359,7 @@ start Idle {
 
     /// **T10 (0029-02/03).** Ширина доступа к MMIO по типу порта.
     ///
-    /// Значения **захвачены зондом** (`lamc -t c-hal`), а не угаданы. Ловит два
+    /// Значения **захвачены зондом** (`taktc -t c-hal`), а не угаданы. Ловит два
     /// исправления фичи 0029 сразу:
     /// - битовый порт — **1** байт (было 4: `Bit` → `int` → `_ => 4`); чтение
     ///   4 байтами из однобайтового регистра — доступ за его пределы;

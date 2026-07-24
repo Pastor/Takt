@@ -102,7 +102,7 @@ fn run(args: Args) -> Result<RunResult, String> {
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    // Позиция — в начале строки, как у `lamc` и `rustc`: так её видит редактор.
+    // Позиция — в начале строки, как у `taktc` и `rustc`: так её видит редактор.
     // Слова «Семантическая ошибка» не дублируются — об этом говорит код (`SE-…`).
     let model_rc = construct_model_with_files(&ast, None, &search_paths, &mut files)
         .map_err(|d| format_diagnostic(&d, &files))?;
@@ -185,7 +185,7 @@ fn extract_port_names(model: &takt_lang::semantic::ModelNode) -> PortNames {
 /// импортированной библиотеки.
 ///
 /// Печатаются **все** диагностики, а не первая: у разбора их обычно несколько, и
-/// каждая — своя подсказка. (`lamc` показывает первую; здесь поведение полезнее и
+/// каждая — своя подсказка. (`taktc` показывает первую; здесь поведение полезнее и
 /// сохранено осознанно.)
 fn format_diagnostics(
     prefix: &str,
@@ -199,7 +199,7 @@ fn format_diagnostics(
 /// Одна диагностика: `путь:строка:колонка: [КОД] сообщение`.
 ///
 /// Позиция печатается общей для всех бинарников функцией
-/// (`takt_lang::diagnostics::position_prefix`) — формат позиции един у `lamc` и
+/// (`takt_lang::diagnostics::position_prefix`) — формат позиции един у `taktc` и
 /// симулятора физически, а не по договорённости.
 fn format_diagnostic(
     diag: &takt_lang::diagnostics::Diagnostic,

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Предкоммит-проверка: ссылки в Markdown + fmt + check + clippy + test +
-# формат примеров (lamc fmt --check) +
+# формат примеров (taktc fmt --check) +
 # генерация C/PlantUML/ST/Rust/SV из примеров Lam + гейт воспроизводимости
 # (фича 0048) + сборка сгенерированного кода (C — cmake/ninja, Rust — cargo +
 # прогон проверок по моделям, SV — verilator + yosys).
@@ -85,16 +85,16 @@ $CARGO_CMD test -- --test-threads=1
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-$CARGO_CMD build --bin lamc 2>/dev/null
-$CARGO_CMD build --features lsp --bin lam-lsp
+$CARGO_CMD build --bin taktc 2>/dev/null
+$CARGO_CMD build --features lsp --bin takt-lsp
 
-LAMC="./target/debug/lamc"
+LAMC="./target/debug/taktc"
 
 # Канон форматирования примеров (фича 0024). Проверка НЕразрушающая: только код
 # возврата. Область — `examples/`: они являются документацией по языку
 # (правила 15, 16) и обязаны быть в каноне. Фикстуры `tests/data/` намеренно НЕ
 # проверяются: часть тестов завязана на их раскладку и позиции.
-echo "Проверка формата примеров (lamc fmt --check)..."
+echo "Проверка формата примеров (taktc fmt --check)..."
 $LAMC fmt --check examples/ || {
   echo "  Примеры не в каноне. Исправить: $LAMC fmt examples/"
   exit 1
@@ -336,7 +336,7 @@ fi
 # через `assert!` — падение `assert!` валит предкоммит.
 #
 # Крейт НАМЕРЕННО вне workspace репозитория (своя таблица `[workspace]`), потому
-# и вызывается отдельным `--manifest-path`: его содержимое порождается `lamc`, и
+# и вызывается отдельным `--manifest-path`: его содержимое порождается `taktc`, и
 # под `cargo check`/`clippy` корня попадать не должно. По той же причине здесь
 # `build`, а не `clippy`: на `comprehensive.rs` clippy закономерно ругается
 # (известный дефект примера, фича 0030 — см. пропуск в гейте выше), а `rustc`
@@ -369,7 +369,7 @@ done
 #
 # Мягкая деградация (образец — `cc_available()` в conformance_c_tests.rs):
 # инструмента нет → шаг пропускается с явным сообщением. Verilator и yosys для
-# сборки и тестов `lamc` не нужны (ставятся `brew install verilator yosys`), и
+# сборки и тестов `taktc` не нужны (ставятся `brew install verilator yosys`), и
 # машина разработчика вправе быть без них.
 #
 # В CI мягкость недопустима: пропущенный гейт зелёный, то есть неотличим от
@@ -532,7 +532,7 @@ fi
 # сценарии, проверяют наблюдаемое поведение assert-ами (провал → $fatal →
 # ненулевой код выхода) и снимают осциллограмму <name>.vcd для gtkwave.
 #
-# Тестбенчи написаны РУКАМИ (не порождаются lamc): тестбенч — принадлежность
+# Тестбенчи написаны РУКАМИ (не порождаются taktc): тестбенч — принадлежность
 # проверки, а не продукта (решение 0045-07). Список модулей — тот же
 # $SV_TRANSLATABLE: у каждого обязан быть парный tb/<name>_tb.sv.
 #
@@ -646,7 +646,7 @@ echo "Проверка ST-арбитра (MatIEC iec2c)..."
 # юнит-тесты проверяют лишь, что генератор напечатал задуманное.
 #
 # Гейт НЕ валит предкоммит, если инструмента нет: `iec2c` внешний и для сборки
-# `lamc` не нужен. Но если он есть — невалидный ST это ОШИБКА.
+# `taktc` не нужен. Но если он есть — невалидный ST это ОШИБКА.
 IEC2C_BIN="${IEC2C_PREFIX:-$HOME/.local}/bin/iec2c"
 IEC2C_LIB="${IEC2C_PREFIX:-$HOME/.local}/share/matiec/lib"
 if [ -x "$IEC2C_BIN" ] && [ -f "$IEC2C_LIB/ieclib.txt" ]; then

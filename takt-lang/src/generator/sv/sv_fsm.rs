@@ -290,7 +290,7 @@ fn constant_enter_assignments(
             Ok(())
         }
         // Формула — свойство для верификации, а не поведение: цель `c` её тоже
-        // не эмитит (`lamc verify`, фича 0049).
+        // не эмитит (`taktc verify`, фича 0049).
         StatementNode::InlineFormula(_) => Ok(()),
         StatementNode::Expression(expr) => match &**expr {
             ExpressionNode::Assign(target, value) => {

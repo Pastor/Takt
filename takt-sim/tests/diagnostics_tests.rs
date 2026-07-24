@@ -12,7 +12,7 @@ const DIR: &str = "tests/data/diag54";
 
 /// Запускает симулятор на фикстуре и возвращает stderr (фикстуры ошибочны).
 fn stderr_of(fixture: &str) -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_simulation"))
+    let out = Command::new(env!("CARGO_BIN_EXE_takt-sim"))
         .args([&format!("{DIR}/{fixture}"), "-I", DIR, "--steps", "3"])
         .output()
         .expect("запуск симулятора");
@@ -49,7 +49,7 @@ fn error_inside_import_names_the_library() {
 
 /// A3: ошибки разбора печатаются ВСЕ, каждая со своей позицией.
 ///
-/// Симулятор показывает их все (в отличие от `lamc`, показывающего первую) —
+/// Симулятор показывает их все (в отличие от `taktc`, показывающего первую) —
 /// поведение сохранено осознанно: каждая ошибка своя подсказка.
 #[test]
 fn all_parse_errors_are_printed_with_positions() {
@@ -64,7 +64,7 @@ fn all_parse_errors_are_printed_with_positions() {
     );
 }
 
-/// A4: формат позиции совпадает с `lamc` — потому что функция одна и та же
+/// A4: формат позиции совпадает с `taktc` — потому что функция одна и та же
 /// (`takt_lang::diagnostics::position_prefix`).
 ///
 /// Сторож против расхождения печати: копия формата в каждом бинарнике разошлась
