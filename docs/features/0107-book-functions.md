@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | [`docs/adr/0107-book-functions.md`](../adr/0107-book-functions.md) |
-| Анализ | [`docs/analyze/0107-book-functions.md`](../analyze/0107-book-functions.md) |
+| Архитектура (ADR) | не заведён (стадия 2) |
+| Анализ | не заведён (стадия 3) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0107-YY-*`) |
 | Тест-план | [`docs/tests/0107-book-functions.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/0107-book-functions.md`](../reports/README.md) |

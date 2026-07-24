@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | [`docs/adr/0103-book-types.md`](../adr/0103-book-types.md) |
-| Анализ | [`docs/analyze/0103-book-types.md`](../analyze/0103-book-types.md) |
+| Архитектура (ADR) | не заведён (стадия 2) |
+| Анализ | не заведён (стадия 3) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0103-YY-*`) |
 | Тест-план | [`docs/tests/0103-book-types.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/0103-book-types.md`](../reports/README.md) |

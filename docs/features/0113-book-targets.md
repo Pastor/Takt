@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | [`docs/adr/0113-book-targets.md`](../adr/0113-book-targets.md) |
-| Анализ | [`docs/analyze/0113-book-targets.md`](../analyze/0113-book-targets.md) |
+| Архитектура (ADR) | не заведён (стадия 2) |
+| Анализ | не заведён (стадия 3) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0113-YY-*`) |
 | Тест-план | [`docs/tests/0113-book-targets.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/0113-book-targets.md`](../reports/README.md) |

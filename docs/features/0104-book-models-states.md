@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | [`docs/adr/0104-book-models-states.md`](../adr/0104-book-models-states.md) |
-| Анализ | [`docs/analyze/0104-book-models-states.md`](../analyze/0104-book-models-states.md) |
+| Архитектура (ADR) | не заведён (стадия 2) |
+| Анализ | не заведён (стадия 3) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0104-YY-*`) |
 | Тест-план | [`docs/tests/0104-book-models-states.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/0104-book-models-states.md`](../reports/README.md) |
