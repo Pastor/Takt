@@ -98,3 +98,4 @@
 | 0118 | Раздел документа «Развёрнутый пример» | [0118-book-showcase.md](0118-book-showcase.md) | — (новая фича) |
 | 0119 | Приложения документа + приложение «Ошибки» | [0119-book-appendices.md](0119-book-appendices.md) | — (новая фича) |
 | 0120 | Заметки о возможных ошибках в разделах документа | [0120-book-error-notes.md](0120-book-error-notes.md) | — (новая фича) |
+| 0121 | Разбор примеров в разделах с упором на тему | [0121-book-example-walkthrough.md](0121-book-example-walkthrough.md) | — (новая фича) |
