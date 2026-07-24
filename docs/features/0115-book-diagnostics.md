@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | [`docs/adr/0115-book-diagnostics.md`](../adr/0115-book-diagnostics.md) |
-| Анализ | [`docs/analyze/0115-book-diagnostics.md`](../analyze/0115-book-diagnostics.md) |
+| Архитектура (ADR) | не заведён (стадия 2) |
+| Анализ | не заведён (стадия 3) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0115-YY-*`) |
 | Тест-план | [`docs/tests/0115-book-diagnostics.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/0115-book-diagnostics.md`](../reports/README.md) |

@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | [`docs/adr/0108-book-ports.md`](../adr/0108-book-ports.md) |
-| Анализ | [`docs/analyze/0108-book-ports.md`](../analyze/0108-book-ports.md) |
+| Архитектура (ADR) | не заведён (стадия 2) |
+| Анализ | не заведён (стадия 3) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0108-YY-*`) |
 | Тест-план | [`docs/tests/0108-book-ports.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/0108-book-ports.md`](../reports/README.md) |

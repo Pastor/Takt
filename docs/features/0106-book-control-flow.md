@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | [`docs/adr/0106-book-control-flow.md`](../adr/0106-book-control-flow.md) |
-| Анализ | [`docs/analyze/0106-book-control-flow.md`](../analyze/0106-book-control-flow.md) |
+| Архитектура (ADR) | не заведён (стадия 2) |
+| Анализ | не заведён (стадия 3) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0106-YY-*`) |
 | Тест-план | [`docs/tests/0106-book-control-flow.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/0106-book-control-flow.md`](../reports/README.md) |

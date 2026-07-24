@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | [`docs/adr/0105-book-expressions.md`](../adr/0105-book-expressions.md) |
-| Анализ | [`docs/analyze/0105-book-expressions.md`](../analyze/0105-book-expressions.md) |
+| Архитектура (ADR) | не заведён (стадия 2) |
+| Анализ | не заведён (стадия 3) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0105-YY-*`) |
 | Тест-план | [`docs/tests/0105-book-expressions.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/0105-book-expressions.md`](../reports/README.md) |
