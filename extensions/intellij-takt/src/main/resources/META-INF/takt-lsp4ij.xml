@@ -1,0 +1,31 @@
+<idea-plugin>
+    <!-- Опциональная интеграция LSP4IJ (фича 0038). Этот файл подключается только
+         при наличии плагина com.redhat.devtools.lsp4ij (`<depends optional=…>` в
+         plugin.xml): без LSP4IJ плагин грузится и работает как 0.4.0 (лексический
+         слой 0022, навигация 0023) — семантический слой просто не включается. -->
+    <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
+        <!-- Языковой сервер Takt: поднимает `takt-lsp` (0011) по stdio. -->
+        <server
+                id="lamLsp"
+                name="Takt Language Server"
+                factoryClass="org.takt.intellij.lsp.TaktLspServerFactory">
+            <description><![CDATA[
+                Семантическая подсветка, форматирование и hover для языка Takt через
+                внешний сервер <code>takt-lsp</code> (собирается
+                <code>cargo build --features lsp --bin takt-lsp</code>). Путь к
+                бинарнику — в настройках плагина; при отсутствии сервер не
+                поднимается, работает лексическая подсветка.
+            ]]></description>
+        </server>
+
+        <!-- Сопоставление языка Takt с сервером. -->
+        <languageMapping serverId="lamLsp" language="Takt"/>
+
+        <!-- Маппинг типов семантических токенов легенды в цвета редактора (0038-02).
+             Атрибут класса — `class` (см. `<with attribute="class">` в EP LSP4IJ),
+             не `className`. -->
+        <semanticTokensColorsProvider
+                serverId="lamLsp"
+                class="org.takt.intellij.lsp.TaktSemanticTokensColorsProvider"/>
+    </extensions>
+</idea-plugin>

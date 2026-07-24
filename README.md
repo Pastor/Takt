@@ -2341,7 +2341,7 @@ start Main = Motor;             // переход отсюда откроет en
   при переименовании/перемещении файла. Работают офлайн, без `lam-lsp`.
 
 Сборка/установка — см.
-[`extensions/intellij-lam/README.md`](extensions/intellij-lam/README.md).
+[`extensions/intellij-lam/README.md`](extensions/intellij-takt/README.md).
 
 ---
 

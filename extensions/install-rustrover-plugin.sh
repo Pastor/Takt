@@ -1,10 +1,10 @@
 #!/bin/sh
-# install-rustrover-plugin.sh — сборка плагина Lam для IntelliJ Platform и его
+# install-rustrover-plugin.sh — сборка плагина Takt для IntelliJ Platform и его
 # установка/обновление в найденные инсталляции JetBrains RustRover.
 #
 # Что делает:
-#   1. Собирает плагин `extensions/intellij-lam` (его же gradlew → buildPlugin),
-#      получая build/distributions/intellij-lam-<версия>.zip.
+#   1. Собирает плагин `extensions/intellij-takt` (его же gradlew → buildPlugin),
+#      получая build/distributions/intellij-takt-<версия>.zip.
 #   2. Находит каталоги плагинов RustRover в стандартном месте JetBrains
 #      (macOS/Linux; в т.ч. установки через Toolbox — конфиг там стандартный).
 #   3. Ставит плагин, а при наличии прежней версии — обновляет (удаляет старую
@@ -32,7 +32,7 @@ done
 
 # Корень скрипта = extensions/; проект плагина рядом.
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PLUGIN_DIR="$SCRIPT_DIR/intellij-lam"
+PLUGIN_DIR="$SCRIPT_DIR/intellij-takt"
 
 [ -d "$PLUGIN_DIR" ] || { echo "Не найден проект плагина: $PLUGIN_DIR" >&2; exit 1; }
 [ -x "$PLUGIN_DIR/gradlew" ] || { echo "Не найден $PLUGIN_DIR/gradlew" >&2; exit 1; }
@@ -48,7 +48,7 @@ fi
 # --- 2. Поиск собранного zip ----------------------------------------------
 DIST_DIR="$PLUGIN_DIR/build/distributions"
 VERSION=$(sed -n 's/^pluginVersion[[:space:]]*=[[:space:]]*//p' "$PLUGIN_DIR/gradle.properties" | tr -d '[:space:]')
-ZIP="$DIST_DIR/intellij-lam-$VERSION.zip"
+ZIP="$DIST_DIR/intellij-takt-$VERSION.zip"
 if [ ! -f "$ZIP" ]; then
   # Резерв: самый свежий zip в distributions.
   ZIP=$(ls -t "$DIST_DIR"/*.zip 2>/dev/null | head -1 || true)
