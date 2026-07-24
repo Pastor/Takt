@@ -1,0 +1,7 @@
+// Импорты (позитивный тест парсера)
+import "std.takt";
+import "utils.takt" as Utils;
+
+model M {
+    start S;
+}

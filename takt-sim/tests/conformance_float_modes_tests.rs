@@ -17,7 +17,7 @@
 use takt_lang::semantic::tree::construct_model;
 use takt_sim::{Value, build_unit};
 
-const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.lam";
+const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.takt";
 
 /// Опции: точность задана, `--float-embedded` НЕ включён (native для c/rust/st).
 #[allow(clippy::field_reassign_with_default)] // GenerateOptions — #[non_exhaustive]

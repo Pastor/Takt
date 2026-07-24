@@ -21,7 +21,7 @@ use takt_lang::generator::GenerateOptions;
 
 /// Компилирует фикстуру в ST и возвращает текст порождённого файла.
 fn compile_fixture(name: &str) -> String {
-    let src_path = format!("tests/data/st/valid/{}.lam", name);
+    let src_path = format!("tests/data/st/valid/{}.takt", name);
     let source = fs::read_to_string(&src_path).unwrap_or_else(|e| panic!("{}: {}", src_path, e));
     let out_dir = target_dir(name);
     let _ = fs::remove_dir_all(&out_dir);
@@ -89,7 +89,7 @@ fn test_st_scalar_types_follow_iec_table() {
 ///
 /// Не перечислимым типом IEC: MatIEC отвергает явные значения вариантов (проба
 /// П4). Значения — `Bottom = 80`, `Top` наследует `81` (снято зондом с
-/// `examples/elevator.lam:117`).
+/// `examples/elevator.takt:117`).
 #[test]
 fn test_st_enum_variants_become_named_constants() {
     let st = compile_fixture("enum_struct");
@@ -130,7 +130,7 @@ fn test_st_struct_type_is_declared_before_function_block() {
 /// хуже отказа — его бы отдали в среду ПЛК.
 #[test]
 fn test_st_zero_sized_array_fails_with_st007_and_writes_nothing() {
-    let src_path = "tests/data/st/invalid/array_zero.lam";
+    let src_path = "tests/data/st/invalid/array_zero.takt";
     let source = fs::read_to_string(src_path).unwrap();
     let out_dir = target_dir("array_zero");
     let _ = fs::remove_dir_all(&out_dir);
@@ -247,7 +247,7 @@ fn test_ports_without_at_in_plain_st() {
 /// Пара с тестом выше: цели **асимметричны**, и это фиксируется с обеих сторон.
 #[test]
 fn test_same_ports_get_locations_in_st_at() {
-    let src_path = "tests/data/st/valid/ports_at.lam";
+    let src_path = "tests/data/st/valid/ports_at.takt";
     let source = fs::read_to_string(src_path).unwrap();
     let out_dir = target_dir("ports_at_at");
     let _ = fs::remove_dir_all(&out_dir);
@@ -282,7 +282,7 @@ fn test_same_ports_get_locations_in_st_at() {
 
 /// Компилирует контрпример целью `st-at` и возвращает диагностику.
 fn compile_invalid_at(name: &str, map: Option<&str>) -> Vec<String> {
-    let src_path = format!("tests/data/st/invalid/{}.lam", name);
+    let src_path = format!("tests/data/st/invalid/{}.takt", name);
     let source = fs::read_to_string(&src_path).unwrap();
     let entries = match map {
         Some(m) => {
@@ -352,21 +352,21 @@ fn test_dangling_map_entry_is_se051_and_overlay_is_se050() {
 
 /// **Закрывает РИ4.** Внешняя карта переопределяет МК-адреса на ПЛК-локации.
 ///
-/// `elevator.lam` написан под МК-адресацию: `in sensors_1: u8 := 268435456;`
+/// `elevator.takt` написан под МК-адресацию: `in sensors_1: u8 := 268435456;`
 /// (`0x10000000`) → `AT %IB268435456`, чего не имеет ни один ПЛК. Модель при
 /// этом **корректна** (для целей `c`/`c-hal`) и не правится: ПЛК-локации живут
 /// во внешней карте, а генератор берёт их по приоритету (inline < `address` <
 /// карта).
 #[test]
 fn test_external_map_overrides_mcu_addresses_with_plc_locations() {
-    let source = fs::read_to_string("../examples/elevator.lam").unwrap();
+    let source = fs::read_to_string("../examples/elevator.takt").unwrap();
     let map_src = fs::read_to_string("../examples/elevator.plc.map").unwrap();
     let entries = takt_lang::parse_address_map(&map_src, 0).expect("карта должна разбираться");
     let out_dir = target_dir("elevator_at");
     let _ = fs::remove_dir_all(&out_dir);
 
     takt_lang::compile_to_st_at(
-        "../examples/elevator.lam",
+        "../examples/elevator.takt",
         &source,
         out_dir.to_str().unwrap(),
         &[],
@@ -434,13 +434,13 @@ fn compile_st_source(
 
 /// **T5/A4 — `ST-014` на имени модели, совпавшем со стандартной библиотекой IEC.**
 ///
-/// Имя корневой модели берётся из **имени файла**: `concat.lam` →
+/// Имя корневой модели берётся из **имени файла**: `concat.takt` →
 /// `FUNCTION_BLOCK Concat`, а `CONCAT` — стандартная функция IEC. `iec2c` даёт
 /// `invalid function block name`; `ST-014` называет причину.
 #[test]
 fn test_st014_on_model_name_colliding_with_stdlib() {
     let err = compile_st_source(
-        "concat.lam",
+        "concat.takt",
         "var x: u8 := 0;\nstart S { always { x := x + 1; } }\n",
     )
     .expect_err("модель Concat обязана дать ST-014");
@@ -454,7 +454,7 @@ fn test_st014_on_model_name_colliding_with_stdlib() {
 #[test]
 fn test_st014_on_variable_named_left_names_the_cause() {
     let err = compile_st_source(
-        "prog.lam",
+        "prog.takt",
         "var left: u8 := 0;\nstart S { always { left := left + 1; } }\n",
     )
     .expect_err("переменная left обязана дать ST-014");
@@ -475,7 +475,7 @@ fn test_st014_case_insensitive() {
             "var {n}: u8 := 0;\nstart S {{ always {{ {n} := {n} + 1; }} }}\n",
             n = name
         );
-        let err = compile_st_source("prog.lam", &src)
+        let err = compile_st_source("prog.takt", &src)
             .expect_err(&format!("'{}' обязано дать ST-014", name));
         assert_eq!(err.code.as_deref(), Some("ST-014"), "имя '{}'", name);
     }
@@ -489,7 +489,7 @@ fn test_st014_various_reserved_names() {
             "var {n}: u8 := 0;\nstart S {{ always {{ {n} := {n} + 1; }} }}\n",
             n = name
         );
-        let err = compile_st_source("prog.lam", &src)
+        let err = compile_st_source("prog.takt", &src)
             .expect_err(&format!("'{}' обязано дать ST-014", name));
         assert_eq!(err.code.as_deref(), Some("ST-014"), "имя '{}'", name);
     }
@@ -501,7 +501,7 @@ fn test_st014_various_reserved_names() {
 #[test]
 fn test_st014_accepts_valid_names() {
     compile_st_source(
-        "prog.lam",
+        "prog.takt",
         "var remaining: u8 := 0;\nstart S { always { remaining := remaining + 1; } }\n",
     )
     .expect("valid имя remaining должно компилироваться без ST-014");

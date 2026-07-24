@@ -55,12 +55,12 @@ fn extract_name(id: Option<Identifier>, loc: Location) -> Result<String, Diagnos
 ///
 /// Если `new_file` уже присутствует в `import_stack`, значит мы столкнулись
 /// с циклической зависимостью. В этом случае возвращается [`Diagnostic`]-ошибка
-/// с цепочкой вида `a.lam → b.lam → a.lam`.
+/// с цепочкой вида `a.takt → b.takt → a.takt`.
 ///
 /// # Примеры цикла
 ///
 /// ```text
-/// Циклический импорт: /src/a.lam → /src/b.lam → /src/a.lam
+/// Циклический импорт: /src/a.takt → /src/b.takt → /src/a.takt
 /// ```
 fn check_import_cycle(
     import_stack: &[String],
@@ -96,7 +96,7 @@ fn importer_path<'a>(import_stack: &'a [String], files: &'a FileTable) -> Option
 ///
 /// Прежде импорт искался **только** по явным `-I`: файл, лежащий рядом с
 /// импортирующим, не находился — даже если компилятор запущен из его каталога.
-/// `import "lib.lam";` в `main.lam` требовал `-I <каталог main.lam>`, иначе
+/// `import "lib.takt";` в `main.takt` требовал `-I <каталог main.takt>`, иначе
 /// `SE-013`. Это расходилось с интуицией (`#include "x.h"`, Python, JS ищут
 /// рядом) и делало `import` непригодным без настройки.
 ///
@@ -122,7 +122,7 @@ fn search_paths_with_importer_dir(
         .map(std::path::Path::new)
         .and_then(std::path::Path::parent)
     {
-        // Путь без каталога (`main.lam`) даёт пустого родителя — это «здесь».
+        // Путь без каталога (`main.takt`) даёт пустого родителя — это «здесь».
         let dir = if parent.as_os_str().is_empty() {
             ".".to_string()
         } else {
@@ -258,7 +258,7 @@ fn construct_model_stage0(
                     // Проверяем цикл ДО рекурсивной обработки файла
                     check_import_cycle(import_stack, &filename, *import_loc)?;
                     // Извлекаем только имя файла (без директории и расширения),
-                    // затем нормализуем в CamelCase: "my_model.lam" → "MyModel".
+                    // затем нормализуем в CamelCase: "my_model.takt" → "MyModel".
                     // Прежде использовался срез filename[..len-4], что давало полный путь
                     // и, как следствие, некорректное имя (например, "TmpMyModel").
                     let stem = std::path::Path::new(&filename)
@@ -345,7 +345,7 @@ fn construct_model_stage0(
                         }
                     }
                 }
-                // `import { A, B as C } from "file.lam";`
+                // `import { A, B as C } from "file.takt";`
                 //
                 // Загружает файл, строит его семантическую модель, затем
                 // выборочно экспортирует указанные имена в текущий контекст.
@@ -1210,7 +1210,7 @@ fn construct_model_impl(
 /// словарь состояний с разрешёнными ссылками между ними.
 ///
 /// Обнаруживает циклические зависимости между файлами импорта:
-/// при наличии цикла `a.lam → b.lam → a.lam` возвращает [`Diagnostic`]-ошибку
+/// при наличии цикла `a.takt → b.takt → a.takt` возвращает [`Diagnostic`]-ошибку
 /// с полным описанием цепочки.
 ///
 /// # Ошибки

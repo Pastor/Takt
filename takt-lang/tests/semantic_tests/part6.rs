@@ -143,16 +143,16 @@ fn match_statement_is_valid() {
     );
 }
 
-/// fixture `match_switch.lam` проходит семантический анализ без ошибок.
+/// fixture `match_switch.takt` проходит семантический анализ без ошибок.
 #[test]
 fn match_switch_fixture_is_valid() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/match_switch.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/match_switch.takt")
         .expect("файл не найден");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_ok(),
-        "match_switch.lam должен проходить анализ: {:?}",
+        "match_switch.takt должен проходить анализ: {:?}",
         result
     );
 }

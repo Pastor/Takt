@@ -45,7 +45,7 @@ fn a2_reformat_matches_lamc_fmt_over_corpus() {
     let mut checked = 0usize;
     for entry in std::fs::read_dir(&examples).expect("examples/ читается") {
         let path = entry.expect("запись каталога").path();
-        if path.extension().and_then(|e| e.to_str()) != Some("lam") {
+        if path.extension().and_then(|e| e.to_str()) != Some("takt") {
             continue;
         }
         let source = std::fs::read_to_string(&path).expect("файл примера читается");

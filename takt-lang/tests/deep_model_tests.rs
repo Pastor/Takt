@@ -42,7 +42,7 @@ fn codegen_handles_deep_state_chain() {
     let src = chain_source(DEEP);
     let out = std::env::temp_dir().join("lam_deep_chain.c");
     takt_lang::compile_to_c(
-        "deep.lam",
+        "deep.takt",
         &src,
         out.to_str().expect("путь"),
         &[],
@@ -57,7 +57,7 @@ fn codegen_handles_deep_state_chain() {
 fn plantuml_handles_deep_state_chain() {
     let src = chain_source(DEEP);
     let out = std::env::temp_dir().join("lam_deep_chain.puml");
-    takt_lang::compile_to_plantuml("deep.lam", &src, out.to_str().expect("путь"), &[])
+    takt_lang::compile_to_plantuml("deep.takt", &src, out.to_str().expect("путь"), &[])
         .expect("цепочка из 5000 состояний обязана давать диаграмму");
     let _ = std::fs::remove_file(&out);
 }

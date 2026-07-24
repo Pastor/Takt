@@ -401,11 +401,11 @@ mod lsp_multifile {
     /// Импорт разрешается в редакторе.
     ///
     /// Прежде `collect_diagnostics` звала `construct_model(&ast, None, &[])` — с
-    /// пустыми путями поиска, поэтому `import "lib_ok.lam";` **всегда** давал
+    /// пустыми путями поиска, поэтому `import "lib_ok.takt";` **всегда** давал
     /// «файл не найден», хотя файл лежит рядом.
     #[test]
     fn import_resolves_in_editor() {
-        let diags = diagnostics_at("uses_ok.lam");
+        let diags = diagnostics_at("uses_ok.takt");
         assert!(
             !diags.iter().any(|d| d.message.contains("не найден")),
             "импорт рядом с документом обязан разрешаться: {diags:?}"
@@ -418,7 +418,7 @@ mod lsp_multifile {
     /// смещению из другого файла — то есть не туда.
     #[test]
     fn foreign_error_is_anchored_at_the_import_line() {
-        let diags = diagnostics_at("uses_bad.lam");
+        let diags = diagnostics_at("uses_bad.takt");
         let d = diags
             .iter()
             .find(|d| d.message.contains("Nowhere"))
@@ -435,13 +435,13 @@ mod lsp_multifile {
     /// Без этого автор видел бы подсветку на `import` и не знал, что искать.
     #[test]
     fn foreign_error_names_the_real_location() {
-        let diags = diagnostics_at("uses_bad.lam");
+        let diags = diagnostics_at("uses_bad.takt");
         let d = diags
             .iter()
             .find(|d| d.message.contains("Nowhere"))
             .expect("ошибка библиотеки");
         assert!(
-            d.message.contains("в файле") && d.message.contains("lib_bad.lam:2:"),
+            d.message.contains("в файле") && d.message.contains("lib_bad.takt:2:"),
             "сообщение обязано называть файл и позицию: {}",
             d.message
         );
@@ -451,7 +451,7 @@ mod lsp_multifile {
     #[test]
     fn own_error_keeps_its_own_range() {
         let source = "start A { ref Nowhere; }";
-        let diags = takt_lang::lsp::collect_diagnostics_at("own.lam", source, &[]);
+        let diags = takt_lang::lsp::collect_diagnostics_at("own.takt", source, &[]);
         let d = diags.first().expect("ошибка своя");
         assert!(
             !d.message.contains("в файле"),

@@ -29,7 +29,7 @@ use takt_sim::{TickResult, Unit, Value, build_unit};
 
 /// Опорная фикстура: выходные порты `counter` (`0x10`) и `flag` (`0x20`)
 /// эволюционируют по тактам (автономно, без входов).
-const MMIO_FIXTURE: &str = "tests/data/eval/conformance_mmio.lam";
+const MMIO_FIXTURE: &str = "tests/data/eval/conformance_mmio.takt";
 
 /// Тактов в трассе симулятора — с запасом над её длиной.
 const TRACE_TICKS: usize = 6;
@@ -268,7 +268,7 @@ fn bus_write_ignored_for_out_and_readback_for_in() {
     let dir = build_dir("io");
     compile_mmio(
         dir.as_path(),
-        "tests/data/eval/conformance_mmio_io.lam",
+        "tests/data/eval/conformance_mmio_io.takt",
         "conformance_mmio_io",
     );
 

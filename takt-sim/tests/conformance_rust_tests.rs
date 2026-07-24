@@ -173,7 +173,7 @@ fn build_dir(tag: &str) -> PathBuf {
 }
 
 fn fixture(dir: &Path, name: &str, source: &str) -> PathBuf {
-    let path = dir.join(format!("{name}.lam"));
+    let path = dir.join(format!("{name}.takt"));
     std::fs::write(&path, source).expect("запись фикстуры");
     path
 }
@@ -387,7 +387,7 @@ fn main() {{
 #[test]
 fn fixed_point_arithmetic_matches_generated_rust() {
     let dir = build_dir("rsfixed");
-    let fixture = Path::new("tests/data/eval/conformance_fixed_probe.lam");
+    let fixture = Path::new("tests/data/eval/conformance_fixed_probe.takt");
     let sim = simulate_f64_trace(fixture, "probe");
     // Пиннинг битов: -3.0, -1.5, -0.0078125, 1.9921875 (все точны в f64).
     assert_eq!(
@@ -423,8 +423,8 @@ fn fixed_point_arithmetic_matches_generated_rust() {
 // наследует уже проверенную 0061 rust-Q-арифметику (fixed_point_..._rust выше).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.lam";
-const FLOAT_Q_TWIN: &str = "tests/data/eval/conformance_float_q_twin.lam";
+const FLOAT_Q_FIXTURE: &str = "tests/data/eval/conformance_float_q.takt";
+const FLOAT_Q_TWIN: &str = "tests/data/eval/conformance_float_q_twin.takt";
 
 /// Опции embedded-Q для `float` (фича 0096).
 #[allow(clippy::field_reassign_with_default)] // GenerateOptions — #[non_exhaustive]

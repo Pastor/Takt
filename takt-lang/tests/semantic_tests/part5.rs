@@ -48,7 +48,7 @@ fn test_parent_var_used_in_submodel_no_unused_warning() {
 fn test_nondeterministic_transitions() {
     use takt_lang::diagnostics::Level;
     let (ast, _) = parse(
-        &std::fs::read_to_string("tests/data/semantic/valid/nondeterministic_warn.lam").unwrap(),
+        &std::fs::read_to_string("tests/data/semantic/valid/nondeterministic_warn.takt").unwrap(),
         0,
     )
     .unwrap();
@@ -72,7 +72,7 @@ fn test_nondeterministic_transitions() {
 #[test]
 fn test_deterministic_no_warning() {
     let (ast, _) = parse(
-        &std::fs::read_to_string("tests/data/semantic/valid/deterministic_transitions.lam")
+        &std::fs::read_to_string("tests/data/semantic/valid/deterministic_transitions.takt")
             .unwrap(),
         0,
     )
@@ -91,8 +91,8 @@ fn test_deterministic_no_warning() {
 /// FE1: Базовое перечисление — разбирается без ошибок, варианты присутствуют в EnumNode.
 #[test]
 fn test_enum_basic() {
-    let node = build_file("tests/data/semantic/valid/enum_basic.lam")
-        .expect("enum_basic.lam должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/enum_basic.takt")
+        .expect("enum_basic.takt должен разбираться без ошибок");
     // Перечисление находится во вложенной модели M
     let m = node
         .search_model("M")
@@ -116,8 +116,8 @@ fn test_enum_basic() {
 #[test]
 fn test_type_alias_inference() {
     use takt_lang::semantic::type_node::TypeNode;
-    let node = build_file("tests/data/semantic/valid/type_alias_inference.lam")
-        .expect("type_alias_inference.lam должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/type_alias_inference.takt")
+        .expect("type_alias_inference.takt должен разбираться без ошибок");
     let m = node
         .search_model("M")
         .expect("модель M должна быть найдена");
@@ -136,8 +136,8 @@ fn test_type_alias_inference() {
 /// FE1: Перечисление с явными значениями — значения соответствуют объявлению.
 #[test]
 fn test_enum_with_values() {
-    let node = build_file("tests/data/semantic/valid/enum_with_values.lam")
-        .expect("enum_with_values.lam должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/enum_with_values.takt")
+        .expect("enum_with_values.takt должен разбираться без ошибок");
     let m = node
         .search_model("M")
         .expect("модель M должна быть найдена");
@@ -163,8 +163,8 @@ fn test_enum_with_values() {
 /// ```
 #[test]
 fn ce4_enum_typed_var_valid() {
-    let node = build_file("tests/data/semantic/valid/enum_typed_var.lam")
-        .expect("enum_typed_var.lam должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/enum_typed_var.takt")
+        .expect("enum_typed_var.takt должен разбираться без ошибок");
     // Тип переменной dir должен быть TypeNode::Enum("Direction")
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("dir") {
         assert_eq!(
@@ -186,7 +186,7 @@ fn ce4_enum_typed_var_valid() {
 /// ```
 #[test]
 fn ce4_undeclared_enum_type_gives_error() {
-    let err = build_file_err("tests/data/semantic/invalid/ce4_undeclared_enum_type.lam");
+    let err = build_file_err("tests/data/semantic/invalid/ce4_undeclared_enum_type.takt");
     assert!(
         err.message.contains("Ce4") || err.message.contains("Status"),
         "ошибка должна упоминать Ce4 или имя перечисления: {}",
@@ -203,7 +203,7 @@ fn ce4_undeclared_enum_type_gives_error() {
 /// ```
 #[test]
 fn ce4_enum_typed_var_invalid_value() {
-    let err = build_file_err("tests/data/semantic/invalid/ce4_enum_type_wrong_value.lam");
+    let err = build_file_err("tests/data/semantic/invalid/ce4_enum_type_wrong_value.takt");
     assert!(
         err.message.contains("NI6") || err.message.contains("99") || err.message.contains("Color"),
         "ошибка должна упоминать NI6, значение или имя enum: {}",
@@ -426,11 +426,11 @@ start S;
     );
 }
 
-/// NI3: Интеграционный тест — файл `struct_types.lam` разбирается семантически.
+/// NI3: Интеграционный тест — файл `struct_types.takt` разбирается семантически.
 #[test]
 fn test_struct_types_file_semantic() {
-    let node = build_file("tests/data/semantic/valid/struct_types.lam")
-        .expect("struct_types.lam должен разбираться без ошибок");
+    let node = build_file("tests/data/semantic/valid/struct_types.takt")
+        .expect("struct_types.takt должен разбираться без ошибок");
     assert!(
         node.structs.contains_key("Point"),
         "struct Point должен быть в semantic модели"
@@ -447,8 +447,8 @@ fn test_struct_types_file_semantic() {
 #[test]
 fn test_ni4_duplicate_condition_warns() {
     use takt_lang::diagnostics::Level;
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/condition_overlap_eq.lam")
-        .expect("файл condition_overlap_eq.lam должен существовать");
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/condition_overlap_eq.takt")
+        .expect("файл condition_overlap_eq.takt должен существовать");
     let (ast, _) = parse(&src, 0).unwrap();
     let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = takt_lang::nondeterministic_transition_warnings(model_rc);
@@ -467,8 +467,9 @@ fn test_ni4_duplicate_condition_warns() {
 /// NI4: Перекрывающиеся интервальные условия `level < 10` и `level < 20` — предупреждение NI4.
 #[test]
 fn test_ni4_interval_overlap_warns() {
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/condition_overlap_interval.lam")
-        .expect("файл condition_overlap_interval.lam должен существовать");
+    let src =
+        std::fs::read_to_string("tests/data/semantic/invalid/condition_overlap_interval.takt")
+            .expect("файл condition_overlap_interval.takt должен существовать");
     let (ast, _) = parse(&src, 0).unwrap();
     let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = takt_lang::nondeterministic_transition_warnings(model_rc);
@@ -486,8 +487,8 @@ fn test_ni4_interval_overlap_warns() {
 /// NI4: Непересекающиеся условия `level < 10` и `level > 20` — предупреждений NI4 нет.
 #[test]
 fn test_ni4_non_overlapping_no_warn() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/no_condition_overlap.lam")
-        .expect("файл no_condition_overlap.lam должен существовать");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/no_condition_overlap.takt")
+        .expect("файл no_condition_overlap.takt должен существовать");
     let (ast, _) = parse(&src, 0).unwrap();
     let model_rc = construct_model(&ast, None, &[]).unwrap();
     let warnings = takt_lang::nondeterministic_transition_warnings(model_rc);
@@ -599,10 +600,10 @@ fn i5_non_recursive_type_alias_ok() {
     );
 }
 
-/// Ce16: прямая рекурсия из тестового файла `recursive_type_alias.lam`.
+/// Ce16: прямая рекурсия из тестового файла `recursive_type_alias.takt`.
 #[test]
 fn i5_file_recursive_type_alias() {
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/recursive_type_alias.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/recursive_type_alias.takt")
         .expect("не удалось прочитать файл");
     let err = build_err(&src);
     assert_eq!(
@@ -613,11 +614,11 @@ fn i5_file_recursive_type_alias() {
     );
 }
 
-/// Ce16: взаимная рекурсия из тестового файла `mutual_recursive_type_alias.lam`.
+/// Ce16: взаимная рекурсия из тестового файла `mutual_recursive_type_alias.takt`.
 #[test]
 fn i5_file_mutual_recursive_type_alias() {
     let src =
-        std::fs::read_to_string("tests/data/semantic/invalid/mutual_recursive_type_alias.lam")
+        std::fs::read_to_string("tests/data/semantic/invalid/mutual_recursive_type_alias.takt")
             .expect("не удалось прочитать файл");
     let err = build_err(&src);
     assert_eq!(
@@ -628,10 +629,10 @@ fn i5_file_mutual_recursive_type_alias() {
     );
 }
 
-/// Ce16: корректные псевдонимы из тестового файла `non_recursive_type_alias.lam` — OK.
+/// Ce16: корректные псевдонимы из тестового файла `non_recursive_type_alias.takt` — OK.
 #[test]
 fn i5_file_non_recursive_type_alias_ok() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/non_recursive_type_alias.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/non_recursive_type_alias.takt")
         .expect("не удалось прочитать файл");
     let _model = build(&src);
     // Если дошли сюда — нет ошибки Ce16
@@ -678,18 +679,18 @@ fn struct_as_var_type_resolves() {
     );
 }
 
-/// NI3: тестовый файл `struct_basic.lam` — без ошибок.
+/// NI3: тестовый файл `struct_basic.takt` — без ошибок.
 #[test]
 fn struct_basic_file_ok() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/struct_basic.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/struct_basic.takt")
         .expect("не удалось прочитать файл");
     let _model = build(&src);
 }
 
-/// NI3: тестовый файл `struct_as_var_type.lam` — без ошибок.
+/// NI3: тестовый файл `struct_as_var_type.takt` — без ошибок.
 #[test]
 fn struct_as_var_type_file_ok() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/struct_as_var_type.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/struct_as_var_type.takt")
         .expect("не удалось прочитать файл");
     let _model = build(&src);
 }
@@ -713,10 +714,10 @@ fn struct_duplicate_field_error() {
     );
 }
 
-/// Ce17: тестовый файл `struct_duplicate_field.lam` — ошибка Ce17.
+/// Ce17: тестовый файл `struct_duplicate_field.takt` — ошибка Ce17.
 #[test]
 fn struct_duplicate_field_file_error() {
-    let src = std::fs::read_to_string("tests/data/semantic/invalid/struct_duplicate_field.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/invalid/struct_duplicate_field.takt")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора файла");
     let result = construct_model(&ast, None, &[]);
@@ -738,7 +739,7 @@ fn struct_duplicate_field_file_error() {
 /// Extern-функция в блоке always разрешается без ошибок семантики.
 #[test]
 fn extern_fn_in_always_resolves_ok() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/extern_fn_in_always.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/extern_fn_in_always.takt")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[]);
@@ -752,7 +753,7 @@ fn extern_fn_in_always_resolves_ok() {
 /// Extern-функция после локальной переменной разрешается без ошибок.
 #[test]
 fn extern_fn_after_local_var_resolves_ok() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/extern_fn_local_var.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/extern_fn_local_var.takt")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[]);
@@ -929,7 +930,7 @@ fn test_from_is_reserved_keyword_not_identifier() {
 fn test_import_from_keyword_parses_correctly() {
     use takt_lang::parser::ast::ModelElement;
     // Создаём минимальный импорт (файл не существует, проверяем только АСД)
-    let (ast, errs) = takt_lang::parse(r#"import { A } from "shared.lam";"#, 0)
+    let (ast, errs) = takt_lang::parse(r#"import { A } from "shared.takt";"#, 0)
         .expect("ошибка разбора import from");
     assert!(errs.is_empty(), "ошибок разбора быть не должно: {:?}", errs);
     let has_import = ast

@@ -113,7 +113,7 @@ pub(crate) fn emit_tick(
     // Параметров такта теперь всегда ≤ 3 (`self` + `&mut Shared?` + `&mut H?`,
     // фича 0059): общие переменные свёрнуты в одну структуру, поэтому заглушки
     // `#[allow(clippy::too_many_arguments)]` больше нет — политика (а) ADR 0050
-    // без исключений. Раньше `MovementController` (`stacker.lam`) разделял с
+    // без исключений. Раньше `MovementController` (`stacker.takt`) разделял с
     // корнем ВОСЕМЬ переменных (девять — размер корня) и такт получал 10
     // параметров.
     p.ident(&format!(
@@ -273,7 +273,7 @@ fn emit_transitions(
     //
     // Сливаются только СОСЕДНИЕ: между рёбрами в разные состояния порядок
     // значим (первое сработавшее выигрывает), и переставлять их нельзя.
-    // Реальный случай — `LiftOperating` в `stacker.lam`: захват и укладка
+    // Реальный случай — `LiftOperating` в `stacker.takt`: захват и укладка
     // ведут в одно `LiftDone` по разным условиям.
     let mut edges: Vec<(Name, Vec<&crate::semantic::ReferenceNode<StateNode>>)> = Vec::new();
     for reference in raw.references() {

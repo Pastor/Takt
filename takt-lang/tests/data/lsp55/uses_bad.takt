@@ -1,0 +1,4 @@
+import "lib_bad.takt";
+
+start Work { ref Done; }
+state Done;

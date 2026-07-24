@@ -108,7 +108,7 @@ FP-целей. Итог по цели:
 Побитовая сверка ведётся **внутри** режима (драйвер 2 ADR). Явный `q(m, n)` (0061)
 не задет; версия языка не менялась (флаги — свойство генерации).
 
-Пример-потребитель — [`examples/float_regulator.lam`](../../examples/float_regulator.lam)
+Пример-потребитель — [`examples/float_regulator.lam`](../../examples/float_regulator.takt)
 (регулятор на прозрачном `float`; native на `c`/`rust`/`st`, синтезируем под `sv`
 с флагом).
 

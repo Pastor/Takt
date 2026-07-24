@@ -1,0 +1,3 @@
+import "helper.takt";
+
+start Main = Helper;

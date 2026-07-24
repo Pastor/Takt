@@ -207,7 +207,7 @@ fn array_type(typ: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic> {
 ///
 /// **Почему разрядность считается, а не берётся `USINT`.** ADR (Option C)
 /// предполагал плоский `USINT`, но это предположение не выдерживает корпуса:
-/// `enum Action { Idle = 670, Closing }` (`examples/elevator.lam:121`) в `USINT`
+/// `enum Action { Idle = 670, Closing }` (`examples/elevator.takt:121`) в `USINT`
 /// **не помещается** — 670 > 255. Плоский `USINT` дал бы тихое усечение, то есть
 /// ровно тот класс дефекта («тихий пропуск»), против которого написана фича.
 /// Разрядность выбирается по фактическому диапазону вариантов — так же, как это
@@ -379,7 +379,7 @@ mod tests {
 
     /// T13: перечисление — целое, вмещающее варианты (откат Option C).
     ///
-    /// Значения сняты зондом с `examples/elevator.lam:117`: `Floor { Bottom = 80,
+    /// Значения сняты зондом с `examples/elevator.takt:117`: `Floor { Bottom = 80,
     /// Top }` даёт варианты `[("Bottom", 80), ("Top", 81)]` — `Top` наследует 81.
     #[test]
     fn test_get_st_type_enum_fits_in_usint() {
@@ -397,7 +397,7 @@ mod tests {
     /// Перечисление шире байта получает более широкий тип, а не усекается.
     ///
     /// Вход не гипотетический: `enum Action { Idle = 670, Closing }` —
-    /// `examples/elevator.lam:121`. Плоский `USINT` (как предполагал ADR) усёк бы
+    /// `examples/elevator.takt:121`. Плоский `USINT` (как предполагал ADR) усёк бы
     /// 670 молча.
     #[test]
     fn test_get_st_type_enum_wider_than_byte_is_widened_not_truncated() {

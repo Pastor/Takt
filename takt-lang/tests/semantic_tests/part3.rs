@@ -4,24 +4,24 @@
 
 use super::*;
 
-/// `tests/data/semantic/invalid/bit_value_in_const.lam` — бит-константа с недопустимым значением → ошибка.
+/// `tests/data/semantic/invalid/bit_value_in_const.takt` — бит-константа с недопустимым значением → ошибка.
 #[test]
 fn example_bit_value_in_const_is_error() {
-    let result = build_file("tests/data/semantic/invalid/bit_value_in_const.lam");
+    let result = build_file("tests/data/semantic/invalid/bit_value_in_const.takt");
     assert!(result.is_err(), "bit = 5 должно давать ошибку");
 }
 
-/// `tests/data/semantic/invalid/no_start_state.lam` — модель без start → ошибка.
+/// `tests/data/semantic/invalid/no_start_state.takt` — модель без start → ошибка.
 #[test]
 fn example_no_start_state_is_error() {
-    let result = build_file("tests/data/semantic/invalid/no_start_state.lam");
+    let result = build_file("tests/data/semantic/invalid/no_start_state.takt");
     assert!(result.is_err(), "модель без start должна давать ошибку");
 }
 
-/// `tests/data/semantic/invalid/unknown_type_in_function.lam` — неизвестный тип параметра → ошибка.
+/// `tests/data/semantic/invalid/unknown_type_in_function.takt` — неизвестный тип параметра → ошибка.
 #[test]
 fn example_unknown_type_in_function_is_error() {
-    let result = build_file("tests/data/semantic/invalid/unknown_type_in_function.lam");
+    let result = build_file("tests/data/semantic/invalid/unknown_type_in_function.takt");
     assert!(
         result.is_err(),
         "неизвестный тип параметра должен давать ошибку"
@@ -32,21 +32,21 @@ fn example_unknown_type_in_function_is_error() {
 //
 // Реализация Се1: семантический анализатор обнаруживает циклические зависимости
 // между файлами импорта. При обнаружении цикла возвращается ошибка вида:
-//   «Циклический импорт: /path/a.lam → /path/b.lam → /path/a.lam»
+//   «Циклический импорт: /path/a.takt → /path/b.takt → /path/a.takt»
 //
 // Поддерживаемые сценарии:
 //   - прямой цикл между двумя файлами: a → b → a
 //   - длинная цепочка: a → b → c → a
 //   - самоссылающийся файл: a → a
 
-/// Вспомогательная функция: создаёт временный `.lam`-файл в директории `dir`.
+/// Вспомогательная функция: создаёт временный `.takt`-файл в директории `dir`.
 fn write_tmp_in_dir(dir: &tempfile::TempDir, name: &str, content: &str) -> String {
     let path = dir.path().join(name);
     std::fs::write(&path, content).unwrap();
     dir.path().to_string_lossy().into_owned()
 }
 
-/// Прямой цикл между двумя файлами: `a.lam` импортирует `b.lam`, `b.lam` — `a.lam`.
+/// Прямой цикл между двумя файлами: `a.takt` импортирует `b.takt`, `b.takt` — `a.takt`.
 ///
 /// Ожидается ошибка «Циклический импорт» с упоминанием обоих файлов в цепочке.
 #[test]
@@ -54,16 +54,16 @@ fn circular_import_two_files_is_error() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    // a.lam → b.lam
+    // a.takt → b.takt
     write_tmp_in_dir(
         &dir,
-        "a.lam",
-        r#"import "b.lam"; start Entry = B { } state Done;"#,
+        "a.takt",
+        r#"import "b.takt"; start Entry = B { } state Done;"#,
     );
-    // b.lam → a.lam (замыкает цикл)
-    write_tmp_in_dir(&dir, "b.lam", r#"import "a.lam"; model B { start S; }"#);
+    // b.takt → a.takt (замыкает цикл)
+    write_tmp_in_dir(&dir, "b.takt", r#"import "a.takt"; model B { start S; }"#);
 
-    let src = r#"import "a.lam";"#;
+    let src = r#"import "a.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -75,13 +75,13 @@ fn circular_import_two_files_is_error() {
         err.message
     );
     assert!(
-        err.message.contains("a.lam"),
-        "сообщение должно упоминать файл a.lam: {}",
+        err.message.contains("a.takt"),
+        "сообщение должно упоминать файл a.takt: {}",
         err.message
     );
     assert!(
-        err.message.contains("b.lam"),
-        "сообщение должно упоминать файл b.lam: {}",
+        err.message.contains("b.takt"),
+        "сообщение должно упоминать файл b.takt: {}",
         err.message
     );
 }
@@ -96,14 +96,22 @@ fn circular_import_three_files_is_error() {
 
     write_tmp_in_dir(
         &dir,
-        "ca.lam",
-        r#"import "cb.lam"; start Entry = Cb { } state Done;"#,
+        "ca.takt",
+        r#"import "cb.takt"; start Entry = Cb { } state Done;"#,
     );
-    write_tmp_in_dir(&dir, "cb.lam", r#"import "cc.lam"; model Cb { start S; }"#);
-    // cc.lam → ca.lam (замыкает цикл длиной 3)
-    write_tmp_in_dir(&dir, "cc.lam", r#"import "ca.lam"; model Cc { start S; }"#);
+    write_tmp_in_dir(
+        &dir,
+        "cb.takt",
+        r#"import "cc.takt"; model Cb { start S; }"#,
+    );
+    // cc.takt → ca.takt (замыкает цикл длиной 3)
+    write_tmp_in_dir(
+        &dir,
+        "cc.takt",
+        r#"import "ca.takt"; model Cc { start S; }"#,
+    );
 
-    let src = r#"import "ca.lam";"#;
+    let src = r#"import "ca.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -119,7 +127,7 @@ fn circular_import_three_files_is_error() {
     );
 }
 
-/// Самоссылающийся файл: `self.lam` импортирует самого себя.
+/// Самоссылающийся файл: `self.takt` импортирует самого себя.
 ///
 /// Это частный случай прямого цикла длиной 1.
 #[test]
@@ -127,10 +135,10 @@ fn circular_import_self_reference_is_error() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    // self.lam импортирует себя же
-    write_tmp_in_dir(&dir, "self_ref.lam", r#"import "self_ref.lam"; start S;"#);
+    // self.takt импортирует себя же
+    write_tmp_in_dir(&dir, "self_ref.takt", r#"import "self_ref.takt"; start S;"#);
 
-    let src = r#"import "self_ref.lam";"#;
+    let src = r#"import "self_ref.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -145,8 +153,8 @@ fn circular_import_self_reference_is_error() {
         err.message
     );
     assert!(
-        err.message.contains("self_ref.lam"),
-        "сообщение должно упоминать файл self_ref.lam: {}",
+        err.message.contains("self_ref.takt"),
+        "сообщение должно упоминать файл self_ref.takt: {}",
         err.message
     );
 }
@@ -161,19 +169,19 @@ fn diamond_import_is_not_cycle_error() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    // d.lam — общая зависимость
-    write_tmp_in_dir(&dir, "d.lam", r#"model D { start S; }"#);
-    // b.lam и c.lam оба импортируют d.lam
-    write_tmp_in_dir(&dir, "db.lam", r#"import "d.lam"; model Db { start S; }"#);
-    write_tmp_in_dir(&dir, "dc.lam", r#"import "d.lam"; model Dc { start S; }"#);
-    // a.lam импортирует оба
+    // d.takt — общая зависимость
+    write_tmp_in_dir(&dir, "d.takt", r#"model D { start S; }"#);
+    // b.takt и c.takt оба импортируют d.takt
+    write_tmp_in_dir(&dir, "db.takt", r#"import "d.takt"; model Db { start S; }"#);
+    write_tmp_in_dir(&dir, "dc.takt", r#"import "d.takt"; model Dc { start S; }"#);
+    // a.takt импортирует оба
     write_tmp_in_dir(
         &dir,
-        "da.lam",
-        r#"import "db.lam"; import "dc.lam"; start S;"#,
+        "da.takt",
+        r#"import "db.takt"; import "dc.takt"; start S;"#,
     );
 
-    let src = r#"import "da.lam";"#;
+    let src = r#"import "da.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -199,16 +207,16 @@ fn circular_import_via_global_symbol_is_error() {
 
     write_tmp_in_dir(
         &dir,
-        "ga.lam",
-        r#"import "gb.lam" as Gb; start Entry = Gb { } state Done;"#,
+        "ga.takt",
+        r#"import "gb.takt" as Gb; start Entry = Gb { } state Done;"#,
     );
     write_tmp_in_dir(
         &dir,
-        "gb.lam",
-        r#"import "ga.lam" as Ga; model Gb { start S; }"#,
+        "gb.takt",
+        r#"import "ga.takt" as Ga; model Gb { start S; }"#,
     );
 
-    let src = r#"import "ga.lam" as Ga;"#;
+    let src = r#"import "ga.takt" as Ga;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -234,17 +242,17 @@ fn circular_import_via_rename_is_error() {
 
     write_tmp_in_dir(
         &dir,
-        "ra.lam",
-        r#"import { Rb } from "rb.lam"; start Entry = Rb { } state Done;"#,
+        "ra.takt",
+        r#"import { Rb } from "rb.takt"; start Entry = Rb { } state Done;"#,
     );
     write_tmp_in_dir(
         &dir,
-        "rb.lam",
-        r#"import { Ra } from "ra.lam"; model Ra { start S; } model Rb { start S; }"#,
+        "rb.takt",
+        r#"import { Ra } from "ra.takt"; model Ra { start S; } model Rb { start S; }"#,
     );
 
-    // Инициируем цикл через Plain-импорт (ra.lam содержит rename-импорт rb.lam, который замкнёт цикл)
-    let src = r#"import "ra.lam";"#;
+    // Инициируем цикл через Plain-импорт (ra.takt содержит rename-импорт rb.takt, который замкнёт цикл)
+    let src = r#"import "ra.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -268,11 +276,19 @@ fn linear_import_chain_is_valid() {
     let dir = tempfile::tempdir().unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
-    write_tmp_in_dir(&dir, "lc.lam", r#"model Lc { start S; }"#);
-    write_tmp_in_dir(&dir, "lb.lam", r#"import "lc.lam"; model Lb { start S; }"#);
-    write_tmp_in_dir(&dir, "la.lam", r#"import "lb.lam"; model La { start S; }"#);
+    write_tmp_in_dir(&dir, "lc.takt", r#"model Lc { start S; }"#);
+    write_tmp_in_dir(
+        &dir,
+        "lb.takt",
+        r#"import "lc.takt"; model Lb { start S; }"#,
+    );
+    write_tmp_in_dir(
+        &dir,
+        "la.takt",
+        r#"import "lb.takt"; model La { start S; }"#,
+    );
 
-    let src = r#"import "la.lam";"#;
+    let src = r#"import "la.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
 
@@ -468,11 +484,11 @@ fn doc_comment_for_state_inside_model() {
     );
 }
 
-/// `tests/data/semantic/valid/doc_comments.lam` — файл с doc-комментариями строится корректно.
+/// `tests/data/semantic/valid/doc_comments.takt` — файл с doc-комментариями строится корректно.
 #[test]
 fn example_doc_comments_file_is_valid() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/doc_comments.lam")
-        .expect("не могу прочитать doc_comments.lam");
+    let src = std::fs::read_to_string("tests/data/semantic/valid/doc_comments.takt")
+        .expect("не могу прочитать doc_comments.takt");
     let (ast, comments) = parse(&src, 0).expect("ошибка разбора");
     let root =
         construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
@@ -692,12 +708,12 @@ fn se11_nested_model_numeric_ref_warning() {
     );
 }
 
-/// Файл `implicit_bool_warn.lam` из тестовых данных — без предупреждений.
+/// Файл `implicit_bool_warn.takt` из тестовых данных — без предупреждений.
 ///
 /// Все переходы в файле используют явные сравнения или булевы переменные.
 #[test]
 fn se11_valid_file_no_warnings() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_warn.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_warn.takt")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
@@ -709,10 +725,10 @@ fn se11_valid_file_no_warnings() {
     );
 }
 
-/// Файл `implicit_bool_numeric.lam` — одно предупреждение о числовом условии.
+/// Файл `implicit_bool_numeric.takt` — одно предупреждение о числовом условии.
 #[test]
 fn se11_numeric_file_gives_one_warning() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_numeric.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_numeric.takt")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
@@ -812,7 +828,7 @@ fn se11_arithmetic_in_ref_gives_warning() {
 /// Файл с арифметическим условием — одно предупреждение.
 #[test]
 fn se11_arithmetic_file_gives_one_warning() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_arithmetic.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_arithmetic.takt")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");
@@ -827,7 +843,7 @@ fn se11_arithmetic_file_gives_one_warning() {
 /// Файл с именованными условиями — нет предупреждений Се11.
 #[test]
 fn se11_named_cond_file_no_warnings() {
-    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_named_cond.lam")
+    let src = std::fs::read_to_string("tests/data/semantic/valid/implicit_bool_named_cond.takt")
         .expect("не удалось прочитать файл");
     let (ast, _) = parse(&src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[]).expect("ошибка построения");

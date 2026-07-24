@@ -128,7 +128,7 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     //
     // Порядок фиксируется сортировкой по уникальному имени. Это не косметика:
     // `used_models()` отдаёт модели в порядке обхода `HashMap`, то есть **разном
-    // от запуска к запуску** (пять прогонов `taktc -t st examples/stacker.lam`
+    // от запуска к запуску** (пять прогонов `taktc -t st examples/stacker.takt`
     // дали четыре разных файла). В IEC 61131-3 порядок объявлений **значим** —
     // тип экземпляра обязан быть объявлен раньше использования, — поэтому
     // случайный порядок здесь дороже, чем в C: он делает вывод то валидным, то
@@ -216,7 +216,7 @@ fn emit_configuration(
 
     // Размещённые порты собираются заранее: пустой `VAR_GLOBAL … END_VAR`
     // недопустим («no variable declared in global variable(s) declaration»), а
-    // модель без портов — не ошибка (например, `comprehensive.lam`).
+    // модель без портов — не ошибка (например, `comprehensive.takt`).
     let mut placed: Vec<String> = Vec::new();
     let mut warnings = Vec::new();
     let mut seen: Vec<String> = Vec::new();
@@ -404,7 +404,7 @@ fn emit_function_block(
     };
 
     // Имя FB совпадает с эмитируемым идентификатором. У корня оно берётся из
-    // имени файла (проба 2: `concat.lam` → `FUNCTION_BLOCK Concat`, а `CONCAT` —
+    // имени файла (проба 2: `concat.takt` → `FUNCTION_BLOCK Concat`, а `CONCAT` —
     // стандартная функция IEC), поэтому проверять надо именно эту строку.
     let fb_name = name.unique_camelcase();
     st_reserved::check_st_name(&fb_name, model.loc)?;
@@ -511,7 +511,7 @@ mod tests {
     ///
     /// Сторож против регресса недетерминизма. `used_models()` отдаёт модели в
     /// порядке обхода `HashMap`, поэтому без явной сортировки пять прогонов
-    /// `taktc -t st examples/stacker.lam` давали **четыре разных** файла. Для ST
+    /// `taktc -t st examples/stacker.takt` давали **четыре разных** файла. Для ST
     /// это не косметика: порядок объявлений в IEC 61131-3 значим.
     ///
     /// Тест строит карту заново на каждой итерации — иначе он проверял бы кэш,

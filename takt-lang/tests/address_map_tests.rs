@@ -11,7 +11,7 @@ use takt_lang::{
 
 /// Строит семантическую модель из исходника Takt.
 fn model_of(src: &str) -> std::rc::Rc<std::cell::RefCell<takt_lang::semantic::ModelNode>> {
-    let (ast, _) = parse(src, 0).expect("ошибка разбора .lam");
+    let (ast, _) = parse(src, 0).expect("ошибка разбора .takt");
     construct_model(&ast, None, &[]).expect("ошибка построения модели")
 }
 

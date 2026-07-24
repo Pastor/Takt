@@ -1,9 +1,9 @@
-//! Корпусной гейт достижимости: примеры `examples/*.lam` **запускаются**, а не
+//! Корпусной гейт достижимости: примеры `examples/*.takt` **запускаются**, а не
 //! только компилируются.
 //!
 //! # Зачем этот слой существует
 //!
-//! `comprehensive.lam` объявлял недостижимый сценарий (`Cooling`/`Done` не
+//! `comprehensive.takt` объявлял недостижимый сценарий (`Cooling`/`Done` не
 //! достигались никогда) при **полностью зелёных** гейтах: пример компилировался
 //! в C, собирался cmake/ninja, был в каноне форматтера и печатался форматтером
 //! целиком. Единственное, чего не делал никто, — **не запускал его и не смотрел,
@@ -13,7 +13,7 @@
 //! Отсюда устройство гейта (задача
 //! [0030-02](../../docs/development/0030-02-examples-scenario-gate.md), образец —
 //! гейт непокрытых узлов фичи 0024: «отказ вместо тихого пропуска»): у **каждого**
-//! файла `examples/*.lam` обязан быть **либо** контракт сценария, **либо**
+//! файла `examples/*.takt` обязан быть **либо** контракт сценария, **либо**
 //! исключение **с причиной**. Третьего не дано — новый пример, про который забыли,
 //! валит тест ([`every_example_is_accounted_for`]).
 //!
@@ -62,14 +62,14 @@ struct Exception {
 /// единственный, чей сценарий вообще можно проверить безусловным прогоном.
 const CONTRACTS: &[Contract] = &[
     Contract {
-        file: "comprehensive.lam",
+        file: "comprehensive.takt",
         chain: &["Idle", "Heating", "Cooling", "Done"],
         budget: 400,
         must_terminate: true,
     },
     // Регулятор на q(8, 8) (фича 0061): сходится сам и завершается.
     Contract {
-        file: "regulator.lam",
+        file: "regulator.takt",
         chain: &["Adjust", "Settled", "Done"],
         budget: 50,
         must_terminate: true,
@@ -78,7 +78,7 @@ const CONTRACTS: &[Contract] = &[
     // нативным f64, сходится с anti-windup и завершается. q(8, 8) формируется под
     // sv/встраиваемые флагами сборки (--float-as-q / --float-embedded).
     Contract {
-        file: "pid_regulator.lam",
+        file: "pid_regulator.takt",
         chain: &["Control", "Settled", "Done"],
         budget: 300,
         must_terminate: true,
@@ -86,7 +86,7 @@ const CONTRACTS: &[Contract] = &[
     // Регулятор на ПРОЗРАЧНОМ float (фича 0096): симулятор считает нативным f64
     // (native-режим), сходится так же, как q-версия, и завершается.
     Contract {
-        file: "float_regulator.lam",
+        file: "float_regulator.takt",
         chain: &["Adjust", "Settled", "Done"],
         budget: 50,
         must_terminate: true,
@@ -95,22 +95,22 @@ const CONTRACTS: &[Contract] = &[
 
 const EXCEPTIONS: &[Exception] = &[
     Exception {
-        file: "elevator.lam",
+        file: "elevator.takt",
         reason: "стенд парсера: шапка объявляет файл позитивным тестом разбора; \
                  корень — цепочка `next` без условий, поведения не заявлено",
     },
     Exception {
-        file: "extend_complex.lam",
+        file: "extend_complex.takt",
         reason: "стенд синтаксиса (структуры, порты с адресами, композиция \
                  `A + B + (C | D) + E`); сценария не заявляет",
     },
     Exception {
-        file: "stacker.lam",
+        file: "stacker.takt",
         reason: "сценарии подаются извне — `examples/simulations/stacker_*.json`, \
                  харнесс `scripts/run_simulations.sh`",
     },
     Exception {
-        file: "elevator_mini.lam",
+        file: "elevator_mini.takt",
         reason: "реактивный автомат (`Cabin | Motor`): без входов стоит в Idle и \
                  не завершается — сценарии подаются извне, \
                  `examples/simulations/elevator_mini_floor2.json`. Дефект 0079 \
@@ -301,7 +301,7 @@ fn every_example_is_accounted_for() {
         .expect("не прочитать каталог examples/")
         .filter_map(Result::ok)
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
-        .filter(|name| name.ends_with(".lam"))
+        .filter(|name| name.ends_with(".takt"))
         .collect();
     files.sort();
 
@@ -324,7 +324,7 @@ fn every_example_is_accounted_for() {
         "примеры не имеют ни контракта сценария, ни исключения с причиной: {unaccounted:?}\n\
          Добавьте в CONTRACTS (ожидаемая цепочка состояний + бюджет шагов) — либо \
          в EXCEPTIONS с причиной, почему сценарий не проверяется прогоном.\n\
-         Молча пропустить пример нельзя: именно так `comprehensive.lam` годами \
+         Молча пропустить пример нельзя: именно так `comprehensive.takt` годами \
          объявлял недостижимый сценарий при зелёных гейтах."
     );
 
@@ -395,12 +395,12 @@ fn contracts_are_executed() {
     }
 }
 
-// ── Группа 1: сценарий comprehensive.lam (ядро фичи, T1–T5) ──────────────────
+// ── Группа 1: сценарий comprehensive.takt (ядро фичи, T1–T5) ──────────────────
 
 /// T3: достижимы **все** объявленные состояния.
 #[test]
 fn comprehensive_reaches_every_state() {
-    let run = run_example("comprehensive.lam", 400);
+    let run = run_example("comprehensive.takt", 400);
     let visited: BTreeSet<&str> = run.chain.iter().map(String::as_str).collect();
     let expected: BTreeSet<&str> = ["Idle", "Heating", "Cooling", "Done"].into_iter().collect();
 
@@ -419,8 +419,8 @@ fn comprehensive_reaches_every_state() {
 /// пройти ни при каком входе, — мёртвый код в витрине языка.
 #[test]
 fn comprehensive_has_no_dead_edges() {
-    let run = run_example("comprehensive.lam", 400);
-    let declared = declared_edges(&model_of("comprehensive.lam"));
+    let run = run_example("comprehensive.takt", 400);
+    let declared = declared_edges(&model_of("comprehensive.takt"));
 
     let dead: Vec<_> = declared.difference(&run.transitions).collect();
     assert!(
@@ -441,12 +441,12 @@ fn comprehensive_has_no_dead_edges() {
 
 /// T6, контрпример «тупик»: выход из состояния недостижим по логике модели.
 ///
-/// Сжатая копия дефекта, из-за которого `comprehensive.lam` годами стоял в
+/// Сжатая копия дефекта, из-за которого `comprehensive.takt` годами стоял в
 /// `Heating`. Фиксирует границу ответственности: **симулятор прав, дефектна
 /// модель** — и что проверка прогоном на такое реагирует.
 #[test]
 fn t6_counterexample_deadlock_never_leaves_state() {
-    let run = run_fixture("deadlock.lam", 50);
+    let run = run_fixture("deadlock.takt", 50);
 
     assert_eq!(
         run.chain,
@@ -467,7 +467,7 @@ fn t6_counterexample_deadlock_never_leaves_state() {
 /// на достижении `Cooling`, признала бы такую модель исправной.
 #[test]
 fn t7_counterexample_hold_break_leaves_cooling_immediately() {
-    let run = run_fixture("hold_break.lam", 50);
+    let run = run_fixture("hold_break.takt", 50);
 
     // `Cooling` — стартовое состояние, поэтому его тело исполняется уже на такте 1
     // (контракт фичи 0033: вход не расходует такт), и ребро срывается там же.
@@ -493,7 +493,7 @@ fn t7_counterexample_hold_break_leaves_cooling_immediately() {
 /// документации о проектировании состояний.
 #[test]
 fn t8_example_hold_keep_leaves_cooling_only_when_cooled() {
-    let run = run_fixture("hold_keep.lam", 100);
+    let run = run_fixture("hold_keep.takt", 100);
 
     assert!(
         run.chain.iter().any(|s| s == "Done"),
@@ -528,7 +528,7 @@ fn t8_example_hold_keep_leaves_cooling_only_when_cooled() {
 /// T9: каждая конструкция, заявленная шапкой примера, присутствует в теле.
 #[test]
 fn comprehensive_header_matches_body() {
-    let body = body_of("comprehensive.lam");
+    let body = body_of("comprehensive.takt");
     let promised = [
         "if", "else", "loop", "while", "for", "match", "cond", "enum", "extern", "fn", "start",
         "state",
@@ -548,7 +548,7 @@ fn comprehensive_header_matches_body() {
 }
 
 /// Значение `float`-переменной модели (native-режим симулятора — `f64`) на
-/// текущем такте. `pid_regulator.lam` переведён на `float` (фича 0097 поверх
+/// текущем такте. `pid_regulator.takt` переведён на `float` (фича 0097 поверх
 /// механизма 0096): симулятор без флага понижения считает нативным `f64`, то
 /// есть переменные приходят [`Value::Real`], а не [`Value::Fixed`].
 fn real_val(unit: &Unit, name: &str) -> f64 {
@@ -566,7 +566,7 @@ fn real_val(unit: &Unit, name: &str) -> f64 {
 /// wraparound'ом; для native float clamp безвреден, но активен).
 #[test]
 fn pid_integral_stays_bounded_and_converges() {
-    let path = examples_dir().join("pid_regulator.lam");
+    let path = examples_dir().join("pid_regulator.takt");
     let mut unit = build_unit(model_at(&path)).expect("построение юнита");
 
     // float (native f64): imax = 32.0; setpoint = 8.0; eps = 0.125.

@@ -624,8 +624,11 @@ mod tests {
     /// (ADR прикидывал 5 × 256 = 1280 — оценка, а не замер).
     #[test]
     fn comprehensive_controller_u8_predicate_is_tracked() {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples/comprehensive.lam");
-        let src = std::fs::read_to_string(path).expect("examples/comprehensive.lam");
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../examples/comprehensive.takt"
+        );
+        let src = std::fs::read_to_string(path).expect("examples/comprehensive.takt");
         let (ast, _) = parse(&src, 0).unwrap();
         let root = construct_model(&ast, None, &[]).unwrap();
         let controller = root.borrow().models.get("Controller").unwrap().clone();

@@ -14,7 +14,7 @@
 mod lsp72_init_options {
     use lsp_types::Position;
 
-    const DOC: &str = "tests/data/lsp72/proj/main.lam";
+    const DOC: &str = "tests/data/lsp72/proj/main.takt";
     const LIB: &str = "tests/data/lsp72/lib";
 
     fn doc_source() -> String {
@@ -64,8 +64,8 @@ mod lsp72_init_options {
         let loc = takt_lang::lsp::goto_declaration_at(DOC, &source, pos, &paths)
             .expect("переход на имени импортированной модели обязан находиться");
         assert!(
-            loc.uri.ends_with("lsp72/lib/shared.lam"),
-            "обязан открыться shared.lam из searchPaths, получено: {}",
+            loc.uri.ends_with("lsp72/lib/shared.takt"),
+            "обязан открыться shared.takt из searchPaths, получено: {}",
             loc.uri
         );
     }

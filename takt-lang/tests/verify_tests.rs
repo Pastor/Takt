@@ -39,7 +39,7 @@ fn verdict_of(fixture: &str) -> Verdict {
 #[test]
 fn response_property_holds() {
     assert_eq!(
-        verdict_of("holds.lam"),
+        verdict_of("holds.takt"),
         Verdict::Holds,
         "G (Fault -> F Idle) обязано держаться: из Fault выход только через Recovery в Idle"
     );
@@ -48,8 +48,8 @@ fn response_property_holds() {
 /// Контрпример: самопетля Fault позволяет залипнуть в сбое навсегда.
 #[test]
 fn response_property_violated_with_lasso() {
-    let Verdict::Violated(cex) = verdict_of("fails.lam") else {
-        panic!("fails.lam: `ref Fault` в самом Fault даёт вечное залипание — ожидалось нарушение");
+    let Verdict::Violated(cex) = verdict_of("fails.takt") else {
+        panic!("fails.takt: `ref Fault` в самом Fault даёт вечное залипание — ожидалось нарушение");
     };
     assert_eq!(
         cex.trace(),
@@ -63,14 +63,14 @@ fn response_property_violated_with_lasso() {
 /// Пример: Done достижимо и неизбежно — `F Done` держится.
 #[test]
 fn reachability_holds() {
-    assert_eq!(verdict_of("reachable.lam"), Verdict::Holds);
+    assert_eq!(verdict_of("reachable.takt"), Verdict::Holds);
 }
 
 /// Контрпример: в Done не ведёт ни один `ref` — `F Done` нарушено.
 #[test]
 fn reachability_violated_when_state_is_unreachable() {
-    let Verdict::Violated(cex) = verdict_of("unreachable.lam") else {
-        panic!("unreachable.lam: в Done нет ни одного перехода — ожидалось нарушение");
+    let Verdict::Violated(cex) = verdict_of("unreachable.takt") else {
+        panic!("unreachable.takt: в Done нет ни одного перехода — ожидалось нарушение");
     };
     assert!(
         !cex.cycle.contains(&"Done".to_string()) && !cex.prefix.contains(&"Done".to_string()),
@@ -85,7 +85,7 @@ fn reachability_violated_when_state_is_unreachable() {
 #[test]
 fn data_atom_is_reported_as_unsupported() {
     assert_eq!(
-        verdict_of("atom_not_state.lam"),
+        verdict_of("atom_not_state.takt"),
         Verdict::Unsupported(vec!["temp".to_string()]),
         "`temp` — переменная, а не состояние: в абстракции управления не проверяется"
     );
@@ -96,11 +96,11 @@ fn data_atom_is_reported_as_unsupported() {
 #[test]
 fn verdicts_are_deterministic() {
     for fixture in [
-        "holds.lam",
-        "fails.lam",
-        "reachable.lam",
-        "unreachable.lam",
-        "atom_not_state.lam",
+        "holds.takt",
+        "fails.takt",
+        "reachable.takt",
+        "unreachable.takt",
+        "atom_not_state.takt",
     ] {
         let first = verdict_of(fixture);
         for _ in 0..10 {
@@ -128,13 +128,13 @@ fn property_string_parses_multi_char_atoms() {
 fn property_from_string_is_verified() {
     let phi = takt_lang::parse_ltl_property("F Done").unwrap();
     assert_eq!(
-        takt_lang::verify_model(model_of("reachable.lam"), &phi),
+        takt_lang::verify_model(model_of("reachable.takt"), &phi),
         Verdict::Holds
     );
 
     let phi = takt_lang::parse_ltl_property("F Done").unwrap();
     assert!(matches!(
-        takt_lang::verify_model(model_of("unreachable.lam"), &phi),
+        takt_lang::verify_model(model_of("unreachable.takt"), &phi),
         Verdict::Violated(_)
     ));
 }
@@ -406,7 +406,7 @@ fn verification_terminates_on_examples_corpus() {
     let mut checked = 0usize;
     for entry in std::fs::read_dir("../examples").expect("каталог examples/") {
         let path = entry.expect("запись каталога").path();
-        if path.extension().is_none_or(|e| e != "lam") {
+        if path.extension().is_none_or(|e| e != "takt") {
             continue;
         }
         let source = std::fs::read_to_string(&path).expect("чтение примера");
@@ -444,7 +444,7 @@ fn verification_terminates_on_examples_corpus() {
 /// Пример: `: [LTL] F Idle;` внутри Fault держится — возврат гарантирован.
 #[test]
 fn state_scoped_formula_holds_when_return_is_guaranteed() {
-    assert_eq!(verdict_of("state_scope_holds.lam"), Verdict::Holds);
+    assert_eq!(verdict_of("state_scope_holds.takt"), Verdict::Holds);
 }
 
 /// Контрпример и **сторож семантики области**: залипание в Fault обязано быть
@@ -456,7 +456,7 @@ fn state_scoped_formula_holds_when_return_is_guaranteed() {
 /// вопрос, которого автор не задавал.
 #[test]
 fn state_scoped_formula_violated_when_state_can_stick() {
-    let v = verdict_of("state_scope_fails.lam");
+    let v = verdict_of("state_scope_fails.takt");
     let Verdict::Violated(cex) = v else {
         panic!("залипание в Fault нарушает «из Fault вернёмся в Idle»: получено {v:?}");
     };
@@ -474,7 +474,7 @@ fn state_scoped_formula_violated_when_state_can_stick() {
 /// «СВОЙСТВО НАРУШЕНО: F Idle» и искал недостижимость Idle от старта.
 #[test]
 fn state_scoped_formula_is_reported_desugared() {
-    let results = takt_lang::verify_all(model_of("state_scope_fails.lam"));
+    let results = takt_lang::verify_all(model_of("state_scope_fails.takt"));
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].formula.to_string(), "G (Fault -> F Idle)");
 }
@@ -483,7 +483,7 @@ fn state_scoped_formula_is_reported_desugared() {
 /// связывается ничем и проверяется от старта, как и прежде.
 #[test]
 fn model_level_formula_is_not_scoped() {
-    let results = takt_lang::verify_all(model_of("fails.lam"));
+    let results = takt_lang::verify_all(model_of("fails.takt"));
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].formula.to_string(), "G (Fault -> F Idle)");
     assert!(matches!(results[0].verdict, Verdict::Violated(_)));
@@ -520,7 +520,7 @@ fn model_with_imports(fixture: &str) -> Rc<RefCell<takt_lang::semantic::ModelNod
 #[test]
 fn plain_import_is_out_of_scope_by_default() {
     let outcome = takt_lang::verify_all_scoped(
-        model_with_imports("scope_plain.lam"),
+        model_with_imports("scope_plain.takt"),
         false,
         takt_lang::VerifyScope::File,
     );
@@ -536,7 +536,7 @@ fn plain_import_is_out_of_scope_by_default() {
 #[test]
 fn plain_import_is_verified_with_scope_all() {
     let outcome = takt_lang::verify_all_scoped(
-        model_with_imports("scope_plain.lam"),
+        model_with_imports("scope_plain.takt"),
         false,
         takt_lang::VerifyScope::All,
     );
@@ -545,7 +545,7 @@ fn plain_import_is_verified_with_scope_all() {
             .results
             .iter()
             .any(|r| matches!(r.verdict, Verdict::Violated(_))),
-        "badlib.lam нарушает свои свойства — при scope=all это обязано всплыть"
+        "badlib.takt нарушает свои свойства — при scope=all это обязано всплыть"
     );
     assert!(
         outcome.skipped.is_empty(),
@@ -560,7 +560,7 @@ fn plain_import_is_verified_with_scope_all() {
 #[test]
 fn rename_import_is_out_of_scope_by_default() {
     let outcome = takt_lang::verify_all_scoped(
-        model_with_imports("scope_rename.lam"),
+        model_with_imports("scope_rename.takt"),
         false,
         takt_lang::VerifyScope::File,
     );
@@ -577,7 +577,7 @@ fn rename_import_is_out_of_scope_by_default() {
 fn local_nested_model_is_always_verified() {
     for scope in [takt_lang::VerifyScope::File, takt_lang::VerifyScope::All] {
         let outcome =
-            takt_lang::verify_all_scoped(model_of("scope_local_nested.lam"), false, scope);
+            takt_lang::verify_all_scoped(model_of("scope_local_nested.takt"), false, scope);
         assert!(
             outcome
                 .results
@@ -594,13 +594,13 @@ fn local_nested_model_is_always_verified() {
 
 /// Р2: отсечение — поддеревом целиком, а не по одному узлу.
 ///
-/// У `badlib.lam` формулы есть и в корне, и во вложенной `Engine`. Вложенная
+/// У `badlib.takt` формулы есть и в корне, и во вложенной `Engine`. Вложенная
 /// несёт `origin = Local` (она локальна для своего файла), поэтому обход,
 /// проверяющий признак поузлово, зашёл бы внутрь и проверил её.
 #[test]
 fn imported_subtree_is_cut_entirely() {
     let outcome = takt_lang::verify_all_scoped(
-        model_with_imports("scope_plain.lam"),
+        model_with_imports("scope_plain.takt"),
         false,
         takt_lang::VerifyScope::File,
     );
@@ -615,6 +615,6 @@ fn imported_subtree_is_cut_entirely() {
 /// Умолчание публичного `verify_all` — область `file` (ADR 0051).
 #[test]
 fn verify_all_defaults_to_file_scope() {
-    let results = takt_lang::verify_all(model_with_imports("scope_plain.lam"));
+    let results = takt_lang::verify_all(model_with_imports("scope_plain.takt"));
     assert!(results.iter().all(|r| r.verdict == Verdict::Holds));
 }

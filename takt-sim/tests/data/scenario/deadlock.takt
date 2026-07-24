@@ -1,0 +1,32 @@
+/// Контрпример T6 (фича 0030): **тупик** — выход из состояния недостижим по
+/// логике самой модели.
+///
+/// Сжатая копия дефекта, прожившего в `examples/comprehensive.takt` до фичи 0030:
+/// `enter` греет **однократно** (0 → 5), `always` температуру не трогает вовсе,
+/// а единственное ребро требует `> 100`. Модель остаётся в `Heating` навсегда.
+///
+/// Фиксирует, что **симулятор прав, а дефектна модель**: файл компилируется,
+/// форматируется и порождает валидный C — и всё равно не делает ничего.
+model Deadlock {
+    var temperature: u8 := 0;
+    const MAX_TEMP: u8 := 100;
+
+    start Heating {
+        enter {
+            temperature := temperature + 5;
+        }
+        always {
+            var ticks: u8 := 0;
+            ticks := ticks + 1;
+        }
+        ref Done: temperature > MAX_TEMP;
+    }
+
+    state Done {
+        enter {
+            temperature := 0;
+        }
+    }
+}
+
+start Entry = Deadlock;

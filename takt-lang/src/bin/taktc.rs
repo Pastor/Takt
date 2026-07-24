@@ -3,8 +3,8 @@
 //! # Использование
 //!
 //! ```text
-//! taktc compile [--target c] [-I dir1:dir2] [--verbose | --quiet] <input.lam> [-o output_dir]
-//! taktc compile input.lam           # вывод в ./output
+//! taktc compile [--target c] [-I dir1:dir2] [--verbose | --quiet] <input.takt> [-o output_dir]
+//! taktc compile input.takt           # вывод в ./output
 //! taktc --help                      # справка
 //! ```
 //!
@@ -16,13 +16,13 @@
 //!
 //! ```text
 //! # Unix: два пути через двоеточие
-//! taktc compile -I /usr/lib/lam:/home/user/lam main.lam -o out
+//! taktc compile -I /usr/lib/lam:/home/user/lam main.takt -o out
 //!
 //! # Несколько флагов -I
-//! taktc compile -I /usr/lib/lam -I /home/user/lam main.lam
+//! taktc compile -I /usr/lib/lam -I /home/user/lam main.takt
 //!
 //! # Слитная форма без пробела
-//! taktc compile -I/usr/lib/lam main.lam
+//! taktc compile -I/usr/lib/lam main.takt
 //! ```
 //!
 //! # Уровни диагностики
@@ -53,7 +53,7 @@ use takt_lang::address_map::split_include_dirs;
 pub struct CompileOptions {
     /// Целевой язык генерации (по умолчанию `"c"`).
     pub target: String,
-    /// Путь к входному `.lam`-файлу.
+    /// Путь к входному `.takt`-файлу.
     pub input_file: String,
     /// Путь к выходному файлу или директории.
     pub output_path: String,
@@ -135,11 +135,11 @@ pub struct CompileOptions {
 /// # use grammar_bin::{parse_compile_args, CompileOptions};
 /// let args = vec![
 ///     "-I".to_string(), "/lib/lam:/usr/lam".to_string(),
-///     "main.lam".to_string(),
+///     "main.takt".to_string(),
 /// ];
 /// let opts = parse_compile_args(&args).unwrap();
 /// assert_eq!(opts.include_dirs, vec!["/lib/lam", "/usr/lam"]);
-/// assert_eq!(opts.input_file, "main.lam");
+/// assert_eq!(opts.input_file, "main.takt");
 /// assert_eq!(opts.target, "c");
 /// assert!(!opts.verbose);
 /// assert!(!opts.quiet);
@@ -431,7 +431,7 @@ pub struct FmtOptions {
     pub check: bool,
     /// Читать из stdin, писать в stdout.
     pub stdin: bool,
-    /// Файлы и каталоги (каталоги обходятся рекурсивно по `*.lam`).
+    /// Файлы и каталоги (каталоги обходятся рекурсивно по `*.takt`).
     pub paths: Vec<String>,
 }
 
@@ -459,7 +459,7 @@ pub fn parse_fmt_args(args: &[String]) -> Result<FmtOptions, String> {
     Ok(options)
 }
 
-/// Рекурсивно собирает `*.lam` из файла или каталога.
+/// Рекурсивно собирает `*.takt` из файла или каталога.
 fn collect_lam_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     if path.is_file() {
         out.push(path.to_path_buf());
@@ -473,7 +473,7 @@ fn collect_lam_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> 
         let child = entry.path();
         if child.is_dir() {
             collect_lam_files(&child, out)?;
-        } else if child.extension().is_some_and(|e| e == "lam") {
+        } else if child.extension().is_some_and(|e| e == "takt") {
             out.push(child);
         }
     }
@@ -587,7 +587,7 @@ fn run_fmt(options: &FmtOptions) -> i32 {
 /// Опции подкоманды `verify`.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct VerifyOptions {
-    /// Путь к проверяемому `.lam`-файлу.
+    /// Путь к проверяемому `.takt`-файлу.
     pub input_file: String,
     /// Директории поиска файлов `import`.
     pub include_dirs: Vec<String>,
@@ -621,7 +621,7 @@ fn parse_scope(value: &str) -> Result<takt_lang::VerifyScope, String> {
 /// Задаёт проверяемое свойство, отвергая повтор флага.
 ///
 /// Второй `--property` молча затирал бы первый, и `taktc verify -p "F Done" -p
-/// "G Idle" m.lam` отчитался бы «проверено свойств: 1; все держатся» — про
+/// "G Idle" m.takt` отчитался бы «проверено свойств: 1; все держатся» — про
 /// первую формулу пользователь узнал бы только из исходников. Отказ по тому же
 /// правилу, что и для второго файла.
 fn set_property(options: &mut VerifyOptions, value: &str) -> Result<(), String> {
@@ -691,7 +691,7 @@ pub fn parse_verify_args(args: &[String]) -> Result<VerifyOptions, String> {
         i += 1;
     }
     if options.input_file.is_empty() {
-        return Err("укажите .lam-файл для проверки".to_string());
+        return Err("укажите .takt-файл для проверки".to_string());
     }
     Ok(options)
 }
@@ -857,13 +857,13 @@ fn print_verify_results(outcome: &takt_lang::VerifyOutcome) -> i32 {
 
 /// Выводит справку по использованию утилиты в stderr.
 fn print_usage() {
-    eprintln!("Использование: taktc compile [флаги] <input.lam> [-o <output>]");
+    eprintln!("Использование: taktc compile [флаги] <input.takt> [-o <output>]");
     eprintln!("               taktc fmt [--check] [--stdin] <файлы/каталоги>");
     eprintln!(
-        "               taktc verify [--property \"φ\"] [--scope file|all] [--trace] <input.lam>"
+        "               taktc verify [--property \"φ\"] [--scope file|all] [--trace] <input.takt>"
     );
     eprintln!(
-        "               taktc address-map [--emit map|json] [--address-map <файл>] [-D N=V] [-o <out>] <input.lam>"
+        "               taktc address-map [--emit map|json] [--address-map <файл>] [-D N=V] [-o <out>] <input.takt>"
     );
     eprintln!("               taktc --help");
     eprintln!();
@@ -909,18 +909,18 @@ fn print_usage() {
     eprintln!("            Порт с адресом = бит регистра; интерфейс reg_addr/wdata/wen/rdata");
     eprintln!();
     eprintln!("Примеры:");
-    eprintln!("  taktc compile main.lam");
-    eprintln!("  taktc compile -I /lib/lam:/home/user/lam main.lam -o build/");
-    eprintln!("  taktc compile -I /lib/lam -I /home/user/lam --target c main.lam");
-    eprintln!("  taktc compile --verbose main.lam");
-    eprintln!("  taktc compile --quiet main.lam -o dist/");
+    eprintln!("  taktc compile main.takt");
+    eprintln!("  taktc compile -I /lib/lam:/home/user/lam main.takt -o build/");
+    eprintln!("  taktc compile -I /lib/lam -I /home/user/lam --target c main.takt");
+    eprintln!("  taktc compile --verbose main.takt");
+    eprintln!("  taktc compile --quiet main.takt -o dist/");
     eprintln!();
     eprintln!("Подкоманда fmt (канонический форматтер):");
     eprintln!("  --check      Не писать файлы; ненулевой код, если нужен формат (для CI)");
     eprintln!("  --stdin      Читать из stdin, писать в stdout");
     eprintln!("  taktc fmt examples/            # отформатировать каталог на месте");
     eprintln!("  taktc fmt --check examples/    # проверить (CI)");
-    eprintln!("  cat a.lam | taktc fmt --stdin  # отформатировать поток");
+    eprintln!("  cat a.takt | taktc fmt --stdin  # отформатировать поток");
     eprintln!();
     eprintln!("Подкоманда verify (проверка LTL-свойств, model checking — фича 0049):");
     eprintln!("  --property, -p \"φ\"  Проверить одну формулу из командной строки");
@@ -935,9 +935,9 @@ fn print_usage() {
     eprintln!("  Свойства над данными (`G (temp <= 100)`) в этой абстракции не поддержаны.");
     eprintln!("  Код возврата: 0 — все свойства держатся; 1 — нарушение/не проверено.");
     eprintln!();
-    eprintln!("  taktc verify model.lam");
-    eprintln!("  taktc verify --property \"F Done\" model.lam       # достижимость");
-    eprintln!("  taktc verify -p \"G (Fault -> F Idle)\" model.lam  # живость");
+    eprintln!("  taktc verify model.takt");
+    eprintln!("  taktc verify --property \"F Done\" model.takt       # достижимость");
+    eprintln!("  taktc verify -p \"G (Fault -> F Idle)\" model.takt  # живость");
 }
 
 fn main() {
@@ -1237,16 +1237,16 @@ mod tests {
 
     #[test]
     fn fmt_args_paths() {
-        let args = vec!["examples/".to_string(), "a.lam".to_string()];
+        let args = vec!["examples/".to_string(), "a.takt".to_string()];
         let o = parse_fmt_args(&args).unwrap();
         assert!(!o.check);
         assert!(!o.stdin);
-        assert_eq!(o.paths, vec!["examples/", "a.lam"]);
+        assert_eq!(o.paths, vec!["examples/", "a.takt"]);
     }
 
     #[test]
     fn fmt_args_check_flag() {
-        let args = vec!["--check".to_string(), "a.lam".to_string()];
+        let args = vec!["--check".to_string(), "a.takt".to_string()];
         let o = parse_fmt_args(&args).unwrap();
         assert!(o.check);
     }
@@ -1263,7 +1263,7 @@ mod tests {
     fn fmt_args_stdin_with_files_is_error() {
         // Контрпример: `--stdin` и файлы одновременно бессмысленны — лучше
         // отказать, чем молча проигнорировать одно из двух.
-        let args = vec!["--stdin".to_string(), "a.lam".to_string()];
+        let args = vec!["--stdin".to_string(), "a.takt".to_string()];
         assert!(parse_fmt_args(&args).is_err());
     }
 
@@ -1280,38 +1280,38 @@ mod tests {
 
     #[test]
     fn verify_args_file_only() {
-        let o = parse_verify_args(&args(&["model.lam"])).unwrap();
-        assert_eq!(o.input_file, "model.lam");
+        let o = parse_verify_args(&args(&["model.takt"])).unwrap();
+        assert_eq!(o.input_file, "model.takt");
         assert_eq!(o.property, None, "без --property проверяются формулы файла");
         assert!(!o.trace);
     }
 
     #[test]
     fn verify_args_property_flag() {
-        let o = parse_verify_args(&args(&["--property", "G (Fault -> F Idle)", "m.lam"])).unwrap();
+        let o = parse_verify_args(&args(&["--property", "G (Fault -> F Idle)", "m.takt"])).unwrap();
         assert_eq!(o.property.as_deref(), Some("G (Fault -> F Idle)"));
-        assert_eq!(o.input_file, "m.lam");
+        assert_eq!(o.input_file, "m.takt");
     }
 
     /// Короткая форма `-p` и слитная `--property=` — синонимы длинной.
     #[test]
     fn verify_args_property_short_and_joined_forms() {
-        let short = parse_verify_args(&args(&["-p", "F Done", "m.lam"])).unwrap();
-        let joined = parse_verify_args(&args(&["--property=F Done", "m.lam"])).unwrap();
+        let short = parse_verify_args(&args(&["-p", "F Done", "m.takt"])).unwrap();
+        let joined = parse_verify_args(&args(&["--property=F Done", "m.takt"])).unwrap();
         assert_eq!(short.property.as_deref(), Some("F Done"));
         assert_eq!(joined.property.as_deref(), Some("F Done"));
     }
 
     #[test]
     fn verify_args_trace_flag() {
-        let o = parse_verify_args(&args(&["--trace", "m.lam"])).unwrap();
+        let o = parse_verify_args(&args(&["--trace", "m.takt"])).unwrap();
         assert!(o.trace);
-        assert_eq!(o.input_file, "m.lam");
+        assert_eq!(o.input_file, "m.takt");
     }
 
     #[test]
     fn verify_args_include_dirs() {
-        let o = parse_verify_args(&args(&["-I", "/a", "-I/b", "m.lam"])).unwrap();
+        let o = parse_verify_args(&args(&["-I", "/a", "-I/b", "m.takt"])).unwrap();
         assert_eq!(o.include_dirs, vec!["/a", "/b"]);
     }
 
@@ -1324,16 +1324,16 @@ mod tests {
 
     #[test]
     fn verify_args_property_without_value_is_error() {
-        assert!(parse_verify_args(&args(&["m.lam", "--property"])).is_err());
+        assert!(parse_verify_args(&args(&["m.takt", "--property"])).is_err());
     }
 
     #[test]
     fn verify_args_duplicate_property_is_error() {
         // Контрпример: второй -p молча затирал бы первый, и отчёт «проверено
         // свойств: 1» умалчивал бы о невыполненной проверке.
-        assert!(parse_verify_args(&args(&["-p", "F Done", "-p", "G Idle", "m.lam"])).is_err());
+        assert!(parse_verify_args(&args(&["-p", "F Done", "-p", "G Idle", "m.takt"])).is_err());
         assert!(
-            parse_verify_args(&args(&["-p", "F Done", "--property=G Idle", "m.lam"])).is_err(),
+            parse_verify_args(&args(&["-p", "F Done", "--property=G Idle", "m.takt"])).is_err(),
             "смешение форм флага повтором быть не перестаёт"
         );
     }
@@ -1342,12 +1342,12 @@ mod tests {
     fn verify_args_second_file_is_error() {
         // Контрпример: verify работает с одним файлом; второй молча
         // проигнорировать — значит соврать о том, что проверено.
-        assert!(parse_verify_args(&args(&["a.lam", "b.lam"])).is_err());
+        assert!(parse_verify_args(&args(&["a.takt", "b.takt"])).is_err());
     }
 
     #[test]
     fn verify_args_unknown_flag_is_error() {
-        assert!(parse_verify_args(&args(&["--target", "c", "m.lam"])).is_err());
+        assert!(parse_verify_args(&args(&["--target", "c", "m.takt"])).is_err());
     }
 
     #[test]
@@ -1434,9 +1434,9 @@ mod tests {
     /// Минимальный вызов: только входной файл.
     #[test]
     fn parse_minimal() {
-        let args = vec!["main.lam".to_string()];
+        let args = vec!["main.takt".to_string()];
         let opts = parse_compile_args(&args).unwrap();
-        assert_eq!(opts.input_file, "main.lam");
+        assert_eq!(opts.input_file, "main.takt");
         assert_eq!(opts.target, "c");
         assert_eq!(opts.output_path, "output");
         assert!(opts.include_dirs.is_empty());
@@ -1450,7 +1450,7 @@ mod tests {
         let args = vec![
             "-I".to_string(),
             "/lib/lam".to_string(),
-            "main.lam".to_string(),
+            "main.takt".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/lib/lam"]);
@@ -1462,7 +1462,7 @@ mod tests {
         let args = vec![
             "-I".to_string(),
             format!("/lib/lam{SEP}/usr/lam"),
-            "main.lam".to_string(),
+            "main.takt".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/lib/lam", "/usr/lam"]);
@@ -1476,7 +1476,7 @@ mod tests {
             "/a".to_string(),
             "-I".to_string(),
             "/b".to_string(),
-            "main.lam".to_string(),
+            "main.takt".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/a", "/b"]);
@@ -1488,7 +1488,7 @@ mod tests {
         let args = vec![
             "--include-dirs".to_string(),
             format!("/lib{SEP}/usr"),
-            "main.lam".to_string(),
+            "main.takt".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/lib", "/usr"]);
@@ -1497,7 +1497,7 @@ mod tests {
     /// Слитная форма: `-I/path` без пробела.
     #[test]
     fn parse_include_dir_glued() {
-        let args = vec!["-I/lib/lam".to_string(), "main.lam".to_string()];
+        let args = vec!["-I/lib/lam".to_string(), "main.takt".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/lib/lam"]);
     }
@@ -1505,7 +1505,7 @@ mod tests {
     /// Слитная форма с разделителем платформы: `-I/a:/b` (Unix) / `-I/a;/b` (Windows).
     #[test]
     fn parse_include_dir_glued_separator() {
-        let args = vec![format!("-I/a{SEP}/b"), "main.lam".to_string()];
+        let args = vec![format!("-I/a{SEP}/b"), "main.takt".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/a", "/b"]);
     }
@@ -1520,13 +1520,13 @@ mod tests {
             format!("/lib/lam{SEP}/usr/lam"),
             "-I".to_string(),
             "/local/but".to_string(),
-            "main.lam".to_string(),
+            "main.takt".to_string(),
             "-o".to_string(),
             "build/".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.target, "c");
-        assert_eq!(opts.input_file, "main.lam");
+        assert_eq!(opts.input_file, "main.takt");
         assert_eq!(opts.output_path, "build/");
         assert_eq!(
             opts.include_dirs,
@@ -1538,7 +1538,7 @@ mod tests {
     #[test]
     fn parse_output_flag() {
         let args = vec![
-            "main.lam".to_string(),
+            "main.takt".to_string(),
             "-o".to_string(),
             "dist/".to_string(),
         ];
@@ -1552,7 +1552,7 @@ mod tests {
         let args = vec![
             "--output".to_string(),
             "out/".to_string(),
-            "main.lam".to_string(),
+            "main.takt".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.output_path, "out/");
@@ -1561,7 +1561,7 @@ mod tests {
     /// Короткий флаг целевой платформы `-t`.
     #[test]
     fn parse_target_short_flag() {
-        let args = vec!["-t".to_string(), "c".to_string(), "main.lam".to_string()];
+        let args = vec!["-t".to_string(), "c".to_string(), "main.takt".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.target, "c");
     }
@@ -1590,7 +1590,7 @@ mod tests {
     /// Нет аргумента после `-o` → ошибка.
     #[test]
     fn parse_output_missing_value_is_error() {
-        let args = vec!["main.lam".to_string(), "-o".to_string()];
+        let args = vec!["main.takt".to_string(), "-o".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             err.contains("-o"),
@@ -1602,7 +1602,7 @@ mod tests {
     /// Нет аргумента после `-I` → ошибка.
     #[test]
     fn parse_include_missing_value_is_error() {
-        let args = vec!["main.lam".to_string(), "-I".to_string()];
+        let args = vec!["main.takt".to_string(), "-I".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             err.contains("-I"),
@@ -1614,7 +1614,7 @@ mod tests {
     /// Нет аргумента после `--include-dirs` → ошибка.
     #[test]
     fn parse_include_dirs_missing_value_is_error() {
-        let args = vec!["main.lam".to_string(), "--include-dirs".to_string()];
+        let args = vec!["main.takt".to_string(), "--include-dirs".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             err.contains("--include-dirs"),
@@ -1626,7 +1626,7 @@ mod tests {
     /// Неизвестный флаг → ошибка с его именем.
     #[test]
     fn parse_unknown_flag_is_error() {
-        let args = vec!["main.lam".to_string(), "--unknown-flag".to_string()];
+        let args = vec!["main.takt".to_string(), "--unknown-flag".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             err.contains("--unknown-flag"),
@@ -1641,7 +1641,7 @@ mod tests {
         let args = vec![
             "-I".to_string(),
             format!("/a{SEP}{SEP}/b"),
-            "main.lam".to_string(),
+            "main.takt".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/a", "/b"]);
@@ -1657,7 +1657,7 @@ mod tests {
             "/second".to_string(),
             "-I".to_string(),
             "/third".to_string(),
-            "main.lam".to_string(),
+            "main.takt".to_string(),
         ];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.include_dirs, vec!["/first", "/second", "/third"]);
@@ -1668,7 +1668,7 @@ mod tests {
     /// Флаг `--verbose` устанавливает `verbose = true`.
     #[test]
     fn parse_verbose_long_flag() {
-        let args = vec!["main.lam".to_string(), "--verbose".to_string()];
+        let args = vec!["main.takt".to_string(), "--verbose".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert!(opts.verbose, "--verbose должен устанавливать verbose=true");
         assert!(!opts.quiet, "--verbose не должен затрагивать quiet");
@@ -1677,7 +1677,7 @@ mod tests {
     /// Короткий флаг `-v` устанавливает `verbose = true`.
     #[test]
     fn parse_verbose_short_flag() {
-        let args = vec!["-v".to_string(), "main.lam".to_string()];
+        let args = vec!["-v".to_string(), "main.takt".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert!(opts.verbose, "-v должен устанавливать verbose=true");
     }
@@ -1685,7 +1685,7 @@ mod tests {
     /// Флаг `--quiet` устанавливает `quiet = true`.
     #[test]
     fn parse_quiet_long_flag() {
-        let args = vec!["main.lam".to_string(), "--quiet".to_string()];
+        let args = vec!["main.takt".to_string(), "--quiet".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert!(opts.quiet, "--quiet должен устанавливать quiet=true");
         assert!(!opts.verbose, "--quiet не должен затрагивать verbose");
@@ -1694,7 +1694,7 @@ mod tests {
     /// Короткий флаг `-q` устанавливает `quiet = true`.
     #[test]
     fn parse_quiet_short_flag() {
-        let args = vec!["-q".to_string(), "main.lam".to_string()];
+        let args = vec!["-q".to_string(), "main.takt".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert!(opts.quiet, "-q должен устанавливать quiet=true");
     }
@@ -1702,7 +1702,7 @@ mod tests {
     /// По умолчанию ни `verbose`, ни `quiet` не установлены.
     #[test]
     fn parse_defaults_no_verbose_no_quiet() {
-        let args = vec!["main.lam".to_string()];
+        let args = vec!["main.takt".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert!(!opts.verbose, "verbose должен быть false по умолчанию");
         assert!(!opts.quiet, "quiet должен быть false по умолчанию");
@@ -1712,7 +1712,7 @@ mod tests {
     #[test]
     fn parse_verbose_and_quiet_is_error() {
         let args = vec![
-            "main.lam".to_string(),
+            "main.takt".to_string(),
             "--verbose".to_string(),
             "--quiet".to_string(),
         ];
@@ -1727,7 +1727,7 @@ mod tests {
     /// Одновременное указание `-v` и `-q` → ошибка.
     #[test]
     fn parse_v_and_q_is_error() {
-        let args = vec!["main.lam".to_string(), "-v".to_string(), "-q".to_string()];
+        let args = vec!["main.takt".to_string(), "-v".to_string(), "-q".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             !err.is_empty(),
@@ -1744,7 +1744,7 @@ mod tests {
             "/lib".to_string(),
             "--target".to_string(),
             "c".to_string(),
-            "main.lam".to_string(),
+            "main.takt".to_string(),
             "-o".to_string(),
             "out/".to_string(),
         ];
@@ -1761,7 +1761,7 @@ mod tests {
     fn parse_quiet_with_other_flags() {
         let args = vec![
             "-q".to_string(),
-            "main.lam".to_string(),
+            "main.takt".to_string(),
             "-o".to_string(),
             "dist/".to_string(),
         ];
@@ -1775,7 +1775,7 @@ mod tests {
     #[test]
     fn parse_address_map_flag() {
         let args = vec![
-            "main.lam".to_string(),
+            "main.takt".to_string(),
             "--address-map".to_string(),
             "stm32.map".to_string(),
         ];
@@ -1792,12 +1792,12 @@ mod tests {
         let expected = vec!["N=0x1".to_string()];
         for args in [
             vec![
-                "m.lam".to_string(),
+                "m.takt".to_string(),
                 "--define".to_string(),
                 "N=0x1".to_string(),
             ],
-            vec!["m.lam".to_string(), "-D".to_string(), "N=0x1".to_string()],
-            vec!["m.lam".to_string(), "-DN=0x1".to_string()],
+            vec!["m.takt".to_string(), "-D".to_string(), "N=0x1".to_string()],
+            vec!["m.takt".to_string(), "-DN=0x1".to_string()],
         ] {
             let opts = parse_compile_args(&args).unwrap();
             assert_eq!(opts.defines, expected, "форма: {args:?}");
@@ -1808,7 +1808,7 @@ mod tests {
     #[test]
     fn define_flag_is_repeatable() {
         let args = vec![
-            "m.lam".to_string(),
+            "m.takt".to_string(),
             "-D".to_string(),
             "A=0x1".to_string(),
             "-DB=0x2".to_string(),
@@ -1820,21 +1820,21 @@ mod tests {
     /// По умолчанию define'ов нет → поведение `taktc` идентично прежнему.
     #[test]
     fn defines_absent_by_default() {
-        let opts = parse_compile_args(&["m.lam".to_string()]).unwrap();
+        let opts = parse_compile_args(&["m.takt".to_string()]).unwrap();
         assert!(opts.defines.is_empty());
     }
 
     /// `-D` без аргумента — отказ (как у `--address-map`).
     #[test]
     fn define_requires_argument() {
-        let args = vec!["m.lam".to_string(), "-D".to_string()];
+        let args = vec!["m.takt".to_string(), "-D".to_string()];
         assert!(parse_compile_args(&args).is_err());
     }
 
     /// T21: разбор `-D` не проглатывает чужие флаги.
     #[test]
     fn unknown_flag_is_still_rejected() {
-        let args = vec!["m.lam".to_string(), "-Q".to_string(), "foo".to_string()];
+        let args = vec!["m.takt".to_string(), "-Q".to_string(), "foo".to_string()];
         assert!(
             parse_compile_args(&args).is_err(),
             "-Q обязан остаться неизвестным"
@@ -1844,7 +1844,7 @@ mod tests {
     /// По умолчанию карта адресов не задана.
     #[test]
     fn address_map_absent_by_default() {
-        let opts = parse_compile_args(&["main.lam".to_string()]).unwrap();
+        let opts = parse_compile_args(&["main.takt".to_string()]).unwrap();
         assert!(opts.address_map.is_none());
     }
 
@@ -1859,14 +1859,14 @@ mod tests {
     /// точностью симулятора (f64) по умолчанию, а не по особой просьбе.
     #[test]
     fn float_width_defaults_to_64() {
-        let opts = parse_compile_args(&["main.lam".to_string()]).unwrap();
+        let opts = parse_compile_args(&["main.takt".to_string()]).unwrap();
         assert_eq!(opts.float_width, takt_lang::FloatWidth::W64);
     }
 
     /// T8 (0029-03): `--float-width=32` → `float`.
     #[test]
     fn parse_float_width_32() {
-        let args = vec!["main.lam".to_string(), "--float-width=32".to_string()];
+        let args = vec!["main.takt".to_string(), "--float-width=32".to_string()];
         let opts = parse_compile_args(&args).unwrap();
         assert_eq!(opts.float_width, takt_lang::FloatWidth::W32);
     }
@@ -1875,7 +1875,7 @@ mod tests {
     #[test]
     fn parse_float_width_separate_argument() {
         let args = vec![
-            "main.lam".to_string(),
+            "main.takt".to_string(),
             "--float-width".to_string(),
             "32".to_string(),
         ];
@@ -1888,7 +1888,7 @@ mod tests {
     /// пользователь.
     #[test]
     fn float_width_rejects_unsupported_value() {
-        let args = vec!["main.lam".to_string(), "--float-width=16".to_string()];
+        let args = vec!["main.takt".to_string(), "--float-width=16".to_string()];
         let err = parse_compile_args(&args).unwrap_err();
         assert!(
             err.contains("16") && err.contains("32") && err.contains("64"),
@@ -1910,10 +1910,10 @@ mod tests {
     #[test]
     fn parse_float_as_q_valid() {
         let slit =
-            parse_compile_args(&["m.lam".to_string(), "--float-as-q=10.22".to_string()]).unwrap();
+            parse_compile_args(&["m.takt".to_string(), "--float-as-q=10.22".to_string()]).unwrap();
         assert_eq!(slit.float_as_q, Some((10, 22)));
         let sep = parse_compile_args(&[
-            "m.lam".to_string(),
+            "m.takt".to_string(),
             "--float-as-q".to_string(),
             "8.8".to_string(),
         ])
@@ -1924,7 +1924,7 @@ mod tests {
     /// Умолчание: без флага — `None` (прежнее поведение, T1).
     #[test]
     fn float_as_q_defaults_to_none() {
-        let o = parse_compile_args(&["m.lam".to_string()]).unwrap();
+        let o = parse_compile_args(&["m.takt".to_string()]).unwrap();
         assert_eq!(o.float_as_q, None);
         assert!(!o.float_embedded);
     }
@@ -1934,7 +1934,7 @@ mod tests {
     fn float_as_q_rejects_out_of_bounds_and_bad_format() {
         for bad in ["40.40", "0.8", "8.0", "abc", "8", "8.x"] {
             let arg = format!("--float-as-q={bad}");
-            let err = parse_compile_args(&["m.lam".to_string(), arg]).unwrap_err();
+            let err = parse_compile_args(&["m.takt".to_string(), arg]).unwrap_err();
             assert!(err.contains("--float-as-q"), "для '{bad}' сообщение: {err}");
         }
     }
@@ -1943,7 +1943,7 @@ mod tests {
     #[test]
     fn parse_float_embedded_flag() {
         let o = parse_compile_args(&[
-            "m.lam".to_string(),
+            "m.takt".to_string(),
             "--float-as-q=8.8".to_string(),
             "--float-embedded".to_string(),
         ])
@@ -1955,7 +1955,7 @@ mod tests {
 
     #[test]
     fn verify_scope_defaults_to_file() {
-        let o = parse_verify_args(&["m.lam".to_string()]).unwrap();
+        let o = parse_verify_args(&["m.takt".to_string()]).unwrap();
         assert_eq!(o.scope, takt_lang::VerifyScope::File);
     }
 
@@ -1964,11 +1964,11 @@ mod tests {
         let split = parse_verify_args(&[
             "--scope".to_string(),
             "all".to_string(),
-            "m.lam".to_string(),
+            "m.takt".to_string(),
         ])
         .unwrap();
         assert_eq!(split.scope, takt_lang::VerifyScope::All);
-        let joined = parse_verify_args(&["--scope=all".to_string(), "m.lam".to_string()]).unwrap();
+        let joined = parse_verify_args(&["--scope=all".to_string(), "m.takt".to_string()]).unwrap();
         assert_eq!(joined.scope, takt_lang::VerifyScope::All);
     }
 
@@ -1978,7 +1978,7 @@ mod tests {
     /// пользователь считал бы, что импорты тоже проверены.
     #[test]
     fn verify_unknown_scope_is_rejected() {
-        let err = parse_verify_args(&["--scope=al".to_string(), "m.lam".to_string()]).unwrap_err();
+        let err = parse_verify_args(&["--scope=al".to_string(), "m.takt".to_string()]).unwrap_err();
         assert!(err.contains("al"), "сообщение: {err}");
         assert!(
             err.contains("file"),

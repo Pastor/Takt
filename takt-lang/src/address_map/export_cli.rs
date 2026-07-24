@@ -50,7 +50,7 @@ pub enum EmitFormat {
 /// Опции подкоманды `address-map` (фича 0043).
 #[derive(Debug)]
 pub struct AddressMapOptions {
-    /// Входной `.lam`.
+    /// Входной `.takt`.
     pub input_file: String,
     /// Путь выходного файла; `None` — печать в stdout.
     pub output_path: Option<String>,
@@ -160,7 +160,7 @@ pub fn run_export_subcommand(args: &[String]) -> i32 {
             eprintln!("Ошибка разбора аргументов: {e}");
             eprintln!(
                 "Использование: taktc address-map [--emit map|json] [--address-map <файл>] \
-                 [-D N=V] [-I <dirs>] [-o <out>] <input.lam>"
+                 [-D N=V] [-I <dirs>] [-o <out>] <input.takt>"
             );
             1
         }
@@ -340,9 +340,9 @@ mod tests {
 
     #[test]
     fn args_default_emit_is_map() {
-        let opts = parse_address_map_args(&["m.lam".to_string()]).unwrap();
+        let opts = parse_address_map_args(&["m.takt".to_string()]).unwrap();
         assert_eq!(opts.emit, EmitFormat::Map);
-        assert_eq!(opts.input_file, "m.lam");
+        assert_eq!(opts.input_file, "m.takt");
     }
 
     #[test]
@@ -354,7 +354,7 @@ mod tests {
             "/a",
             "--address-map",
             "p.map",
-            "m.lam",
+            "m.takt",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -363,6 +363,6 @@ mod tests {
         assert_eq!(opts.emit, EmitFormat::Json);
         assert_eq!(opts.include_dirs, vec!["/a"]);
         assert_eq!(opts.address_map.as_deref(), Some("p.map"));
-        assert_eq!(opts.input_file, "m.lam");
+        assert_eq!(opts.input_file, "m.takt");
     }
 }

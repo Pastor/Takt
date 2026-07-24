@@ -1,4 +1,0 @@
-import "lib_bad.lam";
-
-start Work { ref Done; }
-state Done;

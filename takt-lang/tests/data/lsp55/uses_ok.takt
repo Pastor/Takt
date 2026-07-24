@@ -1,0 +1,4 @@
+import "lib_ok.takt";
+
+start Work { ref Done; }
+state Done;

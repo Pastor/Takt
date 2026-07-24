@@ -6,7 +6,7 @@
 //! - компоновку реализаций (`+`, `|`, скобки);
 //! - обнаружение дублирующихся имён моделей;
 //! - ошибочные пути: некорректный тип порта, несуществующий псевдоним и др.;
-//! - импорт моделей из файлов (`import "file.lam"`, `import "file.lam" as Name`);
+//! - импорт моделей из файлов (`import "file.takt"`, `import "file.takt" as Name`);
 //! - файлы-примеры из `tests/data/semantic/`.
 
 use takt_lang::parse;
@@ -382,7 +382,7 @@ fn address_operator_is_captured_in_address_defs() {
 /// Фича 0020-02: адрес отдельным оператором (без inline) — модель валидна.
 #[test]
 fn example_port_address_separate_is_valid() {
-    let model = build_file("tests/data/semantic/valid/port_address_separate.lam")
+    let model = build_file("tests/data/semantic/valid/port_address_separate.takt")
         .expect("модель с отдельными адресами портов должна строиться");
     assert_eq!(
         model.address_defs.len(),
@@ -394,7 +394,7 @@ fn example_port_address_separate_is_valid() {
 /// Фича 0020-02 (R4/SE-049): адрес задан и inline, и оператором `address`.
 #[test]
 fn port_address_conflict_inline_and_operator_is_error() {
-    let err = build_file_err("tests/data/semantic/invalid/port_address_conflict.lam");
+    let err = build_file_err("tests/data/semantic/invalid/port_address_conflict.takt");
     assert_eq!(
         err.code.as_deref(),
         Some("SE-049"),
@@ -421,7 +421,7 @@ fn port_address_duplicate_operator_is_error() {
 /// Фича 0020-02 (R5/SE-048): `address` для несуществующего порта.
 #[test]
 fn port_address_dangling_reference_is_error() {
-    let err = build_file_err("tests/data/semantic/invalid/port_address_dangling.lam");
+    let err = build_file_err("tests/data/semantic/invalid/port_address_dangling.takt");
     assert_eq!(
         err.code.as_deref(),
         Some("SE-048"),
@@ -436,7 +436,7 @@ fn port_address_dangling_reference_is_error() {
 /// ошибка SE-059, а не молчаливая потеря точности.
 #[test]
 fn fixed_mixing_with_integer_is_se059() {
-    let err = build_file_err("tests/data/semantic/invalid/fixed_mixing.lam");
+    let err = build_file_err("tests/data/semantic/invalid/fixed_mixing.takt");
     assert_eq!(
         err.code.as_deref(),
         Some("SE-059"),
@@ -478,7 +478,7 @@ fn fixed_same_format_addition_is_valid() {
 /// T7 (правило 6 ADR): явное приведение `u8 as q(8, 8)` снимает смешение.
 #[test]
 fn fixed_cast_resolves_mixing() {
-    let node = build_file("tests/data/semantic/valid/fixed_cast.lam");
+    let node = build_file("tests/data/semantic/valid/fixed_cast.takt");
     assert!(
         node.is_ok(),
         "приведение `b as q(8, 8)` должно сделать выражение валидным: {:?}",
@@ -562,7 +562,7 @@ fn type_definition_not_in_variables() {
 
 // ─── Интеграционные тесты импорта ────────────────────────────────────────────
 
-/// Вспомогательная функция: создаёт временную директорию с .lam-файлом.
+/// Вспомогательная функция: создаёт временную директорию с .takt-файлом.
 /// Возвращает (TempDir, путь_к_файлу) — TempDir нужно держать живым до конца теста.
 fn write_tmp_lam(name: &str, content: &str) -> (tempfile::TempDir, String) {
     let dir = tempfile::tempdir().unwrap();
@@ -572,13 +572,13 @@ fn write_tmp_lam(name: &str, content: &str) -> (tempfile::TempDir, String) {
     (dir, dir_str)
 }
 
-/// `import "file.lam"` — успешный импорт простой модели из файла.
+/// `import "file.takt"` — успешный импорт простой модели из файла.
 /// Импортированная модель доступна по нормализованному имени.
 #[test]
 fn plain_import_registers_model() {
-    let (_dir, dir_str) = write_tmp_lam("ping.lam", "model Ping { start S; }");
+    let (_dir, dir_str) = write_tmp_lam("ping.takt", "model Ping { start S; }");
 
-    let src = r#"import "ping.lam";"#;
+    let src = r#"import "ping.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
@@ -589,18 +589,18 @@ fn plain_import_registers_model() {
 }
 
 /// Имя модели из импортированного файла нормализуется в CamelCase:
-/// `my_model.lam` → `MyModel`.
+/// `my_model.takt` → `MyModel`.
 #[test]
 fn plain_import_normalizes_filename_to_camel_case() {
-    let (_dir, dir_str) = write_tmp_lam("my_model.lam", "start S;");
+    let (_dir, dir_str) = write_tmp_lam("my_model.takt", "start S;");
 
-    let src = r#"import "my_model.lam";"#;
+    let src = r#"import "my_model.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
     assert!(
         root.borrow().search_model("MyModel").is_some(),
-        "my_model.lam должен регистрироваться как MyModel"
+        "my_model.takt должен регистрироваться как MyModel"
     );
     assert!(
         root.borrow().search_model("my_model").is_none(),
@@ -608,12 +608,12 @@ fn plain_import_normalizes_filename_to_camel_case() {
     );
 }
 
-/// `import "file.lam" as Alias` — модель доступна под заданным именем.
+/// `import "file.takt" as Alias` — модель доступна под заданным именем.
 #[test]
 fn global_symbol_import_registers_under_alias() {
-    let (_dir, dir_str) = write_tmp_lam("engine.lam", "start S;");
+    let (_dir, dir_str) = write_tmp_lam("engine.takt", "start S;");
 
-    let src = r#"import "engine.lam" as Motor;"#;
+    let src = r#"import "engine.takt" as Motor;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
@@ -627,11 +627,11 @@ fn global_symbol_import_registers_under_alias() {
 #[test]
 fn duplicate_import_plain_is_error() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("dup.lam"), "start S;").unwrap();
+    std::fs::write(dir.path().join("dup.takt"), "start S;").unwrap();
     let dir_str = dir.path().to_string_lossy().into_owned();
 
     // Два одинаковых импорта
-    let src = r#"import "dup.lam"; import "dup.lam";"#;
+    let src = r#"import "dup.takt"; import "dup.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &[dir_str]);
     assert!(result.is_err(), "Дублирующийся импорт должен давать ошибку");
@@ -646,7 +646,7 @@ fn duplicate_import_plain_is_error() {
 /// Файл импорта не найден → ошибка с понятным сообщением.
 #[test]
 fn import_missing_file_is_error() {
-    let src = r#"import "ghost.lam";"#;
+    let src = r#"import "ghost.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &["/nonexistent_dir_xyz".to_string()]);
     assert!(
@@ -664,9 +664,9 @@ fn import_missing_file_is_error() {
 /// Файл импорта содержит синтаксическую ошибку → ошибка при построении семантики.
 #[test]
 fn import_file_with_parse_error_is_error() {
-    let (_dir, dir_str) = write_tmp_lam("broken.lam", "model {"); // синтаксическая ошибка
+    let (_dir, dir_str) = write_tmp_lam("broken.takt", "model {"); // синтаксическая ошибка
 
-    let src = r#"import "broken.lam";"#;
+    let src = r#"import "broken.takt";"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора основного файла");
     let result = construct_model(&ast, None, &[dir_str]);
     assert!(
@@ -678,10 +678,10 @@ fn import_file_with_parse_error_is_error() {
 /// Импортированная модель видна при разрешении `implements` в основном файле.
 #[test]
 fn imported_model_usable_in_implements() {
-    let (_dir, dir_str) = write_tmp_lam("worker.lam", "model Worker { start S; }");
+    let (_dir, dir_str) = write_tmp_lam("worker.takt", "model Worker { start S; }");
 
     let src = r#"
-        import "worker.lam";
+        import "worker.takt";
         start Entry = Worker { }
         state Done;
     "#;
@@ -692,10 +692,10 @@ fn imported_model_usable_in_implements() {
     assert!(root.borrow().states.contains_key("Entry"));
 }
 
-/// `import "file.lam" as Name` с несуществующим файлом → ошибка.
+/// `import "file.takt" as Name` с несуществующим файлом → ошибка.
 #[test]
 fn global_symbol_import_missing_file_is_error() {
-    let src = r#"import "ghost.lam" as Ghost;"#;
+    let src = r#"import "ghost.takt" as Ghost;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let result = construct_model(&ast, None, &["/nonexistent".to_string()]);
     assert!(
@@ -708,9 +708,9 @@ fn global_symbol_import_missing_file_is_error() {
 /// Проверяем, что старое имя (по имени файла) НЕ регистрируется.
 #[test]
 fn global_symbol_import_only_alias_registered() {
-    let (_dir, dir_str) = write_tmp_lam("engine.lam", "start S;");
+    let (_dir, dir_str) = write_tmp_lam("engine.takt", "start S;");
 
-    let src = r#"import "engine.lam" as Motor;"#;
+    let src = r#"import "engine.takt" as Motor;"#;
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     let root = construct_model(&ast, None, &[dir_str]).expect("ошибка построения семантики");
 
@@ -895,7 +895,7 @@ fn error_message_contains_missing_ref_name() {
 
 // ─── Тесты файлов-примеров из tests/data/semantic/ ────────────────────────────
 
-/// Вспомогательная функция: читает .lam-файл и строит семантическое дерево.
+/// Вспомогательная функция: читает .takt-файл и строит семантическое дерево.
 fn build_file(
     path: &str,
 ) -> Result<takt_lang::semantic::ModelNode, takt_lang::diagnostics::Diagnostic> {
@@ -921,10 +921,10 @@ fn build_file_err(path: &str) -> takt_lang::diagnostics::Diagnostic {
     construct_model(&ast, None, &[]).expect_err("ожидалась ошибка семантического анализа")
 }
 
-/// `tests/data/semantic/valid/simple_fsm.lam` — строится без ошибок.
+/// `tests/data/semantic/valid/simple_fsm.takt` — строится без ошибок.
 #[test]
 fn example_simple_fsm_is_valid() {
-    let node = build_file("tests/data/semantic/valid/simple_fsm.lam").unwrap();
+    let node = build_file("tests/data/semantic/valid/simple_fsm.takt").unwrap();
     assert!(node.has_states(), "FSM должен иметь состояния");
     assert!(
         node.states.contains_key("Start"),

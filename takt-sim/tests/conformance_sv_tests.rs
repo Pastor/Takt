@@ -48,7 +48,7 @@ use takt_sim::{TickResult, Unit, Value, build_unit};
 /// Переиспользуется из сверки с C **как есть**: одна и та же модель, сверяемая с
 /// двумя эталонами, — это и есть смысл сверки. Модель эволюционирует несколько
 /// тактов, поэтому сдвиг на такт (если бы он появился) сместил бы всю трассу.
-const TICKS_FIXTURE: &str = "tests/data/eval/conformance_ticks.lam";
+const TICKS_FIXTURE: &str = "tests/data/eval/conformance_ticks.takt";
 
 /// Тактов в трассе — с запасом над её длиной.
 const TRACE_TICKS: usize = 6;
@@ -200,7 +200,7 @@ fn build_dir(tag: &str) -> PathBuf {
 
 /// Пишет временную фикстуру и возвращает путь к ней.
 fn fixture(dir: &Path, name: &str, source: &str) -> PathBuf {
-    let path = dir.join(format!("{name}.lam"));
+    let path = dir.join(format!("{name}.takt"));
     std::fs::write(&path, source).expect("запись фикстуры");
     path
 }
@@ -370,7 +370,7 @@ fn bit_is_within_conformance_scope() {
 // вскрылось: **симулятор не исполняет композицию, несущую переход `next`** —
 // состояние-реализация с `next` немедленно уходит по `next`, не тикнув шаги
 // (проба: `start P = A + B { next Done; }` даёт `Terminated` на такте 1, шаги не
-// исполнены). Ровно поэтому `extend_complex.lam` (корневая `+` с `next Next`)
+// исполнены). Ровно поэтому `extend_complex.takt` (корневая `+` с `next Next`)
 // **исключён** из `examples_scenario_tests`. Дефект симулятора заведён фиксом
 // `docs/fixes/0057-01-sim-composition-next.md` (Tier 2) и к цели `sv` отношения
 // не имеет.
@@ -667,7 +667,7 @@ endmodule
 #[test]
 fn fixed_point_arithmetic_matches_generated_sv() {
     let vars = ["acc"];
-    let sim = simulate_trace("tests/data/eval/conformance_fixed.lam", &vars);
+    let sim = simulate_trace("tests/data/eval/conformance_fixed.takt", &vars);
     assert_eq!(
         sim,
         vec![vec![-768], vec![-384], vec![-2], vec![510]],
@@ -681,7 +681,7 @@ fn fixed_point_arithmetic_matches_generated_sv() {
     let dir = build_dir("fixed");
     let sv = sv_trace_signed(
         &dir,
-        "tests/data/eval/conformance_fixed.lam",
+        "tests/data/eval/conformance_fixed.takt",
         "conformance_fixed",
         &["conformance_fixed_fixed_acc"],
         sim.len(),
@@ -740,7 +740,7 @@ fn simulate_trace_float_q(fixture: &str, m: u8, n: u8, vars: &[&str]) -> Vec<Vec
 /// что у явной q-версии `conformance_fixed` (float→q(8,8) ≡ q(8,8)).
 #[test]
 fn float_as_q_matches_generated_sv() {
-    let sim = simulate_trace_float_q("tests/data/eval/conformance_float_q.lam", 8, 8, &["acc"]);
+    let sim = simulate_trace_float_q("tests/data/eval/conformance_float_q.takt", 8, 8, &["acc"]);
     assert_eq!(
         sim,
         vec![vec![-768], vec![-384], vec![-2], vec![510]],
@@ -754,7 +754,7 @@ fn float_as_q_matches_generated_sv() {
     let dir = build_dir("float_q");
     let sv = sv_trace_signed(
         &dir,
-        "tests/data/eval/conformance_float_q.lam",
+        "tests/data/eval/conformance_float_q.takt",
         "conformance_float_q",
         &["conformance_float_q_float_fixed_acc"],
         sim.len(),
@@ -773,7 +773,7 @@ fn float_as_q_matches_generated_sv() {
 /// молча собрать несопоставимый (native) вывод.
 #[test]
 fn float_without_flag_is_sv003() {
-    let source = std::fs::read_to_string("tests/data/eval/conformance_float_q.lam")
+    let source = std::fs::read_to_string("tests/data/eval/conformance_float_q.takt")
         .expect("фикстура читается");
     let dir = build_dir("float_no_flag");
     let err = takt_lang::compile_to_sv(

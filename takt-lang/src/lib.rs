@@ -36,7 +36,7 @@ pub mod address_map;
 /// Модуль диагностических сообщений компилятора.
 pub mod diagnostics;
 
-/// Канонический форматтер `.lam` (фича 0024).
+/// Канонический форматтер `.takt` (фича 0024).
 pub mod format;
 /// Модуль генерации кода (C и другие целевые платформы).
 pub mod generator;
@@ -248,7 +248,7 @@ pub(crate) fn apply_float_lowering(
 /// ```no_run
 /// // Без импортов — пустой список путей; guard-проверки по умолчанию включены
 /// takt_lang::compile_to_c(
-///     "dummy.lam",
+///     "dummy.takt",
 ///     "start S;",
 ///     ".output",
 ///     &[],
@@ -258,8 +258,8 @@ pub(crate) fn apply_float_lowering(
 ///
 /// // С импортами — указываем директорию поиска
 /// takt_lang::compile_to_c(
-///     "dummy.lam",
-///     r#"import "std.lam"; start S;"#,
+///     "dummy.takt",
+///     r#"import "std.takt"; start S;"#,
 ///     ".output",
 ///     &["/usr/lib/lam".to_string()],
 ///     &takt_lang::GenerateOptions::default(),
@@ -496,7 +496,7 @@ pub fn compile_to_rust(
 ///
 /// `c`, `st` и `rust` — программные цели: такт модели там есть итерация цикла
 /// сканирования. Здесь такт Takt ≡ **фронт тактового сигнала**: `clk` и `rst_n`
-/// — неявные служебные порты модуля, которых в языке `.lam` нет, а их имена для
+/// — неявные служебные порты модуля, которых в языке `.takt` нет, а их имена для
 /// цели `sv` зарезервированы (порт модели с таким именем → `SV-007`).
 ///
 /// Часть дефектов отображения цели `c` здесь не воспроизводится конструктивно:
@@ -835,7 +835,7 @@ fn verify_all_inner(
     // Имя берётся КЛЮЧОМ словаря, а не полем узла: корень импортированного файла
     // анонимен (`name: None`), и `name()` дал бы пустую строку — пропуск
     // перечислялся бы без имени. Ключ же и есть то имя, под которым модель
-    // видна импортёру (`import "badlib.lam";` → `Badlib`).
+    // видна импортёру (`import "badlib.takt";` → `Badlib`).
     let nested: Vec<_> = borrowed
         .models
         .iter()
@@ -894,7 +894,7 @@ fn scoped_formula(site: semantic::ltl_check::LtlSite) -> verification::ltl::Ltl 
 /// Фича 0049: разбирает LTL-формулу из строки (для `taktc verify --property`).
 ///
 /// Строка разбирается **грамматикой языка** — как тело `: [LTL] φ;`, поэтому
-/// синтаксис свойства в командной строке и в `.lam`-файле совпадает буква в
+/// синтаксис свойства в командной строке и в `.takt`-файле совпадает буква в
 /// букву, а имена состояний могут быть любой длины.
 ///
 /// Не путать с [`verification::ltl::parse_ltl`]: тот — тестовая игрушка
@@ -1339,7 +1339,7 @@ always {
 
     // ── V1/V2: Тесты безопасного извлечения имени файла ──────────────────────
 
-    /// V1: обычный путь вида "path/to/model.lam" → имя модели "model".
+    /// V1: обычный путь вида "path/to/model.takt" → имя модели "model".
     #[test]
     fn compile_to_c_normal_filename_sets_model_name() {
         // Используем пустую директорию; ошибка записи нас не интересует —
@@ -1349,7 +1349,7 @@ always {
         // Простой FSM без имени модели; имя должно быть взято из имени файла.
         let src = "start S;";
         let result = compile_to_c(
-            "path/to/my_model.lam",
+            "path/to/my_model.takt",
             src,
             &out,
             &[],
@@ -1396,7 +1396,7 @@ always {
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().to_string_lossy().into_owned();
         let src = "start S;";
-        // "arch.v2.lam" → должно брать "arch", не "arch.v2".
-        let _ = compile_to_c("arch.v2.lam", src, &out, &[], &GenerateOptions::default());
+        // "arch.v2.takt" → должно брать "arch", не "arch.v2".
+        let _ = compile_to_c("arch.v2.takt", src, &out, &[], &GenerateOptions::default());
     }
 }

@@ -435,7 +435,7 @@ mod tests {
 
     /// Функция, читающая ПОРТ, требует HAL.
     ///
-    /// Реальный случай корпуса: `travel_time` в `stacker.lam` читает `pos_stack`.
+    /// Реальный случай корпуса: `travel_time` в `stacker.takt` читает `pos_stack`.
     #[test]
     fn function_reading_port_needs_hal() {
         let needs = needs_of(

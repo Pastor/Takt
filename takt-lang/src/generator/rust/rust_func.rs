@@ -43,7 +43,7 @@ fn print_body_with_tail(
     };
     // Тело функции печатается ОБЩИМ печатником блока — иначе оно не получило бы
     // переноса объявлений с мёртвым инициализатором (`rust_live`), и
-    // `travel_time` в `stacker.lam` остался бы с `needless_late_init`.
+    // `travel_time` в `stacker.takt` остался бы с `needless_late_init`.
     // Хвостовой `return` (и завершающий `if/else` со сворачиваемыми ветвями,
     // фича 0058) заменяется выражением через `print_tail`.
     print_block(items, Some(&print_tail), scope, p, out)
@@ -104,7 +104,7 @@ pub(crate) fn emit_functions(
             }
             // HAL идёт ПОСЛЕДНИМ параметром, а не первым. Причина —
             // заимствования: аргумент нередко сам читает порт
-            // (`travel_time(pos_stack, …)` в `stacker.lam`), и вызов
+            // (`travel_time(pos_stack, …)` в `stacker.takt`), и вызов
             // `f(&mut hal, hal.read_u8(…))` взял бы `hal` изменяемо дважды
             // (E0499). Аргументы вычисляются слева направо, поэтому чтение
             // успевает отпустить заимствование до того, как его возьмёт `&mut`.

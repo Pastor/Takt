@@ -23,9 +23,9 @@ fn stderr_of(fixture: &str) -> String {
 /// A1: позиция и код печатаются.
 #[test]
 fn semantic_error_prints_position_and_code() {
-    let err = stderr_of("lib_bad.lam");
+    let err = stderr_of("lib_bad.takt");
     assert!(
-        err.contains("lib_bad.lam:2:18:"),
+        err.contains("lib_bad.takt:2:18:"),
         "ожидались путь:строка:колонка, получено: {err}"
     );
     assert!(err.contains("[SE-002]"), "код диагностики потерян: {err}");
@@ -36,13 +36,13 @@ fn semantic_error_prints_position_and_code() {
 /// Это и есть суть фичи: прежде оба случая давали дословно одинаковый вывод.
 #[test]
 fn error_inside_import_names_the_library() {
-    let err = stderr_of("importer.lam");
+    let err = stderr_of("importer.takt");
     assert!(
-        err.contains("lib_bad.lam:"),
+        err.contains("lib_bad.takt:"),
         "виновник — библиотека, а не импортёр: {err}"
     );
     assert!(
-        !err.contains("importer.lam:"),
+        !err.contains("importer.takt:"),
         "импортёр ошибок не содержит и назван быть не должен: {err}"
     );
 }
@@ -53,10 +53,10 @@ fn error_inside_import_names_the_library() {
 /// поведение сохранено осознанно: каждая ошибка своя подсказка.
 #[test]
 fn all_parse_errors_are_printed_with_positions() {
-    let err = stderr_of("syntax_bad.lam");
+    let err = stderr_of("syntax_bad.takt");
     let positioned = err
         .lines()
-        .filter(|l| l.contains("syntax_bad.lam:"))
+        .filter(|l| l.contains("syntax_bad.takt:"))
         .count();
     assert!(
         positioned >= 2,
@@ -71,12 +71,12 @@ fn all_parse_errors_are_printed_with_positions() {
 /// бы (доказанный класс дефекта — задача 0028-01).
 #[test]
 fn position_format_matches_the_shared_layer() {
-    let err = stderr_of("lib_bad.lam");
-    let source = std::fs::read_to_string(format!("{DIR}/lib_bad.lam")).expect("чтение");
+    let err = stderr_of("lib_bad.takt");
+    let source = std::fs::read_to_string(format!("{DIR}/lib_bad.takt")).expect("чтение");
     let offset = source.find("Nowhere").expect("ссылка есть");
     let (line, column) = takt_lang::diagnostics::line_column(&source, offset);
     assert!(
-        err.contains(&format!("lib_bad.lam:{line}:{column}:")),
+        err.contains(&format!("lib_bad.takt:{line}:{column}:")),
         "позиция обязана совпадать с расчётом общего слоя ({line}:{column}): {err}"
     );
 }
