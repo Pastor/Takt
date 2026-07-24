@@ -1,0 +1,36 @@
+// Условия используют & | ! как логические И/ИЛИ/НЕ; выражения — арифметику,
+// присваивание := и сравнение =.
+const LIMIT: u8 := 100;
+
+in start_btn: bit;
+in stop_btn: bit;
+out running: bit;
+
+var count: u8 := 0;
+var doubled: u8 := 0;
+
+start Idle {
+    enter {
+        running := 0;
+        count := 0;
+    }
+    // Условие: логическое И (&) и сравнение = (одиночный знак).
+    ref Working: start_btn = 1 & stop_btn = 0;
+}
+
+state Working {
+    enter {
+        running := 1;
+    }
+    always {
+        count := count + 1;
+        doubled := count * 2;
+        if count >= LIMIT {
+            count := 0;
+        }
+    }
+    // Выражения: арифметика и присваивание :=.
+    // Сравнение = в условии if.
+    // Условие: логическое ИЛИ (|).
+    ref Idle: stop_btn = 1 | count >= LIMIT;
+}
