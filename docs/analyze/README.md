@@ -94,3 +94,6 @@
 | 0092 | У фичи 0018 нет ADR | [0092-adr-0018-retrofit.md](0092-adr-0018-retrofit.md) | — (новая фича) |
 | 0100 | Переименование языка Lam → Takt | [0100-language-rename-takt.md](0100-language-rename-takt.md) | — (новая фича) |
 | 0101 | Документ описания языка Takt | [0101-language-book.md](0101-language-book.md) | — (новая фича) |
+| 0117 | Раздел документа «Инструментарий» | [0117-book-tools.md](0117-book-tools.md) | — (новая фича) |
+| 0118 | Раздел документа «Развёрнутый пример» | [0118-book-showcase.md](0118-book-showcase.md) | — (новая фича) |
+| 0119 | Приложения документа + приложение «Ошибки» | [0119-book-appendices.md](0119-book-appendices.md) | — (новая фича) |
