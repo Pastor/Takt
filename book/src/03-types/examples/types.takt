@@ -1,0 +1,37 @@
+// Обзор системы типов на одной модели: примитивы, целые, перечисление,
+// структура, фикс-точка и массив.
+
+// Перечисление — именованный набор значений (значения можно задать явно).
+enum Mode { Idle = 0, Run = 1, Halt = 2 }
+
+// Структура — запись из именованных полей.
+struct Point {
+    x: u16,
+    y: u16
+}
+
+in start_btn: bit;          // примитив bit (1 бит)
+out active: bool;           // булев тип
+
+const ORIGIN: Point := {0, 0};   // структурная константа, позиционный инициализатор
+const GAIN: q(4, 4) := 1.5;      // фикс-точка: 4 целых бита (со знаком), 4 дробных
+
+var mode: Mode := Idle;          // переменная перечислимого типа
+var counter: u16 := 0;           // беззнаковое целое 16 бит
+var level: q(4, 4) := 0.0;       // фикс-точка q(4, 4)
+var samples: [u8; 4] := {0, 0, 0, 0};   // массив из 4 элементов u8
+
+start Idle {
+    enter { active := false; mode := Idle; counter := ORIGIN.x; }
+    ref Working: start_btn = 1;
+}
+
+state Working {
+    enter { active := true; mode := Run; }
+    always {
+        counter := counter + 1;
+        level := level + GAIN;
+        samples[0] := 1;
+    }
+    ref Idle: start_btn = 0;
+}
