@@ -1,25 +1,23 @@
-// Насосная станция: по запросу включает насос и удерживает давление, не давая
-// ему превысить допустимый предел.
+// Насосная станция: по запросу включает насос и следит за давлением, сообщая
+// запас до допустимого предела.
 
-extern fn read_pressure() -> u8;   // (1) внешняя функция: чтение датчика
-extern fn drive_pump(on: bit);     //     внешняя функция: команда насосу
+extern fn drive_pump(on: bit);     // (1) внешняя функция: команда насосу
 
 in demand: bit;
+in pressure: u8;                   // датчик давления
 out running: bit;
-out margin: u8;
+out margin: u8;                    // запас до предела
 
 const MAX_P: u8 := 100;
 
-var pressure: u8 := 0;
-
-fn clamp(p: u8) -> u8 {             // (2) ограничение сверху
+fn clamp(p: u8) -> u8 {            // (2) ограничение значения сверху
     if p > MAX_P {
         return MAX_P;
     }
     return p;
 }
 
-fn headroom(p: u8) -> u8 {          // (3) композиция: headroom использует clamp
+fn headroom(p: u8) -> u8 {         // (3) композиция: headroom использует clamp
     return MAX_P - clamp(p);
 }
 
@@ -29,10 +27,7 @@ start Off {
 }
 
 state On {
-    enter { running := 1; drive_pump(1); }             // (5) вызов внешней функции
-    always {
-        pressure := clamp(read_pressure());            // (4) вызов над результатом внешней
-        margin := headroom(pressure);
-    }
+    enter { running := 1; drive_pump(1); }        // (4) вызов внешней функции
+    always { margin := headroom(pressure); }      // (5) вызов функции-композиции
     ref Off: demand = 0;
 }
