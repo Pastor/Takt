@@ -130,5 +130,5 @@
 | [0115](./0115-book-diagnostics.md) | Раздел документа «Диагностики» | карточка (ADR/анализ не заведены) | СОЗДАНА |
 | [0116](./0116-book-grammar.md) | Приложение документа «Грамматика (EBNF)» | карточка (ADR/анализ не заведены) | СОЗДАНА |
 | [0117](./0117-book-tools.md) | Раздел документа «Инструментарий» | [ADR](../adr/0117-book-tools.md) · [анализ](../analyze/0117-book-tools.md) | ГОТОВО |
-| [0118](./0118-book-showcase.md) | Раздел документа «Развёрнутый пример» | [ADR](../adr/0118-book-showcase.md) · [анализ](../analyze/0118-book-showcase.md) · [тест-план](../tests/README.md) · [отчёт](../reports/README.md) | СОЗДАНА |
+| [0118](./0118-book-showcase.md) | Раздел документа «Развёрнутый пример» | [ADR](../adr/0118-book-showcase.md) · [анализ](../analyze/0118-book-showcase.md) | ГОТОВО |
 | [0119](./0119-book-appendices.md) | Приложения документа + приложение «Ошибки» | [ADR](../adr/0119-book-appendices.md) · [анализ](../analyze/0119-book-appendices.md) · [тест-план](../tests/README.md) · [отчёт](../reports/README.md) | СОЗДАНА |
