@@ -29,6 +29,13 @@ highlight-style = "tango"
 # (fontspec/xelatex резолвит по имени семейства).
 mainfont = "Fira Code"
 monofont = "Fira Code"
+# У Fira Code нет курсивного начертания. Без синтетического курсива xelatex на
+# каждом курсивном фрагменте (комментарии в подсветке кода `\CommentTok`,
+# `\emph`-текст библиографии) печатает предупреждение «Font shape .../m/it
+# undefined». AutoFakeSlant определяет наклонное начертание из прямого — курсив
+# рендерится синтетически, предупреждения исчезают.
+mainfontoptions = ["AutoFakeSlant=0.2"]
+monofontoptions = ["AutoFakeSlant=0.2"]
 fontsize = "10pt"
 lang = "ru"
 toc = true
