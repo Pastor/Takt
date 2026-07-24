@@ -9,6 +9,18 @@
 
 ### Добавлено (фича [0100](docs/features/0100-language-rename-takt.md) — переименование языка Lam → Takt) — **РАЗРАБОТКА**
 
+- **0100-05 — готово (редакторные расширения IntelliJ + Zed).** ⚠️ Обнаружено и
+  включено **второе** расширение — Zed (`zed-lam`), пропущенное в декомпозиции
+  (правило 19). **IntelliJ:** `intellij-lam`→`intellij-takt`, пакет `org/lam`→
+  `org/takt`, 45 `Lam*.kt`→`Takt*.kt`, ресурсы, `.takt`/`org.takt.intellij`/id/name.
+  Функциональные пропуски, пойманные проверкой: `getDefaultExtension()` `"lam"`→
+  `"takt"`; тесты плагина ссылались на каталог `grammar/` (переименован 0100-01!)
+  → `takt-lang/`; `lamc`→`taktc`; storage `lam.xml`→`takt.xml`.
+  **Zed:** `zed-lam`→`zed-takt`, `languages/takt`, `path_suffixes=["takt"]`,
+  бинарник `takt-lsp`, `takt-lang`. Installer-скрипты. `./gradlew --offline test`
+  — BUILD SUCCESSFUL. Rust-precheck не затронут (менялись только `extensions/` +
+  1 markdown-ссылка README, правило 14). Историческая хроника `CHANGES.md` не
+  переписывается.
 - **0100-04 — готово (расширение `.lam`→`.takt`, атомарно).** `git mv` всех **244**
   файлов; `import "x.takt"` внутри; **9** extension-проверок `"lam"`→`"takt"`
   (`taktc.rs:476` + 8 тест-обходов каталогов); **375** хардкод-путей фикстур в 37

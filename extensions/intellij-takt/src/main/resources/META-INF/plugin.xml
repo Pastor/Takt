@@ -1,0 +1,83 @@
+<idea-plugin>
+    <id>org.takt.intellij</id>
+    <name>Takt</name>
+    <vendor url="https://github.com/Pastor/BuT">Takt</vendor>
+
+    <description><![CDATA[
+        Takt (Typed, Automata, Known Timing) language support for IntelliJ IDEA:
+        <code>.takt</code> file type, syntax highlighting, go to declaration and
+        <code>import</code> navigation.<br/>
+        <br/>
+        Поддержка языка <b>Takt</b> (Typed, Automata, Known Timing) в IntelliJ IDEA:
+        распознавание файлов <code>.takt</code>, подсветка синтаксиса, переход к
+        декларации и навигация по директивам <code>import</code>. Базовая
+        подсветка лексическая (работает офлайн, в т.ч. в Community).
+    ]]></description>
+
+    <!-- Диапазон совместимости IDE (sinceBuild/untilBuild) патчится Gradle-плагином
+         из gradle.properties — здесь не дублируется (ADR 0022). -->
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <!-- 0038: опциональная интеграция LSP4IJ (семантическая подсветка через
+         takt-lsp). Без установленного LSP4IJ плагин грузится и работает как
+         лексический (0022) — отсутствие зависимости не срывает загрузку. -->
+    <depends optional="true" config-file="takt-lsp4ij.xml">com.redhat.devtools.lsp4ij</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- 0038: настройки LSP-слоя (путь к `takt-lsp`). Класс не зависит от
+             LSP4IJ, поэтому сервис регистрируется всегда (не в опциональном
+             config-file) — путь можно хранить независимо от наличия LSP4IJ. -->
+        <applicationService serviceImplementation="org.takt.intellij.lsp.TaktLspSettings"/>
+        <!-- 0038: страница настроек «Takt Language Server» (путь к takt-lsp). -->
+        <applicationConfigurable
+                parentId="tools"
+                instance="org.takt.intellij.lsp.TaktLspConfigurable"
+                id="org.takt.intellij.lsp.TaktLspConfigurable"
+                displayName="Takt Language Server"/>
+
+        <!-- 0022-01: регистрация типа файла `.takt` → язык Takt (R1, A1). -->
+        <fileType
+                name="Takt"
+                implementationClass="org.takt.intellij.TaktFileType"
+                fieldName="INSTANCE"
+                language="Takt"
+                extensions="takt"/>
+
+        <!-- 0022-02: лексическая подсветка синтаксиса. -->
+        <lang.syntaxHighlighterFactory
+                language="Takt"
+                implementationClass="org.takt.intellij.highlight.TaktSyntaxHighlighterFactory"/>
+
+        <!-- 0022-03: страница настройки цветов, commenter, brace matcher. -->
+        <colorSettingsPage implementation="org.takt.intellij.highlight.TaktColorSettingsPage"/>
+        <lang.commenter language="Takt" implementationClass="org.takt.intellij.editor.TaktCommenter"/>
+        <lang.braceMatcher language="Takt" implementationClass="org.takt.intellij.editor.TaktBraceMatcher"/>
+
+        <!-- 0023: плоский PSI-разбор — даёт реальные PsiElement под кареткой
+             (нужны навигации и ссылкам; ADR 0023, Option A). -->
+        <lang.parserDefinition
+                language="Takt"
+                implementationClass="org.takt.intellij.parser.TaktParserDefinition"/>
+
+        <!-- 0023: переход к декларации (Go to Declaration) и к файлам `import`. -->
+        <gotoDeclarationHandler
+                implementation="org.takt.intellij.navigation.TaktGotoDeclarationHandler"/>
+
+        <!-- 0067 (R5): манипулятор текста узла IMPORT_PATH — нужен, чтобы
+             FileReference (rename-on-move) мог переписать строку-путь при
+             переименовании/перемещении целевого файла средствами IDEA. Сам
+             узел TaktImportPath несёт ссылку через getReferences() (композит, а
+             не лист — проба 0067), поэтому psi.referenceContributor не требуется. -->
+        <lang.elementManipulator
+                forClass="org.takt.intellij.psi.TaktImportPath"
+                implementationClass="org.takt.intellij.psi.TaktImportPathManipulator"/>
+
+        <!-- 0067 (R3): валидатор имён для нативного rename (отвергает ключевые
+             слова Takt). Декларации — PsiNamedElement (NAME_DECL), использования —
+             PsiReference (NAME_REF); их строит парсер, регистрация не требуется. -->
+        <lang.namesValidator
+                language="Takt"
+                implementationClass="org.takt.intellij.refactoring.TaktNamesValidator"/>
+    </extensions>
+</idea-plugin>

@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-  install-rustrover-plugin.ps1 - build the Lam IntelliJ Platform plugin and
+  install-rustrover-plugin.ps1 - build the Takt IntelliJ Platform plugin and
   install/update it into detected JetBrains RustRover installations (Windows).
 
 .DESCRIPTION
   Steps:
-    1. Builds the plugin in extensions\intellij-lam (its own gradlew.bat -> buildPlugin),
-       producing build\distributions\intellij-lam-<version>.zip.
+    1. Builds the plugin in extensions\intellij-takt (its own gradlew.bat -> buildPlugin),
+       producing build\distributions\intellij-takt-<version>.zip.
     2. Locates RustRover plugin directories in the standard JetBrains location on
        Windows (%APPDATA%\JetBrains\RustRover*; including Toolbox installs - the
        config layout there is standard).
@@ -35,7 +35,7 @@ Set-StrictMode -Version Latest
 
 # Script root = extensions\; the plugin project sits next to it.
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$PluginDir = Join-Path $ScriptDir 'intellij-lam'
+$PluginDir = Join-Path $ScriptDir 'intellij-takt'
 $GradlewBat = Join-Path $PluginDir 'gradlew.bat'
 
 if (-not (Test-Path -LiteralPath $PluginDir -PathType Container)) {
@@ -66,7 +66,7 @@ if ($verLine) { $Version = $verLine.Matches[0].Groups[1].Value }
 
 $Zip = $null
 if ($Version) {
-    $candidate = Join-Path $DistDir "intellij-lam-$Version.zip"
+    $candidate = Join-Path $DistDir "intellij-takt-$Version.zip"
     if (Test-Path -LiteralPath $candidate -PathType Leaf) { $Zip = $candidate }
 }
 if (-not $Zip) {
