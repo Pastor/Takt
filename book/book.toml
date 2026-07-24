@@ -1,0 +1,34 @@
+[book]
+title = "Язык Takt — описание"
+authors = ["Pastor <viruszold@gmail.com>"]
+language = "ru"
+src = "src"
+description = "Справочное описание языка Takt (Typed, Automata, Known Timing) — DSL для спецификации и синтеза конечных автоматов промышленных систем управления."
+
+# Автонумерация разделов — из порядка в src/SUMMARY.md (mdBook нумерует
+# перечисленные под `- [..]` главы автоматически).
+
+# ВЫВОД ПО УМОЛЧАНИЮ — PDF (через mdbook-pandoc), а не HTML. HTML-бэкенд не
+# подключён. Зависимости сборки — см. Makefile / README.md (mdbook, mdbook-pandoc,
+# pandoc, TeX-движок xelatex, шрифт Fira Code).
+[output.pandoc.profile.pdf]
+output-file = "takt-language.pdf"
+to = "pdf"
+pdf-engine = "xelatex"
+
+# Опции pandoc: оглавление с нумерацией разделов (дублирует автонумерацию mdBook в
+# структуре документа), ссылки.
+[output.pandoc.profile.pdf.variables]
+# Шрифт ТЕКСТА документа — Fira Code (по требованию). Моноширинный шрифт кода —
+# тоже Fira Code (единый вид). Требуется установленный в системе шрифт Fira Code
+# (fontspec/xelatex резолвит по имени семейства).
+mainfont = "Fira Code"
+monofont = "Fira Code"
+fontsize = "10pt"
+lang = "ru"
+toc = true
+toccolor = "black"
+numbersections = true
+colorlinks = true
+linkcolor = "black"
+urlcolor = "blue"
