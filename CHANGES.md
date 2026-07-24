@@ -9,6 +9,18 @@
 
 ### Добавлено (фича [0100](docs/features/0100-language-rename-takt.md) — переименование языка Lam → Takt) — **РАЗРАБОТКА**
 
+- **0100-06 — готово (документация, `Takt.ebnf`, версия 0.5.0, грамматика A1).**
+  Подъём версии языка **`0.4.0`→`0.5.0`** (`LANGUAGE_VERSION` + якорь README,
+  правило 22), коммит помечен тегом **`v0.5.0`**. `Lam.ebnf`→`Takt.ebnf`. Сквозная
+  проза живых доков (README/README.typ/CLAUDE/RULE/CODE/FEATURES/diagnostics/.zed/
+  ci.yml/скрипты): `Lam`→`Takt`, `.lam`→`.takt`, `lamc`→`taktc`, `lam-lsp`→
+  `takt-lsp`, крейт `` `grammar` ``→`` `takt-lang` ``, `Language of Automata
+  Models`→`Typed, Automata, Known Timing`. Крейт-имена в комментариях кода/плагина/
+  тестов. Примеры `.takt` + обвязка `examples/generated/`; снапшоты пересобраны.
+  **Гейт A1** (нет остаточного `Lam` в коде/скриптах/примерах/активных доках) —
+  чист, с документированными исключениями (историч. артефакты, `.claude`,
+  `lib.rs:117` LALRPOP, tests/data-фикстуры — позиционно-связаны). `precheck.sh`
+  зелёный.
 - **0100-05 — готово (редакторные расширения IntelliJ + Zed).** ⚠️ Обнаружено и
   включено **второе** расширение — Zed (`zed-lam`), пропущенное в декомпозиции
   (правило 19). **IntelliJ:** `intellij-lam`→`intellij-takt`, пакет `org/lam`→

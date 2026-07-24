@@ -1,5 +1,5 @@
 (* ===========================================================================
-   Lam — язык описания конечных автоматов (Finite-State Machine Description Language)
+   Takt — язык описания конечных автоматов (Finite-State Machine Description Language)
    Синтаксическое описание в формате ISO EBNF (ISO/IEC 14977:1996).
 
    Условные обозначения:
@@ -13,7 +13,7 @@
      lowercase_name       — нетерминал
      (* ... *)            — комментарий
 
-   Источник: grammar/src/grammar.lalrpop, grammar/src/parser/lexer.rs
+   Источник: takt-lang/src/grammar.lalrpop, takt-lang/src/parser/lexer.rs
    =========================================================================== *)
 
 
@@ -21,7 +21,7 @@
    ТОЧКА ВХОДА
    =========================================================================== *)
 
-(* Программа Lam — последовательность элементов верхнего уровня. *)
+(* Программа Takt — последовательность элементов верхнего уровня. *)
 source_unit = { model_element } ;
 
 
@@ -75,7 +75,7 @@ import_define
    но генерирует диагностику SE, если это не "from". *)
 
 import_path
-    = string_literal        (* "путь/к/файлу.lam" *)
+    = string_literal        (* "путь/к/файлу.takt" *)
     | identifier_path       (* Module::SubModule *)
     ;
 

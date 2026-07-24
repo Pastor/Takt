@@ -6,7 +6,7 @@
 #
 # Крейт НАМЕРЕННО не входит в workspace репозитория (собственная таблица
 # `[workspace]` ниже): его содержимое — ПОРОЖДЁННЫЙ код, он перезаписывается
-# `lamc` и не должен попадать под `cargo check`/`clippy --all-targets` корня.
+# `taktc` и не должен попадать под `cargo check`/`clippy --all-targets` корня.
 # Строгий гейт (`rustc`/`clippy` с `-D warnings` в профиле `no_std`) живёт в
 # `scripts/precheck.sh` и проверяет сами `.rs`, а не этот крейт.
 #
