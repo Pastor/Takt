@@ -1,4 +1,4 @@
-//! Печать выражений и условий Lam в Structured Text (IEC 61131-3).
+//! Печать выражений и условий Takt в Structured Text (IEC 61131-3).
 //!
 //! Задача 0041-04 (часть 1: выражения и условия; операторы, функции и `extern fn`
 //! — часть 2). Аналог для цели `c` — `c_expr.rs`, 1736 строк, самый крупный файл
@@ -14,7 +14,7 @@
 //!
 //! ## Удачное совпадение с ST
 //!
-//! Lam и IEC 61131-3 используют **одни и те же** `:=` (присваивание) и `=`
+//! Takt и IEC 61131-3 используют **одни и те же** `:=` (присваивание) и `=`
 //! (равенство), поэтому отображение почти тождественно — в отличие от цели `c`,
 //! которая вынуждена печатать `==` (`stacker.c:146`).
 //!
@@ -44,7 +44,7 @@ use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionNode, ExpressionNode, ModelNode, VariableNode};
 
-/// Печатает выражение Lam в текст ST.
+/// Печатает выражение Takt в текст ST.
 ///
 /// # Ошибки
 /// `ST-011` — узел не имеет представления в ST (R4: никакого тихого пропуска).
@@ -121,7 +121,7 @@ pub(crate) fn print_expression(
             print_expression(lhs, model)?,
             print_expression(rhs, model)?
         )),
-        // Тернарный оператор Lam `c ? a : b` → SEL(G, IN0, IN1): при G=FALSE
+        // Тернарный оператор Takt `c ? a : b` → SEL(G, IN0, IN1): при G=FALSE
         // берётся IN0, при TRUE — IN1, поэтому ветви идут в обратном порядке.
         ExpressionNode::ConditionalOperator(cond, then_, else_) => Ok(format!(
             "SEL({}, {}, {})",
@@ -232,7 +232,7 @@ pub(crate) fn variable_ident(var: &VariableNode) -> String {
     variable_name(var)
 }
 
-/// Печатает условие Lam в текст ST.
+/// Печатает условие Takt в текст ST.
 ///
 /// Отдельный печатник — инвариант ADR 0019: в условии `=` это **равенство**,
 /// а не присваивание.
@@ -336,8 +336,8 @@ fn variable_name(var: &VariableNode) -> String {
 
 /// Печатает бинарную операцию выражения, скобкуя составные операнды.
 ///
-/// **Скобки обязательны, а не косметика.** Приоритеты Lam и ST не совпадают:
-/// `!(a = b)` Lam при наивной печати даёт `NOT a = b`, а в ST `NOT` связывает
+/// **Скобки обязательны, а не косметика.** Приоритеты Takt и ST не совпадают:
+/// `!(a = b)` Takt при наивной печати даёт `NOT a = b`, а в ST `NOT` связывает
 /// сильнее `=`, то есть читается как `(NOT a) = b` — другое выражение. Гейт
 /// поймал это на `elevator` («Invalid data type for 'NOT' expression»), но
 /// страшнее случай, когда типы совпадут и разница пройдёт **молча**.
@@ -445,7 +445,7 @@ struct BitString {
     bits: u8,
 }
 
-/// Подбирает битовую строку для целого типа Lam.
+/// Подбирает битовую строку для целого типа Takt.
 fn bit_string_of_type(ty: &TypeNode) -> Option<BitString> {
     let TypeNode::Integer { bits, signed } = ty else {
         return None;
@@ -567,7 +567,7 @@ fn bit_access(
     _model: &ModelNode,
 ) -> Result<String, Diagnostic> {
     match member {
-        // Поле структуры: синтаксис ST совпадает с Lam.
+        // Поле структуры: синтаксис ST совпадает с Takt.
         Member::Identifier(id) => Ok(format!("{}.{}", print_inner()?, id.name)),
         Member::Number(n) => {
             let inner = print_inner()?;
@@ -643,7 +643,7 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    /// Строит модель из исходника Lam.
+    /// Строит модель из исходника Takt.
     fn model_of(src: &str) -> Rc<RefCell<ModelNode>> {
         let (ast, _) = crate::parse(src, 0).unwrap();
         construct_model(&ast, None, &[]).unwrap()
@@ -695,7 +695,7 @@ mod tests {
         assert_eq!(cond_of("b | !b"), "b OR (NOT b)");
     }
 
-    /// Составные операнды скобкуются: приоритеты Lam и ST не совпадают.
+    /// Составные операнды скобкуются: приоритеты Takt и ST не совпадают.
     ///
     /// Сторож против регресса, который поймал гейт, а юнит-тесты — нет:
     /// `!(a = b)` при наивной печати даёт `NOT a = b`, а в ST `NOT` связывает
@@ -713,7 +713,7 @@ mod tests {
         assert_eq!(cond_of("n != m"), "n <> m");
     }
 
-    /// Реляционные операторы совпадают с Lam.
+    /// Реляционные операторы совпадают с Takt.
     #[test]
     fn test_condition_relational_operators_match_lam() {
         assert_eq!(cond_of("n < m"), "n < m");

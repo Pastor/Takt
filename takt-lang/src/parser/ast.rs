@@ -1,4 +1,4 @@
-//! Узлы абстрактного синтаксического дерева (АСД) языка Lam.
+//! Узлы абстрактного синтаксического дерева (АСД) языка Takt.
 //!
 //! Этот модуль определяет все типы, образующие АСД после синтаксического анализа.
 //! Каждый узел несёт в себе информацию о местоположении ([`Location`]) в исходном
@@ -6,7 +6,7 @@
 //!
 //! ## Иерархия узлов
 //!
-//! - [`Model`] — корневой узел программы Lam; содержит список [`ModelElement`].
+//! - [`Model`] — корневой узел программы Takt; содержит список [`ModelElement`].
 //! - [`ModelElement`] — элемент модели: состояние, переменная, тип, условие,
 //!   именованный блок, функция или импорт.
 //! - [`StateDefine`] — определение состояния с элементами [`StateElement`].
@@ -134,7 +134,7 @@ impl ImportDefine {
 /// `None` используется при ошибке восстановления парсера.
 pub type ParameterList = Vec<(Location, Option<Parameter>)>;
 
-/// Тип данных в языке Lam.
+/// Тип данных в языке Takt.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 #[non_exhaustive]
@@ -730,7 +730,7 @@ pub enum LoopKeyword {
     While,
 }
 
-/// Оператор языка Lam.
+/// Оператор языка Takt.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 #[allow(clippy::large_enum_variant, clippy::type_complexity)]

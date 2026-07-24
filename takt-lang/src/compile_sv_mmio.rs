@@ -11,7 +11,7 @@ use crate::generator::{self, GenerateOptions};
 use crate::{apply_float_lowering, parse_and_construct};
 use std::path::Path;
 
-/// Компилирует Lam в синтезируемый SystemVerilog в режиме `sv-mmio` (фича 0062):
+/// Компилирует Takt в синтезируемый SystemVerilog в режиме `sv-mmio` (фича 0062):
 /// порт **с** адресом становится битом регистрового файла на шинно-агностичном
 /// интерфейсе, порт **без** адреса — портом модуля. Парная цель к
 /// [`compile_to_sv`](crate::compile_to_sv), как `c-hal` парная к `c`.

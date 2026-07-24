@@ -1,4 +1,4 @@
-//! Генератор `no_std` Rust из семантического дерева Lam (фича 0050).
+//! Генератор `no_std` Rust из семантического дерева Takt (фича 0050).
 //!
 //! Пятый целевой язык. Архитектурное решение — ADR 0050 (Option A по обеим
 //! развилкам, решение заказчика 2026-07-16): профиль **`no_std`-прошивка**,
@@ -71,7 +71,7 @@ use std::rc::Rc;
 /// Размер одного уровня отступа в порождаемом Rust (конвенция rustfmt).
 const INDENT: usize = 4;
 
-/// Генератор Rust для модели Lam.
+/// Генератор Rust для модели Takt.
 pub struct Generator {}
 
 impl AsGenerator for Generator {
@@ -152,7 +152,7 @@ fn generate_program(map: &RustMap) -> Result<String, Diagnostic> {
     let mut p = Printer::new(INDENT, &mut out);
     let mut warnings: Vec<Diagnostic> = Vec::new();
 
-    p.ident("// Порождено компилятором Lam (taktc) — цель: Rust (профиль no_std).")
+    p.ident("// Порождено компилятором Takt (taktc) — цель: Rust (профиль no_std).")
         .nl();
     p.ident("// Не редактировать вручную: файл перезаписывается при каждой генерации.")
         .nl();
@@ -213,7 +213,7 @@ mod tests {
     use super::*;
     use crate::semantic::tree::construct_model;
 
-    /// Строит снимок карты из исходника Lam (по образцу `st::tests::make_map`).
+    /// Строит снимок карты из исходника Takt (по образцу `st::tests::make_map`).
     fn make_map(src: &str, name: &str) -> RustMap {
         let (ast, _) = crate::parse(src, 0).unwrap();
         let model_rc = construct_model(&ast, None, &[]).unwrap();

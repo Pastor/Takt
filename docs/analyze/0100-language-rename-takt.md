@@ -56,8 +56,15 @@
 |---|---|---|---|
 | 0100-01 | Крейты + пути импорта | `Cargo.toml` (workspace/deps): `grammar`→`takt-lang`, `simulation`→`takt-sim`; массово `grammar::`→`takt_lang::`, `simulation::`→`takt_sim::` в коде/тестах/доктестах. **Переезд путей в `module-size-baseline.txt`** | `cargo build`/`cargo test`; `check-module-size.sh` |
 | 0100-02 | Бинарники | `bin/lamc.rs`→`bin/taktc.rs` (`[[bin]] name="taktc"`), `bin/lam_lsp.rs`→`bin/takt_lsp.rs` (`name="takt-lsp"`); usage/`eprintln!` CLI (`lamc …`→`taktc …`); baseline-запись `lamc.rs`→`taktc.rs` | `cargo build --bin taktc`/`--bin takt-lsp`; тесты CLI |
-| 0100-03 | Расширение + идентификаторы кода | Точка распознавания расширения (`bin/lamc.rs:476 e=="lam"`→`"takt"`, разрешение импорта в `semantic/tree.rs`), фикстуры расширения; текст в коде/комментариях (`Lam`→`Takt`, «Language of Automata Models»→«Typed, Automata, Known Timing») | `cargo test`; проба компиляции `.takt` |
-| 0100-04 | Примеры + генерация | `examples/**/*.lam`→`.takt` (244) + внутренние `import`; карты `.map`/`.plc.map` (упоминания расширения); **пересборка снапшотов `examples/generated/`**; `run_simulations.sh` (матч по префиксу) и прочие `*.sh` | `run_simulations.sh`; детерминизм-гейт; `examples_scenario_tests` |
+| 0100-03 | Идентификаторы кода (текст) | Текст в коде/комментариях/доках (`Lam`→`Takt`) + Cargo `description`/`keywords`. ⚠️ **Расширение перенесено в 0100-04** (атомарно связано с файлами — см. корректировку ниже) | `cargo build --all-features`; `precheck.sh` |
+| 0100-04 | Расширение + примеры + фикстуры + генерация | **Расширение `.lam`→`.takt` атомарно**: точка распознавания (`taktc.rs:476 e=="lam"`→`"takt"`), `examples/**/*.lam`→`.takt` (244) + внутренние `import`, 235 фикстур `tests/data/**/*.lam` + пути в тест-коде, карты `.map`/`.plc.map`, globы precheck `examples/*.lam`, **пересборка снапшотов `examples/generated/`**, `run_simulations.sh` | `run_simulations.sh`; детерминизм-гейт; `examples_scenario_tests`; проба компиляции `.takt` |
+
+> ⚠️ **Корректировка декомпозиции (правило 19, при разработке 0100-03):**
+> «расширение» перенесено из 0100-03 в 0100-04. Причина: логика расширения — одна
+> точка (`taktc.rs:476`, обход каталога у `fmt`), а всё остальное (`compile`/
+> `verify`/тесты) берёт **явные** пути; расширение атомарно связано с 244
+> `.lam`-файлами, globами precheck и импортами внутри примеров — флип в отрыве от
+> файлов даёт битое промежуточное состояние. 0100-03 сведён к чистому тексту.
 | 0100-05 | Плагин IntelliJ | `extensions/intellij-lam`→`intellij-takt`, пакет `org/lam`→`org/takt`, классы `Lam*`→`Takt*`, `plugin.xml`/ресурсы, `TaktFileType`→`.takt`, корпус тестов `.takt` (`LamPsiCorpusTest`/`LamKeywordSyncTest`) | `./gradlew --offline test` |
 | 0100-06 | Документация + версия | `README.md`/`README.typ`/`CLAUDE.md`/`CHANGES.md`, `Lam.ebnf`→`Takt.ebnf`, активные `docs/`; подъём версии `0.4.0`→`0.5.0` (константа + якорь README) + **тег `v0.5.0`**; grep-проверка R1 | `check-language-version.sh`; `check-links.py`; grep-гейт R1 |
 

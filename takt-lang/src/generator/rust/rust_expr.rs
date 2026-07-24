@@ -1,4 +1,4 @@
-//! Трансляция выражений и условий Lam в Rust (задача 0050-07).
+//! Трансляция выражений и условий Takt в Rust (задача 0050-07).
 //!
 //! ## Почему два печатника, а не один
 //!
@@ -72,7 +72,7 @@ pub(crate) struct Scope<'a> {
     pub(crate) locals: Vec<String>,
     /// Имена, которым в теле присваивают — для выбора `let` против `let mut`.
     ///
-    /// В Lam изменяемость не объявляется (`var` изменяем всегда), в Rust лишний
+    /// В Takt изменяемость не объявляется (`var` изменяем всегда), в Rust лишний
     /// `mut` — это `unused_mut`, то есть отказ гейта. Заполняется обходом тела
     /// до печати (`rust_stmt::collect_assigned`).
     pub(crate) assigned: std::collections::BTreeSet<String>,
@@ -388,7 +388,7 @@ pub(crate) fn unwrap_outer(text: &str) -> &str {
     &text[1..text.len() - 1]
 }
 
-/// Транслирует выражение Lam в выражение Rust.
+/// Транслирует выражение Takt в выражение Rust.
 ///
 /// # Ошибки
 /// [`RS-011`] на непереводимой конструкции — **не** тихий пропуск.
@@ -496,7 +496,7 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::None => Err(unsupported("пустое выражение")),
         ExpressionNode::Unresolved(_) => Err(unsupported("неразрешённое выражение")),
         ExpressionNode::ArraySlice(_, _, _) => Err(unsupported(
-            "срез массива: в Lam он не имеет типа-владельца, а в no_std нет alloc",
+            "срез массива: в Takt он не имеет типа-владельца, а в no_std нет alloc",
         )),
         ExpressionNode::CodeBlock(_, _) => Err(unsupported("блок кода в позиции выражения")),
         ExpressionNode::NamedFunctionBox(_, _) => {
@@ -638,7 +638,7 @@ pub(crate) fn coerce_to(
                 rust_type_name(&variant.0, def.loc)?
             ))
         }
-        // `bit`/`bool` в Lam принимает 0/1; в Rust это `false`/`true`.
+        // `bit`/`bool` в Takt принимает 0/1; в Rust это `false`/`true`.
         (TypeNode::Bit | TypeNode::Bool, ExpressionNode::Number(n)) => match n {
             0 => Ok("false".to_string()),
             1 => Ok("true".to_string()),

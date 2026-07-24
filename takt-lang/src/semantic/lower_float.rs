@@ -533,7 +533,7 @@ mod tests {
     use super::*;
     use crate::semantic::tree::construct_model;
 
-    /// Разбирает и строит модель из исходника Lam.
+    /// Разбирает и строит модель из исходника Takt.
     fn build(src: &str) -> Rc<RefCell<ModelNode>> {
         let (ast, _) = crate::parse(src, 0).expect("разбор");
         construct_model(&ast, None, &[]).expect("семантика")

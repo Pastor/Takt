@@ -1,4 +1,4 @@
-//! Отображение типов Lam ([`TypeNode`]) в типы IEC 61131-3.
+//! Отображение типов Takt ([`TypeNode`]) в типы IEC 61131-3.
 //!
 //! Задача 0041-02; нормативная таблица — [`analyze/0041-02`], решение — ADR 0041
 //! (вопрос 2, Option B с откатом Option C для перечислений).
@@ -37,7 +37,7 @@ use crate::semantic::ModelNode;
 use crate::semantic::enum_facts;
 use crate::semantic::type_node::TypeNode;
 
-/// Отображает тип Lam в имя типа IEC 61131-3.
+/// Отображает тип Takt в имя типа IEC 61131-3.
 ///
 /// `model` нужен для разрешения именованных типов (`enum`/`struct`): имя ищется
 /// в модели и родительских (`search_enum`/`search_struct`).
@@ -54,7 +54,7 @@ use crate::semantic::type_node::TypeNode;
 /// `match`.
 pub(crate) fn get_st_type(typ: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic> {
     match typ {
-        // T1, T2. В Lam `bit` и `bool` — разные узлы, в IEC оба суть `BOOL`.
+        // T1, T2. В Takt `bit` и `bool` — разные узлы, в IEC оба суть `BOOL`.
         // Различие теряется безвредно: обратного преобразования нет, семантика
         // (1 бит) совпадает. Цель `c` здесь даёт `int` — дефект Д2 фичи 0029.
         TypeNode::Bit | TypeNode::Bool => Ok("BOOL".to_string()),
@@ -144,7 +144,7 @@ fn unmapped(shown: &str, why: &str) -> Diagnostic {
     .with_code("ST-002")
 }
 
-/// T3..T10: целые Lam → целые IEC.
+/// T3..T10: целые Takt → целые IEC.
 ///
 /// ⚠ `INT` в IEC — **16-битный** знаковый, а не 32-битный, как в C.
 fn integer_type(bits: u8, signed: bool) -> Result<String, Diagnostic> {
@@ -172,7 +172,7 @@ fn integer_type(bits: u8, signed: bool) -> Result<String, Diagnostic> {
 ///
 /// Уплощение — не стилистика: `iec2c` **отвергает** `ARRAY OF ARRAY`
 /// (`invalid item data type in array specification`), но принимает многомерную
-/// форму. Порядок размерностей — от внешней к внутренней, как в индексации Lam:
+/// форму. Порядок размерностей — от внешней к внутренней, как в индексации Takt:
 /// `[[u8; 2]; 3]` = `Array(3, Array(2, u8))` → `ARRAY [0..2, 0..1] OF USINT`.
 fn array_type(typ: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic> {
     let mut dims: Vec<String> = Vec::new();
@@ -202,7 +202,7 @@ fn array_type(typ: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic> {
 ///
 /// **Почему не перечислимый `TYPE`.** Проба П4 (0041-06): MatIEC отвергает
 /// `TYPE F : (A := 80); END_TYPE` — явные значения вариантов появились в 3-й
-/// редакции IEC 61131-3. Перечисления Lam значения **имеют**
+/// редакции IEC 61131-3. Перечисления Takt значения **имеют**
 /// (`enum Floor { Bottom = 80, Top }`), поэтому прямое отображение непригодно.
 ///
 /// **Почему разрядность считается, а не берётся `USINT`.** ADR (Option C)
@@ -349,7 +349,7 @@ mod tests {
     /// Форма продиктована фактом, а не вкусом: `iec2c` отвергает
     /// `ARRAY [0..2] OF ARRAY [0..1] OF USINT` («invalid item data type in array
     /// specification»), но принимает `ARRAY [0..2, 0..1] OF USINT`. Порядок
-    /// размерностей — внешняя первой, как в индексации Lam.
+    /// размерностей — внешняя первой, как в индексации Takt.
     #[test]
     fn test_get_st_type_nested_array_is_flattened_to_multidim() {
         let inner = TypeNode::Array(

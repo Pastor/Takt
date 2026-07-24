@@ -1,4 +1,4 @@
-//! Трансляция **условий** Lam в Rust (`print_condition` и спутники).
+//! Трансляция **условий** Takt в Rust (`print_condition` и спутники).
 //!
 //! Вынесено из `rust_expr.rs` (фича 0088 — лимит размера модуля, ADR 0088):
 //! чистое перемещение, вывод байт-в-байт неизменен. Печатник условий отделён от
@@ -14,7 +14,7 @@ use crate::generator::rust::rust_name::{rust_type_name, rust_value_name};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionNode, FunctionDefinitionNode};
 
-/// Транслирует условие Lam в выражение `bool` Rust.
+/// Транслирует условие Takt в выражение `bool` Rust.
 ///
 /// # Ошибки
 /// [`RS-011`] на непереводимой конструкции.
@@ -48,7 +48,7 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::Add(a, b) => cond_binary(a, "+", b, scope),
         ConditionNode::Subtract(a, b) => cond_binary(a, "-", b, scope),
 
-        // `&`/`|` в условии Lam — побитовые (как в C). На `bool` в Rust они
+        // `&`/`|` в условии Takt — побитовые (как в C). На `bool` в Rust они
         // определены и дают `bool`, поэтому трансляция один в один законна и
         // для булевых операндов, и для целых.
         ConditionNode::And(a, b) => cond_bool_binary(a, "&", b, scope),
@@ -214,7 +214,7 @@ fn cond_binary(
 
 /// Печатает `&`/`|`, приводя операнды к `bool`.
 ///
-/// Операнд-порт (`ElevatorMotor_SensorU`) в Lam используется как условие
+/// Операнд-порт (`ElevatorMotor_SensorU`) в Takt используется как условие
 /// напрямую; в Rust `bool & bool` законно, но `u8 & bool` — нет.
 fn cond_bool_binary(
     a: &ConditionNode,

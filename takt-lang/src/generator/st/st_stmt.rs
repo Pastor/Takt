@@ -1,11 +1,11 @@
-//! Печать операторов Lam ([`StatementNode`]) в Structured Text (IEC 61131-3).
+//! Печать операторов Takt ([`StatementNode`]) в Structured Text (IEC 61131-3).
 //!
 //! Задача 0041-04, часть 2. Дополняет `st_expr.rs` (часть 1: выражения и
 //! условия). Функции (`FUNCTION`/`RETURN`, `extern fn`) — часть 3.
 //!
 //! ## Подъём объявлений (главное отличие от C)
 //!
-//! В Lam переменная объявляется по месту: `enter { var boost: u8 := 5; … }`
+//! В Takt переменная объявляется по месту: `enter { var boost: u8 := 5; … }`
 //! (`comprehensive.lam:58`). В IEC 61131-3 объявления живут **только в шапке
 //! POU**, а не в теле. Поэтому [`print_statement`] **поднимает** объявление в
 //! [`Hoisted`], а на его месте оставляет присваивание инициализатора.
@@ -21,7 +21,7 @@
 //!
 //! ## Циклы
 //!
-//! `loop`/`while` Lam → `WHILE … DO … END_WHILE;`. `for` Lam — **си-образный**
+//! `loop`/`while` Takt → `WHILE … DO … END_WHILE;`. `for` Takt — **си-образный**
 //! (`init; cond; step`), а `FOR` в IEC — **счётный** (`FOR i := 0 TO 3 BY 1`), то
 //! есть прямого соответствия нет: си-образный `for` разворачивается в `WHILE` с
 //! шагом в конце тела.
@@ -52,7 +52,7 @@ pub(crate) struct StmtOutput {
     pub warnings: Vec<Diagnostic>,
 }
 
-/// Печатает оператор Lam в текст ST.
+/// Печатает оператор Takt в текст ST.
 ///
 /// Объявления переменных **поднимаются** в `out.hoisted` (см. шапку модуля), а
 /// на их месте печатается присваивание инициализатора.
@@ -77,7 +77,7 @@ pub(crate) fn print_statement(
             Ok(())
         }
         // Голый вызов функции оператором быть НЕ МОЖЕТ: «Function invocation in
-        // ST code is not allowed outside an expression». Lam так вызывает
+        // ST code is not allowed outside an expression». Takt так вызывает
         // (`log_temp(temperature);`, `motor_up();`), поэтому результат уходит в
         // переменную-приёмник, которую вызывающий объявит в шапке POU.
         StatementNode::Expression(expr) => {
@@ -189,7 +189,7 @@ pub(crate) fn print_statement(
             Ok(())
         }
         // `match` → цепочка `IF/ELSIF`, а НЕ `CASE OF`. Причина: метки `CASE` в
-        // IEC — литералы и диапазоны, а образцы Lam могут быть произвольными
+        // IEC — литералы и диапазоны, а образцы Takt могут быть произвольными
         // выражениями (включая варианты перечислений, которые у нас стали
         // именованными константами, а не литералами). Цепочка сравнений
         // семантически тождественна и заведомо выразима.
@@ -219,9 +219,9 @@ pub(crate) fn print_statement(
     }
 }
 
-/// Печатает си-образный `for` Lam как `WHILE` со счётчиком.
+/// Печатает си-образный `for` Takt как `WHILE` со счётчиком.
 ///
-/// `FOR` в IEC — **счётный** (`FOR i := 0 TO 3 BY 1 DO`), а `for` Lam несёт
+/// `FOR` в IEC — **счётный** (`FOR i := 0 TO 3 BY 1 DO`), а `for` Takt несёт
 /// произвольные `cond` и `step`, поэтому прямого соответствия нет.
 ///
 /// # Ошибки
@@ -241,7 +241,7 @@ fn print_for(
 ) -> Result<(), Diagnostic> {
     if step.is_some() && contains_continue(body) {
         return Err(unsupported(
-            "continue внутри for с шагом: в Lam шаг выполняется и после continue, \
+            "continue внутри for с шагом: в Takt шаг выполняется и после continue, \
              а в WHILE-развёртке ST — нет; тождественной развёртки не существует",
         ));
     }
@@ -548,7 +548,7 @@ mod tests {
     }
 
     /// `match` → цепочка `IF/ELSIF/ELSE`, а не `CASE`: метки `CASE` в IEC —
-    /// литералы, а образцы Lam могут быть выражениями.
+    /// литералы, а образцы Takt могут быть выражениями.
     #[test]
     fn test_match_becomes_if_elsif_chain() {
         let (st, _) = always_of("match n { 1 => { m := 1; } 2 => { m := 2; } _ => { m := 0; } }");
@@ -567,7 +567,7 @@ mod tests {
 
     /// `continue` внутри `for` с шагом — отказ, а не тихое расхождение.
     ///
-    /// В Lam шаг выполняется и после `continue`; в `WHILE`-развёртке — нет.
+    /// В Takt шаг выполняется и после `continue`; в `WHILE`-развёртке — нет.
     /// Тождественной развёртки не существует, поэтому `ST-011`.
     #[test]
     fn test_continue_inside_for_with_step_is_rejected_not_silently_wrong() {

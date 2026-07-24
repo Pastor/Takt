@@ -1,4 +1,4 @@
-//! Генератор диаграмм состояний PlantUML из семантического дерева Lam.
+//! Генератор диаграмм состояний PlantUML из семантического дерева Takt.
 //!
 //! Модуль транслирует семантическое дерево [`ModelNode`] в файл `.puml`
 //! с диаграммой состояний в формате PlantUML.
@@ -22,7 +22,7 @@ use puml_map::PumlMap;
 use std::fs;
 use std::path::Path;
 
-/// Генератор PlantUML-диаграмм для модели Lam.
+/// Генератор PlantUML-диаграмм для модели Takt.
 pub struct Generator {}
 
 impl AsGenerator for Generator {

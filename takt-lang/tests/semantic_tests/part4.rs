@@ -6,7 +6,7 @@ use super::*;
 
 /// Безусловный переход (`ref B`) оставляет `Condition::None`.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// start A { ref B; }
 /// state B;
@@ -27,7 +27,7 @@ fn ref_no_cond_is_none() {
 
 /// Булев литерал `true` в ref разрешается в `Condition::Bool(true)`.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// start A { ref B: true; }
 /// state B;
@@ -47,7 +47,7 @@ fn ref_cond_bool_literal_is_resolved() {
 
 /// Сравнение в ref разрешается в `Condition::Equal`.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// var x: [bit;8] = 0;
 /// start A { ref B: x = 255; }
@@ -72,7 +72,7 @@ fn ref_cond_comparison_is_resolved() {
 
 /// Контрпример: арифметика в ref-условии даёт предупреждение «арифметическое вычитание».
 ///
-/// # Контрпример (Lam)
+/// # Контрпример (Takt)
 /// ```but
 /// var x: [bit;8] = 0;
 /// start A { ref B: x - 1; }
@@ -94,7 +94,7 @@ fn se11_subtract_in_ref_gives_warning() {
 
 /// Контрпример: побитовое И в ref-условии даёт предупреждение «побитовое И».
 ///
-/// # Контрпример (Lam)
+/// # Контрпример (Takt)
 /// ```but
 /// var x: [bit;8] = 0;
 /// start A { ref B: x & 1; }
@@ -120,7 +120,7 @@ fn se11_bitwise_and_in_ref_gives_warning() {
 
 /// Контрпример: числовой литерал в ref-условии даёт предупреждение с указанием числа.
 ///
-/// # Контрпример (Lam)
+/// # Контрпример (Takt)
 /// ```but
 /// start A { ref B: 42; }
 /// state B;
@@ -185,7 +185,7 @@ fn ref_cond_arithmetic_file_gives_warning() {
 /// Тест использует `Rc` напрямую (не `.take()`), чтобы родительская
 /// модель оставалась живой и Weak-ссылка могла быть разыменована.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// var flag: bit = false;
 /// ```
@@ -224,7 +224,7 @@ fn const_node_has_parent_upper() {
 
 /// Именованное условие хранит ссылку на родительскую модель.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// cond done = true;
 /// ```
@@ -243,7 +243,7 @@ fn condition_node_has_parent_upper() {
 
 /// Вложенная переменная ссылается на свою (вложенную) модель, не на корень.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// model Inner { var x: bit = false; start S; }
 /// ```
@@ -290,7 +290,7 @@ fn variable_node_name_and_ty_methods() {
 
 /// `tests/data/semantic/valid/local_var_in_block.lam` — var внутри always — без ошибок.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// var flag: bit = false;
 /// start Running {
@@ -308,7 +308,7 @@ fn example_local_var_in_block_is_valid() {
 
 /// `tests/data/semantic/valid/local_var_in_for.lam` — var в инициализаторе for — без ошибок.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// var result: bit = false;
 /// start S {
@@ -324,7 +324,7 @@ fn example_local_var_in_for_is_valid() {
 
 /// `tests/data/semantic/valid/local_var_nested.lam` — вложенные блоки с затенением — без ошибок.
 ///
-/// # Пример (Lam)
+/// # Пример (Takt)
 /// ```but
 /// var x: bit = true;
 /// start S {

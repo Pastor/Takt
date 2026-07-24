@@ -248,7 +248,7 @@ pub(crate) fn exec_statement(
         }
         StatementNode::Break => Ok(Flow::Break),
         StatementNode::Continue => Ok(Flow::Continue),
-        // 0044: `assert` языка Lam (`: c;` / `: [Guard] c;`) в точке записи —
+        // 0044: `assert` языка Takt (`: c;` / `: [Guard] c;`) в точке записи —
         // как в порождённом C (`assert()`, эталон c_expr.rs:1693). Нарушение →
         // `Err(SIM-025)` → доходит до `TickResult::Failed` (R13/R14). Ошибка
         // вычисления самого условия → существующий `SIM-0xx` (R15). LTL — статика,
