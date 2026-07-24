@@ -1,5 +1,5 @@
 // ─── Настройки документа ─────────────────────────────────────────────────────
-#set document(title: "Lam — Язык описания автоматных моделей", author: "")
+#set document(title: "Takt — Язык описания автоматных моделей", author: "")
 #set page(
     paper: "a4",
     margin: (top: 2.5cm, bottom: 2.5cm, left: 2.5cm, right: 2cm),
@@ -47,12 +47,12 @@
 
 // ─── Заголовок ────────────────────────────────────────────────────────────────
 #align(center)[
-    #text(size: 20pt, weight: "bold")[Lam --- Язык описания автоматных моделей]
+    #text(size: 20pt, weight: "bold")[Takt --- Язык описания автоматных моделей]
     #v(4pt)
-    #text(size: 12pt, style: "italic")[(Language of Automata Models)]
+    #text(size: 12pt, style: "italic")[(Typed, Automata, Known Timing)]
     #v(6pt)
     #text(size: 11pt)[
-        *Lam* (Language of Automata Models) --- предметно-ориентированный язык (DSL)
+        *Takt* (Typed, Automata, Known Timing) --- предметно-ориентированный язык (DSL)
         для моделирования конечных автоматов (FSM) и компонентных систем.
         Компилятор реализован на Rust.
     ]
@@ -79,7 +79,7 @@
 - *Исследователей и инженеров* в области верификации, желающих описывать поведение систем
   на высоком уровне абстракции.
 - *Опытных разработчиков* (C/C++/Rust), знакомых с понятиями FSM, которые хотят изучить
-  синтаксис и семантику Lam.
+  синтаксис и семантику Takt.
 
 == Соглашения по нотации
 
@@ -93,7 +93,7 @@
     [`a | b`], [Альтернатива],
 )
 
-Полная грамматика в формате ISO EBNF --- в файле `Lam.ebnf`.
+Полная грамматика в формате ISO EBNF --- в файле `Takt.ebnf`.
 
 == Привет, мир!
 
@@ -110,8 +110,8 @@ start Main = Hello;
 Запустить компилятор:
 
 ```sh
-cargo build --release --bin lamc
-./target/release/lamc compile --target c hello.lam -o out/
+cargo build --release --bin taktc
+./target/release/taktc compile --target c hello.takt -o out/
 ```
 
 В `out/` появятся `hello.h` и `hello.c`.
@@ -130,7 +130,7 @@ cargo build --release --bin lamc
 
 == Решение
 
-Lam предлагает:
+Takt предлагает:
 
 - *Декларативный синтаксис* для FSM вместо `switch-case` на C.
 - *Компиляцию в C*: сгенерированный код оптимален и пригоден для встраиваемых систем.
@@ -139,7 +139,7 @@ Lam предлагает:
 
 == Парадигма
 
-Lam --- *декларативный, ориентированный на состояния* язык:
+Takt --- *декларативный, ориентированный на состояния* язык:
 
 - *Модели* (`model`) --- основные строительные блоки; каждая модель --- один FSM.
 - *Состояния* (`start`, `state`) --- узлы автомата; логика выполняется в их блоках.
@@ -161,7 +161,7 @@ Lam --- *декларативный, ориентированный на сос�
 
 #table(
     columns: (1fr, 1fr, 1fr),
-    table.header([Концепция], [C (switch-case)], [Lam]),
+    table.header([Концепция], [C (switch-case)], [Takt]),
     [Состояние], [`enum` + переменная], [`state`/`start`],
     [Переход], [`case` с `goto`], [`ref Цель: условие;`],
     [Вход в состояние], [ручная флаг-переменная], [`enter { ... }`],
@@ -196,12 +196,12 @@ Lam --- *декларативный, ориентированный на сос�
 
 == Структура программы
 
-Программа Lam --- последовательность *элементов верхнего уровня*:
+Программа Takt --- последовательность *элементов верхнего уровня*:
 
 #table(
     columns: (auto, 1fr),
     table.header([Конструкция], [Описание]),
-    [`import "file.lam";`], [Импорт другого файла],
+    [`import "file.takt";`], [Импорт другого файла],
     [`type T = ...;`], [Псевдоним типа],
     [`var x: T = v;`], [Глобальная переменная],
     [`const C: T = v;`], [Константа],
@@ -302,7 +302,7 @@ true    false
 
 == Система типов
 
-Lam использует *статическую строгую типизацию* с *выводом типов* из инициализаторов.
+Takt использует *статическую строгую типизацию* с *выводом типов* из инициализаторов.
 
 #table(
     columns: (auto, auto, 1fr),
@@ -359,11 +359,11 @@ extern fn hal_uart_send(data: u8); // внешняя функция
 == Импорт
 
 ```lam
-import "shared.lam";
-import "engine.lam" as Motor;
-import * as Utils from "lib.lam";
-import { TrafficLight, u8 } from "common.lam";
-import { OldName as NewName } from "types.lam";
+import "shared.takt";
+import "engine.takt" as Motor;
+import * as Utils from "lib.takt";
+import { TrafficLight, u8 } from "common.takt";
+import { OldName as NewName } from "types.takt";
 ```
 
 == Краткая грамматика EBNF
@@ -403,7 +403,7 @@ state_element
 
 == Два значения оператора `=`
 
-В Lam оператор `=` имеет *разный смысл* в зависимости от контекста:
+В Takt оператор `=` имеет *разный смысл* в зависимости от контекста:
 
 #table(
     columns: (1fr, auto, auto),
@@ -758,7 +758,7 @@ start System = (Init + Startup) + (Run | Halt);
 == Конвейер компиляции
 
 ```
-Исходный файл (.lam)
+Исходный файл (.takt)
         │
         ▼
 ┌─────────────────┐
@@ -797,7 +797,7 @@ start System = (Init + Startup) + (Run | Halt);
 
 ```sh
 # Компиляция в C
-lamc compile --target c input.lam -o output/
+taktc compile --target c input.takt -o output/
 
 # Результат:
 # output/input.h  — заголовочный файл
@@ -854,8 +854,8 @@ extern fn hal_gpio_set(pin: u8, val: bit);
 == LSP-сервер
 
 ```sh
-cargo build --release --features lsp --bin lam-lsp
-cargo install --path grammar --bin lam-lsp --features lsp
+cargo build --release --features lsp --bin takt-lsp
+cargo install --path grammar --bin takt-lsp --features lsp
 ```
 
 Поддерживаемые возможности: диагностика, hover, автодополнение, Go to Declaration.
@@ -865,8 +865,8 @@ cargo install --path grammar --bin lam-lsp --features lsp
 ```json
 {
   "lsp": {
-    "lam-lsp": {
-      "binary": { "path": "lam-lsp" }
+    "takt-lsp": {
+      "binary": { "path": "takt-lsp" }
     }
   }
 }
@@ -886,8 +886,8 @@ cargo test --features lsp    // включая LSP-тесты
 
 == Стратегия тестирования
 
-- `.lam`-файлы в `tests/data/valid/` --- должны компилироваться без ошибок.
-- `.lam`-файлы в `tests/data/invalid/` --- должны производить ожидаемую диагностику.
+- `.takt`-файлы в `tests/data/valid/` --- должны компилироваться без ошибок.
+- `.takt`-файлы в `tests/data/invalid/` --- должны производить ожидаемую диагностику.
 
 == Виды тестов
 
@@ -908,8 +908,8 @@ cargo test --features lsp    // включая LSP-тесты
 ```sh
 git clone https://github.com/your-org/BuT.git
 cd BuT
-cargo build --release --bin lamc
-cargo install --path grammar --bin lamc
+cargo build --release --bin taktc
+cargo install --path grammar --bin taktc
 ```
 
 #hline
@@ -923,7 +923,7 @@ cargo install --path grammar --bin lamc
 
 == Композиция моделей
 
-Lam поддерживает два вида сборки систем:
+Takt поддерживает два вида сборки систем:
 
 ```lam
 // Последовательная: Init → Startup
@@ -959,7 +959,7 @@ LTL-аннотации прямо в элементах:
 
 ```
 BuT/
-├── grammar/src/
+├── takt-lang/src/
 │   ├── parser/
 │   │   ├── lexer.rs          — лексический анализатор
 │   │   └── ast.rs            — узлы AST
@@ -975,22 +975,22 @@ BuT/
 │   │   ├── c_expr.rs         — генерация выражений
 │   │   └── c_map.rs          — маппинг модели
 │   └── bin/
-│       ├── lamc.rs           — CLI-компилятор
-│       └── lam_lsp.rs        — LSP-сервер
-├── examples/                 — примеры .lam + сгенерированный C
+│       ├── taktc.rs           — CLI-компилятор
+│       └── takt_lsp.rs        — LSP-сервер
+├── examples/                 — примеры .takt + сгенерированный C
 ├── extensions/zed-lam/       — расширение для Zed (v0.1.1)
 ├── doc/                      — документация
-└── Lam.ebnf                  — полная грамматика EBNF
+└── Takt.ebnf                  — полная грамматика EBNF
 ```
 
 == Расширение языка
 
-Добавить новую конструкцию в Lam:
+Добавить новую конструкцию в Takt:
 
-+ Расширить грамматику в `grammar/src/grammar.lalrpop` и `lexer.rs`.
++ Расширить грамматику в `takt-lang/src/grammar.lalrpop` и `lexer.rs`.
 + Добавить узел AST в `ast.rs`.
 + Реализовать семантический проход в `semantic/tree.rs`.
 + При необходимости --- расширить кодогенератор в `generator/c/`.
 + Добавить тесты в `tests/data/valid/` и `tests/data/invalid/`.
 
-Полная грамматика --- в файле `Lam.ebnf`.
+Полная грамматика --- в файле `Takt.ebnf`.

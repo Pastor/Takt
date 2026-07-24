@@ -13,7 +13,7 @@ import com.redhat.devtools.lsp4ij.server.StreamConnectionProvider
  * (`takt-lsp4ij.xml`) и сопоставляется языку Takt через `languageMapping`. Поднимает
  * готовый сервер `takt-lsp` (фича 0011) по stdio — семантическую подсветку,
  * форматирование, hover и пр. отдаёт он, дублирования семантики на Kotlin нет
- * (единый источник — крейт `grammar`, драйвер 2 ADR).
+ * (единый источник — крейт `takt-lang`, драйвер 2 ADR).
  *
  * Реализуется только обязательный [createConnectionProvider]; `createLanguageClient`
  * и `getServerInterface` берутся из умолчаний LSP4IJ (стандартный клиент,

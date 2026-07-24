@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Предкоммит-проверка: ссылки в Markdown + fmt + check + clippy + test +
 # формат примеров (taktc fmt --check) +
-# генерация C/PlantUML/ST/Rust/SV из примеров Lam + гейт воспроизводимости
+# генерация C/PlantUML/ST/Rust/SV из примеров Takt + гейт воспроизводимости
 # (фича 0048) + сборка сгенерированного кода (C — cmake/ninja, Rust — cargo +
 # прогон проверок по моделям, SV — verilator + yosys).
 # Запускать из любого каталога.
@@ -153,7 +153,7 @@ sv_float_flags() {  # $1 = имя примера
   esac
 }
 
-echo "Генерация C-кода из примеров Lam..."
+echo "Генерация C-кода из примеров Takt..."
 for lam_file in examples/*.takt; do
   name="$(basename "$lam_file" .takt)"
   echo "  $lam_file → $C_OUTPUT/${name}.c / ${name}.h"
