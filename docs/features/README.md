@@ -134,3 +134,4 @@
 | [0119](./0119-book-appendices.md) | Приложения документа + приложение «Ошибки» | [ADR](../adr/0119-book-appendices.md) · [анализ](../analyze/0119-book-appendices.md) | ГОТОВО |
 | [0120](./0120-book-error-notes.md) | Заметки о возможных ошибках в разделах документа | [ADR](../adr/0120-book-error-notes.md) · [анализ](../analyze/0120-book-error-notes.md) | ГОТОВО |
 | [0121](./0121-book-example-walkthrough.md) | Разбор примеров в разделах с упором на тему | [ADR](../adr/0121-book-example-walkthrough.md) · [анализ](../analyze/0121-book-example-walkthrough.md) | ГОТОВО |
+| [0122](./0122-book-pdf-latexmk.md) | Сборка PDF через latexmk (корректные кросс-ссылки) + Makefile | [ADR](../adr/0122-book-pdf-latexmk.md) · [анализ](../analyze/0122-book-pdf-latexmk.md) | ГОТОВО |

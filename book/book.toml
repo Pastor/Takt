@@ -14,7 +14,12 @@ description = "Справочное описание языка Takt (Typed, Aut
 [output.pandoc.profile.pdf]
 output-file = "takt-language.pdf"
 to = "pdf"
-pdf-engine = "xelatex"
+# Движок сборки — latexmk поверх xelatex: latexmk сам гоняет xelatex до сходимости
+# перекрёстных ссылок (ToC, кросс-главные ссылки на приложения), в отличие от
+# одиночного вызова xelatex. Так `make build` формирует корректные ссылки без
+# ручных повторных проходов.
+pdf-engine = "latexmk"
+pdf-engine-opts = ["-xelatex", "-interaction=nonstopmode"]
 # Подсветка синтаксиса Takt: KDE/kate-определение подключается в skylighting
 # (движок pandoc). Блоки ```takt подсвечиваются согласно takt.kate.xml. Путь —
 # относительно каталога book/ (откуда mdbook-pandoc запускает pandoc).
