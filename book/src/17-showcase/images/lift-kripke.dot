@@ -1,15 +1,17 @@
 digraph Kripke {
   rankdir=LR;
-  node [shape=circle, fontname="monospace"];
-  edge [fontname="monospace"];
+  fontname="GOST 2.304-81";
+  fontsize=10;
+  node [shape=circle, fixedsize=true, width=0.7, height=0.7, fontsize=12, fontname="GOST 2.304-81"];
+  edge [fontname="GOST 2.304-81"];
   __start [shape=point, width=0.12];
   __start -> k5;
-  k0 [label="Boarding"];
-  k1 [label="GoingDown"];
-  k2 [label="GoingUp"];
-  k3 [label="Leaving"];
-  k4 [label="Stopping"];
-  k5 [label="Waiting"];
+  k0 [label="S₁"];
+  k1 [label="S₂"];
+  k2 [label="S₃"];
+  k3 [label="S₄"];
+  k4 [label="S₅"];
+  k5 [label="S₆"];
   k0 -> k0;
   k0 -> k3;
   k1 -> k1;
@@ -22,4 +24,7 @@ digraph Kripke {
   k5 -> k1;
   k5 -> k2;
   k5 -> k5;
+  label="S₁ — Boarding\lS₂ — GoingDown\lS₃ — GoingUp\lS₄ — Leaving\lS₅ — Stopping\lS₆ — Waiting\l";
+  labelloc="b";
+  labeljust="l";
 }

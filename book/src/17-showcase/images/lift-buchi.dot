@@ -1,9 +1,14 @@
 digraph Buchi {
   rankdir=LR;
-  node [shape=circle, fontname="monospace"];
-  edge [fontname="monospace"];
-  s0 [shape=doublecircle, label="s0\n{!Boarding}"];
+  fontname="GOST 2.304-81";
+  fontsize=10;
+  node [shape=circle, fixedsize=true, width=0.7, height=0.7, fontsize=12, fontname="GOST 2.304-81"];
+  edge [fontname="GOST 2.304-81"];
+  s0 [shape=doublecircle, label="S₁"];
   __start0 [shape=point, width=0.12];
   __start0 -> s0;
   s0 -> s0;
+  label="S₁ — {!Boarding}\l";
+  labelloc="b";
+  labeljust="l";
 }

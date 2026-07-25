@@ -1,11 +1,13 @@
 digraph Product {
   rankdir=LR;
-  node [shape=circle, fontname="monospace"];
-  edge [fontname="monospace"];
-  p0 [shape=doublecircle, label="Waiting,q0"];
-  p1 [shape=doublecircle, label="GoingDown,q0"];
-  p2 [shape=doublecircle, label="GoingUp,q0"];
-  p3 [shape=doublecircle, label="Stopping,q0"];
+  fontname="GOST 2.304-81";
+  fontsize=10;
+  node [shape=circle, fixedsize=true, width=0.7, height=0.7, fontsize=12, fontname="GOST 2.304-81"];
+  edge [fontname="GOST 2.304-81"];
+  p0 [shape=doublecircle, label="S₁"];
+  p1 [shape=doublecircle, label="S₂"];
+  p2 [shape=doublecircle, label="S₃"];
+  p3 [shape=doublecircle, label="S₄"];
   __start0 [shape=point, width=0.12];
   __start0 -> p0;
   p0 -> p0;
@@ -15,4 +17,7 @@ digraph Product {
   p1 -> p3;
   p2 -> p2;
   p2 -> p3;
+  label="S₁ — Waiting, q0\lS₂ — GoingDown, q0\lS₃ — GoingUp, q0\lS₄ — Stopping, q0\l";
+  labelloc="b";
+  labeljust="l";
 }
