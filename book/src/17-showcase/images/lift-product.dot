@@ -3,7 +3,7 @@ digraph Product {
   fontname="GOST 2.304-81";
   fontsize=10;
   node [shape=circle, fixedsize=true, width=0.5, height=0.5, fontsize=12, fontname="GOST 2.304-81"];
-  edge [arrowsize=0.7, fontname="GOST 2.304-81"];
+  edge [arrowsize=0.5, fontname="GOST 2.304-81"];
   p0 [shape=doublecircle, label="S₁"];
   p1 [shape=doublecircle, label="S₂"];
   p2 [shape=doublecircle, label="S₃"];
