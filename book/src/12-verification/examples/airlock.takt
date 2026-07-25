@@ -1,0 +1,31 @@
+// Шлюз (воздушный тамбур): две двери, которые никогда не открыты одновременно.
+// По запросу цикла шлюз впускает через внешнюю дверь, затем — через внутреннюю.
+in  cycle: bit;          // запрос цикла шлюзования
+out outer: bit;          // внешняя дверь (1 — открыта)
+out inner: bit;          // внутренняя дверь
+
+var od: bit := 0;        // состояние внешней двери
+var id: bit := 0;        // внутренней
+
+// (1) Инвариант безопасности: обе двери никогда не открыты разом — на каждом такте.
+invariant Interlock = od = 0 | id = 0;
+
+start Sealed {
+    enter { outer := 0; inner := 0; od := 0; id := 0; }
+    ref OuterOpen: cycle = 1;
+}
+
+state OuterOpen {
+    enter { outer := 1; od := 1; }     // (2) открыта только внешняя
+    ref Transfer: cycle = 0;
+}
+
+state Transfer {
+    enter { outer := 0; od := 0; }     // внешняя закрыта — тамбур герметичен
+    ref InnerOpen: cycle = 1;
+}
+
+state InnerOpen {
+    enter { inner := 1; id := 1; }     // (2) открыта только внутренняя
+    ref Sealed: cycle = 0;
+}
