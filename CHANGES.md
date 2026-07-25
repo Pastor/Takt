@@ -18,9 +18,10 @@
   (`book/scripts/svg_flatten_text.py`, `fontTools`) — наклонный ГОСТ виден в любом
   просмотрщике и в PDF без установленного шрифта. Регенерация —
   `book/scripts/render_verify_graphs.sh`.
-- `book/Makefile`: цель `fonts` (best-effort авто-установка свободного шрифта ГОСТ
-  из релиза Metrolog/Font.GOST2.304-81) — нужна лишь для регенерации графов, сборку
-  не валит.
+- `book/Makefile`: цель `graphs` (авто-регенерация SVG-графов `taktc → dot →
+  флаттеринг` перед сборкой — ручной шаг устранён) и `fonts` (best-effort
+  авто-установка свободного шрифта ГОСТ из релиза Metrolog/Font.GOST2.304-81); обе
+  best-effort — при нехватке инструментов берутся закоммиченные SVG, сборка не валится.
 - **Поля документа — 1.5 см** (`book/book.toml`: `geometry = ["margin=1.5cm"]`).
 
 ### Добавлено ([0110](docs/features/0110-book-named.md) — раздел документа «Именованные условия и блоки»)
