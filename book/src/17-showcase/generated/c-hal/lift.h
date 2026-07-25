@@ -67,9 +67,53 @@ static const Lift_PortBinding Lift_Out_NumericPort__ADDR[] = {
     [LIFT_DISPLAY] = { (uintptr_t)0x50000014u, -1, 1 },
 };
 
-static void Lift_default_write_bit(Lift_Out_BitPort p, bool val, void *userdata) { (void)userdata; Lift_PortBinding b = Lift_Out_BitPort__ADDR[p]; int s = b.bit < 0 ? 0 : b.bit; switch (b.width) { case 2: { volatile uint16_t *r = (volatile uint16_t*)b.addr; uint16_t m = (uint16_t)((uint16_t)1u << s); if (val) *r |= m; else *r &= (uint16_t)~m; } break; case 4: { volatile uint32_t *r = (volatile uint32_t*)b.addr; uint32_t m = (uint32_t)1u << s; if (val) *r |= m; else *r &= ~m; } break; case 8: { volatile uint64_t *r = (volatile uint64_t*)b.addr; uint64_t m = (uint64_t)1u << s; if (val) *r |= m; else *r &= ~m; } break; default: { volatile uint8_t *r = (volatile uint8_t*)b.addr; uint8_t m = (uint8_t)((uint8_t)1u << s); if (val) *r |= m; else *r &= (uint8_t)~m; } break; } }
-static int64_t Lift_default_read_numeric(Lift_In_NumericPort p, void *userdata) { (void)userdata; Lift_PortBinding b = Lift_In_NumericPort__ADDR[p]; switch (b.width) { case 1: return (int64_t)*(volatile uint8_t*)b.addr; case 2: return (int64_t)*(volatile uint16_t*)b.addr; case 8: return (int64_t)*(volatile uint64_t*)b.addr; default: return (int64_t)*(volatile uint32_t*)b.addr; } }
-static void Lift_default_write_numeric(Lift_Out_NumericPort p, int64_t val, void *userdata) { (void)userdata; Lift_PortBinding b = Lift_Out_NumericPort__ADDR[p]; switch (b.width) { case 1: *(volatile uint8_t*)b.addr = (uint8_t)val; break; case 2: *(volatile uint16_t*)b.addr = (uint16_t)val; break; case 8: *(volatile uint64_t*)b.addr = (uint64_t)val; break; default: *(volatile uint32_t*)b.addr = (uint32_t)val; break; } }
+static void Lift_default_write_bit(Lift_Out_BitPort p, bool val, void *userdata) {
+    (void)userdata;
+    Lift_PortBinding b = Lift_Out_BitPort__ADDR[p];
+    int s = b.bit < 0 ? 0 : b.bit;
+    switch (b.width) {
+        case 2: {
+            volatile uint16_t *r = (volatile uint16_t*)b.addr;
+            uint16_t m = (uint16_t)((uint16_t)1u << s);
+            if (val) *r |= m; else *r &= (uint16_t)~m;
+        } break;
+        case 4: {
+            volatile uint32_t *r = (volatile uint32_t*)b.addr;
+            uint32_t m = (uint32_t)1u << s;
+            if (val) *r |= m; else *r &= ~m;
+        } break;
+        case 8: {
+            volatile uint64_t *r = (volatile uint64_t*)b.addr;
+            uint64_t m = (uint64_t)1u << s;
+            if (val) *r |= m; else *r &= ~m;
+        } break;
+        default: {
+            volatile uint8_t *r = (volatile uint8_t*)b.addr;
+            uint8_t m = (uint8_t)((uint8_t)1u << s);
+            if (val) *r |= m; else *r &= (uint8_t)~m;
+        } break;
+    }
+}
+static int64_t Lift_default_read_numeric(Lift_In_NumericPort p, void *userdata) {
+    (void)userdata;
+    Lift_PortBinding b = Lift_In_NumericPort__ADDR[p];
+    switch (b.width) {
+        case 1: return (int64_t)*(volatile uint8_t*)b.addr;
+        case 2: return (int64_t)*(volatile uint16_t*)b.addr;
+        case 8: return (int64_t)*(volatile uint64_t*)b.addr;
+        default: return (int64_t)*(volatile uint32_t*)b.addr;
+    }
+}
+static void Lift_default_write_numeric(Lift_Out_NumericPort p, int64_t val, void *userdata) {
+    (void)userdata;
+    Lift_PortBinding b = Lift_Out_NumericPort__ADDR[p];
+    switch (b.width) {
+        case 1: *(volatile uint8_t*)b.addr = (uint8_t)val; break;
+        case 2: *(volatile uint16_t*)b.addr = (uint16_t)val; break;
+        case 8: *(volatile uint64_t*)b.addr = (uint64_t)val; break;
+        default: *(volatile uint32_t*)b.addr = (uint32_t)val; break;
+    }
+}
 
 static void Lift_bind_default_hal(Lift *m) {
     m->write_bit = Lift_default_write_bit;
