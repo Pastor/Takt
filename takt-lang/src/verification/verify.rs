@@ -32,11 +32,11 @@
 //!   (A4, правило 5 — честность результата).
 
 use crate::semantic::ModelNode;
-use crate::verification::buchi::{build_buchi, BuchiAutomaton};
+use crate::verification::buchi::{BuchiAutomaton, build_buchi};
 use crate::verification::check::emptiness;
-use crate::verification::kripke::{build_kripke, Kripke};
+use crate::verification::kripke::{Kripke, build_kripke};
 use crate::verification::ltl::Ltl;
-use crate::verification::product::{product, Product};
+use crate::verification::product::{Product, product};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 

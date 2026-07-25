@@ -1,0 +1,25 @@
+digraph Kripke {
+  rankdir=LR;
+  node [shape=circle, fontname="monospace"];
+  edge [fontname="monospace"];
+  __start [shape=point, width=0.12];
+  __start -> k5;
+  k0 [label="Boarding"];
+  k1 [label="GoingDown"];
+  k2 [label="GoingUp"];
+  k3 [label="Leaving"];
+  k4 [label="Stopping"];
+  k5 [label="Waiting"];
+  k0 -> k0;
+  k0 -> k3;
+  k1 -> k1;
+  k1 -> k4;
+  k2 -> k2;
+  k2 -> k4;
+  k3 -> k5;
+  k4 -> k0;
+  k5 -> k0;
+  k5 -> k1;
+  k5 -> k2;
+  k5 -> k5;
+}

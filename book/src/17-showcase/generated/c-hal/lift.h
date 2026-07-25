@@ -1,0 +1,78 @@
+#ifndef LIFT_H__
+#define LIFT_H__
+#include <stdint.h>
+#include <stdbool.h>
+
+typedef struct Lift Lift;
+
+typedef enum {
+    LIFT_BRAKE = 0,
+    LIFT_DOORS_OPEN = 1,
+    LIFT_MOTOR_DOWN = 2,
+    LIFT_MOTOR_UP = 3,
+} Lift_Out_BitPort;
+
+typedef enum {
+    LIFT_CALL = 0,
+} Lift_In_NumericPort;
+
+typedef enum {
+    LIFT_DISPLAY = 0,
+} Lift_Out_NumericPort;
+
+// NOTICE: Определение констант для модели lift (Lift)
+/* Model lift (Lift) */
+struct Lift {
+    // NOTICE: Определение переменных модели
+    uint8_t doors;
+    uint8_t dwell;
+    uint8_t floor;
+    uint8_t moving;
+    enum {
+        LIFT_INIT,
+        LIFT_BOARDING,
+        LIFT_GOING_DOWN,
+        LIFT_GOING_UP,
+        LIFT_LEAVING,
+        LIFT_STOPPING,
+        LIFT_WAITING,
+        LIFT_END
+    } state;
+    /// NOTICE: Функции портов ввода вывода
+    void  *userdata;
+    void  (*write_bit)(Lift_Out_BitPort port, bool val, void *userdata);
+    void    (*write_numeric)(Lift_Out_NumericPort port, int64_t val, void *userdata);
+    int64_t (*read_numeric )(Lift_In_NumericPort port, void *userdata);
+};
+
+void Lift_init(Lift *main);
+void Lift_tick(Lift *main);
+void Lift_reset(Lift *main);
+bool Lift_is_done(const Lift *main);
+
+/* 0020: карта адресов портов и дефолтный HAL */
+typedef struct { uintptr_t addr; int8_t bit; uint8_t width; } Lift_PortBinding;
+
+static const Lift_PortBinding Lift_Out_BitPort__ADDR[] = {
+    [LIFT_BRAKE] = { (uintptr_t)0x50000010u, 2, 1 },
+    [LIFT_DOORS_OPEN] = { (uintptr_t)0x50000010u, 3, 1 },
+    [LIFT_MOTOR_DOWN] = { (uintptr_t)0x50000010u, 1, 1 },
+    [LIFT_MOTOR_UP] = { (uintptr_t)0x50000010u, 0, 1 },
+};
+static const Lift_PortBinding Lift_In_NumericPort__ADDR[] = {
+    [LIFT_CALL] = { (uintptr_t)0x50000000u, -1, 1 },
+};
+static const Lift_PortBinding Lift_Out_NumericPort__ADDR[] = {
+    [LIFT_DISPLAY] = { (uintptr_t)0x50000014u, -1, 1 },
+};
+
+static void Lift_default_write_bit(Lift_Out_BitPort p, bool val, void *userdata) { (void)userdata; Lift_PortBinding b = Lift_Out_BitPort__ADDR[p]; int s = b.bit < 0 ? 0 : b.bit; switch (b.width) { case 2: { volatile uint16_t *r = (volatile uint16_t*)b.addr; uint16_t m = (uint16_t)((uint16_t)1u << s); if (val) *r |= m; else *r &= (uint16_t)~m; } break; case 4: { volatile uint32_t *r = (volatile uint32_t*)b.addr; uint32_t m = (uint32_t)1u << s; if (val) *r |= m; else *r &= ~m; } break; case 8: { volatile uint64_t *r = (volatile uint64_t*)b.addr; uint64_t m = (uint64_t)1u << s; if (val) *r |= m; else *r &= ~m; } break; default: { volatile uint8_t *r = (volatile uint8_t*)b.addr; uint8_t m = (uint8_t)((uint8_t)1u << s); if (val) *r |= m; else *r &= (uint8_t)~m; } break; } }
+static int64_t Lift_default_read_numeric(Lift_In_NumericPort p, void *userdata) { (void)userdata; Lift_PortBinding b = Lift_In_NumericPort__ADDR[p]; switch (b.width) { case 1: return (int64_t)*(volatile uint8_t*)b.addr; case 2: return (int64_t)*(volatile uint16_t*)b.addr; case 8: return (int64_t)*(volatile uint64_t*)b.addr; default: return (int64_t)*(volatile uint32_t*)b.addr; } }
+static void Lift_default_write_numeric(Lift_Out_NumericPort p, int64_t val, void *userdata) { (void)userdata; Lift_PortBinding b = Lift_Out_NumericPort__ADDR[p]; switch (b.width) { case 1: *(volatile uint8_t*)b.addr = (uint8_t)val; break; case 2: *(volatile uint16_t*)b.addr = (uint16_t)val; break; case 8: *(volatile uint64_t*)b.addr = (uint64_t)val; break; default: *(volatile uint32_t*)b.addr = (uint32_t)val; break; } }
+
+static void Lift_bind_default_hal(Lift *m) {
+    m->write_bit = Lift_default_write_bit;
+    m->read_numeric = Lift_default_read_numeric;
+    m->write_numeric = Lift_default_write_numeric;
+}
+#endif

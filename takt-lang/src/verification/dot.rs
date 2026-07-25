@@ -16,10 +16,12 @@
 //! Порядок вывода детерминирован (обход по возрастанию индекса, множества —
 //! `BTreeSet`), поэтому DOT воспроизводим побайтно (согласуется с гейтом 0048).
 
+use crate::semantic::ModelNode;
 use crate::verification::buchi::BuchiAutomaton;
 use crate::verification::kripke::Kripke;
 use crate::verification::ltl::Ltl;
 use crate::verification::product::Product;
+use crate::verification::verify::{self, Verdict};
 
 /// Экранирует метку узла для DOT (кавычки и обратный слэш).
 fn escape(label: &str) -> String {
@@ -154,6 +156,94 @@ pub fn product_to_dot(product: &Product, kripke: &Kripke) -> String {
     out
 }
 
+/// Какой граф верификации выгрузить в DOT (фича 0124). Тип общий для CLI
+/// (`taktc verify --emit-graph`) и библиотеки, чтобы разбор значения и построение
+/// жили в одном месте, а бинарник оставался тонким (лимит размера `taktc.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GraphKind {
+    /// Структура Крипке модели (без `--property` — управляющая абстракция 0049).
+    Kripke,
+    /// Автомат Бюхи для `¬φ` (требует свойства).
+    Buchi,
+    /// Произведение `K × A_¬φ` (требует свойства).
+    Product,
+}
+
+impl GraphKind {
+    /// Имя для сообщений/диагностики.
+    pub fn name(self) -> &'static str {
+        match self {
+            GraphKind::Kripke => "kripke",
+            GraphKind::Buchi => "buchi",
+            GraphKind::Product => "product",
+        }
+    }
+}
+
+/// Разбирает значение флага `--emit-graph`.
+///
+/// Негодное значение — отказ (тот же принцип, что у `--scope`): иначе
+/// `--emit-graph kripk` тихо ушёл бы в проверку.
+pub fn parse_graph_kind(value: &str) -> Result<GraphKind, String> {
+    match value {
+        "kripke" => Ok(GraphKind::Kripke),
+        "buchi" => Ok(GraphKind::Buchi),
+        "product" => Ok(GraphKind::Product),
+        other => Err(format!(
+            "неизвестный граф '{other}'; допустимо: kripke (структура Крипке), \
+             buchi (автомат ¬φ), product (произведение)"
+        )),
+    }
+}
+
+/// Диагностика вердикта-отказа при экспорте графа.
+fn refusal_message(verdict: &Verdict) -> String {
+    match verdict {
+        Verdict::NoStartState => {
+            "Экспорт графа невозможен: у модели нет стартового состояния.".to_string()
+        }
+        Verdict::Unsupported(atoms) => format!(
+            "Экспорт графа невозможен: атом(ы) {} — не имя состояния и не \
+             отслеживаемый предикат над данными.",
+            atoms.join(", ")
+        ),
+        // Holds/Violated здесь не возникают: build_graphs не проверяет пустоту.
+        _ => "Экспорт графа невозможен.".to_string(),
+    }
+}
+
+/// Строит запрошенный граф верификации и возвращает его DOT (фича 0124).
+///
+/// `kripke` без свойства — управляющая структура Крипке; `buchi`/`product`
+/// требуют свойства (строятся по `¬φ`). `Err` несёт готовое сообщение для
+/// пользователя (CLI печатает его в stderr).
+pub fn emit_graph_dot(
+    model: &ModelNode,
+    kind: GraphKind,
+    property: Option<&str>,
+) -> Result<String, String> {
+    // Крипке без свойства — единственный граф, не требующий формулы.
+    if kind == GraphKind::Kripke && property.is_none() {
+        let kripke = verify::build_control_kripke(model).map_err(|v| refusal_message(&v))?;
+        return Ok(kripke_to_dot(&kripke));
+    }
+
+    let Some(text) = property else {
+        return Err(format!(
+            "граф '{}' строится по свойству — задайте его флагом --property \"φ\".",
+            kind.name()
+        ));
+    };
+    let phi = crate::parse_ltl_property(text)
+        .map_err(|d| format!("Ошибка разбора свойства: {}", d.message))?;
+    let graphs = verify::build_graphs(model, &phi).map_err(|v| refusal_message(&v))?;
+    Ok(match kind {
+        GraphKind::Kripke => kripke_to_dot(&graphs.kripke),
+        GraphKind::Buchi => buchi_to_dot(&graphs.automaton),
+        GraphKind::Product => product_to_dot(&graphs.product, &graphs.kripke),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,7 +276,10 @@ mod tests {
         );
         // Каждое состояние — узел с меткой-именем.
         for name in &k.states {
-            assert!(dot.contains(&format!("label=\"{name}\"")), "узел {name}: {dot}");
+            assert!(
+                dot.contains(&format!("label=\"{name}\"")),
+                "узел {name}: {dot}"
+            );
         }
         assert!(dot.trim_end().ends_with('}'));
     }
@@ -199,7 +292,10 @@ mod tests {
         let dot = buchi_to_dot(&g.automaton);
         assert!(dot.starts_with("digraph Buchi {"));
         // Хотя бы одно принимающее состояние — двойной кружок.
-        assert!(!g.automaton.accepting.is_empty(), "автомат ¬(F Filling) принимает");
+        assert!(
+            !g.automaton.accepting.is_empty(),
+            "автомат ¬(F Filling) принимает"
+        );
         for &acc in &g.automaton.accepting {
             assert!(
                 dot.contains(&format!("s{acc} [shape=doublecircle")),
@@ -208,7 +304,10 @@ mod tests {
         }
         // Начальные состояния получают точку-источник.
         for &init in &g.automaton.initial_states {
-            assert!(dot.contains(&format!("__start{init} -> s{init};")), "нач s{init}");
+            assert!(
+                dot.contains(&format!("__start{init} -> s{init};")),
+                "нач s{init}"
+            );
         }
     }
 

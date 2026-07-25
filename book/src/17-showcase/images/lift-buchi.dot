@@ -1,0 +1,9 @@
+digraph Buchi {
+  rankdir=LR;
+  node [shape=circle, fontname="monospace"];
+  edge [fontname="monospace"];
+  s0 [shape=doublecircle, label="s0\n{!Boarding}"];
+  __start0 [shape=point, width=0.12];
+  __start0 -> s0;
+  s0 -> s0;
+}

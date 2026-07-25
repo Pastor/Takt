@@ -14,3 +14,5 @@ pub mod ltl;
 pub mod product;
 /// Движок верификации: вердикт по LTL-свойству модели (фича 0049).
 pub mod verify;
+/// Разбор аргументов подкоманды `taktc verify` (вынесен из бинарника).
+pub mod verify_cli;

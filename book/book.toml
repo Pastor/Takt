@@ -54,3 +54,13 @@ numbersections = true
 colorlinks = true
 linkcolor = "black"
 urlcolor = "blue"
+# Перенос длинных строк в блоках кода. Порождённый код (приложение «Порождённый
+# код примера») содержит строки шире печатной полосы (напр. дефолтный HAL в
+# c-hal — одной строкой); без переноса они уходят за поле (Overfull hbox, текст
+# обрезается). fvextra с breaklines/breakanywhere переносит их. commandchars
+# оставлены как у pandoc по умолчанию (`\\\{\}`) — иначе подсветка синтаксиса
+# сломается.
+header-includes = [
+  '\usepackage{fvextra}',
+  '\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\}}',
+]
