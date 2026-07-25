@@ -1,0 +1,55 @@
+// Контроллер кабины лифта: принимает вызов на этаж, едет к нему с торможением,
+// безопасно открывает и закрывает двери, возвращается в ожидание.
+
+const DWELL: u8 := 2;                    // такты стоянки с открытыми дверьми
+
+in  call: u8 := 0x50000000;              // (1) запрошенный этаж (0 — нет запроса)
+out motor_up:   bit := 0x50000010:0;     // (1) выходы в один регистр, по битам
+out motor_down: bit := 0x50000010:1;
+out brake:      bit := 0x50000010:2;     // 1 — тормоз зажат
+out doors_open: bit := 0x50000010:3;
+out display:    u8  := 0x50000014;       // индикатор текущего этажа
+
+var floor:  u8  := 1;                    // текущий этаж
+var dwell:  u8  := 0;                    // счётчик стоянки
+var doors:  bit := 0;                    // (2) внутреннее состояние дверей
+var moving: bit := 0;                    // (2) внутреннее состояние привода
+
+// (3) Безопасность: привод не работает, пока двери открыты — проверяется каждый такт.
+invariant SafeMove = moving = 0 | doors = 0;
+
+start Waiting {
+    enter { moving := 0; motor_up := 0; motor_down := 0; brake := 1; doors := 0; doors_open := 0; }
+    always { display := floor; }
+    ref Boarding: call = floor;          // (4) вызван текущий этаж → впустить
+    ref GoingUp: call > floor;           // (4) вызван этаж выше
+    ref GoingDown: call > 0 & call < floor;
+}
+
+state GoingUp {
+    enter { moving := 1; brake := 0; motor_up := 1; }
+    always { floor := floor + 1; display := floor; }   // (5) каждый такт — этаж вверх
+    ref Stopping: floor >= call;
+}
+
+state GoingDown {
+    enter { moving := 1; brake := 0; motor_down := 1; }
+    always { floor := floor - 1; display := floor; }
+    ref Stopping: floor <= call;
+}
+
+state Stopping {
+    enter { moving := 0; motor_up := 0; motor_down := 0; brake := 1; }
+    next Boarding;                       // (6) безусловный переход — торможение завершено
+}
+
+state Boarding {
+    enter { doors := 1; doors_open := 1; dwell := 0; }
+    always { dwell := dwell + 1; }       // (7) отсчёт стоянки
+    ref Leaving: dwell >= DWELL;
+}
+
+state Leaving {
+    enter { doors := 0; doors_open := 0; }
+    next Waiting;
+}

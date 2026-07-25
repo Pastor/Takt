@@ -1,0 +1,100 @@
+(*
+ * Порождено компилятором Takt (taktc) — цель: Structured Text (IEC 61131-3).
+ * Не редактировать вручную: файл перезаписывается при каждой генерации.
+ *)
+
+FUNCTION_BLOCK Lift
+VAR_INPUT
+    call : USINT;
+END_VAR
+VAR_OUTPUT
+    is_done : BOOL;
+    brake : BOOL;
+    display : USINT;
+    doors_open : BOOL;
+    motor_down : BOOL;
+    motor_up : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+    doors : BOOL := FALSE;
+    dwell : USINT := 0;
+    floor : USINT := 1;
+    moving : BOOL := FALSE;
+END_VAR
+VAR CONSTANT
+    DWELL : USINT := 2;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            moving := FALSE;
+            motor_up := FALSE;
+            motor_down := FALSE;
+            brake := TRUE;
+            doors := FALSE;
+            doors_open := FALSE;
+            state := 6; (* Waiting *)
+        1: (* Boarding *)
+            dwell := dwell + 1;
+            IF dwell >= DWELL THEN
+                doors := FALSE;
+                doors_open := FALSE;
+                state := 4; (* Leaving *)
+            END_IF;
+        2: (* GoingDown *)
+            floor := floor - 1;
+            display := floor;
+            IF floor <= call THEN
+                moving := FALSE;
+                motor_up := FALSE;
+                motor_down := FALSE;
+                brake := TRUE;
+                state := 5; (* Stopping *)
+            END_IF;
+        3: (* GoingUp *)
+            floor := floor + 1;
+            display := floor;
+            IF floor >= call THEN
+                moving := FALSE;
+                motor_up := FALSE;
+                motor_down := FALSE;
+                brake := TRUE;
+                state := 5; (* Stopping *)
+            END_IF;
+        4: (* Leaving *)
+            moving := FALSE;
+            motor_up := FALSE;
+            motor_down := FALSE;
+            brake := TRUE;
+            doors := FALSE;
+            doors_open := FALSE;
+            state := 6; (* Waiting *)
+        5: (* Stopping *)
+            doors := TRUE;
+            doors_open := TRUE;
+            dwell := 0;
+            state := 1; (* Boarding *)
+        6: (* Waiting *)
+            display := floor;
+            IF call = floor THEN
+                doors := TRUE;
+                doors_open := TRUE;
+                dwell := 0;
+                state := 1; (* Boarding *)
+            ELSIF call > floor THEN
+                moving := TRUE;
+                brake := FALSE;
+                motor_up := TRUE;
+                state := 3; (* GoingUp *)
+            ELSIF (call > 0) AND (call < floor) THEN
+                moving := TRUE;
+                brake := FALSE;
+                motor_down := TRUE;
+                state := 2; (* GoingDown *)
+            END_IF;
+        7: (* END *)
+            state := 7;
+    END_CASE;
+    is_done := state = 7;
+END_FUNCTION_BLOCK
+

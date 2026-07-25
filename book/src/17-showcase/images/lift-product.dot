@@ -1,0 +1,18 @@
+digraph Product {
+  rankdir=LR;
+  node [shape=circle, fontname="monospace"];
+  edge [fontname="monospace"];
+  p0 [shape=doublecircle, label="Waiting,q0"];
+  p1 [shape=doublecircle, label="GoingDown,q0"];
+  p2 [shape=doublecircle, label="GoingUp,q0"];
+  p3 [shape=doublecircle, label="Stopping,q0"];
+  __start0 [shape=point, width=0.12];
+  __start0 -> p0;
+  p0 -> p0;
+  p0 -> p1;
+  p0 -> p2;
+  p1 -> p1;
+  p1 -> p3;
+  p2 -> p2;
+  p2 -> p3;
+}

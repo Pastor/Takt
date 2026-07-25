@@ -25,11 +25,12 @@
 # Применение
 
 - [Инструментарий](16-tools/index.md)
-- [Развёрнутый пример](17-showcase/index.md)
+- [Практический пример](17-showcase/index.md)
 
 # Приложения
 
 - [Ошибки и предупреждения](appendix-errors/index.md)
+- [Порождённый код примера](appendix-generated/index.md)
 - [Грамматика (EBNF)](appendix-grammar/index.md)
 - [Литература](appendix-references/index.md)
 - [Глоссарий](appendix-glossary/index.md)
