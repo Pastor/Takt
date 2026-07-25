@@ -9,6 +9,7 @@ module lift (
     input  logic clk,   // служебный порт цели sv: в .takt его нет
     input  logic rst_n, // служебный порт цели sv: сброс, активный низкий
     input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)
+    input  logic [7:0] at_floor,
     input  logic [7:0] call,
     output logic brake,
     output logic [7:0] display,
@@ -17,7 +18,7 @@ module lift (
     output logic motor_up,
     output logic is_done
 );
-    localparam logic [7:0] DWELL = 2;
+    localparam logic [7:0] DWELL_TICKS = 3;
 
     // Состояния модели 'lift (Lift)'. Синтетического INIT нет: стартовое
     // состояние живёт в ветви сброса (контракт ADR 0033).
@@ -37,8 +38,6 @@ module lift (
     logic lift_doors_next;
     logic [7:0] lift_dwell;
     logic [7:0] lift_dwell_next;
-    logic [7:0] lift_floor;
-    logic [7:0] lift_floor_next;
     logic lift_moving;
     logic lift_moving_next;
     logic brake_next;
@@ -55,7 +54,6 @@ module lift (
         state_next = state;
         lift_doors_next = lift_doors;
         lift_dwell_next = lift_dwell;
-        lift_floor_next = lift_floor;
         lift_moving_next = lift_moving;
         brake_next = brake;
         display_next = display;
@@ -66,16 +64,15 @@ module lift (
         unique case (state)
             LIFT_BOARDING: begin
                 lift_dwell_next = (lift_dwell_next + 1);
-                if ((lift_dwell_next >= DWELL)) begin
+                if ((lift_dwell_next >= DWELL_TICKS)) begin
                     lift_doors_next = 0;
                     doors_open_next = 0;
                     state_next = LIFT_LEAVING;
                 end
             end
             LIFT_GOING_DOWN: begin
-                lift_floor_next = (lift_floor_next - 1);
-                display_next = lift_floor_next;
-                if ((lift_floor_next <= call)) begin
+                display_next = at_floor;
+                if ((at_floor <= call)) begin
                     lift_moving_next = 0;
                     motor_up_next = 0;
                     motor_down_next = 0;
@@ -84,9 +81,8 @@ module lift (
                 end
             end
             LIFT_GOING_UP: begin
-                lift_floor_next = (lift_floor_next + 1);
-                display_next = lift_floor_next;
-                if ((lift_floor_next >= call)) begin
+                display_next = at_floor;
+                if ((at_floor >= call)) begin
                     lift_moving_next = 0;
                     motor_up_next = 0;
                     motor_down_next = 0;
@@ -114,20 +110,20 @@ module lift (
                 end
             end
             LIFT_WAITING: begin
-                display_next = lift_floor_next;
-                if ((call == lift_floor_next)) begin
+                display_next = at_floor;
+                if ((call == at_floor)) begin
                     lift_doors_next = 1;
                     doors_open_next = 1;
                     lift_dwell_next = 0;
                     state_next = LIFT_BOARDING;
                 end
-                else if ((call > lift_floor_next)) begin
+                else if ((call > at_floor)) begin
                     lift_moving_next = 1;
                     brake_next = 0;
                     motor_up_next = 1;
                     state_next = LIFT_GOING_UP;
                 end
-                else if (((call > 0) && (call < lift_floor_next))) begin
+                else if (((call > 0) && (call < at_floor))) begin
                     lift_moving_next = 1;
                     brake_next = 0;
                     motor_down_next = 1;
@@ -146,7 +142,6 @@ module lift (
             state <= LIFT_WAITING;
             lift_doors <= 0;
             lift_dwell <= 0;
-            lift_floor <= 1;
             lift_moving <= 0;
             brake <= '0;
             display <= '0;
@@ -163,7 +158,6 @@ module lift (
             state <= state_next;
             lift_doors <= lift_doors_next;
             lift_dwell <= lift_dwell_next;
-            lift_floor <= lift_floor_next;
             lift_moving <= lift_moving_next;
             brake <= brake_next;
             display <= display_next;

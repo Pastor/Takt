@@ -1,10 +1,15 @@
-// Светофор: три состояния по кругу, переключение по таймеру.
+// Светофор: три фазы по кругу, переключение по таймеру. Такт — шаг ЛОГИКИ;
+// длительности фаз заданы В ТАКТАХ и подстраиваются под частоту устройства.
+
+const RED_TICKS:    u8 := 30;  // длительность красной фазы в тактах (напр. ≈30 с при 1 Гц)
+const GREEN_TICKS:  u8 := 30;  // зелёной
+const YELLOW_TICKS: u8 := 5;   // жёлтой (короткая)
 
 out red: bit;
 out yellow: bit;
 out green: bit;
 
-var timer: u8 := 0;
+var timer: u8 := 0;            // тактов проведено в текущей фазе
 
 start Red {                 // (1) стартовое состояние
     enter {                 // (2) при входе
@@ -13,10 +18,10 @@ start Red {                 // (1) стартовое состояние
         green := 0;
         timer := 0;
     }
-    always {                // (3) каждый такт
+    always {                // (3) каждый такт — отсчёт времени фазы
         timer := timer + 1;
     }
-    ref Green: timer >= 30; // (4) переход по условию
+    ref Green: timer >= RED_TICKS; // (4) фаза выдержана → переход
 }
 
 state Green {               // (5) обычное состояние
@@ -28,7 +33,7 @@ state Green {               // (5) обычное состояние
     always {
         timer := timer + 1;
     }
-    ref Yellow: timer >= 30;
+    ref Yellow: timer >= GREEN_TICKS;
 }
 
 state Yellow {              // (6)
@@ -40,5 +45,5 @@ state Yellow {              // (6)
     always {
         timer := timer + 1;
     }
-    ref Red: timer >= 5;
+    ref Red: timer >= YELLOW_TICKS;
 }

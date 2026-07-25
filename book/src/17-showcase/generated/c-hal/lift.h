@@ -13,7 +13,8 @@ typedef enum {
 } Lift_Out_BitPort;
 
 typedef enum {
-    LIFT_CALL = 0,
+    LIFT_AT_FLOOR = 0,
+    LIFT_CALL = 1,
 } Lift_In_NumericPort;
 
 typedef enum {
@@ -26,7 +27,6 @@ struct Lift {
     // NOTICE: Определение переменных модели
     uint8_t doors;
     uint8_t dwell;
-    uint8_t floor;
     uint8_t moving;
     enum {
         LIFT_INIT,
@@ -60,6 +60,7 @@ static const Lift_PortBinding Lift_Out_BitPort__ADDR[] = {
     [LIFT_MOTOR_UP] = { (uintptr_t)0x50000010u, 0, 1 },
 };
 static const Lift_PortBinding Lift_In_NumericPort__ADDR[] = {
+    [LIFT_AT_FLOOR] = { (uintptr_t)0x50000002u, -1, 1 },
     [LIFT_CALL] = { (uintptr_t)0x50000000u, -1, 1 },
 };
 static const Lift_PortBinding Lift_Out_NumericPort__ADDR[] = {
