@@ -12,11 +12,12 @@
 
 #![forbid(unsafe_code)]
 
-const DWELL: u8 = 2;
+const DWELL_TICKS: u8 = 3;
 
 /// Порт ввода-вывода модели. Реализация — за трейтом [`Hal`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InU8Port {
+    AtFloor,
     Call,
 }
 
@@ -67,7 +68,6 @@ enum LiftState {
 pub struct Lift<H: Hal> {
     doors: bool,
     dwell: u8,
-    floor: u8,
     moving: bool,
     state: LiftState,
     /// Аппаратный слой. Заменяет `void *userdata` цели `c`.
@@ -83,7 +83,6 @@ impl<H: Hal> Lift<H> {
         Self {
             doors: false,
             dwell: 0,
-            floor: 1,
             moving: false,
             state: LiftState::Init,
             hal,
@@ -97,7 +96,6 @@ impl<H: Hal> Lift<H> {
     pub fn init(&mut self) {
         self.doors = false;
         self.dwell = 0;
-        self.floor = 1;
         self.moving = false;
         self.state = LiftState::Init;
     }
@@ -120,16 +118,15 @@ impl<H: Hal> Lift<H> {
         match self.state {
             LiftState::Boarding => {
                 self.dwell += 1;
-                if self.dwell >= DWELL {
+                if self.dwell >= DWELL_TICKS {
                     self.doors = false;
                     self.hal.write_bit(OutBitPort::DoorsOpen, false);
                     self.state = LiftState::Leaving;
                 }
             }
             LiftState::GoingDown => {
-                self.floor -= 1;
-                self.hal.write_u8(OutU8Port::Display, self.floor);
-                if self.floor <= self.hal.read_u8(InU8Port::Call) {
+                self.hal.write_u8(OutU8Port::Display, self.hal.read_u8(InU8Port::AtFloor));
+                if self.hal.read_u8(InU8Port::AtFloor) <= self.hal.read_u8(InU8Port::Call) {
                     self.moving = false;
                     self.hal.write_bit(OutBitPort::MotorUp, false);
                     self.hal.write_bit(OutBitPort::MotorDown, false);
@@ -138,9 +135,8 @@ impl<H: Hal> Lift<H> {
                 }
             }
             LiftState::GoingUp => {
-                self.floor += 1;
-                self.hal.write_u8(OutU8Port::Display, self.floor);
-                if self.floor >= self.hal.read_u8(InU8Port::Call) {
+                self.hal.write_u8(OutU8Port::Display, self.hal.read_u8(InU8Port::AtFloor));
+                if self.hal.read_u8(InU8Port::AtFloor) >= self.hal.read_u8(InU8Port::Call) {
                     self.moving = false;
                     self.hal.write_bit(OutBitPort::MotorUp, false);
                     self.hal.write_bit(OutBitPort::MotorDown, false);
@@ -164,18 +160,18 @@ impl<H: Hal> Lift<H> {
                 self.state = LiftState::Boarding;
             }
             LiftState::Waiting => {
-                self.hal.write_u8(OutU8Port::Display, self.floor);
-                if self.hal.read_u8(InU8Port::Call) == self.floor {
+                self.hal.write_u8(OutU8Port::Display, self.hal.read_u8(InU8Port::AtFloor));
+                if self.hal.read_u8(InU8Port::Call) == self.hal.read_u8(InU8Port::AtFloor) {
                     self.doors = true;
                     self.hal.write_bit(OutBitPort::DoorsOpen, true);
                     self.dwell = 0;
                     self.state = LiftState::Boarding;
-                } else if self.hal.read_u8(InU8Port::Call) > self.floor {
+                } else if self.hal.read_u8(InU8Port::Call) > self.hal.read_u8(InU8Port::AtFloor) {
                     self.moving = true;
                     self.hal.write_bit(OutBitPort::Brake, false);
                     self.hal.write_bit(OutBitPort::MotorUp, true);
                     self.state = LiftState::GoingUp;
-                } else if (self.hal.read_u8(InU8Port::Call) > 0) & (self.hal.read_u8(InU8Port::Call) < self.floor) {
+                } else if (self.hal.read_u8(InU8Port::Call) > 0) & (self.hal.read_u8(InU8Port::Call) < self.hal.read_u8(InU8Port::AtFloor)) {
                     self.moving = true;
                     self.hal.write_bit(OutBitPort::Brake, false);
                     self.hal.write_bit(OutBitPort::MotorDown, true);

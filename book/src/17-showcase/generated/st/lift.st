@@ -5,6 +5,7 @@
 
 FUNCTION_BLOCK Lift
 VAR_INPUT
+    at_floor : USINT;
     call : USINT;
 END_VAR
 VAR_OUTPUT
@@ -19,11 +20,10 @@ VAR
     state : USINT := 0;
     doors : BOOL := FALSE;
     dwell : USINT := 0;
-    floor : USINT := 1;
     moving : BOOL := FALSE;
 END_VAR
 VAR CONSTANT
-    DWELL : USINT := 2;
+    DWELL_TICKS : USINT := 3;
 END_VAR
     CASE state OF
         0: (* INIT *)
@@ -36,15 +36,14 @@ END_VAR
             state := 6; (* Waiting *)
         1: (* Boarding *)
             dwell := dwell + 1;
-            IF dwell >= DWELL THEN
+            IF dwell >= DWELL_TICKS THEN
                 doors := FALSE;
                 doors_open := FALSE;
                 state := 4; (* Leaving *)
             END_IF;
         2: (* GoingDown *)
-            floor := floor - 1;
-            display := floor;
-            IF floor <= call THEN
+            display := at_floor;
+            IF at_floor <= call THEN
                 moving := FALSE;
                 motor_up := FALSE;
                 motor_down := FALSE;
@@ -52,9 +51,8 @@ END_VAR
                 state := 5; (* Stopping *)
             END_IF;
         3: (* GoingUp *)
-            floor := floor + 1;
-            display := floor;
-            IF floor >= call THEN
+            display := at_floor;
+            IF at_floor >= call THEN
                 moving := FALSE;
                 motor_up := FALSE;
                 motor_down := FALSE;
@@ -75,18 +73,18 @@ END_VAR
             dwell := 0;
             state := 1; (* Boarding *)
         6: (* Waiting *)
-            display := floor;
-            IF call = floor THEN
+            display := at_floor;
+            IF call = at_floor THEN
                 doors := TRUE;
                 doors_open := TRUE;
                 dwell := 0;
                 state := 1; (* Boarding *)
-            ELSIF call > floor THEN
+            ELSIF call > at_floor THEN
                 moving := TRUE;
                 brake := FALSE;
                 motor_up := TRUE;
                 state := 3; (* GoingUp *)
-            ELSIF (call > 0) AND (call < floor) THEN
+            ELSIF (call > 0) AND (call < at_floor) THEN
                 moving := TRUE;
                 brake := FALSE;
                 motor_down := TRUE;

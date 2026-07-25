@@ -1,26 +1,27 @@
-// Регулятор уровня в баке: наливает до верхней отметки, затем откачивает до
-// нижней, считая завершённые циклы откачки.
+// Регулятор уровня в баке: наливает до верхней отметки, затем откачивает до нижней
+// и снова наливает, считая завершённые циклы откачки. Уровень приходит с ДАТЧИКА
+// (такт — шаг логики, не мера объёма); клапан и насос — приводы.
 const HIGH: u8 := 90;
 const LOW:  u8 := 10;
-const RATE: u8 := 20;
 
-out valve: bit;          // клапан налива
-out pump:  bit;          // насос откачки
-var level:  u8 := 50;    // уровень
-var cycles: u8 := 0;     // завершённые циклы откачки
+in  level:   u8;         // датчик уровня
+out valve:   bit;        // клапан налива
+out pump:    bit;        // насос откачки
+out display: u8;         // индикатор уровня
+var cycles:  u8 := 0;    // завершённые циклы откачки
 
-cond Full  = level >= HIGH;    // бак полон
-cond Empty = level <= LOW;     // бак пуст
+cond Full  = level >= HIGH;    // (1) бак полон (по датчику)
+cond Empty = level <= LOW;     // (1) бак пуст (по датчику)
 
 start Filling {
-    enter { valve := 1; pump := 0; }      // открыть налив
-    always { level := level + RATE; }     // уровень растёт
-    ref Draining: Full;                   // полон → откачка
+    enter { valve := 1; pump := 0; }     // (2) открыть налив
+    always { display := level; }         // (3) индикатор следует за датчиком
+    ref Draining: Full;
 }
 
 state Draining {
-    enter { valve := 0; pump := 1; }      // включить насос
-    always { level := level - RATE; }     // уровень падает
-    exit  { cycles := cycles + 1; }       // цикл откачки завершён
-    ref Filling: Empty;                   // пуст → снова налив
+    enter { valve := 0; pump := 1; }     // (2) включить насос
+    always { display := level; }
+    exit  { cycles := cycles + 1; }      // (4) цикл откачки завершён
+    ref Filling: Empty;
 }
