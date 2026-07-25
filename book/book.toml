@@ -48,6 +48,9 @@ mainfontoptions = ["AutoFakeSlant=0.2"]
 monofontoptions = ["AutoFakeSlant=0.2"]
 fontsize = "10pt"
 lang = "ru"
+# Поля страницы — по 1.5 см со всех сторон (по требованию; дефолт geometry ~2.5 см
+# давал слишком широкие поля).
+geometry = ["margin=1.5cm"]
 toc = true
 toccolor = "black"
 numbersections = true

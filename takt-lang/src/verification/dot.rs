@@ -28,77 +28,140 @@ fn escape(label: &str) -> String {
     label.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// Шрифт всех подписей графа — **ГОСТ тип А, наклонный** (чертёжный, ГОСТ 2.304-81).
+///
+/// Значение — имя семейства свободного шрифта `GOST2.304-81TypeA-Slanted.ttf`
+/// (проект Metrolog/Font.GOST2.304-81, стиль Italic/Наклонный — стандартное
+/// чертёжное начертание). Ставит его `book/Makefile` (цель `fonts`) — **только
+/// наклонный** вариант, поэтому семейство `GOST 2.304-81` резолвится именно в него.
+/// ⚠️ Дефис в имени экранировать НЕ нужно: Graphviz задаёт семейство напрямую
+/// (в отличие от `fc-match`, чей парсер шаблонов принял бы `-81` за размер).
+///
+/// Имя используется на **генерации** SVG (Graphviz — метрики раскладки; скрипт
+/// `book/scripts/svg_flatten_text.py` — чтение контуров глифов). Итоговый SVG
+/// раздела **самодостаточен**: подписи переведены в векторные `<path>`, поэтому при
+/// ПРОСМОТРЕ и сборке PDF шрифт уже не нужен.
+const GRAPH_FONT: &str = "GOST 2.304-81";
+
+/// Заголовок орграфа с единым стилем (фикс 0124-01):
+/// - **все вершины одного радиуса** — `fixedsize=true` + фиксированные
+///   `width`/`height`; метка вписывается подбором `fontsize`, не растягивая круг;
+/// - **подписи — шрифтом ГОСТ тип А** ([`GRAPH_FONT`]).
+///
+/// Служебные точки-источники (`shape=point`) переопределяют `width` у себя, так
+/// что на равенство радиусов состояний-кругов не влияют.
+fn graph_header(name: &str) -> String {
+    format!(
+        "digraph {name} {{\n\
+         \x20 rankdir=LR;\n\
+         \x20 fontname=\"{GRAPH_FONT}\";\n\
+         \x20 fontsize=10;\n\
+         \x20 node [shape=circle, fixedsize=true, width=0.7, height=0.7, \
+         fontsize=12, fontname=\"{GRAPH_FONT}\"];\n\
+         \x20 edge [fontname=\"{GRAPH_FONT}\"];\n"
+    )
+}
+
+/// Подстрочный номер (Unicode ₀–₉, U+2080…2089) для числа `n`. Глифы есть в
+/// шрифте ГОСТ тип А, поэтому подпись флаттерится в контуры без потерь.
+fn subscript(n: usize) -> String {
+    n.to_string()
+        .chars()
+        .map(|c| char::from_u32(0x2080 + c.to_digit(10).unwrap()).unwrap())
+        .collect()
+}
+
+/// Компактная подпись вершины: `S` с подстрочным номером (1-based, `S₁`, `S₂`, …).
+/// Расшифровка полного имени — в легенде графа (см. [`legend_label`]).
+fn node_label(i: usize) -> String {
+    format!("S{}", subscript(i + 1))
+}
+
+/// Легенда графа (метка снизу, `labelloc=b`): по строке на вершину —
+/// `Sᵢ — <полная подпись>`, левым краем (`\l`). `entries[i]` — исходная (полная)
+/// подпись `i`-й вершины. Возвращает три строки атрибутов графа.
+fn legend_label(entries: &[String]) -> String {
+    let mut lines = String::new();
+    for (i, full) in entries.iter().enumerate() {
+        // `\l` — директива Graphviz (левое выравнивание), не экранируется; сам
+        // текст подписи уже экранирован вызывающим.
+        lines.push_str(&format!("{} — {}\\l", node_label(i), full));
+    }
+    format!("  label=\"{lines}\";\n  labelloc=\"b\";\n  labeljust=\"l\";\n")
+}
+
 /// DOT структуры Крипке.
 ///
 /// Вершины — состояния FSM; тотальность (самопетля у вершины без безусловного
 /// выхода, `may_stutter`) видна ребром-петлёй. Для пути данных (0068, `labels`
 /// непусто) метка вершины несёт набор истинных в ней атомов.
 pub fn kripke_to_dot(kripke: &Kripke) -> String {
-    let mut out = String::from("digraph Kripke {\n");
-    out.push_str("  rankdir=LR;\n");
-    out.push_str("  node [shape=circle, fontname=\"monospace\"];\n");
-    out.push_str("  edge [fontname=\"monospace\"];\n");
+    let mut out = graph_header("Kripke");
     // Точка-источник → начальная вершина.
     out.push_str("  __start [shape=point, width=0.12];\n");
     out.push_str(&format!("  __start -> k{};\n", kripke.initial));
 
-    for (k, name) in kripke.states.iter().enumerate() {
-        // Компоненты экранируются по отдельности; разделитель `\n` — настоящий
-        // перенос строки метки DOT и экранированию не подлежит.
-        let label = if kripke.labels.is_empty() {
-            escape(name)
-        } else {
-            // Путь данных: имя состояния + истинные атомы (кроме самого имени).
-            let atoms: Vec<String> = kripke.labels[k]
-                .iter()
-                .filter(|a| a.as_str() != name)
-                .map(|a| escape(a))
-                .collect();
-            if atoms.is_empty() {
+    // Полные подписи вершин (для легенды); в кругах — компактные Sᵢ.
+    let entries: Vec<String> = kripke
+        .states
+        .iter()
+        .enumerate()
+        .map(|(k, name)| {
+            if kripke.labels.is_empty() {
                 escape(name)
             } else {
-                format!("{}\\n{{{}}}", escape(name), atoms.join(", "))
+                // Путь данных: имя состояния + истинные атомы (кроме самого имени).
+                let atoms: Vec<String> = kripke.labels[k]
+                    .iter()
+                    .filter(|a| a.as_str() != name)
+                    .map(|a| escape(a))
+                    .collect();
+                if atoms.is_empty() {
+                    escape(name)
+                } else {
+                    format!("{} {{{}}}", escape(name), atoms.join(", "))
+                }
             }
-        };
-        out.push_str(&format!("  k{k} [label=\"{label}\"];\n"));
+        })
+        .collect();
+
+    for k in 0..kripke.states.len() {
+        out.push_str(&format!("  k{k} [label=\"{}\"];\n", node_label(k)));
     }
     for (&from, tos) in &kripke.transitions {
         for &to in tos {
             out.push_str(&format!("  k{from} -> k{to};\n"));
         }
     }
+    out.push_str(&legend_label(&entries));
     out.push_str("}\n");
     out
 }
 
-/// Литералы состояния автомата Бюхи — ограничения на текущую букву (как в
-/// [`BuchiAutomaton::dump`]): только `Atom`/`Not`, прочие формулы состояния —
-/// темпоральные обязательства, а не разметка узла.
-fn buchi_state_label(i: usize, formulas: &std::collections::BTreeSet<std::rc::Rc<Ltl>>) -> String {
+/// Полная подпись состояния автомата Бюхи для легенды — набор его литералов
+/// (ограничений на текущую букву; `Atom`/`Not`, как в [`BuchiAutomaton::dump`]).
+/// Прочие формулы состояния — темпоральные обязательства, а не разметка узла.
+/// Пустой набор → `{}` (нет ограничений на букву).
+fn buchi_legend_entry(formulas: &std::collections::BTreeSet<std::rc::Rc<Ltl>>) -> String {
     let literals: Vec<String> = formulas
         .iter()
         .filter(|f| matches!(f.as_ref(), Ltl::Atom(_) | Ltl::Not(_)))
         .map(|f| escape(&f.to_string()))
         .collect();
-    // Разделитель `\n` — настоящий перенос строки метки DOT (не экранируется).
-    if literals.is_empty() {
-        format!("s{i}")
-    } else {
-        format!("s{i}\\n{{{}}}", literals.join(", "))
-    }
+    format!("{{{}}}", literals.join(", "))
 }
 
 /// DOT автомата Бюхи для `¬φ`.
 ///
 /// Начальные состояния получают стрелку из точки-источника, **принимающие** —
-/// двойной кружок. Язык автомата — нарушающие свойство прогоны.
+/// двойной кружок. Язык автомата — нарушающие свойство прогоны. В кругах —
+/// компактные `Sᵢ`, расшифровка (набор литералов) — в легенде.
 pub fn buchi_to_dot(automaton: &BuchiAutomaton) -> String {
-    let mut out = String::from("digraph Buchi {\n");
-    out.push_str("  rankdir=LR;\n");
-    out.push_str("  node [shape=circle, fontname=\"monospace\"];\n");
-    out.push_str("  edge [fontname=\"monospace\"];\n");
+    let mut out = graph_header("Buchi");
 
-    for (i, formulas) in automaton.states.iter().enumerate() {
+    let entries: Vec<String> = automaton.states.iter().map(buchi_legend_entry).collect();
+
+    for i in 0..automaton.states.len() {
         let shape = if automaton.accepting.contains(&i) {
             "doublecircle"
         } else {
@@ -106,7 +169,7 @@ pub fn buchi_to_dot(automaton: &BuchiAutomaton) -> String {
         };
         out.push_str(&format!(
             "  s{i} [shape={shape}, label=\"{}\"];\n",
-            buchi_state_label(i, formulas)
+            node_label(i)
         ));
     }
     // Точки-источники начальных состояний.
@@ -119,6 +182,7 @@ pub fn buchi_to_dot(automaton: &BuchiAutomaton) -> String {
             out.push_str(&format!("  s{from} -> s{to};\n"));
         }
     }
+    out.push_str(&legend_label(&entries));
     out.push_str("}\n");
     out
 }
@@ -129,19 +193,25 @@ pub fn buchi_to_dot(automaton: &BuchiAutomaton) -> String {
 /// двойной кружок, начальные — стрелка из точки-источника. Непустой цикл через
 /// принимающую пару = контрпример (проверяется [`super::check::emptiness`]).
 pub fn product_to_dot(product: &Product, kripke: &Kripke) -> String {
-    let mut out = String::from("digraph Product {\n");
-    out.push_str("  rankdir=LR;\n");
-    out.push_str("  node [shape=circle, fontname=\"monospace\"];\n");
-    out.push_str("  edge [fontname=\"monospace\"];\n");
+    let mut out = graph_header("Product");
 
-    for (s, &(k, q)) in product.states.iter().enumerate() {
+    // Полные подписи пар `(состояние, qN)` — в легенду; в кругах — Sᵢ.
+    let entries: Vec<String> = product
+        .states
+        .iter()
+        .map(|&(k, q)| format!("{}, q{q}", escape(&kripke.states[k])))
+        .collect();
+
+    for s in 0..product.states.len() {
         let shape = if product.accepting.contains(&s) {
             "doublecircle"
         } else {
             "circle"
         };
-        let label = format!("{},q{q}", escape(&kripke.states[k]));
-        out.push_str(&format!("  p{s} [shape={shape}, label=\"{label}\"];\n"));
+        out.push_str(&format!(
+            "  p{s} [shape={shape}, label=\"{}\"];\n",
+            node_label(s)
+        ));
     }
     for &init in &product.initial {
         out.push_str(&format!("  __start{init} [shape=point, width=0.12];\n"));
@@ -152,6 +222,7 @@ pub fn product_to_dot(product: &Product, kripke: &Kripke) -> String {
             out.push_str(&format!("  p{from} -> p{to};\n"));
         }
     }
+    out.push_str(&legend_label(&entries));
     out.push_str("}\n");
     out
 }
@@ -274,11 +345,21 @@ mod tests {
             dot.contains(&format!("__start -> k{};\n", k.initial)),
             "старт: {dot}"
         );
-        // Каждое состояние — узел с меткой-именем.
-        for name in &k.states {
+        // В кругах — компактные Sᵢ; полные имена — в легенде графа.
+        for i in 0..k.states.len() {
             assert!(
-                dot.contains(&format!("label=\"{name}\"")),
-                "узел {name}: {dot}"
+                dot.contains(&format!("k{i} [label=\"{}\"]", node_label(i))),
+                "вершина k{i} = {}: {dot}",
+                node_label(i)
+            );
+        }
+        // Легенда (label графа) расшифровывает каждое имя состояния.
+        assert!(dot.contains("labelloc=\"b\""), "легенда снизу: {dot}");
+        for (i, name) in k.states.iter().enumerate() {
+            assert!(
+                dot.contains(&format!("{} — {name}", node_label(i))),
+                "легенда {}: {name}: {dot}",
+                node_label(i)
             );
         }
         assert!(dot.trim_end().ends_with('}'));
@@ -318,12 +399,12 @@ mod tests {
         let g = build_graphs(&m.borrow(), &phi).unwrap();
         let dot = product_to_dot(&g.product, &g.kripke);
         assert!(dot.starts_with("digraph Product {"));
-        // Метка узла — пара (имя состояния, qN).
+        // В кругах — Sᵢ; пара (имя состояния, qN) — в легенде.
         for (s, &(k, q)) in g.product.states.iter().enumerate() {
             let name = &g.kripke.states[k];
             assert!(
-                dot.contains(&format!("p{s} [shape=")) && dot.contains(&format!("{name},q{q}")),
-                "пара p{s}=({name},q{q}): {dot}"
+                dot.contains(&format!("p{s} [shape=")) && dot.contains(&format!("{name}, q{q}")),
+                "пара p{s}=({name}, q{q}) в легенде: {dot}"
             );
         }
     }
@@ -340,21 +421,22 @@ mod tests {
         let phi = parse_ltl_property("F On").unwrap();
         let g = build_graphs(&m.borrow(), &phi).unwrap();
         let dot = kripke_to_dot(&g.kripke);
-        // Есть вершина в состоянии A, где предикат On истинен → метка "A\n{On}".
-        assert!(dot.contains("A\\n{On}"), "метка данных: {dot}");
+        // Есть вершина в состоянии A, где предикат On истинен → в легенде "A {On}".
+        assert!(dot.contains("A {On}"), "подпись данных в легенде: {dot}");
     }
 
     #[test]
-    fn labels_use_real_newline_not_escaped_backslash() {
-        // Разделитель метки — `\n` (одиночный слэш = перенос строки DOT), а не
-        // `\\n` (был бы литеральный текст) — регресс двойного экранирования.
+    fn legend_separator_not_escaped() {
+        // Разделитель строк легенды — `\l` (одиночный слэш = левое выравнивание
+        // DOT), а не `\\l` (был бы литеральный текст) — регресс экранирования.
         let src = "var flag: bit := 0;\n cond On = flag = 1;\n \
                    start A { always { flag := 1; } ref B: flag = 1; }\n state B;";
         let m = model(src);
         let phi = parse_ltl_property("F On").unwrap();
         let g = build_graphs(&m.borrow(), &phi).unwrap();
         let dot = kripke_to_dot(&g.kripke);
-        assert!(!dot.contains("\\\\n"), "двойное экранирование \\n: {dot}");
+        assert!(dot.contains("\\l"), "легенда с `\\l`: {dot}");
+        assert!(!dot.contains("\\\\l"), "двойное экранирование `\\l`: {dot}");
     }
 
     #[test]
