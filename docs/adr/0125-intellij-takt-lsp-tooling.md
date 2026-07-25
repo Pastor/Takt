@@ -1,6 +1,6 @@
 # ADR 0125: Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Date:** 2026-07-25
 - **Authors:** Архитектор
 - **Related issues:** [Фича 0125](../features/0125-intellij-takt-lsp-tooling.md); опирается на ADR [0038](0038-intellij-semantic-tokens.md) (LSP4IJ) и механизм 0072 (`searchPaths`)

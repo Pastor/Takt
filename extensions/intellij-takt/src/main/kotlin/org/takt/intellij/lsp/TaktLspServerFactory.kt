@@ -2,6 +2,7 @@ package org.takt.intellij.lsp
 
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
 import com.redhat.devtools.lsp4ij.LanguageServerFactory
 import com.redhat.devtools.lsp4ij.server.OSProcessStreamConnectionProvider
 import com.redhat.devtools.lsp4ij.server.StreamConnectionProvider
@@ -34,6 +35,11 @@ class TaktLspServerFactory : LanguageServerFactory {
  * `CannotStartProcessException`, которую LSP4IJ обрабатывает сама (сервер
  * показывается остановленным в консоли LSP, **без** модального диалога). Базовая
  * подсветка 0022 при этом не затронута.
+ *
+ * Фича 0125: [getInitializationOptions] отдаёт серверу каталоги импортов (`-I`)
+ * из настроек как `initializationOptions.searchPaths` (0072) — иначе импорт из
+ * общих библиотек в редакторе не разрешается. Пустой список ⇒ `null` (прежнее
+ * поведение).
  */
 class TaktLspConnectionProvider : OSProcessStreamConnectionProvider() {
     init {
@@ -42,4 +48,12 @@ class TaktLspConnectionProvider : OSProcessStreamConnectionProvider() {
             commandLine = GeneralCommandLine(binary.absolutePath)
         }
     }
+
+    /**
+     * `initializationOptions` для сервера: `{ "searchPaths": [<каталоги -I>] }`
+     * из настроек плагина (фича 0125; контракт 0072). `rootUri` не используется —
+     * относительные пути разрешает сам сервер от корня рабочей области.
+     */
+    override fun getInitializationOptions(rootUri: VirtualFile?): Any? =
+        TaktInitOptions.build(TaktLspSettings.getInstance().includeDirs)
 }

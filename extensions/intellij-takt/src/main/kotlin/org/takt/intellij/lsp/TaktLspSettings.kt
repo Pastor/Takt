@@ -6,11 +6,23 @@ import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 
 /**
- * Настройки LSP-интеграции плагина (фича 0038, задача 0038-01): путь к `takt-lsp`.
+ * Настройки инструментов Takt в плагине (фичи 0038, 0125).
  *
- * Хранилище — [PersistentStateComponent] уровня приложения (путь к бинарнику
- * общий для всех проектов). Пустой путь ⇒ автопоиск в `PATH`
- * ([TaktLspBinary.resolve]).
+ * Хранилище — [PersistentStateComponent] уровня приложения (пути к бинарникам
+ * общие для всех проектов). Поля:
+ *  - `serverPath` — путь к `takt-lsp` (0038; пусто ⇒ автопоиск в `PATH`,
+ *    [TaktLspBinary.resolve]);
+ *  - `compilerPath`/`simulatorPath` — пути к компилятору `taktc`/симулятору
+ *    `takt-sim` (0125; **хранятся как задел** под действия компиляции/симуляции —
+ *    фича-преемник; сама 0125 их не исполняет);
+ *  - `includeDirs` — каталоги импортов (`-I`); **прокидываются в LSP-сервер** как
+ *    `initializationOptions.searchPaths` (0072) — см. [TaktInitOptions];
+ *  - `compilerArgs` — дополнительные параметры компилятора (свободные флаги,
+ *    задел под действия);
+ *  - `outputDir` — выходная директория генерации (задел под действия).
+ *
+ * Логика сборки `searchPaths` из [includeDirs] вынесена в [TaktInitOptions] —
+ * чистая, тестируемая без GUI (драйвер 5 ADR 0038).
  */
 @State(name = "TaktLspSettings", storages = [Storage("takt.xml")])
 class TaktLspSettings : PersistentStateComponent<TaktLspSettings.State> {
@@ -20,6 +32,29 @@ class TaktLspSettings : PersistentStateComponent<TaktLspSettings.State> {
         /** Явный путь к `takt-lsp` (пусто ⇒ автопоиск в `PATH`). */
         @JvmField
         var serverPath: String = ""
+
+        /** Путь к компилятору `taktc` (задел под действия компиляции). */
+        @JvmField
+        var compilerPath: String = ""
+
+        /** Путь к симулятору `takt-sim` (задел под действия симуляции). */
+        @JvmField
+        var simulatorPath: String = ""
+
+        /**
+         * Каталоги импортов (`-I`). Прокидываются в LSP как `searchPaths` (0072).
+         * `MutableList` сериализуется `XmlSerializer` как список строк.
+         */
+        @JvmField
+        var includeDirs: MutableList<String> = mutableListOf()
+
+        /** Дополнительные параметры компилятора (свободные флаги; задел). */
+        @JvmField
+        var compilerArgs: String = ""
+
+        /** Выходная директория генерации (задел под действия). */
+        @JvmField
+        var outputDir: String = ""
     }
 
     private var state = State()
@@ -35,6 +70,41 @@ class TaktLspSettings : PersistentStateComponent<TaktLspSettings.State> {
         get() = state.serverPath
         set(value) {
             state.serverPath = value
+        }
+
+    /** Путь к компилятору `taktc` (задел). */
+    var compilerPath: String
+        get() = state.compilerPath
+        set(value) {
+            state.compilerPath = value
+        }
+
+    /** Путь к симулятору `takt-sim` (задел). */
+    var simulatorPath: String
+        get() = state.simulatorPath
+        set(value) {
+            state.simulatorPath = value
+        }
+
+    /** Каталоги импортов (`-I`) → `searchPaths` LSP. */
+    var includeDirs: MutableList<String>
+        get() = state.includeDirs
+        set(value) {
+            state.includeDirs = value
+        }
+
+    /** Дополнительные параметры компилятора (задел). */
+    var compilerArgs: String
+        get() = state.compilerArgs
+        set(value) {
+            state.compilerArgs = value
+        }
+
+    /** Выходная директория генерации (задел). */
+    var outputDir: String
+        get() = state.outputDir
+        set(value) {
+            state.outputDir = value
         }
 
     companion object {

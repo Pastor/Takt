@@ -1,7 +1,7 @@
 # Фича 0125: Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов
 
 - **Номер:** 0125
-- **Статус:** СОЗДАНА
+- **Статус:** ГОТОВО
 - **Зависит от:** `0038` (LSP-интеграция плагина через LSP4IJ), `0072`
   (`initializationOptions.searchPaths` на сервере). Обе закрыты — фича не
   блокирована; она **аддитивна** к существующему плагину `intellij-takt`.
@@ -17,9 +17,9 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0125-intellij-takt-lsp-tooling.md`](../adr/0125-intellij-takt-lsp-tooling.md) |
 | Анализ | [`docs/analyze/0125-intellij-takt-lsp-tooling.md`](../analyze/0125-intellij-takt-lsp-tooling.md) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0125-YY-*`) |
-| Тест-план | [`docs/tests/0125-intellij-takt-lsp-tooling.md`](../tests/README.md) |
-| Отчёт о тестировании | [`docs/reports/0125-intellij-takt-lsp-tooling.md`](../reports/README.md) |
+| Разработка | [`docs/development/0125-01-intellij-takt-lsp-tooling.md`](../development/0125-01-intellij-takt-lsp-tooling.md) |
+| Тест-план | [`docs/tests/0125-intellij-takt-lsp-tooling.md`](../tests/0125-intellij-takt-lsp-tooling.md) |
+| Отчёт о тестировании | [`docs/reports/0125-intellij-takt-lsp-tooling.md`](../reports/0125-intellij-takt-lsp-tooling.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0125-YY-*`) |
 
 ## Краткое описание
@@ -52,7 +52,37 @@ hover-документация реально отображаются в ред
 упоминанием отметить наличие плагина IntelliJ, но это не обязательство данной
 фичи и деталей реализации/настроек не приводит (правило 24).
 
-<!-- При ЗАКРЫТИИ фичи (стадия 8, статус ГОТОВО) сюда добавляется раздел
-     «## Итог (что сделано)» —
-     ссылки на отчёт/фиксы (правило 21). Незакрытые фичи «Итога» не имеют. -->
+## Итог (что сделано)
+
+Реализована **Option A** ADR 0125 — правки только в `extensions/intellij-takt`,
+LSP-сервер `takt-lang` не тронут (отчёт:
+[`docs/reports/0125-intellij-takt-lsp-tooling.md`](../reports/0125-intellij-takt-lsp-tooling.md)):
+
+- **Настройки инструментов** (`lsp/TaktLspSettings.kt`,
+  `lsp/TaktLspConfigurable.kt`): к пути `takt-lsp` (0038) добавлены пути к
+  компилятору `taktc`, симулятору `takt-sim`, каталоги импортов (`-I`),
+  дополнительные параметры компилятора и выходная директория. UI — Swing на
+  `GridBagLayout` (без UI-DSL, ради открытого `untilBuild`). Умолчания пусты
+  (аддитивность).
+- **Прокидка `-I` в LSP** (`lsp/TaktInitOptions.kt` — новый;
+  `lsp/TaktLspServerFactory.kt`): каталоги `-I` уходят серверу как
+  `initializationOptions.searchPaths` (контракт 0072), поэтому импорт из общих
+  библиотек разрешается в редакторе (диагностика/дополнение/переход), а не только
+  из каталога документа. Пустой список ⇒ опции не слать (прежнее поведение).
+- **Диагностики / автодополнение / hover** — обеспечены готовым сервером
+  (`takt-lang/src/lsp/`) и прокидываются LSP4IJ по capabilities; дескриптор
+  `takt-lsp4ij.xml` уже достаточен — правок сервера и новых точек расширения не
+  потребовалось.
+- **Тесты** (`src/test/…`): `TaktInitOptionsTest` (7/7) — сборка `searchPaths`,
+  тримминг, round-trip текста поля; `TaktLspSettingsTest` (2/2) — умолчания и
+  перенос новых полей `loadState`. `./gradlew test` (JDK 21) — `BUILD SUCCESSFUL`,
+  регрессий нет.
+
+**Живая проверка:** JUnit-тесты плагина зелены; `./scripts/precheck.sh` зелёный
+(фича вне его области — плагин собирается только локально). Язык Takt **не
+менялся** → версия языка та же (правило 24 — документирование не требуется).
+
+**Задел (не в объёме):** пути `taktc`/`takt-sim`/`outputDir`/`compilerArgs`
+хранятся, но не исполняются — действия «Compile»/«Simulate» из IDE выносятся в
+фичу-преемника (Option C ADR 0125; кандидат в `FEATURES.md`).
 
