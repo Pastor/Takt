@@ -102,3 +102,4 @@
 | [0121](./0121-book-example-walkthrough.md) | Разбор примеров в разделах с упором на тему | Draft | фича 0121 |
 | [0122](./0122-book-pdf-latexmk.md) | Сборка PDF через latexmk (корректные кросс-ссылки) + Makefile | Draft | фича 0122 |
 | [0123](./0123-book-keyword-highlight.md) | Подсветка ключевых слов языка в тексте документа | Draft | фича 0123 |
+| [0124](./0124-verify-graph-export.md) | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | Accepted | фича 0124 |
