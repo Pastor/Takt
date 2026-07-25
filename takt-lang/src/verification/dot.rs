@@ -56,7 +56,7 @@ fn graph_header(name: &str) -> String {
          \x20 rankdir=LR;\n\
          \x20 fontname=\"{GRAPH_FONT}\";\n\
          \x20 fontsize=10;\n\
-         \x20 node [shape=circle, fixedsize=true, width=0.7, height=0.7, \
+         \x20 node [shape=circle, fixedsize=true, width=0.5, height=0.5, \
          fontsize=12, fontname=\"{GRAPH_FONT}\"];\n\
          \x20 edge [fontname=\"{GRAPH_FONT}\"];\n"
     )

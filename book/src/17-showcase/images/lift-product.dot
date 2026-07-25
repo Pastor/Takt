@@ -2,7 +2,7 @@ digraph Product {
   rankdir=LR;
   fontname="GOST 2.304-81";
   fontsize=10;
-  node [shape=circle, fixedsize=true, width=0.7, height=0.7, fontsize=12, fontname="GOST 2.304-81"];
+  node [shape=circle, fixedsize=true, width=0.5, height=0.5, fontsize=12, fontname="GOST 2.304-81"];
   edge [fontname="GOST 2.304-81"];
   p0 [shape=doublecircle, label="S₁"];
   p1 [shape=doublecircle, label="S₂"];

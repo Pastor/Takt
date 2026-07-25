@@ -24,8 +24,8 @@
 ## Решение
 
 - **Равный радиус вершин** (`verification/dot.rs`, общий помощник `graph_header`):
-  `node [shape=circle, fixedsize=true, width=0.7, height=0.7, …]` — все круги
-  одного размера. Служебные точки-источники (`shape=point`) переопределяют `width`
+  `node [shape=circle, fixedsize=true, width=0.5, height=0.5, …]` — все круги
+  одного (компактного) размера. Служебные точки-источники (`shape=point`) переопределяют `width`
   у себя и на равенство радиусов состояний не влияют.
 - **Компактные подписи вершин + легенда** (`node_label`/`legend_label`,
   `subscript`): в кругах — `S` с **подстрочным** номером (`S₁`, `S₂`, … — Unicode
