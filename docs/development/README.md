@@ -220,3 +220,4 @@
 | 0100-04 | 0100 | Переименование языка Lam → Takt | [0100-04-language-rename-takt.md](0100-04-language-rename-takt.md) |
 | 0100-05 | 0100 | Переименование языка Lam → Takt | [0100-05-language-rename-takt.md](0100-05-language-rename-takt.md) |
 | 0100-06 | 0100 | Переименование языка Lam → Takt | [0100-06-language-rename-takt.md](0100-06-language-rename-takt.md) |
+| 0124-01 | 0124 | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | [0124-01-verify-graph-export.md](0124-01-verify-graph-export.md) |

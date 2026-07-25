@@ -584,6 +584,17 @@ fn run_fmt(options: &FmtOptions) -> i32 {
 // Подкоманда `verify` — model checking по LTL (фича 0049, задача 0049-04)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Какой граф верификации выгрузить в Graphviz DOT (фича 0124).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GraphKind {
+    /// Структура Крипке модели (без `--property` — управляющая абстракция 0049).
+    Kripke,
+    /// Автомат Бюхи для `¬φ` (требует `--property`).
+    Buchi,
+    /// Произведение `K × A_¬φ` (требует `--property`).
+    Product,
+}
+
 /// Опции подкоманды `verify`.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct VerifyOptions {
@@ -600,6 +611,24 @@ pub struct VerifyOptions {
     /// Область проверки (фича 0051): `file` (умолчание) — модели своего файла,
     /// `all` — включая импортированные.
     pub scope: takt_lang::VerifyScope,
+    /// Выгрузить граф верификации в DOT вместо проверки (фича 0124, `--emit-graph`).
+    pub emit_graph: Option<GraphKind>,
+}
+
+/// Разбирает значение флага `--emit-graph`.
+///
+/// Негодное значение — отказ, а не молчаливое умолчание (тот же принцип, что у
+/// `--scope`): иначе `--emit-graph kripk` тихо ушёл бы в проверку.
+fn parse_graph_kind(value: &str) -> Result<GraphKind, String> {
+    match value {
+        "kripke" => Ok(GraphKind::Kripke),
+        "buchi" => Ok(GraphKind::Buchi),
+        "product" => Ok(GraphKind::Product),
+        other => Err(format!(
+            "неизвестный граф '{other}'; допустимо: kripke (структура Крипке), \
+             buchi (автомат ¬φ), product (произведение)"
+        )),
+    }
 }
 
 /// Разбирает значение флага `--scope`.
@@ -652,6 +681,13 @@ pub fn parse_verify_args(args: &[String]) -> Result<VerifyOptions, String> {
                 set_property(&mut options, value)?;
             }
             "--trace" => options.trace = true,
+            "--emit-graph" => {
+                i += 1;
+                let value = args.get(i).ok_or_else(|| {
+                    format!("флаг '{arg}' требует значение: kripke, buchi или product")
+                })?;
+                options.emit_graph = Some(parse_graph_kind(value)?);
+            }
             "--scope" => {
                 i += 1;
                 let value = args
@@ -671,6 +707,9 @@ pub fn parse_verify_args(args: &[String]) -> Result<VerifyOptions, String> {
             }
             other if other.starts_with("--scope=") => {
                 options.scope = parse_scope(&other["--scope=".len()..])?;
+            }
+            other if other.starts_with("--emit-graph=") => {
+                options.emit_graph = Some(parse_graph_kind(&other["--emit-graph=".len()..])?);
             }
             // Слитная форма `-I/путь` — как в подкоманде compile.
             other if other.starts_with("-I") && other.len() > 2 => {
@@ -736,6 +775,11 @@ fn run_verify(options: &VerifyOptions) -> i32 {
         }
     };
 
+    // Экспорт графа верификации в DOT (фича 0124) — вместо проверки.
+    if let Some(kind) = options.emit_graph {
+        return run_emit_graph(&model.borrow(), kind, options.property.as_deref());
+    }
+
     // Свойства: либо одно из --property, либо все объявленные в файле.
     let outcome = match &options.property {
         Some(text) => {
@@ -774,6 +818,80 @@ fn run_verify(options: &VerifyOptions) -> i32 {
     }
 
     print_verify_results(&outcome)
+}
+
+/// Печатает диагностику вердикта-отказа при экспорте графа (фича 0124).
+fn report_graph_refusal(verdict: &takt_lang::verification::verify::Verdict) -> i32 {
+    use takt_lang::verification::verify::Verdict;
+    match verdict {
+        Verdict::NoStartState => {
+            eprintln!("Экспорт графа невозможен: у модели нет стартового состояния.");
+        }
+        Verdict::Unsupported(atoms) => {
+            eprintln!(
+                "Экспорт графа невозможен: атом(ы) {} — не имя состояния и не \
+                 отслеживаемый предикат над данными.",
+                atoms.join(", ")
+            );
+        }
+        // Holds/Violated здесь не возникают: build_graphs не проверяет пустоту.
+        _ => eprintln!("Экспорт графа невозможен."),
+    }
+    1
+}
+
+/// Выгружает запрошенный граф верификации в Graphviz DOT (фича 0124).
+///
+/// `kripke` без свойства — управляющая структура Крипке; `buchi`/`product`
+/// требуют `--property` (строятся по `¬φ`). DOT печатается в stdout
+/// (перенаправляется в файл, рендерится `dot -Tsvg`).
+fn run_emit_graph(
+    model: &takt_lang::semantic::ModelNode,
+    kind: GraphKind,
+    property: Option<&str>,
+) -> i32 {
+    use takt_lang::verification::{dot, verify};
+
+    // Крипке без свойства — единственный граф, не требующий формулы.
+    if kind == GraphKind::Kripke && property.is_none() {
+        return match verify::build_control_kripke(model) {
+            Ok(kripke) => {
+                print!("{}", dot::kripke_to_dot(&kripke));
+                0
+            }
+            Err(v) => report_graph_refusal(&v),
+        };
+    }
+
+    // buchi/product (и kripke со свойством) строятся по формуле.
+    let Some(text) = property else {
+        eprintln!(
+            "граф '{}' строится по свойству — задайте его флагом --property \"φ\".",
+            match kind {
+                GraphKind::Buchi => "buchi",
+                GraphKind::Product => "product",
+                GraphKind::Kripke => "kripke",
+            }
+        );
+        return 1;
+    };
+    let phi = match takt_lang::parse_ltl_property(text) {
+        Ok(p) => p,
+        Err(d) => {
+            eprintln!("Ошибка разбора свойства: {}", d.message);
+            return 1;
+        }
+    };
+    let graphs = match verify::build_graphs(model, &phi) {
+        Ok(g) => g,
+        Err(v) => return report_graph_refusal(&v),
+    };
+    match kind {
+        GraphKind::Kripke => print!("{}", dot::kripke_to_dot(&graphs.kripke)),
+        GraphKind::Buchi => print!("{}", dot::buchi_to_dot(&graphs.automaton)),
+        GraphKind::Product => print!("{}", dot::product_to_dot(&graphs.product, &graphs.kripke)),
+    }
+    0
 }
 
 /// Печатает вердикты и возвращает код возврата процесса.
@@ -1313,6 +1431,27 @@ mod tests {
     fn verify_args_include_dirs() {
         let o = parse_verify_args(&args(&["-I", "/a", "-I/b", "m.takt"])).unwrap();
         assert_eq!(o.include_dirs, vec!["/a", "/b"]);
+    }
+
+    #[test]
+    fn verify_args_emit_graph() {
+        // Фича 0124: --emit-graph в раздельной и слитной форме.
+        let k = parse_verify_args(&args(&["--emit-graph", "kripke", "m.takt"])).unwrap();
+        assert_eq!(k.emit_graph, Some(GraphKind::Kripke));
+        let b = parse_verify_args(&args(&["--emit-graph=buchi", "m.takt"])).unwrap();
+        assert_eq!(b.emit_graph, Some(GraphKind::Buchi));
+        let p = parse_verify_args(&args(&["--emit-graph", "product", "m.takt"])).unwrap();
+        assert_eq!(p.emit_graph, Some(GraphKind::Product));
+        // По умолчанию экспорта нет.
+        let none = parse_verify_args(&args(&["m.takt"])).unwrap();
+        assert_eq!(none.emit_graph, None);
+    }
+
+    #[test]
+    fn verify_args_emit_graph_bad_value_is_error() {
+        // Контрпример: опечатка не должна молча уходить в проверку.
+        assert!(parse_verify_args(&args(&["--emit-graph", "kripk", "m.takt"])).is_err());
+        assert!(parse_verify_args(&args(&["--emit-graph", "m.takt"])).is_err());
     }
 
     #[test]

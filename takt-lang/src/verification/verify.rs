@@ -32,11 +32,11 @@
 //!   (A4, правило 5 — честность результата).
 
 use crate::semantic::ModelNode;
-use crate::verification::buchi::build_buchi;
+use crate::verification::buchi::{build_buchi, BuchiAutomaton};
 use crate::verification::check::emptiness;
-use crate::verification::kripke::build_kripke;
+use crate::verification::kripke::{build_kripke, Kripke};
 use crate::verification::ltl::Ltl;
-use crate::verification::product::product;
+use crate::verification::product::{product, Product};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
@@ -127,9 +127,16 @@ pub fn verify_model_traced(model: &ModelNode, phi: &Ltl) -> (Verdict, String) {
     (verdict, trace.unwrap_or_default())
 }
 
-fn run(model: &ModelNode, phi: &Ltl, trace: &mut Option<String>) -> Verdict {
+/// Выбирает структуру Крипке, которую проверка (и экспорт графа, 0124) построит
+/// для формулы `phi`: **управляющую** (0049), если все атомы `phi` — имена
+/// состояний, иначе **по данным** (0068). Единый источник истины отбора —
+/// иначе диаграмма 0124 показала бы не тот граф, что проверялся.
+///
+/// `Err` несёт вердикт-отказ (`NoStartState`/`Unsupported`), который вызывающий
+/// возвращает как есть.
+pub(crate) fn select_kripke(model: &ModelNode, phi: &Ltl) -> Result<Kripke, Verdict> {
     let Some(control) = build_kripke(model) else {
-        return Verdict::NoStartState;
+        return Err(Verdict::NoStartState);
     };
 
     // R2/R7: связывание атомов до проверки. Атом, не являющийся именем
@@ -140,13 +147,18 @@ fn run(model: &ModelNode, phi: &Ltl, trace: &mut Option<String>) -> Verdict {
     // Путь управления (0049) vs путь данных (0068). Если все атомы — имена
     // состояний, поведение прежнее байт-в-байт (критерий A7). Иначе пробуем
     // отследить предикаты над данными; не вышло — честный `Unsupported`.
-    let kripke = if control.unknown_atoms(&atoms).is_empty() {
-        control
+    if control.unknown_atoms(&atoms).is_empty() {
+        Ok(control)
     } else {
-        match crate::verification::data_kripke::build_data_kripke(model, &control, &atoms) {
-            Ok(k) => k,
-            Err(names) => return Verdict::Unsupported(names),
-        }
+        crate::verification::data_kripke::build_data_kripke(model, &control, &atoms)
+            .map_err(Verdict::Unsupported)
+    }
+}
+
+fn run(model: &ModelNode, phi: &Ltl, trace: &mut Option<String>) -> Verdict {
+    let kripke = match select_kripke(model, phi) {
+        Ok(k) => k,
+        Err(verdict) => return verdict,
     };
     if let Some(t) = trace.as_mut() {
         t.push_str(&kripke.trace());
@@ -175,6 +187,41 @@ fn run(model: &ModelNode, phi: &Ltl, trace: &mut Option<String>) -> Verdict {
             Verdict::Violated(counterexample(prefix, cycle))
         }
     }
+}
+
+/// Промежуточные графы конвейера верификации — для экспорта в Graphviz DOT
+/// (фича 0124). Строятся тем же путём, что и проверка: [`select_kripke`] выбирает
+/// управляющую (0049) или данными (0068) Крипке, автомат — по `¬φ`, произведение —
+/// их композиция. Диаграмма показывает **ровно** проверявшийся граф.
+#[derive(Debug)]
+pub struct VerificationGraphs {
+    /// Проверявшаяся структура Крипке (управляющая 0049 или данными 0068).
+    pub kripke: Kripke,
+    /// Автомат Бюхи для `¬φ` — его язык суть нарушающие прогоны.
+    pub automaton: BuchiAutomaton,
+    /// Произведение `K × A_¬φ`.
+    pub product: Product,
+}
+
+/// Строит графы конвейера верификации для формулы `phi` (фича 0124).
+///
+/// `Err` несёт вердикт-отказ (`NoStartState`/`Unsupported`), который CLI печатает
+/// как обычный отказ проверки.
+pub fn build_graphs(model: &ModelNode, phi: &Ltl) -> Result<VerificationGraphs, Verdict> {
+    let kripke = select_kripke(model, phi)?;
+    let automaton = build_buchi(&Ltl::Not(Rc::new(phi.clone())));
+    let product = product(&kripke, &automaton);
+    Ok(VerificationGraphs {
+        kripke,
+        automaton,
+        product,
+    })
+}
+
+/// Строит только **управляющую** структуру Крипке модели — для `--emit-graph
+/// kripke` без `--property` (0124): атомов данных нет, абстракция управления 0049.
+pub fn build_control_kripke(model: &ModelNode) -> Result<Kripke, Verdict> {
+    build_kripke(model).ok_or(Verdict::NoStartState)
 }
 
 /// Приводит спроецированное лассо к читаемому виду.
