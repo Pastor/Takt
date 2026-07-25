@@ -1,0 +1,16 @@
+// Термостат: держит температуру у порога, командуя нагревателем.
+// Переиспользуемая модель — лежит в отдельном файле, подключается импортом.
+model Thermostat {
+    in  temp: u8;
+    out heater: bit;
+    const SETPOINT: u8 := 22;
+
+    start Cold {
+        enter { heater := 1; }
+        ref Warm: temp >= SETPOINT;
+    }
+    state Warm {
+        enter { heater := 0; }
+        ref Cold: temp < SETPOINT;
+    }
+}

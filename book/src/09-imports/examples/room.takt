@@ -1,0 +1,3 @@
+import { Thermostat } from "thermostat.takt";   // взять модель из файла
+
+start Room = Thermostat;                        // машина комнаты — это термостат
