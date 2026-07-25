@@ -1,0 +1,26 @@
+// Регулятор уровня в баке: наливает до верхней отметки, затем откачивает до
+// нижней, считая завершённые циклы откачки.
+const HIGH: u8 := 90;
+const LOW:  u8 := 10;
+const RATE: u8 := 20;
+
+out valve: bit;          // клапан налива
+out pump:  bit;          // насос откачки
+var level:  u8 := 50;    // уровень
+var cycles: u8 := 0;     // завершённые циклы откачки
+
+cond Full  = level >= HIGH;    // бак полон
+cond Empty = level <= LOW;     // бак пуст
+
+start Filling {
+    enter { valve := 1; pump := 0; }      // открыть налив
+    always { level := level + RATE; }     // уровень растёт
+    ref Draining: Full;                   // полон → откачка
+}
+
+state Draining {
+    enter { valve := 0; pump := 1; }      // включить насос
+    always { level := level - RATE; }     // уровень падает
+    exit  { cycles := cycles + 1; }       // цикл откачки завершён
+    ref Filling: Empty;                   // пуст → снова налив
+}
