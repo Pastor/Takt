@@ -3,7 +3,7 @@ digraph Kripke {
   fontname="GOST 2.304-81";
   fontsize=10;
   node [shape=circle, fixedsize=true, width=0.5, height=0.5, fontsize=12, fontname="GOST 2.304-81"];
-  edge [arrowsize=0.7, fontname="GOST 2.304-81"];
+  edge [arrowsize=0.5, fontname="GOST 2.304-81"];
   __start [shape=point, width=0.12];
   __start -> k5;
   k0 [label="S₁"];
