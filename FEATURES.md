@@ -24,7 +24,7 @@
 | № | Фича | Зависит от | Tier | Статус |
 |---|------|------------|------|--------|
 | [0101](docs/features/0101-language-book.md) | Документ описания языка Takt (`book/`, mdBook → PDF, Fira Code) — инфраструктура + правило 24; наполнение разделов 2–15 — фичи-преемники | — | 3 | РАЗРАБОТКА (инфраструктура заведена; сборка PDF не верифицирована — нет mdbook) |
-| [0131](docs/features/0131-lsp-definition-references-rename.md) | LSP: `definition`, `references` и `rename` | — | 2 | АРХИТЕКТУРА |
+| [0131](docs/features/0131-lsp-definition-references-rename.md) | LSP: `definition`, `references` и `rename` | — | 2 | АНАЛИЗ |
 | [0132](docs/features/0132-sim-named-port-scenarios.md) | Именованные порты в сценариях симулятора | — (0135 закрыта) | 3 | СОЗДАНА |
 | [0130](docs/features/0130-diagnostics-batch.md) | Накопление семантических диагностик (несколько ошибок за прогон) | — | 2 | СОЗДАНА |
 | [0140](docs/features/0140-backlog-revision-doc-split.md) | Ревизия витрины кандидатов и решение по дублю `README.md` ↔ `book/` | — | proc | СОЗДАНА |
