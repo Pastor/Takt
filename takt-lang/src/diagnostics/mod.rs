@@ -26,6 +26,11 @@
 //! ошибок из строк. По умолчанию создаётся сообщение уровня `Error` с категорией
 //! `SematicError`.
 
+// Пачка диагностик (фича 0130): порядок, уникальность, печать. Вынесено
+// подмодулем — `mod.rs` упирается в лимит размера.
+mod batch;
+pub use batch::{format_compile_error, normalize};
+
 #[cfg(feature = "ast-serde")]
 use serde::{Deserialize, Serialize};
 use std::fmt;

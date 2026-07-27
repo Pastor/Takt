@@ -177,35 +177,11 @@ fn parser_error_to_diagnostic(
     }
 }
 
-/// Разбирает и строит модель, проставляя диагностике **путь её файла** (фича 0053).
-///
-/// Общий шаг всех целей. Заведён потому, что путь нужно разрешить там, где
-/// [`FileTable`](diagnostics::FileTable) ещё жив: реестр — деталь компиляции и
-/// наружу не выходит, а `Location` несёт лишь номер файла. Без этого диагностика
-/// из импортированной библиотеки была неотличима от своей — `taktc` печатал обе
-/// дословно одинаково.
-pub(crate) fn parse_and_construct(
-    filename: &str,
-    source: &str,
-    search_paths: &[String],
-) -> Result<std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>, Diagnostic> {
-    let mut files = diagnostics::FileTable::new(filename);
-
-    // Корневой файл — номер 0 (его зарегистрировал `FileTable::new`).
-    let (model_ast, _) = parse(source, 0).map_err(|ds| {
-        let d = ds.into_iter().next().unwrap();
-        stamp_file(d, &files)
-    })?;
-
-    semantic::tree::construct_model_with_files(&model_ast, None, search_paths, &mut files)
-        .map_err(|d| stamp_file(d, &files))
-}
-
-/// Разрешает номер файла диагностики в путь.
-fn stamp_file(d: Diagnostic, files: &diagnostics::FileTable) -> Diagnostic {
-    let path = files.path_of(&d.loc).map(str::to_string);
-    d.with_file_if_unset(path.as_deref())
-}
+// Общий конвейер разбора и построения (фича 0053) плюс сбор всех диагностик
+// (фича 0130) — вынесено модулем: `lib.rs` пришпилен реестром размеров.
+mod pipeline;
+pub use pipeline::collect_compile_diagnostics;
+pub(crate) use pipeline::parse_and_construct;
 
 /// Применяет трансформацию `float → q(m, n)` (фича 0096), если она включена для
 /// цели опциями генерации. `embedded_gate` — требуется ли `--float-embedded`:
