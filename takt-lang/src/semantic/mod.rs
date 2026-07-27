@@ -10,11 +10,17 @@
 //! - [`VariableNode`] — переменная, порт или константа с разрешённым типом.
 //! - [`Extend`] — реализация модели: ссылка, последовательная или параллельная компоновка.
 
+mod clock;
+mod condition_node;
+pub use condition_node::ConditionNode;
+
 pub mod bit_vector;
 mod builtin;
 pub(crate) mod callgraph;
 mod condition;
 pub(crate) mod docs;
+/// Профили времени и пересчёт длительности (фича 0134).
+pub mod duration;
 pub mod enum_node;
 mod expression;
 pub mod extend;
@@ -125,6 +131,13 @@ pub struct ModelNode {
     pub address_defs: Vec<AddressBindingNode>,
     /// Происхождение модели: объявлена здесь или пришла через `import` (фича 0051).
     pub origin: ModelOrigin,
+    /// Частота тактирования, объявленная `clock 1kHz;` (фича 0134), в герцах.
+    ///
+    /// `None` — не объявлена, действует профиль «часы». Приоритет с флагом
+    /// `--tick-hz` разрешает [`duration::resolve_profile`](duration::resolve_profile) —
+    /// **одной** функцией, чтобы источники не перекрывали друг друга по-разному
+    /// в разных целях (урок карты адресов, фича 0020).
+    pub clock_hz: Option<u64>,
 }
 
 /// Происхождение модели в дереве (фича 0051).
@@ -193,6 +206,7 @@ impl ModelNode {
             formulas: Vec::new(),
             address_defs: Vec::new(),
             origin: ModelOrigin::Local,
+            clock_hz: None,
         };
         let model = Rc::new(RefCell::new(model));
         if let Some(parent) = &parent {
@@ -267,6 +281,9 @@ impl ModelNode {
             // Копия наследует происхождение: переименование модели её источник
             // не меняет (фича 0051).
             origin: self.origin,
+            // …и частоту тактирования (фича 0134): она свойство модели, а не
+            // имени, под которым модель видна импортёру.
+            clock_hz: self.clock_hz,
         }
     }
 }
@@ -1245,122 +1262,8 @@ impl StateNode {
     }
 }
 
-/// Условие перехода между состояниями.
-///
-/// В текущей реализации поддерживается только вариант [`None`](ConditionNode::None),
-/// означающий безусловный переход. Полный набор условий — в будущих версиях.
-///
-/// `PartialEq` реализован вручную: поле `Location` в вариантах `Variable` и
-/// `Function` не участвует в сравнении — оно несёт позицию использования
-/// (use-site), а не часть семантической идентичности условия.
-#[derive(Default, Debug, Clone)]
-pub enum ConditionNode {
-    /// Безусловный переход (условие не задано или не разрешено).
-    #[default]
-    None,
-    /// Заглушка для условия, которое ещё не было разрешено.
-    Unresolved(ast::Condition),
-    /// Доступ к элементу массива: `id[индекс]`.
-    ArraySubscript(Rc<RefCell<VariableNode>>, Box<ConditionNode>),
-    /// Скобки: `(условие)`.
-    Parenthesis(Box<ConditionNode>),
-    /// Доступ к биту: `условие.член`.
-    BitAccess(Box<ConditionNode>, Member),
-    /// Вызов функции: `id(аргументы,*)`.
-    ///
-    /// Третье поле — позиция имени функции в исходном тексте (use-site).
-    Function(
-        Rc<RefCell<FunctionDefinitionNode>>,
-        Vec<Box<ConditionNode>>,
-        Location,
-    ),
-    /// Логическое НЕ: `!условие`.
-    Not(Box<ConditionNode>),
-    /// Сложение: `левое + правое`.
-    Add(Box<ConditionNode>, Box<ConditionNode>),
-    /// Вычитание: `левое - правое`.
-    Subtract(Box<ConditionNode>, Box<ConditionNode>),
-    /// Побитовое И: `левое & правое`.
-    And(Box<ConditionNode>, Box<ConditionNode>),
-    /// Побитовое ИЛИ: `левое | правое`.
-    Or(Box<ConditionNode>, Box<ConditionNode>),
-    /// Меньше: `левое < правое`.
-    Less(Box<ConditionNode>, Box<ConditionNode>),
-    /// Больше: `левое > правое`.
-    More(Box<ConditionNode>, Box<ConditionNode>),
-    /// Меньше или равно: `левое <= правое`.
-    LessEqual(Box<ConditionNode>, Box<ConditionNode>),
-    /// Больше или равно: `левое >= правое`.
-    MoreEqual(Box<ConditionNode>, Box<ConditionNode>),
-    /// Равенство: `левое = правое`.
-    Equal(Box<ConditionNode>, Box<ConditionNode>),
-    /// Неравенство: `левое != правое`.
-    NotEqual(Box<ConditionNode>, Box<ConditionNode>),
-    /// Целочисленный литерал.
-    Number(i64),
-    /// Вещественный литерал: `(строка, отрицательный)`.
-    Rational(String, bool),
-    /// Конкатенация строковых литералов.
-    String(Vec<String>),
-    /// Булевый литерал.
-    Bool(bool),
-    /// Переменная.
-    ///
-    /// Второе поле — позиция использования переменной в исходном тексте (use-site),
-    /// а не позиция объявления. Позволяет индексу LSP найти узел по курсору.
-    Variable(Rc<RefCell<VariableNode>>, Location),
-    /// Ссылка на модель: `S(Ping)`.
-    ///
-    /// Второе поле — позиция **использования** (use-site), как у
-    /// [`Variable`](ConditionNode::Variable). Без неё переход к декларации на
-    /// имени модели невозможен: разрешение стирает позицию, и индексу LSP нечего
-    /// сопоставить с курсором (фича 0056).
-    Model(Rc<RefCell<ModelNode>>, Location),
-    /// Имя состояния той же модели в условии (`x = Done`); 2-е поле — use-site для LSP (фича 0071).
-    State(Rc<RefCell<StateNode>>, Location),
-    /// Вариант перечисления (Ce4/NI6).
-    ///
-    /// Поля: `(определение перечисления, имя варианта, числовое значение варианта)`.
-    EnumVariant(Rc<RefCell<EnumDefinitionNode>>, String, i64),
-}
-
-impl PartialEq for ConditionNode {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::None, Self::None) => true,
-            (Self::Unresolved(a), Self::Unresolved(b)) => a == b,
-            (Self::ArraySubscript(v1, n1), Self::ArraySubscript(v2, n2)) => v1 == v2 && n1 == n2,
-            (Self::Parenthesis(a), Self::Parenthesis(b)) => a == b,
-            (Self::BitAccess(a, ma), Self::BitAccess(b, mb)) => a == b && ma == mb,
-            // Location (use-site) намеренно игнорируется: идентичность — семантическая
-            (Self::Function(f1, args1, _), Self::Function(f2, args2, _)) => {
-                f1 == f2 && args1 == args2
-            }
-            (Self::Not(a), Self::Not(b)) => a == b,
-            (Self::Add(l1, r1), Self::Add(l2, r2)) => l1 == l2 && r1 == r2,
-            (Self::Subtract(l1, r1), Self::Subtract(l2, r2)) => l1 == l2 && r1 == r2,
-            (Self::And(l1, r1), Self::And(l2, r2)) => l1 == l2 && r1 == r2,
-            (Self::Or(l1, r1), Self::Or(l2, r2)) => l1 == l2 && r1 == r2,
-            (Self::Less(l1, r1), Self::Less(l2, r2)) => l1 == l2 && r1 == r2,
-            (Self::More(l1, r1), Self::More(l2, r2)) => l1 == l2 && r1 == r2,
-            (Self::LessEqual(l1, r1), Self::LessEqual(l2, r2)) => l1 == l2 && r1 == r2,
-            (Self::MoreEqual(l1, r1), Self::MoreEqual(l2, r2)) => l1 == l2 && r1 == r2,
-            (Self::Equal(l1, r1), Self::Equal(l2, r2)) => l1 == l2 && r1 == r2,
-            (Self::NotEqual(l1, r1), Self::NotEqual(l2, r2)) => l1 == l2 && r1 == r2,
-            (Self::Number(a), Self::Number(b)) => a == b,
-            (Self::Rational(s1, n1), Self::Rational(s2, n2)) => s1 == s2 && n1 == n2,
-            (Self::String(a), Self::String(b)) => a == b,
-            (Self::Bool(a), Self::Bool(b)) => a == b,
-            // Location (use-site) намеренно игнорируется
-            (Self::Variable(v1, _), Self::Variable(v2, _)) => v1 == v2,
-            (Self::Model(a, _), Self::Model(b, _)) => a == b,
-            (Self::State(a, _), Self::State(b, _)) => a == b,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for ConditionNode {}
+// `ConditionNode` вынесен в `condition_node.rs` (лимит размера модуля):
+// чистое перемещение, путь `semantic::ConditionNode` держит реэкспорт ниже.
 
 /// Разрешённый семантический узел выражения (заглушка — будет расширено).
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
@@ -1452,6 +1355,8 @@ pub enum ExpressionNode {
     Assign(Box<ExpressionNode>, Box<ExpressionNode>),
     /// Целочисленный литерал.
     Number(i64),
+    /// Литерал длительности в наносекундах (фича 0134).
+    Duration(i64),
     /// Вещественный литерал: `(строка, отрицательный)`.
     Rational(String, bool),
     /// Конкатенация строковых литералов.

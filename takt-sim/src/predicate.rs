@@ -39,6 +39,7 @@ fn condition_label(cond: &ConditionNode) -> String {
     match cond {
         ConditionNode::None => String::new(),
         ConditionNode::Bool(b) => b.to_string(),
+        ConditionNode::Duration(ns) => format!("{ns}ns"),
         ConditionNode::Number(n) => n.to_string(),
         ConditionNode::Rational(s, neg) => {
             if *neg {
@@ -90,6 +91,8 @@ fn condition_label(cond: &ConditionNode) -> String {
 /// вместо `Location::Builtin` (критерий A10) в подавляющем большинстве случаев.
 fn loc_of(cond: &ConditionNode) -> Location {
     match cond {
+        // У литерала длительности позиции нет — как и у прочих литералов.
+        ConditionNode::Duration(_) => Location::Implicit,
         ConditionNode::Variable(_, loc) | ConditionNode::Function(_, _, loc) => *loc,
         ConditionNode::Not(c) | ConditionNode::Parenthesis(c) | ConditionNode::BitAccess(c, _) => {
             loc_of(c)
@@ -130,6 +133,14 @@ pub(crate) fn eval_condition(
 ) -> Result<Value, Diagnostic> {
     match cond {
         // ── Литералы ─────────────────────────────────────────────────────────
+        // Длительность (фича 0134): значение времени вводит подзадача
+        // 0134-03 вместе с виртуальными часами. До неё — явный отказ:
+        // посчитать наносекунды обычным числом значило бы дать выдержку,
+        // не равную заявленной, и разойтись с целями молча.
+        ConditionNode::Duration(_) => Err(EvalError::UnsupportedType {
+            ty: "duration".to_string(),
+        }
+        .to_diagnostic(Location::Implicit)),
         ConditionNode::Number(n) => Ok(Value::Number(*n)),
         ConditionNode::Bool(b) => Ok(Value::Boolean(*b)),
         ConditionNode::Rational(text, negative) => {

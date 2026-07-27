@@ -1,0 +1,127 @@
+//! Семантический узел условия ([`ConditionNode`]).
+//!
+//! Вынесен из `semantic/mod.rs` **чистым перемещением** (фича 0134-02): файл
+//! пришпилен реестром размеров (`scripts/module-size-baseline.txt`) и расти не
+//! имеет права, а узел — самостоятельное знание. Путь `semantic::ConditionNode`
+//! сохранён реэкспортом, поэтому потребители не тронуты (правило 11).
+
+use super::*;
+
+/// Условие перехода между состояниями.
+///
+/// В текущей реализации поддерживается только вариант [`None`](ConditionNode::None),
+/// означающий безусловный переход. Полный набор условий — в будущих версиях.
+///
+/// `PartialEq` реализован вручную: поле `Location` в вариантах `Variable` и
+/// `Function` не участвует в сравнении — оно несёт позицию использования
+/// (use-site), а не часть семантической идентичности условия.
+#[derive(Default, Debug, Clone)]
+pub enum ConditionNode {
+    /// Безусловный переход (условие не задано или не разрешено).
+    #[default]
+    None,
+    /// Заглушка для условия, которое ещё не было разрешено.
+    Unresolved(ast::Condition),
+    /// Доступ к элементу массива: `id[индекс]`.
+    ArraySubscript(Rc<RefCell<VariableNode>>, Box<ConditionNode>),
+    /// Скобки: `(условие)`.
+    Parenthesis(Box<ConditionNode>),
+    /// Доступ к биту: `условие.член`.
+    BitAccess(Box<ConditionNode>, Member),
+    /// Вызов функции: `id(аргументы,*)`.
+    ///
+    /// Третье поле — позиция имени функции в исходном тексте (use-site).
+    Function(
+        Rc<RefCell<FunctionDefinitionNode>>,
+        Vec<Box<ConditionNode>>,
+        Location,
+    ),
+    /// Логическое НЕ: `!условие`.
+    Not(Box<ConditionNode>),
+    /// Сложение: `левое + правое`.
+    Add(Box<ConditionNode>, Box<ConditionNode>),
+    /// Вычитание: `левое - правое`.
+    Subtract(Box<ConditionNode>, Box<ConditionNode>),
+    /// Побитовое И: `левое & правое`.
+    And(Box<ConditionNode>, Box<ConditionNode>),
+    /// Побитовое ИЛИ: `левое | правое`.
+    Or(Box<ConditionNode>, Box<ConditionNode>),
+    /// Меньше: `левое < правое`.
+    Less(Box<ConditionNode>, Box<ConditionNode>),
+    /// Больше: `левое > правое`.
+    More(Box<ConditionNode>, Box<ConditionNode>),
+    /// Меньше или равно: `левое <= правое`.
+    LessEqual(Box<ConditionNode>, Box<ConditionNode>),
+    /// Больше или равно: `левое >= правое`.
+    MoreEqual(Box<ConditionNode>, Box<ConditionNode>),
+    /// Равенство: `левое = правое`.
+    Equal(Box<ConditionNode>, Box<ConditionNode>),
+    /// Неравенство: `левое != правое`.
+    NotEqual(Box<ConditionNode>, Box<ConditionNode>),
+    /// Целочисленный литерал.
+    Number(i64),
+    /// Литерал длительности в наносекундах (фича 0134).
+    Duration(i64),
+    /// Вещественный литерал: `(строка, отрицательный)`.
+    Rational(String, bool),
+    /// Конкатенация строковых литералов.
+    String(Vec<String>),
+    /// Булевый литерал.
+    Bool(bool),
+    /// Переменная.
+    ///
+    /// Второе поле — позиция использования переменной в исходном тексте (use-site),
+    /// а не позиция объявления. Позволяет индексу LSP найти узел по курсору.
+    Variable(Rc<RefCell<VariableNode>>, Location),
+    /// Ссылка на модель: `S(Ping)`.
+    ///
+    /// Второе поле — позиция **использования** (use-site), как у
+    /// [`Variable`](ConditionNode::Variable). Без неё переход к декларации на
+    /// имени модели невозможен: разрешение стирает позицию, и индексу LSP нечего
+    /// сопоставить с курсором (фича 0056).
+    Model(Rc<RefCell<ModelNode>>, Location),
+    /// Имя состояния той же модели в условии (`x = Done`); 2-е поле — use-site для LSP (фича 0071).
+    State(Rc<RefCell<StateNode>>, Location),
+    /// Вариант перечисления (Ce4/NI6).
+    ///
+    /// Поля: `(определение перечисления, имя варианта, числовое значение варианта)`.
+    EnumVariant(Rc<RefCell<EnumDefinitionNode>>, String, i64),
+}
+
+impl PartialEq for ConditionNode {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::None, Self::None) => true,
+            (Self::Unresolved(a), Self::Unresolved(b)) => a == b,
+            (Self::ArraySubscript(v1, n1), Self::ArraySubscript(v2, n2)) => v1 == v2 && n1 == n2,
+            (Self::Parenthesis(a), Self::Parenthesis(b)) => a == b,
+            (Self::BitAccess(a, ma), Self::BitAccess(b, mb)) => a == b && ma == mb,
+            // Location (use-site) намеренно игнорируется: идентичность — семантическая
+            (Self::Function(f1, args1, _), Self::Function(f2, args2, _)) => {
+                f1 == f2 && args1 == args2
+            }
+            (Self::Not(a), Self::Not(b)) => a == b,
+            (Self::Add(l1, r1), Self::Add(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::Subtract(l1, r1), Self::Subtract(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::And(l1, r1), Self::And(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::Or(l1, r1), Self::Or(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::Less(l1, r1), Self::Less(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::More(l1, r1), Self::More(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::LessEqual(l1, r1), Self::LessEqual(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::MoreEqual(l1, r1), Self::MoreEqual(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::Equal(l1, r1), Self::Equal(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::NotEqual(l1, r1), Self::NotEqual(l2, r2)) => l1 == l2 && r1 == r2,
+            (Self::Number(a), Self::Number(b)) => a == b,
+            (Self::Rational(s1, n1), Self::Rational(s2, n2)) => s1 == s2 && n1 == n2,
+            (Self::String(a), Self::String(b)) => a == b,
+            (Self::Bool(a), Self::Bool(b)) => a == b,
+            // Location (use-site) намеренно игнорируется
+            (Self::Variable(v1, _), Self::Variable(v2, _)) => v1 == v2,
+            (Self::Model(a, _), Self::Model(b, _)) => a == b,
+            (Self::State(a, _), Self::State(b, _)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ConditionNode {}

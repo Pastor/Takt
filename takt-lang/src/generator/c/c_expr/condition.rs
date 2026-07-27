@@ -188,6 +188,13 @@ pub(in crate::generator::c) fn generate_condition_expr(
     match cond {
         ConditionNode::None | ConditionNode::Unresolved(_) => Ok(String::new()),
         ConditionNode::Bool(b) => Ok(if *b { "true" } else { "false" }.to_string()),
+        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
+        // отказ, а не печать наносекунд обычным числом.
+        ConditionNode::Duration(_) => Err(Diagnostic::error(
+            Location::Codegen,
+            "длительность целью 'c' пока не поддерживается".to_string(),
+        )
+        .with_code("CC-020")),
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Rational(s, neg) => {
             if *neg {

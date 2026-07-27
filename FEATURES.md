@@ -24,7 +24,7 @@
 | № | Фича | Зависит от | Tier | Статус |
 |---|------|------------|------|--------|
 | [0101](docs/features/0101-language-book.md) | Документ описания языка Takt (`book/`, mdBook → PDF, Fira Code) — инфраструктура + правило 24; наполнение разделов 2–15 — фичи-преемники | — | 3 | РАЗРАБОТКА (инфраструктура заведена; сборка PDF не верифицирована — нет mdbook) |
-| [0134](docs/features/0134-language-time-model.md) | **Модель времени в языке**: литерал длительности, внешний источник времени и частота такта (пробел № 1 отчёта [DIFF.md](docs/DIFF.md)) | — (0127 закрыта) | 1 | РАЗРАБОТКА ([ADR](docs/adr/0134-language-time-model.md) принят, [аналитика](docs/analyze/0134-language-time-model.md) — 8 подзадач; [0134-01](docs/development/0134-01-lexis-grammar-ast.md) сделана, идёт 0134-02) |
+| [0134](docs/features/0134-language-time-model.md) | **Модель времени в языке**: литерал длительности, внешний источник времени и частота такта (пробел № 1 отчёта [DIFF.md](docs/DIFF.md)) | — (0127 закрыта) | 1 | РАЗРАБОТКА ([ADR](docs/adr/0134-language-time-model.md) принят, [аналитика](docs/analyze/0134-language-time-model.md) — 8 подзадач; [0134-01](docs/development/0134-01-lexis-grammar-ast.md), [0134-02](docs/development/0134-02-type-and-lowering.md) сделаны, идёт 0134-03) |
 | [0099](docs/features/0099-module-size-core.md) | Вынос оставшихся нарушителей размера модуля — ядро семантики (`tree`/`mod`/`expression`/`type_inference`) + пришпиленные (`taktc`/`lib`) | — | — | СОЗДАНА |
 
 > **Порядок (правило 19).** Сверху — уже начатая 0101 (критерий 2:

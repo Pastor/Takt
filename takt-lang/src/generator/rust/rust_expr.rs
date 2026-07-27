@@ -394,6 +394,13 @@ pub(crate) fn unwrap_outer(text: &str) -> &str {
 /// [`RS-011`] на непереводимой конструкции — **не** тихий пропуск.
 pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<String, Diagnostic> {
     match expr {
+        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
+        // отказ, а не печать наносекунд обычным числом.
+        ExpressionNode::Duration(_) => Err(Diagnostic::error(
+            Location::Codegen,
+            "длительность целью 'rust' пока не поддерживается".to_string(),
+        )
+        .with_code("RS-023")),
         ExpressionNode::Number(n) => Ok(n.to_string()),
         ExpressionNode::Rational(text, negative) => Ok(rational(text, *negative)),
         ExpressionNode::Bool(b) => Ok(b.to_string()),

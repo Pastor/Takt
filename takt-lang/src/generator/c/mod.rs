@@ -162,6 +162,8 @@ impl AsGenerator for Generator {
 pub(super) enum CTypeError {
     /// Тип (или тип элемента массива) представления в C не имеет вовсе.
     Unrepresentable,
+    /// Тип времени (`duration`) целью пока не поддерживается (фича 0134).
+    TimeNotSupported,
 }
 
 impl CTypeError {
@@ -174,6 +176,11 @@ impl CTypeError {
                 format!("{}: тип не представим в C", what),
             )
             .with_code("CC-015"),
+            Self::TimeNotSupported => Diagnostic::error(
+                Location::Codegen,
+                format!("{}: тип 'duration' целью 'c' пока не поддерживается", what),
+            )
+            .with_code("CC-020"),
         }
     }
 }
@@ -189,6 +196,11 @@ pub(super) fn map_c_type(
     match typ {
         // Д2 (фича 0029): было `int` — 32-битный ЗНАКОВЫЙ для однобитной
         // семантики. `uint8_t` — наименьший адресуемый беззнаковый тип C.
+        // Тип `duration` (фича 0134): узел языка есть, эмиссия — задача
+        // соответствующей цели. До неё — ЯВНЫЙ отказ: молча напечатать
+        // наносекунды обычным целым значило бы выдать выдержку, не равную
+        // заявленной.
+        TypeNode::Duration => Err(CTypeError::TimeNotSupported),
         TypeNode::Bit => Ok("uint8_t".to_string()),
         TypeNode::Bool => Ok("bool".to_string()),
         // Д3 (фича 0029): было `float` (f32) безусловно, тогда как симулятор

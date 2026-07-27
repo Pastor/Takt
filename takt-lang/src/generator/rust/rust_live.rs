@@ -396,6 +396,7 @@ fn reads_expr(name: &str, expr: &ExpressionNode) -> bool {
         ExpressionNode::None
         | ExpressionNode::Unresolved(_)
         | ExpressionNode::Number(_)
+        | ExpressionNode::Duration(_)
         | ExpressionNode::Rational(_, _)
         | ExpressionNode::String(_)
         | ExpressionNode::Type(_)

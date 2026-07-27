@@ -403,6 +403,13 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         // (`sv_fsm`) обязан различать условный и безусловный переход, потому что
         // безусловный делает всё, что ниже него, недостижимым.
         ConditionNode::None => Ok("1'b1".to_string()),
+        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
+        // отказ, а не печать наносекунд обычным числом.
+        ConditionNode::Duration(_) => Err(Diagnostic::error(
+            Location::Codegen,
+            "длительность целью 'sv' пока не поддерживается".to_string(),
+        )
+        .with_code("SV-015")),
         ConditionNode::Bool(v) => Ok(if *v { "1'b1" } else { "1'b0" }.to_string()),
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Parenthesis(inner) => Ok(format!("({})", print_condition(inner, scope)?)),
@@ -477,6 +484,13 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
             .map(|(m, n)| super::sv_fixed::binary(op, l, r, scope, m, n))
     };
     match node {
+        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
+        // отказ, а не печать наносекунд обычным числом.
+        ExpressionNode::Duration(_) => Err(Diagnostic::error(
+            Location::Codegen,
+            "длительность целью 'sv' пока не поддерживается".to_string(),
+        )
+        .with_code("SV-015")),
         ExpressionNode::Number(n) => Ok(n.to_string()),
         ExpressionNode::Bool(v) => Ok(if *v { "1'b1" } else { "1'b0" }.to_string()),
         ExpressionNode::Parenthesis(inner) => Ok(format!("({})", print_expression(inner, scope)?)),

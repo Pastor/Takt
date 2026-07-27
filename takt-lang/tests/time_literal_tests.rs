@@ -197,3 +197,98 @@ fn formatter_is_idempotent_on_time_constructs() {
     let twice = takt_lang::format::format_source(&once).expect("второй проход");
     assert_eq!(once, twice, "fmt(fmt(x)) обязан равняться fmt(x)");
 }
+
+// ── 5. Тип `duration` и профили (задача 0134-02) ─────────────────────────────
+
+/// Диагностики компиляции исходника (коды).
+fn codes(src: &str) -> Vec<String> {
+    takt_lang::collect_compile_diagnostics("probe.takt", src, &[])
+        .iter()
+        .filter_map(|d| d.code.clone())
+        .collect()
+}
+
+/// Модель с длительностью в объявлениях (без `after`/`every`).
+fn model_with(body: &str) -> String {
+    // `start Main = Probe;` обязателен: без него корневая модель файла не имеет
+    // стартового состояния и разбор падает раньше проверяемого (SE-011).
+    format!(
+        "model Probe {{\n    out ready: bit := 0;\n{body}\n    start Idle {{ }}\n}}\n\nstart Main = Probe;\n"
+    )
+}
+
+#[test]
+fn duration_literal_and_type_are_accepted_by_semantics() {
+    // Тип `duration` связан по имени, литерал понижается в наносекунды —
+    // SE-066 (отказ стадии 0134-01) больше не возникает.
+    let src = model_with("    const DWELL := 3s;\n    var left: duration := 0s;");
+    assert!(
+        !codes(&src).iter().any(|c| c == "SE-066"),
+        "семантика обязана принять литерал и тип: {:?}",
+        codes(&src)
+    );
+}
+
+#[test]
+fn mixing_duration_with_number_is_se065() {
+    // Правило 5 ADR: длительность сочетается только с длительностью.
+    let src = model_with(
+        "    var left: duration := 0s;\n    var n: u8 := 0;\n    always { left := left + n; }",
+    );
+    assert!(
+        codes(&src).iter().any(|c| c == "SE-065"),
+        "ожидалась SE-065: {:?}",
+        codes(&src)
+    );
+}
+
+#[test]
+fn duration_plus_duration_is_allowed() {
+    let src = model_with(
+        "    var a: duration := 1s;\n    var b: duration := 2s;\n    always { a := a + b; }",
+    );
+    let found = codes(&src);
+    assert!(
+        !found.iter().any(|c| c == "SE-065"),
+        "сложение длительностей запрещать нельзя: {found:?}"
+    );
+}
+
+#[test]
+fn conflicting_clock_declarations_are_se067() {
+    // Две разные частоты в одной модели — ошибка автора, а не «победит последняя».
+    let src = "model Probe {\n    clock 1kHz;\n    clock 8MHz;\n    out ready: bit := 0;\n    start Idle { }\n}\n\nstart Main = Probe;\n";
+    assert!(
+        codes(src).iter().any(|c| c == "SE-067"),
+        "ожидалась SE-067: {:?}",
+        codes(src)
+    );
+    // Повтор одной и той же частоты безвреден.
+    let same = "model Probe {\n    clock 1kHz;\n    clock 1kHz;\n    out ready: bit := 0;\n    start Idle { }\n}\n\nstart Main = Probe;\n";
+    assert!(
+        !codes(same).iter().any(|c| c == "SE-067"),
+        "повтор одной частоты ошибкой не является: {:?}",
+        codes(same)
+    );
+}
+
+#[test]
+fn targets_refuse_time_loudly_until_their_own_subtasks() {
+    // Эмиссия времени — задачи 0134-04…07. До них цель обязана ОТКАЗАТЬ, а не
+    // напечатать наносекунды обычным целым: молча неверный код компилируется.
+    // ⚠️ Переменную нужно ИСПОЛЬЗОВАТЬ: неиспользуемая отфильтровывается из
+    // структуры цели `c` (известная ловушка, разобранная фичей 0029), и тогда
+    // отображение типа не вызывается вовсе — тест зеленел бы впустую.
+    let src = model_with("    var left: duration := 0s;\n    always { left := 5s; }");
+    let mut out = std::env::temp_dir();
+    out.push("takt_0134_02_probe.c");
+    let result = takt_lang::compile_to_c(
+        "probe.takt",
+        &src,
+        out.to_str().expect("путь"),
+        &[],
+        &takt_lang::generator::GenerateOptions::new(false),
+    );
+    let diagnostic = result.expect_err("цель 'c' обязана отказать");
+    assert_eq!(diagnostic.code.as_deref(), Some("CC-020"), "{diagnostic:?}");
+}

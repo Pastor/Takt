@@ -52,6 +52,15 @@ fn rs014(what: &str, ty: &TypeNode) -> Diagnostic {
 pub(crate) fn rust_type(ty: &TypeNode, what: &str) -> Result<String, Diagnostic> {
     match ty {
         // Точное соответствие. В цели `c` — `int` (дефект 0029, Д2).
+        // Тип `duration` (фича 0134): узел языка есть, эмиссия — задача
+        // соответствующей цели. До неё — ЯВНЫЙ отказ: молча напечатать
+        // наносекунды обычным целым значило бы выдать выдержку, не равную
+        // заявленной.
+        TypeNode::Duration => Err(Diagnostic::error(
+            Location::Codegen,
+            format!("{what}: тип 'duration' целью 'rust' пока не поддерживается"),
+        )
+        .with_code("RS-023")),
         TypeNode::Bit => Ok("bool".to_string()),
         TypeNode::Bool => Ok("bool".to_string()),
         // f64, а НЕ f32: симулятор считает в f64 (`eval::Value::Real`), и только

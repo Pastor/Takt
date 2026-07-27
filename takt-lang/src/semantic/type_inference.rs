@@ -7,16 +7,15 @@
 //! ## Алгоритм вывода
 //!
 //! 1. Числовой литерал (Number(n)) → минимальный целочисленный тип [bit;8/16/32/64]
-//! 2. Булевый литерал (Bool) → Bool
-//! 3. Вещественный литерал (`Rational`) → `Rational`
-//! 4. Переменная → тип referenced переменной
-//! 5. Условие → `Bit`
-//! 6. Арифметика → наиболее «широкий» тип из операндов (`Bit` < `Rational`)
-//! 7. Логика/сравнение → `Bit`
-//! 8. Скобки → тип внутреннего выражения
-//! 9. Приведение типа (`as T`) → `T`
-//! 10. Перечисление (`Type::Enum(name)`) → `TypeNode::Enum(name)`
-//! 11. Прочее → `Unsupported`
+//! 2. Литерал `Bool` → `Bool`; `Rational` → `Rational`; `Duration` → `Duration`
+//! 3. Переменная → тип referenced переменной
+//! 4. Условие → `Bit`
+//! 5. Арифметика → наиболее «широкий» тип из операндов (`Bit` < `Rational`)
+//! 6. Логика/сравнение → `Bit`
+//! 7. Скобки → тип внутреннего выражения
+//! 8. Приведение типа (`as T`) → `T`
+//! 9. Перечисление (`Type::Enum(name)`) → `TypeNode::Enum(name)`
+//! 10. Прочее → `Unsupported`
 //!
 //! ## Расширение типов (`wider_type`)
 //!
@@ -328,6 +327,7 @@ pub(crate) fn extract_type(
         // ── Литералы ──────────────────────────────────────────────────────────
         ExpressionNode::Bool(_) => Ok(TypeNode::Bool),
         ExpressionNode::Number(n) => Ok(infer_int_type(*n)),
+        ExpressionNode::Duration(_) => Ok(TypeNode::Duration), // фича 0134
         ExpressionNode::Rational(_, _) => Ok(TypeNode::Rational),
         ExpressionNode::String(_) | ExpressionNode::Address(_, _) => Ok(TypeNode::Unsupported),
 

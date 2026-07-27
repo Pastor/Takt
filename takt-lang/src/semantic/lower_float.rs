@@ -470,6 +470,8 @@ fn lower_expr(expr: &mut ExpressionNode, m: u8, n: u8) -> Result<(), Diagnostic>
         ExpressionNode::None
         | ExpressionNode::Unresolved(_)
         | ExpressionNode::Number(_)
+        // Понижение `float → q` длительности не касается.
+        | ExpressionNode::Duration(_)
         | ExpressionNode::Rational(_, _)
         | ExpressionNode::String(_)
         | ExpressionNode::Type(_)
@@ -516,6 +518,7 @@ fn lower_cond(cond: &mut ConditionNode, m: u8, n: u8) -> Result<(), Diagnostic> 
         ConditionNode::None
         | ConditionNode::Unresolved(_)
         | ConditionNode::Number(_)
+        | ConditionNode::Duration(_)
         | ConditionNode::Rational(_, _)
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)
