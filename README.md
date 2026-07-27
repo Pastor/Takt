@@ -2304,7 +2304,7 @@ cargo install --path grammar --bin takt-lsp --features lsp
 |-------|-------|-----------|--------|
 | Zed | `extensions/zed-lam` | через `takt-lsp` (semantic tokens) | v0.1.1 |
 | IntelliJ IDEA (и IDE на IntelliJ Platform) | `extensions/intellij-lam` | лексическая (офлайн, Community) + **семантическая** через LSP4IJ + `takt-lsp`; навигация к декларации и по `import`; **Rename** и **ссылка на файл `import`**; **Reformat Code** | фичи [0022](docs/features/0022-intellij-syntax-highlight.md), [0023](docs/features/0023-intellij-navigation-include.md), [0038](docs/features/0038-intellij-semantic-tokens.md), [0039](docs/features/0039-intellij-reformat.md), [0067](docs/features/0067-intellij-rename-psi-import.md) |
-| Любой LSP-клиент | `takt-lsp` | диагностика, hover, автодополнение, semantic tokens, **переход к декларации и к определению (в т.ч. в импортированный файл)** | стабильно |
+| Любой LSP-клиент | `takt-lsp` | диагностика, hover, автодополнение, semantic tokens, **переход к декларации и к определению (в т.ч. в импортированный файл)**, **поиск использований** | стабильно |
 
 **F12 работает в любом клиенте** (фича
 [0131](docs/features/0131-lsp-definition-references-rename.md)): сервер объявляет
@@ -2314,6 +2314,14 @@ cargo install --path grammar --bin takt-lsp --features lsp
 вредно; редакторы же расходятся в том, какой метод шлют по F12 (VS Code —
 `definition`, Zed — `declaration`). Прежде объявлен был только `declaration`, и в
 VS Code «Go to Definition» не работал вовсе.
+
+**Поиск использований** (`textDocument/references`, та же фича 0131) находит
+вхождения имени **в телах `enter`/`exit`/`always` и в телах функций** — там, где
+семантическое дерево позиций не хранит, а значит, их не видел и переход к
+декларации. Работает не текстовым поиском, а по областям видимости: одноимённая
+переменная соседней модели в ответ не попадёт, и локальная `var x`, затеняющая
+переменную модели, считается отдельным символом. Вхождения ищутся в открытом
+документе — рабочая область сервером не индексируется.
 
 **Переход к декларации в `takt-lsp`** (фича
 [0056](docs/features/0056-lsp-goto-exact-file.md)). Курсор на имени модели —

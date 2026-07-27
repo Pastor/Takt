@@ -35,6 +35,9 @@ pub fn server_capabilities() -> ServerCapabilities {
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         declaration_provider: Some(DeclarationCapability::Simple(true)),
         definition_provider: Some(OneOf::Left(true)),
+        // Фича 0131: поиск использований идёт по слою `semantic::usages` —
+        // индекс тел блоков и функций не видит.
+        references_provider: Some(OneOf::Left(true)),
         document_symbol_provider: Some(OneOf::Left(true)),
         // Фича 0024: канонический форматтер. То же ядро, что у `taktc fmt`, —
         // расхождение стилей между CLI и редактором невозможно по построению.

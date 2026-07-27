@@ -24,8 +24,7 @@ mod import;
 pub mod index;
 pub mod lower_float;
 pub mod ltl_check;
-/// Карта семантических элементов модели для генератора C-заголовков (снимок
-/// достижимых состояний и моделей — плоская карта [`Map`](minimap::Map)).
+/// Снимок достижимых состояний и моделей — плоская карта [`Map`](minimap::Map).
 pub mod minimap;
 mod named_block;
 pub(crate) mod naming;
@@ -37,6 +36,7 @@ pub mod tree;
 pub(crate) mod type_inference;
 pub mod type_node;
 pub mod unused;
+pub mod usages;
 pub(crate) mod validate;
 pub mod warnings;
 
