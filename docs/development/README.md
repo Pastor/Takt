@@ -222,3 +222,5 @@
 | 0100-06 | 0100 | Переименование языка Lam → Takt | [0100-06-language-rename-takt.md](0100-06-language-rename-takt.md) |
 | 0124-01 | 0124 | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | [0124-01-verify-graph-export.md](0124-01-verify-graph-export.md) |
 | 0125-01 | 0125 | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | [0125-01-intellij-takt-lsp-tooling.md](0125-01-intellij-takt-lsp-tooling.md) |
+| 0139-01 | 0139 | Удаление мёртвой конфигурации .travis.yml | [0139-01-remove-travis-config.md](0139-01-remove-travis-config.md) |
+| 0137-01 | 0137 | Фиксация толчейна Rust и MSRV | [0137-01-toolchain-pin-msrv.md](0137-01-toolchain-pin-msrv.md) |
