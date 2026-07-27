@@ -231,3 +231,4 @@
 | 0135-01 | 0135 | Квалифицированные имена портов в симуляторе | [0135-01-sim-qualified-port-names.md](0135-01-sim-qualified-port-names.md) |
 | 0131-01 | 0131 | LSP: definition, references и rename | [0131-01-lsp-definition-references-rename.md](0131-01-lsp-definition-references-rename.md) |
 | 0131-02 | 0131 | LSP: definition, references и rename | [0131-02-lsp-definition-references-rename.md](0131-02-lsp-definition-references-rename.md) |
+| 0131-03 | 0131 | LSP: definition, references и rename | [0131-03-lsp-definition-references-rename.md](0131-03-lsp-definition-references-rename.md) |

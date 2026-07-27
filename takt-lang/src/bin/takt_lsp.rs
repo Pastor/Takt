@@ -19,7 +19,7 @@ use lsp_types::notification::{
 };
 use lsp_types::request::{
     Completion, Formatting, GotoDeclaration, GotoDeclarationParams, GotoDeclarationResponse,
-    GotoDefinition, HoverRequest, References, Request as _,
+    GotoDefinition, HoverRequest, PrepareRenameRequest, References, Rename, Request as _,
 };
 use lsp_types::*;
 
@@ -240,6 +240,55 @@ fn handle_request(
                 req.id,
                 serde_json::to_value(result)?,
             )))?;
+        }
+        PrepareRenameRequest::METHOD => {
+            let params: TextDocumentPositionParams = serde_json::from_value(req.params)?;
+            let text = state.get_text(&params.text_document.uri).unwrap_or("");
+            // Отказ приходит ДО ввода нового имени: редактор покажет причину, а
+            // пользователь не потратит время впустую (фича 0131).
+            let response = match takt_lang::lsp::prepare_rename_at(text, params.position) {
+                Ok(range) => Response::new_ok(
+                    req.id,
+                    serde_json::to_value(PrepareRenameResponse::Range(range))?,
+                ),
+                Err(refusal) => Response::new_err(
+                    req.id,
+                    lsp_server::ErrorCode::InvalidRequest as i32,
+                    refusal.message().to_string(),
+                ),
+            };
+            connection.sender.send(Message::Response(response))?;
+        }
+        Rename::METHOD => {
+            let params: RenameParams = serde_json::from_value(req.params)?;
+            let uri = params.text_document_position.text_document.uri.clone();
+            let position = params.text_document_position.position;
+            let text = state.get_text(&uri).unwrap_or("");
+            // ⚠️ Либо все вхождения, либо ни одного: частичное переименование
+            // портит исходник молча (затенение оставляет текст компилируемым,
+            // меняя смысл).
+            let response = match takt_lang::lsp::rename_at(text, position, &params.new_name) {
+                Ok(edits) => {
+                    // `Uri` формально обладает интерьерной мутабельностью (кэш
+                    // разбора), из-за чего clippy ругается на ключ словаря. Тип
+                    // ключа задан протоколом (`WorkspaceEdit.changes`), и та же
+                    // пара «Uri → …» уже живёт в состоянии сервера.
+                    #[allow(clippy::mutable_key_type)]
+                    let mut changes = HashMap::new();
+                    changes.insert(uri, edits);
+                    let workspace_edit = WorkspaceEdit {
+                        changes: Some(changes),
+                        ..Default::default()
+                    };
+                    Response::new_ok(req.id, serde_json::to_value(workspace_edit)?)
+                }
+                Err(refusal) => Response::new_err(
+                    req.id,
+                    lsp_server::ErrorCode::InvalidRequest as i32,
+                    refusal.message().to_string(),
+                ),
+            };
+            connection.sender.send(Message::Response(response))?;
         }
         "textDocument/documentSymbol" => {
             let params: DocumentSymbolParams = serde_json::from_value(req.params)?;
