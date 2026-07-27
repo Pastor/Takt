@@ -1,7 +1,7 @@
 # Фича 0137: Фиксация толчейна Rust и MSRV
 
 - **Номер:** 0137
-- **Статус:** СОЗДАНА
+- **Статус:** **ГОТОВО** (закрыта 2026-07-27)
 - **Зависит от:** нет
 - **Tier:** proc
 - **Связанные issue (анализ):** процессный бэклог `FEATURES.md` (аудит 2026-07-27; отказ воспроизведён)
@@ -10,11 +10,11 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | не заведена (стадия 2) |
-| Анализ | не заведён (стадия 3) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0137-YY-*`) |
-| Тест-план | [`docs/tests/README.md`](../tests/README.md) |
-| Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
+| Архитектура (ADR) | [`docs/adr/0137-toolchain-pin-msrv.md`](../adr/0137-toolchain-pin-msrv.md) |
+| Анализ | [`docs/analyze/0137-toolchain-pin-msrv.md`](../analyze/0137-toolchain-pin-msrv.md) |
+| Разработка | [`docs/development/0137-01-toolchain-pin-msrv.md`](../development/0137-01-toolchain-pin-msrv.md) |
+| Тест-план | [`docs/tests/0137-toolchain-pin-msrv.md`](../tests/0137-toolchain-pin-msrv.md) |
+| Отчёт о тестировании | [`docs/reports/0137-toolchain-pin-msrv.md`](../reports/0137-toolchain-pin-msrv.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0137-YY-*`) |
 
 ## Краткое описание
@@ -51,3 +51,34 @@
 ## Документирование (правило 24)
 
 **Не требуется.** Инфраструктура сборки; язык не меняется.
+
+## Итог (что сделано)
+
+- **`rust-toolchain.toml`** — пин `channel = "1.97.1"` (стабильный канал),
+  компоненты `rustfmt`/`clippy`/`rust-std`, `profile = "minimal"`. Канал задан
+  **однажды и одним файлом**.
+- **MSRV** — `rust-version = "1.97"` в `takt-lang` и `takt-sim` (объявлена
+  версия, на которой гоняются гейты; нижняя граница сознательно не исследовалась).
+- **`Cargo.lock` введён в репозиторий** (убран из `.gitignore`): без него пин
+  компилятора не даёт воспроизводимости — состав зависимостей плавал бы, а
+  git-зависимость `lalrpop` следовала бы за веткой. Lock фиксирует её коммитом
+  `f67f8741…`.
+- **`resolver = "3"`** вместо `"1"` — штатный для edition 2024; проверено, что
+  граф зависимостей не меняется (`--locked` проходит).
+- **`scripts/precheck.sh`**: `cargo +nightly fmt` → `cargo fmt`;
+  **`.github/workflows/ci.yml`**: шаги `dtolnay/rust-toolchain@nightly` (оба job)
+  заменены на `rustup show active-toolchain` — версия больше нигде не дублируется.
+- **Обоснование выбора stable — замер, а не вкус:** ни одной `#![feature(...)]`
+  в исходниках; `clippy --all-targets --all-features -D warnings` на 1.97.1 —
+  **ноль** предупреждений; стабильный `rustfmt` принимает дерево, отформатированное
+  nightly, **байт-в-байт**. Option C (плавающий stable) отвергнут: при `-D warnings`
+  любой новый лint очередного релиза валит сборку у всех сразу.
+- Отчёт — вердикт **✅ ПРОЙДЕН** (10/10 проверок, `precheck.sh` `EXIT=0`,
+  2176 тестов), [`docs/reports/0137-toolchain-pin-msrv.md`](../reports/0137-toolchain-pin-msrv.md).
+- ⚠️ **Найден дефект окружения:** толчейн может установиться **без `rust-std`**
+  молча (`rustup component list` показывает `installed`, каталог `lib` пуст,
+  сборка падает с `E0463`). Лечение — переустановка толчейна; диагностика и
+  команды записаны в задаче [0137-01](../development/0137-01-toolchain-pin-msrv.md).
+- **Открытые действия:** нижняя граница MSRV не измерена; `ci.yml` живьём не
+  проверен (Actions заблокированы по биллингу); подъём версии — отдельный коммит
+  с полным прогоном гейтов.
