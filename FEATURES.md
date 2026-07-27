@@ -24,7 +24,6 @@
 | № | Фича | Зависит от | Tier | Статус |
 |---|------|------------|------|--------|
 | [0101](docs/features/0101-language-book.md) | Документ описания языка Takt (`book/`, mdBook → PDF, Fira Code) — инфраструктура + правило 24; наполнение разделов 2–15 — фичи-преемники | — | 3 | РАЗРАБОТКА (инфраструктура заведена; сборка PDF не верифицирована — нет mdbook) |
-| [0133](docs/features/0133-book-examples-gate.md) | Гейт компиляции и симуляции примеров документа `book/` | — | 2 | СОЗДАНА |
 | [0135](docs/features/0135-sim-qualified-port-names.md) | Квалифицированные имена портов в симуляторе | — | 2 | СОЗДАНА |
 | [0132](docs/features/0132-sim-named-port-scenarios.md) | Именованные порты в сценариях симулятора | [0135](docs/features/0135-sim-qualified-port-names.md) | 3 | **ЗАБЛОКИРОВАНА** |
 | [0131](docs/features/0131-lsp-definition-references-rename.md) | LSP: `definition`, `references` и `rename` | — | 2 | СОЗДАНА |

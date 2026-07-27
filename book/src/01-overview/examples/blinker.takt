@@ -1,15 +1,17 @@
-// Переключатель: кнопка btn переключает состояние, выход led его отражает.
-model Blinker {
+// Подсветка: лампа led горит, пока нажата кнопка btn.
+model Lamp {
     in btn: bit;
     out led: bit;
 
-    start state Off {
+    start Off {
         enter { led := 0; }
         ref On: btn = 1;
     }
 
     state On {
         enter { led := 1; }
-        ref Off: btn = 1;
+        ref Off: btn = 0;
     }
 }
+
+start Main = Lamp;
