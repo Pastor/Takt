@@ -147,7 +147,7 @@
 | [0132](./0132-sim-named-port-scenarios.md) | Именованные порты в сценариях симулятора | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0133](./0133-book-examples-gate.md) | Гейт компиляции и симуляции примеров документа book/ | [ADR](../adr/0133-book-examples-gate.md) · [анализ](../analyze/0133-book-examples-gate.md) · [тест-план](../tests/0133-book-examples-gate.md) · [отчёт](../reports/0133-book-examples-gate.md) | ✅ ГОТОВО |
 | [0134](./0134-language-time-model.md) | Модель времени в языке: литерал длительности и частота такта | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0135](./0135-sim-qualified-port-names.md) | Квалифицированные имена портов в симуляторе | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0135](./0135-sim-qualified-port-names.md) | Квалифицированные имена портов в симуляторе | [ADR](../adr/0135-sim-qualified-port-names.md) · [анализ](../analyze/0135-sim-qualified-port-names.md) · [тест-план](../tests/0135-sim-qualified-port-names.md) · [отчёт](../reports/0135-sim-qualified-port-names.md) | ✅ ГОТОВО |
 | [0136](./0136-perf-benchmarks.md) | Бенчмарки производительности компиляции и верификации | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0137](./0137-toolchain-pin-msrv.md) | Фиксация толчейна Rust и MSRV | [ADR](../adr/0137-toolchain-pin-msrv.md) · [анализ](../analyze/0137-toolchain-pin-msrv.md) · [тест-план](../tests/0137-toolchain-pin-msrv.md) · [отчёт](../reports/0137-toolchain-pin-msrv.md) | ✅ ГОТОВО |
 | [0138](./0138-coverage-measurement.md) | Измерение покрытия тестами (или удаление чужого codecov.yml) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

@@ -121,6 +121,15 @@ pub(crate) enum UnitKind {
     Node {
         context: Option<Rc<RefCell<dyn Context>>>,
 
+        /// Имя модели этого узла — квалификатор для адресации порта (фича 0135).
+        ///
+        /// Без него пространство имён значений плоское: одноимённые порты разных
+        /// под-моделей композиции неразличимы, чтение находило первую ветвь, а
+        /// запись расходилась по всем. Имя берётся из `ModelNode::name`;
+        /// у анонимной модели его нет — тогда квалифицированная адресация к
+        /// этому узлу невозможна, а голая работает как прежде.
+        model_name: Option<String>,
+
         state_transitions: HashMap<String, Vec<(String, Predicate)>>,
         state_executions: HashMap<String, Executions>,
         state: Option<String>,
@@ -178,6 +187,12 @@ impl Unit {
 
 impl Context for Unit {
     fn get_value(&self, name: &str) -> Option<Value> {
+        // Квалифицированное имя `Модель::порт` (фича 0135) адресует ОДНУ ветвь.
+        // Голое имя работает как прежде (первая нашедшаяся ветвь) — правка
+        // аддитивна: сценарии, состояния и тесты на голых именах не ломаются.
+        if let Some((model, port)) = split_qualified(name) {
+            return self.get_qualified(model, port);
+        }
         match &self.0 {
             UnitKind::None => None,
             // 0032: единственный источник истины — контекст модели. Собственной
@@ -195,6 +210,13 @@ impl Context for Unit {
     }
 
     fn set_value(&mut self, name: &str, value: Value) {
+        // Квалифицированная запись (фича 0135) идёт ровно в одну ветвь — иначе
+        // задать вход отдельной под-модели композиции нечем: голое имя
+        // рассылается всем ветвям.
+        if let Some((model, port)) = split_qualified(name) {
+            self.set_qualified(model, port, value);
+            return;
+        }
         match &mut self.0 {
             UnitKind::None => {}
             // 0032: запись идёт в контекст модели тем же путём, что присваивание
@@ -650,6 +672,69 @@ impl Unit {
     ///
     /// Читает по той же цепочке, что и вычислитель ([`Context::get_value`]):
     /// сначала собственные переменные юнита, затем контекст модели.
+    /// Чтение по квалифицированному имени: спуск до узла модели `model`.
+    fn get_qualified(&self, model: &str, port: &str) -> Option<Value> {
+        match &self.0 {
+            UnitKind::None => None,
+            UnitKind::Node {
+                context,
+                model_name,
+                ..
+            } => {
+                if model_name.as_deref() == Some(model) {
+                    context
+                        .as_ref()
+                        .and_then(|ctx| ctx.borrow().get_value(port))
+                } else {
+                    None
+                }
+            }
+            // Композиция сама модели не имеет: спрашиваем ветви.
+            UnitKind::Parallel { units, .. } => units
+                .iter()
+                .find_map(|unit| unit.borrow().get_qualified(model, port)),
+            // У последовательной композиции опрашиваются ВСЕ шаги, а не только
+            // активный: наблюдение за уже отработавшим шагом законно.
+            UnitKind::Sequential { units, .. } => units
+                .iter()
+                .find_map(|unit| unit.borrow().get_qualified(model, port)),
+        }
+    }
+
+    /// Запись по квалифицированному имени: только в узел модели `model`.
+    fn set_qualified(&mut self, model: &str, port: &str, value: Value) {
+        match &mut self.0 {
+            UnitKind::None => {}
+            UnitKind::Node {
+                context,
+                model_name,
+                ..
+            } => {
+                if model_name.as_deref() == Some(model)
+                    && let Some(ctx) = context
+                {
+                    ctx.borrow_mut().set_value(port, value);
+                }
+            }
+            UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => {
+                for unit in units.iter() {
+                    unit.borrow_mut().set_qualified(model, port, value.clone());
+                }
+            }
+        }
+    }
+
+    /// Записывает значение по имени — публичный вход для драйверов и тестов.
+    ///
+    /// Симметричен [`variable`](Self::variable): раньше запись была доступна
+    /// только через трейт `Context`, то есть требовала тащить внутренний трейт в
+    /// каждый вызывающий модуль. Имя может быть **квалифицированным**
+    /// (`Модель::порт`, фича 0135) — тогда запись идёт ровно в одну ветвь
+    /// композиции; голое имя рассылается всем ветвям, как прежде.
+    pub fn set_port(&mut self, name: &str, value: Value) {
+        self.set_value(name, value);
+    }
+
     pub fn variable(&self, name: &str) -> Option<Value> {
         self.get_value(name)
     }
@@ -805,6 +890,20 @@ impl Unit {
             }
         }
     }
+}
+
+/// Разбирает квалифицированное имя значения `Модель::порт` (фича 0135).
+///
+/// Разделитель — `::`, как у квалифицированного ключа карты адресов (фича 0084):
+/// две подсистемы адресуют одно и то же, и разъехавшиеся формы записи стоили бы
+/// пользователю догадок. Имя без разделителя — голое, обрабатывается прежним
+/// путём.
+fn split_qualified(name: &str) -> Option<(&str, &str)> {
+    let (model, port) = name.split_once("::")?;
+    if model.is_empty() || port.is_empty() || port.contains("::") {
+        return None;
+    }
+    Some((model, port))
 }
 
 fn collect_active_states(unit: &Unit, out: &mut Vec<String>) {
