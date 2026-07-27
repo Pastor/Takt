@@ -131,6 +131,22 @@ pub fn resolve_condition(
     // Сторож глубины — см. `validate::depth` (фича 0129).
     let _depth = crate::semantic::validate::depth::enter(Some(cond.loc()))?;
     match cond {
+        // ── Время (фича 0134) ────────────────────────────────────────────────
+        // Литерал разбирается лексером и хранится в АСД; семантика времени
+        // (тип `duration`, профили, пересчёт) вводится подзадачей 0134-02.
+        // До неё конструкция даёт ЯВНЫЙ отказ, а не молчаливое приведение к
+        // числу: молча посчитать наносекунды обычным целым значило бы получить
+        // выдержку, не равную заявленной.
+        ast::Condition::Duration(loc, _, text) => Err(Diagnostic::error(
+            *loc,
+            format!("литерал длительности '{text}' пока не поддерживается семантикой"),
+        )
+        .with_code("SE-066")),
+        ast::Condition::After(loc, _, text) => Err(Diagnostic::error(
+            *loc,
+            format!("выдержка 'after {text}' пока не поддерживается семантикой"),
+        )
+        .with_code("SE-066")),
         ast::Condition::ArraySubscript(_, id, idx_cond) => {
             let name = id.name.clone();
             let var = model.borrow().search_var(&name);

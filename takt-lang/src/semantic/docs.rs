@@ -88,6 +88,7 @@ fn element_start(element: &ModelElement) -> Option<usize> {
         ModelElement::Struct(s) => Some(s.loc.start()),
         ModelElement::InlineFormula(f) => Some(inline_formula_loc(f).start()),
         ModelElement::Address(a) => Some(a.loc.start()),
+        ModelElement::Clock(c) => Some(c.loc.start()),
     }
 }
 

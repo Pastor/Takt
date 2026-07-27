@@ -86,6 +86,8 @@ pub enum Expression {
     Assign(Location, Box<Expression>, Box<Expression>),
     /// Целочисленный литерал.
     Number(Location, i64),
+    /// Литерал длительности: `(позиция, наносекунды, как записано)` — фича 0134.
+    Duration(Location, i64, String),
     /// Вещественный литерал: `(строка, отрицательный)`.
     Rational(Location, String, bool),
     /// Конкатенация строковых литералов.
@@ -153,6 +155,7 @@ macro_rules! expr_components {
             | NamedFunction(..)
             | Number(..)
             | Rational(..)
+            | Duration(..)
             | String(..)
             | Type(..)
             | Bool(..)
@@ -300,6 +303,7 @@ impl Expression {
             Expression::ConditionalOperator(loc, _, _, _) => *loc,
             Expression::Assign(loc, _, _) => *loc,
             Expression::Number(loc, _) => *loc,
+            Expression::Duration(loc, _, _) => *loc,
             Expression::Rational(loc, _, _) => *loc,
             Expression::String(_) => Location::Builtin,
             Expression::Type(loc, _) => *loc,
