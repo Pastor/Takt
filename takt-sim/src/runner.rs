@@ -2,7 +2,7 @@ use crate::context::Context;
 use crate::eval::value::Value;
 use crate::gif::GifRecorder;
 use crate::graphics_config::{GraphicsConfig, OutputMode};
-use crate::json_input::{Guard, SimStep, json_to_value};
+use crate::json_input::{Guard, PortValues, SimStep, json_to_value};
 use crate::svg::SvgRecorder;
 use crate::unit::viewport::{CachedLayout, LegendData, compute_layout, render_from_layout};
 use crate::unit::{TickResult, Unit};
@@ -57,6 +57,12 @@ pub struct PortNames {
     /// существует, чтобы двусмысленность была **видна** — в предупреждении при
     /// запуске и в потактовом выводе, — а не молчала.
     pub ambiguous: Vec<(String, Vec<String>)>,
+    /// Все квалифицированные имена (`Модель::имя`) — фича 0132.
+    ///
+    /// Строится тем же обходом, что и [`ambiguous`](Self::ambiguous), из одного
+    /// списка владельцев: два реестра из разных источников разошлись бы, и
+    /// сценарий получал бы «имя не найдено» на имя, которое симулятор знает.
+    pub qualified: std::collections::BTreeSet<String>,
 }
 
 impl PortNames {
@@ -75,10 +81,15 @@ impl PortNames {
             inout_ports: Vec::new(),
             vars: Vec::new(),
             ambiguous: Vec::new(),
+            qualified: std::collections::BTreeSet::new(),
         };
         let mut owners: Vec<(String, String)> = Vec::new();
         names.collect_recursive(model, &mut owners);
         names.ambiguous = ambiguous_names(&owners);
+        names.qualified = owners
+            .iter()
+            .map(|(name, owner)| format!("{owner}::{name}"))
+            .collect();
         for v in [
             &mut names.in_ports,
             &mut names.out_ports,
@@ -150,6 +161,28 @@ fn ambiguous_names(owners: &[(String, String)]) -> Vec<(String, Vec<String>)> {
             (name.to_string(), qualified)
         })
         .collect()
+}
+
+/// Направление портов, к которому относятся значения шага (фича 0132).
+///
+/// Нужен, чтобы одна воронка разрешения имён обслуживала и входы, и `guard`:
+/// направление — единственное, чем эти случаи различаются.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortDirectionKind {
+    In,
+    Out,
+    InOut,
+}
+
+impl PortDirectionKind {
+    /// Имя поля в файле сценария — для текста диагностики.
+    fn field(self) -> &'static str {
+        match self {
+            Self::In => "in_ports",
+            Self::Out => "out",
+            Self::InOut => "inout",
+        }
+    }
 }
 
 // ── Результат симуляции ──────────────────────────────────────────────────────
@@ -276,7 +309,7 @@ impl SimulationRunner {
 
             // Применяем входные порты
             if let Some(step) = &sim_step {
-                self.apply_step_inputs(step);
+                self.apply_step_inputs(step, step_no + 1)?;
             }
 
             // Выполняем шаг. В мягком режиме нарушения инвариантов не прерывают
@@ -426,60 +459,138 @@ impl SimulationRunner {
         println!();
     }
 
-    fn apply_step_inputs(&mut self, step: &SimStep) {
-        if let Some(in_vals) = &step.in_ports {
-            for (i, json_val) in in_vals.iter().enumerate() {
-                if let (Some(name), Some(value)) =
-                    (self.port_names.in_ports.get(i), json_to_value(json_val))
-                {
-                    let name = name.clone();
-                    self.unit.set_value(&name, value);
+    /// Применяет входы шага: позиционно (историческая форма) либо по именам.
+    ///
+    /// Возвращает ошибку, если сценарий назвал порт, которого нет, либо имя
+    /// двусмысленно. Прежде функция ошибок не возвращала вовсе: лишний элемент
+    /// массива молча отбрасывался (фича 0132).
+    fn apply_step_inputs(&mut self, step: &SimStep, step_no: usize) -> Result<(), String> {
+        for (values, direction) in [
+            (&step.in_ports, PortDirectionKind::In),
+            (&step.inout, PortDirectionKind::InOut),
+        ] {
+            let Some(values) = values else { continue };
+            for (name, value) in self.resolve_values(values, direction, step_no)? {
+                self.unit.set_port(&name, value);
+            }
+        }
+        Ok(())
+    }
+
+    /// Переводит значения шага в пары «имя порта → значение».
+    ///
+    /// Общая воронка для входов и для `guard`: разойдясь, они принимали бы
+    /// разные имена, и сценарий вёл бы себя по-разному в зависимости от того, в
+    /// какой половине шага написано имя.
+    fn resolve_values(
+        &self,
+        values: &PortValues,
+        direction: PortDirectionKind,
+        step_no: usize,
+    ) -> Result<Vec<(String, Value)>, String> {
+        let names = self.names_of(direction);
+        let mut resolved = Vec::new();
+        match values {
+            PortValues::Positional(list) => {
+                if list.len() != names.len() {
+                    // Предупреждение, а не ошибка: корпус мог опираться на
+                    // неполные массивы, и ломать его фича не должна.
+                    eprintln!(
+                        "Предупреждение [SIM-032]: шаг {step_no}: {} значений в позиционном \
+                         массиве `{}`, а портов {} — лишние игнорируются, недостающие не задаются",
+                        list.len(),
+                        direction.field(),
+                        names.len()
+                    );
+                }
+                for (i, json_val) in list.iter().enumerate() {
+                    if let (Some(name), Some(value)) = (names.get(i), json_to_value(json_val)) {
+                        resolved.push((name.clone(), value));
+                    }
+                }
+            }
+            PortValues::Named(map) => {
+                for (name, json_val) in map {
+                    self.check_port_name(name, direction, step_no)?;
+                    if let Some(value) = json_to_value(json_val) {
+                        resolved.push((name.clone(), value));
+                    }
                 }
             }
         }
-        if let Some(inout_vals) = &step.inout {
-            for (i, json_val) in inout_vals.iter().enumerate() {
-                if let (Some(name), Some(value)) =
-                    (self.port_names.inout_ports.get(i), json_to_value(json_val))
-                {
-                    let name = name.clone();
-                    self.unit.set_value(&name, value);
-                }
-            }
+        Ok(resolved)
+    }
+
+    /// Имена портов заданного направления.
+    fn names_of(&self, direction: PortDirectionKind) -> &[String] {
+        match direction {
+            PortDirectionKind::In => &self.port_names.in_ports,
+            PortDirectionKind::Out => &self.port_names.out_ports,
+            PortDirectionKind::InOut => &self.port_names.inout_ports,
         }
     }
 
-    fn check_guard(&self, guard: &Guard, step_no: usize) -> Result<(), String> {
-        if let Some(out_vals) = &guard.out {
-            for (i, expected_json) in out_vals.iter().enumerate() {
-                let Some(name) = self.port_names.out_ports.get(i) else {
-                    continue;
-                };
-                let Some(expected) = json_to_value(expected_json) else {
-                    continue;
-                };
-                let actual = self.unit.get_value(name);
-                if !values_match(&actual, &expected) {
-                    return Err(format!(
-                        "Guard шага {step_no}: out[{i}] ({name}): ожидалось {:?}, получено {:?}",
-                        expected, actual
-                    ));
-                }
+    /// Проверяет, что имя из сценария адресует ровно один порт нужного
+    /// направления.
+    ///
+    /// ⚠️ Направление проверяется намеренно: `in_ports: {"lamp": 1}` при выходном
+    /// `lamp` — почти наверняка опечатка, а не задумка. Прежде такая запись
+    /// молча ничего не делала.
+    fn check_port_name(
+        &self,
+        name: &str,
+        direction: PortDirectionKind,
+        step_no: usize,
+    ) -> Result<(), String> {
+        if name.contains("::") {
+            // Квалифицированное имя: проверяем существование пары «модель::имя».
+            // Направление здесь не сужается — квалификация уже однозначна.
+            if !self.port_names.qualified.contains(name) {
+                return Err(format!(
+                    "Ошибка [SIM-030]: шаг {step_no}: порт `{name}` не найден в модели"
+                ));
             }
+            return Ok(());
         }
-        if let Some(inout_vals) = &guard.inout {
-            for (i, expected_json) in inout_vals.iter().enumerate() {
-                let Some(name) = self.port_names.inout_ports.get(i) else {
-                    continue;
-                };
-                let Some(expected) = json_to_value(expected_json) else {
-                    continue;
-                };
-                let actual = self.unit.get_value(name);
+        if let Some((_, variants)) = self
+            .port_names
+            .ambiguous
+            .iter()
+            .find(|(bare, _)| bare == name)
+        {
+            return Err(format!(
+                "Ошибка [SIM-031]: шаг {step_no}: имя `{name}` объявлено несколькими моделями \
+                 ({}) — укажите квалифицированное имя",
+                variants.join(", ")
+            ));
+        }
+        if !self.names_of(direction).iter().any(|n| n == name) {
+            return Err(format!(
+                "Ошибка [SIM-030]: шаг {step_no}: порт `{name}` не найден среди портов \
+                 направления `{}`",
+                direction.field()
+            ));
+        }
+        Ok(())
+    }
+
+    fn check_guard(&self, guard: &Guard, step_no: usize) -> Result<(), String> {
+        // Порты guard разрешаются ТОЙ ЖЕ воронкой, что и входы шага: иначе
+        // именованная форма работала бы в одной половине файла и не работала в
+        // другой (фича 0132).
+        for (values, direction) in [
+            (&guard.out, PortDirectionKind::Out),
+            (&guard.inout, PortDirectionKind::InOut),
+        ] {
+            let Some(values) = values else { continue };
+            for (name, expected) in self.resolve_values(values, direction, step_no)? {
+                let actual = self.unit.get_value(&name);
                 if !values_match(&actual, &expected) {
                     return Err(format!(
-                        "Guard шага {step_no}: inout[{i}] ({name}): ожидалось {:?}, получено {:?}",
-                        expected, actual
+                        "Guard шага {step_no}: {} ({name}): ожидалось {:?}, получено {:?}",
+                        direction.field(),
+                        expected,
+                        actual
                     ));
                 }
             }
