@@ -128,6 +128,8 @@ pub fn resolve_condition(
     cond: &ast::Condition,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<ConditionNode, Diagnostic> {
+    // Сторож глубины — см. `validate::depth` (фича 0129).
+    let _depth = crate::semantic::validate::depth::enter(Some(cond.loc()))?;
     match cond {
         ast::Condition::ArraySubscript(_, id, idx_cond) => {
             let name = id.name.clone();

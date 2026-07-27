@@ -108,3 +108,4 @@
 | [0139](./0139-remove-travis-config.md) | Удаление мёртвой конфигурации .travis.yml | Accepted | фича 0139 |
 | [0137](./0137-toolchain-pin-msrv.md) | Фиксация толчейна Rust и MSRV | Accepted | фича 0137 |
 | [0128](./0128-lexer-literal-overflow.md) | Диагностика вместо паники на числовом литерале больше i64::MAX | Accepted | фича 0128 |
+| [0129](./0129-semantic-deep-nesting.md) | Устранение переполнения стека на глубине выражений и операторов | Accepted | фича 0129 |

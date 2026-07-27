@@ -141,7 +141,7 @@
 | [0126](./0126-language-comparison-diff.md) | Сравнительный анализ языка Takt с родственными языками (отчёт [DIFF.md](../DIFF.md)) | [ADR](../adr/0126-language-comparison-diff.md) · [анализ](../analyze/0126-language-comparison-diff.md) · [отчёт](../DIFF.md) | ✅ ГОТОВО |
 | [0127](./0127-int-overflow-semantics.md) | Единая семантика переполнения целых во всех целях | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0128](./0128-lexer-literal-overflow.md) | Диагностика вместо паники на числовом литерале больше i64::MAX | [ADR](../adr/0128-lexer-literal-overflow.md) · [анализ](../analyze/0128-lexer-literal-overflow.md) · [тест-план](../tests/0128-lexer-literal-overflow.md) · [отчёт](../reports/0128-lexer-literal-overflow.md) | ✅ ГОТОВО |
-| [0129](./0129-semantic-deep-nesting.md) | Устранение переполнения стека на глубине выражений и операторов | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0129](./0129-semantic-deep-nesting.md) | Устранение переполнения стека на глубине выражений и операторов | [ADR](../adr/0129-semantic-deep-nesting.md) · [анализ](../analyze/0129-semantic-deep-nesting.md) · [тест-план](../tests/0129-semantic-deep-nesting.md) · [отчёт](../reports/0129-semantic-deep-nesting.md) | ✅ ГОТОВО |
 | [0130](./0130-diagnostics-batch.md) | Накопление семантических диагностик (несколько ошибок за прогон) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0131](./0131-lsp-definition-references-rename.md) | LSP: definition, references и rename | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0132](./0132-sim-named-port-scenarios.md) | Именованные порты в сценариях симулятора | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
