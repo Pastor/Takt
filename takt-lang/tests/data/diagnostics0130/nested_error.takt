@@ -1,0 +1,9 @@
+model Outer {
+    var top: bit := 7;
+    model Inner {
+        var deep: bit := 9;
+        start I { always { deep := 0; } }
+    }
+    start O = Inner;
+}
+start Root = Outer;

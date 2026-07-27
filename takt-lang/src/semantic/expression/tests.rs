@@ -384,31 +384,31 @@ fn var_type_unresolved() {
 /// `check_slice_bounds`: допустимый срез [1:6] для массива size=8 — ок.
 #[test]
 fn check_slice_bounds_valid() {
-    check_slice_bounds("buf", 8, Some(1), Some(6)).unwrap();
+    check_slice_bounds("buf", Location::Source(0, 1, 2), 8, Some(1), Some(6)).unwrap();
 }
 
 /// `check_slice_bounds`: срез с end > size — ошибка.
 #[test]
 fn check_slice_bounds_end_out_of_range_is_error() {
-    assert!(check_slice_bounds("buf", 8, None, Some(9)).is_err());
+    assert!(check_slice_bounds("buf", Location::Source(0, 1, 2), 8, None, Some(9)).is_err());
 }
 
 /// `check_slice_bounds`: срез с start >= size — ошибка.
 #[test]
 fn check_slice_bounds_start_out_of_range_is_error() {
-    assert!(check_slice_bounds("buf", 8, Some(8), None).is_err());
+    assert!(check_slice_bounds("buf", Location::Source(0, 1, 2), 8, Some(8), None).is_err());
 }
 
 /// `check_slice_bounds`: start > end — ошибка.
 #[test]
 fn check_slice_bounds_start_greater_than_end_is_error() {
-    assert!(check_slice_bounds("buf", 8, Some(5), Some(3)).is_err());
+    assert!(check_slice_bounds("buf", Location::Source(0, 1, 2), 8, Some(5), Some(3)).is_err());
 }
 
 /// `check_slice_bounds`: None, None — всегда ок (срез без границ).
 #[test]
 fn check_slice_bounds_both_none_is_ok() {
-    check_slice_bounds("buf", 8, None, None).unwrap();
+    check_slice_bounds("buf", Location::Source(0, 1, 2), 8, None, None).unwrap();
 }
 
 // ── Implement-состояния и construct_expression ─────────────────────────────
@@ -883,23 +883,23 @@ fn var_type_const() {
 /// `check_slice_bounds`: отрицательный start — ошибка.
 #[test]
 fn check_slice_bounds_negative_start_is_error() {
-    assert!(check_slice_bounds("buf", 8, Some(-1), None).is_err());
+    assert!(check_slice_bounds("buf", Location::Source(0, 1, 2), 8, Some(-1), None).is_err());
 }
 
 /// `check_slice_bounds`: отрицательный end — ошибка.
 #[test]
 fn check_slice_bounds_negative_end_is_error() {
-    assert!(check_slice_bounds("buf", 8, None, Some(-1)).is_err());
+    assert!(check_slice_bounds("buf", Location::Source(0, 1, 2), 8, None, Some(-1)).is_err());
 }
 
 /// `check_slice_bounds`: срез без начала [..end] — ок.
 #[test]
 fn check_slice_bounds_only_end_is_ok() {
-    check_slice_bounds("buf", 8, None, Some(8)).unwrap();
+    check_slice_bounds("buf", Location::Source(0, 1, 2), 8, None, Some(8)).unwrap();
 }
 
 /// `check_slice_bounds`: срез без конца [start..] — ок.
 #[test]
 fn check_slice_bounds_only_start_is_ok() {
-    check_slice_bounds("buf", 8, Some(0), None).unwrap();
+    check_slice_bounds("buf", Location::Source(0, 1, 2), 8, Some(0), None).unwrap();
 }

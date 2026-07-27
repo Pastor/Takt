@@ -182,7 +182,7 @@ fn mark_imported(model: Rc<RefCell<ModelNode>>) -> Rc<RefCell<ModelNode>> {
     model
 }
 
-fn construct_model_stage0(
+pub(super) fn construct_model_stage0(
     model: &Model,
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
@@ -793,7 +793,7 @@ fn construct_model_stage0(
     Ok(Rc::clone(&model_node))
 }
 
-fn construct_model_stage1(
+pub(super) fn construct_model_stage1(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     // Клонируем состояния до мутабельного займа, чтобы construct_implement мог брать заём
@@ -920,7 +920,7 @@ fn resolve_variable_expressions(
     Ok(result)
 }
 
-fn construct_model_stage2(
+pub(super) fn construct_model_stage2(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     // Шаг 2а: разрешаем инициализаторы переменных (Unresolved → полноценное Expression)
@@ -947,7 +947,7 @@ fn construct_model_stage2(
     Ok(Rc::clone(&model))
 }
 
-fn construct_model_stage3(
+pub(super) fn construct_model_stage3(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     let mut conditions = model.borrow().conditions.clone();
@@ -981,7 +981,7 @@ fn construct_model_stage3(
 /// При ошибке разрешения оператор сохраняется в виде [`StatementNode::Unresolved`]
 /// (ошибка не пробрасывается), что позволяет корректно обрабатывать
 /// встроенные функции (`debug`, `S`, …) без их явной регистрации.
-fn construct_model_stage4(
+pub(super) fn construct_model_stage4(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     // Разрешаем формулы на уровне текущей модели
@@ -1017,7 +1017,7 @@ fn construct_model_stage4(
     Ok(Rc::clone(&model))
 }
 
-fn construct_model_stage5(
+pub(super) fn construct_model_stage5(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     // 0031: тела функций разрешаются в ТОПОЛОГИЧЕСКОМ порядке графа вызовов —
@@ -1071,7 +1071,7 @@ fn construct_model_stage5(
     Ok(Rc::clone(&model))
 }
 
-fn construct_model_stage6(
+pub(super) fn construct_model_stage6(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     let states = model.borrow().states.clone();
@@ -1243,18 +1243,7 @@ pub fn construct_model_with_files(
     search_paths: &[String],
     files: &mut FileTable,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    // Стек путей файлов, чьи импорты сейчас обрабатываются.
-    // Пустой на входе: текущая (корневая) единица компиляции не имеет пути.
-    let mut import_stack: Vec<String> = Vec::new();
-    let model = construct_model_stage0(model, upper, search_paths, &mut import_stack, files)?;
-    let model = construct_model_stage1(model)?;
-    let model = construct_model_stage2(model)?;
-    let model = construct_model_stage3(model)?;
-    // Функции (этап 5) должны разрешаться перед именованными блоками (этап 4),
-    // чтобы блоки always/enter/exit могли находить уже разрешённые функции через search_func.
-    let model = construct_model_stage5(model)?;
-    let model = construct_model_stage4(model)?;
-    let model = construct_model_stage6(model)?;
+    let model = super::stages::construct_stages(model, upper, search_paths, files)?;
     validate_model(model.clone())?;
     Ok(model)
 }

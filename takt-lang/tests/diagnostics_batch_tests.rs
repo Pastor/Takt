@@ -95,6 +95,70 @@ fn exact_duplicates_are_collapsed() {
     );
 }
 
+/// A3: проверки высказываются все, а не только первая.
+///
+/// В фикстуре две независимые ошибки: два начальных состояния (`SE-011`) и
+/// значение `5` у переменной типа `bit` (`SE-035`). Прежде сообщалась одна.
+#[test]
+fn all_validation_errors_are_reported() {
+    let (path, source) = fixture("two_validate_errors.takt");
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    let codes: Vec<&str> = diagnostics
+        .iter()
+        .filter_map(|d| d.code.as_deref())
+        .collect();
+    assert!(
+        codes.contains(&"SE-011") && codes.contains(&"SE-035"),
+        "ожидались обе ошибки проверок, получено {codes:?}"
+    );
+}
+
+/// A4: ошибка вложенной модели попадает в тот же список.
+#[test]
+fn nested_model_errors_are_collected() {
+    let (path, source) = fixture("nested_error.takt");
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    let messages: Vec<&str> = diagnostics.iter().map(|d| d.message.as_str()).collect();
+    assert_eq!(
+        diagnostics.len(),
+        2,
+        "ожидались ошибки внешней и вложенной моделей: {messages:?}"
+    );
+    assert!(
+        messages.iter().any(|m| m.contains("'top'"))
+            && messages.iter().any(|m| m.contains("'deep'")),
+        "обе модели обязаны высказаться: {messages:?}"
+    );
+    let starts: Vec<u32> = diagnostics.iter().map(start_of).collect();
+    let mut sorted = starts.clone();
+    sorted.sort_unstable();
+    assert_eq!(starts, sorted, "порядок текстовый: {starts:?}");
+}
+
+/// A7: диагностика несёт **реальную** позицию, а не начало файла.
+///
+/// ⚠️ Пока сообщение было одно, координата `1:1` терпелась: ошибка в файле одна,
+/// найдётся. В пачке сообщений позиция становится обязательной — иначе все они
+/// указывают в первую строку и искать приходится вручную.
+#[test]
+fn diagnostics_point_at_real_positions() {
+    let (path, source) = fixture("unknown_identifier.takt");
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    assert_eq!(diagnostics.len(), 1, "{diagnostics:#?}");
+    let Location::Source(_, start, end) = diagnostics[0].loc else {
+        panic!("ожидалась позиция в исходном тексте: {:?}", diagnostics[0]);
+    };
+    assert!(
+        start > 0,
+        "позиция обязана указывать на имя, а не на начало файла"
+    );
+    assert_eq!(
+        &source[start as usize..end as usize],
+        "unknown_name",
+        "диапазон обязан покрывать сам идентификатор"
+    );
+}
+
 /// Корректный файл даёт пустой список — «нет ошибок» выражается пустотой, а не
 /// отсутствием вызова.
 #[test]

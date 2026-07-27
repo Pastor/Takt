@@ -1,0 +1,6 @@
+model M {
+    var b: bit := 5;
+    start S1 { always { b := 0; } }
+    start S2 { always { b := 1; } }
+}
+start Root = M;
