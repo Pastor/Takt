@@ -107,3 +107,4 @@
 | [0126](./0126-language-comparison-diff.md) | Сравнительный анализ языка Takt с родственными языками (отчёт docs/DIFF.md) | Accepted | фича 0126 |
 | [0139](./0139-remove-travis-config.md) | Удаление мёртвой конфигурации .travis.yml | Accepted | фича 0139 |
 | [0137](./0137-toolchain-pin-msrv.md) | Фиксация толчейна Rust и MSRV | Accepted | фича 0137 |
+| [0128](./0128-lexer-literal-overflow.md) | Диагностика вместо паники на числовом литерале больше i64::MAX | Accepted | фича 0128 |

@@ -224,3 +224,4 @@
 | 0125-01 | 0125 | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | [0125-01-intellij-takt-lsp-tooling.md](0125-01-intellij-takt-lsp-tooling.md) |
 | 0139-01 | 0139 | Удаление мёртвой конфигурации .travis.yml | [0139-01-remove-travis-config.md](0139-01-remove-travis-config.md) |
 | 0137-01 | 0137 | Фиксация толчейна Rust и MSRV | [0137-01-toolchain-pin-msrv.md](0137-01-toolchain-pin-msrv.md) |
+| 0128-01 | 0128 | Диагностика вместо паники на числовом литерале больше i64::MAX | [0128-01-lexer-literal-overflow.md](0128-01-lexer-literal-overflow.md) |

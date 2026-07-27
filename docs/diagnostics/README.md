@@ -107,6 +107,7 @@
 | `LE-006` | Нераспознанный токен | `takt-lang/src/parser/lexer.rs:448` |
 | `LE-007` | Отсутствует показатель степени в числе с плавающей точкой | `takt-lang/src/parser/lexer.rs:449` |
 | `LE-008` | Ожидался токен `from` | `takt-lang/src/parser/lexer.rs:450` |
+| `LE-009` | Числовой литерал вне диапазона `i64` | `takt-lang/src/parser/lexer.rs:162` |
 
 ### PU — цель PlantUML
 
