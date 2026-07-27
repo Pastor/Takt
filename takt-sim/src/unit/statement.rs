@@ -61,6 +61,10 @@ struct BlockScope<'a> {
 }
 
 impl Context for BlockScope<'_> {
+    fn since_state_entry_ns(&self) -> i64 {
+        self.outer.since_state_entry_ns()
+    }
+
     fn get_value(&self, name: &str) -> Option<Value> {
         self.locals
             .get(name)
@@ -92,6 +96,10 @@ struct FunctionScope<'a> {
 }
 
 impl Context for FunctionScope<'_> {
+    fn since_state_entry_ns(&self) -> i64 {
+        self.outer.since_state_entry_ns()
+    }
+
     fn get_value(&self, name: &str) -> Option<Value> {
         self.locals
             .get(name)

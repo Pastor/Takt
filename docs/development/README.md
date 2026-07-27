@@ -247,3 +247,4 @@
 | 0136-03 | 0136 | Бенчмарки производительности | [0136-03-perf-benchmarks.md](0136-03-perf-benchmarks.md) |
 | 0134-01 | 0134 | Лексика, грамматика и АСД: литерал длительности, `clock`, `after`/`every` | [0134-01-lexis-grammar-ast.md](0134-01-lexis-grammar-ast.md) |
 | 0134-02 | 0134 | Тип `duration`, слой `semantic::duration` и диагностики | [0134-02-type-and-lowering.md](0134-02-type-and-lowering.md) |
+| 0134-03 | 0134 | Симулятор: виртуальные часы, значение длительности, `after` | [0134-03-simulator-clock.md](0134-03-simulator-clock.md) |

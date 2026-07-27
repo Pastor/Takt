@@ -36,7 +36,7 @@ pub(crate) fn construct_stages(
     let model = construct_model_stage0(model, upper, search_paths, &mut import_stack, files)?;
     // Частота тактирования (фича 0134): собирается по АСД отдельным проходом —
     // она свойство единицы компиляции, а не отдельного элемента модели.
-    crate::semantic::clock::collect_clock(ast, &model)?;
+    crate::semantic::time_ast::collect_clock(ast, &model)?;
     let model = construct_model_stage1(model)?;
     let model = construct_model_stage2(model)?;
     let model = construct_model_stage3(model)?;

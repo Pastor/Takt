@@ -229,6 +229,17 @@ pub struct SimulationRunner {
     /// Мягкий режим инвариантов (фича 0087): нарушение записывается и прогон
     /// продолжается, вместо останова. Умолчание — `false` (жёсткий режим 0044).
     soft_invariants: bool,
+    /// Модельное время прогона (наносекунды) — виртуальные часы (фича 0134).
+    ///
+    /// Часов реального мира в эталоне нет ни при каких условиях: трасса обязана
+    /// воспроизводиться, иначе все сверки станут мигающими.
+    now_ns: i64,
+    /// На сколько продвигать часы за такт, если шаг сценария не сказал иного.
+    ///
+    /// Умолчание — **1 мс**: прогон без указания времени должен оставаться
+    /// возможным, а неявной частоты здесь не появляется — это свойство прогона,
+    /// а не модели. Объявленная моделью частота (`clock`) задаёт период такта.
+    tick_period_ns: i64,
 }
 
 impl SimulationRunner {
@@ -280,6 +291,8 @@ impl SimulationRunner {
             gif_config,
             cached_layout: None,
             soft_invariants: false,
+            now_ns: 0,
+            tick_period_ns: 1_000_000,
         })
     }
 
@@ -287,6 +300,20 @@ impl SimulationRunner {
     /// выключен (жёсткий режим 0044 — совпадает с `assert()` в C).
     pub fn set_invariant_soft(&mut self, on: bool) {
         self.soft_invariants = on;
+    }
+
+    /// Задаёт период такта модельных часов (фича 0134), в наносекундах.
+    ///
+    /// Источники, в порядке приоритета: поле шага сценария (`time_ms`) →
+    /// это значение → умолчание 1 мс. Объявленная моделью частота (`clock`)
+    /// переводится в период вызывающим: `1 с / f`.
+    pub fn set_tick_period_ns(&mut self, period_ns: i64) {
+        self.tick_period_ns = period_ns.max(0);
+    }
+
+    /// Текущее модельное время прогона (наносекунды).
+    pub fn now_ns(&self) -> i64 {
+        self.now_ns
     }
 
     /// Запускает главный цикл симуляции.
@@ -306,6 +333,23 @@ impl SimulationRunner {
 
         for step_no in 0..limit {
             let sim_step: Option<SimStep> = self.sim_steps.get(step_no).cloned();
+
+            // Модельное время (фича 0134) ставится ДО такта: показания часов на
+            // такте N обязаны быть видны телу, исполняемому на такте N. Иначе
+            // выдержка сдвинулась бы на такт относительно целей — а такой сдвиг
+            // компилируется молча (тот же класс, что вход в стартовое состояние,
+            // фича 0033).
+            // ⚠️ Первый такт идёт при t = 0: часы двигаются ПЕРЕД каждым тактом,
+            // кроме первого. Иначе модель входила бы в стартовое состояние уже
+            // «спустя период», и выдержка отсчитывалась бы от чужого момента.
+            if step_no > 0 {
+                let advance_ns = sim_step
+                    .as_ref()
+                    .and_then(|step| step.time_ms)
+                    .map_or(self.tick_period_ns, |ms| ms.saturating_mul(1_000_000));
+                self.now_ns = self.now_ns.saturating_add(advance_ns);
+            }
+            self.unit.set_time_ns(self.now_ns);
 
             // Применяем входные порты
             if let Some(step) = &sim_step {
@@ -443,7 +487,21 @@ impl SimulationRunner {
                 .join("  ")
         };
 
-        print!("Шаг {:3}:  [{}]", step_no, states_str);
+        // Трасса печатает и такт, и модельное время (фича 0134): без времени
+        // не прочесть, почему выдержка сработала именно здесь, а без такта —
+        // не сверить с целью. Время показывается, только когда часы идут не по
+        // умолчанию либо уже сдвинулись, — иначе оно засоряло бы вывод моделям,
+        // время не использующим.
+        if self.now_ns > 0 {
+            print!(
+                "Шаг {:3} ({:>8}):  [{}]",
+                step_no,
+                format_duration(self.now_ns),
+                states_str
+            );
+        } else {
+            print!("Шаг {:3}:  [{}]", step_no, states_str);
+        }
 
         for (label, names) in [
             ("in", self.port_names.in_ports.as_slice()),
@@ -732,6 +790,24 @@ fn values_match(actual: &Option<Value>, expected: &Value) -> bool {
     }
 }
 
+/// Человекочитаемая запись длительности: `1.500s`, `250ms`, `40ns`.
+///
+/// Трасса читается человеком, и `1500000000` в ней бесполезно: автор писал
+/// `1s500ms` и ожидает увидеть сопоставимое.
+pub(crate) fn format_duration(nanos: i64) -> String {
+    const MS: i64 = 1_000_000;
+    const S: i64 = 1_000_000_000;
+    if nanos != 0 && nanos % S == 0 {
+        format!("{}s", nanos / S)
+    } else if nanos != 0 && nanos % MS == 0 {
+        format!("{}ms", nanos / MS)
+    } else if nanos != 0 && nanos % 1_000 == 0 {
+        format!("{}us", nanos / 1_000)
+    } else {
+        format!("{nanos}ns")
+    }
+}
+
 fn format_value(v: &Value) -> String {
     match v {
         Value::Number(n) => n.to_string(),
@@ -739,6 +815,9 @@ fn format_value(v: &Value) -> String {
         Value::Boolean(b) => b.to_string(),
         // q(m, n): показываем вещественное значение repr·2⁻ⁿ.
         Value::Fixed { repr, n, .. } => format!("{:.4}", *repr as f64 / (1u64 << n) as f64),
+        // Длительность печатается человекочитаемо: наносекунды в трассе
+        // нечитаемы, а выдержки задаются секундами и миллисекундами.
+        Value::Duration(ns) => crate::runner::format_duration(*ns),
         Value::Array(arr) => format!(
             "[{}]",
             arr.iter().map(format_value).collect::<Vec<_>>().join(",")

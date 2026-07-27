@@ -147,6 +147,18 @@ pub(crate) enum UnitKind {
         invariant_violations: Vec<String>,
         /// Последний сработавший переход: (из, в, имя_предиката).
         last_transition: Option<(String, String, String)>,
+        /// Модельное время (наносекунды) — виртуальные часы (фича 0134).
+        ///
+        /// Ставит `runner` перед каждым тактом (`set_time_ns`), поэтому часов
+        /// реального мира в эталоне нет ни при каких условиях: иначе трасса
+        /// перестала бы воспроизводиться, а все сверки стали бы мигающими.
+        time_ns: i64,
+        /// Модельное время входа в **текущее** состояние (фича 0134).
+        ///
+        /// От него отсчитывается `after`. Ставится при входе в стартовое
+        /// состояние и при каждом переходе — то есть выдержка меряется от
+        /// момента входа, а не от начала прогона.
+        state_entered_ns: i64,
         /// Исполнен ли `enter` **стартового** состояния (Д5).
         ///
         /// `enter` вызывался только в ветке перехода, поэтому начальная
@@ -186,6 +198,10 @@ impl Unit {
 }
 
 impl Context for Unit {
+    fn since_state_entry_ns(&self) -> i64 {
+        Unit::since_state_entry_ns(self)
+    }
+
     fn get_value(&self, name: &str) -> Option<Value> {
         // Квалифицированное имя `Модель::порт` (фича 0135) адресует ОДНУ ветвь.
         // Голое имя работает как прежде (первая нашедшаяся ветвь) — правка
@@ -263,6 +279,50 @@ impl Unit {
     /// инварианта останавливает прогон (`Failed`, `SIM-025`), совпадая с
     /// `assert()` → `abort()` в порождённом C. Публичный контракт; через него
     /// идут все потактовые сверки с C и корпус.
+    /// Ставит модельное время (наносекунды) во **все** узлы дерева (фича 0134).
+    ///
+    /// Рекурсивно, как `set_value`: ветви композиции живут в одном времени —
+    /// иначе выдержка в одной ветви шла бы по своим часам, и трасса перестала
+    /// бы быть воспроизводимой.
+    pub fn set_time_ns(&mut self, now_ns: i64) {
+        match &mut self.0 {
+            UnitKind::Node { time_ns, .. } => *time_ns = now_ns,
+            UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => {
+                for unit in units {
+                    unit.borrow_mut().set_time_ns(now_ns);
+                }
+            }
+            UnitKind::None => {}
+        }
+    }
+
+    /// Сколько модельного времени прошло с входа в текущее состояние.
+    pub(crate) fn since_state_entry_ns(&self) -> i64 {
+        match &self.0 {
+            UnitKind::Node {
+                time_ns,
+                state_entered_ns,
+                ..
+            } => time_ns.saturating_sub(*state_entered_ns),
+            UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => units
+                .first()
+                .map_or(0, |u| u.borrow().since_state_entry_ns()),
+            UnitKind::None => 0,
+        }
+    }
+
+    /// Отмечает вход в состояние текущим модельным временем (фича 0134).
+    fn mark_state_entry(&mut self) {
+        if let UnitKind::Node {
+            time_ns,
+            state_entered_ns,
+            ..
+        } = &mut self.0
+        {
+            *state_entered_ns = *time_ns;
+        }
+    }
+
     pub fn tick(&mut self) -> TickResult {
         self.tick_mode(false)
     }
@@ -454,6 +514,8 @@ impl Unit {
                 last_transition.replace((state_name, next.clone(), pred_name));
                 *state = Some(next);
             }
+            // Выдержка `after` отсчитывается от входа в состояние (фича 0134).
+            self.mark_state_entry();
         }
 
         TickResult::Processing
@@ -600,6 +662,11 @@ impl Unit {
                 return Ok(());
             }
         };
+        // Выдержка `after` отсчитывается от входа в состояние — в том числе в
+        // СТАРТОВОЕ (фича 0134). Без этой отметки отсчёт шёл бы от начала
+        // прогона, и выдержка срабатывала бы раньше, чем у цели `st` со штатным
+        // `TON`: тот латчит момент, когда условие стало истинным (проба П3 ADR).
+        self.mark_state_entry();
         let enter_fns: Vec<Execution> = match &self.0 {
             UnitKind::Node {
                 state_executions, ..

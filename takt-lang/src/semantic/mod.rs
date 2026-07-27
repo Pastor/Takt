@@ -10,8 +10,8 @@
 //! - [`VariableNode`] — переменная, порт или константа с разрешённым типом.
 //! - [`Extend`] — реализация модели: ссылка, последовательная или параллельная компоновка.
 
-mod clock;
 mod condition_node;
+mod time_ast;
 pub use condition_node::ConditionNode;
 
 pub mod bit_vector;

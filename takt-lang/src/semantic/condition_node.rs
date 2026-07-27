@@ -62,6 +62,12 @@ pub enum ConditionNode {
     Number(i64),
     /// Литерал длительности в наносекундах (фича 0134).
     Duration(i64),
+    /// Выдержка от входа в состояние: `after 3s` (фича 0134), в наносекундах.
+    ///
+    /// Сахар: своей семантики времени не вводит — истинно, когда с момента
+    /// входа в **текущее состояние** прошло не меньше указанного. Отсчёт ведёт
+    /// исполнитель (симулятор — по модельным часам, цели — по своему счётчику).
+    After(i64),
     /// Вещественный литерал: `(строка, отрицательный)`.
     Rational(String, bool),
     /// Конкатенация строковых литералов.
@@ -112,6 +118,8 @@ impl PartialEq for ConditionNode {
             (Self::Equal(l1, r1), Self::Equal(l2, r2)) => l1 == l2 && r1 == r2,
             (Self::NotEqual(l1, r1), Self::NotEqual(l2, r2)) => l1 == l2 && r1 == r2,
             (Self::Number(a), Self::Number(b)) => a == b,
+            (Self::Duration(a), Self::Duration(b)) => a == b,
+            (Self::After(a), Self::After(b)) => a == b,
             (Self::Rational(s1, n1), Self::Rational(s2, n2)) => s1 == s2 && n1 == n2,
             (Self::String(a), Self::String(b)) => a == b,
             (Self::Bool(a), Self::Bool(b)) => a == b,

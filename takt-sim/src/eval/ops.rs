@@ -101,13 +101,15 @@ pub(crate) fn to_bool(value: &Value) -> Result<bool, EvalError> {
     match value {
         Value::Boolean(b) => Ok(*b),
         Value::Number(n) => Ok(*n != 0),
-        Value::Real(_) | Value::Array(_) | Value::Fixed { .. } | Value::Struct { .. } => {
-            Err(EvalError::TypeMismatch {
-                op: "логическое условие",
-                lhs: value_kind(value),
-                rhs: None,
-            })
-        }
+        Value::Real(_)
+        | Value::Array(_)
+        | Value::Fixed { .. }
+        | Value::Struct { .. }
+        | Value::Duration(_) => Err(EvalError::TypeMismatch {
+            op: "логическое условие",
+            lhs: value_kind(value),
+            rhs: None,
+        }),
     }
 }
 
@@ -123,13 +125,15 @@ fn as_num(value: &Value, op: BinOp, other: Option<&Value>) -> Result<Num, EvalEr
         Value::Number(n) => Ok(Num::Int(*n)),
         Value::Real(f) => Ok(Num::Real(*f)),
         // q(m, n) сюда не доходит: `apply_binary` перехватывает Fixed раньше.
-        Value::Boolean(_) | Value::Array(_) | Value::Fixed { .. } | Value::Struct { .. } => {
-            Err(EvalError::TypeMismatch {
-                op: op.symbol(),
-                lhs: value_kind(value),
-                rhs: other.map(value_kind),
-            })
-        }
+        Value::Boolean(_)
+        | Value::Array(_)
+        | Value::Fixed { .. }
+        | Value::Struct { .. }
+        | Value::Duration(_) => Err(EvalError::TypeMismatch {
+            op: op.symbol(),
+            lhs: value_kind(value),
+            rhs: other.map(value_kind),
+        }),
     }
 }
 
@@ -172,6 +176,11 @@ pub(crate) fn apply_binary(op: BinOp, lhs: &Value, rhs: &Value) -> Result<Value,
     // `*`/`/`) живёт в `fixed`, а не размазана по обычной целочисленной ветке.
     if matches!(lhs, Value::Fixed { .. }) || matches!(rhs, Value::Fixed { .. }) {
         return crate::eval::fixed::binary(op, lhs, rhs);
+    }
+    // Длительность (0134) перехватывается так же: значение самоописательно,
+    // семантика времени живёт в своём модуле, а не в числовой ветке.
+    if matches!(lhs, Value::Duration(_)) || matches!(rhs, Value::Duration(_)) {
+        return crate::eval::duration::binary(op, lhs, rhs);
     }
     match op {
         BinOp::Add => arith(op, lhs, rhs, i64::checked_add, |a, b| a + b),
@@ -371,6 +380,10 @@ fn equality(op: BinOp, lhs: &Value, rhs: &Value, negate: bool) -> Result<Value, 
         // дал бы ложную уверенность (фича 0034, драйвер 3).
         (Value::Array(_), _)
         | (_, Value::Array(_))
+        // Длительность сюда не доходит: `apply_binary` перехватывает её раньше,
+        // как и Fixed. Ветка нужна разбору, а не вычислению.
+        | (Value::Duration(_), _)
+        | (_, Value::Duration(_))
         | (Value::Fixed { .. }, _)
         | (_, Value::Fixed { .. })
         | (Value::Struct { .. }, _)
@@ -397,7 +410,8 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
             | Value::Boolean(_)
             | Value::Array(_)
             | Value::Fixed { .. }
-            | Value::Struct { .. } => Err(EvalError::TypeMismatch {
+            | Value::Struct { .. }
+            | Value::Duration(_) => Err(EvalError::TypeMismatch {
                 op: op.symbol(),
                 lhs: value_kind(value),
                 rhs: None,
@@ -411,7 +425,7 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
             Value::Real(f) => Ok(Value::Real(-f)),
             // q(m, n): унарный минус над представлением с wraparound.
             Value::Fixed { repr, m, n } => Ok(crate::eval::fixed::negate(*repr, *m, *n)),
-            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } => {
+            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
                 Err(EvalError::TypeMismatch {
                     op: op.symbol(),
                     lhs: value_kind(value),
@@ -427,7 +441,7 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
                 m: *m,
                 n: *n,
             }),
-            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } => {
+            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
                 Err(EvalError::TypeMismatch {
                     op: op.symbol(),
                     lhs: value_kind(value),
