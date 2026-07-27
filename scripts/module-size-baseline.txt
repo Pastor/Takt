@@ -13,5 +13,4 @@
 1842 takt-lang/src/semantic/tree.rs
 1747 takt-lang/src/semantic/mod.rs
 1402 takt-lang/src/lib.rs
-1360 takt-lang/src/semantic/expression.rs
 1191 takt-lang/src/semantic/type_inference.rs

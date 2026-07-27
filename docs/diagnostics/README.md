@@ -198,6 +198,7 @@
 | `SE-059` | неявное смешение типов '…' и '…' в арифметике fixed-point запрещено; \ | `takt-lang/src/semantic/validate/fixed.rs:254` |
 | `SE-060` | Бит адреса порта вне диапазона [0, 63] | `takt-lang/src/address_map/resolve.rs:295` |
 | `SE-061` | структура '…' не содержит поля '…' | `takt-lang/src/semantic/validate/member_access.rs:105` |
+| `SE-062` | Превышен предел вложенности выражений/условий | `takt-lang/src/semantic/validate/depth.rs:77` |
 
 ### SIM — симулятор
 

@@ -31,6 +31,7 @@ use std::rc::Rc;
 
 mod common;
 mod constant_conditions;
+pub mod depth;
 mod enums;
 mod fixed;
 mod implicit_bool;
