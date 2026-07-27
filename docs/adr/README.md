@@ -117,3 +117,4 @@
 | [0132](./0132-sim-named-port-scenarios.md) | Именованные порты в сценариях симулятора | Accepted | фича 0132 |
 | [0140](./0140-backlog-revision-doc-split.md) | Ревизия витрины кандидатов и разделение ролей README и book | Draft | фича 0140 |
 | [0138](./0138-coverage-measurement.md) | Измерение покрытия тестами | Draft | фича 0138 |
+| [0136](./0136-perf-benchmarks.md) | Бенчмарки производительности | Draft | фича 0136 |
