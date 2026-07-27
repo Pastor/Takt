@@ -37,6 +37,19 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
+/// Отказ «тип `duration` пока не поддерживается» (фича 0134, до задачи 0134-02).
+///
+/// Отдельная функция, чтобы обе точки входа (узел `Type::Duration` и имя
+/// `duration` в псевдониме) давали **одну** формулировку: разъехавшись, они
+/// сообщали бы пользователю о разном по одному поводу.
+fn duration_not_supported(loc: Location) -> Diagnostic {
+    Diagnostic::error(
+        loc,
+        "тип 'duration' пока не поддерживается семантикой".to_string(),
+    )
+    .with_code("SE-066")
+}
+
 /// Строит [`TypeNode`] из опционального АСД-типа [`Type`].
 ///
 /// Если тип не задан (`None`), возвращает [`TypeNode::Inference`] —
@@ -58,6 +71,11 @@ pub(crate) fn construct_type(
         Type::Bit => Ok(TypeNode::Bit),
         Type::Bool => Ok(TypeNode::Bool),
         Type::Rational => Ok(TypeNode::Rational),
+        // ⚠️ Вариант `Type::Duration` грамматикой НЕ порождается — как и
+        // `Bit`/`Bool`/`Rational`: примитивные типы приходят из грамматики
+        // псевдонимом (`Type::Alias`) и связываются по имени ниже. Ветка
+        // оставлена для полноты разбора узла.
+        Type::Duration => Err(duration_not_supported(Location::Implicit)),
         Type::Fixed(loc, ctor, m, n) => construct_fixed(loc, &ctor, m, n),
         Type::Alias(def) => {
             // Примитивные типы: «bit», «bool», «float», «unit» — жёстко связаны.
@@ -65,6 +83,9 @@ pub(crate) fn construct_type(
                 "bit" => return Ok(TypeNode::Bit),
                 "bool" => return Ok(TypeNode::Bool),
                 "float" => return Ok(TypeNode::Rational),
+                // Тип `duration` (фича 0134): имя связано жёстко, как прочие
+                // примитивы. Семантика — подзадача 0134-02.
+                "duration" => return Err(duration_not_supported(def.loc)),
                 "unit" => return Ok(TypeNode::Unit),
                 _ => {}
             }

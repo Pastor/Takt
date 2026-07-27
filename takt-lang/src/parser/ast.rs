@@ -152,6 +152,11 @@ pub enum Type {
     Bool,
     /// Тип с плавающей точкой `float`.
     Rational,
+    /// Длительность `duration` (фича 0134): значение — целое число наносекунд.
+    ///
+    /// Отдельный тип, а не целое: единица обязана быть частью типа, иначе
+    /// теряется в первом же присваивании (тот же довод, что у `q(m, n)`).
+    Duration,
     /// Fixed-point `q(m, n)` — фича 0061: `(loc, ctor, m, n)`; границы, имя `q`
     /// и смысл полей (`m`/`n` — сырые литералы) проверяет `construct_fixed`.
     Fixed(Location, String, i64, i64),
@@ -290,6 +295,24 @@ pub enum ModelElement {
     /// Разрешение адреса (привязка к порту, приоритет источников, `AddressMap`)
     /// выполняется семантикой (фича 0020-02); здесь — только синтаксический узел.
     Address(Box<AddressDefine>),
+    /// Частота тактирования модели (`clock 1kHz;`, фича 0134).
+    Clock(Box<ClockDefine>),
+}
+
+/// Объявление частоты тактирования модели: `clock 1kHz;` (фича 0134).
+///
+/// Включает **профиль «такты»**: длительности пересчитываются в число тактов
+/// (ADR 0134, правило 3). Без объявления и без флага `--tick-hz` действует
+/// профиль «часы» — частота не нужна вовсе.
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct ClockDefine {
+    /// Местоположение в исходном тексте.
+    pub loc: Location,
+    /// Частота в герцах (каноническое представление литерала).
+    pub hertz: u64,
+    /// Литерал частоты как записан (`1kHz`) — для форматтера.
+    pub text: String,
 }
 
 /// Вид состояния автомата.
@@ -337,6 +360,25 @@ pub enum StateElement {
     InlineFormula(Box<InlineFormulaDefine>),
     /// Именованный инвариант состояния (`invariant Имя = <Условие>;`, фича 0044).
     Invariant(Box<InvariantDefine>),
+    /// Периодическое действие (`every 100ms { … }`, фича 0134).
+    Every(Box<EveryDefine>),
+}
+
+/// Периодическое действие состояния: `every 100ms { … }` (фича 0134).
+///
+/// Сахар над механизмом времени (ADR 0134, правило 12): своей семантики не
+/// вводит, скрытое состояние разворачивает семантика.
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
+pub struct EveryDefine {
+    /// Местоположение в исходном тексте.
+    pub loc: Location,
+    /// Период в наносекундах (каноническое представление литерала).
+    pub nanos: i64,
+    /// Литерал периода как записан (`100ms`) — для форматтера.
+    pub text: String,
+    /// Тело, исполняемое с этим периодом.
+    pub body: Statement,
 }
 
 /// База наследования: `Имя[(аргументы,*)]`.
@@ -494,6 +536,16 @@ pub enum Condition {
     NotEqual(Location, Box<Condition>, Box<Condition>),
     /// Целочисленный литерал.
     Number(Location, i64),
+    /// Литерал длительности: `(позиция, наносекунды, как записано)` — фича 0134.
+    ///
+    /// Исходный текст хранится ради форматтера: `1m30s` печатается как
+    /// написано, а не канонизируется (приём узла `Rational`).
+    Duration(Location, i64, String),
+    /// Выдержка на ребре: `ref Имя: after 3s;` (фича 0134).
+    ///
+    /// Сахар над механизмом времени (ADR 0134, правило 12); скрытую метку
+    /// времени заводит семантика, а не автор.
+    After(Location, i64, String),
     /// Вещественный литерал: `(строка, отрицательный)`.
     Rational(Location, String, bool),
     /// Конкатенация строковых литералов.
@@ -525,6 +577,8 @@ impl Condition {
             | Condition::NotEqual(loc, _, _)
             | Condition::Number(loc, _)
             | Condition::Rational(loc, _, _)
+            | Condition::Duration(loc, _, _)
+            | Condition::After(loc, _, _)
             | Condition::Bool(loc, _) => *loc,
             Condition::Variable(id) => id.loc,
             Condition::String(parts) => parts.first().map(|s| s.loc).unwrap_or(Location::Implicit),

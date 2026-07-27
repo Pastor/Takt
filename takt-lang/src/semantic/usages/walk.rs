@@ -165,6 +165,7 @@ fn each_declaration<'a>(
             | ast::ModelElement::NamedBlockCode(_)
             | ast::ModelElement::InlineFormula(_)
             | ast::ModelElement::Address(_)
+            | ast::ModelElement::Clock(_)
             | ast::ModelElement::StraySemicolon(_) => {}
         }
     }
@@ -206,7 +207,10 @@ fn walk_element(element: &ast::ModelElement, scopes: &mut Scopes, table: &mut Us
             }
         }
         ast::ModelElement::Import(def) => note_import_originals(def, table),
-        ast::ModelElement::Enum(_) | ast::ModelElement::StraySemicolon(_) => {}
+        // `clock 1kHz;` — литерал частоты, имён не содержит.
+        ast::ModelElement::Enum(_)
+        | ast::ModelElement::Clock(_)
+        | ast::ModelElement::StraySemicolon(_) => {}
     }
 }
 
@@ -237,6 +241,13 @@ fn walk_state(state: &ast::StateDefine, scopes: &mut Scopes, table: &mut UsageTa
                     declare(name, SymbolKind::Condition, scopes, table, DeclareIn::Model);
                 }
                 walk_condition(&def.value, scopes, table);
+            }
+            // `every 100ms { … }` — тело обходится как у именованного блока:
+            // пропустить его значило бы потерять использования имён внутри.
+            ast::StateElement::Every(def) => {
+                scopes.push_local();
+                walk_statement(&def.body, scopes, table);
+                scopes.pop_local();
             }
             ast::StateElement::StraySemicolon(_) => {}
         }
@@ -431,6 +442,7 @@ fn walk_expression(expr: &ast::Expression, scopes: &mut Scopes, table: &mut Usag
         }
         // Литералы имён не содержат.
         ast::Expression::Number(_, _)
+        | ast::Expression::Duration(_, _, _)
         | ast::Expression::Rational(_, _, _)
         | ast::Expression::String(_)
         | ast::Expression::Address(_, _, _)
@@ -509,6 +521,8 @@ fn walk_condition(cond: &ast::Condition, scopes: &mut Scopes, table: &mut UsageT
             walk_condition(rhs, scopes, table);
         }
         ast::Condition::Number(_, _)
+        | ast::Condition::Duration(_, _, _)
+        | ast::Condition::After(_, _, _)
         | ast::Condition::Rational(_, _, _)
         | ast::Condition::String(_)
         | ast::Condition::Bool(_, _) => {}
@@ -650,6 +664,7 @@ fn walk_type(ty: &ast::Type, scopes: &mut Scopes, table: &mut UsageTable) {
         | ast::Type::Bit
         | ast::Type::Bool
         | ast::Type::Rational
+        | ast::Type::Duration
         | ast::Type::Fixed(_, _, _, _)
         | ast::Type::Unit => {}
     }

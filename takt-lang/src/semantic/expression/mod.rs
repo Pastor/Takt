@@ -49,6 +49,17 @@ pub fn construct_expression(
     match expr {
         // ── Литералы ──────────────────────────────────────────────────────────
         ast::Expression::Number(_, n) => Ok(ExpressionNode::Number(n)),
+        // ── Время (фича 0134) ────────────────────────────────────────────────
+        // Литерал разбирается лексером и хранится в АСД; семантика времени
+        // (тип `duration`, профили, пересчёт) вводится подзадачей 0134-02.
+        // До неё конструкция даёт ЯВНЫЙ отказ, а не молчаливое приведение к
+        // числу: молча посчитать наносекунды обычным целым значило бы получить
+        // выдержку, не равную заявленной.
+        ast::Expression::Duration(loc, _, text) => Err(Diagnostic::error(
+            loc,
+            format!("литерал длительности '{text}' пока не поддерживается семантикой"),
+        )
+        .with_code("SE-066")),
         ast::Expression::Rational(_, s, neg) => Ok(ExpressionNode::Rational(s, neg)),
         ast::Expression::Bool(_, v) => Ok(ExpressionNode::Bool(v)),
         // Строки: извлекаем текст из Vec<StringLiteral>

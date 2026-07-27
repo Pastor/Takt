@@ -237,6 +237,7 @@ fn element_loc(element: &ast::ModelElement) -> crate::diagnostics::Location {
         M::Invariant(i) => i.loc,
         M::InlineFormula(f) => inline_formula_loc(f),
         M::Address(a) => a.loc,
+        M::Clock(c) => c.loc,
     }
 }
 
@@ -367,6 +368,11 @@ fn print_element_inner(
             out.node_line(&loc, &expr::inline_formula(f)?);
             Ok(())
         }
+        ast::ModelElement::Clock(c) => {
+            // `clock 1kHz;` (фича 0134): печатается авторская запись частоты.
+            out.node_line(&loc, &format!("clock {};", c.text));
+            Ok(())
+        }
         ast::ModelElement::Address(a) => {
             // `address ИМЯ = <выражение>;` (фича 0020).
             let name = a.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
@@ -459,6 +465,7 @@ fn state_element_loc(element: &ast::StateElement) -> crate::diagnostics::Locatio
         S::NamedBlockCode(b) => b.loc,
         S::InlineFormula(f) => expr::inline_formula_loc(f),
         S::Invariant(i) => i.loc,
+        S::Every(e) => e.loc,
     }
 }
 
@@ -480,6 +487,10 @@ fn print_state_element_inner(
             Ok(())
         }
         ast::StateElement::NamedBlockCode(b) => print_named_block(out, b),
+        // `every 100ms { … }` (фича 0134) — голова блока с авторским литералом.
+        ast::StateElement::Every(e) => {
+            stmt::block_with_head(out, &format!("every {} ", e.text), &e.body)
+        }
         ast::StateElement::InlineFormula(f) => {
             let loc = expr::inline_formula_loc(f);
             out.node_line(&loc, &expr::inline_formula(f)?);

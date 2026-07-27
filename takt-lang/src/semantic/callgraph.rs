@@ -144,6 +144,7 @@ fn callees_in_expression(expr: &ast::Expression, local: &BTreeSet<String>, out: 
         // Листовые выражения без вложенных вызовов.
         ast::Expression::ArraySlice(_, _, _, _)
         | ast::Expression::Number(_, _)
+        | ast::Expression::Duration(_, _, _)
         | ast::Expression::Rational(_, _, _)
         | ast::Expression::String(_)
         | ast::Expression::Type(_, _)

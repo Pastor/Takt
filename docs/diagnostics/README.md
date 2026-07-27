@@ -108,6 +108,8 @@
 | `LE-007` | Отсутствует показатель степени в числе с плавающей точкой | `takt-lang/src/parser/lexer.rs:449` |
 | `LE-008` | Ожидался токен `from` | `takt-lang/src/parser/lexer.rs:450` |
 | `LE-009` | Числовой литерал вне диапазона `i64` | `takt-lang/src/parser/lexer.rs:162` |
+| `LE-010` | Литерал времени вне представимого диапазона (нс/Гц) | `takt-lang/src/parser/lexer.rs:183` |
+| `LE-011` | Единица времени у формы, которая её не допускает (`1.5s`, `1e3ms`, `0xFFms`) | `takt-lang/src/parser/lexer.rs:184` |
 
 ### PU — цель PlantUML
 
@@ -199,6 +201,7 @@
 | `SE-060` | Бит адреса порта вне диапазона [0, 63] | `takt-lang/src/address_map/resolve.rs:295` |
 | `SE-061` | структура '…' не содержит поля '…' | `takt-lang/src/semantic/validate/member_access.rs:105` |
 | `SE-062` | Превышен предел вложенности выражений/условий | `takt-lang/src/semantic/validate/depth.rs:77` |
+| `SE-066` | Конструкция времени пока не поддерживается семантикой (временный код: снимается подзадачей 0134-02) | `takt-lang/src/semantic/condition.rs:139` |
 
 ### SIM — симулятор
 

@@ -31,6 +31,11 @@ use unicode_xid::UnicodeXID;
 use crate::ast::Comment;
 use crate::diagnostics::Location;
 
+// Сканирование литералов времени (фича 0134) — дочерний модуль: работает с
+// приватными полями `Lexer`, вынесен из-за лимита размера модуля.
+#[path = "lexer_time.rs"]
+mod lexer_time;
+
 /// Тип «токен с позицией»: `(начало, токен, конец)`.
 pub type Spanned<'a> = (usize, Token<'a>, usize);
 
@@ -130,6 +135,26 @@ pub enum LexicalError {
     /// лексера; см. приложение «Ошибки и предупреждения».
     #[error("числовой литерал '{1}' вне диапазона i64 [-9223372036854775808, 9223372036854775807]")]
     NumberOutOfRange(Location, String),
+
+    /// Литерал длительности/частоты вне представимого диапазона (фича 0134).
+    ///
+    /// Длительность хранится в наносекундах (`i64`, ±292 года), частота — в
+    /// герцах (`u64`). Молчаливой обёртки здесь быть не должно: выдержка,
+    /// обернувшаяся при разборе, стала бы другой выдержкой.
+    #[error("литерал времени '{1}' вне представимого диапазона")]
+    TimeLiteralOutOfRange(Location, String),
+
+    /// Единица времени стоит после формы, которая её не допускает (фича 0134).
+    ///
+    /// Длительность записывается **целым** десятичным числом с единицей:
+    /// `1.5s`, `1e3ms` и `0xFFms` отвергаются здесь, а не оставляются
+    /// «числом и идентификатором» — иначе автор получил бы `SY-002` про
+    /// неведомый токен вместо указания на настоящую причину. Дробная
+    /// длительность выражается меньшей единицей (`1500ms`).
+    #[error(
+        "недопустимый литерал времени '{1}': единица допустима только у целого десятичного числа"
+    )]
+    InvalidTimeLiteral(Location, String),
 }
 
 impl LexicalError {
@@ -145,6 +170,8 @@ impl LexicalError {
             LexicalError::MissingExponent(loc) => *loc,
             LexicalError::ExpectedFrom(loc, _) => *loc,
             LexicalError::NumberOutOfRange(loc, _) => *loc,
+            LexicalError::TimeLiteralOutOfRange(loc, _) => *loc,
+            LexicalError::InvalidTimeLiteral(loc, _) => *loc,
         }
     }
 
@@ -160,6 +187,8 @@ impl LexicalError {
             LexicalError::MissingExponent(_) => "LE-007",
             LexicalError::ExpectedFrom(_, _) => "LE-008",
             LexicalError::NumberOutOfRange(_, _) => "LE-009",
+            LexicalError::TimeLiteralOutOfRange(_, _) => "LE-010",
+            LexicalError::InvalidTimeLiteral(_, _) => "LE-011",
         }
     }
 }
@@ -197,6 +226,9 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "out"      => Token::PortOut,
     "inout"    => Token::PortInOut,
     "address"  => Token::Address,
+    "clock"    => Token::Clock,
+    "after"    => Token::After,
+    "every"    => Token::Every,
     "model"    => Token::Model,
     "state"    => Token::State,
     "start"    => Token::Start,
@@ -329,6 +361,9 @@ impl<'input> Lexer<'input> {
                 ));
             }
 
+            // `0xFFms` — не длительность (фича 0134): единица допустима только
+            // у целого десятичного числа.
+            self.reject_time_suffix(start, end)?;
             return Ok((start, Token::Number(hex_val), end + 1));
         }
 
@@ -349,6 +384,15 @@ impl<'input> Lexer<'input> {
             end = *i;
             self.chars.next();
         }
+        // Литерал длительности/частоты (фича 0134): единица примыкает к целому
+        // десятичному числу. Проверка стоит здесь, до дробной части и
+        // экспоненты: тем формам единица не положена, и они дают `LE-011` ниже.
+        if !is_rational
+            && let Some((token, consumed)) = self.scan_time_literal(start, end, is_minus)?
+        {
+            return Ok((start, token, end + 1 + consumed));
+        }
+
         let mut rational_end = end;
         let mut end_before_rational = end + 1;
         let mut rational_start = end;
@@ -410,6 +454,9 @@ impl<'input> Lexer<'input> {
             let _fraction = &self.input[rational_start..=rational_end];
             let _exp = &self.input[exp_start..=end];
 
+            // `1.5s` — не длительность (фича 0134, правило 4 ADR): дробная
+            // форма выражается меньшей единицей.
+            self.reject_time_suffix(start, end)?;
             return Ok((
                 start,
                 Token::RationalNumber(&self.input[start..=rational_end], is_minus),
@@ -433,6 +480,9 @@ impl<'input> Lexer<'input> {
         if is_minus {
             n = -n;
         }
+        // Сюда доходит только форма с экспонентой (`1e3ms`): у простого целого
+        // единица уже прочитана выше и вернула токен длительности.
+        self.reject_time_suffix(start, end)?;
         Ok((start, Token::Number(n), end + 1))
     }
 
