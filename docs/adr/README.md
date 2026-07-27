@@ -112,3 +112,4 @@
 | [0127](./0127-int-overflow-semantics.md) | Единая семантика переполнения целых во всех целях | Accepted | фича 0127 |
 | [0133](./0133-book-examples-gate.md) | Гейт компиляции и симуляции примеров документа book/ | Accepted | фича 0133 |
 | [0135](./0135-sim-qualified-port-names.md) | Квалифицированные имена портов в симуляторе | Accepted | фича 0135 |
+| [0131](./0131-lsp-definition-references-rename.md) | LSP: definition, references и rename | Accepted | фича 0131 |
