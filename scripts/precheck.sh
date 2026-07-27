@@ -73,6 +73,11 @@ $CARGO_CMD clippy --all-targets --all-features -- -D warnings
 # Версия языка (фича 0085): LANGUAGE_VERSION в коде согласована с README. Быстрая.
 "$(dirname "$0")/check-language-version.sh"
 
+# Кандидаты в фичи (правило 28, фича 0140): ПОДСКАЗКА, не гейт — печатает
+# размер блока и напоминает про `check-stale-candidates.sh NNNN`. Код возврата
+# не меняет: решение о снятии кандидата всегда за человеком.
+"$(dirname "$0")/check-stale-candidates.sh" || true
+
 # Генератор заготовок (фича 0094): идемпотентность --register, статус ADR Draft,
 # добор поздних стадий. Гоняется в temp-дереве (NF_ROOT), рабочие реестры не
 # трогает. Быстрая — до долгих тестов.

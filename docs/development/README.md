@@ -238,3 +238,6 @@
 | 0132-01 | 0132 | Именованные порты в сценариях симулятора | [0132-01-sim-named-port-scenarios.md](0132-01-sim-named-port-scenarios.md) |
 | 0132-02 | 0132 | Именованные порты в сценариях симулятора | [0132-02-sim-named-port-scenarios.md](0132-02-sim-named-port-scenarios.md) |
 | 0132-03 | 0132 | Именованные порты в сценариях симулятора | [0132-03-sim-named-port-scenarios.md](0132-03-sim-named-port-scenarios.md) |
+| 0140-01 | 0140 | Ревизия витрины кандидатов и разделение ролей README и book | [0140-01-backlog-revision-doc-split.md](0140-01-backlog-revision-doc-split.md) |
+| 0140-02 | 0140 | Ревизия витрины кандидатов и разделение ролей README и book | [0140-02-backlog-revision-doc-split.md](0140-02-backlog-revision-doc-split.md) |
+| 0140-03 | 0140 | Ревизия витрины кандидатов и разделение ролей README и book | [0140-03-backlog-revision-doc-split.md](0140-03-backlog-revision-doc-split.md) |
