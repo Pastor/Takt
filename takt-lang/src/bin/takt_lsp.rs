@@ -19,7 +19,7 @@ use lsp_types::notification::{
 };
 use lsp_types::request::{
     Completion, Formatting, GotoDeclaration, GotoDeclarationParams, GotoDeclarationResponse,
-    HoverRequest, Request as _,
+    GotoDefinition, HoverRequest, Request as _,
 };
 use lsp_types::*;
 
@@ -27,40 +27,9 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // Инициализируем соединение через stdin/stdout
     let (connection, io_threads) = Connection::stdio();
 
-    // Описываем возможности сервера
-    let server_capabilities = serde_json::to_value(ServerCapabilities {
-        text_document_sync: Some(TextDocumentSyncCapability::Options(
-            TextDocumentSyncOptions {
-                open_close: Some(true),
-                change: Some(TextDocumentSyncKind::FULL),
-                save: Some(TextDocumentSyncSaveOptions::Supported(true)),
-                ..Default::default()
-            },
-        )),
-        completion_provider: Some(CompletionOptions {
-            trigger_characters: Some(vec![" ".to_string(), ".".to_string(), ":".to_string()]),
-            resolve_provider: Some(false),
-            ..Default::default()
-        }),
-        hover_provider: Some(HoverProviderCapability::Simple(true)),
-        declaration_provider: Some(DeclarationCapability::Simple(true)),
-        document_symbol_provider: Some(OneOf::Left(true)),
-        // Фича 0024: канонический форматтер. То же ядро, что у `taktc fmt`, —
-        // расхождение стилей между CLI и редактором невозможно по построению.
-        document_formatting_provider: Some(OneOf::Left(true)),
-        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
-            SemanticTokensOptions {
-                legend: SemanticTokensLegend {
-                    token_types: takt_lang::lsp::SEMANTIC_TOKEN_TYPES.to_vec(),
-                    token_modifiers: vec![],
-                },
-                full: Some(SemanticTokensFullOptions::Bool(true)),
-                range: None,
-                work_done_progress_options: Default::default(),
-            },
-        )),
-        ..Default::default()
-    })?;
+    // Описываем возможности сервера. Список живёт в библиотеке (фича 0131):
+    // бинарник тестами не покрыть, а «что объявлено» — проверяемый факт.
+    let server_capabilities = serde_json::to_value(takt_lang::lsp::server_capabilities())?;
 
     // Выполняем инициализационное рукопожатие. Параметры клиента больше НЕ
     // игнорируются (фича 0072): из `initializationOptions.searchPaths` берутся
@@ -207,7 +176,14 @@ fn handle_request(
                 serde_json::to_value(hover)?,
             )))?;
         }
-        GotoDeclaration::METHOD => {
+        // ⚠️ Одна ветка на оба метода (фича 0131): в Takt объявление и
+        // определение — одно и то же, и разделять их нечего. Разные редакторы
+        // шлют по F12 разное (VS Code — `definition`, Zed — `declaration`);
+        // обслуживая их **разным** кодом, сервер рано или поздно ответил бы
+        // по-разному на один и тот же курсор. Параметры и ответ у методов
+        // совпадают по типу (`GotoDeclarationParams = GotoDefinitionParams`),
+        // поэтому объединение бесплатно.
+        GotoDeclaration::METHOD | GotoDefinition::METHOD => {
             let params: GotoDeclarationParams = serde_json::from_value(req.params)?;
             let uri = &params.text_document_position_params.text_document.uri;
             let position = params.text_document_position_params.position;

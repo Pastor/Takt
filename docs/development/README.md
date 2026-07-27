@@ -229,3 +229,4 @@
 | 0127-01 | 0127 | Единая семантика переполнения целых во всех целях | [0127-01-int-overflow-semantics.md](0127-01-int-overflow-semantics.md) |
 | 0133-01 | 0133 | Гейт компиляции и симуляции примеров документа book/ | [0133-01-book-examples-gate.md](0133-01-book-examples-gate.md) |
 | 0135-01 | 0135 | Квалифицированные имена портов в симуляторе | [0135-01-sim-qualified-port-names.md](0135-01-sim-qualified-port-names.md) |
+| 0131-01 | 0131 | LSP: definition, references и rename | [0131-01-lsp-definition-references-rename.md](0131-01-lsp-definition-references-rename.md) |
