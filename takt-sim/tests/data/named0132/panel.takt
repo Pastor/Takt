@@ -1,0 +1,11 @@
+model Panel {
+    in start_btn: bit := 0;
+    in stop_btn: bit := 0;
+    out running: bit := 0;
+    start Idle {
+        always { if start_btn { running := 1; } }
+        ref Done: stop_btn;
+    }
+    state Done { always { running := 0; } }
+}
+start Root = Panel;

@@ -235,3 +235,6 @@
 | 0130-01 | 0130 | Накопление семантических диагностик | [0130-01-diagnostics-batch.md](0130-01-diagnostics-batch.md) |
 | 0130-02 | 0130 | Накопление семантических диагностик | [0130-02-diagnostics-batch.md](0130-02-diagnostics-batch.md) |
 | 0130-03 | 0130 | Накопление семантических диагностик | [0130-03-diagnostics-batch.md](0130-03-diagnostics-batch.md) |
+| 0132-01 | 0132 | Именованные порты в сценариях симулятора | [0132-01-sim-named-port-scenarios.md](0132-01-sim-named-port-scenarios.md) |
+| 0132-02 | 0132 | Именованные порты в сценариях симулятора | [0132-02-sim-named-port-scenarios.md](0132-02-sim-named-port-scenarios.md) |
+| 0132-03 | 0132 | Именованные порты в сценариях симулятора | [0132-03-sim-named-port-scenarios.md](0132-03-sim-named-port-scenarios.md) |
