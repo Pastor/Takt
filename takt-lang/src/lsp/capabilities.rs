@@ -38,6 +38,12 @@ pub fn server_capabilities() -> ServerCapabilities {
         // Фича 0131: поиск использований идёт по слою `semantic::usages` —
         // индекс тел блоков и функций не видит.
         references_provider: Some(OneOf::Left(true)),
+        // Фича 0131: переименование с `prepareRename` — редактор обязан узнать
+        // об отказе ДО ввода нового имени, иначе пользователь введёт его зря.
+        rename_provider: Some(OneOf::Right(RenameOptions {
+            prepare_provider: Some(true),
+            work_done_progress_options: Default::default(),
+        })),
         document_symbol_provider: Some(OneOf::Left(true)),
         // Фича 0024: канонический форматтер. То же ядро, что у `taktc fmt`, —
         // расхождение стилей между CLI и редактором невозможно по построению.

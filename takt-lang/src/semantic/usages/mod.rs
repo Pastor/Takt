@@ -129,6 +129,17 @@ impl UsageTable {
             .find(|u| u.symbol == symbol && u.kind == UsageKind::Declaration)
     }
 
+    /// Неразрешённое имя, покрывающее смещение `offset`.
+    ///
+    /// Нужно, чтобы отличить «курсор не на имени» от «курсор на имени, которое
+    /// объявлено вне этого файла»: у отказа переименовать это разные причины.
+    pub fn unresolved_at(&self, offset: usize) -> Option<&UnresolvedName> {
+        let offset = offset as u32;
+        self.unresolved
+            .iter()
+            .find(|u| u.start <= offset && offset <= u.end)
+    }
+
     /// Есть ли неразрешённое имя, текстуально совпадающее с `name`.
     ///
     /// ⚠️ Это **сторож полноты**, а не диагностика. Если имя где-то встретилось,
