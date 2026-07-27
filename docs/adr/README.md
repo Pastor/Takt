@@ -104,3 +104,4 @@
 | [0123](./0123-book-keyword-highlight.md) | Подсветка ключевых слов языка в тексте документа | Draft | фича 0123 |
 | [0124](./0124-verify-graph-export.md) | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | Accepted | фича 0124 |
 | [0125](./0125-intellij-takt-lsp-tooling.md) | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | Accepted | фича 0125 |
+| [0126](./0126-language-comparison-diff.md) | Сравнительный анализ языка Takt с родственными языками (отчёт docs/DIFF.md) | Accepted | фича 0126 |
