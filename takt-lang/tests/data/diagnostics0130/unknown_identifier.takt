@@ -1,0 +1,7 @@
+model M {
+    out flag: bit := 0;
+    start S {
+        always { flag := unknown_name; }
+    }
+}
+start Root = M;

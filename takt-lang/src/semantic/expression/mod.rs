@@ -95,8 +95,12 @@ pub fn construct_expression(
             if let Some((_enum_name, value)) = model.borrow().search_enum_variant(name) {
                 return Ok(ExpressionNode::Number(value));
             }
-            Err(Diagnostic::from(
-                format!("Идентификатор '{}' не найден в области видимости", name).as_str(),
+            // Позиция — идентификатора, а не «начала файла» (фича 0130): пока
+            // диагностика была одна, координата `1:1` терпелась, но в пачке
+            // сообщений она не даёт искать.
+            Err(Diagnostic::error(
+                id.loc,
+                format!("Идентификатор '{}' не найден в области видимости", name),
             )
             .with_code("SE-003"))
         }
@@ -112,7 +116,7 @@ pub fn construct_expression(
         // проверка пропускается — она будет повторно вычислена после вывода типов.
         ast::Expression::ArraySubscript(_, id, idx_expr) => {
             let var = model.borrow().search_var(&id.name).ok_or_else(|| {
-                Diagnostic::from(format!("Переменная '{}' не найдена", id.name).as_str())
+                Diagnostic::error(id.loc, format!("Переменная '{}' не найдена", id.name))
                     .with_code("SE-003")
             })?;
             // Проверяем тип (для динамических индексов проверку границ пропускаем)
@@ -122,20 +126,21 @@ pub fn construct_expression(
                     if let ast::Expression::Number(_, n) = idx_expr.as_ref()
                         && (*n < 0 || *n >= size as i64)
                     {
-                        return Err(Diagnostic::from(
+                        return Err(Diagnostic::error(
+                            id.loc,
                             format!(
                                 "Индекс {} выходит за границы массива '{}' (размер {})",
                                 n, id.name, size
-                            )
-                            .as_str(),
+                            ),
                         )
                         .with_code("SE-028"));
                     }
                 }
                 TypeNode::Inference => {} // тип ещё не выведен — пропускаем проверку
                 _ => {
-                    return Err(Diagnostic::from(
-                        format!("Переменная '{}' не является массивом", id.name).as_str(),
+                    return Err(Diagnostic::error(
+                        id.loc,
+                        format!("Переменная '{}' не является массивом", id.name),
                     )
                     .with_code("SE-030"));
                 }
@@ -148,18 +153,19 @@ pub fn construct_expression(
         }
         ast::Expression::ArraySlice(_, id, start, end) => {
             let var = model.borrow().search_var(&id.name).ok_or_else(|| {
-                Diagnostic::from(format!("Переменная '{}' не найдена", id.name).as_str())
+                Diagnostic::error(id.loc, format!("Переменная '{}' не найдена", id.name))
                     .with_code("SE-003")
             })?;
             // Проверяем тип и границы среза (если тип известен)
             match var_type(&var) {
                 TypeNode::Array(size, _) => {
-                    check_slice_bounds(&id.name, size, start, end)?;
+                    check_slice_bounds(&id.name, id.loc, size, start, end)?;
                 }
                 TypeNode::Inference => {} // тип ещё не выведен — пропускаем
                 _ => {
-                    return Err(Diagnostic::from(
-                        format!("Переменная '{}' не является массивом", id.name).as_str(),
+                    return Err(Diagnostic::error(
+                        id.loc,
+                        format!("Переменная '{}' не является массивом", id.name),
                     )
                     .with_code("SE-030"));
                 }
@@ -400,6 +406,7 @@ fn var_type(var: &VariableNode) -> TypeNode {
 /// Возвращает [`Diagnostic`], если любое условие нарушено.
 fn check_slice_bounds(
     name: &str,
+    loc: Location,
     size: u16,
     start: Option<i64>,
     end: Option<i64>,
@@ -407,36 +414,36 @@ fn check_slice_bounds(
     if let Some(s) = start
         && (s < 0 || s >= size as i64)
     {
-        return Err(Diagnostic::from(
+        return Err(Diagnostic::error(
+            loc,
             format!(
                 "Начало среза {} выходит за границы массива '{}' (размер {})",
                 s, name, size
-            )
-            .as_str(),
+            ),
         )
         .with_code("SE-029"));
     }
     if let Some(e) = end
         && (e < 0 || e > size as i64)
     {
-        return Err(Diagnostic::from(
+        return Err(Diagnostic::error(
+            loc,
             format!(
                 "Конец среза {} выходит за границы массива '{}' (размер {})",
                 e, name, size
-            )
-            .as_str(),
+            ),
         )
         .with_code("SE-029"));
     }
     if let (Some(s), Some(e)) = (start, end)
         && s > e
     {
-        return Err(Diagnostic::from(
+        return Err(Diagnostic::error(
+            loc,
             format!(
                 "Начало среза {} больше конца {} для массива '{}'",
                 s, e, name
-            )
-            .as_str(),
+            ),
         )
         .with_code("SE-029"));
     }

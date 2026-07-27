@@ -72,46 +72,71 @@ pub use states::{check_transition_completeness, check_unreachable_states};
 pub use structs::{check_duplicate_struct_fields, check_struct_field_types};
 pub use types::{check_recursive_type_aliases, check_type_alias_cycles_ast};
 
+/// Проверяет модель, останавливаясь на первой ошибке.
+///
+/// Контракт прежний (183 вызова в проекте), но реализация — «первая из
+/// [`validate_model_all`]»: два входа, написанные порознь, разошлись бы, и
+/// пользователь получал бы разный ответ в зависимости от того, кто спрашивает
+/// (фича 0130).
 pub fn validate_model(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
-    model_only_one_start_state(model.clone())?;
-    validate_bit_values(model.clone())?;
-    validate_enum_values(model.clone())?;
-    validate_enum_type_declarations(model.clone())?;
-    validate_state_references(model.clone())?;
-    validate_variables(model.clone())?;
-    validate_conditions(model.clone())?;
-    check_array_sizes(model.clone())?;
-    check_port_addresses(model.clone())?;
-    check_fixed_mixing(model.clone())?; // T6 (0061): запрет смешения q(m, n)
-
-    // Ce16: проверка рекурсивных псевдонимов — ошибка при первом цикле
-    let recursive_diags = check_recursive_type_aliases(model.clone());
-    if let Some(first) = recursive_diags.into_iter().next() {
-        return Err(first);
+    match validate_model_all(model).into_iter().next() {
+        Some(diagnostic) => Err(diagnostic),
+        None => Ok(()),
     }
+}
 
-    // Ce17: дублирующиеся поля структуры
-    if let Some(diag) = check_duplicate_struct_fields(model.clone()) {
-        return Err(diag);
-    }
+/// Проверяет модель, собирая **все** найденные ошибки (фича 0130).
+///
+/// Проверки идут по **готовому** дереву и независимы друг от друга, поэтому
+/// каждая может сообщить о своём, не мешая соседям: пользователь видит причины,
+/// а не первую попавшуюся.
+///
+/// ## Что накапливается, а что нет
+///
+/// - **Между проверками** — да: все четырнадцать высказываются.
+/// - **Внутри проверки** — по-разному: пять из них возвращают `Vec` и отдают всё
+///   найденное, остальные устроены как цикл с ранним возвратом и дают по одной
+///   ошибке на модель. Углубление — отдельная работа (граница ADR 0130).
+/// - **Вложенные модели** обходятся рекурсивно, и их диагностики добавляются к
+///   общему списку.
+///
+/// Порядок здесь — порядок проверок и обхода (детерминированного, фича 0048);
+/// упорядочить по позиции в тексте — задача выдачи
+/// ([`diagnostics::normalize`](crate::diagnostics::normalize)).
+pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
+    let mut found = Vec::new();
 
-    // Ce18: неизвестный тип поля структуры
-    if let Some(diag) = check_struct_field_types(model.clone()) {
-        return Err(diag);
-    }
+    // Проверки, устроенные как «первая ошибка»: каждая добавляет не более одной.
+    let single: [Result<(), Diagnostic>; 10] = [
+        model_only_one_start_state(model.clone()),
+        validate_bit_values(model.clone()),
+        validate_enum_values(model.clone()),
+        validate_enum_type_declarations(model.clone()),
+        validate_state_references(model.clone()),
+        validate_variables(model.clone()),
+        validate_conditions(model.clone()),
+        check_array_sizes(model.clone()),
+        check_port_addresses(model.clone()),
+        check_fixed_mixing(model.clone()), // T6 (0061): запрет смешения q(m, n)
+    ];
+    found.extend(single.into_iter().filter_map(Result::err));
+
+    // Ce16: рекурсивные псевдонимы — проверка отдаёт все циклы сразу.
+    // ⚠️ Прежде вызывающий брал из них первую: накопление здесь было написано,
+    // но выбрасывалось.
+    found.extend(check_recursive_type_aliases(model.clone()));
+
+    // Ce17/Ce18: структуры — по одной ошибке от каждой проверки.
+    found.extend(check_duplicate_struct_fields(model.clone()));
+    found.extend(check_struct_field_types(model.clone()));
 
     // Ce19 (SE-061): доступ к несуществующему полю структуры (0080, дефект 3)
-    member_access::check_struct_field_access(model.clone())?;
+    found.extend(member_access::check_struct_field_access(model.clone()).err());
 
-    let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
-        .borrow()
-        .models
-        .iter()
-        .map(|(k, v)| (k.clone(), Rc::clone(v)))
-        .collect();
-
-    for (_, nested_model) in nested {
-        validate_model(nested_model)?; // рекурсивно проверяем вложенные модели
+    let nested: Vec<Rc<RefCell<ModelNode>>> =
+        model.borrow().models.values().map(Rc::clone).collect();
+    for nested_model in nested {
+        found.extend(validate_model_all(nested_model));
     }
-    Ok(())
+    found
 }

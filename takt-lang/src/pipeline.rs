@@ -58,6 +58,8 @@ fn stamp_file(d: Diagnostic, files: &diagnostics::FileTable) -> Diagnostic {
 /// - **Построение дерева** остаётся терминальным: после ошибки дерево неполно, и
 ///   продолжение дало бы сообщения о следствиях, а не о причинах (решение
 ///   ADR 0130).
+/// - **Проверки** (`validate`) высказываются все: они идут по готовому дереву и
+///   независимы друг от друга.
 ///
 /// Список упорядочен по позиции в тексте и не содержит точных повторов
 /// ([`diagnostics::normalize`]).
@@ -76,8 +78,18 @@ pub fn collect_compile_diagnostics(
         }
     };
 
-    match semantic::tree::construct_model_with_files(&model_ast, None, search_paths, &mut files) {
-        Ok(_) => Vec::new(),
-        Err(d) => vec![stamp_file(d, &files)],
-    }
+    // Стадии построения и проверки разделены намеренно: первые терминальны,
+    // вторые накапливаются. Слитно (через `construct_model_with_files`) получить
+    // всё нельзя — тот вход отдаёт первую ошибку по контракту.
+    let model = match semantic::stages::construct_stages(&model_ast, None, search_paths, &mut files)
+    {
+        Ok(model) => model,
+        Err(d) => return vec![stamp_file(d, &files)],
+    };
+
+    let found = semantic::validate::validate_model_all(model)
+        .into_iter()
+        .map(|d| stamp_file(d, &files))
+        .collect();
+    diagnostics::normalize(found)
 }

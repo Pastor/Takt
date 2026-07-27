@@ -29,6 +29,7 @@ pub mod minimap;
 mod named_block;
 pub(crate) mod naming;
 mod reference;
+pub(crate) mod stages;
 mod statement;
 pub mod struct_node;
 mod test_constants;
@@ -57,8 +58,7 @@ use type_node::TypeNode;
 
 /// Семантический узел модели (конечного автомата).
 ///
-/// Содержит контекст модели, её имя, словарь состояний и
-/// информацию о реализации (`implements`).
+/// Контекст модели, имя, словарь состояний и реализация (`implements`).
 ///
 /// Поля [`doc`](ModelNode::doc) и [`docs`](ModelNode::docs) заполняются
 /// отдельным вызовом [`construct_model_with_docs`](tree::construct_model_with_docs)
