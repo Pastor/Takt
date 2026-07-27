@@ -143,7 +143,7 @@
 | [0128](./0128-lexer-literal-overflow.md) | Диагностика вместо паники на числовом литерале больше i64::MAX | [ADR](../adr/0128-lexer-literal-overflow.md) · [анализ](../analyze/0128-lexer-literal-overflow.md) · [тест-план](../tests/0128-lexer-literal-overflow.md) · [отчёт](../reports/0128-lexer-literal-overflow.md) | ✅ ГОТОВО |
 | [0129](./0129-semantic-deep-nesting.md) | Устранение переполнения стека на глубине выражений и операторов | [ADR](../adr/0129-semantic-deep-nesting.md) · [анализ](../analyze/0129-semantic-deep-nesting.md) · [тест-план](../tests/0129-semantic-deep-nesting.md) · [отчёт](../reports/0129-semantic-deep-nesting.md) | ✅ ГОТОВО |
 | [0130](./0130-diagnostics-batch.md) | Накопление семантических диагностик (несколько ошибок за прогон) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0131](./0131-lsp-definition-references-rename.md) | LSP: definition, references и rename | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0131](./0131-lsp-definition-references-rename.md) | LSP: definition, references и rename | [ADR](../adr/0131-lsp-definition-references-rename.md) | АРХИТЕКТУРА |
 | [0132](./0132-sim-named-port-scenarios.md) | Именованные порты в сценариях симулятора | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0133](./0133-book-examples-gate.md) | Гейт компиляции и симуляции примеров документа book/ | [ADR](../adr/0133-book-examples-gate.md) · [анализ](../analyze/0133-book-examples-gate.md) · [тест-план](../tests/0133-book-examples-gate.md) · [отчёт](../reports/0133-book-examples-gate.md) | ✅ ГОТОВО |
 | [0134](./0134-language-time-model.md) | Модель времени в языке: литерал длительности и частота такта | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
