@@ -9,6 +9,9 @@ readme = "../README.md"
 keywords = ["Takt", "framework", "simulation"]
 license = "BSD"
 edition = "2024"
+# MSRV: проверено на пине толчейна (rust-toolchain.toml). Нижняя граница
+# специально не исследовалась — объявлена та версия, на которой гоняются гейты.
+rust-version = "1.97"
 include = ["Cargo.toml", "src/**/*", "README.md", "LICENSE*"]
 
 [[bin]]

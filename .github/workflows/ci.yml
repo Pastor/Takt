@@ -16,12 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # nightly нужен precheck.sh: `cargo +nightly fmt`, а также rustc/clippy-driver
-      # для гейта цели rust. Компоненты — rustfmt + clippy.
-      - name: Toolchain (nightly + rustfmt + clippy)
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt, clippy
+      # Толчейн НЕ задаётся здесь: он зафиксирован в `rust-toolchain.toml`
+      # (фича 0137), и rustup на раннере ставит именно его — вместе с
+      # компонентами rustfmt и clippy, перечисленными в том же файле. Так версия
+      # компилятора описана в ОДНОМ месте: дублировать её в workflow значит
+      # завести второй источник истины, который разойдётся (урок фичи 0090).
+      - name: Toolchain (пин из rust-toolchain.toml)
+        run: rustup show active-toolchain && cargo --version && cargo fmt --version
 
       # Инструменты живых гейтов precheck.sh. python3, cc/gcc и git — уже на
       # образе ubuntu-latest. bison ≥ 2.4 + flex — для сборки MatIEC iec2c
@@ -76,8 +77,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Toolchain (nightly)
-        uses: dtolnay/rust-toolchain@nightly
+      # Толчейн — из `rust-toolchain.toml` (фича 0137), см. комментарий выше.
+      - name: Toolchain (пин из rust-toolchain.toml)
+        run: rustup show active-toolchain && cargo --version
 
       # Однопоточно — как требуют CLAUDE.md и precheck.sh (иначе гонки за общие
       # файлы; на Windows с его блокировками файлов цена гонки выше).
