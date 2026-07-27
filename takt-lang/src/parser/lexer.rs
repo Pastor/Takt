@@ -121,6 +121,15 @@ pub enum LexicalError {
     /// Ожидалось ключевое слово `from`, но встретилось другое слово.
     #[error("ожидалось ключевое слово 'from', но найдено '{1}'")]
     ExpectedFrom(Location, String),
+
+    /// Числовой литерал не помещается в знаковое 64-битное целое.
+    ///
+    /// Прежде такой литерал **ронял компилятор**: разбор шёл через
+    /// `i64::from_str(..).unwrap()`. Диапазон задан представлением числа в
+    /// токене (`Token::Number(i64)`), поэтому граница — свойство языка, а не
+    /// лексера; см. приложение «Ошибки и предупреждения».
+    #[error("числовой литерал '{1}' вне диапазона i64 [-9223372036854775808, 9223372036854775807]")]
+    NumberOutOfRange(Location, String),
 }
 
 impl LexicalError {
@@ -135,6 +144,7 @@ impl LexicalError {
             LexicalError::UnrecognisedToken(loc, _) => *loc,
             LexicalError::MissingExponent(loc) => *loc,
             LexicalError::ExpectedFrom(loc, _) => *loc,
+            LexicalError::NumberOutOfRange(loc, _) => *loc,
         }
     }
 
@@ -149,6 +159,7 @@ impl LexicalError {
             LexicalError::UnrecognisedToken(_, _) => "LE-006",
             LexicalError::MissingExponent(_) => "LE-007",
             LexicalError::ExpectedFrom(_, _) => "LE-008",
+            LexicalError::NumberOutOfRange(_, _) => "LE-009",
         }
     }
 }
@@ -286,7 +297,15 @@ impl<'input> Lexer<'input> {
             // Удаляем разделители `_` перед разбором hex-числа
             let hex_raw = &self.input[start + 2..=end];
             let hex: String = hex_raw.chars().filter(|&c| c != '_').collect();
-            let hex_val = i64::from_str_radix(&hex, 16).unwrap();
+            // Диапазон — свойство представления `Token::Number(i64)`: значение
+            // шире i64 (например маска `0xFFFFFFFFFFFFFFFF`) в токен не влезает.
+            // Прежде здесь стоял `unwrap()`, и такой литерал ронял компилятор.
+            let Ok(hex_val) = i64::from_str_radix(&hex, 16) else {
+                return Err(LexicalError::NumberOutOfRange(
+                    Location::source(self.file_no, start, end + 1),
+                    self.input[start..=end].to_string(),
+                ));
+            };
 
             // Проверяем, является ли это адресным литералом `0xNNNN:bit`
             // (токен AddressLiteral, чтобы избежать LR(1)-конфликта с тернарным `?:`)
@@ -403,7 +422,14 @@ impl<'input> Lexer<'input> {
         let n_clean: String = n_raw.chars().filter(|&c| c != '_').collect();
         let _exp = &self.input[exp_start..=end];
 
-        let mut n = i64::from_str(&n_clean).unwrap();
+        // См. комментарий у hex-ветви: `unwrap()` здесь ронял компилятор на
+        // литерале шире i64 (например `18446744073709551615`).
+        let Ok(mut n) = i64::from_str(&n_clean) else {
+            return Err(LexicalError::NumberOutOfRange(
+                Location::source(self.file_no, start, old_end + 1),
+                n_clean,
+            ));
+        };
         if is_minus {
             n = -n;
         }

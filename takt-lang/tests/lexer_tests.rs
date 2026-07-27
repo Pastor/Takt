@@ -529,3 +529,59 @@ fn arrow_lexes_as_single_token() {
 // подкаталоге по имени файла.
 #[path = "lexer_tests/part2.rs"]
 mod part2;
+
+// ───────────────────── Границы числовых литералов (фича 0128) ────────────────
+//
+// Прежде литерал шире `i64` РОНЯЛ компилятор: разбор шёл через `unwrap()`
+// (`i64::from_str` для десятичного, `i64::from_str_radix` для шестнадцатеричного).
+// Пользователь получал трассу паники вместо диагностики, причём на осмысленном
+// вводе: `0xFFFFFFFFFFFFFFFF` — это полная маска для типа `[bit;64]`.
+
+#[test]
+fn decimal_literal_beyond_i64_is_diagnostic_not_panic() {
+    let errors = collect_errors("var x: u64 := 18446744073709551615;");
+    assert_eq!(errors.len(), 1, "ожидалась ровно одна лексическая ошибка");
+    assert!(
+        matches!(errors[0], LexicalError::NumberOutOfRange(_, _)),
+        "ожидался NumberOutOfRange, получено: {:?}",
+        errors[0]
+    );
+    assert_eq!(errors[0].code(), "LE-009");
+}
+
+#[test]
+fn hex_literal_beyond_i64_is_diagnostic_not_panic() {
+    // Полная маска 64-битного вектора — самый реалистичный способ наткнуться.
+    let errors = collect_errors("const MASK: [bit;64] := 0xFFFFFFFFFFFFFFFF;");
+    assert_eq!(errors.len(), 1);
+    assert!(matches!(errors[0], LexicalError::NumberOutOfRange(_, _)));
+    assert_eq!(errors[0].code(), "LE-009");
+}
+
+#[test]
+fn literal_at_i64_boundary_still_lexes() {
+    // Сторож направления: граница должна быть ИМЕННО на i64, а не «где-то рядом».
+    // Если правка сузит диапазон, этот тест покраснеет.
+    assert!(collect_errors("var x: i64 := 9223372036854775807;").is_empty());
+    assert!(collect_errors("var x: i64 := 0x7FFFFFFFFFFFFFFF;").is_empty());
+    assert!(collect_errors("var x: u8 := 255;").is_empty());
+}
+
+#[test]
+fn out_of_range_literal_carries_position_and_text() {
+    // Диагностика бесполезна без места: проверяем, что позиция указывает на сам
+    // литерал, а сообщение содержит его текст.
+    let src = "var x: u64 := 99999999999999999999;";
+    let errors = collect_errors(src);
+    assert_eq!(errors.len(), 1);
+    let LexicalError::NumberOutOfRange(loc, text) = &errors[0] else {
+        panic!("ожидался NumberOutOfRange, получено {:?}", errors[0]);
+    };
+    assert_eq!(text, "99999999999999999999");
+    let start = src.find("99999").expect("литерал в исходнике");
+    assert_eq!(
+        loc.start(),
+        start,
+        "позиция обязана указывать на начало литерала"
+    );
+}
