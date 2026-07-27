@@ -37,19 +37,6 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-/// Отказ «тип `duration` пока не поддерживается» (фича 0134, до задачи 0134-02).
-///
-/// Отдельная функция, чтобы обе точки входа (узел `Type::Duration` и имя
-/// `duration` в псевдониме) давали **одну** формулировку: разъехавшись, они
-/// сообщали бы пользователю о разном по одному поводу.
-fn duration_not_supported(loc: Location) -> Diagnostic {
-    Diagnostic::error(
-        loc,
-        "тип 'duration' пока не поддерживается семантикой".to_string(),
-    )
-    .with_code("SE-066")
-}
-
 /// Строит [`TypeNode`] из опционального АСД-типа [`Type`].
 ///
 /// Если тип не задан (`None`), возвращает [`TypeNode::Inference`] —
@@ -75,7 +62,7 @@ pub(crate) fn construct_type(
         // `Bit`/`Bool`/`Rational`: примитивные типы приходят из грамматики
         // псевдонимом (`Type::Alias`) и связываются по имени ниже. Ветка
         // оставлена для полноты разбора узла.
-        Type::Duration => Err(duration_not_supported(Location::Implicit)),
+        Type::Duration => Ok(TypeNode::Duration),
         Type::Fixed(loc, ctor, m, n) => construct_fixed(loc, &ctor, m, n),
         Type::Alias(def) => {
             // Примитивные типы: «bit», «bool», «float», «unit» — жёстко связаны.
@@ -84,8 +71,8 @@ pub(crate) fn construct_type(
                 "bool" => return Ok(TypeNode::Bool),
                 "float" => return Ok(TypeNode::Rational),
                 // Тип `duration` (фича 0134): имя связано жёстко, как прочие
-                // примитивы. Семантика — подзадача 0134-02.
-                "duration" => return Err(duration_not_supported(def.loc)),
+                // примитивы (грамматика примитивы отдаёт псевдонимом).
+                "duration" => return Ok(TypeNode::Duration),
                 "unit" => return Ok(TypeNode::Unit),
                 _ => {}
             }
@@ -819,6 +806,12 @@ pub enum TypeNode {
     Bool,
     /// Тип с плавающей точкой (`float`).
     Rational,
+    /// Длительность (`duration`, фича 0134): целое число **наносекунд**.
+    ///
+    /// Отдельный тип, а не целое: единица обязана быть частью типа, иначе она
+    /// теряется в первом же присваивании (довод тот же, что у `Fixed`).
+    /// Пересчёт в единицы профиля — [`semantic::duration`](crate::semantic::duration).
+    Duration,
     /// Fixed-point `q(m, n)` (фича 0061): знаковый, дополнительный код; `m`
     /// целых бит **включая знак**, `n` дробных, полная ширина `W = m + n ≤ 64`.
     /// Представимое значение — `v · 2⁻ⁿ`, где `v : intW`. Границы гарантированы
@@ -872,6 +865,7 @@ impl fmt::Display for TypeNode {
             TypeNode::Bit => write!(f, "bit"),
             TypeNode::Bool => write!(f, "bool"),
             TypeNode::Rational => write!(f, "float"),
+            TypeNode::Duration => write!(f, "duration"),
             TypeNode::Fixed { m, n } => write!(f, "q({}, {})", m, n),
             TypeNode::Unit => write!(f, "unit"),
             TypeNode::Integer { bits, signed } => {

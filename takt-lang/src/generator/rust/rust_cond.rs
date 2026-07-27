@@ -20,6 +20,13 @@ use crate::semantic::{ConditionNode, FunctionDefinitionNode};
 /// [`RS-011`] на непереводимой конструкции.
 pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<String, Diagnostic> {
     match cond {
+        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
+        // отказ, а не печать наносекунд обычным числом.
+        ConditionNode::Duration(_) => Err(Diagnostic::error(
+            Location::Codegen,
+            "длительность целью 'rust' пока не поддерживается".to_string(),
+        )
+        .with_code("RS-023")),
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Rational(text, negative) => Ok(rational(text, *negative)),
         ConditionNode::Bool(b) => Ok(b.to_string()),

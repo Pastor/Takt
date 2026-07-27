@@ -151,6 +151,15 @@ pub(crate) fn sv_type(ty: &TypeNode, what: &str) -> Result<SvType, Diagnostic> {
     match ty {
         // Идеальное соответствие: один провод / один триггер. В цели `c` — `int`,
         // то есть 32 бита на бит (дефект 0029, Д2).
+        // Тип `duration` (фича 0134): узел языка есть, эмиссия — задача
+        // соответствующей цели. До неё — ЯВНЫЙ отказ: молча напечатать
+        // наносекунды обычным целым значило бы выдать выдержку, не равную
+        // заявленной.
+        TypeNode::Duration => Err(Diagnostic::error(
+            Location::Codegen,
+            format!("{what}: тип 'duration' целью 'sv' пока не поддерживается"),
+        )
+        .with_code("SV-015")),
         TypeNode::Bit | TypeNode::Bool => Ok(SvType::scalar("logic")),
         // Отдельного `real` нет и быть не может: см. шапку модуля.
         TypeNode::Rational => Err(sv003(what)),

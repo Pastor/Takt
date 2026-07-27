@@ -115,6 +115,20 @@ pub struct GenerateOptions {
     /// всегда (снимая `SV-003`), цели `c`/`rust`/`st` — только при
     /// [`float_embedded`](Self::float_embedded). Границы — правило 1 ADR 0061.
     pub float_as_q: Option<(u8, u8)>,
+    /// Частота тактирования для профиля «такты» (фича 0134), в герцах.
+    ///
+    /// `None` (умолчание) — профиль **«часы»**: длительность меряется
+    /// миллисекундами внешнего источника времени, частота не нужна.
+    /// `Some(hz)` (CLI-флаг `--tick-hz`) — профиль **«такты»**: длительность
+    /// пересчитывается в число тактов. Флаг **переопределяет** объявление
+    /// `clock` в модели; приоритет разрешает
+    /// [`duration::resolve_profile`](crate::semantic::duration::resolve_profile).
+    ///
+    /// ⚠️ Это **второе осознанное исключение** из принципа «CLI не меняет
+    /// логику» (правило 13 ADR 0134): первое — `--float-as-q`/`--float-embedded`
+    /// (действие A-7 фичи 0096). Исключение уже, чем у 0096: в профиле «часы»
+    /// флага нет вовсе.
+    pub tick_hz: Option<u64>,
     /// Для целей `c`/`rust`/`st`: реализовать `float` целочисленным Q-путём
     /// (embedded без FPU) вместо нативного (фича 0096, CLI-флаг
     /// `--float-embedded`). Действует только вместе с [`float_as_q`](Self::float_as_q);
@@ -132,6 +146,7 @@ impl GenerateOptions {
             float_width: FloatWidth::default(),
             float_as_q: None,
             float_embedded: false,
+            tick_hz: None,
         }
     }
 }
@@ -146,6 +161,7 @@ impl Default for GenerateOptions {
             float_width: FloatWidth::default(),
             float_as_q: None,
             float_embedded: false,
+            tick_hz: None,
         }
     }
 }

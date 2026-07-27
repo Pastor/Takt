@@ -85,6 +85,7 @@
 | `CC-017` | Инициализатор массива не выразим в C (скалярный либо иной длины) | `takt-lang/src/generator/c/c_model.rs:230` |
 | `CC-018` | Условие перехода не переводится в C (причина — заметкой) | `takt-lang/src/generator/c/c_model.rs:482` |
 | `CC-019` | состояние модели '…' недостижимо из '…': модель не \ | `takt-lang/src/generator/c/c_expr/condition.rs:165` |
+| `CC-020` | Время (`duration`) целью `c` пока не поддерживается | `takt-lang/src/generator/c/mod.rs:180` |
 
 ### DF — флаг --define
 
@@ -137,6 +138,7 @@
 | `RS-020` | условный переход в состояние '…' не переводится в Rust: … | `takt-lang/src/generator/rust/rust_model.rs:1132` |
 | `RS-021` | последовательная композиция (`+`) вложена в шаг другой `+` | `takt-lang/src/generator/rust/rust_model.rs:263` |
 | `RS-022` | нужен HAL, но он в этой области недоступен | `takt-lang/src/generator/rust/rust_expr.rs:125` |
+| `RS-023` | Время (`duration`) целью `rust` пока не поддерживается | `takt-lang/src/generator/rust/rust_type.rs:60` |
 
 ### SE — семантика
 
@@ -201,7 +203,11 @@
 | `SE-060` | Бит адреса порта вне диапазона [0, 63] | `takt-lang/src/address_map/resolve.rs:295` |
 | `SE-061` | структура '…' не содержит поля '…' | `takt-lang/src/semantic/validate/member_access.rs:105` |
 | `SE-062` | Превышен предел вложенности выражений/условий | `takt-lang/src/semantic/validate/depth.rs:77` |
-| `SE-066` | Конструкция времени пока не поддерживается семантикой (временный код: снимается подзадачей 0134-02) | `takt-lang/src/semantic/condition.rs:139` |
+| `SE-063` | Длительность непредставима в выбранном профиле времени | `takt-lang/src/semantic/duration.rs:150` |
+| `SE-064` | Длительность не помещается в счётчик времени | `takt-lang/src/semantic/duration.rs:170` |
+| `SE-065` | Смешение `duration` с числом в арифметике | `takt-lang/src/semantic/validate/fixed.rs:262` |
+| `SE-066` | Выдержка `after` пока не поддерживается семантикой (временный код) | `takt-lang/src/semantic/condition.rs:139` |
+| `SE-067` | Частота тактирования объявлена дважды и по-разному | `takt-lang/src/semantic/tree.rs:757` |
 
 ### SIM — симулятор
 
@@ -254,6 +260,7 @@
 | `ST-012` | Корневой элемент карты не является моделью | `takt-lang/src/generator/st/mod.rs:113` |
 | `ST-013` | q({m}, {n}): W = … > 32 — точное произведение шириной 2W не влезает в LINT | `takt-lang/src/generator/st/st_fixed.rs:242` |
 | `ST-014` | Приведение float → q в цели st (LREAL_TO_INT округляет к ближайшему) | `takt-lang/src/generator/st/st_fixed.rs:177` |
+| `ST-015` | Время (`duration`) целью `st` пока не поддерживается | `takt-lang/src/generator/st/st_type.rs:62` |
 
 ### SV — цель SystemVerilog
 
@@ -273,6 +280,7 @@
 | `SV-012` | имя = ключевое слово SystemVerilog (`fork`, `wire`, `time`, …) | `takt-lang/src/generator/sv/sv_module.rs:387` |
 | `SV-013` | Порт занимает биты адреса шире регистра цели sv-mmio | `takt-lang/src/generator/sv/sv_mmio.rs:85` |
 | `SV-014` | Имя зарезервировано регистровым интерфейсом цели sv-mmio | `takt-lang/src/generator/sv/sv_mmio.rs:101` |
+| `SV-015` | Время (`duration`) целью `sv` пока не поддерживается | `takt-lang/src/generator/sv/sv_type.rs:157` |
 
 ### SY — парсер
 
