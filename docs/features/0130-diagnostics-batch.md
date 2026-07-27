@@ -1,7 +1,7 @@
 # Фича 0130: Накопление семантических диагностик (несколько ошибок за прогон)
 
 - **Номер:** 0130
-- **Статус:** АРХИТЕКТУРА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** нет
 - **Tier:** 2
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (аудит 2026-07-27, проба + чтение кода)
@@ -11,7 +11,7 @@
 | Стадия | Артефакт |
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0130-diagnostics-batch.md`](../adr/0130-diagnostics-batch.md) |
-| Анализ | не заведён (стадия 3) |
+| Анализ | [`docs/analyze/0130-diagnostics-batch.md`](../analyze/0130-diagnostics-batch.md) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0130-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
