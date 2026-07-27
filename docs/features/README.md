@@ -139,3 +139,17 @@
 | [0124](./0124-verify-graph-export.md) | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | [ADR](../adr/0124-verify-graph-export.md) · [анализ](../analyze/0124-verify-graph-export.md) · [dev 01](../development/0124-01-verify-graph-export.md) · [тест-план](../tests/0124-verify-graph-export.md) | ГОТОВО |
 | [0125](./0125-intellij-takt-lsp-tooling.md) | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | [ADR](../adr/0125-intellij-takt-lsp-tooling.md) · [анализ](../analyze/0125-intellij-takt-lsp-tooling.md) · [dev 01](../development/0125-01-intellij-takt-lsp-tooling.md) · [тест-план](../tests/0125-intellij-takt-lsp-tooling.md) · [отчёт](../reports/0125-intellij-takt-lsp-tooling.md) | ГОТОВО |
 | [0126](./0126-language-comparison-diff.md) | Сравнительный анализ языка Takt с родственными языками (отчёт [DIFF.md](../DIFF.md)) | [ADR](../adr/0126-language-comparison-diff.md) · [анализ](../analyze/0126-language-comparison-diff.md) · [отчёт](../DIFF.md) | ✅ ГОТОВО |
+| [0127](./0127-int-overflow-semantics.md) | Единая семантика переполнения целых во всех целях | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0128](./0128-lexer-literal-overflow.md) | Диагностика вместо паники на числовом литерале больше i64::MAX | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0129](./0129-semantic-deep-nesting.md) | Устранение переполнения стека на глубине выражений и операторов | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0130](./0130-diagnostics-batch.md) | Накопление семантических диагностик (несколько ошибок за прогон) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0131](./0131-lsp-definition-references-rename.md) | LSP: definition, references и rename | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0132](./0132-sim-named-port-scenarios.md) | Именованные порты в сценариях симулятора | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0133](./0133-book-examples-gate.md) | Гейт компиляции и симуляции примеров документа book/ | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0134](./0134-language-time-model.md) | Модель времени в языке: литерал длительности и частота такта | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0135](./0135-sim-qualified-port-names.md) | Квалифицированные имена портов в симуляторе | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0136](./0136-perf-benchmarks.md) | Бенчмарки производительности компиляции и верификации | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0137](./0137-toolchain-pin-msrv.md) | Фиксация толчейна Rust и MSRV | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0138](./0138-coverage-measurement.md) | Измерение покрытия тестами (или удаление чужого codecov.yml) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0139](./0139-remove-travis-config.md) | Удаление мёртвой конфигурации .travis.yml | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0140](./0140-backlog-revision-doc-split.md) | Ревизия витрины кандидатов и решение по дублю README ↔ book | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
