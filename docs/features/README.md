@@ -151,5 +151,5 @@
 | [0136](./0136-perf-benchmarks.md) | Бенчмарки производительности компиляции и верификации | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0137](./0137-toolchain-pin-msrv.md) | Фиксация толчейна Rust и MSRV | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0138](./0138-coverage-measurement.md) | Измерение покрытия тестами (или удаление чужого codecov.yml) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0139](./0139-remove-travis-config.md) | Удаление мёртвой конфигурации .travis.yml | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0139](./0139-remove-travis-config.md) | Удаление мёртвой конфигурации .travis.yml | [ADR](../adr/0139-remove-travis-config.md) · [анализ](../analyze/0139-remove-travis-config.md) · [тест-план](../tests/0139-remove-travis-config.md) · [отчёт](../reports/0139-remove-travis-config.md) | ✅ ГОТОВО |
 | [0140](./0140-backlog-revision-doc-split.md) | Ревизия витрины кандидатов и решение по дублю README ↔ book | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

@@ -105,3 +105,5 @@
 | [0124](./0124-verify-graph-export.md) | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | Accepted | фича 0124 |
 | [0125](./0125-intellij-takt-lsp-tooling.md) | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | Accepted | фича 0125 |
 | [0126](./0126-language-comparison-diff.md) | Сравнительный анализ языка Takt с родственными языками (отчёт docs/DIFF.md) | Accepted | фича 0126 |
+| [0139](./0139-remove-travis-config.md) | Удаление мёртвой конфигурации .travis.yml | Accepted | фича 0139 |
+| [0137](./0137-toolchain-pin-msrv.md) | Фиксация толчейна Rust и MSRV | Draft | фича 0137 |

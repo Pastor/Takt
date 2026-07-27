@@ -1,7 +1,7 @@
 # Фича 0139: Удаление мёртвой конфигурации `.travis.yml`
 
 - **Номер:** 0139
-- **Статус:** СОЗДАНА
+- **Статус:** **ГОТОВО** (закрыта 2026-07-27)
 - **Зависит от:** нет
 - **Tier:** proc
 - **Связанные issue (анализ):** процессный бэклог `FEATURES.md` (аудит 2026-07-27)
@@ -10,11 +10,11 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | не заведена (стадия 2) |
-| Анализ | не заведён (стадия 3) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0139-YY-*`) |
-| Тест-план | [`docs/tests/README.md`](../tests/README.md) |
-| Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
+| Архитектура (ADR) | [`docs/adr/0139-remove-travis-config.md`](../adr/0139-remove-travis-config.md) |
+| Анализ | [`docs/analyze/0139-remove-travis-config.md`](../analyze/0139-remove-travis-config.md) |
+| Разработка | [`docs/development/0139-01-remove-travis-config.md`](../development/0139-01-remove-travis-config.md) |
+| Тест-план | [`docs/tests/0139-remove-travis-config.md`](../tests/0139-remove-travis-config.md) |
+| Отчёт о тестировании | [`docs/reports/0139-remove-travis-config.md`](../reports/0139-remove-travis-config.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0139-YY-*`) |
 
 ## Краткое описание
@@ -44,3 +44,22 @@
 ## Документирование (правило 24)
 
 **Не требуется.** Инфраструктура; язык не меняется.
+
+## Итог (что сделано)
+
+- `.travis.yml` **удалён** (`git rm`): в репозитории осталось единственное
+  описание гейтов — `scripts/precheck.sh`, вызываемый из `ci.yml` (контракт фичи
+  [0090](0090-ci-precheck.md)).
+- Живых упоминаний Travis не осталось — проверено грепом по всему дереву
+  (`README.md`, `docs/`, `CLAUDE.md`, `scripts/`, `.github/`); найденные
+  совпадения принадлежат артефактам самой фичи и строкам реестров.
+- **Гейты не тронуты:** `scripts/precheck.sh` и `.github/workflows/ci.yml` не
+  изменялись (требование R2 анализа) — набор проверок остался ровно прежним.
+- Решение — Option A [ADR 0139](../adr/0139-remove-travis-config.md); Option B
+  («оставить как запасной CI») отвергнут: конфигурация, которая никем не
+  исполняется и ни с чем не сверяется, запасной не является.
+- Отчёт о тестировании — вердикт **✅ ПРОЙДЕН** (6 из 6 проверок),
+  [`docs/reports/0139-remove-travis-config.md`](../reports/0139-remove-travis-config.md);
+  дефектов и фиксов нет.
+- **Действие на будущее:** второй провайдер CI, если понадобится, обязан звать
+  тот же `precheck.sh` и заводится отдельной фичей.
