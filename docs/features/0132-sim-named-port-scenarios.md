@@ -1,7 +1,7 @@
 # Фича 0132: Именованные порты в сценариях симулятора
 
 - **Номер:** 0132
-- **Статус:** АРХИТЕКТУРА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** [0135](0135-sim-qualified-port-names.md) — **закрыта 2026-07-27**, блокировка снята
 - **Tier:** 3
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (аудит 2026-07-27, чтение `takt-sim/src/json_input.rs` + корпус)
@@ -11,7 +11,7 @@
 | Стадия | Артефакт |
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0132-sim-named-port-scenarios.md`](../adr/0132-sim-named-port-scenarios.md) |
-| Анализ | не заведён (стадия 3) |
+| Анализ | [`docs/analyze/0132-sim-named-port-scenarios.md`](../analyze/0132-sim-named-port-scenarios.md) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0132-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
