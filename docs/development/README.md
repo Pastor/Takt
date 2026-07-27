@@ -232,3 +232,4 @@
 | 0131-01 | 0131 | LSP: definition, references и rename | [0131-01-lsp-definition-references-rename.md](0131-01-lsp-definition-references-rename.md) |
 | 0131-02 | 0131 | LSP: definition, references и rename | [0131-02-lsp-definition-references-rename.md](0131-02-lsp-definition-references-rename.md) |
 | 0131-03 | 0131 | LSP: definition, references и rename | [0131-03-lsp-definition-references-rename.md](0131-03-lsp-definition-references-rename.md) |
+| 0130-01 | 0130 | Накопление семантических диагностик | [0130-01-diagnostics-batch.md](0130-01-diagnostics-batch.md) |
