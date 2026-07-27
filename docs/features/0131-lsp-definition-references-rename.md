@@ -1,7 +1,7 @@
 # Фича 0131: LSP: `definition`, `references` и `rename`
 
 - **Номер:** 0131
-- **Статус:** АРХИТЕКТУРА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** нет
 - **Tier:** 2
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (аудит 2026-07-27, чтение `bin/takt_lsp.rs`)
@@ -11,7 +11,7 @@
 | Стадия | Артефакт |
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0131-lsp-definition-references-rename.md`](../adr/0131-lsp-definition-references-rename.md) |
-| Анализ | не заведён (стадия 3) |
+| Анализ | [`docs/analyze/0131-lsp-definition-references-rename.md`](../analyze/0131-lsp-definition-references-rename.md) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0131-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
