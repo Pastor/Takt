@@ -241,3 +241,4 @@
 | 0140-01 | 0140 | Ревизия витрины кандидатов и разделение ролей README и book | [0140-01-backlog-revision-doc-split.md](0140-01-backlog-revision-doc-split.md) |
 | 0140-02 | 0140 | Ревизия витрины кандидатов и разделение ролей README и book | [0140-02-backlog-revision-doc-split.md](0140-02-backlog-revision-doc-split.md) |
 | 0140-03 | 0140 | Ревизия витрины кандидатов и разделение ролей README и book | [0140-03-backlog-revision-doc-split.md](0140-03-backlog-revision-doc-split.md) |
+| 0138-02 | 0138 | Измерение покрытия тестами | [0138-02-coverage-measurement.md](0138-02-coverage-measurement.md) |
