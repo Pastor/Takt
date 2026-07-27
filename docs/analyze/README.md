@@ -103,3 +103,4 @@
 | 0123 | Подсветка ключевых слов языка в тексте документа | [0123-book-keyword-highlight.md](0123-book-keyword-highlight.md) | — (новая фича) |
 | 0124 | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | [0124-verify-graph-export.md](0124-verify-graph-export.md) | — (новая фича) |
 | 0125 | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | [0125-intellij-takt-lsp-tooling.md](0125-intellij-takt-lsp-tooling.md) | — (новая фича) |
+| 0126 | Сравнительный анализ языка Takt с родственными языками (отчёт docs/DIFF.md) | [0126-language-comparison-diff.md](0126-language-comparison-diff.md) | — (новая фича) |
