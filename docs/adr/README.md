@@ -113,3 +113,4 @@
 | [0133](./0133-book-examples-gate.md) | Гейт компиляции и симуляции примеров документа book/ | Accepted | фича 0133 |
 | [0135](./0135-sim-qualified-port-names.md) | Квалифицированные имена портов в симуляторе | Accepted | фича 0135 |
 | [0131](./0131-lsp-definition-references-rename.md) | LSP: definition, references и rename | Accepted | фича 0131 |
+| [0130](./0130-diagnostics-batch.md) | Накопление диагностик — несколько ошибок за прогон | Accepted | фича 0130 |
