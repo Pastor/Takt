@@ -25,6 +25,7 @@ mod hover;
 mod init_options;
 mod keywords;
 mod position;
+mod references;
 mod semantic_tokens;
 mod symbols;
 
@@ -41,6 +42,7 @@ pub use hover::{hover_info, word_at_position};
 pub use init_options::search_paths_from_options;
 pub use keywords::SEMANTIC_TOKEN_TYPES;
 pub use position::{node_at_position, offset_to_position, offset_to_range, position_to_offset};
+pub use references::references_at;
 pub use semantic_tokens::semantic_tokens;
 pub use symbols::document_symbols;
 

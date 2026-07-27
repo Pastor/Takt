@@ -19,7 +19,7 @@ use lsp_types::notification::{
 };
 use lsp_types::request::{
     Completion, Formatting, GotoDeclaration, GotoDeclarationParams, GotoDeclarationResponse,
-    GotoDefinition, HoverRequest, Request as _,
+    GotoDefinition, HoverRequest, References, Request as _,
 };
 use lsp_types::*;
 
@@ -212,6 +212,30 @@ fn handle_request(
                     range: loc.range,
                 }))
             });
+            connection.sender.send(Message::Response(Response::new_ok(
+                req.id,
+                serde_json::to_value(result)?,
+            )))?;
+        }
+        References::METHOD => {
+            let params: ReferenceParams = serde_json::from_value(req.params)?;
+            let uri = &params.text_document_position.text_document.uri;
+            let position = params.text_document_position.position;
+            let text = state.get_text(uri).unwrap_or("");
+            // Вхождения ищутся в открытом документе: рабочая область сервером не
+            // индексируется (фича 0131). Ответ правдив, но не всеобъемлющ — и
+            // это лучше, чем молчание.
+            let result =
+                takt_lang::lsp::references_at(text, position, params.context.include_declaration)
+                    .map(|ranges| {
+                        ranges
+                            .into_iter()
+                            .map(|range| Location {
+                                uri: uri.clone(),
+                                range,
+                            })
+                            .collect::<Vec<_>>()
+                    });
             connection.sender.send(Message::Response(Response::new_ok(
                 req.id,
                 serde_json::to_value(result)?,
