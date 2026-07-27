@@ -93,7 +93,15 @@ fn rust_emits_model_level_always_before_match() {
     .expect("порождение rust");
     let path = dir.join("ma.rs");
     let code = std::fs::read_to_string(&path).expect(".rs");
-    assert_before(&code, "self.n += 1;", "match self.state", "rust");
+    // `wrapping_add`, а не `+=`: беззнаковая арифметика печатается обёрткой
+    // (фича 0127, правило S1). Свёртка в `+=` вернула бы панику debug-профиля на
+    // переполнении — ровно то, что 0127 устранила.
+    assert_before(
+        &code,
+        "self.n = self.n.wrapping_add(1);",
+        "match self.state",
+        "rust",
+    );
 
     // В корпусе model-level `always` нет — гейт `rustc` его не компилирует.
     // Проверяем компиляцию тут же (rustc всегда доступен): касались расчёта
