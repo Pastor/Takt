@@ -7,6 +7,29 @@
 
 ## [Не выпущено]
 
+### Добавлено ([0131-01](docs/development/0131-01-lsp-definition-references-rename.md) — `textDocument/definition` в `takt-lsp`)
+
+- **F12 заработал в редакторах, шлющих `definition`.** Сервер объявляет
+  `definitionProvider` рядом с `declarationProvider`, а обслуживает их **одна**
+  ветка `match` (`GotoDeclaration::METHOD | GotoDefinition::METHOD`): в Takt
+  объявление и определение — одно и то же, и отвечать на них по-разному незачем.
+  Прежде объявлен был только `declaration`, и «Go to Definition» в VS Code не
+  работал вовсе, хотя вся логика перехода есть с фичи 0056.
+- **Список возможностей вынесен в библиотеку** — `lsp::server_capabilities()`
+  (`takt-lang/src/lsp/capabilities.rs`). Не ради размера, а ради
+  **проверяемости**: бинарник тестами не покрыть, и «что объявлено» до сих пор
+  проверялось только глазами. Тот же довод, по которому фича 0072 вынесла разбор
+  `initializationOptions`.
+- **Сторож ловит раздвоение, а не отсутствие.** Разъехаться `definition` и
+  `declaration` могут ровно одним способом — вторым обработчиком; тест требует
+  **ровно одну** ветку с обоими методами и отсутствие второго
+  `GotoDefinition::METHOD` в файле сервера.
+- Логика перехода, индекс и семантика не тронуты (правило 11): расширился только
+  список входов. Тесты — `takt-lang/tests/lsp_definition_tests.rs` (4) +
+  2 юнит-теста в `capabilities.rs`; `cargo test --features lsp` зелёный, clippy
+  чист. Статус 0131 → `РАЗРАБОТКА`; впереди `0131-02` (`references`) и
+  `0131-03` (`rename`).
+
 ### Процесс ([0131](docs/features/0131-lsp-definition-references-rename.md) — анализ готов, статус `АРХИТЕКТУРА` → `АНАЛИЗ`)
 
 - **[Анализ](docs/analyze/0131-lsp-definition-references-rename.md) готов**:

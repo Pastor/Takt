@@ -1,7 +1,7 @@
 # Фича 0131: LSP: `definition`, `references` и `rename`
 
 - **Номер:** 0131
-- **Статус:** АНАЛИЗ
+- **Статус:** РАЗРАБОТКА
 - **Зависит от:** нет
 - **Tier:** 2
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (аудит 2026-07-27, чтение `bin/takt_lsp.rs`)
@@ -12,8 +12,8 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0131-lsp-definition-references-rename.md`](../adr/0131-lsp-definition-references-rename.md) |
 | Анализ | [`docs/analyze/0131-lsp-definition-references-rename.md`](../analyze/0131-lsp-definition-references-rename.md) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0131-YY-*`) |
-| Тест-план | [`docs/tests/README.md`](../tests/README.md) |
+| Разработка | [`0131-01`](../development/0131-01-lsp-definition-references-rename.md) (`definition`) · далее `0131-02`, `0131-03` |
+| Тест-план | [`docs/tests/0131-lsp-definition-references-rename.md`](../tests/0131-lsp-definition-references-rename.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0131-YY-*`) |
 

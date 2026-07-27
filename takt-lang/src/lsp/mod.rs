@@ -16,6 +16,7 @@ use semantic::index::SemanticNodeRef;
 use semantic::{FunctionDefinitionNode, ModelNode, VariableNode};
 use std::cell;
 
+mod capabilities;
 mod completion;
 mod diagnostics;
 mod formatting;
@@ -31,6 +32,7 @@ mod symbols;
 // `bin/takt_lsp.rs`, `tests/lsp_tests.rs` и плагинов IDE. Реэкспорт держит пути
 // импорта прежними: где лежит функция внутри — деталь, которую потребитель знать
 // не обязан. Ни один потребитель этой фичей не правится.
+pub use capabilities::server_capabilities;
 pub use completion::completion_items;
 pub use diagnostics::{collect_diagnostics, collect_diagnostics_at, grammar_diagnostic_to_lsp};
 pub use formatting::formatting_edits;
