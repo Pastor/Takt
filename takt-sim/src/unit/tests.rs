@@ -30,6 +30,8 @@ fn ctx_with(key: &str, val: Value) -> Rc<RefCell<dyn Context>> {
 
 fn node() -> Unit {
     Unit(UnitKind::Node {
+        time_ns: 0,
+        state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
         context: None,
@@ -45,6 +47,8 @@ fn node() -> Unit {
 
 fn node_with(key: &str, val: Value) -> Unit {
     Unit(UnitKind::Node {
+        time_ns: 0,
+        state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
         context: Some(ctx_with(key, val)),
@@ -303,6 +307,8 @@ fn r5_eval_error_is_distinguishable_from_false_condition() {
     st.insert("A".to_string(), vec![("B".to_string(), failing)]);
     st.insert("B".to_string(), vec![]);
     let mut u = Unit(UnitKind::Node {
+        time_ns: 0,
+        state_entered_ns: 0,
         model_name: None,
         entered_initial: true,
         context: None,
@@ -336,6 +342,8 @@ fn r5_false_condition_is_not_an_error() {
     );
     st.insert("B".to_string(), vec![]);
     let mut u = Unit(UnitKind::Node {
+        time_ns: 0,
+        state_entered_ns: 0,
         model_name: None,
         entered_initial: true,
         context: None,
@@ -365,6 +373,8 @@ fn node_with_enter(counter: Rc<Cell<u32>>) -> Unit {
     m.insert("enter".to_string(), vec![f]);
     execs.insert("A".to_string(), m);
     Unit(UnitKind::Node {
+        time_ns: 0,
+        state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
         context: None,
@@ -422,6 +432,8 @@ fn node_terminal(name: &str) -> Unit {
     let mut st = HashMap::new();
     st.insert(name.to_string(), vec![]);
     Unit(UnitKind::Node {
+        time_ns: 0,
+        state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
         context: None,
@@ -442,6 +454,8 @@ fn node_with_transition(from: &str, to: &str, cond: bool) -> Unit {
     st.insert(from.to_string(), vec![(to.to_string(), pred)]);
     st.insert(to.to_string(), vec![]);
     Unit(UnitKind::Node {
+        time_ns: 0,
+        state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
         context: None,
@@ -538,6 +552,8 @@ fn test_tick_node_only_first_matching_transition_taken() {
     st.insert("B".to_string(), vec![]);
     st.insert("C".to_string(), vec![]);
     let mut u = Unit(UnitKind::Node {
+        time_ns: 0,
+        state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
         context: None,

@@ -127,7 +127,7 @@ pub(crate) fn cast_to_fixed(value: &Value, m: u8, n: u8) -> Result<Value, EvalEr
         Value::Boolean(b) => (i64::from(*b) as i128) << n,
         Value::Real(f) => (f * pow2(n)).floor() as i128,
         Value::Fixed { repr, n: n2, .. } => rescale(*repr as i128, *n2, n),
-        Value::Array(_) | Value::Struct { .. } => {
+        Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
             return Err(EvalError::NotCoercible {
                 value: value_kind(value),
                 ty: format!("q({m}, {n})"),

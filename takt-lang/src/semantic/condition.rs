@@ -132,15 +132,11 @@ pub fn resolve_condition(
     let _depth = crate::semantic::validate::depth::enter(Some(cond.loc()))?;
     match cond {
         // ── Время (фича 0134) ────────────────────────────────────────────────
-        // Литерал несёт наносекунды; `after` — сахар, его развернут задачи
-        // симулятора и целей. До них выдержка даёт ЯВНЫЙ отказ (SE-066), а не
-        // молчаливое «условие всегда ложно».
+        // Литерал несёт наносекунды; `after` — сахар над отсчётом от входа в
+        // состояние. Отсчёт ведёт исполнитель; общего для всех правила
+        // («прошло не меньше указанного») достаточно, чтобы цели не расходились.
         ast::Condition::Duration(_, nanos, _) => Ok(ConditionNode::Duration(*nanos)),
-        ast::Condition::After(loc, _, text) => Err(Diagnostic::error(
-            *loc,
-            format!("выдержка 'after {text}' пока не поддерживается семантикой"),
-        )
-        .with_code("SE-066")),
+        ast::Condition::After(_, nanos, _) => Ok(ConditionNode::After(*nanos)),
         ast::Condition::ArraySubscript(_, id, idx_cond) => {
             let name = id.name.clone();
             let var = model.borrow().search_var(&name);

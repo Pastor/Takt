@@ -56,6 +56,14 @@ struct Args {
     /// продолжается, вместо останова. Для отладки — сверки с C у него нет.
     #[arg(long = "invariant-soft")]
     invariant_soft: bool,
+
+    /// Сколько модельного времени проходит за такт, в миллисекундах (фича 0134).
+    ///
+    /// Переопределяет период, выведенный из объявленной моделью частоты
+    /// (`clock`); шаг сценария с полем `time_ms` — переопределяет и это.
+    /// Умолчание — 1 мс.
+    #[arg(long = "tick-ms", value_name = "MS")]
+    tick_ms: Option<i64>,
 }
 
 // ── Точка входа ───────────────────────────────────────────────────────────────
@@ -107,9 +115,10 @@ fn run(args: Args) -> Result<RunResult, String> {
     let model_rc = construct_model_with_files(&ast, None, &search_paths, &mut files)
         .map_err(|d| format_diagnostic(&d, &files))?;
 
-    // 4. Извлекаем имена портов и имя модели
+    // 4. Извлекаем имена портов, имя модели и объявленную частоту (фича 0134)
     let port_names = extract_port_names(&model_rc.borrow());
     let model_name = model_rc.borrow().name.clone();
+    let clock_hz = model_rc.borrow().clock_hz;
 
     // 5. Строим Unit
     let mut unit = build_unit(model_rc).map_err(|d| format!("Ошибка построения: {}", d.message))?;
@@ -155,6 +164,14 @@ fn run(args: Args) -> Result<RunResult, String> {
         gif_config,
     )?;
     runner.set_invariant_soft(args.invariant_soft);
+    // Период такта модельных часов: флаг > частота модели > умолчание 1 мс.
+    // Приоритет тот же, что у профиля времени в компиляторе (ADR 0134,
+    // правило 3): явно заданное побеждает выведенное.
+    if let Some(ms) = args.tick_ms {
+        runner.set_tick_period_ns(ms.saturating_mul(1_000_000));
+    } else if let Some(hz) = clock_hz.filter(|hz| *hz > 0) {
+        runner.set_tick_period_ns(1_000_000_000 / i64::try_from(hz).unwrap_or(i64::MAX));
+    }
 
     let result = runner.run()?;
 

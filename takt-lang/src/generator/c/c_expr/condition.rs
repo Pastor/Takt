@@ -190,7 +190,7 @@ pub(in crate::generator::c) fn generate_condition_expr(
         ConditionNode::Bool(b) => Ok(if *b { "true" } else { "false" }.to_string()),
         // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
         // отказ, а не печать наносекунд обычным числом.
-        ConditionNode::Duration(_) => Err(Diagnostic::error(
+        ConditionNode::Duration(_) | ConditionNode::After(_) => Err(Diagnostic::error(
             Location::Codegen,
             "длительность целью 'c' пока не поддерживается".to_string(),
         )

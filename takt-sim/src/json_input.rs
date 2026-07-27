@@ -42,6 +42,12 @@ pub enum PortValues {
 pub struct SimStep {
     #[serde(rename = "in_ports")]
     pub in_ports: Option<PortValues>,
+    /// На сколько продвинуть модельные часы перед этим тактом, в миллисекундах
+    /// (фича 0134). `None` — на период такта прогона (умолчание 1 мс).
+    ///
+    /// Поле необязательно, поэтому все существующие сценарии читаются без
+    /// правки: время появляется только там, где о нём попросили.
+    pub time_ms: Option<i64>,
     pub inout: Option<PortValues>,
     pub guard: Option<Guard>,
 }

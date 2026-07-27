@@ -157,6 +157,7 @@ pub(crate) fn value_kind(value: &Value) -> &'static str {
         Value::Array(_) => "массив",
         Value::Fixed { .. } => "fixed-point",
         Value::Struct { .. } => "структура",
+        Value::Duration(_) => "длительность",
     }
 }
 

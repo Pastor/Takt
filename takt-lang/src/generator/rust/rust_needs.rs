@@ -369,6 +369,7 @@ fn walk_condition(
         | ConditionNode::Unresolved(_)
         | ConditionNode::Number(_)
         | ConditionNode::Duration(_)
+        | ConditionNode::After(_)
         | ConditionNode::Rational(_, _)
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)

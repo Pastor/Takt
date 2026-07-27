@@ -553,6 +553,8 @@ mod tests {
         state_transitions: HashMap<String, Vec<(String, crate::unit::Predicate)>>,
     ) -> Unit {
         Unit::from_kind(UnitKind::Node {
+            time_ns: 0,
+            state_entered_ns: 0,
             model_name: None,
             entered_initial: false,
             context: None,

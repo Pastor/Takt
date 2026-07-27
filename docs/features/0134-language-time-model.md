@@ -1,7 +1,7 @@
 # Фича 0134: Модель времени в языке: литерал длительности и частота такта
 
 - **Номер:** 0134
-- **Статус:** РАЗРАБОТКА (0134-01, 0134-02 сделаны 2026-07-27; далее 0134-03 — симулятор и виртуальные часы)
+- **Статус:** РАЗРАБОТКА (0134-01…03 сделаны 2026-07-27; далее 0134-04 — цели `c`/`c-hal`)
 - **Зависит от:** [0127](0127-int-overflow-semantics.md) — **закрыта 2026-07-27**
 - **Tier:** 1
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` + **пробел № 1 из 15** и раздел 11.6 отчёта [`docs/DIFF.md`](../DIFF.md)
@@ -12,7 +12,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0134-language-time-model.md`](../adr/0134-language-time-model.md) (Accepted) |
 | Анализ | [`docs/analyze/0134-language-time-model.md`](../analyze/0134-language-time-model.md) — обзор + 8 подзадач `0134-01…08` |
-| Разработка | [`0134-01`](../development/0134-01-lexis-grammar-ast.md), [`0134-02`](../development/0134-02-type-and-lowering.md) — сделаны; `0134-03…08` — впереди |
+| Разработка | [`0134-01`](../development/0134-01-lexis-grammar-ast.md), [`0134-02`](../development/0134-02-type-and-lowering.md), [`0134-03`](../development/0134-03-simulator-clock.md) — сделаны; `0134-04…08` + `0134-09` (`every`) — впереди |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0134-YY-*`) |

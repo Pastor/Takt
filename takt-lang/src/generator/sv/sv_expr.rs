@@ -405,7 +405,7 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::None => Ok("1'b1".to_string()),
         // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
         // отказ, а не печать наносекунд обычным числом.
-        ConditionNode::Duration(_) => Err(Diagnostic::error(
+        ConditionNode::Duration(_) | ConditionNode::After(_) => Err(Diagnostic::error(
             Location::Codegen,
             "длительность целью 'sv' пока не поддерживается".to_string(),
         )
