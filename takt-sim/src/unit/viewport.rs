@@ -816,6 +816,7 @@ mod tests {
         transitions.insert("A".to_string(), vec![("B".to_string(), pred)]);
         transitions.insert("B".to_string(), vec![]);
         let unit = Unit::from_kind(UnitKind::Node {
+            model_name: None,
             entered_initial: false,
             context: None,
             executions: HashMap::new(),
@@ -843,6 +844,7 @@ mod test_highlight {
 
     fn make_node(t: HashMap<String, Vec<(String, crate::unit::Predicate)>>) -> Unit {
         Unit::from_kind(crate::unit::UnitKind::Node {
+            model_name: None,
             entered_initial: false,
             context: None,
             executions: HashMap::new(),

@@ -418,6 +418,7 @@ fn build_node(
 
     Ok(Unit::from_kind(UnitKind::Node {
         entered_initial: false,
+        model_name: model.borrow().name.clone(),
         context: Some(ctx_rc),
         state_transitions,
         state_executions,

@@ -178,6 +178,7 @@ mod tests {
         let mut st = HashMap::new();
         st.insert(state.to_string(), vec![]);
         Unit::from_kind(UnitKind::Node {
+            model_name: None,
             entered_initial: false,
             context: None,
             executions: HashMap::new(),
@@ -196,6 +197,7 @@ mod tests {
         st.insert(from.to_string(), vec![(to.to_string(), pred)]);
         st.insert(to.to_string(), vec![]);
         Unit::from_kind(UnitKind::Node {
+            model_name: None,
             entered_initial: false,
             context: None,
             executions: HashMap::new(),

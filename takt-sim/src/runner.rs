@@ -49,6 +49,14 @@ pub struct PortNames {
     pub out_ports: Vec<String>,
     pub inout_ports: Vec<String>,
     pub vars: Vec<String>,
+    /// Имена, объявленные более чем одной моделью: голое имя → квалифицированные
+    /// (`Модель::имя`), фича 0135.
+    ///
+    /// Плоское пространство имён делает такие значения неразличимыми: чтение по
+    /// голому имени находит первую ветвь, запись расходится по всем. Поле
+    /// существует, чтобы двусмысленность была **видна** — в предупреждении при
+    /// запуске и в потактовом выводе, — а не молчала.
+    pub ambiguous: Vec<(String, Vec<String>)>,
 }
 
 impl PortNames {
@@ -66,8 +74,11 @@ impl PortNames {
             out_ports: Vec::new(),
             inout_ports: Vec::new(),
             vars: Vec::new(),
+            ambiguous: Vec::new(),
         };
-        names.collect_recursive(model);
+        let mut owners: Vec<(String, String)> = Vec::new();
+        names.collect_recursive(model, &mut owners);
+        names.ambiguous = ambiguous_names(&owners);
         for v in [
             &mut names.in_ports,
             &mut names.out_ports,
@@ -80,24 +91,65 @@ impl PortNames {
         names
     }
 
-    fn collect_recursive(&mut self, model: &takt_lang::semantic::ModelNode) {
+    /// `owners` копит пары «имя значения → модель, его объявившая»: по ним
+    /// вычисляется двусмысленность (фича 0135).
+    fn collect_recursive(
+        &mut self,
+        model: &takt_lang::semantic::ModelNode,
+        owners: &mut Vec<(String, String)>,
+    ) {
         use takt_lang::parser::ast::PortDirection;
         use takt_lang::semantic::VariableNode;
+        let owner = model.name.clone();
         for (name, var) in &model.variables {
-            match var {
-                VariableNode::Port { direction, .. } => match direction {
-                    PortDirection::In => self.in_ports.push(name.clone()),
-                    PortDirection::Out => self.out_ports.push(name.clone()),
-                    PortDirection::InOut => self.inout_ports.push(name.clone()),
-                },
-                VariableNode::Simple { .. } => self.vars.push(name.clone()),
-                _ => {}
+            let mine = match var {
+                VariableNode::Port { direction, .. } => {
+                    match direction {
+                        PortDirection::In => self.in_ports.push(name.clone()),
+                        PortDirection::Out => self.out_ports.push(name.clone()),
+                        PortDirection::InOut => self.inout_ports.push(name.clone()),
+                    }
+                    true
+                }
+                VariableNode::Simple { .. } => {
+                    self.vars.push(name.clone());
+                    true
+                }
+                _ => false,
+            };
+            if mine && let Some(owner) = &owner {
+                owners.push((name.clone(), owner.clone()));
             }
         }
         for sub in model.models.values() {
-            self.collect_recursive(&sub.borrow());
+            self.collect_recursive(&sub.borrow(), owners);
         }
     }
+}
+
+/// Имена, объявленные более чем одной моделью (фича 0135).
+///
+/// Одна и та же модель, встреченная дважды при обходе, двусмысленности не даёт —
+/// поэтому владельцы дедуплицируются перед подсчётом.
+fn ambiguous_names(owners: &[(String, String)]) -> Vec<(String, Vec<String>)> {
+    let mut by_name: std::collections::BTreeMap<&str, Vec<&str>> =
+        std::collections::BTreeMap::new();
+    for (name, owner) in owners {
+        let slot = by_name.entry(name.as_str()).or_default();
+        if !slot.contains(&owner.as_str()) {
+            slot.push(owner.as_str());
+        }
+    }
+    by_name
+        .into_iter()
+        .filter(|(_, models)| models.len() > 1)
+        .map(|(name, models)| {
+            let mut qualified: Vec<String> =
+                models.iter().map(|m| format!("{m}::{name}")).collect();
+            qualified.sort();
+            (name.to_string(), qualified)
+        })
+        .collect()
 }
 
 // ── Результат симуляции ──────────────────────────────────────────────────────
@@ -206,6 +258,7 @@ impl SimulationRunner {
 
     /// Запускает главный цикл симуляции.
     pub fn run(&mut self) -> Result<RunResult, String> {
+        self.warn_about_ambiguous_names();
         // Если загружен файл сценария, он определяет лимит шагов;
         // -n может только уменьшить это число, но не увеличить.
         let sim_len = self.sim_steps.len();
@@ -305,6 +358,24 @@ impl SimulationRunner {
 
     // ── Вспомогательные методы ────────────────────────────────────────────────
 
+    /// Предупреждает об именах, объявленных несколькими моделями (фича 0135).
+    ///
+    /// Пространство имён значений плоское: по голому имени читается ПЕРВАЯ
+    /// нашедшаяся ветвь, а запись расходится по всем. Прежде это происходило
+    /// молча — модель с одноимёнными портами под-моделей выглядела работающей,
+    /// хотя половина её состояния была недоступна. Теперь двусмысленность
+    /// названа, и рядом показано, как адресовать точно.
+    fn warn_about_ambiguous_names(&self) {
+        for (bare, qualified) in &self.port_names.ambiguous {
+            eprintln!(
+                "ВНИМАНИЕ: имя '{bare}' объявлено несколькими моделями ({}). \
+                 По голому имени адресуется первая из них; для точного обращения \
+                 используйте квалифицированное имя.",
+                qualified.join(", ")
+            );
+        }
+    }
+
     fn print_step(&self, step_no: usize) {
         let states = self.unit.active_states();
         let states_str = if states.is_empty() {
@@ -313,8 +384,22 @@ impl SimulationRunner {
             states.join(", ")
         };
 
+        // Двусмысленное имя (фича 0135) печатается КВАЛИФИЦИРОВАННЫМИ формами:
+        // показывать `val=1`, пока вторая под-модель держит `val=2`, — значит
+        // скрывать половину состояния модели.
+        let display_names = |names: &[String]| -> Vec<String> {
+            let mut out = Vec::new();
+            for n in names {
+                match self.port_names.ambiguous.iter().find(|(bare, _)| bare == n) {
+                    Some((_, qualified)) => out.extend(qualified.iter().cloned()),
+                    None => out.push(n.clone()),
+                }
+            }
+            out
+        };
+
         let fmt_group = |names: &[String]| -> String {
-            names
+            display_names(names)
                 .iter()
                 .filter_map(|n| {
                     self.unit
