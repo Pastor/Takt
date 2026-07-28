@@ -1,6 +1,19 @@
 //! Семантическая подсветка.
 //!
 //! Часть модуля `lsp` (фича 0027: деление по логике).
+//!
+//! **Разбор токена исчерпывающ** (правило 1 ADR 0178): подстановочной ветки по
+//! [`Token`](crate::parser::lexer::Token) здесь нет, и `deny` ниже не даёт её
+//! вернуть. Новый токен языка **валит сборку** — то есть автор обязан назвать
+//! его категорию подсветки, а не промолчать. Прежде разбор кончался
+//! `_ => continue`, и непокрытый токен молча не подсвечивался при зелёной
+//! сборке: так `invariant` (фича 0044) не раскрашивался до 0178, а ключевые
+//! слова времени (фича 0134) уцелели лишь потому, что их искали специально.
+//! Токен, который не подсвечивается **намеренно** (пунктуация), перечисляется
+//! явной веткой — «не подсвечиваем» тоже решение.
+//!
+//! Тот же приём — `eval/` симулятора и `semantic/usages/walk.rs` (ADR 0093).
+#![deny(clippy::wildcard_enum_match_arm)]
 
 use super::*;
 use crate::semantic::ModelNode;
@@ -156,6 +169,18 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             | Token::Clock
             | Token::After
             | Token::Every
+            // Инвариант состояния/модели (фича 0044) — до 0178 не подсвечивался:
+            // токен не был перечислен и уходил в `_ => continue`.
+            | Token::Invariant
+            // Операторы LTL и типы формул: `X F G U R`, `[LTL]`, `[Guard]`.
+            // Однобуквенные — но это ключевые слова языка, а не идентификаторы.
+            | Token::LtlNext
+            | Token::LtlFinally
+            | Token::LtlGlobally
+            | Token::LtlUntil
+            | Token::LtlRelease
+            | Token::TypeLtl
+            | Token::TypeGuard
             | Token::True
             | Token::False
             | Token::String => TT_KEYWORD,
@@ -192,9 +217,27 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             | Token::More
             | Token::MoreEqual
             | Token::PeirceArrow
+            // Стрелки и тернарный знак (A-2 ADR 0178): подсвечиваются наравне с
+            // `-->` выше — прежде `->` (тип возврата), `=>` (ветка `match`) и
+            // `?` молча не окрашивались, хотя `-->` окрашивался. Исчерпывающий
+            // разбор превратил бы эту случайность в решение, поэтому она снята.
+            | Token::Arrow
+            | Token::FatArrow
+            | Token::Question
             | Token::Member => TT_OPERATOR,
-            // Пунктуация и прочее — не подсвечиваем
-            _ => continue,
+            // Пунктуация — НЕ подсвечивается намеренно. Ветка явная (правило 1
+            // ADR 0178): «не подсвечиваем» — решение, а не умолчание, и новый
+            // знак препинания придётся внести сюда руками.
+            Token::Sharp
+            | Token::Semicolon
+            | Token::Comma
+            | Token::Colon
+            | Token::OpenParenthesis
+            | Token::CloseParenthesis
+            | Token::OpenCurlyBrace
+            | Token::CloseCurlyBrace
+            | Token::OpenBracket
+            | Token::CloseBracket => continue,
         };
         raw.push((start, end, tt));
     }

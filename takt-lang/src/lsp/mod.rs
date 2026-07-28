@@ -634,6 +634,66 @@ start S = M;
         );
     }
 
+    /// Считает токены заданной категории в подсветке источника.
+    fn count_tokens_of(src: &str, tt: u32) -> usize {
+        semantic_tokens(src)
+            .data
+            .iter()
+            .filter(|t| t.token_type == tt)
+            .count()
+    }
+
+    /// `invariant` подсвечивается наравне со структурно равным ему `cond`
+    /// (критерий A3 фичи 0178).
+    ///
+    /// Сторож устроен **сравнением с эталоном**, а не «есть хотя бы один
+    /// KEYWORD»: слабая форма зеленела бы и при непокрытом `invariant` — в
+    /// источнике есть `model` и `start`. Замер до фичи: `cond` — 3 токена
+    /// KEYWORD, `invariant` — 2, потому что `Token::Invariant` уходил в
+    /// `_ => continue` (фича 0044 добавила слово в язык и не добавила в LSP).
+    #[test]
+    fn test_semantic_tokens_highlight_invariant_like_cond() {
+        let with_cond = "model M { cond Ok = 1 = 1; start S; }";
+        let with_invariant = "model M { invariant Ok = 1 = 1; start S; }";
+        let n_cond = count_tokens_of(with_cond, TT_KEYWORD);
+        let n_inv = count_tokens_of(with_invariant, TT_KEYWORD);
+        assert_eq!(
+            n_inv, n_cond,
+            "invariant обязан подсвечиваться как cond: {n_inv} против {n_cond}"
+        );
+    }
+
+    /// Операторы LTL и виды формул подсвечиваются как ключевые слова
+    /// (критерий A4 фичи 0178).
+    ///
+    /// Эталон — та же модель без формулы: разница обязана быть ровно в числе
+    /// добавленных ключевых слов (`LTL` и `G`), а не «хотя бы что-то».
+    #[test]
+    fn test_semantic_tokens_highlight_ltl_operators() {
+        let plain = "model M { var flag: bool; start S; }";
+        let with_ltl = "model M { var flag: bool; : [LTL] G flag; start S; }";
+        let added = count_tokens_of(with_ltl, TT_KEYWORD) - count_tokens_of(plain, TT_KEYWORD);
+        assert_eq!(
+            added, 2,
+            "`LTL` и `G` — два ключевых слова; подсвечено добавочных: {added}"
+        );
+    }
+
+    /// Стрелки `->` и `=>` подсвечиваются как операторы (критерий A5, A-2 ADR 0178).
+    ///
+    /// До фичи они молча не окрашивались, хотя `-->` (`PeirceArrow`)
+    /// окрашивался, — исчерпывающий разбор снял эту случайность.
+    #[test]
+    fn test_semantic_tokens_highlight_arrows_as_operators() {
+        let no_arrow = "model M { fn f(x: u8) { return; } start S; }";
+        let with_arrow = "model M { fn f(x: u8) -> u8 { return x; } start S; }";
+        assert_eq!(
+            count_tokens_of(with_arrow, TT_OPERATOR) - count_tokens_of(no_arrow, TT_OPERATOR),
+            1,
+            "`->` даёт ровно один добавочный оператор"
+        );
+    }
+
     /// semantic_tokens корректно считает длину кириллического идентификатора в UTF-16.
     ///
     /// Токен "АБВ" (3 символа, 6 байт UTF-8) должен иметь length=3 в UTF-16, не 6.

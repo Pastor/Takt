@@ -256,3 +256,6 @@
 | 0134-08 | 0134 | Цель `sv`: модель времени (вход `time_ms` и счётчик) | [0134-08-target-sv.md](0134-08-target-sv.md) |
 | 0134-09 | 0134 | Периодический блок `every` — все цели и симулятор | [0134-09-every.md](0134-09-every.md) |
 | 0142-01 | 0142 | Верхний колонтитул документа с названием раздела | [0142-01-running-header.md](0142-01-running-header.md) |
+| 0178-01 | 0178 | Исчерпывающий разбор токена и догон подсветки | [0178-01-exhaustive-token-highlight.md](0178-01-exhaustive-token-highlight.md) |
+| 0178-02 | 0178 | Догон списка автодополнения и сторож вложения | [0178-02-completion-keywords-guard.md](0178-02-completion-keywords-guard.md) |
+| 0178-03 | 0178 | Исполнение тестов LSP в предкоммите | [0178-03-precheck-lsp-tests.md](0178-03-precheck-lsp-tests.md) |
