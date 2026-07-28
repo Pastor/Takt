@@ -195,6 +195,8 @@ pub(in crate::generator::c) fn generate_condition_expr(
         // конце такта, поэтому его значение равно числу тактов, прошедших с
         // входа, — ровно то, что меряет эталон модельным временем.
         ConditionNode::After(nanos) => after_condition(*nanos, map),
+        // Выдержка в тактах частоты НЕ требует: счётчик и так считает такты.
+        ConditionNode::AfterTicks(ticks) => Ok(format!("{} >= {}", dwell_access(), ticks)),
         // Литерал длительности вне `after` (переменные типа `duration`) целью
         // пока не поддерживается — отказ, а не печать наносекунд числом.
         ConditionNode::Duration(_) => Err(Diagnostic::error(

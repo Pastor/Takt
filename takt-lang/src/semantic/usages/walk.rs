@@ -523,6 +523,7 @@ fn walk_condition(cond: &ast::Condition, scopes: &mut Scopes, table: &mut UsageT
         ast::Condition::Number(_, _)
         | ast::Condition::Duration(_, _, _)
         | ast::Condition::After(_, _, _)
+        | ast::Condition::AfterTicks(_, _, _)
         | ast::Condition::Rational(_, _, _)
         | ast::Condition::String(_)
         | ast::Condition::Bool(_, _) => {}

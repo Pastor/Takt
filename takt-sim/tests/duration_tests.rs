@@ -389,3 +389,38 @@ fn trace_carries_duration_into_larger_units() {
         );
     }
 }
+
+// ── Выдержка в тактах (`after 3t`) ───────────────────────────────────────────
+
+#[test]
+fn tick_delay_needs_no_frequency_and_counts_steps() {
+    // `after 3t` меряется шагами логики: частота не нужна, и от хода модельных
+    // часов выдержка не зависит — ровно этим она и отличается от `after 3ms`.
+    let source = r#"
+model Steps {
+    out ready: bit := 0;
+    start Waiting {
+        ref Ready: after 3t;
+    }
+    state Ready { enter { ready := 1; } }
+}
+
+start Main = Steps;
+"#;
+    for step_ms in [0i64, 1, 1000] {
+        let mut unit = unit_of(source);
+        let mut fired = None;
+        for step in 0..6i32 {
+            unit.set_time_ns(i64::from(step) * step_ms * 1_000_000);
+            let _ = unit.tick();
+            if fired.is_none() && unit.variable("ready") == Some(Value::Number(1)) {
+                fired = Some(step + 1);
+            }
+        }
+        assert_eq!(
+            fired,
+            Some(4),
+            "три такта от входа истекают на такте 4 при любом ходе часов ({step_ms} мс на такт)"
+        );
+    }
+}

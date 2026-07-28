@@ -76,6 +76,7 @@ impl<'input> Lexer<'input> {
         Ok(Some(match literal {
             time_literal::Literal::Duration(ns) => (Token::Duration(ns, text), consumed),
             time_literal::Literal::Frequency(hz) => (Token::Frequency(hz, text), consumed),
+            time_literal::Literal::Ticks(ticks) => (Token::Ticks(ticks, text), consumed),
         }))
     }
 

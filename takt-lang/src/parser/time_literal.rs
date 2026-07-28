@@ -125,6 +125,12 @@ pub enum Suffix {
     Time(TimeUnit),
     /// Единица частоты.
     Frequency(FrequencyUnit),
+    /// **Такты** (`3t`) — выдержка в шагах логики, а не в физическом времени.
+    ///
+    /// Отдельная единица, а не длительность: такт в наносекундах не выражается,
+    /// пока не известна частота, — и именно поэтому тактовая выдержка **не
+    /// требует** её знать.
+    Ticks,
 }
 
 /// Длина буквенного «хвоста» в начале `tail` (ASCII-буквы подряд).
@@ -146,6 +152,9 @@ pub fn scan_suffix(tail: &str) -> Option<(Suffix, usize)> {
         return None;
     }
     let word = &tail[..len];
+    if word == "t" {
+        return Some((Suffix::Ticks, len));
+    }
     if let Some(unit) = TimeUnit::parse(word) {
         return Some((Suffix::Time(unit), len));
     }
@@ -172,6 +181,8 @@ pub enum Literal {
     Duration(i64),
     /// Частота в герцах.
     Frequency(u64),
+    /// Число тактов (`3t`).
+    Ticks(i64),
 }
 
 /// Отказ разбора литерала времени.
@@ -199,6 +210,8 @@ pub fn scan_literal(
 ) -> Option<std::result::Result<(Literal, usize), ScanError>> {
     let (suffix, len) = scan_suffix(tail)?;
     let unit = match suffix {
+        // Такты составной формы не имеют: `1t30t` бессмысленно.
+        Suffix::Ticks => return Some(Ok((Literal::Ticks(value), len))),
         Suffix::Frequency(unit) => {
             return Some(
                 frequency_hertz(value, unit).map_or(Err(ScanError::OutOfRange), |hz| {

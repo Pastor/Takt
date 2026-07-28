@@ -520,6 +520,7 @@ fn lower_cond(cond: &mut ConditionNode, m: u8, n: u8) -> Result<(), Diagnostic> 
         | ConditionNode::Number(_)
         | ConditionNode::Duration(_)
         | ConditionNode::After(_)
+        | ConditionNode::AfterTicks(_)
         | ConditionNode::Rational(_, _)
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)

@@ -128,7 +128,7 @@ pub(crate) fn condition(cond: &ast::Condition) -> Result<String, FormatError> {
     Ok(match cond {
         C::Number(_, n) => n.to_string(),
         C::Duration(_, _, text) => text.clone(),
-        C::After(_, _, text) => format!("after {text}"),
+        C::After(_, _, text) | C::AfterTicks(_, _, text) => format!("after {text}"),
         C::Rational(_, s, negative) => {
             if *negative {
                 format!("-{s}")

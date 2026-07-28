@@ -446,6 +446,10 @@ ConditionExpression: Condition = {
     <l:@L> "after" <d:duration> <r:@R> => {
         Condition::After(Location::source(file_no, l, r), d.0, d.1.to_string())
     },
+    // Выдержка в тактах (`after 3t`): частота для неё не нужна.
+    <l:@L> "after" <t:ticks> <r:@R> => {
+        Condition::AfterTicks(Location::source(file_no, l, r), t.0, t.1.to_string())
+    },
 }
 
 Member: Member = {
@@ -885,6 +889,7 @@ extern {
         rational => Token::RationalNumber(<&'input str>, <bool>),
         duration => Token::Duration(<i64>, <&'input str>),
         frequency => Token::Frequency(<u64>, <&'input str>),
+        ticks => Token::Ticks(<i64>, <&'input str>),
         "#" => Token::Sharp,
         ";" => Token::Semicolon,
         ":" => Token::Colon,
