@@ -152,10 +152,21 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             | Token::Reference
             | Token::Template
             | Token::Pragma
+            // Ключевые слова времени (фича 0134): объявление частоты и выдержки.
+            | Token::Clock
+            | Token::After
+            | Token::Every
             | Token::True
             | Token::False
             | Token::String => TT_KEYWORD,
-            Token::Number(_) | Token::RationalNumber(..) | Token::AddressLiteral(_) => TT_NUMBER,
+            // Литералы времени (фича 0134): длительность (`3s`), частота (`1kHz`),
+            // такты (`3t`) — подсвечиваются как числа.
+            Token::Number(_)
+            | Token::RationalNumber(..)
+            | Token::AddressLiteral(_)
+            | Token::Duration(..)
+            | Token::Frequency(..)
+            | Token::Ticks(..) => TT_NUMBER,
             Token::StringLiteral(..) => TT_STRING,
             Token::Equal
             | Token::NotEqual

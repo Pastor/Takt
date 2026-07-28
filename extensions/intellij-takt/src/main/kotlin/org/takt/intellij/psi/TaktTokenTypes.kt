@@ -61,5 +61,7 @@ object TaktTokenTypes {
         "struct", "from", "X", "F", "G", "U", "R", "LTL", "Guard",
         // `invariant` — сахар над `cond`+Guard (фича 0044); был пропущен в плагине.
         "invariant",
+        // Ключевые слова времени (фича 0134): объявление частоты и выдержки.
+        "clock", "after", "every",
     )
 }
