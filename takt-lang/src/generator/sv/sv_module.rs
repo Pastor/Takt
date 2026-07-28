@@ -58,8 +58,17 @@ use std::rc::Rc;
 /// причине**, по которой заведены те двое: генератор объявляет эти имена сам.
 /// Цена расширения нулевая — в корпусе нет ни одного такого имени (проверено
 /// `grep` 2026-07-16).
-pub(crate) const RESERVED_NAMES: &[&str] =
-    &["clk", "rst_n", "en", "is_done", "state", "state_next"];
+pub(crate) const RESERVED_NAMES: &[&str] = &[
+    "clk",
+    "rst_n",
+    "en",
+    "is_done",
+    "state",
+    "state_next",
+    // Служебный вход времени (фича 0134): порт пользователя с таким именем
+    // разъехался бы со служебным сигналом — отказ `SV-007`, не тишина.
+    "time_ms",
+];
 
 /// Ключевые слова SystemVerilog (IEEE 1800-2017), непригодные как идентификаторы.
 ///
@@ -503,6 +512,7 @@ pub(crate) fn emit_module_header(
     module: &str,
     ports: &SvPorts,
     mmio: Option<&crate::generator::sv::sv_mmio::Mmio>,
+    time_ms_bits: Option<u8>,
 ) {
     p.ident(&format!("module {} (", module)).nl();
     p.up();
@@ -514,6 +524,16 @@ pub(crate) fn emit_module_header(
     // поэтому существующие потребители не обязаны его подключать (фича 0063).
     p.ident("input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)")
         .nl();
+    // Источник времени (профиль «часы», фича 0134): внешний вход, как `clk`. Без
+    // умолчания — миллисекунду подаёт тот, кто подал такт. Эмитится при использовании.
+    if let Some(bits) = time_ms_bits {
+        p.ident(&format!(
+            "input  logic [{}:0] {}, // служебный порт цели sv: источник времени, мс (фича 0134)",
+            bits.saturating_sub(1),
+            crate::generator::sv::sv_time::TIME_MS_PORT
+        ))
+        .nl();
+    }
     // Регистровый интерфейс цели `sv-mmio` (фича 0062) — после служебных портов,
     // до пользовательских. В режиме `sv` (`mmio == None`) не эмитится.
     if let Some(m) = mmio {
@@ -612,7 +632,7 @@ mod tests {
     fn header_carries_service_ports() {
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
-        emit_module_header(&mut p, "stacker", &SvPorts::default(), None);
+        emit_module_header(&mut p, "stacker", &SvPorts::default(), None, None);
         assert!(out.contains("input  logic clk,"), "нет clk:\n{out}");
         assert!(out.contains("input  logic rst_n,"), "нет rst_n:\n{out}");
         assert!(out.contains("output logic is_done"), "нет is_done:\n{out}");
@@ -628,7 +648,7 @@ mod tests {
     fn header_carries_clock_enable_with_default() {
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
-        emit_module_header(&mut p, "stacker", &SvPorts::default(), None);
+        emit_module_header(&mut p, "stacker", &SvPorts::default(), None, None);
         assert!(
             out.contains("input  logic en = 1'b1,"),
             "нет en с умолчанием 1'b1:\n{out}"
@@ -650,7 +670,7 @@ mod tests {
                 ty: sv_type(&crate::semantic::type_node::TypeNode::Bit, "тест").unwrap(),
             }],
         };
-        emit_module_header(&mut p, "stacker", &ports, None);
+        emit_module_header(&mut p, "stacker", &ports, None, None);
         assert!(
             out.contains("input  logic lift_request,"),
             "нет входного порта:\n{out}"
@@ -685,7 +705,7 @@ mod tests {
             }],
             outputs: Vec::new(),
         };
-        emit_module_header(&mut p, "stacker", &ports, None);
+        emit_module_header(&mut p, "stacker", &ports, None, None);
         assert!(
             out.contains("input  logic [7:0] task_stack_no,"),
             "нет ширины порта:\n{out}"
