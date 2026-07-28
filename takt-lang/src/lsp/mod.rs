@@ -612,6 +612,28 @@ start S = M;
         assert!(tokens.data.is_empty(), "пустой источник → нет токенов");
     }
 
+    /// Конструкции времени (фича 0134) подсвечиваются: `clock`/`after` — ключевые
+    /// слова, литералы `1kHz`/`3s` — числа. Сторож: до правки семантических токенов
+    /// они уходили в `_ => continue` и не подсвечивались вовсе.
+    #[test]
+    fn test_semantic_tokens_highlight_time_constructs() {
+        let src = "model M { clock 1kHz; start S { ref T: after 3s; } state T; }";
+        let types: Vec<u32> = semantic_tokens(src)
+            .data
+            .iter()
+            .map(|t| t.token_type)
+            .collect();
+        // Иных чисел в источнике нет: TT_NUMBER здесь ТОЛЬКО от литералов времени.
+        assert!(
+            types.contains(&TT_NUMBER),
+            "литералы времени (1kHz, 3s) подсвечиваются как числа: {types:?}"
+        );
+        assert!(
+            types.contains(&TT_KEYWORD),
+            "ключевые слова (в т.ч. clock/after) подсвечиваются: {types:?}"
+        );
+    }
+
     /// semantic_tokens корректно считает длину кириллического идентификатора в UTF-16.
     ///
     /// Токен "АБВ" (3 символа, 6 байт UTF-8) должен иметь length=3 в UTF-16, не 6.
