@@ -1,10 +1,10 @@
 # Фича 0134: Модель времени в языке: литерал длительности и частота такта
 
 - **Номер:** 0134
-- **Статус:** РАЗРАБОТКА (0134-01…06 + 0134-04b сделаны: синтаксис, тип, симулятор,
-  цели `c`/`c-hal` и `rust` в **обоих** профилях, выдержка `after Nt`, контракт
-  частоты `--tick-hz`/`SE-069`/`SE-070` с CLI-частью 0134-08; далее — цели
-  `st`/`sv`, `0134-09` (`every`))
+- **Статус:** РАЗРАБОТКА (0134-01…07 + 0134-04b сделаны: синтаксис, тип, симулятор,
+  цели `c`/`c-hal`, `rust`, `st`/`st-at` в **обоих** профилях, выдержка `after Nt`,
+  контракт частоты `--tick-hz`/`SE-069`/`SE-070` с CLI-частью 0134-08; далее — цель
+  `sv`, `0134-09` (`every`))
 - ⚠️ **Долг задач 0134-04b, 0134-05…07:** каждая, добавив время своей цели,
   **дополняет** приложение «Порождённый код примера» разделом о порождённом коде
   времени этой цели (по образцу цели `c`) — запрос заказчика 2026-07-28.
@@ -20,7 +20,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0134-language-time-model.md`](../adr/0134-language-time-model.md) (Accepted) |
 | Анализ | [`docs/analyze/0134-language-time-model.md`](../analyze/0134-language-time-model.md) — обзор + 8 подзадач `0134-01…08` |
-| Разработка | [`0134-01`](../development/0134-01-lexis-grammar-ast.md), [`0134-02`](../development/0134-02-type-and-lowering.md), [`0134-03`](../development/0134-03-simulator-clock.md), [`0134-04`](../development/0134-04-target-c.md), [`0134-04b`](../development/0134-04b-target-c-clock-profile.md) (профиль «часы» в `c`/`c-hal`), [`0134-05`](../development/0134-05-clock-contract.md) (контракт частоты + CLI 0134-08), [`0134-06`](../development/0134-06-target-rust.md) (цель `rust`) — сделаны; цели `st`/`sv`, `0134-09` (`every`) — впереди |
+| Разработка | [`0134-01`](../development/0134-01-lexis-grammar-ast.md), [`0134-02`](../development/0134-02-type-and-lowering.md), [`0134-03`](../development/0134-03-simulator-clock.md), [`0134-04`](../development/0134-04-target-c.md), [`0134-04b`](../development/0134-04b-target-c-clock-profile.md) (профиль «часы» в `c`/`c-hal`), [`0134-05`](../development/0134-05-clock-contract.md) (контракт частоты + CLI 0134-08), [`0134-06`](../development/0134-06-target-rust.md) (цель `rust`), [`0134-07`](../development/0134-07-target-st.md) (цель `st`/`st-at`) — сделаны; цель `sv`, `0134-09` (`every`) — впереди |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0134-YY-*`) |

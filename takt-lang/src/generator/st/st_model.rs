@@ -37,7 +37,8 @@ use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::st::st_expr::print_condition;
 use crate::generator::st::st_map::StMap;
-use crate::generator::st::st_stmt::{StmtOutput, print_statement};
+use crate::generator::st::st_stmt::{Hoisted, StmtOutput, print_statement};
+use crate::generator::st::st_time;
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionNode, ModelNode, NamedCodeBlockDefinitionNode, StateNode};
@@ -178,6 +179,33 @@ pub(crate) fn emit_body(
 
     p.down();
     p.ident("END_CASE;").nl();
+
+    // Обновление счётчика сканов (фича 0134, профиль «такты»/выдержка `after Nt`):
+    // вход в состояние (state <> prev) сбрасывает счётчик в 1, иначе он растёт —
+    // одним сравнением в конце скана, как `c_time::emit_state_time_update`.
+    if st_time::needs_dwell(map, model) {
+        let dwell = st_time::DWELL_FIELD;
+        let prev = st_time::PREV_STATE_FIELD;
+        p.ident(&format!("IF state <> {} THEN", prev)).nl();
+        p.up();
+        p.ident(&format!("{} := 1;", dwell)).nl();
+        p.down();
+        p.ident("ELSE").nl();
+        p.up();
+        p.ident(&format!("{} := {} + 1;", dwell, dwell)).nl();
+        p.down();
+        p.ident("END_IF;").nl();
+        p.ident(&format!("{} := state;", prev)).nl();
+        out.stmt.hoisted.push(Hoisted {
+            name: dwell.to_string(),
+            ty: st_time::dwell_type(),
+        });
+        out.stmt.hoisted.push(Hoisted {
+            name: prev.to_string(),
+            ty: st_time::prev_state_type(),
+        });
+    }
+
     // Признак завершения — выход FB (S11); по нему родитель узнаёт об окончании.
     p.ident(&format!("is_done := state = {};", table.end)).nl();
     Ok(out)
@@ -218,10 +246,42 @@ fn emit_state(
         return Ok(());
     }
 
+    // Выдержка `after` в профиле «часы» (фича 0134): штатный `TON`. Экземпляр на
+    // каждое длительностное ребро, вызывается КАЖДЫЙ скан в состоянии — ДО цепочки
+    // IF, иначе `.Q` не обновится. `IN := TRUE` взводит таймер; сброс `IN := FALSE`
+    // при ЛЮБОМ выходе (иначе выдержка «прилипнет» и следующий вход сработает сразу).
+    let clock = st_time::is_clock(map);
+    let mut edge_timer: Vec<Option<String>> = vec![None; references.len()];
+    if clock {
+        for (i, reference) in references.iter().enumerate() {
+            if let ConditionNode::After(nanos) = reference.cond {
+                let timer = st_time::timer_name(name, i);
+                p.ident(&format!(
+                    "{}(IN := TRUE, PT := {});",
+                    timer,
+                    crate::semantic::duration::time_literal(nanos)
+                ))
+                .nl();
+                out.instances.push(Instance {
+                    name: timer.clone(),
+                    fb_type: st_time::TON_TYPE.to_string(),
+                });
+                edge_timer[i] = Some(timer);
+            }
+        }
+    }
+    let state_timers: Vec<String> = edge_timer.iter().flatten().cloned().collect();
+    // Сброс всех таймеров состояния перед выходом — на любом ребре (перевзвод).
+    let reset_timers = |p: &mut Printer| {
+        for timer in &state_timers {
+            p.ident(&format!("{}(IN := FALSE);", timer)).nl();
+        }
+    };
+
     // Порядок `ref` = порядок проверки, первый сработавший выигрывает (Ф5):
     // цепочка `if … break;` цели `c` — это `IF … ELSIF …` в ST.
     let mut printed_if = false;
-    for reference in &references {
+    for (i, reference) in references.iter().enumerate() {
         let target = table.number_of_local(&reference.name).ok_or_else(|| {
             unknown_state(&format!(
                 "переход ведёт в состояние '{}', которого нет в модели",
@@ -235,15 +295,35 @@ fn emit_state(
             if printed_if {
                 p.ident("ELSE").nl();
                 p.up();
+                reset_timers(p);
                 emit_transition(p, state, &reference.name, target, model, &mut out.stmt)?;
                 p.down();
                 p.ident("END_IF;").nl();
             } else {
+                reset_timers(p);
                 emit_transition(p, state, &reference.name, target, model, &mut out.stmt)?;
             }
             return Ok(());
         }
-        let guard = print_condition(&reference.cond, model)?;
+        // Guard выдержки — по профилю (фича 0134): «часы» → `dwell.Q`, «такты» →
+        // счётчик `takt_dwell >= D`. Прочие условия — обычный печатник.
+        let guard = match &reference.cond {
+            ConditionNode::After(nanos) => {
+                if clock {
+                    format!("{}.Q", edge_timer[i].as_deref().unwrap_or(""))
+                } else {
+                    let units = crate::semantic::duration::units_or_diagnostic(
+                        *nanos,
+                        map.time_profile(),
+                        Location::Codegen,
+                        "выдержка 'after'",
+                    )?;
+                    format!("{} >= {}", st_time::DWELL_FIELD, units)
+                }
+            }
+            ConditionNode::AfterTicks(ticks) => format!("{} >= {}", st_time::DWELL_FIELD, ticks),
+            other => print_condition(other, model)?,
+        };
         p.ident(&format!(
             "{} {} THEN",
             if printed_if { "ELSIF" } else { "IF" },
@@ -251,6 +331,7 @@ fn emit_state(
         ))
         .nl();
         p.up();
+        reset_timers(p);
         emit_transition(p, state, &reference.name, target, model, &mut out.stmt)?;
         p.down();
         printed_if = true;
