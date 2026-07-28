@@ -42,3 +42,25 @@ pub(super) fn counter_ticks(
     }
     Ok(max)
 }
+
+/// Отпечаток контракта частоты для заголовка C (фича 0134-05), готовый блок.
+///
+/// `Some(текст)` — модель объявила `clock`, значит контракт частоты подтверждён
+/// (кодоген сюда доходит только после `resolve_profile`, вернувшего `Ticks`), и
+/// его нужно закрепить статическим утверждением. `#ifndef`-дефолт держит гейт
+/// `cc -c` зелёным (частота по умолчанию совпадает); интегратор, задав
+/// `TAKT_TICK_HZ` иным значением, ловит несовпадение при сборке прошивки — там,
+/// где частоту задаёт уже система тактирования, а не компилятор. `None` — частоту
+/// задал лишь `--tick-hz` без объявления в модели: закреплять нечего.
+pub(super) fn clock_contract_block(map: &CMap) -> Option<String> {
+    let hertz = map.root_model_node().and_then(|m| m.borrow().clock_hz)?;
+    Some(format!(
+        "/* Контракт частоты Takt (clock): объявленная моделью частота. */\n\
+         #define TAKT_REQUIRED_CLOCK_HZ {hertz}u\n\
+         #ifndef TAKT_TICK_HZ\n\
+         #define TAKT_TICK_HZ TAKT_REQUIRED_CLOCK_HZ\n\
+         #endif\n\
+         _Static_assert(TAKT_TICK_HZ == TAKT_REQUIRED_CLOCK_HZ,\n    \
+         \"частота тактирования не совпадает с объявленной моделью Takt\");\n\n"
+    ))
+}

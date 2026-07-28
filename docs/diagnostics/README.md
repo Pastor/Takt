@@ -210,6 +210,9 @@
 | `SE-066` | Выдержка `after` пока не поддерживается семантикой (временный код) | `takt-lang/src/semantic/condition.rs:139` |
 | `SE-067` | Частота тактирования объявлена дважды и по-разному | `takt-lang/src/semantic/time_ast.rs:96` |
 | `SE-068` | Выдержка `after` вне условия перехода `ref` | `takt-lang/src/semantic/time_ast.rs:63` |
+| `SE-069` | Модель объявила `clock`, но `--tick-hz` не передан (контракт частоты) | `takt-lang/src/semantic/duration.rs:251` |
+| `SE-070` | `--tick-hz` не совпадает с объявленной `clock` частотой | `takt-lang/src/semantic/duration.rs:259` |
+| `SE-071` | Во что пересчиталась длительность (информационное предупреждение) | `takt-lang/src/semantic/duration.rs:314` |
 
 ### SIM — симулятор
 
