@@ -156,7 +156,7 @@
 | [0141](./0141-book-time-section.md) | Раздел документа: механизмы времени | раздел [`book/src/12-time/`](../../book/src/12-time/index.md) (Tier 3: ADR и анализ не требуются, как у 0102–0116) | ГОТОВО |
 | [0142](./0142-book-running-header.md) | Верхний колонтитул документа с названием раздела | [dev 01](../development/0142-01-running-header.md) (Tier 3: оформление; ADR и анализ не требуются) | ГОТОВО |
 | [0143](./0143-after-const-duration.md) | `after` принимает константу типа `duration`, а не только литерал | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0144](./0144-int-literal-exponent.md) | Экспонента целочисленного литерала: считать или отвергнуть, но не терять молча | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0144](./0144-int-literal-exponent.md) | Экспонента числового литерала вычисляется | [ADR](../adr/0144-int-literal-exponent.md) · [анализ](../analyze/0144-int-literal-exponent.md) · [тест-план](../tests/0144-int-literal-exponent.md) · [отчёт](../reports/0144-int-literal-exponent.md) | ГОТОВО |
 | [0145](./0145-verify-vertex-budget.md) | Потолок верификации по данным: бюджет вместо VERTEX_LIMIT | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0146](./0146-book-glyph-gate.md) | Гейт символов вне шрифта документа book/ | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0147](./0147-lsp-document-symbol-tests.md) | Тесты textDocument/documentSymbol | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

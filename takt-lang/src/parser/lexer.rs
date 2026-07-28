@@ -406,13 +406,12 @@ impl<'input> Lexer<'input> {
             return Ok((start, token, end + 1 + consumed));
         }
 
+        // Конец дробной части — граница текста литерала БЕЗ показателя.
+        // ⚠️ Переменные `end_before_rational`/`rational_start` (границы целой и
+        // дробной частей) удалены фичей 0144 вместе с `let _integer`/`_fraction`,
+        // которым они и служили: разбор текста на части делает потребитель
+        // (`f64::from_str`, понижение в q), а лексеру он не нужен.
         let mut rational_end = end;
-        let mut end_before_rational = end + 1;
-        let mut rational_start = end;
-        if is_rational {
-            end_before_rational = start;
-            rational_start = start + 1;
-        }
 
         if let Some((_, '.')) = self.chars.peek()
             && let Some((i, ch)) = self.chars.peek_nth(1)
@@ -420,7 +419,6 @@ impl<'input> Lexer<'input> {
             && !is_rational
         {
             // Дробная часть: 3.14
-            rational_start = *i;
             rational_end = *i;
             is_rational = true;
             self.chars.next(); // пропускаем '.'
@@ -436,13 +434,21 @@ impl<'input> Lexer<'input> {
 
         let old_end = end;
         let mut exp_start = end + 1;
+        // Показатель есть / он отрицательный (фича 0144). Прежде границы
+        // показателя вычислялись и выбрасывались в `let _exp`, поэтому `1e3`
+        // молча означало `1`, а `2.5e3` — `2.5`.
+        let mut has_exponent = false;
+        let mut exp_negative = false;
 
         if let Some((i, 'e' | 'E')) = self.chars.peek() {
             // Показатель степени: 1e10, 2.5E-3
             exp_start = *i + 1;
+            has_exponent = true;
             self.chars.next();
             // Опциональный знак минус перед показателем
             while matches!(self.chars.peek(), Some((_, '-'))) {
+                exp_negative = true;
+                exp_start += 1;
                 self.chars.next();
             }
             while let Some((i, ch)) = self.chars.peek() {
@@ -463,16 +469,31 @@ impl<'input> Lexer<'input> {
         }
 
         if is_rational {
-            let _integer = &self.input[start..end_before_rational];
-            let _fraction = &self.input[rational_start..=rational_end];
-            let _exp = &self.input[exp_start..=end];
-
             // `1.5s` — не длительность (фича 0134, правило 4 ADR): дробная
             // форма выражается меньшей единицей.
             self.reject_time_suffix(start, end)?;
+            // Текст рационального литерала хранится КАК НАПИСАН, включая
+            // показатель (правило 4 ADR 0144) — как `2.5` и как длительность
+            // `1m30s` (0134): форматтер печатает авторскую форму. Прежде срез
+            // обрывался на `rational_end`, и `2.5e3` молча означало `2.5`.
+            // Потребители текста готовы: `f64::from_str` понимает показатель,
+            // цели `c`/`rust`/`sv` печатают форму как есть, MatIEC принимает
+            // строчную `e` (проба `iec2c`, rc=0).
+            let text_end = if has_exponent { end } else { rational_end };
             return Ok((
                 start,
-                Token::RationalNumber(&self.input[start..=rational_end], is_minus),
+                Token::RationalNumber(&self.input[start..=text_end], is_minus),
+                end + 1,
+            ));
+        }
+
+        // Отрицательный показатель делает литерал РАЦИОНАЛЬНЫМ (правило 2 ADR
+        // 0144): `1e-3` — это 0.001, целым числом оно не выражается. Текст
+        // отдаётся как написан; `f64::from_str` его понимает.
+        if has_exponent && exp_negative {
+            return Ok((
+                start,
+                Token::RationalNumber(&self.input[start..=end], is_minus),
                 end + 1,
             ));
         }
@@ -480,7 +501,6 @@ impl<'input> Lexer<'input> {
         // Удаляем разделители `_` перед разбором десятичного числа
         let n_raw = &self.input[start..=old_end];
         let n_clean: String = n_raw.chars().filter(|&c| c != '_').collect();
-        let _exp = &self.input[exp_start..=end];
 
         // См. комментарий у hex-ветви: `unwrap()` здесь ронял компилятор на
         // литерале шире i64 (например `18446744073709551615`).
@@ -490,6 +510,27 @@ impl<'input> Lexer<'input> {
                 n_clean,
             ));
         };
+
+        // Показатель без минуса ОСТАВЛЯЕТ литерал целым и вычисляется
+        // (правила 1–3 ADR 0144). Арифметика проверяемая: `1e19` не влезает в
+        // i64, и ответ обязан быть тем же `LE-009`, что у длинного литерала
+        // (0128), а не тихая обёртка.
+        if has_exponent {
+            let exp_raw = &self.input[exp_start..=end];
+            let exp_clean: String = exp_raw.chars().filter(|&c| c != '_').collect();
+            let out_of_range = || {
+                LexicalError::NumberOutOfRange(
+                    Location::source(self.file_no, start, end + 1),
+                    self.input[start..=end].to_string(),
+                )
+            };
+            // Показатель шире u32 заведомо переполняет i64 — считать незачем.
+            let exp: u32 = exp_clean.parse().map_err(|_| out_of_range())?;
+            for _ in 0..exp {
+                n = n.checked_mul(10).ok_or_else(out_of_range)?;
+            }
+        }
+
         if is_minus {
             n = -n;
         }
