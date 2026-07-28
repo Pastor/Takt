@@ -394,6 +394,13 @@ pub(crate) fn unwrap_outer(text: &str) -> &str {
 /// [`RS-011`] на непереводимой конструкции — **не** тихий пропуск.
 pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<String, Diagnostic> {
     match expr {
+        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
+        // отказ, а не печать наносекунд обычным числом.
+        ExpressionNode::Duration(_) => Err(Diagnostic::error(
+            Location::Codegen,
+            "длительность целью 'rust' пока не поддерживается".to_string(),
+        )
+        .with_code("RS-023")),
         ExpressionNode::Number(n) => Ok(n.to_string()),
         ExpressionNode::Rational(text, negative) => Ok(rational(text, *negative)),
         ExpressionNode::Bool(b) => Ok(b.to_string()),
@@ -415,14 +422,14 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
 
         // Арифметика. Над q(m, n) — масштабирующая Q-арифметика (0061).
         ExpressionNode::Multiply(a, b) => fixed_binary(expr, FixedOp::Multiply, a, b, scope)
-            .unwrap_or_else(|| binary(a, "*", b, scope)),
+            .unwrap_or_else(|| wrapping_or_plain(a, "*", "wrapping_mul", b, scope)),
         ExpressionNode::Divide(a, b) => fixed_binary(expr, FixedOp::Divide, a, b, scope)
             .unwrap_or_else(|| binary(a, "/", b, scope)),
         ExpressionNode::Modulo(a, b) => binary(a, "%", b, scope),
         ExpressionNode::Add(a, b) => fixed_binary(expr, FixedOp::Add, a, b, scope)
-            .unwrap_or_else(|| binary(a, "+", b, scope)),
+            .unwrap_or_else(|| wrapping_or_plain(a, "+", "wrapping_add", b, scope)),
         ExpressionNode::Subtract(a, b) => fixed_binary(expr, FixedOp::Subtract, a, b, scope)
-            .unwrap_or_else(|| binary(a, "-", b, scope)),
+            .unwrap_or_else(|| wrapping_or_plain(a, "-", "wrapping_sub", b, scope)),
 
         // Побитовые — нативны (в ST требовали бы BYTE_TO_USINT(...)).
         ExpressionNode::ShiftLeft(a, b) => binary(a, "<<", b, scope),
@@ -578,6 +585,12 @@ fn compound_assign(
     if rust_fixed::fixed_format(value).is_some() {
         return Ok(None);
     }
+    // Беззнаковая арифметика печатается обёрткой (`wrapping_*`, фича 0127):
+    // свернуть её в `x += 1` нельзя — `+=` в debug паникует на переполнении, а
+    // правило языка требует обёртки mod 2^N.
+    if is_wrapping_arith(value) {
+        return Ok(None);
+    }
     let (op, lhs, rhs) = match value {
         ExpressionNode::Add(a, b) => ("+=", a, b),
         ExpressionNode::Subtract(a, b) => ("-=", a, b),
@@ -601,6 +614,50 @@ fn compound_assign(
         op,
         unwrap_outer(&rhs_text)
     )))
+}
+
+/// Печатает арифметику беззнакового целого **обёрткой** (`wrapping_*`).
+///
+/// Правило языка (фича 0127, S1 анализа 0025): переполнение беззнакового целого
+/// — обёртка mod 2^N. В C и SV это поведение получается само (тип фиксированной
+/// ширины), а Rust в debug-профиле **паникует** на `+`: `attempt to add with
+/// overflow`. То есть без обёртки цель `rust` расходилась с эталоном ровно там,
+/// где счётчик доходит до края, — а счётчики есть в каждом примере.
+///
+/// Для **знакового** переполнения обёртка НЕ печатается: по правилу S2 такая
+/// программа ошибочна (в C это UB, симулятор даёт `SIM-003`), и паника debug —
+/// более полезный исход, чем тихий переход через край.
+fn wrapping_or_plain(
+    a: &ExpressionNode,
+    op: &str,
+    wrapping: &str,
+    b: &ExpressionNode,
+    scope: &Scope,
+) -> Result<String, Diagnostic> {
+    if is_unsigned_int(a) || is_unsigned_int(b) {
+        let left = print_expression(a, scope)?;
+        let right = print_expression(b, scope)?;
+        return Ok(format!("{left}.{wrapping}({})", unwrap_outer(&right)));
+    }
+    binary(a, op, b, scope)
+}
+
+/// Беззнаковое ли целое у выражения (тип известен и не знаковый).
+fn is_unsigned_int(expr: &ExpressionNode) -> bool {
+    matches!(
+        rust_fixed::expression_type(expr),
+        Some(TypeNode::Integer { signed: false, .. })
+    )
+}
+
+/// Арифметический узел, который печатается обёрткой (см. [`wrapping_or_plain`]).
+fn is_wrapping_arith(expr: &ExpressionNode) -> bool {
+    match expr {
+        ExpressionNode::Add(a, b)
+        | ExpressionNode::Subtract(a, b)
+        | ExpressionNode::Multiply(a, b) => is_unsigned_int(a) || is_unsigned_int(b),
+        _ => false,
+    }
 }
 
 /// Печатает выражение с оглядкой на **целевой** тип.

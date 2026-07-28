@@ -19,7 +19,7 @@ use lsp_types::notification::{
 };
 use lsp_types::request::{
     Completion, Formatting, GotoDeclaration, GotoDeclarationParams, GotoDeclarationResponse,
-    HoverRequest, Request as _,
+    GotoDefinition, HoverRequest, PrepareRenameRequest, References, Rename, Request as _,
 };
 use lsp_types::*;
 
@@ -27,40 +27,9 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // Инициализируем соединение через stdin/stdout
     let (connection, io_threads) = Connection::stdio();
 
-    // Описываем возможности сервера
-    let server_capabilities = serde_json::to_value(ServerCapabilities {
-        text_document_sync: Some(TextDocumentSyncCapability::Options(
-            TextDocumentSyncOptions {
-                open_close: Some(true),
-                change: Some(TextDocumentSyncKind::FULL),
-                save: Some(TextDocumentSyncSaveOptions::Supported(true)),
-                ..Default::default()
-            },
-        )),
-        completion_provider: Some(CompletionOptions {
-            trigger_characters: Some(vec![" ".to_string(), ".".to_string(), ":".to_string()]),
-            resolve_provider: Some(false),
-            ..Default::default()
-        }),
-        hover_provider: Some(HoverProviderCapability::Simple(true)),
-        declaration_provider: Some(DeclarationCapability::Simple(true)),
-        document_symbol_provider: Some(OneOf::Left(true)),
-        // Фича 0024: канонический форматтер. То же ядро, что у `taktc fmt`, —
-        // расхождение стилей между CLI и редактором невозможно по построению.
-        document_formatting_provider: Some(OneOf::Left(true)),
-        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
-            SemanticTokensOptions {
-                legend: SemanticTokensLegend {
-                    token_types: takt_lang::lsp::SEMANTIC_TOKEN_TYPES.to_vec(),
-                    token_modifiers: vec![],
-                },
-                full: Some(SemanticTokensFullOptions::Bool(true)),
-                range: None,
-                work_done_progress_options: Default::default(),
-            },
-        )),
-        ..Default::default()
-    })?;
+    // Описываем возможности сервера. Список живёт в библиотеке (фича 0131):
+    // бинарник тестами не покрыть, а «что объявлено» — проверяемый факт.
+    let server_capabilities = serde_json::to_value(takt_lang::lsp::server_capabilities())?;
 
     // Выполняем инициализационное рукопожатие. Параметры клиента больше НЕ
     // игнорируются (фича 0072): из `initializationOptions.searchPaths` берутся
@@ -207,7 +176,14 @@ fn handle_request(
                 serde_json::to_value(hover)?,
             )))?;
         }
-        GotoDeclaration::METHOD => {
+        // ⚠️ Одна ветка на оба метода (фича 0131): в Takt объявление и
+        // определение — одно и то же, и разделять их нечего. Разные редакторы
+        // шлют по F12 разное (VS Code — `definition`, Zed — `declaration`);
+        // обслуживая их **разным** кодом, сервер рано или поздно ответил бы
+        // по-разному на один и тот же курсор. Параметры и ответ у методов
+        // совпадают по типу (`GotoDeclarationParams = GotoDefinitionParams`),
+        // поэтому объединение бесплатно.
+        GotoDeclaration::METHOD | GotoDefinition::METHOD => {
             let params: GotoDeclarationParams = serde_json::from_value(req.params)?;
             let uri = &params.text_document_position_params.text_document.uri;
             let position = params.text_document_position_params.position;
@@ -240,6 +216,79 @@ fn handle_request(
                 req.id,
                 serde_json::to_value(result)?,
             )))?;
+        }
+        References::METHOD => {
+            let params: ReferenceParams = serde_json::from_value(req.params)?;
+            let uri = &params.text_document_position.text_document.uri;
+            let position = params.text_document_position.position;
+            let text = state.get_text(uri).unwrap_or("");
+            // Вхождения ищутся в открытом документе: рабочая область сервером не
+            // индексируется (фича 0131). Ответ правдив, но не всеобъемлющ — и
+            // это лучше, чем молчание.
+            let result =
+                takt_lang::lsp::references_at(text, position, params.context.include_declaration)
+                    .map(|ranges| {
+                        ranges
+                            .into_iter()
+                            .map(|range| Location {
+                                uri: uri.clone(),
+                                range,
+                            })
+                            .collect::<Vec<_>>()
+                    });
+            connection.sender.send(Message::Response(Response::new_ok(
+                req.id,
+                serde_json::to_value(result)?,
+            )))?;
+        }
+        PrepareRenameRequest::METHOD => {
+            let params: TextDocumentPositionParams = serde_json::from_value(req.params)?;
+            let text = state.get_text(&params.text_document.uri).unwrap_or("");
+            // Отказ приходит ДО ввода нового имени: редактор покажет причину, а
+            // пользователь не потратит время впустую (фича 0131).
+            let response = match takt_lang::lsp::prepare_rename_at(text, params.position) {
+                Ok(range) => Response::new_ok(
+                    req.id,
+                    serde_json::to_value(PrepareRenameResponse::Range(range))?,
+                ),
+                Err(refusal) => Response::new_err(
+                    req.id,
+                    lsp_server::ErrorCode::InvalidRequest as i32,
+                    refusal.message().to_string(),
+                ),
+            };
+            connection.sender.send(Message::Response(response))?;
+        }
+        Rename::METHOD => {
+            let params: RenameParams = serde_json::from_value(req.params)?;
+            let uri = params.text_document_position.text_document.uri.clone();
+            let position = params.text_document_position.position;
+            let text = state.get_text(&uri).unwrap_or("");
+            // ⚠️ Либо все вхождения, либо ни одного: частичное переименование
+            // портит исходник молча (затенение оставляет текст компилируемым,
+            // меняя смысл).
+            let response = match takt_lang::lsp::rename_at(text, position, &params.new_name) {
+                Ok(edits) => {
+                    // `Uri` формально обладает интерьерной мутабельностью (кэш
+                    // разбора), из-за чего clippy ругается на ключ словаря. Тип
+                    // ключа задан протоколом (`WorkspaceEdit.changes`), и та же
+                    // пара «Uri → …» уже живёт в состоянии сервера.
+                    #[allow(clippy::mutable_key_type)]
+                    let mut changes = HashMap::new();
+                    changes.insert(uri, edits);
+                    let workspace_edit = WorkspaceEdit {
+                        changes: Some(changes),
+                        ..Default::default()
+                    };
+                    Response::new_ok(req.id, serde_json::to_value(workspace_edit)?)
+                }
+                Err(refusal) => Response::new_err(
+                    req.id,
+                    lsp_server::ErrorCode::InvalidRequest as i32,
+                    refusal.message().to_string(),
+                ),
+            };
+            connection.sender.send(Message::Response(response))?;
         }
         "textDocument/documentSymbol" => {
             let params: DocumentSymbolParams = serde_json::from_value(req.params)?;

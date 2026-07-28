@@ -204,6 +204,11 @@ fn coerce_initial(value: Value, var: &VariableNode, model: &ModelNode) -> Value 
 fn eval_expr(expr: &ExpressionNode) -> Option<Value> {
     match expr {
         ExpressionNode::Number(n) => Some(Value::Number(*n)),
+        // ⚠️ Длительность (фича 0134) обязана быть здесь: это ВТОРОЙ
+        // вычислитель, и он не покрыт `deny(wildcard_enum_match_arm)` — его
+        // ветка `_ => None` молча превратила бы `var left: duration := 1m30s;`
+        // в отсутствие значения (тест поймал ровно это).
+        ExpressionNode::Duration(ns) => Some(Value::Duration(*ns)),
         ExpressionNode::Bool(b) => Some(Value::Boolean(*b)),
         ExpressionNode::Rational(s, neg) => {
             let v: f64 = s.parse().ok()?;
@@ -417,7 +422,11 @@ fn build_node(
     }
 
     Ok(Unit::from_kind(UnitKind::Node {
+        time_ns: 0,
+        ticks_in_state: 0,
+        state_entered_ns: 0,
         entered_initial: false,
+        model_name: model.borrow().name.clone(),
         context: Some(ctx_rc),
         state_transitions,
         state_executions,

@@ -110,6 +110,7 @@ fn validate_cond(
             validate_cond(Some(*left.clone()), &right, model.clone())?;
         }
         ConditionNode::Number(_) => {}
+        ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {}
         ConditionNode::Rational(_, _) => {}
         ConditionNode::String(_) => {}
         ConditionNode::Bool(_) => {}
@@ -234,6 +235,7 @@ pub(super) fn validate_expression(
             validate_expression(other, model.clone())?;
         }
         ExpressionNode::Number(_) => {}
+        ExpressionNode::Duration(_) => {}
         ExpressionNode::Rational(_, _) => {}
         ExpressionNode::String(_) => {}
         ExpressionNode::Type(_) => {}

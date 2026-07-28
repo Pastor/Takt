@@ -1,5 +1,6 @@
 /.idea
-/Cargo.lock
+# Cargo.lock ОТСЛЕЖИВАЕТСЯ (фича 0137): workspace содержит бинарники, а
+# зависимость lalrpop берётся из git — без lock-файла сборка не воспроизводима.
 /target
 /.output.txt
 /takt-lang/but/test_output.txt

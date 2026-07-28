@@ -35,6 +35,7 @@
 #![deny(clippy::wildcard_enum_match_arm)]
 
 pub(crate) mod access;
+pub(crate) mod duration;
 pub(crate) mod error;
 pub(crate) mod fixed;
 pub(crate) mod ops;
@@ -129,18 +130,35 @@ pub(crate) fn coerce_to_type_with(
         TypeNode::Bool => match &value {
             Value::Boolean(b) => Ok(Value::Boolean(*b)),
             Value::Number(n) => Ok(Value::Boolean(*n != 0)),
-            Value::Real(_) | Value::Array(_) | Value::Fixed { .. } | Value::Struct { .. } => {
-                Err(EvalError::NotCoercible {
-                    value: value_kind(&value),
-                    ty: "bool".to_string(),
-                })
-            }
+            Value::Real(_)
+            | Value::Array(_)
+            | Value::Fixed { .. }
+            | Value::Struct { .. }
+            | Value::Duration(_) => Err(EvalError::NotCoercible {
+                value: value_kind(&value),
+                ty: "bool".to_string(),
+            }),
+        },
+        // Длительность (фича 0134): значение уже в наносекундах — канон языка,
+        // поэтому приведение тождественно. Число сюда не приводится: это и есть
+        // запрет смешения (`SE-065`) на стороне эталона.
+        TypeNode::Duration => match &value {
+            Value::Duration(ns) => Ok(Value::Duration(*ns)),
+            Value::Number(_)
+            | Value::Real(_)
+            | Value::Boolean(_)
+            | Value::Array(_)
+            | Value::Fixed { .. }
+            | Value::Struct { .. } => Err(EvalError::NotCoercible {
+                value: value_kind(&value),
+                ty: "duration".to_string(),
+            }),
         },
         TypeNode::Rational => match &value {
             Value::Real(f) => Ok(Value::Real(*f)),
             Value::Number(n) => Ok(Value::Real(*n as f64)),
             Value::Fixed { repr, n, .. } => Ok(Value::Real(fixed::to_real(*repr, *n))),
-            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } => {
+            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
                 Err(EvalError::NotCoercible {
                     value: value_kind(&value),
                     ty: "float".to_string(),
@@ -158,12 +176,14 @@ pub(crate) fn coerce_to_type_with(
         TypeNode::Address(_, _) => match &value {
             Value::Number(n) => Ok(Value::Number(*n)),
             Value::Boolean(b) => Ok(Value::Number(i64::from(*b))),
-            Value::Real(_) | Value::Array(_) | Value::Fixed { .. } | Value::Struct { .. } => {
-                Err(EvalError::NotCoercible {
-                    value: value_kind(&value),
-                    ty: "адресный порт".to_string(),
-                })
-            }
+            Value::Real(_)
+            | Value::Array(_)
+            | Value::Fixed { .. }
+            | Value::Struct { .. }
+            | Value::Duration(_) => Err(EvalError::NotCoercible {
+                value: value_kind(&value),
+                ty: "адресный порт".to_string(),
+            }),
         },
         // Структурная цель (фича 0034): инициализатор `{…}` (пришёл как `Array`,
         // адаптер не знает типа) приводится по определению; `Struct` того же типа
@@ -189,7 +209,7 @@ pub(crate) fn coerce_to_type_with(
         }),
         TypeNode::BuiltinNumeric => match &value {
             Value::Number(_) | Value::Real(_) | Value::Fixed { .. } => Ok(value),
-            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } => {
+            Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
                 Err(EvalError::NotCoercible {
                     value: value_kind(&value),
                     ty: "числовой тип".to_string(),
@@ -214,10 +234,12 @@ fn to_integer(value: &Value, ty: &TypeNode) -> Result<i64, EvalError> {
         // q(m, n) → целая часть (floor): `repr >> n`. Штатно сюда не попадает
         // (смешение q с целым — `SE-059`); перевод q→int идёт через `cast_to_type`.
         Value::Fixed { repr, n, .. } => Ok(fixed::to_integer_part(*repr, *n)),
-        Value::Array(_) | Value::Struct { .. } => Err(EvalError::NotCoercible {
-            value: value_kind(value),
-            ty: format!("{ty:?}"),
-        }),
+        Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
+            Err(EvalError::NotCoercible {
+                value: value_kind(value),
+                ty: format!("{ty:?}"),
+            })
+        }
     }
 }
 
@@ -235,7 +257,7 @@ fn coerce_to_fixed_store(value: Value, m: u8, n: u8) -> Result<Value, EvalError>
             }
         }
         Value::Real(f) => (f * (1u64 << n) as f64).floor() as i128,
-        Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } => {
+        Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
             return Err(EvalError::NotCoercible {
                 value: value_kind(&value),
                 ty: format!("q({m}, {n})"),
@@ -271,7 +293,22 @@ pub(crate) fn cast_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalErr
             _ => coerce_to_type(Value::Number(fixed::to_integer_part(repr, n)), ty),
         };
     }
-    // Ни источник, ни цель не q — прежнее поведение каста (= запись).
+    // Длительность (фича 0134, решение заказчика): мост к числам — **миллисекунды**.
+    // Пересчёт зовётся из общего слоя `semantic::duration`, а не считается здесь:
+    // цели обязаны получить тот же ответ на вопрос «сколько это миллисекунд».
+    if let Value::Duration(ns) = value {
+        return coerce_to_type(
+            Value::Number(takt_lang::semantic::duration::to_millis(ns)),
+            ty,
+        );
+    }
+    if matches!(ty, TypeNode::Duration) {
+        let millis = to_integer(&value, ty)?;
+        return takt_lang::semantic::duration::from_millis(millis)
+            .map(Value::Duration)
+            .ok_or(EvalError::ArithmeticOverflow { op: "as duration" });
+    }
+    // Ни источник, ни цель не q и не duration — прежнее поведение каста (= запись).
     coerce_to_type(value, ty)
 }
 
@@ -331,7 +368,8 @@ fn coerce_bit_vector(value: Value, n: u16) -> Result<Value, EvalError> {
                 other @ (Value::Boolean(_)
                 | Value::Real(_)
                 | Value::Fixed { .. }
-                | Value::Struct { .. }) => {
+                | Value::Struct { .. }
+                | Value::Duration(_)) => {
                     return Err(EvalError::NotCoercible {
                         value: value_kind(&other),
                         ty: format!("[bit;{n}]"),
@@ -419,12 +457,14 @@ fn coerce_struct(
         }
         // Прочие значения к структуре не приводятся (модуль под
         // `deny(wildcard_enum_match_arm)` — варианты перечислены явно).
-        scalar @ (Value::Number(_) | Value::Real(_) | Value::Boolean(_) | Value::Fixed { .. }) => {
-            Err(EvalError::NotCoercible {
-                value: value_kind(&scalar),
-                ty: format!("структура '{name}'"),
-            })
-        }
+        scalar @ (Value::Number(_)
+        | Value::Real(_)
+        | Value::Boolean(_)
+        | Value::Fixed { .. }
+        | Value::Duration(_)) => Err(EvalError::NotCoercible {
+            value: value_kind(&scalar),
+            ty: format!("структура '{name}'"),
+        }),
     }
 }
 

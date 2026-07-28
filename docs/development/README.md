@@ -222,3 +222,31 @@
 | 0100-06 | 0100 | Переименование языка Lam → Takt | [0100-06-language-rename-takt.md](0100-06-language-rename-takt.md) |
 | 0124-01 | 0124 | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | [0124-01-verify-graph-export.md](0124-01-verify-graph-export.md) |
 | 0125-01 | 0125 | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | [0125-01-intellij-takt-lsp-tooling.md](0125-01-intellij-takt-lsp-tooling.md) |
+| 0139-01 | 0139 | Удаление мёртвой конфигурации .travis.yml | [0139-01-remove-travis-config.md](0139-01-remove-travis-config.md) |
+| 0137-01 | 0137 | Фиксация толчейна Rust и MSRV | [0137-01-toolchain-pin-msrv.md](0137-01-toolchain-pin-msrv.md) |
+| 0128-01 | 0128 | Диагностика вместо паники на числовом литерале больше i64::MAX | [0128-01-lexer-literal-overflow.md](0128-01-lexer-literal-overflow.md) |
+| 0129-01 | 0129 | Предел вложенности семантических обходов | [0129-01-semantic-deep-nesting.md](0129-01-semantic-deep-nesting.md) |
+| 0127-01 | 0127 | Единая семантика переполнения целых во всех целях | [0127-01-int-overflow-semantics.md](0127-01-int-overflow-semantics.md) |
+| 0133-01 | 0133 | Гейт компиляции и симуляции примеров документа book/ | [0133-01-book-examples-gate.md](0133-01-book-examples-gate.md) |
+| 0135-01 | 0135 | Квалифицированные имена портов в симуляторе | [0135-01-sim-qualified-port-names.md](0135-01-sim-qualified-port-names.md) |
+| 0131-01 | 0131 | LSP: definition, references и rename | [0131-01-lsp-definition-references-rename.md](0131-01-lsp-definition-references-rename.md) |
+| 0131-02 | 0131 | LSP: definition, references и rename | [0131-02-lsp-definition-references-rename.md](0131-02-lsp-definition-references-rename.md) |
+| 0131-03 | 0131 | LSP: definition, references и rename | [0131-03-lsp-definition-references-rename.md](0131-03-lsp-definition-references-rename.md) |
+| 0130-01 | 0130 | Накопление семантических диагностик | [0130-01-diagnostics-batch.md](0130-01-diagnostics-batch.md) |
+| 0130-02 | 0130 | Накопление семантических диагностик | [0130-02-diagnostics-batch.md](0130-02-diagnostics-batch.md) |
+| 0130-03 | 0130 | Накопление семантических диагностик | [0130-03-diagnostics-batch.md](0130-03-diagnostics-batch.md) |
+| 0132-01 | 0132 | Именованные порты в сценариях симулятора | [0132-01-sim-named-port-scenarios.md](0132-01-sim-named-port-scenarios.md) |
+| 0132-02 | 0132 | Именованные порты в сценариях симулятора | [0132-02-sim-named-port-scenarios.md](0132-02-sim-named-port-scenarios.md) |
+| 0132-03 | 0132 | Именованные порты в сценариях симулятора | [0132-03-sim-named-port-scenarios.md](0132-03-sim-named-port-scenarios.md) |
+| 0140-01 | 0140 | Ревизия витрины кандидатов и разделение ролей README и book | [0140-01-backlog-revision-doc-split.md](0140-01-backlog-revision-doc-split.md) |
+| 0140-02 | 0140 | Ревизия витрины кандидатов и разделение ролей README и book | [0140-02-backlog-revision-doc-split.md](0140-02-backlog-revision-doc-split.md) |
+| 0140-03 | 0140 | Ревизия витрины кандидатов и разделение ролей README и book | [0140-03-backlog-revision-doc-split.md](0140-03-backlog-revision-doc-split.md) |
+| 0138-02 | 0138 | Измерение покрытия тестами | [0138-02-coverage-measurement.md](0138-02-coverage-measurement.md) |
+| 0136-01 | 0136 | Бенчмарки производительности | [0136-01-perf-benchmarks.md](0136-01-perf-benchmarks.md) |
+| 0136-02 | 0136 | Бенчмарки производительности | [0136-02-perf-benchmarks.md](0136-02-perf-benchmarks.md) |
+| 0136-03 | 0136 | Бенчмарки производительности | [0136-03-perf-benchmarks.md](0136-03-perf-benchmarks.md) |
+| 0134-01 | 0134 | Лексика, грамматика и АСД: литерал длительности, `clock`, `after`/`every` | [0134-01-lexis-grammar-ast.md](0134-01-lexis-grammar-ast.md) |
+| 0134-02 | 0134 | Тип `duration`, слой `semantic::duration` и диагностики | [0134-02-type-and-lowering.md](0134-02-type-and-lowering.md) |
+| 0134-03 | 0134 | Симулятор: виртуальные часы, значение длительности, `after` | [0134-03-simulator-clock.md](0134-03-simulator-clock.md) |
+| 0134-04 | 0134 | Цель `c`: выдержка `after` в профиле «такты» | [0134-04-target-c.md](0134-04-target-c.md) |
+| 0134-05 | 0134 | Частота — контракт сборки (спланирована; требует CLI-части 0134-08) | [0134-05-clock-contract.md](0134-05-clock-contract.md) |

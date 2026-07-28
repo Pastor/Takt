@@ -44,6 +44,9 @@ fn value_to_json(v: &Value) -> serde_json::Value {
         // q(m, n): сохраняем **представление** целым; при загрузке `coerce_to_type`
         // трактует Number как готовый repr (задача 0061-01) → круг-трип точен.
         Value::Fixed { repr, .. } => serde_json::Value::Number((*repr).into()),
+        // Длительность (0134): сохраняем наносекунды целым — как и repr у q,
+        // круговой рейс точен, потому что канон языка и есть наносекунды.
+        Value::Duration(ns) => serde_json::Value::Number((*ns).into()),
         Value::Array(arr) => serde_json::Value::Array(arr.iter().map(value_to_json).collect()),
         // Структура (фича 0034): объект `{ поле: значение }`. Порядок полей при
         // загрузке восстанавливает `coerce_to_type` по определению структуры,
@@ -178,6 +181,10 @@ mod tests {
         let mut st = HashMap::new();
         st.insert(state.to_string(), vec![]);
         Unit::from_kind(UnitKind::Node {
+            time_ns: 0,
+            ticks_in_state: 0,
+            state_entered_ns: 0,
+            model_name: None,
             entered_initial: false,
             context: None,
             executions: HashMap::new(),
@@ -196,6 +203,10 @@ mod tests {
         st.insert(from.to_string(), vec![(to.to_string(), pred)]);
         st.insert(to.to_string(), vec![]);
         Unit::from_kind(UnitKind::Node {
+            time_ns: 0,
+            ticks_in_state: 0,
+            state_entered_ns: 0,
+            model_name: None,
             entered_initial: false,
             context: None,
             executions: HashMap::new(),

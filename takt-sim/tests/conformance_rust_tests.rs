@@ -276,6 +276,47 @@ fn per_tick_trace_matches_generated_rust() {
     );
 }
 
+/// Обёртка `u8` совпадает у симулятора и порождённой прошивки Rust.
+///
+/// **Сторож главного дефекта фичи 0127.** Цель `rust` печатала `n += 1`, и на
+/// `255 + 1` прошивка **паниковала** (`attempt to add with overflow`) в
+/// debug-профиле, а в release молча оборачивала — то есть поведение зависело от
+/// профиля сборки пользователя, и ни один из двух вариантов не совпадал с
+/// правилом языка гарантированно. Теперь печатается `wrapping_add`.
+///
+/// Наблюдение — через выходной порт: поля модели приватны (см. шапку файла).
+#[test]
+fn unsigned_overflow_wraps_like_generated_rust() {
+    let dir = build_dir("rsovf");
+    // Счётчик — `var` (выходной порт читать нельзя, SE-027), наружу он
+    // зеркалится портом `n`: наблюдение в этой сверке идёт только через HAL.
+    let source = "model Wrap { var t: u8 := 253; out n: u8; \
+                  start Counting { always { t := t + 1; n := t; } ref Done: t = 3; } \
+                  state Done {} } \
+                  start Entry = Wrap;";
+    let path = fixture(&dir, "rsovf", source);
+    let sim = simulate_trace(&path, "n");
+    // Пиннинг правила S1: обёртка на третьем такте.
+    assert_eq!(
+        sim,
+        vec![254, 255, 0, 1, 2, 3],
+        "ожидаемая трасса симулятора: 254, 255, 0 (обёртка), 1, 2, 3"
+    );
+
+    if !rustc_available() {
+        eprintln!(
+            "[ПРОПУСК] unsigned_overflow_wraps_like_generated_rust: rustc не найден \
+             (трасса симулятора пришпилена выше)"
+        );
+        return;
+    }
+    let rs = rust_trace(&dir, &path, "rsovf", "Rsovf", "N", sim.len());
+    assert_eq!(
+        sim, rs,
+        "обёртка беззнакового обязана совпадать.\nсимулятор={sim:?}\nRust={rs:?}"
+    );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Q-арифметика fixed-point (фича 0061, задача 0061-03): T10 для цели rust
 //

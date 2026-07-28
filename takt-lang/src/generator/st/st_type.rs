@@ -57,6 +57,15 @@ pub(crate) fn get_st_type(typ: &TypeNode, model: &ModelNode) -> Result<String, D
         // T1, T2. В Takt `bit` и `bool` — разные узлы, в IEC оба суть `BOOL`.
         // Различие теряется безвредно: обратного преобразования нет, семантика
         // (1 бит) совпадает. Цель `c` здесь даёт `int` — дефект Д2 фичи 0029.
+        // Тип `duration` (фича 0134): узел языка есть, эмиссия — задача
+        // соответствующей цели. До неё — ЯВНЫЙ отказ: молча напечатать
+        // наносекунды обычным целым значило бы выдать выдержку, не равную
+        // заявленной.
+        TypeNode::Duration => Err(Diagnostic::error(
+            Location::Codegen,
+            "тип 'duration' целью 'st' пока не поддерживается".to_string(),
+        )
+        .with_code("ST-015")),
         TypeNode::Bit | TypeNode::Bool => Ok("BOOL".to_string()),
         // T3..T10.
         TypeNode::Integer { bits, signed } => integer_type(*bits, *signed),

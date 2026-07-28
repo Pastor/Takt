@@ -16,6 +16,7 @@ use semantic::index::SemanticNodeRef;
 use semantic::{FunctionDefinitionNode, ModelNode, VariableNode};
 use std::cell;
 
+mod capabilities;
 mod completion;
 mod diagnostics;
 mod formatting;
@@ -24,6 +25,8 @@ mod hover;
 mod init_options;
 mod keywords;
 mod position;
+mod references;
+mod rename;
 mod semantic_tokens;
 mod symbols;
 
@@ -31,6 +34,7 @@ mod symbols;
 // `bin/takt_lsp.rs`, `tests/lsp_tests.rs` и плагинов IDE. Реэкспорт держит пути
 // импорта прежними: где лежит функция внутри — деталь, которую потребитель знать
 // не обязан. Ни один потребитель этой фичей не правится.
+pub use capabilities::server_capabilities;
 pub use completion::completion_items;
 pub use diagnostics::{collect_diagnostics, collect_diagnostics_at, grammar_diagnostic_to_lsp};
 pub use formatting::formatting_edits;
@@ -39,6 +43,8 @@ pub use hover::{hover_info, word_at_position};
 pub use init_options::search_paths_from_options;
 pub use keywords::SEMANTIC_TOKEN_TYPES;
 pub use position::{node_at_position, offset_to_position, offset_to_range, position_to_offset};
+pub use references::references_at;
+pub use rename::{RenameRefusal, prepare_rename_at, rename_at};
 pub use semantic_tokens::semantic_tokens;
 pub use symbols::document_symbols;
 

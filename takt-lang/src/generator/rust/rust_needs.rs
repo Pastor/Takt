@@ -305,6 +305,7 @@ fn walk_expression(
         ExpressionNode::None
         | ExpressionNode::Unresolved(_)
         | ExpressionNode::Number(_)
+        | ExpressionNode::Duration(_)
         | ExpressionNode::Rational(_, _)
         | ExpressionNode::String(_)
         | ExpressionNode::Type(_)
@@ -367,6 +368,9 @@ fn walk_condition(
         ConditionNode::None
         | ConditionNode::Unresolved(_)
         | ConditionNode::Number(_)
+        | ConditionNode::Duration(_)
+        | ConditionNode::After(_)
+        | ConditionNode::AfterTicks(_)
         | ConditionNode::Rational(_, _)
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)

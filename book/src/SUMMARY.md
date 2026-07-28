@@ -17,15 +17,16 @@
 - [Импорты и композиция моделей](09-imports/index.md)
 - [Именованные условия и блоки](10-named/index.md)
 - [Модель исполнения (семантика такта)](11-execution/index.md)
-- [Верификация свойств](12-verification/index.md)
-- [Цели генерации](13-targets/index.md)
-- [Симуляция](14-simulation/index.md)
-- [Диагностики](15-diagnostics/index.md)
+- [Механизмы времени](12-time/index.md)
+- [Верификация свойств](13-verification/index.md)
+- [Цели генерации](14-targets/index.md)
+- [Симуляция](15-simulation/index.md)
+- [Диагностики](16-diagnostics/index.md)
 
 # Применение
 
-- [Инструментарий](16-tools/index.md)
-- [Практический пример](17-showcase/index.md)
+- [Инструментарий](17-tools/index.md)
+- [Практический пример](18-showcase/index.md)
 
 # Приложения
 

@@ -25,6 +25,11 @@ pub(in crate::generator::c) fn generate_expr(
         printer.print("(");
     }
     match expr {
+        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
+        // отказ, а не печать наносекунд обычным числом.
+        ExpressionNode::Duration(_) => {
+            return Err("Длительность целью 'c' пока не поддерживается".into());
+        }
         ExpressionNode::None | ExpressionNode::Unresolved(_) => {
             return Err("Неразрешённое выражение".into());
         }
