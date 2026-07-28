@@ -55,6 +55,30 @@ pub(crate) fn collect_clock(ast: &Model, model: &Rc<RefCell<ModelNode>>) -> Resu
     Ok(())
 }
 
+/// Использует ли модель выдержку `after` хотя бы на одном ребре (фича 0134).
+///
+/// Нужно генераторам: поле-счётчик времени эмитится **только** при
+/// использовании (правило 1 ADR — модель без времени даёт прежний вывод
+/// байт-в-байт). Условия рёбер живут как `Unresolved(ast)` (инвариант проекта),
+/// поэтому проверяются оба представления: и сырое АСД, и разрешённый узел.
+pub fn model_uses_after(model: &ModelNode) -> bool {
+    model.states.values().any(|state| {
+        state
+            .references()
+            .iter()
+            .any(|reference| cond_uses_after(&reference.cond))
+    })
+}
+
+/// Есть ли `after` в условии перехода (в любом из двух представлений).
+fn cond_uses_after(cond: &crate::semantic::ConditionNode) -> bool {
+    match cond {
+        crate::semantic::ConditionNode::After(_) => true,
+        crate::semantic::ConditionNode::Unresolved(raw) => find_after(raw).is_some(),
+        _ => false,
+    }
+}
+
 /// Отвергает `after` в условии, стоящем не на ребре перехода (`SE-068`).
 fn reject_after(cond: &Condition, place: &str) -> Result<(), Diagnostic> {
     if let Some(loc) = find_after(cond) {

@@ -16,6 +16,8 @@ pub struct CMap {
     guard_enable: bool,
     /// Ширина вещественного типа (фича 0029): `double` при `W64`, `float` при `W32`.
     float_width: FloatWidth,
+    /// Профиль времени (фича 0134): в какие единицы пересчитывается длительность.
+    time_profile: crate::semantic::duration::TimeProfile,
 }
 
 impl CMap {
@@ -54,7 +56,22 @@ impl CMap {
             usage,
             guard_enable,
             float_width: FloatWidth::default(),
+            time_profile: crate::semantic::duration::TimeProfile::default(),
         })
+    }
+
+    /// Задаёт профиль времени (фича 0134): «часы» либо «такты».
+    ///
+    /// Отдельным методом по той же причине, что и ширина вещественного:
+    /// умолчание — профиль «часы», и существующие вызовы `new` его не повторяют.
+    pub fn with_time_profile(mut self, profile: crate::semantic::duration::TimeProfile) -> Self {
+        self.time_profile = profile;
+        self
+    }
+
+    /// Профиль времени, выбранный для этой сборки (фича 0134).
+    pub(crate) fn time_profile(&self) -> crate::semantic::duration::TimeProfile {
+        self.time_profile
     }
 
     /// Задаёт ширину вещественного типа (фича 0029).

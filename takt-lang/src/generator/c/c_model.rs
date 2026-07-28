@@ -659,6 +659,35 @@ fn generate_model_tick(
     // этом реальный пропуск состояния (все достижимые состояния имеют `case`).
     printer.ident("default: break;").nl();
     printer.down().ident("}").nl();
+    // Счётчик выдержки (фича 0134) обновляется в КОНЦЕ такта — так значение,
+    // видимое условиям на такте M, равно числу тактов, прошедших с входа в
+    // состояние. Смена состояния в этом такте означает вход, поэтому счётчик
+    // становится 1 (на следующем такте с входа пройдёт ровно один такт), иначе
+    // растёт. Обновление стоит здесь ОДИН раз, а не рядом с каждым из десяти
+    // присваиваний `model->state` — второй экземпляр этой логики неминуемо
+    // разъехался бы с первым.
+    let raw_model = map.raw_model_at(model_name.clone())?;
+    if crate::semantic::time_ast::model_uses_after(&raw_model.borrow()) {
+        let dwell = crate::generator::c::c_expr::condition::DWELL_FIELD;
+        let prev = crate::generator::c::c_expr::condition::PREV_STATE_FIELD;
+        printer
+            .ident(&format!("if ((unsigned)model->state != model->{prev}) {{"))
+            .up()
+            .nl()
+            .ident(&format!("model->{dwell} = 1;"))
+            .nl()
+            .ident(&format!("model->{prev} = (unsigned)model->state;"))
+            .nl()
+            .down()
+            .ident("} else {")
+            .up()
+            .nl()
+            .ident(&format!("model->{dwell}++;"))
+            .nl()
+            .down()
+            .ident("}")
+            .nl();
+    }
     Ok(())
 }
 

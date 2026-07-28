@@ -190,9 +190,16 @@ pub(in crate::generator::c) fn generate_condition_expr(
         ConditionNode::Bool(b) => Ok(if *b { "true" } else { "false" }.to_string()),
         // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
         // отказ, а не печать наносекунд обычным числом.
-        ConditionNode::Duration(_) | ConditionNode::After(_) => Err(Diagnostic::error(
+        // Выдержка `after` (фича 0134): сравнение по РАЗНОСТИ единиц профиля.
+        // Счётчик `_dwell` обнуляется при входе в состояние и увеличивается в
+        // конце такта, поэтому его значение равно числу тактов, прошедших с
+        // входа, — ровно то, что меряет эталон модельным временем.
+        ConditionNode::After(nanos) => after_condition(*nanos, map),
+        // Литерал длительности вне `after` (переменные типа `duration`) целью
+        // пока не поддерживается — отказ, а не печать наносекунд числом.
+        ConditionNode::Duration(_) => Err(Diagnostic::error(
             Location::Codegen,
-            "длительность целью 'c' пока не поддерживается".to_string(),
+            "значения типа 'duration' целью 'c' пока не поддерживаются".to_string(),
         )
         .with_code("CC-020")),
         ConditionNode::Number(n) => Ok(n.to_string()),
@@ -396,4 +403,51 @@ pub(in crate::generator::c) fn generate_condition_expr(
         )
         .with_code("CC-003")),
     }
+}
+
+/// Имя поля-счётчика времени, проведённого в текущем состоянии (фича 0134).
+///
+/// Имя начинается с `takt_`, чтобы не столкнуться с полем автора: имена Takt
+/// нормализуются в snake_case без этого префикса.
+pub(in crate::generator::c) const DWELL_FIELD: &str = "takt_dwell";
+
+/// Имя поля «состояние на конец предыдущего такта» (фича 0134).
+///
+/// Нужно, чтобы вход в состояние определялся **одним** сравнением в конце
+/// такта, а не десятью правками рядом с присваиваниями `model->state`.
+pub(in crate::generator::c) const PREV_STATE_FIELD: &str = "takt_prev_state";
+
+/// Печатает условие выдержки `after` для профиля «такты».
+///
+/// Профиль «часы» (внешний источник времени) целью `c` **пока** не
+/// поддерживается — отказ `CC-021`, а не тихая подстановка тактов вместо
+/// миллисекунд: это дало бы выдержку, не равную заявленной.
+fn after_condition(nanos: i64, map: &CMap) -> Result<String, Diagnostic> {
+    let profile = map.time_profile();
+    let ticks = crate::semantic::duration::units_or_diagnostic(
+        nanos,
+        profile,
+        Location::Codegen,
+        "выдержка 'after'",
+    )?;
+    match profile {
+        crate::semantic::duration::TimeProfile::Ticks { .. } => {
+            Ok(format!("{} >= {}", dwell_access(), ticks))
+        }
+        crate::semantic::duration::TimeProfile::Clock => Err(Diagnostic::error(
+            Location::Codegen,
+            "выдержка 'after' в профиле «часы» целью 'c' пока не поддерживается: \
+объявите частоту тактирования (`clock 1kHz;`) либо задайте её флагом сборки"
+                .to_string(),
+        )
+        .with_code("CC-021")),
+    }
+}
+
+/// Доступ к счётчику времени состояния изнутри такта своей модели.
+///
+/// Условие ребра печатается при генерации такта **своей** модели, поэтому путь —
+/// всегда `model->…` (как у `model->state` для собственного состояния).
+pub(in crate::generator::c) fn dwell_access() -> String {
+    format!("model->{DWELL_FIELD}")
 }
