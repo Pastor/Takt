@@ -10,7 +10,165 @@
 //! давал 1004 строки при лимите 1000, и гейт размера отказал.
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::c::c_expr::condition::{DWELL_FIELD, ENTRY_MS_FIELD, PREV_STATE_FIELD};
 use crate::generator::c::c_map::CMap;
+use crate::generator::indent::Printer;
+use crate::semantic::ModelNode;
+use crate::semantic::time_ast::{model_uses_duration_after, model_uses_tick_after};
+
+/// Профиль модели — «часы» (внешний источник времени)?
+fn is_clock_profile(map: &CMap) -> bool {
+    matches!(
+        map.time_profile(),
+        crate::semantic::duration::TimeProfile::Clock
+    )
+}
+
+/// Нужен ли колбэк `now_ms` (фича 0134-04b): профиль «часы» + длительностная
+/// выдержка `after Nms` где-либо в дереве модели (колбэк — на корневой структуре,
+/// а выдержка бывает во вложенной под-модели). Тактовая `after Nt` не требует.
+pub(super) fn needs_now_ms(map: &CMap, model: &ModelNode) -> bool {
+    is_clock_profile(map) && crate::semantic::time_ast::model_tree_uses_duration_after(model)
+}
+
+/// Печатает поля структуры для механизма времени (фича 0134).
+///
+/// Профиль «такты» → `takt_dwell` (счётчик); профиль «часы» → `takt_entry_ms`
+/// (метка входа, сравнение разностью с `now_ms`). Тактовая выдержка `after Nt`
+/// считает `takt_dwell` в любом профиле. Общее поле `takt_prev_state` — для
+/// распознавания входа одним сравнением в конце такта.
+pub(super) fn emit_state_time_fields(
+    printer: &mut Printer,
+    map: &CMap,
+    model: &ModelNode,
+) -> Result<(), Diagnostic> {
+    let clock = is_clock_profile(map);
+    let uses_dur = model_uses_duration_after(model);
+    let uses_tick = model_uses_tick_after(model);
+    let needs_dwell = uses_tick || (!clock && uses_dur);
+    let needs_entry_ms = clock && uses_dur;
+    if needs_dwell {
+        let bits =
+            crate::semantic::duration::counter_bits(counter_ticks(map, model)?).unwrap_or(64);
+        printer
+            .ident("// NOTICE: Счётчик тактов, прошедших с входа в состояние (выдержка `after`)")
+            .nl()
+            .ident(&format!("uint{bits}_t {DWELL_FIELD};"))
+            .nl();
+    }
+    if needs_entry_ms {
+        let bits = clock_marker_bits(map)?;
+        printer
+            .ident("// NOTICE: Метка времени входа в состояние — внешний источник (профиль «часы»)")
+            .nl()
+            .ident(&format!("uint{bits}_t {ENTRY_MS_FIELD};"))
+            .nl();
+    }
+    if needs_dwell || needs_entry_ms {
+        printer.ident(&format!("unsigned {PREV_STATE_FIELD};")).nl();
+    }
+    Ok(())
+}
+
+/// Печатает обновление счётчика/метки времени в КОНЦЕ такта (фича 0134).
+///
+/// Вход в состояние (`state != prev`) сбрасывает счётчик тактов в 1 и латчит
+/// метку `now_ms` (профиль «часы»); иначе счётчик тактов растёт. Стоит **одним**
+/// сравнением, а не рядом с каждым присваиванием `model->state`, — второй
+/// экземпляр логики неминуемо разошёлся бы с первым. Для профиля «такты» вывод
+/// байт-в-байт прежний.
+pub(super) fn emit_state_time_update(
+    printer: &mut Printer,
+    map: &CMap,
+    model: &ModelNode,
+    hal_ptr: &str,
+) -> Result<(), Diagnostic> {
+    let clock = is_clock_profile(map);
+    let uses_dur = model_uses_duration_after(model);
+    let uses_tick = model_uses_tick_after(model);
+    let needs_dwell = uses_tick || (!clock && uses_dur);
+    let needs_entry_ms = clock && uses_dur;
+    if !needs_dwell && !needs_entry_ms {
+        return Ok(());
+    }
+    printer
+        .ident(&format!(
+            "if ((unsigned)model->state != model->{PREV_STATE_FIELD}) {{"
+        ))
+        .up()
+        .nl();
+    if needs_dwell {
+        printer.ident(&format!("model->{DWELL_FIELD} = 1;")).nl();
+    }
+    if needs_entry_ms {
+        let bits = clock_marker_bits(map)?;
+        printer
+            .ident(&format!(
+                "model->{ENTRY_MS_FIELD} = (uint{bits}_t){hal_ptr}->{}({hal_ptr}->userdata);",
+                crate::generator::c::FUNCTION_TIME_NOW_MS
+            ))
+            .nl();
+    }
+    printer
+        .ident(&format!(
+            "model->{PREV_STATE_FIELD} = (unsigned)model->state;"
+        ))
+        .nl()
+        .down();
+    if needs_dwell {
+        printer
+            .ident("} else {")
+            .up()
+            .nl()
+            .ident(&format!("model->{DWELL_FIELD}++;"))
+            .nl()
+            .down();
+    }
+    printer.ident("}").nl();
+    Ok(())
+}
+
+/// Печатает инициализацию счётчика/метки времени в `_init` (фича 0134).
+///
+/// Стартовое состояние входит «до такта 1» (0033), поэтому метку `now_ms`
+/// латчим здесь: иначе первая выдержка в профиле «часы» мерилась бы от нуля
+/// абсолютного времени, а не от входа. `takt_prev_state` совпадает с начальным
+/// состоянием — вход в стартовое на такте 1 распознаётся сменой состояния.
+/// `init_const` — имя `<ROOT>_INIT`.
+pub(super) fn emit_state_time_init(
+    printer: &mut Printer,
+    map: &CMap,
+    model: &ModelNode,
+    init_const: &str,
+    hal_ptr: &str,
+) -> Result<(), Diagnostic> {
+    let clock = is_clock_profile(map);
+    let uses_dur = model_uses_duration_after(model);
+    let uses_tick = model_uses_tick_after(model);
+    let needs_dwell = uses_tick || (!clock && uses_dur);
+    let needs_entry_ms = clock && uses_dur;
+    if !needs_dwell && !needs_entry_ms {
+        return Ok(());
+    }
+    if needs_dwell {
+        printer.ident(&format!("model->{DWELL_FIELD} = 0;")).nl();
+    }
+    if needs_entry_ms {
+        let bits = clock_marker_bits(map)?;
+        printer
+            .ident(&format!(
+                "model->{ENTRY_MS_FIELD} = (uint{bits}_t){hal_ptr}->{}({hal_ptr}->userdata);",
+                crate::generator::c::FUNCTION_TIME_NOW_MS
+            ))
+            .nl();
+    }
+    printer
+        .ident(&format!(
+            "model->{PREV_STATE_FIELD} = (unsigned){init_const};"
+        ))
+        .nl();
+    Ok(())
+}
 
 /// Максимальная выдержка модели в единицах профиля — для выбора разрядности.
 ///
@@ -39,6 +197,37 @@ pub(super) fn counter_ticks(
                 max = max.max(units);
             }
         }
+    }
+    Ok(max)
+}
+
+/// Ширина метки времени профиля «часы» (фича 0134-04b) — по максимуму `after`
+/// корневой модели, `counter_bits` от него.
+///
+/// Объявление поля [`ENTRY_MS_FIELD`](super::c_expr::condition::ENTRY_MS_FIELD) и
+/// условие сравнения обязаны брать ширину из **одного** места: разойдись они,
+/// поле оказалось бы уже сравнения — и выдержка стала бы молча неверной. Отсюда
+/// общий помощник, а не два независимых расчёта.
+///
+/// ⚠️ Берётся от **корня**: вложенная композиция с `after` глубже корня шириной
+/// не покрыта (в корпусе такого нет — время цели `c` живёт на плоских моделях).
+pub(super) fn clock_marker_bits(map: &CMap) -> Result<u8, Diagnostic> {
+    let max_ms = match map.root_model_node() {
+        Some(model) => max_units_in_tree(map, &model.borrow())?,
+        None => 0,
+    };
+    Ok(crate::semantic::duration::counter_bits(max_ms).unwrap_or(64))
+}
+
+/// Максимум единиц выдержки `after` по всему дереву модели (сама + вложенные).
+///
+/// Метка времени и поле лежат на разных структурах композиции, но ширину обязаны
+/// брать одну — по максимуму дерева, иначе вложенная выдержка получила бы поле
+/// уже сравнения и стала бы молча неверной.
+fn max_units_in_tree(map: &CMap, model: &ModelNode) -> Result<u64, Diagnostic> {
+    let mut max = counter_ticks(map, model)?;
+    for nested in model.models.values() {
+        max = max.max(max_units_in_tree(map, &nested.borrow())?);
     }
     Ok(max)
 }

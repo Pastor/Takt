@@ -667,27 +667,18 @@ fn generate_model_tick(
     // присваиваний `model->state` — второй экземпляр этой логики неминуемо
     // разъехался бы с первым.
     let raw_model = map.raw_model_at(model_name.clone())?;
-    if crate::semantic::time_ast::model_uses_after(&raw_model.borrow()) {
-        let dwell = crate::generator::c::c_expr::condition::DWELL_FIELD;
-        let prev = crate::generator::c::c_expr::condition::PREV_STATE_FIELD;
-        printer
-            .ident(&format!("if ((unsigned)model->state != model->{prev}) {{"))
-            .up()
-            .nl()
-            .ident(&format!("model->{dwell} = 1;"))
-            .nl()
-            .ident(&format!("model->{prev} = (unsigned)model->state;"))
-            .nl()
-            .down()
-            .ident("} else {")
-            .up()
-            .nl()
-            .ident(&format!("model->{dwell}++;"))
-            .nl()
-            .down()
-            .ident("}")
-            .nl();
-    }
+    // HAL-указатель: `model` у корня, `main` у под-модели (как порты).
+    let hal_ptr = if model_name.eq(&map.root_name()) {
+        "model"
+    } else {
+        "main"
+    };
+    crate::generator::c::c_time::emit_state_time_update(
+        printer,
+        map,
+        &raw_model.borrow(),
+        hal_ptr,
+    )?;
     Ok(())
 }
 

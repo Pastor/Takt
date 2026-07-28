@@ -382,27 +382,10 @@ fn generate_model_header(
         printer.ident(&end_constant);
     }
     printer.down().nl().ident("} state;").nl();
-    // Счётчик времени, проведённого в текущем состоянии (фича 0134). Эмитится
-    // ТОЛЬКО если модель использует выдержку `after`: модель без времени обязана
-    // давать прежний вывод байт-в-байт (правило 1 ADR).
-    if crate::semantic::time_ast::model_uses_after(&model.borrow()) {
-        let ticks = crate::generator::c::c_time::counter_ticks(map, &model.borrow())?;
-        let bits = crate::semantic::duration::counter_bits(ticks).unwrap_or(64);
-        printer
-            .ident("// NOTICE: Счётчик тактов, прошедших с входа в состояние (выдержка `after`)")
-            .nl()
-            .ident(&format!(
-                "uint{}_t {};",
-                bits,
-                crate::generator::c::c_expr::condition::DWELL_FIELD
-            ))
-            .nl()
-            .ident(&format!(
-                "unsigned {};",
-                crate::generator::c::c_expr::condition::PREV_STATE_FIELD
-            ))
-            .nl();
-    }
+    // Механизмы времени (фича 0134): поля счётчика/метки эмитятся ТОЛЬКО при
+    // использовании `after` (модель без времени — прежний вывод байт-в-байт).
+    // Логика в `c_time` (лимит размера `c_header`).
+    crate::generator::c::c_time::emit_state_time_fields(printer, map, &model.borrow())?;
     // Генерируем поля extend-состояний
     let mut is_extend = false;
     for state_name in states {
@@ -435,7 +418,10 @@ fn generate_model_header(
             || has_out_rational
             || has_in_numeric
             || has_out_numeric;
-        if has_any {
+        // Источник времени `now_ms` (профиль «часы», 0134-04b) встаёт рядом с
+        // портовыми колбэками — и требует `userdata`, даже если портов нет.
+        let needs_now_ms = crate::generator::c::c_time::needs_now_ms(map, &model.borrow());
+        if has_any || needs_now_ms {
             printer
                 .ident("/// NOTICE: Функции портов ввода вывода")
                 .nl();
@@ -500,6 +486,16 @@ fn generate_model_header(
                     ))
                     .nl();
             }
+            if needs_now_ms {
+                printer
+                    .ident("// NOTICE: Источник времени, миллисекунды (профиль «часы», фича 0134)")
+                    .nl()
+                    .ident(&format!(
+                        "uint64_t (*{now_ms})(void *userdata);",
+                        now_ms = crate::generator::c::FUNCTION_TIME_NOW_MS
+                    ))
+                    .nl();
+            }
         }
     }
 
@@ -517,6 +513,23 @@ pub fn generate_header(
 ) -> Result<String, Diagnostic> {
     let mut header = String::new();
     let mut printer = Printer::new(4, &mut header);
+    // Дефолтный `now_ms` цели `c-hal` (0134-04b) зовёт `clock_gettime(CLOCK_MONOTONIC)`,
+    // а на строгом glibc под `-std=c11` этот символ скрыт без `_POSIX_C_SOURCE`.
+    // Объявляем у самого верха — ДО любого системного заголовка, иначе feature-тест
+    // glibc уже отработал. Только для c-hal с профилем «часы»: прочий вывод неизменен.
+    if options.hal
+        && map
+            .root_model_node()
+            .is_some_and(|m| crate::generator::c::c_time::needs_now_ms(map, &m.borrow()))
+    {
+        printer
+            .print("#ifndef _POSIX_C_SOURCE")
+            .nl()
+            .print("#define _POSIX_C_SOURCE 199309L")
+            .nl()
+            .print("#endif")
+            .nl();
+    }
     // Исправлено: заменяем '.' (не '\.') для корректного C-идентификатора #ifndef guard
     let id = normalize_lowercase_snakecase(filename.to_string())
         .replace(".", "_")

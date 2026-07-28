@@ -194,7 +194,7 @@ pub(in crate::generator::c) fn generate_condition_expr(
         // Счётчик `_dwell` обнуляется при входе в состояние и увеличивается в
         // конце такта, поэтому его значение равно числу тактов, прошедших с
         // входа, — ровно то, что меряет эталон модельным временем.
-        ConditionNode::After(nanos) => after_condition(*nanos, map),
+        ConditionNode::After(nanos) => after_condition(*nanos, map, owner),
         // Выдержка в тактах частоты НЕ требует: счётчик и так считает такты.
         ConditionNode::AfterTicks(ticks) => Ok(format!("{} >= {}", dwell_access(), ticks)),
         // Литерал длительности вне `after` (переменные типа `duration`) целью
@@ -413,20 +413,28 @@ pub(in crate::generator::c) fn generate_condition_expr(
 /// нормализуются в snake_case без этого префикса.
 pub(in crate::generator::c) const DWELL_FIELD: &str = "takt_dwell";
 
+/// Имя поля-метки времени входа в состояние — профиль «часы» (фича 0134-04b).
+///
+/// Хранит `now_ms()` момента входа; выдержка сравнивается **разностью**
+/// `(uintN)(now - t0) >= D_MS` (обёртка беззнакового нормирована ADR 0127).
+pub(in crate::generator::c) const ENTRY_MS_FIELD: &str = "takt_entry_ms";
+
 /// Имя поля «состояние на конец предыдущего такта» (фича 0134).
 ///
 /// Нужно, чтобы вход в состояние определялся **одним** сравнением в конце
 /// такта, а не десятью правками рядом с присваиваниями `model->state`.
 pub(in crate::generator::c) const PREV_STATE_FIELD: &str = "takt_prev_state";
 
-/// Печатает условие выдержки `after` для профиля «такты».
+/// Печатает условие выдержки `after` в обоих профилях времени (фича 0134).
 ///
-/// Профиль «часы» (внешний источник времени) целью `c` **пока** не
-/// поддерживается — отказ `CC-021`, а не тихая подстановка тактов вместо
-/// миллисекунд: это дало бы выдержку, не равную заявленной.
-fn after_condition(nanos: i64, map: &CMap) -> Result<String, Diagnostic> {
+/// - «такты»: счётчик `takt_dwell >= D_TICKS` (инкремент в конце такта).
+/// - «часы»: метка входа `takt_entry_ms` и внешний источник `now_ms`; сравнение
+///   **разностью** `(uintN)(now - t0) >= D_MS` — беззнаковая обёртка нормирована
+///   ADR 0127, поэтому `t0 + D <= now` (переполнение) не даёт молча неверного
+///   результата. Ширина `N` — общая с объявлением поля (см. `c_time`).
+fn after_condition(nanos: i64, map: &CMap, owner: &Element) -> Result<String, Diagnostic> {
     let profile = map.time_profile();
-    let ticks = crate::semantic::duration::units_or_diagnostic(
+    let units = crate::semantic::duration::units_or_diagnostic(
         nanos,
         profile,
         Location::Codegen,
@@ -434,15 +442,25 @@ fn after_condition(nanos: i64, map: &CMap) -> Result<String, Diagnostic> {
     )?;
     match profile {
         crate::semantic::duration::TimeProfile::Ticks { .. } => {
-            Ok(format!("{} >= {}", dwell_access(), ticks))
+            Ok(format!("{} >= {}", dwell_access(), units))
         }
-        crate::semantic::duration::TimeProfile::Clock => Err(Diagnostic::error(
-            Location::Codegen,
-            "выдержка 'after' в профиле «часы» целью 'c' пока не поддерживается: \
-объявите частоту тактирования (`clock 1kHz;`) либо задайте её флагом сборки"
-                .to_string(),
-        )
-        .with_code("CC-021")),
+        crate::semantic::duration::TimeProfile::Clock => {
+            let bits = crate::generator::c::c_time::clock_marker_bits(map)?;
+            // HAL (`now_ms`/`userdata`) — на КОРНЕВОЙ структуре: `model` в корне,
+            // `main` в под-модели (как порты). Метка `takt_entry_ms` — на self.
+            let hal = if owner.name().eq(&map.root_name()) {
+                "model"
+            } else {
+                "main"
+            };
+            let now = format!(
+                "{hal}->{}({hal}->userdata)",
+                crate::generator::c::FUNCTION_TIME_NOW_MS
+            );
+            Ok(format!(
+                "(uint{bits}_t)((uint{bits}_t){now} - model->{ENTRY_MS_FIELD}) >= {units}"
+            ))
+        }
     }
 }
 

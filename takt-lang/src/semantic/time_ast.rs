@@ -143,6 +143,84 @@ fn find_after(cond: &Condition) -> Option<crate::diagnostics::Location> {
     }
 }
 
+/// Использует ли модель длительностную выдержку (`after 3s`, `after 500ms`).
+///
+/// В профиле «часы» такая выдержка меряется меткой времени `now_ms`, а не
+/// счётчиком тактов (фича 0134-04b) — отсюда нужен отдельный от `after Nt`
+/// предикат: поля структуры у профилей разные.
+pub fn model_uses_duration_after(model: &ModelNode) -> bool {
+    model_uses_after_kind(model, false)
+}
+
+/// Использует ли модель тактовую выдержку (`after 3t`) — считается `takt_dwell`
+/// в любом профиле (такт — шаг логики, частота не нужна).
+pub fn model_uses_tick_after(model: &ModelNode) -> bool {
+    model_uses_after_kind(model, true)
+}
+
+/// Использует ли **дерево** модели (сама + вложенные) длительностную выдержку.
+///
+/// Колбэк `now_ms` профиля «часы» (фича 0134-04b) живёт на КОРНЕВОЙ структуре, а
+/// длительностная выдержка бывает во вложенной под-модели композиции — поэтому
+/// решение «нужен ли `now_ms` корню» принимается по всему дереву, а не по корню.
+pub fn model_tree_uses_duration_after(model: &ModelNode) -> bool {
+    model_uses_duration_after(model)
+        || model
+            .models
+            .values()
+            .any(|nested| model_tree_uses_duration_after(&nested.borrow()))
+}
+
+fn model_uses_after_kind(model: &ModelNode, ticks: bool) -> bool {
+    model.states.values().any(|state| {
+        state
+            .references()
+            .iter()
+            .any(|reference| cond_has_after_kind(&reference.cond, ticks))
+    })
+}
+
+fn cond_has_after_kind(cond: &crate::semantic::ConditionNode, ticks: bool) -> bool {
+    match cond {
+        crate::semantic::ConditionNode::After(_) => !ticks,
+        crate::semantic::ConditionNode::AfterTicks(_) => ticks,
+        crate::semantic::ConditionNode::Unresolved(raw) => raw_has_after_kind(raw, ticks),
+        _ => false,
+    }
+}
+
+/// Ищет выдержку нужного вида в сыром дереве условия (для `Unresolved`-рёбер,
+/// напр. составное `(after 10s) & x`). Обход исчерпывающий, как `find_after`.
+fn raw_has_after_kind(cond: &Condition, ticks: bool) -> bool {
+    match cond {
+        Condition::After(..) => !ticks,
+        Condition::AfterTicks(..) => ticks,
+        Condition::Parenthesis(_, inner)
+        | Condition::Not(_, inner)
+        | Condition::BitAccess(_, inner, _)
+        | Condition::ArraySubscript(_, _, inner) => raw_has_after_kind(inner, ticks),
+        Condition::Add(_, l, r)
+        | Condition::Subtract(_, l, r)
+        | Condition::And(_, l, r)
+        | Condition::Or(_, l, r)
+        | Condition::Less(_, l, r)
+        | Condition::More(_, l, r)
+        | Condition::LessEqual(_, l, r)
+        | Condition::MoreEqual(_, l, r)
+        | Condition::Equal(_, l, r)
+        | Condition::NotEqual(_, l, r) => {
+            raw_has_after_kind(l, ticks) || raw_has_after_kind(r, ticks)
+        }
+        Condition::Function(_, _, args) => args.iter().any(|a| raw_has_after_kind(a, ticks)),
+        Condition::Duration(_, _, _)
+        | Condition::Number(_, _)
+        | Condition::Rational(_, _, _)
+        | Condition::String(_)
+        | Condition::Bool(_, _)
+        | Condition::Variable(_) => false,
+    }
+}
+
 /// Рекурсивный обход АСД: объявления `clock` текущей модели и вложенных.
 fn walk(ast: &Model, found: &mut Option<u64>) -> Result<(), Diagnostic> {
     for element in &ast.elements {
