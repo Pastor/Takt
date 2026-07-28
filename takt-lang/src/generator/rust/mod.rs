@@ -53,6 +53,7 @@ mod rust_port;
 mod rust_shared;
 mod rust_stmt;
 mod rust_tick;
+mod rust_time;
 mod rust_type;
 
 use crate::diagnostics::{Diagnostic, Location};
@@ -85,11 +86,16 @@ impl AsGenerator for Generator {
         // получил f32, тогда как `Rational` → f64 — решение ADR.
         rust_type::reject_float_width(options.float_width)?;
 
+        // Профиль времени (фича 0134): `clock` модели — контракт, флаг обязан
+        // подтвердить (0134-05). Единый чекпойнт-энфорсмент: несовпадение →
+        // `SE-069`/`SE-070` из `?`, покрывает все пути генерации rust.
+        let profile = crate::semantic::duration::resolve_profile(model.clock_hz, options.tick_hz)?;
         let map = RustMap::new(
             &normalize_lowercase_snakecase(model.name().to_string()),
             model,
             options.guard_enable,
-        )?;
+        )?
+        .with_time_profile(profile);
         let program = generate_program(&map)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));
@@ -147,6 +153,11 @@ fn generate_program(map: &RustMap) -> Result<String, Diagnostic> {
     // «вывод решает пользователь». Тихо отбросить нельзя: ровно этот дефект
     // закрыла фича 0035.
     ports.needs_debug = map.usage().functions.contains("debug");
+    // Источник времени `now_ms` (профиль «часы», фича 0134) — метод трейта без
+    // тела, по образцу `debug`: `no_std`-часов нет, реализует пользователь.
+    ports.needs_now_ms = map
+        .root_model_node()
+        .is_some_and(|m| rust_time::needs_now_ms(map, &m.borrow()));
 
     let mut out = String::new();
     let mut p = Printer::new(INDENT, &mut out);

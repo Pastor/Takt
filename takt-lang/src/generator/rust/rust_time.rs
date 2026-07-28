@@ -1,0 +1,211 @@
+//! Механизм времени цели `rust` (фича 0134).
+//!
+//! Зеркало `c/c_time.rs` в rust-идиомах: счётчик/метка — поля структуры модели,
+//! `takt_prev_state` типизирован **самим enum-ом состояния** (не `unsigned`, как
+//! в C), сравнение выдержки в профиле «часы» — беззнаковой обёрткой
+//! `now.wrapping_sub(t0)` (обычное вычитание паникует в debug — фича 0127).
+//! Арифметика длительности — не здесь, а в общем слое `semantic::duration`.
+//!
+//! ⚠️ Предикаты `needs_dwell`/`needs_entry_ms` обязаны совпадать во ВСЕХ точках
+//! (поле ↔ init ↔ обновление ↔ трейт): в Rust неиспользуемое приватное поле —
+//! ошибка `-D warnings`, а не молчаливая трата, как в C.
+
+use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::indent::Printer;
+use crate::generator::rust::rust_map::RustMap;
+use crate::semantic::ModelNode;
+use crate::semantic::duration::{TimeProfile, counter_bits, units_or_diagnostic};
+use crate::semantic::time_ast::{
+    model_tree_uses_duration_after, model_uses_duration_after, model_uses_tick_after,
+};
+
+/// Имя поля-счётчика тактов, проведённых в текущем состоянии.
+pub(super) const DWELL_FIELD: &str = "takt_dwell";
+/// Имя поля-метки времени входа в состояние (профиль «часы»).
+pub(super) const ENTRY_MS_FIELD: &str = "takt_entry_ms";
+/// Имя поля «состояние на конец предыдущего такта».
+pub(super) const PREV_STATE_FIELD: &str = "takt_prev_state";
+/// Метод трейта `Hal` — внешний источник времени (профиль «часы»).
+pub(super) const NOW_MS_METHOD: &str = "now_ms";
+
+/// Профиль модели — «часы»?
+fn is_clock(map: &RustMap) -> bool {
+    matches!(map.time_profile(), TimeProfile::Clock)
+}
+
+/// Нужен ли счётчик тактов `takt_dwell`: тактовая выдержка `after Nt` (в любом
+/// профиле) либо длительностная `after Nms` в профиле «такты».
+pub(super) fn needs_dwell(map: &RustMap, model: &ModelNode) -> bool {
+    model_uses_tick_after(model) || (!is_clock(map) && model_uses_duration_after(model))
+}
+
+/// Нужна ли метка времени `takt_entry_ms`: профиль «часы» + `after Nms`.
+pub(super) fn needs_entry_ms(map: &RustMap, model: &ModelNode) -> bool {
+    is_clock(map) && model_uses_duration_after(model)
+}
+
+/// Нужен ли метод `now_ms` трейту `Hal` (профиль «часы» + `after Nms` в дереве).
+///
+/// Метод на трейте один на файл, а длительностная выдержка бывает во вложенной
+/// под-модели композиции — решение по всему дереву корня.
+pub(super) fn needs_now_ms(map: &RustMap, model: &ModelNode) -> bool {
+    is_clock(map) && model_tree_uses_duration_after(model)
+}
+
+/// Разрядность счётчика тактов `takt_dwell` — по максимуму `after` этой модели.
+fn dwell_bits(map: &RustMap, model: &ModelNode) -> Result<u8, Diagnostic> {
+    Ok(counter_bits(max_units(map, model)?).unwrap_or(64))
+}
+
+/// Максимум единиц профиля по выдержкам `after` **этой** модели.
+fn max_units(map: &RustMap, model: &ModelNode) -> Result<u64, Diagnostic> {
+    let profile = map.time_profile();
+    let mut max = 0u64;
+    for state in model.states.values() {
+        for reference in state.references() {
+            if let crate::semantic::ConditionNode::After(nanos) = reference.cond {
+                let units =
+                    units_or_diagnostic(nanos, profile, Location::Codegen, "выдержка 'after'")?;
+                max = max.max(units);
+            }
+        }
+    }
+    Ok(max)
+}
+
+/// Печатает поля структуры для механизма времени (в объявлении `struct`).
+///
+/// `enum_name` — тип enum-а состояния (для `takt_prev_state`).
+pub(super) fn emit_struct_fields(
+    p: &mut Printer,
+    map: &RustMap,
+    model: &ModelNode,
+    enum_name: &str,
+) -> Result<(), Diagnostic> {
+    if needs_dwell(map, model) {
+        let bits = dwell_bits(map, model)?;
+        p.ident(&format!("{DWELL_FIELD}: u{bits},")).nl();
+    }
+    if needs_entry_ms(map, model) {
+        // Метка — фиксированный u64: `now_ms` отдаёт u64, а обёртка `wrapping_sub`
+        // верна на любой ширине (сужать ради байтов здесь не стоит риска рассинхрона).
+        p.ident(&format!("{ENTRY_MS_FIELD}: u64,")).nl();
+    }
+    if needs_dwell(map, model) || needs_entry_ms(map, model) {
+        p.ident(&format!("{PREV_STATE_FIELD}: {enum_name},")).nl();
+    }
+    Ok(())
+}
+
+/// Печатает начальные значения полей времени в литерале `Self { … }` (`fn new`).
+///
+/// Метку НЕ латчим здесь (в конструкторе `hal` может быть недоступен) — это делает
+/// `fn init` через [`emit_init`], как `_init` цели `c` (вход стартового «до такта 1»).
+pub(super) fn emit_new_fields(
+    p: &mut Printer,
+    map: &RustMap,
+    model: &ModelNode,
+    enum_name: &str,
+) -> Result<(), Diagnostic> {
+    if needs_dwell(map, model) {
+        p.ident(&format!("{DWELL_FIELD}: 0,")).nl();
+    }
+    if needs_entry_ms(map, model) {
+        p.ident(&format!("{ENTRY_MS_FIELD}: 0,")).nl();
+    }
+    if needs_dwell(map, model) || needs_entry_ms(map, model) {
+        p.ident(&format!("{PREV_STATE_FIELD}: {enum_name}::Init,"))
+            .nl();
+    }
+    Ok(())
+}
+
+/// Печатает сброс полей времени в `fn init` (в 0 / `Init`).
+///
+/// Метку `now_ms` здесь НЕ латчим: под-модель композиции не имеет доступа к HAL в
+/// `init(&mut self)` (поле `hal` — только у корня, под-модель получает `hal`
+/// параметром `tick`). Настоящий латч метки делает INIT-диспетчер такта
+/// ([`emit_first_entry_latch`]), где HAL доступен всем.
+pub(super) fn emit_init(p: &mut Printer, map: &RustMap, model: &ModelNode, enum_name: &str) {
+    if needs_dwell(map, model) {
+        p.ident(&format!("self.{DWELL_FIELD} = 0;")).nl();
+    }
+    if needs_entry_ms(map, model) {
+        p.ident(&format!("self.{ENTRY_MS_FIELD} = 0;")).nl();
+    }
+    if needs_dwell(map, model) || needs_entry_ms(map, model) {
+        p.ident(&format!("self.{PREV_STATE_FIELD} = {enum_name}::Init;"))
+            .nl();
+    }
+}
+
+/// Печатает латч метки `now_ms` в INIT-диспетчере такта (0033): вход в стартовое
+/// состояние «до такта 1» — метка обязана отсчитываться от него, а не от нуля
+/// абсолютного времени. HAL здесь доступен всем (у такта под-модели он —
+/// параметр). Дублирование с концом такта безвредно (то же значение).
+pub(super) fn emit_first_entry_latch(
+    p: &mut Printer,
+    map: &RustMap,
+    model: &ModelNode,
+    hal_access: &str,
+) {
+    if needs_entry_ms(map, model) {
+        p.ident(&format!(
+            "self.{ENTRY_MS_FIELD} = {hal_access}.{NOW_MS_METHOD}();"
+        ))
+        .nl();
+    }
+}
+
+/// Печатает обновление счётчика/метки в КОНЦЕ такта (одним сравнением с
+/// `takt_prev_state`, как `c_time::emit_state_time_update`).
+pub(super) fn emit_tick_update(
+    p: &mut Printer,
+    map: &RustMap,
+    model: &ModelNode,
+    hal_access: &str,
+) -> Result<(), Diagnostic> {
+    let dwell = needs_dwell(map, model);
+    let entry = needs_entry_ms(map, model);
+    if !dwell && !entry {
+        return Ok(());
+    }
+    p.ident(&format!("if self.state != self.{PREV_STATE_FIELD} {{"))
+        .up()
+        .nl();
+    if dwell {
+        p.ident(&format!("self.{DWELL_FIELD} = 1;")).nl();
+    }
+    if entry {
+        p.ident(&format!(
+            "self.{ENTRY_MS_FIELD} = {hal_access}.{NOW_MS_METHOD}();"
+        ))
+        .nl();
+    }
+    p.ident(&format!("self.{PREV_STATE_FIELD} = self.state;"))
+        .nl()
+        .down();
+    if dwell {
+        p.ident("} else {")
+            .up()
+            .nl()
+            .ident(&format!(
+                "self.{DWELL_FIELD} = self.{DWELL_FIELD}.wrapping_add(1);"
+            ))
+            .nl()
+            .down();
+    }
+    p.ident("}").nl();
+    Ok(())
+}
+
+/// Строит выражение-условие выдержки `after Nms` (профиль «часы») — сравнение
+/// разностью с обёрткой. `hal` — получатель HAL-вызова (`self.hal`/`hal`).
+pub(super) fn clock_after_expr(hal: &str, units: u64) -> String {
+    format!("{hal}.{NOW_MS_METHOD}().wrapping_sub(self.{ENTRY_MS_FIELD}) >= {units}")
+}
+
+/// Строит выражение-условие тактовой выдержки (`takt_dwell >= N`).
+pub(super) fn dwell_after_expr(units: u64) -> String {
+    format!("self.{DWELL_FIELD} >= {units}")
+}

@@ -94,6 +94,9 @@ pub(crate) struct Scope<'a> {
     /// в каком поле она лежит. Цель `c` строит путь от `model->`/`main->`; здесь
     /// поля плоские, поэтому достаточно карты «модель → поле».
     pub(crate) instances: Vec<(String, String)>,
+    /// Профиль времени (фича 0134): нужен печатнику выдержки `after` в `rust_cond`
+    /// (счётчик тактов vs метка `now_ms`). Берётся из [`RustMap::time_profile`].
+    pub(crate) time_profile: crate::semantic::duration::TimeProfile,
 }
 
 impl Scope<'_> {

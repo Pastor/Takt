@@ -27,6 +27,7 @@ use crate::generator::rust::rust_expr::{Scope, coerce_to};
 use crate::generator::rust::rust_map::RustMap;
 use crate::generator::rust::rust_name::{check_name_collisions, rust_type_name, rust_value_name};
 use crate::generator::rust::rust_tick::emit_tick;
+use crate::generator::rust::rust_time;
 use crate::generator::rust::rust_type::rust_type;
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::{ModelNode, VariableNode};
@@ -430,6 +431,10 @@ pub(crate) fn emit_model(
         p.ident(&format!("shared: {},", shared_type_name(map))).nl();
     }
     p.ident(&format!("state: {},", table.enum_name)).nl();
+    // Поля механизма времени (фича 0134): счётчик тактов / метка `now_ms` /
+    // предыдущее состояние — только при использовании `after` (иначе `-D warnings`
+    // упадёт на неиспользуемом поле). Логика в `rust_time`.
+    rust_time::emit_struct_fields(p, map, model, &table.enum_name)?;
     for (state, steps) in &concats {
         p.ident(&format!(
             "/// Текущий шаг последовательной композиции состояния '{}'.",
@@ -526,7 +531,9 @@ pub(crate) fn needs_hal(
                 .map(|needs| needs.hal)
                 .unwrap_or(false)
         });
-        if has_ports || needs_call {
+        // Выдержка `after Nms` в профиле «часы» зовёт `now_ms` — метод HAL (0134).
+        let needs_time = rust_time::needs_entry_ms(map, &model);
+        if has_ports || needs_call || needs_time {
             return true;
         }
     }
@@ -591,6 +598,7 @@ fn emit_new(
         has_self: false,
         hal_is_ref: false,
         instances: Vec::new(),
+        time_profile: map.time_profile(),
     };
     let args = if is_root && uses_hal { "hal: H" } else { "" };
     let vis = if is_root { "pub " } else { "" };
@@ -644,6 +652,9 @@ fn emit_new(
         emit_shared_new_block(p, map, &union, &shared_inits)?;
     }
     p.ident(&format!("state: {}::Init,", table.enum_name)).nl();
+    // Начальные значения полей времени (фича 0134): метку латчим не здесь, а в
+    // INIT-диспетчере такта (в конструкторе HAL под-модели недоступен).
+    rust_time::emit_new_fields(p, map, model, &table.enum_name)?;
     // Счётчик шага стартует с ПЕРВОГО шага, а не с «Init»: так же поступает
     // `_init` цели `c` (её варианты `{STATE}_INIT`/`_END` не пишутся никогда).
     for (state, steps) in concats {
@@ -704,6 +715,7 @@ fn emit_init(
         has_self: false,
         hal_is_ref: false,
         instances: Vec::new(),
+        time_profile: map.time_profile(),
     };
     let vis = if is_root { "pub " } else { "" };
     p.ident("/// Возвращает модель в начальное состояние.").nl();
@@ -740,6 +752,9 @@ fn emit_init(
     }
     p.ident(&format!("self.state = {}::Init;", table.enum_name))
         .nl();
+    // Сброс полей времени (фича 0134): в 0 / `Init`. Метку латчит INIT-диспетчер
+    // такта — `init(&mut self)` под-модели HAL не имеет.
+    rust_time::emit_init(p, map, model, &table.enum_name);
     for (state, steps) in concats {
         let first = steps.first().ok_or_else(|| {
             Diagnostic::error(

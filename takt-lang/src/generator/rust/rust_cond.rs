@@ -20,15 +20,38 @@ use crate::semantic::{ConditionNode, FunctionDefinitionNode};
 /// [`RS-011`] на непереводимой конструкции.
 pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<String, Diagnostic> {
     match cond {
-        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
-        // отказ, а не печать наносекунд обычным числом.
-        ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {
-            Err(Diagnostic::error(
+        // Литерал длительности ВНЕ `after` (переменная типа `duration`) целью
+        // пока не поддерживается — отказ, а не печать наносекунд числом (как в c).
+        ConditionNode::Duration(_) => Err(Diagnostic::error(
+            Location::Codegen,
+            "значения типа 'duration' целью 'rust' пока не поддерживаются".to_string(),
+        )
+        .with_code("RS-023")),
+        // Выдержка `after` (фича 0134): профиль «такты» → счётчик `takt_dwell`;
+        // профиль «часы» → метка `now_ms` и сравнение разностью с обёрткой.
+        ConditionNode::After(nanos) => {
+            let units = crate::semantic::duration::units_or_diagnostic(
+                *nanos,
+                scope.time_profile,
                 Location::Codegen,
-                "длительность целью 'rust' пока не поддерживается".to_string(),
-            )
-            .with_code("RS-023"))
+                "выдержка 'after'",
+            )?;
+            match scope.time_profile {
+                crate::semantic::duration::TimeProfile::Ticks { .. } => {
+                    Ok(crate::generator::rust::rust_time::dwell_after_expr(units))
+                }
+                crate::semantic::duration::TimeProfile::Clock => {
+                    let hal = scope.hal_receiver("выдержка 'after'")?;
+                    Ok(crate::generator::rust::rust_time::clock_after_expr(
+                        hal, units,
+                    ))
+                }
+            }
         }
+        // Тактовая выдержка `after Nt`: частота не нужна — счётчик и так считает такты.
+        ConditionNode::AfterTicks(ticks) => Ok(
+            crate::generator::rust::rust_time::dwell_after_expr(*ticks as u64),
+        ),
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Rational(text, negative) => Ok(rational(text, *negative)),
         ConditionNode::Bool(b) => Ok(b.to_string()),
@@ -259,6 +282,10 @@ pub(crate) fn condition_type(cond: &ConditionNode) -> Option<TypeNode> {
         | ConditionNode::Not(_)
         | ConditionNode::And(_, _)
         | ConditionNode::Or(_, _)
+        // Выдержка `after` — булево условие (фича 0134): `takt_dwell >= N` либо
+        // сравнение метки `now_ms` разностью, оба дают `bool`.
+        | ConditionNode::After(_)
+        | ConditionNode::AfterTicks(_)
         | ConditionNode::BitAccess(_, _) => Some(TypeNode::Bool),
         ConditionNode::ArraySubscript(var, _) => match var.borrow().ty() {
             TypeNode::Array(_, elem) => Some((**elem).clone()),
