@@ -88,7 +88,16 @@ $CARGO_CMD clippy --all-targets --all-features -- -D warnings
 # Защита инварианта от «тихой смерти». Быстрая — до долгих тестов.
 "$(dirname "$0")/check-exhaustive-nodes.sh"
 
-$CARGO_CMD test -- --test-threads=1
+# Тесты гоняются с --all-features (фича 0178, правило 3 ADR). Прежде здесь стоял
+# голый `cargo test`, и юнит-тесты LSP (они под #[cfg(feature = "lsp")]) НЕ
+# ИСПОЛНЯЛИСЬ: clippy --all-targets --all-features выше их лишь КОМПИЛИРУЕТ.
+# Зонд 2026-07-28: test_semantic_tokens_highlight_time_constructs под голым
+# `cargo test` не запускается, под `--features lsp` — проходит. Из-за этого
+# сторожа редакторского слоя были бы мертвы с рождения.
+# Замер (тёплый кеш): 134.8 с без фич против 134.2 с с --all-features — набор
+# тестов при включённых фичах НАДМНОЖЕСТВО (фичи аддитивны, cfg(not(feature …))
+# в крейтах не встречается), поэтому отдельный прогон без фич не нужен.
+$CARGO_CMD test --all-features -- --test-threads=1
 
 # Корень репозитория = каталог этого скрипта /..
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
