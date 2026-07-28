@@ -90,7 +90,7 @@ exts[eid] = {
         "version": "0.1.0",
         "schema_version": 1,
         "description": "Takt FSM language support: LSP-based highlighting and outline for .takt files",
-        "repository": "https://github.com/Pastor/BuT",
+        "repository": "https://github.com/Pastor/Takt",
         "authors": ["Takt Team"],
         "lib": {"kind": None, "version": None},
         "themes": [],

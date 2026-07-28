@@ -259,3 +259,6 @@
 | 0178-01 | 0178 | Исчерпывающий разбор токена и догон подсветки | [0178-01-exhaustive-token-highlight.md](0178-01-exhaustive-token-highlight.md) |
 | 0178-02 | 0178 | Догон списка автодополнения и сторож вложения | [0178-02-completion-keywords-guard.md](0178-02-completion-keywords-guard.md) |
 | 0178-03 | 0178 | Исполнение тестов LSP в предкоммите | [0178-03-precheck-lsp-tests.md](0178-03-precheck-lsp-tests.md) |
+| 0179-01 | 0179 | Правка 16 мест со старым адресом | [0179-01-url-replacements.md](0179-01-url-replacements.md) |
+| 0179-02 | 0179 | Гейт единственности адреса репозитория | [0179-02-repo-url-gate.md](0179-02-repo-url-gate.md) |
+| 0179-03 | 0179 | Пересборка и переустановка плагинов | [0179-03-plugins-reinstall.md](0179-03-plugins-reinstall.md) |

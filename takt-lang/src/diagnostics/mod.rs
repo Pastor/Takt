@@ -460,7 +460,7 @@ pub const ROOT_FILE_NO: u64 = 0;
 /// тесты 0053 проверяли путь `compile_to_*`, а он зовёт `new(filename)`. Читатель
 /// появился с фичей 0056 (файлоосознанный индекс LSP).
 ///
-/// [0053-01]: https://github.com/Pastor/BuT/blob/v2/docs/fixes/0053-01-file-table-default-collision.md
+/// [0053-01]: https://github.com/Pastor/Takt/blob/v2/docs/fixes/0053-01-file-table-default-collision.md
 impl Default for FileTable {
     fn default() -> Self {
         // Пустой путь = «корень неизвестен»: слот занят, но `path(0)` честно

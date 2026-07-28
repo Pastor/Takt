@@ -2072,8 +2072,8 @@ scripts/bench.sh --compare NAME  # сравнить с baseline
 **Требования:** Rust 1.75+, LALRPOP (генерируется автоматически через `build.rs`).
 
 ```sh
-git clone https://github.com/Pastor/BuT.git
-cd BuT
+git clone https://github.com/Pastor/Takt.git
+cd Takt
 cargo build --release --bin taktc
 cargo install --path grammar --bin taktc
 ```
@@ -2274,7 +2274,7 @@ start c { : [LTL] G (a -> F b), X c; }   // атомы a, b — переменн
 ### Архитектура компилятора
 
 ```
-BuT/
+Takt/
 ├── takt-lang/src/
 │   ├── parser/
 │   │   ├── lexer.rs          — лексический анализатор
