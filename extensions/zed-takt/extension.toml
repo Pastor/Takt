@@ -4,7 +4,7 @@ version = "0.2.0"
 schema_version = 1
 authors = ["khlebnikov.a"]
 description = "Takt FSM language support for Zed: syntax highlighting and code navigation for .takt files"
-repository = "https://github.com/Pastor/BuT"
+repository = "https://github.com/Pastor/Takt"
 
 languages = ["languages/takt"]
 

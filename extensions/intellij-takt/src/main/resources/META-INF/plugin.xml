@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>org.takt.intellij</id>
     <name>Takt</name>
-    <vendor url="https://github.com/Pastor/BuT">Takt</vendor>
+    <vendor url="https://github.com/Pastor/Takt">Takt</vendor>
 
     <description><![CDATA[
         Takt (Typed, Automata, Known Timing) language support for IntelliJ IDEA:

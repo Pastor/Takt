@@ -44,7 +44,6 @@
 | [0168](docs/features/0168-generator-warnings-return.md) | Предупреждения генераторов возвращаются вызывающему, а не печатаются из библиотеки | — | 2 | СОЗДАНА |
 | [0145](docs/features/0145-verify-vertex-budget.md) | Потолок верификации по данным: бюджет вместо `VERTEX_LIMIT` | — | 2 | СОЗДАНА |
 | [0153](docs/features/0153-lsp-workspace-index.md) | Индексация рабочей области для LSP (`references`/`rename` между файлами) | — | 2 | СОЗДАНА |
-| [0179](docs/features/0179-repo-url-cleanup.md) | Дочистка URL репозитория после переезда BuT → Takt | — | proc | СОЗДАНА |
 | [0160](docs/features/0160-takt-ebnf-sync.md) | Синхронизация эталона `Takt.ebnf` с актуальным синтаксисом | — | proc | СОЗДАНА |
 | [0164](docs/features/0164-registry-rebuild-gate.md) | Согласованность реестров `docs/*/README.md` с файлами на диске | — | proc | СОЗДАНА |
 | [0173](docs/features/0173-rust-generator-arg-count.md) | Снятие `allow(too_many_arguments)` в генераторе `rust` | — | proc | СОЗДАНА |

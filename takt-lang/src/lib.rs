@@ -428,7 +428,7 @@ pub fn compile_to_st(
 /// Возвращает [`Diagnostic`] при синтаксической или семантической ошибке, при
 /// непереводимой конструкции (`RS-0xx`) либо при ошибке записи файла (`RS-001`).
 ///
-/// [0029]: https://github.com/Pastor/BuT/blob/main/docs/features/0029-c-type-mapping.md
+/// [0029]: https://github.com/Pastor/Takt/blob/main/docs/features/0029-c-type-mapping.md
 pub fn compile_to_rust(
     filename: &str,
     source: &str,
@@ -498,8 +498,8 @@ pub fn compile_to_rust(
 /// Возвращает [`Diagnostic`] при синтаксической или семантической ошибке, при
 /// непереводимой конструкции (`SV-0xx`) либо при ошибке записи файла (`SV-001`).
 ///
-/// [0029]: https://github.com/Pastor/BuT/blob/main/docs/features/0029-c-type-mapping.md
-/// [ADR 0033]: https://github.com/Pastor/BuT/blob/main/docs/adr/0033-init-tick-alignment.md
+/// [0029]: https://github.com/Pastor/Takt/blob/main/docs/features/0029-c-type-mapping.md
+/// [ADR 0033]: https://github.com/Pastor/Takt/blob/main/docs/adr/0033-init-tick-alignment.md
 pub fn compile_to_sv(
     filename: &str,
     source: &str,
