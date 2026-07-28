@@ -191,3 +191,4 @@
 | [0176](./0176-bit-port-address-position.md) | Позиция бита у bit-порта с голым адресом | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0177](./0177-features-registry-status-gate.md) | Гейт согласованности статуса в реестре и в карточке фичи | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0178](./0178-editor-layer-language-sync.md) | Приведение LSP и плагинов в соответствие языку + сторож | [ADR](../adr/0178-editor-layer-language-sync.md) · [анализ](../analyze/0178-editor-layer-language-sync.md) · [тест-план](../tests/0178-editor-layer-language-sync.md) · [отчёт](../reports/0178-editor-layer-language-sync.md) | ГОТОВО |
+| [0179](./0179-repo-url-cleanup.md) | Дочистка URL репозитория после переезда BuT → Takt | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
