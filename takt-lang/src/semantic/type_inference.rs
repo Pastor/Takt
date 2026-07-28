@@ -235,15 +235,12 @@ pub(crate) fn ast_type_to_node(ty: &Type) -> TypeNode {
         Type::Fixed(_, ctor, m, n) => fixed_node_or_unsupported(ctor, *m, *n),
         // Ce4: перечисление по имени — без проверки существования (нет контекста)
         Type::Enum(name) => TypeNode::Enum(name.clone()),
-        // Ce6: разрешаем встроенные псевдонимы типов без контекста модели
-        Type::Alias(id) => match id.name.as_str() {
-            "bit" => TypeNode::Bit,
-            "bool" => TypeNode::Bool,
-            "float" => TypeNode::Rational,
-            "unit" => TypeNode::Unit,
-            // Пользовательский псевдоним — не поддерживается без контекста
-            _ => TypeNode::Unsupported,
-        },
+        // Ce6: встроенные имена — через единый разбор (фикс 0134-01). Прежде
+        // здесь был свой список из четырёх имён, и `5 as u8` давало
+        // `Unsupported`: приведение к целому не работало вовсе.
+        // Пользовательский псевдоним без контекста модели по-прежнему неизвестен.
+        Type::Alias(id) => crate::semantic::type_node::builtin_type_by_name(&id.name)
+            .unwrap_or(TypeNode::Unsupported),
         // Type::Function, Type::Address — не поддерживаются при выводе типа
         _ => TypeNode::Unsupported,
     }

@@ -199,3 +199,164 @@ start Main = Probe;
     );
     assert_eq!(before, Some(Value::Duration(250_000_000)));
 }
+
+// ── Требования заказчика от 2026-07-27 ───────────────────────────────────────
+
+/// Цепочка выдержек: каждая отсчитывается от входа в СВОЁ состояние-источник.
+const CHAIN: &str = r#"
+model Chain {
+    out phase: u8 := 0;
+    start A {
+        enter { phase := 1; }
+        ref B: after 2s;
+    }
+    state B {
+        enter { phase := 2; }
+        ref C: after 3s;
+    }
+    state C {
+        enter { phase := 3; }
+    }
+}
+
+start Main = Chain;
+"#;
+
+#[test]
+fn each_delay_counts_from_entry_into_its_own_source_state() {
+    // `ref C: after 3s` в состоянии B обязан отсчитывать 3 с от входа в **B**,
+    // а не от начала прогона: иначе вторая выдержка «съела» бы первую.
+    let mut unit = unit_of(CHAIN);
+    let mut phases = Vec::new();
+    for step in 0..9i32 {
+        unit.set_time_ns(i64::from(step) * 1_000_000_000);
+        let _ = unit.tick();
+        if let Some(Value::Number(p)) = unit.variable("phase") {
+            phases.push((step + 1, p));
+        }
+    }
+    // Вход в A на такте 1 (t = 0) → 2 с истекают при t = 2s (такт 3): переход в B.
+    // Вход в B при t = 2s → 3 с истекают при t = 5s (такт 6): переход в C.
+    let first = |want: i64| {
+        phases
+            .iter()
+            .find(|(_, p)| *p == want)
+            .map(|(tick, _)| *tick)
+    };
+    assert_eq!(
+        first(1),
+        Some(1),
+        "A занимается на первом такте: {phases:?}"
+    );
+    assert_eq!(
+        first(2),
+        Some(3),
+        "B — при t = 2s, то есть на такте 3: {phases:?}"
+    );
+    assert_eq!(
+        first(3),
+        Some(6),
+        "C — через 3 с ПОСЛЕ входа в B (t = 5s, такт 6), а не от начала прогона: {phases:?}"
+    );
+}
+
+#[test]
+fn re_entering_a_state_restarts_its_delay() {
+    // Повторный вход в состояние начинает отсчёт заново: выдержка — свойство
+    // входа, а не одноразовый будильник.
+    let source = r#"
+model Blink {
+    out on: bit := 0;
+    var cycles: u8 := 0;
+    start Off {
+        enter { on := 0; }
+        ref On: after 2s;
+    }
+    state On {
+        enter { on := 1; cycles := cycles + 1; }
+        ref Off: after 2s;
+    }
+}
+
+start Main = Blink;
+"#;
+    let mut unit = unit_of(source);
+    let mut switches = Vec::new();
+    let mut previous = None;
+    for step in 0..13i32 {
+        unit.set_time_ns(i64::from(step) * 1_000_000_000);
+        let _ = unit.tick();
+        let now = unit.variable("on");
+        if previous.is_some() && now != previous {
+            switches.push(step + 1);
+        }
+        previous = now;
+    }
+    // Каждая половина периода — 2 с (2 такта по 1 с): переключения на 3, 5, 7…
+    assert_eq!(
+        switches,
+        vec![3, 5, 7, 9, 11, 13],
+        "выдержка обязана перезапускаться при каждом входе: {switches:?}"
+    );
+}
+
+#[test]
+fn duration_casts_to_milliseconds_and_back() {
+    // Решение заказчика: `as` над длительностью даёт **миллисекунды**, обратное
+    // приведение числа к `duration` трактует число как миллисекунды.
+    let source = r#"
+model Casts {
+    out ready: bit := 0;
+    var d: duration := 1s500ms;
+    var ms: u32 := 0;
+    var back: duration := 0s;
+    start Idle {
+        always {
+            ms := d as u32;
+            back := 250 as duration;
+            ready := 1;
+        }
+    }
+}
+
+start Main = Casts;
+"#;
+    let mut unit = unit_of(source);
+    let _ = unit.tick();
+    assert_eq!(
+        unit.variable("ms"),
+        Some(Value::Number(1_500)),
+        "1s500ms обязаны дать 1500 мс"
+    );
+    assert_eq!(
+        unit.variable("back"),
+        Some(Value::Duration(250_000_000)),
+        "250 обязаны дать 250 мс длительности"
+    );
+}
+
+#[test]
+fn duration_addition_and_subtraction_stay_duration() {
+    let source = r#"
+model Arith {
+    out ready: bit := 0;
+    var a: duration := 1s;
+    var b: duration := 250ms;
+    var sum: duration := 0s;
+    var diff: duration := 0s;
+    start Idle {
+        always {
+            sum := a + b;
+            diff := a - b;
+            ready := 1;
+        }
+    }
+}
+
+start Main = Arith;
+"#;
+    let mut unit = unit_of(source);
+    let _ = unit.tick();
+    assert_eq!(unit.variable("sum"), Some(Value::Duration(1_250_000_000)));
+    assert_eq!(unit.variable("diff"), Some(Value::Duration(750_000_000)));
+}
