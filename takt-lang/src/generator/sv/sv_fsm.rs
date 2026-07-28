@@ -43,18 +43,18 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::sv::sv_blocks::{emit_model_named_blocks, emit_named_blocks};
+use crate::generator::sv::sv_const;
 use crate::generator::sv::sv_expr::{Scope, print_condition, sv_enum_variant_name};
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_module::{SvPorts, check_sv_name};
 use crate::generator::sv::sv_stmt::{
     emit_hoisted_locals, has_early_return, hoist_locals, print_statement,
 };
+use crate::generator::sv::sv_time;
 use crate::generator::sv::sv_type::{enum_width, sv_enum_type_name, sv_type};
 use crate::semantic::minimap::{Element, Name, StateExtend};
-use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
-    ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode, StatementNode,
-    VariableNode,
+    ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode, VariableNode,
 };
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -62,24 +62,6 @@ use std::rc::Rc;
 
 /// Блок модели: имя в карте и её узел.
 pub(crate) type Block = (Name, Rc<RefCell<ModelNode>>);
-
-/// Строит диагностику `SV-008` — `enter` стартового состояния неконстантен.
-fn sv008(state: &str, loc: Location) -> Diagnostic {
-    Diagnostic::error(
-        loc,
-        format!(
-            "блок 'enter' стартового состояния '{}' вычисляет значение, а не \
-             присваивает константу. Целью 'sv' стартовое состояние помещается в \
-             ветвь сброса (синтетического INIT-состояния в RTL нет), а ветвь \
-             сброса синтезируется в цепь сброса триггеров и выражений не \
-             вычисляет — вычислять там нечем. Перенесите вычисление в блок \
-             'always' того же состояния: вход в стартовое состояние такта не \
-             расходует (контракт ADR 0033), поэтому поведение не изменится",
-            state
-        ),
-    )
-    .with_code("SV-008")
-}
 
 /// Строит диагностику `SV-002` — конструкция не транслируется.
 pub(crate) fn sv002(what: &str) -> Diagnostic {
@@ -96,23 +78,25 @@ pub(crate) fn sv002(what: &str) -> Diagnostic {
 }
 
 /// Регистровый сигнал модуля: объявление и сброс.
-struct Reg {
+pub(crate) struct Reg {
     /// Имя сигнала (без `_next`).
-    name: String,
+    pub(crate) name: String,
     /// Часть объявления до имени (`logic [7:0]`, `stacker_state_e`).
-    prefix: String,
+    pub(crate) prefix: String,
     /// Распакованная размерность после имени (пусто либо `[0:3]`).
-    suffix: String,
+    pub(crate) suffix: String,
     /// Значение в ветви сброса.
-    reset: String,
+    pub(crate) reset: String,
     /// Объявлять ли сам регистр: у выходного порта он уже объявлен в заголовке.
-    declare_reg: bool,
+    pub(crate) declare_reg: bool,
 }
 
 /// Сигналы и отображения модуля, собранные по всем уровням.
 pub(crate) struct Fsm {
     /// Регистры: состояния уровней, переменные, выходные порты.
     regs: Vec<Reg>,
+    /// Уровни с механизмом времени (фича 0134): перекрытие `_next` в `always_comb`.
+    time_levels: Vec<sv_time::TimeLevel>,
     /// Имена регистровых сигналов (ключи для `Scope::registered`).
     registered: BTreeSet<String>,
     /// Имя регистра состояния по уникальному имени модели.
@@ -203,120 +187,6 @@ fn state_variants(model: &Name, states: &[Name]) -> Vec<String> {
     variants
 }
 
-/// Возвращает тип переменной, которой присваивают.
-fn target_var_type(var: &Rc<RefCell<VariableNode>>) -> Option<TypeNode> {
-    match &*var.borrow() {
-        VariableNode::Simple { ty, .. }
-        | VariableNode::Port { ty, .. }
-        | VariableNode::Const { ty, .. } => Some(ty.clone()),
-        VariableNode::Unresolved => None,
-    }
-}
-
-/// Восстанавливает имя варианта перечисления по его значению.
-///
-/// Возвращает `None`, если тип не перечисление либо варианта с таким значением
-/// нет — тогда печатается само число.
-///
-/// **Зачем.** Узла варианта перечисления `ExpressionNode` не имеет вовсе:
-/// `command := Up` приходит как `Number(2)` (та же ловушка описана для цели
-/// `rust` в `CLAUDE.md`). Перечисления SystemVerilog при этом **строго
-/// типизированы** — проба 2026-07-16: `command <= 2;` даёт
-/// `%Error-ENUMVALUE: Implicit conversion to enum`.
-fn enum_literal(
-    ty: &TypeNode,
-    value: i64,
-    enums: &BTreeMap<String, Vec<(String, i64)>>,
-) -> Option<String> {
-    let TypeNode::Enum(enum_name) = ty else {
-        return None;
-    };
-    let variants = enums.get(enum_name)?;
-    let (variant, _) = variants.iter().find(|(_, v)| *v == value)?;
-    Some(sv_enum_variant_name(enum_name, variant))
-}
-
-/// Печатает значение, пригодное для **цепи сброса**.
-///
-/// «Константа» здесь — не только литерал. Именованная константа (`const
-/// CHARGE_STACK: u8 := 0;`) становится `localparam`, то есть значением времени
-/// компиляции, и цепь сброса выражает её так же свободно, как число; то же
-/// касается варианта перечисления.
-///
-/// ⚠️ Первая редакция этой проверки принимала **только** литералы и отвергала
-/// `enter { cmd_target_stack := CHARGE_STACK; }` (`stacker.takt:214`) —
-/// то есть **флагманский пример цели**. Карточка фичи утверждала, что цена
-/// `SV-008` для корпуса нулевая, и была права: ошибалась проверка, а не модель.
-///
-/// # Ошибки
-/// [`SV-008`](sv008), если значение вычисляется, а не известно на этапе
-/// компиляции.
-fn constant_value(
-    value: &ExpressionNode,
-    state: &str,
-    loc: Location,
-) -> Result<String, Diagnostic> {
-    match value {
-        ExpressionNode::Number(n) => Ok(n.to_string()),
-        ExpressionNode::Bool(b) => Ok(if *b { "1'b1" } else { "1'b0" }.to_string()),
-        // Константа модели — `localparam`. Переменная и порт сюда не проходят:
-        // их значение к моменту сброса не определено.
-        ExpressionNode::Variable(var) => match &*var.borrow() {
-            VariableNode::Const { name, .. } => Ok(name.clone()),
-            _ => Err(sv008(state, loc)),
-        },
-        _ => Err(sv008(state, loc)),
-    }
-}
-
-/// Проверяет, что блок `enter` стартового состояния присваивает только константы.
-///
-/// Проверка **консервативна**: всё, что не является присваиванием литерала в
-/// переменную, считается вычислением. Ошибка в эту сторону даёт понятный отказ
-/// (`SV-008` с обходом в тексте), ошибка в другую — несинтезируемый модуль.
-fn constant_enter_assignments(
-    stmt: &StatementNode,
-    state: &str,
-    loc: Location,
-    scope: &Scope,
-    out: &mut Vec<(String, String)>,
-) -> Result<(), Diagnostic> {
-    match stmt {
-        StatementNode::None => Ok(()),
-        StatementNode::Block(stmts) => {
-            for s in stmts {
-                constant_enter_assignments(s, state, loc, scope, out)?;
-            }
-            Ok(())
-        }
-        // Формула — свойство для верификации, а не поведение: цель `c` её тоже
-        // не эмитит (`taktc verify`, фича 0049).
-        StatementNode::InlineFormula(_) => Ok(()),
-        StatementNode::Expression(expr) => match &**expr {
-            ExpressionNode::Assign(target, value) => {
-                let ExpressionNode::Variable(var) = &**target else {
-                    return Err(sv008(state, loc));
-                };
-                let name = crate::generator::sv::sv_expr::signal_of(var)
-                    .ok_or_else(|| sv008(state, loc))?;
-                // Значение печатается ПО ТИПУ ЦЕЛИ: для перечисления число
-                // восстанавливается в имя варианта, иначе ветвь сброса даст
-                // `%Error-ENUMVALUE` (перечисления SV строго типизированы).
-                let printed = match (target_var_type(var), &**value) {
-                    (Some(ty), ExpressionNode::Number(n)) => enum_literal(&ty, *n, scope.enums)
-                        .map(Ok)
-                        .unwrap_or_else(|| constant_value(value, state, loc))?,
-                    _ => constant_value(value, state, loc)?,
-                };
-                out.push((name, printed));
-                Ok(())
-            }
-            _ => Err(sv008(state, loc)),
-        },
-        _ => Err(sv008(state, loc)),
-    }
-}
-
 impl Fsm {
     /// Собирает сигналы модуля со всех уровней.
     ///
@@ -332,6 +202,7 @@ impl Fsm {
     ) -> Result<Self, Diagnostic> {
         let mut fsm = Fsm {
             regs: Vec::new(),
+            time_levels: Vec::new(),
             registered: BTreeSet::new(),
             state_reg: BTreeMap::new(),
             enums: BTreeMap::new(),
@@ -392,7 +263,7 @@ impl Fsm {
                     // без восстановления варианта ветвь сброса дала бы
                     // `%Error-ENUMVALUE`. Та же ловушка описана для цели `rust`.
                     ExpressionNode::Number(n) => {
-                        enum_literal(ty, *n, &fsm.enums).unwrap_or_else(|| n.to_string())
+                        sv_const::enum_literal(ty, *n, &fsm.enums).unwrap_or_else(|| n.to_string())
                     }
                     ExpressionNode::Bool(b) => if *b { "1'b1" } else { "1'b0" }.to_string(),
                     // Умолчание для переменной без инициализатора: регистр
@@ -441,6 +312,19 @@ impl Fsm {
                 });
                 fsm.step_enums.push((state_name.clone(), items.len()));
             }
+
+            // Регистры механизма времени уровня (фича 0134). Логика — в `sv_time`.
+            sv_time::push_time_regs(
+                &mut fsm.regs,
+                &mut fsm.registered,
+                &mut fsm.time_levels,
+                map,
+                name,
+                &model_rc.borrow(),
+                &state_enum_name(name),
+                &end_variant(name),
+                &state_reg_name(name, root),
+            )?;
         }
 
         // Выходные порты: регистр уже объявлен в заголовке модуля, нужна только
@@ -496,50 +380,6 @@ impl Fsm {
 /// `localparam`, а не `parameter`: значение задано моделью и переопределению
 /// извне не подлежит — `parameter` объявил бы его настройкой модуля, которой
 /// автор не давал.
-pub(crate) fn emit_constants(
-    p: &mut Printer,
-    map: &SvMap,
-    blocks: &[Block],
-) -> Result<(), Diagnostic> {
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    let mut emitted = false;
-    for (_, model_rc) in blocks {
-        let model = model_rc.borrow();
-        for var in model.variables.values() {
-            let VariableNode::Const {
-                name,
-                ty,
-                expr,
-                loc,
-                ..
-            } = var
-            else {
-                continue;
-            };
-            if !map.usage().constants.contains(name) || !seen.insert(name.clone()) {
-                continue;
-            }
-            check_sv_name(name, *loc)?;
-            let decl = sv_type(ty, &format!("константа '{}'", name))?;
-            let value = constant_value(expr, name, *loc).map_err(|_| {
-                sv002(&format!(
-                    "инициализатор константы '{}': значение обязано быть известно \
-                     на этапе компиляции — localparam вычисляется синтезатором, \
-                     а не схемой",
-                    name
-                ))
-            })?;
-            p.ident(&format!("localparam {} = {};", decl.declare(name), value))
-                .nl();
-            emitted = true;
-        }
-    }
-    if emitted {
-        p.nl();
-    }
-    Ok(())
-}
-
 /// Печатает пользовательские перечисления модели.
 pub(crate) fn emit_enums(p: &mut Printer, blocks: &[Block]) -> Result<(), Diagnostic> {
     let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -771,6 +611,8 @@ pub(crate) fn emit_comb(
         p.ident(&format!("{}_next = {};", reg.name, reg.name)).nl();
     }
     p.nl();
+    // Перекрытие умолчаний регистров времени (фича 0134). Логика — в `sv_time`.
+    sv_time::emit_time_updates(p, &fsm.time_levels)?;
     emit_model_body(p, map, fsm, root)?;
     p.down();
     p.ident("end").nl().nl();
@@ -872,7 +714,11 @@ fn emit_transitions(
                 p.ident("begin").nl();
             }
         } else {
-            let cond = print_condition(&reference.cond, &fsm.scope())?;
+            // Выдержка `after` (фича 0134) — через `sv_time`; прочие — общий печатник.
+            let cond = match sv_time::after_guard(&fsm.time_levels, map, model, &reference.cond) {
+                Some(guard) => guard?,
+                None => print_condition(&reference.cond, &fsm.scope())?,
+            };
             let keyword = if printed == 0 { "if" } else { "else if" };
             p.ident(&format!("{} ({}) begin", keyword, cond)).nl();
         }
@@ -928,7 +774,7 @@ pub(crate) fn emit_ff(
         let raw = &*raw.borrow();
         for b in raw.get_named_blocks("enter") {
             if let Some(stmt) = b.statement() {
-                constant_enter_assignments(
+                sv_const::constant_enter_assignments(
                     stmt,
                     start.local(),
                     raw.loc(),

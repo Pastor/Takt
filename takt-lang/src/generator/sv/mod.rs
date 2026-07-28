@@ -36,6 +36,7 @@
 
 mod sv_blocks;
 mod sv_compose;
+mod sv_const;
 mod sv_expr;
 mod sv_fixed;
 mod sv_fsm;
@@ -43,6 +44,7 @@ mod sv_map;
 mod sv_mmio;
 mod sv_module;
 mod sv_stmt;
+mod sv_time;
 mod sv_type;
 
 use crate::diagnostics::{Diagnostic, Location};
@@ -79,11 +81,15 @@ impl AsGenerator for Generator {
         output_path: &str,
         options: &GenerateOptions,
     ) -> Result<(), Diagnostic> {
+        // Профиль времени (фича 0134): `clock` модели — контракт, флаг обязан
+        // подтвердить (0134-05). Единый чекпойнт-энфорсмент `SE-069`/`SE-070`.
+        let profile = crate::semantic::duration::resolve_profile(model.clock_hz, options.tick_hz)?;
         let map = SvMap::new(
             &normalize_lowercase_snakecase(model.name().to_string()),
             model,
             options.guard_enable,
-        )?;
+        )?
+        .with_time_profile(profile);
         let program = generate_program(&map, self.mmio, &options.address_map)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));
@@ -183,10 +189,18 @@ fn generate_program(
         .nl();
     p.nl();
 
-    sv_module::emit_module_header(&mut p, &module, &ports, mmio_map.as_ref());
+    // Служебный вход времени (профиль «часы» + длительностная выдержка в дереве,
+    // фича 0134); ширина — по максимуму `after` (R8), общий источник с регистрами.
+    let time_ms_bits = match map.root_model_node() {
+        Some(root) if sv_time::needs_time_port(map, &root.borrow()) => {
+            Some(sv_time::time_bits(map)?)
+        }
+        _ => None,
+    };
+    sv_module::emit_module_header(&mut p, &module, &ports, mmio_map.as_ref(), time_ms_bits);
 
     p.up();
-    sv_fsm::emit_constants(&mut p, map, &blocks)?;
+    sv_const::emit_constants(&mut p, map, &blocks)?;
     sv_fsm::emit_enums(&mut p, &blocks)?;
     sv_fsm::emit_state_enums(&mut p, map, &blocks)?;
     sv_fsm::emit_step_enums(&mut p, &fsm)?;

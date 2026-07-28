@@ -35,6 +35,8 @@ pub(crate) struct SvMap {
     usage: UsageSet,
     /// Эмитить ли guard-проверки — флаг `--guard-disable` наоборот.
     guard_enable: bool,
+    /// Профиль времени (фича 0134): «часы» (вход `time_ms`) либо «такты» (счётчик).
+    time_profile: crate::semantic::duration::TimeProfile,
 }
 
 impl SvMap {
@@ -54,7 +56,22 @@ impl SvMap {
             map: Map::create(model_rc)?,
             usage,
             guard_enable,
+            time_profile: crate::semantic::duration::TimeProfile::default(),
         })
+    }
+
+    /// Задаёт профиль времени (фича 0134); умолчание — «часы» (аддитивно).
+    pub(crate) fn with_time_profile(
+        mut self,
+        profile: crate::semantic::duration::TimeProfile,
+    ) -> Self {
+        self.time_profile = profile;
+        self
+    }
+
+    /// Профиль времени, выбранный для генерации.
+    pub(crate) fn time_profile(&self) -> crate::semantic::duration::TimeProfile {
+        self.time_profile
     }
 
     /// Базовое имя выходного файла (без расширения).
