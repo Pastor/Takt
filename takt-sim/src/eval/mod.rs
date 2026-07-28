@@ -293,7 +293,22 @@ pub(crate) fn cast_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalErr
             _ => coerce_to_type(Value::Number(fixed::to_integer_part(repr, n)), ty),
         };
     }
-    // Ни источник, ни цель не q — прежнее поведение каста (= запись).
+    // Длительность (фича 0134, решение заказчика): мост к числам — **миллисекунды**.
+    // Пересчёт зовётся из общего слоя `semantic::duration`, а не считается здесь:
+    // цели обязаны получить тот же ответ на вопрос «сколько это миллисекунд».
+    if let Value::Duration(ns) = value {
+        return coerce_to_type(
+            Value::Number(takt_lang::semantic::duration::to_millis(ns)),
+            ty,
+        );
+    }
+    if matches!(ty, TypeNode::Duration) {
+        let millis = to_integer(&value, ty)?;
+        return takt_lang::semantic::duration::from_millis(millis)
+            .map(Value::Duration)
+            .ok_or(EvalError::ArithmeticOverflow { op: "as duration" });
+    }
+    // Ни источник, ни цель не q и не duration — прежнее поведение каста (= запись).
     coerce_to_type(value, ty)
 }
 

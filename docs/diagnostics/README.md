@@ -207,7 +207,8 @@
 | `SE-064` | Длительность не помещается в счётчик времени | `takt-lang/src/semantic/duration.rs:170` |
 | `SE-065` | Смешение `duration` с числом в арифметике | `takt-lang/src/semantic/validate/fixed.rs:262` |
 | `SE-066` | Выдержка `after` пока не поддерживается семантикой (временный код) | `takt-lang/src/semantic/condition.rs:139` |
-| `SE-067` | Частота тактирования объявлена дважды и по-разному | `takt-lang/src/semantic/tree.rs:757` |
+| `SE-067` | Частота тактирования объявлена дважды и по-разному | `takt-lang/src/semantic/time_ast.rs:96` |
+| `SE-068` | Выдержка `after` вне условия перехода `ref` | `takt-lang/src/semantic/time_ast.rs:63` |
 
 ### SIM — симулятор
 

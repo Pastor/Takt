@@ -13,6 +13,16 @@
 //!    не «побеждает последнее». Итог кладётся в
 //!    [`ModelNode::clock_hz`](super::ModelNode::clock_hz) корня.
 //! 2. Отвергает `every 100ms { … }` (`SE-066`) — до его реализации.
+//! 3. Следит, что `after` стоит **только** в условии перехода `ref` (`SE-068`).
+//!
+//! ## Почему `after` только на ребре (решение заказчика)
+//!
+//! Отсчёт `after` начинается с **перехода в состояние-источник**, то есть
+//! выдержка — свойство пары «состояние + ребро». Именованное условие
+//! (`cond Timeout = after 6s;`) видно из нескольких состояний, и одно скрытое
+//! начало отсчёта на всех дало бы выдержку, зависящую от того, кто спросил
+//! первым; в LTL/Guard-формуле у выдержки нет состояния-источника вовсе.
+//! Прежде такая запись принималась **молча**.
 //!
 //! ⚠️ **Второй пункт закрывает молчаливую потерю.** Проба при разработке
 //! 0134-03: модель с `every` компилировалась **успешно**, тело блока пропадало
@@ -25,7 +35,7 @@
 //! объявление модели с флагом `--tick-hz` (флаг переопределяет).
 
 use crate::diagnostics::Diagnostic;
-use crate::parser::ast::{Model, ModelElement, StateElement};
+use crate::parser::ast::{Condition, InlineFormulaDefine, Model, ModelElement, StateElement};
 use crate::semantic::ModelNode;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -43,6 +53,69 @@ pub(crate) fn collect_clock(ast: &Model, model: &Rc<RefCell<ModelNode>>) -> Resu
         model.borrow_mut().clock_hz = Some(hertz);
     }
     Ok(())
+}
+
+/// Отвергает `after` в условии, стоящем не на ребре перехода (`SE-068`).
+fn reject_after(cond: &Condition, place: &str) -> Result<(), Diagnostic> {
+    if let Some(loc) = find_after(cond) {
+        return Err(Diagnostic::error(
+            loc,
+            format!(
+                "выдержка 'after' допустима только в условии перехода 'ref'; в {place} \
+у неё нет состояния-источника, от входа в которое ведётся отсчёт"
+            ),
+        )
+        .with_code("SE-068"));
+    }
+    Ok(())
+}
+
+/// Отвергает `after` в Guard-формуле (`: условие;`).
+///
+/// В LTL-формуле условие не хранится обычным `Condition` (там свой узел
+/// `LtlExpr`), а лексема `after` в атом LTL не входит — поэтому проверять там
+/// нечего: до семантики такая запись не доходит.
+fn reject_after_in_formula(def: &InlineFormulaDefine) -> Result<(), Diagnostic> {
+    match def {
+        InlineFormulaDefine::Guard { conditions, .. } => {
+            for cond in conditions {
+                reject_after(cond, "Guard-формуле")?;
+            }
+            Ok(())
+        }
+        InlineFormulaDefine::Ltl { .. } => Ok(()),
+    }
+}
+
+/// Ищет `after` в дереве условия; возвращает его позицию.
+///
+/// Обход исчерпывающий по построению: новый узел условия сюда не попадёт молча —
+/// компилятор потребует ветку (в отличие от `_ =>`, который проглотил бы её).
+fn find_after(cond: &Condition) -> Option<crate::diagnostics::Location> {
+    match cond {
+        Condition::After(loc, _, _) => Some(*loc),
+        Condition::Parenthesis(_, inner)
+        | Condition::Not(_, inner)
+        | Condition::BitAccess(_, inner, _)
+        | Condition::ArraySubscript(_, _, inner) => find_after(inner),
+        Condition::Add(_, l, r)
+        | Condition::Subtract(_, l, r)
+        | Condition::And(_, l, r)
+        | Condition::Or(_, l, r)
+        | Condition::Less(_, l, r)
+        | Condition::More(_, l, r)
+        | Condition::LessEqual(_, l, r)
+        | Condition::MoreEqual(_, l, r)
+        | Condition::Equal(_, l, r)
+        | Condition::NotEqual(_, l, r) => find_after(l).or_else(|| find_after(r)),
+        Condition::Function(_, _, args) => args.iter().find_map(find_after),
+        Condition::Duration(_, _, _)
+        | Condition::Number(_, _)
+        | Condition::Rational(_, _, _)
+        | Condition::String(_)
+        | Condition::Bool(_, _)
+        | Condition::Variable(_) => None,
+    }
 }
 
 /// Рекурсивный обход АСД: объявления `clock` текущей модели и вложенных.
@@ -64,19 +137,34 @@ fn walk(ast: &Model, found: &mut Option<u64>) -> Result<(), Diagnostic> {
                 }
                 _ => *found = Some(def.hertz),
             },
+            // `after` вне ребра — ошибка (см. шапку модуля).
+            ModelElement::Condition(def) => reject_after(&def.value, "именованном условии")?,
+            ModelElement::Invariant(def) => reject_after(&def.value, "инварианте")?,
+            ModelElement::InlineFormula(def) => reject_after_in_formula(def)?,
             ModelElement::Model(nested) => walk(nested, found)?,
             // `every` пока не исполняется: отказ вместо тихой потери тела.
             ModelElement::State(state) => {
                 for element in &state.elements {
-                    if let StateElement::Every(def) = element {
-                        return Err(Diagnostic::error(
-                            def.loc,
-                            format!(
-                                "периодическое действие 'every {}' пока не поддерживается",
-                                def.text
-                            ),
-                        )
-                        .with_code("SE-066"));
+                    match element {
+                        StateElement::Every(def) => {
+                            return Err(Diagnostic::error(
+                                def.loc,
+                                format!(
+                                    "периодическое действие 'every {}' пока не поддерживается",
+                                    def.text
+                                ),
+                            )
+                            .with_code("SE-066"));
+                        }
+                        // Условие ребра — **единственное** законное место `after`.
+                        StateElement::Reference(_, _, _) => {}
+                        StateElement::Invariant(def) => {
+                            reject_after(&def.value, "инварианте состояния")?;
+                        }
+                        StateElement::InlineFormula(def) => reject_after_in_formula(def)?,
+                        StateElement::Next(_)
+                        | StateElement::NamedBlockCode(_)
+                        | StateElement::StraySemicolon(_) => {}
                     }
                 }
             }

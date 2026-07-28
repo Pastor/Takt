@@ -292,3 +292,96 @@ fn targets_refuse_time_loudly_until_their_own_subtasks() {
     let diagnostic = result.expect_err("цель 'c' обязана отказать");
     assert_eq!(diagnostic.code.as_deref(), Some("CC-020"), "{diagnostic:?}");
 }
+
+// ── 6. Требования заказчика от 2026-07-27 ────────────────────────────────────
+
+#[test]
+fn after_is_allowed_only_on_transition_edges() {
+    // Отсчёт `after` начинается с перехода в состояние-источник, поэтому вне
+    // ребра у выдержки нет момента, от которого считать. Прежде такая запись
+    // принималась МОЛЧА.
+    let named = "model P {\n    out r: bit := 0;\n    cond T = after 6s;\n    start A { ref B: T; }\n    state B { }\n}\n\nstart Main = P;\n";
+    assert!(
+        codes(named).iter().any(|c| c == "SE-068"),
+        "`cond T = after 6s;` обязан отвергаться: {:?}",
+        codes(named)
+    );
+    let guard = "model P {\n    out r: bit := 0;\n    start A {\n        : after 6s;\n        ref B: after 6s;\n    }\n    state B { }\n}\n\nstart Main = P;\n";
+    assert!(
+        codes(guard).iter().any(|c| c == "SE-068"),
+        "`after` в Guard-формуле обязан отвергаться: {:?}",
+        codes(guard)
+    );
+    let invariant = "model P {\n    out r: bit := 0;\n    invariant I = after 6s;\n    start A { ref B: after 6s; }\n    state B { }\n}\n\nstart Main = P;\n";
+    assert!(
+        codes(invariant).iter().any(|c| c == "SE-068"),
+        "`after` в инварианте обязан отвергаться: {:?}",
+        codes(invariant)
+    );
+}
+
+#[test]
+fn after_on_an_edge_and_in_a_composite_condition_is_accepted() {
+    // На ребре — законно, в том числе вместе с другими условиями.
+    for edge in ["after 6s", "(after 6s) & (x = 1)", "x = 1 & after 6s"] {
+        let src = format!(
+            "model P {{\n    in x: bit := 0;\n    out r: bit := 0;\n    start A {{ ref B: {edge}; }}\n    state B {{ }}\n}}\n\nstart Main = P;\n"
+        );
+        assert!(
+            !codes(&src).iter().any(|c| c == "SE-068" || c == "SE-066"),
+            "условие ребра '{edge}' обязано приниматься: {:?}",
+            codes(&src)
+        );
+    }
+}
+
+#[test]
+fn duration_converts_to_and_from_numbers_explicitly() {
+    // `as` — единственный путь между `duration` и числом; единица — миллисекунда.
+    let to_number = model_with(
+        "    var d: duration := 1s;\n    var ms: u32 := 0;\n    always { ms := d as u32; }",
+    );
+    assert!(
+        !codes(&to_number).iter().any(|c| c == "SE-065"),
+        "явное приведение длительности к числу обязано приниматься: {:?}",
+        codes(&to_number)
+    );
+    let from_number =
+        model_with("    var d: duration := 0s;\n    always { d := 250 as duration; }");
+    assert!(
+        !codes(&from_number).iter().any(|c| c == "SE-065"),
+        "явное приведение числа к длительности обязано приниматься: {:?}",
+        codes(&from_number)
+    );
+    // Без `as` смешение по-прежнему запрещено.
+    let implicit =
+        model_with("    var d: duration := 0s;\n    var n: u8 := 1;\n    always { d := d + n; }");
+    assert!(
+        codes(&implicit).iter().any(|c| c == "SE-065"),
+        "неявное смешение обязано оставаться ошибкой: {:?}",
+        codes(&implicit)
+    );
+}
+
+#[test]
+fn cast_to_integer_alias_works_at_all() {
+    // Сторож фикса 0134-01: `5 as u8` до него давал `TypeNode::Unsupported`,
+    // и симулятор падал с `SIM-007` на совершенно законном коде. Причина —
+    // ДВА списка встроенных имён, разъехавшихся между собой.
+    assert_eq!(
+        takt_lang::semantic::type_node::builtin_type_by_name("u8"),
+        Some(takt_lang::semantic::type_node::TypeNode::Integer {
+            bits: 8,
+            signed: false
+        })
+    );
+    assert_eq!(
+        takt_lang::semantic::type_node::builtin_type_by_name("duration"),
+        Some(takt_lang::semantic::type_node::TypeNode::Duration)
+    );
+    assert_eq!(
+        takt_lang::semantic::type_node::builtin_type_by_name("Point"),
+        None,
+        "пользовательский тип встроенным не является"
+    );
+}

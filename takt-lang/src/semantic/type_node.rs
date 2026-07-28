@@ -37,6 +37,40 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
+/// Встроенный тип по его имени в исходнике (`u8`, `bit`, `duration`, …).
+///
+/// **Единственное место**, где имя встроенного типа превращается в
+/// [`TypeNode`]. Заведено фиксом 0134-01: знание было продублировано —
+/// [`construct_type`] знало целочисленные псевдонимы (`u8`…`i64`), а
+/// context-free [`ast_type_to_node`](crate::semantic::type_inference::ast_type_to_node)
+/// (через который идёт **приведение** `x as T`) знало только
+/// `bit`/`bool`/`float`/`unit`. Из-за расхождения `5 as u8` давало
+/// `TypeNode::Unsupported`, и симулятор падал с `SIM-007` — на совершенно
+/// законном коде.
+///
+/// `None` — имя не встроенное (пользовательский псевдоним либо опечатка);
+/// решение, что с этим делать, принимает вызывающий.
+pub fn builtin_type_by_name(name: &str) -> Option<TypeNode> {
+    let integer = |bits, signed| Some(TypeNode::Integer { bits, signed });
+    match name {
+        "bit" => Some(TypeNode::Bit),
+        "bool" => Some(TypeNode::Bool),
+        "float" => Some(TypeNode::Rational),
+        "unit" => Some(TypeNode::Unit),
+        // Длительность (фича 0134): грамматика отдаёт примитивы псевдонимом.
+        "duration" => Some(TypeNode::Duration),
+        "u8" => integer(8, false),
+        "u16" => integer(16, false),
+        "u32" => integer(32, false),
+        "u64" => integer(64, false),
+        "i8" => integer(8, true),
+        "i16" => integer(16, true),
+        "i32" => integer(32, true),
+        "i64" => integer(64, true),
+        _ => None,
+    }
+}
+
 /// Строит [`TypeNode`] из опционального АСД-типа [`Type`].
 ///
 /// Если тип не задан (`None`), возвращает [`TypeNode::Inference`] —
@@ -65,63 +99,21 @@ pub(crate) fn construct_type(
         Type::Duration => Ok(TypeNode::Duration),
         Type::Fixed(loc, ctor, m, n) => construct_fixed(loc, &ctor, m, n),
         Type::Alias(def) => {
-            // Примитивные типы: «bit», «bool», «float», «unit» — жёстко связаны.
-            match def.name.as_str() {
-                "bit" => return Ok(TypeNode::Bit),
-                "bool" => return Ok(TypeNode::Bool),
-                "float" => return Ok(TypeNode::Rational),
-                // Тип `duration` (фича 0134): имя связано жёстко, как прочие
-                // примитивы (грамматика примитивы отдаёт псевдонимом).
-                "duration" => return Ok(TypeNode::Duration),
-                "unit" => return Ok(TypeNode::Unit),
-                _ => {}
-            }
             // Пользовательский псевдоним в таблице типов модели берёт приоритет
             // над встроенными именами (u8, i32 и пр.), что позволяет переопределять
             // встроенные типы на уровне модели для обратной совместимости.
             if let Some(rc) = model.borrow().search_type(&def.name) {
                 return Ok(rc.borrow().clone());
             }
-            // Встроенные целочисленные типы
-            match def.name.as_str() {
-                "u8" => Ok(TypeNode::Integer {
-                    bits: 8,
-                    signed: false,
-                }),
-                "u16" => Ok(TypeNode::Integer {
-                    bits: 16,
-                    signed: false,
-                }),
-                "u32" => Ok(TypeNode::Integer {
-                    bits: 32,
-                    signed: false,
-                }),
-                "u64" => Ok(TypeNode::Integer {
-                    bits: 64,
-                    signed: false,
-                }),
-                "i8" => Ok(TypeNode::Integer {
-                    bits: 8,
-                    signed: true,
-                }),
-                "i16" => Ok(TypeNode::Integer {
-                    bits: 16,
-                    signed: true,
-                }),
-                "i32" => Ok(TypeNode::Integer {
-                    bits: 32,
-                    signed: true,
-                }),
-                "i64" => Ok(TypeNode::Integer {
-                    bits: 64,
-                    signed: true,
-                }),
-                local => Err(Diagnostic::declaration_error(
+            // Встроенные имена — через единый разбор (фикс 0134-01): второй
+            // экземпляр этого знания уже разъезжался с первым.
+            builtin_type_by_name(&def.name).ok_or_else(|| {
+                Diagnostic::declaration_error(
                     def.loc,
-                    format!("Локальный тип '{}' не найден", local),
+                    format!("Локальный тип '{}' не найден", def.name),
                 )
-                .with_code("SE-034")),
-            }
+                .with_code("SE-034")
+            })
         }
         Type::Array {
             element_type,
