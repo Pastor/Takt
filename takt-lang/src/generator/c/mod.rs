@@ -39,6 +39,8 @@ mod c_map;
 mod c_model;
 mod c_model_init;
 mod c_source;
+/// Механизм времени цели `c` (фича 0134).
+mod c_time;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::Generator as AsGenerator;
@@ -129,7 +131,13 @@ impl AsGenerator for Generator {
             model,
             options.guard_enable,
         )?
-        .with_float_width(options.float_width);
+        .with_float_width(options.float_width)
+        // Профиль времени (фича 0134): `clock` модели < `--tick-hz`; приоритет
+        // разрешает общий слой, а не генератор.
+        .with_time_profile(crate::semantic::duration::resolve_profile(
+            model.clock_hz,
+            options.tick_hz,
+        ));
         let header = generate_header(map.get_filename(), &map, options)?;
         let source = generate_source(map.get_filename(), &map)?;
         let filename = map.get_filename();

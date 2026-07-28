@@ -85,7 +85,8 @@
 | `CC-017` | Инициализатор массива не выразим в C (скалярный либо иной длины) | `takt-lang/src/generator/c/c_model.rs:230` |
 | `CC-018` | Условие перехода не переводится в C (причина — заметкой) | `takt-lang/src/generator/c/c_model.rs:482` |
 | `CC-019` | состояние модели '…' недостижимо из '…': модель не \ | `takt-lang/src/generator/c/c_expr/condition.rs:165` |
-| `CC-020` | Время (`duration`) целью `c` пока не поддерживается | `takt-lang/src/generator/c/mod.rs:180` |
+| `CC-020` | Значения типа `duration` целью `c` пока не поддерживаются | `takt-lang/src/generator/c/mod.rs:180` |
+| `CC-021` | Выдержка `after` в профиле «часы» целью `c` пока не поддерживается (нужна частота) | `takt-lang/src/generator/c/c_expr/condition.rs:430` |
 
 ### DF — флаг --define
 

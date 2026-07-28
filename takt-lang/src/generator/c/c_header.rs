@@ -382,6 +382,27 @@ fn generate_model_header(
         printer.ident(&end_constant);
     }
     printer.down().nl().ident("} state;").nl();
+    // Счётчик времени, проведённого в текущем состоянии (фича 0134). Эмитится
+    // ТОЛЬКО если модель использует выдержку `after`: модель без времени обязана
+    // давать прежний вывод байт-в-байт (правило 1 ADR).
+    if crate::semantic::time_ast::model_uses_after(&model.borrow()) {
+        let ticks = crate::generator::c::c_time::counter_ticks(map, &model.borrow())?;
+        let bits = crate::semantic::duration::counter_bits(ticks).unwrap_or(64);
+        printer
+            .ident("// NOTICE: Счётчик тактов, прошедших с входа в состояние (выдержка `after`)")
+            .nl()
+            .ident(&format!(
+                "uint{}_t {};",
+                bits,
+                crate::generator::c::c_expr::condition::DWELL_FIELD
+            ))
+            .nl()
+            .ident(&format!(
+                "unsigned {};",
+                crate::generator::c::c_expr::condition::PREV_STATE_FIELD
+            ))
+            .nl();
+    }
     // Генерируем поля extend-состояний
     let mut is_extend = false;
     for state_name in states {

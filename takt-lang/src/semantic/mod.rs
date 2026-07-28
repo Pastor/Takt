@@ -11,7 +11,7 @@
 //! - [`Extend`] — реализация модели: ссылка, последовательная или параллельная компоновка.
 
 mod condition_node;
-mod time_ast;
+pub mod time_ast;
 pub use condition_node::ConditionNode;
 
 pub mod bit_vector;

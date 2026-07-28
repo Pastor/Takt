@@ -11,8 +11,8 @@ set -eu
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TAKTC="${TAKTC:-$ROOT/target/debug/taktc}"
-MODEL="$ROOT/book/src/17-showcase/examples/lift.takt"
-IMG="$ROOT/book/src/17-showcase/images"
+MODEL="$ROOT/book/src/18-showcase/examples/lift.takt"
+IMG="$ROOT/book/src/18-showcase/images"
 FLATTEN="$ROOT/book/scripts/svg_flatten_text.py"
 PROP="F Boarding"
 

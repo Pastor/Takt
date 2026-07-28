@@ -790,22 +790,43 @@ fn values_match(actual: &Option<Value>, expected: &Value) -> bool {
     }
 }
 
-/// Человекочитаемая запись длительности: `1.500s`, `250ms`, `40ns`.
+/// Человекочитаемая запись длительности: `999ms`, `1s`, `1s1ms`, `1m30s`.
 ///
-/// Трасса читается человеком, и `1500000000` в ней бесполезно: автор писал
-/// `1s500ms` и ожидает увидеть сопоставимое.
-pub(crate) fn format_duration(nanos: i64) -> String {
-    const MS: i64 = 1_000_000;
-    const S: i64 = 1_000_000_000;
-    if nanos != 0 && nanos % S == 0 {
-        format!("{}s", nanos / S)
-    } else if nanos != 0 && nanos % MS == 0 {
-        format!("{}ms", nanos / MS)
-    } else if nanos != 0 && nanos % 1_000 == 0 {
-        format!("{}us", nanos / 1_000)
-    } else {
-        format!("{nanos}ns")
+/// Разряды переносятся, как в литерале языка: пока значение укладывается в
+/// младшую единицу — печатается ею (`999ms`), при переполнении появляется
+/// старшая (`1000ms` → `1s`), а остаток дописывается справа (`1001ms` →
+/// `1s1ms`). Так запись в трассе читается тем же способом, каким автор её
+/// **писал** в исходнике, и `90000ms` не приходится делить в голове.
+///
+/// Нулевые разряды опускаются (`3600s` → `1h`, а не `1h0m0s`); нулевая
+/// длительность печатается младшей содержательной единицей — `0ms`.
+pub fn format_duration(nanos: i64) -> String {
+    const UNITS: [(i64, &str); 6] = [
+        (3_600_000_000_000, "h"),
+        (60_000_000_000, "m"),
+        (1_000_000_000, "s"),
+        (1_000_000, "ms"),
+        (1_000, "us"),
+        (1, "ns"),
+    ];
+    if nanos == 0 {
+        return "0ms".to_string();
     }
+    let sign = if nanos < 0 { "-" } else { "" };
+    // Модуль берётся с защитой от i64::MIN: `abs()` на нём паникует.
+    let mut rest = nanos.unsigned_abs();
+    let mut out = String::new();
+    for (size, name) in UNITS {
+        let size = size.unsigned_abs();
+        if rest >= size {
+            out.push_str(&format!("{}{}", rest / size, name));
+            rest %= size;
+        }
+        if rest == 0 {
+            break;
+        }
+    }
+    format!("{sign}{out}")
 }
 
 fn format_value(v: &Value) -> String {
