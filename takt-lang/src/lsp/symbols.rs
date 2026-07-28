@@ -222,6 +222,8 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
             ModelElement::Import(_)
             | ModelElement::Formula(_)
             | ModelElement::Address(_)
+            // `clock 1kHz;` — свойство модели, а не именованный символ.
+            | ModelElement::Clock(_)
             | ModelElement::StraySemicolon(_) => {}
             ModelElement::Struct(def) => {
                 let children: Vec<DocumentSymbol> = def

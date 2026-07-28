@@ -76,6 +76,10 @@ pub(super) fn is_boolean_ast_condition(
         // ── Явно числовые ────────────────────────────────────────────────────
         // Целочисленный литерал
         AC::Number(_, _) => false,
+        // Литерал длительности сам по себе не булев; `after 3s` — булево
+        // (истекла ли выдержка), поэтому неявным приведением не является.
+        AC::Duration(_, _, _) => false,
+        AC::After(_, _, _) | AC::AfterTicks(_, _, _) => true,
         // Вещественный литерал
         AC::Rational(_, _, _) => false,
         // Строковый литерал (нетипичный в условии, но не булево)
@@ -102,6 +106,7 @@ pub(super) fn ast_condition_summary(
     use ast_types::Condition as AC;
     match cond {
         AC::Number(_, n) => format!("числовой литерал {}", n),
+        AC::Duration(_, _, text) => format!("литерал длительности {}", text),
         AC::Rational(_, r, neg) => {
             format!("вещественный литерал {}{}", if *neg { "-" } else { "" }, r)
         }

@@ -39,6 +39,9 @@ fn condition_label(cond: &ConditionNode) -> String {
     match cond {
         ConditionNode::None => String::new(),
         ConditionNode::Bool(b) => b.to_string(),
+        ConditionNode::Duration(ns) => crate::runner::format_duration(*ns),
+        ConditionNode::After(ns) => format!("after {}", crate::runner::format_duration(*ns)),
+        ConditionNode::AfterTicks(ticks) => format!("after {ticks}t"),
         ConditionNode::Number(n) => n.to_string(),
         ConditionNode::Rational(s, neg) => {
             if *neg {
@@ -90,6 +93,11 @@ fn condition_label(cond: &ConditionNode) -> String {
 /// вместо `Location::Builtin` (критерий A10) в подавляющем большинстве случаев.
 fn loc_of(cond: &ConditionNode) -> Location {
     match cond {
+        // У литерала длительности и у `after` позиции нет — как и у прочих
+        // литералов (позиция — свойство ссылки, фича 0056).
+        ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {
+            Location::Implicit
+        }
         ConditionNode::Variable(_, loc) | ConditionNode::Function(_, _, loc) => *loc,
         ConditionNode::Not(c) | ConditionNode::Parenthesis(c) | ConditionNode::BitAccess(c, _) => {
             loc_of(c)
@@ -130,6 +138,16 @@ pub(crate) fn eval_condition(
 ) -> Result<Value, Diagnostic> {
     match cond {
         // ── Литералы ─────────────────────────────────────────────────────────
+        // Длительность и выдержка (фича 0134). `after` истинно, когда с входа
+        // в текущее состояние прошло не меньше указанного: сравнение — по
+        // РАЗНОСТИ модельного времени, а не по абсолютному моменту, иначе
+        // выдержка зависела бы от начала прогона.
+        ConditionNode::Duration(ns) => Ok(Value::Duration(*ns)),
+        ConditionNode::After(ns) => Ok(Value::Boolean(ctx.since_state_entry_ns() >= *ns)),
+        // Выдержка в тактах: сравнение по счётчику шагов, а не по часам.
+        ConditionNode::AfterTicks(ticks) => Ok(Value::Boolean(
+            i64::try_from(ctx.ticks_in_state()).unwrap_or(i64::MAX) >= *ticks,
+        )),
         ConditionNode::Number(n) => Ok(Value::Number(*n)),
         ConditionNode::Bool(b) => Ok(Value::Boolean(*b)),
         ConditionNode::Rational(text, negative) => {

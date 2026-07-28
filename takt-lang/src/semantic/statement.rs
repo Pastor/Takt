@@ -77,6 +77,9 @@ fn resolve_ast_statement(
     params: Vec<(String, TypeNode)>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<StatementNode, Diagnostic> {
+    // Сторож глубины (фича 0129). Позиция не передаётся: `ast::Statement` её
+    // хранит не во всех вариантах, а выдумывать координаты нельзя.
+    let _depth = crate::semantic::validate::depth::enter(None)?;
     match stmt {
         // ── Блок операторов ────────────────────────────────────────────────────
         //

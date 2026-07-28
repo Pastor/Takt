@@ -46,15 +46,26 @@ pub fn collect_diagnostics_at(
         }
     };
 
-    // Шаг 2: Семантический анализ
-    let model =
-        match semantic::tree::construct_model_with_files(&ast, None, search_paths, &mut files) {
-            Ok(m) => m,
-            Err(err) => {
-                lsp_diags.push(diagnostic_to_lsp(&err, source, &files));
-                return lsp_diags;
-            }
-        };
+    // Шаг 2: Семантический анализ. Стадии построения терминальны, проверки —
+    // накапливаются (фича 0130): редактор подчёркивает **все** нарушения, а не
+    // первое. Прежде здесь стоял `construct_model_with_files`, отдающий одну
+    // диагностику по контракту.
+    let model = match semantic::stages::construct_stages(&ast, None, search_paths, &mut files) {
+        Ok(m) => m,
+        Err(err) => {
+            lsp_diags.push(diagnostic_to_lsp(&err, source, &files));
+            return lsp_diags;
+        }
+    };
+
+    let errors = semantic::validate::validate_model_all(model.clone());
+    if !errors.is_empty() {
+        // Предупреждения при наличии ошибок не показываем: сперва ошибки.
+        for err in crate::diagnostics::normalize(errors) {
+            lsp_diags.push(diagnostic_to_lsp(&err, source, &files));
+        }
+        return lsp_diags;
+    }
 
     // Шаг 3: Дополнительные предупреждения
     let unused = crate::unused_variable_warnings(model.clone());
@@ -176,6 +187,14 @@ pub fn grammar_diagnostic_to_lsp(
     Diagnostic {
         range,
         severity,
+        // Код диагностики (фича 0130). Прежде он терялся: `taktc` печатал
+        // `[SE-003]`, а редактор показывал тот же текст **без** кода — и найти
+        // ошибку в справочнике кодов было не по чему. Поле в протоколе для этого
+        // и предназначено.
+        code: diag
+            .code
+            .as_ref()
+            .map(|c| NumberOrString::String(c.clone())),
         message,
         source: Some("takt-lsp".to_string()),
         ..Default::default()

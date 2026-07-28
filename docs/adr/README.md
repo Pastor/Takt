@@ -104,3 +104,18 @@
 | [0123](./0123-book-keyword-highlight.md) | Подсветка ключевых слов языка в тексте документа | Draft | фича 0123 |
 | [0124](./0124-verify-graph-export.md) | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | Accepted | фича 0124 |
 | [0125](./0125-intellij-takt-lsp-tooling.md) | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | Accepted | фича 0125 |
+| [0126](./0126-language-comparison-diff.md) | Сравнительный анализ языка Takt с родственными языками (отчёт docs/DIFF.md) | Accepted | фича 0126 |
+| [0139](./0139-remove-travis-config.md) | Удаление мёртвой конфигурации .travis.yml | Accepted | фича 0139 |
+| [0137](./0137-toolchain-pin-msrv.md) | Фиксация толчейна Rust и MSRV | Accepted | фича 0137 |
+| [0128](./0128-lexer-literal-overflow.md) | Диагностика вместо паники на числовом литерале больше i64::MAX | Accepted | фича 0128 |
+| [0129](./0129-semantic-deep-nesting.md) | Устранение переполнения стека на глубине выражений и операторов | Accepted | фича 0129 |
+| [0127](./0127-int-overflow-semantics.md) | Единая семантика переполнения целых во всех целях | Accepted | фича 0127 |
+| [0133](./0133-book-examples-gate.md) | Гейт компиляции и симуляции примеров документа book/ | Accepted | фича 0133 |
+| [0135](./0135-sim-qualified-port-names.md) | Квалифицированные имена портов в симуляторе | Accepted | фича 0135 |
+| [0131](./0131-lsp-definition-references-rename.md) | LSP: definition, references и rename | Accepted | фича 0131 |
+| [0130](./0130-diagnostics-batch.md) | Накопление диагностик — несколько ошибок за прогон | Accepted | фича 0130 |
+| [0132](./0132-sim-named-port-scenarios.md) | Именованные порты в сценариях симулятора | Accepted | фича 0132 |
+| [0140](./0140-backlog-revision-doc-split.md) | Ревизия витрины кандидатов и разделение ролей README и book | Draft | фича 0140 |
+| [0138](./0138-coverage-measurement.md) | Измерение покрытия тестами | Draft | фича 0138 |
+| [0136](./0136-perf-benchmarks.md) | Бенчмарки производительности | Draft | фича 0136 |
+| [0134](./0134-language-time-model.md) | Модель времени в языке: литерал длительности, внешний источник времени и частота такта | Accepted | фича 0134 |

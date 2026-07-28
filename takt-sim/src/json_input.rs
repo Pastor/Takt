@@ -1,28 +1,62 @@
 use crate::eval::value::Value;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 // ── Структуры шага симуляции ─────────────────────────────────────────────────
 
+/// Значения портов шага: **позиционные** либо **именованные** (фича 0132).
+///
+/// ```json
+/// { "in_ports": [0, 1, 0] }                       // позиционная форма
+/// { "in_ports": {"FloorSensor_F2_Bottom": 1} }    // именованная форма
+/// ```
+///
+/// ⚠️ Позиционная форма хрупка не только для чтения: индекс — это место имени в
+/// **алфавитном** списке портов модели и её под-моделей, поэтому добавление или
+/// переименование порта сдвигает весь массив, и шаг начинает описывать другое
+/// событие — молча (проба фичи 0132). Именованная форма от этого защищена:
+/// несуществующее имя становится ошибкой.
+///
+/// Формы не пересекаются по представлению (массив против объекта), поэтому
+/// `untagged` разбирает их однозначно.
+#[derive(Deserialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum PortValues {
+    /// Значения по порядку портов (историческая форма).
+    Positional(Vec<serde_json::Value>),
+    /// Значения по именам портов; имя может быть квалифицированным
+    /// (`Модель::порт`, фича 0135).
+    ///
+    /// `BTreeMap`, а не `HashMap`: порядок обхода решает, **какая** ошибка будет
+    /// названа первой, и он обязан быть воспроизводимым (урок фичи 0048).
+    Named(BTreeMap<String, serde_json::Value>),
+}
+
 /// Один шаг симуляции из JSON-файла.
 ///
 /// ```json
-/// { "in": [2.5, 0, true], "inout": [8], "guard": { "out": [0], "vars": {"M::x": 1} } }
+/// { "in_ports": {"btn": 1}, "inout": [8], "guard": { "out": {"lamp": 0}, "vars": {"M::x": 1} } }
 /// ```
 #[derive(Deserialize, Default, Clone)]
 pub struct SimStep {
     #[serde(rename = "in_ports")]
-    pub in_ports: Option<Vec<serde_json::Value>>,
-    pub inout: Option<Vec<serde_json::Value>>,
+    pub in_ports: Option<PortValues>,
+    /// На сколько продвинуть модельные часы перед этим тактом, в миллисекундах
+    /// (фича 0134). `None` — на период такта прогона (умолчание 1 мс).
+    ///
+    /// Поле необязательно, поэтому все существующие сценарии читаются без
+    /// правки: время появляется только там, где о нём попросили.
+    pub time_ms: Option<i64>,
+    pub inout: Option<PortValues>,
     pub guard: Option<Guard>,
 }
 
 /// Проверка состояния модели после шага.
 #[derive(Deserialize, Clone)]
 pub struct Guard {
-    pub out: Option<Vec<serde_json::Value>>,
-    pub inout: Option<Vec<serde_json::Value>>,
+    pub out: Option<PortValues>,
+    pub inout: Option<PortValues>,
     pub vars: Option<HashMap<String, serde_json::Value>>,
 }
 
@@ -132,7 +166,27 @@ mod tests {
         let steps = load_sim_steps(f.path()).unwrap();
         assert_eq!(steps.len(), 2);
         assert!(steps[0].in_ports.is_none());
-        assert_eq!(steps[1].in_ports.as_ref().unwrap().len(), 2);
+        match steps[1].in_ports.as_ref().expect("шаг 2 задаёт входы") {
+            PortValues::Positional(list) => assert_eq!(list.len(), 2),
+            PortValues::Named(_) => panic!("массив обязан разбираться позиционной формой"),
+        }
+    }
+
+    /// Именованная форма разбирается объектом, а не позиционным массивом
+    /// (фича 0132): формы не должны путаться местами.
+    #[test]
+    fn named_form_is_parsed_as_map() {
+        use std::io::Write;
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        write!(f, r#"[{{"in_ports": {{"btn": 1}}}}]"#).unwrap();
+        let steps = load_sim_steps(f.path()).unwrap();
+        match steps[0].in_ports.as_ref().expect("входы заданы") {
+            PortValues::Named(map) => {
+                assert_eq!(map.len(), 1);
+                assert!(map.contains_key("btn"));
+            }
+            PortValues::Positional(_) => panic!("объект обязан разбираться именованной формой"),
+        }
     }
 
     #[test]

@@ -1,0 +1,25 @@
+# Пин толчейна Rust (фича 0137).
+#
+# Зачем пин. До 0137 сборка стояла на «плавающем» nightly: файла пина не было,
+# CI брал `dtolnay/rust-toolchain@nightly`, и любой день мог принести другой
+# компилятор. Это не теория: смена nightly ломала локальный `precheck.sh`
+# двадцатью одной ошибкой `E0514` («crate compiled by an incompatible version of
+# rustc») — лечится только `cargo clean`, а каталог сборки этого репозитория
+# занимает ~140 ГБ.
+#
+# Почему stable. Ни одной `#![feature(...)]` в исходниках нет — nightly проекту
+# не нужен. Проверено пробой: `clippy --all-targets --all-features -D warnings`
+# на 1.97.1 проходит без единого предупреждения, а `cargo fmt --check` стабильной
+# версии принимает дерево, отформатированное nightly, байт-в-байт.
+#
+# Подъём версии — ОСОЗНАННОЕ действие: правится этот файл отдельным коммитом,
+# после чего гоняется полный `./scripts/precheck.sh`. Автообновления нет намеренно.
+[toolchain]
+channel = "1.97.1"
+# rust-std перечислен ЯВНО (защитно). При первой установке пина каталог
+# `lib/rustlib/<target>/lib` оказался ПУСТ, хотя `rustup component list` показывал
+# `rust-std … (installed)`: сборка падала с `E0463: can't find crate for std`.
+# Лечится переустановкой толчейна (`rustup toolchain uninstall`/`install`);
+# явная запись компонента делает требование видимым, а не подразумеваемым.
+components = ["rustfmt", "clippy", "rust-std"]
+profile = "minimal"

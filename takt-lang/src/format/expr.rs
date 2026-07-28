@@ -13,6 +13,9 @@ pub(crate) fn expression(expr: &ast::Expression) -> Result<String, FormatError> 
     Ok(match expr {
         // ── Литералы и имена ─────────────────────────────────────────────────
         E::Number(_, n) => n.to_string(),
+        // Литерал длительности печатается как написан (фича 0134): `1m30s` не
+        // канонизируется в `90s` — АСД хранит выбор автора.
+        E::Duration(_, _, text) => text.clone(),
         E::Rational(_, s, negative) => {
             if *negative {
                 format!("-{s}")
@@ -124,6 +127,8 @@ pub(crate) fn condition(cond: &ast::Condition) -> Result<String, FormatError> {
     use ast::Condition as C;
     Ok(match cond {
         C::Number(_, n) => n.to_string(),
+        C::Duration(_, _, text) => text.clone(),
+        C::After(_, _, text) | C::AfterTicks(_, _, text) => format!("after {text}"),
         C::Rational(_, s, negative) => {
             if *negative {
                 format!("-{s}")
@@ -175,6 +180,7 @@ pub(crate) fn ty(t: &ast::Type) -> Result<String, FormatError> {
         T::Bit => "bit".to_string(),
         T::Bool => "bool".to_string(),
         T::Rational => "float".to_string(),
+        T::Duration => "duration".to_string(),
         // Fixed-point q(m, n) (фича 0061): печатаем как объявлено, канон — с
         // пробелом после запятой (как в аргументах).
         T::Fixed(_, ctor, m, n) => format!("{ctor}({m}, {n})"),

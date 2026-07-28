@@ -37,6 +37,14 @@ pub(crate) fn eval_expression(
 ) -> Result<Value, Diagnostic> {
     match expr {
         // ── Литералы ─────────────────────────────────────────────────────────
+        // Длительность (фича 0134): значение времени вводит подзадача
+        // 0134-03 вместе с виртуальными часами. До неё — явный отказ:
+        // посчитать наносекунды обычным числом значило бы дать выдержку,
+        // не равную заявленной, и разойтись с целями молча.
+        ExpressionNode::Duration(_) => Err(EvalError::UnsupportedType {
+            ty: "duration".to_string(),
+        }
+        .to_diagnostic(Location::Implicit)),
         ExpressionNode::Number(n) => Ok(Value::Number(*n)),
         ExpressionNode::Bool(b) => Ok(Value::Boolean(*b)),
         ExpressionNode::Rational(text, negative) => parse_rational(text, *negative),
@@ -259,6 +267,8 @@ fn parse_rational(text: &str, negative: bool) -> Result<Value, Diagnostic> {
 /// см. заголовок модуля.
 fn loc_of(expr: &ExpressionNode) -> Location {
     match expr {
+        // У литерала длительности позиции нет — как и у прочих литералов.
+        ExpressionNode::Duration(_) => Location::Implicit,
         ExpressionNode::Variable(var) => var.borrow().loc(),
         ExpressionNode::ArraySubscript(var, _) | ExpressionNode::ArraySlice(var, _, _) => {
             var.borrow().loc()

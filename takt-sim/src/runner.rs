@@ -2,7 +2,7 @@ use crate::context::Context;
 use crate::eval::value::Value;
 use crate::gif::GifRecorder;
 use crate::graphics_config::{GraphicsConfig, OutputMode};
-use crate::json_input::{Guard, SimStep, json_to_value};
+use crate::json_input::{Guard, PortValues, SimStep, json_to_value};
 use crate::svg::SvgRecorder;
 use crate::unit::viewport::{CachedLayout, LegendData, compute_layout, render_from_layout};
 use crate::unit::{TickResult, Unit};
@@ -49,6 +49,20 @@ pub struct PortNames {
     pub out_ports: Vec<String>,
     pub inout_ports: Vec<String>,
     pub vars: Vec<String>,
+    /// Имена, объявленные более чем одной моделью: голое имя → квалифицированные
+    /// (`Модель::имя`), фича 0135.
+    ///
+    /// Плоское пространство имён делает такие значения неразличимыми: чтение по
+    /// голому имени находит первую ветвь, запись расходится по всем. Поле
+    /// существует, чтобы двусмысленность была **видна** — в предупреждении при
+    /// запуске и в потактовом выводе, — а не молчала.
+    pub ambiguous: Vec<(String, Vec<String>)>,
+    /// Все квалифицированные имена (`Модель::имя`) — фича 0132.
+    ///
+    /// Строится тем же обходом, что и [`ambiguous`](Self::ambiguous), из одного
+    /// списка владельцев: два реестра из разных источников разошлись бы, и
+    /// сценарий получал бы «имя не найдено» на имя, которое симулятор знает.
+    pub qualified: std::collections::BTreeSet<String>,
 }
 
 impl PortNames {
@@ -66,8 +80,16 @@ impl PortNames {
             out_ports: Vec::new(),
             inout_ports: Vec::new(),
             vars: Vec::new(),
+            ambiguous: Vec::new(),
+            qualified: std::collections::BTreeSet::new(),
         };
-        names.collect_recursive(model);
+        let mut owners: Vec<(String, String)> = Vec::new();
+        names.collect_recursive(model, &mut owners);
+        names.ambiguous = ambiguous_names(&owners);
+        names.qualified = owners
+            .iter()
+            .map(|(name, owner)| format!("{owner}::{name}"))
+            .collect();
         for v in [
             &mut names.in_ports,
             &mut names.out_ports,
@@ -80,22 +102,85 @@ impl PortNames {
         names
     }
 
-    fn collect_recursive(&mut self, model: &takt_lang::semantic::ModelNode) {
+    /// `owners` копит пары «имя значения → модель, его объявившая»: по ним
+    /// вычисляется двусмысленность (фича 0135).
+    fn collect_recursive(
+        &mut self,
+        model: &takt_lang::semantic::ModelNode,
+        owners: &mut Vec<(String, String)>,
+    ) {
         use takt_lang::parser::ast::PortDirection;
         use takt_lang::semantic::VariableNode;
+        let owner = model.name.clone();
         for (name, var) in &model.variables {
-            match var {
-                VariableNode::Port { direction, .. } => match direction {
-                    PortDirection::In => self.in_ports.push(name.clone()),
-                    PortDirection::Out => self.out_ports.push(name.clone()),
-                    PortDirection::InOut => self.inout_ports.push(name.clone()),
-                },
-                VariableNode::Simple { .. } => self.vars.push(name.clone()),
-                _ => {}
+            let mine = match var {
+                VariableNode::Port { direction, .. } => {
+                    match direction {
+                        PortDirection::In => self.in_ports.push(name.clone()),
+                        PortDirection::Out => self.out_ports.push(name.clone()),
+                        PortDirection::InOut => self.inout_ports.push(name.clone()),
+                    }
+                    true
+                }
+                VariableNode::Simple { .. } => {
+                    self.vars.push(name.clone());
+                    true
+                }
+                _ => false,
+            };
+            if mine && let Some(owner) = &owner {
+                owners.push((name.clone(), owner.clone()));
             }
         }
         for sub in model.models.values() {
-            self.collect_recursive(&sub.borrow());
+            self.collect_recursive(&sub.borrow(), owners);
+        }
+    }
+}
+
+/// Имена, объявленные более чем одной моделью (фича 0135).
+///
+/// Одна и та же модель, встреченная дважды при обходе, двусмысленности не даёт —
+/// поэтому владельцы дедуплицируются перед подсчётом.
+fn ambiguous_names(owners: &[(String, String)]) -> Vec<(String, Vec<String>)> {
+    let mut by_name: std::collections::BTreeMap<&str, Vec<&str>> =
+        std::collections::BTreeMap::new();
+    for (name, owner) in owners {
+        let slot = by_name.entry(name.as_str()).or_default();
+        if !slot.contains(&owner.as_str()) {
+            slot.push(owner.as_str());
+        }
+    }
+    by_name
+        .into_iter()
+        .filter(|(_, models)| models.len() > 1)
+        .map(|(name, models)| {
+            let mut qualified: Vec<String> =
+                models.iter().map(|m| format!("{m}::{name}")).collect();
+            qualified.sort();
+            (name.to_string(), qualified)
+        })
+        .collect()
+}
+
+/// Направление портов, к которому относятся значения шага (фича 0132).
+///
+/// Нужен, чтобы одна воронка разрешения имён обслуживала и входы, и `guard`:
+/// направление — единственное, чем эти случаи различаются.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortDirectionKind {
+    In,
+    Out,
+    InOut,
+}
+
+impl PortDirectionKind {
+    /// Имя поля в файле сценария — для текста диагностики.
+    fn field(self) -> &'static str {
+        match self {
+            Self::In => "in_ports",
+            Self::Out => "out",
+            Self::InOut => "inout",
         }
     }
 }
@@ -144,6 +229,17 @@ pub struct SimulationRunner {
     /// Мягкий режим инвариантов (фича 0087): нарушение записывается и прогон
     /// продолжается, вместо останова. Умолчание — `false` (жёсткий режим 0044).
     soft_invariants: bool,
+    /// Модельное время прогона (наносекунды) — виртуальные часы (фича 0134).
+    ///
+    /// Часов реального мира в эталоне нет ни при каких условиях: трасса обязана
+    /// воспроизводиться, иначе все сверки станут мигающими.
+    now_ns: i64,
+    /// На сколько продвигать часы за такт, если шаг сценария не сказал иного.
+    ///
+    /// Умолчание — **1 мс**: прогон без указания времени должен оставаться
+    /// возможным, а неявной частоты здесь не появляется — это свойство прогона,
+    /// а не модели. Объявленная моделью частота (`clock`) задаёт период такта.
+    tick_period_ns: i64,
 }
 
 impl SimulationRunner {
@@ -195,6 +291,8 @@ impl SimulationRunner {
             gif_config,
             cached_layout: None,
             soft_invariants: false,
+            now_ns: 0,
+            tick_period_ns: 1_000_000,
         })
     }
 
@@ -204,8 +302,23 @@ impl SimulationRunner {
         self.soft_invariants = on;
     }
 
+    /// Задаёт период такта модельных часов (фича 0134), в наносекундах.
+    ///
+    /// Источники, в порядке приоритета: поле шага сценария (`time_ms`) →
+    /// это значение → умолчание 1 мс. Объявленная моделью частота (`clock`)
+    /// переводится в период вызывающим: `1 с / f`.
+    pub fn set_tick_period_ns(&mut self, period_ns: i64) {
+        self.tick_period_ns = period_ns.max(0);
+    }
+
+    /// Текущее модельное время прогона (наносекунды).
+    pub fn now_ns(&self) -> i64 {
+        self.now_ns
+    }
+
     /// Запускает главный цикл симуляции.
     pub fn run(&mut self) -> Result<RunResult, String> {
+        self.warn_about_ambiguous_names();
         // Если загружен файл сценария, он определяет лимит шагов;
         // -n может только уменьшить это число, но не увеличить.
         let sim_len = self.sim_steps.len();
@@ -221,9 +334,26 @@ impl SimulationRunner {
         for step_no in 0..limit {
             let sim_step: Option<SimStep> = self.sim_steps.get(step_no).cloned();
 
+            // Модельное время (фича 0134) ставится ДО такта: показания часов на
+            // такте N обязаны быть видны телу, исполняемому на такте N. Иначе
+            // выдержка сдвинулась бы на такт относительно целей — а такой сдвиг
+            // компилируется молча (тот же класс, что вход в стартовое состояние,
+            // фича 0033).
+            // ⚠️ Первый такт идёт при t = 0: часы двигаются ПЕРЕД каждым тактом,
+            // кроме первого. Иначе модель входила бы в стартовое состояние уже
+            // «спустя период», и выдержка отсчитывалась бы от чужого момента.
+            if step_no > 0 {
+                let advance_ns = sim_step
+                    .as_ref()
+                    .and_then(|step| step.time_ms)
+                    .map_or(self.tick_period_ns, |ms| ms.saturating_mul(1_000_000));
+                self.now_ns = self.now_ns.saturating_add(advance_ns);
+            }
+            self.unit.set_time_ns(self.now_ns);
+
             // Применяем входные порты
             if let Some(step) = &sim_step {
-                self.apply_step_inputs(step);
+                self.apply_step_inputs(step, step_no + 1)?;
             }
 
             // Выполняем шаг. В мягком режиме нарушения инвариантов не прерывают
@@ -305,6 +435,24 @@ impl SimulationRunner {
 
     // ── Вспомогательные методы ────────────────────────────────────────────────
 
+    /// Предупреждает об именах, объявленных несколькими моделями (фича 0135).
+    ///
+    /// Пространство имён значений плоское: по голому имени читается ПЕРВАЯ
+    /// нашедшаяся ветвь, а запись расходится по всем. Прежде это происходило
+    /// молча — модель с одноимёнными портами под-моделей выглядела работающей,
+    /// хотя половина её состояния была недоступна. Теперь двусмысленность
+    /// названа, и рядом показано, как адресовать точно.
+    fn warn_about_ambiguous_names(&self) {
+        for (bare, qualified) in &self.port_names.ambiguous {
+            eprintln!(
+                "ВНИМАНИЕ: имя '{bare}' объявлено несколькими моделями ({}). \
+                 По голому имени адресуется первая из них; для точного обращения \
+                 используйте квалифицированное имя.",
+                qualified.join(", ")
+            );
+        }
+    }
+
     fn print_step(&self, step_no: usize) {
         let states = self.unit.active_states();
         let states_str = if states.is_empty() {
@@ -313,8 +461,22 @@ impl SimulationRunner {
             states.join(", ")
         };
 
+        // Двусмысленное имя (фича 0135) печатается КВАЛИФИЦИРОВАННЫМИ формами:
+        // показывать `val=1`, пока вторая под-модель держит `val=2`, — значит
+        // скрывать половину состояния модели.
+        let display_names = |names: &[String]| -> Vec<String> {
+            let mut out = Vec::new();
+            for n in names {
+                match self.port_names.ambiguous.iter().find(|(bare, _)| bare == n) {
+                    Some((_, qualified)) => out.extend(qualified.iter().cloned()),
+                    None => out.push(n.clone()),
+                }
+            }
+            out
+        };
+
         let fmt_group = |names: &[String]| -> String {
-            names
+            display_names(names)
                 .iter()
                 .filter_map(|n| {
                     self.unit
@@ -325,7 +487,21 @@ impl SimulationRunner {
                 .join("  ")
         };
 
-        print!("Шаг {:3}:  [{}]", step_no, states_str);
+        // Трасса печатает и такт, и модельное время (фича 0134): без времени
+        // не прочесть, почему выдержка сработала именно здесь, а без такта —
+        // не сверить с целью. Время показывается, только когда часы идут не по
+        // умолчанию либо уже сдвинулись, — иначе оно засоряло бы вывод моделям,
+        // время не использующим.
+        if self.now_ns > 0 {
+            print!(
+                "Шаг {:3} ({:>8}):  [{}]",
+                step_no,
+                format_duration(self.now_ns),
+                states_str
+            );
+        } else {
+            print!("Шаг {:3}:  [{}]", step_no, states_str);
+        }
 
         for (label, names) in [
             ("in", self.port_names.in_ports.as_slice()),
@@ -341,60 +517,138 @@ impl SimulationRunner {
         println!();
     }
 
-    fn apply_step_inputs(&mut self, step: &SimStep) {
-        if let Some(in_vals) = &step.in_ports {
-            for (i, json_val) in in_vals.iter().enumerate() {
-                if let (Some(name), Some(value)) =
-                    (self.port_names.in_ports.get(i), json_to_value(json_val))
-                {
-                    let name = name.clone();
-                    self.unit.set_value(&name, value);
+    /// Применяет входы шага: позиционно (историческая форма) либо по именам.
+    ///
+    /// Возвращает ошибку, если сценарий назвал порт, которого нет, либо имя
+    /// двусмысленно. Прежде функция ошибок не возвращала вовсе: лишний элемент
+    /// массива молча отбрасывался (фича 0132).
+    fn apply_step_inputs(&mut self, step: &SimStep, step_no: usize) -> Result<(), String> {
+        for (values, direction) in [
+            (&step.in_ports, PortDirectionKind::In),
+            (&step.inout, PortDirectionKind::InOut),
+        ] {
+            let Some(values) = values else { continue };
+            for (name, value) in self.resolve_values(values, direction, step_no)? {
+                self.unit.set_port(&name, value);
+            }
+        }
+        Ok(())
+    }
+
+    /// Переводит значения шага в пары «имя порта → значение».
+    ///
+    /// Общая воронка для входов и для `guard`: разойдясь, они принимали бы
+    /// разные имена, и сценарий вёл бы себя по-разному в зависимости от того, в
+    /// какой половине шага написано имя.
+    fn resolve_values(
+        &self,
+        values: &PortValues,
+        direction: PortDirectionKind,
+        step_no: usize,
+    ) -> Result<Vec<(String, Value)>, String> {
+        let names = self.names_of(direction);
+        let mut resolved = Vec::new();
+        match values {
+            PortValues::Positional(list) => {
+                if list.len() != names.len() {
+                    // Предупреждение, а не ошибка: корпус мог опираться на
+                    // неполные массивы, и ломать его фича не должна.
+                    eprintln!(
+                        "Предупреждение [SIM-032]: шаг {step_no}: {} значений в позиционном \
+                         массиве `{}`, а портов {} — лишние игнорируются, недостающие не задаются",
+                        list.len(),
+                        direction.field(),
+                        names.len()
+                    );
+                }
+                for (i, json_val) in list.iter().enumerate() {
+                    if let (Some(name), Some(value)) = (names.get(i), json_to_value(json_val)) {
+                        resolved.push((name.clone(), value));
+                    }
+                }
+            }
+            PortValues::Named(map) => {
+                for (name, json_val) in map {
+                    self.check_port_name(name, direction, step_no)?;
+                    if let Some(value) = json_to_value(json_val) {
+                        resolved.push((name.clone(), value));
+                    }
                 }
             }
         }
-        if let Some(inout_vals) = &step.inout {
-            for (i, json_val) in inout_vals.iter().enumerate() {
-                if let (Some(name), Some(value)) =
-                    (self.port_names.inout_ports.get(i), json_to_value(json_val))
-                {
-                    let name = name.clone();
-                    self.unit.set_value(&name, value);
-                }
-            }
+        Ok(resolved)
+    }
+
+    /// Имена портов заданного направления.
+    fn names_of(&self, direction: PortDirectionKind) -> &[String] {
+        match direction {
+            PortDirectionKind::In => &self.port_names.in_ports,
+            PortDirectionKind::Out => &self.port_names.out_ports,
+            PortDirectionKind::InOut => &self.port_names.inout_ports,
         }
     }
 
-    fn check_guard(&self, guard: &Guard, step_no: usize) -> Result<(), String> {
-        if let Some(out_vals) = &guard.out {
-            for (i, expected_json) in out_vals.iter().enumerate() {
-                let Some(name) = self.port_names.out_ports.get(i) else {
-                    continue;
-                };
-                let Some(expected) = json_to_value(expected_json) else {
-                    continue;
-                };
-                let actual = self.unit.get_value(name);
-                if !values_match(&actual, &expected) {
-                    return Err(format!(
-                        "Guard шага {step_no}: out[{i}] ({name}): ожидалось {:?}, получено {:?}",
-                        expected, actual
-                    ));
-                }
+    /// Проверяет, что имя из сценария адресует ровно один порт нужного
+    /// направления.
+    ///
+    /// ⚠️ Направление проверяется намеренно: `in_ports: {"lamp": 1}` при выходном
+    /// `lamp` — почти наверняка опечатка, а не задумка. Прежде такая запись
+    /// молча ничего не делала.
+    fn check_port_name(
+        &self,
+        name: &str,
+        direction: PortDirectionKind,
+        step_no: usize,
+    ) -> Result<(), String> {
+        if name.contains("::") {
+            // Квалифицированное имя: проверяем существование пары «модель::имя».
+            // Направление здесь не сужается — квалификация уже однозначна.
+            if !self.port_names.qualified.contains(name) {
+                return Err(format!(
+                    "Ошибка [SIM-030]: шаг {step_no}: порт `{name}` не найден в модели"
+                ));
             }
+            return Ok(());
         }
-        if let Some(inout_vals) = &guard.inout {
-            for (i, expected_json) in inout_vals.iter().enumerate() {
-                let Some(name) = self.port_names.inout_ports.get(i) else {
-                    continue;
-                };
-                let Some(expected) = json_to_value(expected_json) else {
-                    continue;
-                };
-                let actual = self.unit.get_value(name);
+        if let Some((_, variants)) = self
+            .port_names
+            .ambiguous
+            .iter()
+            .find(|(bare, _)| bare == name)
+        {
+            return Err(format!(
+                "Ошибка [SIM-031]: шаг {step_no}: имя `{name}` объявлено несколькими моделями \
+                 ({}) — укажите квалифицированное имя",
+                variants.join(", ")
+            ));
+        }
+        if !self.names_of(direction).iter().any(|n| n == name) {
+            return Err(format!(
+                "Ошибка [SIM-030]: шаг {step_no}: порт `{name}` не найден среди портов \
+                 направления `{}`",
+                direction.field()
+            ));
+        }
+        Ok(())
+    }
+
+    fn check_guard(&self, guard: &Guard, step_no: usize) -> Result<(), String> {
+        // Порты guard разрешаются ТОЙ ЖЕ воронкой, что и входы шага: иначе
+        // именованная форма работала бы в одной половине файла и не работала в
+        // другой (фича 0132).
+        for (values, direction) in [
+            (&guard.out, PortDirectionKind::Out),
+            (&guard.inout, PortDirectionKind::InOut),
+        ] {
+            let Some(values) = values else { continue };
+            for (name, expected) in self.resolve_values(values, direction, step_no)? {
+                let actual = self.unit.get_value(&name);
                 if !values_match(&actual, &expected) {
                     return Err(format!(
-                        "Guard шага {step_no}: inout[{i}] ({name}): ожидалось {:?}, получено {:?}",
-                        expected, actual
+                        "Guard шага {step_no}: {} ({name}): ожидалось {:?}, получено {:?}",
+                        direction.field(),
+                        expected,
+                        actual
                     ));
                 }
             }
@@ -536,6 +790,45 @@ fn values_match(actual: &Option<Value>, expected: &Value) -> bool {
     }
 }
 
+/// Человекочитаемая запись длительности: `999ms`, `1s`, `1s1ms`, `1m30s`.
+///
+/// Разряды переносятся, как в литерале языка: пока значение укладывается в
+/// младшую единицу — печатается ею (`999ms`), при переполнении появляется
+/// старшая (`1000ms` → `1s`), а остаток дописывается справа (`1001ms` →
+/// `1s1ms`). Так запись в трассе читается тем же способом, каким автор её
+/// **писал** в исходнике, и `90000ms` не приходится делить в голове.
+///
+/// Нулевые разряды опускаются (`3600s` → `1h`, а не `1h0m0s`); нулевая
+/// длительность печатается младшей содержательной единицей — `0ms`.
+pub fn format_duration(nanos: i64) -> String {
+    const UNITS: [(i64, &str); 6] = [
+        (3_600_000_000_000, "h"),
+        (60_000_000_000, "m"),
+        (1_000_000_000, "s"),
+        (1_000_000, "ms"),
+        (1_000, "us"),
+        (1, "ns"),
+    ];
+    if nanos == 0 {
+        return "0ms".to_string();
+    }
+    let sign = if nanos < 0 { "-" } else { "" };
+    // Модуль берётся с защитой от i64::MIN: `abs()` на нём паникует.
+    let mut rest = nanos.unsigned_abs();
+    let mut out = String::new();
+    for (size, name) in UNITS {
+        let size = size.unsigned_abs();
+        if rest >= size {
+            out.push_str(&format!("{}{}", rest / size, name));
+            rest %= size;
+        }
+        if rest == 0 {
+            break;
+        }
+    }
+    format!("{sign}{out}")
+}
+
 fn format_value(v: &Value) -> String {
     match v {
         Value::Number(n) => n.to_string(),
@@ -543,6 +836,9 @@ fn format_value(v: &Value) -> String {
         Value::Boolean(b) => b.to_string(),
         // q(m, n): показываем вещественное значение repr·2⁻ⁿ.
         Value::Fixed { repr, n, .. } => format!("{:.4}", *repr as f64 / (1u64 << n) as f64),
+        // Длительность печатается человекочитаемо: наносекунды в трассе
+        // нечитаемы, а выдержки задаются секундами и миллисекундами.
+        Value::Duration(ns) => crate::runner::format_duration(*ns),
         Value::Array(arr) => format!(
             "[{}]",
             arr.iter().map(format_value).collect::<Vec<_>>().join(",")

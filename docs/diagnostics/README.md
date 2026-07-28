@@ -85,6 +85,8 @@
 | `CC-017` | Инициализатор массива не выразим в C (скалярный либо иной длины) | `takt-lang/src/generator/c/c_model.rs:230` |
 | `CC-018` | Условие перехода не переводится в C (причина — заметкой) | `takt-lang/src/generator/c/c_model.rs:482` |
 | `CC-019` | состояние модели '…' недостижимо из '…': модель не \ | `takt-lang/src/generator/c/c_expr/condition.rs:165` |
+| `CC-020` | Значения типа `duration` целью `c` пока не поддерживаются | `takt-lang/src/generator/c/mod.rs:180` |
+| `CC-021` | Выдержка `after` в профиле «часы» целью `c` пока не поддерживается (нужна частота) | `takt-lang/src/generator/c/c_expr/condition.rs:430` |
 
 ### DF — флаг --define
 
@@ -107,6 +109,9 @@
 | `LE-006` | Нераспознанный токен | `takt-lang/src/parser/lexer.rs:448` |
 | `LE-007` | Отсутствует показатель степени в числе с плавающей точкой | `takt-lang/src/parser/lexer.rs:449` |
 | `LE-008` | Ожидался токен `from` | `takt-lang/src/parser/lexer.rs:450` |
+| `LE-009` | Числовой литерал вне диапазона `i64` | `takt-lang/src/parser/lexer.rs:162` |
+| `LE-010` | Литерал времени вне представимого диапазона (нс/Гц) | `takt-lang/src/parser/lexer.rs:183` |
+| `LE-011` | Единица времени у формы, которая её не допускает (`1.5s`, `1e3ms`, `0xFFms`) | `takt-lang/src/parser/lexer.rs:184` |
 
 ### PU — цель PlantUML
 
@@ -134,6 +139,7 @@
 | `RS-020` | условный переход в состояние '…' не переводится в Rust: … | `takt-lang/src/generator/rust/rust_model.rs:1132` |
 | `RS-021` | последовательная композиция (`+`) вложена в шаг другой `+` | `takt-lang/src/generator/rust/rust_model.rs:263` |
 | `RS-022` | нужен HAL, но он в этой области недоступен | `takt-lang/src/generator/rust/rust_expr.rs:125` |
+| `RS-023` | Время (`duration`) целью `rust` пока не поддерживается | `takt-lang/src/generator/rust/rust_type.rs:60` |
 
 ### SE — семантика
 
@@ -197,6 +203,13 @@
 | `SE-059` | неявное смешение типов '…' и '…' в арифметике fixed-point запрещено; \ | `takt-lang/src/semantic/validate/fixed.rs:254` |
 | `SE-060` | Бит адреса порта вне диапазона [0, 63] | `takt-lang/src/address_map/resolve.rs:295` |
 | `SE-061` | структура '…' не содержит поля '…' | `takt-lang/src/semantic/validate/member_access.rs:105` |
+| `SE-062` | Превышен предел вложенности выражений/условий | `takt-lang/src/semantic/validate/depth.rs:77` |
+| `SE-063` | Длительность непредставима в выбранном профиле времени | `takt-lang/src/semantic/duration.rs:150` |
+| `SE-064` | Длительность не помещается в счётчик времени | `takt-lang/src/semantic/duration.rs:170` |
+| `SE-065` | Смешение `duration` с числом в арифметике | `takt-lang/src/semantic/validate/fixed.rs:262` |
+| `SE-066` | Выдержка `after` пока не поддерживается семантикой (временный код) | `takt-lang/src/semantic/condition.rs:139` |
+| `SE-067` | Частота тактирования объявлена дважды и по-разному | `takt-lang/src/semantic/time_ast.rs:96` |
+| `SE-068` | Выдержка `after` вне условия перехода `ref` | `takt-lang/src/semantic/time_ast.rs:63` |
 
 ### SIM — симулятор
 
@@ -249,6 +262,7 @@
 | `ST-012` | Корневой элемент карты не является моделью | `takt-lang/src/generator/st/mod.rs:113` |
 | `ST-013` | q({m}, {n}): W = … > 32 — точное произведение шириной 2W не влезает в LINT | `takt-lang/src/generator/st/st_fixed.rs:242` |
 | `ST-014` | Приведение float → q в цели st (LREAL_TO_INT округляет к ближайшему) | `takt-lang/src/generator/st/st_fixed.rs:177` |
+| `ST-015` | Время (`duration`) целью `st` пока не поддерживается | `takt-lang/src/generator/st/st_type.rs:62` |
 
 ### SV — цель SystemVerilog
 
@@ -268,6 +282,7 @@
 | `SV-012` | имя = ключевое слово SystemVerilog (`fork`, `wire`, `time`, …) | `takt-lang/src/generator/sv/sv_module.rs:387` |
 | `SV-013` | Порт занимает биты адреса шире регистра цели sv-mmio | `takt-lang/src/generator/sv/sv_mmio.rs:85` |
 | `SV-014` | Имя зарезервировано регистровым интерфейсом цели sv-mmio | `takt-lang/src/generator/sv/sv_mmio.rs:101` |
+| `SV-015` | Время (`duration`) целью `sv` пока не поддерживается | `takt-lang/src/generator/sv/sv_type.rs:157` |
 
 ### SY — парсер
 

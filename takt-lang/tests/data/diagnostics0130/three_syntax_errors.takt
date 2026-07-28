@@ -1,0 +1,7 @@
+model M {
+    var a: u8 := ;
+    start S {
+        ref Done: ;
+    }
+    state Done
+}

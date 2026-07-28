@@ -128,7 +128,16 @@ pub fn resolve_condition(
     cond: &ast::Condition,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<ConditionNode, Diagnostic> {
+    // Сторож глубины — см. `validate::depth` (фича 0129).
+    let _depth = crate::semantic::validate::depth::enter(Some(cond.loc()))?;
     match cond {
+        // ── Время (фича 0134) ────────────────────────────────────────────────
+        // Литерал несёт наносекунды; `after` — сахар над отсчётом от входа в
+        // состояние. Отсчёт ведёт исполнитель; общего для всех правила
+        // («прошло не меньше указанного») достаточно, чтобы цели не расходились.
+        ast::Condition::Duration(_, nanos, _) => Ok(ConditionNode::Duration(*nanos)),
+        ast::Condition::After(_, nanos, _) => Ok(ConditionNode::After(*nanos)),
+        ast::Condition::AfterTicks(_, ticks, _) => Ok(ConditionNode::AfterTicks(*ticks)),
         ast::Condition::ArraySubscript(_, id, idx_cond) => {
             let name = id.name.clone();
             let var = model.borrow().search_var(&name);

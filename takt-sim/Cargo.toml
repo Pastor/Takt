@@ -9,10 +9,20 @@ readme = "../README.md"
 keywords = ["Takt", "framework", "simulation"]
 license = "BSD"
 edition = "2024"
+# MSRV: проверено на пине толчейна (rust-toolchain.toml). Нижняя граница
+# специально не исследовалась — объявлена та версия, на которой гоняются гейты.
+rust-version = "1.97"
 include = ["Cargo.toml", "src/**/*", "README.md", "LICENSE*"]
+
+# Бенчмарки идут через criterion (фича 0136), у которого свой harness. Без
+# `bench = false` cargo пытается прогнать как бенч и библиотеку с бинарниками —
+# их стандартный harness не понимает флагов criterion (`--quick`, `--baseline`).
+[lib]
+bench = false
 
 [[bin]]
 name = "takt-sim"
+bench = false
 path = "src/bin/takt_sim.rs"
 
 [dependencies]
@@ -31,7 +41,13 @@ gif = "0.14.2"
 env_logger = "0.11"
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
+
+# Бенчмарк симуляции (фича 0136). См. комментарий в takt-lang/Cargo.toml.
+[[bench]]
+name = "simulate"
+harness = false
 
 [features]
 default = []

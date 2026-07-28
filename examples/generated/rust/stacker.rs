@@ -77,9 +77,9 @@ pub trait Hal {
 
 /// Функция 'travel_time' модели.
 fn travel_time<H: Hal>(to_stack: u8, to_row: u8, to_section: u8, hal: &mut H) -> u8 {
-    let ds: u8 = if hal.read_u8(InU8Port::PosStack) > to_stack { hal.read_u8(InU8Port::PosStack) - to_stack } else { to_stack - hal.read_u8(InU8Port::PosStack) };
-    let dr: u8 = if hal.read_u8(InU8Port::PosRow) > to_row { hal.read_u8(InU8Port::PosRow) - to_row } else { to_row - hal.read_u8(InU8Port::PosRow) };
-    let dy: u8 = if hal.read_u8(InU8Port::PosSection) > to_section { hal.read_u8(InU8Port::PosSection) - to_section } else { to_section - hal.read_u8(InU8Port::PosSection) };
+    let ds: u8 = if hal.read_u8(InU8Port::PosStack) > to_stack { hal.read_u8(InU8Port::PosStack).wrapping_sub(to_stack) } else { to_stack.wrapping_sub(hal.read_u8(InU8Port::PosStack)) };
+    let dr: u8 = if hal.read_u8(InU8Port::PosRow) > to_row { hal.read_u8(InU8Port::PosRow).wrapping_sub(to_row) } else { to_row.wrapping_sub(hal.read_u8(InU8Port::PosRow)) };
+    let dy: u8 = if hal.read_u8(InU8Port::PosSection) > to_section { hal.read_u8(InU8Port::PosSection).wrapping_sub(to_section) } else { to_section.wrapping_sub(hal.read_u8(InU8Port::PosSection)) };
     let mut t: u8 = ds;
     if dr > t {
         t = dr;

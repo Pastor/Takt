@@ -50,6 +50,9 @@ use takt_sim::{TickResult, Unit, Value, build_unit};
 /// тактов, поэтому сдвиг на такт (если бы он появился) сместил бы всю трассу.
 const TICKS_FIXTURE: &str = "tests/data/eval/conformance_ticks.takt";
 
+/// Фикстура переполнения беззнакового (фича 0127).
+const OVERFLOW_FIXTURE: &str = "tests/data/eval/conformance_overflow.takt";
+
 /// Тактов в трассе — с запасом над её длиной.
 const TRACE_TICKS: usize = 6;
 
@@ -242,6 +245,43 @@ fn per_tick_trace_matches_generated_sv() {
         sim, sv,
         "потактовые трассы симулятора и порождённого RTL обязаны совпадать НА \
          КАЖДОМ такте (R7/A10).\nсимулятор={sim:?}\nRTL={sv:?}"
+    );
+}
+
+/// Обёртка `u8` совпадает у симулятора и порождённого RTL (фича 0127).
+///
+/// В аппаратуре обёртка получается сама — регистр `logic [7:0]` шире не бывает.
+/// Сверка нужна как **пиннинг правила**: она фиксирует, что эталон-симулятор
+/// именно оборачивает (правило S1), а не диагностирует и не насыщает. Разойдись
+/// эталон с аппаратной арифметикой — расхождение поймается здесь.
+#[test]
+fn unsigned_overflow_wraps_like_generated_sv() {
+    let vars = ["t"];
+    let sim = simulate_trace(OVERFLOW_FIXTURE, &vars);
+    assert_eq!(
+        sim,
+        vec![vec![254], vec![255], vec![0], vec![1], vec![2], vec![3]],
+        "ожидаемая трасса симулятора: 254, 255, 0 (обёртка), 1, 2, 3"
+    );
+
+    if !verilator_available() {
+        eprintln!(
+            "[ПРОПУСК] unsigned_overflow_wraps_like_generated_sv: verilator не найден \
+             (трасса симулятора пришпилена выше)"
+        );
+        return;
+    }
+    let dir = build_dir("ovf");
+    let sv = sv_trace(
+        &dir,
+        OVERFLOW_FIXTURE,
+        "conformance_overflow",
+        &["conformance_overflow_wrap_t"],
+        sim.len(),
+    );
+    assert_eq!(
+        sim, sv,
+        "обёртка беззнакового обязана совпадать.\nсимулятор={sim:?}\nSV={sv:?}"
     );
 }
 

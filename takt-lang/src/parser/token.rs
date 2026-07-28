@@ -22,6 +22,18 @@ pub enum Token<'input> {
     Number(i64),
     /// Рациональный (плавающий) литерал: `(строка, отрицательный)`.
     RationalNumber(&'input str, bool),
+    /// Литерал длительности: `(наносекунды, как записано)` — фича 0134.
+    ///
+    /// Исходный текст нужен форматтеру: `1m30s` не канонизируется в `90s`
+    /// (тот же приём, что у [`RationalNumber`](Token::RationalNumber)).
+    Duration(i64, &'input str),
+    /// Литерал частоты: `(герцы, как записано)` — фича 0134.
+    Frequency(u64, &'input str),
+    /// Литерал выдержки в **тактах**: `(число тактов, как записано)` — `3t`.
+    ///
+    /// Отдельный токен, а не длительность: такт в наносекундах не выражается без
+    /// частоты, и тактовая выдержка её не требует.
+    Ticks(i64, &'input str),
     /// Оператор деления `/`.
     Divide,
     /// Ключевое слово `fn`.
@@ -161,6 +173,12 @@ pub enum Token<'input> {
     PortInOut,
     /// Ключевое слово `address` (оператор задания адреса порта, фича 0020).
     Address,
+    /// Ключевое слово `clock` (частота тактирования модели, фича 0134).
+    Clock,
+    /// Ключевое слово `after` (выдержка на ребре, фича 0134).
+    After,
+    /// Ключевое слово `every` (периодическое действие, фича 0134).
+    Every,
 
     /// Стрелка `-->` (не используется в текущей грамматике).
     PeirceArrow,
@@ -223,6 +241,10 @@ impl<'input> fmt::Display for Token<'input> {
                 }
                 write!(f, "{n}")
             }
+            // Фича 0134: печатается авторская запись (`1m30s`), а не канон.
+            Token::Duration(_, text) => write!(f, "{text}"),
+            Token::Frequency(_, text) => write!(f, "{text}"),
+            Token::Ticks(_, text) => write!(f, "{text}"),
             Token::Semicolon => write!(f, ";"),
             Token::Comma => write!(f, ","),
             Token::Sharp => write!(f, "#"),
@@ -292,6 +314,9 @@ impl<'input> fmt::Display for Token<'input> {
             Token::PortOut => write!(f, "out"),
             Token::PortInOut => write!(f, "inout"),
             Token::Address => write!(f, "address"),
+            Token::Clock => write!(f, "clock"),
+            Token::After => write!(f, "after"),
+            Token::Every => write!(f, "every"),
             Token::Variable => write!(f, "var"),
             Token::Next => write!(f, "next"),
             Token::Extern => write!(f, "extern"),

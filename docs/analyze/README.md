@@ -103,3 +103,26 @@
 | 0123 | Подсветка ключевых слов языка в тексте документа | [0123-book-keyword-highlight.md](0123-book-keyword-highlight.md) | — (новая фича) |
 | 0124 | Экспорт графов верификации (Крипке/Бюхи/произведение) в Graphviz DOT | [0124-verify-graph-export.md](0124-verify-graph-export.md) | — (новая фича) |
 | 0125 | Плагин IntelliJ Takt: LSP-проверка, автодополнение, документация и настройки инструментов | [0125-intellij-takt-lsp-tooling.md](0125-intellij-takt-lsp-tooling.md) | — (новая фича) |
+| 0126 | Сравнительный анализ языка Takt с родственными языками (отчёт docs/DIFF.md) | [0126-language-comparison-diff.md](0126-language-comparison-diff.md) | — (новая фича) |
+| 0139 | Удаление мёртвой конфигурации .travis.yml | [0139-remove-travis-config.md](0139-remove-travis-config.md) | — (новая фича) |
+| 0137 | Фиксация толчейна Rust и MSRV | [0137-toolchain-pin-msrv.md](0137-toolchain-pin-msrv.md) | — (новая фича) |
+| 0128 | Диагностика вместо паники на числовом литерале больше i64::MAX | [0128-lexer-literal-overflow.md](0128-lexer-literal-overflow.md) | — (новая фича) |
+| 0129 | Устранение переполнения стека на глубине выражений и операторов | [0129-semantic-deep-nesting.md](0129-semantic-deep-nesting.md) | — (новая фича) |
+| 0127 | Единая семантика переполнения целых во всех целях | [0127-int-overflow-semantics.md](0127-int-overflow-semantics.md) | — (новая фича) |
+| 0133 | Гейт компиляции и симуляции примеров документа book/ | [0133-book-examples-gate.md](0133-book-examples-gate.md) | — (новая фича) |
+| 0135 | Квалифицированные имена портов в симуляторе | [0135-sim-qualified-port-names.md](0135-sim-qualified-port-names.md) | — (новая фича) |
+| 0131 | LSP: definition, references и rename | [0131-lsp-definition-references-rename.md](0131-lsp-definition-references-rename.md) | — (новая фича) |
+| 0130 | Накопление семантических диагностик | [0130-diagnostics-batch.md](0130-diagnostics-batch.md) | — (новая фича) |
+| 0132 | Именованные порты в сценариях симулятора | [0132-sim-named-port-scenarios.md](0132-sim-named-port-scenarios.md) | — (новая фича) |
+| 0140 | Ревизия витрины кандидатов и разделение ролей README и book | [0140-backlog-revision-doc-split.md](0140-backlog-revision-doc-split.md) | — (новая фича) |
+| 0138 | Измерение покрытия тестами | [0138-coverage-measurement.md](0138-coverage-measurement.md) | — (новая фича) |
+| 0136 | Бенчмарки производительности | [0136-perf-benchmarks.md](0136-perf-benchmarks.md) | — (новая фича) |
+| 0134 | Модель времени в языке: литерал длительности, внешний источник времени и частота такта | [0134-language-time-model.md](0134-language-time-model.md) | аддитивно (проба: `3s` сегодня даёт `SY-002`) |
+| 0134 | Анализ 0134-01: Лексика, грамматика и АСД — литерал, `clock`, `after`/`every` (подзадача аналитики) | [0134-01-lexis-grammar-ast.md](0134-01-lexis-grammar-ast.md) | см. обзор 0134 |
+| 0134 | Анализ 0134-02: Тип `duration`, слой пересчёта и диагностики (подзадача аналитики) | [0134-02-type-and-lowering.md](0134-02-type-and-lowering.md) | см. обзор 0134 |
+| 0134 | Анализ 0134-03: Симулятор — виртуальные часы, вычислитель, сценарий, трасса (подзадача аналитики) | [0134-03-simulator-clock.md](0134-03-simulator-clock.md) | см. обзор 0134 |
+| 0134 | Анализ 0134-04: Цели `c` и `c-hal` — колбэк `now_ms` и счётчики (подзадача аналитики) | [0134-04-target-c.md](0134-04-target-c.md) | см. обзор 0134 |
+| 0134 | Анализ 0134-05: Цель `rust` — метод трейта `Hal` (подзадача аналитики) | [0134-05-target-rust.md](0134-05-target-rust.md) | см. обзор 0134 |
+| 0134 | Анализ 0134-06: Цели `st` и `st-at` — штатный `TON` (подзадача аналитики) | [0134-06-target-st.md](0134-06-target-st.md) | см. обзор 0134 |
+| 0134 | Анализ 0134-07: Цели `sv` и `sv-mmio` — вход `time_ms` и профиль тактов (подзадача аналитики) | [0134-07-target-sv.md](0134-07-target-sv.md) | см. обзор 0134 |
+| 0134 | Анализ 0134-08: CLI, сопровождающие слои, документация и свод (подзадача аналитики) | [0134-08-cli-tooling-docs.md](0134-08-cli-tooling-docs.md) | см. обзор 0134 |

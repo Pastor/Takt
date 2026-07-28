@@ -2,172 +2,398 @@
   {
     "_comment": "=== ОПЕРАЦИЯ 1: Погрузка → ячейка [5,3,7] ===",
     "_step": "1 — Задание на погрузку (task_type=0, цель [5,3,7])",
-    "in_ports": [0, 0, 0, 1, 0, 0, 3, 7, 5, 0, 1],
+    "in_ports": {
+      "sense_at_charge": 1,
+      "task_row_no": 3,
+      "task_section_no": 7,
+      "task_stack_no": 5,
+      "task_valid": 1
+    },
     "guard": {
-      "out": [1, null, null, null, null, null],
-      "vars": {"busy": 1, "tgt_stack": 5, "tgt_row": 3, "tgt_section": 7, "tgt_type": 0}
+      "out": {
+        "cmd_ack": 1
+      },
+      "vars": {
+        "busy": 1,
+        "tgt_stack": 5,
+        "tgt_row": 3,
+        "tgt_section": 7,
+        "tgt_type": 0
+      }
     }
   },
   {
     "_step": "2 — MC→MovingToPickup",
-    "in_ports": [0, 0, 0, 1, 0, 0, 3, 7, 5, 0, 1],
-    "guard": {"out": [0, null, null, 1, 1, 0]}
+    "guard": {
+      "out": {
+        "cmd_ack": 0,
+        "cmd_target_row": 1,
+        "cmd_target_section": 1,
+        "cmd_target_stack": 0
+      }
+    }
   },
   {
     "_step": "3 — Приёмка (pos=0,1,1), захват паллета",
-    "in_ports": [1, 1, 0, 0, 0, 0, 3, 7, 5, 0, 1],
-    "guard": {"out": [null, null, 1, null, null, null]}
+    "in_ports": {
+      "pos_row": 1,
+      "pos_section": 1,
+      "sense_at_charge": 0
+    },
+    "guard": {
+      "out": {
+        "cmd_fork": 1
+      }
+    }
   },
   {
-    "_step": "4 — Ожидание захвата",
-    "in_ports": [1, 1, 0, 0, 0, 0, 3, 7, 5, 0, 1]
+    "_step": "4 — Ожидание захвата"
   },
   {
     "_step": "5 — Паллет захвачен",
-    "in_ports": [1, 1, 0, 0, 0, 1, 3, 7, 5, 0, 1],
-    "guard": {"vars": {"lift_done": 1}}
+    "in_ports": {
+      "sense_loaded": 1
+    },
+    "guard": {
+      "vars": {
+        "lift_done": 1
+      }
+    }
   },
   {
     "_step": "6 — MC→MovingToCell [5,3,7]",
-    "in_ports": [1, 1, 0, 0, 0, 1, 3, 7, 5, 0, 1],
-    "guard": {"out": [null, null, 0, 3, 7, 5]}
+    "guard": {
+      "out": {
+        "cmd_fork": 0,
+        "cmd_target_row": 3,
+        "cmd_target_section": 7,
+        "cmd_target_stack": 5
+      }
+    }
   },
   {
     "_step": "7 — Прибытие [5,3,7], укладка",
-    "in_ports": [3, 7, 5, 0, 0, 1, 3, 7, 5, 0, 1],
-    "guard": {"out": [null, null, 1, null, null, null], "vars": {"lift_op": 1}}
+    "in_ports": {
+      "pos_row": 3,
+      "pos_section": 7,
+      "pos_stack": 5
+    },
+    "guard": {
+      "out": {
+        "cmd_fork": 1
+      },
+      "vars": {
+        "lift_op": 1
+      }
+    }
   },
   {
-    "_step": "8 — Ожидание укладки",
-    "in_ports": [3, 7, 5, 0, 0, 1, 3, 7, 5, 0, 1]
+    "_step": "8 — Ожидание укладки"
   },
   {
     "_step": "9 — Паллет уложен",
-    "in_ports": [3, 7, 5, 0, 0, 0, 3, 7, 5, 0, 1],
-    "guard": {"vars": {"lift_done": 1}}
+    "in_ports": {
+      "sense_loaded": 0
+    },
+    "guard": {
+      "vars": {
+        "lift_done": 1
+      }
+    }
   },
   {
     "_step": "10 — MC→TaskCompleting (busy=0, cmd_done=1)",
-    "in_ports": [3, 7, 5, 0, 0, 0, 3, 7, 5, 0, 1],
-    "guard": {"out": [null, 1, null, null, null, null], "vars": {"busy": 0}}
+    "guard": {
+      "out": {
+        "cmd_done": 1
+      },
+      "vars": {
+        "busy": 0
+      }
+    }
   },
   {
     "_step": "11 — Возврат в простой",
-    "in_ports": [0, 0, 0, 1, 0, 0, 3, 7, 5, 0, 0],
-    "guard": {"out": [0, 0, 0, 0, 0, 0]}
+    "in_ports": {
+      "pos_row": 0,
+      "pos_section": 0,
+      "pos_stack": 0,
+      "sense_at_charge": 1,
+      "task_valid": 0
+    },
+    "guard": {
+      "out": {
+        "cmd_ack": 0,
+        "cmd_done": 0,
+        "cmd_fork": 0,
+        "cmd_target_row": 0,
+        "cmd_target_section": 0,
+        "cmd_target_stack": 0
+      }
+    }
   },
   {
     "_comment": "=== ОПЕРАЦИЯ 2: Отгрузка из ячейки [5,3,7] ===",
     "_step": "12 — Задание на отгрузку (task_type=1, паллет в [5,3,7])",
-    "in_ports": [0, 0, 0, 1, 0, 0, 3, 7, 5, 1, 1],
+    "in_ports": {
+      "task_type": 1,
+      "task_valid": 1
+    },
     "guard": {
-      "out": [1, null, null, null, null, null],
-      "vars": {"busy": 1, "tgt_type": 1}
+      "out": {
+        "cmd_ack": 1
+      },
+      "vars": {
+        "busy": 1,
+        "tgt_type": 1
+      }
     }
   },
   {
     "_step": "13 — MC→MovingToStorage [5,3,7]",
-    "in_ports": [0, 0, 0, 1, 0, 0, 3, 7, 5, 1, 1],
-    "guard": {"out": [0, null, null, 3, 7, 5]}
+    "guard": {
+      "out": {
+        "cmd_ack": 0,
+        "cmd_target_row": 3,
+        "cmd_target_section": 7,
+        "cmd_target_stack": 5
+      }
+    }
   },
   {
     "_step": "14 — Прибытие [5,3,7], захват",
-    "in_ports": [3, 7, 5, 0, 0, 0, 3, 7, 5, 1, 1],
-    "guard": {"out": [null, null, 1, null, null, null], "vars": {"lift_op": 0}}
+    "in_ports": {
+      "pos_row": 3,
+      "pos_section": 7,
+      "pos_stack": 5,
+      "sense_at_charge": 0
+    },
+    "guard": {
+      "out": {
+        "cmd_fork": 1
+      },
+      "vars": {
+        "lift_op": 0
+      }
+    }
   },
   {
-    "_step": "15 — Ожидание захвата",
-    "in_ports": [3, 7, 5, 0, 0, 0, 3, 7, 5, 1, 1]
+    "_step": "15 — Ожидание захвата"
   },
   {
     "_step": "16 — Паллет захвачен",
-    "in_ports": [3, 7, 5, 0, 0, 1, 3, 7, 5, 1, 1],
-    "guard": {"vars": {"lift_done": 1}}
+    "in_ports": {
+      "sense_loaded": 1
+    },
+    "guard": {
+      "vars": {
+        "lift_done": 1
+      }
+    }
   },
   {
     "_step": "17 — MC→MovingToDropoff [11,1,1]",
-    "in_ports": [3, 7, 5, 0, 0, 1, 3, 7, 5, 1, 1],
-    "guard": {"out": [null, null, 0, 1, 1, 11]}
+    "guard": {
+      "out": {
+        "cmd_fork": 0,
+        "cmd_target_row": 1,
+        "cmd_target_section": 1,
+        "cmd_target_stack": 11
+      }
+    }
   },
   {
     "_step": "18 — Прибытие [11,1,1], передача",
-    "in_ports": [1, 1, 11, 0, 0, 1, 3, 7, 5, 1, 1],
-    "guard": {"out": [null, null, 1, null, null, null], "vars": {"lift_op": 1}}
+    "in_ports": {
+      "pos_row": 1,
+      "pos_section": 1,
+      "pos_stack": 11
+    },
+    "guard": {
+      "out": {
+        "cmd_fork": 1
+      },
+      "vars": {
+        "lift_op": 1
+      }
+    }
   },
   {
-    "_step": "19 — Ожидание передачи",
-    "in_ports": [1, 1, 11, 0, 0, 1, 3, 7, 5, 1, 1]
+    "_step": "19 — Ожидание передачи"
   },
   {
     "_step": "20 — Паллет передан",
-    "in_ports": [1, 1, 11, 0, 0, 0, 3, 7, 5, 1, 1],
-    "guard": {"vars": {"lift_done": 1}}
+    "in_ports": {
+      "sense_loaded": 0
+    },
+    "guard": {
+      "vars": {
+        "lift_done": 1
+      }
+    }
   },
   {
     "_step": "21 — MC→TaskCompleting (busy=0, cmd_done=1)",
-    "in_ports": [1, 1, 11, 0, 0, 0, 3, 7, 5, 1, 1],
-    "guard": {"out": [null, 1, null, null, null, null], "vars": {"busy": 0}}
+    "guard": {
+      "out": {
+        "cmd_done": 1
+      },
+      "vars": {
+        "busy": 0
+      }
+    }
   },
   {
     "_step": "22 — Возврат в простой",
-    "in_ports": [0, 0, 0, 1, 0, 0, 3, 7, 5, 1, 0],
-    "guard": {"out": [0, 0, 0, 0, 0, 0]}
+    "in_ports": {
+      "pos_row": 0,
+      "pos_section": 0,
+      "pos_stack": 0,
+      "sense_at_charge": 1,
+      "task_valid": 0
+    },
+    "guard": {
+      "out": {
+        "cmd_ack": 0,
+        "cmd_done": 0,
+        "cmd_fork": 0,
+        "cmd_target_row": 0,
+        "cmd_target_section": 0,
+        "cmd_target_stack": 0
+      }
+    }
   },
   {
     "_comment": "=== ОПЕРАЦИЯ 3: Погрузка → ячейка [2,8,15] ===",
     "_step": "23 — Задание на погрузку (task_type=0, цель [2,8,15])",
-    "in_ports": [0, 0, 0, 1, 0, 0, 8, 15, 2, 0, 1],
+    "in_ports": {
+      "task_row_no": 8,
+      "task_section_no": 15,
+      "task_stack_no": 2,
+      "task_type": 0,
+      "task_valid": 1
+    },
     "guard": {
-      "out": [1, null, null, null, null, null],
-      "vars": {"busy": 1, "tgt_stack": 2, "tgt_row": 8, "tgt_section": 15, "tgt_type": 0}
+      "out": {
+        "cmd_ack": 1
+      },
+      "vars": {
+        "busy": 1,
+        "tgt_stack": 2,
+        "tgt_row": 8,
+        "tgt_section": 15,
+        "tgt_type": 0
+      }
     }
   },
   {
     "_step": "24 — MC→MovingToPickup",
-    "in_ports": [0, 0, 0, 1, 0, 0, 8, 15, 2, 0, 1],
-    "guard": {"out": [0, null, null, 1, 1, 0]}
+    "guard": {
+      "out": {
+        "cmd_ack": 0,
+        "cmd_target_row": 1,
+        "cmd_target_section": 1,
+        "cmd_target_stack": 0
+      }
+    }
   },
   {
     "_step": "25 — Приёмка (pos=0,1,1), захват",
-    "in_ports": [1, 1, 0, 0, 0, 0, 8, 15, 2, 0, 1],
-    "guard": {"out": [null, null, 1, null, null, null]}
+    "in_ports": {
+      "pos_row": 1,
+      "pos_section": 1,
+      "sense_at_charge": 0
+    },
+    "guard": {
+      "out": {
+        "cmd_fork": 1
+      }
+    }
   },
   {
-    "_step": "26 — Ожидание захвата",
-    "in_ports": [1, 1, 0, 0, 0, 0, 8, 15, 2, 0, 1]
+    "_step": "26 — Ожидание захвата"
   },
   {
     "_step": "27 — Паллет захвачен",
-    "in_ports": [1, 1, 0, 0, 0, 1, 8, 15, 2, 0, 1],
-    "guard": {"vars": {"lift_done": 1}}
+    "in_ports": {
+      "sense_loaded": 1
+    },
+    "guard": {
+      "vars": {
+        "lift_done": 1
+      }
+    }
   },
   {
     "_step": "28 — MC→MovingToCell [2,8,15]",
-    "in_ports": [1, 1, 0, 0, 0, 1, 8, 15, 2, 0, 1],
-    "guard": {"out": [null, null, 0, 8, 15, 2]}
+    "guard": {
+      "out": {
+        "cmd_fork": 0,
+        "cmd_target_row": 8,
+        "cmd_target_section": 15,
+        "cmd_target_stack": 2
+      }
+    }
   },
   {
     "_step": "29 — Прибытие [2,8,15], укладка",
-    "in_ports": [8, 15, 2, 0, 0, 1, 8, 15, 2, 0, 1],
-    "guard": {"out": [null, null, 1, null, null, null], "vars": {"lift_op": 1}}
+    "in_ports": {
+      "pos_row": 8,
+      "pos_section": 15,
+      "pos_stack": 2
+    },
+    "guard": {
+      "out": {
+        "cmd_fork": 1
+      },
+      "vars": {
+        "lift_op": 1
+      }
+    }
   },
   {
-    "_step": "30 — Ожидание укладки",
-    "in_ports": [8, 15, 2, 0, 0, 1, 8, 15, 2, 0, 1]
+    "_step": "30 — Ожидание укладки"
   },
   {
     "_step": "31 — Паллет уложен",
-    "in_ports": [8, 15, 2, 0, 0, 0, 8, 15, 2, 0, 1],
-    "guard": {"vars": {"lift_done": 1}}
+    "in_ports": {
+      "sense_loaded": 0
+    },
+    "guard": {
+      "vars": {
+        "lift_done": 1
+      }
+    }
   },
   {
     "_step": "32 — MC→TaskCompleting (busy=0, cmd_done=1)",
-    "in_ports": [8, 15, 2, 0, 0, 0, 8, 15, 2, 0, 1],
-    "guard": {"out": [null, 1, null, null, null, null], "vars": {"busy": 0}}
+    "guard": {
+      "out": {
+        "cmd_done": 1
+      },
+      "vars": {
+        "busy": 0
+      }
+    }
   },
   {
     "_step": "33 — Все операции завершены, система в простое",
-    "in_ports": [0, 0, 0, 1, 0, 0, 8, 15, 2, 0, 0],
-    "guard": {"out": [0, 0, 0, 0, 0, 0]}
+    "in_ports": {
+      "pos_row": 0,
+      "pos_section": 0,
+      "pos_stack": 0,
+      "sense_at_charge": 1,
+      "task_valid": 0
+    },
+    "guard": {
+      "out": {
+        "cmd_ack": 0,
+        "cmd_done": 0,
+        "cmd_fork": 0,
+        "cmd_target_row": 0,
+        "cmd_target_section": 0,
+        "cmd_target_stack": 0
+      }
+    }
   }
 ]

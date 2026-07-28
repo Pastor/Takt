@@ -25,7 +25,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 mod call;
-mod condition;
+pub(in crate::generator::c) mod condition;
 mod expr;
 mod fixed;
 mod names;

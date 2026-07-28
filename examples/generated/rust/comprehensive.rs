@@ -49,7 +49,7 @@ fn clamp_temp(value: u8) -> u8 {
 
 /// Функция 'increment' модели.
 fn increment(n: u8) -> u8 {
-    n + 1
+    n.wrapping_add(1)
 }
 
 /// Функция 'steps_to_limit' модели.
@@ -57,8 +57,8 @@ fn steps_to_limit(value: u8) -> u8 {
     let mut remaining: u8 = 0;
     let mut v: u8 = value;
     while v < MAX_TEMP {
-        v += HEAT_STEP;
-        remaining += 1;
+        v = v.wrapping_add(HEAT_STEP);
+        remaining = remaining.wrapping_add(1);
     }
     remaining
 }
@@ -69,11 +69,11 @@ fn steps_to_zero(value: u8) -> u8 {
     let mut v: u8 = value;
     while v > 0 {
         if v > COOL_STEP {
-            v -= COOL_STEP;
+            v = v.wrapping_sub(COOL_STEP);
         } else {
             v = 0;
         }
-        remaining += 1;
+        remaining = remaining.wrapping_add(1);
     }
     remaining
 }
@@ -132,9 +132,9 @@ impl ComprehensiveController {
                     let mut i: u8 = 0;
                     while i < COOL_STEP {
                         if self.temperature > 0 {
-                            self.temperature -= 1;
+                            self.temperature = self.temperature.wrapping_sub(1);
                         }
-                        i += 1;
+                        i = i.wrapping_add(1);
                     }
                 }
                 hal.log_count(steps_to_zero(self.temperature));
@@ -151,7 +151,7 @@ impl ComprehensiveController {
                 self.state = ComprehensiveControllerState::End;
             }
             ComprehensiveControllerState::Heating => {
-                self.temperature = clamp_temp(self.temperature + HEAT_STEP);
+                self.temperature = clamp_temp(self.temperature.wrapping_add(HEAT_STEP));
                 if self.mode == Mode::Auto {
                     hal.log_count(steps_to_limit(self.temperature));
                 } else if self.mode == Mode::Manual {
@@ -165,7 +165,7 @@ impl ComprehensiveController {
             }
             ComprehensiveControllerState::Idle => {
                 let delta: u8 = 1;
-                self.temperature += delta;
+                self.temperature = self.temperature.wrapping_add(delta);
                 hal.log_temp(self.temperature);
                 if self.temperature > WARMUP_TEMP {
                     self.count = increment(self.count);

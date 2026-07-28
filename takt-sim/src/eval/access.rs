@@ -50,12 +50,14 @@ pub(crate) fn read_member(value: &Value, member: &Member) -> Result<Value, EvalE
             | Value::Boolean(_)
             | Value::Real(_)
             | Value::Array(_)
-            | Value::Fixed { .. },
+            | Value::Fixed { .. }
+            | Value::Duration(_),
             Member::Identifier(_),
         ) => Err(EvalError::FieldOfNonStruct {
             value: value_kind(value),
         }),
-        (Value::Real(_) | Value::Fixed { .. }, Member::Number(_)) => {
+        // Бит длительности не имеет смысла: это величина, а не битовый вектор.
+        (Value::Real(_) | Value::Fixed { .. } | Value::Duration(_), Member::Number(_)) => {
             Err(EvalError::BitOfNonInteger {
                 value: value_kind(value),
             })

@@ -40,6 +40,14 @@ pub(crate) fn read_import_file(
     search_paths: &[String],
     path: &ImportPath,
 ) -> Result<(String, String), Diagnostic> {
+    // Позиция директивы `import` — из самого пути (фича 0130). Прежде эти
+    // диагностики строились без позиции и печатались как `файл:1:1`, то есть
+    // указывали в начало файла, а не на неудавшийся импорт.
+    let loc = match path {
+        ImportPath::Filename(literal) => literal.loc,
+        ImportPath::Path(id_path) => id_path.loc,
+    };
+
     // Формируем список кандидатов: cross-product (search_paths × path)
     let files: Vec<String> = match path {
         // Строковый литерал: `import "file.takt";`
@@ -80,12 +88,12 @@ pub(crate) fn read_import_file(
         } else {
             search_paths.join(", ")
         };
-        return Err(Diagnostic::from(
+        return Err(Diagnostic::error(
+            loc,
             format!(
                 "Файл импорта не найден: «{}». Пути поиска: {}",
                 path_str, paths_str
-            )
-            .as_str(),
+            ),
         )
         .with_code("SE-013"));
     }
@@ -98,8 +106,9 @@ pub(crate) fn read_import_file(
     // Это предотвращает импорты вида `import "../../etc/passwd"`.
     {
         let canonical_file = std::fs::canonicalize(filename).map_err(|e| {
-            Diagnostic::from(
-                format!("Не удалось канонизировать путь «{}»: {}", filename, e).as_str(),
+            Diagnostic::error(
+                loc,
+                format!("Не удалось канонизировать путь «{}»: {}", filename, e),
             )
             .with_code("SE-016")
         })?;
@@ -110,12 +119,12 @@ pub(crate) fn read_import_file(
                 .unwrap_or(false)
         });
         if !is_allowed {
-            return Err(Diagnostic::from(
+            return Err(Diagnostic::error(
+                loc,
                 format!(
                     "Путь импорта «{}» выходит за пределы разрешённых директорий поиска: {:?}",
                     filename, search_paths
-                )
-                .as_str(),
+                ),
             )
             .with_code("SE-016"));
         }
@@ -123,15 +132,19 @@ pub(crate) fn read_import_file(
 
     // Проверяем, что файл имеет расширение .takt
     if !filename.ends_with(".takt") {
-        return Err(Diagnostic::from(
-            format!("Недопустимое расширение файла импорта: «{}»", filename).as_str(),
+        return Err(Diagnostic::error(
+            loc,
+            format!("Недопустимое расширение файла импорта: «{}»", filename),
         )
         .with_code("SE-014"));
     }
 
     let content = read_to_string(filename).map_err(|e| {
-        Diagnostic::from(format!("Ошибка чтения файла импорта «{}»: {}", filename, e).as_str())
-            .with_code("SE-015")
+        Diagnostic::error(
+            loc,
+            format!("Ошибка чтения файла импорта «{}»: {}", filename, e),
+        )
+        .with_code("SE-015")
     })?;
 
     Ok((content, filename.clone()))

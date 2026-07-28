@@ -73,3 +73,88 @@ fn submodel_port_is_readable_in_composition() {
         "порт под-модели композиции должен читаться (0 по умолчанию, не SIM-009)"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Квалифицированные имена портов (фича 0135)
+//
+// Дефект: пространство имён значений симулятора было ПЛОСКИМ. Одноимённые порты
+// разных под-моделей композиции делили адрес: чтение находило первую ветвь (порт
+// второй модели был ненаблюдаем вовсе), запись расходилась по всем ветвям
+// (задать вход отдельной под-модели было нечем). Карта адресов цели `c-hal`
+// квалифицирована фичей 0084, а значения симулятора — нет: разные слои.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Две под-модели с ОДНОИМЁННЫМИ портами: `Left::val = 1`, `Right::val = 2`.
+fn duplicate_ports_model() -> std::rc::Rc<std::cell::RefCell<takt_lang::semantic::ModelNode>> {
+    let src = "model Left  { in cmd: u8; out val: u8; start S { always { val := 1; } } }\
+               model Right { in cmd: u8; out val: u8; start S { always { val := 2; } } }\
+               start Root = Left | Right;";
+    let (ast, _) = takt_lang::parse(src, 0).expect("разбор");
+    construct_model(&ast, None, &[]).expect("семантика")
+}
+
+#[test]
+fn qualified_name_reads_the_named_branch() {
+    let mut unit = build_unit(duplicate_ports_model()).expect("построение юнита");
+    unit.tick();
+
+    // Голое имя по-прежнему находит первую ветвь — совместимость (правило 11).
+    assert_eq!(unit.variable("val"), Some(Value::Number(1)));
+
+    // Квалифицированное — обе ветви различимы. До 0135 значение `Right::val`
+    // не читалось никак: оно существовало в снимке, но было недоступно по имени.
+    assert_eq!(unit.variable("Left::val"), Some(Value::Number(1)));
+    assert_eq!(unit.variable("Right::val"), Some(Value::Number(2)));
+}
+
+#[test]
+fn qualified_write_touches_only_the_named_branch() {
+    let mut unit = build_unit(duplicate_ports_model()).expect("построение юнита");
+    unit.set_port("Left::cmd", Value::Number(7));
+
+    assert_eq!(unit.variable("Left::cmd"), Some(Value::Number(7)));
+    assert_eq!(
+        unit.variable("Right::cmd"),
+        Some(Value::Number(0)),
+        "запись по квалифицированному имени обязана попасть ровно в одну ветвь"
+    );
+}
+
+#[test]
+fn unknown_qualifier_addresses_nothing() {
+    // Опечатка в имени модели не должна молча писать «куда-нибудь».
+    let mut unit = build_unit(duplicate_ports_model()).expect("построение юнита");
+    unit.set_port("Middle::cmd", Value::Number(9));
+    assert_eq!(unit.variable("Left::cmd"), Some(Value::Number(0)));
+    assert_eq!(unit.variable("Right::cmd"), Some(Value::Number(0)));
+    assert_eq!(unit.variable("Middle::cmd"), None);
+}
+
+#[test]
+fn duplicate_names_are_reported_as_ambiguous() {
+    // Двусмысленность обязана быть ВИДНА перечислению: на ней стоят и
+    // предупреждение при запуске, и квалифицированный вывод такта.
+    let names = PortNames::from_model(&duplicate_ports_model().borrow());
+    let ambiguous: Vec<&str> = names.ambiguous.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(ambiguous, vec!["cmd", "val"]);
+
+    let val = names
+        .ambiguous
+        .iter()
+        .find(|(n, _)| n == "val")
+        .expect("val двусмысленно");
+    assert_eq!(val.1, vec!["Left::val", "Right::val"]);
+}
+
+#[test]
+fn unique_names_are_not_reported_as_ambiguous() {
+    // Сторож направления: перечисление не должно объявлять двусмысленным то,
+    // что объявлено один раз (иначе предупреждение станет шумом и его перестанут
+    // читать).
+    let names = PortNames::from_model(&model().borrow());
+    assert!(
+        names.ambiguous.is_empty(),
+        "у модели с уникальными именами двусмысленности нет: {:?}",
+        names.ambiguous
+    );
+}
