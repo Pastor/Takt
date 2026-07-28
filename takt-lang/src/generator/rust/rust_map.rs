@@ -9,6 +9,7 @@
 //! здесь заводить не нужно — порядок задан типом контейнера.
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::semantic::duration::TimeProfile;
 use crate::semantic::minimap::{Element, Map, Name};
 use crate::semantic::unused::UsageSet;
 use crate::semantic::{ModelNode, StateNode};
@@ -23,6 +24,9 @@ pub(crate) struct RustMap {
     usage: UsageSet,
     /// Эмитить ли guard-проверки (`assert!`) — флаг `--guard-disable` наоборот.
     guard_enable: bool,
+    /// Профиль времени (фича 0134): «часы» либо «такты». Разрешается общим слоем
+    /// (`resolve_profile`) в `generate` и кладётся сюда — по образцу `CMap`.
+    time_profile: TimeProfile,
 }
 
 impl RustMap {
@@ -42,7 +46,20 @@ impl RustMap {
             map: Map::create(model_rc)?,
             usage,
             guard_enable,
+            time_profile: TimeProfile::default(),
         })
+    }
+
+    /// Задаёт профиль времени (фича 0134). Умолчание — «часы»; существующие
+    /// вызовы `new` его не повторяют (аддитивно).
+    pub(crate) fn with_time_profile(mut self, profile: TimeProfile) -> Self {
+        self.time_profile = profile;
+        self
+    }
+
+    /// Профиль времени, выбранный для генерации.
+    pub(crate) fn time_profile(&self) -> TimeProfile {
+        self.time_profile
     }
 
     /// Базовое имя выходного файла (без расширения).

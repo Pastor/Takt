@@ -530,3 +530,116 @@ fn float_as_q_without_embedded_is_native_rust() {
         "без --float-embedded float остаётся native f64 (не i16).\n{rs}"
     );
 }
+
+// ── Модель времени: профиль «часы» через внешний `now_ms` (фича 0134) ─────────
+
+/// Трасса симулятора при 1 мс на такт (эталон профиля «часы»).
+fn simulate_time_trace(source: &str, port: &str, ticks: usize) -> Vec<i64> {
+    let (ast, _) = takt_lang::parse(source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let mut trace = Vec::new();
+    for step in 0..ticks {
+        unit.set_time_ns(i64::try_from(step).unwrap() * 1_000_000);
+        let result = unit.tick();
+        assert!(
+            !matches!(result, TickResult::Failed(_)),
+            "падение: {result:?}"
+        );
+        trace.push(sim_value(&unit, port));
+    }
+    trace
+}
+
+/// Трасса порождённой прошивки: фиктивный `now_ms` = модельное время (1 мс/такт).
+fn rust_time_trace(dir: &Path, path: &Path, root: &str, variant: &str, ticks: usize) -> Vec<i64> {
+    let source = std::fs::read_to_string(path).expect("фикстура");
+    takt_lang::compile_to_rust(
+        "rstime",
+        &source,
+        dir.to_str().unwrap(),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение rust");
+    let module = dir.join("rstime.rs");
+    let driver = format!(
+        r#"#[path = "{module}"]
+mod generated;
+use generated::{{Hal, OutU8Port, {root}}};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+struct Probe {{ reg: Rc<RefCell<u8>>, now: Rc<RefCell<u64>> }}
+impl Hal for Probe {{
+    fn write_u8(&mut self, port: OutU8Port, value: u8) {{
+        assert!(matches!(port, OutU8Port::{variant}), "неожиданный порт");
+        *self.reg.borrow_mut() = value;
+    }}
+    fn now_ms(&mut self) -> u64 {{ *self.now.borrow() }}
+}}
+
+fn main() {{
+    let reg = Rc::new(RefCell::new(0u8));
+    let now = Rc::new(RefCell::new(0u64));
+    let mut model = {root}::new(Probe {{ reg: Rc::clone(&reg), now: Rc::clone(&now) }});
+    // Вход стартового состояния «до такта 1»: время такта 1 — ноль.
+    model.init();
+    for step in 0..{ticks} {{
+        *now.borrow_mut() = step as u64; // 1 мс на такт, начиная с нуля
+        model.tick();
+        println!("TICK {{}}", reg.borrow());
+    }}
+}}
+"#,
+        module = module.display(),
+    );
+    std::fs::write(dir.join("driver.rs"), driver).expect("драйвер");
+    let build = Command::new("rustc")
+        .current_dir(dir)
+        .args(["--edition", "2021", "driver.rs", "-o", "driver"])
+        .output()
+        .expect("запуск rustc");
+    assert!(
+        build.status.success(),
+        "rustc не собрал драйвер профиля «часы»:\n{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let run = Command::new(dir.join("driver"))
+        .current_dir(dir)
+        .output()
+        .expect("запуск драйвера");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|l| l.strip_prefix("TICK "))
+        .map(|v| v.trim().parse::<i64>().expect("значение"))
+        .collect()
+}
+
+/// Выдержка `after 5ms` в профиле «часы» срабатывает на том же такте у симулятора
+/// и у порождённого Rust (внешний `now_ms`, 1 мс на такт).
+#[test]
+fn after_clock_profile_matches_generated_rust() {
+    const FIXTURE: &str = "tests/data/eval/conformance_after_rust.takt";
+    let source = std::fs::read_to_string(FIXTURE).expect("фикстура");
+    let ticks = 8usize;
+    let sim = simulate_time_trace(&source, "level", ticks);
+    // 5 мс при 1 мс/такт — уровень становится 1 на 6-м такте (индекс 5).
+    assert_eq!(
+        sim,
+        vec![0, 0, 0, 0, 0, 1, 1, 1],
+        "эталон профиля «часы»: {sim:?}"
+    );
+    if !rustc_available() {
+        eprintln!("[ПРОПУСК] after_clock_profile_matches_generated_rust: rustc не найден");
+        return;
+    }
+    let dir = build_dir("rstime");
+    let path = fixture(&dir, "conformance_after_rust", &source);
+    let rs = rust_time_trace(&dir, &path, "Rstime", "Level", ticks);
+    assert_eq!(
+        sim, rs,
+        "трассы симулятора и порождённого Rust (профиль «часы») обязаны совпадать\n\
+         симулятор={sim:?}\nRust={rs:?}"
+    );
+}

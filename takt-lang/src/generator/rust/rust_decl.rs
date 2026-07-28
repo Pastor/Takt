@@ -36,6 +36,9 @@ pub(crate) struct PortSet {
     pub(crate) classes: BTreeMap<String, PortClass>,
     /// Требуется ли метод `debug` (встроенная функция в профиле `no_std`).
     pub(crate) needs_debug: bool,
+    /// Требуется ли метод `now_ms` — внешний источник времени (профиль «часы»,
+    /// фича 0134). Как и `debug`, это метод трейта без тела: `no_std`-часов нет.
+    pub(crate) needs_now_ms: bool,
     /// Внешние функции (`extern fn`) → методы трейта.
     pub(crate) externals: BTreeMap<String, String>,
 }
@@ -52,6 +55,7 @@ impl PortSet {
         self.inputs.is_empty()
             && self.outputs.is_empty()
             && !self.needs_debug
+            && !self.needs_now_ms
             && self.externals.is_empty()
     }
 }
@@ -233,6 +237,15 @@ pub(crate) fn emit_hal(p: &mut Printer, set: &PortSet) -> Result<(), Diagnostic>
             .nl();
         p.ident("fn debug(&mut self, message: &str);").nl();
     }
+    if set.needs_now_ms {
+        p.ident("/// Внешний источник времени: миллисекунды монотонных часов")
+            .nl();
+        p.ident("/// (профиль «часы», фича 0134). В `no_std` часов нет — реализует")
+            .nl();
+        p.ident("/// пользователь (образец на `std::time::Instant` — в документации).")
+            .nl();
+        p.ident("fn now_ms(&mut self) -> u64;").nl();
+    }
     for (name, signature) in &set.externals {
         p.ident("/// Внешняя функция модели (`extern fn` в исходнике .takt).")
             .nl();
@@ -312,6 +325,7 @@ pub(crate) fn emit_constants(
             has_self: false,
             hal_is_ref: false,
             instances: Vec::new(),
+            time_profile: map.time_profile(),
         };
         for var in model.variables.values() {
             let VariableNode::Const {

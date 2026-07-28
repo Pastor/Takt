@@ -100,6 +100,7 @@ pub(crate) fn emit_tick(
             .flat_map(|(_, list)| list.iter())
             .map(|i| (i.unique.clone(), i.field.clone()))
             .collect(),
+        time_profile: map.time_profile(),
     };
 
     p.ident("/// Один такт автомата.").nl();
@@ -143,6 +144,9 @@ pub(crate) fn emit_tick(
     emit_named_blocks(p, &start_raw.borrow(), "enter", &mut scope, &mut out)?;
     p.ident(&format!("self.state = {};", table.path_of(start)?))
         .nl();
+    // Латч метки времени входа в стартовое состояние (фича 0134, профиль «часы»):
+    // отсчёт выдержки — от входа «до такта 1», а не от нуля абсолютного времени.
+    crate::generator::rust::rust_time::emit_first_entry_latch(p, map, model, hal_access);
     p.down();
     p.ident("}").nl();
 
@@ -203,6 +207,10 @@ pub(crate) fn emit_tick(
     p.ident(&format!("{}::Init => {{}}", table.enum_name)).nl();
     p.down();
     p.ident("}").nl();
+
+    // Обновление счётчика/метки времени в КОНЦЕ такта (фича 0134): одним
+    // сравнением с `takt_prev_state`, как `c_time::emit_state_time_update`.
+    crate::generator::rust::rust_time::emit_tick_update(p, map, model, hal_access)?;
 
     p.down();
     p.ident("}").nl().nl();

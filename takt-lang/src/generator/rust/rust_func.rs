@@ -143,6 +143,7 @@ pub(crate) fn emit_functions(
                 // Свободная функция получает `hal: &mut H` — уже ссылку.
                 hal_is_ref: needs.hal,
                 instances: Vec::new(),
+                time_profile: map.time_profile(),
             };
 
             p.ident(&format!("/// Функция '{}' модели.", name)).nl();
