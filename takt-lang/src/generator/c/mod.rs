@@ -125,6 +125,11 @@ impl AsGenerator for Generator {
         output_path: &str,
         options: &GenerateOptions,
     ) -> Result<(), Diagnostic> {
+        // Профиль времени (фича 0134): `clock` модели — контракт, флаг обязан
+        // подтвердить (задача 0134-05). Сверка живёт в общем слое; здесь —
+        // единый чекпойнт-энфорсмент: несовпадение → `SE-069`/`SE-070` из `?`,
+        // покрывает все пути кодогенерации (CLI, публичный API, тесты).
+        let profile = crate::semantic::duration::resolve_profile(model.clock_hz, options.tick_hz)?;
         //TODO: При генерации следует работать с примитивным слепком модели
         let map = CMap::new(
             &*normalize_lowercase_snakecase(model.name().to_string()),
@@ -132,12 +137,7 @@ impl AsGenerator for Generator {
             options.guard_enable,
         )?
         .with_float_width(options.float_width)
-        // Профиль времени (фича 0134): `clock` модели < `--tick-hz`; приоритет
-        // разрешает общий слой, а не генератор.
-        .with_time_profile(crate::semantic::duration::resolve_profile(
-            model.clock_hz,
-            options.tick_hz,
-        ));
+        .with_time_profile(profile);
         let header = generate_header(map.get_filename(), &map, options)?;
         let source = generate_source(map.get_filename(), &map)?;
         let filename = map.get_filename();

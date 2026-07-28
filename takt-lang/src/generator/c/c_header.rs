@@ -528,6 +528,12 @@ pub fn generate_header(
     printer.print("#include <stdbool.h>").nl();
     printer.nl();
 
+    // Отпечаток контракта частоты (фича 0134-05): готовый блок из `c_time`, если
+    // модель объявила `clock` (иначе закреплять нечего). Печатается сырьём.
+    if let Some(block) = c::c_time::clock_contract_block(map) {
+        printer.print(&block);
+    }
+
     // Топологически сортируем зависимые модели — зависимости идут первыми
     let sorted_models = c::topological_sort_models(map, map.using_models());
 

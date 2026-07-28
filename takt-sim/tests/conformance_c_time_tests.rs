@@ -50,12 +50,16 @@ fn simulator_dwell_tick() -> usize {
 /// На каком такте `done` впервые стал единицей — у порождённого C.
 fn generated_c_dwell_tick(dir: &Path) -> usize {
     let source = std::fs::read_to_string(AFTER_FIXTURE).expect("фикстура читается");
+    // Фикстура объявляет `clock 1kHz` → контракт частоты (задача 0134-05)
+    // требует подтверждающий `--tick-hz`; здесь — совпадающая частота.
+    let mut options = takt_lang::generator::GenerateOptions::default();
+    options.tick_hz = Some(1_000);
     takt_lang::compile_to_c(
         "conformance_after",
         &source,
         dir.to_str().expect("путь в UTF-8"),
         &[],
-        &takt_lang::generator::GenerateOptions::default(),
+        &options,
     )
     .expect("порождение C");
 
@@ -127,4 +131,52 @@ fn after_fires_on_the_same_tick_in_simulator_and_generated_c() {
     // Число из модели: 5 мс при 1 кГц — пять тактов от входа в стартовое
     // состояние, то есть такт 6 (вход занимает такт 1, время на нём — ноль).
     assert_eq!(reference, 6, "ожидался такт 6, получено {reference}");
+}
+
+/// Компилирует исходник целью `c` с частотой и возвращает текст заголовка.
+fn header_with_tick_hz(source: &str, tick_hz: Option<u64>) -> String {
+    let dir = tempfile::tempdir().expect("временный каталог");
+    let mut options = takt_lang::generator::GenerateOptions::default();
+    options.tick_hz = tick_hz;
+    takt_lang::compile_to_c(
+        "fp",
+        source,
+        dir.path().to_str().expect("путь в UTF-8"),
+        &[],
+        &options,
+    )
+    .expect("порождение C");
+    std::fs::read_to_string(dir.path().join("fp.h")).expect("заголовок читается")
+}
+
+/// Отпечаток контракта частоты (0134-05): модель с `clock` порождает статическое
+/// утверждение в заголовке — несовпадение частоты ловится при сборке прошивки.
+#[test]
+fn generated_c_carries_clock_contract_static_assert() {
+    let source = "model Fp {\n    clock 1kHz;\n    out done: bit := 0;\n    \
+                  start Waiting { ref Ready: after 5ms; }\n    state Ready { enter { done := 1; } }\n}\n\
+                  start Main = Fp;\n";
+    let header = header_with_tick_hz(source, Some(1_000));
+    assert!(
+        header.contains("#define TAKT_REQUIRED_CLOCK_HZ 1000u"),
+        "заголовок обязан закрепить объявленную частоту:\n{header}"
+    );
+    assert!(
+        header.contains("_Static_assert(TAKT_TICK_HZ == TAKT_REQUIRED_CLOCK_HZ,"),
+        "заголовок обязан нести статическое утверждение частоты:\n{header}"
+    );
+}
+
+/// Контрпример: без объявления `clock` (частоту задал лишь `--tick-hz`) отпечатка
+/// нет — автор частоту не ограничивал, закреплять контракт нечего.
+#[test]
+fn tick_hz_without_clock_declaration_emits_no_contract() {
+    let source = "model Fp {\n    out done: bit := 0;\n    \
+                  start Waiting { ref Ready: after 5t; }\n    state Ready { enter { done := 1; } }\n}\n\
+                  start Main = Fp;\n";
+    let header = header_with_tick_hz(source, Some(1_000));
+    assert!(
+        !header.contains("TAKT_REQUIRED_CLOCK_HZ"),
+        "без объявления clock отпечатка контракта быть не должно:\n{header}"
+    );
 }

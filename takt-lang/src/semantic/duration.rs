@@ -216,15 +216,108 @@ pub fn units_or_diagnostic(
     })
 }
 
-/// Выбирает профиль: флаг сборки переопределяет объявление в модели.
+/// Сверяет частоту: объявление `clock` — **контракт**, флаг обязан подтвердить.
 ///
-/// Приоритет — **`clock` в модели < `--tick-hz`** (правило 3 ADR). Выражен
-/// **одной** функцией намеренно: у карты адресов (фича 0020) приоритет
+/// Требование заказчика (2026-07-28, задача 0134-05) развернуло прежнее правило 3
+/// ADR («флаг переопределяет объявление») в правило **подтверждения**: если
+/// модель объявила частоту, сборка обязана передать совпадающий `--tick-hz`.
+/// Выражено **одной** функцией намеренно: у карты адресов (фича 0020) приоритет
 /// источников размазался по слоям, и это стоило отдельной проработки.
-pub fn resolve_profile(model_clock_hz: Option<u64>, flag_tick_hz: Option<u64>) -> TimeProfile {
-    match flag_tick_hz.or(model_clock_hz) {
-        Some(hertz) => TimeProfile::Ticks { hertz },
-        None => TimeProfile::Clock,
+///
+/// | Объявление | Флаг | Итог |
+/// |---|---|---|
+/// | есть | нет | `Err` `SE-069` (частота не подтверждена) |
+/// | есть | ≠ | `Err` `SE-070` (частота не совпадает) |
+/// | есть | = | `Ok(Ticks)` |
+/// | нет | есть | `Ok(Ticks)` (автор частоту не ограничивал) |
+/// | нет | нет | `Ok(Clock)` |
+///
+/// ⚠️ Проверка касается только **генерации кода**: симулятор частоту берёт из
+/// объявления как период такта (прогон — отладка, подтверждать нечего) и эту
+/// функцию не зовёт.
+///
+/// Позиция диагностики — [`Location::Implicit`]: контракт относится ко **всей**
+/// модели, а не к строке; `ModelNode` местоположения `clock` не хранит (`mod.rs`
+/// пришпилен реестром размеров — заводить поле нельзя).
+pub fn resolve_profile(
+    model_clock_hz: Option<u64>,
+    flag_tick_hz: Option<u64>,
+) -> Result<TimeProfile, Diagnostic> {
+    match (model_clock_hz, flag_tick_hz) {
+        (Some(declared), None) => Err(Diagnostic::error(
+            Location::Implicit,
+            format!("модель требует тактирования {declared} Гц; передайте --tick-hz={declared}"),
+        )
+        .with_code("SE-069")),
+        (Some(declared), Some(flag)) if declared != flag => Err(Diagnostic::error(
+            Location::Implicit,
+            format!(
+                "модель требует тактирования {declared} Гц, сборка задаёт {flag} Гц; \
+                 приведите --tick-hz к объявленной частоте"
+            ),
+        )
+        .with_code("SE-070")),
+        // Объявление подтверждено флагом (declared == flag).
+        (Some(hertz), Some(_)) => Ok(TimeProfile::Ticks { hertz }),
+        // Автор частоту не ограничивал — сборка задаёт её флагом.
+        (None, Some(hertz)) => Ok(TimeProfile::Ticks { hertz }),
+        (None, None) => Ok(TimeProfile::Clock),
+    }
+}
+
+/// Перечисляет выдержки `after` модели и то, во что каждая пересчиталась (R10).
+///
+/// Требование заказчика (0134-05/0134-08): сборка обязана печатать, во что
+/// превратилась каждая длительность, — иначе пользователь не видит, «столько же
+/// это тактов, сколько он думал». Возвращает **предупреждения** (канал 0081,
+/// глушится `--quiet`), по одному на выдержку `after` (профиль-зависимую); такты
+/// `after Nt` конверсии не требуют и здесь не перечисляются.
+///
+/// Непредставимая выдержка **пропускается**: её громкую ошибку (`SE-063`/`SE-064`)
+/// даст кодоген — дублировать нечего. Обходит и вложенные модели композиции.
+pub fn describe_durations(
+    model: &crate::semantic::ModelNode,
+    profile: TimeProfile,
+) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    collect_duration_notes(model, profile, &mut out);
+    out
+}
+
+fn collect_duration_notes(
+    model: &crate::semantic::ModelNode,
+    profile: TimeProfile,
+    out: &mut Vec<Diagnostic>,
+) {
+    let suffix = match profile {
+        TimeProfile::Clock => String::new(),
+        TimeProfile::Ticks { hertz } => format!(", {hertz} Гц"),
+    };
+    for state in model.states.values() {
+        for reference in state.references() {
+            if let crate::semantic::ConditionNode::After(nanos) = reference.cond
+                && let Ok(units) = units(nanos, profile)
+            {
+                out.push(
+                    Diagnostic::warning(
+                        reference.location,
+                        format!(
+                            "выдержка after → {}: {} нс = {} {} (профиль «{}»{})",
+                            reference.name,
+                            nanos,
+                            units,
+                            profile.unit_name(),
+                            profile.name(),
+                            suffix,
+                        ),
+                    )
+                    .with_code("SE-071"),
+                );
+            }
+        }
+    }
+    for nested in model.models.values() {
+        collect_duration_notes(&nested.borrow(), profile, out);
     }
 }
 
@@ -307,21 +400,36 @@ mod tests {
     }
 
     #[test]
-    fn profile_priority_is_flag_over_model() {
-        // Флаг переопределяет объявление (правило 3 ADR).
-        assert_eq!(resolve_profile(None, None), TimeProfile::Clock);
-        assert_eq!(
-            resolve_profile(Some(1_000), None),
-            TimeProfile::Ticks { hertz: 1_000 }
+    fn profile_contract_confirms_or_rejects() {
+        // Объявление есть, флаг не передан → SE-069 (частота не подтверждена).
+        let missing = resolve_profile(Some(1_000), None).expect_err("объявление требует флага");
+        assert_eq!(missing.code.as_deref(), Some("SE-069"));
+        assert!(
+            missing.message.contains("1000") && missing.message.contains("--tick-hz"),
+            "{missing:?}"
         );
-        assert_eq!(
-            resolve_profile(Some(1_000), Some(8_000_000)),
-            TimeProfile::Ticks { hertz: 8_000_000 }
+
+        // Объявление есть, флаг не совпал → SE-070 (частота не совпадает).
+        let mismatch =
+            resolve_profile(Some(1_000), Some(8_000_000)).expect_err("несовпадение — отказ");
+        assert_eq!(mismatch.code.as_deref(), Some("SE-070"));
+        assert!(
+            mismatch.message.contains("1000") && mismatch.message.contains("8000000"),
+            "{mismatch:?}"
         );
+
+        // Объявление подтверждено флагом → профиль «такты».
+        assert_eq!(
+            resolve_profile(Some(1_000), Some(1_000)),
+            Ok(TimeProfile::Ticks { hertz: 1_000 })
+        );
+        // Автор частоту не ограничивал — сборка задаёт её флагом.
         assert_eq!(
             resolve_profile(None, Some(50)),
-            TimeProfile::Ticks { hertz: 50 }
+            Ok(TimeProfile::Ticks { hertz: 50 })
         );
+        // Ни объявления, ни флага → профиль «часы».
+        assert_eq!(resolve_profile(None, None), Ok(TimeProfile::Clock));
     }
 
     #[test]

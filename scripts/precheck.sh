@@ -723,7 +723,26 @@ if [ -d book/src ]; then
       continue
     fi
     out_dir="$(mktemp -d)"
-    if ! "$LAMC" compile "$takt_file" -t c -o "$out_dir" >"$out_dir/gen.log" 2>&1; then
+    # Контракт частоты (фича 0134-05): модель с объявлением `clock` требует
+    # совпадающий `--tick-hz`, иначе компиляция целью `c` даёт SE-069. Гейт
+    # извлекает объявленную частоту и передаёт её ЯВНО (и печатает, что передал),
+    # чтобы проверка примеров не зависела от угадывания частоты.
+    tick_flag=""
+    # `|| true`: под `set -euo pipefail` grep без совпадения (файл без `clock`)
+    # вернул бы 1 и оборвал предкоммит — здесь отсутствие совпадения штатно.
+    clock_lit="$(grep -oE 'clock[[:space:]]+[0-9]+[kMG]?Hz' "$takt_file" | head -1 | sed -E 's/clock[[:space:]]+//' || true)"
+    if [ -n "$clock_lit" ]; then
+      clock_num="$(printf '%s' "$clock_lit" | sed -E 's/([0-9]+).*/\1/')"
+      case "$clock_lit" in
+        *kHz) clock_hz=$((clock_num * 1000)) ;;
+        *MHz) clock_hz=$((clock_num * 1000000)) ;;
+        *GHz) clock_hz=$((clock_num * 1000000000)) ;;
+        *) clock_hz=$clock_num ;;
+      esac
+      tick_flag="--tick-hz=$clock_hz"
+      echo "  $base → объявляет $clock_lit, передаю $tick_flag"
+    fi
+    if ! "$LAMC" compile "$takt_file" -t c $tick_flag -o "$out_dir" >"$out_dir/gen.log" 2>&1; then
       echo "  $base → НЕ КОМПИЛИРУЕТСЯ:"
       sed 's/^/    /' "$out_dir/gen.log" | head -3
       book_failed=1
