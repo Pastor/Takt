@@ -219,14 +219,55 @@ pub(crate) fn lower_fixed_literal(
 ) -> Result<Option<i128>, Diagnostic> {
     // (мантисса, десятичный порядок): значение = мантисса / 10^exp.
     let (mantissa, exp): (i128, u32) = match expr {
+        // Целый литерал приходит уже вычисленным: показатель степени учёл
+        // лексер (фича 0144), поэтому здесь порядок нулевой.
         ExpressionNode::Number(k) => (*k as i128, 0),
         ExpressionNode::Rational(s, neg) => {
-            let (int_part, frac_part) = s.split_once('.').unwrap_or((s.as_str(), ""));
+            // Текст хранится КАК НАПИСАН и может нести показатель (`2.5e3`,
+            // фича 0144). Прежде здесь стоял `split_once('.')` по всему тексту:
+            // `"2.5e3"` давал цифры `"25e3"`, которые не парсятся, и автор
+            // получал SE-058 «не число» — сообщение о следствии, а не о причине.
+            let (num_text, exp_text) = match s.find(['e', 'E']) {
+                Some(i) => (&s[..i], &s[i + 1..]),
+                None => (s.as_str(), ""),
+            };
+            let (int_part, frac_part) = num_text.split_once('.').unwrap_or((num_text, ""));
             let digits = format!("{}{}", int_part, frac_part);
             let raw: i128 = digits
                 .parse()
                 .map_err(|_| se058(loc, m, n, s, "не число"))?;
-            (if *neg { -raw } else { raw }, frac_part.len() as u32)
+            let raw = if *neg { -raw } else { raw };
+
+            // Десятичный порядок: дробная часть его повышает, показатель —
+            // понижает. Значение = мантисса / 10^(frac_len − показатель).
+            let frac_len = i64::try_from(frac_part.len()).unwrap_or(i64::MAX);
+            let e: i64 = if exp_text.is_empty() {
+                0
+            } else {
+                exp_text
+                    .parse()
+                    .map_err(|_| se058(loc, m, n, s, "неверный показатель степени"))?
+            };
+            let scale = frac_len.saturating_sub(e);
+            if scale < 0 {
+                // Показатель перевесил дробную часть: значение целое, домножаем.
+                let up = u32::try_from(-scale)
+                    .map_err(|_| se058(loc, m, n, s, "слишком большой показатель степени"))?;
+                let factor = 10i128
+                    .checked_pow(up)
+                    .ok_or_else(|| se058(loc, m, n, s, "слишком большой показатель степени"))?;
+                (
+                    raw.checked_mul(factor)
+                        .ok_or_else(|| se058(loc, m, n, s, "слишком большой литерал"))?,
+                    0,
+                )
+            } else {
+                (
+                    raw,
+                    u32::try_from(scale)
+                        .map_err(|_| se058(loc, m, n, s, "слишком большой показатель степени"))?,
+                )
+            }
         }
         _ => return Ok(None),
     };
@@ -728,6 +769,29 @@ mod tests {
     fn fixed_literal_1_5_is_384() {
         let v = lower_fixed_literal(&rat("1.5", false), 8, 8, Location::Implicit).unwrap();
         assert_eq!(v, Some(384));
+    }
+
+    /// Показатель степени в тексте литерала учитывается (фича 0144).
+    ///
+    /// Текст рационального литерала хранится КАК НАПИСАН и с 0144 может нести
+    /// показатель (`2.5e2`). Прежде разбор делал `split_once('.')` по всему
+    /// тексту: цифры выходили `"25e2"`, не парсились, и автор получал SE-058
+    /// «не число» — сообщение о следствии, а не о причине.
+    #[test]
+    fn fixed_literal_with_exponent() {
+        // 2.5e2 = 250 → 250·2⁸ = 64000.
+        let v = lower_fixed_literal(&rat("2.5e2", false), 16, 8, Location::Implicit).unwrap();
+        assert_eq!(v, Some(64_000));
+        // Та же величина без показателя обязана дать то же представление.
+        let plain = lower_fixed_literal(&rat("250.0", false), 16, 8, Location::Implicit).unwrap();
+        assert_eq!(v, plain, "форма записи не должна менять представление");
+    }
+
+    /// Показатель, перевешивающий дробную часть, даёт целое: `1.5e1` = 15.
+    #[test]
+    fn fixed_literal_exponent_outweighs_fraction() {
+        let v = lower_fixed_literal(&rat("1.5e1", false), 8, 8, Location::Implicit).unwrap();
+        assert_eq!(v, Some(15 * 256));
     }
 
     /// Отрицательный литерал: `-1.5` → `-384`.

@@ -262,3 +262,6 @@
 | 0179-01 | 0179 | Правка 16 мест со старым адресом | [0179-01-url-replacements.md](0179-01-url-replacements.md) |
 | 0179-02 | 0179 | Гейт единственности адреса репозитория | [0179-02-repo-url-gate.md](0179-02-repo-url-gate.md) |
 | 0179-03 | 0179 | Пересборка и переустановка плагинов | [0179-03-plugins-reinstall.md](0179-03-plugins-reinstall.md) |
+| 0144-01 | 0144 | Вычисление экспоненты в лексере | [0144-01-lexer-exponent.md](0144-01-lexer-exponent.md) |
+| 0144-02 | 0144 | Понижение float в q с экспонентой | [0144-02-fixed-lowering-exponent.md](0144-02-fixed-lowering-exponent.md) |
+| 0144-03 | 0144 | Документ и версия языка | [0144-03-book-and-version.md](0144-03-book-and-version.md) |

@@ -10,6 +10,7 @@
 use std::fs;
 use std::path::Path;
 use takt_lang::diagnostics::Location;
+use takt_lang::parser::ast::Comment;
 use takt_lang::parser::lexer::{Lexer, LexicalError, Token};
 
 // ─────────────────────────────── Вспомогательные функции ─────────────────────
@@ -584,4 +585,87 @@ fn out_of_range_literal_carries_position_and_text() {
         start,
         "позиция обязана указывать на начало литерала"
     );
+}
+
+// ───────────────────── Экспонента числового литерала (фича 0144) ─────────────
+//
+// Прежде показатель степени МОЛЧА отбрасывался у ОБОИХ видов литерала: границы
+// показателя вычислялись и присваивались `let _exp`. `1e3` давало `Number(1)`,
+// `2.5e3` — `RationalNumber("2.5")`, и ошибок не было ни одной. Дефект прожил
+// именно потому, что форма токена была верна — неверным было только значение.
+//
+// ⚠️ Поэтому тесты ниже проверяют ЗНАЧЕНИЕ, а не факт разбора: проверка «токен
+// получен» здесь не доказывает ничего.
+
+/// Сверяет токены источника с ожидаемыми — проверка ЗНАЧЕНИЯ литерала.
+///
+/// ⚠️ Два приёма, без которых это не компилируется, — те же, что у
+/// `collect_errors` выше. Первый: источник кладётся в **локальную** `String`.
+/// Лексер занимает вход и накопители одним временем жизни `'input`, и на
+/// строковом литерале (`&'static str`) заимствование накопителей стало бы
+/// вечным. Второй: токены сверяются во **вложенной области**, чтобы к моменту
+/// чтения `errors` заимствование уже кончилось.
+macro_rules! assert_toks {
+    ($src:expr, $expected:expr $(, $msg:expr)?) => {{
+        let src = $src.to_string();
+        let mut comments: Vec<Comment> = Vec::new();
+        let mut errors: Vec<LexicalError> = Vec::new();
+        {
+            let got: Vec<Token> = Lexer::new(&src, 0, &mut comments, &mut errors)
+                .map(|(_, tok, _)| tok)
+                .collect();
+            assert_eq!(got, $expected $(, $msg)?);
+        }
+        assert!(
+            errors.is_empty(),
+            "лексических ошибок быть не должно: {errors:?}"
+        );
+    }};
+}
+
+#[test]
+fn integer_exponent_is_computed() {
+    assert_toks!("1e3", vec![Token::Number(1000)]);
+    // Регистр показателя незначим (правило 1 ADR 0144).
+    assert_toks!("1E3", vec![Token::Number(1000)]);
+    // Нулевой показатель ничего не меняет.
+    assert_toks!("7e0", vec![Token::Number(7)]);
+    // Разделители в мантиссе не мешают.
+    assert_toks!("1_0e2", vec![Token::Number(1000)]);
+}
+
+#[test]
+fn negative_exponent_makes_literal_rational() {
+    // Правило 2 ADR 0144: минус в показателе делает литерал рациональным —
+    // 0.001 целым числом не выражается. Текст хранится как написан.
+    assert_toks!(
+        "1e-3",
+        vec![Token::RationalNumber("1e-3", false)],
+        "показатель с минусом обязан давать рациональный литерал"
+    );
+}
+
+#[test]
+fn rational_exponent_is_kept_in_text() {
+    // Правило 4 ADR 0144: авторская форма сохраняется (как `2.5` и `1m30s`).
+    // Прежде срез обрывался перед показателем, и `2.5e3` означало 2.5.
+    assert_toks!("2.5e3", vec![Token::RationalNumber("2.5e3", false)]);
+    // Литерал без показателя не задет.
+    assert_toks!("2.5", vec![Token::RationalNumber("2.5", false)]);
+}
+
+#[test]
+fn exponent_overflow_is_diagnostic_not_wraparound() {
+    // Правило 3 ADR 0144: вычисление проверяемое, переполнение — тот же `LE-009`,
+    // что у длинного литерала (0128). Тихая обёртка недопустима.
+    let errors = collect_errors("var x: i64 := 1e19;");
+    assert_eq!(errors.len(), 1, "ожидалась ровно одна лексическая ошибка");
+    assert!(matches!(errors[0], LexicalError::NumberOutOfRange(_, _)));
+    assert_eq!(errors[0].code(), "LE-009");
+}
+
+#[test]
+fn exponent_at_i64_boundary_still_lexes() {
+    // Сторож направления: 10^18 в i64 влезает, и сужать границу нельзя.
+    assert_toks!("1e18", vec![Token::Number(1_000_000_000_000_000_000)]);
 }
