@@ -33,6 +33,8 @@ pub mod ltl_check;
 /// Снимок достижимых состояний и моделей — плоская карта [`Map`](minimap::Map).
 pub mod minimap;
 mod named_block;
+mod named_code_block;
+pub use named_code_block::NamedCodeBlockDefinitionNode;
 pub(crate) mod naming;
 mod reference;
 pub(crate) mod stages;
@@ -549,107 +551,6 @@ impl ModelNode {
     /// ```
     pub fn element_doc(&self, name: &str) -> &[String] {
         self.docs.get(name).map(|v| v.as_slice()).unwrap_or(&[])
-    }
-}
-
-/// Семантический узел именованного блока кода (`enter`, `exit`, `always`, …).
-#[derive(Default, Debug, Clone)]
-pub enum NamedCodeBlockDefinitionNode {
-    /// Блок не задан.
-    #[default]
-    None,
-    /// Неразрешённый блок кода: `(имя, AST-оператор)`.
-    Unresolved(String, ast::Statement),
-    /// Блок `enter` с разрешённым оператором.
-    Enter {
-        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
-        upper: Option<Weak<RefCell<ModelNode>>>,
-        /// Тело блока.
-        body: StatementNode,
-    },
-    /// Блок `exit` с разрешённым оператором.
-    Exit {
-        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
-        upper: Option<Weak<RefCell<ModelNode>>>,
-        /// Тело блока.
-        body: StatementNode,
-    },
-    /// Блок `always` с разрешённым оператором.
-    Always {
-        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
-        upper: Option<Weak<RefCell<ModelNode>>>,
-        /// Тело блока.
-        body: StatementNode,
-    },
-    /// Пользовательский именованный блок.
-    Unknown {
-        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
-        upper: Option<Weak<RefCell<ModelNode>>>,
-        /// Имя блока.
-        name: String,
-        /// Тело блока.
-        body: StatementNode,
-    },
-}
-
-impl PartialEq for NamedCodeBlockDefinitionNode {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::None, Self::None) => true,
-            (Self::Unresolved(n1, s1), Self::Unresolved(n2, s2)) => n1 == n2 && s1 == s2,
-            (Self::Enter { body: b1, .. }, Self::Enter { body: b2, .. }) => b1 == b2,
-            (Self::Exit { body: b1, .. }, Self::Exit { body: b2, .. }) => b1 == b2,
-            (Self::Always { body: b1, .. }, Self::Always { body: b2, .. }) => b1 == b2,
-            (
-                Self::Unknown {
-                    name: n1, body: b1, ..
-                },
-                Self::Unknown {
-                    name: n2, body: b2, ..
-                },
-            ) => n1 == n2 && b1 == b2,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for NamedCodeBlockDefinitionNode {}
-
-impl NamedCodeBlockDefinitionNode {
-    /// Возвращает имя блока.
-    pub fn name(&self) -> &str {
-        match self {
-            NamedCodeBlockDefinitionNode::None => "",
-            NamedCodeBlockDefinitionNode::Unresolved(name, _) => name,
-            NamedCodeBlockDefinitionNode::Enter { .. } => "enter",
-            NamedCodeBlockDefinitionNode::Exit { .. } => "exit",
-            NamedCodeBlockDefinitionNode::Always { .. } => "always",
-            NamedCodeBlockDefinitionNode::Unknown { name, .. } => name,
-        }
-    }
-
-    /// Возвращает ссылку на семантический оператор блока, если он разрешён.
-    pub fn statement(&self) -> Option<&StatementNode> {
-        match self {
-            NamedCodeBlockDefinitionNode::Enter { body, .. }
-            | NamedCodeBlockDefinitionNode::Exit { body, .. }
-            | NamedCodeBlockDefinitionNode::Always { body, .. }
-            | NamedCodeBlockDefinitionNode::Unknown { body, .. } => Some(body),
-            _ => None,
-        }
-    }
-
-    /// Возвращает ссылку на родительскую модель блока.
-    pub fn upper(&self) -> Option<Rc<RefCell<ModelNode>>> {
-        match self {
-            NamedCodeBlockDefinitionNode::Enter { upper, .. }
-            | NamedCodeBlockDefinitionNode::Exit { upper, .. }
-            | NamedCodeBlockDefinitionNode::Always { upper, .. }
-            | NamedCodeBlockDefinitionNode::Unknown { upper, .. } => {
-                upper.as_ref().and_then(|w| w.upgrade())
-            }
-            _ => None,
-        }
     }
 }
 

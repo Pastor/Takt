@@ -309,7 +309,8 @@ fn lower_block(blk: &mut NamedCodeBlockDefinitionNode, m: u8, n: u8) -> Result<(
         NamedCodeBlockDefinitionNode::Enter { body, .. }
         | NamedCodeBlockDefinitionNode::Exit { body, .. }
         | NamedCodeBlockDefinitionNode::Always { body, .. }
-        | NamedCodeBlockDefinitionNode::Unknown { body, .. } => lower_stmt(body, m, n),
+        | NamedCodeBlockDefinitionNode::Unknown { body, .. }
+        | NamedCodeBlockDefinitionNode::Every { body, .. } => lower_stmt(body, m, n),
         NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(_, _) => {
             Ok(())
         }

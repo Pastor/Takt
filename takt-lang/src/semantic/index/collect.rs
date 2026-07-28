@@ -638,7 +638,8 @@ pub(super) fn collect_named_block_entries(
         NamedCodeBlockDefinitionNode::Enter { body, .. }
         | NamedCodeBlockDefinitionNode::Exit { body, .. }
         | NamedCodeBlockDefinitionNode::Always { body, .. }
-        | NamedCodeBlockDefinitionNode::Unknown { body, .. } => body,
+        | NamedCodeBlockDefinitionNode::Unknown { body, .. }
+        | NamedCodeBlockDefinitionNode::Every { body, .. } => body,
         // None/Unresolved — тело отсутствует или ещё не прикреплено
         NamedCodeBlockDefinitionNode::None | NamedCodeBlockDefinitionNode::Unresolved(..) => return,
     };

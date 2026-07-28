@@ -13,8 +13,10 @@
 use crate::generator::st::st_map::StMap;
 use crate::semantic::duration::TimeProfile;
 use crate::semantic::minimap::Name;
-use crate::semantic::time_ast::{model_uses_duration_after, model_uses_tick_after};
-use crate::semantic::{ModelNode, type_node::TypeNode};
+use crate::semantic::time_ast::{
+    model_uses_duration_after, model_uses_every, model_uses_tick_after,
+};
+use crate::semantic::{ModelNode, StatementNode, type_node::TypeNode};
 
 /// Имя поля-счётчика сканов, проведённых в текущем состоянии.
 pub(super) const DWELL_FIELD: &str = "takt_dwell";
@@ -28,10 +30,61 @@ pub(super) fn is_clock(map: &StMap) -> bool {
     matches!(map.time_profile(), TimeProfile::Clock)
 }
 
+/// Длительностный `after Nms` **или** периодический `every Nms` (фича 0134-09):
+/// обе величины меряются длительностью; в профиле «такты» им нужен счётчик сканов.
+fn uses_duration_time(model: &ModelNode) -> bool {
+    model_uses_duration_after(model) || model_uses_every(model)
+}
+
 /// Нужен ли счётчик сканов `takt_dwell`: тактовая выдержка `after Nt` (в любом
-/// профиле) либо длительностная `after Nms` в профиле «такты».
+/// профиле) либо длительностный `after Nms`/`every Nms` в профиле «такты».
 pub(super) fn needs_dwell(map: &StMap, model: &ModelNode) -> bool {
-    model_uses_tick_after(model) || (!is_clock(map) && model_uses_duration_after(model))
+    model_uses_tick_after(model) || (!is_clock(map) && uses_duration_time(model))
+}
+
+/// Имя переменной-аккумулятора `every`-блока (профиль «такты», фича 0134-09).
+pub(super) fn every_field(idx: usize) -> String {
+    format!("takt_every{idx}")
+}
+
+/// Имя экземпляра самосбрасывающегося `TON` для `every`-блока (профиль «часы»).
+pub(super) fn every_timer(idx: usize) -> String {
+    format!("takt_every_ton{idx}")
+}
+
+/// Тип аккумулятора `every` — как `takt_dwell` (`UDINT`).
+pub(super) fn every_field_type() -> TypeNode {
+    dwell_type()
+}
+
+/// Периодический блок `every` модели: индекс, состояние, период, тело (0134-09).
+pub(super) struct EveryBlock<'a> {
+    pub(super) idx: usize,
+    pub(super) state: String,
+    pub(super) period_nanos: i64,
+    pub(super) body: &'a StatementNode,
+}
+
+/// Перечисляет `every`-блоки модели со сквозным индексом (детерминированно).
+pub(super) fn model_every(model: &ModelNode) -> Vec<EveryBlock<'_>> {
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    for (name, state) in &model.states {
+        for block in state.named_blocks() {
+            if let Some((period_nanos, _)) = block.every_period()
+                && let Some(body) = block.statement()
+            {
+                out.push(EveryBlock {
+                    idx,
+                    state: name.clone(),
+                    period_nanos,
+                    body,
+                });
+                idx += 1;
+            }
+        }
+    }
+    out
 }
 
 /// Тип счётчика `takt_dwell` — `UDINT` (32 бита): диапазон с запасом, тип IEC

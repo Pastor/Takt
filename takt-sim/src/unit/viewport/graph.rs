@@ -563,6 +563,8 @@ mod tests {
             state: None,
             state_transitions,
             state_executions: HashMap::new(),
+            state_every: HashMap::new(),
+            every_consumed: Vec::new(),
             guards: Default::default(),
             invariant_violations: Vec::new(),
             last_transition: None,

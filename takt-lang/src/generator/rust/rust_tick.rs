@@ -173,6 +173,17 @@ pub(crate) fn emit_tick(
             }
         }
         emit_named_blocks(p, raw, "always", &mut scope, &mut out)?;
+        // Периодические блоки `every` (фича 0134-09) — после `always`, как в
+        // симуляторе (`execute_every` следом за `execution("always")`).
+        crate::generator::rust::rust_every::emit_state_body(
+            p,
+            map,
+            model,
+            state_name.local(),
+            hal_access,
+            &mut scope,
+            &mut out,
+        )?;
 
         match &state {
             Element::State { .. } => {

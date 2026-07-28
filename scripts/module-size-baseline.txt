@@ -10,6 +10,6 @@
 #
 # Формат: <строк> <путь от корня репозитория>
 1831 takt-lang/src/semantic/tree.rs
-1652 takt-lang/src/semantic/mod.rs
+1553 takt-lang/src/semantic/mod.rs
 1378 takt-lang/src/lib.rs
 1188 takt-lang/src/semantic/type_inference.rs

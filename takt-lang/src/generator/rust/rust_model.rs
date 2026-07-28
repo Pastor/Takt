@@ -435,6 +435,7 @@ pub(crate) fn emit_model(
     // предыдущее состояние — только при использовании `after` (иначе `-D warnings`
     // упадёт на неиспользуемом поле). Логика в `rust_time`.
     rust_time::emit_struct_fields(p, map, model, &table.enum_name)?;
+    crate::generator::rust::rust_every::emit_struct_fields(p, map, model)?;
     for (state, steps) in &concats {
         p.ident(&format!(
             "/// Текущий шаг последовательной композиции состояния '{}'.",
@@ -655,6 +656,7 @@ fn emit_new(
     // Начальные значения полей времени (фича 0134): метку латчим не здесь, а в
     // INIT-диспетчере такта (в конструкторе HAL под-модели недоступен).
     rust_time::emit_new_fields(p, map, model, &table.enum_name)?;
+    crate::generator::rust::rust_every::emit_new_fields(p, model);
     // Счётчик шага стартует с ПЕРВОГО шага, а не с «Init»: так же поступает
     // `_init` цели `c` (её варианты `{STATE}_INIT`/`_END` не пишутся никогда).
     for (state, steps) in concats {
@@ -755,6 +757,7 @@ fn emit_init(
     // Сброс полей времени (фича 0134): в 0 / `Init`. Метку латчит INIT-диспетчер
     // такта — `init(&mut self)` под-модели HAL не имеет.
     rust_time::emit_init(p, map, model, &table.enum_name);
+    crate::generator::rust::rust_every::emit_reset(p, model);
     for (state, steps) in concats {
         let first = steps.first().ok_or_else(|| {
             Diagnostic::error(

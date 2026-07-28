@@ -152,6 +152,112 @@ fn after_clock_profile_matches_generated_sv() {
     );
 }
 
+// ── Периодический блок `every` (фича 0134-09) ─────────────────────────────────
+
+const EVERY_FIXTURE: &str = "tests/data/eval/conformance_every.takt";
+const EVERY_TICKS: usize = 10;
+
+/// Трасса эталона `every`: `led` после каждого такта при 1 мс/такт.
+fn simulate_every_trace() -> Vec<i64> {
+    let source = std::fs::read_to_string(EVERY_FIXTURE).expect("фикстура");
+    let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let mut trace = Vec::new();
+    for step in 0..EVERY_TICKS {
+        unit.set_time_ns(i64::try_from(step).unwrap() * 1_000_000);
+        let r = unit.tick();
+        assert!(!matches!(r, TickResult::Failed(_)), "падение: {r:?}");
+        trace.push(sim_value(&unit, "led"));
+    }
+    trace
+}
+
+/// Трасса RTL `every`: тестбенч ведёт `time_ms` модельным временем, читает `dut.led`.
+fn sv_every_trace(dir: &Path) -> Vec<i64> {
+    let source = std::fs::read_to_string(EVERY_FIXTURE).expect("фикстура");
+    takt_lang::compile_to_sv(
+        "svevery",
+        &source,
+        dir.to_str().unwrap(),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение SystemVerilog");
+    let tb = format!(
+        r#"module tb;
+    logic clk = 0, rst_n = 0;
+    logic is_done;
+    logic [31:0] time_ms = 0;
+    logic [7:0] led;
+    svevery dut (.clk(clk), .rst_n(rst_n), .time_ms(time_ms[7:0]), .led(led), .is_done(is_done));
+    always #5 clk = ~clk;
+    initial begin
+        @(posedge clk);
+        rst_n <= 1'b1;
+        for (int i = 0; i < {EVERY_TICKS}; i++) begin
+            time_ms = i;
+            @(posedge clk);
+            #1 $display("TICK %0d", dut.led);
+        end
+        $finish;
+    end
+endmodule
+"#
+    );
+    std::fs::write(dir.join("tb.sv"), tb).expect("тестбенч");
+    let build = Command::new("verilator")
+        .current_dir(dir)
+        .args([
+            "--binary",
+            "--timing",
+            "-Wno-fatal",
+            "--top-module",
+            "tb",
+            "tb.sv",
+            "svevery.sv",
+            "-o",
+            "simtb",
+        ])
+        .output()
+        .expect("verilator");
+    assert!(
+        build.status.success(),
+        "verilator не собрал тестбенч `every`:\n{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let run = Command::new(dir.join("obj_dir").join("simtb"))
+        .current_dir(dir)
+        .output()
+        .expect("запуск");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i64>().ok())
+        .collect()
+}
+
+/// Периодический блок `every 3ms` (профиль «часы») срабатывает у симулятора и у
+/// RTL на одних тактах (3, 6, 9). Мягкая деградация: нет verilator → пропуск.
+#[test]
+fn every_period_matches_generated_sv() {
+    let sim = simulate_every_trace();
+    assert_eq!(
+        sim,
+        vec![0, 0, 0, 1, 1, 1, 2, 2, 2, 3],
+        "эталон периода `every`: {sim:?}"
+    );
+    if !verilator_available() {
+        eprintln!("[ПРОПУСК] every_period_matches_generated_sv: verilator не найден");
+        return;
+    }
+    let dir = build_dir("svevery");
+    let sv = sv_every_trace(&dir);
+    assert_eq!(
+        sim, sv,
+        "трассы симулятора и RTL (`every`) обязаны совпадать\nсим={sim:?}\nRTL={sv:?}"
+    );
+}
+
 /// Сторож A7 (проба П4 ADR): порождённый RTL НИКОГДА не несёт `#`-задержек и
 /// `$time` — их yosys/verilator пропускают молча, а в железе они означают иное.
 #[test]

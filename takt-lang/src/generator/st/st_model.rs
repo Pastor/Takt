@@ -189,6 +189,11 @@ pub(crate) fn emit_body(
         p.ident(&format!("IF state <> {} THEN", prev)).nl();
         p.up();
         p.ident(&format!("{} := 1;", dwell)).nl();
+        // Аккумуляторы `every` (0134-09) обнуляются при входе — период с нуля.
+        for e in st_time::model_every(model) {
+            p.ident(&format!("{} := 0;", st_time::every_field(e.idx)))
+                .nl();
+        }
         p.down();
         p.ident("ELSE").nl();
         p.up();
@@ -223,6 +228,54 @@ fn emit_state(
 ) -> Result<(), Diagnostic> {
     // `always` — первым в ветви, до проверок переходов (S8, Ф5).
     emit_block(p, state, "always", model, &mut out.stmt)?;
+
+    // Периодические блоки `every` (фича 0134-09) — после `always`. Профиль «часы»
+    // → самосбрасывающийся `TON` (`IN := NOT Q` — классический IEC-мигатель);
+    // «такты» → счётчик-аккумулятор `takt_everyN` (как цель `c`).
+    for e in st_time::model_every(model) {
+        if e.state != name.local() {
+            continue;
+        }
+        if st_time::is_clock(map) {
+            let ton = st_time::every_timer(e.idx);
+            p.ident(&format!(
+                "{ton}(IN := NOT {ton}.Q, PT := {});",
+                crate::semantic::duration::time_literal(e.period_nanos)
+            ))
+            .nl();
+            out.instances.push(Instance {
+                name: ton.clone(),
+                fb_type: st_time::TON_TYPE.to_string(),
+            });
+            p.ident(&format!("IF {ton}.Q THEN")).nl();
+            p.up();
+            print_statement(e.body, model, p, &mut out.stmt, None)?;
+            p.down();
+            p.ident("END_IF;").nl();
+        } else {
+            let acc = st_time::every_field(e.idx);
+            let units = crate::semantic::duration::units_or_diagnostic(
+                e.period_nanos,
+                map.time_profile(),
+                Location::Codegen,
+                "период 'every'",
+            )?;
+            p.ident(&format!(
+                "IF {dwell} - {acc} >= {units} THEN",
+                dwell = st_time::DWELL_FIELD
+            ))
+            .nl();
+            p.up();
+            print_statement(e.body, model, p, &mut out.stmt, None)?;
+            p.ident(&format!("{acc} := {acc} + {units};")).nl();
+            p.down();
+            p.ident("END_IF;").nl();
+            out.stmt.hoisted.push(Hoisted {
+                name: acc,
+                ty: st_time::every_field_type(),
+            });
+        }
+    }
 
     // Состояние с реализацией (`= Модель`, `= M1 | M2`) — композиция.
     if let Some(Element::StateExtend { extend, next, .. }) = map.element_of(name)

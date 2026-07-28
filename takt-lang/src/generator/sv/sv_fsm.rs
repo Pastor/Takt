@@ -658,6 +658,26 @@ pub(crate) fn emit_model_body(
         .nl();
         p.up();
         emit_named_blocks(p, raw, fsm, "always")?;
+        // Периодические блоки `every` (фича 0134-09) — после `always`, как в
+        // симуляторе. Гейт читает `_next` метки/счётчика (учёт текущего такта).
+        {
+            let rm = raw_model.borrow();
+            for e in sv_time::model_every(&rm) {
+                if e.state != state_name.local() {
+                    continue;
+                }
+                let body = e.body;
+                sv_time::emit_every_gate(
+                    p,
+                    &fsm.time_levels,
+                    map,
+                    model,
+                    e.idx,
+                    e.period_nanos,
+                    |p| super::sv_stmt::print_statement(p, body, &fsm.scope()),
+                )?;
+            }
+        }
         match element {
             Element::State { .. } => {
                 emit_transitions(p, map, fsm, raw, model, &states)?;
