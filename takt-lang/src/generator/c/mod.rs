@@ -65,6 +65,9 @@ pub(super) const FUNCTION_PORT_WRITE_FLOAT: &str = "write_float";
 pub(super) const FUNCTION_PORT_READ_FLOAT: &str = "read_float";
 pub(super) const FUNCTION_PORT_WRITE_NUMERIC: &str = "write_numeric";
 pub(super) const FUNCTION_PORT_READ_NUMERIC: &str = "read_numeric";
+/// Колбэк источника времени профиля «часы» (фича 0134-04b): `uint64_t now_ms(void*)`.
+/// Встаёт рядом с портовыми колбэками в структуре модели; дефолт — только у `c-hal`.
+pub(super) const FUNCTION_TIME_NOW_MS: &str = "now_ms";
 
 /// Категория типа порта — определяет имя перечисления и набор функций.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

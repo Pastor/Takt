@@ -39,24 +39,18 @@ pub(super) fn generate_model_init(
         .print(&name.unique_uppercase_snakecase())
         .print("_INIT;")
         .nl();
-    // Счётчик выдержки (фича 0134): 0 — на первом такте с входа в стартовое
-    // состояние не прошло ни одного такта. `takt_prev_state` совпадает с
-    // начальным состоянием, поэтому вход в стартовое состояние на такте 1
-    // распознаётся сменой состояния и оставляет счётчик равным 1 к такту 2.
-    if crate::semantic::time_ast::model_uses_after(raw) {
-        printer
-            .ident(&format!(
-                "model->{} = 0;",
-                crate::generator::c::c_expr::condition::DWELL_FIELD
-            ))
-            .nl()
-            .ident(&format!(
-                "model->{} = (unsigned){}_INIT;",
-                crate::generator::c::c_expr::condition::PREV_STATE_FIELD,
-                name.unique_uppercase_snakecase()
-            ))
-            .nl();
-    }
+    // Счётчик/метка времени (фича 0134): счётчик тактов = 0 (на первом такте с
+    // входа не прошло ни одного такта), метка «часы» латчит `now_ms` (0134-04b).
+    // `takt_prev_state` совпадает с начальным состоянием, поэтому вход в стартовое
+    // распознаётся сменой состояния. Логика в `c_time` (лимит размера).
+    let init_const = format!("{}_INIT", name.unique_uppercase_snakecase());
+    // HAL-указатель: `model` у корня, `main` у под-модели (как порты).
+    let hal_ptr = if name.eq(&map.root_name()) {
+        "model"
+    } else {
+        "main"
+    };
+    crate::generator::c::c_time::emit_state_time_init(printer, map, raw, &init_const, hal_ptr)?;
     // 0033 (R6): инициализация вложенных элементов стартового состояния в `_init`,
     // а не в `_tick` — память приводится в определённое состояние ДО первого
     // `_tick`, поэтому чтение полей между `_init` и `_tick` перестаёт быть UB.

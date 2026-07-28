@@ -92,6 +92,10 @@ pub(super) fn generate_hal(
     let by_class = collect_ports_by_class(map)?;
     let addr_map = &options.address_map;
     let has = |c: PortClass, d: PortDirection| by_class.contains_key(&(c, d));
+    // Нужен ли дефолтный источник времени `now_ms` (профиль «часы», 0134-04b).
+    let needs_time = map
+        .root_model_node()
+        .is_some_and(|m| c::c_time::needs_now_ms(map, &m.borrow()));
 
     printer.nl();
     printer
@@ -296,6 +300,25 @@ pub(super) fn generate_hal(
             ))
             .nl();
     }
+    // Дефолтный источник времени профиля «часы» (фича 0134-04b): библиотечные
+    // монотонные часы. ⚠️ Тянет `<time.h>` и `clock_gettime` — на голом железе их
+    // нет; там штатный путь — профиль «такты» либо свой `now_ms` (см. книгу).
+    // `_POSIX_C_SOURCE` объявлен у самого верха заголовка (0134-04b), иначе на
+    // строгом glibc `CLOCK_MONOTONIC` скрыт под `-std=c11`.
+    if needs_time {
+        printer.print("#include <time.h>").nl();
+        printer
+            .print(&format!(
+                r#"static uint64_t {root}_default_{f}(void *userdata) {{
+    (void)userdata;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+}}"#,
+                f = c::FUNCTION_TIME_NOW_MS,
+            ))
+            .nl();
+    }
     printer.nl();
 
     // Помощник связывания дефолтного HAL со структурой модели.
@@ -337,6 +360,14 @@ pub(super) fn generate_hal(
                 .ident(&format!("m->{field} = {root}_default_{field};"))
                 .nl();
         }
+    }
+    if needs_time {
+        printer
+            .ident(&format!(
+                "m->{f} = {root}_default_{f};",
+                f = c::FUNCTION_TIME_NOW_MS
+            ))
+            .nl();
     }
     printer.down();
     printer.print("}").nl();
