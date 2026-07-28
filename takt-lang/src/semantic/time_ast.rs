@@ -12,8 +12,8 @@
 //!    называть **одну** частоту: разные значения — ошибка автора (`SE-067`), а
 //!    не «побеждает последнее». Итог кладётся в
 //!    [`ModelNode::clock_hz`](super::ModelNode::clock_hz) корня.
-//! 2. Отвергает `every 100ms { … }` (`SE-066`) — до его реализации.
-//! 3. Следит, что `after` стоит **только** в условии перехода `ref` (`SE-068`).
+//! 2. Следит, что `after` стоит **только** в условии перехода `ref` (`SE-068`);
+//!    `every 100ms { … }` (задача 0134-09) — разворачивается семантикой в блок.
 //!
 //! ## Почему `after` только на ребре (решение заказчика)
 //!
@@ -45,7 +45,7 @@ use std::rc::Rc;
 /// # Ошибки
 ///
 /// - `SE-067` — две несовпадающие частоты в одной единице компиляции;
-/// - `SE-066` — `every` (пока не исполняется ни одной целью).
+/// - `SE-068` — `after` вне условия перехода `ref`.
 pub(crate) fn collect_clock(ast: &Model, model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
     let mut found: Option<u64> = None;
     walk(ast, &mut found)?;
@@ -171,6 +171,30 @@ pub fn model_tree_uses_duration_after(model: &ModelNode) -> bool {
             .any(|nested| model_tree_uses_duration_after(&nested.borrow()))
 }
 
+/// Использует ли модель периодический блок `every` хотя бы в одном состоянии
+/// (фича 0134-09). Период `every` — всегда длительность, поэтому в профиле «часы»
+/// он меряется меткой `now_ms` (как длительностный `after`).
+pub fn model_uses_every(model: &ModelNode) -> bool {
+    model.states.values().any(|state| {
+        state
+            .named_blocks()
+            .iter()
+            .any(|block| block.every_period().is_some())
+    })
+}
+
+/// Использует ли **дерево** модели (сама + вложенные) периодический `every`.
+///
+/// Как `model_tree_uses_duration_after`: колбэк/вход времени профиля «часы» живёт
+/// на корне, а `every` бывает во вложенной под-модели композиции.
+pub fn model_tree_uses_every(model: &ModelNode) -> bool {
+    model_uses_every(model)
+        || model
+            .models
+            .values()
+            .any(|nested| model_tree_uses_every(&nested.borrow()))
+}
+
 fn model_uses_after_kind(model: &ModelNode, ticks: bool) -> bool {
     model.states.values().any(|state| {
         state
@@ -245,20 +269,13 @@ fn walk(ast: &Model, found: &mut Option<u64>) -> Result<(), Diagnostic> {
             ModelElement::Invariant(def) => reject_after(&def.value, "инварианте")?,
             ModelElement::InlineFormula(def) => reject_after_in_formula(def)?,
             ModelElement::Model(nested) => walk(nested, found)?,
-            // `every` пока не исполняется: отказ вместо тихой потери тела.
             ModelElement::State(state) => {
                 for element in &state.elements {
                     match element {
-                        StateElement::Every(def) => {
-                            return Err(Diagnostic::error(
-                                def.loc,
-                                format!(
-                                    "периодическое действие 'every {}' пока не поддерживается",
-                                    def.text
-                                ),
-                            )
-                            .with_code("SE-066"));
-                        }
+                        // `every` (фича 0134, задача 0134-09) исполняется всеми
+                        // целями и симулятором — разворачивается семантикой в
+                        // блок `NamedCodeBlockDefinitionNode::Every`.
+                        StateElement::Every(_) => {}
                         // Условие ребра — **единственное** законное место `after`.
                         StateElement::Reference(_, _, _) => {}
                         StateElement::Invariant(def) => {

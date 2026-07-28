@@ -1,6 +1,7 @@
 pub(crate) mod builder;
 #[path = "clock.rs"]
 mod clock;
+mod every;
 pub(crate) mod statement;
 pub(crate) mod viewport;
 
@@ -134,6 +135,15 @@ pub(crate) enum UnitKind {
 
         state_transitions: HashMap<String, Vec<(String, Predicate)>>,
         state_executions: HashMap<String, Executions>,
+        /// Периодические блоки `every` состояния (фича 0134-09): по имени
+        /// состояния — список `(период_нс, тело)`. Период всегда в наносекундах
+        /// (литерал `every` — длительность), эталон меряет `since_state_entry_ns`.
+        state_every: HashMap<String, Vec<(i64, Vec<Execution>)>>,
+        /// Поглощённое срабатываниями `every` время (нс) — по одному счётчику на
+        /// блок `every` **текущего** состояния (фича 0134-09). Сбрасывается при
+        /// входе в состояние (`mark_state_entry`); скрытое состояние сахара,
+        /// видимое в трассе (правило 12 ADR).
+        every_consumed: Vec<i64>,
         state: Option<String>,
 
         executions: Executions,
@@ -327,6 +337,11 @@ impl Unit {
             return failed;
         }
         if let Err(diagnostic) = self.execution("always") {
+            return TickResult::Failed(describe(&diagnostic));
+        }
+        // Периодические блоки `every` (фича 0134-09) — после `always`, до
+        // диспетчеризации состояния (как model-level `always`, фича 0083).
+        if let Err(diagnostic) = self.execute_every() {
             return TickResult::Failed(describe(&diagnostic));
         }
         // Диспетчеризация по форме без удержания заимствования `self.0`: ветвь

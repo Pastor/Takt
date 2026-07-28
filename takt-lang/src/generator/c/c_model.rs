@@ -492,6 +492,15 @@ fn generate_model_tick(
         }
 
         generate_named_blocks(printer, raw_state, map, model, "always")?;
+        // Периодические блоки `every` (фича 0134-09) — после `always`, как в
+        // симуляторе (шаг `execute_every` идёт следом за `execution("always")`).
+        crate::generator::c::c_every::emit_state_body(
+            printer,
+            map,
+            model,
+            &raw_model.borrow(),
+            state_name.local(),
+        )?;
         // 0028-02: было — цепочка `if let / else if let / else`, где хвостовой
         // `else` печатал в порождаемый C комментарий-заглушку «пока не
         // реализовано». Ветка

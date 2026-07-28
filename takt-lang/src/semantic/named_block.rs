@@ -79,6 +79,17 @@ pub fn resolve_named_blocks(
                     body: resolve_statement(&body, vec![], model.clone())?,
                 }
             }
+            NamedCodeBlockDefinitionNode::Every {
+                upper,
+                period_nanos,
+                text,
+                body,
+            } => NamedCodeBlockDefinitionNode::Every {
+                upper,
+                period_nanos,
+                text,
+                body: resolve_statement(&body, vec![], model.clone())?,
+            },
         };
         blocks.push(block);
     }

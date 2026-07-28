@@ -1020,11 +1020,9 @@ pub(super) fn construct_model_stage4(
 pub(super) fn construct_model_stage5(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    // 0031: тела функций разрешаются в ТОПОЛОГИЧЕСКОМ порядке графа вызовов —
-    // вызываемая раньше вызывающей, — БЕЗ изъятия карты (`mem::take` устранён).
-    // Тогда при разборе тела вызывающей карта модели непуста: `search_func`
-    // видит уже разрешённые локальные функции (композиция `f → g` работает).
-    // Цикл в графе (рекурсия) отвергается диагностикой SE-053.
+    // 0031: тела функций разрешаются в ТОПОЛОГИЧЕСКОМ порядке графа вызовов (без
+    // изъятия карты) — при разборе вызывающей `search_func` видит уже разрешённые
+    // функции (композиция `f → g`); цикл (рекурсия) отвергается SE-053.
     let bodies: BTreeMap<String, Option<ast::Statement>> = {
         let borrowed = model.borrow();
         borrowed
@@ -1616,14 +1614,9 @@ fn resolve_references(
         .collect()
 }
 
-/// Извлекает именованные блоки кода из определения состояния.
-///
-/// Обходит `StateElement::NamedBlockCode` в `state.elements` и создаёт
-/// `NamedBlockNode` с `Statement::Unresolved` для каждого блока.
-/// Разрешение операторов происходит позднее в [`construct_model_stage4`].
-///
-/// Если несколько блоков имеют одинаковое имя (например, два `always`),
-/// они все сохраняются в списке и могут быть получены через `get_named_blocks`.
+/// Извлекает именованные блоки (`enter`/`exit`/`always`/`every`) состояния как
+/// `Statement::Unresolved`; разрешение — в стадии 4. Одноимённые блоки (напр. два
+/// `always`) сохраняются все и доступны через `get_named_blocks`.
 fn construct_named_blocks(
     state: &StateDefine,
     upper: Option<Weak<RefCell<ModelNode>>>,
@@ -1663,6 +1656,13 @@ fn construct_named_blocks(
                 },
             };
             named_blocks.push(block);
+        } else if let StateElement::Every(def) = element {
+            named_blocks.push(NamedCodeBlockDefinitionNode::Every {
+                upper: upper.clone(),
+                period_nanos: def.nanos,
+                text: def.text.clone(),
+                body: StatementNode::Unresolved(def.body.clone()),
+            });
         }
     }
     Ok(named_blocks)

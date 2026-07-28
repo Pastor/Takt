@@ -14,7 +14,9 @@ use crate::generator::c::c_expr::condition::{DWELL_FIELD, ENTRY_MS_FIELD, PREV_S
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
 use crate::semantic::ModelNode;
-use crate::semantic::time_ast::{model_uses_duration_after, model_uses_tick_after};
+use crate::semantic::time_ast::{
+    model_uses_duration_after, model_uses_every, model_uses_tick_after,
+};
 
 /// Профиль модели — «часы» (внешний источник времени)?
 fn is_clock_profile(map: &CMap) -> bool {
@@ -24,11 +26,21 @@ fn is_clock_profile(map: &CMap) -> bool {
     )
 }
 
+/// Использует ли модель длительностную выдержку `after Nms` **или** периодический
+/// блок `every Nms` (фича 0134-09). Оба меряются длительностью, поэтому требуют
+/// одну инфраструктуру времени: счётчик тактов (профиль «такты») либо метку входа
+/// + `now_ms` (профиль «часы»). Тактовая `after Nt` идёт отдельным путём.
+fn uses_duration_time(model: &ModelNode) -> bool {
+    model_uses_duration_after(model) || model_uses_every(model)
+}
+
 /// Нужен ли колбэк `now_ms` (фича 0134-04b): профиль «часы» + длительностная
 /// выдержка `after Nms` где-либо в дереве модели (колбэк — на корневой структуре,
 /// а выдержка бывает во вложенной под-модели). Тактовая `after Nt` не требует.
 pub(super) fn needs_now_ms(map: &CMap, model: &ModelNode) -> bool {
-    is_clock_profile(map) && crate::semantic::time_ast::model_tree_uses_duration_after(model)
+    is_clock_profile(map)
+        && (crate::semantic::time_ast::model_tree_uses_duration_after(model)
+            || crate::semantic::time_ast::model_tree_uses_every(model))
 }
 
 /// Печатает поля структуры для механизма времени (фича 0134).
@@ -43,7 +55,7 @@ pub(super) fn emit_state_time_fields(
     model: &ModelNode,
 ) -> Result<(), Diagnostic> {
     let clock = is_clock_profile(map);
-    let uses_dur = model_uses_duration_after(model);
+    let uses_dur = uses_duration_time(model);
     let uses_tick = model_uses_tick_after(model);
     let needs_dwell = uses_tick || (!clock && uses_dur);
     let needs_entry_ms = clock && uses_dur;
@@ -84,7 +96,7 @@ pub(super) fn emit_state_time_update(
     hal_ptr: &str,
 ) -> Result<(), Diagnostic> {
     let clock = is_clock_profile(map);
-    let uses_dur = model_uses_duration_after(model);
+    let uses_dur = uses_duration_time(model);
     let uses_tick = model_uses_tick_after(model);
     let needs_dwell = uses_tick || (!clock && uses_dur);
     let needs_entry_ms = clock && uses_dur;
@@ -113,8 +125,11 @@ pub(super) fn emit_state_time_update(
         .ident(&format!(
             "model->{PREV_STATE_FIELD} = (unsigned)model->state;"
         ))
-        .nl()
-        .down();
+        .nl();
+    // Аккумуляторы `every` (0134-09) обнуляются при входе — период отсчитывается
+    // заново, как и `elapsed` от только что залатченной метки/сброшенного счётчика.
+    crate::generator::c::c_every::emit_reset(printer, model);
+    printer.down();
     if needs_dwell {
         printer
             .ident("} else {")
@@ -143,7 +158,7 @@ pub(super) fn emit_state_time_init(
     hal_ptr: &str,
 ) -> Result<(), Diagnostic> {
     let clock = is_clock_profile(map);
-    let uses_dur = model_uses_duration_after(model);
+    let uses_dur = uses_duration_time(model);
     let uses_tick = model_uses_tick_after(model);
     let needs_dwell = uses_tick || (!clock && uses_dur);
     let needs_entry_ms = clock && uses_dur;
@@ -167,6 +182,8 @@ pub(super) fn emit_state_time_init(
             "model->{PREV_STATE_FIELD} = (unsigned){init_const};"
         ))
         .nl();
+    // Аккумуляторы `every` (0134-09) стартуют с нуля — как счётчик/метка.
+    crate::generator::c::c_every::emit_reset(printer, model);
     Ok(())
 }
 
@@ -193,6 +210,20 @@ pub(super) fn counter_ticks(
                     profile,
                     Location::Codegen,
                     "выдержка 'after'",
+                )?;
+                max = max.max(units);
+            }
+        }
+        // Периоды `every` (фича 0134-09) тоже определяют ширину: аккумулятор
+        // делит её с меткой/счётчиком, а `elapsed - consumed` обязан не
+        // переполниться раньше срабатывания.
+        for block in state.named_blocks() {
+            if let Some((period_nanos, _)) = block.every_period() {
+                let units = crate::semantic::duration::units_or_diagnostic(
+                    period_nanos,
+                    profile,
+                    Location::Codegen,
+                    "период 'every'",
                 )?;
                 max = max.max(units);
             }

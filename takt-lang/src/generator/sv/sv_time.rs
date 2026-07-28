@@ -22,7 +22,8 @@ use crate::semantic::ModelNode;
 use crate::semantic::duration::{TimeProfile, counter_bits, units_or_diagnostic};
 use crate::semantic::minimap::Name;
 use crate::semantic::time_ast::{
-    model_tree_uses_duration_after, model_uses_duration_after, model_uses_tick_after,
+    model_tree_uses_duration_after, model_tree_uses_every, model_uses_duration_after,
+    model_uses_every, model_uses_tick_after,
 };
 
 /// Профиль модели — «часы»?
@@ -30,21 +31,27 @@ pub(crate) fn is_clock(map: &SvMap) -> bool {
     matches!(map.time_profile(), TimeProfile::Clock)
 }
 
-/// Нужен ли счётчик тактов у уровня: тактовая выдержка `after Nt` (любой профиль)
-/// либо длительностная `after Nms` в профиле «такты».
-pub(crate) fn needs_dwell(map: &SvMap, model: &ModelNode) -> bool {
-    model_uses_tick_after(model) || (!is_clock(map) && model_uses_duration_after(model))
+/// Длительностный `after Nms` **или** периодический `every Nms` (фича 0134-09):
+/// обе величины — длительности, требуют одну инфраструктуру времени уровня.
+fn uses_duration_time(model: &ModelNode) -> bool {
+    model_uses_duration_after(model) || model_uses_every(model)
 }
 
-/// Нужна ли метка времени у уровня: профиль «часы» + `after Nms`.
+/// Нужен ли счётчик тактов у уровня: тактовая выдержка `after Nt` (любой профиль)
+/// либо длительностная `after Nms`/`every Nms` в профиле «такты».
+pub(crate) fn needs_dwell(map: &SvMap, model: &ModelNode) -> bool {
+    model_uses_tick_after(model) || (!is_clock(map) && uses_duration_time(model))
+}
+
+/// Нужна ли метка времени у уровня: профиль «часы» + `after Nms`/`every Nms`.
 pub(crate) fn needs_entry(map: &SvMap, model: &ModelNode) -> bool {
-    is_clock(map) && model_uses_duration_after(model)
+    is_clock(map) && uses_duration_time(model)
 }
 
 /// Нужен ли служебный вход `time_ms` модулю: профиль «часы» + длительностная
-/// выдержка где-либо в дереве (вход один на модуль после уплощения).
+/// выдержка/период где-либо в дереве (вход один на модуль после уплощения).
 pub(crate) fn needs_time_port(map: &SvMap, root: &ModelNode) -> bool {
-    is_clock(map) && model_tree_uses_duration_after(root)
+    is_clock(map) && (model_tree_uses_duration_after(root) || model_tree_uses_every(root))
 }
 
 /// Разрядность метки/счётчика по максимуму `after` **дерева** модели (R8).
@@ -73,6 +80,17 @@ fn max_units_in_tree(map: &SvMap, model: &ModelNode) -> Result<u64, Diagnostic> 
                 )?);
             }
         }
+        // Периоды `every` (0134-09) делят ширину регистров времени — учитываем.
+        for block in state.named_blocks() {
+            if let Some((period_nanos, _)) = block.every_period() {
+                max = max.max(units_or_diagnostic(
+                    period_nanos,
+                    map.time_profile(),
+                    crate::diagnostics::Location::Codegen,
+                    "период 'every'",
+                )?);
+            }
+        }
     }
     for nested in model.models.values() {
         max = max.max(max_units_in_tree(map, &nested.borrow())?);
@@ -98,6 +116,43 @@ pub(crate) fn prev_state_reg(model: &Name) -> String {
 /// Служебный вход времени модуля.
 pub(crate) const TIME_MS_PORT: &str = "time_ms";
 
+/// Имя регистра-аккумулятора `every`-блока уровня (фича 0134-09).
+pub(crate) fn every_reg(model: &Name, idx: usize) -> String {
+    format!("{}_takt_every{idx}", model.unique_lowercase_snakecase())
+}
+
+/// Периодический блок `every` модели: глобальный (по модели) индекс, состояние,
+/// период, тело (фича 0134-09).
+pub(crate) struct EveryBlock<'a> {
+    pub(crate) idx: usize,
+    pub(crate) state: String,
+    pub(crate) period_nanos: i64,
+    pub(crate) body: &'a crate::semantic::StatementNode,
+}
+
+/// Перечисляет `every`-блоки модели с индексом (детерминированно — `states` в
+/// `BTreeMap`-порядке, блоки в порядке объявления). Индекс — сквозной по модели.
+pub(crate) fn model_every(model: &ModelNode) -> Vec<EveryBlock<'_>> {
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    for (name, state) in &model.states {
+        for block in state.named_blocks() {
+            if let Some((period_nanos, _)) = block.every_period()
+                && let Some(body) = block.statement()
+            {
+                out.push(EveryBlock {
+                    idx,
+                    state: name.clone(),
+                    period_nanos,
+                    body,
+                });
+                idx += 1;
+            }
+        }
+    }
+    out
+}
+
 /// Уровень (модель) с механизмом времени (фича 0134): имена регистров и профиль.
 pub(crate) struct TimeLevel {
     /// Модель-уровень (для префикса имён регистров).
@@ -110,6 +165,8 @@ pub(crate) struct TimeLevel {
     entry: bool,
     /// Разрядность метки/счётчика.
     bits: u8,
+    /// Регистры-аккумуляторы `every` уровня (фича 0134-09) — для сброса при входе.
+    every_regs: Vec<String>,
 }
 
 /// Заводит регистры времени уровня (фича 0134): счётчик/метка + метка предыдущего
@@ -130,7 +187,8 @@ pub(crate) fn push_time_regs(
 ) -> Result<(), Diagnostic> {
     let dwell = needs_dwell(map, model);
     let entry = needs_entry(map, model);
-    if !dwell && !entry {
+    let every = model_every(model);
+    if !dwell && !entry && every.is_empty() {
         return Ok(());
     }
     let bits = time_bits(map)?;
@@ -149,7 +207,14 @@ pub(crate) fn push_time_regs(
         push(dwell_reg(name), word.clone(), "'0".to_string());
     }
     if entry {
-        push(entry_reg(name), word, "'0".to_string());
+        push(entry_reg(name), word.clone(), "'0".to_string());
+    }
+    // Аккумуляторы `every` (0134-09): регистр на блок, сброс '0.
+    let mut every_regs = Vec::new();
+    for e in &every {
+        let reg = every_reg(name, e.idx);
+        push(reg.clone(), word.clone(), "'0".to_string());
+        every_regs.push(reg);
     }
     // `prev_state` сбрасывается в END-сентинел (не в стартовое): sv без INIT, и на
     // ПЕРВОМ такте `state(start) != prev(END)` даёт вход.
@@ -164,6 +229,7 @@ pub(crate) fn push_time_regs(
         dwell,
         entry,
         bits,
+        every_regs,
     });
     Ok(())
 }
@@ -192,10 +258,65 @@ pub(crate) fn emit_time_updates(p: &mut Printer, levels: &[TimeLevel]) -> Result
             ))
             .nl();
         }
+        // Аккумуляторы `every` (0134-09): умолчание `_next` — сброс '0 при входе,
+        // иначе удержание. Срабатывание переопределит его в ветви состояния.
+        for reg in &lvl.every_regs {
+            p.ident(&format!("{reg}_next = ({entered}) ? '0 : {reg};"))
+                .nl();
+        }
     }
     if !levels.is_empty() {
         p.nl();
     }
+    Ok(())
+}
+
+/// Выражение `elapsed` уровня, читающее `_next` (как `after_guard`): «часы» —
+/// `time_ms - <entry>_next`, «такты» — `<dwell>_next`. `None`, если у уровня нет
+/// инфраструктуры времени (не должно случаться при наличии `every`).
+pub(crate) fn elapsed_next_expr(levels: &[TimeLevel], map: &SvMap, model: &Name) -> Option<String> {
+    let level = levels.iter().find(|l| l.model.unique() == model.unique())?;
+    if is_clock(map) {
+        Some(format!(
+            "({TIME_MS_PORT} - {}_next)",
+            entry_reg(&level.model)
+        ))
+    } else {
+        Some(format!("{}_next", dwell_reg(&level.model)))
+    }
+}
+
+/// Печатает гейт срабатывания `every`-блока в ветви состояния `always_comb`
+/// (фича 0134-09): `if ((elapsed - reg_next) >= period) begin … reg_next += period; end`.
+/// Тело печатает `emit_body` (замыкание вызывающего — у него доступ к `Scope`).
+pub(crate) fn emit_every_gate(
+    p: &mut Printer,
+    levels: &[TimeLevel],
+    map: &SvMap,
+    model: &Name,
+    idx: usize,
+    period_nanos: i64,
+    emit_body: impl FnOnce(&mut Printer) -> Result<(), Diagnostic>,
+) -> Result<(), Diagnostic> {
+    let Some(elapsed) = elapsed_next_expr(levels, map, model) else {
+        return Ok(());
+    };
+    let units = units_or_diagnostic(
+        period_nanos,
+        map.time_profile(),
+        crate::diagnostics::Location::Codegen,
+        "период 'every'",
+    )?;
+    let reg = every_reg(model, idx);
+    p.ident(&format!("if (({elapsed} - {reg}_next) >= {units}) begin"))
+        .up()
+        .nl();
+    emit_body(p)?;
+    p.ident(&format!("{reg}_next = {reg}_next + {units};"))
+        .nl()
+        .down()
+        .ident("end")
+        .nl();
     Ok(())
 }
 

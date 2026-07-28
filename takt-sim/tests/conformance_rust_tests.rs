@@ -643,3 +643,30 @@ fn after_clock_profile_matches_generated_rust() {
          симулятор={sim:?}\nRust={rs:?}"
     );
 }
+
+/// Периодический блок `every 3ms` (профиль «часы») срабатывает у симулятора и у
+/// порождённого Rust на одних тактах (3, 6, 9) — счётчик `led` растёт синхронно.
+#[test]
+fn every_period_matches_generated_rust() {
+    const FIXTURE: &str = "tests/data/eval/conformance_every.takt";
+    let source = std::fs::read_to_string(FIXTURE).expect("фикстура");
+    let ticks = 10usize;
+    let sim = simulate_time_trace(&source, "led", ticks);
+    assert_eq!(
+        sim,
+        vec![0, 0, 0, 1, 1, 1, 2, 2, 2, 3],
+        "эталон периода `every`: {sim:?}"
+    );
+    if !rustc_available() {
+        eprintln!("[ПРОПУСК] every_period_matches_generated_rust: rustc не найден");
+        return;
+    }
+    let dir = build_dir("rsevery");
+    let path = fixture(&dir, "conformance_every", &source);
+    let rs = rust_time_trace(&dir, &path, "Rstime", "Led", ticks);
+    assert_eq!(
+        sim, rs,
+        "трассы симулятора и порождённого Rust (`every`) обязаны совпадать\n\
+         симулятор={sim:?}\nRust={rs:?}"
+    );
+}

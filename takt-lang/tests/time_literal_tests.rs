@@ -156,16 +156,15 @@ fn all_new_constructs_parse() {
 }
 
 #[test]
-fn semantics_refuses_loudly_until_next_subtask() {
-    // Подзадача 0134-02 заменит этот отказ настоящей семантикой. До неё
-    // конструкция обязана давать ЯВНУЮ диагностику: молчаливое приведение
-    // наносекунд к целому дало бы выдержку, не равную заявленной.
+fn every_is_accepted_since_0134_09() {
+    // Задача 0134-09 реализовала `every`: прежний отказ `SE-066` снят, конструкция
+    // разворачивается семантикой в периодический блок и компилируется всеми целями.
     let diagnostics = takt_lang::collect_compile_diagnostics("doors.takt", TIME_SRC, &[]);
     assert!(
-        diagnostics
+        !diagnostics
             .iter()
             .any(|d| d.code.as_deref() == Some("SE-066")),
-        "ожидалась диагностика SE-066: {diagnostics:?}"
+        "SE-066 (отказ `every`) обязан быть снят задачей 0134-09: {diagnostics:?}"
     );
 }
 

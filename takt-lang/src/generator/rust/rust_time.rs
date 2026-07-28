@@ -16,8 +16,15 @@ use crate::generator::rust::rust_map::RustMap;
 use crate::semantic::ModelNode;
 use crate::semantic::duration::{TimeProfile, counter_bits, units_or_diagnostic};
 use crate::semantic::time_ast::{
-    model_tree_uses_duration_after, model_uses_duration_after, model_uses_tick_after,
+    model_tree_uses_duration_after, model_tree_uses_every, model_uses_duration_after,
+    model_uses_every, model_uses_tick_after,
 };
+
+/// Длительностная выдержка `after Nms` **или** периодический блок `every Nms`
+/// (фича 0134-09): обе меряются длительностью и требуют одну инфраструктуру.
+fn uses_duration_time(model: &ModelNode) -> bool {
+    model_uses_duration_after(model) || model_uses_every(model)
+}
 
 /// Имя поля-счётчика тактов, проведённых в текущем состоянии.
 pub(super) const DWELL_FIELD: &str = "takt_dwell";
@@ -36,24 +43,26 @@ fn is_clock(map: &RustMap) -> bool {
 /// Нужен ли счётчик тактов `takt_dwell`: тактовая выдержка `after Nt` (в любом
 /// профиле) либо длительностная `after Nms` в профиле «такты».
 pub(super) fn needs_dwell(map: &RustMap, model: &ModelNode) -> bool {
-    model_uses_tick_after(model) || (!is_clock(map) && model_uses_duration_after(model))
+    model_uses_tick_after(model) || (!is_clock(map) && uses_duration_time(model))
 }
 
-/// Нужна ли метка времени `takt_entry_ms`: профиль «часы» + `after Nms`.
+/// Нужна ли метка времени `takt_entry_ms`: профиль «часы» + длительностный
+/// `after Nms` или `every Nms`.
 pub(super) fn needs_entry_ms(map: &RustMap, model: &ModelNode) -> bool {
-    is_clock(map) && model_uses_duration_after(model)
+    is_clock(map) && uses_duration_time(model)
 }
 
-/// Нужен ли метод `now_ms` трейту `Hal` (профиль «часы» + `after Nms` в дереве).
+/// Нужен ли метод `now_ms` трейту `Hal` (профиль «часы» + длительностный `after`
+/// или `every` в дереве).
 ///
 /// Метод на трейте один на файл, а длительностная выдержка бывает во вложенной
 /// под-модели композиции — решение по всему дереву корня.
 pub(super) fn needs_now_ms(map: &RustMap, model: &ModelNode) -> bool {
-    is_clock(map) && model_tree_uses_duration_after(model)
+    is_clock(map) && (model_tree_uses_duration_after(model) || model_tree_uses_every(model))
 }
 
-/// Разрядность счётчика тактов `takt_dwell` — по максимуму `after` этой модели.
-fn dwell_bits(map: &RustMap, model: &ModelNode) -> Result<u8, Diagnostic> {
+/// Разрядность счётчика тактов `takt_dwell` — по максимуму `after`/`every` модели.
+pub(super) fn dwell_bits(map: &RustMap, model: &ModelNode) -> Result<u8, Diagnostic> {
     Ok(counter_bits(max_units(map, model)?).unwrap_or(64))
 }
 
@@ -66,6 +75,18 @@ fn max_units(map: &RustMap, model: &ModelNode) -> Result<u64, Diagnostic> {
             if let crate::semantic::ConditionNode::After(nanos) = reference.cond {
                 let units =
                     units_or_diagnostic(nanos, profile, Location::Codegen, "выдержка 'after'")?;
+                max = max.max(units);
+            }
+        }
+        // Периоды `every` (0134-09) делят ширину счётчика — учитываем и их.
+        for block in state.named_blocks() {
+            if let Some((period_nanos, _)) = block.every_period() {
+                let units = units_or_diagnostic(
+                    period_nanos,
+                    profile,
+                    Location::Codegen,
+                    "период 'every'",
+                )?;
                 max = max.max(units);
             }
         }
@@ -183,8 +204,10 @@ pub(super) fn emit_tick_update(
         .nl();
     }
     p.ident(&format!("self.{PREV_STATE_FIELD} = self.state;"))
-        .nl()
-        .down();
+        .nl();
+    // Аккумуляторы `every` (0134-09) обнуляются при входе — период с нуля.
+    crate::generator::rust::rust_every::emit_reset(p, model);
+    p.down();
     if dwell {
         p.ident("} else {")
             .up()

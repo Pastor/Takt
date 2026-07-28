@@ -32,6 +32,7 @@
 
 mod c_blocks;
 mod c_decl;
+mod c_every;
 mod c_expr;
 mod c_hal;
 mod c_header;

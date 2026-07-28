@@ -386,6 +386,8 @@ fn generate_model_header(
     // использовании `after` (модель без времени — прежний вывод байт-в-байт).
     // Логика в `c_time` (лимит размера `c_header`).
     crate::generator::c::c_time::emit_state_time_fields(printer, map, &model.borrow())?;
+    // Аккумуляторы периодических блоков `every` (фича 0134-09).
+    crate::generator::c::c_every::emit_fields(printer, map, &model.borrow())?;
     // Генерируем поля extend-состояний
     let mut is_extend = false;
     for state_name in states {

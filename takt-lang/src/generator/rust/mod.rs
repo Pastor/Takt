@@ -41,6 +41,7 @@
 mod rust_blocks;
 mod rust_cond;
 mod rust_decl;
+mod rust_every;
 mod rust_expr;
 mod rust_fixed;
 mod rust_func;

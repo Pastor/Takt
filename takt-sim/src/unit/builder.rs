@@ -372,6 +372,7 @@ fn build_node(
 
     let mut state_transitions: HashMap<String, Vec<(String, Predicate)>> = HashMap::new();
     let mut state_executions: HashMap<String, Executions> = HashMap::new();
+    let mut state_every: HashMap<String, Vec<(i64, Vec<Execution>)>> = HashMap::new();
     // 0044: инварианты модели (проверяются каждый такт) и по состояниям.
     let mut guards = crate::unit::Guards {
         model: build_guards(&model.borrow().formulas),
@@ -386,7 +387,18 @@ fn build_node(
         }
 
         let mut execs: Executions = HashMap::new();
+        let mut every_blocks: Vec<(i64, Vec<Execution>)> = Vec::new();
         for block in state_node.named_blocks() {
+            // `every Nms { … }` (фича 0134-09): периодический блок. Собирается
+            // отдельно от обычных (`always`/`enter`/`exit`) — несёт период, а не
+            // имя-ключ, и все `every` одного состояния делят ключ иначе слиплись бы.
+            if let Some((period_nanos, _)) = block.every_period() {
+                if let Some(body) = block.statement() {
+                    let fns = compile_block_body(body, ctx_rc.clone());
+                    every_blocks.push((period_nanos, fns));
+                }
+                continue;
+            }
             let kind = block.name();
             if kind.is_empty() {
                 continue;
@@ -399,6 +411,9 @@ fn build_node(
             }
         }
         state_executions.insert(name.clone(), execs);
+        if !every_blocks.is_empty() {
+            state_every.insert(name.clone(), every_blocks);
+        }
     }
 
     // Фича 0083: именованные блоки **уровня модели** (`always` вне состояния).
@@ -430,6 +445,8 @@ fn build_node(
         context: Some(ctx_rc),
         state_transitions,
         state_executions,
+        state_every,
+        every_consumed: Vec::new(),
         state: Some(start_name),
         executions,
         guards,
