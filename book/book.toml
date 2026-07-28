@@ -63,7 +63,31 @@ urlcolor = "blue"
 # обрезается). fvextra с breaklines/breakanywhere переносит их. commandchars
 # оставлены как у pandoc по умолчанию (`\\\{\}`) — иначе подсветка синтаксиса
 # сломается.
+# Верхний колонтитул с названием раздела (фича 0142). Класс документа — `report`
+# (главы `\chapter`), поэтому `\leftmark` несёт заголовок текущей главы, а
+# `\chapter` сам переводит ПЕРВУЮ страницу главы в стиль `plain` (без колонтитула)
+# — ровно то исключение, которого требует фича: на странице начала раздела его имя
+# и так стоит заголовком. `\chaptermark` переопределён на «только заголовок» (без
+# англоязычного «Chapter N.»/русского «Глава N.», которого нет в структуре mdBook);
+# `plain` переопределён, чтобы на первой странице главы остался лишь номер страницы.
+#
+# Передний блок (титул, оглавление) колонтитула НЕ несёт (требование фичи): стиль
+# по умолчанию — `plain`, а на `fancy` документ переключается с ПЕРВОГО `\part`
+# (etoolbox `\pretocmd`). Так `\tableofcontents`, ставящий метку `Содержание`
+# через `\@mkboth`, остаётся без колонтитула, а страницы-разделители `\part` — тоже
+# `plain` (их имя и так стоит заголовком).
 header-includes = [
   '\usepackage{fvextra}',
   '\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\}}',
+  '\usepackage{fancyhdr}',
+  '\renewcommand{\chaptermark}[1]{\markboth{#1}{}}',
+  '\pagestyle{fancy}',
+  '\fancyhf{}',
+  '\fancyhead[R]{\nouppercase{\leftmark}}',
+  '\fancyfoot[C]{\thepage}',
+  '\makeatletter',
+  '\renewcommand{\headrule}{\protected@edef\@tempa{\leftmark}\ifx\@tempa\@empty\else\hrule\@height0.4pt\@width\headwidth\vskip-0.4pt\fi}',
+  '\AtBeginDocument{\let\taktoldtoc\tableofcontents\renewcommand{\tableofcontents}{\begingroup\renewcommand{\@mkboth}[2]{}\taktoldtoc\endgroup\markboth{}{}}}',
+  '\makeatother',
+  '\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\thepage}\renewcommand{\headrule}{}}',
 ]
