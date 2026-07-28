@@ -22,11 +22,13 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
     match cond {
         // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
         // отказ, а не печать наносекунд обычным числом.
-        ConditionNode::Duration(_) | ConditionNode::After(_) => Err(Diagnostic::error(
-            Location::Codegen,
-            "длительность целью 'rust' пока не поддерживается".to_string(),
-        )
-        .with_code("RS-023")),
+        ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {
+            Err(Diagnostic::error(
+                Location::Codegen,
+                "длительность целью 'rust' пока не поддерживается".to_string(),
+            )
+            .with_code("RS-023"))
+        }
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Rational(text, negative) => Ok(rational(text, *negative)),
         ConditionNode::Bool(b) => Ok(b.to_string()),

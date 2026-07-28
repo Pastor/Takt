@@ -253,11 +253,13 @@ pub(crate) fn print_condition(
     match cond {
         // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
         // отказ, а не печать наносекунд обычным числом.
-        ConditionNode::Duration(_) | ConditionNode::After(_) => Err(Diagnostic::error(
-            Location::Codegen,
-            "длительность целью 'st' пока не поддерживается".to_string(),
-        )
-        .with_code("ST-015")),
+        ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {
+            Err(Diagnostic::error(
+                Location::Codegen,
+                "длительность целью 'st' пока не поддерживается".to_string(),
+            )
+            .with_code("ST-015"))
+        }
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Bool(b) => Ok(bool_literal(*b)),
         ConditionNode::Rational(text, negative) => {

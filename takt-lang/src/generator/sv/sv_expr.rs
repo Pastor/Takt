@@ -405,11 +405,13 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::None => Ok("1'b1".to_string()),
         // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
         // отказ, а не печать наносекунд обычным числом.
-        ConditionNode::Duration(_) | ConditionNode::After(_) => Err(Diagnostic::error(
-            Location::Codegen,
-            "длительность целью 'sv' пока не поддерживается".to_string(),
-        )
-        .with_code("SV-015")),
+        ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {
+            Err(Diagnostic::error(
+                Location::Codegen,
+                "длительность целью 'sv' пока не поддерживается".to_string(),
+            )
+            .with_code("SV-015"))
+        }
         ConditionNode::Bool(v) => Ok(if *v { "1'b1" } else { "1'b0" }.to_string()),
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Parenthesis(inner) => Ok(format!("({})", print_condition(inner, scope)?)),

@@ -73,7 +73,8 @@ pub fn model_uses_after(model: &ModelNode) -> bool {
 /// Есть ли `after` в условии перехода (в любом из двух представлений).
 fn cond_uses_after(cond: &crate::semantic::ConditionNode) -> bool {
     match cond {
-        crate::semantic::ConditionNode::After(_) => true,
+        crate::semantic::ConditionNode::After(_)
+        | crate::semantic::ConditionNode::AfterTicks(_) => true,
         crate::semantic::ConditionNode::Unresolved(raw) => find_after(raw).is_some(),
         _ => false,
     }
@@ -117,7 +118,7 @@ fn reject_after_in_formula(def: &InlineFormulaDefine) -> Result<(), Diagnostic> 
 /// компилятор потребует ветку (в отличие от `_ =>`, который проглотил бы её).
 fn find_after(cond: &Condition) -> Option<crate::diagnostics::Location> {
     match cond {
-        Condition::After(loc, _, _) => Some(*loc),
+        Condition::After(loc, _, _) | Condition::AfterTicks(loc, _, _) => Some(*loc),
         Condition::Parenthesis(_, inner)
         | Condition::Not(_, inner)
         | Condition::BitAccess(_, inner, _)

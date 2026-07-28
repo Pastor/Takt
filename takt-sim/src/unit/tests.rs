@@ -31,6 +31,7 @@ fn ctx_with(key: &str, val: Value) -> Rc<RefCell<dyn Context>> {
 fn node() -> Unit {
     Unit(UnitKind::Node {
         time_ns: 0,
+        ticks_in_state: 0,
         state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
@@ -48,6 +49,7 @@ fn node() -> Unit {
 fn node_with(key: &str, val: Value) -> Unit {
     Unit(UnitKind::Node {
         time_ns: 0,
+        ticks_in_state: 0,
         state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
@@ -308,6 +310,7 @@ fn r5_eval_error_is_distinguishable_from_false_condition() {
     st.insert("B".to_string(), vec![]);
     let mut u = Unit(UnitKind::Node {
         time_ns: 0,
+        ticks_in_state: 0,
         state_entered_ns: 0,
         model_name: None,
         entered_initial: true,
@@ -343,6 +346,7 @@ fn r5_false_condition_is_not_an_error() {
     st.insert("B".to_string(), vec![]);
     let mut u = Unit(UnitKind::Node {
         time_ns: 0,
+        ticks_in_state: 0,
         state_entered_ns: 0,
         model_name: None,
         entered_initial: true,
@@ -374,6 +378,7 @@ fn node_with_enter(counter: Rc<Cell<u32>>) -> Unit {
     execs.insert("A".to_string(), m);
     Unit(UnitKind::Node {
         time_ns: 0,
+        ticks_in_state: 0,
         state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
@@ -433,6 +438,7 @@ fn node_terminal(name: &str) -> Unit {
     st.insert(name.to_string(), vec![]);
     Unit(UnitKind::Node {
         time_ns: 0,
+        ticks_in_state: 0,
         state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
@@ -455,6 +461,7 @@ fn node_with_transition(from: &str, to: &str, cond: bool) -> Unit {
     st.insert(to.to_string(), vec![]);
     Unit(UnitKind::Node {
         time_ns: 0,
+        ticks_in_state: 0,
         state_entered_ns: 0,
         model_name: None,
         entered_initial: false,
@@ -553,6 +560,7 @@ fn test_tick_node_only_first_matching_transition_taken() {
     st.insert("C".to_string(), vec![]);
     let mut u = Unit(UnitKind::Node {
         time_ns: 0,
+        ticks_in_state: 0,
         state_entered_ns: 0,
         model_name: None,
         entered_initial: false,

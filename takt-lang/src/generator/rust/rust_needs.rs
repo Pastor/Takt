@@ -370,6 +370,7 @@ fn walk_condition(
         | ConditionNode::Number(_)
         | ConditionNode::Duration(_)
         | ConditionNode::After(_)
+        | ConditionNode::AfterTicks(_)
         | ConditionNode::Rational(_, _)
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)

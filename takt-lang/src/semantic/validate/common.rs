@@ -110,7 +110,7 @@ fn validate_cond(
             validate_cond(Some(*left.clone()), &right, model.clone())?;
         }
         ConditionNode::Number(_) => {}
-        ConditionNode::Duration(_) | ConditionNode::After(_) => {}
+        ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {}
         ConditionNode::Rational(_, _) => {}
         ConditionNode::String(_) => {}
         ConditionNode::Bool(_) => {}

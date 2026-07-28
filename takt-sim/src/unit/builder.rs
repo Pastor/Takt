@@ -423,6 +423,7 @@ fn build_node(
 
     Ok(Unit::from_kind(UnitKind::Node {
         time_ns: 0,
+        ticks_in_state: 0,
         state_entered_ns: 0,
         entered_initial: false,
         model_name: model.borrow().name.clone(),

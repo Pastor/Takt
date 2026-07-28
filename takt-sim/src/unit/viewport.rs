@@ -817,6 +817,7 @@ mod tests {
         transitions.insert("B".to_string(), vec![]);
         let unit = Unit::from_kind(UnitKind::Node {
             time_ns: 0,
+            ticks_in_state: 0,
             state_entered_ns: 0,
             model_name: None,
             entered_initial: false,
@@ -847,6 +848,7 @@ mod test_highlight {
     fn make_node(t: HashMap<String, Vec<(String, crate::unit::Predicate)>>) -> Unit {
         Unit::from_kind(crate::unit::UnitKind::Node {
             time_ns: 0,
+            ticks_in_state: 0,
             state_entered_ns: 0,
             model_name: None,
             entered_initial: false,

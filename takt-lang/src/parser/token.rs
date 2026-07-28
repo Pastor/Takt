@@ -29,6 +29,11 @@ pub enum Token<'input> {
     Duration(i64, &'input str),
     /// Литерал частоты: `(герцы, как записано)` — фича 0134.
     Frequency(u64, &'input str),
+    /// Литерал выдержки в **тактах**: `(число тактов, как записано)` — `3t`.
+    ///
+    /// Отдельный токен, а не длительность: такт в наносекундах не выражается без
+    /// частоты, и тактовая выдержка её не требует.
+    Ticks(i64, &'input str),
     /// Оператор деления `/`.
     Divide,
     /// Ключевое слово `fn`.
@@ -239,6 +244,7 @@ impl<'input> fmt::Display for Token<'input> {
             // Фича 0134: печатается авторская запись (`1m30s`), а не канон.
             Token::Duration(_, text) => write!(f, "{text}"),
             Token::Frequency(_, text) => write!(f, "{text}"),
+            Token::Ticks(_, text) => write!(f, "{text}"),
             Token::Semicolon => write!(f, ";"),
             Token::Comma => write!(f, ","),
             Token::Sharp => write!(f, "#"),

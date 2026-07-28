@@ -137,6 +137,7 @@ pub fn resolve_condition(
         // («прошло не меньше указанного») достаточно, чтобы цели не расходились.
         ast::Condition::Duration(_, nanos, _) => Ok(ConditionNode::Duration(*nanos)),
         ast::Condition::After(_, nanos, _) => Ok(ConditionNode::After(*nanos)),
+        ast::Condition::AfterTicks(_, ticks, _) => Ok(ConditionNode::AfterTicks(*ticks)),
         ast::Condition::ArraySubscript(_, id, idx_cond) => {
             let name = id.name.clone();
             let var = model.borrow().search_var(&name);

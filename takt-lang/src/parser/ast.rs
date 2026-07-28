@@ -546,6 +546,11 @@ pub enum Condition {
     /// Сахар над механизмом времени (ADR 0134, правило 12); скрытую метку
     /// времени заводит семантика, а не автор.
     After(Location, i64, String),
+    /// Выдержка в **тактах** на ребре: `ref Имя: after 3t;` (фича 0134).
+    ///
+    /// Отдельный узел, а не длительность: такт — шаг логики, его физическая
+    /// длительность неизвестна, и частота такой выдержке не нужна.
+    AfterTicks(Location, i64, String),
     /// Вещественный литерал: `(строка, отрицательный)`.
     Rational(Location, String, bool),
     /// Конкатенация строковых литералов.
@@ -579,6 +584,7 @@ impl Condition {
             | Condition::Rational(loc, _, _)
             | Condition::Duration(loc, _, _)
             | Condition::After(loc, _, _)
+            | Condition::AfterTicks(loc, _, _)
             | Condition::Bool(loc, _) => *loc,
             Condition::Variable(id) => id.loc,
             Condition::String(parts) => parts.first().map(|s| s.loc).unwrap_or(Location::Implicit),

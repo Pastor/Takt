@@ -182,6 +182,7 @@ mod tests {
         st.insert(state.to_string(), vec![]);
         Unit::from_kind(UnitKind::Node {
             time_ns: 0,
+            ticks_in_state: 0,
             state_entered_ns: 0,
             model_name: None,
             entered_initial: false,
@@ -203,6 +204,7 @@ mod tests {
         st.insert(to.to_string(), vec![]);
         Unit::from_kind(UnitKind::Node {
             time_ns: 0,
+            ticks_in_state: 0,
             state_entered_ns: 0,
             model_name: None,
             entered_initial: false,
