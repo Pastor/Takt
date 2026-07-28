@@ -649,3 +649,211 @@ fn unsigned_overflow_wraps_like_generated_st() {
         "в трассе ST обязан быть переход 255 → 0 (обёртка mod 2^8): ST={st:?}"
     );
 }
+
+// ── Модель времени: профиль «часы» через штатный TON (фича 0134) ──────────────
+
+const TIME_FIXTURE: &str = "tests/data/eval/conformance_after_st.takt";
+/// Корень фикстуры времени в C-символах iec2c (ВЕРХНИЙ регистр от basename).
+const TIME_ROOT: &str = "STTIME";
+/// Путь к наблюдаемому порту в структуре POUS (под-FB `DWELL0`, поле `LEVEL`).
+const TIME_PORT: &str = "DWELL0.LEVEL";
+const TIME_TICKS: usize = 8;
+
+/// Трасса симулятора при 1 мс на такт (эталон профиля «часы»).
+fn simulate_time_trace() -> Vec<i64> {
+    let source = std::fs::read_to_string(TIME_FIXTURE).expect("фикстура");
+    let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
+    let model = construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = build_unit(model).expect("построение юнита");
+    let mut trace = Vec::new();
+    for step in 0..TIME_TICKS {
+        unit.set_time_ns(i64::try_from(step).unwrap() * 1_000_000);
+        let result = unit.tick();
+        assert!(
+            !matches!(result, TickResult::Failed(_)),
+            "падение: {result:?}"
+        );
+        trace.push(sim_value(&unit, "level"));
+    }
+    trace
+}
+
+/// Трасса порождённого ST: драйвер подаёт модельное время в `__CURRENT_TIME`
+/// (1 мс на такт) перед каждым `_body__` — проба П3. Печатает порт после скана.
+fn run_st_time_trace(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i64> {
+    let source = std::fs::read_to_string(TIME_FIXTURE).expect("фикстура");
+    let st_dir = dir.join("st");
+    std::fs::create_dir_all(&st_dir).expect("каталог ST");
+    takt_lang::compile_to_st(
+        "sttime.takt",
+        &source,
+        st_dir.to_str().expect("путь"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("порождение ST");
+    let work = dir.join("iec2c");
+    std::fs::create_dir_all(&work).expect("рабочий каталог");
+    let transpile = Command::new(iec2c)
+        .arg("-I")
+        .arg(lib)
+        .arg(st_dir.join("sttime.st"))
+        .current_dir(&work)
+        .output()
+        .expect("запуск iec2c");
+    assert!(
+        transpile.status.success() && work.join("POUS.c").is_file(),
+        "iec2c не оттранслировал ST времени:\n{}",
+        String::from_utf8_lossy(&transpile.stderr)
+    );
+
+    let harness = format!(
+        r#"#include <stdio.h>
+#include "iec_std_lib.h"
+TIME __CURRENT_TIME;
+BOOL __DEBUG = 0;
+#include "POUS.h"
+#include "POUS.c"
+
+int main(void) {{
+    {TIME_ROOT}_data__ fb = {{0}};
+    {TIME_ROOT}_init__(&fb, __BOOL_LITERAL(FALSE));
+    for (int i = 0; i < {TIME_TICKS}; i++) {{
+        /* 1 мс на такт: модельное время такта i (проба П3). */
+        __CURRENT_TIME.tv_sec = 0;
+        __CURRENT_TIME.tv_nsec = (long)i * 1000000L;
+        {TIME_ROOT}_body__(&fb);
+        printf("TICK %u\n", (unsigned)fb.{TIME_PORT}.value);
+    }}
+    return 0;
+}}
+"#
+    );
+    let harness_path = work.join("harness_time.c");
+    std::fs::write(&harness_path, harness).expect("драйвер");
+    let bin = work.join("st_time_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c99", "-w", "-I"])
+        .arg(lib.join("C"))
+        .arg("-I")
+        .arg(&work)
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "ST времени (через iec2c) не собирается:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск драйвера");
+    assert!(
+        run.status.success(),
+        "драйвер ST времени завершился с ошибкой"
+    );
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i64>().ok())
+        .collect()
+}
+
+/// Выдержка `after 5ms` (профиль «часы») через штатный `TON`: цель `st`, как
+/// эталон, ЗАДЕРЖИВАЕТ переход и снимает его после накопления 5 мс.
+///
+/// ⚠️ Сверяется не абсолютный такт, а **свойство выдержки**. `TON` отмеряет
+/// длительность верно (проба П3 анализа: ET копит инжектированное время до `PT`),
+/// но абсолютный такт срабатывания у `st` СМЕЩЁН относительно симулятора на два
+/// скана — по причинам, к времени отношения не имеющим: (1) ветвь INIT `CASE`
+/// расходует скан (тело стартового состояния исполняется со следующего — свойство
+/// структуры ST, а не 0033), (2) MatIEC `TON` ловит фронт `IN` на ВТОРОМ вызове.
+/// Оба — идиосинкразия ST/MatIEC. Поэтому потактовое равенство трасс здесь не
+/// требуется; требуется, чтобы выдержка **сработала не сразу и не никогда**, была
+/// монотонной и не опередила эталон. Мягкая деградация: нет iec2c/cc → пропуск.
+#[test]
+fn after_clock_profile_delays_and_fires_in_generated_st() {
+    let sim = simulate_time_trace();
+    let sim_fire = sim
+        .iter()
+        .position(|&v| v == 1)
+        .expect("эталон снимает выдержку");
+    assert_eq!(
+        sim,
+        vec![0, 0, 0, 0, 0, 1, 1, 1],
+        "эталон профиля «часы»: {sim:?}"
+    );
+    let Some((iec2c, lib)) = iec2c_available() else {
+        eprintln!(
+            "[ПРОПУСК] after_clock_profile_delays_and_fires_in_generated_st: iec2c не найден"
+        );
+        return;
+    };
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] after_clock_profile_delays_and_fires_in_generated_st: cc не найден");
+        return;
+    }
+    let dir = tempfile::tempdir().expect("каталог");
+    let st = run_st_time_trace(dir.path(), &iec2c, &lib);
+    let st_fire = st
+        .iter()
+        .position(|&v| v == 1)
+        .unwrap_or_else(|| panic!("ST обязан снять выдержку (TON сработал): {st:?}"));
+    // Задержка: не мгновенно (не такт 0) — TON реально ждёт.
+    assert!(
+        st_fire > 0,
+        "выдержка не должна срабатывать мгновенно: {st:?}"
+    );
+    // Не раньше эталона: TON меряет ту же длительность, ST лишь структурно позже.
+    assert!(
+        st_fire >= sim_fire,
+        "ST не может опередить эталон (та же длительность): ST={st:?}, эталон снял на {sim_fire}"
+    );
+    // Монотонность: 0…0 затем 1…1 (переход единожды, не мигает).
+    assert!(
+        st.iter().skip(st_fire).all(|&v| v == 1) && st.iter().take(st_fire).all(|&v| v == 0),
+        "трасса ST обязана быть монотонной 0→1: {st:?}"
+    );
+}
+
+/// Профиль «такты» (`--tick-hz` без `clock`) порождает СЧЁТЧИК `takt_dwell`, не
+/// `TON`, и `iec2c` его принимает. Сторож валидности встречного профиля.
+#[test]
+#[allow(clippy::field_reassign_with_default)]
+fn after_ticks_profile_generates_valid_st() {
+    let source = std::fs::read_to_string(TIME_FIXTURE).expect("фикстура");
+    let dir = tempfile::tempdir().expect("каталог");
+    let st_dir = dir.path().join("st");
+    std::fs::create_dir_all(&st_dir).expect("каталог ST");
+    let mut opts = takt_lang::generator::GenerateOptions::default();
+    opts.tick_hz = Some(1000); // профиль «такты» без объявления clock
+    takt_lang::compile_to_st("sttick.takt", &source, st_dir.to_str().unwrap(), &[], &opts)
+        .expect("порождение ST");
+    let st = std::fs::read_to_string(st_dir.join("sttick.st")).expect(".st");
+    assert!(
+        st.contains("takt_dwell"),
+        "профиль «такты» — счётчик:\n{st}"
+    );
+    assert!(
+        !st.contains("TON"),
+        "профиль «такты» не должен эмитить TON:\n{st}"
+    );
+
+    let Some((iec2c, lib)) = iec2c_available() else {
+        eprintln!("[ПРОПУСК] after_ticks_profile_generates_valid_st: iec2c не найден");
+        return;
+    };
+    let work = dir.path().join("iec2c");
+    std::fs::create_dir_all(&work).expect("рабочий каталог");
+    let transpile = Command::new(&iec2c)
+        .arg("-I")
+        .arg(&lib)
+        .arg(st_dir.join("sttick.st"))
+        .current_dir(&work)
+        .output()
+        .expect("запуск iec2c");
+    assert!(
+        transpile.status.success() && work.join("POUS.c").is_file(),
+        "iec2c отверг профиль «такты»:\n{}",
+        String::from_utf8_lossy(&transpile.stderr)
+    );
+}

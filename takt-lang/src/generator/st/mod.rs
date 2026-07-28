@@ -49,6 +49,7 @@ mod st_map;
 mod st_model;
 mod st_reserved;
 mod st_stmt;
+mod st_time;
 mod st_type;
 
 use crate::diagnostics::{Diagnostic, Location};
@@ -78,12 +79,16 @@ impl AsGenerator for Generator {
         output_path: &str,
         options: &GenerateOptions,
     ) -> Result<(), Diagnostic> {
+        // Профиль времени (фича 0134): `clock` модели — контракт, флаг обязан
+        // подтвердить (0134-05). Единый чекпойнт-энфорсмент `SE-069`/`SE-070`.
+        let profile = crate::semantic::duration::resolve_profile(model.clock_hz, options.tick_hz)?;
         let map = StMap::new(
             &normalize_lowercase_snakecase(model.name().to_string()),
             model,
             options.hal,
             options.address_map.clone(),
-        )?;
+        )?
+        .with_time_profile(profile);
         let program = generate_program(&map)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));

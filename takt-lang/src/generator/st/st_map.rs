@@ -28,6 +28,9 @@ pub(crate) struct StMap {
     at_addresses: bool,
     /// Разрешённые адреса портов (`resolve_addresses`, приоритет 0020).
     addresses: HashMap<String, ResolvedAddress>,
+    /// Профиль времени (фича 0134): «часы» (штатный `TON`) либо «такты» (счётчик).
+    /// Разрешается общим слоем `resolve_profile` в `generate` — по образцу `CMap`.
+    time_profile: crate::semantic::duration::TimeProfile,
 }
 
 /// Собирает имена моделей из дерева реализации состояния.
@@ -60,7 +63,22 @@ impl StMap {
             usage,
             at_addresses,
             addresses,
+            time_profile: crate::semantic::duration::TimeProfile::default(),
         })
+    }
+
+    /// Задаёт профиль времени (фича 0134); умолчание — «часы» (аддитивно).
+    pub(crate) fn with_time_profile(
+        mut self,
+        profile: crate::semantic::duration::TimeProfile,
+    ) -> Self {
+        self.time_profile = profile;
+        self
+    }
+
+    /// Профиль времени, выбранный для генерации.
+    pub(crate) fn time_profile(&self) -> crate::semantic::duration::TimeProfile {
+        self.time_profile
     }
 
     /// Разрешённый адрес порта по имени (цель `st-at`).
