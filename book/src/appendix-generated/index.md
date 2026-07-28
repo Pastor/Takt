@@ -1,7 +1,7 @@
 # Порождённый код примера
 
 Здесь приведён **полный** код, порождённый из модели контроллера кабины лифта
-(раздел [«Практический пример»](../17-showcase/index.md)) для каждой цели
+(раздел [«Практический пример»](../18-showcase/index.md)) для каждой цели
 генерации. Один и тот же исходник `lift.takt` даёт все эти файлы **без правок** —
 командой `taktc compile -t <цель> lift.takt -o out/`. Код воспроизводим побайтно
 (генерация детерминирована), поэтому его можно сравнивать между версиями.
@@ -11,13 +11,13 @@
 Заголовок `lift.h`:
 
 ```c
-{{#include ../17-showcase/generated/c/lift.h}}
+{{#include ../18-showcase/generated/c/lift.h}}
 ```
 
 Реализация `lift.c`:
 
 ```c
-{{#include ../17-showcase/generated/c/lift.c}}
+{{#include ../18-showcase/generated/c/lift.c}}
 ```
 
 ## Цель `c-hal` — прошивка с прямым доступом к регистрам
@@ -26,29 +26,29 @@
 превращаются в доступ по памяти. Заголовок `lift.h`:
 
 ```c
-{{#include ../17-showcase/generated/c-hal/lift.h}}
+{{#include ../18-showcase/generated/c-hal/lift.h}}
 ```
 
 Реализация `lift.c`:
 
 ```c
-{{#include ../17-showcase/generated/c-hal/lift.c}}
+{{#include ../18-showcase/generated/c-hal/lift.c}}
 ```
 
 ## Цель `rust` — `no_std` Rust
 
 ```rust
-{{#include ../17-showcase/generated/rust/lift.rs}}
+{{#include ../18-showcase/generated/rust/lift.rs}}
 ```
 
 ## Цель `st` — ПЛК, Structured Text (IEC 61131-3)
 
 ```pascal
-{{#include ../17-showcase/generated/st/lift.st}}
+{{#include ../18-showcase/generated/st/lift.st}}
 ```
 
 ## Цель `sv` — синтезируемый SystemVerilog (FPGA/ASIC)
 
 ```systemverilog
-{{#include ../17-showcase/generated/sv/lift.sv}}
+{{#include ../18-showcase/generated/sv/lift.sv}}
 ```

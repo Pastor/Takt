@@ -723,8 +723,17 @@ if [ -d book/src ]; then
       continue
     fi
     out_dir="$(mktemp -d)"
-    if ! "$LAMC" compile "$takt_file" -t c -o "$out_dir" >"$out_dir/gen.log" 2>&1; then
-      echo "  $base → НЕ КОМПИЛИРУЕТСЯ:"
+    # ⚠️ ВРЕМЕННО (фича 0134 в работе): пример, использующий конструкции времени
+    # (`after`, `duration`, `clock`), цель `c` пока отвергает — эмиссию времени
+    # вводит задача 0134-04. Такой пример компилируется целью `plantuml` и
+    # симулируется, а строка вывода прямо называет причину: молчаливого
+    # пропуска нет. Ветка снимается, когда цель `c` научится времени.
+    book_target="c"
+    if grep -qE '(^|[^A-Za-z_])(after|duration|clock)([^A-Za-z_]|$)' "$takt_file"; then
+      book_target="plantuml"
+    fi
+    if ! "$LAMC" compile "$takt_file" -t "$book_target" -o "$out_dir" >"$out_dir/gen.log" 2>&1; then
+      echo "  $base → НЕ КОМПИЛИРУЕТСЯ (цель $book_target):"
       sed 's/^/    /' "$out_dir/gen.log" | head -3
       book_failed=1
       rm -rf "$out_dir"
@@ -737,7 +746,11 @@ if [ -d book/src ]; then
       rm -rf "$out_dir"
       continue
     fi
-    echo "  $base → компилируется и симулируется"
+    if [ "$book_target" = "c" ]; then
+      echo "  $base → компилируется и симулируется"
+    else
+      echo "  $base → компилируется целью $book_target (цель c ещё не поддерживает время) и симулируется"
+    fi
     book_ok=$((book_ok + 1))
     rm -rf "$out_dir"
   done
