@@ -219,7 +219,7 @@ start Root = Watchdog;              // корневая модель едини�
 | `import`, пути поиска, псевдонимы | [«Импорты»](book/src/09-imports/index.md) |
 | `enter`/`exit`/`always`, `cond`, `invariant` | [«Именованные блоки»](book/src/10-named/index.md) |
 | Что такое такт, порядок исполнения, первый такт | [«Модель исполнения»](book/src/11-execution/index.md) |
-| LTL-формулы, `Guard`, верификация | [«Верификация»](book/src/12-verification/index.md) |
+| LTL-формулы, `Guard`, верификация | [«Верификация»](book/src/13-verification/index.md) |
 | Полная грамматика | [приложение «Грамматика»](book/src/appendix-grammar/index.md) |
 
 ---
@@ -238,14 +238,14 @@ start Root = Watchdog;              // корневая модель едини�
   исполняется на такте 1. → [«Модель исполнения»](book/src/11-execution/index.md)
 - **Симулятор — эталон поведения.** Все цели генерации обязаны вести себя так
   же; потактовые сверки прогоняют трассы симулятора против порождённого кода.
-  → [«Цели генерации»](book/src/13-targets/index.md),
-  [«Симуляция»](book/src/14-simulation/index.md)
+  → [«Цели генерации»](book/src/14-targets/index.md),
+  [«Симуляция»](book/src/15-simulation/index.md)
 - **Переполнение целых нормировано.** Беззнаковое — обёртка `mod 2ⁿ` одинаково у
   эталона и всех целей; знаковое — **ошибка программы**.
   → [«Типы»](book/src/03-types/index.md)
 - **Диагностика вместо тишины.** Неопределённый случай даёт код (`SE-…`, `SIM-…`,
   `ST-…`, `SV-…`, `RS-…`), а не молчаливое умолчание.
-  → [«Диагностика»](book/src/15-diagnostics/index.md),
+  → [«Диагностика»](book/src/16-diagnostics/index.md),
   [приложение «Ошибки и предупреждения»](book/src/appendix-errors/index.md)
 
 ---
