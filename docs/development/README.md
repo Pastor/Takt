@@ -295,3 +295,5 @@
 | 0183-04 | 0183 | Цель `sv` | [0183-04-duration-type-in-targets.md](0183-04-duration-type-in-targets.md) |
 | 0183-05 | 0183 | Вычисляемая выдержка `after (v + 1s)` | [0183-05-duration-type-in-targets.md](0183-05-duration-type-in-targets.md) |
 | 0183-06 | 0183 | Документ и значение порта `duration` | [0183-06-duration-type-in-targets.md](0183-06-duration-type-in-targets.md) |
+| 0184-01 | 0184 | Общие переменные библиотечного файла в импортёре | [0184-01-imported-shared-variables.md](0184-01-imported-shared-variables.md) |
+| 0184-02 | 0184 | Общие переменные библиотечного файла в импортёре | [0184-02-imported-shared-variables.md](0184-02-imported-shared-variables.md) |

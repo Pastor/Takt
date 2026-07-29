@@ -1,0 +1,116 @@
+//! Выборочный импорт: `import { A, B as C } from "file.takt";`.
+//!
+//! Экспортирует перечисленные имена подключённого файла в текущий контекст.
+//! Поддерживаемые категории и приоритет поиска: **модель → тип → переменная →
+//! условие**.
+//!
+//! Модуль выделен из `semantic/tree.rs` (фича 0184): ветка разрослась
+//! усыновлением импортированного поддерева, а `tree.rs` — файл сверх лимита
+//! размера, которому расти нельзя. Заодно приём стал видимым: перенос имён и их
+//! **привязка** к импортёру — одна операция, и жить ей вместе.
+
+use crate::diagnostics::Diagnostic;
+use crate::parser::ast::Identifier;
+use crate::semantic::import::adopt;
+use crate::semantic::{ConditionDefinitionNode, ModelNode, VariableNode};
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::rc::Rc;
+
+/// Карты строящейся модели-импортёра, в которые попадают импортированные имена.
+pub(in crate::semantic) struct Target<'a> {
+    pub models: &'a mut BTreeMap<String, Rc<RefCell<ModelNode>>>,
+    pub variables: &'a mut BTreeMap<String, VariableNode>,
+    pub conditions: &'a mut BTreeMap<String, ConditionDefinitionNode>,
+    /// Узел импортёра: владелец усыновлённых объявлений и хозяин карты типов.
+    pub model_node: &'a Rc<RefCell<ModelNode>>,
+}
+
+/// Переносит перечисленные символы из `imported` в карты импортёра и усыновляет
+/// импортированное поддерево.
+///
+/// # Ошибки
+///
+/// - `SE-005`/`SE-006`/`SE-007`/`SE-008` — имя уже занято у импортёра;
+/// - `SE-017` — запрошенного имени в подключённом файле нет;
+/// - `SE-074` — импортированная модель опирается на объявления подключённого
+///   файла, не перечисленные в этом импорте (см. [`adopt`]).
+pub(in crate::semantic) fn apply(
+    target: Target<'_>,
+    imported: &Rc<RefCell<ModelNode>>,
+    symbols: &[(Identifier, Option<Identifier>)],
+    mark_imported: fn(Rc<RefCell<ModelNode>>) -> Rc<RefCell<ModelNode>>,
+) -> Result<(), Diagnostic> {
+    let Target {
+        models,
+        variables,
+        conditions,
+        model_node,
+    } = target;
+    // Усыновление (фича 0184) перепривязывает поддеревья ПОСЛЕ цикла — пока `Rc`
+    // корня подключённого файла жив: по нему опознаются его объявления.
+    let mut renames: BTreeMap<String, String> = BTreeMap::new();
+    let mut adopted: Vec<(Rc<RefCell<ModelNode>>, String)> = Vec::new();
+    {
+        let src = imported.borrow();
+        for (orig_id, alias_id) in symbols {
+            let orig = &orig_id.name;
+            // Целевое имя: alias если задан, иначе оригинальное
+            let alias = alias_id
+                .as_ref()
+                .map_or_else(|| orig.clone(), |a| a.name.clone());
+            let sym_loc = alias_id.as_ref().map(|a| a.loc).unwrap_or(orig_id.loc);
+            if let Some(m) = src.models.get(orig) {
+                if models.contains_key(&alias) {
+                    return Err(Diagnostic::declaration_error(
+                        sym_loc,
+                        format!("Модель с именем '{}' уже объявлена", alias),
+                    )
+                    .with_code("SE-006"));
+                }
+                adopted.push((Rc::clone(m), alias.clone()));
+                models.insert(alias, mark_imported(Rc::clone(m)));
+            } else if let Some(t) = src.types.get(orig) {
+                if model_node.borrow().types.contains_key(&alias) {
+                    return Err(Diagnostic::declaration_error(
+                        sym_loc,
+                        format!("Тип '{}' уже объявлен", alias),
+                    )
+                    .with_code("SE-007"));
+                }
+                model_node.borrow_mut().types.insert(alias, t.clone());
+            } else if let Some(v) = src.variables.get(orig) {
+                if variables.contains_key(&alias) {
+                    return Err(Diagnostic::declaration_error(
+                        sym_loc,
+                        format!("Переменная '{}' уже объявлена", alias),
+                    )
+                    .with_code("SE-005"));
+                }
+                let mut adopted_var = v.clone();
+                adopt::adopt_declaration(&mut adopted_var, model_node, &alias);
+                renames.insert(orig.clone(), alias.clone());
+                variables.insert(alias, adopted_var);
+            } else if let Some(c) = src.conditions.get(orig) {
+                if conditions.contains_key(&alias) {
+                    return Err(Diagnostic::declaration_error(
+                        sym_loc,
+                        format!("Условие '{}' уже объявлено", alias),
+                    )
+                    .with_code("SE-008"));
+                }
+                conditions.insert(alias, c.clone());
+            } else {
+                return Err(Diagnostic::declaration_error(
+                    orig_id.loc,
+                    format!("Идентификатор '{}' не найден в импортируемом файле", orig),
+                )
+                .with_code("SE-017"));
+            }
+        }
+    }
+    for (m, alias) in &adopted {
+        adopt::adopt_selected_model(m, imported, model_node, alias, &renames)?;
+    }
+    Ok(())
+}

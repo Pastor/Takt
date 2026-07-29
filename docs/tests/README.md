@@ -115,3 +115,4 @@
 | 0163 | Исчерпывающий разбор узлов во втором вычислителе | [0163-builder-eval-exhaustive.md](0163-builder-eval-exhaustive.md) | ГОТОВО |
 | 0143 | `after` принимает константное выражение типа `duration` | [0143-after-const-duration.md](0143-after-const-duration.md) | ГОТОВО |
 | 0183 | Тип `duration` в целях и вычисляемая выдержка | [0183-duration-type-in-targets.md](0183-duration-type-in-targets.md) | ГОТОВО |
+| 0184 | Общие переменные библиотечного файла в импортёре | [0184-imported-shared-variables.md](0184-imported-shared-variables.md) | СОЗДАНА |
