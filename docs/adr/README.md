@@ -131,3 +131,4 @@
 | [0171](./0171-c-gate-werror.md) | Гейт цели c под -Werror | Draft | фича 0171 |
 | [0181](./0181-sim-state-implementation-tick.md) | Симулятор исполняет реализацию состояния с переходом next | Accepted | фича 0181 |
 | [0182](./0182-pid-library-and-application.md) | Библиотечный ПИД-регулятор и пример его применения | Accepted | фича 0182 |
+| [0166](./0166-sv-example-sequential-composition.md) | Корпусной SV-транслируемый пример на последовательную композицию + | Draft | фича 0166 |
