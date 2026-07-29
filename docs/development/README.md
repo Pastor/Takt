@@ -284,3 +284,4 @@
 | 0174-01 | 0174 | Эмиссия impl Default и сторож на гейте | [0174-01-rust-default-impl.md](0174-01-rust-default-impl.md) |
 | 0147-01 | 0147 | Тесты состава, вложенности и диапазонов символов | [0147-01-document-symbol-tests.md](0147-01-document-symbol-tests.md) |
 | 0148-01 | 0148 | Тесты ветвей печатников и фикс сравнения bit | [0148-01-rust-printer-branch-tests.md](0148-01-rust-printer-branch-tests.md) |
+| 0163-01 | 0163 | Вынос вычислителя в unit/initial.rs с модульным deny и расширение гейта | [0163-01-initial-module-deny.md](0163-01-initial-module-deny.md) |

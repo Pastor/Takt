@@ -135,3 +135,4 @@
 | [0174](./0174-rust-new-without-default.md) | Цель rust: корневая модель без портов (clippy::new_without_default) | Accepted | фича 0174 |
 | [0147](./0147-lsp-document-symbol-tests.md) | Тесты textDocument/documentSymbol | Accepted | фича 0147 |
 | [0148](./0148-rust-printers-coverage.md) | Покрытие печатников цели rust тестами | Accepted | фича 0148 |
+| [0163](./0163-builder-eval-exhaustive.md) | Исчерпывающий разбор узлов во втором вычислителе | Accepted | фича 0163 |

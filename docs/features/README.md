@@ -175,7 +175,7 @@
 | [0160](./0160-takt-ebnf-sync.md) | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0161](./0161-fixture-comments-rename.md) | Ренейм Lam-Takt в комментариях тест-фикстур | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0162](./0162-git-tag-v040.md) | Ретроспективный git-тег v0.4.0 | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0163](./0163-builder-eval-exhaustive.md) | Исчерпывающий разбор узлов во втором вычислителе builder.rs::eval_expr | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0163](./0163-builder-eval-exhaustive.md) | Исчерпывающий разбор узлов во втором вычислителе builder.rs::eval_expr | [ADR](../adr/0163-builder-eval-exhaustive.md) · [анализ](../analyze/0163-builder-eval-exhaustive.md) · разработка 01 · [тест-план](../tests/0163-builder-eval-exhaustive.md) · [отчёт](../reports/0163-builder-eval-exhaustive.md) | ГОТОВО |
 | [0164](./0164-registry-rebuild-gate.md) | Согласованность реестров docs/*/README.md с файлами на диске | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0165](./0165-taktc-version-subcommand.md) | Подкоманда taktc version | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0166](./0166-sv-example-sequential-composition.md) | Корпусной SV-транслируемый пример на последовательную композицию + | [ADR](../adr/0166-sv-example-sequential-composition.md) · [анализ](../analyze/0166-sv-example-sequential-composition.md) · разработка 01 · [тест-план](../tests/0166-sv-example-sequential-composition.md) · [отчёт](../reports/0166-sv-example-sequential-composition.md) | ГОТОВО |
