@@ -268,3 +268,5 @@
 | 0155-01 | 0155 | Семантическое разрешение тел вложенных операторов | [0155-01-semantic-nested-statement-resolution.md](0155-01-semantic-nested-statement-resolution.md) |
 | 0155-02 | 0155 | Семантическое разрешение тел вложенных операторов | [0155-02-semantic-nested-statement-resolution.md](0155-02-semantic-nested-statement-resolution.md) |
 | 0155-03 | 0155 | Семантическое разрешение тел вложенных операторов | [0155-03-semantic-nested-statement-resolution.md](0155-03-semantic-nested-statement-resolution.md) |
+| 0146-01 | 0146 | Гейт символов вне шрифта документа book/ | [0146-01-book-glyph-gate.md](0146-01-book-glyph-gate.md) |
+| 0146-02 | 0146 | Гейт символов вне шрифта документа book/ | [0146-02-book-glyph-gate.md](0146-02-book-glyph-gate.md) |

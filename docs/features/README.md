@@ -158,7 +158,7 @@
 | [0143](./0143-after-const-duration.md) | `after` принимает константу типа `duration`, а не только литерал | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0144](./0144-int-literal-exponent.md) | Экспонента числового литерала вычисляется | [ADR](../adr/0144-int-literal-exponent.md) · [анализ](../analyze/0144-int-literal-exponent.md) · [тест-план](../tests/0144-int-literal-exponent.md) · [отчёт](../reports/0144-int-literal-exponent.md) | ГОТОВО |
 | [0145](./0145-verify-vertex-budget.md) | Потолок верификации по данным: бюджет вместо VERTEX_LIMIT | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0146](./0146-book-glyph-gate.md) | Гейт символов вне шрифта документа book/ | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0146](./0146-book-glyph-gate.md) | Гейт символов вне шрифта документа book/ | ADR + анализ + разработка 01–02 + тест-план + отчёт | ГОТОВО |
 | [0147](./0147-lsp-document-symbol-tests.md) | Тесты textDocument/documentSymbol | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0148](./0148-rust-printers-coverage.md) | Покрытие печатников цели rust тестами | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0149](./0149-claude-md-consistency-gate.md) | Гейт согласованности живого контекста CLAUDE.md | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
