@@ -78,6 +78,62 @@ intellijPlatform {
     }
 }
 
+// ── Пусковой JDK: преflight-проверка (фича 0159) ──────────────────────────────
+//
+// ⚠️ ЗДЕСЬ ДВА РАЗНЫХ JDK, И ПУТАЮТ ИМЕННО ИХ.
+//
+//  * JDK КОМПИЛЯЦИИ задаёт `jvmToolchain(21)` ниже. Gradle скачивает его сам
+//    (foojay-резолвер в settings.gradle.kts) — об этом заботиться не нужно.
+//  * JDK ПУСКОВОЙ — тот, на котором работает демон Gradle и Kotlin-плагин.
+//    Его берут из окружения, и ломается именно он: `jvmToolchain` его НЕ меняет.
+//
+// Таблица версий Java внутри `kotlin-gradle-plugin` 2.0.21 обрывается на
+// `JAVA_21` (замер: класс commons-lang3 `JavaVersion` в jar плагина). Пусковой
+// JDK новее приводит к отказу вида `IllegalArgumentException: 25.0.2` на
+// `compileKotlin` — сообщение не называет ни причины, ни лечения, и час на его
+// разгадывание уже был потрачен однажды.
+//
+// ГРАНИЦЫ НИЖЕ — ЗАМЕР, А НЕ ДОГАДКА:
+//   ≤ 21  — работает (17 проверен прогоном; 21 им же компилирует toolchain);
+//   25    — ломается (замер при работе над плагином);
+//   22–24 — НЕ ПРОВЕРЕНО: таблица Kotlin даёт основание ожидать отказа, но JDK
+//           этих версий под рукой не было. Поэтому предупреждение, а не отказ:
+//           запрещать неизмеренное — та же догадка, только с другим знаком.
+//
+// ⚠️ Числа привязаны к Kotlin 2.0.21. Подняли Kotlin — ПЕРЕЗАМЕРЬТЕ границы, а
+// не подвиньте их «на глаз».
+run {
+    val launcher = JavaVersion.current()
+    val lastKnownGood = JavaVersion.VERSION_21
+    val firstMeasuredBad = JavaVersion.VERSION_25
+    // Номер версии подставляется и в прозу, и в команду из ОДНОГО значения:
+    // зашитое числом «21» в примере разъехалось бы с границей при её правке
+    // (мутация порога это и показала).
+    val howToFix =
+        "Запустите Gradle под JDK $lastKnownGood или ниже, например:\n" +
+            "    JAVA_HOME=\$(/usr/libexec/java_home -v $lastKnownGood) ./gradlew <задача>\n" +
+            "  `jvmToolchain` трогать не нужно: JDK компиляции Gradle скачивает сам."
+
+    if (launcher >= firstMeasuredBad) {
+        error(
+            "Пусковой JDK $launcher не поддерживается сборкой плагина.\n" +
+                "  Причина: таблица версий Java в kotlin-gradle-plugin 2.0.21 обрывается на " +
+                "$lastKnownGood, и на более новом пусковом JDK `compileKotlin` падает с " +
+                "IllegalArgumentException.\n  $howToFix",
+        )
+    }
+    if (launcher > lastKnownGood) {
+        logger.warn(
+            "ВНИМАНИЕ: пусковой JDK $launcher не проверялся с этой сборкой.\n" +
+                "  Известно: до $lastKnownGood включительно работает, $firstMeasuredBad ломается; " +
+                "диапазон между ними не измерен.\n" +
+                "  Если сборка упадёт с IllegalArgumentException на compileKotlin — причина эта.\n" +
+                "  $howToFix\n" +
+                "  Сработало или нет — стоит записать: тогда границу можно будет сузить фактом.",
+        )
+    }
+}
+
 kotlin {
     jvmToolchain(21)
 }
