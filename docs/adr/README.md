@@ -133,3 +133,4 @@
 | [0182](./0182-pid-library-and-application.md) | Библиотечный ПИД-регулятор и пример его применения | Accepted | фича 0182 |
 | [0166](./0166-sv-example-sequential-composition.md) | Корпусной SV-транслируемый пример на последовательную композицию + | Accepted | фича 0166 |
 | [0174](./0174-rust-new-without-default.md) | Цель rust: корневая модель без портов (clippy::new_without_default) | Accepted | фича 0174 |
+| [0147](./0147-lsp-document-symbol-tests.md) | Тесты textDocument/documentSymbol | Accepted | фича 0147 |

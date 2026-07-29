@@ -159,7 +159,7 @@
 | [0144](./0144-int-literal-exponent.md) | Экспонента числового литерала вычисляется | [ADR](../adr/0144-int-literal-exponent.md) · [анализ](../analyze/0144-int-literal-exponent.md) · [тест-план](../tests/0144-int-literal-exponent.md) · [отчёт](../reports/0144-int-literal-exponent.md) | ГОТОВО |
 | [0145](./0145-verify-vertex-budget.md) | Потолок верификации по данным: бюджет вместо VERTEX_LIMIT | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0146](./0146-book-glyph-gate.md) | Гейт символов вне шрифта документа book/ | ADR + анализ + разработка 01–02 + тест-план + отчёт | ГОТОВО |
-| [0147](./0147-lsp-document-symbol-tests.md) | Тесты textDocument/documentSymbol | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0147](./0147-lsp-document-symbol-tests.md) | Тесты textDocument/documentSymbol | [ADR](../adr/0147-lsp-document-symbol-tests.md) · [анализ](../analyze/0147-lsp-document-symbol-tests.md) · разработка 01 · [тест-план](../tests/0147-lsp-document-symbol-tests.md) · [отчёт](../reports/0147-lsp-document-symbol-tests.md) | ГОТОВО |
 | [0148](./0148-rust-printers-coverage.md) | Покрытие печатников цели rust тестами | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0149](./0149-claude-md-consistency-gate.md) | Гейт согласованности живого контекста CLAUDE.md | ADR + анализ + разработка 01–02 + тест-план + отчёт | ГОТОВО |
 | [0150](./0150-sim-positional-scenario-deprecation.md) | Признание позиционной формы сценария устаревшей | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

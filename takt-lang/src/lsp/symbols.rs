@@ -226,6 +226,17 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
             | ModelElement::Clock(_)
             | ModelElement::StraySemicolon(_) => {}
             ModelElement::Struct(def) => {
+                // Имя берётся так же, как у всех соседних ветвей: безымянный
+                // элемент ПРОПУСКАЕТСЯ. Здесь стоял `.unwrap()` — мина под
+                // восстановление разбора: `IdentifierOrError` кладёт `None`,
+                // когда имя не разобралось, и сервер языка упал бы прямо во
+                // время набора текста. Сегодня путь недостижим (при ошибке
+                // `parse` возвращает `Err`, и `document_symbols` выходит
+                // раньше), но это свойство ПАРСЕРА, а не этого модуля.
+                let id = match def.name.as_ref() {
+                    Some(id) => id,
+                    None => continue,
+                };
                 let children: Vec<DocumentSymbol> = def
                     .fields
                     .iter()
@@ -240,10 +251,15 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                     })
                     .collect();
                 out.push(make_sym(
-                    def.name.clone().unwrap().name.clone(),
+                    id.name.clone(),
                     SymbolKind::STRUCT,
                     loc_to_range(&def.loc, source),
-                    loc_to_range(&def.loc, source),
+                    // `selection_range` — диапазон ИМЕНИ, а не всего
+                    // объявления: именно его редактор подсвечивает и на него
+                    // переходит из панели структуры. Прежде здесь стоял `loc`
+                    // объявления — единственная ветвь, выбивавшаяся из общего
+                    // правила.
+                    loc_to_range(&id.loc, source),
                     if children.is_empty() {
                         None
                     } else {

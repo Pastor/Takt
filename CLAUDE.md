@@ -366,6 +366,16 @@ yosys/bison/flex + сборка `iec2c`) и делает один вызов `./
   одноимённым из `-I`. `search_paths` LSP берутся из
   `initializationOptions.searchPaths`. ⚠️ Тесты LSP — под `#[cfg(feature = "lsp")]`;
   их гоняет `cargo test --all-features` в предкоммите.
+- **`documentSymbol`: `selection_range` — диапазон ИМЕНИ, `range` — всего
+  объявления** ([0147](docs/features/0147-lsp-document-symbol-tests.md)). По
+  `selection_range` редактор переходит из панели структуры. Заводя новый вид
+  символа, бери имя как соседние ветви — через `match … { Some => …, None =>
+  continue }`, а не `unwrap`: `IdentifierOrError` кладёт `None`, когда имя не
+  разобралось, и это паника сервера во время набора. ⚠️ Сегодня путь
+  недостижим, но обеспечивает это **парсер** (`parse` даёт `Err`), а не модуль —
+  фича [0152](docs/features/0152-semantic-recovery-element-boundary.md) свойство
+  меняет. ⚠️ Инвариант **состояния** символом не становится (модели —
+  становится): известный пробел, пришпилен тестом.
 - **Семантика переполнения целых нормирована**
   ([0127](docs/features/0127-int-overflow-semantics.md)). Беззнаковое — обёртка
   `mod 2ⁿ` у эталона и всех целей; знаковое — **ошибка программы** (`SIM-003`).
