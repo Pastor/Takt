@@ -1,0 +1,16 @@
+// Контрпример: неизвестное имя во вложенном `if` внутри плеча `match`.
+model Probe {
+    var x: u8 := 0;
+    always {
+        match x {
+            0 => {
+                if x > 0 {
+                    x := unknown_var_zzz;
+                }
+            }
+            _ => { x := 1; }
+        }
+    }
+    start A { ref A: x = 200; }
+}
+start Entry = Probe;

@@ -1,0 +1,11 @@
+// Контрпример: неизвестное имя в инициализаторе `for`.
+model Probe {
+    var x: u8 := 0;
+    always {
+        for var i: u8 := unknown_var_zzz; i < 3; i := i + 1 {
+            x := 1;
+        }
+    }
+    start A { ref A: x = 200; }
+}
+start Entry = Probe;

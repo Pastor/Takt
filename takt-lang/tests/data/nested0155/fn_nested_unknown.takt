@@ -1,0 +1,13 @@
+// Контрпример: неизвестное имя внутри `if` в теле функции.
+model Probe {
+    var x: u8 := 0;
+    fn pick(v: u8) -> u8 {
+        if v > 0 {
+            return unknown_var_zzz;
+        }
+        return 1;
+    }
+    always { x := pick(x); }
+    start A { ref A: x = 200; }
+}
+start Entry = Probe;
