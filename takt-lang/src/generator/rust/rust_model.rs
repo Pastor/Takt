@@ -480,6 +480,7 @@ pub(crate) fn emit_model(
     emit_is_done(p, &table, is_root)?;
     p.down();
     p.ident("}").nl().nl();
+    emit_default_impl(p, &struct_name, is_root, uses_hal);
     Ok(())
 }
 
@@ -689,6 +690,39 @@ fn emit_new(
     p.down();
     p.ident("}").nl().nl();
     Ok(())
+}
+
+/// Печатает `impl Default` рядом с публичным `new()` **без аргументов**
+/// (фича 0174).
+///
+/// Условие ровно то же, при котором срабатывает `clippy::new_without_default`:
+/// конструктор **публичен** (то есть корневой) и аргументов не имеет (то есть
+/// HAL модели транзитивно не нужен — ни портов, ни `extern fn`). Под `-D
+/// warnings` гейта цели `rust` такой вывод иначе КРАСНЫЙ, и пользователь с той
+/// же политикой линтов не собрал бы порождённый код вовсе.
+///
+/// ⚠️ При `uses_hal` печатать нельзя и не нужно: `new(hal: H)` аргумент имеет —
+/// линт молчит, — а `Default::default()` и не построить, значение `H` взять
+/// неоткуда.
+///
+/// Выбран `impl Default`, а не `#[allow(clippy::new_without_default)]`: политика
+/// R9 фичи 0050 — «не эмитить то, на что линт ругается», сторож обязан остаться
+/// живым. Заглушив линт атрибутом, мы спрятали бы и будущие срабатывания.
+fn emit_default_impl(p: &mut Printer, struct_name: &str, is_root: bool, uses_hal: bool) {
+    if !is_root || uses_hal {
+        return;
+    }
+    p.ident("/// Модель в начальном состоянии — синоним [`new`](Self::new).")
+        .nl();
+    p.ident(&format!("impl Default for {struct_name} {{")).nl();
+    p.up();
+    p.ident("fn default() -> Self {").nl();
+    p.up();
+    p.ident("Self::new()").nl();
+    p.down();
+    p.ident("}").nl();
+    p.down();
+    p.ident("}").nl().nl();
 }
 
 /// Печатает `init` — приведение памяти в начальное состояние.
