@@ -119,9 +119,25 @@ const CONTRACTS: &[Contract] = &[
         budget: 40,
         must_terminate: true,
     },
+    // Применение библиотечного регулятора (фича 0182): контур замыкается через
+    // объявления, подключённые из `pid_law.takt`, сходится сам и завершается —
+    // партию греют до уставки, выдерживают до температуры выдачи, цикл окончен.
+    Contract {
+        file: "pid_heater.takt",
+        chain: &["Control, Heating", "Settled, Holding", "Done, Done"],
+        budget: 100,
+        must_terminate: true,
+    },
 ];
 
 const EXCEPTIONS: &[Exception] = &[
+    Exception {
+        file: "pid_law.takt",
+        reason: "библиотека контура управления: описывает закон и протокол связи \
+                 (`target`/`meas`/`ctrl`), модели объекта не содержит. Без объекта \
+                 измерение никто не меняет, поэтому осмысленного сценария у файла \
+                 нет — он проверяется применением `pid_heater.takt`",
+    },
     Exception {
         file: "elevator.takt",
         reason: "стенд парсера: шапка объявляет файл позитивным тестом разбора; \
@@ -179,7 +195,15 @@ fn model_at(path: &std::path::Path) -> Rc<RefCell<ModelNode>> {
     let source = read_source(path);
     let name = path.display();
     let (ast, _) = takt_lang::parse(&source, 0).unwrap_or_else(|e| panic!("{name}: разбор: {e:?}"));
-    construct_model(&ast, None, &[]).unwrap_or_else(|e| panic!("{name}: семантика: {e:?}"))
+    // Каталог самой модели — путь поиска импортов: пример может подключать
+    // библиотеку из корпуса (`pid_heater.takt` → `pid_law.takt`). Компилятор
+    // ищет рядом с ИМПОРТИРУЮЩИМ файлом, но здесь исходник передаётся строкой,
+    // и знать этот каталог ему неоткуда.
+    let search = path
+        .parent()
+        .map(|d| vec![d.to_string_lossy().into_owned()])
+        .unwrap_or_default();
+    construct_model(&ast, None, &search).unwrap_or_else(|e| panic!("{name}: семантика: {e:?}"))
 }
 
 /// Итог прогона примера — ровно то, что наблюдает пользователь через симулятор.

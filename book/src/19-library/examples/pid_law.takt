@@ -1,0 +1,52 @@
+// Библиотека: закон ПИД-регулирования, пригодный для любого объекта.
+// Наружу выведен только ПРОТОКОЛ КОНТУРА — три величины. (1)
+var target: float := 40.0; // уставка: чего добиваемся
+var meas: float := 0.0; // измерение: что сообщает датчик
+var ctrl: float := 0.0; // воздействие: что подаём на привод
+
+model Pid {
+    out ready: bit := 0; // контур сошёлся
+
+    // Настройка и рабочие величины объявлены ВНУТРИ модели: это устройство
+    // регулятора, а не его интерфейс. (2)
+    var kp: float := 0.5;
+    var ki: float := 0.0625;
+    var kd: float := 0.25;
+    var imax: float := 32.0;
+    var neg_imax: float := -32.0;
+    var eps: float := 0.5;
+    var err: float := 0.0;
+    var err_prev: float := 0.0;
+    var i_acc: float := 0.0;
+    var deriv: float := 0.0;
+
+    start Control {
+        always {
+            err := target - meas;
+            i_acc := i_acc + err;
+            if i_acc > imax {
+                i_acc := imax;
+            }
+            if i_acc < neg_imax {
+                i_acc := neg_imax;
+            }
+            deriv := err - err_prev;
+            ctrl := kp * err + ki * i_acc + kd * deriv;
+            err_prev := err;
+        }
+        // ограничение накопителя (3)
+        ref Settled: err < eps;
+    }
+
+    state Settled {
+        enter {
+            ctrl := 0.0;
+            ready := 1;
+        }
+        ref Done;
+    }
+
+    state Done;
+}
+
+start Main = Pid;

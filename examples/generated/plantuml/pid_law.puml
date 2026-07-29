@@ -1,0 +1,15 @@
+@startuml
+title PidLaw
+
+[*] --> Main
+Main : Pid
+Main --> [*]
+
+state Pid {
+    [*] --> Control
+    Control --> Settled
+    Done --> [*]
+    Settled --> Done
+}
+
+@enduml
