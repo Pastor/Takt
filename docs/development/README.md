@@ -297,3 +297,6 @@
 | 0183-06 | 0183 | Документ и значение порта `duration` | [0183-06-duration-type-in-targets.md](0183-06-duration-type-in-targets.md) |
 | 0184-01 | 0184 | Общие переменные библиотечного файла в импортёре | [0184-01-imported-shared-variables.md](0184-01-imported-shared-variables.md) |
 | 0184-02 | 0184 | Общие переменные библиотечного файла в импортёре | [0184-02-imported-shared-variables.md](0184-02-imported-shared-variables.md) |
+| 0182-01 | 0182 | Библиотечный ПИД-регулятор и пример его применения | [0182-01-pid-library-and-application.md](0182-01-pid-library-and-application.md) |
+| 0182-02 | 0182 | Библиотечный ПИД-регулятор и пример его применения | [0182-02-pid-library-and-application.md](0182-02-pid-library-and-application.md) |
+| 0182-03 | 0182 | Библиотечный ПИД-регулятор и пример его применения | [0182-03-pid-library-and-application.md](0182-03-pid-library-and-application.md) |

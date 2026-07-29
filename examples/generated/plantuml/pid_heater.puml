@@ -1,0 +1,22 @@
+@startuml
+title PidHeater
+
+[*] --> PidHeater
+PidHeater : Pid | Heater
+PidHeater --> [*]
+
+state Heater {
+    [*] --> Heating
+    Done --> [*]
+    Heating --> Holding
+    Holding --> Done
+}
+
+state Pid {
+    [*] --> Control
+    Control --> Settled
+    Done --> [*]
+    Settled --> Done
+}
+
+@enduml

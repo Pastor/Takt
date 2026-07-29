@@ -211,7 +211,11 @@ fn corpus_generates_no_stubs() {
             &name,
             &source,
             out.to_str().expect("путь в UTF-8"),
-            &["../examples/include".to_string()],
+            // Каталог корпуса — тоже путь поиска: пример вправе подключать
+            // библиотеку из соседнего файла (`pid_heater.takt` → `pid_law.takt`).
+            // Компилятор ищет рядом с ИМПОРТИРУЮЩИМ файлом, но здесь исходник
+            // передаётся строкой, и знать этот каталог ему неоткуда.
+            &["../examples/include".to_string(), "../examples".to_string()],
             &GenerateOptions::default(),
         )
         .unwrap_or_else(|d| panic!("{name}: корпус обязан компилироваться: {d:?}"));

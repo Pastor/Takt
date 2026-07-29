@@ -1,0 +1,34 @@
+// Применение: тот же регулятор приложен к баку с подогревом.
+// Из библиотеки берутся модель и протокол контура — три величины. (4)
+import {Pid, target, meas, ctrl} from "pid_law.takt";
+
+var gain: float := 0.5; // сколько градусов даёт единица мощности
+var loss: float := 0.05; // доля потерь в среду за шаг
+var ambient: float := 18.0; // температура помещения
+var release: float := 38.0; // температура выдачи партии
+
+model Heater {
+    out temperature: float := 0.0;
+
+    start Heating {
+        always {
+            meas := meas + gain * ctrl - loss * (meas - ambient);
+            temperature := meas;
+        }
+        // стенд (5)
+        ref Holding: ctrl <= 0.0;
+    }
+
+    state Holding {
+        always {
+            meas := meas - loss * (meas - ambient);
+            temperature := meas;
+        }
+        ref Done: meas <= release;
+    }
+
+    state Done;
+}
+
+start HeaterLoop = Pid | Heater;
+// контур замкнулся композицией (6)
