@@ -129,3 +129,5 @@
 | [0177](./0177-features-registry-status-gate.md) | Гейт согласованности статуса в реестре и в карточке фичи | Draft | фича 0177 |
 | [0159](./0159-intellij-jdk21-build.md) | Фиксация требования JDK 21 для сборки плагина intellij-takt | Draft | фича 0159 |
 | [0171](./0171-c-gate-werror.md) | Гейт цели c под -Werror | Draft | фича 0171 |
+| [0181](./0181-sim-state-implementation-tick.md) | Симулятор исполняет реализацию состояния с переходом next | Accepted | фича 0181 |
+| [0182](./0182-pid-library-and-application.md) | Библиотечный ПИД-регулятор и пример его применения | Accepted | фича 0182 |

@@ -41,6 +41,7 @@ fn node() -> Unit {
         state_transitions: HashMap::new(),
         state_executions: HashMap::new(),
         state_every: HashMap::new(),
+        state_impls: HashMap::new(),
         every_consumed: Vec::new(),
         guards: Default::default(),
         invariant_violations: Vec::new(),
@@ -61,6 +62,7 @@ fn node_with(key: &str, val: Value) -> Unit {
         state_transitions: HashMap::new(),
         state_executions: HashMap::new(),
         state_every: HashMap::new(),
+        state_impls: HashMap::new(),
         every_consumed: Vec::new(),
         guards: Default::default(),
         invariant_violations: Vec::new(),
@@ -322,6 +324,7 @@ fn r5_eval_error_is_distinguishable_from_false_condition() {
         state_transitions: st,
         state_executions: HashMap::new(),
         state_every: HashMap::new(),
+        state_impls: HashMap::new(),
         every_consumed: Vec::new(),
         state: Some("A".to_string()),
         executions: HashMap::new(),
@@ -360,6 +363,7 @@ fn r5_false_condition_is_not_an_error() {
         state_transitions: st,
         state_executions: HashMap::new(),
         state_every: HashMap::new(),
+        state_impls: HashMap::new(),
         every_consumed: Vec::new(),
         state: Some("A".to_string()),
         executions: HashMap::new(),
@@ -394,6 +398,7 @@ fn node_with_enter(counter: Rc<Cell<u32>>) -> Unit {
         state_transitions: st,
         state_executions: execs,
         state_every: HashMap::new(),
+        state_impls: HashMap::new(),
         every_consumed: Vec::new(),
         state: Some("A".to_string()),
         executions: HashMap::new(),
@@ -458,6 +463,7 @@ fn node_terminal(name: &str) -> Unit {
         state_transitions: st,
         state_executions: HashMap::new(),
         state_every: HashMap::new(),
+        state_impls: HashMap::new(),
         every_consumed: Vec::new(),
         guards: Default::default(),
         invariant_violations: Vec::new(),
@@ -483,6 +489,7 @@ fn node_with_transition(from: &str, to: &str, cond: bool) -> Unit {
         state_transitions: st,
         state_executions: HashMap::new(),
         state_every: HashMap::new(),
+        state_impls: HashMap::new(),
         every_consumed: Vec::new(),
         guards: Default::default(),
         invariant_violations: Vec::new(),
@@ -584,6 +591,7 @@ fn test_tick_node_only_first_matching_transition_taken() {
         state_transitions: st,
         state_executions: HashMap::new(),
         state_every: HashMap::new(),
+        state_impls: HashMap::new(),
         every_consumed: Vec::new(),
         guards: Default::default(),
         invariant_violations: Vec::new(),
@@ -648,23 +656,26 @@ fn test_tick_sequential_empty_is_terminated() {
 
 // tick/Sequential: последовательное продвижение через дочерние.
 // node() с state: None завершается немедленно, поэтому каждый tick продвигает index.
-// При двух дочерних нужно три тика: два для продвижения index и один для Terminated.
+//
+// Фича 0181: завершение ПОСЛЕДНЕГО шага завершает цепочку в ТОТ ЖЕ такт —
+// эталон цели `c` (`X_tick(&step); if (X_is_done(&step)) { … }`: завершение
+// проверяется на том же такте, что и тик). Прежняя редакция теста пришпиливала
+// лишний такт («index ≥ len» отдельным тиком) — то есть закрепляла расхождение
+// симулятора с эталоном, а не проверяла его.
 #[test]
 fn test_tick_sequential_advances_through_children() {
     let mut u = sequential(vec![node(), node()]);
     assert_eq!(u.tick(), TickResult::Processing); // child[0] завершился → index 0→1
-    assert_eq!(u.tick(), TickResult::Processing); // child[1] завершился → index 1→2
-    assert_eq!(u.tick(), TickResult::Terminated); // index ≥ len
+    assert_eq!(u.tick(), TickResult::Terminated); // child[1] завершился → index ≥ len
 }
 
 // tick/Sequential: ожидание активного дочернего перед продвижением к следующему.
-// Первый ребёнок проходит A→B (два тика), затем завершается; второй завершается сразу.
-// Итого четыре тика до Terminated Sequential.
+// Первый ребёнок проходит A→B (два тика), затем завершается; второй завершается
+// сразу и тем же тактом завершает цепочку (фича 0181, см. тест выше).
 #[test]
 fn test_tick_sequential_waits_for_child() {
     let mut u = sequential(vec![node_with_transition("A", "B", true), node()]);
     assert_eq!(u.tick(), TickResult::Processing); // child[0]: A→B, Processing
     assert_eq!(u.tick(), TickResult::Processing); // child[0]: B терминальный → index 0→1
-    assert_eq!(u.tick(), TickResult::Processing); // child[1]: Terminated → index 1→2
-    assert_eq!(u.tick(), TickResult::Terminated); // index ≥ len
+    assert_eq!(u.tick(), TickResult::Terminated); // child[1]: Terminated → index ≥ len
 }
