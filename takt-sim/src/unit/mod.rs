@@ -2,6 +2,7 @@ pub(crate) mod builder;
 #[path = "clock.rs"]
 mod clock;
 mod every;
+mod initial;
 pub(crate) mod statement;
 mod tick;
 pub(crate) mod viewport;

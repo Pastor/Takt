@@ -575,8 +575,13 @@ yosys/bison/flex + сборка `iec2c`) и делает один вызов `./
   `unit/statement.rs::exec_statement`. Модуль `eval` под
   `deny(clippy::wildcard_enum_match_arm)`: ветка `_` по узлу языка завалит сборку —
   так задумано ([0093](docs/features/0093-wildcard-match-rule.md), гейт
-  `scripts/check-exhaustive-nodes.sh`). ⚠️ Второй вычислитель
-  `unit/builder.rs::eval_expr` с `_ => None` гейтом **не покрыт** (кандидат).
+  `scripts/check-exhaustive-nodes.sh`). **Второй вычислитель** (начальные значения,
+  `unit/initial.rs`) под тем же `deny` с фичи
+  [0163](docs/features/0163-builder-eval-exhaustive.md); гейт сторожит **оба**
+  модуля и ищет атрибут **с начала строки** — иначе его находил док-комментарий,
+  и модуль без атрибута проверку проходил. ⚠️ Правило названо для трёх узлов
+  языка: подстановочные ветки по `TypeNode`/`StateNode`/`Extend` в `builder.rs`
+  им **не** покрыты и осмысленны.
   ⚠️ Тесты симуляции пиши **на значения** (`Unit::variable`), а не на факт
   перехода: именно отсутствие этого слоя дало восемь дефектов при зелёных тестах.
 - **Единый источник истины по значениям — `ModelNodeContext`**

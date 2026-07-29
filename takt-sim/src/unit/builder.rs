@@ -14,6 +14,8 @@ use takt_lang::semantic::{
     StateNode, StateNodeKind, VariableNode,
 };
 
+use crate::unit::initial::eval_expr;
+
 type Executions = HashMap<String, Vec<Execution>>;
 
 // ── ModelNodeContext ──────────────────────────────────────────────────────────
@@ -197,39 +199,6 @@ fn coerce_initial(value: Value, var: &VariableNode, model: &ModelNode) -> Value 
                 .unwrap_or(value)
         }
         _ => value,
-    }
-}
-
-/// Вычисляет простое константное выражение в Value.
-fn eval_expr(expr: &ExpressionNode) -> Option<Value> {
-    match expr {
-        ExpressionNode::Number(n) => Some(Value::Number(*n)),
-        // ⚠️ Длительность (фича 0134) обязана быть здесь: это ВТОРОЙ
-        // вычислитель, и он не покрыт `deny(wildcard_enum_match_arm)` — его
-        // ветка `_ => None` молча превратила бы `var left: duration := 1m30s;`
-        // в отсутствие значения (тест поймал ровно это).
-        ExpressionNode::Duration(ns) => Some(Value::Duration(*ns)),
-        ExpressionNode::Bool(b) => Some(Value::Boolean(*b)),
-        ExpressionNode::Rational(s, neg) => {
-            let v: f64 = s.parse().ok()?;
-            Some(Value::Real(if *neg { -v } else { v }))
-        }
-        ExpressionNode::Negate(inner) => match eval_expr(inner)? {
-            Value::Number(n) => Some(Value::Number(-n)),
-            Value::Real(f) => Some(Value::Real(-f)),
-            _ => None,
-        },
-        ExpressionNode::Parenthesis(inner) => eval_expr(inner),
-        // Инициализатор `{…}` структуры (фича 0034) и массивный литерал `[…]` —
-        // оба дают список значений; тип цели (структура/массив) различит
-        // `coerce_initial` по объявленному типу переменной.
-        ExpressionNode::Array(items) | ExpressionNode::Initializer(items) => {
-            let values: Option<Vec<Value>> = items.iter().map(eval_expr).collect();
-            Some(Value::Array(values?))
-        }
-        // Адресные порты (bit = 0x600:0) инициализируются нулём по умолчанию
-        ExpressionNode::Address(_, _) => Some(Value::Number(0)),
-        _ => None,
     }
 }
 

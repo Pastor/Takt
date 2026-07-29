@@ -12,8 +12,14 @@
 #   1. Пометить узел `#[non_exhaustive]` — атрибут отключает проверку
 #      исчерпываемости для зависимых крейтов: добавление варианта перестанет
 #      ломать сборку, адаптеры вернутся к «молча не обработано».
-#   2. Снять `#![deny(clippy::wildcard_enum_match_arm)]` в eval/ — исчезнет
-#      компиляторное принуждение перечислять варианты.
+#   2. Снять `#![deny(clippy::wildcard_enum_match_arm)]` в одном из модулей,
+#      разбирающих узлы языка, — исчезнет компиляторное принуждение перечислять
+#      варианты. Таких модулей ДВА, и оба обязательны:
+#        - takt-sim/src/eval/     — полный интерпретатор такта (фича 0093);
+#        - takt-sim/src/unit/initial.rs — ВТОРОЙ вычислитель, начальные значения
+#          (фича 0163). Он жил под `_ => None` и потому был вне действия правила:
+#          добавление варианта не ломало сборку, новый узел молча получал
+#          «значения нет».
 # Оба пути проходят сборку молча — поэтому нужен именно гейт (прецедент ADR 0027/
 # 0077: правило без команды — не правило).
 #
@@ -23,9 +29,10 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 NODES_FILE="$ROOT/takt-lang/src/semantic/mod.rs"
 EVAL_MOD="$ROOT/takt-sim/src/eval/mod.rs"
+INITIAL_MOD="$ROOT/takt-sim/src/unit/initial.rs"
 DENY='#![deny(clippy::wildcard_enum_match_arm)]'
 
-for f in "$NODES_FILE" "$EVAL_MOD"; do
+for f in "$NODES_FILE" "$EVAL_MOD" "$INITIAL_MOD"; do
   [ -f "$f" ] || { echo "check-exhaustive-nodes: не найден $f" >&2; exit 1; }
 done
 
@@ -57,15 +64,22 @@ if [ -n "$BAD_NODES" ]; then
   fail=1
 fi
 
-# Условие 2: модуль eval/ хранит `#![deny(clippy::wildcard_enum_match_arm)]`.
-if ! grep -Fq "$DENY" "$EVAL_MOD"; then
-  echo "  ОШИБКА: в $EVAL_MOD снят '$DENY' (фича 0093)." >&2
-  echo "  Без него компилятор перестаёт требовать явного разбора вариантов —" >&2
-  echo "  вычислители смогут разойтись молча (ADR 0025). Верните атрибут." >&2
-  fail=1
-fi
+# Условие 2: ОБА вычислителя над узлами языка хранят
+# `#![deny(clippy::wildcard_enum_match_arm)]`. Проверять только `eval/` мало:
+# ровно так второй вычислитель и оставался вне правила (фича 0163).
+# ⚠️ Поиск привязан к НАЧАЛУ строки. Простой `grep -F` находил атрибут и внутри
+# док-комментария, объясняющего, зачем он нужен, — то есть модуль без атрибута,
+# но с рассказом о нём, гейт проходил. Вскрыто мутацией при разработке 0163.
+for mod_file in "$EVAL_MOD" "$INITIAL_MOD"; do
+  if ! grep -q '^#!\[deny(clippy::wildcard_enum_match_arm)\]' "$mod_file"; then
+    echo "  ОШИБКА: в $mod_file снят '$DENY' (фичи 0093, 0163)." >&2
+    echo "  Без него компилятор перестаёт требовать явного разбора вариантов —" >&2
+    echo "  вычислители смогут разойтись молча (ADR 0025). Верните атрибут." >&2
+    fail=1
+  fi
+done
 
 if [ "$fail" != 0 ]; then
   exit 1
 fi
-echo "  OK: узлы не #[non_exhaustive]; eval/ хранит deny(wildcard_enum_match_arm)."
+echo "  OK: узлы не #[non_exhaustive]; оба вычислителя хранят deny(wildcard_enum_match_arm)."
