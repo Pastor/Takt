@@ -3,6 +3,9 @@
 //! Основная функция [`read_import_file`] ищет `.takt`-файл по списку директорий,
 //! проверяет расширение и возвращает содержимое вместе с полным путём к файлу.
 
+pub(in crate::semantic) mod adopt;
+pub(in crate::semantic) mod select;
+
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast::ImportPath;
 use itertools::Itertools;

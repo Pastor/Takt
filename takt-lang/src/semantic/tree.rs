@@ -19,7 +19,9 @@ use crate::semantic::expression::construct_expression;
 use crate::semantic::extend::Extend;
 use crate::semantic::formula;
 use crate::semantic::function::construct_function;
+use crate::semantic::import::adopt as import_adopt;
 use crate::semantic::import::read_import_file;
+use crate::semantic::import::select as import_select;
 use crate::semantic::named_block::resolve_named_blocks;
 use crate::semantic::naming::normalize_camelcase_name;
 use crate::semantic::reference::resolve_state_references;
@@ -294,6 +296,17 @@ pub(super) fn construct_model_stage0(
                             let node = result.map_err(|d| {
                                 note_imported_here(d, *import_loc, &filename, importer)
                             })?;
+                            // Усыновление (фича 0184): корень подключённого файла
+                            // становится под-моделью импортёра и получает имя, под
+                            // которым внесён в список. Без имени цель `c` отказывает
+                            // `CC-004` на пустом имени модели.
+                            import_adopt::adopt_whole_file(
+                                &node,
+                                &model_node,
+                                &model_name,
+                                &mut variables,
+                            )
+                            .map_err(|d| note_imported_here(d, *import_loc, &filename, importer))?;
                             models.insert(model_name, mark_imported(node));
                         }
                         Err(d) => {
@@ -333,6 +346,17 @@ pub(super) fn construct_model_stage0(
                             let node = result.map_err(|d| {
                                 note_imported_here(d, *import_loc, &filename, importer)
                             })?;
+                            // Усыновление (фича 0184): корень подключённого файла
+                            // становится под-моделью импортёра и получает имя, под
+                            // которым внесён в список. Без имени цель `c` отказывает
+                            // `CC-004` на пустом имени модели.
+                            import_adopt::adopt_whole_file(
+                                &node,
+                                &model_node,
+                                &model_name,
+                                &mut variables,
+                            )
+                            .map_err(|d| note_imported_here(d, *import_loc, &filename, importer))?;
                             models.insert(model_name, mark_imported(node));
                         }
                         Err(d) => {
@@ -378,59 +402,18 @@ pub(super) fn construct_model_stage0(
                     import_stack.pop();
                     let imported = result
                         .map_err(|d| note_imported_here(d, *import_loc, &filename, importer))?;
-                    let src = imported.borrow();
-                    for (orig_id, alias_id) in symbols {
-                        let orig = &orig_id.name;
-                        // Целевое имя: alias если задан, иначе оригинальное
-                        let alias = alias_id
-                            .as_ref()
-                            .map_or_else(|| orig.clone(), |a| a.name.clone());
-                        let sym_loc = alias_id.as_ref().map(|a| a.loc).unwrap_or(orig_id.loc);
-                        // Поиск в категориях: модель → тип → переменная → условие
-                        if let Some(m) = src.models.get(orig) {
-                            if models.contains_key(&alias) {
-                                return Err(Diagnostic::declaration_error(
-                                    sym_loc,
-                                    format!("Модель с именем '{}' уже объявлена", alias),
-                                )
-                                .with_code("SE-006"));
-                            }
-                            models.insert(alias, mark_imported(Rc::clone(m)));
-                        } else if let Some(t) = src.types.get(orig) {
-                            if model_node.borrow().types.contains_key(&alias) {
-                                return Err(Diagnostic::declaration_error(
-                                    sym_loc,
-                                    format!("Тип '{}' уже объявлен", alias),
-                                )
-                                .with_code("SE-007"));
-                            }
-                            model_node.borrow_mut().types.insert(alias, t.clone());
-                        } else if let Some(v) = src.variables.get(orig) {
-                            if variables.contains_key(&alias) {
-                                return Err(Diagnostic::declaration_error(
-                                    sym_loc,
-                                    format!("Переменная '{}' уже объявлена", alias),
-                                )
-                                .with_code("SE-005"));
-                            }
-                            variables.insert(alias, v.clone());
-                        } else if let Some(c) = src.conditions.get(orig) {
-                            if conditions.contains_key(&alias) {
-                                return Err(Diagnostic::declaration_error(
-                                    sym_loc,
-                                    format!("Условие '{}' уже объявлено", alias),
-                                )
-                                .with_code("SE-008"));
-                            }
-                            conditions.insert(alias, c.clone());
-                        } else {
-                            return Err(Diagnostic::declaration_error(
-                                orig_id.loc,
-                                format!("Идентификатор '{}' не найден в импортируемом файле", orig),
-                            )
-                            .with_code("SE-017"));
-                        }
-                    }
+                    import_select::apply(
+                        import_select::Target {
+                            models: &mut models,
+                            variables: &mut variables,
+                            conditions: &mut conditions,
+                            model_node: &model_node,
+                        },
+                        &imported,
+                        symbols,
+                        mark_imported,
+                    )
+                    .map_err(|d| note_imported_here(d, *import_loc, &filename, importer))?;
                 }
             }
         } else if let ModelElement::Variable(def) = element {

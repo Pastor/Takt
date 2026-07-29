@@ -1,0 +1,18 @@
+// Применение: подключает регулятор и переменные связи, добавляет объект
+// управления и замыкает контур. Объект — нагрев с потерями: уровень растёт от
+// воздействия и сам по себе не падает ниже нуля.
+import { Pid, ctrl, meas } from "pid_lib.takt";
+
+model Plant {
+    out level: u8 := 0;
+
+    start Run {
+        always {
+            meas := meas + ctrl;
+            level := meas;
+        }
+        ref Run: true;
+    }
+}
+
+start PidLoop = Pid | Plant;
