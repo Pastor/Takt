@@ -173,9 +173,12 @@ impl AsGenerator for Generator {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum CTypeError {
     /// Тип (или тип элемента массива) представления в C не имеет вовсе.
+    ///
+    /// ⚠️ Вариант `TimeNotSupported` (`CC-020`) снят фичей 0183: тип `duration`
+    /// цель эмитит целым в миллисекундах, отказывать больше не за что. Код
+    /// `CC-020` в реестре диагностик помечен снятым — возвращать его под другим
+    /// смыслом нельзя.
     Unrepresentable,
-    /// Тип времени (`duration`) целью пока не поддерживается (фича 0134).
-    TimeNotSupported,
 }
 
 impl CTypeError {
@@ -188,11 +191,6 @@ impl CTypeError {
                 format!("{}: тип не представим в C", what),
             )
             .with_code("CC-015"),
-            Self::TimeNotSupported => Diagnostic::error(
-                Location::Codegen,
-                format!("{}: тип 'duration' целью 'c' пока не поддерживается", what),
-            )
-            .with_code("CC-020"),
         }
     }
 }
@@ -208,11 +206,11 @@ pub(super) fn map_c_type(
     match typ {
         // Д2 (фича 0029): было `int` — 32-битный ЗНАКОВЫЙ для однобитной
         // семантики. `uint8_t` — наименьший адресуемый беззнаковый тип C.
-        // Тип `duration` (фича 0134): узел языка есть, эмиссия — задача
-        // соответствующей цели. До неё — ЯВНЫЙ отказ: молча напечатать
-        // наносекунды обычным целым значило бы выдать выдержку, не равную
-        // заявленной.
-        TypeNode::Duration => Err(CTypeError::TimeNotSupported),
+        // Тип `duration` (фича 0183): целое без знака в **миллисекундах** — та
+        // же единица, что у приведения `as` и у профиля «часы», поэтому граница
+        // «длительность ↔ число» не порождает арифметики и не может разойтись с
+        // эталоном (ADR 0183, драйвер 4). Ширина — `duration::VALUE_BITS`.
+        TypeNode::Duration => Ok(format!("uint{}_t", crate::semantic::duration::VALUE_BITS)),
         TypeNode::Bit => Ok("uint8_t".to_string()),
         TypeNode::Bool => Ok("bool".to_string()),
         // Д3 (фича 0029): было `float` (f32) безусловно, тогда как симулятор

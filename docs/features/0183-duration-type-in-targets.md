@@ -1,7 +1,7 @@
 # Фича 0183: Тип `duration` в целях генерации и вычисляемая выдержка
 
 - **Номер:** 0183
-- **Статус:** СОЗДАНА
+- **Статус:** РАЗРАБОТКА
 - **Зависит от:** нет (проставляет аналитик на стадии анализа, правило 17)
 - **Tier:** 2
 - **Связанные issue (анализ):** вскрыта при разработке
@@ -13,8 +13,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | [`docs/adr/0183-duration-type-in-targets.md`](../adr/0183-duration-type-in-targets.md) — заготовка |
-| Анализ | [`docs/analyze/0183-duration-type-in-targets.md`](../analyze/0183-duration-type-in-targets.md) — заготовка |
+| Архитектура (ADR) | [`docs/adr/0183-duration-type-in-targets.md`](../adr/0183-duration-type-in-targets.md) |
+| Анализ | [`docs/analyze/0183-duration-type-in-targets.md`](../analyze/0183-duration-type-in-targets.md) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0183-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |

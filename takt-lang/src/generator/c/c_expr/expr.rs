@@ -25,10 +25,16 @@ pub(in crate::generator::c) fn generate_expr(
         printer.print("(");
     }
     match expr {
-        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
-        // отказ, а не печать наносекунд обычным числом.
-        ExpressionNode::Duration(_) => {
-            return Err("Длительность целью 'c' пока не поддерживается".into());
+        // Длительность (фича 0183) печатается **миллисекундами** — единицей
+        // представления значения в целях. Пересчёт зовёт общий слой: своей
+        // арифметики времени генератор не заводит (правило 7 ADR 0134).
+        ExpressionNode::Duration(nanos) => {
+            let millis = crate::semantic::duration::value_millis(
+                *nanos,
+                crate::diagnostics::Location::Codegen,
+                "литерал длительности",
+            )?;
+            printer.print(&millis.to_string());
         }
         ExpressionNode::None | ExpressionNode::Unresolved(_) => {
             return Err("Неразрешённое выражение".into());
