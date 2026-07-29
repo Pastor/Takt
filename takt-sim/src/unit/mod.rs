@@ -743,9 +743,20 @@ fn split_qualified(name: &str) -> Option<(&str, &str)> {
 fn collect_active_states(unit: &Unit, out: &mut Vec<String>) {
     match &unit.0 {
         UnitKind::None => {}
-        UnitKind::Node { state, .. } => {
+        UnitKind::Node {
+            state, state_impls, ..
+        } => {
             if let Some(s) = state {
                 out.push(s.clone());
+                // Состояния ВНУТРИ реализации (фича 0181) — часть активной
+                // конфигурации автомата, а не деталь: без них трасса
+                // `state P = A + B` показывала бы одно неподвижное `P`, тогда
+                // как у формы `start P = A | B` (та же композиция без
+                // переходов) сообщаются состояния ветвей. Две записи одной
+                // конструкции обязаны наблюдаться одинаково.
+                if let Some(inner) = state_impls.get(s) {
+                    collect_active_states(&inner.borrow(), out);
+                }
             }
         }
         UnitKind::Parallel { units, .. } => {
