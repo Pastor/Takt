@@ -102,3 +102,4 @@
 | 0148 | Покрытие печатников цели rust тестами | [0148-rust-printers-coverage.md](0148-rust-printers-coverage.md) | СОЗДАНА |
 | 0163 | Исчерпывающий разбор узлов во втором вычислителе | [0163-builder-eval-exhaustive.md](0163-builder-eval-exhaustive.md) | СОЗДАНА |
 | 0143 | `after` принимает константное выражение типа duration | [0143-after-const-duration.md](0143-after-const-duration.md) | ГОТОВО |
+| 0183 | Тип `duration` в целях и вычисляемая выдержка | [0183-duration-type-in-targets.md](0183-duration-type-in-targets.md) | ГОТОВО |

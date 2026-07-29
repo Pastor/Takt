@@ -63,6 +63,16 @@ pub struct PortNames {
     /// списка владельцев: два реестра из разных источников разошлись бы, и
     /// сценарий получал бы «имя не найдено» на имя, которое симулятор знает.
     pub qualified: std::collections::BTreeSet<String>,
+    /// Имена значений типа `duration` (фича 0183).
+    ///
+    /// Сценарий пишет числа (`"program": 20`), а тип значения знает только
+    /// модель. Без этого реестра число попадало на порт как `Number`, и первое же
+    /// `program + 30s` давало `SIM-005` — то есть вычисляемая выдержка на входном
+    /// порте была невыполнима эталоном, тогда как цель `c` её печатает.
+    ///
+    /// Единица числа — **миллисекунды**, как у приведения `as duration`
+    /// (решение заказчика 0134): другая единица дала бы сценарию свой язык времени.
+    pub durations: std::collections::BTreeSet<String>,
 }
 
 impl PortNames {
@@ -82,6 +92,7 @@ impl PortNames {
             vars: Vec::new(),
             ambiguous: Vec::new(),
             qualified: std::collections::BTreeSet::new(),
+            durations: std::collections::BTreeSet::new(),
         };
         let mut owners: Vec<(String, String)> = Vec::new();
         names.collect_recursive(model, &mut owners);
@@ -113,6 +124,11 @@ impl PortNames {
         use takt_lang::semantic::VariableNode;
         let owner = model.name.clone();
         for (name, var) in &model.variables {
+            // Тип значения нужен сценарию (фича 0183): число в JSON приводится к
+            // длительности по имени, потому что JSON типов Takt не знает.
+            if matches!(var.ty(), takt_lang::semantic::type_node::TypeNode::Duration) {
+                self.durations.insert(name.clone());
+            }
             let mine = match var {
                 VariableNode::Port { direction, .. } => {
                     match direction {
@@ -563,6 +579,7 @@ impl SimulationRunner {
                 }
                 for (i, json_val) in list.iter().enumerate() {
                     if let (Some(name), Some(value)) = (names.get(i), json_to_value(json_val)) {
+                        let value = self.as_port_value(name, value);
                         resolved.push((name.clone(), value));
                     }
                 }
@@ -571,12 +588,35 @@ impl SimulationRunner {
                 for (name, json_val) in map {
                     self.check_port_name(name, direction, step_no)?;
                     if let Some(value) = json_to_value(json_val) {
-                        resolved.push((name.clone(), value));
+                        resolved.push((name.clone(), self.as_port_value(name, value)));
                     }
                 }
             }
         }
         Ok(resolved)
+    }
+
+    /// Приводит значение сценария к типу значения модели (фича 0183).
+    ///
+    /// Сегодня приведение одно: число на значении типа `duration` трактуется как
+    /// **миллисекунды** — та же единица, что у `as duration`. Прочие значения
+    /// проходят как есть: JSON и так даёт числа, логические и вещественные.
+    ///
+    /// ⚠️ Имя ищется и в квалифицированной форме (`Модель::имя`, фича 0135):
+    /// реестр типов собран по голым именам, поэтому квалификатор снимается.
+    fn as_port_value(&self, name: &str, value: crate::Value) -> crate::Value {
+        let bare = name.rsplit("::").next().unwrap_or(name);
+        match value {
+            crate::Value::Number(millis) if self.port_names.durations.contains(bare) => {
+                match takt_lang::semantic::duration::from_millis(millis) {
+                    Some(ns) => crate::Value::Duration(ns),
+                    // Переполнение наносекунд: оставляем число — ошибку даст
+                    // вычисление, и она назовёт место, а молчаливой подмены нет.
+                    None => crate::Value::Number(millis),
+                }
+            }
+            other => other,
+        }
     }
 
     /// Имена портов заданного направления.

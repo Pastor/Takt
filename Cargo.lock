@@ -1495,7 +1495,7 @@ dependencies = [
 
 [[package]]
 name = "takt-lang"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "criterion",
  "itertools 0.15.0",
@@ -1518,7 +1518,7 @@ dependencies = [
 
 [[package]]
 name = "takt-sim"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "base64 0.23.0",
  "clap",
