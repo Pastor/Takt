@@ -178,7 +178,7 @@
 | [0163](./0163-builder-eval-exhaustive.md) | Исчерпывающий разбор узлов во втором вычислителе builder.rs::eval_expr | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0164](./0164-registry-rebuild-gate.md) | Согласованность реестров docs/*/README.md с файлами на диске | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0165](./0165-taktc-version-subcommand.md) | Подкоманда taktc version | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0166](./0166-sv-example-sequential-composition.md) | Корпусной SV-транслируемый пример на последовательную композицию + | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0166](./0166-sv-example-sequential-composition.md) | Корпусной SV-транслируемый пример на последовательную композицию + | [ADR](../adr/0166-sv-example-sequential-composition.md) · [анализ](../analyze/0166-sv-example-sequential-composition.md) · разработка 01 · [тест-план](../tests/0166-sv-example-sequential-composition.md) · [отчёт](../reports/0166-sv-example-sequential-composition.md) | ГОТОВО |
 | [0167](./0167-c-enum-constants-usage.md) | Цель c: использовать объявленные константы перечисления | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0168](./0168-generator-warnings-return.md) | Предупреждения генераторов возвращаются вызывающему, а не печатаются из библиотеки | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0169](./0169-sv-mmio-bus-adapters.md) | Адаптеры шин для цели sv-mmio (APB / AXI-Lite / Wishbone) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

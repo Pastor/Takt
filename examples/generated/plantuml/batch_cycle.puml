@@ -1,0 +1,27 @@
+@startuml
+title BatchCycle
+
+[*] --> Cycle
+Cycle : Dose + Mix + Drain
+Cycle --> Done
+Done --> [*]
+
+state Dose {
+    [*] --> Fill
+    Fill --> Full
+    Full --> [*]
+}
+
+state Drain {
+    [*] --> Empty
+    Dry --> [*]
+    Empty --> Dry
+}
+
+state Mix {
+    [*] --> Stir
+    Blended --> [*]
+    Stir --> Blended
+}
+
+@enduml

@@ -280,3 +280,4 @@
 | 0181-02 | 0181 | Реализация состояния строится дочерним юнитом с общим контекстом | [0181-02-state-implementation-child-unit.md](0181-02-state-implementation-child-unit.md) |
 | 0181-03 | 0181 | Такт узла тикает реализацию; переход берётся по её завершении | [0181-03-tick-node-implementation.md](0181-03-tick-node-implementation.md) |
 | 0181-04 | 0181 | Тройная сверка sim-C-SV и значенческие тесты композиции | [0181-04-triple-conformance.md](0181-04-triple-conformance.md) |
+| 0166-01 | 0166 | Пример batch_cycle и его обвязка (SV_TRANSLATABLE, тестбенч, контракт, харнесс C) | [0166-01-batch-cycle-example.md](0166-01-batch-cycle-example.md) |

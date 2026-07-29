@@ -1,0 +1,134 @@
+(*
+ * Порождено компилятором Takt (taktc) — цель: Structured Text (IEC 61131-3).
+ * Не редактировать вручную: файл перезаписывается при каждой генерации.
+ *)
+
+FUNCTION_BLOCK BatchCycleDose
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR_IN_OUT
+    stage : USINT;
+END_VAR
+VAR
+    state : USINT := 0;
+    dosed : USINT := 0;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 1; (* Fill *)
+        1: (* Fill *)
+            stage := 1;
+            dosed := dosed + 1;
+            IF dosed >= 3 THEN
+                state := 2; (* Full *)
+            END_IF;
+        2: (* Full *)
+            state := 3; (* END *)
+        3: (* END *)
+            state := 3;
+    END_CASE;
+    is_done := state = 3;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK BatchCycleDrain
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR_IN_OUT
+    stage : USINT;
+END_VAR
+VAR
+    state : USINT := 0;
+    drained : USINT := 0;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 2; (* Empty *)
+        1: (* Dry *)
+            state := 3; (* END *)
+        2: (* Empty *)
+            stage := 3;
+            drained := drained + 1;
+            IF drained >= 2 THEN
+                state := 1; (* Dry *)
+            END_IF;
+        3: (* END *)
+            state := 3;
+    END_CASE;
+    is_done := state = 3;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK BatchCycleMix
+VAR_OUTPUT
+    is_done : BOOL;
+END_VAR
+VAR_IN_OUT
+    stage : USINT;
+END_VAR
+VAR
+    state : USINT := 0;
+    stirred : USINT := 0;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 2; (* Stir *)
+        1: (* Blended *)
+            state := 3; (* END *)
+        2: (* Stir *)
+            stage := 2;
+            stirred := stirred + 1;
+            IF stirred >= 2 THEN
+                state := 1; (* Blended *)
+            END_IF;
+        3: (* END *)
+            state := 3;
+    END_CASE;
+    is_done := state = 3;
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK BatchCycle
+VAR_OUTPUT
+    is_done : BOOL;
+    ready : BOOL;
+END_VAR
+VAR
+    state : USINT := 0;
+    cycle_dose0 : BatchCycleDose;
+    cycle_mix1 : BatchCycleMix;
+    cycle_drain2 : BatchCycleDrain;
+    cycle_step : USINT;
+    stage : USINT := 0;
+END_VAR
+    CASE state OF
+        0: (* INIT *)
+            state := 1; (* Cycle *)
+        1: (* Cycle *)
+            CASE cycle_step OF
+                0:
+                    cycle_dose0(stage := stage);
+                    IF cycle_dose0.is_done THEN
+                        cycle_step := 1;
+                    END_IF;
+                1:
+                    cycle_mix1(stage := stage);
+                    IF cycle_mix1.is_done THEN
+                        cycle_step := 2;
+                    END_IF;
+                2:
+                    cycle_drain2(stage := stage);
+                    IF cycle_drain2.is_done THEN
+                        cycle_step := 3;
+                    END_IF;
+                3: (* конкатенация завершена *)
+                    state := 2; (* Done *)
+            END_CASE;
+        2: (* Done *)
+            ready := TRUE;
+            state := 3; (* END *)
+        3: (* END *)
+            state := 3;
+    END_CASE;
+    is_done := state = 3;
+END_FUNCTION_BLOCK
+

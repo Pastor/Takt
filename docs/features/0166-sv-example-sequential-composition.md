@@ -1,7 +1,7 @@
 # Фича 0166: Корпусной SV-транслируемый пример на последовательную композицию `+`
 
 - **Номер:** 0166
-- **Статус:** СОЗДАНА
+- **Статус:** ГОТОВО
 - **Зависит от:** [0181](0181-sim-state-implementation-tick.md)
 - **Tier:** 2
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (выявлено при закрытии [0057](0057-sv-sequential-composition.md))
@@ -10,11 +10,11 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | не заведена (стадия 2) |
-| Анализ | не заведён (стадия 3) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0166-YY-*`) |
-| Тест-план | [`docs/tests/README.md`](../tests/README.md) |
-| Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
+| Архитектура (ADR) | [`docs/adr/0166-sv-example-sequential-composition.md`](../adr/0166-sv-example-sequential-composition.md) |
+| Анализ | [`docs/analyze/0166-sv-example-sequential-composition.md`](../analyze/0166-sv-example-sequential-composition.md) |
+| Разработка | [`docs/development/0166-01-batch-cycle-example.md`](../development/0166-01-batch-cycle-example.md) |
+| Тест-план | [`docs/tests/0166-sv-example-sequential-composition.md`](../tests/0166-sv-example-sequential-composition.md) |
+| Отчёт о тестировании | [`docs/reports/0166-sv-example-sequential-composition.md`](../reports/0166-sv-example-sequential-composition.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0166-YY-*`) |
 
 ## Краткое описание
@@ -56,3 +56,31 @@
 **Не требуется.** Покрытие гейта существующей возможностью языка; сам язык не
 меняется. (Пример может пригодиться разделу
 [`book/src/14-targets/`](../../book/src/14-targets/index.md) — решает аналитик.)
+
+## Итог (что сделано)
+
+Последовательная композиция `+` подана на гейты: заведён корпусный пример
+`examples/batch_cycle.takt` — технологический цикл из трёх фаз
+(`start Cycle = Dose + Mix + Drain { next Done; }`), внесён в `SV_TRANSLATABLE`.
+
+Верность доказывают **три независимых свидетеля с разными наблюдаемыми**, а не
+один гейт (урок 0045: линт и синтез валидность доказывают, верность — нет):
+
+- **тестбенч** `examples/generated/sv/tb/batch_cycle_tb.sv` — порядок фаз в RTL
+  (наблюдает `stage` иерархической ссылкой, требует 1 → 2 → 3);
+- **контракт сценария** в `examples_scenario_tests` — цепочка из семи состояний
+  в симуляторе, `must_terminate: true`;
+- **харнесс** `examples/generated/c/batch_cycle_main.c` — порядок фаз в прошивке
+  (`assert`: номер фазы растёт ровно на единицу). ⚠️ В `precheck.sh` добавлен
+  его **прогон**: собранный, но не запущенный `assert` молчит всегда.
+
+Обе новые ловушки **взведены** — доказано мутацией (укороченный прогон
+тестбенча → код 1; `assert(phases == 4)` → код 134). Симулятор и цель `c`
+завершают цикл за 11 тактов оба.
+
+Попутно найден дефект цели `c`, шире этой фичи: битовый выходной порт и
+состояние с одинаковым именем дают некомпилируемый код (перечислители в C делят
+область видимости). Записан находкой в `FEATURES.md`.
+
+Детали — [отчёт](../reports/0166-sv-example-sequential-composition.md),
+[ADR](../adr/0166-sv-example-sequential-composition.md).
