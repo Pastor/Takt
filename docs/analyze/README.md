@@ -129,3 +129,4 @@
 | 0178 | Приведение LSP и плагинов в соответствие языку + сторож | [0178-editor-layer-language-sync.md](0178-editor-layer-language-sync.md) | правило 29 свода |
 | 0179 | Дочистка URL репозитория после переезда BuT → Takt | [0179-repo-url-cleanup.md](0179-repo-url-cleanup.md) | процессный бэклог |
 | 0144 | Экспонента целочисленного литерала: считать или отвергнуть, но не терять молча | [0144-int-literal-exponent.md](0144-int-literal-exponent.md) | кандидат блока 2 FEATURES.md |
+| 0155 | Семантическое разрешение тел вложенных операторов | [0155-semantic-nested-statement-resolution.md](0155-semantic-nested-statement-resolution.md) | — (новая фича) |

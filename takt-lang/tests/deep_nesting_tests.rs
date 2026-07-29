@@ -16,6 +16,13 @@
 //! диагностику, либо падение. Тест на внутренний счётчик этого не докажет —
 //! счётчик может работать, а точка входа остаться не прикрытой (ровно так и
 //! случилось со сторожем операторов, см. отчёт фичи).
+//!
+//! ⚠️ **Сторож операторов был недостижим и стал достижим (фича 0155).** Его
+//! `Err` глотался разрешением вложенных тел (`.unwrap_or_else(|_|
+//! Unresolved(…))`), поэтому 60 вложенных `if` компилировались молча. После
+//! 0155 ошибка пробрасывается, и предел работает на операторах — это
+//! проверяется здесь (`deep_statement_nesting_is_diagnosed`). Прежняя запись
+//! «сторож операторов недостижим» **неверна**.
 
 use takt_lang::semantic::tree::construct_model;
 
@@ -113,6 +120,37 @@ fn diagnostic_names_the_limit() {
         err.contains(&MAX_NESTING_DEPTH.to_string()),
         "сообщение обязано называть предел {MAX_NESTING_DEPTH}: {err}"
     );
+}
+
+/// Модель с `depth` вложенными `if` в теле `always`.
+fn model_with_nested_statements(depth: usize) -> String {
+    let mut body = String::from("x := 5;");
+    for _ in 0..depth {
+        body = format!("if x > 0 {{ {body} }}");
+    }
+    format!("var x: u8 := 0;\nstart S {{\n  always {{ {body} }}\n  ref S: x = 9;\n}}\n")
+}
+
+#[test]
+fn deep_statement_nesting_is_diagnosed() {
+    // Точка рекурсии по **операторам** (`resolve_ast_statement`) — третья наряду
+    // с условием ребра и выражением. До фичи 0155 она была прикрыта только на
+    // бумаге: сторож срабатывал, но его ошибку глотало разрешение вложенного
+    // тела, и модель компилировалась молча.
+    let err = build(&model_with_nested_statements(60))
+        .expect_err("60 вложенных операторов — диагностика, а не тишина");
+    assert!(
+        err.starts_with("SE-062|"),
+        "ожидался SE-062, получено: {err}"
+    );
+}
+
+#[test]
+fn statement_nesting_within_limit_is_accepted() {
+    // Сторож направления: предел не должен сползти вниз — обычная вложенность
+    // (в корпусе встречается тройная) обязана строиться.
+    let ok = build(&model_with_nested_statements(3));
+    assert!(ok.is_ok(), "тройная вложенность обязана строиться: {ok:?}");
 }
 
 #[test]

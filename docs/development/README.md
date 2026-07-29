@@ -265,3 +265,6 @@
 | 0144-01 | 0144 | Вычисление экспоненты в лексере | [0144-01-lexer-exponent.md](0144-01-lexer-exponent.md) |
 | 0144-02 | 0144 | Понижение float в q с экспонентой | [0144-02-fixed-lowering-exponent.md](0144-02-fixed-lowering-exponent.md) |
 | 0144-03 | 0144 | Документ и версия языка | [0144-03-book-and-version.md](0144-03-book-and-version.md) |
+| 0155-01 | 0155 | Семантическое разрешение тел вложенных операторов | [0155-01-semantic-nested-statement-resolution.md](0155-01-semantic-nested-statement-resolution.md) |
+| 0155-02 | 0155 | Семантическое разрешение тел вложенных операторов | [0155-02-semantic-nested-statement-resolution.md](0155-02-semantic-nested-statement-resolution.md) |
+| 0155-03 | 0155 | Семантическое разрешение тел вложенных операторов | [0155-03-semantic-nested-statement-resolution.md](0155-03-semantic-nested-statement-resolution.md) |

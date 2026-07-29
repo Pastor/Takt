@@ -1,0 +1,19 @@
+// Пример: вложенные тела из корректных операторов — принимаются как прежде.
+model Probe {
+    var x: u8 := 0;
+    always {
+        if x > 0 {
+            x := 5;
+        }
+        else {
+            x := 7;
+        }
+        for var i: u8 := 0; i < 3; i := i + 1 {
+            while x < 100 {
+                x := x + 1;
+            }
+        }
+    }
+    start A { ref A: x = 200; }
+}
+start Entry = Probe;

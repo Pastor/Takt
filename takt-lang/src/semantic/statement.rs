@@ -19,11 +19,30 @@
 //! механизм [`construct_expression`]. При выходе из блока [`unregister_local_vars`]
 //! восстанавливает исходное состояние модели (с поддержкой затенения).
 //!
-//! Если выражение в операторе не может быть разрешено (например, ссылка
-//! на необъявленную встроенную функцию), весь оператор сохраняется в виде
-//! [`StatementNode::Unresolved`] — ошибка не пробрасывается наверх.
-//! Это позволяет обрабатывать код с встроенными функциями (`debug`, `S` и т.п.)
-//! без предварительной регистрации встроенных символов.
+//! ## Ошибка разрешения не зависит от глубины (0155)
+//!
+//! Оператор, который не удалось разрешить, даёт **ошибку** — на любом уровне
+//! вложенности одинаково. Никаких `.unwrap_or_else(|_| Unresolved(…))` во
+//! вложенных телах (`if`/`else`, `while`/`loop`, `for`: инициализатор и тело) и
+//! никаких `filter_map(…ok())` у inline-`Guard`: пробрасывать `?`, и только.
+//!
+//! ⚠️ **Так было не всегда, и цена ошибки здесь — не «нет диагностики».**
+//! Прежде ошибка вложенного тела глоталась, оператор оставался
+//! [`StatementNode::Unresolved`], а цель `c` печатала его **пустотой**
+//! (`generator/c/c_expr/stmt.rs`), симулятор — пропускал
+//! (`takt-sim/src/unit/statement.rs`). То есть `always { if x > 0 { x :=
+//! неизвестное_имя; } }` компилировался в `if (model->x > 0) { }`: программа
+//! принята, а написанный оператор **исчез**. Заодно не работал сторож глубины
+//! `SE-062` (0129) — его `Err` глотался тем же механизмом.
+//!
+//! Прежнее обоснование глотания («позволяет обрабатывать `debug`, `S` без
+//! регистрации встроенных символов») **мертво**: встроенные функции
+//! зарегистрированы в [`crate::semantic::builtin`] и разрешаются штатно. Именно
+//! этот комментарий и удерживал дефект — его читали вместо кода.
+//!
+//! Законные источники [`StatementNode::Unresolved`] остаются: ветка `_ =>` в
+//! [`resolve_ast_statement`] (`Assembly`, `Formula`, `Args`, `Error`,
+//! `StraySemicolon`) отдаёт его через `Ok`, а не `Err`.
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
@@ -110,14 +129,11 @@ fn resolve_ast_statement(
         // ── Условный оператор if ───────────────────────────────────────────────
         ast::Statement::If(_, cond, then_, else_) => {
             let cond = construct_expression(cond.clone(), params.clone(), model.clone())?;
-            let then_ = resolve_ast_statement(then_, params.clone(), model.clone())
-                .unwrap_or_else(|_| StatementNode::Unresolved(then_.as_ref().clone()));
+            let then_ = resolve_ast_statement(then_, params.clone(), model.clone())?;
             let else_ = else_
                 .as_ref()
-                .map(|e| {
-                    resolve_ast_statement(e, params.clone(), model.clone())
-                        .unwrap_or_else(|_| StatementNode::Unresolved(e.as_ref().clone()))
-                })
+                .map(|e| resolve_ast_statement(e, params.clone(), model.clone()))
+                .transpose()?
                 .map(Box::new);
             Ok(StatementNode::If {
                 cond: Box::new(cond),
@@ -136,8 +152,7 @@ fn resolve_ast_statement(
                 .map(|c| construct_expression(c.clone(), params.clone(), model.clone()))
                 .transpose()?
                 .map(Box::new);
-            let body = resolve_ast_statement(body, params.clone(), model)
-                .unwrap_or_else(|_| StatementNode::Unresolved(body.as_ref().clone()));
+            let body = resolve_ast_statement(body, params.clone(), model)?;
             Ok(StatementNode::Loop {
                 cond,
                 body: Box::new(body),
@@ -153,10 +168,8 @@ fn resolve_ast_statement(
         ast::Statement::For(_, init, cond, step, body) => {
             let init_resolved = init
                 .as_ref()
-                .map(|s| {
-                    resolve_ast_statement(s, params.clone(), model.clone())
-                        .unwrap_or_else(|_| StatementNode::Unresolved(s.as_ref().clone()))
-                })
+                .map(|s| resolve_ast_statement(s, params.clone(), model.clone()))
+                .transpose()?
                 .map(Box::new);
 
             // Регистрируем переменную из init для cond/step/body
@@ -167,26 +180,33 @@ fn resolve_ast_statement(
                 for_locals.push(entry);
             }
 
-            let cond = cond
-                .as_ref()
-                .map(|e| construct_expression(*e.clone(), params.clone(), model.clone()))
-                .transpose()?
-                .map(Box::new);
-            let step = step
-                .as_ref()
-                .map(|e| construct_expression(*e.clone(), params.clone(), model.clone()))
-                .transpose()?
-                .map(Box::new);
-            let body = body
-                .as_ref()
-                .map(|s| {
-                    resolve_ast_statement(s, params.clone(), model.clone())
-                        .unwrap_or_else(|_| StatementNode::Unresolved(s.as_ref().clone()))
-                })
-                .map(Box::new)
-                .unwrap_or_else(|| Box::new(StatementNode::None));
+            // Разрешение cond/step/body отделено от снятия регистрации: любая из
+            // трёх частей может завершиться ошибкой (0155 — ошибка тела больше не
+            // глотается), а переменная цикла обязана быть снята с регистрации в
+            // любом исходе. Иначе неудачная сборка оставила бы `i` в
+            // `model.variables` — фантомное имя, видимое последующим проверкам.
+            let parts = (|| {
+                let cond = cond
+                    .as_ref()
+                    .map(|e| construct_expression(*e.clone(), params.clone(), model.clone()))
+                    .transpose()?
+                    .map(Box::new);
+                let step = step
+                    .as_ref()
+                    .map(|e| construct_expression(*e.clone(), params.clone(), model.clone()))
+                    .transpose()?
+                    .map(Box::new);
+                let body = body
+                    .as_ref()
+                    .map(|s| resolve_ast_statement(s, params.clone(), model.clone()))
+                    .transpose()?
+                    .map(Box::new)
+                    .unwrap_or_else(|| Box::new(StatementNode::None));
+                Ok::<_, Diagnostic>((cond, step, body))
+            })();
 
             unregister_local_vars(for_locals, &model);
+            let (cond, step, body) = parts?;
 
             Ok(StatementNode::For {
                 init: init_resolved,
@@ -261,8 +281,10 @@ fn resolve_ast_statement(
                 ast::InlineFormulaDefine::Guard { conditions, .. } => {
                     let resolved: Vec<Formula> = conditions
                         .iter()
-                        .filter_map(|c| resolve_condition(c, model.clone()).ok())
-                        .map(|cn| crate::semantic::formula::condition_to_formula(&cn))
+                        .map(|c| resolve_condition(c, model.clone()))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .iter()
+                        .map(crate::semantic::formula::condition_to_formula)
                         .collect();
                     Ok(StatementNode::InlineFormula(resolved))
                 }
