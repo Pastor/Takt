@@ -275,3 +275,4 @@
 | 0180-01 | 0180 | Сокращение живого контекста CLAUDE.md | [0180-01-claude-md-context-diet.md](0180-01-claude-md-context-diet.md) |
 | 0177-01 | 0177 | Гейт согласованности статуса в реестре и в карточке фичи | [0177-01-features-registry-status-gate.md](0177-01-features-registry-status-gate.md) |
 | 0159-01 | 0159 | Фиксация требования JDK для сборки плагина | [0159-01-intellij-jdk21-build.md](0159-01-intellij-jdk21-build.md) |
+| 0171-01 | 0171 | Гейт цели c под -Werror | [0171-01-c-gate-werror.md](0171-01-c-gate-werror.md) |

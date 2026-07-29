@@ -632,7 +632,22 @@ if [ "$sv_failed" -ne 0 ]; then
   exit 1
 fi
 
-cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -S $C_OUTPUT -B $C_OUTPUT/cmake-build-debug/
+# Гейт цели `c` под -Wall -Werror (фича 0171). Прежде гейт собирал порождённый
+# код БЕЗ единого флага предупреждений — и потому принял тождественно ложное
+# `if (model->lv == -5)` при `uint8_t lv`: `cc` об этом ГОВОРИЛ, а гейт не
+# слушал. Именно так дефект знака перечисления (фикс 0005-01, Tier 1) дожил
+# незамеченным. Урок 0045 наоборот: там инструмент молчал, здесь — говорил впустую.
+#
+# Замер перед включением (правило карточки «прежде чем включать — прогнать»):
+# корпус под `-Wall` даёт **0** предупреждений, то есть строгость бесплатна.
+# `-Wextra` добавил бы 38 штук одного класса (`-Wunused-parameter`: параметр
+# `main` не нужен части функций) — это отдельная работа, заведена кандидатом.
+#
+# ⚠️ Флаги задаются ГЕЙТОМ, а не CMakeLists порождённого примера: `-Werror` в
+# поставляемом файле навязал бы строгость всякому, кто скопирует
+# `examples/generated/c` себе, — а это его выбор, не наш.
+cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja -DCMAKE_C_FLAGS="-Wall -Werror" \
+  -S $C_OUTPUT -B $C_OUTPUT/cmake-build-debug/
 cd $C_OUTPUT/cmake-build-debug/ && ninja
 cd -
 
@@ -657,7 +672,12 @@ if require_tool cc "гейт c-hal, фикс 0020-01; обычно есть на
     ok=1
     for c in "$chal_dir"/*.c; do
       [ -e "$c" ] || continue
-      if ! cc -std=c11 -I "$chal_dir" -c "$c" -o /dev/null 2>"$chal_dir/cc.log"; then
+      # -Wall -Werror (фича 0171): порождённый HAL обязан собираться СТРОГО —
+      # пользователь со своим `-Wall -Werror` иначе не соберёт наш код вовсе.
+      # Замер: до фичи каждый пример давал `-Wunused-function` на
+      # `<Root>_bind_default_hal` (объявлен в заголовке, зовётся не всякой
+      # единицей трансляции); вылечено `static inline` в генераторе.
+      if ! cc -std=c11 -Wall -Werror -I "$chal_dir" -c "$c" -o /dev/null 2>"$chal_dir/cc.log"; then
         echo "  $name [c-hal] → НЕ КОМПИЛИРУЕТСЯ:"
         sed 's/^/    /' "$chal_dir/cc.log" | head -8
         ok=0
