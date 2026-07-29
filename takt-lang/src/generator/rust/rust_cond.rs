@@ -67,11 +67,17 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
         // сравнением их не напечатать.
         ConditionNode::Equal(a, b) => match state_comparison(a, b, "==", scope)? {
             Some(text) => Ok(text),
-            None => cond_binary(a, "==", b, scope),
+            None => match boolean_comparison(a, "==", b, scope)? {
+                Some(text) => Ok(text),
+                None => cond_binary(a, "==", b, scope),
+            },
         },
         ConditionNode::NotEqual(a, b) => match state_comparison(a, b, "!=", scope)? {
             Some(text) => Ok(text),
-            None => cond_binary(a, "!=", b, scope),
+            None => match boolean_comparison(a, "!=", b, scope)? {
+                Some(text) => Ok(text),
+                None => cond_binary(a, "!=", b, scope),
+            },
         },
         ConditionNode::Less(a, b) => cond_binary(a, "<", b, scope),
         ConditionNode::More(a, b) => cond_binary(a, ">", b, scope),
@@ -242,6 +248,66 @@ fn cond_binary(
         op,
         print_condition(b, scope)?
     ))
+}
+
+/// Печатает сравнение булева операнда (`bit`/`bool`) с литералом — фикс 0148-01.
+///
+/// Возвращает `None`, если форма не эта: тогда печатается обычное сравнение.
+///
+/// ## Зачем отдельная ветвь
+///
+/// В Takt `bit` — целое-однобитное, и `ref Next: btn = 1;` — естественная
+/// запись. В Rust `bit` отображается на **`bool`** (порт читается
+/// `hal.read_bit(...) -> bool`), поэтому дословный перевод даёт `bool == 1`,
+/// а это **ошибка типов**: порождённый модуль не компилируется вовсе.
+///
+/// Форма с булевым литералом (`btn = true`) компилируется, но валит
+/// `clippy::bool_comparison` — то есть не проходит политику `-D warnings`
+/// гейта цели (ADR 0050, R9) и не соберётся у пользователя с той же политикой.
+///
+/// Обе формы сводятся к самому операнду: `x = 1` и `x = true` → `x`,
+/// `x = 0` и `x = false` → `(!x)`; для `!=` — наоборот. Так же поступает
+/// присваивание (`o := 1` → `write_bit(..., true)`), и разъезжаться этим двум
+/// путям незачем.
+fn boolean_comparison(
+    a: &ConditionNode,
+    op: &str,
+    b: &ConditionNode,
+    scope: &Scope,
+) -> Result<Option<String>, Diagnostic> {
+    /// Операнд булев по статическому типу?
+    fn is_boolean(cond: &ConditionNode) -> bool {
+        matches!(
+            condition_type(cond),
+            Some(TypeNode::Bool) | Some(TypeNode::Bit)
+        )
+    }
+    /// Литерал, читаемый как булев: `true`/`false` и число (0 — ложь).
+    fn literal(cond: &ConditionNode) -> Option<bool> {
+        match cond {
+            ConditionNode::Bool(v) => Some(*v),
+            ConditionNode::Number(n) => Some(*n != 0),
+            ConditionNode::Parenthesis(inner) => literal(inner),
+            _ => None,
+        }
+    }
+
+    // Литерал ищется с ОБЕИХ сторон: `btn = 1` и `1 = btn` одинаково законны.
+    // Проверка «операнд не литерал» обязательна, иначе `true = false` попало бы
+    // в первую ветвь и потеряло бы вторую половину.
+    let (operand, value) = match (literal(a), literal(b)) {
+        (None, Some(v)) if is_boolean(a) => (a, v),
+        (Some(v), None) if is_boolean(b) => (b, v),
+        _ => return Ok(None),
+    };
+
+    let printed = print_condition(operand, scope)?;
+    let positive = (op == "==") == value;
+    Ok(Some(if positive {
+        printed
+    } else {
+        format!("(!{})", printed)
+    }))
 }
 
 /// Печатает `&`/`|`, приводя операнды к `bool`.
