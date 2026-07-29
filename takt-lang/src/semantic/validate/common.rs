@@ -111,6 +111,12 @@ fn validate_cond(
         }
         ConditionNode::Number(_) => {}
         ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {}
+        // Вычисляемая выдержка (фича 0183): вложенное выражение — обычное
+        // условие, и его проверки (чтение `out`-порта, неизвестное имя) обязаны
+        // работать так же, как везде.
+        ConditionNode::AfterExpr(inner) => {
+            validate_cond(None, &inner, model.clone())?;
+        }
         ConditionNode::Rational(_, _) => {}
         ConditionNode::String(_) => {}
         ConditionNode::Bool(_) => {}

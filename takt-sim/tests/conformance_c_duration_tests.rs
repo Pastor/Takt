@@ -172,3 +172,111 @@ fn cast_between_duration_and_number_emits_no_arithmetic() {
         );
     }
 }
+
+// ── Вычисляемая выдержка (фича 0183, задача 0183-05) ─────────────────────────
+
+/// Фикстура: `after (base + 2ms)` при `base := 3ms` и 1 кГц — пять тактов.
+const DYNAMIC_FIXTURE: &str = "tests/data/eval/conformance_dynamic_dwell.takt";
+
+/// На каком такте `done` впервые стал единицей — у эталона.
+fn simulator_dynamic_tick() -> usize {
+    let source = std::fs::read_to_string(DYNAMIC_FIXTURE).expect("фикстура читается");
+    let (ast, _) = takt_lang::parse(&source, 0).expect("разбор фикстуры");
+    let model = takt_lang::semantic::tree::construct_model(&ast, None, &[]).expect("семантика");
+    let mut unit = takt_sim::build_unit(model).expect("построение Unit");
+    for step in 0..12i32 {
+        // 1 мс на такт — та же частота, что объявлена моделью.
+        unit.set_time_ns(i64::from(step) * 1_000_000);
+        let _ = unit.tick();
+        if unit.variable("done") == Some(takt_sim::Value::Number(1)) {
+            return usize::try_from(step + 1).expect("номер такта");
+        }
+    }
+    panic!("эталон обязан снять вычисляемую выдержку за 12 тактов");
+}
+
+/// На каком такте `done` впервые стал единицей — у порождённого C.
+fn generated_c_dynamic_tick(dir: &Path) -> usize {
+    let source = std::fs::read_to_string(DYNAMIC_FIXTURE).expect("фикстура читается");
+    let mut options = takt_lang::generator::GenerateOptions::default();
+    options.tick_hz = Some(1_000);
+    takt_lang::compile_to_c(
+        "conformance_dynamic_dwell",
+        &source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &options,
+    )
+    .expect("порождение C");
+
+    let harness = r#"#include <stdio.h>
+#include "conformance_dynamic_dwell.h"
+
+static int done = 0;
+static void wr(ConformanceDynamicDwell_Out_BitPort port, bool v, void *ud) {
+    (void)port;
+    (void)ud;
+    done = v;
+}
+
+int main(void) {
+    ConformanceDynamicDwell m = {0};
+    m.write_bit = wr;
+    ConformanceDynamicDwell_init(&m);
+    for (int tick = 1; tick <= 12; tick++) {
+        ConformanceDynamicDwell_tick(&m);
+        if (done) { printf("tick=%d\n", tick); return 0; }
+    }
+    printf("tick=0\n");
+    return 0;
+}
+"#;
+    let harness_path = dir.join("harness_dynamic.c");
+    std::fs::write(&harness_path, harness).expect("запись харнесса");
+
+    let bin = dir.join("conformance_dynamic_bin");
+    let compile = Command::new("cc")
+        .args(["-std=c11", "-Wall", "-Werror", "-I"])
+        .arg(dir)
+        .arg(dir.join("conformance_dynamic_dwell.c"))
+        .arg(&harness_path)
+        .arg("-o")
+        .arg(&bin)
+        .output()
+        .expect("запуск cc");
+    assert!(
+        compile.status.success(),
+        "порождённый C с вычисляемой выдержкой не компилируется:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = Command::new(&bin).output().expect("запуск собранного C");
+    assert!(run.status.success(), "собранный C завершился с ошибкой");
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix("tick=")?.trim().parse::<usize>().ok())
+        .expect("харнесс печатает номер такта")
+}
+
+/// Вычисляемая выдержка срабатывает на **одном и том же** такте у эталона и у
+/// порождённого C.
+///
+/// ⚠️ Порог здесь не известен компилятору: он складывается из переменной и
+/// литерала уже во время работы. Именно поэтому сверяется такт, а не текст: и
+/// пересчёт «миллисекунды → такты», и ширина счётчика могли бы разойтись молча.
+#[test]
+fn dynamic_dwell_fires_on_the_same_tick_in_simulator_and_generated_c() {
+    if !cc_available() {
+        eprintln!("[ПРОПУСК] dynamic_dwell_fires_on_the_same_tick...: `cc` не найден");
+        return;
+    }
+    let dir = tempfile::tempdir().expect("временный каталог");
+    let reference = simulator_dynamic_tick();
+    let generated = generated_c_dynamic_tick(dir.path());
+    assert_eq!(
+        reference, generated,
+        "вычисляемая выдержка обязана срабатывать на одном такте: эталон {reference}, цель C {generated}"
+    );
+    // 3ms + 2ms = 5 мс при 1 кГц — пять тактов от входа; вход занимает такт 1
+    // (время на нём ноль), поэтому срабатывание — такт 6.
+    assert_eq!(reference, 6, "ожидался такт 6, получено {reference}");
+}

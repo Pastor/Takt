@@ -74,7 +74,12 @@ pub fn model_uses_after(model: &ModelNode) -> bool {
 fn cond_uses_after(cond: &crate::semantic::ConditionNode) -> bool {
     match cond {
         crate::semantic::ConditionNode::After(_)
-        | crate::semantic::ConditionNode::AfterTicks(_) => true,
+        | crate::semantic::ConditionNode::AfterTicks(_)
+        // Вычисляемая выдержка (фича 0183) — тоже выдержка: без этой ветви
+        // генераторы не завели бы поле времени, и условие сравнивало бы
+        // несуществующий счётчик. ⚠️ Компилятор здесь **не помогает**: разбор
+        // заканчивается `_ => false`, поэтому ветвь добавляется руками.
+        | crate::semantic::ConditionNode::AfterExpr(_) => true,
         crate::semantic::ConditionNode::Unresolved(raw) => find_after(raw).is_some(),
         _ => false,
     }
@@ -210,7 +215,11 @@ fn model_uses_after_kind(model: &ModelNode, ticks: bool) -> bool {
 
 fn cond_has_after_kind(cond: &crate::semantic::ConditionNode, ticks: bool) -> bool {
     match cond {
-        crate::semantic::ConditionNode::After(_) => !ticks,
+        // Вычисляемая выдержка длительностная: её операнды — значения типа
+        // `duration` (фича 0183), тактовых значений в языке нет.
+        crate::semantic::ConditionNode::After(_) | crate::semantic::ConditionNode::AfterExpr(_) => {
+            !ticks
+        }
         crate::semantic::ConditionNode::AfterTicks(_) => ticks,
         crate::semantic::ConditionNode::Unresolved(raw) => raw_has_after_kind(raw, ticks),
         _ => false,

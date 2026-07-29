@@ -195,6 +195,13 @@ pub(in crate::generator::c) fn generate_condition_expr(
         // конце такта, поэтому его значение равно числу тактов, прошедших с
         // входа, — ровно то, что меряет эталон модельным временем.
         ConditionNode::After(nanos) => after_condition(*nanos, map, owner),
+        // Вычисляемая выдержка (фича 0183): значение известно лишь в такте,
+        // поэтому сравнивается не число, а напечатанное выражение — в
+        // МИЛЛИСЕКУНДАХ (представление `duration` в целях).
+        ConditionNode::AfterExpr(inner) => {
+            let expr = generate_condition_expr(inner, map, owner)?;
+            after_dynamic_condition(&expr, map, owner)
+        }
         // Выдержка в тактах частоты НЕ требует: счётчик и так считает такты.
         ConditionNode::AfterTicks(ticks) => Ok(format!("{} >= {}", dwell_access(), ticks)),
         // Литерал длительности вне `after` — сравнение со значением типа
@@ -461,6 +468,36 @@ fn after_condition(nanos: i64, map: &CMap, owner: &Element) -> Result<String, Di
             );
             Ok(format!(
                 "(uint{bits}_t)((uint{bits}_t){now} - model->{ENTRY_MS_FIELD}) >= {units}"
+            ))
+        }
+    }
+}
+
+/// Условие **вычисляемой** выдержки (фича 0183).
+///
+/// `expr` — уже напечатанное выражение в миллисекундах.
+///
+/// Профиль «часы» сравнивает миллисекунды напрямую; профиль «такты» переводит
+/// миллисекунды в такты множителем `hertz / 1000`, который обязан быть целым
+/// (иначе `SE-073`: округление молча изменило бы выдержку).
+fn after_dynamic_condition(expr: &str, map: &CMap, owner: &Element) -> Result<String, Diagnostic> {
+    let profile = map.time_profile();
+    match crate::semantic::duration::ticks_per_milli(profile, Location::Codegen)? {
+        Some(1) => Ok(format!("{} >= {expr}", dwell_access())),
+        Some(multiplier) => Ok(format!("{} >= ({expr}) * {multiplier}", dwell_access())),
+        None => {
+            let bits = crate::generator::c::c_time::clock_marker_bits(map)?;
+            let hal = if owner.name().eq(&map.root_name()) {
+                "model"
+            } else {
+                "main"
+            };
+            let now = format!(
+                "{hal}->{}({hal}->userdata)",
+                crate::generator::c::FUNCTION_TIME_NOW_MS
+            );
+            Ok(format!(
+                "(uint{bits}_t)((uint{bits}_t){now} - model->{ENTRY_MS_FIELD}) >= ({expr})"
             ))
         }
     }

@@ -744,10 +744,12 @@ fn emit_transitions(
             }
         } else {
             // Выдержка `after` (фича 0134) — через `sv_time`; прочие — общий печатник.
-            let cond = match sv_time::after_guard(&fsm.time_levels, map, model, &reference.cond) {
-                Some(guard) => guard?,
-                None => print_condition(&reference.cond, &fsm.scope())?,
-            };
+            let scope = fsm.scope();
+            let cond =
+                match sv_time::after_guard(&fsm.time_levels, map, model, &reference.cond, &scope) {
+                    Some(guard) => guard?,
+                    None => print_condition(&reference.cond, &scope)?,
+                };
             let keyword = if printed == 0 { "if" } else { "else if" };
             p.ident(&format!("{} ({}) begin", keyword, cond)).nl();
         }

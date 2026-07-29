@@ -42,6 +42,9 @@ fn condition_label(cond: &ConditionNode) -> String {
         ConditionNode::Duration(ns) => crate::runner::format_duration(*ns),
         ConditionNode::After(ns) => format!("after {}", crate::runner::format_duration(*ns)),
         ConditionNode::AfterTicks(ticks) => format!("after {ticks}t"),
+        // Вычисляемая выдержка (фича 0183): значения нет до такта, поэтому на
+        // ребре печатается сама запись автора.
+        ConditionNode::AfterExpr(inner) => format!("after ({})", condition_label(inner)),
         ConditionNode::Number(n) => n.to_string(),
         ConditionNode::Rational(s, neg) => {
             if *neg {
@@ -98,6 +101,8 @@ fn loc_of(cond: &ConditionNode) -> Location {
         ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {
             Location::Implicit
         }
+        // У вычисляемой выдержки позиция есть — у операндов вложенного условия.
+        ConditionNode::AfterExpr(inner) => loc_of(inner),
         ConditionNode::Variable(_, loc) | ConditionNode::Function(_, _, loc) => *loc,
         ConditionNode::Not(c) | ConditionNode::Parenthesis(c) | ConditionNode::BitAccess(c, _) => {
             loc_of(c)
@@ -148,6 +153,21 @@ pub(crate) fn eval_condition(
         ConditionNode::AfterTicks(ticks) => Ok(Value::Boolean(
             i64::try_from(ctx.ticks_in_state()).unwrap_or(i64::MAX) >= *ticks,
         )),
+        // Вычисляемая выдержка (фича 0183): порог берётся из вложенного условия
+        // **в этом такте**. Эталон считает в наносекундах — как и всё время
+        // симулятора; цели держат миллисекунды (ADR 0183), и совпадение доказывает
+        // потактовая сверка, а не рассуждение.
+        ConditionNode::AfterExpr(inner) => match eval_condition(inner, ctx)? {
+            Value::Duration(ns) => Ok(Value::Boolean(ctx.since_state_entry_ns() >= ns)),
+            other => Err(Diagnostic::error(
+                loc_of(inner),
+                format!(
+                    "выдержка 'after' ожидала длительность, выражение дало {}",
+                    crate::eval::error::value_kind(&other)
+                ),
+            )
+            .with_code("SIM-007")),
+        },
         ConditionNode::Number(n) => Ok(Value::Number(*n)),
         ConditionNode::Bool(b) => Ok(Value::Boolean(*b)),
         ConditionNode::Rational(text, negative) => {

@@ -262,11 +262,16 @@ pub(crate) fn print_condition(
             "литерал длительности в условии",
         )?
         .to_string()),
-        ConditionNode::After(_) | ConditionNode::AfterTicks(_) => Err(Diagnostic::error(
-            Location::Codegen,
-            "выдержка 'after' обязана печататься через st_model, а не как условие".to_string(),
-        )
-        .with_code("ST-015")),
+        // Выдержка (константная и вычисляемая, фича 0183) печатается `st_model`:
+        // только у него есть поле времени и профиль. Попадание сюда означает
+        // разбор в обход того пути.
+        ConditionNode::After(_) | ConditionNode::AfterTicks(_) | ConditionNode::AfterExpr(_) => {
+            Err(Diagnostic::error(
+                Location::Codegen,
+                "выдержка 'after' обязана печататься через st_model, а не как условие".to_string(),
+            )
+            .with_code("ST-015"))
+        }
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Bool(b) => Ok(bool_literal(*b)),
         ConditionNode::Rational(text, negative) => {

@@ -71,6 +71,13 @@ fn max_units_in_tree(map: &SvMap, model: &ModelNode) -> Result<u64, Diagnostic> 
     let mut max = 0u64;
     for state in model.states.values() {
         for reference in state.references() {
+            // Вычисляемая выдержка (фича 0183): порог появляется лишь в такте,
+            // поэтому регистр обязан вмещать любое представимое значение — иначе
+            // сравнение усекло бы старшие биты **молча** (в RTL шире/уже — не
+            // ошибка, а тихое обрезание).
+            if matches!(reference.cond, crate::semantic::ConditionNode::AfterExpr(_)) {
+                max = max.max(u64::from(u32::MAX));
+            }
             if let crate::semantic::ConditionNode::After(nanos) = reference.cond {
                 max = max.max(units_or_diagnostic(
                     nanos,
@@ -330,6 +337,7 @@ pub(crate) fn after_guard(
     map: &SvMap,
     model: &Name,
     cond: &crate::semantic::ConditionNode,
+    scope: &super::sv_expr::Scope,
 ) -> Option<Result<String, Diagnostic>> {
     use crate::semantic::ConditionNode;
     let level = levels.iter().find(|l| l.model.unique() == model.unique())?;
@@ -360,6 +368,31 @@ pub(crate) fn after_guard(
             "{dwell}_next >= {ticks}",
             dwell = dwell_reg(&level.model)
         ))),
+        // Вычисляемая выдержка (фича 0183): справа — выражение в миллисекундах.
+        // Читается `_next`, как и у константной формы: чтение регистра сдвинуло
+        // бы выдержку на такт **молча** (главный капкан цели, ADR 0045).
+        ConditionNode::AfterExpr(inner) => {
+            let expr = match super::sv_expr::print_condition(inner, scope) {
+                Ok(e) => e,
+                Err(e) => return Some(Err(e)),
+            };
+            let multiplier = match crate::semantic::duration::ticks_per_milli(
+                map.time_profile(),
+                crate::diagnostics::Location::Codegen,
+            ) {
+                Ok(m) => m,
+                Err(e) => return Some(Err(e)),
+            };
+            let dwell = dwell_reg(&level.model);
+            match multiplier {
+                Some(1) => Some(Ok(format!("{dwell}_next >= ({expr})"))),
+                Some(k) => Some(Ok(format!("{dwell}_next >= ({expr}) * {k}"))),
+                None => Some(Ok(format!(
+                    "({TIME_MS_PORT} - {entry}_next) >= ({expr})",
+                    entry = entry_reg(&level.model)
+                ))),
+            }
+        }
         _ => None,
     }
 }

@@ -180,3 +180,71 @@ fn assert_st_valid(dir: &Path, name: &str) {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+// ── Вычисляемая выдержка: границы (фича 0183, задача 0183-05) ────────────────
+
+/// Модель с вычисляемой выдержкой (`after (base + 500ms)`).
+const DYNAMIC: &str = r#"
+model Timer {
+    var base: duration := 2s;
+    out done: bit := 0;
+    start Waiting { ref Ready: after (base + 500ms); }
+    state Ready { enter { done := 1; } }
+}
+start Main = Timer;
+"#;
+
+/// Частота, не кратная 1000 Гц, отвергается `SE-073`: множитель `hertz / 1000`
+/// не цел, и сравнение округлялось бы **молча**.
+#[test]
+fn dynamic_dwell_refuses_frequency_not_multiple_of_kilohertz() {
+    let dir = tmp("dynamic_3hz");
+    let mut options = GenerateOptions::default();
+    options.tick_hz = Some(3);
+    let error =
+        takt_lang::compile_to_c("timer", DYNAMIC, dir.to_str().expect("путь"), &[], &options)
+            .expect_err("частота 3 Гц обязана быть отвергнута");
+    // Код приходит причиной внутри диагностики кодогена — проверяется текстом,
+    // потому что цель оборачивает причину в свою `CC-018`.
+    let text = format!("{error:?}");
+    assert!(
+        text.contains("SE-073") || error.notes.iter().any(|n| n.message.contains("SE-073")),
+        "ожидался SE-073 о частоте, получено: {text}"
+    );
+}
+
+/// Частота, кратная 1000 Гц, принимается, и множитель виден в выводе.
+#[test]
+fn dynamic_dwell_multiplies_milliseconds_by_ticks_per_milli() {
+    let dir = tmp("dynamic_2khz");
+    let mut options = GenerateOptions::default();
+    options.tick_hz = Some(2_000);
+    takt_lang::compile_to_c("timer", DYNAMIC, dir.to_str().expect("путь"), &[], &options)
+        .expect("частота 2 кГц обязана приниматься");
+    let code = std::fs::read_to_string(dir.join("timer.c")).expect("порождённый .c");
+    assert!(
+        code.contains("* 2"),
+        "при 2 кГц миллисекунды обязаны умножаться на 2 такта:\n{code}"
+    );
+}
+
+/// Цель `st` в профиле «часы» вычисляемую выдержку пока не поддерживает —
+/// **громко** (`ST-016`), а не молча иной выдержкой: переменный `PT` таймера
+/// `TON` требует своей обвязки.
+#[test]
+fn st_refuses_dynamic_dwell_in_clock_profile() {
+    let dir = tmp("dynamic_st_clock");
+    let error = takt_lang::compile_to_st(
+        "timer",
+        DYNAMIC,
+        dir.to_str().expect("путь"),
+        &[],
+        &GenerateOptions::default(),
+    )
+    .expect_err("профиль «часы» обязан быть отвергнут");
+    let text = format!("{error:?}");
+    assert!(
+        text.contains("ST-016") || error.notes.iter().any(|n| n.message.contains("ST-016")),
+        "ожидался ST-016, получено: {text}"
+    );
+}

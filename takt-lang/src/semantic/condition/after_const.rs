@@ -161,11 +161,93 @@ pub(super) fn resolve_after_expr(
     cond: &ast::Condition,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<ConditionNode, Diagnostic> {
-    let nanos = nanos_of_cond(cond, model, 0).map_err(|(loc, cause)| fail(loc, &cause))?;
-    if nanos < 0 {
-        return Err(fail(cond.loc(), &Cause::Negative(nanos)));
+    match nanos_of_cond(cond, model.clone(), 0) {
+        Ok(nanos) if nanos < 0 => Err(fail(cond.loc(), &Cause::Negative(nanos))),
+        Ok(nanos) => Ok(ConditionNode::After(nanos)),
+        // Значение известно лишь в такте (переменная или порт) — выдержка
+        // становится **вычисляемой** (фича 0183). Прочие причины остаются
+        // ошибками: вызов функции компилятору неизвестен, голое число не имеет
+        // единицы времени, сравнение — не длительность.
+        Err((_, Cause::NotConst(..))) => resolve_dynamic(cond, model),
+        Err((loc, cause)) => Err(fail(loc, &cause)),
     }
-    Ok(ConditionNode::After(nanos))
+}
+
+/// Строит **вычисляемую** выдержку [`ConditionNode::AfterExpr`] (фича 0183).
+///
+/// Значение считает исполнитель: симулятор в наносекундах, цели в миллисекундах.
+/// Поэтому здесь проверяется не значение, а **форма и типы**: допустимы литералы
+/// длительности, переменные, порты и константы типа `duration`, скобки, `+`, `-`.
+/// Смешение с числом запрещено языком (`SE-065`), и выдержка исключения не делает.
+fn resolve_dynamic(
+    cond: &ast::Condition,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<ConditionNode, Diagnostic> {
+    check_dynamic_form(cond, model.clone(), 0).map_err(|(loc, cause)| fail(loc, &cause))?;
+    let inner = crate::semantic::condition::resolve_condition(cond, model)?;
+    Ok(ConditionNode::AfterExpr(Box::new(inner)))
+}
+
+/// Проверяет, что выражение вычисляемой выдержки состоит только из длительностей.
+///
+/// Разбор исчерпывающий по узлу условия: новая форма языка обязана получить здесь
+/// решение, а не унаследовать чужое умолчание.
+fn check_dynamic_form(
+    cond: &ast::Condition,
+    model: Rc<RefCell<ModelNode>>,
+    depth: usize,
+) -> Result<(), Failure> {
+    if depth > MAX_DEPTH {
+        return Err((cond.loc(), Cause::Cycle));
+    }
+    match cond {
+        ast::Condition::Duration(_, _, _) => Ok(()),
+        ast::Condition::Parenthesis(_, inner) => check_dynamic_form(inner, model, depth + 1),
+        ast::Condition::Add(_, left, right) | ast::Condition::Subtract(_, left, right) => {
+            check_dynamic_form(left, model.clone(), depth + 1)?;
+            check_dynamic_form(right, model, depth + 1)
+        }
+        ast::Condition::Variable(id) => check_duration_operand(id, model),
+        // Всё прочее — те же причины, что у константной формы: сообщение и код
+        // общие, поэтому решение принимает один разбор.
+        other => match nanos_of_cond(other, model, depth) {
+            Ok(_) => Ok(()),
+            // Переменная внутри выражения законна — проверяется своей ветвью.
+            Err((_, Cause::NotConst(..))) => Ok(()),
+            Err(failure) => Err(failure),
+        },
+    }
+}
+
+/// Операнд-имя вычисляемой выдержки обязан быть значением типа `duration`.
+fn check_duration_operand(
+    id: &ast::Identifier,
+    model: Rc<RefCell<ModelNode>>,
+) -> Result<(), Failure> {
+    let var = model
+        .borrow()
+        .search_var(&id.name)
+        .ok_or_else(|| (id.loc, Cause::Undeclared(id.name.clone())))?;
+    let ty = match &var {
+        VariableNode::Simple { ty, .. } | VariableNode::Port { ty, .. } => ty.clone(),
+        // Константа сюда доходит только внутри смешанного выражения
+        // (`v + DWELL`): её значение известно, но всё выражение — нет.
+        VariableNode::Const { ty, .. } => ty.clone(),
+        VariableNode::Unresolved => {
+            return Err((
+                id.loc,
+                Cause::NotConst(id.name.clone(), "неразрешённое объявление"),
+            ));
+        }
+    };
+    // `Inference`/`Unsupported` — «вывод типов не дошёл»; у **переменной** такой
+    // тип означает, что длительностью её объявить не удалось, и принимать её
+    // здесь значило бы гадать. Требуем явного `duration`.
+    if matches!(ty, TypeNode::Duration) {
+        Ok(())
+    } else {
+        Err((id.loc, Cause::WrongType(id.name.clone(), type_name(&ty))))
+    }
 }
 
 fn fail(loc: Location, cause: &Cause) -> Diagnostic {
@@ -529,35 +611,63 @@ start Main = M;
         assert!(err.contains("не объявлена"), "получено: {err}");
     }
 
-    /// Имя — изменяемая переменная, а не константа (решение заказчика: в объёме
-    /// 0143 только константы).
+    /// Имя — **переменная** типа `duration`: выдержка становится вычисляемой
+    /// (фича 0183 сняла ограничение 0143 «только константы»).
+    ///
+    /// # Пример (Takt)
+    /// ```but
+    /// var DWELL: duration := 3m;
+    /// ref Done: after DWELL;      // значение берётся в такте
+    /// ```
     #[test]
-    fn variable_is_se072() {
-        let err = ref_cond(&src("var DWELL: duration := 3m;", "after DWELL")).unwrap_err();
-        assert_eq!(code(&err), "SE-072", "получено: {err}");
-        assert!(err.contains("переменная"), "получено: {err}");
+    fn variable_gives_dynamic_dwell() {
+        let cond = ref_cond(&src("var DWELL: duration := 3m;", "after DWELL")).unwrap();
+        assert!(
+            matches!(cond, ConditionNode::AfterExpr(_)),
+            "ожидалась вычисляемая выдержка, получено {cond:?}"
+        );
     }
 
-    /// Переменная **внутри выражения** отвергается так же, как одиночная.
+    /// Переменная **внутри выражения** — тоже вычисляемая выдержка.
+    #[test]
+    fn variable_inside_expression_gives_dynamic_dwell() {
+        let cond = ref_cond(&src("var v: duration := 10s;", "after (v + 1s)")).unwrap();
+        assert!(
+            matches!(cond, ConditionNode::AfterExpr(_)),
+            "ожидалась вычисляемая выдержка, получено {cond:?}"
+        );
+    }
+
+    /// Входной порт типа `duration` годится так же, как переменная.
+    #[test]
+    fn duration_port_gives_dynamic_dwell() {
+        let cond = ref_cond(&src("in DWELL: duration := 0s;", "after DWELL")).unwrap();
+        assert!(
+            matches!(cond, ConditionNode::AfterExpr(_)),
+            "ожидалась вычисляемая выдержка, получено {cond:?}"
+        );
+    }
+
+    /// Порт **не той** типизации отвергается: выдержке нужна длительность.
     ///
     /// # Контрпример (Takt)
     /// ```but
-    /// var v: duration := 10s;
-    /// ref Done: after (v + 1s);   // значение известно только в такте
+    /// in DWELL: bit := 0;
+    /// ref Done: after DWELL;   // бит — не длительность
     /// ```
     #[test]
-    fn variable_inside_expression_is_se072() {
-        let err = ref_cond(&src("var v: duration := 10s;", "after (v + 1s)")).unwrap_err();
-        assert_eq!(code(&err), "SE-072", "получено: {err}");
-        assert!(err.contains("переменная"), "получено: {err}");
-    }
-
-    /// Имя — порт.
-    #[test]
-    fn port_is_se072() {
+    fn non_duration_port_is_se072() {
         let err = ref_cond(&src("in DWELL: bit := 0;", "after DWELL")).unwrap_err();
         assert_eq!(code(&err), "SE-072", "получено: {err}");
-        assert!(err.contains("порт"), "получено: {err}");
+        assert!(err.contains("duration"), "получено: {err}");
+    }
+
+    /// Переменная не той типизации — тоже отказ.
+    #[test]
+    fn non_duration_variable_is_se072() {
+        let err = ref_cond(&src("var n: u32 := 5;", "after (n + 1s)")).unwrap_err();
+        assert_eq!(code(&err), "SE-072", "получено: {err}");
+        assert!(err.contains("duration"), "получено: {err}");
     }
 
     /// Константа есть, но тип не `duration`.
