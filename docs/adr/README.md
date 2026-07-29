@@ -124,3 +124,4 @@
 | [0144](./0144-int-literal-exponent.md) | Экспонента числового литерала вычисляется | Accepted | фича 0144 |
 | [0155](./0155-semantic-nested-statement-resolution.md) | Семантическое разрешение тел вложенных операторов | Draft | фича 0155 |
 | [0146](./0146-book-glyph-gate.md) | Гейт символов вне шрифта документа book/ | Draft | фича 0146 |
+| [0149](./0149-claude-md-consistency-gate.md) | Гейт согласованности живого контекста CLAUDE.md | Draft | фича 0149 |

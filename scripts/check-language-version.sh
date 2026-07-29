@@ -3,7 +3,14 @@
 #
 # Правило (ADR 0085): номер версии языка Takt живёт в коде ровно один раз —
 # константа `takt_lang::version::LANGUAGE_VERSION` (`takt-lang/src/version.rs`).
-# `README.md` обязан ей соответствовать. Прежде версия жила ТОЛЬКО в README, и
+# `README.md` и живой контекст `CLAUDE.md` обязаны ей соответствовать.
+#
+# ТРЕТИЙ ИСТОЧНИК — CLAUDE.md (фича 0149). Прежде гейт сверял два источника из
+# трёх, и живой контекст показывал 0.4.0 при фактических 0.6.0; ошибка успела
+# разойтись ПО ТРЁМ КАРТОЧКАМ закрытых фич через цитирование. Проверка версии
+# держится ЗДЕСЬ, а не в scripts/check-claude-md.py: два гейта, проверяющие один
+# предмет, неизбежно разъезжаются (прецеденты — CI-гейты 0090, формат позиции
+# 0028-01). Прежде версия жила ТОЛЬКО в README, и
 # рассинхрон дока↔факт ничем не ловился: фича 0078 подняла язык 0.3.0 → 0.4.0, а
 # README остался на 0.3.0 — незамеченно. README без гейта повторяет судьбу
 # доков, отстающих от кода (прецедент ADR 0027 — размер модуля, ADR 0077 —
@@ -23,6 +30,7 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION_RS="$ROOT/takt-lang/src/version.rs"
 README="$ROOT/README.md"
+CLAUDE_MD="$ROOT/CLAUDE.md"
 VER_RE='[0-9]+\.[0-9]+\.[0-9]+'
 
 if [ ! -f "$VERSION_RS" ]; then
@@ -33,8 +41,12 @@ if [ ! -f "$README" ]; then
     echo "check-language-version: не найден $README" >&2
     exit 1
 fi
+if [ ! -f "$CLAUDE_MD" ]; then
+    echo "check-language-version: не найден $CLAUDE_MD" >&2
+    exit 1
+fi
 
-echo "Гейт версии языка: LANGUAGE_VERSION ↔ README (фича 0085)..."
+echo "Гейт версии языка: LANGUAGE_VERSION ↔ README ↔ CLAUDE.md (фичи 0085, 0149)..."
 
 # Значение константы: `pub const LANGUAGE_VERSION: &str = "X.Y.Z";`
 CONST_VER="$(grep -oE "LANGUAGE_VERSION: &str = \"$VER_RE\"" "$VERSION_RS" \
@@ -69,4 +81,31 @@ if [ "$CONST_VER" != "$README_VER" ]; then
     exit 1
 fi
 
-echo "  OK: версия языка = $CONST_VER (константа и README согласованы)"
+# Каноническая строка живого контекста: `**сейчас `X.Y.Z`**` рядом с упоминанием
+# LANGUAGE_VERSION — ровно одна. Якорь узкий по той же причине, что и у README:
+# исторические упоминания версий («0.2.0 → 0.3.0», «версия языка 0.1.0» в записях
+# о закрытых фичах) под него не подходят и гейтом не трогаются.
+CLAUDE_ANCHORS="$(grep -cE '\*\*сейчас `'"$VER_RE"'`\*\*' "$CLAUDE_MD" || true)"
+if [ "$CLAUDE_ANCHORS" -eq 0 ]; then
+    echo "  ОШИБКА: в $CLAUDE_MD нет канонической строки '**сейчас \`X.Y.Z\`**'." >&2
+    echo "  Она обязана стоять при упоминании LANGUAGE_VERSION (значение = $CONST_VER)." >&2
+    exit 1
+fi
+if [ "$CLAUDE_ANCHORS" -gt 1 ]; then
+    echo "  ОШИБКА: в $CLAUDE_MD найдено $CLAUDE_ANCHORS канонических строк версии — якорь неоднозначен." >&2
+    exit 1
+fi
+
+CLAUDE_VER="$(grep -oE '\*\*сейчас `'"$VER_RE"'`\*\*' "$CLAUDE_MD" \
+    | grep -oE "$VER_RE" | head -n1)"
+
+if [ "$CONST_VER" != "$CLAUDE_VER" ]; then
+    echo "  ОШИБКА: версия языка в живом контексте рассинхронизирована." >&2
+    echo "    LANGUAGE_VERSION ($VERSION_RS): $CONST_VER" >&2
+    echo "    CLAUDE.md (**сейчас \`…\`**):       $CLAUDE_VER" >&2
+    echo "  Живой контекст читается в начале каждой сессии — ложный факт здесь" >&2
+    echo "  становится предпосылкой всей работы (фича 0149)." >&2
+    exit 1
+fi
+
+echo "  OK: версия языка = $CONST_VER (константа, README и CLAUDE.md согласованы)"
