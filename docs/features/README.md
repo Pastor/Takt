@@ -186,7 +186,7 @@
 | [0171](./0171-c-gate-werror.md) | Гейт цели c под -Werror | ADR + анализ + разработка 01 + тест-план + отчёт | ГОТОВО |
 | [0172](./0172-empty-enum-semantics.md) | Семантика перечисления без вариантов | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0173](./0173-rust-generator-arg-count.md) | Снятие allow(too_many_arguments) в генераторе rust | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0174](./0174-rust-new-without-default.md) | Цель rust: корневая модель без портов (clippy::new_without_default) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0174](./0174-rust-new-without-default.md) | Цель rust: корневая модель без портов (clippy::new_without_default) | [ADR](../adr/0174-rust-new-without-default.md) · [анализ](../analyze/0174-rust-new-without-default.md) · разработка 01 · [тест-план](../tests/0174-rust-new-without-default.md) · [отчёт](../reports/0174-rust-new-without-default.md) | ГОТОВО |
 | [0175](./0175-ci-verification-followup.md) | Дожатие CI-верификации 0090 после разблокировки Actions | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0176](./0176-bit-port-address-position.md) | Позиция бита у bit-порта с голым адресом | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0177](./0177-features-registry-status-gate.md) | Гейт согласованности статуса в реестре и в карточке фичи | ADR + анализ + разработка 01 + тест-план + отчёт | ГОТОВО |
