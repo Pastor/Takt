@@ -138,3 +138,4 @@
 | [0163](./0163-builder-eval-exhaustive.md) | Исчерпывающий разбор узлов во втором вычислителе | Accepted | фича 0163 |
 | [0143](./0143-after-const-duration.md) | `after` принимает константное выражение типа `duration`, а не только литерал | Accepted | фича 0143 |
 | [0183](./0183-duration-type-in-targets.md) | Тип `duration` в целях генерации и вычисляемая выдержка | Accepted | фича 0183 |
+| [0184](./0184-imported-shared-variables.md) | Общие переменные библиотечного файла в импортёре | Draft | фича 0184 |
