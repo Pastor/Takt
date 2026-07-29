@@ -272,24 +272,37 @@ fn conflicting_clock_declarations_are_se067() {
 }
 
 #[test]
-fn targets_refuse_time_loudly_until_their_own_subtasks() {
-    // Эмиссия времени — задачи 0134-04…07. До них цель обязана ОТКАЗАТЬ, а не
-    // напечатать наносекунды обычным целым: молча неверный код компилируется.
+fn target_c_emits_duration_as_milliseconds() {
+    // Фича 0183 сняла отказ `CC-020`: цель `c` эмитит длительность целым в
+    // МИЛЛИСЕКУНДАХ. Прежде этот тест проверял противоположное — что цель
+    // отказывает «до своих подзадач»; ожидание сменилось вместе с решением
+    // (ADR 0183), а не потому, что стало неудобно.
+    //
     // ⚠️ Переменную нужно ИСПОЛЬЗОВАТЬ: неиспользуемая отфильтровывается из
-    // структуры цели `c` (известная ловушка, разобранная фичей 0029), и тогда
-    // отображение типа не вызывается вовсе — тест зеленел бы впустую.
+    // структуры цели `c` (ловушка, разобранная фичей 0029), и тогда отображение
+    // типа не вызывается вовсе — тест зеленел бы впустую.
     let src = model_with("    var left: duration := 0s;\n    always { left := 5s; }");
-    let mut out = std::env::temp_dir();
-    out.push("takt_0134_02_probe.c");
-    let result = takt_lang::compile_to_c(
-        "probe.takt",
+    let dir = std::env::temp_dir().join("takt_0183_probe_c");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("каталог");
+    takt_lang::compile_to_c(
+        "probe",
         &src,
-        out.to_str().expect("путь"),
+        dir.to_str().expect("путь"),
         &[],
         &takt_lang::generator::GenerateOptions::new(false),
+    )
+    .expect("цель 'c' обязана эмитить длительность");
+    let code = std::fs::read_to_string(dir.join("probe.c")).expect("порождённый .c");
+    let header = std::fs::read_to_string(dir.join("probe.h")).expect("порождённый .h");
+    assert!(
+        header.contains("uint32_t left;"),
+        "длительность обязана быть 32-битным целым:\n{header}"
     );
-    let diagnostic = result.expect_err("цель 'c' обязана отказать");
-    assert_eq!(diagnostic.code.as_deref(), Some("CC-020"), "{diagnostic:?}");
+    assert!(
+        code.contains("model->left = 5000;"),
+        "5s обязаны напечататься как 5000 мс:\n{code}"
+    );
 }
 
 // ── 6. Требования заказчика от 2026-07-27 ────────────────────────────────────

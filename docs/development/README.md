@@ -289,3 +289,4 @@
 | 0143-02 | 0143 | Вычислитель константной выдержки и диагностика `SE-072` | [0143-02-after-const-duration.md](0143-02-after-const-duration.md) |
 | 0143-03 | 0143 | Документ: раздел времени и приложение диагностик | [0143-03-after-const-duration.md](0143-03-after-const-duration.md) |
 | 0143-04 | 0143 | Ревизия объёма: константное выражение в after | [0143-04-after-const-duration.md](0143-04-after-const-duration.md) |
+| 0183-01 | 0183 | Общий слой представления и цель c | [0183-01-duration-type-in-targets.md](0183-01-duration-type-in-targets.md) |

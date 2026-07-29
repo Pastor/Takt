@@ -197,13 +197,15 @@ pub(in crate::generator::c) fn generate_condition_expr(
         ConditionNode::After(nanos) => after_condition(*nanos, map, owner),
         // Выдержка в тактах частоты НЕ требует: счётчик и так считает такты.
         ConditionNode::AfterTicks(ticks) => Ok(format!("{} >= {}", dwell_access(), ticks)),
-        // Литерал длительности вне `after` (переменные типа `duration`) целью
-        // пока не поддерживается — отказ, а не печать наносекунд числом.
-        ConditionNode::Duration(_) => Err(Diagnostic::error(
+        // Литерал длительности вне `after` — сравнение со значением типа
+        // `duration` (фича 0183). Печатается **миллисекундами**, как и значение;
+        // пересчёт зовёт общий слой (правило 7 ADR 0134).
+        ConditionNode::Duration(nanos) => Ok(crate::semantic::duration::value_millis(
+            *nanos,
             Location::Codegen,
-            "значения типа 'duration' целью 'c' пока не поддерживаются".to_string(),
-        )
-        .with_code("CC-020")),
+            "литерал длительности в условии",
+        )?
+        .to_string()),
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Rational(s, neg) => {
             if *neg {
