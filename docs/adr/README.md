@@ -126,3 +126,4 @@
 | [0146](./0146-book-glyph-gate.md) | Гейт символов вне шрифта документа book/ | Draft | фича 0146 |
 | [0149](./0149-claude-md-consistency-gate.md) | Гейт согласованности живого контекста CLAUDE.md | Draft | фича 0149 |
 | [0180](./0180-claude-md-context-diet.md) | Сокращение живого контекста CLAUDE.md | Draft | фича 0180 |
+| [0177](./0177-features-registry-status-gate.md) | Гейт согласованности статуса в реестре и в карточке фичи | Draft | фича 0177 |

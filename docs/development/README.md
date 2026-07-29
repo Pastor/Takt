@@ -273,3 +273,4 @@
 | 0149-01 | 0149 | Гейт согласованности живого контекста CLAUDE.md | [0149-01-claude-md-consistency-gate.md](0149-01-claude-md-consistency-gate.md) |
 | 0149-02 | 0149 | Гейт согласованности живого контекста CLAUDE.md | [0149-02-claude-md-consistency-gate.md](0149-02-claude-md-consistency-gate.md) |
 | 0180-01 | 0180 | Сокращение живого контекста CLAUDE.md | [0180-01-claude-md-context-diet.md](0180-01-claude-md-context-diet.md) |
+| 0177-01 | 0177 | Гейт согласованности статуса в реестре и в карточке фичи | [0177-01-features-registry-status-gate.md](0177-01-features-registry-status-gate.md) |
