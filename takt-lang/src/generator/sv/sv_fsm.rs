@@ -266,6 +266,15 @@ impl Fsm {
                         sv_const::enum_literal(ty, *n, &fsm.enums).unwrap_or_else(|| n.to_string())
                     }
                     ExpressionNode::Bool(b) => if *b { "1'b1" } else { "1'b0" }.to_string(),
+                    // Литерал длительности (фича 0183) — константа в
+                    // **миллисекундах**: тип `duration` в целях есть беззнаковый
+                    // вектор миллисекунд, поэтому и значение сброса такое же.
+                    ExpressionNode::Duration(nanos) => crate::semantic::duration::value_millis(
+                        *nanos,
+                        *loc,
+                        &format!("инициализатор переменной '{var_name}'"),
+                    )?
+                    .to_string(),
                     // Умолчание для переменной без инициализатора: регистр
                     // обязан иметь значение сброса — «неинициализированного»
                     // триггера не бывает.

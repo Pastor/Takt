@@ -403,15 +403,21 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         // (`sv_fsm`) обязан различать условный и безусловный переход, потому что
         // безусловный делает всё, что ниже него, недостижимым.
         ConditionNode::None => Ok("1'b1".to_string()),
-        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
-        // отказ, а не печать наносекунд обычным числом.
-        ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {
-            Err(Diagnostic::error(
-                Location::Codegen,
-                "длительность целью 'sv' пока не поддерживается".to_string(),
-            )
-            .with_code("SV-015"))
-        }
+        // Литерал длительности в условии (фича 0183) — миллисекунды, как и
+        // значение. ⚠️ Выдержка `after` здесь **не** обрабатывается: её печатает
+        // `sv_time` (у него есть доступ к счётчику и профилю), и попадание сюда
+        // означало бы разбор в обход того пути.
+        ConditionNode::Duration(nanos) => Ok(crate::semantic::duration::value_millis(
+            *nanos,
+            Location::Codegen,
+            "литерал длительности в условии",
+        )?
+        .to_string()),
+        ConditionNode::After(_) | ConditionNode::AfterTicks(_) => Err(Diagnostic::error(
+            Location::Codegen,
+            "выдержка 'after' обязана печататься через sv_time, а не как условие".to_string(),
+        )
+        .with_code("SV-015")),
         ConditionNode::Bool(v) => Ok(if *v { "1'b1" } else { "1'b0" }.to_string()),
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Parenthesis(inner) => Ok(format!("({})", print_condition(inner, scope)?)),
@@ -486,13 +492,14 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
             .map(|(m, n)| super::sv_fixed::binary(op, l, r, scope, m, n))
     };
     match node {
-        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
-        // отказ, а не печать наносекунд обычным числом.
-        ExpressionNode::Duration(_) => Err(Diagnostic::error(
+        // Длительность (фича 0183) печатается **миллисекундами**; пересчёт зовёт
+        // общий слой — своей арифметики времени генератор не заводит.
+        ExpressionNode::Duration(nanos) => Ok(crate::semantic::duration::value_millis(
+            *nanos,
             Location::Codegen,
-            "длительность целью 'sv' пока не поддерживается".to_string(),
-        )
-        .with_code("SV-015")),
+            "литерал длительности",
+        )?
+        .to_string()),
         ExpressionNode::Number(n) => Ok(n.to_string()),
         ExpressionNode::Bool(v) => Ok(if *v { "1'b1" } else { "1'b0" }.to_string()),
         ExpressionNode::Parenthesis(inner) => Ok(format!("({})", print_expression(inner, scope)?)),
