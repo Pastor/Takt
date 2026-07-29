@@ -12,7 +12,7 @@
 use std::path::Path;
 use std::process::Command;
 
-/// Фикстура: `left := pause + 750ms`, `ms := left as u32`, `late := left > 500ms`.
+/// Фикстура: `elapsed := pause + 750ms`, `ms := elapsed as u32`, `late := elapsed > 500ms`.
 const FIXTURE: &str = "tests/data/eval/conformance_duration_value.takt";
 
 /// Доступен ли компилятор C (иначе сверка мягко пропускается).
@@ -145,7 +145,7 @@ fn duration_values_match_simulator_and_generated_c() {
 /// (миллисекунды), поэтому в выводе стоит только приведение типа.
 ///
 /// Проверяется текстом, а не поведением: деление на 1000000, вставленное «на
-/// всякий случай», прошло бы сверку значений при `left = 0` и провалилось бы на
+/// всякий случай», прошло бы сверку значений при `elapsed = 0` и провалилось бы на
 /// живой модели.
 #[test]
 fn cast_between_duration_and_number_emits_no_arithmetic() {
@@ -162,7 +162,7 @@ fn cast_between_duration_and_number_emits_no_arithmetic() {
     let code = std::fs::read_to_string(dir.path().join("conformance_duration_value.c"))
         .expect("порождённый .c");
     assert!(
-        code.contains("(uint32_t)model->left"),
+        code.contains("(uint32_t)model->elapsed"),
         "приведение обязано быть простым кастом:\n{code}"
     );
     for forbidden in ["1000000", "/ 1000", "* 1000"] {

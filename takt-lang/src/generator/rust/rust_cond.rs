@@ -20,13 +20,14 @@ use crate::semantic::{ConditionNode, FunctionDefinitionNode};
 /// [`RS-011`] на непереводимой конструкции.
 pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<String, Diagnostic> {
     match cond {
-        // Литерал длительности ВНЕ `after` (переменная типа `duration`) целью
-        // пока не поддерживается — отказ, а не печать наносекунд числом (как в c).
-        ConditionNode::Duration(_) => Err(Diagnostic::error(
+        // Литерал длительности ВНЕ `after` — сравнение со значением типа
+        // `duration` (фича 0183). Печатается **миллисекундами**, как и значение.
+        ConditionNode::Duration(nanos) => Ok(crate::semantic::duration::value_millis(
+            *nanos,
             Location::Codegen,
-            "значения типа 'duration' целью 'rust' пока не поддерживаются".to_string(),
-        )
-        .with_code("RS-023")),
+            "литерал длительности в условии",
+        )?
+        .to_string()),
         // Выдержка `after` (фича 0134): профиль «такты» → счётчик `takt_dwell`;
         // профиль «часы» → метка `now_ms` и сравнение разностью с обёрткой.
         ConditionNode::After(nanos) => {

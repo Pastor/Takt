@@ -53,13 +53,14 @@ pub(crate) fn print_expression(
     model: &ModelNode,
 ) -> Result<String, Diagnostic> {
     match expr {
-        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
-        // отказ, а не печать наносекунд обычным числом.
-        ExpressionNode::Duration(_) => Err(Diagnostic::error(
+        // Длительность (фича 0183) печатается **миллисекундами** — целым, как и
+        // её тип (`UDINT`); пересчёт зовёт общий слой.
+        ExpressionNode::Duration(nanos) => Ok(crate::semantic::duration::value_millis(
+            *nanos,
             Location::Codegen,
-            "длительность целью 'st' пока не поддерживается".to_string(),
-        )
-        .with_code("ST-015")),
+            "литерал длительности",
+        )?
+        .to_string()),
         ExpressionNode::Number(n) => Ok(n.to_string()),
         ExpressionNode::Bool(b) => Ok(bool_literal(*b)),
         ExpressionNode::Rational(text, negative) => {
@@ -251,15 +252,21 @@ pub(crate) fn print_condition(
     model: &ModelNode,
 ) -> Result<String, Diagnostic> {
     match cond {
-        // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
-        // отказ, а не печать наносекунд обычным числом.
-        ConditionNode::Duration(_) | ConditionNode::After(_) | ConditionNode::AfterTicks(_) => {
-            Err(Diagnostic::error(
-                Location::Codegen,
-                "длительность целью 'st' пока не поддерживается".to_string(),
-            )
-            .with_code("ST-015"))
-        }
+        // Литерал длительности в условии (фича 0183) — миллисекунды, как и
+        // значение. ⚠️ Выдержка `after` здесь **не** обрабатывается: её печатает
+        // `st_model` (у него есть доступ к полю времени и профилю), и попадание
+        // сюда означало бы, что условие разбирают в обход того пути.
+        ConditionNode::Duration(nanos) => Ok(crate::semantic::duration::value_millis(
+            *nanos,
+            Location::Codegen,
+            "литерал длительности в условии",
+        )?
+        .to_string()),
+        ConditionNode::After(_) | ConditionNode::AfterTicks(_) => Err(Diagnostic::error(
+            Location::Codegen,
+            "выдержка 'after' обязана печататься через st_model, а не как условие".to_string(),
+        )
+        .with_code("ST-015")),
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Bool(b) => Ok(bool_literal(*b)),
         ConditionNode::Rational(text, negative) => {

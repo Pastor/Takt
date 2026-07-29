@@ -433,6 +433,17 @@ pub(crate) fn literal_init(expr: &ExpressionNode, ty: &TypeNode) -> Option<Strin
         // declaration».
         ExpressionNode::Bool(b) => Some(if *b { "TRUE" } else { "FALSE" }.to_string()),
         ExpressionNode::Number(n) => Some(n.to_string()),
+        // Длительность (фича 0183) — целое в миллисекундах, как и её тип
+        // (`UDINT`). ⚠️ Без этой ветви инициализатор терялся **молча**: `var
+        // pause: duration := 1s;` объявлялся нулём, тогда как эталон давал 1000
+        // мс, — расхождение, которое не увидел бы ни `iec2c`, ни гейт.
+        ExpressionNode::Duration(nanos) => crate::semantic::duration::value_millis(
+            *nanos,
+            crate::diagnostics::Location::Codegen,
+            "инициализатор длительности",
+        )
+        .ok()
+        .map(|millis| millis.to_string()),
         ExpressionNode::Rational(text, negative) => {
             Some(format!("{}{}", if *negative { "-" } else { "" }, text))
         }

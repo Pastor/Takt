@@ -290,3 +290,6 @@
 | 0143-03 | 0143 | Документ: раздел времени и приложение диагностик | [0143-03-after-const-duration.md](0143-03-after-const-duration.md) |
 | 0143-04 | 0143 | Ревизия объёма: константное выражение в after | [0143-04-after-const-duration.md](0143-04-after-const-duration.md) |
 | 0183-01 | 0183 | Общий слой представления и цель c | [0183-01-duration-type-in-targets.md](0183-01-duration-type-in-targets.md) |
+| 0183-02 | 0183 | Цель `rust` | [0183-02-duration-type-in-targets.md](0183-02-duration-type-in-targets.md) |
+| 0183-03 | 0183 | Цель `st` | [0183-03-duration-type-in-targets.md](0183-03-duration-type-in-targets.md) |
+| 0183-04 | 0183 | Цель `sv` | [0183-04-duration-type-in-targets.md](0183-04-duration-type-in-targets.md) |

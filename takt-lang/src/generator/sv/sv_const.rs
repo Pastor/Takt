@@ -88,6 +88,13 @@ fn constant_value(
     match value {
         ExpressionNode::Number(n) => Ok(n.to_string()),
         ExpressionNode::Bool(b) => Ok(if *b { "1'b1" } else { "1'b0" }.to_string()),
+        // Литерал длительности (фича 0183) — такая же константа, как число:
+        // печатается миллисекундами, потому что тип `duration` в целях есть
+        // беззнаковый вектор миллисекунд.
+        ExpressionNode::Duration(nanos) => {
+            crate::semantic::duration::value_millis(*nanos, loc, "инициализатор длительности")
+                .map(|millis| millis.to_string())
+        }
         // Константа модели — `localparam`. Переменная и порт сюда не проходят:
         // их значение к моменту сброса не определено.
         ExpressionNode::Variable(var) => match &*var.borrow() {

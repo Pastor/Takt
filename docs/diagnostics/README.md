@@ -138,7 +138,7 @@
 | `RS-020` | условный переход в состояние '…' не переводится в Rust: … | `takt-lang/src/generator/rust/rust_model.rs:1132` |
 | `RS-021` | последовательная композиция (`+`) вложена в шаг другой `+` | `takt-lang/src/generator/rust/rust_model.rs:263` |
 | `RS-022` | нужен HAL, но он в этой области недоступен | `takt-lang/src/generator/rust/rust_expr.rs:125` |
-| `RS-023` | Время (`duration`) целью `rust` пока не поддерживается | `takt-lang/src/generator/rust/rust_type.rs:60` |
+| `RS-023` | **RETIRED** (фича 0183): тип `duration` цель `rust` эмитит `u32` в миллисекундах — отказывать не за что. Номер не переиспользовать под другой смысл | — |
 
 ### SE — семантика
 
@@ -264,7 +264,7 @@
 | `ST-012` | Корневой элемент карты не является моделью | `takt-lang/src/generator/st/mod.rs:113` |
 | `ST-013` | q({m}, {n}): W = … > 32 — точное произведение шириной 2W не влезает в LINT | `takt-lang/src/generator/st/st_fixed.rs:242` |
 | `ST-014` | Приведение float → q в цели st (LREAL_TO_INT округляет к ближайшему) | `takt-lang/src/generator/st/st_fixed.rs:177` |
-| `ST-015` | Время (`duration`) целью `st` пока не поддерживается | `takt-lang/src/generator/st/st_type.rs:62` |
+| `ST-015` | Выдержка `after` попала в печатник условий вместо `st_model` (сторож пути: фича 0183 сняла прежний смысл «`duration` не поддерживается») | `takt-lang/src/generator/st/st_expr.rs` |
 
 ### SV — цель SystemVerilog
 
@@ -284,7 +284,7 @@
 | `SV-012` | имя = ключевое слово SystemVerilog (`fork`, `wire`, `time`, …) | `takt-lang/src/generator/sv/sv_module.rs:387` |
 | `SV-013` | Порт занимает биты адреса шире регистра цели sv-mmio | `takt-lang/src/generator/sv/sv_mmio.rs:85` |
 | `SV-014` | Имя зарезервировано регистровым интерфейсом цели sv-mmio | `takt-lang/src/generator/sv/sv_mmio.rs:101` |
-| `SV-015` | Время (`duration`) целью `sv` пока не поддерживается | `takt-lang/src/generator/sv/sv_type.rs:157` |
+| `SV-015` | Выдержка `after` попала в печатник условий вместо `sv_time` (сторож пути: фича 0183 сняла прежний смысл «`duration` не поддерживается») | `takt-lang/src/generator/sv/sv_expr.rs` |
 
 ### SY — парсер
 
