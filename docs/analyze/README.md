@@ -134,3 +134,4 @@
 | 0149 | Гейт согласованности живого контекста CLAUDE.md | [0149-claude-md-consistency-gate.md](0149-claude-md-consistency-gate.md) | — (новая фича) |
 | 0180 | Сокращение живого контекста CLAUDE.md | [0180-claude-md-context-diet.md](0180-claude-md-context-diet.md) | — (новая фича) |
 | 0177 | Гейт согласованности статуса в реестре и в карточке фичи | [0177-features-registry-status-gate.md](0177-features-registry-status-gate.md) | — (новая фича) |
+| 0159 | Фиксация требования JDK 21 для сборки плагина intellij-takt | [0159-intellij-jdk21-build.md](0159-intellij-jdk21-build.md) | — (новая фича) |
