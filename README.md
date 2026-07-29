@@ -1488,7 +1488,11 @@ endcase
 `A + (B + C)` уплощается в плоскую цепочку; прямая вложенная `+` внутри
 параллельного шага (`(A + B) | C`) даёт явную `SV-002` — не молча стоящий автомат.
 
-Из корпуса цель транслирует `stacker.takt` и `elevator_mini.takt`. Отвергаются:
+Из корпуса цель транслирует `stacker.takt`, `elevator_mini.takt`,
+`regulator.takt`, `pid_regulator.takt` и `batch_cycle.takt`. Последний заведён
+специально под `+` (фича [0166](docs/features/0166-sv-example-sequential-composition.md)):
+до него список состоял из моделей на `|`, и последовательная композиция под гейт
+**не подавалась** — синтез на ней прогоняли вручную. Отвергаются:
 `elevator.takt` — `SV-005` (8 `extern fn`); `comprehensive.takt` — `SV-002` (цикл
 `for`); `extend_complex.takt` — `SV-005` (`extern fn has_flag`; композиция `+`
 тут поддержана, препятствие — не она).
@@ -1526,9 +1530,11 @@ CI.
 
 #### Тестбенчи и осциллограммы для GTKWave
 
-Для каждого транслируемого примера (`stacker`, `elevator_mini`) заведён
-рукописный тестбенч в `examples/generated/sv/tb/` (фича
-[0095](docs/features/0095-sv-testbenches.md)). Тестбенч делает две вещи:
+Для **каждого** транслируемого примера (`stacker`, `elevator_mini`, `regulator`,
+`pid_regulator`, `batch_cycle`) заведён рукописный тестбенч в
+`examples/generated/sv/tb/` (фича
+[0095](docs/features/0095-sv-testbenches.md)); отсутствие парного тестбенча у
+обязательного примера валит гейт. Тестбенч делает две вещи:
 прогоняет порождённый модуль на осмысленном сценарии, проверяя наблюдаемое
 поведение `assert`-ами, и снимает осциллограмму `<module>.vcd` для
 [GTKWave](https://gtkwave.sourceforge.net/):
