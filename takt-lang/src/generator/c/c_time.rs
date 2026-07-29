@@ -200,6 +200,16 @@ pub(super) fn counter_ticks(
     let mut max = 0u64;
     for state in model.states.values() {
         for reference in state.references() {
+            // Вычисляемая выдержка (фича 0183) значения не имеет до такта,
+            // поэтому счётчик обязан вмещать **любое** представимое: иначе
+            // сравнение либо усечёт значение, либо (в цели `rust`) не
+            // скомпилируется из-за разной ширины операндов.
+            if matches!(
+                &reference.cond,
+                crate::semantic::ConditionNode::AfterExpr(_)
+            ) {
+                max = max.max(u64::from(u32::MAX));
+            }
             let nanos = match &reference.cond {
                 crate::semantic::ConditionNode::After(nanos) => Some(*nanos),
                 _ => None,

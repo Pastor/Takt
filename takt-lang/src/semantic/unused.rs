@@ -298,6 +298,13 @@ fn usage_from_condition(cond: &ConditionNode, set: &mut UsageSet) {
             }
         }
         ConditionNode::BitAccess(inner, _) => usage_from_condition(inner, set),
+        // Вычисляемая выдержка (фича 0183) читает переменные и порты — это
+        // настоящее использование. ⚠️ Без этой ветви `after (base + 500ms)`
+        // давало ложное «переменная 'base' нигде не используется», то есть
+        // компилятор говорил автору неправду о его же коде (класс, разобранный
+        // задачей 0134-03). Компилятор здесь не помогает: разбор кончается
+        // `_ => {}`.
+        ConditionNode::AfterExpr(inner) => usage_from_condition(inner, set),
         _ => {}
     }
 }
@@ -639,6 +646,14 @@ fn collect_from_condition(cond: &ConditionNode, used: &mut HashSet<String>) {
             }
         }
         ConditionNode::BitAccess(inner, _) => collect_from_condition(inner, used),
+        // Вычисляемая выдержка (фича 0183) читает переменные и порты.
+        //
+        // ⚠️ Это **второй** сборщик использований по условиям в этом же модуле
+        // (первый — `usage_from_condition`), и правка одного оставляла ложное
+        // «переменная 'base' нигде не используется» — компилятор говорил автору
+        // неправду о его же коде. Оба кончаются `_ => {}`, поэтому ни один узел
+        // языка здесь не защищён исчерпаемостью: правя один, правь второй.
+        ConditionNode::AfterExpr(inner) => collect_from_condition(inner, used),
         _ => {}
     }
 }

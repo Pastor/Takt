@@ -413,11 +413,15 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
             "литерал длительности в условии",
         )?
         .to_string()),
-        ConditionNode::After(_) | ConditionNode::AfterTicks(_) => Err(Diagnostic::error(
-            Location::Codegen,
-            "выдержка 'after' обязана печататься через sv_time, а не как условие".to_string(),
-        )
-        .with_code("SV-015")),
+        // Выдержка (константная и вычисляемая, фича 0183) печатается `sv_time`:
+        // только у него есть счётчик и профиль.
+        ConditionNode::After(_) | ConditionNode::AfterTicks(_) | ConditionNode::AfterExpr(_) => {
+            Err(Diagnostic::error(
+                Location::Codegen,
+                "выдержка 'after' обязана печататься через sv_time, а не как условие".to_string(),
+            )
+            .with_code("SV-015"))
+        }
         ConditionNode::Bool(v) => Ok(if *v { "1'b1" } else { "1'b0" }.to_string()),
         ConditionNode::Number(n) => Ok(n.to_string()),
         ConditionNode::Parenthesis(inner) => Ok(format!("({})", print_condition(inner, scope)?)),

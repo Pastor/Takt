@@ -515,6 +515,9 @@ fn lower_cond(cond: &mut ConditionNode, m: u8, n: u8) -> Result<(), Diagnostic> 
             }
         }
         ConditionNode::Variable(v, _) => retype_var_cell(v, m, n),
+        // Вычисляемая выдержка (фича 0183) несёт условие внутри — его переменные
+        // подлежат тому же перетипированию, что и все прочие.
+        ConditionNode::AfterExpr(inner) => lower_cond(inner, m, n)?,
         // Листья, ссылки на модель/состояние, литералы, `Unresolved` рёбер.
         ConditionNode::None
         | ConditionNode::Unresolved(_)

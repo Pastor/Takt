@@ -49,6 +49,26 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
                 }
             }
         }
+        // Вычисляемая выдержка (фича 0183): сравнивается напечатанное выражение в
+        // миллисекундах, а не число.
+        ConditionNode::AfterExpr(inner) => {
+            let expr = print_condition(inner, scope)?;
+            match crate::semantic::duration::ticks_per_milli(scope.time_profile, Location::Codegen)?
+            {
+                Some(1) => Ok(crate::generator::rust::rust_time::dwell_after_dynamic(
+                    &expr,
+                )),
+                Some(multiplier) => Ok(crate::generator::rust::rust_time::dwell_after_dynamic(
+                    &format!("({expr}) * {multiplier}"),
+                )),
+                None => {
+                    let hal = scope.hal_receiver("вычисляемая выдержка 'after'")?;
+                    Ok(crate::generator::rust::rust_time::clock_after_dynamic(
+                        hal, &expr,
+                    ))
+                }
+            }
+        }
         // Тактовая выдержка `after Nt`: частота не нужна — счётчик и так считает такты.
         ConditionNode::AfterTicks(ticks) => Ok(
             crate::generator::rust::rust_time::dwell_after_expr(*ticks as u64),
@@ -353,6 +373,11 @@ pub(crate) fn condition_type(cond: &ConditionNode) -> Option<TypeNode> {
         // сравнение метки `now_ms` разностью, оба дают `bool`.
         | ConditionNode::After(_)
         | ConditionNode::AfterTicks(_)
+        // Вычисляемая выдержка (фича 0183) — тоже сравнение, то есть `bool`.
+        // ⚠️ Без этой ветви цель отвечала `RS-011` («тип не выводится») на
+        // готовом булевом выражении: разбор кончается `_ => None`, и компилятор
+        // о пропуске не сообщает.
+        | ConditionNode::AfterExpr(_)
         | ConditionNode::BitAccess(_, _) => Some(TypeNode::Bool),
         ConditionNode::ArraySubscript(var, _) => match var.borrow().ty() {
             TypeNode::Array(_, elem) => Some((**elem).clone()),

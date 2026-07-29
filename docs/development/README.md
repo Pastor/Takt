@@ -293,3 +293,4 @@
 | 0183-02 | 0183 | Цель `rust` | [0183-02-duration-type-in-targets.md](0183-02-duration-type-in-targets.md) |
 | 0183-03 | 0183 | Цель `st` | [0183-03-duration-type-in-targets.md](0183-03-duration-type-in-targets.md) |
 | 0183-04 | 0183 | Цель `sv` | [0183-04-duration-type-in-targets.md](0183-04-duration-type-in-targets.md) |
+| 0183-05 | 0183 | Вычисляемая выдержка `after (v + 1s)` | [0183-05-duration-type-in-targets.md](0183-05-duration-type-in-targets.md) |

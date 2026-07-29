@@ -72,6 +72,13 @@ fn max_units(map: &RustMap, model: &ModelNode) -> Result<u64, Diagnostic> {
     let mut max = 0u64;
     for state in model.states.values() {
         for reference in state.references() {
+            // Вычисляемая выдержка (фича 0183): значение известно лишь в такте,
+            // поэтому счётчик обязан вмещать любое представимое — иначе в Rust
+            // сравнение `u8 >= u32` не скомпилируется (`E0308`), а в C молча
+            // усечёт.
+            if matches!(reference.cond, crate::semantic::ConditionNode::AfterExpr(_)) {
+                max = max.max(u64::from(u32::MAX));
+            }
             if let crate::semantic::ConditionNode::After(nanos) = reference.cond {
                 let units =
                     units_or_diagnostic(nanos, profile, Location::Codegen, "выдержка 'after'")?;
@@ -231,4 +238,16 @@ pub(super) fn clock_after_expr(hal: &str, units: u64) -> String {
 /// Строит выражение-условие тактовой выдержки (`takt_dwell >= N`).
 pub(super) fn dwell_after_expr(units: u64) -> String {
     format!("self.{DWELL_FIELD} >= {units}")
+}
+
+/// То же для **вычисляемой** выдержки (фича 0183): справа стоит выражение в
+/// миллисекундах, уже переведённое вызывающим в единицы счётчика.
+pub(super) fn dwell_after_dynamic(expr: &str) -> String {
+    format!("self.{DWELL_FIELD} >= {expr}")
+}
+
+/// Вычисляемая выдержка в профиле «часы»: разность меток сравнивается с
+/// выражением в миллисекундах.
+pub(super) fn clock_after_dynamic(hal: &str, expr: &str) -> String {
+    format!("{hal}.{NOW_MS_METHOD}().wrapping_sub(self.{ENTRY_MS_FIELD}) >= ({expr})")
 }

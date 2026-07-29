@@ -375,6 +375,32 @@ fn emit_state(
                 }
             }
             ConditionNode::AfterTicks(ticks) => format!("{} >= {}", st_time::DWELL_FIELD, ticks),
+            // Вычисляемая выдержка (фича 0183): справа — выражение в
+            // миллисекундах. В профиле «часы» таймер `TON` с переменным `PT`
+            // потребовал бы иной обвязки, поэтому пока поддержан профиль «такты»:
+            // отказ громкий, а не молча иная выдержка.
+            ConditionNode::AfterExpr(inner) => {
+                if clock {
+                    return Err(Diagnostic::error(
+                        Location::Codegen,
+                        "вычисляемая выдержка 'after' в профиле «часы» целью 'st'                          пока не поддерживается: переменный `PT` таймера требует                          своей обвязки. Передайте --tick-hz (профиль «такты») либо                          оставьте выдержку константной"
+                            .to_string(),
+                    )
+                    .with_code("ST-016"));
+                }
+                let expr = print_condition(inner, model)?;
+                match crate::semantic::duration::ticks_per_milli(
+                    map.time_profile(),
+                    Location::Codegen,
+                )? {
+                    Some(1) => format!("{} >= {expr}", st_time::DWELL_FIELD),
+                    Some(multiplier) => {
+                        format!("{} >= ({expr}) * {multiplier}", st_time::DWELL_FIELD)
+                    }
+                    // `None` невозможен: ветвь `clock` отсечена выше.
+                    None => unreachable!("профиль «часы» отсечён выше"),
+                }
+            }
             other => print_condition(other, model)?,
         };
         p.ident(&format!(

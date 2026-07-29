@@ -212,6 +212,7 @@
 | `SE-070` | `--tick-hz` не совпадает с объявленной `clock` частотой | `takt-lang/src/semantic/duration.rs:259` |
 | `SE-071` | Во что пересчиталась длительность (информационное предупреждение) | `takt-lang/src/semantic/duration.rs:314` |
 | `SE-072` | Выдержка `after` не сводится к константной длительности | `takt-lang/src/semantic/condition/after_const.rs` |
+| `SE-073` | Вычисляемая выдержка требует частоты, кратной 1000 Гц (иначе множитель `hertz/1000` не цел) | `takt-lang/src/semantic/duration.rs` |
 
 ### SIM — симулятор
 
@@ -265,6 +266,7 @@
 | `ST-013` | q({m}, {n}): W = … > 32 — точное произведение шириной 2W не влезает в LINT | `takt-lang/src/generator/st/st_fixed.rs:242` |
 | `ST-014` | Приведение float → q в цели st (LREAL_TO_INT округляет к ближайшему) | `takt-lang/src/generator/st/st_fixed.rs:177` |
 | `ST-015` | Выдержка `after` попала в печатник условий вместо `st_model` (сторож пути: фича 0183 сняла прежний смысл «`duration` не поддерживается») | `takt-lang/src/generator/st/st_expr.rs` |
+| `ST-016` | Вычисляемая выдержка `after` в профиле «часы» целью `st` не поддерживается (переменный `PT` таймера `TON`) | `takt-lang/src/generator/st/st_model.rs` |
 
 ### SV — цель SystemVerilog
 

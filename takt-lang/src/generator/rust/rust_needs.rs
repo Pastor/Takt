@@ -365,6 +365,11 @@ fn walk_condition(
             walk_condition(a, model, locals, needs, seen)?;
             walk_condition(b, model, locals, needs, seen)?;
         }
+        // Вычисляемая выдержка (фича 0183): её операнды — переменные и порты,
+        // то есть нужды HAL считаются по вложенному условию.
+        ConditionNode::AfterExpr(inner) => {
+            walk_condition(inner, model, locals, needs, seen)?;
+        }
         ConditionNode::None
         | ConditionNode::Unresolved(_)
         | ConditionNode::Number(_)
