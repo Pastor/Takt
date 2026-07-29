@@ -10,8 +10,8 @@ use takt_lang::diagnostics::{Diagnostic, Location};
 use takt_lang::semantic::extend::Extend;
 use takt_lang::semantic::type_node::TypeNode;
 use takt_lang::semantic::{
-    ConditionNode, ExpressionNode, ModelNode, NamedCodeBlockDefinitionNode, StateNode,
-    StateNodeKind, VariableNode,
+    ConditionNode, ExpressionNode, ModelNode, NamedCodeBlockDefinitionNode, ReferenceNode,
+    StateNode, StateNodeKind, VariableNode,
 };
 
 type Executions = HashMap<String, Vec<Execution>>;
@@ -373,6 +373,10 @@ fn build_node(
     let mut state_transitions: HashMap<String, Vec<(String, Predicate)>> = HashMap::new();
     let mut state_executions: HashMap<String, Executions> = HashMap::new();
     let mut state_every: HashMap<String, Vec<(i64, Vec<Execution>)>> = HashMap::new();
+    // 0181 (закрытие фикса 0057-01): реализации состояний-реализаций. Прежде
+    // здесь не строилось НИЧЕГО — поле `implements` состояния не читалось, и
+    // композиция `state P = A + B { next Done; }` молча исчезала.
+    let mut state_impls: HashMap<String, Rc<RefCell<Unit>>> = HashMap::new();
     // 0044: инварианты модели (проверяются каждый такт) и по состояниям.
     let mut guards = crate::unit::Guards {
         model: build_guards(&model.borrow().formulas),
@@ -381,6 +385,16 @@ fn build_node(
 
     for (name, state_node) in &states_snapshot {
         state_transitions.insert(name.clone(), build_transitions(state_node)?);
+        // Реализация состояния (`state P = A + B`) — дочерний юнит с контекстом
+        // ЭТОГО узла в качестве общего родителя (фича 0181). Общий контекст —
+        // не деталь: без него шаги `+` не видят переменных друг друга, и
+        // значение, записанное шагом A, проваливается в 0 при переходе к B.
+        if let StateNode::Implement { implements, .. } = state_node {
+            let inner = build_extend(implements, Some(ctx_rc.clone()))?;
+            if !matches!(inner.kind(), UnitKind::None) {
+                state_impls.insert(name.clone(), Rc::new(RefCell::new(inner)));
+            }
+        }
         let state_guards = build_guards(state_node.formulas());
         if !state_guards.is_empty() {
             guards.per_state.insert(name.clone(), state_guards);
@@ -446,6 +460,7 @@ fn build_node(
         state_transitions,
         state_executions,
         state_every,
+        state_impls,
         every_consumed: Vec::new(),
         state: Some(start_name),
         executions,
@@ -473,18 +488,28 @@ fn build_guards(formulas: &[takt_lang::semantic::formula::Formula]) -> Vec<crate
 }
 
 fn build_transitions(state: &StateNode) -> Result<Vec<(String, Predicate)>, Diagnostic> {
-    state
-        .references()
-        .iter()
-        .map(|r| {
-            let pred = if matches!(r.cond, ConditionNode::None) {
-                Predicate::new("Always", |_| Ok(true))
-            } else {
-                create_predicate(&r.cond)
-            };
-            Ok((r.name.clone(), pred))
-        })
-        .collect()
+    let to_transition = |r: &ReferenceNode<StateNode>| {
+        let pred = if matches!(r.cond, ConditionNode::None) {
+            Predicate::new("Always", |_| Ok(true))
+        } else {
+            create_predicate(&r.cond)
+        };
+        (r.name.clone(), pred)
+    };
+    let mut out: Vec<(String, Predicate)> = state.references().iter().map(to_transition).collect();
+    // Переход `next` состояния-реализации (фича 0181). Живёт ОТДЕЛЬНЫМ полем
+    // `StateNode::Implement::next`, а не среди `references`, и потому прежде в
+    // переходы симулятора не попадал вовсе: `start P = A + B { next Done; }`
+    // застревал в `P` навсегда.
+    //
+    // Идёт ПОСЛЕДНИМ: `next` безусловен, и впереди `ref`-рёбер он затенил бы их
+    // все. Проверяется он лишь после того, как реализация состояния завершилась
+    // (`tick_node`, шаг 1a) — эталон цели `c`, где `generate_extend_transition`
+    // эмитит переход внутри ветви `is_done`.
+    if let StateNode::Implement { next: Some(r), .. } = state {
+        out.push(to_transition(r));
+    }
+    Ok(out)
 }
 
 // ── Unit из Extend ────────────────────────────────────────────────────────────
@@ -497,28 +522,47 @@ fn build_extend(
         Extend::None | Extend::Unresolved(_) => Ok(Unit::default()),
         Extend::Model(rc, _) => build_impl(Rc::clone(rc), shared_parent),
         Extend::Parentless(inner) => build_extend(inner, shared_parent),
-        Extend::Concatenation(items) => items.iter().try_fold(Unit::default(), |acc, item| {
-            Ok(acc.add(&build_extend(item, shared_parent.clone())?))
-        }),
+        Extend::Concatenation(items) => {
+            // Шаги `+` делят общий родительский контекст ровно так же, как ветви
+            // `|` (фича 0181). Прежде здесь передавался `shared_parent` КАК ЕСТЬ:
+            // на корне он `None`, каждый шаг строил СВОЙ экземпляр контекста
+            // корневой модели, и `stage`, записанный шагом A, шагу B был не
+            // виден — наблюдаемая проваливалась в 0 на такте переключения.
+            let shared = shared_context(shared_parent, items);
+            items.iter().try_fold(Unit::default(), |acc, item| {
+                Ok(acc.add(&build_extend(item, shared.clone())?))
+            })
+        }
         Extend::Parallel(items) => {
             // Все параллельные подмодели разделяют один общий родительский контекст —
             // это позволяет передавать shared-переменные (busy, tgt_*, lift_*) между ними.
-            let shared: Option<Rc<RefCell<dyn Context>>> = if shared_parent.is_some() {
-                shared_parent
-            } else {
-                items
-                    .first()
-                    .and_then(|first| extract_parent_model(first))
-                    .map(|parent_model| {
-                        Rc::new(RefCell::new(ModelNodeContext::new(parent_model)))
-                            as Rc<RefCell<dyn Context>>
-                    })
-            };
+            let shared = shared_context(shared_parent, items);
             items.iter().try_fold(Unit::default(), |acc, item| {
                 Ok(acc.union(&build_extend(item, shared.clone())?))
             })
         }
     }
+}
+
+/// Общий родительский контекст ветвей композиции: переданный сверху либо, если
+/// его нет, свежий контекст родительской модели первой ветви.
+///
+/// Одна функция на `|` и `+` намеренно: разъехавшись, они дали бы разную
+/// видимость переменных для двух форм композиции одного языка — ровно тот
+/// дефект, что закрывает фича 0181.
+fn shared_context(
+    shared_parent: Option<Rc<RefCell<dyn Context>>>,
+    items: &[Box<Extend>],
+) -> Option<Rc<RefCell<dyn Context>>> {
+    if shared_parent.is_some() {
+        return shared_parent;
+    }
+    items
+        .first()
+        .and_then(|first| extract_parent_model(first))
+        .map(|parent_model| {
+            Rc::new(RefCell::new(ModelNodeContext::new(parent_model))) as Rc<RefCell<dyn Context>>
+        })
 }
 
 /// Извлекает родительскую модель из Extend (нужна для построения shared-контекста).

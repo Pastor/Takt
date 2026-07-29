@@ -276,3 +276,7 @@
 | 0177-01 | 0177 | Гейт согласованности статуса в реестре и в карточке фичи | [0177-01-features-registry-status-gate.md](0177-01-features-registry-status-gate.md) |
 | 0159-01 | 0159 | Фиксация требования JDK для сборки плагина | [0159-01-intellij-jdk21-build.md](0159-01-intellij-jdk21-build.md) |
 | 0171-01 | 0171 | Гейт цели c под -Werror | [0171-01-c-gate-werror.md](0171-01-c-gate-werror.md) |
+| 0181-01 | 0181 | Деление takt-sim/src/unit/mod.rs — вынос такта в unit/tick.rs | [0181-01-unit-module-split.md](0181-01-unit-module-split.md) |
+| 0181-02 | 0181 | Реализация состояния строится дочерним юнитом с общим контекстом | [0181-02-state-implementation-child-unit.md](0181-02-state-implementation-child-unit.md) |
+| 0181-03 | 0181 | Такт узла тикает реализацию; переход берётся по её завершении | [0181-03-tick-node-implementation.md](0181-03-tick-node-implementation.md) |
+| 0181-04 | 0181 | Тройная сверка sim-C-SV и значенческие тесты композиции | [0181-04-triple-conformance.md](0181-04-triple-conformance.md) |

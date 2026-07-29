@@ -1,0 +1,363 @@
+//! Такт симуляции — исполнение одного шага [`Unit`].
+//!
+//! Выделен из `unit/mod.rs` задачей 0181-01: модуль подошёл к пределу размера
+//! (988 строк при лимите 1000 в `scripts/check-module-size.sh`), а фича 0181
+//! правит именно такт. Вынос **чистый**: поведение не меняется, границы —
+//! по теме («что происходит за один такт»), как в `semantic/validate/`.
+//!
+//! Здесь живёт диспетчеризация такта по форме узла (`Node`/`Parallel`/
+//! `Sequential`), проверка инвариантов (фича 0044) и вход в стартовое
+//! состояние (фича 0033). Наблюдение значений, композиция юнитов и сбор
+//! трасс остались в `mod.rs`.
+
+use super::*;
+
+impl Unit {
+    /// Один такт симуляции — **жёсткий** режим (умолчание, фича 0044): нарушение
+    /// инварианта останавливает прогон (`Failed`, `SIM-025`), совпадая с
+    /// `assert()` → `abort()` в порождённом C. Публичный контракт; через него
+    /// идут все потактовые сверки с C и корпус.
+    pub fn tick(&mut self) -> TickResult {
+        self.tick_mode(false)
+    }
+
+    /// Один такт в **мягком** режиме (фича 0087): нарушение инварианта
+    /// **записывается** (в `Node.invariant_violations`) и такт **продолжается**
+    /// (иначе состояние не сменится → ливлок). Осмыслен только для отладки —
+    /// сверки с C у него нет (C бы уже упал). Нарушения сливает `runner`
+    /// (`take_invariant_violations`).
+    pub fn tick_soft(&mut self) -> TickResult {
+        self.tick_mode(true)
+    }
+
+    fn tick_mode(&mut self, soft: bool) -> TickResult {
+        let result = self.tick_body(soft);
+        // Счётчик тактов состояния растёт в конце такта (см. `advance_state_ticks`).
+        self.advance_state_ticks();
+        result
+    }
+
+    fn tick_body(&mut self, soft: bool) -> TickResult {
+        if let Err(diagnostic) = self.enter_initial_state() {
+            return TickResult::Failed(describe(&diagnostic));
+        }
+        // 0044: инварианты (Guard-формулы) проверяются ДО `always` — как в
+        // порождённом C (`assert()` до `switch`/`always`). Жёсткий режим:
+        // нарушение → `Failed` (стоп). Мягкий (0087): нарушение записано,
+        // `None` → такт продолжается. Ошибка вычисления самого условия ≠
+        // нарушению (R15) — `Failed` в обоих режимах. Для композитов проверяет
+        // каждый дочерний `Node` в своём `tick_mode`.
+        if matches!(self.0, UnitKind::Node { .. })
+            && let Some(failed) = self.check_guards(soft)
+        {
+            return failed;
+        }
+        if let Err(diagnostic) = self.execution("always") {
+            return TickResult::Failed(describe(&diagnostic));
+        }
+        // Периодические блоки `every` (фича 0134-09) — после `always`, до
+        // диспетчеризации состояния (как model-level `always`, фича 0083).
+        if let Err(diagnostic) = self.execute_every() {
+            return TickResult::Failed(describe(&diagnostic));
+        }
+        // Диспетчеризация по форме без удержания заимствования `self.0`: ветвь
+        // вызывает методы, которым нужен `&mut self` (`match &self.0 { … =>
+        // self.tick_node() }` дал бы конфликт заимствований).
+        if matches!(self.0, UnitKind::None) {
+            return TickResult::Terminated;
+        }
+        if matches!(self.0, UnitKind::Node { .. }) {
+            return self.tick_node(soft);
+        }
+        if matches!(self.0, UnitKind::Parallel { .. }) {
+            return self.tick_parallel(soft);
+        }
+        self.tick_sequential(soft)
+    }
+
+    /// Проверяет инварианты модели и текущего состояния (фича 0044). Возвращает
+    /// `Some(Failed)` при нарушении (жёсткий режим) или ошибке вычисления,
+    /// `None` если обязательства выполнены **или** нарушение записано в мягком
+    /// режиме (фича 0087). Различает нарушение (SIM-025) и ошибку самого условия
+    /// (существующий `SIM-0xx`) — как переходы в `tick_node` (R15): ошибка
+    /// условия — `Failed` в **обоих** режимах.
+    fn check_guards(&mut self, soft: bool) -> Option<TickResult> {
+        let guards: Vec<Guard> = if let UnitKind::Node { guards, state, .. } = &self.0 {
+            let mut all = guards.model.clone();
+            if let Some(s) = state
+                && let Some(sg) = guards.per_state.get(s)
+            {
+                all.extend(sg.clone());
+            }
+            all
+        } else {
+            return None;
+        };
+        for (pred, name) in &guards {
+            match pred.evaluate(self) {
+                Ok(true) => {}
+                Ok(false) => {
+                    let named = name.as_ref().map(|n| format!(" '{n}'")).unwrap_or_default();
+                    let details = format!("нарушен инвариант{named} (SIM-025)");
+                    if soft {
+                        // Мягкий режим: записать и продолжить (не прерывать такт).
+                        if let UnitKind::Node {
+                            invariant_violations,
+                            ..
+                        } = &mut self.0
+                        {
+                            invariant_violations.push(details);
+                        }
+                    } else {
+                        return Some(TickResult::Failed(details));
+                    }
+                }
+                // Ошибка вычисления условия — недостоверность прогона, а не
+                // «инвариант ложен»: `Failed` в обоих режимах (R15/R4).
+                Err(diagnostic) => return Some(TickResult::Failed(describe(&diagnostic))),
+            }
+        }
+        None
+    }
+
+    fn tick_node(&mut self, soft: bool) -> TickResult {
+        // Шаг 1: клонируем имя текущего состояния
+        let state_name: String = if let UnitKind::Node { state: Some(s), .. } = &self.0 {
+            s.clone()
+        } else {
+            // state: None — узел не инициализирован или завершён
+            return TickResult::Terminated;
+        };
+
+        // Шаг 1a: реализация состояния (`state P = A + B { … }`) — фича 0181.
+        //
+        // Тикается ДО проверки переходов, и пока она не завершена, переходы НЕ
+        // проверяются вовсе. Эталон — порождённый C: `generate_extend_transition`
+        // эмитит переход внутри ветви `is_done`. Прежде реализация терялась при
+        // построении, и узел уходил по безусловному `next` на такте 1.
+        //
+        // Такт при этом НЕ добавляется: переход берётся на том же такте, на
+        // котором реализация завершилась (`Terminated` проваливается ниже, а не
+        // выходит с `Processing`).
+        let implementation = if let UnitKind::Node { state_impls, .. } = &self.0 {
+            state_impls.get(&state_name).cloned()
+        } else {
+            unreachable!()
+        };
+        if let Some(inner) = implementation {
+            match inner.borrow_mut().tick_mode(soft) {
+                TickResult::Processing => return TickResult::Processing,
+                // Ошибка внутри реализации — ошибка узла (R5 ADR 0057).
+                failed @ TickResult::Failed(_) => return failed,
+                TickResult::Terminated => {}
+            }
+        }
+
+        // Шаг 2: клонируем список переходов (Rc-предикаты)
+        let transitions: Vec<(String, Predicate)> = if let UnitKind::Node {
+            state_transitions,
+            ..
+        } = &self.0
+        {
+            state_transitions
+                .get(&state_name)
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            unreachable!()
+        };
+
+        if transitions.is_empty() {
+            return TickResult::Terminated;
+        }
+
+        // Шаг 3: ищем первый сработавший переход.
+        //
+        // R5: ошибка вычисления условия — **не** «условие ложно». Раньше
+        // `create_predicate` сводил `Err` и невычислимый результат к `false`, и
+        // отличить сломанную модель от честно неактивного перехода было нельзя.
+        let mut fired = None;
+        for (name, pred) in &transitions {
+            match pred.evaluate(self) {
+                Ok(true) => {
+                    fired = Some((name.clone(), pred.name.clone()));
+                    break;
+                }
+                Ok(false) => {}
+                Err(diagnostic) => return TickResult::Failed(describe(&diagnostic)),
+            }
+        }
+
+        if let UnitKind::Node {
+            last_transition, ..
+        } = &mut self.0
+        {
+            *last_transition = None;
+        }
+
+        if let Some((next, pred_name)) = fired {
+            // Шаг 4: исполнители выхода из текущего состояния
+            let exit_fns: Vec<Execution> = if let UnitKind::Node {
+                state_executions, ..
+            } = &self.0
+            {
+                state_executions
+                    .get(&state_name)
+                    .and_then(|m| m.get("exit"))
+                    .cloned()
+                    .unwrap_or_default()
+            } else {
+                unreachable!()
+            };
+            for f in &exit_fns {
+                if let Err(diagnostic) = f(self) {
+                    return TickResult::Failed(describe(&diagnostic));
+                }
+            }
+
+            // Шаг 5: исполнители входа в следующее состояние
+            let enter_fns: Vec<Execution> = if let UnitKind::Node {
+                state_executions, ..
+            } = &self.0
+            {
+                state_executions
+                    .get(&next)
+                    .and_then(|m| m.get("enter"))
+                    .cloned()
+                    .unwrap_or_default()
+            } else {
+                unreachable!()
+            };
+            for f in &enter_fns {
+                if let Err(diagnostic) = f(self) {
+                    return TickResult::Failed(describe(&diagnostic));
+                }
+            }
+
+            // Шаг 6: переход в новое состояние + запись последнего перехода
+            if let UnitKind::Node {
+                state,
+                last_transition,
+                ..
+            } = &mut self.0
+            {
+                last_transition.replace((state_name, next.clone(), pred_name));
+                *state = Some(next);
+            }
+            // Выдержка `after` отсчитывается от входа в состояние (фича 0134).
+            self.mark_state_entry();
+        }
+
+        TickResult::Processing
+    }
+
+    fn tick_parallel(&mut self, soft: bool) -> TickResult {
+        // Тикаем ВСЕ дочерние и собираем результаты — нельзя прерываться раньше
+        let results: Vec<TickResult> = if let UnitKind::Parallel { units, .. } = &self.0 {
+            units
+                .iter()
+                .map(|u| u.borrow_mut().tick_mode(soft))
+                .collect()
+        } else {
+            unreachable!()
+        };
+        // Ошибка любого из параллельных детей делает шаг недостоверным (R5).
+        if let Some(failed) = results
+            .iter()
+            .find(|r| matches!(r, TickResult::Failed(_)))
+            .cloned()
+        {
+            return failed;
+        }
+        if results.iter().all(|r| *r == TickResult::Terminated) {
+            TickResult::Terminated
+        } else {
+            TickResult::Processing
+        }
+    }
+
+    fn tick_sequential(&mut self, soft: bool) -> TickResult {
+        let (index, len) = if let UnitKind::Sequential { units, index, .. } = &self.0 {
+            (*index, units.len())
+        } else {
+            unreachable!()
+        };
+        if index >= len {
+            return TickResult::Terminated;
+        }
+        let child_result = if let UnitKind::Sequential { units, index, .. } = &self.0 {
+            units[*index].borrow_mut().tick_mode(soft)
+        } else {
+            unreachable!()
+        };
+        match child_result {
+            TickResult::Processing => TickResult::Processing,
+            // Ошибка ребёнка — ошибка всей последовательности (R5).
+            failed @ TickResult::Failed(_) => failed,
+            TickResult::Terminated => {
+                let mut finished = false;
+                if let UnitKind::Sequential { units, index, .. } = &mut self.0 {
+                    *index += 1;
+                    finished = *index >= units.len();
+                }
+                // Завершение ПОСЛЕДНЕГО шага завершает цепочку в ТОТ ЖЕ такт
+                // (фича 0181). Эталон — цель `c`: `X_tick(&step); if
+                // (X_is_done(&step)) { … }` — завершение проверяется на том же
+                // такте, что и тик. Прежде здесь возвращался `Processing`, и
+                // цепочка сообщала о завершении тактом позже, чем C.
+                if finished {
+                    TickResult::Terminated
+                } else {
+                    TickResult::Processing
+                }
+            }
+        }
+    }
+
+    /// Д5: исполняет `enter` стартового состояния — ровно один раз, до первого
+    /// `always` и до проверки переходов.
+    ///
+    /// Для `Parallel`/`Sequential` вызывать не нужно: их дети получают вызов
+    /// через собственный [`Unit::tick`].
+    fn enter_initial_state(&mut self) -> Result<(), Diagnostic> {
+        let state_name = match &mut self.0 {
+            UnitKind::Node {
+                entered_initial: true,
+                ..
+            } => return Ok(()),
+            UnitKind::Node {
+                entered_initial,
+                state,
+                ..
+            } => {
+                *entered_initial = true;
+                match state {
+                    Some(name) => name.clone(),
+                    None => return Ok(()),
+                }
+            }
+            UnitKind::Parallel { .. } | UnitKind::Sequential { .. } | UnitKind::None => {
+                return Ok(());
+            }
+        };
+        // Выдержка `after` отсчитывается от входа в состояние — в том числе в
+        // СТАРТОВОЕ (фича 0134). Без этой отметки отсчёт шёл бы от начала
+        // прогона, и выдержка срабатывала бы раньше, чем у цели `st` со штатным
+        // `TON`: тот латчит момент, когда условие стало истинным (проба П3 ADR).
+        self.mark_state_entry();
+        let enter_fns: Vec<Execution> = match &self.0 {
+            UnitKind::Node {
+                state_executions, ..
+            } => state_executions
+                .get(&state_name)
+                .and_then(|m| m.get("enter"))
+                .cloned()
+                .unwrap_or_default(),
+            UnitKind::Parallel { .. } | UnitKind::Sequential { .. } | UnitKind::None => vec![],
+        };
+        for f in &enter_fns {
+            f(self)?;
+        }
+        Ok(())
+    }
+}
