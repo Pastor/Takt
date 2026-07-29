@@ -282,3 +282,4 @@
 | 0181-04 | 0181 | Тройная сверка sim-C-SV и значенческие тесты композиции | [0181-04-triple-conformance.md](0181-04-triple-conformance.md) |
 | 0166-01 | 0166 | Пример batch_cycle и его обвязка (SV_TRANSLATABLE, тестбенч, контракт, харнесс C) | [0166-01-batch-cycle-example.md](0166-01-batch-cycle-example.md) |
 | 0174-01 | 0174 | Эмиссия impl Default и сторож на гейте | [0174-01-rust-default-impl.md](0174-01-rust-default-impl.md) |
+| 0147-01 | 0147 | Тесты состава, вложенности и диапазонов символов | [0147-01-document-symbol-tests.md](0147-01-document-symbol-tests.md) |
