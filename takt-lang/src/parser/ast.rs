@@ -551,6 +551,18 @@ pub enum Condition {
     /// Отдельный узел, а не длительность: такт — шаг логики, его физическая
     /// длительность неизвестна, и частота такой выдержке не нужна.
     AfterTicks(Location, i64, String),
+    /// Выдержка **константным выражением**: `after DWELL`, `after (BASE + 30s)`
+    /// (фича 0143).
+    ///
+    /// Внутреннее условие — арифметика над длительностями: литералы, имена
+    /// констант типа `duration`, скобки, `+`/`-`. Скобочная форма сохраняет узел
+    /// [`Condition::Parenthesis`] — форматтер обязан напечатать скобки обратно.
+    ///
+    /// Наносекунд здесь **нет**: значение вычисляет семантика, сводя узел к тому
+    /// же `ConditionNode::After(нс)`, что и литерал (ADR 0143) — за границей
+    /// семантики этой формы не существует, поэтому цели генерации о ней не
+    /// знают. Отсюда и ограничение: операнды обязаны быть **константными**.
+    AfterExpr(Location, Box<Condition>),
     /// Вещественный литерал: `(строка, отрицательный)`.
     Rational(Location, String, bool),
     /// Конкатенация строковых литералов.
@@ -585,6 +597,7 @@ impl Condition {
             | Condition::Duration(loc, _, _)
             | Condition::After(loc, _, _)
             | Condition::AfterTicks(loc, _, _)
+            | Condition::AfterExpr(loc, _)
             | Condition::Bool(loc, _) => *loc,
             Condition::Variable(id) => id.loc,
             Condition::String(parts) => parts.first().map(|s| s.loc).unwrap_or(Location::Implicit),

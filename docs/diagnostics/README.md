@@ -211,6 +211,7 @@
 | `SE-069` | Модель объявила `clock`, но `--tick-hz` не передан (контракт частоты) | `takt-lang/src/semantic/duration.rs:251` |
 | `SE-070` | `--tick-hz` не совпадает с объявленной `clock` частотой | `takt-lang/src/semantic/duration.rs:259` |
 | `SE-071` | Во что пересчиталась длительность (информационное предупреждение) | `takt-lang/src/semantic/duration.rs:314` |
+| `SE-072` | Выдержка `after` не сводится к константной длительности | `takt-lang/src/semantic/condition/after_const.rs` |
 
 ### SIM — симулятор
 

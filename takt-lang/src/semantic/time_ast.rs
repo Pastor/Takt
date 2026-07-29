@@ -118,7 +118,11 @@ fn reject_after_in_formula(def: &InlineFormulaDefine) -> Result<(), Diagnostic> 
 /// компилятор потребует ветку (в отличие от `_ =>`, который проглотил бы её).
 fn find_after(cond: &Condition) -> Option<crate::diagnostics::Location> {
     match cond {
-        Condition::After(loc, _, _) | Condition::AfterTicks(loc, _, _) => Some(*loc),
+        Condition::After(loc, _, _)
+        | Condition::AfterTicks(loc, _, _)
+        // Именная форма (фича 0143) — та же выдержка, то же ограничение места:
+        // `cond X = after DWELL;` обязан отвергаться `SE-068`, как и литеральная.
+        | Condition::AfterExpr(loc, _) => Some(*loc),
         Condition::Parenthesis(_, inner)
         | Condition::Not(_, inner)
         | Condition::BitAccess(_, inner, _)
@@ -217,7 +221,10 @@ fn cond_has_after_kind(cond: &crate::semantic::ConditionNode, ticks: bool) -> bo
 /// напр. составное `(after 10s) & x`). Обход исчерпывающий, как `find_after`.
 fn raw_has_after_kind(cond: &Condition, ticks: bool) -> bool {
     match cond {
-        Condition::After(..) => !ticks,
+        // Константа именуется типом `duration`, поэтому именная выдержка — всегда
+        // длительностная: тактового литерала в выражениях нет, значит и константы
+        // в тактах не существует (ограничение объёма ADR 0143).
+        Condition::After(..) | Condition::AfterExpr(..) => !ticks,
         Condition::AfterTicks(..) => ticks,
         Condition::Parenthesis(_, inner)
         | Condition::Not(_, inner)

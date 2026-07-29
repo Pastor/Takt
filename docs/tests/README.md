@@ -113,3 +113,4 @@
 | 0147 | Тесты textDocument/documentSymbol | [0147-lsp-document-symbol-tests.md](0147-lsp-document-symbol-tests.md) | ГОТОВО |
 | 0148 | Покрытие печатников цели rust тестами | [0148-rust-printers-coverage.md](0148-rust-printers-coverage.md) | ГОТОВО |
 | 0163 | Исчерпывающий разбор узлов во втором вычислителе | [0163-builder-eval-exhaustive.md](0163-builder-eval-exhaustive.md) | ГОТОВО |
+| 0143 | `after` принимает константное выражение типа `duration` | [0143-after-const-duration.md](0143-after-const-duration.md) | ГОТОВО |

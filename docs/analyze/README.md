@@ -143,3 +143,5 @@
 | 0147 | Тесты textDocument/documentSymbol | [0147-lsp-document-symbol-tests.md](0147-lsp-document-symbol-tests.md) | — (новая фича) |
 | 0148 | Покрытие печатников цели rust тестами | [0148-rust-printers-coverage.md](0148-rust-printers-coverage.md) | — (новая фича) |
 | 0163 | Исчерпывающий разбор узлов во втором вычислителе | [0163-builder-eval-exhaustive.md](0163-builder-eval-exhaustive.md) | — (новая фича) |
+| 0143 | `after` принимает константу типа `duration`, а не только литерал | [0143-after-const-duration.md](0143-after-const-duration.md) | — (новая фича) |
+| 0183 | Тип `duration` в целях генерации и вычисляемая выдержка | [0183-duration-type-in-targets.md](0183-duration-type-in-targets.md) | — (новая фича) |
