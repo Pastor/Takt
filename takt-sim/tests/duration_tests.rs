@@ -424,3 +424,88 @@ start Main = Steps;
         );
     }
 }
+
+// ── Литерал длительности в теле блока (фикс 0134-02) ─────────────────────────
+
+#[test]
+fn duration_literal_inside_body_is_a_value() {
+    // Документ обещает `left := pause + 750ms;` — литерал длительности **в теле**
+    // блока. Прежде тело отвечало `SIM-007`: адаптер выражений нёс заглушку-отказ
+    // «до подзадачи 0134-03», переживший саму 0134-03.
+    //
+    // ⚠️ Тест `duration_addition_and_subtraction_stay_duration` дефект **не
+    // ловил**: он складывает две переменные, а падал именно литерал. Отсюда
+    // правило этого теста — литерал обязан стоять в каждой позиции: справа от
+    // операции, слева, в сравнении.
+    let source = r#"
+model Literals {
+    out late: bit := 0;
+    var pause: duration := 1s;
+    var sum: duration := 0s;
+    var diff: duration := 0s;
+    var only: duration := 0s;
+    start Idle {
+        always {
+            sum := pause + 750ms;
+            diff := 3s - 1s;
+            only := 250ms;
+            late := (pause > 500ms) ? 1 : 0;
+        }
+    }
+}
+
+start Main = Literals;
+"#;
+    let mut unit = unit_of(source);
+    let _ = unit.tick();
+    assert_eq!(
+        unit.variable("sum"),
+        Some(Value::Duration(1_750_000_000)),
+        "1s + 750ms обязаны дать 1750 мс"
+    );
+    assert_eq!(
+        unit.variable("diff"),
+        Some(Value::Duration(2_000_000_000)),
+        "3s - 1s обязаны дать 2 с (литералы в обоих операндах)"
+    );
+    assert_eq!(
+        unit.variable("only"),
+        Some(Value::Duration(250_000_000)),
+        "литерал в правой части присваивания обязан быть значением"
+    );
+    assert_eq!(
+        unit.variable("late"),
+        Some(Value::Number(1)),
+        "сравнение переменной с литералом длительности обязано работать"
+    );
+}
+
+#[test]
+fn duration_literal_mixed_with_number_still_refused() {
+    // Сторож направления: починка литерала **не** открыла смешение с числом.
+    // Отказ приходит раньше симулятора — из семантики (`SE-065`), и это верное
+    // место: симулятор не должен оказаться «умнее» языка, иначе расхождение
+    // вылезет на целях.
+    let source = r#"
+model Mixed {
+    out ready: bit := 0;
+    var pause: duration := 1s;
+    var bad: duration := 0s;
+    start Idle {
+        always {
+            bad := pause + 1;
+            ready := 1;
+        }
+    }
+}
+
+start Main = Mixed;
+"#;
+    let (ast, _) = takt_lang::parse(source, 0).expect("исходник обязан разбираться");
+    let error = construct_model(&ast, None, &[]).expect_err("смешение обязано отвергаться");
+    assert_eq!(
+        error.code.as_deref(),
+        Some("SE-065"),
+        "ожидался SE-065 о смешении длительности с числом, получено {error:?}"
+    );
+}
