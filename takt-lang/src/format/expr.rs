@@ -129,6 +129,10 @@ pub(crate) fn condition(cond: &ast::Condition) -> Result<String, FormatError> {
         C::Number(_, n) => n.to_string(),
         C::Duration(_, _, text) => text.clone(),
         C::After(_, _, text) | C::AfterTicks(_, _, text) => format!("after {text}"),
+        // Константная выдержка (фича 0143): печатается вложенное условие как
+        // написано — скобки живут в дереве (`Parenthesis`), поэтому
+        // `after (BASE + 30s)` восстанавливается вместе с ними.
+        C::AfterExpr(_, inner) => format!("after {}", condition(inner)?),
         C::Rational(_, s, negative) => {
             if *negative {
                 format!("-{s}")

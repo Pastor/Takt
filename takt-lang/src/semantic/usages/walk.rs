@@ -520,6 +520,10 @@ fn walk_condition(cond: &ast::Condition, scopes: &mut Scopes, table: &mut UsageT
             walk_condition(lhs, scopes, table);
             walk_condition(rhs, scopes, table);
         }
+        // Константная выдержка (фича 0143): внутри — имена констант, то есть
+        // настоящие **использования**. Обходятся тем же рекурсивным путём, что и
+        // прочие условия: пропуск испортил бы исходник переименованием константы.
+        ast::Condition::AfterExpr(_, inner) => walk_condition(inner, scopes, table),
         ast::Condition::Number(_, _)
         | ast::Condition::Duration(_, _, _)
         | ast::Condition::After(_, _, _)

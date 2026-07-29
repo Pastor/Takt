@@ -285,3 +285,7 @@
 | 0147-01 | 0147 | Тесты состава, вложенности и диапазонов символов | [0147-01-document-symbol-tests.md](0147-01-document-symbol-tests.md) |
 | 0148-01 | 0148 | Тесты ветвей печатников и фикс сравнения bit | [0148-01-rust-printer-branch-tests.md](0148-01-rust-printer-branch-tests.md) |
 | 0163-01 | 0163 | Вынос вычислителя в unit/initial.rs с модульным deny и расширение гейта | [0163-01-initial-module-deny.md](0163-01-initial-module-deny.md) |
+| 0143-01 | 0143 | Грамматика, узел АСД и исчерпывающие обходы | [0143-01-after-const-duration.md](0143-01-after-const-duration.md) |
+| 0143-02 | 0143 | Вычислитель константной выдержки и диагностика `SE-072` | [0143-02-after-const-duration.md](0143-02-after-const-duration.md) |
+| 0143-03 | 0143 | Документ: раздел времени и приложение диагностик | [0143-03-after-const-duration.md](0143-03-after-const-duration.md) |
+| 0143-04 | 0143 | Ревизия объёма: константное выражение в after | [0143-04-after-const-duration.md](0143-04-after-const-duration.md) |

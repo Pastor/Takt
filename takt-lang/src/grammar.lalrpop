@@ -450,6 +450,20 @@ ConditionExpression: Condition = {
     <l:@L> "after" <t:ticks> <r:@R> => {
         Condition::AfterTicks(Location::source(file_no, l, r), t.0, t.1.to_string())
     },
+    // Выдержка константным выражением (фича 0143): именем константы `duration`
+    // (`after DWELL`) либо выражением в скобках (`after (BASE + 30s)`). Значение
+    // вычисляет семантика; здесь — только дерево и позиции.
+    <l:@L> "after" <i:Identifier> <r:@R> => {
+        Condition::AfterExpr(Location::source(file_no, l, r), Box::new(Condition::Variable(i)))
+    },
+    // Скобки сохраняются в дереве: форматтер обязан напечатать их обратно —
+    // без них `after A + 1s` разобралось бы как `(after A) + 1s`, то есть иначе.
+    <l:@L> "after" <pl:@L> "(" <e:Condition> ")" <pr:@R> <r:@R> => {
+        Condition::AfterExpr(
+            Location::source(file_no, l, r),
+            Box::new(Condition::Parenthesis(Location::source(file_no, pl, pr), Box::new(e))),
+        )
+    },
 }
 
 Member: Member = {

@@ -6,6 +6,13 @@
 //! - [`extract_conditions`] — разрешает все неразрешённые именованные условия
 //!   в [`BTreeMap`].
 
+/// Вычисление константной выдержки `after …` (фича 0143).
+///
+/// Подмодуль, а не сосед по `semantic/`: `semantic/mod.rs` пришпилен реестром
+/// размеров (1553 строки) и расти не имеет права, а предмет вычислителя —
+/// частный случай разбора условия, то есть его законное место здесь.
+mod after_const;
+
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::builtin::builtin_function;
@@ -138,6 +145,12 @@ pub fn resolve_condition(
         ast::Condition::Duration(_, nanos, _) => Ok(ConditionNode::Duration(*nanos)),
         ast::Condition::After(_, nanos, _) => Ok(ConditionNode::After(*nanos)),
         ast::Condition::AfterTicks(_, ticks, _) => Ok(ConditionNode::AfterTicks(*ticks)),
+        // Константная выдержка (фича 0143): значение вычисляется из имён констант
+        // и литералов и даёт **тот же** узел, что литерал — за этой границей
+        // выражения нет.
+        ast::Condition::AfterExpr(_, inner) => {
+            after_const::resolve_after_expr(inner, model.clone())
+        }
         ast::Condition::ArraySubscript(_, id, idx_cond) => {
             let name = id.name.clone();
             let var = model.borrow().search_var(&name);

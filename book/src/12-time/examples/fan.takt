@@ -4,6 +4,8 @@
 model Fan {
     clock 1kHz; // такт устройства — 1 мс: длительности пересчитываются в такты (1)
 
+    const OVERRUN := 3m; // выдержка выбега — одно место правки (5)
+
     in light: bit := 0; // датчик: включён ли свет в помещении
     out motor: bit := 0; // привод вентилятора
 
@@ -24,7 +26,7 @@ model Fan {
     // выдержка отменяется переходом обратно в Working (3).
     state Overrun {
         ref Working: light = 1;
-        ref Idle: after 3m; // (4)
+        ref Idle: after OVERRUN; // (4)
     }
 }
 
