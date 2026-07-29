@@ -272,3 +272,4 @@
 | 0146-02 | 0146 | Гейт символов вне шрифта документа book/ | [0146-02-book-glyph-gate.md](0146-02-book-glyph-gate.md) |
 | 0149-01 | 0149 | Гейт согласованности живого контекста CLAUDE.md | [0149-01-claude-md-consistency-gate.md](0149-01-claude-md-consistency-gate.md) |
 | 0149-02 | 0149 | Гейт согласованности живого контекста CLAUDE.md | [0149-02-claude-md-consistency-gate.md](0149-02-claude-md-consistency-gate.md) |
+| 0180-01 | 0180 | Сокращение живого контекста CLAUDE.md | [0180-01-claude-md-context-diet.md](0180-01-claude-md-context-diet.md) |

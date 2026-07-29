@@ -125,3 +125,4 @@
 | [0155](./0155-semantic-nested-statement-resolution.md) | Семантическое разрешение тел вложенных операторов | Draft | фича 0155 |
 | [0146](./0146-book-glyph-gate.md) | Гейт символов вне шрифта документа book/ | Draft | фича 0146 |
 | [0149](./0149-claude-md-consistency-gate.md) | Гейт согласованности живого контекста CLAUDE.md | Draft | фича 0149 |
+| [0180](./0180-claude-md-context-diet.md) | Сокращение живого контекста CLAUDE.md | Draft | фича 0180 |

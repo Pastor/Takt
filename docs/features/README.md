@@ -192,3 +192,4 @@
 | [0177](./0177-features-registry-status-gate.md) | Гейт согласованности статуса в реестре и в карточке фичи | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0178](./0178-editor-layer-language-sync.md) | Приведение LSP и плагинов в соответствие языку + сторож | [ADR](../adr/0178-editor-layer-language-sync.md) · [анализ](../analyze/0178-editor-layer-language-sync.md) · [тест-план](../tests/0178-editor-layer-language-sync.md) · [отчёт](../reports/0178-editor-layer-language-sync.md) | ГОТОВО |
 | [0179](./0179-repo-url-cleanup.md) | Дочистка URL репозитория после переезда BuT → Takt | [ADR](../adr/0179-repo-url-cleanup.md) · [анализ](../analyze/0179-repo-url-cleanup.md) · [тест-план](../tests/0179-repo-url-cleanup.md) · [отчёт](../reports/0179-repo-url-cleanup.md) | ГОТОВО |
+| [0180](./0180-claude-md-context-diet.md) | Сокращение живого контекста CLAUDE.md | ADR + анализ + разработка 01 + тест-план + отчёт | ГОТОВО |
