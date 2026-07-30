@@ -579,7 +579,7 @@ pub(super) fn construct_model_stage0(
                 .as_ref()
                 .map(|id| id.name.clone())
                 .unwrap_or_default();
-            let mut next_val: i64 = 0;
+            let mut next_val: i128 = 0;
             let mut variant_pairs = Vec::new();
             for variant in &e.variants {
                 let val = variant.value.unwrap_or(next_val);

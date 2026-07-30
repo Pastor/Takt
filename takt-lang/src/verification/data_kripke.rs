@@ -214,7 +214,7 @@ struct TrackedDecl {
 /// Отслеживаемая переменная с материализованным доменом и индексом нач. значения.
 struct TrackedVar {
     name: String,
-    values: Vec<i64>,
+    values: Vec<i128>,
     init_idx: usize,
 }
 
@@ -331,16 +331,16 @@ fn domain_size(ty: &TypeNode, model: &ModelNode) -> Option<u128> {
 }
 
 /// Материализует значения домена (только после прохождения потолка).
-fn domain_values(ty: &TypeNode, model: &ModelNode) -> Vec<i64> {
+fn domain_values(ty: &TypeNode, model: &ModelNode) -> Vec<i128> {
     match ty {
         TypeNode::Bit | TypeNode::Bool => vec![0, 1],
         TypeNode::Integer { bits, signed } => {
             let n = 1i128 << *bits;
             if *signed {
                 let half = n / 2;
-                (-half..half).map(|v| v as i64).collect()
+                (-half..half).collect()
             } else {
-                (0..n).map(|v| v as i64).collect()
+                (0..n).collect()
             }
         }
         TypeNode::Enum(name) => model
@@ -353,13 +353,13 @@ fn domain_values(ty: &TypeNode, model: &ModelNode) -> Vec<i64> {
 }
 
 /// Различные значения вариантов перечисления, по возрастанию (детерминизм 0048).
-fn distinct_variant_values(e: &crate::semantic::EnumDefinitionNode) -> Vec<i64> {
-    let set: BTreeSet<i64> = e.variants.iter().map(|(_, v)| *v).collect();
+fn distinct_variant_values(e: &crate::semantic::EnumDefinitionNode) -> Vec<i128> {
+    let set: BTreeSet<i128> = e.variants.iter().map(|(_, v)| *v).collect();
     set.into_iter().collect()
 }
 
 /// Оценка `j` как отображение имя → значение (одометр по [`TrackedVar`]).
-fn valuation_at(order: &[TrackedVar], j: usize) -> BTreeMap<String, i64> {
+fn valuation_at(order: &[TrackedVar], j: usize) -> BTreeMap<String, i128> {
     let mut out = BTreeMap::new();
     for (i, v) in order.iter().enumerate() {
         let idx = (j / stride(order, i)) % v.values.len();
@@ -378,10 +378,10 @@ fn stride(order: &[TrackedVar], i: usize) -> usize {
 }
 
 /// Свёртка выражения-инициализатора/константы в целое. `None` — не константа.
-fn fold_expr(expr: &ExpressionNode) -> Option<i64> {
+fn fold_expr(expr: &ExpressionNode) -> Option<i128> {
     match expr {
         ExpressionNode::Number(n) => Some(*n),
-        ExpressionNode::Bool(b) => Some(*b as i64),
+        ExpressionNode::Bool(b) => Some(i128::from(*b)),
         ExpressionNode::Parenthesis(inner) | ExpressionNode::UnaryPlus(inner) => fold_expr(inner),
         ExpressionNode::Negate(inner) => fold_expr(inner).map(|v| v.wrapping_neg()),
         _ => None,
@@ -389,7 +389,7 @@ fn fold_expr(expr: &ExpressionNode) -> Option<i64> {
 }
 
 /// Булева оценка атома по конкретной оценке переменных.
-fn eval_atom(expr: &AtomExpr, val: &BTreeMap<String, i64>) -> Option<bool> {
+fn eval_atom(expr: &AtomExpr, val: &BTreeMap<String, i128>) -> Option<bool> {
     match expr {
         AtomExpr::BoolVar(name) => val.get(name).map(|v| *v != 0),
         AtomExpr::Cond(cond) => eval_bool(cond, val),
@@ -398,7 +398,7 @@ fn eval_atom(expr: &AtomExpr, val: &BTreeMap<String, i64>) -> Option<bool> {
 
 /// Булева оценка условия по конкретной оценке переменных. `None` — предикат вне
 /// поддержанного подмножества (страховка; валидация п.2 это исключает).
-fn eval_bool(cond: &ConditionNode, val: &BTreeMap<String, i64>) -> Option<bool> {
+fn eval_bool(cond: &ConditionNode, val: &BTreeMap<String, i128>) -> Option<bool> {
     match cond {
         ConditionNode::Bool(b) => Some(*b),
         ConditionNode::Not(c) => eval_bool(c, val).map(|x| !x),
@@ -426,10 +426,10 @@ fn eval_bool(cond: &ConditionNode, val: &BTreeMap<String, i64>) -> Option<bool> 
 }
 
 /// Числовая оценка терма по оценке переменных. `None` — вне подмножества.
-fn eval_num(cond: &ConditionNode, val: &BTreeMap<String, i64>) -> Option<i64> {
+fn eval_num(cond: &ConditionNode, val: &BTreeMap<String, i128>) -> Option<i128> {
     match cond {
         ConditionNode::Number(n) => Some(*n),
-        ConditionNode::Bool(b) => Some(*b as i64),
+        ConditionNode::Bool(b) => Some(i128::from(*b)),
         ConditionNode::EnumVariant(_, _, v) => Some(*v),
         ConditionNode::Parenthesis(c) => eval_num(c, val),
         ConditionNode::Variable(rc, _) => {

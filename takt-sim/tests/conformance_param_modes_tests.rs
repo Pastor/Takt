@@ -82,12 +82,16 @@ fn unit_of(src: &str, specialize: bool) -> Unit {
 /// Квалифицированная адресация (`Модель::имя`, фича 0135) не годится: в режиме
 /// `assign` оба экземпляра — `Tuner`. Снимок (`state_io`, фича 0032) различает
 /// их структурно и потому работает в **обоих** режимах.
-fn variables_named(unit: &Unit, name: &str) -> Vec<i64> {
-    fn walk(snap: &takt_sim::state_io::UnitSnapshot, name: &str, out: &mut Vec<i64>) {
+fn variables_named(unit: &Unit, name: &str) -> Vec<i128> {
+    fn walk(snap: &takt_sim::state_io::UnitSnapshot, name: &str, out: &mut Vec<i128>) {
         match snap {
             takt_sim::state_io::UnitSnapshot::None => {}
             takt_sim::state_io::UnitSnapshot::Node { variables, .. } => {
-                if let Some(value) = variables.get(name).and_then(|v| v.as_i64()) {
+                if let Some(value) = variables
+                    .get(name)
+                    .and_then(|v| v.as_number())
+                    .and_then(serde_json::Number::as_i128)
+                {
                     out.push(value);
                 }
             }
@@ -105,7 +109,7 @@ fn variables_named(unit: &Unit, name: &str) -> Vec<i64> {
 }
 
 /// Трасса симулятора: пара накопителей на каждом такте.
-fn sim_trace(src: &str, specialize: bool) -> Vec<(i64, i64)> {
+fn sim_trace(src: &str, specialize: bool) -> Vec<(i128, i128)> {
     let mut unit = unit_of(src, specialize);
     let mut trace = Vec::new();
     for tick in 1..=TICKS {
@@ -126,7 +130,7 @@ fn sim_trace(src: &str, specialize: bool) -> Vec<(i64, i64)> {
 
 /// Трасса порождённого C в заданном режиме: порождает, собирает с харнессом,
 /// исполняет и читает значения накопителей.
-fn c_trace(dir: &Path, specialize: bool, fields: (&str, &str)) -> Vec<(i64, i64)> {
+fn c_trace(dir: &Path, specialize: bool, fields: (&str, &str)) -> Vec<(i128, i128)> {
     let _ = std::fs::remove_dir_all(dir);
     std::fs::create_dir_all(dir).expect("каталог");
 
@@ -182,7 +186,7 @@ int main(void) {{
     String::from_utf8_lossy(&run.stdout)
         .lines()
         .map(|line| {
-            let mut parts = line.split_whitespace().map(|p| p.parse::<i64>().unwrap());
+            let mut parts = line.split_whitespace().map(|p| p.parse::<i128>().unwrap());
             (parts.next().unwrap(), parts.next().unwrap())
         })
         .collect()
@@ -199,7 +203,7 @@ fn both_modes_and_simulator_agree_tick_by_tick() {
     // Ожидание считается независимо от обоих исполнителей: совпадение двух
     // реализаций между собой ещё не значит, что они правы.
     let mut expected = Vec::new();
-    let (mut fast, mut slow) = (0i64, 0i64);
+    let (mut fast, mut slow) = (0i128, 0i128);
     for _ in 0..TICKS {
         fast = (fast + 100) % 256;
         slow = (slow + 200) % 256;
@@ -259,8 +263,8 @@ const SHARED: &str = "out sum: u8 := 0;\n\
                       start Main = Tuner(gain := 100) | Tuner(gain := 200);\n";
 
 /// Ожидаемая трасса общей суммы: обе настройки применены, обёртка `u8` — по 0127.
-fn shared_expected() -> Vec<i64> {
-    let mut total = 0i64;
+fn shared_expected() -> Vec<i128> {
+    let mut total = 0i128;
     (0..TICKS)
         .map(|_| {
             total = (total + 300) % 256;
@@ -278,7 +282,7 @@ fn tool_available(tool: &str, arg: &str) -> bool {
 }
 
 /// Трасса симулятора по переменной `total` (обе настройки в одном значении).
-fn shared_sim_trace(specialize: bool) -> Vec<i64> {
+fn shared_sim_trace(specialize: bool) -> Vec<i128> {
     let mut unit = unit_of(SHARED, specialize);
     (0..TICKS)
         .map(|_| {
@@ -362,10 +366,10 @@ fn main() {{
         .current_dir(&dir)
         .output()
         .expect("запуск драйвера");
-    let trace: Vec<i64> = String::from_utf8_lossy(&run.stdout)
+    let trace: Vec<i128> = String::from_utf8_lossy(&run.stdout)
         .lines()
         .filter_map(|line| line.strip_prefix("TICK "))
-        .map(|v| v.trim().parse::<i64>().expect("значение — целое"))
+        .map(|v| v.trim().parse::<i128>().expect("значение — целое"))
         .collect();
     assert_eq!(
         trace,
@@ -450,10 +454,10 @@ endmodule
         .current_dir(&dir)
         .output()
         .expect("запуск собранной симуляции");
-    let trace: Vec<i64> = String::from_utf8_lossy(&run.stdout)
+    let trace: Vec<i128> = String::from_utf8_lossy(&run.stdout)
         .lines()
         .filter_map(|line| line.strip_prefix("TICK "))
-        .map(|v| v.trim().parse::<i64>().expect("значение — целое"))
+        .map(|v| v.trim().parse::<i128>().expect("значение — целое"))
         .collect();
     assert_eq!(
         trace,

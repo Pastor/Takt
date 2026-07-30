@@ -18,7 +18,7 @@ fn loc(start: usize, end: usize) -> Location {
     Location::source(0, start, end)
 }
 
-fn num(n: i64) -> Expression {
+fn num(n: i128) -> Expression {
     Expression::Number(loc(0, 0), n)
 }
 

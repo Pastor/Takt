@@ -77,7 +77,7 @@ pub fn json_to_value(v: &serde_json::Value) -> Option<Value> {
     match v {
         serde_json::Value::Bool(b) => Some(Value::Boolean(*b)),
         serde_json::Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
+            if let Some(i) = n.as_i128() {
                 Some(Value::Number(i))
             } else {
                 n.as_f64().map(Value::Real)

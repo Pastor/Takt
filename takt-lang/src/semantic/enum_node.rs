@@ -32,7 +32,7 @@ pub struct EnumDefinitionNode {
     pub name: String,
     /// Варианты перечисления: `(имя_варианта, числовое_значение)`.
     /// Если значение не задано при создании, оно равно индексу варианта.
-    pub variants: Vec<(String, i64)>,
+    pub variants: Vec<(String, i128)>,
     /// Позиция объявления перечисления в исходном тексте.
     pub loc: Location,
 }
@@ -70,11 +70,11 @@ impl EnumDefinitionNode {
     /// assert_eq!(e.variants[1], ("Green".to_string(), 1));
     /// assert_eq!(e.variants[2], ("Blue".to_string(), 5));
     /// ```
-    pub fn new(name: &str, variants: &[(&str, Option<i64>)]) -> Self {
-        let resolved: Vec<(String, i64)> = variants
+    pub fn new(name: &str, variants: &[(&str, Option<i128>)]) -> Self {
+        let resolved: Vec<(String, i128)> = variants
             .iter()
             .enumerate()
-            .map(|(i, (vname, val))| (vname.to_string(), val.unwrap_or(i as i64)))
+            .map(|(i, (vname, val))| (vname.to_string(), val.unwrap_or(i as i128)))
             .collect();
         EnumDefinitionNode {
             upper: None,
@@ -97,7 +97,7 @@ impl EnumDefinitionNode {
     /// assert_eq!(e.find_variant("Red"), Some(0));
     /// assert_eq!(e.find_variant("Blue"), None);
     /// ```
-    pub fn find_variant(&self, variant_name: &str) -> Option<i64> {
+    pub fn find_variant(&self, variant_name: &str) -> Option<i128> {
         self.variants
             .iter()
             .find(|(name, _)| name == variant_name)
@@ -127,9 +127,9 @@ impl EnumDefinitionNode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EnumFacts {
     /// Наименьшее значение варианта.
-    pub min: i64,
+    pub min: i128,
     /// Наибольшее значение варианта.
-    pub max: i64,
+    pub max: i128,
     /// Знаковый ли диапазон (`min < 0`) — **единая** формула на все цели.
     pub signed: bool,
     /// ТОЧНАЯ минимальная ширина в битах, вмещающая диапазон.
@@ -164,7 +164,7 @@ impl EnumFacts {
 /// цель (ADR 0060, правило 3 — поведение сохраняется сегодняшним:
 /// `c`/`st`/`rust` → 8 бит без знака, `sv` → `SV-004`). Факт возвращает «пусто»
 /// честно, а не подставляет молчаливое умолчание.
-pub fn enum_facts(variants: &[(String, i64)]) -> Option<EnumFacts> {
+pub fn enum_facts(variants: &[(String, i128)]) -> Option<EnumFacts> {
     if variants.is_empty() {
         return None;
     }
@@ -175,15 +175,15 @@ pub fn enum_facts(variants: &[(String, i64)]) -> Option<EnumFacts> {
         // Наименьшая ширина доп. кода w ≥ 2, вмещающая весь диапазон.
         (2..=64u32)
             .find(|&w| {
-                let lo = -(1i64 << (w - 1));
-                let hi = (1i64 << (w - 1)) - 1;
+                let lo = -(1i128 << (w - 1));
+                let hi = (1i128 << (w - 1)) - 1;
                 min >= lo && max <= hi
             })
             .unwrap_or(64)
     } else if max == 0 {
         1
     } else {
-        64 - (max as u64).leading_zeros()
+        128 - (max as u128).leading_zeros()
     };
     Some(EnumFacts {
         min,
@@ -197,7 +197,7 @@ pub fn enum_facts(variants: &[(String, i64)]) -> Option<EnumFacts> {
 mod facts_tests {
     use super::*;
 
-    fn vs(values: &[i64]) -> Vec<(String, i64)> {
+    fn vs(values: &[i128]) -> Vec<(String, i128)> {
         values
             .iter()
             .enumerate()

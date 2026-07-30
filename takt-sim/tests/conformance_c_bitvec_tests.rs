@@ -54,10 +54,10 @@ start Entry = BitVec;
     let mut unit = build_unit(model).expect("построение юнита");
     let _ = unit.tick();
 
-    let num = |name: &str| -> i64 {
+    let num = |name: &str| -> i128 {
         match unit.variable(name) {
             Some(Value::Number(n)) => n,
-            Some(Value::Boolean(b)) => i64::from(b),
+            Some(Value::Boolean(b)) => i128::from(b),
             other => panic!("{name}: неожиданное значение {other:?}"),
         }
     };
@@ -125,7 +125,7 @@ int main(void) {{
     let run = Command::new(&bin).output().expect("запуск");
     assert!(run.status.success(), "C завершился с ошибкой");
     let out = String::from_utf8_lossy(&run.stdout);
-    let c_val = |key: &str| -> i64 {
+    let c_val = |key: &str| -> i128 {
         out.lines()
             .find_map(|l| l.strip_prefix(&format!("{key}="))?.trim().parse().ok())
             .unwrap_or_else(|| panic!("C не напечатал '{key}': {out}"))

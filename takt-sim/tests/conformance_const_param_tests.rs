@@ -36,7 +36,7 @@ fn model_of(src: &str) -> Rc<RefCell<ModelNode>> {
 }
 
 /// Значение переменной после одного такта — эталон симулятора.
-fn simulated(src: &str, name: &str) -> i64 {
+fn simulated(src: &str, name: &str) -> i128 {
     let mut unit = build_unit(model_of(src)).expect("построение юнита");
     match unit.tick() {
         TickResult::Processing | TickResult::Terminated => {}
@@ -44,13 +44,13 @@ fn simulated(src: &str, name: &str) -> i64 {
     }
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
-        Some(Value::Boolean(b)) => i64::from(b),
+        Some(Value::Boolean(b)) => i128::from(b),
         other => panic!("переменная '{name}': неожиданное значение {other:?}"),
     }
 }
 
 /// То же выражение, вычисленное **компилятором**.
-fn compiled(src: &str, expr_src: &str) -> i64 {
+fn compiled(src: &str, expr_src: &str) -> i128 {
     let model = model_of(src);
     let probe = format!("const PROBE := {expr_src};\nstart S;\n");
     let (probe_tree, _) = takt_lang::parse(&probe, 0).expect("разбор пробы");

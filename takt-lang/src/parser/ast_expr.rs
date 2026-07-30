@@ -22,7 +22,7 @@ pub enum Expression {
     /// Доступ к элементу массива: `id[индекс]`.
     ArraySubscript(Location, Identifier, Box<Expression>),
     /// Срез массива: `id[начало:конец]`.
-    ArraySlice(Location, Identifier, Option<i64>, Option<i64>),
+    ArraySlice(Location, Identifier, Option<i128>, Option<i128>),
     /// Скобки: `(выражение)`.
     Parenthesis(Location, Box<Expression>),
     /// Доступ к биту: `выражение.член`.
@@ -85,7 +85,7 @@ pub enum Expression {
     /// Присваивание: `левое = правое`.
     Assign(Location, Box<Expression>, Box<Expression>),
     /// Целочисленный литерал.
-    Number(Location, i64),
+    Number(Location, i128),
     /// Литерал длительности: `(позиция, наносекунды, как записано)` — фича 0134.
     Duration(Location, i64, String),
     /// Вещественный литерал: `(строка, отрицательный)`.

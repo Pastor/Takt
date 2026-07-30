@@ -30,11 +30,11 @@ fn verilator_available() -> bool {
         .unwrap_or(false)
 }
 
-fn sim_value(unit: &Unit, name: &str) -> i64 {
+fn sim_value(unit: &Unit, name: &str) -> i128 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
-        Some(Value::Boolean(b)) => i64::from(b),
-        Some(Value::Fixed { repr, .. }) => repr,
+        Some(Value::Boolean(b)) => i128::from(b),
+        Some(Value::Fixed { repr, .. }) => i128::from(repr),
         other => panic!("переменная '{name}': неожиданное значение {other:?}"),
     }
 }
@@ -47,7 +47,7 @@ fn build_dir(tag: &str) -> std::path::PathBuf {
 }
 
 /// Трасса симулятора при 1 мс на такт (эталон профиля «часы»).
-fn simulate_sv_time_trace() -> Vec<i64> {
+fn simulate_sv_time_trace() -> Vec<i128> {
     let source = std::fs::read_to_string(TIME_FIXTURE).expect("фикстура");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -67,7 +67,7 @@ fn simulate_sv_time_trace() -> Vec<i64> {
 
 /// Трасса порождённого RTL: тестбенч ведёт `time_ms` модельным временем
 /// (1 мс на такт, 0-индексно — как c-time-харнесс `fake_now = tick-1`).
-fn sv_time_trace(dir: &Path) -> Vec<i64> {
+fn sv_time_trace(dir: &Path) -> Vec<i128> {
     let source = std::fs::read_to_string(TIME_FIXTURE).expect("фикстура");
     takt_lang::compile_to_sv(
         "svtime",
@@ -124,7 +124,7 @@ endmodule
         .expect("запуск симуляции");
     String::from_utf8_lossy(&run.stdout)
         .lines()
-        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i64>().ok())
+        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i128>().ok())
         .collect()
 }
 
@@ -158,7 +158,7 @@ const EVERY_FIXTURE: &str = "tests/data/eval/conformance_every.takt";
 const EVERY_TICKS: usize = 10;
 
 /// Трасса эталона `every`: `led` после каждого такта при 1 мс/такт.
-fn simulate_every_trace() -> Vec<i64> {
+fn simulate_every_trace() -> Vec<i128> {
     let source = std::fs::read_to_string(EVERY_FIXTURE).expect("фикстура");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -174,7 +174,7 @@ fn simulate_every_trace() -> Vec<i64> {
 }
 
 /// Трасса RTL `every`: тестбенч ведёт `time_ms` модельным временем, читает `dut.led`.
-fn sv_every_trace(dir: &Path) -> Vec<i64> {
+fn sv_every_trace(dir: &Path) -> Vec<i128> {
     let source = std::fs::read_to_string(EVERY_FIXTURE).expect("фикстура");
     takt_lang::compile_to_sv(
         "svevery",
@@ -232,7 +232,7 @@ endmodule
         .expect("запуск");
     String::from_utf8_lossy(&run.stdout)
         .lines()
-        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i64>().ok())
+        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i128>().ok())
         .collect()
 }
 

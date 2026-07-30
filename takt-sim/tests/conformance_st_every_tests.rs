@@ -43,7 +43,7 @@ fn cc_available() -> bool {
 
 /// Трасса порождённого ST (профиль «часы»): драйвер ведёт `__CURRENT_TIME`
 /// 1 мс/скан, печатает `led` после каждого `_body__`.
-fn run_st_every_trace(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i64> {
+fn run_st_every_trace(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i128> {
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура");
     let st_dir = dir.join("st");
     std::fs::create_dir_all(&st_dir).expect("каталог ST");
@@ -112,7 +112,7 @@ int main(void) {{
     assert!(run.status.success(), "драйвер ST `every` упал");
     String::from_utf8_lossy(&run.stdout)
         .lines()
-        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i64>().ok())
+        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i128>().ok())
         .collect()
 }
 

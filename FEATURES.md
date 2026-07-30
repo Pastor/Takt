@@ -23,7 +23,7 @@
 
 | № | Фича | Зависит от | Tier | Статус |
 |---|------|------------|------|--------|
-| [0157](docs/features/0157-literal-u64-representation.md) | Представление числового литерала: полная маска `[bit;64]` | — | 2 | АНАЛИЗ |
+| [0157](docs/features/0157-literal-u64-representation.md) | Представление числового литерала: полная маска `[bit;64]` | — | 2 | РАЗРАБОТКА |
 | [0156](docs/features/0156-parser-depth-limit.md) | Ограничение глубины вложенности на уровне лексера/парсера | — | 2 | СОЗДАНА |
 | [0176](docs/features/0176-bit-port-address-position.md) | Позиция бита у `bit`-порта с голым адресом | — | 2 | СОЗДАНА |
 | [0170](docs/features/0170-fixed-point-saturation.md) | Насыщение (saturation) для fixed-point `q(m, n)` | — | 2 | СОЗДАНА |

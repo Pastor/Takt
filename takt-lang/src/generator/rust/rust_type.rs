@@ -129,7 +129,7 @@ pub(crate) fn rust_type(ty: &TypeNode, what: &str) -> Result<String, Diagnostic>
 ///
 /// Проба 2026-07-16: `Idle = 670` (`elevator.takt:121`) в `u8` **не влезает**;
 /// «всегда `u8`» дало бы невалидный код на реальном примере корпуса.
-pub(crate) fn enum_repr(variants: &[(String, i64)]) -> &'static str {
+pub(crate) fn enum_repr(variants: &[(String, i128)]) -> &'static str {
     // Знак и ширина — из общего факта (фича 0060): цель лишь отображает его в имя
     // repr. Свой каскад извлечения диапазона удалён (ADR 0060, правило 5).
     match enum_facts(variants) {
@@ -297,13 +297,13 @@ mod tests {
     /// Границы разрядности: 255 → u8, 256 → u16, 65535 → u16, 65536 → u32.
     #[test]
     fn enum_repr_boundaries() {
-        let at = |v: i64| enum_repr(&[("V".to_string(), v)]);
+        let at = |v: i128| enum_repr(&[("V".to_string(), v)]);
         assert_eq!(at(255), "u8");
         assert_eq!(at(256), "u16");
         assert_eq!(at(65535), "u16");
         assert_eq!(at(65536), "u32");
-        assert_eq!(at(u32::MAX as i64), "u32");
-        assert_eq!(at(u32::MAX as i64 + 1), "u64");
+        assert_eq!(at(i128::from(u32::MAX)), "u32");
+        assert_eq!(at(i128::from(u32::MAX) + 1), "u64");
     }
 
     /// Отрицательный вариант даёт знаковый `repr`.

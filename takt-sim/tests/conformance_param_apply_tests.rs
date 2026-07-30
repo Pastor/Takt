@@ -59,12 +59,16 @@ fn unit_of(src: &str) -> Unit {
 /// Квалифицированная адресация (`Модель::имя`, фича 0135) здесь не годится:
 /// квалификатор — имя модели, а оба экземпляра — `Tuner`. Снимок (`state_io`,
 /// фича 0032) различает экземпляры структурно.
-fn variables_named(unit: &Unit, name: &str) -> Vec<i64> {
-    fn walk(snap: &takt_sim::state_io::UnitSnapshot, name: &str, out: &mut Vec<i64>) {
+fn variables_named(unit: &Unit, name: &str) -> Vec<i128> {
+    fn walk(snap: &takt_sim::state_io::UnitSnapshot, name: &str, out: &mut Vec<i128>) {
         match snap {
             takt_sim::state_io::UnitSnapshot::None => {}
             takt_sim::state_io::UnitSnapshot::Node { variables, .. } => {
-                if let Some(value) = variables.get(name).and_then(|v| v.as_i64()) {
+                if let Some(value) = variables
+                    .get(name)
+                    .and_then(|v| v.as_number())
+                    .and_then(serde_json::Number::as_i128)
+                {
                     out.push(value);
                 }
             }
@@ -87,8 +91,8 @@ fn variables_named(unit: &Unit, name: &str) -> Vec<i64> {
 #[test]
 fn two_instances_accumulate_at_different_rates() {
     let mut unit = unit_of(SRC);
-    let mut expected_fast: i64 = 0;
-    let mut expected_slow: i64 = 0;
+    let mut expected_fast: i128 = 0;
+    let mut expected_slow: i128 = 0;
     for tick in 1..=TICKS {
         assert!(!matches!(unit.tick(), TickResult::Failed(_)));
         expected_fast = (expected_fast + 100) % 256;
@@ -148,7 +152,7 @@ fn per_tick_trace_matches_generated_c() {
 
     // Трасса симулятора: оба накопителя на каждом такте.
     let mut unit = unit_of(SRC);
-    let mut sim_trace: Vec<(i64, i64)> = Vec::new();
+    let mut sim_trace: Vec<(i128, i128)> = Vec::new();
     for _ in 0..TICKS {
         assert!(!matches!(unit.tick(), TickResult::Failed(_)));
         let values = variables_named(&unit, "acc");
@@ -165,7 +169,7 @@ fn per_tick_trace_matches_generated_c() {
 
 /// Порождает C, собирает с харнессом и возвращает потактовую трассу обоих
 /// накопителей.
-fn run_generated_c(dir: &Path) -> Vec<(i64, i64)> {
+fn run_generated_c(dir: &Path) -> Vec<(i128, i128)> {
     takt_lang::compile_to_c(
         "param_conf",
         SRC,
@@ -214,7 +218,7 @@ int main(void) {{
     String::from_utf8_lossy(&run.stdout)
         .lines()
         .map(|line| {
-            let mut parts = line.split_whitespace().map(|p| p.parse::<i64>().unwrap());
+            let mut parts = line.split_whitespace().map(|p| p.parse::<i128>().unwrap());
             (parts.next().unwrap(), parts.next().unwrap())
         })
         .collect()

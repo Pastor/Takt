@@ -18,9 +18,9 @@ pub(crate) enum EvalError {
     /// S3: деление или взятие остатка на ноль (в C — UB, не воспроизводим).
     DivisionByZero,
     /// S4a: сдвиг на отрицательное число или на ≥ 64 бит (в C — UB).
-    ShiftOutOfRange { by: i64 },
+    ShiftOutOfRange { by: i128 },
     /// S2: значение не помещается в знаковый тип назначения (в C — UB).
-    SignedOverflow { value: i64, bits: u8 },
+    SignedOverflow { value: i128, bits: u8 },
     /// Переполнение внутреннего 64-битного представления.
     ArithmeticOverflow { op: &'static str },
     /// Операция не определена для операндов таких типов (в т.ч. S8).
@@ -50,7 +50,7 @@ pub(crate) enum EvalError {
     /// Доступ к биту (`.N`) у значения, не являющегося целым/логическим.
     BitOfNonInteger { value: &'static str },
     /// Номер бита вне диапазона `0..64`.
-    BitIndexOutOfRange { bit: i64 },
+    BitIndexOutOfRange { bit: i128 },
     /// Индексная запись (`x[i] := …`) в значение, не являющееся массивом (0076).
     IndexOfNonArray { value: &'static str },
     /// Индекс записи вне границ массива (`data[i] := …`, `i ≥ длины`) (0076).

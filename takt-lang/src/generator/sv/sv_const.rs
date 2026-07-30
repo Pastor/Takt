@@ -54,8 +54,8 @@ fn target_var_type(var: &std::rc::Rc<std::cell::RefCell<VariableNode>>) -> Optio
 /// `%Error-ENUMVALUE: Implicit conversion to enum`.
 pub(crate) fn enum_literal(
     ty: &TypeNode,
-    value: i64,
-    enums: &BTreeMap<String, Vec<(String, i64)>>,
+    value: i128,
+    enums: &BTreeMap<String, Vec<(String, i128)>>,
 ) -> Option<String> {
     let TypeNode::Enum(enum_name) = ty else {
         return None;

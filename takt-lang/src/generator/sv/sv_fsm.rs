@@ -102,7 +102,7 @@ pub(crate) struct Fsm {
     /// Имя регистра состояния по уникальному имени модели.
     pub(crate) state_reg: BTreeMap<String, String>,
     /// Варианты перечислений модели — для восстановления варианта по значению.
-    enums: BTreeMap<String, Vec<(String, i64)>>,
+    enums: BTreeMap<String, Vec<(String, i128)>>,
     /// Цепочки `+`: несущее состояние и число шагов (для эмиссии enum шага,
     /// задача 0057-01). Порядок — обхода `build`, значит детерминирован (0048).
     step_enums: Vec<(Name, usize)>,
@@ -607,10 +607,10 @@ pub(crate) fn emit_state_enums(
         // Ширина — по диапазону значений (задача 0045-03). Значения назначает
         // генератор (0..n-1), поэтому формула вырождается в ⌈log₂(n)⌉ — то есть
         // совпадает с формулой ADR именно здесь, где та была верна.
-        let numbered: Vec<(String, i64)> = variants
+        let numbered: Vec<(String, i128)> = variants
             .iter()
             .enumerate()
-            .map(|(i, v)| (v.clone(), i as i64))
+            .map(|(i, v)| (v.clone(), i as i128))
             .collect();
         let (width, _) = enum_width(&numbered, &format!("состояния модели '{}'", name))?;
         p.ident(&format!(
@@ -640,8 +640,8 @@ pub(crate) fn emit_state_enums(
 /// перечислений состояний. Порядок — обхода `Fsm::build` (детерминизм 0048).
 pub(crate) fn emit_step_enums(p: &mut Printer, fsm: &Fsm) -> Result<(), Diagnostic> {
     for (state, count) in &fsm.step_enums {
-        let numbered: Vec<(String, i64)> = (0..*count)
-            .map(|i| (step_variant(state, i), i as i64))
+        let numbered: Vec<(String, i128)> = (0..*count)
+            .map(|i| (step_variant(state, i), i as i128))
             .collect();
         let (width, _) = enum_width(&numbered, &format!("шаг цепочки '{}'", state))?;
         p.ident(&format!(

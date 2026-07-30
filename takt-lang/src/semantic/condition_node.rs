@@ -58,8 +58,8 @@ pub enum ConditionNode {
     Equal(Box<ConditionNode>, Box<ConditionNode>),
     /// Неравенство: `левое != правое`.
     NotEqual(Box<ConditionNode>, Box<ConditionNode>),
-    /// Целочисленный литерал.
-    Number(i64),
+    /// Целочисленный литерал (носитель — `i128`, фича 0157).
+    Number(i128),
     /// Литерал длительности в наносекундах (фича 0134).
     Duration(i64),
     /// Выдержка от входа в состояние: `after 3s` (фича 0134), в наносекундах.
@@ -109,7 +109,7 @@ pub enum ConditionNode {
     /// Вариант перечисления (Ce4/NI6).
     ///
     /// Поля: `(определение перечисления, имя варианта, числовое значение варианта)`.
-    EnumVariant(Rc<RefCell<EnumDefinitionNode>>, String, i64),
+    EnumVariant(Rc<RefCell<EnumDefinitionNode>>, String, i128),
 }
 
 impl PartialEq for ConditionNode {

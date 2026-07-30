@@ -10,17 +10,17 @@ use super::*;
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Constraint {
     /// `var = n`
-    Eq(i64),
+    Eq(i128),
     /// `var != n`
-    Ne(i64),
+    Ne(i128),
     /// `var < n`
-    Lt(i64),
+    Lt(i128),
     /// `var <= n`
-    Le(i64),
+    Le(i128),
     /// `var > n`
-    Gt(i64),
+    Gt(i128),
     /// `var >= n`
-    Ge(i64),
+    Ge(i128),
 }
 
 /// Проверяет детерминированность переходов в состояниях модели.
@@ -121,8 +121,8 @@ fn constraints_overlap(a: &Constraint, b: &Constraint) -> bool {
         (Eq(x), Ge(y)) => x >= y,
         // Ne vs *
         (Ne(x), Eq(y)) => x != y,
-        (Ne(x), Ne(_y)) => *x != i64::MAX, // всегда истинно (хотя бы одно значение)
-        (Ne(_), Lt(_)) => true,            // всегда есть значение ≠ x и < y
+        (Ne(x), Ne(_y)) => *x != i128::MAX, // всегда истинно (хотя бы одно значение)
+        (Ne(_), Lt(_)) => true,             // всегда есть значение ≠ x и < y
         (Ne(_), Le(_)) => true,
         (Ne(_), Gt(_)) => true,
         (Ne(_), Ge(_)) => true,

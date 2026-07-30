@@ -29,7 +29,7 @@ fn run(fixture: &str, steps: usize) -> (Unit, TickResult) {
     (unit, last)
 }
 
-fn num(unit: &Unit, name: &str) -> i64 {
+fn num(unit: &Unit, name: &str) -> i128 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
         other => panic!("переменная '{name}': ожидалось целое, получено {other:?}"),

@@ -77,7 +77,7 @@ start Entry = ArrConf;
         Some(Value::Array(items)) => items,
         other => panic!("`data` обязана быть массивом, получено {other:?}"),
     };
-    let sim_elem = |i: usize| -> i64 {
+    let sim_elem = |i: usize| -> i128 {
         match &sim_data[i] {
             Value::Number(n) => *n,
             other => panic!("data[{i}]: не целое {other:?}"),
@@ -135,7 +135,7 @@ int main(void) {{
     let run = Command::new(&bin).output().expect("запуск собранного C");
     assert!(run.status.success(), "собранный C завершился с ошибкой");
     let out = String::from_utf8_lossy(&run.stdout);
-    let c_val = |key: &str| -> i64 {
+    let c_val = |key: &str| -> i128 {
         out.lines()
             .find_map(|l| l.strip_prefix(&format!("{key}="))?.trim().parse().ok())
             .unwrap_or_else(|| panic!("C не напечатал '{key}': {out}"))

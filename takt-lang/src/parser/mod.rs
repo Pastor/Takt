@@ -2,8 +2,12 @@
 pub mod ast;
 pub mod ast_expr;
 
+/// Ошибки лексического анализа (фича 0157: вынесены из `lexer`).
+pub mod lex_error;
 /// Модуль лексического анализатора Takt.
 pub mod lexer;
+/// Границы числового литерала (фича 0157).
+mod literal_range;
 /// Литералы длительности и частоты (фича 0134).
 pub mod time_literal;
 pub mod token;

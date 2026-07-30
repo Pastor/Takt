@@ -123,7 +123,7 @@ pub(crate) fn negate(repr: i64, m: u8, n: u8) -> Value {
 /// `f · 2ⁿ`, `q(m₂, n₂)` — пересчитывается на разницу дробных разрядов.
 pub(crate) fn cast_to_fixed(value: &Value, m: u8, n: u8) -> Result<Value, EvalError> {
     let repr: i128 = match value {
-        Value::Number(i) => (*i as i128) << n,
+        Value::Number(i) => *i << n,
         Value::Boolean(b) => (i64::from(*b) as i128) << n,
         Value::Real(f) => (f * pow2(n)).floor() as i128,
         Value::Fixed { repr, n: n2, .. } => rescale(*repr as i128, *n2, n),

@@ -128,7 +128,7 @@ pub fn construct_expression(
                 TypeNode::Array(size, _) => {
                     // Статическая проверка границ только для числовых литералов
                     if let ast::Expression::Number(_, n) = idx_expr.as_ref()
-                        && (*n < 0 || *n >= size as i64)
+                        && (*n < 0 || *n >= i128::from(size))
                     {
                         return Err(Diagnostic::error(
                             id.loc,
@@ -412,11 +412,11 @@ fn check_slice_bounds(
     name: &str,
     loc: Location,
     size: u16,
-    start: Option<i64>,
-    end: Option<i64>,
+    start: Option<i128>,
+    end: Option<i128>,
 ) -> Result<(), Diagnostic> {
     if let Some(s) = start
-        && (s < 0 || s >= size as i64)
+        && (s < 0 || s >= i128::from(size))
     {
         return Err(Diagnostic::error(
             loc,
@@ -428,7 +428,7 @@ fn check_slice_bounds(
         .with_code("SE-029"));
     }
     if let Some(e) = end
-        && (e < 0 || e > size as i64)
+        && (e < 0 || e > i128::from(size))
     {
         return Err(Diagnostic::error(
             loc,

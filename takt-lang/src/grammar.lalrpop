@@ -906,7 +906,7 @@ extern {
     enum Token<'input> {
         identifier => Token::Identifier(<&'input str>),
         string => Token::StringLiteral(<bool>, <&'input str>),
-        number => Token::Number(<i64>),
+        number => Token::Number(<i128>),
         address => Token::AddressLiteral(<&'input str>),
         rational => Token::RationalNumber(<&'input str>, <bool>),
         duration => Token::Duration(<i64>, <&'input str>),

@@ -116,7 +116,7 @@ fn eval_ast_addr(
         }};
     }
     match expr {
-        E::Number(_, n) => Ok((*n, None)),
+        E::Number(loc, n) => Ok((narrow_addr_literal(*n, *loc)?, None)),
         E::Address(_, a, b) => Ok((*a, Some(*b))),
         E::Variable(id) => resolve_symbol(&id.name, id.loc, scope, env, seen),
         E::Parenthesis(_, inner) => eval_ast_addr(inner, scope, env, seen),
@@ -145,6 +145,21 @@ fn eval_ast_addr(
              `+ - * / % << >> & | ^ ~`",
         )),
     }
+}
+
+/// Сужает литерал (`i128`, фича 0157) до носителя адреса (`i64`).
+///
+/// Адрес и бит живут в `i64` — их ширину эта фича не меняла. Литерал шире
+/// (`u64`-маска законна как значение, но адресом быть не может), и сужение
+/// обязано быть **явным отказом**: молчаливое `as i64` дало бы адрес, которого
+/// автор не писал, — ровно тот класс, из-за которого 0042 завела `SE-055`.
+fn narrow_addr_literal(value: i128, loc: Location) -> Result<i64, Diagnostic> {
+    i64::try_from(value).map_err(|_| {
+        not_constant(
+            loc,
+            "числовой литерал не помещается в знаковое 64-битное значение адреса",
+        )
+    })
 }
 
 /// Унарная операция: бит в ней бессмыслен — см. [`apply_binary`].
@@ -230,7 +245,7 @@ fn eval_addr_value(
         }};
     }
     match expr {
-        ExpressionNode::Number(n) => Ok((*n, None)),
+        ExpressionNode::Number(n) => Ok((narrow_addr_literal(*n, Location::Implicit)?, None)),
         ExpressionNode::Address(a, b) => Ok((*a, Some(*b))),
         // Сырой АСД: значение оператора `address` семантикой не понижается.
         ExpressionNode::Unresolved(ast_expr) => eval_ast_addr(ast_expr, scope, env, seen),

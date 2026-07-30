@@ -115,7 +115,7 @@ pub(crate) fn to_bool(value: &Value) -> Result<bool, EvalError> {
 
 /// Числовой операнд после приведения (S5).
 enum Num {
-    Int(i64),
+    Int(i128),
     Real(f64),
 }
 
@@ -139,7 +139,7 @@ fn as_num(value: &Value, op: BinOp, other: Option<&Value>) -> Result<Num, EvalEr
 
 /// Пара операндов, приведённая по S5: если хоть один вещественный — оба к `f64`.
 enum Pair {
-    Ints(i64, i64),
+    Ints(i128, i128),
     Reals(f64, f64),
 }
 
@@ -157,7 +157,7 @@ fn coerce_pair(lhs: &Value, rhs: &Value, op: BinOp) -> Result<Pair, EvalError> {
 }
 
 /// Целочисленные операнды: операция определена только для целых.
-fn as_ints(lhs: &Value, rhs: &Value, op: BinOp) -> Result<(i64, i64), EvalError> {
+fn as_ints(lhs: &Value, rhs: &Value, op: BinOp) -> Result<(i128, i128), EvalError> {
     match coerce_pair(lhs, rhs, op)? {
         Pair::Ints(a, b) => Ok((a, b)),
         Pair::Reals(_, _) => Err(EvalError::TypeMismatch {
@@ -183,9 +183,9 @@ pub(crate) fn apply_binary(op: BinOp, lhs: &Value, rhs: &Value) -> Result<Value,
         return crate::eval::duration::binary(op, lhs, rhs);
     }
     match op {
-        BinOp::Add => arith(op, lhs, rhs, i64::checked_add, |a, b| a + b),
-        BinOp::Subtract => arith(op, lhs, rhs, i64::checked_sub, |a, b| a - b),
-        BinOp::Multiply => arith(op, lhs, rhs, i64::checked_mul, |a, b| a * b),
+        BinOp::Add => arith(op, lhs, rhs, i128::checked_add, |a, b| a + b),
+        BinOp::Subtract => arith(op, lhs, rhs, i128::checked_sub, |a, b| a - b),
+        BinOp::Multiply => arith(op, lhs, rhs, i128::checked_mul, |a, b| a * b),
         BinOp::Divide => divide(op, lhs, rhs),
         BinOp::Modulo => modulo(op, lhs, rhs),
         BinOp::Power => power(op, lhs, rhs),
@@ -203,7 +203,7 @@ fn arith(
     op: BinOp,
     lhs: &Value,
     rhs: &Value,
-    int_op: fn(i64, i64) -> Option<i64>,
+    int_op: fn(i128, i128) -> Option<i128>,
     real_op: fn(f64, f64) -> f64,
 ) -> Result<Value, EvalError> {
     match coerce_pair(lhs, rhs, op)? {
@@ -456,7 +456,7 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
 mod tests {
     use super::*;
 
-    fn int(n: i64) -> Value {
+    fn int(n: i128) -> Value {
         Value::Number(n)
     }
 
@@ -680,12 +680,12 @@ mod tests {
         ));
     }
 
-    // ── Переполнение i64 ──────────────────────────────────────────────────────
+    // ── Переполнение носителя ─────────────────────────────────────────────────
 
     #[test]
-    fn i64_overflow_is_error_not_wrap() {
+    fn carrier_overflow_is_error_not_wrap() {
         assert!(matches!(
-            apply_binary(BinOp::Add, &int(i64::MAX), &int(1)),
+            apply_binary(BinOp::Add, &int(i128::MAX), &int(1)),
             Err(EvalError::ArithmeticOverflow { .. })
         ));
     }
