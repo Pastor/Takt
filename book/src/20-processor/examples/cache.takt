@@ -1,8 +1,8 @@
 // Ступень 2: та же машина, но кеш включён, а память — медленная.
 //
 // От ступени 1 файл отличается ДВУМЯ значениями параметров: моделей он не
-// копирует. Смысл кеша виден по счётчикам `hits`/`misses` и по числу тактов:
+// копирует. Смысл кеша виден по счётчикам `hits`/`misses` и по числу тактов —
 // без кеша та же программа на той же памяти идёт заметно дольше.
-import {Op, Memory, Cache, Core, fetch_addr, fetch_req, fetch_op, fetch_arg, fetch_ready, bus_addr, bus_req, bus_op, bus_arg, bus_ready, data_addr, data_waddr, data_rdata, data_wdata, data_wen} from "machine_lib.takt";
+import {Op, Memory, Cache, Core, Arbiter, fetch_addr, fetch_req, fetch_op, fetch_arg, fetch_ready, arb_addr, arb_req, arb_op, arb_arg, arb_ready, bus_addr, bus_req, bus_op, bus_arg, bus_ready, data_addr, data_waddr, data_rdata, data_wdata, data_wen} from "machine_lib.takt";
 
-start Machine = Core | Cache(enabled := 1) | Memory(latency := 3);
+start Machine = Core(id := 0, base := 0) | Cache(id := 0, enabled := 1) | Arbiter | Memory(latency := 3);
