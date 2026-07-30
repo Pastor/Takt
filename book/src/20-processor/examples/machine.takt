@@ -8,4 +8,4 @@
 // пустить, кто-то обязан. При единственном мастере он вырождается.
 import {Op, Memory, Cache, Core, Arbiter, fetch_addr, fetch_req, fetch_op, fetch_arg, fetch_ready, arb_addr, arb_req, arb_op, arb_arg, arb_ready, bus_addr, bus_req, bus_op, bus_arg, bus_ready, data_addr, data_waddr, data_rdata, data_wdata, data_wen} from "machine_lib.takt";
 
-start Machine = Core(id := 0, base := 0) | Cache(id := 0, enabled := 0) | Arbiter | Memory(latency := 0);
+start Machine = Core(id := 0, base := 0) | Cache(serves := 0, enabled := 0) | Arbiter | Memory(latency := 0);
