@@ -67,19 +67,24 @@ type = identifier                      (* bit, u8, MyType *)
      | "[" type ";" integer "]" ;      (* массив: [bit;8] *)
 ```
 
-## Переменные, константы, порты
+## Переменные, константы, параметры, порты
 
-Инициализатор — через `:=`. `const` требует его; инициализатор `in`/`out` задаёт
-адрес порта (`0xADDR` или `0xADDR:бит`).
+Инициализатор — через `:=`. `const` и `parameter` требуют его (у параметра это
+значение по умолчанию); инициализатор `in`/`out` задаёт адрес порта (`0xADDR` или
+`0xADDR:бит`).
 
 ```ebnf
 variable_define
-    = "var"   identifier [ ":" type ] [ ":=" expression ] ";"
-    | "const" identifier [ ":" type ] ":=" expression ";"
-    | "in"    identifier [ ":" type ] [ ":=" expression ] ";"
-    | "out"   identifier [ ":" type ] [ ":=" expression ] ";"
-    | "inout" identifier [ ":" type ] [ ":=" expression ] ";" ;
+    = "var"       identifier [ ":" type ] [ ":=" expression ] ";"
+    | "const"     identifier [ ":" type ] ":=" expression ";"
+    | "parameter" identifier [ ":" type ] ":=" expression ";"
+    | "in"        identifier [ ":" type ] [ ":=" expression ] ";"
+    | "out"       identifier [ ":" type ] [ ":=" expression ] ";"
+    | "inout"     identifier [ ":" type ] [ ":=" expression ] ";" ;
 ```
+
+`parameter` объявляется только на уровне модели: настройку задают в месте
+инстанцирования, а у оператора такого места нет.
 
 ## Функции
 
@@ -88,12 +93,14 @@ function_define
     = [ "extern" ] "fn" identifier parameter_list [ "->" type ]
       ( ";" | block_statement ) ;
 
-parameter_list      = "(" [ parameter { "," parameter } ] ")" ;
-parameter           = identifier ":" parameter_type_expr | parameter_type_expr ;
+parameter_list      = "(" [ fn_parameter { "," fn_parameter } ] ")" ;
+fn_parameter        = identifier ":" parameter_type_expr | parameter_type_expr ;
 parameter_type_expr = "[" type ";" integer "]" | expression ;
 ```
 
-`extern fn` — объявление без тела; `fn` — определение с телом.
+`extern fn` — объявление без тела; `fn` — определение с телом. Нетерминал
+`fn_parameter` — параметр функции; ключевое слово `"parameter"` (в кавычках выше) —
+объявление параметра модели, это разные вещи.
 
 ## Модель, состояние, перечисление, структура
 
@@ -110,6 +117,11 @@ enum_variant = identifier [ "=" integer ] ;
 struct_define = "struct" identifier "{" [ struct_field { "," struct_field } ] "}" ;
 struct_field  = identifier ":" type ;
 ```
+
+Выражение реализации (`= expression` у модели и состояния) — композиция моделей
+`|`/`+` со скобками. Настройка модели при инстанцировании записывается формой
+вызова — `Model(имя := выражение, …)`; отдельного правила у неё нет, это то же
+выражение реализации.
 
 ## Именованные условия и блоки
 
@@ -249,8 +261,8 @@ doc_comment     = "///" { any_char_except_newline } ( newline | eof ) ;
 
 **Ключевые слова:** `as` `assembly` `break` `cond` `const` `continue` `else`
 `enum` `extern` `false` `fn` `for` `formula` `if` `import` `in` `inout` `invariant`
-`loop` `model` `next` `out` `ref` `return` `start` `state` `struct` `true` `type`
-`var`.
+`loop` `model` `next` `out` `parameter` `ref` `return` `start` `state` `struct`
+`true` `type` `var`.
 
 **Операторы и пунктуация:** присваивание `:=`; арифметические `+ - * / % **`;
 побитовые `& | ^ ~ << >>`; логические `&& || !`; равенство/сравнение `= != < <= > >=`;

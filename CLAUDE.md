@@ -710,7 +710,7 @@ yosys/bison/flex + сборка `iec2c`) и делает один вызов `./
 ### Документ и процесс
 
 - **Версия языка — единственный источник истины в коде**:
-  `takt_lang::LANGUAGE_VERSION`, **сейчас `0.7.0`**
+  `takt_lang::LANGUAGE_VERSION`, **сейчас `0.8.0`**
   ([0085](docs/features/0085-language-version-constant.md)). Гейт
   `scripts/check-language-version.sh` сверяет **три** источника — константа,
   README и живой контекст. ⚠️ Меняя версию языка (правило 22 — накапливается по

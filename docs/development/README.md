@@ -307,3 +307,4 @@
 | 0185-05 | 0185 | Режим specialize: копия модели, детерминированные имена, дедупликация | [0185-05-model-parameters.md](0185-05-model-parameters.md) |
 | 0185-06 | 0185 | Параметризация моделей (ключевое слово parameter) | [0185-06-model-parameters.md](0185-06-model-parameters.md) |
 | 0185-07 | 0185 | Параметризация моделей (ключевое слово parameter) | [0185-07-model-parameters.md](0185-07-model-parameters.md) |
+| 0185-08 | 0185 | Параметризация моделей (ключевое слово parameter) | [0185-08-model-parameters.md](0185-08-model-parameters.md) |
