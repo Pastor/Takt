@@ -1,0 +1,102 @@
+// Ступень 1: одно ядро, память и ДВЕ ШИНЫ — кода и данных.
+
+// ─── Шина кода: ядро выставляет адрес, память отдаёт команду ─────────────────
+var code_addr: u8 := 0; // адрес команды (номер команды, не байта)
+var code_op: u8 := 0; // опкод, отданный памятью
+var code_arg: u8 := 0; // аргумент команды
+
+// ─── Шина данных: адрес, чтение, запись ──────────────────────────────────────
+var data_addr: u8 := 0;
+var data_rdata: u8 := 0;
+var data_wdata: u8 := 0;
+var data_wen: bit := 0; // строб записи
+
+// Опкоды учебной машины.
+enum Op { Nop = 0, Lda = 1, Sta = 2, Add = 3, Sub = 4, Jnz = 5, Hlt = 6 }
+
+model Memory {
+    // Память команд: опкоды и аргументы двумя массивами — команда отдаётся
+    // целиком за одно обращение (в настоящей машине это две ячейки).
+    //
+    // Программа «умножение сложением»: sum := x * n — складываем x ровно n раз.
+    //     0: LDA 0   ; acc := sum        4: SUB 3   ; acc -= 1
+    //     1: ADD 1   ; acc += x          5: STA 2   ; n := acc
+    //     2: STA 0   ; sum := acc        6: JNZ 0   ; пока n ≠ 0 — на начало
+    //     3: LDA 2   ; acc := n          7: HLT
+    var prog_op: [u8; 8] := {1, 3, 2, 1, 4, 2, 5, 6};
+    var prog_arg: [u8; 8] := {0, 1, 0, 2, 3, 2, 0, 0};
+
+    // Память данных: 0 — накопитель, 1 — слагаемое, 2 — счётчик, 3 — единица.
+    var ram: [u8; 4] := {0, 7, 3, 1};
+
+    start Serve {
+        always {
+            code_op := prog_op[code_addr];
+            code_arg := prog_arg[code_addr];
+            if data_wen = 1 {
+                ram[data_addr] := data_wdata;
+            }
+            data_rdata := ram[data_addr];
+        }
+        ref Serve;
+    }
+}
+
+model Core {
+    var pc: u8 := 0; // счётчик команд
+    var acc: u8 := 0; // аккумулятор
+    var op: u8 := 0; // текущий опкод
+    var arg: u8 := 0; // текущий аргумент
+    var next_pc: u8 := 0;
+
+    start Fetch {
+        always {
+            code_addr := pc;
+            data_wen := 0;
+        }
+        ref Decode;
+    }
+
+    state Decode {
+        always {
+            op := code_op;
+            arg := code_arg;
+            data_addr := code_arg;
+            next_pc := pc + 1;
+        }
+        ref Execute;
+    }
+
+    state Execute {
+        always {
+            match op {
+                Lda => {
+                    acc := data_rdata;
+                }
+                Sta => {
+                    data_wdata := acc;
+                    data_wen := 1;
+                }
+                Add => {
+                    acc := acc + data_rdata;
+                }
+                Sub => {
+                    acc := acc - data_rdata;
+                }
+                Jnz => {
+                    if acc != 0 {
+                        next_pc := arg;
+                    }
+                }
+                _ => {}
+            }
+            pc := next_pc;
+        }
+        ref Halted: op = Hlt;
+        ref Fetch;
+    }
+
+    state Halted;
+}
+
+start Machine = Core | Memory;
