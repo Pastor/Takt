@@ -12,7 +12,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0185-model-parameters.md`](../adr/0185-model-parameters.md) |
 | Анализ | [`docs/analyze/0185-model-parameters.md`](../analyze/0185-model-parameters.md) |
-| Разработка | [`0185-01`](../development/0185-01-model-parameters.md) — объявление `parameter` (**выполнена**), [`0185-02`](../development/0185-02-model-parameters.md) — аргументы инстанцирования (**выполнена**), [`0185-03`](../development/0185-03-model-parameters.md) — константный вычислитель (**выполнена**); задачи `0185-04`…`0185-09` — по декомпозиции анализа |
+| Разработка | [`0185-01`](../development/0185-01-model-parameters.md) — объявление `parameter` (**выполнена**), [`0185-02`](../development/0185-02-model-parameters.md) — аргументы инстанцирования (**выполнена**), [`0185-03`](../development/0185-03-model-parameters.md) — константный вычислитель (**выполнена**), [`0185-04`](../development/0185-04-model-parameters.md) — режим `assign` и флаг CLI (**выполнена**); задачи `0185-05`…`0185-09` — по декомпозиции анализа |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) — **не заведён** (проработка) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) — **не заведён** (проработка) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0185-YY-*`) |

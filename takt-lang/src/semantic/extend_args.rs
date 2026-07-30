@@ -14,6 +14,7 @@ use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast;
 use crate::semantic::ModelNode;
 use crate::semantic::const_eval;
+use crate::semantic::expression::construct_expression;
 use crate::semantic::extend::ParameterArgument;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -42,7 +43,11 @@ pub(super) fn parse_arguments(
         // существует — в дерево попадает литерал. Вычисляется в области
         // видимости МЕСТА инстанцирования (`scope`), а не целевой модели: имена
         // `Y`/`U` в `M(X := Y + 1)` пишет тот, кто инстанцирует.
-        let value = const_eval::fold_to_literal(&value, scope)?;
+        let literal = const_eval::fold_to_literal(&value, scope)?;
+        // Понижение — тем же `construct_expression`, что и у объявлений: печать
+        // значения в целях идёт их обычным печатником выражений, а не отдельной
+        // веткой «а вот аргумент печатается так».
+        let value = construct_expression(literal, Vec::new(), Rc::clone(scope))?;
         if let Some(first) = seen.get(&name) {
             return Err(Diagnostic::error(
                 loc,

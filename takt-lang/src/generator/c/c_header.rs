@@ -24,7 +24,7 @@ fn build_extend_header(
 ) -> Result<(), Diagnostic> {
     match extend {
         StateExtend::None => {}
-        StateExtend::Model(model) => {
+        StateExtend::Model(model, _) => {
             printer
                 .ident(&format!(
                     "{} {};",
@@ -74,7 +74,7 @@ fn build_concat_item(
 ) -> Result<(), Diagnostic> {
     match extend {
         StateExtend::None => {}
-        StateExtend::Model(model) => {
+        StateExtend::Model(model, _) => {
             printer
                 .ident(&format!(
                     "{} {}_{}{};",
@@ -132,7 +132,7 @@ fn build_parallel_item(
 ) -> Result<(), Diagnostic> {
     match extend {
         StateExtend::None => {}
-        StateExtend::Model(model) => {
+        StateExtend::Model(model, _) => {
             printer
                 .ident(&format!(
                     "{} {}{};",
@@ -182,7 +182,7 @@ fn build_concat_state_enum(
     for (idx, item) in items.iter().enumerate() {
         let variant = match item {
             StateExtend::None => continue,
-            StateExtend::Model(model) => {
+            StateExtend::Model(model, _) => {
                 format!(
                     "{}_{}{}",
                     prefix,

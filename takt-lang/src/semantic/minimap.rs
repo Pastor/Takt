@@ -1,5 +1,5 @@
 use crate::diagnostics::Diagnostic;
-use crate::semantic::extend::Extend;
+use crate::semantic::extend::{Extend, ParameterArgument};
 use crate::semantic::naming::{normalize_camelcase_name, normalize_lowercase_snakecase};
 use crate::semantic::{ModelNode, StateNode};
 use itertools::Itertools;
@@ -109,12 +109,16 @@ impl From<Rc<RefCell<ModelNode>>> for Name {
 }
 
 /// Структура реализации состояния (`= Expr`), представленная в плоском виде.
-#[derive(Debug, Clone, PartialEq, Eq)]
+// `Eq` снят: аргументы инстанцирования несут дробное значение (`ExpressionNode`
+// с `f64` внутри), для которого полного равенства не существует (фича 0185).
+#[derive(Debug, Clone, PartialEq)]
 pub enum StateExtend {
     /// Реализация отсутствует или не разрешена.
     None,
-    /// Ссылка на модель с указанным именем.
-    Model(Name),
+    /// Ссылка на модель с указанным именем и **аргументами инстанцирования**
+    /// (фича 0185): значения параметров этого экземпляра, уже вычисленные
+    /// константным вычислителем. Пустой вектор — вызов без аргументов.
+    Model(Name, Vec<ParameterArgument>),
     /// Последовательная конкатенация нескольких реализаций (`A ; B`).
     Concatenation(Vec<StateExtend>),
     /// Параллельная композиция нескольких реализаций (`A | B`).
@@ -126,7 +130,8 @@ pub enum StateExtend {
 /// Поля `start`, `name`, `next`, `references` хранятся для будущей генерации
 /// `.c`-источника (I1–I4) и не читаются напрямую в текущей реализации.
 #[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+// `Eq` снят вслед за `StateExtend` (см. выше): элемент карты несёт реализацию.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Element {
     /// Вложенная модель со списком состояний и именем стартового состояния.
     Model {
@@ -482,7 +487,9 @@ fn build_extend(extend: &Extend, model: Rc<RefCell<ModelNode>>) -> StateExtend {
     match extend {
         Extend::None => StateExtend::None,
         Extend::Unresolved(_) => StateExtend::None,
-        Extend::Model(model, _, _) => StateExtend::Model(Name::from(Rc::clone(model))),
+        Extend::Model(model, _, args) => {
+            StateExtend::Model(Name::from(Rc::clone(model)), args.clone())
+        }
         Extend::Parentless(extend) => build_extend(extend, model),
         Extend::Concatenation(extends) => StateExtend::Concatenation(
             extends

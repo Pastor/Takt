@@ -11,6 +11,7 @@ use super::c_expr::generate_expr;
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::c::c_map::CMap;
 use crate::generator::indent::Printer;
+use crate::semantic::extend::ParameterArgument;
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, VariableNode};
@@ -57,7 +58,7 @@ pub(super) fn generate_model_init(
     // Рекурсивно по уровням: `_init` вложенной модели инициализирует свои
     // вложенные. Блоки `enter` сюда НЕ входят — они поведение и остаются в `_tick`.
     let is_main = name.eq(&map.root_name());
-    generate_start_state_init(printer, map, start, is_main)?;
+    generate_start_state_init(printer, map, model, start, is_main)?;
     for var in raw.variables.values() {
         let VariableNode::Simple {
             name: var_name,
@@ -87,6 +88,28 @@ pub(super) fn generate_model_init(
     Ok(())
 }
 
+/// Присваивает значения аргументов инстанцирования полям экземпляра — режим
+/// `--parameters=assign` (фича 0185).
+///
+/// Печатается **сразу после** вызова `_init` этого экземпляра: `_init` кладёт
+/// значения по умолчанию, а настройка места инстанцирования их перекрывает.
+/// Одна `_init` на все экземпляры — в этом и состоит выбор умолчания (ADR 0185,
+/// Option E): копий модели не возникает.
+fn generate_argument_assignments(
+    printer: &mut Printer,
+    map: &CMap,
+    model: &Element,
+    access: &str,
+    args: &[ParameterArgument],
+) -> Result<(), Diagnostic> {
+    for arg in args {
+        printer.ident(&format!("{}.{} = ", access, arg.name));
+        generate_expr(printer, map, model, vec![], &arg.value, 0, true)?;
+        printer.print(";").nl();
+    }
+    Ok(())
+}
+
 /// Эмитит инициализацию вложенных элементов стартового состояния в `_init`
 /// (фича 0033, R6). Только память (вызовы `_init` вложенных, установка стартовых
 /// служебных состояний композитов) — блоки `enter` сюда НЕ входят: это поведение,
@@ -95,6 +118,7 @@ pub(super) fn generate_model_init(
 fn generate_start_state_init(
     printer: &mut Printer,
     map: &CMap,
+    model_element: &Element,
     start: &Name,
     is_main: bool,
 ) -> Result<(), Diagnostic> {
@@ -106,22 +130,28 @@ fn generate_start_state_init(
     }) = map.state_at(start.clone())
     {
         match extend {
-            StateExtend::Model(name) => {
+            StateExtend::Model(name, args) => {
+                let access = format!("model->{}", state_name.local().to_lowercase());
                 printer
-                    .ident(&format!(
-                        "{}_init(&model->{}",
-                        name.unique_camelcase(),
-                        state_name.local().to_lowercase()
-                    ))
+                    .ident(&format!("{}_init(&{}", name.unique_camelcase(), access))
                     .print(append)
                     .print(");")
                     .nl();
+                generate_argument_assignments(printer, map, model_element, &access, &args)?;
             }
             StateExtend::Parallel(steps) => {
                 let local = state_name.local_lowercase_snakecase();
                 let unique_upper = state_name.unique_uppercase_snakecase();
                 let access = format!("model->{}", local);
-                generate_parallel_items_init(printer, &access, &unique_upper, &steps, append);
+                generate_parallel_items_init(
+                    printer,
+                    map,
+                    model_element,
+                    &access,
+                    &unique_upper,
+                    &steps,
+                    append,
+                )?;
                 printer
                     .ident(&format!("model->{}.state = {}_INIT;", local, unique_upper))
                     .nl();
@@ -132,8 +162,9 @@ fn generate_start_state_init(
                 if let Some(first) = steps.first() {
                     let variant = generate_concat_item_init(
                         printer,
-                        &local,
-                        &unique_upper,
+                        map,
+                        model_element,
+                        (&local, &unique_upper),
                         first,
                         0,
                         append,
@@ -238,29 +269,44 @@ fn generate_array_init(
 ///   enum-вариантов вложенных параллелей.
 fn generate_parallel_items_init(
     printer: &mut Printer,
+    map: &CMap,
+    model_element: &Element,
     parent_access: &str,
     parent_unique_upper: &str,
     items: &[StateExtend],
     append: &str,
-) {
+) -> Result<(), Diagnostic> {
     for (idx, item) in items.iter().enumerate() {
         match item {
-            StateExtend::Model(name) => {
+            StateExtend::Model(name, args) => {
+                let access = format!(
+                    "{}.{}{}",
+                    parent_access,
+                    name.local_lowercase_snakecase(),
+                    idx
+                );
                 printer
                     .ident(&format!(
-                        "{}_init(&{}.{}{}{});",
+                        "{}_init(&{}{});",
                         name.unique_camelcase(),
-                        parent_access,
-                        name.local_lowercase_snakecase(),
-                        idx,
+                        access,
                         append,
                     ))
                     .nl();
+                generate_argument_assignments(printer, map, model_element, &access, args)?;
             }
             StateExtend::Parallel(inner) => {
                 let nested_access = format!("{}.parallel{}", parent_access, idx);
                 let nested_upper = format!("{}_PARALLEL{}", parent_unique_upper, idx);
-                generate_parallel_items_init(printer, &nested_access, &nested_upper, inner, append);
+                generate_parallel_items_init(
+                    printer,
+                    map,
+                    model_element,
+                    &nested_access,
+                    &nested_upper,
+                    inner,
+                    append,
+                )?;
                 printer
                     .ident(&format!("{}.state = {}_INIT;", nested_access, nested_upper))
                     .nl();
@@ -268,6 +314,7 @@ fn generate_parallel_items_init(
             _ => {}
         }
     }
+    Ok(())
 }
 
 /// Генерирует вызов `_init` для одного элемента конкатенации и возвращает
@@ -278,24 +325,32 @@ fn generate_parallel_items_init(
 ///   (например, `"EXTEND_COMPLEX_START"`).
 pub(super) fn generate_concat_item_init(
     printer: &mut Printer,
-    state_local: &str,
-    state_unique_upper: &str,
+    map: &CMap,
+    model_element: &Element,
+    // Локальное и UPPER-имя несущего состояния — парой: это одно имя в двух
+    // регистрах, а не два независимых параметра (и лимит аргументов clippy).
+    (state_local, state_unique_upper): (&str, &str),
     item: &StateExtend,
     idx: usize,
     append: &str,
 ) -> Result<String, Diagnostic> {
     match item {
-        StateExtend::Model(name) => {
+        StateExtend::Model(name, args) => {
+            let access = format!(
+                "model->{}_{}{}",
+                state_local,
+                name.local_lowercase_snakecase(),
+                idx
+            );
             printer
                 .ident(&format!(
-                    "{}_init(&model->{}_{}{}{});",
+                    "{}_init(&{}{});",
                     name.unique_camelcase(),
-                    state_local,
-                    name.local_lowercase_snakecase(),
-                    idx,
+                    access,
                     append,
                 ))
                 .nl();
+            generate_argument_assignments(printer, map, model_element, &access, args)?;
             Ok(format!(
                 "{}_{}{}",
                 state_unique_upper,
@@ -306,7 +361,15 @@ pub(super) fn generate_concat_item_init(
         StateExtend::Parallel(inner) => {
             let access = format!("model->{}_parallel{}", state_local, idx);
             let nested_upper = format!("{}_PARALLEL{}", state_unique_upper, idx);
-            generate_parallel_items_init(printer, &access, &nested_upper, inner, append);
+            generate_parallel_items_init(
+                printer,
+                map,
+                model_element,
+                &access,
+                &nested_upper,
+                inner,
+                append,
+            )?;
             printer
                 .ident(&format!("{}.state = {}_INIT;", access, nested_upper))
                 .nl();

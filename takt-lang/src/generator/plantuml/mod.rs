@@ -58,7 +58,7 @@ impl AsGenerator for Generator {
 fn extend_annotation(extend: &StateExtend) -> String {
     match extend {
         StateExtend::None => String::new(),
-        StateExtend::Model(name) => name.local().to_string(),
+        StateExtend::Model(name, _) => name.local().to_string(),
         StateExtend::Concatenation(items) => items
             .iter()
             .map(extend_annotation)

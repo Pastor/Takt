@@ -56,7 +56,7 @@ pub(crate) fn emit_extend(
         }
         // Параллельная композиция (и вырожденный случай одной модели): под-модели
         // работают одновременно, родитель уходит дальше, когда завершились ВСЕ.
-        StateExtend::Parallel(_) | StateExtend::Model(_) => {
+        StateExtend::Parallel(_) | StateExtend::Model(_, _) => {
             let done_exprs = inline_composed(p, map, fsm, extend)?;
             if done_exprs.is_empty() {
                 return Ok(());
@@ -138,7 +138,7 @@ fn inline_composed(
     item: &StateExtend,
 ) -> Result<Vec<String>, Diagnostic> {
     match item {
-        StateExtend::Model(sub) => {
+        StateExtend::Model(sub, _) => {
             p.ident(&format!("// Под-модель '{}' — инлайн её такта.", sub))
                 .nl();
             emit_model_body(p, map, fsm, sub)?;

@@ -74,7 +74,7 @@ fn generate_parallel_items_tick(
     let mut done_exprs = Vec::new();
     for (idx, item) in items.iter().enumerate() {
         match item {
-            StateExtend::Model(name) => {
+            StateExtend::Model(name, _) => {
                 let field = format!(
                     "{}.{}{}",
                     parent_access,
@@ -270,7 +270,7 @@ fn generate_concat_tick(
     for (idx, item) in items.iter().enumerate() {
         // Вычисляем имя варианта enum для текущего элемента
         let current_variant = match item {
-            StateExtend::Model(name) => format!(
+            StateExtend::Model(name, _) => format!(
                 "{}_{}{}",
                 state_unique_upper,
                 name.local_lowercase_snakecase().to_uppercase(),
@@ -302,7 +302,7 @@ fn generate_concat_tick(
         let is_last = idx + 1 >= items.len();
 
         match item {
-            StateExtend::Model(name) => {
+            StateExtend::Model(name, _) => {
                 let field = format!(
                     "model->{}_{}{}",
                     state_local,
@@ -333,8 +333,9 @@ fn generate_concat_tick(
                 } else {
                     let next_variant = generate_concat_item_init(
                         printer,
-                        state_local,
-                        state_unique_upper,
+                        map,
+                        model,
+                        (state_local, state_unique_upper),
                         &items[idx + 1],
                         idx + 1,
                         append,
@@ -368,8 +369,9 @@ fn generate_concat_tick(
                     } else {
                         let next_variant = generate_concat_item_init(
                             printer,
-                            state_local,
-                            state_unique_upper,
+                            map,
+                            model,
+                            (state_local, state_unique_upper),
                             &items[idx + 1],
                             idx + 1,
                             append,
@@ -531,7 +533,7 @@ fn generate_model_tick(
                 // `match` — у неё не было ветки `None`, и такое состояние молча
                 // не порождало НИЧЕГО, даже комментария — тише заглушки №1.
                 match extend {
-                    StateExtend::Model(name) => {
+                    StateExtend::Model(name, _) => {
                         printer
                             .ident(&format!(
                                 "{}_tick(&model->{}",

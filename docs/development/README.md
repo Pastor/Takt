@@ -303,3 +303,4 @@
 | 0185-01 | 0185 | Лексика, грамматика и АСД объявления parameter | [0185-01-model-parameters.md](0185-01-model-parameters.md) |
 | 0185-02 | 0185 | Аргументы инстанцирования и их диагностики | [0185-02-model-parameters.md](0185-02-model-parameters.md) |
 | 0185-03 | 0185 | Константный вычислитель и константные функции | [0185-03-model-parameters.md](0185-03-model-parameters.md) |
+| 0185-04 | 0185 | Режим assign: применение аргументов пятью потребителями и флаг CLI | [0185-04-model-parameters.md](0185-04-model-parameters.md) |

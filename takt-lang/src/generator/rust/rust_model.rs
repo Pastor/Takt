@@ -41,6 +41,13 @@ pub(crate) struct Instance {
     pub(crate) ty: String,
     /// Уникальное имя модели в карте — для поиска её общих переменных.
     pub(crate) unique: String,
+    /// Аргументы инстанцирования этого экземпляра (фича 0185, режим `assign`).
+    ///
+    /// Применяются **дважды** — в `new()` и в `init()`: цель `c` присваивает их
+    /// после `_init`, а у `rust` конструктор и сброс — разные функции, и
+    /// расхождение между ними дало бы разные значения у одного экземпляра
+    /// в зависимости от того, как его создали.
+    pub(crate) args: Vec<crate::semantic::extend::ParameterArgument>,
 }
 
 /// Таблица состояний модели: имя варианта `enum` для каждого состояния.
@@ -185,18 +192,19 @@ pub(crate) fn collect_instances(
 ) -> Result<(), Diagnostic> {
     match extend {
         StateExtend::None => Ok(()),
-        StateExtend::Model(name) => {
+        StateExtend::Model(name, args) => {
             out.push(Instance {
                 field: rust_value_name(prefix, Location::Codegen)?,
                 ty: name.unique_camelcase(),
                 unique: name.unique().to_string(),
+                args: args.clone(),
             });
             Ok(())
         }
         StateExtend::Parallel(steps) | StateExtend::Concatenation(steps) => {
             for (idx, step) in steps.iter().enumerate() {
                 let sub = match step {
-                    StateExtend::Model(name) => {
+                    StateExtend::Model(name, _) => {
                         format!("{}_{}{}", prefix, name.local_lowercase_snakecase(), idx)
                     }
                     _ => format!("{}_group{}", prefix, idx),
@@ -238,7 +246,7 @@ pub(crate) fn concat_steps(
     let mut out = Vec::new();
     for (idx, step) in steps.iter().enumerate() {
         let (variant, sub) = match step {
-            StateExtend::Model(name) => (
+            StateExtend::Model(name, _) => (
                 format!(
                     "{}{}",
                     rust_type_name(name.local(), Location::Codegen)?,
@@ -678,8 +686,23 @@ fn emit_new(
     }
     for (_, list) in instances {
         for instance in list {
-            p.ident(&format!("{}: {}::new(),", instance.field, instance.ty))
+            let assignments = argument_assignments(map, instance, &scope)?;
+            if assignments.is_empty() {
+                p.ident(&format!("{}: {}::new(),", instance.field, instance.ty))
+                    .nl();
+                continue;
+            }
+            // Аргументы применяются и здесь: `new()` и `init()` — разные входы,
+            // и разойдясь, они дали бы одному экземпляру разные значения в
+            // зависимости от того, как его создали.
+            p.ident(&format!("{}: {{", instance.field)).up().nl();
+            p.ident(&format!("let mut instance = {}::new();", instance.ty))
                 .nl();
+            for assignment in assignments {
+                p.ident(&format!("instance.{}", assignment)).nl();
+            }
+            p.ident("instance").nl();
+            p.down().ident("},").nl();
         }
     }
     if is_root && uses_hal {
@@ -818,11 +841,57 @@ fn emit_init(
     for (_, list) in instances {
         for instance in list {
             p.ident(&format!("self.{}.init();", instance.field)).nl();
+            // Настройка места инстанцирования — после `init()` экземпляра: та же
+            // последовательность, что у цели `c` (присваивание после `_init`).
+            for assignment in argument_assignments(map, instance, &scope)? {
+                p.ident(&format!("self.{}.{}", instance.field, assignment))
+                    .nl();
+            }
         }
     }
     p.down();
     p.ident("}").nl().nl();
     Ok(())
+}
+
+/// Присваивания аргументов инстанцирования полям экземпляра (фича 0185).
+///
+/// Значение приводится к типу параметра тем же `coerce_to`, что и инициализатор
+/// объявления: печатать «как есть» значило бы завести вторую трактовку типа.
+fn argument_assignments(
+    map: &RustMap,
+    instance: &Instance,
+    scope: &Scope,
+) -> Result<Vec<String>, Diagnostic> {
+    let mut out = Vec::new();
+    if instance.args.is_empty() {
+        return Ok(out);
+    }
+    // Тип параметра берётся у целевой модели: значение приводится к нему, а не
+    // печатается «как есть» — иначе у аргумента завелась бы вторая трактовка типа.
+    let target = map.model_node_by_unique(&instance.unique);
+    for arg in &instance.args {
+        let ty = target
+            .as_ref()
+            .and_then(|m| m.borrow().variables.get(&arg.name).map(|v| v.ty().clone()))
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    arg.loc,
+                    format!(
+                        "Параметр '{}' модели '{}' не найден при печати аргумента",
+                        arg.name, instance.unique
+                    ),
+                )
+                .with_code("RS-024")
+            })?;
+        let value = coerce_to(&arg.value, &ty, scope)?;
+        out.push(format!(
+            "{} = {};",
+            rust_value_name(&arg.name, Location::Codegen)?,
+            value
+        ));
+    }
+    Ok(out)
 }
 
 /// Печатает `reset` — паритет с целью `c`, где `_reset` вызывает `_init`.

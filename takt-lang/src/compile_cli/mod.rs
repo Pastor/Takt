@@ -16,6 +16,18 @@ use std::process;
 #[cfg(test)]
 mod tests;
 
+/// Режим применения параметров модели (`--parameters=`, фича 0185, ADR Option E).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ParametersMode {
+    /// Модель одна; значения аргументов присваиваются полям экземпляра после
+    /// его инициализации. Умолчание — заказчик выбрал простоту (ADR 0185).
+    #[default]
+    Assign,
+    /// Копия модели на каждый различный набор значений: свои `_init` в `c`,
+    /// свои `FUNCTION_BLOCK` в `st`, вывод константности (задача 0185-05).
+    Specialize,
+}
+
 /// Параметры компиляции, разобранные из аргументов командной строки.
 #[derive(Debug, PartialEq)]
 pub struct CompileOptions {
@@ -68,6 +80,15 @@ pub struct CompileOptions {
     /// Реализовать `float` целочисленным Q-путём в `c`/`rust`/`st` (embedded) —
     /// флаг `--float-embedded` (фича 0096). Действует только с `--float-as-q`.
     pub float_embedded: bool,
+    /// Режим применения параметров модели — флаг `--parameters=` (фича 0185).
+    ///
+    /// Умолчание [`ParametersMode::Assign`]: модель одна, значения аргументов
+    /// присваиваются полям экземпляра после его инициализации.
+    /// `--parameters=specialize` — копия модели на каждый различный набор
+    /// значений (задача 0185-05; до неё — честный отказ, не молчание).
+    /// Неизвестное значение — ошибка CLI с перечислением допустимых, а не
+    /// молчаливое умолчание (критерий A11 анализа 0185).
+    pub parameters: ParametersMode,
     /// Частота такта устройства в герцах — флаг `--tick-hz` (фича 0134).
     ///
     /// Включает профиль «такты»: длительности пересчитываются в число тактов.
@@ -114,6 +135,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     let mut address_map: Option<String> = None;
     let mut float_width = crate::FloatWidth::default();
     let mut float_as_q: Option<(u8, u8)> = None;
+    let mut parameters = ParametersMode::default();
     let mut float_embedded = false;
     let mut tick_hz: Option<u64> = None;
 
@@ -202,6 +224,16 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                 float_as_q = Some(parse_float_as_q(&a["--float-as-q=".len()..])?);
             }
             "--float-embedded" => float_embedded = true,
+            // Фича 0185: режим применения параметров модели. Только слитная
+            // форма со значением: флаг без значения — ошибка, не умолчание.
+            a if a.starts_with("--parameters=") => {
+                parameters = parse_parameters_mode(&a["--parameters=".len()..])?;
+            }
+            "--parameters" => {
+                return Err(
+                    "--parameters требует значение: --parameters=assign|specialize".to_string(),
+                );
+            }
             // Фича 0134: частота такта устройства. Обе формы, как у соседей.
             "--tick-hz" => {
                 i += 1;
@@ -248,8 +280,25 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
         float_width,
         float_as_q,
         float_embedded,
+        parameters,
         tick_hz,
     })
+}
+
+/// Разбирает значение флага `--parameters=` (фича 0185).
+///
+/// Неизвестное значение — ошибка с перечислением допустимых, а не молчаливое
+/// умолчание: `--parameters=specialise` (опечатка) обязан сказать, что такого
+/// режима нет, а не собрать код другим режимом.
+fn parse_parameters_mode(value: &str) -> Result<ParametersMode, String> {
+    match value {
+        "assign" => Ok(ParametersMode::Assign),
+        "specialize" => Ok(ParametersMode::Specialize),
+        other => Err(format!(
+            "--parameters={} — неизвестный режим; допустимы: assign (умолчание), specialize",
+            other
+        )),
+    }
 }
 
 /// Разбирает значение флага `--float-width` (фича 0029).
@@ -404,6 +453,17 @@ pub fn run_compile(args: &[String]) -> i32 {
             return 1;
         }
     };
+
+    // Режим `specialize` (фича 0185) реализует задача 0185-05: до неё — честный
+    // отказ, а не молчаливая работа режимом `assign` (класс дефекта 0184 —
+    // настройка применена не тем способом, который просил пользователь).
+    if options.parameters == ParametersMode::Specialize {
+        eprintln!(
+            "Ошибка: режим --parameters=specialize ещё не реализован (задача 0185-05); \
+             доступен режим по умолчанию --parameters=assign"
+        );
+        return 1;
+    }
 
     // Читаем исходный файл
     let source = match fs::read_to_string(&options.input_file) {

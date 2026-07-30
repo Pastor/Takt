@@ -55,12 +55,74 @@ const INIT_STATE: usize = 0;
 /// Аналог поля `StackerCommandReceiver command_receiver0;` в структуре цели `c`
 /// (Ф6). Числовой суффикс обязателен: одна и та же модель может входить в
 /// композицию **несколько раз** (`elevator.takt:198` включает `Engine` пять раз).
+/// Модель композиции вместе с аргументами её инстанцирования (фича 0185).
+pub(crate) type ModelRef = (Name, Vec<crate::semantic::extend::ParameterArgument>);
+
 #[derive(Debug)]
 pub(crate) struct Instance {
     /// Имя переменной-экземпляра.
     pub name: String,
     /// Имя типа — `FUNCTION_BLOCK` под-модели.
     pub fb_type: String,
+    /// Готовый инициализатор экземпляра из аргументов инстанцирования
+    /// (фича 0185, режим `assign`) — `(step := 5)` либо `None`.
+    ///
+    /// В ST настройка задаётся **инициализатором экземпляра** —
+    /// `tuner0 : Tuner := (step := 5);`. Это ближе всего к цели `c`, где
+    /// присваивание идёт один раз в `_init`: присваивать в теле означало бы
+    /// перетирать значение каждый скан, ломая параметр, который модель меняет
+    /// сама. Печатается в [`emit_group`] — единственном месте, где рядом и имя
+    /// модели, и её аргументы.
+    pub init: Option<String>,
+}
+
+/// Инициализатор экземпляра FB из аргументов инстанцирования (фича 0185).
+///
+/// Форма `(step := 5, dwell := 2500)` — инициализатор структуры IEC; проба
+/// MatIEC подтвердила, что `iec2c` её принимает. Значение печатается по **типу
+/// параметра** целевой модели (`literal_init`, урок 0066: литерал в ST
+/// типозависим — `bit` требует `TRUE`/`FALSE`, `duration` — миллисекунды).
+fn instance_initializer(
+    map: &StMap,
+    model_name: &Name,
+    args: &[crate::semantic::extend::ParameterArgument],
+) -> Result<Option<String>, Diagnostic> {
+    if args.is_empty() {
+        return Ok(None);
+    }
+    let target = map.raw_model_at(model_name.clone())?;
+    let target = target.borrow();
+    let mut parts = Vec::with_capacity(args.len());
+    for arg in args {
+        let ty = target
+            .variables
+            .get(&arg.name)
+            .map(|v| v.ty().clone())
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    arg.loc,
+                    format!(
+                        "Параметр '{}' модели '{}' не найден при печати инициализатора",
+                        arg.name,
+                        model_name.local()
+                    ),
+                )
+                .with_code("ST-017")
+            })?;
+        let value =
+            crate::generator::st::st_decl::literal_init(&arg.value, &ty).ok_or_else(|| {
+                Diagnostic::error(
+                    arg.loc,
+                    format!(
+                        "Значение параметра '{}' не печатается инициализатором ST",
+                        arg.name
+                    ),
+                )
+                .with_code("ST-017")
+            })?;
+        parts.push(format!("{} := {}", arg.name, value));
+    }
+    Ok(Some(format!("({})", parts.join(", "))))
 }
 
 /// Результат печати тела: побочные эффекты операторов плюс экземпляры под-FB.
@@ -246,6 +308,7 @@ fn emit_state(
             out.instances.push(Instance {
                 name: ton.clone(),
                 fb_type: st_time::TON_TYPE.to_string(),
+                init: None,
             });
             p.ident(&format!("IF {ton}.Q THEN")).nl();
             p.up();
@@ -318,6 +381,7 @@ fn emit_state(
                 out.instances.push(Instance {
                     name: timer.clone(),
                     fb_type: st_time::TON_TYPE.to_string(),
+                    init: None,
                 });
                 edge_timer[i] = Some(timer);
             }
@@ -450,7 +514,7 @@ fn emit_composition(
     collect_models(extend, &mut group)?;
     // Переменные корня под-FB видит через `VAR_IN_OUT`: в ST указателей нет, а
     // `main->lift_request` цели `c` выразить нечем (О1-в, проба П7).
-    let done_terms = [emit_group(p, map, &group, "", out)];
+    let done_terms = [emit_group(p, map, &group, "", out)?];
 
     let target = if next.unique().is_empty() {
         table.end
@@ -473,12 +537,12 @@ fn emit_composition(
 fn emit_group(
     p: &mut Printer,
     map: &StMap,
-    group: &[Name],
+    group: &[ModelRef],
     prefix: &str,
     out: &mut BodyOutput,
-) -> String {
+) -> Result<String, Diagnostic> {
     let mut done_terms = Vec::new();
-    for model_name in group {
+    for (model_name, model_args) in group {
         // Числовой суффикс — по образцу цели `c` (`start_a0`, `start_b1`): одна и
         // та же модель может входить в композицию несколько раз.
         let index = out.instances.len();
@@ -491,6 +555,7 @@ fn emit_group(
         out.instances.push(Instance {
             name: inst.clone(),
             fb_type: model_name.unique_camelcase(),
+            init: instance_initializer(map, model_name, model_args)?,
         });
         let args: Vec<String> = map
             .shared_variables(model_name)
@@ -500,7 +565,7 @@ fn emit_group(
         p.ident(&format!("{}({});", inst, args.join(", "))).nl();
         done_terms.push(format!("{}.is_done", inst));
     }
-    done_terms.join(" AND ")
+    Ok(done_terms.join(" AND "))
 }
 
 /// Печатает последовательную композицию (`M1 + M2`) как вложенный `CASE` по
@@ -541,7 +606,7 @@ fn emit_concatenation(
         collect_models(step, &mut group)?;
         p.ident(&format!("{}:", i)).nl();
         p.up();
-        let done = emit_group(p, map, &group, &prefix, out);
+        let done = emit_group(p, map, &group, &prefix, out)?;
         p.ident(&format!("IF {} THEN", done)).nl();
         p.up();
         p.ident(&format!("{} := {};", counter, i + 1)).nl();
@@ -572,11 +637,14 @@ fn emit_concatenation(
 /// `ST-011` — `Concatenation` (`M1 + M2`): последовательная композиция требует
 /// собственного счётчика шагов (в цели `c` — вложенный `enum state`) и
 /// реализуется частью 3.
-fn collect_models(extend: &StateExtend, out: &mut Vec<Name>) -> Result<(), Diagnostic> {
+fn collect_models(extend: &StateExtend, out: &mut Vec<ModelRef>) -> Result<(), Diagnostic> {
     match extend {
         StateExtend::None => Ok(()),
-        StateExtend::Model(name) => {
-            out.push(name.clone());
+        // Вместе с именем несём аргументы инстанцирования (фича 0185): они
+        // свойство места, а не модели, и потерять их здесь значило бы молча
+        // выбросить настройку экземпляра.
+        StateExtend::Model(name, args) => {
+            out.push((name.clone(), args.clone()));
             Ok(())
         }
         StateExtend::Parallel(steps) => {

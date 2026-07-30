@@ -2,13 +2,12 @@
 //!
 //! Проверяется **разбор и структурные диагностики**: форма аргумента,
 //! существование параметра, отсутствие повторов, все позиции инстанцирования.
-//! Вычисление значения — задача 0185-03, применение — 0185-04/05.
+//! Вычисление значения — задача 0185-03 (`const_eval_tests`), применение —
+//! 0185-04 (`model_parameter_apply_tests` и сверки в `takt-sim`).
 //!
-//! ⚠️ Пока значения не применяются, вход с аргументами отвергается `SE-082`:
-//! иначе `Tuner(limit := 200)` компилировался бы **молча** со значением по
-//! умолчанию (проба показала `model->limit = 100`). Тест
-//! `arguments_are_rejected_until_targets_apply_them` фиксирует это состояние —
-//! задача 0185-04 обязана снять и отказ, и его.
+//! История: до 0185-04 вход с аргументами отвергался временным сторожем
+//! `SE-082` — иначе `Tuner(limit := 200)` компилировался бы молча со значением
+//! по умолчанию. Сторож снят вместе с применением значений.
 
 use takt_lang::parse;
 use takt_lang::semantic::tree::construct_model;
@@ -114,8 +113,7 @@ fn unsupported_implementation_form_is_se081() {
 // ─── Все позиции инстанцирования (R2) ────────────────────────────────────────
 
 /// Разбор доходит до дерева во **всех** позициях: корень, композиции `+`/`|`,
-/// реализация состояния. Свидетельство — `SE-082` (сторож ниже): он выдаётся
-/// только тогда, когда аргументы **уже разобраны** и лежат в реализации.
+/// реализация состояния, скобки — модель строится без ошибок в каждой.
 #[test]
 fn arguments_are_parsed_in_every_instantiation_position() {
     let cases = [
@@ -141,11 +139,10 @@ fn arguments_are_parsed_in_every_instantiation_position() {
         ),
     ];
     for (what, src) in cases {
-        assert_eq!(
-            error_code(&src),
-            "SE-082",
-            "аргументы обязаны доезжать до дерева в позиции «{what}»"
-        );
+        let (tree, _) = parse(&src, 0).expect("разбор");
+        construct_model(&tree, None, &[]).unwrap_or_else(|e| {
+            panic!("позиция «{what}»: модель обязана строиться: {}", e.message)
+        });
     }
 }
 
@@ -157,23 +154,28 @@ fn call_without_arguments_still_builds() {
     construct_model(&tree, None, &[]).expect("модель без аргументов обязана строиться");
 }
 
-// ─── Временный сторож (снимает 0185-04) ──────────────────────────────────────
+// ─── Значение вычислено и лежит в дереве ─────────────────────────────────────
 
-/// Пока ни одна цель не применяет значения, вход с аргументами **отвергается**.
-///
-/// Это не «недоделка молчком», а её противоположность: без отказа
-/// `Tuner(limit := 200)` собрался бы со значением 100 при рапорте об успехе.
-/// Задача 0185-04 снимает и отказ, и этот тест — вместо него встанет проверка
-/// **применённого** значения.
+/// Аргумент в дереве — уже **вычисленный литерал** (задача 0185-03), а не сырое
+/// выражение: за границей семантики выражения аргумента не существует.
 #[test]
-fn arguments_are_rejected_until_targets_apply_them() {
-    let src = format!("{TUNER}start Main = Tuner(limit := 200);\n");
+fn argument_value_is_folded_to_a_literal() {
+    let src = format!("{TUNER}const BASE: u8 := 60;\nstart Main = Tuner(limit := BASE + 7);\n");
     let (tree, _) = parse(&src, 0).expect("разбор");
-    let err = construct_model(&tree, None, &[]).expect_err("ожидался отказ SE-082");
-    assert_eq!(err.code.as_deref(), Some("SE-082"));
-    assert!(
-        err.message.contains("не применяются"),
-        "сообщение обязано объяснять причину отказа, получено: {}",
-        err.message
+    let model = construct_model(&tree, None, &[]).expect("модель строится");
+    let takt_lang::semantic::StateNode::Implement { implements, .. } =
+        model.borrow().states["Main"].clone()
+    else {
+        panic!("корень обязан быть состоянием-реализацией");
+    };
+    let takt_lang::semantic::extend::Extend::Model(_, _, args) = implements else {
+        panic!("реализация обязана быть инстанцированием модели");
+    };
+    assert_eq!(args.len(), 1);
+    assert_eq!(args[0].name, "limit");
+    assert_eq!(
+        args[0].value,
+        takt_lang::semantic::ExpressionNode::Number(67),
+        "значение обязано быть вычислено: BASE + 7 = 67"
     );
 }

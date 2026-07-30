@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use takt_lang::diagnostics::{Diagnostic, Location};
-use takt_lang::semantic::extend::Extend;
+use takt_lang::semantic::extend::{Extend, ParameterArgument};
 use takt_lang::semantic::type_node::TypeNode;
 use takt_lang::semantic::{
     ConditionNode, ExpressionNode, ModelNode, NamedCodeBlockDefinitionNode, ReferenceNode,
@@ -246,12 +246,14 @@ impl crate::eval::StructRegistry for ModelStructs<'_> {
 
 /// Строит дерево [`Unit`] из семантической модели.
 pub fn build(model: Rc<RefCell<ModelNode>>) -> Result<Unit, Diagnostic> {
-    build_impl(model, None)
+    build_impl(model, None, &[], Location::Builtin)
 }
 
 fn build_impl(
     model: Rc<RefCell<ModelNode>>,
     shared_parent: Option<Rc<RefCell<dyn Context>>>,
+    args: &[ParameterArgument],
+    call_loc: Location,
 ) -> Result<Unit, Diagnostic> {
     let has_states = model.borrow().has_states();
     if has_states {
@@ -282,13 +284,43 @@ fn build_impl(
             }
         };
         if let Some(implements) = single_compound {
+            reject_unsupported_arguments(&model, args, call_loc)?;
             build_extend(&implements, shared_parent)
         } else {
-            build_node(model, shared_parent)
+            build_node(model, shared_parent, args)
         }
     } else {
+        // Модель без своих состояний (`model M = A | B`): своего контекста у неё
+        // не возникает — значения записывать некуда. Отказ вместо молчания.
+        reject_unsupported_arguments(&model, args, call_loc)?;
         let extends = model.borrow().implements.clone();
         build_extend(&extends, shared_parent)
+    }
+}
+
+/// Отказывает, если аргументы заданы модели, у которой нет своего контекста.
+///
+/// Такая модель (композиция без собственных состояний) значений параметров
+/// хранить негде: их некуда записать, и молча потерять настройку — тот класс
+/// дефекта, ради которого фича 0185 держит сторожа `SE-082`.
+fn reject_unsupported_arguments(
+    model: &Rc<RefCell<ModelNode>>,
+    args: &[ParameterArgument],
+    call_loc: Location,
+) -> Result<(), Diagnostic> {
+    match args.first() {
+        None => Ok(()),
+        Some(first) => Err(Diagnostic::error(
+            first.loc,
+            format!(
+                "Модель '{}' — композиция без собственных состояний: задать её \
+                 параметр '{}' при инстанцировании нельзя (значение хранить негде)",
+                model.borrow().name.clone().unwrap_or_default(),
+                first.name
+            ),
+        )
+        .with_code("SIM-034")
+        .with_note(call_loc, "инстанцирование здесь".to_string())),
     }
 }
 
@@ -297,6 +329,7 @@ fn build_impl(
 fn build_node(
     model: Rc<RefCell<ModelNode>>,
     shared_parent: Option<Rc<RefCell<dyn Context>>>,
+    args: &[ParameterArgument],
 ) -> Result<Unit, Diagnostic> {
     let start_name = {
         let borrowed = model.borrow();
@@ -338,6 +371,28 @@ fn build_node(
         } else {
             ModelNodeContext::new(model.clone())
         }));
+
+    // Значения параметров этого экземпляра (фича 0185, режим `assign`):
+    // записываются в контекст **сразу после его создания** — до первого чтения
+    // и до первого такта. Ровно то же место, что у цели `c`, где присваивание
+    // идёт после вызова `_init`.
+    for arg in args {
+        let value = eval_expr(&arg.value).ok_or_else(|| {
+            Diagnostic::error(
+                arg.loc,
+                format!("Значение параметра '{}' не вычислено", arg.name),
+            )
+            .with_code("SIM-035")
+        })?;
+        let coerced = {
+            let borrowed = model.borrow();
+            match borrowed.variables.get(&arg.name) {
+                Some(var) => coerce_initial(value, var, &borrowed),
+                None => value,
+            }
+        };
+        ctx_rc.borrow_mut().set_value(&arg.name, coerced);
+    }
 
     let mut state_transitions: HashMap<String, Vec<(String, Predicate)>> = HashMap::new();
     let mut state_executions: HashMap<String, Executions> = HashMap::new();
@@ -489,7 +544,9 @@ fn build_extend(
 ) -> Result<Unit, Diagnostic> {
     match extend {
         Extend::None | Extend::Unresolved(_) => Ok(Unit::default()),
-        Extend::Model(rc, _, _) => build_impl(Rc::clone(rc), shared_parent),
+        // Аргументы инстанцирования (фича 0185): значения параметров этого
+        // экземпляра. Пустой список — вызов без аргументов, поведение прежнее.
+        Extend::Model(rc, loc, args) => build_impl(Rc::clone(rc), shared_parent, args, *loc),
         Extend::Parentless(inner) => build_extend(inner, shared_parent),
         Extend::Concatenation(items) => {
             // Шаги `+` делят общий родительский контекст ровно так же, как ветви

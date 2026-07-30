@@ -366,7 +366,7 @@ pub(super) fn map_typed_variable(
 pub fn collect_extend_model_deps(extend: &StateExtend, deps: &mut Vec<String>) {
     match extend {
         StateExtend::None => {}
-        StateExtend::Model(name) => deps.push(name.unique().to_string()),
+        StateExtend::Model(name, _) => deps.push(name.unique().to_string()),
         StateExtend::Concatenation(items) | StateExtend::Parallel(items) => {
             for item in items {
                 collect_extend_model_deps(item, deps);

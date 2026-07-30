@@ -37,7 +37,7 @@ pub(crate) struct StMap {
 fn collect_extend_models(extend: &StateExtend, out: &mut Vec<String>) {
     match extend {
         StateExtend::None => {}
-        StateExtend::Model(name) => out.push(name.unique().to_string()),
+        StateExtend::Model(name, _) => out.push(name.unique().to_string()),
         StateExtend::Concatenation(steps) | StateExtend::Parallel(steps) => {
             steps.iter().for_each(|s| collect_extend_models(s, out))
         }
