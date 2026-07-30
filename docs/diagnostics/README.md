@@ -214,7 +214,14 @@
 | `SE-072` | Выдержка `after` не сводится к константной длительности | `takt-lang/src/semantic/condition/after_const.rs` |
 | `SE-073` | Вычисляемая выдержка требует частоты, кратной 1000 Гц (иначе множитель `hertz/1000` не цел) | `takt-lang/src/semantic/duration.rs` |
 | `SE-074` | Импортированная модель использует объявления подключаемого файла, не импортированные вместе с ней | `takt-lang/src/semantic/import_adopt.rs` |
-| `SE-075` | Параметр объявлен вне модели: на верхнем уровне файла либо внутри блока | `takt-lang/src/semantic/tree.rs`, `takt-lang/src/semantic/statement.rs` |
+| `SE-075` | Параметр объявлен вне модели: на верхнем уровне файла либо внутри блока | `takt-lang/src/semantic/declaration.rs` |
+| `SE-076` | Аргумент инстанцирования задан не формой `имя := значение` | `takt-lang/src/semantic/extend_args.rs` |
+| `SE-077` | Инстанцируемая модель не объявляет параметров вовсе | `takt-lang/src/semantic/extend_args.rs` |
+| `SE-078` | У модели нет параметра с таким именем (объявлены другие) | `takt-lang/src/semantic/extend_args.rs` |
+| `SE-079` | Имя в модели объявлено, но не как `parameter` | `takt-lang/src/semantic/extend_args.rs` |
+| `SE-080` | Параметр задан в одном вызове дважды | `takt-lang/src/semantic/extend_args.rs` |
+| `SE-081` | Форма выражения не может быть реализацией модели | `takt-lang/src/semantic/extend.rs` |
+| `SE-082` | Значения аргументов инстанцирования целями пока не применяются (временный сторож фичи 0185, снимает задача 0185-04) | `takt-lang/src/semantic/validate/instantiation.rs` |
 
 ### SIM — симулятор
 

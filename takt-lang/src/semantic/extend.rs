@@ -6,6 +6,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast;
+use crate::semantic::extend_args;
 use crate::semantic::{
     ConditionNode, ExpressionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind,
 };
@@ -37,7 +38,12 @@ pub enum Extend {
     ///
     /// У синтетической модели, собранной [`compact_implement`] для `M1 + M2`,
     /// исходной позиции нет: она несёт [`Location::Codegen`].
-    Model(Rc<RefCell<ModelNode>>, Location),
+    ///
+    /// Третье поле — **аргументы инстанцирования** `M(Y := 200)` (фича 0185).
+    /// Они привязаны к месту использования, а не к модели: одна и та же модель
+    /// в двух местах настраивается по-разному. Пустой вектор — вызов без
+    /// аргументов, поведение прежнее.
+    Model(Rc<RefCell<ModelNode>>, Location, Vec<ParameterArgument>),
     /// Скобочная группировка: `(реализация)`.
     Parentless(Box<Extend>),
 
@@ -45,6 +51,21 @@ pub enum Extend {
     Concatenation(Vec<Box<Extend>>),
     /// Параллельная компоновка: `левое | правое | ...`.
     Parallel(Vec<Box<Extend>>),
+}
+
+/// Аргумент инстанцирования модели: `M(ИМЯ := ВЫРАЖЕНИЕ)` (фича 0185).
+///
+/// Значение хранится **сырым АСД**: вычисляет его константный вычислитель
+/// (задача 0185-03), а применяет — потребитель дерева (0185-04/05). Здесь —
+/// только привязка «имя параметра ↔ выражение ↔ позиция».
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParameterArgument {
+    /// Имя параметра целевой модели.
+    pub name: String,
+    /// Позиция **имени** в аргументе — для диагностик о самом аргументе.
+    pub loc: Location,
+    /// Заданное значение (сырое выражение АСД).
+    pub value: ast::Expression,
 }
 
 /// Равенство реализаций **игнорирует позицию использования**.
@@ -64,7 +85,11 @@ impl PartialEq for Extend {
             (Extend::None, Extend::None) => true,
             (Extend::Unresolved(a), Extend::Unresolved(b)) => a == b,
             // Позиция (use-site) намеренно игнорируется — см. док выше.
-            (Extend::Model(a, _), Extend::Model(b, _)) => a == b,
+            // ⚠️ А вот аргументы инстанцирования (фича 0185) игнорировать
+            // НЕЛЬЗЯ: `M(Y := 100)` и `M(Y := 200)` ссылаются на одну модель,
+            // но это разные реализации. Приравняв их, мы получили бы один
+            // экземпляр там, где автор написал два разных.
+            (Extend::Model(a, _, aa), Extend::Model(b, _, ba)) => a == b && aa == ba,
             (Extend::Parentless(a), Extend::Parentless(b)) => a == b,
             (Extend::Concatenation(a), Extend::Concatenation(b)) => a == b,
             (Extend::Parallel(a), Extend::Parallel(b)) => a == b,
@@ -79,7 +104,7 @@ impl Extend {
     /// Возвращает `true`, если вариант — конкретная ссылка на модель.
     #[inline]
     pub fn is_model(&self) -> bool {
-        matches!(self, Extend::Model(_, _))
+        matches!(self, Extend::Model(_, _, _))
     }
     /// Возвращает `true`, если вариант — скобочная группировка.
     #[inline]
@@ -101,7 +126,7 @@ impl Extend {
         match self {
             Extend::None => "None".to_string(),
             Extend::Unresolved(_) => "Unresolved".to_string(),
-            Extend::Model(model, _) => model.clone().borrow().name().to_string(),
+            Extend::Model(model, _, _) => model.clone().borrow().name().to_string(),
             Extend::Parentless(implement) => implement.name(),
             Extend::Concatenation(_) => "Concatenation".to_string(),
             Extend::Parallel(_) => "Parallel".to_string(),
@@ -114,7 +139,7 @@ impl Display for Extend {
         match self {
             Extend::None => write!(f, "None"),
             Extend::Unresolved(_) => write!(f, "Unresolved"),
-            Extend::Model(model, _) => {
+            Extend::Model(model, _, _) => {
                 write!(f, "{}", model.borrow().name.clone().unwrap_or_default())
             }
             Extend::Parentless(extends) => write!(f, "({})", extends),
@@ -194,7 +219,7 @@ pub fn compact_implement(
                 seq_model.borrow_mut().states.insert(step_name, state);
             }
             // Модель придумал компилятор: исходной позиции у неё нет.
-            Extend::Model(seq_model, Location::Codegen)
+            Extend::Model(seq_model, Location::Codegen, Vec::new())
         }
         // Скобочная группировка — делегируем внутрь.
         Extend::Parentless(inner) => compact_implement(*inner, parent, state_name),
@@ -252,7 +277,22 @@ fn unroll_ast_extend(
                         .with_code("SE-001")
                 })?;
             // Позиция имени — то, ради чего разворот идёт по АСД.
-            Ok(Extend::Model(found, id.loc))
+            Ok(Extend::Model(found, id.loc, Vec::new()))
+        }
+        // Инстанцирование с аргументами: `M(Y := 200)` (фича 0185).
+        // Грамматика видит здесь вызов функции — моделью его делает позиция
+        // (выражение реализации), поэтому имя ищется среди моделей.
+        ast::Expression::Function(call_loc, id, args) => {
+            let found = model
+                .as_ref()
+                .borrow()
+                .search_model(&id.name)
+                .ok_or_else(|| {
+                    Diagnostic::error(id.loc, format!("Модель '{}' не найдена", id.name))
+                        .with_code("SE-001")
+                })?;
+            let arguments = extend_args::parse_arguments(&found, &id.name, &args, call_loc)?;
+            Ok(Extend::Model(found, id.loc, arguments))
         }
         ast::Expression::Parenthesis(_, inner) => unroll_ast_extend(*inner, model),
         ast::Expression::Add(_, left, right) => {
@@ -265,11 +305,28 @@ fn unroll_ast_extend(
             let right = unroll_ast_extend(*right, model)?;
             Ok(parallelize(left, right))
         }
-        other => Err(
-            format!("Выражение AST расширения не поддерживается: {:?}", other)
-                .as_str()
-                .into(),
-        ),
+        // Прочие формы реализацией быть не могут. Диагностика **с кодом и
+        // позицией**: прежде здесь печатался `Debug` узла АСД без того и
+        // другого — сообщение о внутреннем устройстве вместо ошибки автора.
+        other => Err(Diagnostic::error(
+            arg_loc(&other).unwrap_or(Location::Implicit),
+            "Реализация модели задаётся именем модели, композицией '+'/'|' или \
+             инстанцированием 'M(параметр := значение)'"
+                .to_string(),
+        )
+        .with_code("SE-081")),
+    }
+}
+
+/// Позиция выражения, если она у варианта есть (для диагностики выше).
+fn arg_loc(expr: &ast::Expression) -> Option<Location> {
+    match expr {
+        ast::Expression::Variable(id) => Some(id.loc),
+        ast::Expression::Assign(loc, _, _)
+        | ast::Expression::Number(loc, _)
+        | ast::Expression::Function(loc, _, _)
+        | ast::Expression::Parenthesis(loc, _) => Some(*loc),
+        _ => None,
     }
 }
 
@@ -284,7 +341,13 @@ pub fn unroll_extend_expression(
         // Путь продукта: реализация приходит сырым АСД (`tree.rs`, stage1).
         ExpressionNode::Unresolved(expr) => unroll_ast_extend(expr, model),
         // Уже разрешённая модель: позиции использования у неё нет и взять негде.
-        ExpressionNode::Model(model) => Ok(Extend::Model(Rc::clone(&model), Location::Implicit)),
+        // Разрешённая модель: ни позиции использования, ни аргументов у неё нет
+        // и взять негде — этим путём идут узлы, собранные кодогеном.
+        ExpressionNode::Model(model) => Ok(Extend::Model(
+            Rc::clone(&model),
+            Location::Implicit,
+            Vec::new(),
+        )),
         ExpressionNode::Parenthesis(expression) => unroll_extend_expression(*expression, model),
         ExpressionNode::Add(left, right) => {
             let left = unroll_extend_expression(*left, model.clone())?;
@@ -322,7 +385,7 @@ mod tests {
             model_rc.clone(),
         )
         .unwrap();
-        assert!(matches!(implement, Extend::Model(_, _)));
+        assert!(matches!(implement, Extend::Model(_, _, _)));
         let implement = unroll_extend_expression(
             ExpressionNode::Unresolved(ast::Expression::BitwiseOr(
                 Location::Implicit,
@@ -359,20 +422,24 @@ mod tests {
             Extend::Parallel(vec![
                 Box::new(Extend::Model(
                     model_rc.borrow().search_model("A").unwrap(),
-                    Location::Implicit
+                    Location::Implicit,
+                    Vec::new(),
                 )),
                 Box::new(Extend::Model(
                     model_rc.borrow().search_model("B").unwrap(),
-                    Location::Implicit
+                    Location::Implicit,
+                    Vec::new(),
                 )),
                 Box::new(Extend::Concatenation(vec![
                     Box::new(Extend::Model(
                         model_rc.borrow().search_model("A").unwrap(),
-                        Location::Implicit
+                        Location::Implicit,
+                        Vec::new(),
                     )),
                     Box::new(Extend::Model(
                         model_rc.borrow().search_model("B").unwrap(),
-                        Location::Implicit
+                        Location::Implicit,
+                        Vec::new(),
                     )),
                 ]))
             ])
@@ -442,14 +509,17 @@ mod tests {
         assert!(!Extend::None.is_sequence());
         assert!(!Extend::None.is_parallel());
 
-        let extend_model = Extend::Model(model.clone(), Location::Implicit);
+        let extend_model = Extend::Model(model.clone(), Location::Implicit, Vec::new());
         assert!(extend_model.is_model());
         assert!(!extend_model.is_parentless());
         assert!(!extend_model.is_sequence());
         assert!(!extend_model.is_parallel());
 
-        let parentless =
-            Extend::Parentless(Box::new(Extend::Model(model.clone(), Location::Implicit)));
+        let parentless = Extend::Parentless(Box::new(Extend::Model(
+            model.clone(),
+            Location::Implicit,
+            Vec::new(),
+        )));
         assert!(!parentless.is_model());
         assert!(parentless.is_parentless());
         assert!(!parentless.is_sequence());
@@ -458,6 +528,7 @@ mod tests {
         let seq = Extend::Concatenation(vec![Box::new(Extend::Model(
             model.clone(),
             Location::Implicit,
+            Vec::new(),
         ))]);
         assert!(!seq.is_model());
         assert!(!seq.is_parentless());
@@ -467,6 +538,7 @@ mod tests {
         let par = Extend::Parallel(vec![Box::new(Extend::Model(
             model.clone(),
             Location::Implicit,
+            Vec::new(),
         ))]);
         assert!(!par.is_model());
         assert!(!par.is_parentless());
@@ -486,17 +558,23 @@ mod tests {
             "Unresolved"
         );
         assert_eq!(
-            Extend::Model(model.clone(), Location::Implicit).name(),
+            Extend::Model(model.clone(), Location::Implicit, Vec::new()).name(),
             "MyModel"
         );
         assert_eq!(
-            Extend::Parentless(Box::new(Extend::Model(model.clone(), Location::Implicit))).name(),
+            Extend::Parentless(Box::new(Extend::Model(
+                model.clone(),
+                Location::Implicit,
+                Vec::new()
+            )))
+            .name(),
             "MyModel"
         );
         assert_eq!(
             Extend::Concatenation(vec![Box::new(Extend::Model(
                 model.clone(),
-                Location::Implicit
+                Location::Implicit,
+                Vec::new(),
             ))])
             .name(),
             "Concatenation"
@@ -504,7 +582,8 @@ mod tests {
         assert_eq!(
             Extend::Parallel(vec![Box::new(Extend::Model(
                 model.clone(),
-                Location::Implicit
+                Location::Implicit,
+                Vec::new(),
             ))])
             .name(),
             "Parallel"
@@ -527,13 +606,20 @@ mod tests {
             "Unresolved"
         );
         assert_eq!(
-            format!("{}", Extend::Model(a.clone(), Location::Implicit)),
+            format!(
+                "{}",
+                Extend::Model(a.clone(), Location::Implicit, Vec::new())
+            ),
             "A"
         );
         assert_eq!(
             format!(
                 "{}",
-                Extend::Parentless(Box::new(Extend::Model(a.clone(), Location::Implicit)))
+                Extend::Parentless(Box::new(Extend::Model(
+                    a.clone(),
+                    Location::Implicit,
+                    Vec::new()
+                )))
             ),
             "(A)"
         );
@@ -541,8 +627,8 @@ mod tests {
             format!(
                 "{}",
                 Extend::Concatenation(vec![
-                    Box::new(Extend::Model(a.clone(), Location::Implicit)),
-                    Box::new(Extend::Model(b.clone(), Location::Implicit)),
+                    Box::new(Extend::Model(a.clone(), Location::Implicit, Vec::new())),
+                    Box::new(Extend::Model(b.clone(), Location::Implicit, Vec::new())),
                 ])
             ),
             "A + B"
@@ -551,8 +637,8 @@ mod tests {
             format!(
                 "{}",
                 Extend::Parallel(vec![
-                    Box::new(Extend::Model(a.clone(), Location::Implicit)),
-                    Box::new(Extend::Model(b.clone(), Location::Implicit)),
+                    Box::new(Extend::Model(a.clone(), Location::Implicit, Vec::new())),
+                    Box::new(Extend::Model(b.clone(), Location::Implicit, Vec::new())),
                 ])
             ),
             "A | B"

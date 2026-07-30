@@ -15,7 +15,7 @@ pub(super) fn find_in_extend(
     state_name: &str,
 ) -> Option<String> {
     match extend {
-        Extend::Model(m, _) => {
+        Extend::Model(m, _, _) => {
             if Rc::ptr_eq(m, target) {
                 Some(normalize_lowercase_snakecase(state_name.to_string()))
             } else {
@@ -50,7 +50,7 @@ fn find_in_concat(
     idx: usize,
 ) -> Option<String> {
     match extend {
-        Extend::Model(m, _) => {
+        Extend::Model(m, _, _) => {
             if Rc::ptr_eq(m, target) {
                 let model_name = m.borrow().name.clone().unwrap_or_default();
                 Some(format!(
@@ -96,7 +96,7 @@ fn find_in_parallel(
     idx: usize,
 ) -> Option<String> {
     match extend {
-        Extend::Model(m, _) => {
+        Extend::Model(m, _, _) => {
             if Rc::ptr_eq(m, target) {
                 let model_name = m.borrow().name.clone().unwrap_or_default();
                 Some(format!(
