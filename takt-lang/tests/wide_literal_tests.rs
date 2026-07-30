@@ -27,6 +27,17 @@
 use std::process::Command;
 use takt_lang::generator::GenerateOptions;
 
+/// Широкое значение, читаемое в условии: годится для гейтов `st` и `rust`.
+///
+/// Без чтения `rustc -D warnings` отверг бы вывод за «присваивание поля самому
+/// себе» — то есть за конструкцию фикстуры, а не за литерал.
+const WIDE_READ: &str = "model M { \
+                         var top: u64 := 18446744073709551615; \
+                         var seen: u8 := 0; \
+                         start S { always { seen := 1; } ref Done: top > 0; } \
+                         state Done; \
+                         } start Root = M;";
+
 /// Маска `[bit;64]` и максимум `u64` — значения, невыразимые до 0157.
 const WIDE: &str = "model M { \
                     var mask: [bit;64] := 0xFFFFFFFFFFFFFFFF; \
@@ -216,4 +227,123 @@ fn generated_sv_passes_verilator_lint() {
             String::from_utf8_lossy(&out.stderr)
         );
     }
+}
+
+/// Порождает Structured Text и возвращает `(каталог, текст .st)`.
+fn generate_st(tag: &str, source: &str) -> (std::path::PathBuf, String) {
+    let dir = build_dir(&format!("st_{tag}"));
+    takt_lang::compile_to_st(
+        tag,
+        source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &GenerateOptions::default(),
+    )
+    .expect("порождение ST");
+    let text = std::fs::read_to_string(dir.join(format!("{tag}.st"))).expect("чтение .st");
+    (dir, text)
+}
+
+/// Порождает Rust и возвращает `(каталог, текст .rs)`.
+fn generate_rust(tag: &str, source: &str) -> (std::path::PathBuf, String) {
+    let dir = build_dir(&format!("rust_{tag}"));
+    takt_lang::compile_to_rust(
+        tag,
+        source,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &GenerateOptions::default(),
+    )
+    .expect("порождение Rust");
+    let text = std::fs::read_to_string(dir.join(format!("{tag}.rs"))).expect("чтение .rs");
+    (dir, text)
+}
+
+/// Цели `st` и `rust` печатают широкое значение **как есть** — и это верно.
+///
+/// Проба ADR (П6, П7) показала, что `iec2c` принимает `ULINT :=
+/// 18446744073709551615`, а `rustc` выводит тип литерала из контекста. Особой
+/// формы этим целям не нужно, и тест закрепляет именно это: «ничего не делаем»
+/// — решение, а не пробел.
+#[test]
+fn st_and_rust_print_wide_literal_plainly() {
+    let (_dir, st) = generate_st("plainst", WIDE_READ);
+    assert!(
+        st.contains("ULINT := 18446744073709551615"),
+        "ST печатает значение как есть\n{st}"
+    );
+    let (_dir, rs) = generate_rust("plainrs", WIDE_READ);
+    assert!(
+        rs.contains("18446744073709551615"),
+        "Rust печатает значение как есть\n{rs}"
+    );
+}
+
+fn iec2c_path() -> Option<std::path::PathBuf> {
+    let path = dirs_home()?.join(".local/bin/iec2c");
+    path.exists().then_some(path)
+}
+
+fn dirs_home() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
+}
+
+/// Порождённый ST принимается `iec2c` — как в гейте `precheck.sh`.
+#[test]
+fn generated_st_is_accepted_by_iec2c() {
+    let Some(iec2c) = iec2c_path() else {
+        eprintln!("[ПРОПУСК] generated_st_is_accepted_by_iec2c: `iec2c` не собран");
+        return;
+    };
+    let home = dirs_home().expect("HOME");
+    let (dir, _) = generate_st("gatest", WIDE_READ);
+    let out_dir = dir.join("iec");
+    std::fs::create_dir_all(&out_dir).expect("каталог вывода iec2c");
+    let out = Command::new(iec2c)
+        .arg("-I")
+        .arg(home.join(".local/share/matiec/lib"))
+        .arg("-T")
+        .arg(&out_dir)
+        .arg(dir.join("gatest.st"))
+        .output()
+        .expect("запуск iec2c");
+    assert!(
+        out.status.success(),
+        "порождённый ST с широким литералом отвергнут iec2c:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+fn rustc_available() -> bool {
+    Command::new("rustc")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Порождённый Rust принимается `rustc -D warnings` — как в гейте.
+#[test]
+fn generated_rust_compiles_under_deny_warnings() {
+    if !rustc_available() {
+        eprintln!("[ПРОПУСК] generated_rust_compiles_under_deny_warnings: `rustc` не найден");
+        return;
+    }
+    let (dir, text) = generate_rust("gaters", WIDE_READ);
+    // Обёртка с `#![no_std]` в корне повторяет гейт `precheck.sh`: атрибут
+    // допустим только в корне крейта.
+    let wrapper = dir.join("lib.rs");
+    std::fs::write(&wrapper, format!("#![no_std]\n{text}")).expect("запись обёртки");
+    let out = Command::new("rustc")
+        .args(["--crate-type=lib", "-D", "warnings"])
+        .arg(&wrapper)
+        .arg("--out-dir")
+        .arg(&dir)
+        .output()
+        .expect("запуск rustc");
+    assert!(
+        out.status.success(),
+        "порождённый Rust с широким литералом отвергнут гейтом:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
