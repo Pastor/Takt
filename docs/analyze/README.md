@@ -148,3 +148,4 @@
 | 0184 | Общие переменные библиотечного файла в импортёре | [0184-imported-shared-variables.md](0184-imported-shared-variables.md) | — (новая фича) |
 | 0185 | Параметризация моделей (var/const parameter) | [0185-model-parameters.md](0185-model-parameters.md) | — (новая фича) |
 | 0186 | Раздел документа «Практический пример: процессор» (шины, кеш, ядра) | [0186-book-processor-example.md](0186-book-processor-example.md) | — (новая фича) |
+| 0157 | Представление числового литерала: полная маска [bit;64] | [0157-literal-u64-representation.md](0157-literal-u64-representation.md) | — (новая фича) |
