@@ -23,11 +23,17 @@ use std::rc::Rc;
 /// ⚠️ Стадии остаются **терминальными** (решение ADR 0130): после ошибки
 /// построения дерево неполно, и продолжение дало бы сообщения о следствиях, а не
 /// о причинах.
+/// `specialize == true` — режим `--parameters=specialize` (фича 0185): между
+/// стадиями 1 и 2 инстанцирования с аргументами заменяются копиями моделей с
+/// подставленными значениями. Точка выбрана не случайно: после стадии 1
+/// аргументы уже вычислены, а тела ещё сырые — копия разрешит их на **свои**
+/// переменные штатными стадиями 2–6 (см. шапку `semantic/specialize.rs`).
 pub(crate) fn construct_stages(
     model: &Model,
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
     files: &mut FileTable,
+    specialize: bool,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     // Стек путей файлов, чьи импорты сейчас обрабатываются.
     // Пустой на входе: текущая (корневая) единица компиляции не имеет пути.
@@ -38,6 +44,9 @@ pub(crate) fn construct_stages(
     // она свойство единицы компиляции, а не отдельного элемента модели.
     crate::semantic::time_ast::collect_clock(ast, &model)?;
     let model = construct_model_stage1(model)?;
+    if specialize {
+        crate::semantic::specialize::specialize_instantiations(&model)?;
+    }
     let model = construct_model_stage2(model)?;
     let model = construct_model_stage3(model)?;
     // Функции (этап 5) разрешаются перед именованными блоками (этап 4): блоки

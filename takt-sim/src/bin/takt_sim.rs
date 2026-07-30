@@ -112,7 +112,7 @@ fn run(args: Args) -> Result<RunResult, String> {
         .collect();
     // Позиция — в начале строки, как у `taktc` и `rustc`: так её видит редактор.
     // Слова «Семантическая ошибка» не дублируются — об этом говорит код (`SE-…`).
-    let model_rc = construct_model_with_files(&ast, None, &search_paths, &mut files)
+    let model_rc = construct_model_with_files(&ast, None, &search_paths, &mut files, false)
         .map_err(|d| format_diagnostic(&d, &files))?;
 
     // 4. Извлекаем имена портов, имя модели и объявленную частоту (фича 0134)

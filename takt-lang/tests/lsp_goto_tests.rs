@@ -67,8 +67,8 @@ mod goto_exact_file {
 
         let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
         let mut files = FileTable::new("uses_helper.takt");
-        let model =
-            construct_model_with_files(&ast, None, &[goto56_dir()], &mut files).expect("семантика");
+        let model = construct_model_with_files(&ast, None, &[goto56_dir()], &mut files, false)
+            .expect("семантика");
         let index = SemanticIndex::build(&model);
 
         // Шаг 1. Ловушка взведена? В чужом файле обязан быть узел, накрывающий

@@ -1143,10 +1143,9 @@ pub fn construct_model(
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    // Реестр-однодневка: вызывающему пути файлов не нужны, номера никуда не
-    // уходят. Кому нужны — зовёт `construct_model_with_files` (фича 0053).
+    // Реестр-однодневка (0053): пути файлов вызывающему не нужны.
     let mut files = FileTable::default();
-    construct_model_with_files(model, upper, search_paths, &mut files)
+    construct_model_with_files(model, upper, search_paths, &mut files, false)
 }
 
 /// То же, что [`construct_model`], но с реестром файлов (фича 0053).
@@ -1160,8 +1159,9 @@ pub fn construct_model_with_files(
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
     files: &mut FileTable,
+    specialize: bool,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    let model = super::stages::construct_stages(model, upper, search_paths, files)?;
+    let model = super::stages::construct_stages(model, upper, search_paths, files, specialize)?;
     validate_model(model.clone())?;
     Ok(model)
 }

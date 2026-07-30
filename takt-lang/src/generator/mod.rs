@@ -129,6 +129,13 @@ pub struct GenerateOptions {
     /// (действие A-7 фичи 0096). Исключение уже, чем у 0096: в профиле «часы»
     /// флага нет вовсе.
     pub tick_hz: Option<u64>,
+    /// Режим `--parameters=specialize` (фича 0185): инстанцирования с
+    /// аргументами заменяются копиями моделей с подставленными значениями —
+    /// между стадиями 1 и 2 семантики (`semantic/specialize.rs`). Умолчание
+    /// `false` — режим `assign`: модель одна, значения присваиваются полям
+    /// экземпляров. ⚠️ Оба режима обязаны давать одинаковое поведение
+    /// (потактовая сверка — сторож гибрида, ADR 0185 Option E).
+    pub specialize: bool,
     /// Для целей `c`/`rust`/`st`: реализовать `float` целочисленным Q-путём
     /// (embedded без FPU) вместо нативного (фича 0096, CLI-флаг
     /// `--float-embedded`). Действует только вместе с [`float_as_q`](Self::float_as_q);
@@ -147,6 +154,7 @@ impl GenerateOptions {
             float_as_q: None,
             float_embedded: false,
             tick_hz: None,
+            specialize: false,
         }
     }
 }
@@ -162,6 +170,7 @@ impl Default for GenerateOptions {
             float_as_q: None,
             float_embedded: false,
             tick_hz: None,
+            specialize: false,
         }
     }
 }

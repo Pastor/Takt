@@ -17,6 +17,7 @@ pub(crate) fn parse_and_construct(
     filename: &str,
     source: &str,
     search_paths: &[String],
+    specialize: bool,
 ) -> Result<std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>, Diagnostic> {
     let mut files = diagnostics::FileTable::new(filename);
 
@@ -26,8 +27,14 @@ pub(crate) fn parse_and_construct(
         stamp_file(d, &files)
     })?;
 
-    semantic::tree::construct_model_with_files(&model_ast, None, search_paths, &mut files)
-        .map_err(|d| stamp_file(d, &files))
+    semantic::tree::construct_model_with_files(
+        &model_ast,
+        None,
+        search_paths,
+        &mut files,
+        specialize,
+    )
+    .map_err(|d| stamp_file(d, &files))
 }
 
 /// Разрешает номер файла диагностики в путь.
@@ -81,11 +88,12 @@ pub fn collect_compile_diagnostics(
     // Стадии построения и проверки разделены намеренно: первые терминальны,
     // вторые накапливаются. Слитно (через `construct_model_with_files`) получить
     // всё нельзя — тот вход отдаёт первую ошибку по контракту.
-    let model = match semantic::stages::construct_stages(&model_ast, None, search_paths, &mut files)
-    {
-        Ok(model) => model,
-        Err(d) => return vec![stamp_file(d, &files)],
-    };
+    let model =
+        match semantic::stages::construct_stages(&model_ast, None, search_paths, &mut files, false)
+        {
+            Ok(model) => model,
+            Err(d) => return vec![stamp_file(d, &files)],
+        };
 
     let found = semantic::validate::validate_model_all(model)
         .into_iter()
