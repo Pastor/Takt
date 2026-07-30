@@ -12,7 +12,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0186-book-processor-example.md`](../adr/0186-book-processor-example.md) |
 | Анализ | [`docs/analyze/0186-book-processor-example.md`](../analyze/0186-book-processor-example.md) |
-| Разработка | [`0186-01`](../development/0186-01-book-processor-example.md) — пробы, ISA и программа (**выполнена**), [`0186-02`](../development/0186-02-book-processor-example.md) — ступень 1: ядро, память, две шины (**выполнена**), [`0186-03`](../development/0186-03-book-processor-example.md) — ступень 2: кеш команд (**выполнена**), [`0186-04`](../development/0186-04-book-processor-example.md) — ступень 3: конвейер (**выполнена**); задачи `0186-05`…`0186-06` — по декомпозиции анализа |
+| Разработка | [`0186-01`](../development/0186-01-book-processor-example.md) — пробы, ISA и программа (**выполнена**), [`0186-02`](../development/0186-02-book-processor-example.md) — ступень 1: ядро, память, две шины (**выполнена**), [`0186-03`](../development/0186-03-book-processor-example.md) — ступень 2: кеш команд (**выполнена**), [`0186-04`](../development/0186-04-book-processor-example.md) — ступень 3: конвейер (**выполнена**), [`0186-05`](../development/0186-05-book-processor-example.md) — ступень 4: два ядра и арбитр (**выполнена**); задача `0186-06` (текст раздела) — по декомпозиции анализа |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) — **не заведён** (проработка) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) — **не заведён** (проработка) |
 | Исправления | [`0186-01`](../fixes/0186-01-example-decomposition.md) — дублирование моделей в примерах снято (замечание заказчика) |
