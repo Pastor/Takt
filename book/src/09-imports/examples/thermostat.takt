@@ -1,16 +1,18 @@
 // Термостат: держит температуру у порога, командуя нагревателем.
 // Переиспользуемая модель — лежит в отдельном файле, подключается импортом.
+// Порог объявлен ПАРАМЕТРОМ: значение по умолчанию 22, но применение вправе
+// задать своё в месте подключения.
 model Thermostat {
     in  temp: u8;
     out heater: bit;
-    const SETPOINT: u8 := 22;
+    parameter setpoint: u8 := 22;
 
     start Cold {
         enter { heater := 1; }
-        ref Warm: temp >= SETPOINT;
+        ref Warm: temp >= setpoint;
     }
     state Warm {
         enter { heater := 0; }
-        ref Cold: temp < SETPOINT;
+        ref Cold: temp < setpoint;
     }
 }

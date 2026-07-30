@@ -65,7 +65,7 @@ max_speed_2    // цифры и подчёркивания — в середин
 | Назначение | Ключевые слова |
 |------------|----------------|
 | Модели и состояния | `model`, `state`, `start`, `ref`, `next`, `cond`, `invariant` |
-| Объявления | `var`, `const`, `type`, `enum`, `struct`, `fn`, `extern`, `template` |
+| Объявления | `var`, `const`, `parameter`, `type`, `enum`, `struct`, `fn`, `extern`, `template` |
 | Импорт | `import`, `from`, `as` |
 | Порты и адреса | `in`, `out`, `inout`, `address` |
 | Управляющие конструкции | `if`, `else`, `match`, `while`, `loop`, `for`, `break`, `continue`, `return` |

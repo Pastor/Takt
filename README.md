@@ -219,7 +219,7 @@ start Root = Watchdog;              // корневая модель едини�
 |---|---|
 | Комментарии, идентификаторы, литералы, ключевые слова | [«Лексика»](book/src/02-lexical/index.md) |
 | Типы: `bit`, целые, `bool`, `float`, `q(m, n)`, массивы, `enum`, `struct` | [«Типы»](book/src/03-types/index.md) |
-| `model`, `state`, `start`, `ref`, `next`, композиция `+` и `\|` | [«Модели и состояния»](book/src/04-models-states/index.md) |
+| `model`, `state`, `start`, `ref`, `next`, композиция `+` и `\|`, `parameter` (настройка экземпляра) | [«Модели и состояния»](book/src/04-models-states/index.md) |
 | Выражения, приоритеты, `:=` против `=` | [«Выражения»](book/src/05-expressions/index.md) |
 | `if`, `loop`/`while`, `for`, `match`, `break`/`continue` | [«Управление»](book/src/06-control-flow/index.md) |
 | `fn`, `extern fn`, параметры и возврат | [«Функции»](book/src/07-functions/index.md) |
@@ -923,7 +923,17 @@ taktc compile --target c input.takt -o output/
 # Результат:
 # output/input.h  — заголовочный файл
 # output/input.c  — реализация
+
+# Способ сборки параметризованных моделей (по умолчанию — assign)
+taktc compile --target c --parameters=specialize input.takt -o output/
 ```
+
+Флаг `--parameters=assign|specialize` выбирает **форму** порождённого кода для
+моделей с параметрами: `assign` держит одну модель и присваивает значения полям
+экземпляров, `specialize` порождает копию модели на каждую различную настройку
+(тогда неизменяемый параметр становится константой). Поведение программы от
+выбора не зависит; семантику параметров описывает раздел документа
+[«Модели и состояния»](book/src/04-models-states/index.md).
 
 #### Отображение типов Takt в типы C
 
@@ -2178,7 +2188,7 @@ float→q, канон формата, ссылки) проверяются вж�
 
 ### Версия
 
-**Версия языка: 0.7.0** (крейт `takt-lang`). Документ актуален для ветки `v2`.
+**Версия языка: 0.8.0** (крейт `takt-lang`). Документ актуален для ветки `v2`.
 Список изменений — в файле [`CHANGES.md`](CHANGES.md).
 
 > **Место Takt среди родственных языков** — отчёт
