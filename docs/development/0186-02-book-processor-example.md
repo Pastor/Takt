@@ -2,6 +2,10 @@
 
 > Фича: [../features/0186-book-processor-example.md](../features/0186-book-processor-example.md) · ADR: [../adr/0186-book-processor-example.md](../adr/0186-book-processor-example.md) · анализ: [../analyze/0186-book-processor-example.md](../analyze/0186-book-processor-example.md)
 
+> **Правка после замечания заказчика:** структура примеров переработана —
+> модели вынесены в библиотеку `machine_lib.takt`, ступени стали сборками из
+> импорта и параметров. См. [фикс 0186-01](../fixes/0186-01-example-decomposition.md).
+
 ## Что было
 
 Пробы и система команд зафиксированы задачей
