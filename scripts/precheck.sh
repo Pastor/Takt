@@ -256,13 +256,22 @@ echo "Готово. Файлы в $C_OUTPUT/"
 # каком-то примере не транслируется, оба прогона одинаково пусты → это не
 # недетерминизм. Цель `st` детерминирована уже сегодня — служит контрольной
 # точкой правки общего слоя.
-# Тем же обходом проверяется ВТОРОЕ свойство — **флаг режима параметров не
-# наблюдаем на непараметризованном корпусе** (требование R7 фичи 0185): ни один
-# пример `examples/` параметров не объявляет, поэтому `--parameters=specialize`
-# обязан давать тот же вывод, что умолчание. Третий прогон встроен в этот обход, а
-# не заведён отдельным циклом, ровно чтобы не появилось второй копии вычисления
-# флагов цели (`sv_float_flags`) — урок 0090 о двух источниках истины. Предметы
-# при этом различимы: у каждого сравнения своё сообщение.
+# Тем же обходом проверяется ВТОРОЕ свойство, и оно зависит от того, объявляет ли
+# пример параметры (фича 0185):
+#
+#   - пример БЕЗ параметров — `--parameters=specialize` обязан дать тот же вывод,
+#     что умолчание (требование R7: на непараметризованном входе флаг не
+#     наблюдаем);
+#   - пример С параметрами (`pid_law`, `pid_heater` — задача 0185-09) сравнивать с
+#     умолчанием нельзя: специализация там **обязана** менять форму вывода. У него
+#     проверяется другое — **детерминизм самой специализации** (два прогона под
+#     флагом байт-в-байт), потому что имена копий порождает компилятор, и именно
+#     они — риск недетерминизма (фича 0048).
+#
+# Прогоны встроены в этот обход, а не заведены отдельным циклом, ровно чтобы не
+# появилось второй копии вычисления флагов цели (`sv_float_flags`) — урок 0090 о
+# двух источниках истины. Предметы при этом различимы: у каждого сравнения своё
+# сообщение.
 echo "Гейт воспроизводимости: два прогона (+ режим specialize) на пример × цель..."
 repro_failed=0
 for lam_file in examples/*.takt; do
@@ -278,26 +287,51 @@ for lam_file in examples/*.takt; do
     d1="$(mktemp -d)"
     d2="$(mktemp -d)"
     d3="$(mktemp -d)"
+    d4="$(mktemp -d)"
     # shellcheck disable=SC2086
     $LAMC compile "$lam_file" $flag -o "$d1" >/dev/null 2>&1 || true
     # shellcheck disable=SC2086
     $LAMC compile "$lam_file" $flag -o "$d2" >/dev/null 2>&1 || true
     # shellcheck disable=SC2086
     $LAMC compile "$lam_file" $flag --parameters=specialize -o "$d3" >/dev/null 2>&1 || true
-    if diff -r "$d1" "$d2" >/dev/null 2>&1; then
-      if diff -r "$d1" "$d3" >/dev/null 2>&1; then
-        echo "  $name [$tgt] → воспроизводим; режим specialize не наблюдаем"
-      else
-        echo "  $name [$tgt] → РЕЖИМ НАБЛЮДАЕМ (--parameters=specialize изменил вывод):"
-        diff -r "$d1" "$d3" 2>&1 | sed 's/^/    /' | head -8
-        repro_failed=1
-      fi
-    else
+    # Объявляет ли параметры сам пример ЛИБО файл, который он подключает:
+    # параметры может объявлять библиотека, а форма вывода меняется у импортёра.
+    # Проверяется именно этот пример, а не корпус целиком — иначе один
+    # параметризованный файл снял бы проверку R7 со всех остальных.
+    check_files="$lam_file"
+    for imported in $(grep -oE 'from[[:space:]]+"[^"]+"' "$lam_file" 2>/dev/null \
+                      | sed -E 's/from[[:space:]]+"([^"]+)"/\1/'); do
+      [ -f "examples/$imported" ] && check_files="$check_files examples/$imported"
+    done
+    parameterized=0
+    # shellcheck disable=SC2086
+    if grep -qE '^[[:space:]]*parameter[[:space:]]' $check_files; then
+      parameterized=1
+    fi
+    if [ "$parameterized" -eq 1 ]; then
+      # shellcheck disable=SC2086
+      $LAMC compile "$lam_file" $flag --parameters=specialize -o "$d4" >/dev/null 2>&1 || true
+    fi
+    if ! diff -r "$d1" "$d2" >/dev/null 2>&1; then
       echo "  $name [$tgt] → НЕДЕТЕРМИНИЗМ (два прогона разошлись):"
       diff -r "$d1" "$d2" 2>&1 | sed 's/^/    /' | head -8
       repro_failed=1
+    elif [ "$parameterized" -eq 1 ]; then
+      if diff -r "$d3" "$d4" >/dev/null 2>&1; then
+        echo "  $name [$tgt] → воспроизводим; специализация детерминирована"
+      else
+        echo "  $name [$tgt] → НЕДЕТЕРМИНИЗМ СПЕЦИАЛИЗАЦИИ (два прогона разошлись):"
+        diff -r "$d3" "$d4" 2>&1 | sed 's/^/    /' | head -8
+        repro_failed=1
+      fi
+    elif diff -r "$d1" "$d3" >/dev/null 2>&1; then
+      echo "  $name [$tgt] → воспроизводим; режим specialize не наблюдаем"
+    else
+      echo "  $name [$tgt] → РЕЖИМ НАБЛЮДАЕМ (--parameters=specialize изменил вывод):"
+      diff -r "$d1" "$d3" 2>&1 | sed 's/^/    /' | head -8
+      repro_failed=1
     fi
-    rm -rf "$d1" "$d2" "$d3"
+    rm -rf "$d1" "$d2" "$d3" "$d4"
   done
 done
 if [ "$repro_failed" -ne 0 ]; then

@@ -27,6 +27,7 @@ void PidLawPid_tick(PidLawPid *model, PidLaw *main) {
     assert(0 != model);
     assert(0 != main);
     if (model->state == PID_LAW_PID_INIT) {
+        model->neg_imax = 0.0 - model->imax;
         model->state = PID_LAW_PID_CONTROL;
     }
     switch (model->state) {

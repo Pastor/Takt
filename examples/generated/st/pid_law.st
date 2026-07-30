@@ -28,6 +28,7 @@ VAR
 END_VAR
     CASE state OF
         0: (* INIT *)
+            neg_imax := 0.0 - imax;
             state := 1; (* Control *)
         1: (* Control *)
             err := target - meas;

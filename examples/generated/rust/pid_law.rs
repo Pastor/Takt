@@ -93,6 +93,7 @@ impl PidLawPid {
     /// Один такт автомата.
     fn tick<H: Hal>(&mut self, shared: &mut PidLawShared, hal: &mut H) {
         if self.state == PidLawPidState::Init {
+            self.neg_imax = 0.0 - self.imax;
             self.state = PidLawPidState::Control;
         }
         match self.state {

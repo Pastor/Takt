@@ -14,13 +14,16 @@ VAR_IN_OUT
     gain : LREAL;
     loss : LREAL;
     meas : LREAL;
-    release : LREAL;
+    target : LREAL;
 END_VAR
 VAR
     state : USINT := 0;
+    release : LREAL := 38.0;
+    setpoint : LREAL := 40.0;
 END_VAR
     CASE state OF
         0: (* INIT *)
+            target := setpoint;
             state := 2; (* Heating *)
         1: (* Done *)
             state := 4; (* END *)
@@ -67,6 +70,7 @@ VAR
 END_VAR
     CASE state OF
         0: (* INIT *)
+            neg_imax := 0.0 - imax;
             state := 1; (* Control *)
         1: (* Control *)
             err := target - meas;
@@ -101,28 +105,43 @@ VAR_OUTPUT
 END_VAR
 VAR
     state : USINT := 0;
-    pid0 : PidHeaterPid;
-    heater1 : PidHeaterHeater;
+    pid_heater_pid0 : PidHeaterPid;
+    pid_heater_heater1 : PidHeaterHeater;
+    pid_heater_pid2 : PidHeaterPid := (kp := 0.25, ki := 0.125);
+    pid_heater_heater3 : PidHeaterHeater := (setpoint := 55.0, release := 52.0);
+    pid_heater_step : USINT;
     ambient : LREAL := 18.0;
     ctrl : LREAL := 0.0;
     gain : LREAL := 0.5;
     loss : LREAL := 0.05;
     meas : LREAL := 0.0;
-    release : LREAL := 38.0;
     target : LREAL := 40.0;
 END_VAR
     CASE state OF
         0: (* INIT *)
-            state := 1; (* PidHeater *)
-        1: (* PidHeater *)
-            pid0(ctrl := ctrl, meas := meas, target := target);
-            heater1(ambient := ambient, ctrl := ctrl, gain := gain, loss := loss, meas := meas, release := release);
-            IF pid0.is_done AND heater1.is_done THEN
-                state := 2; (*  *)
-            END_IF;
-        2: (* END *)
-            state := 2;
+            state := 2; (* PidHeater *)
+        1: (* Finished *)
+            state := 3; (* END *)
+        2: (* PidHeater *)
+            CASE pid_heater_step OF
+                0:
+                    pid_heater_pid0(ctrl := ctrl, meas := meas, target := target);
+                    pid_heater_heater1(ambient := ambient, ctrl := ctrl, gain := gain, loss := loss, meas := meas, target := target);
+                    IF pid_heater_pid0.is_done AND pid_heater_heater1.is_done THEN
+                        pid_heater_step := 1;
+                    END_IF;
+                1:
+                    pid_heater_pid2(ctrl := ctrl, meas := meas, target := target);
+                    pid_heater_heater3(ambient := ambient, ctrl := ctrl, gain := gain, loss := loss, meas := meas, target := target);
+                    IF pid_heater_pid2.is_done AND pid_heater_heater3.is_done THEN
+                        pid_heater_step := 2;
+                    END_IF;
+                2: (* конкатенация завершена *)
+                    state := 1; (* Finished *)
+            END_CASE;
+        3: (* END *)
+            state := 3;
     END_CASE;
-    is_done := state = 2;
+    is_done := state = 3;
 END_FUNCTION_BLOCK
 

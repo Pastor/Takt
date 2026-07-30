@@ -20,6 +20,8 @@ typedef enum {
 /* Model Heater (PidHeater:Heater) */
 struct PidHeaterHeater {
     // NOTICE: Определение переменных модели
+    double release;
+    double setpoint;
     enum {
         PID_HEATER_HEATER_INIT,
         PID_HEATER_HEATER_DONE,
@@ -61,10 +63,10 @@ struct PidHeater {
     double gain;
     double loss;
     double meas;
-    double release;
     double target;
     enum {
         PID_HEATER_INIT,
+        PID_HEATER_FINISHED,
         PID_HEATER_PID_HEATER,
         PID_HEATER_END
     } state;
@@ -73,11 +75,26 @@ struct PidHeater {
         PidHeaterPid pid0;
         PidHeaterHeater heater1;
         enum {
-            PID_HEATER_PID_HEATER_INIT,
-            PID_HEATER_PID_HEATER_TICK,
-            PID_HEATER_PID_HEATER_END
+            PID_HEATER_PID_HEATER_PARALLEL0_INIT,
+            PID_HEATER_PID_HEATER_PARALLEL0_TICK,
+            PID_HEATER_PID_HEATER_PARALLEL0_END
         } state;
-    } pid_heater;
+    } pid_heater_parallel0;
+    struct {
+        PidHeaterPid pid0;
+        PidHeaterHeater heater1;
+        enum {
+            PID_HEATER_PID_HEATER_PARALLEL1_INIT,
+            PID_HEATER_PID_HEATER_PARALLEL1_TICK,
+            PID_HEATER_PID_HEATER_PARALLEL1_END
+        } state;
+    } pid_heater_parallel1;
+    enum {
+        PID_HEATER_PID_HEATER_INIT,
+        PID_HEATER_PID_HEATER_PARALLEL0,
+        PID_HEATER_PID_HEATER_PARALLEL1,
+        PID_HEATER_PID_HEATER_END
+    } pid_heater_state;
     /// NOTICE: Функции портов ввода вывода
     void  *userdata;
     void  (*write_bit)(PidHeater_Out_BitPort port, bool val, void *userdata);

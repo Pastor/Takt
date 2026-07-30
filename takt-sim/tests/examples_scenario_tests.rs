@@ -122,9 +122,23 @@ const CONTRACTS: &[Contract] = &[
     // Применение библиотечного регулятора (фича 0182): контур замыкается через
     // объявления, подключённые из `pid_law.takt`, сходится сам и завершается —
     // партию греют до уставки, выдерживают до температуры выдачи, цикл окончен.
+    //
+    // Ступеней ДВЕ (фича 0185): вторая идёт со своей настройкой регулятора и
+    // своей уставкой, заданными параметрами при инстанцировании. Цепочка
+    // проверяет обе — «Control, Heating» встречается дважды, между ними полный
+    // цикл первой ступени, а завершает прогон состояние `Finished` после
+    // последовательной композиции.
     Contract {
         file: "pid_heater.takt",
-        chain: &["Control, Heating", "Settled, Holding", "Done, Done"],
+        chain: &[
+            "PidHeater, Control, Heating",
+            "PidHeater, Settled, Holding",
+            "PidHeater, Done, Done",
+            "PidHeater, Control, Heating",
+            "PidHeater, Settled, Holding",
+            "PidHeater, Done, Done",
+            "Finished",
+        ],
         budget: 100,
         must_terminate: true,
     },
