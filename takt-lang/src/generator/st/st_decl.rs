@@ -118,7 +118,11 @@ pub(crate) struct Extras {
     /// Переменные корня, разделяемые через `VAR_IN_OUT` (О1-в).
     pub shared: Vec<(String, TypeNode)>,
     /// Экземпляры под-FB: `(имя, тип)`.
-    pub instances: Vec<(String, String)>,
+    /// Экземпляры под-FB: имя, тип, инициализатор экземпляра (фича 0185).
+    ///
+    /// Инициализатор — уже напечатанная строка вида `(step := 5)` либо `None`:
+    /// печатает её st/mod.rs, которому доступны типы параметров целевой модели.
+    pub instances: Vec<(String, String, Option<String>)>,
     /// Объявления, поднятые из тела (`st_stmt`).
     pub hoisted: Vec<(String, TypeNode)>,
     /// Цель `st-at`: порты размещены глобально, поэтому блок видит их через
@@ -182,11 +186,11 @@ pub(crate) fn emit_declarations(
             init: None,
         });
     }
-    for (name, fb_type) in &extras.instances {
+    for (name, fb_type, init) in &extras.instances {
         locals.push(Declaration {
             name: name.clone(),
             ty: fb_type.clone(),
-            init: None,
+            init: init.clone(),
         });
     }
     for (name, ty) in &extras.hoisted {

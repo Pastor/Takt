@@ -343,3 +343,45 @@ fn tick_hz_requires_argument() {
     let err = parse_compile_args(&["--tick-hz".to_string()]).unwrap_err();
     assert!(err.contains("--tick-hz"), "сообщение: {err}");
 }
+
+/// `--parameters=assign` — явное умолчание (фича 0185).
+#[test]
+fn parse_parameters_assign() {
+    let o =
+        parse_compile_args(&["in.takt".to_string(), "--parameters=assign".to_string()]).unwrap();
+    assert_eq!(o.parameters, ParametersMode::Assign);
+}
+
+/// Без флага — режим `assign` (умолчание совпадает с явной формой байт-в-байт).
+#[test]
+fn parse_parameters_default_is_assign() {
+    let o = parse_compile_args(&["in.takt".to_string()]).unwrap();
+    assert_eq!(o.parameters, ParametersMode::Assign);
+}
+
+/// `--parameters=specialize` разбирается (реализация — задача 0185-05).
+#[test]
+fn parse_parameters_specialize() {
+    let o = parse_compile_args(&["in.takt".to_string(), "--parameters=specialize".to_string()])
+        .unwrap();
+    assert_eq!(o.parameters, ParametersMode::Specialize);
+}
+
+/// Неизвестное значение — ошибка с перечислением допустимых, а не молчаливое
+/// умолчание (критерий A11 анализа 0185).
+#[test]
+fn parse_parameters_unknown_value_is_an_error() {
+    let err =
+        parse_compile_args(&["in.takt".to_string(), "--parameters=bogus".to_string()]).unwrap_err();
+    assert!(
+        err.contains("assign") && err.contains("specialize"),
+        "{err}"
+    );
+}
+
+/// Флаг без значения — ошибка, а не умолчание.
+#[test]
+fn parse_parameters_without_value_is_an_error() {
+    let err = parse_compile_args(&["in.takt".to_string(), "--parameters".to_string()]).unwrap_err();
+    assert!(err.contains("--parameters="), "{err}");
+}

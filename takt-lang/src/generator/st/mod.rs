@@ -398,7 +398,7 @@ fn emit_function_block(
         instances: out
             .instances
             .iter()
-            .map(|i| (i.name.clone(), i.fb_type.clone()))
+            .map(|i| (i.name.clone(), i.fb_type.clone(), i.init.clone()))
             .collect(),
         hoisted: out
             .stmt

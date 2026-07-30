@@ -119,6 +119,77 @@ pub(crate) struct Fsm {
     pub(crate) warnings: std::cell::RefCell<Vec<Diagnostic>>,
 }
 
+/// Собирает аргументы инстанцирования по всем реализациям карты (фича 0185).
+///
+/// Ключ — уникальное имя модели. ⚠️ Уплощение цели `sv` даёт **один** набор
+/// регистров на модель: два экземпляра одной модели делят их. Поэтому два
+/// РАЗНЫХ набора аргументов у одной модели невыразимы — громкий отказ `SV-016`
+/// вместо молчаливой победы последнего. Одинаковые наборы законны.
+fn collect_instantiation_args(
+    map: &SvMap,
+    blocks: &[Block],
+) -> Result<BTreeMap<String, Vec<crate::semantic::extend::ParameterArgument>>, Diagnostic> {
+    let mut by_model: BTreeMap<String, Vec<crate::semantic::extend::ParameterArgument>> =
+        BTreeMap::new();
+    let mut walk = |extend: &StateExtend| -> Result<(), Diagnostic> {
+        collect_from_extend(extend, &mut by_model)
+    };
+    for (name, _) in blocks {
+        let Some(Element::Model { states, .. }) = map.model_element_of(name) else {
+            continue;
+        };
+        for state_name in &states {
+            if let Some(Element::StateExtend { extend, .. }) = map.state_at(state_name.clone()) {
+                walk(&extend)?;
+            }
+        }
+    }
+    Ok(by_model)
+}
+
+/// Рекурсивный обход реализации для [`collect_instantiation_args`].
+fn collect_from_extend(
+    extend: &StateExtend,
+    by_model: &mut BTreeMap<String, Vec<crate::semantic::extend::ParameterArgument>>,
+) -> Result<(), Diagnostic> {
+    match extend {
+        StateExtend::None => Ok(()),
+        StateExtend::Model(name, args) => {
+            match by_model.get(name.unique()) {
+                None => {
+                    by_model.insert(name.unique().to_string(), args.clone());
+                }
+                Some(existing) if existing == args => {}
+                Some(_) => {
+                    let loc = args
+                        .first()
+                        .map(|a| a.loc)
+                        .unwrap_or(crate::diagnostics::Location::Codegen);
+                    return Err(Diagnostic::error(
+                        loc,
+                        format!(
+                            "Модель '{}' инстанцирована с РАЗНЫМИ наборами аргументов: \
+                             цель sv уплощает композицию, и экземпляры одной модели \
+                             делят одни регистры — разные настройки невыразимы. \
+                             Дайте копиям разные имена моделей либо используйте \
+                             другую цель",
+                            name.local()
+                        ),
+                    )
+                    .with_code("SV-016"));
+                }
+            }
+            Ok(())
+        }
+        StateExtend::Parallel(items) | StateExtend::Concatenation(items) => {
+            for item in items {
+                collect_from_extend(item, by_model)?;
+            }
+            Ok(())
+        }
+    }
+}
+
 /// Имя регистра состояния модели.
 ///
 /// У корня — просто `state` (форма ADR); у под-модели — с префиксом её
@@ -210,6 +281,10 @@ impl Fsm {
             warnings: std::cell::RefCell::new(Vec::new()),
         };
 
+        // Аргументы инстанцирования (фича 0185): значение сброса регистра
+        // параметра берётся из места инстанцирования, а не из объявления.
+        let instantiation_args = collect_instantiation_args(map, blocks)?;
+
         // Перечисления собираются со всех уровней: `command := Up` в АСД —
         // это `Number(2)`, и без списка вариантов имя `COMMAND_UP` не построить.
         for (_, model_rc) in blocks {
@@ -257,6 +332,14 @@ impl Fsm {
                 check_sv_name(var_name, *loc)?;
                 let signal = var_signal_name(name, var_name);
                 let decl = sv_type(ty, &format!("переменная '{}'", var_name))?;
+                // Параметр, заданный при инстанцировании (фича 0185): значение
+                // места инстанцирования перекрывает инициализатор объявления —
+                // тот же приоритет, что у цели `c` (присваивание после `_init`).
+                let arg_expr = instantiation_args
+                    .get(name.unique())
+                    .and_then(|args| args.iter().find(|a| a.name == *var_name))
+                    .map(|a| a.value.clone());
+                let expr = arg_expr.as_ref().unwrap_or(expr);
                 let reset = match expr {
                     // Значение перечисления приходит ЧИСЛОМ (`command := Up` —
                     // это `Number(2)`), а перечисления SV строго типизированы:

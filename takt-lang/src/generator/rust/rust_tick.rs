@@ -433,7 +433,7 @@ fn emit_extend(
         // объявления — как в цели `c` (ветвь, уже завершённая, тикает в свой
         // `End` вхолостую). Порядок обязан совпадать с C, иначе потактовая
         // сверка разъедется.
-        StateExtend::Model(_) | StateExtend::Parallel(_) => {
+        StateExtend::Model(_, _) | StateExtend::Parallel(_) => {
             let mut done = Vec::new();
             for instance in list {
                 let args = call_args(map, instance, scope, is_root)?;

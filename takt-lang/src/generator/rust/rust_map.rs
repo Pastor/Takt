@@ -122,6 +122,14 @@ impl RustMap {
             })
     }
 
+    /// Семантический узел модели по её **уникальному** имени (фича 0185).
+    ///
+    /// Нужен печати аргументов инстанцирования: тип параметра берётся у целевой
+    /// модели, а не угадывается по литералу.
+    pub(crate) fn model_node_by_unique(&self, unique: &str) -> Option<Rc<RefCell<ModelNode>>> {
+        self.map.model_at(Some(unique.to_string()))
+    }
+
     /// Корневая модель.
     pub(crate) fn root_model_node(&self) -> Option<Rc<RefCell<ModelNode>>> {
         self.map.model_at(None)
