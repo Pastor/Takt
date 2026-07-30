@@ -345,9 +345,12 @@ impl Fsm {
                     // это `Number(2)`), а перечисления SV строго типизированы:
                     // без восстановления варианта ветвь сброса дала бы
                     // `%Error-ENUMVALUE`. Та же ловушка описана для цели `rust`.
-                    ExpressionNode::Number(n) => {
-                        sv_const::enum_literal(ty, *n, &fsm.enums).unwrap_or_else(|| n.to_string())
-                    }
+                    ExpressionNode::Number(n) => sv_const::enum_literal(ty, *n, &fsm.enums)
+                        // Широкое значение сброса — размерной формой по ширине
+                        // регистра (фича 0157): голое десятичное больше
+                        // `i32::MAX` даёт `WIDTHEXPAND`.
+                        .or_else(|| super::sv_type::sized_literal(*n, ty))
+                        .unwrap_or_else(|| n.to_string()),
                     ExpressionNode::Bool(b) => if *b { "1'b1" } else { "1'b0" }.to_string(),
                     // Литерал длительности (фича 0183) — константа в
                     // **миллисекундах**: тип `duration` в целях есть беззнаковый

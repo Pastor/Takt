@@ -214,6 +214,15 @@ impl Scope<'_> {
         value: &ExpressionNode,
     ) -> Result<String, Diagnostic> {
         let crate::semantic::type_node::TypeNode::Enum(enum_name) = ty else {
+            // Широкий литерал печатается размерной формой по ширине ПРИЁМНИКА
+            // (фича 0157): нетипизированная десятичная константа в SV знаковая и
+            // не уже 32 бит, поэтому значение больше `i32::MAX` даёт verilator
+            // `WIDTHEXPAND`, а гейт цели считает предупреждение ошибкой.
+            if let ExpressionNode::Number(n) = value
+                && let Some(sized) = super::sv_type::sized_literal(*n, ty)
+            {
+                return Ok(sized);
+            }
             return print_expression(value, self);
         };
         let printed = print_expression(value, self)?;

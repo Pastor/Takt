@@ -15,7 +15,7 @@ use crate::semantic::{ExpressionNode, FunctionDefinitionNode, VariableNode};
 
 fn const_expr_string(expr: &ExpressionNode, name: &str) -> Result<String, Diagnostic> {
     Ok(if let ExpressionNode::Number(value) = expr {
-        value.to_string()
+        super::c_literal::c_int_literal(*value)
     } else if let ExpressionNode::Bool(value) = expr {
         if *value {
             "true".to_string()
