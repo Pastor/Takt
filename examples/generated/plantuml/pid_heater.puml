@@ -2,8 +2,9 @@
 title PidHeater
 
 [*] --> PidHeater
-PidHeater : Pid | Heater
-PidHeater --> [*]
+Finished --> [*]
+PidHeater : Pid | Heater + Pid | Heater
+PidHeater --> Finished
 
 state Heater {
     [*] --> Heating
