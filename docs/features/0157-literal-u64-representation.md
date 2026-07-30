@@ -1,7 +1,7 @@
 # Фича 0157: Представление числового литерала: полная маска `[bit;64]`
 
 - **Номер:** 0157
-- **Статус:** АРХИТЕКТУРА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** нет
 - **Tier:** 2
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (вынесено закрытием [0128](0128-lexer-literal-overflow.md), Option B/C ADR отвергнуты в объёме)
@@ -11,7 +11,7 @@
 | Стадия | Артефакт |
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0157-literal-u64-representation.md`](../adr/0157-literal-u64-representation.md) — **Accepted** (Option A, объём утверждён заказчиком 2026-07-30) |
-| Анализ | не заведён (стадия 3) |
+| Анализ | [`docs/analyze/0157-literal-u64-representation.md`](../analyze/0157-literal-u64-representation.md) — карта точек правки, R1–R7, A1–A10, декомпозиция `0157-01…08` |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0157-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
