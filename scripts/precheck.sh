@@ -256,7 +256,14 @@ echo "Готово. Файлы в $C_OUTPUT/"
 # каком-то примере не транслируется, оба прогона одинаково пусты → это не
 # недетерминизм. Цель `st` детерминирована уже сегодня — служит контрольной
 # точкой правки общего слоя.
-echo "Гейт воспроизводимости: два прогона на каждый пример × цель..."
+# Тем же обходом проверяется ВТОРОЕ свойство — **флаг режима параметров не
+# наблюдаем на непараметризованном корпусе** (требование R7 фичи 0185): ни один
+# пример `examples/` параметров не объявляет, поэтому `--parameters=specialize`
+# обязан давать тот же вывод, что умолчание. Третий прогон встроен в этот обход, а
+# не заведён отдельным циклом, ровно чтобы не появилось второй копии вычисления
+# флагов цели (`sv_float_flags`) — урок 0090 о двух источниках истины. Предметы
+# при этом различимы: у каждого сравнения своё сообщение.
+echo "Гейт воспроизводимости: два прогона (+ режим specialize) на пример × цель..."
 repro_failed=0
 for lam_file in examples/*.takt; do
   name="$(basename "$lam_file" .takt)"
@@ -270,22 +277,32 @@ for lam_file in examples/*.takt; do
     fi
     d1="$(mktemp -d)"
     d2="$(mktemp -d)"
+    d3="$(mktemp -d)"
     # shellcheck disable=SC2086
     $LAMC compile "$lam_file" $flag -o "$d1" >/dev/null 2>&1 || true
     # shellcheck disable=SC2086
     $LAMC compile "$lam_file" $flag -o "$d2" >/dev/null 2>&1 || true
+    # shellcheck disable=SC2086
+    $LAMC compile "$lam_file" $flag --parameters=specialize -o "$d3" >/dev/null 2>&1 || true
     if diff -r "$d1" "$d2" >/dev/null 2>&1; then
-      echo "  $name [$tgt] → воспроизводим"
+      if diff -r "$d1" "$d3" >/dev/null 2>&1; then
+        echo "  $name [$tgt] → воспроизводим; режим specialize не наблюдаем"
+      else
+        echo "  $name [$tgt] → РЕЖИМ НАБЛЮДАЕМ (--parameters=specialize изменил вывод):"
+        diff -r "$d1" "$d3" 2>&1 | sed 's/^/    /' | head -8
+        repro_failed=1
+      fi
     else
       echo "  $name [$tgt] → НЕДЕТЕРМИНИЗМ (два прогона разошлись):"
       diff -r "$d1" "$d2" 2>&1 | sed 's/^/    /' | head -8
       repro_failed=1
     fi
-    rm -rf "$d1" "$d2"
+    rm -rf "$d1" "$d2" "$d3"
   done
 done
 if [ "$repro_failed" -ne 0 ]; then
-  echo "  Генерация недетерминирована — предкоммит провален (фича 0048)."
+  echo "  Генерация недетерминирована либо режим параметров наблюдаем на корпусе" \
+       "— предкоммит провален (фичи 0048, 0185)."
   exit 1
 fi
 
