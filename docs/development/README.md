@@ -311,3 +311,4 @@
 | 0185-09 | 0185 | Параметризация моделей (ключевое слово parameter) | [0185-09-model-parameters.md](0185-09-model-parameters.md) |
 | 0186-01 | 0186 | Раздел документа «Практический пример: процессор» (шины, кеш, ядра) | [0186-01-book-processor-example.md](0186-01-book-processor-example.md) |
 | 0186-02 | 0186 | Раздел документа «Практический пример: процессор» (шины, кеш, ядра) | [0186-02-book-processor-example.md](0186-02-book-processor-example.md) |
+| 0186-03 | 0186 | Раздел документа «Практический пример: процессор» (шины, кеш, ядра) | [0186-03-book-processor-example.md](0186-03-book-processor-example.md) |
