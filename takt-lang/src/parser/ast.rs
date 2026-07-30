@@ -771,7 +771,7 @@ pub struct NamedBlockCodeDefine {
 }
 
 /// Определение функции (`fn Имя(параметры) [-> Тип] [{ тело }]`).
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "ast-serde", derive(Serialize, Deserialize))]
 pub struct FunctionDefine {
     /// Местоположение всего определения.

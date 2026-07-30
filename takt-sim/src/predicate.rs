@@ -472,6 +472,7 @@ mod tests {
                     bits: 8,
                     signed: false,
                 },
+                raw: Box::default(),
                 body: takt_lang::semantic::StatementNode::Return(Some(Box::new(
                     takt_lang::semantic::ExpressionNode::Number(1),
                 ))),

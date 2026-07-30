@@ -32,6 +32,9 @@ pub fn construct_function(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<FunctionDefinitionNode, Diagnostic> {
     if let FunctionDefinitionNode::Unresolved(def) = func {
+        // Исходное определение сохраняется целиком: его интерпретирует
+        // константный вычислитель (фича 0185).
+        let raw = Box::new(def.clone());
         let name = def
             .clone()
             .name
@@ -100,6 +103,7 @@ pub fn construct_function(
                     params,
                     ret: rett,
                     body: statement,
+                    raw,
                 })
             }
         }
@@ -283,6 +287,7 @@ mod tests {
             params: vec![],
             ret: TypeNode::Unit,
             body: StatementNode::None,
+            raw: Box::default(),
         };
         let model = Rc::new(RefCell::new(ModelNode::default()));
         let result = construct_function(local.clone(), model).unwrap();

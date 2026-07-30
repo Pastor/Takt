@@ -291,7 +291,8 @@ fn unroll_ast_extend(
                     Diagnostic::error(id.loc, format!("Модель '{}' не найдена", id.name))
                         .with_code("SE-001")
                 })?;
-            let arguments = extend_args::parse_arguments(&found, &id.name, &args, call_loc)?;
+            let arguments =
+                extend_args::parse_arguments(&found, &id.name, &args, call_loc, &model)?;
             Ok(Extend::Model(found, id.loc, arguments))
         }
         ast::Expression::Parenthesis(_, inner) => unroll_ast_extend(*inner, model),

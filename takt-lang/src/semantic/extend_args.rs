@@ -1,10 +1,10 @@
 //! Аргументы инстанцирования модели: `M(ИМЯ := ВЫРАЖЕНИЕ, …)` — фича 0185.
 //!
-//! Разбирает список аргументов при имени модели в выражении реализации и
-//! проверяет его **структурно**: форма аргумента, существование параметра,
-//! отсутствие повторов. Значение аргумента остаётся сырым выражением — его
-//! вычисляет константный вычислитель (задача 0185-03), а применяет потребитель
-//! дерева (0185-04/05).
+//! Разбирает список аргументов при имени модели в выражении реализации,
+//! проверяет его **структурно** (форма аргумента, существование параметра,
+//! отсутствие повторов) и **вычисляет значение** константным вычислителем
+//! (`semantic::const_eval`, задача 0185-03). В дерево попадает литерал:
+//! применяет его потребитель (0185-04/05).
 //!
 //! ⚠️ Каждая ошибка употребления получает **свой** код: `M(unknown := 1)` и
 //! `M(acc := 1)` — разные ошибки автора (опечатка против попытки задать
@@ -13,6 +13,7 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast;
 use crate::semantic::ModelNode;
+use crate::semantic::const_eval;
 use crate::semantic::extend::ParameterArgument;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -27,6 +28,7 @@ pub(super) fn parse_arguments(
     model_name: &str,
     args: &[ast::Expression],
     call_loc: Location,
+    scope: &Rc<RefCell<ModelNode>>,
 ) -> Result<Vec<ParameterArgument>, Diagnostic> {
     let mut parsed: Vec<ParameterArgument> = Vec::with_capacity(args.len());
     // Позиция первого вхождения имени — чтобы повтор указал на оба места.
@@ -35,6 +37,12 @@ pub(super) fn parse_arguments(
     for arg in args {
         let (loc, name, value) = destructure(arg, call_loc)?;
         check_declared(target, model_name, &name, loc)?;
+        // Значение вычисляется **здесь и сейчас**: параметр задаётся при сборке
+        // автомата, поэтому за границей семантики выражения аргумента не
+        // существует — в дерево попадает литерал. Вычисляется в области
+        // видимости МЕСТА инстанцирования (`scope`), а не целевой модели: имена
+        // `Y`/`U` в `M(X := Y + 1)` пишет тот, кто инстанцирует.
+        let value = const_eval::fold_to_literal(&value, scope)?;
         if let Some(first) = seen.get(&name) {
             return Err(Diagnostic::error(
                 loc,
