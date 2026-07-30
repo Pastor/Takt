@@ -319,3 +319,5 @@
 | 0157-03 | 0157 | Представление числового литерала: полная маска [bit;64] | [0157-03-literal-u64-representation.md](0157-03-literal-u64-representation.md) |
 | 0157-04 | 0157 | Представление числового литерала: полная маска [bit;64] | [0157-04-literal-u64-representation.md](0157-04-literal-u64-representation.md) |
 | 0157-02 | 0157 | Представление числового литерала: полная маска [bit;64] | [0157-02-literal-u64-representation.md](0157-02-literal-u64-representation.md) |
+| 0157-05 | 0157 | Представление числового литерала: полная маска [bit;64] | [0157-05-literal-u64-representation.md](0157-05-literal-u64-representation.md) |
+| 0157-06 | 0157 | Представление числового литерала: полная маска [bit;64] | [0157-06-literal-u64-representation.md](0157-06-literal-u64-representation.md) |
