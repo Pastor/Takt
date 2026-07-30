@@ -18,7 +18,7 @@ fn cc_available() -> bool {
 }
 
 /// Трасса эталона: значение `led` после каждого такта при 1 мс/такт.
-fn simulate_trace() -> Vec<i64> {
+fn simulate_trace() -> Vec<i128> {
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = takt_lang::semantic::tree::construct_model(&ast, None, &[]).expect("семантика");
@@ -41,7 +41,7 @@ fn simulate_trace() -> Vec<i64> {
 
 /// Трасса порождённого C: `now_ms` возвращает модельное время (1 мс/такт, с нуля),
 /// колбэк `write_numeric` перехватывает запись в `led`.
-fn generated_c_trace(dir: &Path) -> Vec<i64> {
+fn generated_c_trace(dir: &Path) -> Vec<i128> {
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура");
     takt_lang::compile_to_c(
         "conformance_every",
@@ -101,7 +101,7 @@ int main(void) {{
     assert!(run.status.success(), "собранный C упал");
     String::from_utf8_lossy(&run.stdout)
         .lines()
-        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i64>().ok())
+        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i128>().ok())
         .collect()
 }
 

@@ -175,7 +175,7 @@ pub(crate) fn coerce_to_type_with(
         // Адресный тип порта: значение порта — целое машинное слово.
         TypeNode::Address(_, _) => match &value {
             Value::Number(n) => Ok(Value::Number(*n)),
-            Value::Boolean(b) => Ok(Value::Number(i64::from(*b))),
+            Value::Boolean(b) => Ok(Value::Number(i128::from(*b))),
             Value::Real(_)
             | Value::Array(_)
             | Value::Fixed { .. }
@@ -225,15 +225,15 @@ pub(crate) fn coerce_to_type_with(
 }
 
 /// Целочисленное значение из [`Value`] (вещественное усекается к нулю, как в C).
-fn to_integer(value: &Value, ty: &TypeNode) -> Result<i64, EvalError> {
+fn to_integer(value: &Value, ty: &TypeNode) -> Result<i128, EvalError> {
     match value {
         Value::Number(n) => Ok(*n),
-        Value::Boolean(b) => Ok(i64::from(*b)),
+        Value::Boolean(b) => Ok(i128::from(*b)),
         // C усекает float→int в сторону нуля.
-        Value::Real(f) => Ok(*f as i64),
+        Value::Real(f) => Ok(*f as i128),
         // q(m, n) → целая часть (floor): `repr >> n`. Штатно сюда не попадает
         // (смешение q с целым — `SE-059`); перевод q→int идёт через `cast_to_type`.
-        Value::Fixed { repr, n, .. } => Ok(fixed::to_integer_part(*repr, *n)),
+        Value::Fixed { repr, n, .. } => Ok(i128::from(fixed::to_integer_part(*repr, *n))),
         Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
             Err(EvalError::NotCoercible {
                 value: value_kind(value),
@@ -247,7 +247,7 @@ fn to_integer(value: &Value, ty: &TypeNode) -> Result<i64, EvalError> {
 /// [`coerce_to_type`]).
 fn coerce_to_fixed_store(value: Value, m: u8, n: u8) -> Result<Value, EvalError> {
     let repr: i128 = match &value {
-        Value::Number(k) => *k as i128, // сырое представление (грамматика масштабировала)
+        Value::Number(k) => *k, // сырое представление (грамматика масштабировала)
         Value::Fixed { repr, n: n2, .. } => {
             // Пересчёт дробных разрядов (обычно n == n2 → тождество).
             if *n2 >= n {
@@ -290,7 +290,10 @@ pub(crate) fn cast_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalErr
         return match ty {
             TypeNode::Rational => Ok(Value::Real(fixed::to_real(repr, n))),
             // int/bit/enum: целая часть (floor), затем усечение по цели.
-            _ => coerce_to_type(Value::Number(fixed::to_integer_part(repr, n)), ty),
+            _ => coerce_to_type(
+                Value::Number(i128::from(fixed::to_integer_part(repr, n))),
+                ty,
+            ),
         };
     }
     // Длительность (фича 0134, решение заказчика): мост к числам — **миллисекунды**.
@@ -298,12 +301,16 @@ pub(crate) fn cast_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalErr
     // цели обязаны получить тот же ответ на вопрос «сколько это миллисекунд».
     if let Value::Duration(ns) = value {
         return coerce_to_type(
-            Value::Number(takt_lang::semantic::duration::to_millis(ns)),
+            Value::Number(i128::from(takt_lang::semantic::duration::to_millis(ns))),
             ty,
         );
     }
     if matches!(ty, TypeNode::Duration) {
-        let millis = to_integer(&value, ty)?;
+        // Длительность живёт в `i64` наносекунд (0134): её границу фича 0157 не
+        // трогала, поэтому число шире `i64` миллисекунд — переполнение, а не
+        // молчаливое усечение.
+        let millis = i64::try_from(to_integer(&value, ty)?)
+            .map_err(|_| EvalError::ArithmeticOverflow { op: "as duration" })?;
         return takt_lang::semantic::duration::from_millis(millis)
             .map(Value::Duration)
             .ok_or(EvalError::ArithmeticOverflow { op: "as duration" });
@@ -313,25 +320,30 @@ pub(crate) fn cast_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalErr
 }
 
 /// S1/S2/S9: усечение (беззнаковые) либо проверка диапазона (знаковые).
+///
+/// ⚠️ **64-битный тип идёт общим путём** (фича 0157). Прежде здесь стоял ранний
+/// выход «`bits >= 64` — вернуть как есть» с честной пометкой «значения хранятся
+/// в `i64`, поэтому `u64` со старшим битом не представим»: он-то и давал
+/// `SIM-004` на `m := m + 1` у границы `i64::MAX`, хотя ADR 0127 обещает
+/// беззнаковой арифметике обёртку `mod 2ⁿ` (у `u8`/`u32` она работала). С
+/// носителем `i128` спецслучая больше нет — маска и границы считаются той же
+/// формулой, что для узких типов.
 fn coerce_integer(value: Value, bits: u8, signed: bool) -> Result<Value, EvalError> {
     let ty = TypeNode::Integer { bits, signed };
     let n = to_integer(&value, &ty)?;
-    if bits >= 64 {
-        // Известное ограничение: значения хранятся в i64, поэтому u64 со старшим
-        // битом не представим. На приёмку (примеры на u8) не влияет.
-        return Ok(Value::Number(n));
-    }
+    // Шире 64 бит типов в языке нет; `Enum` приходит сюда с `bits = 64`.
+    let bits = bits.min(64);
     if signed {
         // S2: выход за диапазон знакового типа — UB в C, не воспроизводим.
-        let min = -(1_i64 << (bits - 1));
-        let max = (1_i64 << (bits - 1)) - 1;
+        let min = -(1_i128 << (bits - 1));
+        let max = (1_i128 << (bits - 1)) - 1;
         if n < min || n > max {
             return Err(EvalError::SignedOverflow { value: n, bits });
         }
         Ok(Value::Number(n))
     } else {
         // S1: обёртка mod 2^bits — определённое поведение C.
-        let mask = (1_i64 << bits) - 1;
+        let mask = (1_i128 << bits) - 1;
         Ok(Value::Number(n & mask))
     }
 }

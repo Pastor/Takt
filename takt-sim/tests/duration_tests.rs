@@ -237,7 +237,7 @@ fn each_delay_counts_from_entry_into_its_own_source_state() {
     }
     // Вход в A на такте 1 (t = 0) → 2 с истекают при t = 2s (такт 3): переход в B.
     // Вход в B при t = 2s → 3 с истекают при t = 5s (такт 6): переход в C.
-    let first = |want: i64| {
+    let first = |want: i128| {
         phases
             .iter()
             .find(|(_, p)| *p == want)

@@ -52,7 +52,7 @@ pub(crate) fn eval_expression(
         ExpressionNode::Bool(b) => Ok(Value::Boolean(*b)),
         ExpressionNode::Rational(text, negative) => parse_rational(text, *negative),
         // Адресный литерал `адрес:бит` — значение самого адреса.
-        ExpressionNode::Address(addr, _bit) => Ok(Value::Number(*addr)),
+        ExpressionNode::Address(addr, _bit) => Ok(Value::Number(i128::from(*addr))),
 
         // ── Переменные и доступ ──────────────────────────────────────────────
         ExpressionNode::Variable(var) => {
@@ -389,7 +389,7 @@ mod tests {
         }
     }
 
-    fn num(n: i64) -> Box<ExpressionNode> {
+    fn num(n: i128) -> Box<ExpressionNode> {
         Box::new(ExpressionNode::Number(n))
     }
 

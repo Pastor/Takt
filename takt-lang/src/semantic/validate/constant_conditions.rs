@@ -81,27 +81,27 @@ fn eval_const_value(cond: &ConditionNode) -> Option<bool> {
         ConditionNode::Bool(b) => Some(*b),
         ConditionNode::Number(n) => Some(*n != 0),
 
-        ConditionNode::Equal(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+        ConditionNode::Equal(l, r) => match (eval_literal_int(l), eval_literal_int(r)) {
             (Some(a), Some(b)) => Some(a == b),
             _ => None,
         },
-        ConditionNode::NotEqual(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+        ConditionNode::NotEqual(l, r) => match (eval_literal_int(l), eval_literal_int(r)) {
             (Some(a), Some(b)) => Some(a != b),
             _ => None,
         },
-        ConditionNode::Less(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+        ConditionNode::Less(l, r) => match (eval_literal_int(l), eval_literal_int(r)) {
             (Some(a), Some(b)) => Some(a < b),
             _ => None,
         },
-        ConditionNode::More(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+        ConditionNode::More(l, r) => match (eval_literal_int(l), eval_literal_int(r)) {
             (Some(a), Some(b)) => Some(a > b),
             _ => None,
         },
-        ConditionNode::LessEqual(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+        ConditionNode::LessEqual(l, r) => match (eval_literal_int(l), eval_literal_int(r)) {
             (Some(a), Some(b)) => Some(a <= b),
             _ => None,
         },
-        ConditionNode::MoreEqual(l, r) => match (eval_literal_i64(l), eval_literal_i64(r)) {
+        ConditionNode::MoreEqual(l, r) => match (eval_literal_int(l), eval_literal_int(r)) {
             (Some(a), Some(b)) => Some(a >= b),
             _ => None,
         },
@@ -127,11 +127,11 @@ fn eval_const_value(cond: &ConditionNode) -> Option<bool> {
 }
 
 /// Возвращает числовое значение условия, если оно является числовым литералом.
-fn eval_literal_i64(cond: &ConditionNode) -> Option<i64> {
+fn eval_literal_int(cond: &ConditionNode) -> Option<i128> {
     match cond {
         ConditionNode::Number(n) => Some(*n),
         ConditionNode::Bool(b) => Some(if *b { 1 } else { 0 }),
-        ConditionNode::Parenthesis(inner) => eval_literal_i64(inner),
+        ConditionNode::Parenthesis(inner) => eval_literal_int(inner),
         _ => None,
     }
 }

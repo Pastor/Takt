@@ -162,7 +162,7 @@ impl Mmio {
     ) -> Result<Self, Diagnostic> {
         // Перечисления собираются со всех уровней: ширина enum-порта считается по
         // диапазону его значений (как в `sv_type::enum_width`).
-        let mut enums: BTreeMap<String, Vec<(String, i64)>> = BTreeMap::new();
+        let mut enums: BTreeMap<String, Vec<(String, i128)>> = BTreeMap::new();
         for (_, model_rc) in blocks {
             for def in model_rc.borrow().enums.values() {
                 enums
@@ -284,7 +284,7 @@ pub(crate) fn port_signal_name(port: &MmioPort) -> &str {
 /// неразрешённый тип) — такой порт битом регистра быть не может.
 fn bit_width(
     ty: &TypeNode,
-    enums: &BTreeMap<String, Vec<(String, i64)>>,
+    enums: &BTreeMap<String, Vec<(String, i128)>>,
     what: &str,
 ) -> Option<u32> {
     match ty {

@@ -451,7 +451,7 @@ impl ModelNode {
     /// assert_eq!(value, 0);
     /// assert_eq!(model.search_enum_variant("East"), None);
     /// ```
-    pub fn search_enum_variant(&self, variant_name: &str) -> Option<(EnumDefinitionNode, i64)> {
+    pub fn search_enum_variant(&self, variant_name: &str) -> Option<(EnumDefinitionNode, i128)> {
         for enum_node in self.enums.values() {
             if let Some(val) = enum_node.find_variant(variant_name) {
                 return Some((enum_node.clone(), val));
@@ -1048,7 +1048,7 @@ pub enum ExpressionNode {
     /// Доступ к элементу массива: `id[индекс]`.
     ArraySubscript(Rc<RefCell<VariableNode>>, Box<ExpressionNode>),
     /// Срез массива: `id[начало:конец]`.
-    ArraySlice(Rc<RefCell<VariableNode>>, Option<i64>, Option<i64>),
+    ArraySlice(Rc<RefCell<VariableNode>>, Option<i128>, Option<i128>),
     /// Скобки: `(выражение)`.
     Parenthesis(Box<ExpressionNode>),
     /// Доступ к биту: `выражение.член`.
@@ -1113,8 +1113,8 @@ pub enum ExpressionNode {
     ),
     /// Присваивание: `левое = правое`.
     Assign(Box<ExpressionNode>, Box<ExpressionNode>),
-    /// Целочисленный литерал.
-    Number(i64),
+    /// Целочисленный литерал (носитель — `i128`, фича 0157).
+    Number(i128),
     /// Литерал длительности в наносекундах (фича 0134).
     Duration(i64),
     /// Вещественный литерал: `(строка, отрицательный)`.

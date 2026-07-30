@@ -20,12 +20,12 @@
 //!   конкатенацию смежных строк.
 //! - Комментарии: однострочные `//`, документационные `///` и блочные `/* */`.
 
+use crate::parser::literal_range::{LITERAL_MAX, LITERAL_MIN, out_of_range, recover_number};
 use std::str::CharIndices;
 use std::str::FromStr;
 
 use itertools::{PeekNth, peek_nth};
 use phf::phf_map;
-use thiserror::Error;
 use unicode_xid::UnicodeXID;
 
 use crate::ast::Comment;
@@ -69,7 +69,7 @@ pub use crate::parser::token::Token;
 /// assert_eq!(next_token(), Some(Token::Variable));
 /// assert_eq!(next_token(), Some(Token::Identifier("x")));
 /// assert_eq!(next_token(), Some(Token::ColonAssign)); // `:=` — присваивание (фича 0021)
-/// assert_eq!(next_token(), Some(Token::Number(42i64)));
+/// assert_eq!(next_token(), Some(Token::Number(42i128)));
 /// assert_eq!(next_token(), Some(Token::Semicolon));
 /// assert_eq!(next_token(), None);
 /// assert!(errors.is_empty());
@@ -91,107 +91,12 @@ pub struct Lexer<'input> {
     pub errors: &'input mut Vec<LexicalError>,
 }
 
-/// Ошибка лексического анализатора.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-#[allow(missing_docs)]
-pub enum LexicalError {
-    /// Неожиданный конец файла внутри блочного комментария.
-    #[error("неожиданный конец файла внутри комментария")]
-    EndOfFileInComment(Location),
-
-    /// Неожиданный конец файла внутри строкового литерала.
-    #[error("неожиданный конец файла внутри строкового литерала")]
-    EndOfFileInString(Location),
-
-    /// Неожиданный конец файла внутри шестнадцатеричного литерала.
-    #[error("неожиданный конец файла внутри шестнадцатеричного литерала")]
-    EndOfFileInHex(Location),
-
-    /// Отсутствуют цифры после `0x`.
-    #[error("отсутствует число после '0x'")]
-    MissingNumber(Location),
-
-    /// Недопустимый символ в шестнадцатеричном литерале.
-    #[error("недопустимый символ '{1}' в шестнадцатеричном литерале")]
-    InvalidCharacterInHexLiteral(Location, char),
-
-    /// Неизвестный токен.
-    #[error("нераспознанный токен '{1}'")]
-    UnrecognisedToken(Location, String),
-
-    /// Отсутствует показатель степени после `e`/`E`.
-    #[error("отсутствует показатель степени")]
-    MissingExponent(Location),
-
-    /// Ожидалось ключевое слово `from`, но встретилось другое слово.
-    #[error("ожидалось ключевое слово 'from', но найдено '{1}'")]
-    ExpectedFrom(Location, String),
-
-    /// Числовой литерал не помещается в знаковое 64-битное целое.
-    ///
-    /// Прежде такой литерал **ронял компилятор**: разбор шёл через
-    /// `i64::from_str(..).unwrap()`. Диапазон задан представлением числа в
-    /// токене (`Token::Number(i64)`), поэтому граница — свойство языка, а не
-    /// лексера; см. приложение «Ошибки и предупреждения».
-    #[error("числовой литерал '{1}' вне диапазона i64 [-9223372036854775808, 9223372036854775807]")]
-    NumberOutOfRange(Location, String),
-
-    /// Литерал длительности/частоты вне представимого диапазона (фича 0134).
-    ///
-    /// Длительность хранится в наносекундах (`i64`, ±292 года), частота — в
-    /// герцах (`u64`). Молчаливой обёртки здесь быть не должно: выдержка,
-    /// обернувшаяся при разборе, стала бы другой выдержкой.
-    #[error("литерал времени '{1}' вне представимого диапазона")]
-    TimeLiteralOutOfRange(Location, String),
-
-    /// Единица времени стоит после формы, которая её не допускает (фича 0134).
-    ///
-    /// Длительность записывается **целым** десятичным числом с единицей:
-    /// `1.5s`, `1e3ms` и `0xFFms` отвергаются здесь, а не оставляются
-    /// «числом и идентификатором» — иначе автор получил бы `SY-002` про
-    /// неведомый токен вместо указания на настоящую причину. Дробная
-    /// длительность выражается меньшей единицей (`1500ms`).
-    #[error(
-        "недопустимый литерал времени '{1}': единица допустима только у целого десятичного числа"
-    )]
-    InvalidTimeLiteral(Location, String),
-}
-
-impl LexicalError {
-    /// Возвращает местоположение в исходном тексте, где возникла ошибка.
-    pub fn loc(&self) -> Location {
-        match self {
-            LexicalError::EndOfFileInComment(loc) => *loc,
-            LexicalError::EndOfFileInString(loc) => *loc,
-            LexicalError::EndOfFileInHex(loc) => *loc,
-            LexicalError::MissingNumber(loc) => *loc,
-            LexicalError::InvalidCharacterInHexLiteral(loc, _) => *loc,
-            LexicalError::UnrecognisedToken(loc, _) => *loc,
-            LexicalError::MissingExponent(loc) => *loc,
-            LexicalError::ExpectedFrom(loc, _) => *loc,
-            LexicalError::NumberOutOfRange(loc, _) => *loc,
-            LexicalError::TimeLiteralOutOfRange(loc, _) => *loc,
-            LexicalError::InvalidTimeLiteral(loc, _) => *loc,
-        }
-    }
-
-    /// Возвращает код ошибки в формате `LE-NNN`.
-    pub fn code(&self) -> &'static str {
-        match self {
-            LexicalError::EndOfFileInComment(_) => "LE-001",
-            LexicalError::EndOfFileInString(_) => "LE-002",
-            LexicalError::EndOfFileInHex(_) => "LE-003",
-            LexicalError::MissingNumber(_) => "LE-004",
-            LexicalError::InvalidCharacterInHexLiteral(_, _) => "LE-005",
-            LexicalError::UnrecognisedToken(_, _) => "LE-006",
-            LexicalError::MissingExponent(_) => "LE-007",
-            LexicalError::ExpectedFrom(_, _) => "LE-008",
-            LexicalError::NumberOutOfRange(_, _) => "LE-009",
-            LexicalError::TimeLiteralOutOfRange(_, _) => "LE-010",
-            LexicalError::InvalidTimeLiteral(_, _) => "LE-011",
-        }
-    }
-}
+/// Ошибки лексического анализа — [`crate::parser::lex_error`].
+///
+/// Реэкспорт держит публичный путь `parser::lexer::LexicalError` неизменным:
+/// тип переехал в свой модуль по правилу размера (фича 0157), а не сменил
+/// адрес для потребителей.
+pub use crate::parser::lex_error::LexicalError;
 
 /// Возвращает `true`, если переданная строка является ключевым словом Takt.
 pub fn is_keyword(word: &str) -> bool {
@@ -343,14 +248,18 @@ impl<'input> Lexer<'input> {
             // Удаляем разделители `_` перед разбором hex-числа
             let hex_raw = &self.input[start + 2..=end];
             let hex: String = hex_raw.chars().filter(|&c| c != '_').collect();
-            // Диапазон — свойство представления `Token::Number(i64)`: значение
-            // шире i64 (например маска `0xFFFFFFFFFFFFFFFF`) в токен не влезает.
-            // Прежде здесь стоял `unwrap()`, и такой литерал ронял компилятор.
-            let Ok(hex_val) = i64::from_str_radix(&hex, 16) else {
-                return Err(LexicalError::NumberOutOfRange(
-                    Location::source(self.file_no, start, end + 1),
-                    self.input[start..=end].to_string(),
-                ));
+            // Шестнадцатеричная запись беззнаковая, поэтому потолок ей — `u64`
+            // (фича 0157): маска `0xFFFFFFFFFFFFFFFF` выразима.
+            let hex_val = match i128::from_str_radix(&hex, 16) {
+                Ok(value) if value <= LITERAL_MAX => value,
+                _ => {
+                    return Err(out_of_range(
+                        self.file_no,
+                        start,
+                        end,
+                        &self.input[start..=end],
+                    ));
+                }
             };
 
             // Проверяем, является ли это адресным литералом `0xNNNN:bit`
@@ -503,37 +412,46 @@ impl<'input> Lexer<'input> {
         let n_raw = &self.input[start..=old_end];
         let n_clean: String = n_raw.chars().filter(|&c| c != '_').collect();
 
-        // См. комментарий у hex-ветви: `unwrap()` здесь ронял компилятор на
-        // литерале шире i64 (например `18446744073709551615`).
-        let Ok(mut n) = i64::from_str(&n_clean) else {
-            return Err(LexicalError::NumberOutOfRange(
-                Location::source(self.file_no, start, old_end + 1),
-                n_clean,
-            ));
+        // Текст здесь всегда без знака (минус — отдельный символ, учитывается
+        // ниже), поэтому потолок беззнаковый; дно — после смены знака.
+        let Ok(mut n) = i128::from_str(&n_clean).map_err(|_| ()).and_then(|value| {
+            if value <= LITERAL_MAX {
+                Ok(value)
+            } else {
+                Err(())
+            }
+        }) else {
+            return Err(out_of_range(self.file_no, start, old_end, &n_clean));
         };
 
-        // Показатель без минуса ОСТАВЛЯЕТ литерал целым и вычисляется
-        // (правила 1–3 ADR 0144). Арифметика проверяемая: `1e19` не влезает в
-        // i64, и ответ обязан быть тем же `LE-009`, что у длинного литерала
-        // (0128), а не тихая обёртка.
+        // Показатель без минуса ОСТАВЛЯЕТ литерал целым и вычисляется (правила
+        // 1–3 ADR 0144): `1e20` не влезает ни в один тип языка и даёт `LE-009`,
+        // а не тихую обёртку.
         if has_exponent {
             let exp_raw = &self.input[exp_start..=end];
             let exp_clean: String = exp_raw.chars().filter(|&c| c != '_').collect();
-            let out_of_range = || {
-                LexicalError::NumberOutOfRange(
-                    Location::source(self.file_no, start, end + 1),
-                    self.input[start..=end].to_string(),
-                )
-            };
-            // Показатель шире u32 заведомо переполняет i64 — считать незачем.
+            let out_of_range = || out_of_range(self.file_no, start, end, &self.input[start..=end]);
+            // Показатель шире u32 заведомо выходит за диапазон — считать незачем.
             let exp: u32 = exp_clean.parse().map_err(|_| out_of_range())?;
             for _ in 0..exp {
                 n = n.checked_mul(10).ok_or_else(out_of_range)?;
+                if n > LITERAL_MAX {
+                    return Err(out_of_range());
+                }
             }
         }
 
         if is_minus {
             n = -n;
+            // Дно — `i64::MIN`: беззнаковых типов у отрицательного значения нет.
+            if n < LITERAL_MIN {
+                return Err(out_of_range(
+                    self.file_no,
+                    start,
+                    end,
+                    &self.input[start..=end],
+                ));
+            }
         }
         // Сюда доходит только форма с экспонентой (`1e3ms`): у простого целого
         // единица уже прочитана выше и вернула токен длительности.
@@ -728,6 +646,9 @@ impl<'input> Lexer<'input> {
                             if matches!(lex_err, LexicalError::EndOfFileInHex(_)) {
                                 return None;
                             }
+                            if let Some(recovered) = recover_number(&lex_err) {
+                                return Some(recovered);
+                            }
                         }
                         Ok(parse_result) => return Some(parse_result),
                     }
@@ -803,8 +724,9 @@ impl<'input> Lexer<'input> {
                             // Отрицательный числовой литерал
                             return match self.parse_number(i + 1, '-') {
                                 Err(lex_error) => {
+                                    let recovered = recover_number(&lex_error);
                                     self.errors.push(lex_error);
-                                    None
+                                    recovered
                                 }
                                 Ok(parse_result) => Some(parse_result),
                             };

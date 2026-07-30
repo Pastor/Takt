@@ -165,7 +165,7 @@ pub(crate) struct Scope<'a> {
     /// инженеру хуже, чем `COMMAND_UP`, — а RTL читают. Поэтому значение
     /// восстанавливается в имя варианта, и приведение остаётся запасным путём
     /// для значения, которому варианта нет.
-    pub(crate) enums: &'a BTreeMap<String, Vec<(String, i64)>>,
+    pub(crate) enums: &'a BTreeMap<String, Vec<(String, i128)>>,
     /// Приёмник предупреждений генератора (фича 0064).
     ///
     /// `print_expression` берётся по `&Scope`, но `SV-009` (переменный делитель)
@@ -659,7 +659,7 @@ mod tests {
         BTreeSet::new()
     }
 
-    fn num(n: i64) -> Box<ConditionNode> {
+    fn num(n: i128) -> Box<ConditionNode> {
         Box::new(ConditionNode::Number(n))
     }
 

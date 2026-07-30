@@ -38,7 +38,7 @@ fn simulate() -> Unit {
 }
 
 /// Поле структурной переменной `var.field` симулятора как целое.
-fn sim_field(unit: &Unit, var: &str, field: &str) -> i64 {
+fn sim_field(unit: &Unit, var: &str, field: &str) -> i128 {
     match unit.variable(var) {
         Some(Value::Struct { fields, .. }) => match fields.iter().find(|(f, _)| f == field) {
             Some((_, Value::Number(n))) => *n,
@@ -48,7 +48,7 @@ fn sim_field(unit: &Unit, var: &str, field: &str) -> i64 {
     }
 }
 
-fn sim_scalar(unit: &Unit, name: &str) -> i64 {
+fn sim_scalar(unit: &Unit, name: &str) -> i128 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
         other => panic!("{name}: ожидалось целое, получено {other:?}"),
@@ -57,7 +57,7 @@ fn sim_scalar(unit: &Unit, name: &str) -> i64 {
 
 /// Порождает C, компилирует `cc`, запускает и возвращает финальные значения
 /// `p.x`, `p.y`, `t` из эталона.
-fn run_generated_c(dir: &Path) -> Vec<(String, i64)> {
+fn run_generated_c(dir: &Path) -> Vec<(String, i128)> {
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура");
     takt_lang::compile_to_c(
         "struct_conformance",
@@ -135,7 +135,7 @@ fn struct_fields_match_generated_c() {
 
     let dir = std::env::temp_dir().join("lam_conformance_struct");
     std::fs::create_dir_all(&dir).expect("каталог");
-    let c: std::collections::HashMap<String, i64> = run_generated_c(&dir).into_iter().collect();
+    let c: std::collections::HashMap<String, i128> = run_generated_c(&dir).into_iter().collect();
 
     for (name, sim_val) in sim {
         let c_val = c

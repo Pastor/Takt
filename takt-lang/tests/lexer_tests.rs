@@ -16,6 +16,25 @@ use takt_lang::parser::lexer::{Lexer, LexicalError, Token};
 // ─────────────────────────────── Вспомогательные функции ─────────────────────
 
 /// Запускает лексер и возвращает вектор лексических ошибок.
+/// Значение единственного числового токена входа.
+///
+/// Отдельный хелпер, а не макрос `assert_toks` (тот определён ниже по файлу и
+/// до этой точки не виден): возвращается `i128`, поэтому заимствование входа не
+/// утекает наружу.
+fn number_of(input: &str) -> i128 {
+    let mut comments = Vec::new();
+    let mut errors = Vec::new();
+    let value = {
+        let mut lexer = Lexer::new(input, 0, &mut comments, &mut errors);
+        lexer.find_map(|(_, tok, _)| match tok {
+            Token::Number(n) => Some(n),
+            _ => None,
+        })
+    };
+    assert!(errors.is_empty(), "неожиданные ошибки лексера: {errors:?}");
+    value.unwrap_or_else(|| panic!("во входе '{input}' нет числового токена"))
+}
+
 fn collect_errors(input: &str) -> Vec<LexicalError> {
     let src = input.to_string();
     let mut comments = Vec::new();
@@ -531,16 +550,45 @@ fn arrow_lexes_as_single_token() {
 #[path = "lexer_tests/part2.rs"]
 mod part2;
 
-// ───────────────────── Границы числовых литералов (фича 0128) ────────────────
+// ──────────── Границы числовых литералов (фичи 0128 и 0157) ──────────────────
 //
 // Прежде литерал шире `i64` РОНЯЛ компилятор: разбор шёл через `unwrap()`
 // (`i64::from_str` для десятичного, `i64::from_str_radix` для шестнадцатеричного).
-// Пользователь получал трассу паники вместо диагностики, причём на осмысленном
-// вводе: `0xFFFFFFFFFFFFFFFF` — это полная маска для типа `[bit;64]`.
+// Фича 0128 заменила панику диагностикой `LE-009`, но записать значение
+// по-прежнему было нельзя — граница стояла на **носителе** (`i64`).
+//
+// Фича 0157 перенесла границу на **типы языка**: приём — `[i64::MIN, u64::MAX]`,
+// то есть объединение самого широкого знакового и самого широкого беззнакового
+// типов. `0xFFFFFFFFFFFFFFFF` (полная маска `[bit;64]`) и `u64::MAX` стали
+// валидными литералами; `LE-009` остался тому, что не помещается **ни в один**
+// тип.
 
 #[test]
-fn decimal_literal_beyond_i64_is_diagnostic_not_panic() {
-    let errors = collect_errors("var x: u64 := 18446744073709551615;");
+fn u64_max_literal_lexes_after_0157() {
+    // Прежде здесь был `LE-009` — значение не влезало в носитель `i64`.
+    assert!(
+        collect_errors("var x: u64 := 18446744073709551615;").is_empty(),
+        "u64::MAX обязан лекситься: тип u64 объявлен языком"
+    );
+    assert_eq!(
+        number_of("18446744073709551615"),
+        18_446_744_073_709_551_615
+    );
+}
+
+#[test]
+fn full_bit64_mask_lexes_after_0157() {
+    // Заголовочный случай фичи: полная маска для официально поддержанного
+    // `[bit;64]` (ADR 0078) — ради него фича и заводилась.
+    assert!(collect_errors("const MASK: [bit;64] := 0xFFFFFFFFFFFFFFFF;").is_empty());
+    assert_eq!(number_of("0xFFFFFFFFFFFFFFFF"), 18_446_744_073_709_551_615);
+}
+
+#[test]
+fn decimal_literal_beyond_u64_is_diagnostic_not_panic() {
+    // Выше `u64::MAX` типа-приёмника нет ни одного — отказ, а не молчаливое
+    // усечение до носителя.
+    let errors = collect_errors("var x: u64 := 18446744073709551616;");
     assert_eq!(errors.len(), 1, "ожидалась ровно одна лексическая ошибка");
     assert!(
         matches!(errors[0], LexicalError::NumberOutOfRange(_, _)),
@@ -551,21 +599,51 @@ fn decimal_literal_beyond_i64_is_diagnostic_not_panic() {
 }
 
 #[test]
-fn hex_literal_beyond_i64_is_diagnostic_not_panic() {
-    // Полная маска 64-битного вектора — самый реалистичный способ наткнуться.
-    let errors = collect_errors("const MASK: [bit;64] := 0xFFFFFFFFFFFFFFFF;");
+fn hex_literal_beyond_u64_is_diagnostic_not_panic() {
+    let errors = collect_errors("const MASK: [bit;64] := 0x1_0000_0000_0000_0000;");
     assert_eq!(errors.len(), 1);
     assert!(matches!(errors[0], LexicalError::NumberOutOfRange(_, _)));
     assert_eq!(errors[0].code(), "LE-009");
 }
 
 #[test]
-fn literal_at_i64_boundary_still_lexes() {
-    // Сторож направления: граница должна быть ИМЕННО на i64, а не «где-то рядом».
-    // Если правка сузит диапазон, этот тест покраснеет.
+fn negative_literal_below_i64_min_is_diagnostic() {
+    // Дно — `i64::MIN`: беззнаковых типов у отрицательного значения нет, и
+    // расширение потолка до `u64::MAX` его НЕ опускает.
+    assert!(collect_errors("var x: i64 := -9223372036854775808;").is_empty());
+    let errors = collect_errors("var x: i64 := -9223372036854775809;");
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code(), "LE-009");
+}
+
+#[test]
+fn literal_at_type_boundary_still_lexes() {
+    // Сторож направления: граница должна быть ИМЕННО на типах языка, а не
+    // «где-то рядом». Если правка сузит диапазон, этот тест покраснеет.
     assert!(collect_errors("var x: i64 := 9223372036854775807;").is_empty());
     assert!(collect_errors("var x: i64 := 0x7FFFFFFFFFFFFFFF;").is_empty());
     assert!(collect_errors("var x: u8 := 255;").is_empty());
+}
+
+#[test]
+fn out_of_range_literal_does_not_cascade_into_syntax_error() {
+    // R7 фичи 0157: одна причина — одна ошибка. Прежде токен «исчезал», парсер
+    // спотыкался о следующий символ и добавлял `SY-002` про `;`, уводя автора от
+    // настоящей причины. Заглушка держит форму разбора.
+    let source = "model M { var x: u64 := 18446744073709551616; }";
+    let diagnostics = takt_lang::collect_compile_diagnostics("проба.takt", source, &[], false);
+    let codes: Vec<&str> = diagnostics
+        .iter()
+        .filter_map(|d| d.code.as_deref())
+        .collect();
+    assert!(
+        codes.contains(&"LE-009"),
+        "ожидался LE-009, получено: {codes:?}"
+    );
+    assert!(
+        !codes.contains(&"SY-002"),
+        "лексическая ошибка не должна порождать синтаксическое эхо: {codes:?}"
+    );
 }
 
 #[test]
@@ -657,15 +735,18 @@ fn rational_exponent_is_kept_in_text() {
 #[test]
 fn exponent_overflow_is_diagnostic_not_wraparound() {
     // Правило 3 ADR 0144: вычисление проверяемое, переполнение — тот же `LE-009`,
-    // что у длинного литерала (0128). Тихая обёртка недопустима.
-    let errors = collect_errors("var x: i64 := 1e19;");
+    // что у длинного литерала (0128). Тихая обёртка недопустима. Порог сдвинут
+    // фичей 0157 вместе с границей приёма: 10¹⁹ теперь в `u64` влезает, 10²⁰ —
+    // нет.
+    let errors = collect_errors("var x: u64 := 1e20;");
     assert_eq!(errors.len(), 1, "ожидалась ровно одна лексическая ошибка");
     assert!(matches!(errors[0], LexicalError::NumberOutOfRange(_, _)));
     assert_eq!(errors[0].code(), "LE-009");
 }
 
 #[test]
-fn exponent_at_i64_boundary_still_lexes() {
-    // Сторож направления: 10^18 в i64 влезает, и сужать границу нельзя.
+fn exponent_at_type_boundary_still_lexes() {
+    // Сторож направления: 10^18 влезает в i64, 10^19 — в u64; сужать нельзя.
     assert_toks!("1e18", vec![Token::Number(1_000_000_000_000_000_000)]);
+    assert_toks!("1e19", vec![Token::Number(10_000_000_000_000_000_000)]);
 }

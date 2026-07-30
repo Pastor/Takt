@@ -140,7 +140,7 @@ pub(crate) fn construct_type(
 ///
 /// - `SE-057` — конструктор типа не `q` (единственный fixed-point-конструктор),
 ///   либо границы `m`/`n`/`W` нарушены.
-fn construct_fixed(loc: Location, ctor: &str, m: i64, n: i64) -> Result<TypeNode, Diagnostic> {
+fn construct_fixed(loc: Location, ctor: &str, m: i128, n: i128) -> Result<TypeNode, Diagnostic> {
     if ctor != "q" {
         return Err(Diagnostic::declaration_error(
             loc,
@@ -221,7 +221,7 @@ pub(crate) fn lower_fixed_literal(
     let (mantissa, exp): (i128, u32) = match expr {
         // Целый литерал приходит уже вычисленным: показатель степени учёл
         // лексер (фича 0144), поэтому здесь порядок нулевой.
-        ExpressionNode::Number(k) => (*k as i128, 0),
+        ExpressionNode::Number(k) => (*k, 0),
         ExpressionNode::Rational(s, neg) => {
             // Текст хранится КАК НАПИСАН и может нести показатель (`2.5e3`,
             // фича 0144). Прежде здесь стоял `split_once('.')` по всему тексту:
@@ -313,7 +313,7 @@ pub(crate) fn lower_fixed_var(var: &VariableNode) -> Result<Option<VariableNode>
             loc: *loc,
             name: name.clone(),
             ty: TypeNode::Fixed { m: *m, n: *n },
-            expr: ExpressionNode::Number(v as i64),
+            expr: ExpressionNode::Number(v),
         })),
         V::Const {
             upper,
@@ -326,7 +326,7 @@ pub(crate) fn lower_fixed_var(var: &VariableNode) -> Result<Option<VariableNode>
             loc: *loc,
             name: name.clone(),
             ty: TypeNode::Fixed { m: *m, n: *n },
-            expr: ExpressionNode::Number(v as i64),
+            expr: ExpressionNode::Number(v),
         })),
         _ => Ok(None),
     }
@@ -708,7 +708,7 @@ mod tests {
 
     // ── Fixed-point q(m, n) (фича 0061, задача 01) ────────────────────────────
 
-    fn fixed(ctor: &str, m: i64, n: i64) -> Result<TypeNode, Diagnostic> {
+    fn fixed(ctor: &str, m: i128, n: i128) -> Result<TypeNode, Diagnostic> {
         construct_type(
             Some(Type::Fixed(Location::Implicit, ctor.to_string(), m, n)),
             empty_model(),

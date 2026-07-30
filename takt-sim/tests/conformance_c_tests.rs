@@ -110,21 +110,21 @@ fn simulate_fixture(fixture: &str) -> Unit {
     unit
 }
 
-fn sim_value(unit: &Unit, name: &str) -> i64 {
+fn sim_value(unit: &Unit, name: &str) -> i128 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
         // bool в C печатается как 0/1 — приводим к тому же виду.
-        Some(Value::Boolean(b)) => i64::from(b),
+        Some(Value::Boolean(b)) => i128::from(b),
         // q(m, n) (0061): наблюдаемое — **представление** (сырые биты `intW`),
         // ровно то же читает C из поля структуры `(int)m.entry.<var>`. Сверка
         // идёт по repr, а не по вещественному приближению — побитово (A4).
-        Some(Value::Fixed { repr, .. }) => repr,
+        Some(Value::Fixed { repr, .. }) => i128::from(repr),
         other => panic!("переменная '{name}': неожиданное значение {other:?}"),
     }
 }
 
 /// Порождает C, собирает с харнессом и возвращает значения, напечатанные C.
-fn run_generated_c(dir: &Path) -> Vec<(String, i64)> {
+fn run_generated_c(dir: &Path) -> Vec<(String, i128)> {
     // Публичный API — тот же путь, которым идёт `taktc compile -t c`.
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
     takt_lang::compile_to_c(
@@ -241,7 +241,7 @@ const NEG_ENUM_CHECKED: &[&str] = &[
 
 /// Порождает C для фикстуры с отрицательным перечислением, собирает и
 /// возвращает напечатанное. Модель — `ConformanceNegEnum` (из имени файла).
-fn run_generated_neg_enum_c(dir: &Path) -> Vec<(String, i64)> {
+fn run_generated_neg_enum_c(dir: &Path) -> Vec<(String, i128)> {
     let source = std::fs::read_to_string(NEG_ENUM_FIXTURE).expect("фикстура читается");
     takt_lang::compile_to_c(
         "conformance_neg_enum",
@@ -546,7 +546,7 @@ const TRACE_TICKS: usize = 6;
 
 /// Потактовая трасса симулятора: для каждого такта (до терминального включительно)
 /// вектор значений `vars` в порядке `vars`.
-fn simulate_trace(fixture: &str, vars: &[&str]) -> Vec<Vec<i64>> {
+fn simulate_trace(fixture: &str, vars: &[&str]) -> Vec<Vec<i128>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -577,7 +577,7 @@ fn c_trace(
     root: &str,
     accessor: &str,
     vars: &[&str],
-) -> Vec<Vec<i64>> {
+) -> Vec<Vec<i128>> {
     c_trace_opts(
         dir,
         fixture,
@@ -600,7 +600,7 @@ fn c_trace_opts(
     accessor: &str,
     vars: &[&str],
     opts: &takt_lang::generator::GenerateOptions,
-) -> Vec<Vec<i64>> {
+) -> Vec<Vec<i128>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     takt_lang::compile_to_c(
         basename,
@@ -654,12 +654,12 @@ int main(void) {{
 
     // Строки вида "T:var=val" → трасса. Индекс такта `t` начинается с 0 в C.
     let out = String::from_utf8_lossy(&run.stdout).into_owned();
-    let mut trace: Vec<Vec<i64>> = Vec::new();
+    let mut trace: Vec<Vec<i128>> = Vec::new();
     for line in out.lines() {
         let (t_str, rest) = line.split_once(':').expect("формат T:var=val");
         let t: usize = t_str.parse().expect("индекс такта");
         let (_, val) = rest.split_once('=').expect("формат var=val");
-        let val: i64 = val.trim().parse().expect("значение");
+        let val: i128 = val.trim().parse().expect("значение");
         if trace.len() <= t {
             trace.resize(t + 1, Vec::new());
         }
@@ -901,7 +901,7 @@ fn float_embedded_opts(m: u8, n: u8) -> takt_lang::generator::GenerateOptions {
 
 /// Q-режим эталона: понижает `float → q(m, n)` в модели симулятора тем же
 /// проходом, что и цель (ADR 0096, драйвер 2 — сверка ВНУТРИ режима).
-fn simulate_trace_float_q(fixture: &str, m: u8, n: u8, vars: &[&str]) -> Vec<Vec<i64>> {
+fn simulate_trace_float_q(fixture: &str, m: u8, n: u8, vars: &[&str]) -> Vec<Vec<i128>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");

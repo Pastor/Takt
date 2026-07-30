@@ -64,19 +64,19 @@ fn verilator_available() -> bool {
         .unwrap_or(false)
 }
 
-fn sim_value(unit: &Unit, name: &str) -> i64 {
+fn sim_value(unit: &Unit, name: &str) -> i128 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
-        Some(Value::Boolean(b)) => i64::from(b),
+        Some(Value::Boolean(b)) => i128::from(b),
         // q(m, n) (0061): наблюдаемое — представление (сигнал `logic signed [W-1:0]`
         // = repr), ровно то, что тестбенч читает через `$signed(dut.<сигнал>)`.
-        Some(Value::Fixed { repr, .. }) => repr,
+        Some(Value::Fixed { repr, .. }) => i128::from(repr),
         other => panic!("переменная '{name}': неожиданное значение {other:?}"),
     }
 }
 
 /// Потактовая трасса симулятора: значения `vars` после каждого такта.
-fn simulate_trace(fixture: &str, vars: &[&str]) -> Vec<Vec<i64>> {
+fn simulate_trace(fixture: &str, vars: &[&str]) -> Vec<Vec<i128>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -112,7 +112,7 @@ fn sv_trace(
     basename: &str,
     signals: &[&str],
     ticks: usize,
-) -> Vec<Vec<i64>> {
+) -> Vec<Vec<i128>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     takt_lang::compile_to_sv(
         basename,
@@ -186,7 +186,7 @@ endmodule
         .filter_map(|line| line.strip_prefix("TICK "))
         .map(|rest| {
             rest.split_whitespace()
-                .map(|v| v.parse::<i64>().expect("значение — целое"))
+                .map(|v| v.parse::<i128>().expect("значение — целое"))
                 .collect()
         })
         .collect()
@@ -437,7 +437,7 @@ fn c_root_trace(
     basename: &str,
     root_type: &str,
     vars: &[&str],
-) -> Vec<Vec<i64>> {
+) -> Vec<Vec<i128>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     takt_lang::compile_to_c(
         basename,
@@ -487,12 +487,12 @@ int main(void) {{
     let run = Command::new(&bin).output().expect("запуск собранного C");
     assert!(run.status.success(), "собранный C завершился с ошибкой");
     let out = String::from_utf8_lossy(&run.stdout).into_owned();
-    let mut trace: Vec<Vec<i64>> = Vec::new();
+    let mut trace: Vec<Vec<i128>> = Vec::new();
     for line in out.lines() {
         let (t_str, rest) = line.split_once(':').expect("формат T:var=val");
         let t: usize = t_str.parse().expect("индекс такта");
         let (_, val) = rest.split_once('=').expect("формат var=val");
-        let val: i64 = val.trim().parse().expect("значение");
+        let val: i128 = val.trim().parse().expect("значение");
         if trace.len() <= t {
             trace.resize(t + 1, Vec::new());
         }
@@ -660,7 +660,7 @@ fn sv_trace_signed(
     signals: &[&str],
     ticks: usize,
     opts: &takt_lang::generator::GenerateOptions,
-) -> Vec<Vec<i64>> {
+) -> Vec<Vec<i128>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     takt_lang::compile_to_sv(
         basename,
@@ -725,7 +725,7 @@ endmodule
         .filter_map(|line| line.strip_prefix("TICK "))
         .map(|rest| {
             rest.split_whitespace()
-                .map(|v| v.parse::<i64>().expect("значение — целое"))
+                .map(|v| v.parse::<i128>().expect("значение — целое"))
                 .collect()
         })
         .collect()
@@ -782,7 +782,7 @@ fn float_as_q_opts(m: u8, n: u8) -> takt_lang::generator::GenerateOptions {
 
 /// Q-режим эталона: понижает `float → q(m, n)` в модели симулятора тем же
 /// проходом, что и цель (ADR 0096, драйвер 2 — сверка ВНУТРИ режима).
-fn simulate_trace_float_q(fixture: &str, m: u8, n: u8, vars: &[&str]) -> Vec<Vec<i64>> {
+fn simulate_trace_float_q(fixture: &str, m: u8, n: u8, vars: &[&str]) -> Vec<Vec<i128>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -956,7 +956,7 @@ endmodule
         .expect("запуск собранной симуляции");
     let stdout = String::from_utf8_lossy(&run.stdout);
 
-    let steps: Vec<Vec<i64>> = stdout
+    let steps: Vec<Vec<i128>> = stdout
         .lines()
         .filter_map(|l| l.strip_prefix("STEP "))
         .map(|r| r.split_whitespace().map(|v| v.parse().unwrap()).collect())
@@ -978,7 +978,7 @@ endmodule
             "такт {i}: неподключённый en ≠ en=1 (умолчание сломано)"
         );
         // A2: неподключённый = ожидаемая эволюция счётчика (1,2,3).
-        assert_eq!(unc, (i as i64) + 1, "такт {i}: en=1 не даёт n = {}", i + 1);
+        assert_eq!(unc, (i as i128) + 1, "такт {i}: en=1 не даёт n = {}", i + 1);
         // A2: en=0 замораживает автомат на сбросовом значении.
         assert_eq!(en0, 0, "такт {i}: en=0 не заморозил счётчик (n = {en0})");
     }

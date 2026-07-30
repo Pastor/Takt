@@ -206,7 +206,7 @@ pub(super) fn validate_enum_values(model: Rc<RefCell<ModelNode>>) -> Result<(), 
 /// Возвращает `true`, если значение `n` совпадает с числовым значением
 /// хотя бы одного варианта перечисления `enum_name` в контексте модели.
 /// Если перечисление не найдено — не блокируем (ошибка другой проверки).
-fn is_valid_enum_value(enum_name: &str, n: i64, model: &Rc<RefCell<ModelNode>>) -> bool {
+fn is_valid_enum_value(enum_name: &str, n: i128, model: &Rc<RefCell<ModelNode>>) -> bool {
     if let Some(enum_node) = model.borrow().search_enum(enum_name) {
         enum_node.variants.iter().any(|(_, val)| *val == n)
     } else {

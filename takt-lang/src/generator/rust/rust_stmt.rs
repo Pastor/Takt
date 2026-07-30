@@ -671,7 +671,7 @@ mod tail_tests {
     use super::tail_foldable;
     use crate::semantic::{ExpressionNode, StatementNode};
 
-    fn ret(n: i64) -> StatementNode {
+    fn ret(n: i128) -> StatementNode {
         StatementNode::Return(Some(Box::new(ExpressionNode::Number(n))))
     }
     fn if_(then_: StatementNode, else_: Option<StatementNode>) -> StatementNode {

@@ -47,16 +47,16 @@ fn rustc_available() -> bool {
         .unwrap_or(false)
 }
 
-fn sim_value(unit: &Unit, name: &str) -> i64 {
+fn sim_value(unit: &Unit, name: &str) -> i128 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
-        Some(Value::Boolean(b)) => i64::from(b),
+        Some(Value::Boolean(b)) => i128::from(b),
         other => panic!("порт '{name}': неожиданное значение {other:?}"),
     }
 }
 
 /// Потактовая трасса симулятора: значение `port` после каждого такта.
-fn simulate_trace(fixture: &Path, port: &str) -> Vec<i64> {
+fn simulate_trace(fixture: &Path, port: &str) -> Vec<i128> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -95,7 +95,7 @@ fn rust_trace(
     root: &str,
     variant: &str,
     ticks: usize,
-) -> Vec<i64> {
+) -> Vec<i128> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     takt_lang::compile_to_rust(
         basename,
@@ -161,7 +161,7 @@ fn main() {{
     String::from_utf8_lossy(&run.stdout)
         .lines()
         .filter_map(|line| line.strip_prefix("TICK "))
-        .map(|v| v.trim().parse::<i64>().expect("значение — целое"))
+        .map(|v| v.trim().parse::<i128>().expect("значение — целое"))
         .collect()
 }
 
@@ -534,7 +534,7 @@ fn float_as_q_without_embedded_is_native_rust() {
 // ── Модель времени: профиль «часы» через внешний `now_ms` (фича 0134) ─────────
 
 /// Трасса симулятора при 1 мс на такт (эталон профиля «часы»).
-fn simulate_time_trace(source: &str, port: &str, ticks: usize) -> Vec<i64> {
+fn simulate_time_trace(source: &str, port: &str, ticks: usize) -> Vec<i128> {
     let (ast, _) = takt_lang::parse(source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
     let mut unit = build_unit(model).expect("построение юнита");
@@ -552,7 +552,7 @@ fn simulate_time_trace(source: &str, port: &str, ticks: usize) -> Vec<i64> {
 }
 
 /// Трасса порождённой прошивки: фиктивный `now_ms` = модельное время (1 мс/такт).
-fn rust_time_trace(dir: &Path, path: &Path, root: &str, variant: &str, ticks: usize) -> Vec<i64> {
+fn rust_time_trace(dir: &Path, path: &Path, root: &str, variant: &str, ticks: usize) -> Vec<i128> {
     let source = std::fs::read_to_string(path).expect("фикстура");
     takt_lang::compile_to_rust(
         "rstime",
@@ -612,7 +612,7 @@ fn main() {{
     String::from_utf8_lossy(&run.stdout)
         .lines()
         .filter_map(|l| l.strip_prefix("TICK "))
-        .map(|v| v.trim().parse::<i64>().expect("значение"))
+        .map(|v| v.trim().parse::<i128>().expect("значение"))
         .collect()
 }
 

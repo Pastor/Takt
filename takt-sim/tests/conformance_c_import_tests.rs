@@ -35,7 +35,7 @@ fn app_source() -> String {
 }
 
 /// Трасса порта `lvl` у эталона-симулятора.
-fn simulator_trace() -> Vec<i64> {
+fn simulator_trace() -> Vec<i128> {
     let source = app_source();
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор применения");
     let model = takt_lang::semantic::tree::construct_model(&ast, None, &[FIXTURE_DIR.to_string()])
@@ -53,7 +53,7 @@ fn simulator_trace() -> Vec<i64> {
 }
 
 /// Трасса порта `lvl` у порождённого C.
-fn generated_c_trace(dir: &Path) -> Vec<i64> {
+fn generated_c_trace(dir: &Path) -> Vec<i128> {
     let source = app_source();
     takt_lang::compile_to_c(
         UNIT,
@@ -110,7 +110,7 @@ int main(void) {{
     assert!(run.status.success(), "собранный C завершился с ошибкой");
     String::from_utf8_lossy(&run.stdout)
         .lines()
-        .map(|l| l.trim().parse::<i64>().expect("число в строке вывода"))
+        .map(|l| l.trim().parse::<i128>().expect("число в строке вывода"))
         .collect()
 }
 

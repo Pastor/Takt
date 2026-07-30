@@ -73,7 +73,7 @@ const MAX_STEPS: usize = 100_000;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConstValue {
     /// Целое (в том числе `bit`: 0/1).
-    Int(i64),
+    Int(i128),
     /// Булево.
     Bool(bool),
     /// Длительность в наносекундах.
@@ -87,7 +87,7 @@ pub enum ConstValue {
 
 impl ConstValue {
     /// Целое значение, если оно целое — для сверки с эталоном.
-    pub fn as_int(&self) -> Option<i64> {
+    pub fn as_int(&self) -> Option<i128> {
         match self {
             ConstValue::Int(v) => Some(*v),
             _ => None,
@@ -405,7 +405,7 @@ fn apply_binary(
 }
 
 /// Целочисленная операция.
-fn int_op(op: &str, a: i64, b: i64, loc: Location) -> Result<ConstValue, Diagnostic> {
+fn int_op(op: &str, a: i128, b: i128, loc: Location) -> Result<ConstValue, Diagnostic> {
     use ConstValue as V;
     let value = match op {
         "+" => V::Int(a.wrapping_add(b)),

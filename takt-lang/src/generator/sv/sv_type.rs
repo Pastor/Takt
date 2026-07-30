@@ -253,7 +253,7 @@ pub(crate) fn sv_type(ty: &TypeNode, what: &str) -> Result<SvType, Diagnostic> {
 /// # Ошибки
 /// [`SV-004`](sv004), если вариантов нет: ширина перечисления не определена.
 pub(crate) fn enum_width(
-    variants: &[(String, i64)],
+    variants: &[(String, i128)],
     what: &str,
 ) -> Result<(u32, bool), Diagnostic> {
     // Аппаратная ширина точна, поэтому `sv` берёт `min_bits` факта НАПРЯМУЮ (без
@@ -495,8 +495,8 @@ mod tests {
     /// вырождается в `⌈log₂(n)⌉` — отдельной ветви для состояний не требуется.
     #[test]
     fn enum_width_of_sequential_states_matches_log2() {
-        let seq = |n: i64| -> u32 {
-            let variants: Vec<(String, i64)> = (0..n).map(|i| (format!("S{}", i), i)).collect();
+        let seq = |n: i128| -> u32 {
+            let variants: Vec<(String, i128)> = (0..n).map(|i| (format!("S{}", i), i)).collect();
             enum_width(&variants, "тест").unwrap().0
         };
         assert_eq!(seq(1), 1, "одно состояние — ширины 0 в SV не бывает");
@@ -511,7 +511,7 @@ mod tests {
     /// Границы беззнаковой ширины.
     #[test]
     fn enum_width_unsigned_boundaries() {
-        let at = |v: i64| enum_width(&[("V".to_string(), v)], "тест").unwrap();
+        let at = |v: i128| enum_width(&[("V".to_string(), v)], "тест").unwrap();
         assert_eq!(at(0), (1, false));
         assert_eq!(at(1), (1, false));
         assert_eq!(at(2), (2, false));

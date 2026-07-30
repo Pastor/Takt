@@ -134,7 +134,7 @@ mod tests {
     use super::*;
     use crate::eval::EmptyStructs;
 
-    fn point(x: i64, y: i64) -> Value {
+    fn point(x: i128, y: i128) -> Value {
         Value::Struct {
             name: "Point".to_string(),
             fields: vec![
@@ -190,7 +190,7 @@ mod tests {
 
     // ── Массивы (фича 0076) ──────────────────────────────────────────────────
 
-    fn arr(vals: &[i64]) -> Value {
+    fn arr(vals: &[i128]) -> Value {
         Value::Array(vals.iter().map(|&n| Value::Number(n)).collect())
     }
 

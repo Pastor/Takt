@@ -36,7 +36,11 @@ pub enum UnitSnapshot {
 
 fn value_to_json(v: &Value) -> serde_json::Value {
     match v {
-        Value::Number(n) => serde_json::Value::Number((*n).into()),
+        // `i128` (фича 0157): `From` для него у `serde_json::Number` нет — есть
+        // явный конструктор, и он принимает весь диапазон носителя.
+        Value::Number(n) => serde_json::Number::from_i128(*n)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
         Value::Real(f) => {
             serde_json::Value::Number(serde_json::Number::from_f64(*f).unwrap_or(0.into()))
         }

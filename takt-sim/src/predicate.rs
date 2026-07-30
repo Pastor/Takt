@@ -372,7 +372,7 @@ mod tests {
         MockContext::new(&[])
     }
 
-    fn num(n: i64) -> Box<ConditionNode> {
+    fn num(n: i128) -> Box<ConditionNode> {
         Box::new(ConditionNode::Number(n))
     }
 

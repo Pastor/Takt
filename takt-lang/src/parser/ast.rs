@@ -159,7 +159,7 @@ pub enum Type {
     Duration,
     /// Fixed-point `q(m, n)` — фича 0061: `(loc, ctor, m, n)`; границы, имя `q`
     /// и смысл полей (`m`/`n` — сырые литералы) проверяет `construct_fixed`.
-    Fixed(Location, String, i64, i64),
+    Fixed(Location, String, i128, i128),
     /// Псевдоним типа (ссылка по имени).
     Alias(Identifier),
     /// Массив битов: `[тип; N]`.
@@ -433,7 +433,7 @@ pub struct EnumVariant {
     /// Имя варианта.
     pub name: Identifier,
     /// Явное числовое значение, если задано.
-    pub value: Option<i64>,
+    pub value: Option<i128>,
 }
 
 impl Eq for EnumVariant {}
@@ -552,7 +552,7 @@ pub enum Condition {
     /// Неравенство: `левое != правое`.
     NotEqual(Location, Box<Condition>, Box<Condition>),
     /// Целочисленный литерал.
-    Number(Location, i64),
+    Number(Location, i128),
     /// Литерал длительности: `(позиция, наносекунды, как записано)` — фича 0134.
     ///
     /// Исходный текст хранится ради форматтера: `1m30s` печатается как
@@ -629,7 +629,7 @@ pub enum Member {
     /// Доступ по имени: `.имя`.
     Identifier(Identifier),
     /// Доступ по индексу: `.0`, `.1`, …
-    Number(i64),
+    Number(i128),
 }
 
 /// Параметр функции: опциональное имя и тип.
@@ -969,7 +969,7 @@ pub enum FormulaExpression {
     /// Булевый литерал с опциональной аннотацией типа: `true[:тип]`.
     Bool(Location, bool, Option<Identifier>),
     /// Числовой литерал с опциональной аннотацией: `42[:тип]`.
-    Number(Location, i64, Option<Identifier>),
+    Number(Location, i128, Option<Identifier>),
     /// Строковый литерал с опциональной аннотацией: `"s"[:тип]`.
     String(StringLiteral, Option<Identifier>),
     /// Ссылка на переменную.

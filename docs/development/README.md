@@ -315,3 +315,4 @@
 | 0186-04 | 0186 | Раздел документа «Практический пример: процессор» (шины, кеш, ядра) | [0186-04-book-processor-example.md](0186-04-book-processor-example.md) |
 | 0186-05 | 0186 | Раздел документа «Практический пример: процессор» (шины, кеш, ядра) | [0186-05-book-processor-example.md](0186-05-book-processor-example.md) |
 | 0186-06 | 0186 | Раздел документа «Практический пример: процессор» (шины, кеш, ядра) | [0186-06-book-processor-example.md](0186-06-book-processor-example.md) |
+| 0157-01 | 0157 | Представление числового литерала: полная маска [bit;64] | [0157-01-literal-u64-representation.md](0157-01-literal-u64-representation.md) |

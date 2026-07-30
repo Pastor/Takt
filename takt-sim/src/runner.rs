@@ -608,7 +608,10 @@ impl SimulationRunner {
         let bare = name.rsplit("::").next().unwrap_or(name);
         match value {
             crate::Value::Number(millis) if self.port_names.durations.contains(bare) => {
-                match takt_lang::semantic::duration::from_millis(millis) {
+                match i64::try_from(millis)
+                    .ok()
+                    .and_then(takt_lang::semantic::duration::from_millis)
+                {
                     Some(ns) => crate::Value::Duration(ns),
                     // Переполнение наносекунд: оставляем число — ошибку даст
                     // вычисление, и она назовёт место, а молчаливой подмены нет.

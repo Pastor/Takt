@@ -624,7 +624,7 @@ fn bit_access(
                     ty
                 ))
             })?;
-            if *n < 0 || *n >= bs.bits as i64 {
+            if *n < 0 || *n >= i128::from(bs.bits) {
                 return Err(unsupported(&format!(
                     "бит {} вне разрядности типа '{}' ({} бит)",
                     n, ty, bs.bits

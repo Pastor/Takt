@@ -51,7 +51,7 @@ fn run(fixture: &str, steps: usize) -> (Unit, TickResult) {
 }
 
 /// Целочисленное значение переменной — иначе внятный провал.
-fn num(unit: &Unit, name: &str) -> i64 {
+fn num(unit: &Unit, name: &str) -> i128 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
         other => panic!("переменная '{name}': ожидалось целое, получено {other:?}"),
@@ -404,7 +404,7 @@ fn var_without_initializer_defaults_to_zero() {
 // ── Фича 0076: исполнение массивов симулятором ────────────────────────────────
 
 /// Элемент массива по индексу — иначе внятный провал.
-fn arr_elem(unit: &Unit, name: &str, i: usize) -> i64 {
+fn arr_elem(unit: &Unit, name: &str, i: usize) -> i128 {
     match unit.variable(name) {
         Some(Value::Array(items)) => match items.get(i) {
             Some(Value::Number(n)) => *n,

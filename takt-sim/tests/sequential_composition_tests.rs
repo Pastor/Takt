@@ -37,17 +37,17 @@ fn unit_of(source: &str) -> Unit {
     build_unit(model).expect("построение юнита")
 }
 
-fn number(unit: &Unit, name: &str) -> i64 {
+fn number(unit: &Unit, name: &str) -> i128 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
-        Some(Value::Boolean(b)) => i64::from(b),
+        Some(Value::Boolean(b)) => i128::from(b),
         other => panic!("переменная '{name}': неожиданное значение {other:?}"),
     }
 }
 
 /// Потактовая трасса значения `name`: по одному значению за такт, прогон
 /// обрывается на терминальном такте (протокол `conformance_sv_tests`).
-fn trace(source: &str, name: &str) -> Vec<i64> {
+fn trace(source: &str, name: &str) -> Vec<i128> {
     let mut unit = unit_of(source);
     let mut out = Vec::new();
     for _ in 0..BUDGET {
@@ -69,7 +69,7 @@ const STEPS: &str = "model A { start S1 { always { stage := 1; } ref S2: 1 = 1; 
                      model B { start S1 { always { stage := 2; } ref S2: 1 = 1; } state S2; } ";
 
 /// Эталон цели `c` для двухшаговой цепочки (пришпилен в `conformance_sv_tests`).
-const REFERENCE: [i64; 5] = [1, 1, 2, 2, 2];
+const REFERENCE: [i128; 5] = [1, 1, 2, 2, 2];
 
 // ── Примеры: законные формы, обязанные исполняться ───────────────────────────
 

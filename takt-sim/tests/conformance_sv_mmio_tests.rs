@@ -42,17 +42,17 @@ fn verilator_available() -> bool {
         .unwrap_or(false)
 }
 
-fn sim_value(unit: &Unit, name: &str) -> i64 {
+fn sim_value(unit: &Unit, name: &str) -> i128 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
-        Some(Value::Boolean(b)) => i64::from(b),
-        Some(Value::Fixed { repr, .. }) => repr,
+        Some(Value::Boolean(b)) => i128::from(b),
+        Some(Value::Fixed { repr, .. }) => i128::from(repr),
         other => panic!("переменная '{name}': неожиданное значение {other:?}"),
     }
 }
 
 /// Потактовая трасса симулятора: значения `vars` после каждого такта.
-fn simulate_trace(fixture: &str, vars: &[&str]) -> Vec<Vec<i64>> {
+fn simulate_trace(fixture: &str, vars: &[&str]) -> Vec<Vec<i128>> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -115,7 +115,7 @@ fn sv_mmio_trace(
     addr_width: u32,
     data_width: u32,
     ticks: usize,
-) -> Vec<Vec<i64>> {
+) -> Vec<Vec<i128>> {
     compile_mmio(dir, fixture, basename);
 
     let reads: String = regs
@@ -164,7 +164,7 @@ endmodule
         .filter_map(|line| line.strip_prefix("TICK "))
         .map(|rest| {
             rest.split_whitespace()
-                .map(|v| v.parse::<i64>().expect("значение — целое"))
+                .map(|v| v.parse::<i128>().expect("значение — целое"))
                 .collect()
         })
         .collect()

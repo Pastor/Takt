@@ -25,7 +25,7 @@ fn cc_available() -> bool {
 }
 
 /// Значения `(ms, late)` у эталона после первого такта.
-fn simulator_values() -> (i64, i64) {
+fn simulator_values() -> (i128, i128) {
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор фикстуры");
     let model = takt_lang::semantic::tree::construct_model(&ast, None, &[]).expect("семантика");
@@ -39,7 +39,7 @@ fn simulator_values() -> (i64, i64) {
 }
 
 /// Значения `(ms, late)` у порождённого C после первого такта.
-fn generated_c_values(dir: &Path) -> (i64, i64) {
+fn generated_c_values(dir: &Path) -> (i128, i128) {
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
     takt_lang::compile_to_c(
         "conformance_duration_value",
@@ -105,10 +105,10 @@ int main(void) {
     let mut late = None;
     for token in out.split_whitespace() {
         if let Some(v) = token.strip_prefix("ms=") {
-            ms = v.parse::<i64>().ok();
+            ms = v.parse::<i128>().ok();
         }
         if let Some(v) = token.strip_prefix("late=") {
-            late = v.parse::<i64>().ok();
+            late = v.parse::<i128>().ok();
         }
     }
     (

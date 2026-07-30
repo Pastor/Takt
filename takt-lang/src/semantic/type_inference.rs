@@ -173,13 +173,13 @@ pub(crate) fn wider_type(a: TypeNode, b: TypeNode) -> TypeNode {
 /// - `256..=65535`           → `[bit;16]`
 /// - `65536..=4294967295`    → `[bit;32]`
 /// - иначе (или отрицательное) → `[bit;64]`
-fn infer_int_type(n: i64) -> TypeNode {
+fn infer_int_type(n: i128) -> TypeNode {
     let arr = |size| TypeNode::Array(size, Box::new(TypeNode::Bit));
-    if n >= 0 && n <= u8::MAX as i64 {
+    if n >= 0 && n <= i128::from(u8::MAX) {
         arr(8)
-    } else if n >= 0 && n <= u16::MAX as i64 {
+    } else if n >= 0 && n <= i128::from(u16::MAX) {
         arr(16)
-    } else if n >= 0 && n <= u32::MAX as i64 {
+    } else if n >= 0 && n <= i128::from(u32::MAX) {
         arr(32)
     } else {
         arr(64)
@@ -208,7 +208,7 @@ fn infer_int_type(n: i64) -> TypeNode {
 /// границы вне правила 1 ADR 0061 (`m ≥ 1`, `n ≥ 1`, `m + n ≤ 64`) →
 /// [`TypeNode::Unsupported`]; объявление типа тот же случай ловит `SE-057`
 /// (`construct_fixed`).
-fn fixed_node_or_unsupported(ctor: &str, m: i64, n: i64) -> TypeNode {
+fn fixed_node_or_unsupported(ctor: &str, m: i128, n: i128) -> TypeNode {
     if ctor == "q" && m >= 1 && n >= 1 && m + n <= 64 {
         TypeNode::Fixed {
             m: m as u8,

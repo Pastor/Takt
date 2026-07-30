@@ -90,7 +90,7 @@ fn cc_available() -> bool {
 }
 
 /// Прогоняет симулятор до завершения и возвращает наблюдаемые значения.
-fn simulate() -> Vec<(String, i64)> {
+fn simulate() -> Vec<(String, i128)> {
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -111,19 +111,19 @@ fn simulate() -> Vec<(String, i64)> {
         .collect()
 }
 
-fn sim_value(unit: &Unit, name: &str) -> i64 {
+fn sim_value(unit: &Unit, name: &str) -> i128 {
     match unit.variable(name) {
         Some(Value::Number(n)) => n,
-        Some(Value::Boolean(b)) => i64::from(b),
+        Some(Value::Boolean(b)) => i128::from(b),
         // q(m, n) (0061): наблюдаемое — представление (INT-поле в POUS = repr).
-        Some(Value::Fixed { repr, .. }) => repr,
+        Some(Value::Fixed { repr, .. }) => i128::from(repr),
         other => panic!("переменная '{name}': неожиданное значение {other:?}"),
     }
 }
 
 /// Порождает ST, транслирует его `iec2c` в C, собирает с драйвером и возвращает
 /// значения, напечатанные исполнённым ST.
-fn run_generated_st(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<(String, i64)> {
+fn run_generated_st(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<(String, i128)> {
     // 1. Порождение ST — тем же путём, что `taktc compile -t st`.
     let source = std::fs::read_to_string(FIXTURE).expect("фикстура читается");
     let st_dir = dir.join("st");
@@ -269,7 +269,7 @@ const FIXED_FIXTURE: &str = "tests/data/eval/conformance_fixed.takt";
 const OVERFLOW_FIXTURE: &str = "tests/data/eval/conformance_overflow.takt";
 
 /// Потактовая трасса `acc` (repr q(8,8)) симулятора.
-fn simulate_fixed_trace() -> Vec<i64> {
+fn simulate_fixed_trace() -> Vec<i128> {
     let source = std::fs::read_to_string(FIXED_FIXTURE).expect("фикстура читается");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -290,7 +290,7 @@ fn simulate_fixed_trace() -> Vec<i64> {
 }
 
 /// Потактовая трасса `acc` порождённого ST (через iec2c → C).
-fn run_generated_st_fixed(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i64> {
+fn run_generated_st_fixed(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i128> {
     let source = std::fs::read_to_string(FIXED_FIXTURE).expect("фикстура читается");
     let st_dir = dir.join("st");
     std::fs::create_dir_all(&st_dir).expect("каталог ST");
@@ -359,7 +359,7 @@ int main(void) {{
     let run = Command::new(&bin).output().expect("запуск драйвера ST");
     assert!(run.status.success(), "драйвер Q-ST завершился с ошибкой");
     let out = String::from_utf8_lossy(&run.stdout).into_owned();
-    let mut trace: Vec<(usize, i64)> = out
+    let mut trace: Vec<(usize, i128)> = out
         .lines()
         .filter_map(|line| {
             let (t, rest) = line.split_once(':')?;
@@ -497,7 +497,7 @@ fn float_as_q_without_embedded_is_native_st() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Потактовая трасса `t` симулятора на фикстуре переполнения.
-fn simulate_overflow_trace() -> Vec<i64> {
+fn simulate_overflow_trace() -> Vec<i128> {
     let source = std::fs::read_to_string(OVERFLOW_FIXTURE).expect("фикстура читается");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -518,7 +518,7 @@ fn simulate_overflow_trace() -> Vec<i64> {
 }
 
 /// Потактовая трасса `t` порождённого ST (через `iec2c` → C).
-fn run_generated_st_overflow(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i64> {
+fn run_generated_st_overflow(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i128> {
     let source = std::fs::read_to_string(OVERFLOW_FIXTURE).expect("фикстура читается");
     let st_dir = dir.join("st");
     std::fs::create_dir_all(&st_dir).expect("каталог ST");
@@ -585,7 +585,7 @@ int main(void) {
     let run = Command::new(&bin).output().expect("запуск драйвера ST");
     assert!(run.status.success(), "драйвер ST завершился с ошибкой");
     let out = String::from_utf8_lossy(&run.stdout).into_owned();
-    let mut trace: Vec<(usize, i64)> = out
+    let mut trace: Vec<(usize, i128)> = out
         .lines()
         .filter_map(|line| {
             let (t, rest) = line.split_once(':')?;
@@ -660,7 +660,7 @@ const TIME_PORT: &str = "DWELL0.LEVEL";
 const TIME_TICKS: usize = 8;
 
 /// Трасса симулятора при 1 мс на такт (эталон профиля «часы»).
-fn simulate_time_trace() -> Vec<i64> {
+fn simulate_time_trace() -> Vec<i128> {
     let source = std::fs::read_to_string(TIME_FIXTURE).expect("фикстура");
     let (ast, _) = takt_lang::parse(&source, 0).expect("разбор");
     let model = construct_model(&ast, None, &[]).expect("семантика");
@@ -680,7 +680,7 @@ fn simulate_time_trace() -> Vec<i64> {
 
 /// Трасса порождённого ST: драйвер подаёт модельное время в `__CURRENT_TIME`
 /// (1 мс на такт) перед каждым `_body__` — проба П3. Печатает порт после скана.
-fn run_st_time_trace(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i64> {
+fn run_st_time_trace(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i128> {
     let source = std::fs::read_to_string(TIME_FIXTURE).expect("фикстура");
     let st_dir = dir.join("st");
     std::fs::create_dir_all(&st_dir).expect("каталог ST");
@@ -754,7 +754,7 @@ int main(void) {{
     );
     String::from_utf8_lossy(&run.stdout)
         .lines()
-        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i64>().ok())
+        .filter_map(|l| l.strip_prefix("TICK ")?.trim().parse::<i128>().ok())
         .collect()
 }
 
