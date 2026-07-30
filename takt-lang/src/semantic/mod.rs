@@ -18,6 +18,7 @@ pub mod bit_vector;
 mod builtin;
 pub(crate) mod callgraph;
 mod condition;
+pub mod const_eval;
 mod declaration;
 pub(crate) mod docs;
 /// Профили времени и пересчёт длительности (фича 0134).
@@ -50,7 +51,7 @@ pub mod unused;
 pub mod usages;
 pub(crate) mod validate;
 mod variable;
-pub use variable::{ParameterNode, VariableNode};
+pub use variable::{AddressBindingNode, ParameterNode, VariableNode};
 pub mod warnings;
 
 use crate::diagnostics::Location;
@@ -180,21 +181,6 @@ pub enum ModelOrigin {
     Local,
     /// Модель пришла через `import` (любая из трёх форм).
     Imported,
-}
-
-/// Привязка адреса к порту оператором `address` (фича 0020).
-///
-/// Хранит имя целевого порта, позицию оператора и выражение-адрес. Выражение
-/// остаётся «сырым» ([`ExpressionNode::Unresolved`]) до понижения в конкретный
-/// адрес потребителем (C-генерация, задача 0020-05).
-#[derive(Debug, Clone)]
-pub struct AddressBindingNode {
-    /// Имя порта, которому назначается адрес.
-    pub port: String,
-    /// Позиция оператора `address` в исходном тексте.
-    pub loc: Location,
-    /// Выражение-адрес (сырое АСД до понижения).
-    pub value: ExpressionNode,
 }
 
 impl ModelNode {
@@ -596,6 +582,14 @@ pub enum FunctionDefinitionNode {
         ret: TypeNode,
         /// Тело функции.
         body: StatementNode,
+        /// Исходное АСД-определение (фича 0185).
+        ///
+        /// Константный вычислитель (`semantic::const_eval`) интерпретирует
+        /// **АСД** тела: разрешённый [`StatementNode`] потребовал бы второго
+        /// интерпретатора рядом с первым. Хранится при функции, а не отдельной
+        /// картой в модели: иначе поиск определения разошёлся бы с
+        /// [`search_func`](ModelNode::search_func).
+        raw: Box<ast::FunctionDefine>,
     },
     /// Внешняя функция (без тела).
     External {

@@ -1,0 +1,539 @@
+//! Константный вычислитель: свёртка выражения в литерал на этапе компиляции.
+//!
+//! Заведён фичей 0185 для аргументов инстанцирования модели
+//! (`M(X := Y + 1, C := 5s, D := calculate_parameter(U + 67))`), но тема
+//! самостоятельна: «какое значение у этого выражения, если оно вычислимо сейчас».
+//!
+//! ## Свёртка в ЛИТЕРАЛ, а не в свой тип значения
+//!
+//! Вход — [`ast::Expression`], выход — снова [`ast::Expression`], но
+//! литеральный ([`fold_to_literal`]). Это не стилистика: подставив литерал
+//! обратно в дерево, мы отдаём значение **существующему** конвейеру — вывод
+//! типов, понижение `float` → `q` (0096), печать шестью целями. Свой тип
+//! значения пришлось бы учить всему этому заново, и он разошёлся бы с эталоном.
+//!
+//! ## Что вычисляется
+//!
+//! - целые: литералы, `+ - * / %`, сдвиги, побитовые, унарные, сравнения;
+//! - булевы: `true`/`false`, сравнения, `&& || !`;
+//! - длительности: литералы (`5s`), `+`/`-` между длительностями, константы
+//!   типа `duration` (наносекунды — как у [`ConditionNode::After`](crate::semantic::ConditionNode::After));
+//! - имена **констант** модели и её объемлющих (цепочкой);
+//! - вызовы **константных функций** (модуль [`call`]).
+//!
+//! ## Чего НЕ вычисляется — и почему это решение, а не пробел
+//!
+//! **Арифметика над дробными.** Литерал `0.8` проходит насквозь (значение
+//! доносится до объявления как есть), но `0.8 * 2` отвергается. Причина
+//! содержательная: представление дробного выбирается **флагами сборки**
+//! (`--float-as-q=m.n` / `--float-embedded`, фича 0096), а q-арифметика имеет
+//! свою семантику округления (floor к −∞ у `*`, к нулю у `/`, фича 0061), и её
+//! эталон — `takt-sim/src/eval/fixed.rs`. Посчитав здесь «как в `f64`», мы
+//! получили бы значение, которого симулятор никогда не вычислит, — молча.
+//! Отказ с названной причиной честнее.
+//!
+//! ## Переполнение
+//!
+//! Внутри вычислителя арифметика идёт в `i64` с обёрткой (как у вычислителя
+//! адреса, 0042). Проверка «влезает ли в тип параметра» — забота **применения**
+//! значения (задача 0185-04): только там известен целевой тип, а нормы 0127
+//! (беззнаковое — обёртка `mod 2ⁿ`, знаковое — ошибка) сформулированы про тип.
+//!
+//! ## Третья арифметика в компиляторе
+//!
+//! Их теперь три: адрес (0042), выдержка `after` (0143) и эта. Урок 0042
+//! («арифметика — в одном месте») требует не размножать правила: длительности
+//! здесь хранятся в **наносекундах**, как в `after_const`, и пересчёт в
+//! миллисекунды делает единственный `semantic::duration::value_millis` (0183).
+//! Объединение трёх вычислителей — кандидат в фичи, а не работа этой задачи.
+
+mod call;
+
+use crate::diagnostics::{Diagnostic, Location};
+use crate::parser::ast;
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, ModelNode, VariableNode};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+/// Предел глубины: вложенность выражения и длина цепочки констант.
+///
+/// То же число, что у сторожа глубины вложенности (`validate::depth`, `SE-062`)
+/// и у вычислителя выдержки (0143) — намеренно: пределы языка не должны
+/// расходиться между собой.
+const MAX_DEPTH: usize = 32;
+
+/// Предел шагов интерпретации тела константной функции.
+///
+/// Сторож против незавершаемости: рекурсия и долгий цикл повесили бы **и
+/// компилятор, и LSP** (сервер зовёт ту же семантику при каждом нажатии).
+const MAX_STEPS: usize = 100_000;
+
+/// Значение константного выражения.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConstValue {
+    /// Целое (в том числе `bit`: 0/1).
+    Int(i64),
+    /// Булево.
+    Bool(bool),
+    /// Длительность в наносекундах.
+    Duration(i64),
+    /// Дробный литерал — **как записан** (текст, знак).
+    ///
+    /// Не `f64`: представление выбирают флаги сборки (0096), и приводить к
+    /// двоичной плавающей точке здесь значило бы решать за них.
+    Rational(String, bool),
+}
+
+impl ConstValue {
+    /// Целое значение, если оно целое — для сверки с эталоном.
+    pub fn as_int(&self) -> Option<i64> {
+        match self {
+            ConstValue::Int(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Длительность в наносекундах, если значение — длительность.
+    pub fn as_nanos(&self) -> Option<i64> {
+        match self {
+            ConstValue::Duration(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Имя вида значения — для текста диагностики.
+    fn kind(&self) -> &'static str {
+        match self {
+            ConstValue::Int(_) => "целое",
+            ConstValue::Bool(_) => "булево",
+            ConstValue::Duration(_) => "длительность",
+            ConstValue::Rational(_, _) => "дробное",
+        }
+    }
+
+    /// Обратно в литеральное выражение — то, что подставляется в дерево.
+    pub fn to_literal(&self, loc: Location) -> ast::Expression {
+        match self {
+            ConstValue::Int(v) => ast::Expression::Number(loc, *v),
+            ConstValue::Bool(v) => ast::Expression::Bool(loc, *v),
+            // Запись синтезируется каноничной: до пользователя она не доезжает
+            // (форматтер печатает исходный текст автора), нужна лишь диагностике.
+            ConstValue::Duration(ns) => ast::Expression::Duration(loc, *ns, format!("{ns}ns")),
+            ConstValue::Rational(text, negative) => {
+                ast::Expression::Rational(loc, text.clone(), *negative)
+            }
+        }
+    }
+}
+
+/// Бюджет вычисления: глубина и шаги, общие на весь вызов.
+#[derive(Debug, Default)]
+pub struct Budget {
+    depth: usize,
+    steps: usize,
+}
+
+impl Budget {
+    /// Новый бюджет для одного вычисления.
+    pub fn new() -> Self {
+        Budget { depth: 0, steps: 0 }
+    }
+
+    /// Учитывает шаг; отказывает, когда бюджет исчерпан.
+    fn step(&mut self, loc: Location) -> Result<(), Diagnostic> {
+        self.steps += 1;
+        if self.steps > MAX_STEPS {
+            return Err(limit_exceeded(loc, "превышен предел шагов вычисления"));
+        }
+        Ok(())
+    }
+
+    /// Входит на уровень глубже; отказывает при переполнении глубины.
+    fn deeper(&mut self, loc: Location) -> Result<(), Diagnostic> {
+        self.depth += 1;
+        if self.depth > MAX_DEPTH {
+            return Err(limit_exceeded(
+                loc,
+                "превышен предел глубины вычисления (возможен цикл определений)",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Возвращается на уровень выше.
+    fn shallower(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
+    }
+}
+
+/// `SE-085` — предел вычисления исчерпан.
+fn limit_exceeded(loc: Location, what: &str) -> Diagnostic {
+    Diagnostic::error(loc, what.to_string()).with_code("SE-085")
+}
+
+/// `SE-083` — выражение не сворачивается в константу; причина **названа**.
+pub fn not_constant(loc: Location, reason: impl AsRef<str>) -> Diagnostic {
+    Diagnostic::error(
+        loc,
+        format!(
+            "выражение не вычисляется при компиляции: {}",
+            reason.as_ref()
+        ),
+    )
+    .with_code("SE-083")
+}
+
+/// Сворачивает выражение в литерал либо объясняет, почему не может.
+pub fn fold_to_literal(
+    expr: &ast::Expression,
+    scope: &Rc<RefCell<ModelNode>>,
+) -> Result<ast::Expression, Diagnostic> {
+    let mut budget = Budget::new();
+    let loc = expr_loc(expr);
+    let value = eval(expr, scope, &mut budget)?;
+    Ok(value.to_literal(loc))
+}
+
+/// Вычисляет выражение.
+pub fn eval(
+    expr: &ast::Expression,
+    scope: &Rc<RefCell<ModelNode>>,
+    budget: &mut Budget,
+) -> Result<ConstValue, Diagnostic> {
+    eval_in(expr, scope, &Locals::default(), budget)
+}
+
+/// Локальные значения интерпретации тела функции: параметры и `var`.
+///
+/// Список, а не карта: областей мало, а порядок нужен для затенения — последнее
+/// объявление имени побеждает.
+#[derive(Debug, Default, Clone)]
+pub struct Locals {
+    values: Vec<(String, ConstValue)>,
+}
+
+impl Locals {
+    /// Значение имени, если оно локальное.
+    fn get(&self, name: &str) -> Option<&ConstValue> {
+        self.values
+            .iter()
+            .rev()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v)
+    }
+
+    /// Объявляет (или затеняет) имя.
+    pub fn declare(&mut self, name: &str, value: ConstValue) {
+        self.values.push((name.to_string(), value));
+    }
+
+    /// Присваивает уже объявленному имени; `false` — имени нет.
+    pub fn assign(&mut self, name: &str, value: ConstValue) -> bool {
+        match self.values.iter_mut().rev().find(|(n, _)| n == name) {
+            Some(slot) => {
+                slot.1 = value;
+                true
+            }
+            None => false,
+        }
+    }
+}
+
+/// Вычисляет выражение в контексте локальных значений.
+pub fn eval_in(
+    expr: &ast::Expression,
+    scope: &Rc<RefCell<ModelNode>>,
+    locals: &Locals,
+    budget: &mut Budget,
+) -> Result<ConstValue, Diagnostic> {
+    use ast::Expression as E;
+    let loc = expr_loc(expr);
+    budget.step(loc)?;
+    budget.deeper(loc)?;
+    let result = (|| match expr {
+        E::Number(_, v) => Ok(ConstValue::Int(*v)),
+        E::Bool(_, v) => Ok(ConstValue::Bool(*v)),
+        E::Duration(_, ns, _) => Ok(ConstValue::Duration(*ns)),
+        E::Rational(_, text, negative) => Ok(ConstValue::Rational(text.clone(), *negative)),
+        E::Parenthesis(_, inner) | E::UnaryPlus(_, inner) => eval_in(inner, scope, locals, budget),
+        E::Negate(loc, inner) => match eval_in(inner, scope, locals, budget)? {
+            ConstValue::Int(v) => Ok(ConstValue::Int(v.wrapping_neg())),
+            ConstValue::Duration(ns) => Ok(ConstValue::Duration(ns.wrapping_neg())),
+            ConstValue::Rational(text, negative) => Ok(ConstValue::Rational(text, !negative)),
+            other => Err(not_constant(
+                *loc,
+                format!(
+                    "унарный минус не применим к значению вида «{}»",
+                    other.kind()
+                ),
+            )),
+        },
+        E::BitwiseNot(loc, inner) => match eval_in(inner, scope, locals, budget)? {
+            ConstValue::Int(v) => Ok(ConstValue::Int(!v)),
+            other => Err(not_constant(
+                *loc,
+                format!(
+                    "побитовое НЕ не применимо к значению вида «{}»",
+                    other.kind()
+                ),
+            )),
+        },
+        E::Not(loc, inner) => match eval_in(inner, scope, locals, budget)? {
+            ConstValue::Bool(v) => Ok(ConstValue::Bool(!v)),
+            ConstValue::Int(v) => Ok(ConstValue::Bool(v == 0)),
+            other => Err(not_constant(
+                *loc,
+                format!(
+                    "логическое НЕ не применимо к значению вида «{}»",
+                    other.kind()
+                ),
+            )),
+        },
+        E::Variable(id) => match locals.get(&id.name) {
+            Some(value) => Ok(value.clone()),
+            None => resolve_name(&id.name, id.loc, scope, budget),
+        },
+        E::Function(loc, id, args) => call::eval_call(id, args, *loc, scope, locals, budget),
+        // Бинарные операции: единственное место арифметики этого вычислителя.
+        E::Add(loc, l, r) => binary("+", l, r, *loc, scope, locals, budget),
+        E::Subtract(loc, l, r) => binary("-", l, r, *loc, scope, locals, budget),
+        E::Multiply(loc, l, r) => binary("*", l, r, *loc, scope, locals, budget),
+        E::Divide(loc, l, r) => binary("/", l, r, *loc, scope, locals, budget),
+        E::Modulo(loc, l, r) => binary("%", l, r, *loc, scope, locals, budget),
+        E::ShiftLeft(loc, l, r) => binary("<<", l, r, *loc, scope, locals, budget),
+        E::ShiftRight(loc, l, r) => binary(">>", l, r, *loc, scope, locals, budget),
+        E::BitwiseAnd(loc, l, r) => binary("&", l, r, *loc, scope, locals, budget),
+        E::BitwiseOr(loc, l, r) => binary("|", l, r, *loc, scope, locals, budget),
+        E::BitwiseXor(loc, l, r) => binary("^", l, r, *loc, scope, locals, budget),
+        E::Equal(loc, l, r) => binary("=", l, r, *loc, scope, locals, budget),
+        E::NotEqual(loc, l, r) => binary("!=", l, r, *loc, scope, locals, budget),
+        E::Less(loc, l, r) => binary("<", l, r, *loc, scope, locals, budget),
+        E::LessEqual(loc, l, r) => binary("<=", l, r, *loc, scope, locals, budget),
+        E::More(loc, l, r) => binary(">", l, r, *loc, scope, locals, budget),
+        E::MoreEqual(loc, l, r) => binary(">=", l, r, *loc, scope, locals, budget),
+        E::And(loc, l, r) => binary("&&", l, r, *loc, scope, locals, budget),
+        E::Or(loc, l, r) => binary("||", l, r, *loc, scope, locals, budget),
+        // Прочее константным не бывает: обращения к памяти, приведения,
+        // строки, присваивания. Причина называется формой, а не «не годится».
+        other => Err(not_constant(
+            expr_loc(other),
+            "форма выражения при компиляции не вычисляется",
+        )),
+    })();
+    budget.shallower();
+    result
+}
+
+/// Применяет бинарную операцию — **единственное** место арифметики модуля.
+///
+/// Разъехавшись на два места (как когда-то арифметика адреса), она дала бы
+/// разное значение для одного текста в зависимости от пути вычисления.
+fn binary(
+    op: &str,
+    left: &ast::Expression,
+    right: &ast::Expression,
+    loc: Location,
+    scope: &Rc<RefCell<ModelNode>>,
+    locals: &Locals,
+    budget: &mut Budget,
+) -> Result<ConstValue, Diagnostic> {
+    let l = eval_in(left, scope, locals, budget)?;
+    let r = eval_in(right, scope, locals, budget)?;
+    apply_binary(op, l, r, loc)
+}
+
+/// Арифметика, сравнения и логика над вычисленными операндами.
+fn apply_binary(
+    op: &str,
+    left: ConstValue,
+    right: ConstValue,
+    loc: Location,
+) -> Result<ConstValue, Diagnostic> {
+    use ConstValue as V;
+    match (&left, &right) {
+        // ── Целые ─────────────────────────────────────────────────────────────
+        (V::Int(a), V::Int(b)) => int_op(op, *a, *b, loc),
+        // ── Длительности ──────────────────────────────────────────────────────
+        //
+        // Только `+`/`-` и сравнения, и только между длительностями: смешение с
+        // числом запрещено в языке (`SE-065`), и молча приравнять `1s` к `1`
+        // значило бы завести здесь свою систему типов.
+        (V::Duration(a), V::Duration(b)) => match op {
+            "+" => Ok(V::Duration(a.wrapping_add(*b))),
+            "-" => Ok(V::Duration(a.wrapping_sub(*b))),
+            "=" => Ok(V::Bool(a == b)),
+            "!=" => Ok(V::Bool(a != b)),
+            "<" => Ok(V::Bool(a < b)),
+            "<=" => Ok(V::Bool(a <= b)),
+            ">" => Ok(V::Bool(a > b)),
+            ">=" => Ok(V::Bool(a >= b)),
+            _ => Err(not_constant(
+                loc,
+                format!("операция '{op}' над длительностями не определена"),
+            )),
+        },
+        // ── Булевы ────────────────────────────────────────────────────────────
+        (V::Bool(a), V::Bool(b)) => match op {
+            "&&" => Ok(V::Bool(*a && *b)),
+            "||" => Ok(V::Bool(*a || *b)),
+            "=" => Ok(V::Bool(a == b)),
+            "!=" => Ok(V::Bool(a != b)),
+            _ => Err(not_constant(
+                loc,
+                format!("операция '{op}' над булевыми не определена"),
+            )),
+        },
+        // ── Дробные: арифметика отвергается по замыслу ────────────────────────
+        (V::Rational(_, _), _) | (_, V::Rational(_, _)) => Err(not_constant(
+            loc,
+            "арифметика над дробными при компиляции не выполняется: представление \
+             дробного выбирают флаги сборки (--float-as-q / --float-embedded), а \
+             округление q задано эталоном симулятора — посчитав здесь, компилятор \
+             дал бы значение, которого симулятор не вычислит. Задайте готовый литерал",
+        )),
+        // ── Смешение видов ────────────────────────────────────────────────────
+        _ => Err(not_constant(
+            loc,
+            format!(
+                "операция '{op}' над значениями разных видов: «{}» и «{}»",
+                left.kind(),
+                right.kind()
+            ),
+        )),
+    }
+}
+
+/// Целочисленная операция.
+fn int_op(op: &str, a: i64, b: i64, loc: Location) -> Result<ConstValue, Diagnostic> {
+    use ConstValue as V;
+    let value = match op {
+        "+" => V::Int(a.wrapping_add(b)),
+        "-" => V::Int(a.wrapping_sub(b)),
+        "*" => V::Int(a.wrapping_mul(b)),
+        "/" => {
+            if b == 0 {
+                return Err(not_constant(loc, "деление на ноль"));
+            }
+            V::Int(a.wrapping_div(b))
+        }
+        "%" => {
+            if b == 0 {
+                return Err(not_constant(loc, "остаток от деления на ноль"));
+            }
+            V::Int(a.wrapping_rem(b))
+        }
+        // Сдвиг на отрицательное или ≥ 64 в Rust — паника; здесь это всегда
+        // ошибка автора, поэтому диагностика (та же граница, что у 0042 и 0127).
+        "<<" | ">>" => {
+            if !(0..64).contains(&b) {
+                return Err(not_constant(loc, "сдвиг определён только на 0..63 бит"));
+            }
+            if op == "<<" {
+                V::Int(a << b)
+            } else {
+                V::Int(a >> b)
+            }
+        }
+        "&" => V::Int(a & b),
+        "|" => V::Int(a | b),
+        "^" => V::Int(a ^ b),
+        "=" => V::Bool(a == b),
+        "!=" => V::Bool(a != b),
+        "<" => V::Bool(a < b),
+        "<=" => V::Bool(a <= b),
+        ">" => V::Bool(a > b),
+        ">=" => V::Bool(a >= b),
+        "&&" => V::Bool(a != 0 && b != 0),
+        "||" => V::Bool(a != 0 || b != 0),
+        _ => {
+            return Err(not_constant(
+                loc,
+                format!("операция '{op}' при компиляции не вычисляется"),
+            ));
+        }
+    };
+    Ok(value)
+}
+
+/// Разрешает имя: только **константа** модели или её объемлющих.
+///
+/// Переменная и порт отвергаются с прямым указанием на причину: их значение
+/// известно лишь в такте, и подставить его при сборке нельзя.
+fn resolve_name(
+    name: &str,
+    loc: Location,
+    scope: &Rc<RefCell<ModelNode>>,
+    budget: &mut Budget,
+) -> Result<ConstValue, Diagnostic> {
+    let found = scope.borrow().search_var(name).ok_or_else(|| {
+        not_constant(
+            loc,
+            format!("имя '{name}' в области видимости не объявлено"),
+        )
+    })?;
+    match found {
+        VariableNode::Const { expr, .. } => eval_node(&expr, loc, scope, budget),
+        VariableNode::Simple { .. } => Err(not_constant(
+            loc,
+            format!("'{name}' — переменная: её значение известно только в такте"),
+        )),
+        VariableNode::Port { .. } => Err(not_constant(
+            loc,
+            format!("'{name}' — порт: его значение приходит извне во время работы"),
+        )),
+        VariableNode::Unresolved => Err(not_constant(
+            loc,
+            format!("объявление '{name}' не разрешено"),
+        )),
+    }
+}
+
+/// Вычисляет значение объявления константы.
+///
+/// Значение приходит и сырым АСД (`Unresolved`, порядок объявлений), и уже
+/// понижённым узлом — оба пути штатны (та же двойственность, что в 0143).
+fn eval_node(
+    node: &ExpressionNode,
+    loc: Location,
+    scope: &Rc<RefCell<ModelNode>>,
+    budget: &mut Budget,
+) -> Result<ConstValue, Diagnostic> {
+    budget.deeper(loc)?;
+    let result = match node {
+        ExpressionNode::Unresolved(expr) => eval(expr, scope, budget),
+        ExpressionNode::Number(v) => Ok(ConstValue::Int(*v)),
+        ExpressionNode::Duration(ns) => Ok(ConstValue::Duration(*ns)),
+        ExpressionNode::Parenthesis(inner) => eval_node(inner, loc, scope, budget),
+        ExpressionNode::Variable(cell) => {
+            let var = cell.borrow().clone();
+            match var {
+                VariableNode::Const { expr, .. } => eval_node(&expr, loc, scope, budget),
+                other => Err(not_constant(
+                    loc,
+                    format!(
+                        "'{}' — не константа: значение известно только в такте",
+                        other.name()
+                    ),
+                )),
+            }
+        }
+        _ => Err(not_constant(
+            loc,
+            "значение константы при компиляции не вычисляется",
+        )),
+    };
+    budget.shallower();
+    result
+}
+
+/// Имя типа для диагностики — как его написал бы автор.
+#[allow(dead_code)]
+fn type_name(ty: &TypeNode) -> String {
+    ty.to_string()
+}
+
+/// Позиция выражения — для диагностики о нём.
+pub fn expr_loc(expr: &ast::Expression) -> Location {
+    expr.loc()
+}

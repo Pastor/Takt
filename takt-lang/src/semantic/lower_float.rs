@@ -245,6 +245,7 @@ fn lower_function(
             params,
             ret,
             mut body,
+            raw,
         } => {
             let params = params
                 .into_iter()
@@ -259,6 +260,10 @@ fn lower_function(
                 params,
                 ret,
                 body,
+                // Понижение `float` → `q` меняет типы разрешённого тела; сырое
+                // АСД остаётся исходным — константный вычислитель работает с
+                // текстом автора, а не с результатом флага сборки (0096).
+                raw,
             })
         }
         FunctionDefinitionNode::External {

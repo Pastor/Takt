@@ -419,8 +419,7 @@ pub(super) fn construct_model_stage0(
                 }
             }
         } else if let ModelElement::Variable(def) = element {
-            // Разбор объявления значения — отдельный модуль `declaration.rs`
-            // (перечень форм: var/порт/const/parameter).
+            // Разбор объявления значения — модуль `declaration.rs`.
             declaration::construct_declaration(
                 def,
                 Rc::clone(&model_node),

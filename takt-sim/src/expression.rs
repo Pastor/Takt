@@ -521,6 +521,7 @@ mod tests {
                     bits: 8,
                     signed: false,
                 },
+                raw: Box::default(),
                 body: StatementNode::Return(Some(Box::new(ExpressionNode::Add(
                     Box::new(ExpressionNode::Variable(std::rc::Rc::new(
                         std::cell::RefCell::new(takt_lang::semantic::VariableNode::Simple {
