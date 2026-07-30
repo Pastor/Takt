@@ -138,9 +138,11 @@ model Memory {
 
 // ─── Кеш команд: у каждого ядра свой ─────────────────────────────────────────
 model Cache {
-    // Номер обслуживаемого ядра: по нему кеш выбирает свои линии. Так одна
-    // модель служит любому числу ядер — экземпляру достаточно сказать, чей он.
-    parameter id: u8 := 0;
+    // Какое ядро обслуживает этот кеш: по номеру он выбирает его линии. Так
+    // одна модель служит любому числу ядер — экземпляру довольно сказать, чей он.
+    // Имя не `id`, чтобы не совпадать с параметром ядра: одноимённые объявления
+    // разных моделей симулятор различает, но по голому имени адресует первое.
+    parameter serves: u8 := 0;
 
     // Включён ли кеш. Выключенный ведёт себя как провод: каждый запрос идёт на
     // шину. Так одна модель служит и ступени «кеша нет», и ступени «кеш есть» —
@@ -167,33 +169,33 @@ model Cache {
         // при промахе ответ придёт быстрее. ПОПАДАНИЕ обслуживается прямо тут,
         // тем же тактом: за этим кеш и ставят. Промах стоит такта и уходит в Miss.
         always {
-            want_addr := fetch_addr[id];
-            arb_addr[id] := want_addr;
+            want_addr := fetch_addr[serves];
+            arb_addr[serves] := want_addr;
             idx := want_addr % 8;
             want := want_addr / 8;
-            if enabled = 1 && fetch_req[id] = 1 && valid[idx] = 1 && tags[idx] = want {
-                fetch_op[id] := ops[idx];
-                fetch_arg[id] := args[idx];
-                fetch_ready[id] := 1;
+            if enabled = 1 && fetch_req[serves] = 1 && valid[idx] = 1 && tags[idx] = want {
+                fetch_op[serves] := ops[idx];
+                fetch_arg[serves] := args[idx];
+                fetch_ready[serves] := 1;
                 hits := hits + 1;
             }
             else {
-                fetch_ready[id] := 0;
+                fetch_ready[serves] := 0;
             }
         }
-        ref Miss: fetch_req[id] = 1 & enabled = 0;
-        ref Miss: fetch_req[id] = 1 & valid[idx] = 0;
-        ref Miss: fetch_req[id] = 1 & tags[idx] != want;
+        ref Miss: fetch_req[serves] = 1 & enabled = 0;
+        ref Miss: fetch_req[serves] = 1 & valid[idx] = 0;
+        ref Miss: fetch_req[serves] = 1 & tags[idx] != want;
         ref Lookup;
     }
 
     // Промах: кеш просит арбитра и ЖДЁТ, а ядро ждёт кеша.
     state Miss {
         always {
-            arb_req[id] := 1;
-            fetch_ready[id] := 0;
+            arb_req[serves] := 1;
+            fetch_ready[serves] := 0;
         }
-        ref Fill: arb_ready[id] = 1;
+        ref Fill: arb_ready[serves] = 1;
         ref Miss;
     }
 
@@ -201,16 +203,16 @@ model Cache {
     state Fill {
         always {
             if enabled = 1 {
-                ops[idx] := arb_op[id];
-                args[idx] := arb_arg[id];
+                ops[idx] := arb_op[serves];
+                args[idx] := arb_arg[serves];
                 tags[idx] := want;
                 valid[idx] := 1;
             }
-            fetch_op[id] := arb_op[id];
-            fetch_arg[id] := arb_arg[id];
-            fetch_ready[id] := 1;
+            fetch_op[serves] := arb_op[serves];
+            fetch_arg[serves] := arb_arg[serves];
+            fetch_ready[serves] := 1;
             misses := misses + 1;
-            arb_req[id] := 0;
+            arb_req[serves] := 0;
         }
         ref Lookup;
     }

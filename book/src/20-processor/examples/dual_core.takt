@@ -13,4 +13,4 @@
 // разными данными занимает два ядра — простейший вид многоядерной работы.
 import {Op, Memory, Cache, Core, Arbiter, fetch_addr, fetch_req, fetch_op, fetch_arg, fetch_ready, arb_addr, arb_req, arb_op, arb_arg, arb_ready, bus_addr, bus_req, bus_op, bus_arg, bus_ready, data_addr, data_waddr, data_rdata, data_wdata, data_wen} from "machine_lib.takt";
 
-start Machine = Core(id := 0, base := 0) | Core(id := 1, base := 4) | Cache(id := 0, enabled := 1) | Cache(id := 1, enabled := 1) | Arbiter | Memory(latency := 3);
+start Machine = Core(id := 0, base := 0) | Core(id := 1, base := 4) | Cache(serves := 0, enabled := 1) | Cache(serves := 1, enabled := 1) | Arbiter | Memory(latency := 3);
