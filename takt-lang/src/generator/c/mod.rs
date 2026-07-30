@@ -36,6 +36,7 @@ mod c_every;
 mod c_expr;
 mod c_hal;
 mod c_header;
+mod c_literal;
 mod c_map;
 mod c_model;
 mod c_model_init;

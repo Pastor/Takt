@@ -42,7 +42,7 @@ pub(in crate::generator::c) fn generate_expr(
 
         // ── Литералы ──────────────────────────────────────────────────────────
         ExpressionNode::Number(n) => {
-            printer.print(&n.to_string());
+            printer.print(&crate::generator::c::c_literal::c_int_literal(*n));
         }
         ExpressionNode::Bool(value) => {
             printer.print(if *value { "true" } else { "false" });

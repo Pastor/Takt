@@ -213,7 +213,7 @@ pub(in crate::generator::c) fn generate_condition_expr(
             "литерал длительности в условии",
         )?
         .to_string()),
-        ConditionNode::Number(n) => Ok(n.to_string()),
+        ConditionNode::Number(n) => Ok(crate::generator::c::c_literal::c_int_literal(*n)),
         ConditionNode::Rational(s, neg) => {
             if *neg {
                 Ok(format!("-{}", s))
