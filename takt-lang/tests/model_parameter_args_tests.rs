@@ -1,0 +1,179 @@
+//! Аргументы инстанцирования модели `M(ИМЯ := ЗНАЧЕНИЕ)` — фича 0185, задача 0185-02.
+//!
+//! Проверяется **разбор и структурные диагностики**: форма аргумента,
+//! существование параметра, отсутствие повторов, все позиции инстанцирования.
+//! Вычисление значения — задача 0185-03, применение — 0185-04/05.
+//!
+//! ⚠️ Пока значения не применяются, вход с аргументами отвергается `SE-082`:
+//! иначе `Tuner(limit := 200)` компилировался бы **молча** со значением по
+//! умолчанию (проба показала `model->limit = 100`). Тест
+//! `arguments_are_rejected_until_targets_apply_them` фиксирует это состояние —
+//! задача 0185-04 обязана снять и отказ, и его.
+
+use takt_lang::parse;
+use takt_lang::semantic::tree::construct_model;
+
+/// Код диагностики для исходника, который обязан быть отвергнут.
+fn error_code(src: &str) -> String {
+    let (tree, _) = parse(src, 0).expect("исходник должен разбираться");
+    let diagnostic = construct_model(&tree, None, &[]).expect_err("ожидалась семантическая ошибка");
+    diagnostic
+        .code
+        .clone()
+        .unwrap_or_else(|| panic!("диагностика без кода: {}", diagnostic.message))
+}
+
+/// Модель с одним параметром и одной переменной.
+const TUNER: &str = "model Tuner {\n\
+                     \x20   parameter limit: u8 := 100;\n\
+                     \x20   var acc: u8 := 0;\n\
+                     \x20   start Count;\n\
+                     }\n";
+
+// ─── Структурные диагностики (R6) ────────────────────────────────────────────
+
+/// Аргумент вне формы `имя := значение` — `SE-076`. Позиционных аргументов нет:
+/// у параметров есть значения по умолчанию, поэтому позиция ничего не означает.
+#[test]
+fn positional_argument_is_se076() {
+    assert_eq!(
+        error_code(&format!("{TUNER}start Main = Tuner(5);\n")),
+        "SE-076"
+    );
+}
+
+/// Слева от `:=` — не имя: `SE-076` же (та же ошибка формы).
+#[test]
+fn non_name_on_the_left_is_se076() {
+    assert_eq!(
+        error_code(&format!("{TUNER}start Main = Tuner(1 := 5);\n")),
+        "SE-076"
+    );
+}
+
+/// Модель не объявляет параметров вовсе — `SE-077`. Отдельный код от «нет
+/// такого параметра»: автор скорее перепутал модель, чем имя.
+#[test]
+fn model_without_parameters_is_se077() {
+    let src = "model Plain { var acc: u8 := 0; start Count; }\n\
+               start Main = Plain(limit := 5);\n";
+    assert_eq!(error_code(src), "SE-077");
+}
+
+/// У модели есть параметры, но не этот — `SE-078`; сообщение перечисляет
+/// объявленные (опечатку видно сразу).
+#[test]
+fn unknown_parameter_is_se078() {
+    assert_eq!(
+        error_code(&format!("{TUNER}start Main = Tuner(step := 5);\n")),
+        "SE-078"
+    );
+}
+
+/// Имя объявлено, но это переменная — `SE-079`: при инстанцировании задаются
+/// только параметры (граница «настройка сборки vs величина такта»).
+#[test]
+fn assigning_a_plain_variable_is_se079() {
+    assert_eq!(
+        error_code(&format!("{TUNER}start Main = Tuner(acc := 5);\n")),
+        "SE-079"
+    );
+}
+
+/// Повтор имени в одном вызове — `SE-080`.
+#[test]
+fn duplicate_argument_is_se080() {
+    assert_eq!(
+        error_code(&format!(
+            "{TUNER}start Main = Tuner(limit := 5, limit := 6);\n"
+        )),
+        "SE-080"
+    );
+}
+
+/// Неизвестная модель в позиции инстанцирования — прежний `SE-001`.
+#[test]
+fn unknown_model_is_se001() {
+    assert_eq!(
+        error_code(&format!("{TUNER}start Main = Missing(limit := 5);\n")),
+        "SE-001"
+    );
+}
+
+/// Форма, реализацией быть не могущая, получила **код и позицию** (`SE-081`).
+/// Прежде здесь печатался `Debug` узла АСД без того и другого — сообщение о
+/// внутреннем устройстве вместо ошибки автора.
+#[test]
+fn unsupported_implementation_form_is_se081() {
+    assert_eq!(
+        error_code(&format!("{TUNER}start Main = Tuner * Tuner;\n")),
+        "SE-081"
+    );
+}
+
+// ─── Все позиции инстанцирования (R2) ────────────────────────────────────────
+
+/// Разбор доходит до дерева во **всех** позициях: корень, композиции `+`/`|`,
+/// реализация состояния. Свидетельство — `SE-082` (сторож ниже): он выдаётся
+/// только тогда, когда аргументы **уже разобраны** и лежат в реализации.
+#[test]
+fn arguments_are_parsed_in_every_instantiation_position() {
+    let cases = [
+        (
+            "корень",
+            format!("{TUNER}start Main = Tuner(limit := 1);\n"),
+        ),
+        (
+            "последовательная композиция",
+            format!("{TUNER}start Main = Tuner(limit := 1) + Tuner;\n"),
+        ),
+        (
+            "параллельная композиция",
+            format!("{TUNER}start Main = Tuner | Tuner(limit := 2);\n"),
+        ),
+        (
+            "реализация состояния",
+            format!("{TUNER}model Host {{ start B = Tuner(limit := 3); }}\nstart Main = Host;\n"),
+        ),
+        (
+            "скобки",
+            format!("{TUNER}start Main = (Tuner(limit := 4));\n"),
+        ),
+    ];
+    for (what, src) in cases {
+        assert_eq!(
+            error_code(&src),
+            "SE-082",
+            "аргументы обязаны доезжать до дерева в позиции «{what}»"
+        );
+    }
+}
+
+/// Вызов без аргументов ведёт себя как прежде — обратная совместимость.
+#[test]
+fn call_without_arguments_still_builds() {
+    let src = format!("{TUNER}start Main = Tuner;\n");
+    let (tree, _) = parse(&src, 0).expect("разбор");
+    construct_model(&tree, None, &[]).expect("модель без аргументов обязана строиться");
+}
+
+// ─── Временный сторож (снимает 0185-04) ──────────────────────────────────────
+
+/// Пока ни одна цель не применяет значения, вход с аргументами **отвергается**.
+///
+/// Это не «недоделка молчком», а её противоположность: без отказа
+/// `Tuner(limit := 200)` собрался бы со значением 100 при рапорте об успехе.
+/// Задача 0185-04 снимает и отказ, и этот тест — вместо него встанет проверка
+/// **применённого** значения.
+#[test]
+fn arguments_are_rejected_until_targets_apply_them() {
+    let src = format!("{TUNER}start Main = Tuner(limit := 200);\n");
+    let (tree, _) = parse(&src, 0).expect("разбор");
+    let err = construct_model(&tree, None, &[]).expect_err("ожидался отказ SE-082");
+    assert_eq!(err.code.as_deref(), Some("SE-082"));
+    assert!(
+        err.message.contains("не применяются"),
+        "сообщение обязано объяснять причину отказа, получено: {}",
+        err.message
+    );
+}

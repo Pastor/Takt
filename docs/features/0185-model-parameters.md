@@ -12,7 +12,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0185-model-parameters.md`](../adr/0185-model-parameters.md) |
 | Анализ | [`docs/analyze/0185-model-parameters.md`](../analyze/0185-model-parameters.md) |
-| Разработка | [`0185-01`](../development/0185-01-model-parameters.md) — объявление `parameter` (**выполнена**); задачи `0185-02`…`0185-09` — по декомпозиции анализа |
+| Разработка | [`0185-01`](../development/0185-01-model-parameters.md) — объявление `parameter` (**выполнена**), [`0185-02`](../development/0185-02-model-parameters.md) — аргументы инстанцирования (**выполнена**); задачи `0185-03`…`0185-09` — по декомпозиции анализа |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) — **не заведён** (проработка) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) — **не заведён** (проработка) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0185-YY-*`) |

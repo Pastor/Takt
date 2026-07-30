@@ -35,6 +35,7 @@ pub mod depth;
 mod enums;
 mod fixed;
 mod implicit_bool;
+mod instantiation;
 mod member_access;
 mod nondeterminism;
 mod ports;
@@ -107,7 +108,7 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let mut found = Vec::new();
 
     // Проверки, устроенные как «первая ошибка»: каждая добавляет не более одной.
-    let single: [Result<(), Diagnostic>; 10] = [
+    let single: [Result<(), Diagnostic>; 11] = [
         model_only_one_start_state(model.clone()),
         validate_bit_values(model.clone()),
         validate_enum_values(model.clone()),
@@ -118,6 +119,9 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
         check_array_sizes(model.clone()),
         check_port_addresses(model.clone()),
         check_fixed_mixing(model.clone()), // T6 (0061): запрет смешения q(m, n)
+        // Временный сторож 0185: аргументы инстанцирования разобраны, но целями
+        // ещё не применяются — снимает задача 0185-04.
+        instantiation::check_instantiation_arguments(model.clone()),
     ];
     found.extend(single.into_iter().filter_map(Result::err));
 

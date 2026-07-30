@@ -48,7 +48,7 @@ pub(super) fn collect_extend_entries(
     entries: &mut Vec<IndexEntry>,
 ) {
     match extend {
-        ModelExtend::Model(target, loc) => {
+        ModelExtend::Model(target, loc, _) => {
             // Позиции нет у синтетической модели композиции (`Location::Codegen`)
             // и у реализации, разрешённой не из АСД — индексировать нечего.
             if let Location::Source(_, start, end) = loc {

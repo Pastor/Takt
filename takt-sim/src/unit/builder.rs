@@ -489,7 +489,7 @@ fn build_extend(
 ) -> Result<Unit, Diagnostic> {
     match extend {
         Extend::None | Extend::Unresolved(_) => Ok(Unit::default()),
-        Extend::Model(rc, _) => build_impl(Rc::clone(rc), shared_parent),
+        Extend::Model(rc, _, _) => build_impl(Rc::clone(rc), shared_parent),
         Extend::Parentless(inner) => build_extend(inner, shared_parent),
         Extend::Concatenation(items) => {
             // Шаги `+` делят общий родительский контекст ровно так же, как ветви
@@ -537,7 +537,7 @@ fn shared_context(
 /// Извлекает родительскую модель из Extend (нужна для построения shared-контекста).
 fn extract_parent_model(extend: &Extend) -> Option<Rc<RefCell<ModelNode>>> {
     match extend {
-        Extend::Model(rc, _) => rc.borrow().upper.as_ref()?.upgrade(),
+        Extend::Model(rc, _, _) => rc.borrow().upper.as_ref()?.upgrade(),
         Extend::Parentless(inner) => extract_parent_model(inner),
         _ => None,
     }

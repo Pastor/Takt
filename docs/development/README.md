@@ -301,3 +301,4 @@
 | 0182-02 | 0182 | Библиотечный ПИД-регулятор и пример его применения | [0182-02-pid-library-and-application.md](0182-02-pid-library-and-application.md) |
 | 0182-03 | 0182 | Библиотечный ПИД-регулятор и пример его применения | [0182-03-pid-library-and-application.md](0182-03-pid-library-and-application.md) |
 | 0185-01 | 0185 | Лексика, грамматика и АСД объявления parameter | [0185-01-model-parameters.md](0185-01-model-parameters.md) |
+| 0185-02 | 0185 | Аргументы инстанцирования и их диагностики | [0185-02-model-parameters.md](0185-02-model-parameters.md) |
