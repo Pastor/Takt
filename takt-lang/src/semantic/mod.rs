@@ -40,6 +40,7 @@ mod named_code_block;
 pub use named_code_block::NamedCodeBlockDefinitionNode;
 pub(crate) mod naming;
 mod reference;
+pub(crate) mod specialize;
 pub(crate) mod stages;
 mod statement;
 pub mod struct_node;
@@ -65,8 +66,7 @@ use extend::Extend;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::rc::Rc;
-use std::rc::Weak;
+use std::rc::{Rc, Weak};
 use type_node::TypeNode;
 
 /// Семантический узел модели (конечного автомата).

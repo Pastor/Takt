@@ -367,6 +367,9 @@ fn generate_options(options: &CompileOptions) -> crate::GenerateOptions {
     generate.float_as_q = options.float_as_q;
     generate.float_embedded = options.float_embedded;
     generate.tick_hz = options.tick_hz;
+    // Режим параметров (фича 0185): `specialize` включает копирование моделей
+    // по наборам аргументов между стадиями 1 и 2 семантики.
+    generate.specialize = options.parameters == ParametersMode::Specialize;
     generate
 }
 
@@ -453,17 +456,6 @@ pub fn run_compile(args: &[String]) -> i32 {
             return 1;
         }
     };
-
-    // Режим `specialize` (фича 0185) реализует задача 0185-05: до неё — честный
-    // отказ, а не молчаливая работа режимом `assign` (класс дефекта 0184 —
-    // настройка применена не тем способом, который просил пользователь).
-    if options.parameters == ParametersMode::Specialize {
-        eprintln!(
-            "Ошибка: режим --parameters=specialize ещё не реализован (задача 0185-05); \
-             доступен режим по умолчанию --parameters=assign"
-        );
-        return 1;
-    }
 
     // Читаем исходный файл
     let source = match fs::read_to_string(&options.input_file) {

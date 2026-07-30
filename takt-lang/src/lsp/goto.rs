@@ -110,7 +110,8 @@ pub fn goto_declaration_at(
     let (ast, _) = crate::parse(source, 0).ok()?;
     let mut files = FileTable::new(path);
     let model =
-        semantic::tree::construct_model_with_files(&ast, None, search_paths, &mut files).ok()?;
+        semantic::tree::construct_model_with_files(&ast, None, search_paths, &mut files, false)
+            .ok()?;
     let node = node_at_position(source, position, &model)?;
 
     let DiagLoc::Source(file_no, start, end) = declaration_location_of(&node)? else {

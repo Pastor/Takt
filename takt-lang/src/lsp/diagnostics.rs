@@ -50,13 +50,16 @@ pub fn collect_diagnostics_at(
     // накапливаются (фича 0130): редактор подчёркивает **все** нарушения, а не
     // первое. Прежде здесь стоял `construct_model_with_files`, отдающий одну
     // диагностику по контракту.
-    let model = match semantic::stages::construct_stages(&ast, None, search_paths, &mut files) {
-        Ok(m) => m,
-        Err(err) => {
-            lsp_diags.push(diagnostic_to_lsp(&err, source, &files));
-            return lsp_diags;
-        }
-    };
+    // LSP работает в режиме по умолчанию (`assign`): флага генерации у
+    // редактора нет, а диагностики режимов не расходятся.
+    let model =
+        match semantic::stages::construct_stages(&ast, None, search_paths, &mut files, false) {
+            Ok(m) => m,
+            Err(err) => {
+                lsp_diags.push(diagnostic_to_lsp(&err, source, &files));
+                return lsp_diags;
+            }
+        };
 
     let errors = semantic::validate::validate_model_all(model.clone());
     if !errors.is_empty() {
