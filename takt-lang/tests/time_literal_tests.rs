@@ -159,7 +159,7 @@ fn all_new_constructs_parse() {
 fn every_is_accepted_since_0134_09() {
     // Задача 0134-09 реализовала `every`: прежний отказ `SE-066` снят, конструкция
     // разворачивается семантикой в периодический блок и компилируется всеми целями.
-    let diagnostics = takt_lang::collect_compile_diagnostics("doors.takt", TIME_SRC, &[]);
+    let diagnostics = takt_lang::collect_compile_diagnostics("doors.takt", TIME_SRC, &[], false);
     assert!(
         !diagnostics
             .iter()
@@ -201,7 +201,7 @@ fn formatter_is_idempotent_on_time_constructs() {
 
 /// Диагностики компиляции исходника (коды).
 fn codes(src: &str) -> Vec<String> {
-    takt_lang::collect_compile_diagnostics("probe.takt", src, &[])
+    takt_lang::collect_compile_diagnostics("probe.takt", src, &[], false)
         .iter()
         .filter_map(|d| d.code.clone())
         .collect()

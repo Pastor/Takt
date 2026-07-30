@@ -3,7 +3,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
-use crate::generator::rust::rust_expr::{Scope, const_name, print_expression};
+use crate::generator::rust::rust_expr::{Scope, const_ident, print_expression};
 use crate::generator::rust::rust_map::RustMap;
 use crate::generator::rust::rust_name::{check_name_collisions, rust_type_name, rust_value_name};
 use crate::generator::rust::rust_port::{PortClass, port_class};
@@ -329,11 +329,11 @@ pub(crate) fn emit_constants(
         };
         for var in model.variables.values() {
             let VariableNode::Const {
+                upper,
                 name,
                 ty,
                 expr,
                 loc,
-                ..
             } = var
             else {
                 continue;
@@ -341,7 +341,11 @@ pub(crate) fn emit_constants(
             if !map.usage().constants.contains(name) {
                 continue;
             }
-            let ident = const_name(name, *loc)?;
+            // Имя объявления — то же, которым к константе обращаются выражения
+            // (`rust_expr::const_ident`): у константы-параметра оно
+            // квалифицировано владельцем, иначе две специализации слились бы в
+            // одно `const`, и вторая молча получила бы значение первой.
+            let ident = const_ident(upper.as_ref(), name, *loc)?;
             if !seen.insert(ident.clone()) {
                 continue;
             }

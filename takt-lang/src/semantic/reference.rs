@@ -8,9 +8,30 @@
 //! Родительская модель берётся непосредственно из узла состояния (`state.upper()`),
 //! поэтому явная передача `model` в параметрах не требуется.
 
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::condition::resolve_condition;
-use crate::semantic::{ConditionNode, ReferenceNode, StateNode};
+use crate::semantic::{ConditionNode, StateNode};
+use std::fmt::Debug;
+
+/// Ссылка на узел семантического дерева с условием перехода.
+///
+/// Параметр `T` — тип целевого узла (обычно [`StateNode`]).
+///
+/// Живёт здесь, а не в `semantic/mod.rs`: ссылка — предмет **этого** модуля (он
+/// её и разрешает), а `mod.rs` пришпилен реестром размеров и расти не имеет
+/// права. Наружу тип виден прежним путём (`semantic::ReferenceNode`) —
+/// реэкспортом.
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
+pub struct ReferenceNode<T: Clone + PartialEq + Eq + Debug> {
+    /// Позиция ссылки в исходном тексте.
+    pub location: Location,
+    /// Имя целевого состояния.
+    pub name: String,
+    /// Условие перехода.
+    pub cond: ConditionNode,
+    /// Целевой узел (может быть [`StateNode::Unresolved`] до второго прохода).
+    pub object: Box<T>,
+}
 
 /// Разрешает список условий `ref`-ссылок, заменяя [`ConditionNode::Unresolved`]
 /// полностью разрешёнными семантическими условиями.

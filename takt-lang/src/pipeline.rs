@@ -68,12 +68,24 @@ fn stamp_file(d: Diagnostic, files: &diagnostics::FileTable) -> Diagnostic {
 /// - **Проверки** (`validate`) высказываются все: они идут по готовому дереву и
 ///   независимы друг от друга.
 ///
+/// # Почему вход знает про режим параметров
+///
+/// `specialize` — режим `--parameters=specialize` (фича 0185). Диагностика от
+/// него **зависит** и зависеть обязана: параметр в позиции compile-time величины
+/// (`after PARAM`, адрес порта) законен в `specialize` и отвергается в `assign`
+/// (`SE-088`, R12) — это единственное место, где режим виден не в форме вывода, а
+/// в множестве принимаемых программ. Прогон с жёстко зашитым `false` печатал бы
+/// `SE-088` о программе, которую сам же компилятор в этом режиме собирает, — то
+/// есть отказ на верном входе. Параметр продет **одной** сигнатурой, как и у
+/// `parse_and_construct` (0185-05): два входа «с режимом» и «без» разошлись бы.
+///
 /// Список упорядочен по позиции в тексте и не содержит точных повторов
 /// ([`diagnostics::normalize`]).
 pub fn collect_compile_diagnostics(
     filename: &str,
     source: &str,
     search_paths: &[String],
+    specialize: bool,
 ) -> Vec<Diagnostic> {
     let mut files = diagnostics::FileTable::new(filename);
 
@@ -88,12 +100,16 @@ pub fn collect_compile_diagnostics(
     // Стадии построения и проверки разделены намеренно: первые терминальны,
     // вторые накапливаются. Слитно (через `construct_model_with_files`) получить
     // всё нельзя — тот вход отдаёт первую ошибку по контракту.
-    let model =
-        match semantic::stages::construct_stages(&model_ast, None, search_paths, &mut files, false)
-        {
-            Ok(model) => model,
-            Err(d) => return vec![stamp_file(d, &files)],
-        };
+    let model = match semantic::stages::construct_stages(
+        &model_ast,
+        None,
+        search_paths,
+        &mut files,
+        specialize,
+    ) {
+        Ok(model) => model,
+        Err(d) => return vec![stamp_file(d, &files)],
+    };
 
     let found = semantic::validate::validate_model_all(model)
         .into_iter()

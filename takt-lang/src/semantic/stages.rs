@@ -46,6 +46,13 @@ pub(crate) fn construct_stages(
     let model = construct_model_stage1(model)?;
     if specialize {
         crate::semantic::specialize::specialize_instantiations(&model)?;
+        // Вывод константности (задача 0185-06) — **после** специализации и до
+        // стадии 2: специализация подставляет значения в объявления
+        // (`VariableNode::Simple`), а этот проход заменяет объявление
+        // константой. Обратный порядок сломал бы подстановку, а флип после
+        // стадии 2 потребовал бы мутировать оба представления переменной
+        // (засада 0096) и опоздал бы к `after PARAM`/адресу порта.
+        crate::semantic::parameter_const::constify_parameters(&model);
     }
     let model = construct_model_stage2(model)?;
     let model = construct_model_stage3(model)?;

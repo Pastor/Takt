@@ -365,10 +365,41 @@ pub(crate) fn signal_of(var: &std::rc::Rc<std::cell::RefCell<VariableNode>>) -> 
         }
         // Порт — вывод кристалла, его имя задал автор и оно уникально по модулю
         // (`collect_ports` дедуплицирует). Константа — `localparam` уровня
-        // модуля. Префикс им не нужен и только мешал бы читать.
-        VariableNode::Port { name, .. } | VariableNode::Const { name, .. } => Some(name.clone()),
+        // модуля: префикс ей не нужен и только мешал бы читать — **кроме**
+        // константы, выведенной из параметра модели (фича 0185).
+        VariableNode::Const { upper, name, .. } => Some(const_signal(upper.as_ref(), name)),
+        VariableNode::Port { name, .. } => Some(name.clone()),
         VariableNode::Unresolved => None,
     }
+}
+
+/// Имя `localparam` константы: обычная — как написана, выведенная из параметра
+/// модели — **с префиксом владельца** (фича 0185, задача 0185-06).
+///
+/// ⚠️ Два правила на один вид объявления — осознанный минимум, а не небрежность.
+/// Композиция в цели `sv` **уплощается**, и `localparam` живёт на уровне модуля:
+/// две модели с одноимённой константой разных значений дают **одно** объявление,
+/// и вторая молча получает значение первой. Дефект пре-существующий (проба:
+/// `model A { const K := 2; } model B { const K := 3; }` даёт один
+/// `localparam K = 2`) и записан кандидатом — трогать его здесь нельзя, иначе
+/// изменится вывод корпуса (R7 фичи 0185: байт-в-байт прежний). А вот параметр —
+/// именно то, ради чего заводят **разные** значения у одного имени, и оставить
+/// его в общем пространстве значило бы отдать пользователю молча неверный
+/// модуль. Правило префикса взято у регистров (`Simple` выше): владелец, а не
+/// «модель, которую печатаем».
+pub(crate) fn const_signal(
+    upper: Option<&std::rc::Weak<std::cell::RefCell<crate::semantic::ModelNode>>>,
+    name: &str,
+) -> String {
+    let Some(owner) = upper.and_then(|u| u.upgrade()) else {
+        return name.to_string();
+    };
+    let is_parameter = owner.borrow().parameters.iter().any(|p| p.name == name);
+    if !is_parameter {
+        return name.to_string();
+    }
+    let model: crate::semantic::minimap::Name = owner.into();
+    format!("{}_{}", model.unique_lowercase_snakecase(), name)
 }
 
 /// Печатает доступ к члену (`x.0` → `x[0]`, `p.field` → `p.field`).

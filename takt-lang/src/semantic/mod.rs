@@ -39,7 +39,9 @@ mod named_block;
 mod named_code_block;
 pub use named_code_block::NamedCodeBlockDefinitionNode;
 pub(crate) mod naming;
+pub(crate) mod parameter_const;
 mod reference;
+pub use reference::ReferenceNode;
 pub(crate) mod specialize;
 pub(crate) mod stages;
 mod statement;
@@ -1146,21 +1148,6 @@ pub enum ExpressionNode {
     Initializer(Vec<ExpressionNode>),
     /// Приведение типа: `выражение as Тип`.
     Cast(Box<ExpressionNode>, TypeNode),
-}
-
-/// Ссылка на узел семантического дерева с условием перехода.
-///
-/// Параметр `T` — тип целевого узла (обычно [`StateNode`]).
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct ReferenceNode<T: Clone + PartialEq + Eq + Debug> {
-    /// Позиция ссылки в исходном тексте.
-    pub location: Location,
-    /// Имя целевого состояния.
-    pub name: String,
-    /// Условие перехода.
-    pub cond: ConditionNode,
-    /// Целевой узел (может быть [`StateNode::Unresolved`] до второго прохода).
-    pub object: Box<T>,
 }
 
 #[cfg(test)]

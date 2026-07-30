@@ -514,8 +514,15 @@ pub fn run_compile(args: &[String]) -> i32 {
     // Все ошибки за один прогон (фича 0130): проверка идёт ДО компиляции цели,
     // потому что `compile_to_*` отдают одну ошибку — первую. Прежде пользователь
     // получал по одной ошибке за прогон даже там, где парсер нашёл все сразу.
-    let errors =
-        crate::collect_compile_diagnostics(&options.input_file, &source, &options.include_dirs);
+    // Режим параметров передаётся и сюда: `after PARAM` законен в `specialize` и
+    // отвергается в `assign` (`SE-088`), поэтому проверка обязана идти в том же
+    // режиме, в каком пойдёт генерация (фича 0185, R12).
+    let errors = crate::collect_compile_diagnostics(
+        &options.input_file,
+        &source,
+        &options.include_dirs,
+        options.parameters == ParametersMode::Specialize,
+    );
     if !errors.is_empty() {
         for diag in &errors {
             print_compile_error(diag);

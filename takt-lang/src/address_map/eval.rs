@@ -190,6 +190,16 @@ fn resolve_symbol(
         return Err(undefined_symbol(loc, name));
     };
     let VariableNode::Const { expr, .. } = &var else {
+        // Параметр модели (фича 0185) — величина, которая станет константой в
+        // режиме `--parameters=specialize`: диагностика **называет режим**, иначе
+        // автор читал бы «не константа» о том, что константой быть может (R12).
+        if crate::semantic::parameter_const::is_parameter(&var) {
+            return Err(crate::semantic::parameter_const::compile_time_parameter(
+                loc,
+                name,
+                "адрес порта",
+            ));
+        }
         // Переменная или порт: их значение известно только в рантайме.
         return Err(not_constant(
             loc,
