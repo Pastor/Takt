@@ -80,6 +80,37 @@ fn roundtrip_values_match() {
     );
 }
 
+/// A8 (0157): круговой рейс точен и для значения ШИРЕ `i64`.
+///
+/// Снимок пишется через `serde_json`, а у его `Number` нет `From<i128>` — есть
+/// только явный конструктор. Ошибись здесь, и `u64::MAX` вернулся бы из файла
+/// нулём либо `null`: расширение носителя оказалось бы наполовину сделанным, и
+/// заметил бы это лишь тот, кто сохраняет состояние.
+#[test]
+fn roundtrip_keeps_value_beyond_i64() {
+    let src = "var wide: u64 := 18446744073709551615;\nstart A { always { wide := wide; } }";
+    let mut unit = unit_from_src(src);
+    run(&mut unit, 1);
+    let saved = unit.variable("wide");
+    assert_eq!(
+        saved,
+        Some(takt_sim::Value::Number(18_446_744_073_709_551_615)),
+        "предусловие теста: значение шире i64 живёт в переменной"
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.json");
+    save_to_file(&unit, &path).expect("сохранение");
+
+    let mut fresh = unit_from_src(src);
+    load_from_file(&mut fresh, &path).expect("загрузка");
+    assert_eq!(
+        fresh.variable("wide"),
+        saved,
+        "значение шире i64 обязано пережить круговой рейс без потерь"
+    );
+}
+
 /// A4 (Д2): после загрузки модель **продолжает вычисляться** — присваивание
 /// наблюдаемо меняет значение. Замороженной модели не существует. Это и есть
 /// ключевая проверка: точечная починка снимка её бы не прошла.
