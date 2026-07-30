@@ -35,6 +35,7 @@ pub mod depth;
 mod enums;
 mod fixed;
 mod implicit_bool;
+mod literal_range;
 mod member_access;
 mod nondeterminism;
 mod ports;
@@ -132,6 +133,10 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
 
     // Ce19 (SE-061): доступ к несуществующему полю структуры (0080, дефект 3)
     found.extend(member_access::check_struct_field_access(model.clone()).err());
+
+    // SE-089 (0157): литерал не помещается в тип приёмника. Отдаёт все находки:
+    // одна ошибка на литерал, а не «первая на модель».
+    found.extend(literal_range::check_literal_ranges(model.clone()));
 
     let nested: Vec<Rc<RefCell<ModelNode>>> =
         model.borrow().models.values().map(Rc::clone).collect();

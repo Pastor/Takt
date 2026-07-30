@@ -12,7 +12,7 @@
 ///
 /// Проверяемые правила:
 ///   S1 — обёртка беззнакового: 255 + 1 → 0
-///   S9 — усечение при записи:  300     → 44
+///   S9 — усечение при записи:  200+100 → 44
 ///   S7 — вариант enum как целое
 ///   бул. приведение: (bool)2 → true → 1
 enum Mode { Auto = 0, Manual = 1 }
@@ -20,6 +20,13 @@ enum Mode { Auto = 0, Manual = 1 }
 model Conf {
     var wrapped: u8 := 0;
     var truncated: u8 := 0;
+    // Слагаемые — переменные: усечение обязано проверяться ВЫЧИСЛЕНИЕМ.
+    // Литералом (`truncated := 300`) его записать больше нельзя — литерал вне
+    // диапазона типа отвергает SE-089 (фича 0157), и это разные вопросы:
+    // 0127 нормирует поведение арифметики, 0157 — запись заведомо не влезающей
+    // константы.
+    var part_a: u8 := 200;
+    var part_b: u8 := 100;
     var mode: Mode := Auto;
     var flag: bool := false;
     var divided: u8 := 0;
@@ -29,7 +36,7 @@ model Conf {
         always {
             wrapped := 255;
             wrapped := wrapped + 1;
-            truncated := 300;
+            truncated := part_a + part_b;
             mode := Manual;
             flag := true;
             divided := 7 / 2;
