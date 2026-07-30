@@ -147,3 +147,4 @@
 | 0183 | Тип `duration` в целях генерации и вычисляемая выдержка | [0183-duration-type-in-targets.md](0183-duration-type-in-targets.md) | — (новая фича) |
 | 0184 | Общие переменные библиотечного файла в импортёре | [0184-imported-shared-variables.md](0184-imported-shared-variables.md) | — (новая фича) |
 | 0185 | Параметризация моделей (var/const parameter) | [0185-model-parameters.md](0185-model-parameters.md) | — (новая фича) |
+| 0186 | Раздел документа: процессор на Takt (память, декодер, конвейер) | [0186-book-processor-example.md](0186-book-processor-example.md) | — (новая фича) |
