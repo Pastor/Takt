@@ -232,7 +232,9 @@ pub(crate) fn variable(var: &VariableNode, scope: &Scope) -> Result<String, Diag
         VariableNode::Simple { name, loc, .. } => scope.field(name, *loc),
         // Константы живут на уровне модуля (`const MAX: u8 = 10;`) — обращение
         // по имени без `self`.
-        VariableNode::Const { name, loc, .. } => Ok(const_name(name, *loc)?),
+        VariableNode::Const {
+            upper, name, loc, ..
+        } => Ok(const_ident(upper.as_ref(), name, *loc)?),
         VariableNode::Port {
             name,
             ty,
@@ -249,6 +251,36 @@ pub(crate) fn const_name(raw: &str, loc: Location) -> Result<String, Diagnostic>
     Ok(rust_value_name(raw, loc)?
         .trim_start_matches("r#")
         .to_uppercase())
+}
+
+/// Имя объявления константы: обычная — [`const_name`], выведенная из параметра
+/// модели — **с префиксом владельца** (фича 0185, задача 0185-06).
+///
+/// ⚠️ Модуль в цели `rust` один на всю программу, и `const` в нём — **общее**
+/// пространство имён: две модели с одноимённой константой разных значений дают
+/// одно объявление, и вторая молча получает значение первой (проба: `model A {
+/// const K := 2; } model B { const K := 3; }` → единственный `const K: u8 = 2`).
+/// Дефект пре-существующий, записан кандидатом; править его здесь нельзя — вывод
+/// корпуса обязан остаться байт-в-байт прежним (R7 фичи 0185). Но параметр
+/// заводят именно ради разных значений у одного имени, и молчаливое слияние
+/// специализаций было бы неверным выводом при рапорте об успехе — поэтому
+/// квалификация. Ровно то же правило и в цели `sv` (`sv_expr::const_signal`);
+/// цель `c` квалифицирует **все** константы всегда, цель `st` держит их полями
+/// `FUNCTION_BLOCK` — там коллизии нет по устройству.
+pub(crate) fn const_ident(
+    upper: Option<&std::rc::Weak<std::cell::RefCell<crate::semantic::ModelNode>>>,
+    name: &str,
+    loc: Location,
+) -> Result<String, Diagnostic> {
+    let ident = const_name(name, loc)?;
+    let Some(owner) = upper.and_then(|u| u.upgrade()) else {
+        return Ok(ident);
+    };
+    if !owner.borrow().parameters.iter().any(|p| p.name == name) {
+        return Ok(ident);
+    }
+    let model: crate::semantic::minimap::Name = owner.into();
+    Ok(format!("{}_{}", model.unique_uppercase_snakecase(), ident))
 }
 
 /// Печатает вещественный литерал так, чтобы он был литералом `f64`.

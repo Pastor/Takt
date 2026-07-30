@@ -28,7 +28,7 @@ fn fixture(name: &str) -> (String, String) {
 /// Коды диагностик, выданных на фикстуре.
 fn codes(name: &str) -> Vec<String> {
     let (path, source) = fixture(name);
-    collect_compile_diagnostics(&path, &source, &[])
+    collect_compile_diagnostics(&path, &source, &[], false)
         .iter()
         .map(|d| d.code.clone().unwrap_or_default())
         .collect()
@@ -37,7 +37,7 @@ fn codes(name: &str) -> Vec<String> {
 /// Проверяет, что фикстура даёт `SE-003` с указанием потерянного имени.
 fn expect_unknown_identifier(name: &str) {
     let (path, source) = fixture(name);
-    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[], false);
     assert!(
         !diagnostics.is_empty(),
         "{name}: ожидалась диагностика, получена тишина — оператор молча выброшен"
@@ -123,7 +123,7 @@ fn resolution_error_in_inline_guard_is_diagnosed() {
     let source = format!(
         "model Probe {{\n    var x: u8 := 0;\n    always {{ : [Guard] {cond}; }}\n    start A {{ ref A: x = 200; }}\n}}\nstart Entry = Probe;\n"
     );
-    let diagnostics = collect_compile_diagnostics("inline_guard_deep.takt", &source, &[]);
+    let diagnostics = collect_compile_diagnostics("inline_guard_deep.takt", &source, &[], false);
     assert!(
         diagnostics
             .iter()

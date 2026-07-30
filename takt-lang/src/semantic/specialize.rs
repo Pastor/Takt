@@ -182,6 +182,7 @@ fn specialize_one(
         }
         model.variables = rebound;
     }
+    adopt_own_nodes(&copy);
     // Значения аргументов — инициализаторами параметров копии. Узел уже
     // понижен (`const_eval` + `construct_expression` в 0185-02/03): стадия 2
     // разрешать его не будет, а вывод типов возьмёт тип из аннотации.
@@ -194,6 +195,40 @@ fn specialize_one(
         .insert(new_name, Rc::clone(&copy));
     ctx.by_values.insert(key, Rc::clone(&copy));
     Ok(copy)
+}
+
+/// Перепривязывает к копии её **собственные** узлы, склонированные вместе с
+/// `upper` на исходную модель.
+///
+/// ⚠️ **Без этого специализация неверна молча.** Условия рёбер `ref` разрешаются
+/// стадией 6 в области видимости, взятой **из узла состояния**
+/// (`reference.rs::resolve_references` → `state.upper()`), а `copy` клонирует
+/// состояния как есть. Значит `ref Done: after dwell;` копии разрешался бы в
+/// исходной модели и брал **её** значение параметра — то есть значение по
+/// умолчанию вместо аргумента (обнаружено задачей 0185-06: под `specialize`
+/// выдержка выходила 100 мс при `dwell := 200ms`). До 0185-06 дефект был
+/// незаметен: параметр в обеих моделях был полем с одним именем, и доступ
+/// «случайно» указывал на верное поле своего экземпляра.
+///
+/// Именованные блоки в перепривязке не нуждаются: стадия 4 **создаёт** их заново
+/// с `upper` содержащей модели (`named_block.rs`). Вложенные модели трогать
+/// **нельзя** — специализация модели с ними отвергается (`SE-087`).
+fn adopt_own_nodes(copy: &Rc<RefCell<ModelNode>>) {
+    let weak = Rc::downgrade(copy);
+    let mut model = copy.borrow_mut();
+    let mut states = std::mem::take(&mut model.states);
+    for state in states.values_mut() {
+        match state {
+            StateNode::Simple { upper, .. } | StateNode::Implement { upper, .. } => {
+                *upper = Some(weak.clone());
+            }
+            StateNode::Unresolved => {}
+        }
+    }
+    model.states = states;
+    for cond in model.conditions.values_mut() {
+        cond.upper = Some(weak.clone());
+    }
 }
 
 /// Подставляет значение в инициализатор параметра копии.

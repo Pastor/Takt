@@ -150,23 +150,14 @@ fn note_imported_here(
     filename: &str,
     importer: Option<&str>,
 ) -> Diagnostic {
-    let what = short_name(filename);
-    let message = match importer.map(short_name) {
+    let what = crate::semantic::import::short_name(filename);
+    let message = match importer.map(crate::semantic::import::short_name) {
         // Сообщение самодостаточно: `taktc` печатает текст заметки, но не её
         // позицию, поэтому «импортировано здесь» без имён не сказало бы ничего.
         Some(where_) => format!("'{what}' импортирован в '{where_}'"),
         None => format!("'{what}' импортирован здесь"),
     };
     d.with_note(import_loc, message)
-}
-
-/// Имя файла без каталога — для сообщений: полный путь в цепочке импорта только
-/// мешает читать.
-fn short_name(path: &str) -> String {
-    std::path::Path::new(path)
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.to_string())
 }
 
 /// Помечает узел как пришедший через `import` (фича 0051, R2).
@@ -706,6 +697,11 @@ pub(super) fn construct_model_stage0(
     model_node.borrow_mut().models = models;
     model_node.borrow_mut().states = construct_states(model, Rc::clone(&model_node))?;
     model_node.borrow_mut().variables = variables;
+    // Анализ изменяемости параметров (задача 0185-06) — здесь, пока АСД модели
+    // под рукой: он ищет присваивания в **сыром** тексте тел, а стадии 2–6 их
+    // ещё не разрешили. Результат — флаг `ParameterNode::mutated`; применяет его
+    // (только в режиме `--parameters=specialize`) `parameter_const::constify_parameters`.
+    crate::semantic::parameter_const::mark_mutated(model, &mut parameters);
     model_node.borrow_mut().parameters = parameters;
     model_node.borrow_mut().conditions = conditions;
     model_node.borrow_mut().named_blocks = named_blocks;

@@ -126,6 +126,9 @@ pub(super) fn construct_declaration(
             parameters.push(ParameterNode {
                 name: name.clone(),
                 loc,
+                // «Изменяемый», пока анализ изменяемости (0185-06) не сказал
+                // иное: неразмеченный параметр обязан вести себя как переменная.
+                mutated: true,
             });
             variables.insert(
                 name.clone(),

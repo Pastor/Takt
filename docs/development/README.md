@@ -305,3 +305,4 @@
 | 0185-03 | 0185 | Константный вычислитель и константные функции | [0185-03-model-parameters.md](0185-03-model-parameters.md) |
 | 0185-04 | 0185 | Режим assign: применение аргументов пятью потребителями и флаг CLI | [0185-04-model-parameters.md](0185-04-model-parameters.md) |
 | 0185-05 | 0185 | Режим specialize: копия модели, детерминированные имена, дедупликация | [0185-05-model-parameters.md](0185-05-model-parameters.md) |
+| 0185-06 | 0185 | Параметризация моделей (ключевое слово parameter) | [0185-06-model-parameters.md](0185-06-model-parameters.md) |

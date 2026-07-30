@@ -27,7 +27,7 @@ fn start_of(diagnostic: &Diagnostic) -> u32 {
 #[test]
 fn all_parser_errors_are_reported() {
     let (path, source) = fixture("three_syntax_errors.takt");
-    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[], false);
     assert_eq!(
         diagnostics.len(),
         3,
@@ -58,7 +58,7 @@ fn all_parser_errors_are_reported() {
 #[test]
 fn diagnostics_are_ordered_by_position() {
     let (path, source) = fixture("three_syntax_errors.takt");
-    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[], false);
     let starts: Vec<u32> = diagnostics.iter().map(start_of).collect();
     let mut sorted = starts.clone();
     sorted.sort_unstable();
@@ -69,8 +69,8 @@ fn diagnostics_are_ordered_by_position() {
 #[test]
 fn repeated_runs_agree() {
     let (path, source) = fixture("three_syntax_errors.takt");
-    let first = collect_compile_diagnostics(&path, &source, &[]);
-    let second = collect_compile_diagnostics(&path, &source, &[]);
+    let first = collect_compile_diagnostics(&path, &source, &[], false);
+    let second = collect_compile_diagnostics(&path, &source, &[], false);
     assert_eq!(
         format!("{first:?}"),
         format!("{second:?}"),
@@ -82,7 +82,7 @@ fn repeated_runs_agree() {
 #[test]
 fn exact_duplicates_are_collapsed() {
     let (path, source) = fixture("three_syntax_errors.takt");
-    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[], false);
     let doubled: Vec<Diagnostic> = diagnostics
         .iter()
         .cloned()
@@ -102,7 +102,7 @@ fn exact_duplicates_are_collapsed() {
 #[test]
 fn all_validation_errors_are_reported() {
     let (path, source) = fixture("two_validate_errors.takt");
-    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[], false);
     let codes: Vec<&str> = diagnostics
         .iter()
         .filter_map(|d| d.code.as_deref())
@@ -117,7 +117,7 @@ fn all_validation_errors_are_reported() {
 #[test]
 fn nested_model_errors_are_collected() {
     let (path, source) = fixture("nested_error.takt");
-    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[], false);
     let messages: Vec<&str> = diagnostics.iter().map(|d| d.message.as_str()).collect();
     assert_eq!(
         diagnostics.len(),
@@ -143,7 +143,7 @@ fn nested_model_errors_are_collected() {
 #[test]
 fn diagnostics_point_at_real_positions() {
     let (path, source) = fixture("unknown_identifier.takt");
-    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[], false);
     assert_eq!(diagnostics.len(), 1, "{diagnostics:#?}");
     let Location::Source(_, start, end) = diagnostics[0].loc else {
         panic!("ожидалась позиция в исходном тексте: {:?}", diagnostics[0]);
@@ -164,7 +164,7 @@ fn diagnostics_point_at_real_positions() {
 #[test]
 fn valid_source_yields_no_diagnostics() {
     let (path, source) = fixture("valid.takt");
-    let diagnostics = collect_compile_diagnostics(&path, &source, &[]);
+    let diagnostics = collect_compile_diagnostics(&path, &source, &[], false);
     assert!(
         diagnostics.is_empty(),
         "корректная модель не должна давать диагностик: {diagnostics:#?}"
@@ -179,7 +179,7 @@ fn valid_source_yields_no_diagnostics() {
 #[test]
 fn cli_and_language_server_agree() {
     let (path, source) = fixture("three_syntax_errors.takt");
-    let compiler = collect_compile_diagnostics(&path, &source, &[]);
+    let compiler = collect_compile_diagnostics(&path, &source, &[], false);
     let server = takt_lang::lsp::collect_diagnostics_at(&path, &source, &[]);
 
     let compiler_codes: Vec<String> = compiler

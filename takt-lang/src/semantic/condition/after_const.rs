@@ -76,6 +76,16 @@ enum Cause {
     Undeclared(String),
     /// Имя есть, но это переменная, порт или неразрешённое объявление.
     NotConst(String, &'static str),
+    /// Имя есть, и это **параметр модели** (фича 0185, задача 0185-06).
+    ///
+    /// Отдельная причина, а не разновидность [`Cause::NotConst`], по двум
+    /// доводам. Во-первых, ответ автору другой: параметр становится константой
+    /// сменой режима генерации, а переменная — нет, поэтому диагностика **называет
+    /// режим** (ADR 0185, п. 8). Во-вторых — и это важнее — `NotConst` уводит
+    /// разбор в **вычисляемую** выдержку (0183), то есть параметр молча получил
+    /// бы 32-битный счётчик, другой код и отказ `ST-016` в цели `st`; ровно та
+    /// молчаливая деградация, которую решение запрещает.
+    Parameter(String),
     /// Константа есть, но её тип — не `duration`.
     WrongType(String, String),
     /// Значение константы не сводится к литералу длительности.
@@ -104,6 +114,12 @@ impl Cause {
                  константы типа duration либо константное выражение над \
                  длительностями (after (BASE + 30s))"
             ),
+            Cause::Parameter(name) => {
+                crate::semantic::parameter_const::compile_time_parameter_text(
+                    name,
+                    "выдержка 'after'",
+                )
+            }
             Cause::NotConst(name, kind) => format!(
                 "выдержка 'after': '{name}' — это {kind}, а выдержке нужна константа \
                  типа duration (const {name} := 3m;); значение, известное только в \
@@ -229,6 +245,12 @@ fn check_duration_operand(
         .search_var(&id.name)
         .ok_or_else(|| (id.loc, Cause::Undeclared(id.name.clone())))?;
     let ty = match &var {
+        // Параметр внутри смешанного выражения (`after (PARAM + 1s)`) — та же
+        // диагностика, что и у одиночного: иначе выдержка стала бы вычисляемой
+        // молча, и режим остался бы неназванным.
+        VariableNode::Simple { .. } if crate::semantic::parameter_const::is_parameter(&var) => {
+            return Err((id.loc, Cause::Parameter(id.name.clone())));
+        }
         VariableNode::Simple { ty, .. } | VariableNode::Port { ty, .. } => ty.clone(),
         // Константа сюда доходит только внутри смешанного выражения
         // (`v + DWELL`): её значение известно, но всё выражение — нет.
@@ -251,7 +273,15 @@ fn check_duration_operand(
 }
 
 fn fail(loc: Location, cause: &Cause) -> Diagnostic {
-    Diagnostic::error(loc, cause.message()).with_code("SE-072")
+    // Параметр в позиции compile-time величины — свой код (`SE-088`, R12 фичи
+    // 0185): он о режиме генерации, а не о форме выдержки, и тест обязан
+    // отличать одно от другого.
+    let code = if matches!(cause, Cause::Parameter(_)) {
+        crate::semantic::parameter_const::COMPILE_TIME_PARAMETER_CODE
+    } else {
+        "SE-072"
+    };
+    Diagnostic::error(loc, cause.message()).with_code(code)
 }
 
 /// Ошибка вычисления: позиция виновного узла и причина.
@@ -355,6 +385,12 @@ fn nanos_of_var(
         // значение известно лишь в такте, а выдержка нужна компилятору
         // (решение заказчика 2026-07-29 — см. шапку модуля).
         VariableNode::Simple { .. } => {
+            // Параметр модели — не «просто переменная»: он станет константой в
+            // режиме `--parameters=specialize`, и об этом сказано прямо, а не
+            // молчаливым уходом в вычисляемую выдержку (R12 фичи 0185).
+            if crate::semantic::parameter_const::is_parameter(var) {
+                return Err((loc, Cause::Parameter(name.to_string())));
+            }
             return Err((loc, Cause::NotConst(name.to_string(), "переменная")));
         }
         VariableNode::Port { .. } => {

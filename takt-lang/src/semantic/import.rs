@@ -39,6 +39,18 @@ use std::fs::{exists, read_to_string};
 /// import "model.takt";            // Plain-импорт
 /// import "engine.takt" as Motor;  // GlobalSymbol-импорт с алиасом
 /// ```
+/// Имя файла без каталога — для сообщений: полный путь в цепочке импорта только
+/// мешает читать.
+///
+/// Живёт здесь, а не в `tree.rs`: короткое имя нужно **сообщениям об импорте**, и
+/// это предмет данного модуля, а `tree.rs` пришпилен реестром размеров.
+pub(crate) fn short_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string())
+}
+
 pub(crate) fn read_import_file(
     search_paths: &[String],
     path: &ImportPath,

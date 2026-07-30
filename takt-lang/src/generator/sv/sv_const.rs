@@ -98,7 +98,12 @@ fn constant_value(
         // Константа модели — `localparam`. Переменная и порт сюда не проходят:
         // их значение к моменту сброса не определено.
         ExpressionNode::Variable(var) => match &*var.borrow() {
-            VariableNode::Const { name, .. } => Ok(name.clone()),
+            // Имя печатается тем же правилом, что и в выражениях
+            // (`sv_expr::const_signal`): константа-параметр несёт префикс
+            // владельца, иначе ветвь сброса ссылалась бы на localparam соседа.
+            VariableNode::Const { upper, name, .. } => Ok(
+                crate::generator::sv::sv_expr::const_signal(upper.as_ref(), name),
+            ),
             _ => Err(sv008(state, loc)),
         },
         _ => Err(sv008(state, loc)),
@@ -166,19 +171,25 @@ pub(crate) fn emit_constants(
         let model = model_rc.borrow();
         for var in model.variables.values() {
             let VariableNode::Const {
+                upper,
                 name,
                 ty,
                 expr,
                 loc,
-                ..
             } = var
             else {
                 continue;
             };
-            if !map.usage().constants.contains(name) || !seen.insert(name.clone()) {
+            // Объявление печатается тем именем, которым к нему обращаются
+            // выражения: у константы-параметра оно квалифицировано владельцем
+            // (`sv_expr::const_signal`). Ключ дедупликации — **это** имя: по
+            // голому две специализации слились бы в одно объявление, и вторая
+            // молча получила бы значение первой.
+            let signal = crate::generator::sv::sv_expr::const_signal(upper.as_ref(), name);
+            if !map.usage().constants.contains(name) || !seen.insert(signal.clone()) {
                 continue;
             }
-            check_sv_name(name, *loc)?;
+            check_sv_name(&signal, *loc)?;
             let decl = sv_type(ty, &format!("константа '{}'", name))?;
             let value = constant_value(expr, name, *loc).map_err(|_| {
                 sv002(&format!(
@@ -188,8 +199,12 @@ pub(crate) fn emit_constants(
                     name
                 ))
             })?;
-            p.ident(&format!("localparam {} = {};", decl.declare(name), value))
-                .nl();
+            p.ident(&format!(
+                "localparam {} = {};",
+                decl.declare(&signal),
+                value
+            ))
+            .nl();
             emitted = true;
         }
     }
