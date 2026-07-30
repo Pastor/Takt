@@ -1,0 +1,186 @@
+//! Узел объявления значения: переменная, порт, константа, параметр модели.
+//!
+//! Вынесен из `semantic/mod.rs` фичей 0185: модуль давно сверх лимита размера
+//! (`scripts/check-module-size.sh`), а «объявленное значение» — самостоятельная
+//! ответственность, а не часть описания модели.
+
+use crate::diagnostics::Location;
+use crate::parser::ast::PortDirection;
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, ModelNode};
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
+
+/// Семантический узел переменной.
+///
+/// Варианты:
+/// - [`Unresolved`](VariableNode::Unresolved) — временная заглушка.
+/// - [`Simple`](VariableNode::Simple) — обычная изменяемая переменная.
+/// - [`Port`](VariableNode::Port) — порт, отображённый на адрес.
+/// - [`Const`](VariableNode::Const) — константа.
+///
+/// Каждый разрешённый вариант хранит [`Location`] из исходного текста —
+/// позицию объявления переменной. Это поле используется при формировании
+/// диагностических сообщений, чтобы указывать конкретное место ошибки.
+#[derive(Default, Debug, Clone)]
+pub enum VariableNode {
+    /// Не разрешено (временная заглушка при построении дерева).
+    #[default]
+    Unresolved,
+    /// Изменяемая переменная.
+    Simple {
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
+        /// Позиция объявления переменной в исходном тексте.
+        loc: Location,
+        /// Имя переменной.
+        name: String,
+        /// Тип переменной.
+        ty: TypeNode,
+        /// Инициализирующее выражение.
+        expr: ExpressionNode,
+    },
+    /// Порт ввода-вывода, объявляется через `in` (входной) или `out` (выходной).
+    Port {
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
+        /// Позиция объявления порта в исходном тексте.
+        loc: Location,
+        /// Имя переменной.
+        name: String,
+        /// Тип переменной.
+        ty: TypeNode,
+        /// Адрес порта (необязателен).
+        expr: ExpressionNode,
+        /// Направление порта (входной / выходной).
+        direction: PortDirection,
+    },
+    /// Константа.
+    Const {
+        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
+        upper: Option<Weak<RefCell<ModelNode>>>,
+        /// Позиция объявления константы в исходном тексте.
+        loc: Location,
+        /// Имя константы.
+        name: String,
+        /// Тип константы.
+        ty: TypeNode,
+        /// Значение константы.
+        expr: ExpressionNode,
+    },
+}
+
+impl PartialEq for VariableNode {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Unresolved, Self::Unresolved) => true,
+            (
+                Self::Simple {
+                    name: n1,
+                    ty: t1,
+                    expr: e1,
+                    ..
+                },
+                Self::Simple {
+                    name: n2,
+                    ty: t2,
+                    expr: e2,
+                    ..
+                },
+            ) => n1 == n2 && t1 == t2 && e1 == e2,
+            (
+                Self::Port {
+                    name: n1,
+                    ty: t1,
+                    expr: e1,
+                    ..
+                },
+                Self::Port {
+                    name: n2,
+                    ty: t2,
+                    expr: e2,
+                    ..
+                },
+            ) => n1 == n2 && t1 == t2 && e1 == e2,
+            (
+                Self::Const {
+                    name: n1,
+                    ty: t1,
+                    expr: e1,
+                    ..
+                },
+                Self::Const {
+                    name: n2,
+                    ty: t2,
+                    expr: e2,
+                    ..
+                },
+            ) => n1 == n2 && t1 == t2 && e1 == e2,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for VariableNode {}
+
+impl VariableNode {
+    /// Возвращает позицию объявления переменной в исходном тексте.
+    ///
+    /// Для [`Unresolved`](VariableNode::Unresolved) возвращает [`Location::Implicit`],
+    /// так как заглушка не привязана к конкретному месту в коде.
+    pub fn loc(&self) -> Location {
+        match self {
+            VariableNode::Simple { loc, .. }
+            | VariableNode::Port { loc, .. }
+            | VariableNode::Const { loc, .. } => *loc,
+            VariableNode::Unresolved => Location::Implicit,
+        }
+    }
+
+    /// Возвращает имя переменной (пустая строка для `Unresolved`).
+    pub fn name(&self) -> &str {
+        match self {
+            VariableNode::Simple { name, .. }
+            | VariableNode::Port { name, .. }
+            | VariableNode::Const { name, .. } => name,
+            VariableNode::Unresolved => "",
+        }
+    }
+
+    /// Возвращает тип переменной (`Inference` для `Unresolved`).
+    pub fn ty(&self) -> &TypeNode {
+        match self {
+            VariableNode::Simple { ty, .. }
+            | VariableNode::Port { ty, .. }
+            | VariableNode::Const { ty, .. } => ty,
+            VariableNode::Unresolved => &TypeNode::Inference,
+        }
+    }
+
+    /// Возвращает ссылку на родительскую модель.
+    pub fn upper(&self) -> Option<Rc<RefCell<ModelNode>>> {
+        match self {
+            VariableNode::Simple { upper, .. }
+            | VariableNode::Port { upper, .. }
+            | VariableNode::Const { upper, .. } => upper.as_ref().and_then(|w| w.upgrade()),
+            VariableNode::Unresolved => None,
+        }
+    }
+}
+
+/// Параметр модели (фича 0185) — то, чем он отличается от переменной.
+///
+/// Значение параметра лежит в [`ModelNode::variables`] обычным
+/// [`VariableNode::Simple`]: в режиме генерации по умолчанию
+/// (`--parameters=assign`) параметр **и есть** поле экземпляра, и всякий
+/// потребитель дерева, ничего не знающий о параметрах, обращается с ним верно
+/// (урок 0184: механизм, требующий правки в каждом из пяти потребителей,
+/// расходится молча). Здесь — только то, что от переменной его отличает: имя,
+/// позиция объявления и, неявно, порядок (индекс в [`ModelNode::parameters`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParameterNode {
+    /// Имя параметра — ключ в [`ModelNode::variables`].
+    pub name: String,
+    /// Позиция объявления в исходном тексте.
+    pub loc: Location,
+}

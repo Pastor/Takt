@@ -217,6 +217,7 @@ pub fn all_keywords() -> impl Iterator<Item = &'static str> {
 static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "break"    => Token::Break,
     "const"    => Token::Constant,
+    "parameter" => Token::Parameter,
     "continue" => Token::Continue,
     "else"     => Token::Else,
     "false"    => Token::False,

@@ -12,9 +12,9 @@ use crate::parse;
 use crate::parser::ast;
 use crate::parser::ast::{
     Identifier, ImportDefine, Model, ModelElement, StateDefine, StateElement, StateKind,
-    VariableDefine,
 };
 use crate::semantic::condition::{extract_conditions, resolve_condition};
+use crate::semantic::declaration;
 use crate::semantic::expression::construct_expression;
 use crate::semantic::extend::Extend;
 use crate::semantic::formula;
@@ -33,8 +33,8 @@ use crate::semantic::validate::{
 };
 use crate::semantic::{
     ConditionDefinitionNode, ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode,
-    ModelNode, ModelOrigin, NamedCodeBlockDefinitionNode, ReferenceNode, StateNode, StateNodeKind,
-    StatementNode, VariableNode, extend,
+    ModelNode, ModelOrigin, NamedCodeBlockDefinitionNode, ParameterNode, ReferenceNode, StateNode,
+    StateNodeKind, StatementNode, VariableNode, extend,
 };
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -207,6 +207,8 @@ pub(super) fn construct_model_stage0(
     let model_node = Rc::new(RefCell::new(model_node));
     let mut models = BTreeMap::new();
     let mut variables = BTreeMap::new();
+    // Параметры модели — в порядке объявления (фича 0185).
+    let mut parameters: Vec<ParameterNode> = Vec::new();
     let mut conditions = BTreeMap::new();
     let mut named_blocks = Vec::new();
     let mut functions = BTreeMap::new();
@@ -417,79 +419,14 @@ pub(super) fn construct_model_stage0(
                 }
             }
         } else if let ModelElement::Variable(def) = element {
-            // Пока тип определяется только из явной аннотации.
-            match *def.clone() {
-                VariableDefine::Variable {
-                    loc,
-                    typ,
-                    name,
-                    initializer,
-                } => {
-                    let name = extract_name(name.clone(), loc)?;
-                    variables.insert(
-                        name.clone(),
-                        VariableNode::Simple {
-                            upper: Some(Rc::downgrade(&model_node)),
-                            loc,
-                            name: name.clone(),
-                            ty: construct_type(typ, Rc::clone(&model_node))?,
-                            expr: initializer
-                                .map(ExpressionNode::Unresolved)
-                                .unwrap_or(ExpressionNode::None),
-                        },
-                    )
-                }
-                VariableDefine::Port {
-                    loc,
-                    typ,
-                    name,
-                    initializer,
-                    direction,
-                } => {
-                    let name = extract_name(name.clone(), loc)?;
-                    let type_node = construct_type(typ, Rc::clone(&model_node))?;
-                    if type_node == TypeNode::Inference {
-                        return Err(Diagnostic::error(
-                            loc,
-                            "Порт должен иметь конкретный тип".to_string(),
-                        )
-                        .with_code("SE-023"));
-                    }
-                    // Адрес порта необязателен — если не задан, используем None.
-                    let expr = initializer
-                        .map(ExpressionNode::Unresolved)
-                        .unwrap_or(ExpressionNode::None);
-                    variables.insert(
-                        name.clone(),
-                        VariableNode::Port {
-                            upper: Some(Rc::downgrade(&model_node)),
-                            loc,
-                            name: name.clone(),
-                            ty: type_node,
-                            expr,
-                            direction,
-                        },
-                    )
-                }
-                VariableDefine::Constant {
-                    loc,
-                    typ,
-                    name,
-                    initializer,
-                } => {
-                    let name = extract_name(name.clone(), loc)?;
-                    variables.insert(
-                        name.clone(),
-                        VariableNode::Const {
-                            upper: Some(Rc::downgrade(&model_node)),
-                            loc,
-                            name: name.clone(),
-                            ty: construct_type(typ, Rc::clone(&model_node))?,
-                            expr: ExpressionNode::Unresolved(initializer),
-                        },
-                    )
-                }
-            };
+            // Разбор объявления значения — отдельный модуль `declaration.rs`
+            // (перечень форм: var/порт/const/parameter).
+            declaration::construct_declaration(
+                def,
+                Rc::clone(&model_node),
+                &mut variables,
+                &mut parameters,
+            )?;
         } else if let ModelElement::Type(def) = element {
             let name = def.clone().name.name.clone();
             let typ = def.ty.clone();
@@ -770,6 +707,7 @@ pub(super) fn construct_model_stage0(
     model_node.borrow_mut().models = models;
     model_node.borrow_mut().states = construct_states(model, Rc::clone(&model_node))?;
     model_node.borrow_mut().variables = variables;
+    model_node.borrow_mut().parameters = parameters;
     model_node.borrow_mut().conditions = conditions;
     model_node.borrow_mut().named_blocks = named_blocks;
     model_node.borrow_mut().functions = functions;

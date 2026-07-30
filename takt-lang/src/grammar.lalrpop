@@ -161,6 +161,14 @@ VariableDefine: Box<VariableDefine> = {
             loc: Location::source(file_no, l, r), typ, name, initializer: e
         })
     },
+    // Параметр модели (фича 0185). Инициализатор ОБЯЗАТЕЛЕН: это значение по
+    // умолчанию, а не «может быть не задано» — форма без него означала бы
+    // обязательный параметр, вынесенный за границу фичи (ADR 0185).
+    <l:@L> "parameter" <name:IdentifierOrError> <typ:(":" <Type>)?> ":=" <e:Expression> <r:@R> ";" => {
+        Box::new(VariableDefine::Parameter {
+            loc: Location::source(file_no, l, r), typ, name, initializer: e
+        })
+    },
     <l:@L> "in" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
             loc: Location::source(file_no, l, r), typ, name, initializer: e,
@@ -944,6 +952,7 @@ extern {
         "cond" => Token::Condition,
         "invariant" => Token::Invariant,
         "const" => Token::Constant,
+        "parameter" => Token::Parameter,
         "in"    => Token::PortIn,
         "out"   => Token::PortOut,
         "inout" => Token::PortInOut,

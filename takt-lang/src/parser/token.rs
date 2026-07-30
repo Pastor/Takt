@@ -165,6 +165,11 @@ pub enum Token<'input> {
 
     /// Ключевое слово `const`.
     Constant,
+    /// Ключевое слово `parameter` (параметр модели, фича 0185).
+    ///
+    /// Третья форма объявления наряду с `var` и `const`: значение задаётся в
+    /// месте инстанцирования модели, а объявление несёт значение по умолчанию.
+    Parameter,
     /// Ключевое слово `in` (входной порт).
     PortIn,
     /// Ключевое слово `out` (выходной порт).
@@ -286,6 +291,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Import => write!(f, "import"),
             Token::Type => write!(f, "type"),
             Token::Constant => write!(f, "const"),
+            Token::Parameter => write!(f, "parameter"),
             Token::Loop => write!(f, "loop"),
             Token::While => write!(f, "while"),
             Token::Continue => write!(f, "continue"),
