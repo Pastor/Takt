@@ -18,6 +18,7 @@ pub mod bit_vector;
 mod builtin;
 pub(crate) mod callgraph;
 mod condition;
+mod declaration;
 pub(crate) mod docs;
 /// Профили времени и пересчёт длительности (фича 0134).
 pub mod duration;
@@ -47,6 +48,8 @@ pub mod type_node;
 pub mod unused;
 pub mod usages;
 pub(crate) mod validate;
+mod variable;
+pub use variable::{ParameterNode, VariableNode};
 pub mod warnings;
 
 use crate::diagnostics::Location;
@@ -87,6 +90,20 @@ pub struct ModelNode {
     pub functions: BTreeMap<String, FunctionDefinitionNode>,
     /// Объявленные переменные.
     pub variables: BTreeMap<String, VariableNode>,
+    /// Параметры модели в **порядке объявления** (фича 0185).
+    ///
+    /// Само значение параметра живёт в [`ModelNode::variables`] обычным
+    /// [`VariableNode::Simple`]: в режиме генерации по умолчанию
+    /// (`--parameters=assign`) параметр **и есть** поле экземпляра, и всякий
+    /// потребитель дерева, ничего не знающий о параметрах, обращается с ним
+    /// верно. Здесь хранится только то, что от переменной его отличает:
+    /// **имя, позиция объявления и порядок**.
+    ///
+    /// ⚠️ Порядок значим: по нему строится ключ дедупликации специализаций
+    /// (`--parameters=specialize`, ADR 0185, п. 6), а детерминизм вывода
+    /// (фича 0048) требует, чтобы он зависел только от входа. Поэтому `Vec` в
+    /// порядке объявления, а не множество.
+    pub parameters: Vec<ParameterNode>,
     /// Объявленные псевдонимы типов.
     pub types: BTreeMap<String, TypeNode>,
     /// Позиции объявлений псевдонимов типов: имя → позиция в исходном тексте.
@@ -194,6 +211,7 @@ impl ModelNode {
             named_blocks: vec![],
             functions: Default::default(),
             variables: Default::default(),
+            parameters: Vec::new(),
             types: Default::default(),
             type_locs: Default::default(),
             raw_type_defs: Default::default(),
@@ -267,6 +285,9 @@ impl ModelNode {
             named_blocks: self.named_blocks.clone(),
             functions: self.functions.clone(),
             variables: self.variables.clone(),
+            // Параметры — свойство модели, а не имени, под которым она видна
+            // (тот же довод, что у `origin` и `clock_hz` ниже).
+            parameters: self.parameters.clone(),
             types: self.types.clone(),
             type_locs: self.type_locs.clone(),
             raw_type_defs: self.raw_type_defs.clone(),
@@ -757,163 +778,6 @@ pub enum MatchPatternNode {
     /// Подстановочный образец `_`.
     #[default]
     Wildcard,
-}
-
-/// Семантический узел переменной.
-///
-/// Варианты:
-/// - [`Unresolved`](VariableNode::Unresolved) — временная заглушка.
-/// - [`Simple`](VariableNode::Simple) — обычная изменяемая переменная.
-/// - [`Port`](VariableNode::Port) — порт, отображённый на адрес.
-/// - [`Const`](VariableNode::Const) — константа.
-///
-/// Каждый разрешённый вариант хранит [`Location`] из исходного текста —
-/// позицию объявления переменной. Это поле используется при формировании
-/// диагностических сообщений, чтобы указывать конкретное место ошибки.
-#[derive(Default, Debug, Clone)]
-pub enum VariableNode {
-    /// Не разрешено (временная заглушка при построении дерева).
-    #[default]
-    Unresolved,
-    /// Изменяемая переменная.
-    Simple {
-        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
-        upper: Option<Weak<RefCell<ModelNode>>>,
-        /// Позиция объявления переменной в исходном тексте.
-        loc: Location,
-        /// Имя переменной.
-        name: String,
-        /// Тип переменной.
-        ty: TypeNode,
-        /// Инициализирующее выражение.
-        expr: ExpressionNode,
-    },
-    /// Порт ввода-вывода, объявляется через `in` (входной) или `out` (выходной).
-    Port {
-        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
-        upper: Option<Weak<RefCell<ModelNode>>>,
-        /// Позиция объявления порта в исходном тексте.
-        loc: Location,
-        /// Имя переменной.
-        name: String,
-        /// Тип переменной.
-        ty: TypeNode,
-        /// Адрес порта (необязателен).
-        expr: ExpressionNode,
-        /// Направление порта (входной / выходной).
-        direction: PortDirection,
-    },
-    /// Константа.
-    Const {
-        /// Родительская модель (слабая ссылка для предотвращения циклов Rc).
-        upper: Option<Weak<RefCell<ModelNode>>>,
-        /// Позиция объявления константы в исходном тексте.
-        loc: Location,
-        /// Имя константы.
-        name: String,
-        /// Тип константы.
-        ty: TypeNode,
-        /// Значение константы.
-        expr: ExpressionNode,
-    },
-}
-
-impl PartialEq for VariableNode {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Unresolved, Self::Unresolved) => true,
-            (
-                Self::Simple {
-                    name: n1,
-                    ty: t1,
-                    expr: e1,
-                    ..
-                },
-                Self::Simple {
-                    name: n2,
-                    ty: t2,
-                    expr: e2,
-                    ..
-                },
-            ) => n1 == n2 && t1 == t2 && e1 == e2,
-            (
-                Self::Port {
-                    name: n1,
-                    ty: t1,
-                    expr: e1,
-                    ..
-                },
-                Self::Port {
-                    name: n2,
-                    ty: t2,
-                    expr: e2,
-                    ..
-                },
-            ) => n1 == n2 && t1 == t2 && e1 == e2,
-            (
-                Self::Const {
-                    name: n1,
-                    ty: t1,
-                    expr: e1,
-                    ..
-                },
-                Self::Const {
-                    name: n2,
-                    ty: t2,
-                    expr: e2,
-                    ..
-                },
-            ) => n1 == n2 && t1 == t2 && e1 == e2,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for VariableNode {}
-
-impl VariableNode {
-    /// Возвращает позицию объявления переменной в исходном тексте.
-    ///
-    /// Для [`Unresolved`](VariableNode::Unresolved) возвращает [`Location::Implicit`],
-    /// так как заглушка не привязана к конкретному месту в коде.
-    pub fn loc(&self) -> Location {
-        match self {
-            VariableNode::Simple { loc, .. }
-            | VariableNode::Port { loc, .. }
-            | VariableNode::Const { loc, .. } => *loc,
-            VariableNode::Unresolved => Location::Implicit,
-        }
-    }
-
-    /// Возвращает имя переменной (пустая строка для `Unresolved`).
-    pub fn name(&self) -> &str {
-        match self {
-            VariableNode::Simple { name, .. }
-            | VariableNode::Port { name, .. }
-            | VariableNode::Const { name, .. } => name,
-            VariableNode::Unresolved => "",
-        }
-    }
-
-    /// Возвращает тип переменной (`Inference` для `Unresolved`).
-    pub fn ty(&self) -> &TypeNode {
-        match self {
-            VariableNode::Simple { ty, .. }
-            | VariableNode::Port { ty, .. }
-            | VariableNode::Const { ty, .. } => ty,
-            VariableNode::Unresolved => &TypeNode::Inference,
-        }
-    }
-
-    /// Возвращает ссылку на родительскую модель.
-    pub fn upper(&self) -> Option<Rc<RefCell<ModelNode>>> {
-        match self {
-            VariableNode::Simple { upper, .. }
-            | VariableNode::Port { upper, .. }
-            | VariableNode::Const { upper, .. } => upper.as_ref().and_then(|w| w.upgrade()),
-            VariableNode::Unresolved => None,
-        }
-    }
 }
 
 // ─── Ce4: Перечисления ────────────────────────────────────────────────────────

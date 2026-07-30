@@ -136,6 +136,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             | Token::Start
             | Token::Variable
             | Token::Constant
+            | Token::Parameter
             | Token::PortIn
             | Token::PortOut
             | Token::PortInOut

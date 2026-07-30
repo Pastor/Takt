@@ -47,8 +47,9 @@
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::condition::resolve_condition;
+use crate::semantic::declaration;
 use crate::semantic::expression::construct_expression;
-use crate::semantic::type_node::{TypeNode, construct_type};
+use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
     ExpressionNode, Formula, MatchArmNode, MatchPatternNode, ModelNode, StatementNode, VariableNode,
 };
@@ -221,39 +222,10 @@ fn resolve_ast_statement(
         // С4: инициализатор берётся из def.initializer (поле внутри VariableDefine),
         // поскольку после исправления грамматики LocalVariableDefine передаёт
         // инициализатор именно туда, а третье поле Statement::Variable всегда None.
-        ast::Statement::Variable(_, def, _extra_init) => {
-            let (name, ty, def_init) = match def.as_ref() {
-                ast::VariableDefine::Variable {
-                    name,
-                    typ,
-                    initializer,
-                    ..
-                } => {
-                    let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
-                    let t = construct_type(typ.clone(), model.clone())?;
-                    (n, t, initializer.clone())
-                }
-                ast::VariableDefine::Constant {
-                    name,
-                    typ,
-                    initializer,
-                    ..
-                } => {
-                    let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
-                    let t = construct_type(typ.clone(), model.clone())?;
-                    (n, t, Some(initializer.clone()))
-                }
-                ast::VariableDefine::Port {
-                    name,
-                    typ,
-                    initializer,
-                    ..
-                } => {
-                    let n = name.as_ref().map(|i| i.name.clone()).unwrap_or_default();
-                    let t = construct_type(typ.clone(), model.clone())?;
-                    (n, t, initializer.clone())
-                }
-            };
+        ast::Statement::Variable(loc, def, _extra_init) => {
+            // Перечень форм объявления живёт в одном месте — `declaration.rs`
+            // (там же строятся объявления уровня модели).
+            let (name, ty, def_init) = declaration::local_declaration(def, *loc, model.clone())?;
             let init = def_init
                 .map(|e| construct_expression(e, params.clone(), model))
                 .transpose()?

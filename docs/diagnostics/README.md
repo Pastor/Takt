@@ -214,6 +214,7 @@
 | `SE-072` | Выдержка `after` не сводится к константной длительности | `takt-lang/src/semantic/condition/after_const.rs` |
 | `SE-073` | Вычисляемая выдержка требует частоты, кратной 1000 Гц (иначе множитель `hertz/1000` не цел) | `takt-lang/src/semantic/duration.rs` |
 | `SE-074` | Импортированная модель использует объявления подключаемого файла, не импортированные вместе с ней | `takt-lang/src/semantic/import_adopt.rs` |
+| `SE-075` | Параметр объявлен вне модели: на верхнем уровне файла либо внутри блока | `takt-lang/src/semantic/tree.rs`, `takt-lang/src/semantic/statement.rs` |
 
 ### SIM — симулятор
 

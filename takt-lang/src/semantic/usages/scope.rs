@@ -24,6 +24,12 @@ pub enum SymbolKind {
     Variable,
     /// Константа модели (`const`).
     Const,
+    /// Параметр модели (`parameter`, фича 0185).
+    ///
+    /// Отдельно от [`SymbolKind::Parameter`] (параметр функции) и от
+    /// [`SymbolKind::Variable`]: имя параметра появляется ещё и в аргументе
+    /// инстанцирования (`M(Y := 200)`), где принадлежит **чужой** модели.
+    ModelParameter,
     /// Порт (`in`/`out`/`inout`).
     Port,
     /// Локальная переменная блока или тела функции.
@@ -52,9 +58,12 @@ impl SymbolKind {
     /// Пространство имён, в котором символ разрешается.
     pub(super) fn namespace(self) -> Namespace {
         match self {
-            Self::Variable | Self::Const | Self::Port | Self::Local | Self::Parameter => {
-                Namespace::Value
-            }
+            Self::Variable
+            | Self::Const
+            | Self::ModelParameter
+            | Self::Port
+            | Self::Local
+            | Self::Parameter => Namespace::Value,
             Self::Function => Namespace::Callable,
             Self::State => Namespace::State,
             Self::Condition => Namespace::Condition,

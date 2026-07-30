@@ -223,6 +223,14 @@ pub(crate) fn variable_define(v: &ast::VariableDefine) -> Result<String, FormatE
             initializer,
             ..
         } => with_init(head("const", name, typ.as_ref())?, Some(initializer))?,
+        // Параметр модели (фича 0185): инициализатор обязателен грамматикой,
+        // печатается всегда — как у `const`.
+        V::Parameter {
+            name,
+            typ,
+            initializer,
+            ..
+        } => with_init(head("parameter", name, typ.as_ref())?, Some(initializer))?,
         V::Port {
             name,
             typ,

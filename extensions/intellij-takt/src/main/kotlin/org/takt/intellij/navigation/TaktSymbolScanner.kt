@@ -29,6 +29,9 @@ object TaktSymbolScanner {
     private val SIMPLE_DECL_KEYWORDS = setOf(
         "model", "state", "start", "type", "cond", "var", "const", "fn",
         "in", "out", "inout",
+        // Параметр модели (фича 0185): `parameter <Id>: Тип := значение;` —
+        // та же форма «слово, затем имя объявляемого символа».
+        "parameter",
     )
 
     private data class Tok(val type: IElementType, val start: Int, val end: Int, val text: String)

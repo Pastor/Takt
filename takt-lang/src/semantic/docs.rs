@@ -121,6 +121,7 @@ fn variable_loc(v: &ast::VariableDefine) -> Location {
         ast::VariableDefine::Variable { loc, .. } => *loc,
         ast::VariableDefine::Port { loc, .. } => *loc,
         ast::VariableDefine::Constant { loc, .. } => *loc,
+        ast::VariableDefine::Parameter { loc, .. } => *loc,
     }
 }
 
@@ -130,6 +131,7 @@ fn variable_name(v: &ast::VariableDefine) -> Option<String> {
         ast::VariableDefine::Variable { name, .. } => name.as_ref().map(|id| id.name.clone()),
         ast::VariableDefine::Port { name, .. } => name.as_ref().map(|id| id.name.clone()),
         ast::VariableDefine::Constant { name, .. } => name.as_ref().map(|id| id.name.clone()),
+        ast::VariableDefine::Parameter { name, .. } => name.as_ref().map(|id| id.name.clone()),
     }
 }
 

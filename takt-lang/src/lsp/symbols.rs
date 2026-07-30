@@ -193,6 +193,13 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                     VariableDefine::Variable { loc, name, .. } => (loc, name, SymbolKind::VARIABLE),
                     VariableDefine::Port { loc, name, .. } => (loc, name, SymbolKind::PROPERTY),
                     VariableDefine::Constant { loc, name, .. } => (loc, name, SymbolKind::CONSTANT),
+                    // Параметр модели (фича 0185) — `TYPE_PARAMETER`: он
+                    // настраивает модель при инстанцировании, а не хранит
+                    // величину такта, и в панели структуры полезно отличать его
+                    // от `var`/`const`.
+                    VariableDefine::Parameter { loc, name, .. } => {
+                        (loc, name, SymbolKind::TYPE_PARAMETER)
+                    }
                 };
                 let id = match name_opt {
                     Some(id) => id,

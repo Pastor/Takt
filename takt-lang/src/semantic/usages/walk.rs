@@ -698,6 +698,7 @@ fn variable_name_and_kind(
         ),
         ast::VariableDefine::Port { name, .. } => (name.as_ref(), SymbolKind::Port),
         ast::VariableDefine::Constant { name, .. } => (name.as_ref(), SymbolKind::Const),
+        ast::VariableDefine::Parameter { name, .. } => (name.as_ref(), SymbolKind::ModelParameter),
     }
 }
 
@@ -706,7 +707,8 @@ fn walk_variable_type(def: &ast::VariableDefine, scopes: &mut Scopes, table: &mu
     let ty = match def {
         ast::VariableDefine::Variable { typ, .. }
         | ast::VariableDefine::Port { typ, .. }
-        | ast::VariableDefine::Constant { typ, .. } => typ,
+        | ast::VariableDefine::Constant { typ, .. }
+        | ast::VariableDefine::Parameter { typ, .. } => typ,
     };
     if let Some(ty) = ty {
         walk_type(ty, scopes, table);
@@ -732,7 +734,8 @@ fn variable_initializer(def: &ast::VariableDefine) -> Option<&ast::Expression> {
     match def {
         ast::VariableDefine::Variable { initializer, .. }
         | ast::VariableDefine::Port { initializer, .. } => initializer.as_ref(),
-        ast::VariableDefine::Constant { initializer, .. } => Some(initializer),
+        ast::VariableDefine::Constant { initializer, .. }
+        | ast::VariableDefine::Parameter { initializer, .. } => Some(initializer),
     }
 }
 

@@ -244,7 +244,10 @@ fn element_loc(element: &ast::ModelElement) -> crate::diagnostics::Location {
 fn variable_loc(v: &ast::VariableDefine) -> crate::diagnostics::Location {
     use ast::VariableDefine as V;
     match v {
-        V::Variable { loc, .. } | V::Port { loc, .. } | V::Constant { loc, .. } => *loc,
+        V::Variable { loc, .. }
+        | V::Port { loc, .. }
+        | V::Constant { loc, .. }
+        | V::Parameter { loc, .. } => *loc,
     }
 }
 
