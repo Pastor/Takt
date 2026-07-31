@@ -26,6 +26,7 @@ use crate::generator::rust::rust_decl::{PortSet, default_value, model_fields};
 use crate::generator::rust::rust_expr::{Scope, coerce_to};
 use crate::generator::rust::rust_map::RustMap;
 use crate::generator::rust::rust_name::{check_name_collisions, rust_type_name, rust_value_name};
+use crate::generator::rust::rust_port_init;
 use crate::generator::rust::rust_tick::emit_tick;
 use crate::generator::rust::rust_time;
 use crate::generator::rust::rust_type::rust_type;
@@ -632,9 +633,24 @@ fn emit_new(
     };
     let union_names: BTreeSet<String> = union.iter().map(|(n, _)| n.clone()).collect();
     let mut shared_inits: BTreeMap<String, String> = BTreeMap::new();
+    // Начальные значения портов (фича 0187): выставляет корень — у под-модели
+    // доступа к HAL в конструкторе нет. Пусто у всех, кроме моделей с `:=` в
+    // объявлении порта, поэтому форма `new()` в корпусе не меняется.
+    let port_writes = if is_root {
+        rust_port_init::port_initial_writes(map, model)?
+    } else {
+        Vec::new()
+    };
     p.ident(&format!("{}fn new({}) -> Self {{", vis, args)).nl();
     p.up();
-    p.ident("Self {").nl();
+    // Значение уходит наружу через HAL, а он попадает в структуру только вместе
+    // со `Self`: пишем после конструирования, по временной привязке.
+    p.ident(if port_writes.is_empty() {
+        "Self {"
+    } else {
+        "let mut this = Self {"
+    })
+    .nl();
     p.up();
     for (_, var) in model_fields(model, map) {
         let VariableNode::Simple {
@@ -709,7 +725,15 @@ fn emit_new(
         p.ident("hal,").nl();
     }
     p.down();
-    p.ident("}").nl();
+    if port_writes.is_empty() {
+        p.ident("}").nl();
+    } else {
+        p.ident("};").nl();
+        for write in &port_writes {
+            p.ident(&format!("this.hal.{}", write)).nl();
+        }
+        p.ident("this").nl();
+    }
     p.down();
     p.ident("}").nl().nl();
     Ok(())
@@ -847,6 +871,14 @@ fn emit_init(
                 p.ident(&format!("self.{}.{}", instance.field, assignment))
                     .nl();
             }
+        }
+    }
+    // Начальные значения портов (фича 0187) — и здесь тоже: `new()` и `init()`
+    // разные входы, и порт, выставленный лишь в одном, при сбросе разошёлся бы
+    // с целью `c` (там `_reset` зовёт `_init`).
+    if is_root {
+        for write in rust_port_init::port_initial_writes(map, model)? {
+            p.ident(&format!("self.hal.{}", write)).nl();
         }
     }
     p.down();

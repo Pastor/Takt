@@ -263,7 +263,7 @@ impl<H: Hal> PidHeater<H> {
     /// В отличие от цели `c`, забыть проставить доступ к железу
     /// невозможно: без `hal` модель не конструируется.
     pub fn new(hal: H) -> Self {
-        Self {
+        let mut this = Self {
             shared: PidHeaterShared {
                 ambient: 18.0,
                 ctrl: 0.0,
@@ -289,7 +289,9 @@ impl<H: Hal> PidHeater<H> {
                 instance
             },
             hal,
-        }
+        };
+        this.hal.write_f64(OutF64Port::Temperature, 0.0);
+        this
     }
 
     /// Возвращает модель в начальное состояние.
@@ -313,6 +315,7 @@ impl<H: Hal> PidHeater<H> {
         self.pid_heater_group1_heater1.init();
         self.pid_heater_group1_heater1.setpoint = 55.0;
         self.pid_heater_group1_heater1.release = 52.0;
+        self.hal.write_f64(OutF64Port::Temperature, 0.0);
     }
 
     /// Один такт автомата.

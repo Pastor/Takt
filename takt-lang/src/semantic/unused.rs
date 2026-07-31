@@ -95,9 +95,21 @@ fn usage_from_var(var: &VariableNode, set: &mut UsageSet) {
         }
         // Порт несёт два выражения (0187): пропустив адрес, проверка «переменная
         // нигде не используется» солгала бы про константу из `at BASE + 4`.
-        VariableNode::Port { address, init, .. } => {
+        VariableNode::Port {
+            name,
+            address,
+            init,
+            ..
+        } => {
             usage_from_expr(address, set);
             usage_from_expr(init, set);
+            // Начальное значение — это ЗАПИСЬ в порт (фича 0187): порт задействован,
+            // даже если тело автомата к нему не обращается. Иначе цель `rust`
+            // (она эмитит только использованные порты) не завела бы вариант
+            // перечисления, а эмиссия значения сослалась бы на несуществующее имя.
+            if !matches!(init, ExpressionNode::None) {
+                set.ports.insert(name.clone());
+            }
         }
         VariableNode::Unresolved => {}
     }

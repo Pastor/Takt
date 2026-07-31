@@ -10,11 +10,15 @@ use super::c_blocks::generate_scalar_init;
 use super::c_expr::generate_expr;
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::c::c_map::CMap;
+use crate::generator::c::{
+    FUNCTION_PORT_WRITE_BIT, FUNCTION_PORT_WRITE_FLOAT, FUNCTION_PORT_WRITE_NUMERIC, PortClass,
+};
 use crate::generator::indent::Printer;
 use crate::semantic::extend::ParameterArgument;
 use crate::semantic::minimap::{Element, Name, StateExtend};
+use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::{ExpressionNode, VariableNode};
+use crate::semantic::{ExpressionNode, PortDirection, VariableNode};
 
 pub(super) fn generate_model_init(
     printer: &mut Printer,
@@ -84,6 +88,71 @@ pub(super) fn generate_model_init(
             continue;
         }
         generate_scalar_init(printer, map, model, &var.name(), ty, expr)?;
+    }
+    generate_port_initial_values(printer, map, model, raw, name, hal_ptr)?;
+    Ok(())
+}
+
+/// Выставляет начальные значения выходных портов модели (фича 0187, задача 03).
+///
+/// # Где именно
+///
+/// В `_init`, **последним** действием: к этому моменту память модели уже
+/// приведена в определённое состояние, и запись наружу — единственный шаг,
+/// который виден за пределами структуры. Так выполняется R5: значение
+/// выставлено **до первого такта**, а не в такте 1 (там живут блоки `enter`,
+/// ADR 0033).
+///
+/// # Цена: HAL обязан быть привязан до `_init`
+///
+/// Запись идёт через тот же колбэк, что и запись из тела автомата
+/// (`(*model->write_bit)(…)`), поэтому у модели с начальным значением порта
+/// вызов `_init` до заполнения указателей HAL — обращение по нулевому адресу.
+/// Прежде порядок «сначала `_init`, потом колбэки» был безразличен; теперь он
+/// часть контракта, и цель `c-hal` требует вызвать `<Root>_bind_default_hal`
+/// первым. Это наблюдаемое следствие оси 2, названное в ADR 0187.
+///
+/// # Почему у владельца, а не в корне
+///
+/// Указатель на HAL у под-модели — `main`, и он здесь уже вычислен
+/// (`hal_ptr`): каждая модель выставляет **свои** порты, и обход дерева не
+/// нужен. Значение к этому моменту — литерал (свёртка в семантике,
+/// `declaration::resolve_port_init`), поэтому контекст печати роли не играет.
+fn generate_port_initial_values(
+    printer: &mut Printer,
+    map: &CMap,
+    model: &Element,
+    raw: &crate::semantic::ModelNode,
+    model_name: &Name,
+    hal_ptr: &str,
+) -> Result<(), Diagnostic> {
+    for var in raw.variables.values() {
+        let VariableNode::Port {
+            name: port_name,
+            ty,
+            init,
+            direction,
+            ..
+        } = var
+        else {
+            continue;
+        };
+        if matches!(init, ExpressionNode::None) || *direction == PortDirection::In {
+            continue;
+        }
+        let variant = format!(
+            "{}_{}",
+            model_name.unique_uppercase_snakecase(),
+            normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
+        );
+        let write = match PortClass::from_type(ty) {
+            PortClass::Bit => FUNCTION_PORT_WRITE_BIT,
+            PortClass::Rational => FUNCTION_PORT_WRITE_FLOAT,
+            PortClass::Numeric => FUNCTION_PORT_WRITE_NUMERIC,
+        };
+        printer.ident(&format!("(*{hal_ptr}->{write})({variant}, "));
+        generate_expr(printer, map, model, vec![], init, 0, true)?;
+        printer.print(&format!(", {hal_ptr}->userdata);")).nl();
     }
     Ok(())
 }
