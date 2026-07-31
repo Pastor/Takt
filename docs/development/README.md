@@ -331,3 +331,4 @@
 | 0176-02 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-02-bit-port-address-position.md](0176-02-bit-port-address-position.md) |
 | 0176-03 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-03-bit-port-address-position.md](0176-03-bit-port-address-position.md) |
 | 0176-04 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-04-bit-port-address-position.md](0176-04-bit-port-address-position.md) |
+| 0188-01 | 0188 | Направление порта проверяется во всех позициях | [0188-01-port-direction-everywhere.md](0188-01-port-direction-everywhere.md) |

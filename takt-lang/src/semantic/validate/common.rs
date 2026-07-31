@@ -143,6 +143,21 @@ fn validate_cond(
     Ok(())
 }
 
+/// Является ли переменная **выходным** портом.
+///
+/// Вынесено (фича 0188): предикат нужен и проверке чтения, и исключению для
+/// левой части присваивания — два места, где ошибиться значит либо запретить
+/// законную запись, либо разрешить незаконное чтение.
+fn is_out_port(var: &Rc<RefCell<VariableNode>>) -> bool {
+    matches!(
+        &*var.borrow(),
+        VariableNode::Port {
+            direction: PortDirection::Out,
+            ..
+        }
+    )
+}
+
 pub(super) fn validate_expression(
     expr: &ExpressionNode,
     model: Rc<RefCell<ModelNode>>,
@@ -213,24 +228,24 @@ pub(super) fn validate_expression(
                 )
                 .with_code("SE-026"));
             }
-            // Для BitAccess как lvalue на out-порт не рекурсируем внутрь
-            // (это запись в порт, а не чтение — SE-027 здесь неприменим).
-            let is_out_port_bitaccess = if let ExpressionNode::BitAccess(inner, _) = left.as_ref() {
-                if let ExpressionNode::Variable(v) = inner.as_ref() {
-                    matches!(
-                        &*v.borrow(),
-                        VariableNode::Port {
-                            direction: PortDirection::Out,
-                            ..
-                        }
-                    )
-                } else {
-                    false
-                }
-            } else {
-                false
+            // Левая часть присваивания — **место записи**, а не чтение:
+            // рекурсировать в неё нельзя, иначе законное `led := 1;` для
+            // выходного порта дало бы `SE-027` «чтение выходного порта».
+            //
+            // ⚠️ Прежде исключение было написано только для `BitAccess`
+            // (`led.0 := 1;`), потому что проверка работала лишь на условиях, где
+            // присваиваний не бывает. Фича 0188 распространила её на тела блоков
+            // — и форма `led := 1;` стала достижимой, поэтому исключение
+            // обобщено на обе формы цели записи.
+            let target_is_out_port = match left.as_ref() {
+                ExpressionNode::Variable(v) => is_out_port(v),
+                ExpressionNode::BitAccess(inner, _) => match inner.as_ref() {
+                    ExpressionNode::Variable(v) => is_out_port(v),
+                    _ => false,
+                },
+                _ => false,
             };
-            if !is_out_port_bitaccess {
+            if !target_is_out_port {
                 validate_expression(left, model.clone())?;
             }
             validate_expression(right, model.clone())?;

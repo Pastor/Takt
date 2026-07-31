@@ -38,6 +38,7 @@ mod implicit_bool;
 mod literal_range;
 mod member_access;
 mod nondeterminism;
+mod port_direction;
 mod ports;
 mod states;
 mod structs;
@@ -137,6 +138,11 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // SE-089 (0157): литерал не помещается в тип приёмника. Отдаёт все находки:
     // одна ошибка на литерал, а не «первая на модель».
     found.extend(literal_range::check_literal_ranges(model.clone()));
+
+    // SE-026/SE-027 (0188): направление порта — во ВСЕХ позициях, а не только в
+    // условиях. Тела блоков и функций прежде не обходились, и нарушение уезжало
+    // в цели, где расходилось вплоть до записи по адресу другого порта.
+    found.extend(port_direction::check_port_directions(model.clone()));
 
     let nested: Vec<Rc<RefCell<ModelNode>>> =
         model.borrow().models.values().map(Rc::clone).collect();
