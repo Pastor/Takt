@@ -25,10 +25,8 @@
 
 extern crate core;
 
-use crate::parser::lexer::{LexicalError, Token};
-use crate::parser::{ast, lexer};
-use diagnostics::{Diagnostic, Location};
-use lalrpop_util::ParseError;
+use crate::parser::ast;
+use diagnostics::Diagnostic;
 use std::path::Path;
 
 /// Внешняя карта адресов портов (`.ld`-подобный формат, фича 0020).
@@ -109,73 +107,18 @@ mod grammar {
 /// assert!(err.is_err());
 /// ```
 pub fn parse(src: &str, file_no: u64) -> Result<(ast::Model, Vec<ast::Comment>), Vec<Diagnostic>> {
-    let mut comments = Vec::new();
-    let mut lexer_errors = Vec::new();
-    let mut lex = lexer::Lexer::new(src, file_no, &mut comments, &mut lexer_errors);
-
-    let mut parser_errors = Vec::new();
-    let res = grammar::SourceUnitParser::new().parse(src, file_no, &mut parser_errors, &mut lex);
-
-    let mut diagnostics = Vec::with_capacity(lex.errors.len() + parser_errors.len());
-    for lexical_error in lex.errors {
-        diagnostics.push(
-            Diagnostic::parser_error(lexical_error.loc(), lexical_error.to_string())
-                .with_code(lexical_error.code()),
-        );
-    }
-
-    for e in parser_errors {
-        diagnostics.push(parser_error_to_diagnostic(&e.error, file_no));
-    }
-
-    match res {
-        Err(e) => {
-            diagnostics.push(parser_error_to_diagnostic(&e, file_no));
-            Err(diagnostics)
-        }
-        _ if !diagnostics.is_empty() => Err(diagnostics),
-        Ok(res) => Ok((res, comments)),
-    }
+    // Дерево глубже предела наружу не выпускается: за `parse` идут рекурсивные
+    // потребители (печать форматтера, `Clone`, `Debug`, сериализация), и самый
+    // низкий их потолок ниже глубины, которую переживает сам разбор (фича 0156).
+    let (model, comments) = parse_without_depth_limit(src, file_no)?;
+    let model = parser::depth::check(model).map_err(|diagnostic| vec![diagnostic])?;
+    Ok((model, comments))
 }
 
-/// Преобразует ошибку LALRPOP-парсера в [`Diagnostic`].
-fn parser_error_to_diagnostic(
-    error: &ParseError<usize, Token, LexicalError>,
-    file_no: u64,
-) -> Diagnostic {
-    match error {
-        ParseError::InvalidToken { location } => Diagnostic::parser_error(
-            Location::source(file_no, *location, *location),
-            "недопустимый токен".to_string(),
-        )
-        .with_code("SY-001"),
-        ParseError::UnrecognizedToken {
-            token: (l, token, r),
-            expected,
-        } => Diagnostic::parser_error(
-            Location::source(file_no, *l, *r),
-            format!(
-                "нераспознанный токен '{}', ожидалось {}",
-                token,
-                expected.join(", ")
-            ),
-        )
-        .with_code("SY-002"),
-        ParseError::User { error } => {
-            Diagnostic::parser_error(error.loc(), error.to_string()).with_code(error.code())
-        }
-        ParseError::ExtraToken { token } => Diagnostic::parser_error(
-            Location::source(file_no, token.0, token.2),
-            format!("лишний токен '{}'", token.1),
-        )
-        .with_code("SY-003"),
-        ParseError::UnrecognizedEof { expected, location } => Diagnostic::parser_error(
-            Location::source(file_no, *location, *location),
-            format!("неожиданный конец файла, ожидалось {}", expected.join(", ")),
-        )
-        .with_code("SY-004"),
-    }
-}
+// Разбор исходника без предела глубины и перевод ошибок LALRPOP в диагностики —
+// вынесено модулем: `lib.rs` пришпилен реестром размеров (фича 0156).
+mod parse_entry;
+pub(crate) use parse_entry::parse_without_depth_limit;
 
 // Общий конвейер разбора и построения (фича 0053) плюс сбор всех диагностик
 // (фича 0130) — вынесено модулем: `lib.rs` пришпилен реестром размеров.

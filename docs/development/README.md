@@ -322,3 +322,8 @@
 | 0157-05 | 0157 | Представление числового литерала: полная маска [bit;64] | [0157-05-literal-u64-representation.md](0157-05-literal-u64-representation.md) |
 | 0157-06 | 0157 | Представление числового литерала: полная маска [bit;64] | [0157-06-literal-u64-representation.md](0157-06-literal-u64-representation.md) |
 | 0156-01 | 0156 | Снятие клона поддерева в действии грамматики Precedence0 | [0156-01-parser-depth-limit.md](0156-01-parser-depth-limit.md) |
+| 0156-02 | 0156 | Ограничение глубины вложенности на уровне лексера/парсера | [0156-02-parser-depth-limit.md](0156-02-parser-depth-limit.md) |
+| 0156-03 | 0156 | Ограничение глубины вложенности на уровне лексера/парсера | [0156-03-parser-depth-limit.md](0156-03-parser-depth-limit.md) |
+| 0156-04 | 0156 | Ограничение глубины вложенности на уровне лексера/парсера | [0156-04-parser-depth-limit.md](0156-04-parser-depth-limit.md) |
+| 0156-05 | 0156 | Ограничение глубины вложенности на уровне лексера/парсера | [0156-05-parser-depth-limit.md](0156-05-parser-depth-limit.md) |
+| 0156-06 | 0156 | Ограничение глубины вложенности на уровне лексера/парсера | [0156-06-parser-depth-limit.md](0156-06-parser-depth-limit.md) |
