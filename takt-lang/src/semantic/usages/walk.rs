@@ -175,8 +175,8 @@ fn each_declaration<'a>(
 fn walk_element(element: &ast::ModelElement, scopes: &mut Scopes, table: &mut UsageTable) {
     match element {
         ast::ModelElement::Variable(def) => {
-            if let Some(init) = variable_initializer(def) {
-                walk_expression(init, scopes, table);
+            for expr in variable_value_expressions(def) {
+                walk_expression(expr, scopes, table);
             }
         }
         ast::ModelElement::Function(def) => walk_function(def, scopes, table),
@@ -315,8 +315,8 @@ fn walk_statement(stmt: &ast::Statement, scopes: &mut Scopes, table: &mut UsageT
         ast::Statement::Variable(_, def, init) => {
             // Инициализатор разбирается ДО объявления: `var x := x;` справа —
             // ещё внешнее `x` (объявление начинает действовать после оператора).
-            if let Some(init) = variable_initializer(def) {
-                walk_expression(init, scopes, table);
+            for expr in variable_value_expressions(def) {
+                walk_expression(expr, scopes, table);
             }
             if let Some(init) = init {
                 walk_expression(init, scopes, table);
@@ -729,13 +729,22 @@ fn declare_variable(
     }
 }
 
-/// Инициализатор объявления, если он есть.
-fn variable_initializer(def: &ast::VariableDefine) -> Option<&ast::Expression> {
+/// Выражения объявления, в которых могут стоять имена.
+///
+/// У порта их **два** (фича 0187): размещение `at <адрес>` и инициализатор.
+/// Адрес — не обязательно литерал: `at BASE + 4` ссылается на константу, и
+/// пропустив это выражение, переименование испортило бы исходник (ради чего
+/// слой использований и заведён).
+fn variable_value_expressions(def: &ast::VariableDefine) -> Vec<&ast::Expression> {
     match def {
-        ast::VariableDefine::Variable { initializer, .. }
-        | ast::VariableDefine::Port { initializer, .. } => initializer.as_ref(),
+        ast::VariableDefine::Variable { initializer, .. } => initializer.iter().collect(),
+        ast::VariableDefine::Port {
+            address,
+            initializer,
+            ..
+        } => address.iter().chain(initializer.iter()).collect(),
         ast::VariableDefine::Constant { initializer, .. }
-        | ast::VariableDefine::Parameter { initializer, .. } => Some(initializer),
+        | ast::VariableDefine::Parameter { initializer, .. } => vec![initializer],
     }
 }
 

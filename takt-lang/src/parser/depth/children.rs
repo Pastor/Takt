@@ -143,12 +143,28 @@ fn push_variable<'a>(variable: &'a ast::VariableDefine, out: &mut Vec<NodeRef<'a
     match variable {
         ast::VariableDefine::Variable {
             typ, initializer, ..
-        }
-        | ast::VariableDefine::Port {
-            typ, initializer, ..
         } => {
             if let Some(typ) = typ {
                 out.push(NodeRef::Type(typ));
+            }
+            if let Some(initializer) = initializer {
+                out.push(NodeRef::Expression(initializer));
+            }
+        }
+        // Порт несёт ДВА необязательных выражения: размещение `at <адрес>` и
+        // инициализатор (фича 0187). Пропустить размещение значит не измерить
+        // его глубину — а дерево глубже предела выпустить наружу.
+        ast::VariableDefine::Port {
+            typ,
+            address,
+            initializer,
+            ..
+        } => {
+            if let Some(typ) = typ {
+                out.push(NodeRef::Type(typ));
+            }
+            if let Some(address) = address {
+                out.push(NodeRef::Expression(address));
             }
             if let Some(initializer) = initializer {
                 out.push(NodeRef::Expression(initializer));

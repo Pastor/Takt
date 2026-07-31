@@ -50,6 +50,7 @@ pub(super) fn construct_declaration(
             loc,
             typ,
             name,
+            address,
             initializer,
             direction,
         } => {
@@ -61,8 +62,18 @@ pub(super) fn construct_declaration(
                         .with_code("SE-023"),
                 );
             }
-            // Адрес порта необязателен — если не задан, используем None.
-            let expr = initializer
+            // Адрес порта необязателен: его может не быть в объявлении вовсе —
+            // тогда он приходит по имени порта (оператор `address` или внешняя
+            // карта), а полноту проверяет слой адресов, а не разбор (0187).
+            //
+            // ⚠️ **Переходное состояние (0187, задачи 01→07→02).** Пока адресом
+            // считается и `at <адрес>` (новая форма), и `:= <адрес>` (старая):
+            // корпус переходит на `at` задачей 07, и лишь затем `:=` меняет
+            // смысл на начальное значение (задача 02). Приоритет отдан `at` —
+            // если написаны обе формы, адрес берётся из неё.
+            let expr = address
+                .clone()
+                .or_else(|| initializer.clone())
                 .map(ExpressionNode::Unresolved)
                 .unwrap_or(ExpressionNode::None);
             variables.insert(

@@ -169,21 +169,21 @@ VariableDefine: Box<VariableDefine> = {
             loc: Location::source(file_no, l, r), typ, name, initializer: e
         })
     },
-    <l:@L> "in" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
+    <l:@L> "in" <name:IdentifierOrError> <typ:(":" <Type>)?> <a:("at" <AddressExpr>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
-            loc: Location::source(file_no, l, r), typ, name, initializer: e,
+            loc: Location::source(file_no, l, r), typ, name, address: a, initializer: e,
             direction: PortDirection::In,
         })
     },
-    <l:@L> "out" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
+    <l:@L> "out" <name:IdentifierOrError> <typ:(":" <Type>)?> <a:("at" <AddressExpr>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
-            loc: Location::source(file_no, l, r), typ, name, initializer: e,
+            loc: Location::source(file_no, l, r), typ, name, address: a, initializer: e,
             direction: PortDirection::Out,
         })
     },
-    <l:@L> "inout" <name:IdentifierOrError> <typ:(":" <Type>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
+    <l:@L> "inout" <name:IdentifierOrError> <typ:(":" <Type>)?> <a:("at" <AddressExpr>)?> <e:(":=" <Expression>)?> <r:@R> ";" => {
         Box::new(VariableDefine::Port {
-            loc: Location::source(file_no, l, r), typ, name, initializer: e,
+            loc: Location::source(file_no, l, r), typ, name, address: a, initializer: e,
             direction: PortDirection::InOut,
         })
     },
@@ -482,6 +482,18 @@ Member: Member = {
 // LoopCond: условие цикла `loop` — та же цепочка, но с атомом без ведущей `{`.
 // Дубликат `LoopCondP14…LoopCondP1` (96 строк) устранён задачей 0019-01.
 LoopCond: Expression = { Chain14<Precedence1NoBrace> }
+
+// Выражение адреса в объявлении порта: `at <адрес>` (фича 0187).
+//
+// Уровень **ниже присваивания** (`Chain13`, без `:=` и `?:`) — иначе `at A := B`
+// разбирается двояко: LALRPOP сообщает local ambiguity, потому что `Expression`
+// включает присваивание, и `:=` можно отнести и к адресу, и к объявлению.
+// Ограничение содержательное, а не техническое: присваиванию в адресе делать
+// нечего, а вычислитель адреса (`address_map/eval.rs`) принимает лишь литералы,
+// имена и целочисленную арифметику.
+AddressExpr: Expression = {
+    Chain13<Precedence1Full>
+}
 
 Expression: Expression = {
     Chain14<Precedence1Full>
@@ -962,6 +974,7 @@ extern {
         "out"   => Token::PortOut,
         "inout" => Token::PortInOut,
         "address" => Token::Address,
+        "at" => Token::At,
         "clock" => Token::Clock,
         "after" => Token::After,
         "every" => Token::Every,

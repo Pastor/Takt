@@ -180,12 +180,27 @@ fn take_variable(variable: ast::VariableDefine, out: &mut Vec<Owned>) {
     match variable {
         ast::VariableDefine::Variable {
             typ, initializer, ..
-        }
-        | ast::VariableDefine::Port {
-            typ, initializer, ..
         } => {
             if let Some(typ) = typ {
                 out.push(Owned::Type(typ));
+            }
+            if let Some(initializer) = initializer {
+                out.push(Owned::Expression(initializer));
+            }
+        }
+        // Два необязательных выражения: размещение и инициализатор (0187).
+        // Невынутое поддерево уничтожалось бы рекурсивным `Drop`.
+        ast::VariableDefine::Port {
+            typ,
+            address,
+            initializer,
+            ..
+        } => {
+            if let Some(typ) = typ {
+                out.push(Owned::Type(typ));
+            }
+            if let Some(address) = address {
+                out.push(Owned::Expression(address));
             }
             if let Some(initializer) = initializer {
                 out.push(Owned::Expression(initializer));

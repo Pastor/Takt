@@ -145,6 +145,7 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "out"      => Token::PortOut,
     "inout"    => Token::PortInOut,
     "address"  => Token::Address,
+    "at"       => Token::At,
     "clock"    => Token::Clock,
     "after"    => Token::After,
     "every"    => Token::Every,

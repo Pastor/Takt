@@ -235,6 +235,7 @@ pub(crate) fn variable_define(v: &ast::VariableDefine) -> Result<String, FormatE
             name,
             typ,
             direction,
+            address,
             initializer,
             ..
         } => {
@@ -243,7 +244,23 @@ pub(crate) fn variable_define(v: &ast::VariableDefine) -> Result<String, FormatE
                 ast::PortDirection::Out => "out",
                 ast::PortDirection::InOut => "inout",
             };
-            with_init(head(keyword, name, typ.as_ref())?, initializer.as_ref())?
+            // ⚠️ Размещение `at <адрес>` печатается **между** типом и
+            // инициализатором — в том же порядке, в каком стоит в исходнике
+            // (фича 0187). Поле необязательно: адрес может приходить оператором
+            // `address` или внешней картой, и тогда его здесь просто нет.
+            //
+            // Правило форматтера «добавил узел — добавь печать» защищает от
+            // новых **узлов**, а не полей: новое поле компилятор не потребовал
+            // бы разобрать (`..` в образце), и адрес молча пропал бы из вывода.
+            let head = match address {
+                Some(addr) => format!(
+                    "{} at {}",
+                    head(keyword, name, typ.as_ref())?,
+                    expression(addr)?
+                ),
+                None => head(keyword, name, typ.as_ref())?,
+            };
+            with_init(head, initializer.as_ref())?
         }
     })
 }

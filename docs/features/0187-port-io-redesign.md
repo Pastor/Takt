@@ -1,7 +1,7 @@
 # Фича 0187: Пересмотр задания адресов и доступа к портам
 
 - **Номер:** 0187
-- **Статус:** АНАЛИЗ
+- **Статус:** РАЗРАБОТКА
 - **Зависит от:** нет
 - **Tier:** 1
 - **Связанные issue (анализ):** заведена **по запросу заказчика 2026-07-31** при закрытии [0176](0176-bit-port-address-position.md); продолжает [0020](0020-port-address-decl.md), [0070](0070-port-initializer-address-role.md), [0176](0176-bit-port-address-position.md)
@@ -12,7 +12,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0187-port-io-redesign.md`](../adr/0187-port-io-redesign.md) |
 | Анализ | [`docs/analyze/0187-port-io-redesign.md`](../analyze/0187-port-io-redesign.md) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0187-YY-*`) |
+| Разработка | [`0187-01`](../development/0187-01-port-io-redesign.md) … (задачи `0187-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0187-YY-*`) |
