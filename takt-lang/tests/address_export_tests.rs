@@ -37,12 +37,17 @@ fn resolve_fixture(
 
 /// T2/T3/T5: три источника адреса на модели-пробе. Ожидание — из пробы: inline
 /// (`SW`), оператор `address` (`LED`), формат `0x` + 8 цифр, бит сохранён.
+///
+/// ⚠️ У `LED` (однобитный порт) позиция бита в исходнике не написана, и с фичей
+/// 0176 слой адресов подставляет ноль **до** выгрузки (`SE-090`), поэтому в
+/// карте стоит `:0`. Прежде выгрузка печатала адрес без позиции, а умолчание
+/// принимал каждый потребитель сам.
 #[test]
 fn map_export_three_sources_probe() {
     let res = resolve_fixture("probe.takt", None, &[]);
     assert_eq!(
         export_address_map(&res),
-        "BTN = 0x00200000;\nLED = 0x00200004;\nSW = 0x00300000:3;\n"
+        "BTN = 0x00200000;\nLED = 0x00200004:0;\nSW = 0x00300000:3;\n"
     );
 }
 
@@ -273,7 +278,7 @@ fn cli_default_emit_is_map() {
     assert!(out.status.success(), "rc=0 ожидался");
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
-        "BTN = 0x00200000;\nLED = 0x00200004;\nSW = 0x00300000:3;\n"
+        "BTN = 0x00200000;\nLED = 0x00200004:0;\nSW = 0x00300000:3;\n"
     );
 }
 

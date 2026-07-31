@@ -137,6 +137,15 @@ pub(super) fn generate_hal(
                     port_name,
                 ));
                 let addr = resolved.map(|r| r.addr).unwrap_or(0);
+                // `-1` означает «позиции бита нет» и остаётся у числовых и
+                // вещественных портов: у слова разряда не выбирают, поле в их
+                // таблицах не читается.
+                //
+                // Фича 0176: у **бит-порта** позиция нормирована слоем адресов
+                // (`SE-090` подставляет ноль и говорит об этом автору), поэтому в
+                // битовых таблицах `-1` появиться не может, и `read_bit`/
+                // `write_bit` сдвигают на `b.bit` без проверки знака — прежняя
+                // рантайм-заплатка `b.bit < 0 ? 0 : b.bit` снята как мёртвая.
                 let bit = resolved.and_then(|r| r.bit).unwrap_or(-1);
                 // 0029-02: было `.unwrap_or(4)` поверх `_ => 4` — два молчаливых
                 // умолчания подряд. Ширина доступа к MMIO угадыванию не подлежит.
@@ -191,7 +200,7 @@ pub(super) fn generate_hal(
                 r#"static bool {root}_default_{f}({e} p, void *userdata) {{
     (void)userdata;
     {root}_PortBinding b = {e}__ADDR[p];
-    int s = b.bit < 0 ? 0 : b.bit;
+    int s = b.bit;
     switch (b.width) {{
         case 2: return ((*(volatile uint16_t*)b.addr) >> s) & 1u;
         case 4: return ((*(volatile uint32_t*)b.addr) >> s) & 1u;
@@ -210,7 +219,7 @@ pub(super) fn generate_hal(
                 r#"static void {root}_default_{f}({e} p, bool val, void *userdata) {{
     (void)userdata;
     {root}_PortBinding b = {e}__ADDR[p];
-    int s = b.bit < 0 ? 0 : b.bit;
+    int s = b.bit;
     switch (b.width) {{
         case 2: {{
             volatile uint16_t *r = (volatile uint16_t*)b.addr;
@@ -444,8 +453,8 @@ start Idle {
     fn test_hal_port_width_follows_c_type() {
         let header = generate_hal_h(HAL_SRC, "Hal", crate::generator::FloatWidth::W64);
         assert!(
-            header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, -1, 1 },"),
-            "битовый порт обязан читаться 1 байтом:\n{header}"
+            header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, 0, 1 },"),
+            "битовый порт обязан читаться 1 байтом, позиция бита нормирована в 0 (фича 0176):\n{header}"
         );
         assert!(
             header.contains("[HAL_TEMPERATURE] = { (uintptr_t)0x1000u, -1, 8 },"),
@@ -468,7 +477,7 @@ start Idle {
         );
         // Прочие ширины от флага не зависят.
         assert!(
-            header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, -1, 1 },"),
+            header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, 0, 1 },"),
             "битовый порт от --float-width не зависит:\n{header}"
         );
     }

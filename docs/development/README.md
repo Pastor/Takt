@@ -327,3 +327,7 @@
 | 0156-04 | 0156 | Ограничение глубины вложенности на уровне лексера/парсера | [0156-04-parser-depth-limit.md](0156-04-parser-depth-limit.md) |
 | 0156-05 | 0156 | Ограничение глубины вложенности на уровне лексера/парсера | [0156-05-parser-depth-limit.md](0156-05-parser-depth-limit.md) |
 | 0156-06 | 0156 | Ограничение глубины вложенности на уровне лексера/парсера | [0156-06-parser-depth-limit.md](0156-06-parser-depth-limit.md) |
+| 0176-01 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-01-bit-port-address-position.md](0176-01-bit-port-address-position.md) |
+| 0176-02 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-02-bit-port-address-position.md](0176-02-bit-port-address-position.md) |
+| 0176-03 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-03-bit-port-address-position.md](0176-03-bit-port-address-position.md) |
+| 0176-04 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-04-bit-port-address-position.md](0176-04-bit-port-address-position.md) |

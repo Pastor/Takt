@@ -23,7 +23,7 @@
 
 | № | Фича | Зависит от | Tier | Статус |
 |---|------|------------|------|--------|
-| [0176](docs/features/0176-bit-port-address-position.md) | Позиция бита у `bit`-порта с голым адресом | — | 2 | АНАЛИЗ |
+| [0187](docs/features/0187-port-io-redesign.md) | Пересмотр задания адресов и доступа к портам (по запросу заказчика) | — | 1 | АРХИТЕКТУРА |
 | [0170](docs/features/0170-fixed-point-saturation.md) | Насыщение (saturation) для fixed-point `q(m, n)` | — | 2 | СОЗДАНА |
 | [0151](docs/features/0151-diagnostics-batch-within-check.md) | Накопление диагностик внутри отдельной проверки `validate` | — | 2 | СОЗДАНА |
 | [0168](docs/features/0168-generator-warnings-return.md) | Предупреждения генераторов возвращаются вызывающему, а не печатаются из библиотеки | — | 2 | СОЗДАНА |
