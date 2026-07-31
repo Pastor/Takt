@@ -19,7 +19,13 @@
 #        - takt-sim/src/unit/initial.rs — ВТОРОЙ вычислитель, начальные значения
 #          (фича 0163). Он жил под `_ => None` и потому был вне действия правила:
 #          добавление варианта не ломало сборку, новый узел молча получал
-#          «значения нет».
+#          «значения нет»;
+#        - takt-lang/src/parser/depth/{children,dismantle}.rs — счёт глубины АСД и
+#          утилизация отвергнутого дерева (фича 0156). Узел, выпавший из счёта,
+#          НЕ измеряется: дерево произвольной глубины прошло бы предел и уронило
+#          бы первого же рекурсивного потребителя; узел, выпавший из утилизации,
+#          уничтожался бы рекурсивным `Drop` — то есть падение вернулось бы
+#          молча, на самом глубоком вводе.
 # Оба пути проходят сборку молча — поэтому нужен именно гейт (прецедент ADR 0027/
 # 0077: правило без команды — не правило).
 #
@@ -30,9 +36,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 NODES_FILE="$ROOT/takt-lang/src/semantic/mod.rs"
 EVAL_MOD="$ROOT/takt-sim/src/eval/mod.rs"
 INITIAL_MOD="$ROOT/takt-sim/src/unit/initial.rs"
+DEPTH_CHILDREN="$ROOT/takt-lang/src/parser/depth/children.rs"
+DEPTH_DISMANTLE="$ROOT/takt-lang/src/parser/depth/dismantle.rs"
 DENY='#![deny(clippy::wildcard_enum_match_arm)]'
 
-for f in "$NODES_FILE" "$EVAL_MOD" "$INITIAL_MOD"; do
+for f in "$NODES_FILE" "$EVAL_MOD" "$INITIAL_MOD" "$DEPTH_CHILDREN" "$DEPTH_DISMANTLE"; do
   [ -f "$f" ] || { echo "check-exhaustive-nodes: не найден $f" >&2; exit 1; }
 done
 
@@ -64,15 +72,15 @@ if [ -n "$BAD_NODES" ]; then
   fail=1
 fi
 
-# Условие 2: ОБА вычислителя над узлами языка хранят
+# Условие 2: ВСЕ модули, разбирающие узлы языка, хранят
 # `#![deny(clippy::wildcard_enum_match_arm)]`. Проверять только `eval/` мало:
 # ровно так второй вычислитель и оставался вне правила (фича 0163).
 # ⚠️ Поиск привязан к НАЧАЛУ строки. Простой `grep -F` находил атрибут и внутри
 # док-комментария, объясняющего, зачем он нужен, — то есть модуль без атрибута,
 # но с рассказом о нём, гейт проходил. Вскрыто мутацией при разработке 0163.
-for mod_file in "$EVAL_MOD" "$INITIAL_MOD"; do
+for mod_file in "$EVAL_MOD" "$INITIAL_MOD" "$DEPTH_CHILDREN" "$DEPTH_DISMANTLE"; do
   if ! grep -q '^#!\[deny(clippy::wildcard_enum_match_arm)\]' "$mod_file"; then
-    echo "  ОШИБКА: в $mod_file снят '$DENY' (фичи 0093, 0163)." >&2
+    echo "  ОШИБКА: в $mod_file снят '$DENY' (фичи 0093, 0163, 0156)." >&2
     echo "  Без него компилятор перестаёт требовать явного разбора вариантов —" >&2
     echo "  вычислители смогут разойтись молча (ADR 0025). Верните атрибут." >&2
     fail=1
@@ -82,4 +90,4 @@ done
 if [ "$fail" != 0 ]; then
   exit 1
 fi
-echo "  OK: узлы не #[non_exhaustive]; оба вычислителя хранят deny(wildcard_enum_match_arm)."
+echo "  OK: узлы не #[non_exhaustive]; вычислители симулятора и обходы глубины АСД хранят deny(wildcard_enum_match_arm)."

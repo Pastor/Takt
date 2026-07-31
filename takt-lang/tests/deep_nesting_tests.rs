@@ -53,8 +53,19 @@ fn model_with_nested_expression(depth: usize) -> String {
     )
 }
 
+/// Строит модель и отдаёт диагностику в виде `КОД|сообщение`.
+///
+/// ⚠️ Отказ **разбора** оформляется так же, как отказ семантики: с фичей 0156 у
+/// глубины появился второй рубеж (`SY-005` в `parse`), и тест обязан различать
+/// их по коду, а не по стадии. Иначе «глубина отвергнута» и «глубина отвергнута
+/// не тем сторожем» выглядели бы одинаково.
 fn build(src: &str) -> Result<(), String> {
-    let (ast, _) = takt_lang::parse(src, 0).map_err(|e| format!("разбор: {e:?}"))?;
+    let (ast, _) = takt_lang::parse(src, 0).map_err(|diagnostics| {
+        diagnostics.first().map_or_else(
+            || "разбор: диагностика отсутствует".to_string(),
+            |d| format!("{}|{}", d.code.clone().unwrap_or_default(), d.message),
+        )
+    })?;
     construct_model(&ast, None, &[])
         .map(|_| ())
         .map_err(|d| format!("{}|{}", d.code.clone().unwrap_or_default(), d.message))
@@ -92,10 +103,15 @@ fn nesting_beyond_limit_is_diagnosed_not_crash() {
 #[test]
 fn deep_nesting_that_used_to_crash_is_diagnosed() {
     // Именно эта глубина роняла все три инструмента до фичи 0129.
+    //
+    // ⚠️ С фичей 0156 такой ввод не доходит до семантики: предел разбора
+    // отвергает его раньше (`SY-005`). Сторож остаётся на месте, но проверяет
+    // то, ради чего заводился, — **диагностику вместо падения**, а не то, каким
+    // из двух рубежей она выдана.
     let err = build(&model_with_nested_parens(300)).expect_err("300 уровней — диагностика");
     assert!(
-        err.starts_with("SE-062|"),
-        "ожидался SE-062, получено: {err}"
+        err.starts_with("SY-005|"),
+        "ожидался SY-005 (предел разбора), получено: {err}"
     );
 }
 
@@ -103,19 +119,35 @@ fn deep_nesting_that_used_to_crash_is_diagnosed() {
 fn deep_nesting_in_expression_is_diagnosed_too() {
     // Условие ребра и выражение в теле — разные точки рекурсии
     // (`resolve_condition` и `construct_expression`), прикрыть надо обе.
+    // На глубине 300 обе перекрыты пределом разбора (фича 0156).
     let err = build(&model_with_nested_expression(300))
         .expect_err("глубокое выражение в теле — диагностика");
     assert!(
+        err.starts_with("SY-005|"),
+        "ожидался SY-005 (предел разбора), получено: {err}"
+    );
+}
+
+#[test]
+fn semantic_limit_still_applies_between_the_two_thresholds() {
+    // Инвариант двух рубежей (фича 0156, условие R4 анализа): глубина, которую
+    // разбор принимает, но семантика — нет, обязана давать **семантическую**
+    // диагностику. Иначе `SE-062` стал бы недостижимым, а пользователь вместо
+    // разбора причины получал бы отказ разбора.
+    let err = build(&model_with_nested_parens(MAX_NESTING_DEPTH + 8))
+        .expect_err("глубина между рубежами — диагностика");
+    assert!(
         err.starts_with("SE-062|"),
-        "ожидался SE-062, получено: {err}"
+        "ожидался SE-062 (семантический предел), получено: {err}"
     );
 }
 
 #[test]
 fn diagnostic_names_the_limit() {
     // Сообщение обязано называть предел: без числа пользователь не поймёт, к
-    // чему стремиться.
-    let err = build(&model_with_nested_parens(300)).expect_err("диагностика");
+    // чему стремиться. Проверяется на семантическом рубеже — там предел и есть
+    // `MAX_NESTING_DEPTH`.
+    let err = build(&model_with_nested_parens(MAX_NESTING_DEPTH + 8)).expect_err("диагностика");
     assert!(
         err.contains(&MAX_NESTING_DEPTH.to_string()),
         "сообщение обязано называть предел {MAX_NESTING_DEPTH}: {err}"
@@ -137,8 +169,14 @@ fn deep_statement_nesting_is_diagnosed() {
     // с условием ребра и выражением. До фичи 0155 она была прикрыта только на
     // бумаге: сторож срабатывал, но его ошибку глотало разрешение вложенного
     // тела, и модель компилировалась молча.
-    let err = build(&model_with_nested_statements(60))
-        .expect_err("60 вложенных операторов — диагностика, а не тишина");
+    //
+    // ⚠️ Глубина взята **между рубежами** (фича 0156): вложенный `if` даёт два
+    // узла дерева (`If` + `Block`), поэтому 60 операторов — это уже за пределом
+    // разбора, и диагностику выдал бы `SY-005`. Здесь проверяется именно сторож
+    // операторов в семантике, поэтому вложенность на треть выше семантического
+    // предела и вдвое ниже парсерного.
+    let err = build(&model_with_nested_statements(MAX_NESTING_DEPTH + 8))
+        .expect_err("вложенные операторы сверх предела — диагностика, а не тишина");
     assert!(
         err.starts_with("SE-062|"),
         "ожидался SE-062, получено: {err}"
