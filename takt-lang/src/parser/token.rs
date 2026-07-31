@@ -186,6 +186,12 @@ pub enum Token<'input> {
     PortInOut,
     /// Ключевое слово `address` (оператор задания адреса порта, фича 0020).
     Address,
+    /// Ключевое слово `at` — размещение порта в объявлении (фича 0187).
+    ///
+    /// Отделяет **адрес** от значения: `out led: bit at 0x40:2 := 0;`. Часть
+    /// необязательная — адрес может прийти по имени порта (оператор `address`
+    /// или внешняя карта), поэтому объявление без `at` законно.
+    At,
     /// Ключевое слово `clock` (частота тактирования модели, фича 0134).
     Clock,
     /// Ключевое слово `after` (выдержка на ребре, фича 0134).
@@ -328,6 +334,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::PortOut => write!(f, "out"),
             Token::PortInOut => write!(f, "inout"),
             Token::Address => write!(f, "address"),
+            Token::At => write!(f, "at"),
             Token::Clock => write!(f, "clock"),
             Token::After => write!(f, "after"),
             Token::Every => write!(f, "every"),

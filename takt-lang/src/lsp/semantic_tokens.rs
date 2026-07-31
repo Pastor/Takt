@@ -141,6 +141,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             | Token::PortOut
             | Token::PortInOut
             | Token::Address
+            | Token::At
             | Token::Function
             | Token::Extern
             | Token::Enum
