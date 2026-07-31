@@ -90,9 +90,15 @@ fn collect_model_usage(model: Rc<RefCell<ModelNode>>, set: &mut UsageSet) {
 /// Записывает имена из инициализатора переменной в соответствующие множества.
 fn usage_from_var(var: &VariableNode, set: &mut UsageSet) {
     match var {
-        VariableNode::Simple { expr, .. }
-        | VariableNode::Port { expr, .. }
-        | VariableNode::Const { expr, .. } => usage_from_expr(expr, set),
+        VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } => {
+            usage_from_expr(expr, set)
+        }
+        // Порт несёт два выражения (0187): пропустив адрес, проверка «переменная
+        // нигде не используется» солгала бы про константу из `at BASE + 4`.
+        VariableNode::Port { address, init, .. } => {
+            usage_from_expr(address, set);
+            usage_from_expr(init, set);
+        }
         VariableNode::Unresolved => {}
     }
 }
@@ -438,9 +444,13 @@ fn check_model_unused(model: Rc<RefCell<ModelNode>>, warnings: &mut Vec<Diagnost
 
 fn collect_from_var(var: &VariableNode, used: &mut HashSet<String>) {
     match var {
-        VariableNode::Simple { expr, .. }
-        | VariableNode::Port { expr, .. }
-        | VariableNode::Const { expr, .. } => collect_from_expr(expr, used),
+        VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } => {
+            collect_from_expr(expr, used)
+        }
+        VariableNode::Port { address, init, .. } => {
+            collect_from_expr(address, used);
+            collect_from_expr(init, used);
+        }
         VariableNode::Unresolved => {}
     }
 }

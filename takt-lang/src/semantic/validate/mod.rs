@@ -39,6 +39,8 @@ mod literal_range;
 mod member_access;
 mod nondeterminism;
 mod port_direction;
+mod port_init;
+pub(crate) use port_init::port_init_warnings;
 mod ports;
 mod states;
 mod structs;
@@ -143,6 +145,10 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // условиях. Тела блоков и функций прежде не обходились, и нарушение уезжало
     // в цели, где расходилось вплоть до записи по адресу другого порта.
     found.extend(port_direction::check_port_directions(model.clone()));
+
+    // SE-092/SE-093 (0187): начальное значение порта — где законно и что с ним
+    // пока происходит.
+    found.extend(port_init::check_port_initializers(model.clone()));
 
     let nested: Vec<Rc<RefCell<ModelNode>>> =
         model.borrow().models.values().map(Rc::clone).collect();

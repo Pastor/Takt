@@ -60,9 +60,11 @@ pub(super) fn check_fixed_mixing(model: Rc<RefCell<ModelNode>>) -> Result<(), Di
 /// Инициализатор переменной (или `None` для `Unresolved`).
 fn var_init(var: &VariableNode) -> Option<&ExpressionNode> {
     match var {
-        VariableNode::Simple { expr, .. }
-        | VariableNode::Port { expr, .. }
-        | VariableNode::Const { expr, .. } => Some(expr),
+        VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } => Some(expr),
+        // У порта берётся **начальное значение**, а не адрес (фича 0187):
+        // смешение типов fixed-point — свойство значения; адрес — целое число
+        // и к арифметике `q(m, n)` отношения не имеет.
+        VariableNode::Port { init, .. } => Some(init),
         VariableNode::Unresolved => None,
     }
 }

@@ -9,10 +9,15 @@ pub(super) fn validate_variables(model: Rc<RefCell<ModelNode>>) -> Result<(), Di
     for variable in borrowed.variables.values() {
         match variable {
             VariableNode::Unresolved => {}
-            VariableNode::Simple { expr, .. }
-            | VariableNode::Port { expr, .. }
-            | VariableNode::Const { expr, .. } => {
+            VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } => {
                 validate_expression(expr, model.clone())?;
+            }
+            // У порта выражений два (фича 0187): размещение и начальное
+            // значение. Проверять надо оба — имена в адресе (`at BASE + 4`)
+            // такие же настоящие, как в значении.
+            VariableNode::Port { address, init, .. } => {
+                validate_expression(address, model.clone())?;
+                validate_expression(init, model.clone())?;
             }
         }
     }
@@ -54,7 +59,7 @@ fn collect_incomplete_addresses(
     let borrowed = model.borrow();
     for var in borrowed.variables.values() {
         let VariableNode::Port {
-            expr, loc, name, ..
+            address, loc, name, ..
         } = var
         else {
             continue;
@@ -62,7 +67,7 @@ fn collect_incomplete_addresses(
         if !used_ports.contains(name) {
             continue; // мёртвый порт — адрес не требуется
         }
-        let has_inline = !matches!(expr, ExpressionNode::None);
+        let has_inline = !matches!(address, ExpressionNode::None);
         let has_operator = borrowed.address_defs.iter().any(|d| &d.port == name);
         let has_external = external_ports.contains(name);
         if !has_inline && !has_operator && !has_external {
@@ -106,7 +111,7 @@ pub(super) fn check_port_addresses(model: Rc<RefCell<ModelNode>>) -> Result<(), 
     let mut bound_by_address: HashSet<&str> = HashSet::new();
     for def in &borrowed.address_defs {
         // R5: адрес должен ссылаться на существующий порт.
-        let Some(VariableNode::Port { expr, .. }) = borrowed.variables.get(&def.port) else {
+        let Some(VariableNode::Port { address, .. }) = borrowed.variables.get(&def.port) else {
             return Err(Diagnostic::error(
                 def.loc,
                 format!(
@@ -128,7 +133,7 @@ pub(super) fn check_port_addresses(model: Rc<RefCell<ModelNode>>) -> Result<(), 
             .with_code("SE-049"));
         }
         // R4: адрес задан и inline-инициализатором, и оператором `address`.
-        if !matches!(expr, ExpressionNode::None) {
+        if !matches!(address, ExpressionNode::None) {
             return Err(Diagnostic::error(
                 def.loc,
                 format!(

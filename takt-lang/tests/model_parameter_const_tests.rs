@@ -318,7 +318,7 @@ fn after_parameter_is_rejected_under_assign() {
 fn port_address_parameter_follows_the_same_rule() {
     const SRC: &str = "model Board {\n\
                        \x20   parameter base: u32 := 0x40000000;\n\
-                       \x20   in btn: bit := base;\n\
+                       \x20   in btn: bit at base;\n\
                        \x20   out led: bit at 0x40000004;\n\
                        \x20   start Run {\n\
                        \x20       always { led := btn; }\n\
