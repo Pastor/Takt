@@ -23,7 +23,7 @@
 
 | № | Фича | Зависит от | Tier | Статус |
 |---|------|------------|------|--------|
-| [0156](docs/features/0156-parser-depth-limit.md) | Ограничение глубины вложенности на уровне лексера/парсера | — | 2 | АНАЛИЗ |
+| [0156](docs/features/0156-parser-depth-limit.md) | Ограничение глубины вложенности на уровне лексера/парсера | — | 2 | РАЗРАБОТКА |
 | [0176](docs/features/0176-bit-port-address-position.md) | Позиция бита у `bit`-порта с голым адресом | — | 2 | СОЗДАНА |
 | [0170](docs/features/0170-fixed-point-saturation.md) | Насыщение (saturation) для fixed-point `q(m, n)` | — | 2 | СОЗДАНА |
 | [0151](docs/features/0151-diagnostics-batch-within-check.md) | Накопление диагностик внутри отдельной проверки `validate` | — | 2 | СОЗДАНА |
