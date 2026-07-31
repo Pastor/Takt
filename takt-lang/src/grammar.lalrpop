@@ -632,12 +632,17 @@ Precedence1NoBrace: Expression = {
 Precedence0: Expression = {
    <Identifier> => Expression::Variable(<>),
    <FunctionCall> => <>,
-   <l:@L> <a:ParameterList> <r:@R> => {
-      if a.len() == 1 {
-          if let Some(Parameter{ ty, name: None, .. }) = &a[0].1 {
-              // this means "(" Expression ")"
-              return Expression::Parenthesis(ty.loc(), Box::new(ty.clone()));
-          }
+   <l:@L> <mut a:ParameterList> <r:@R> => {
+      // Форма `"(" Expression ")"`: скобки вокруг выражения, а не список
+      // параметров. Значение ПЕРЕМЕЩАЕТСЯ из списка, а не клонируется (фича
+      // 0156): скобка редуцируется изнутри наружу, поэтому клон на каждом уровне
+      // копировал всё накопленное поддерево — рекурсия `Clone` роняла разбор на
+      // глубине ≈ 561 (поток 2 МиБ), а стоимость была квадратичной.
+      if a.len() == 1 && matches!(&a[0].1, Some(Parameter{ name: None, .. })) {
+          let (_, parameter) = a.pop().expect("длина списка проверена выше");
+          let ty = parameter.expect("вариант Some проверен выше").ty;
+          let loc = ty.loc();
+          return Expression::Parenthesis(loc, Box::new(ty));
       }
 
       Expression::List(Location::source(file_no, l, r), a)
