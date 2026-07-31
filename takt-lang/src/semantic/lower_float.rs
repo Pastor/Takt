@@ -195,14 +195,16 @@ fn retype_var(var: &VariableNode, m: u8, n: u8) -> VariableNode {
             loc,
             name,
             ty,
-            expr,
+            address,
+            init,
             direction,
         } => VariableNode::Port {
             upper: upper.clone(),
             loc: *loc,
             name: name.clone(),
             ty: lower_ty(ty, m, n),
-            expr: expr.clone(),
+            address: address.clone(),
+            init: init.clone(),
             direction: *direction,
         },
         VariableNode::Const {

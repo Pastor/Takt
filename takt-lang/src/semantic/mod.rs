@@ -39,7 +39,6 @@ mod named_code_block;
 pub use named_code_block::NamedCodeBlockDefinitionNode;
 pub(crate) mod naming;
 pub(crate) mod parameter_const;
-pub(crate) mod port_address_hint;
 mod reference;
 pub use reference::ReferenceNode;
 pub(crate) mod specialize;

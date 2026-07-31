@@ -159,7 +159,8 @@ fn ce4_undeclared_enum_in_port_is_error() {
             loc: Location::Implicit,
             name: "p".to_string(),
             ty: TypeNode::Enum("Dir".to_string()),
-            expr: ExpressionNode::Number(0),
+            address: ExpressionNode::Number(0),
+            init: ExpressionNode::None,
             direction: crate::semantic::PortDirection::In,
         };
         m.borrow_mut().variables.insert("p".to_string(), var);

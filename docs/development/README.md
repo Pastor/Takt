@@ -333,3 +333,4 @@
 | 0176-04 | 0176 | Позиция бита у bit-порта с голым адресом | [0176-04-bit-port-address-position.md](0176-04-bit-port-address-position.md) |
 | 0188-01 | 0188 | Направление порта проверяется во всех позициях | [0188-01-port-direction-everywhere.md](0188-01-port-direction-everywhere.md) |
 | 0187-07 | 0187 | Пересмотр задания адресов и доступа к портам | [0187-07-port-io-redesign.md](0187-07-port-io-redesign.md) |
+| 0187-02 | 0187 | Пересмотр задания адресов и доступа к портам | [0187-02-port-io-redesign.md](0187-02-port-io-redesign.md) |

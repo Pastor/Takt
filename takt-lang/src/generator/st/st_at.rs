@@ -171,7 +171,7 @@ mod tests {
     /// Входной `bit` → `%IX<адрес>.<бит>`.
     ///
     /// Сверка с ручным прогоном правил (план 0041-05):
-    /// `in task_valid: bit := 0x100:0;` → `task_valid AT %IX256.0 : BOOL;`.
+    /// `in task_valid: bit at 0x100:0;` → `task_valid AT %IX256.0 : BOOL;`.
     #[test]
     fn test_input_bit_becomes_ix_with_bit() {
         let (loc, _, w) = location_of(
@@ -235,7 +235,7 @@ mod tests {
     /// Не-`BOOL` порт с битом: бит игнорируется, но **громко** — `ST-006`.
     ///
     /// Вход не гипотетический: `stacker.takt` систематически пишет `:0` даже для
-    /// `u8`-портов (`in pos_stack: u8 := 0x200:0;`).
+    /// `u8`-портов (`in pos_stack: u8 at 0x200:0;`).
     #[test]
     fn test_non_bool_port_with_bit_warns_st006_and_ignores_bit() {
         let ty = TypeNode::Integer {

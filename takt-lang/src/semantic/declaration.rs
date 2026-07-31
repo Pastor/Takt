@@ -62,18 +62,16 @@ pub(super) fn construct_declaration(
                         .with_code("SE-023"),
                 );
             }
-            // Адрес порта необязателен: его может не быть в объявлении вовсе —
-            // тогда он приходит по имени порта (оператор `address` или внешняя
-            // карта), а полноту проверяет слой адресов, а не разбор (0187).
-            //
-            // ⚠️ **Переходное состояние (0187, задачи 01→07→02).** Пока адресом
-            // считается и `at <адрес>` (новая форма), и `:= <адрес>` (старая):
-            // корпус переходит на `at` задачей 07, и лишь затем `:=` меняет
-            // смысл на начальное значение (задача 02). Приоритет отдан `at` —
-            // если написаны обе формы, адрес берётся из неё.
-            let expr = address
+            // Два независимых выражения (фича 0187): размещение `at <адрес>` и
+            // начальное значение `:=`. Каждое необязательно — адрес может
+            // прийти по имени порта (оператор `address`, внешняя карта), и
+            // полноту проверяет слой адресов, а не объявление.
+            let address_node = address
                 .clone()
-                .or_else(|| initializer.clone())
+                .map(ExpressionNode::Unresolved)
+                .unwrap_or(ExpressionNode::None);
+            let init_node = initializer
+                .clone()
                 .map(ExpressionNode::Unresolved)
                 .unwrap_or(ExpressionNode::None);
             variables.insert(
@@ -83,7 +81,8 @@ pub(super) fn construct_declaration(
                     loc,
                     name: name.clone(),
                     ty: type_node,
-                    expr,
+                    address: address_node,
+                    init: init_node,
                     direction,
                 },
             )
@@ -219,4 +218,79 @@ fn extract_name(id: Option<Identifier>, loc: Location) -> Result<String, Diagnos
             Err(Diagnostic::error(loc, "Идентификатор не задан".to_string()).with_code("SE-021"))
         }
     }
+}
+
+/// Разрешает выражение объявления, если оно ещё «сырое» (`Unresolved`).
+///
+/// Вынесено сюда (фича 0187): у порта таких выражений **два** — размещение и
+/// начальное значение, — и повтор `match` для каждого раздул бы `tree.rs`, уже
+/// стоящий в реестре размера.
+pub(crate) fn resolve_declaration_expression(
+    expr: ExpressionNode,
+    model: &Rc<RefCell<ModelNode>>,
+) -> Result<ExpressionNode, Diagnostic> {
+    match expr {
+        ExpressionNode::Unresolved(raw) => {
+            crate::semantic::expression::construct_expression(raw, vec![], Rc::clone(model))
+        }
+        other => Ok(other),
+    }
+}
+
+/// Разрешает «сырые» выражения объявления переменной (`Unresolved` → дерево).
+///
+/// Вынесено из `tree.rs` (фича 0187): у порта выражений **два** — размещение и
+/// начальное значение, — и разбор каждого на месте раздул бы файл, стоящий в
+/// реестре размера. Логика прежняя: узел без «сырых» выражений возвращается как
+/// есть.
+pub(crate) fn resolve_variable_expressions(
+    var: VariableNode,
+    model: &Rc<RefCell<ModelNode>>,
+) -> Result<VariableNode, Diagnostic> {
+    Ok(match var {
+        VariableNode::Simple {
+            upper,
+            loc,
+            name,
+            ty,
+            expr,
+        } => VariableNode::Simple {
+            upper,
+            loc,
+            name,
+            ty,
+            expr: resolve_declaration_expression(expr, model)?,
+        },
+        VariableNode::Const {
+            upper,
+            loc,
+            name,
+            ty,
+            expr,
+        } => VariableNode::Const {
+            upper,
+            loc,
+            name,
+            ty,
+            expr: resolve_declaration_expression(expr, model)?,
+        },
+        VariableNode::Port {
+            upper,
+            loc,
+            name,
+            ty,
+            address,
+            init,
+            direction,
+        } => VariableNode::Port {
+            upper,
+            loc,
+            name,
+            ty,
+            address: resolve_declaration_expression(address, model)?,
+            init: resolve_declaration_expression(init, model)?,
+            direction,
+        },
+        VariableNode::Unresolved => VariableNode::Unresolved,
+    })
 }

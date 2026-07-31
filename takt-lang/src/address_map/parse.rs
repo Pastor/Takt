@@ -289,8 +289,8 @@ pub fn address_map_overlay_warnings(
     let mut out = Vec::new();
     for e in entries {
         match borrowed.variables.get(&e.name) {
-            Some(VariableNode::Port { expr, .. }) => {
-                let has_inline = !matches!(expr, ExpressionNode::None);
+            Some(VariableNode::Port { address, .. }) => {
+                let has_inline = !matches!(address, ExpressionNode::None);
                 let has_operator = borrowed.address_defs.iter().any(|d| d.port == e.name);
                 if has_inline || has_operator {
                     out.push(

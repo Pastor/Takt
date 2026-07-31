@@ -80,7 +80,7 @@ fn hal_reads_wide_bit_without_ub() {
 
     // LO — бит 2 (младший байт → доступ 1 байт), HI — бит 33 (→ доступ 8 байт).
     let source = format!(
-        "in LO: bit := {PROBE_ADDR}:2;\nin HI: bit := {PROBE_ADDR}:33;\n\
+        "in LO: bit at {PROBE_ADDR}:2;\nin HI: bit at {PROBE_ADDR}:33;\n\
          var seen: bit := 0;\nstart S {{\n    always {{ seen := LO; }}\n}}\n"
     );
     compile_hal("bitprobe", &source, &dir).expect("c-hal генерируется");

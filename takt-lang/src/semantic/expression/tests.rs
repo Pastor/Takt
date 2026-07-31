@@ -23,7 +23,7 @@ fn var_expr(node: &ModelNode, name: &str) -> ExpressionNode {
     match node.search_var(name).expect("переменная не найдена") {
         VariableNode::Simple { expr, .. }
         | VariableNode::Const { expr, .. }
-        | VariableNode::Port { expr, .. } => expr,
+        | VariableNode::Port { init: expr, .. } => expr,
         VariableNode::Unresolved => panic!("переменная неразрешена"),
     }
 }
@@ -861,7 +861,8 @@ fn var_type_port() {
         loc: crate::diagnostics::Location::Implicit,
         name: "p".into(),
         ty: TypeNode::Bit,
-        expr: ExpressionNode::None,
+        address: ExpressionNode::None,
+        init: ExpressionNode::None,
         direction: crate::semantic::PortDirection::In,
     };
     assert_eq!(var_type(&v), TypeNode::Bit);

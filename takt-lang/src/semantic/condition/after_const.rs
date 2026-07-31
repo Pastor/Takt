@@ -677,7 +677,7 @@ start Main = M;
     /// Входной порт типа `duration` годится так же, как переменная.
     #[test]
     fn duration_port_gives_dynamic_dwell() {
-        let cond = ref_cond(&src("in DWELL: duration := 0s;", "after DWELL")).unwrap();
+        let cond = ref_cond(&src("in DWELL: duration;", "after DWELL")).unwrap();
         assert!(
             matches!(cond, ConditionNode::AfterExpr(_)),
             "ожидалась вычисляемая выдержка, получено {cond:?}"

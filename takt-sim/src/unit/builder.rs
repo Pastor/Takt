@@ -147,9 +147,13 @@ impl Context for ModelNodeContext {
 
 fn var_expr(var: &VariableNode) -> &ExpressionNode {
     match var {
-        VariableNode::Simple { expr, .. }
-        | VariableNode::Port { expr, .. }
-        | VariableNode::Const { expr, .. } => expr,
+        VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } => expr,
+        // У порта берётся **начальное значение** (фича 0187), а не адрес:
+        // прежде оба жили в одном поле, и симулятор брал адрес за начальное
+        // значение — `in P: bit := 0x100;` стартовал со значением 0x100.
+        // Выставление значения целями — задачи 0187-03…05; здесь оно уже
+        // работает, потому что симулятору нечего эмитить: он им и стартует.
+        VariableNode::Port { init, .. } => init,
         VariableNode::Unresolved => &ExpressionNode::None,
     }
 }

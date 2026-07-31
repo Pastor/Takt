@@ -349,15 +349,34 @@ fn port_without_type_is_error() {
     assert!(result.is_err(), "Порт без типа должен давать ошибку");
 }
 
-/// Порт с инициализатором не-адресом — адрес игнорируется, порт создаётся без адреса.
+/// Инициализатор **выходного** порта — начальное значение, и построение его
+/// принимает (фича 0187: адрес задаётся только `at`).
+///
+/// ⚠️ Прежде тест назывался «порт с инициализатором не-адресом» и стоял на
+/// **входном** порте: до 0187 инициализатор означал адрес, и не-адрес просто
+/// игнорировался. Теперь у входа начального значения быть не может (`SE-092`) —
+/// проба переехала на выход, где значение законно.
 #[test]
-fn port_with_non_address_initializer_is_valid() {
-    let (ast, _) = parse("type u8 = [bit;8]; in P: u8 := true; start S;", 0).unwrap();
+fn output_port_initial_value_is_accepted() {
+    let (ast, _) = parse("type u8 = [bit;8]; out P: u8 := 1; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_ok(),
-        "Порт с нелитеральным инициализатором должен быть принят (адрес опционален): {:?}",
+        "начальное значение выходного порта обязано приниматься: {:?}",
         result.err()
+    );
+}
+
+/// Начальное значение **входного** порта отвергается (`SE-092`, фича 0187).
+#[test]
+fn input_port_initial_value_is_rejected() {
+    let (ast, _) = parse("type u8 = [bit;8]; in P: u8 := 1; start S;", 0).unwrap();
+    let result = construct_model(&ast, None, &[]);
+    let code = result.err().and_then(|d| d.code);
+    assert_eq!(
+        code.as_deref(),
+        Some("SE-092"),
+        "значение входа приходит извне — задавать его нечем"
     );
 }
 

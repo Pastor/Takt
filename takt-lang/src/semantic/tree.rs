@@ -15,7 +15,6 @@ use crate::parser::ast::{
 };
 use crate::semantic::condition::{extract_conditions, resolve_condition};
 use crate::semantic::declaration;
-use crate::semantic::expression::construct_expression;
 use crate::semantic::extend::Extend;
 use crate::semantic::formula;
 use crate::semantic::function::construct_function;
@@ -779,7 +778,7 @@ pub(super) fn construct_model_stage1(
 ///
 /// # Ошибки
 ///
-/// Пробрасывает [`Diagnostic`] из [`construct_expression`], если идентификатор
+/// Пробрасывает [`Diagnostic`] из построения выражения, если идентификатор
 /// в инициализаторе не найден в области видимости.
 fn resolve_variable_expressions(
     variables: &BTreeMap<String, VariableNode>,
@@ -787,50 +786,7 @@ fn resolve_variable_expressions(
 ) -> Result<BTreeMap<String, VariableNode>, Diagnostic> {
     let mut result = BTreeMap::new();
     for (name, var) in variables {
-        let resolved = match var.clone() {
-            VariableNode::Simple {
-                upper,
-                loc,
-                name: n,
-                ty,
-                expr: ExpressionNode::Unresolved(expr),
-            } => VariableNode::Simple {
-                upper,
-                loc,
-                name: n,
-                ty,
-                expr: construct_expression(expr, vec![], model.clone())?,
-            },
-            VariableNode::Const {
-                upper,
-                loc,
-                name: n,
-                ty,
-                expr: ExpressionNode::Unresolved(expr),
-            } => VariableNode::Const {
-                upper,
-                loc,
-                name: n,
-                ty,
-                expr: construct_expression(expr, vec![], model.clone())?,
-            },
-            VariableNode::Port {
-                upper,
-                loc,
-                name: n,
-                ty,
-                expr: ExpressionNode::Unresolved(expr),
-                direction,
-            } => VariableNode::Port {
-                upper,
-                loc,
-                name: n,
-                ty,
-                expr: construct_expression(expr, vec![], model.clone())?,
-                direction,
-            },
-            other => other,
-        };
+        let resolved = declaration::resolve_variable_expressions(var.clone(), &model)?;
         result.insert(name.clone(), resolved);
     }
     Ok(result)

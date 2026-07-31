@@ -489,14 +489,14 @@ start Idle {
     /// ключом каждый порт получает **свой** адрес.
     const COLLISION_SRC: &str = r#"
 model A {
-    out sig: bit := 0x10:0;
+    out sig: bit at 0x10:0;
     start S {
         always { sig := true; }
         ref S: 1 = 1;
     }
 }
 model B {
-    out sig: bit := 0x20:0;
+    out sig: bit at 0x20:0;
     start S {
         always { sig := true; }
         ref S: 1 = 1;

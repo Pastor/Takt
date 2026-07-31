@@ -237,7 +237,7 @@ fn resolve_model(
     let borrowed = model.borrow();
     for var in borrowed.variables.values() {
         let VariableNode::Port {
-            expr,
+            address,
             loc,
             name,
             ty,
@@ -267,7 +267,10 @@ fn resolve_model(
                 None
             }
         };
-        let inline = eval(expr, out);
+        // Inline-источник — теперь **только** `at <адрес>` (фича 0187):
+        // `:=` в объявлении порта означает начальное значение и адресом больше
+        // не является.
+        let inline = eval(address, out);
         let operator = match borrowed.address_defs.iter().find(|d| &d.port == name) {
             Some(d) => eval(&d.value, out),
             None => None,
