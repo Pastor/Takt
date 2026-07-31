@@ -1,7 +1,7 @@
 # Фича 0156: Ограничение глубины вложенности на уровне лексера/парсера
 
 - **Номер:** 0156
-- **Статус:** АРХИТЕКТУРА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** нет
 - **Tier:** 2
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (замерено приёмкой [0129](0129-semantic-deep-nesting.md))
@@ -11,7 +11,7 @@
 | Стадия | Артефакт |
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0156-parser-depth-limit.md`](../adr/0156-parser-depth-limit.md) |
-| Анализ | не заведён (стадия 3) |
+| Анализ | [`docs/analyze/0156-parser-depth-limit.md`](../analyze/0156-parser-depth-limit.md) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0156-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
