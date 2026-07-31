@@ -31,7 +31,7 @@ use takt_lang::{parse_ltl_property, verify_model};
 /// ранний отказ за 376 нс, одинаковый для 200 и 2000 состояний. Отсюда сторож
 /// ниже.
 fn chain_model(states: usize) -> String {
-    let mut src = String::from("out flag: bit := 0;\n");
+    let mut src = String::from("out flag: bit;\n");
     src.push_str("start S0 { always { flag := 1; } ref S1; }\n");
     for i in 1..states - 1 {
         src.push_str(&format!("state S{i} {{ ref S{}; }}\n", i + 1));
@@ -46,7 +46,7 @@ fn chain_model(states: usize) -> String {
 /// переменные дают 65 536 оценок: рост по этой оси несопоставим с ростом по
 /// числу состояний.
 fn data_model(vars: usize) -> String {
-    let mut src = String::from("out flag: bit := 0;\n");
+    let mut src = String::from("out flag: bit;\n");
     for i in 0..vars {
         src.push_str(&format!("var v{i}: u8 := 0;\n"));
         // Отдельное условие на каждую переменную: отслеживаются ТОЛЬКО те, что

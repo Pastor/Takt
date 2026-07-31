@@ -17,7 +17,7 @@ use takt_sim::{TickResult, Unit, Value, build_unit};
 /// Модель с выдержкой: дверь открыта, через 3 с закрывается.
 const DOORS: &str = r#"
 model Doors {
-    out open: bit := 0;
+    out open: bit;
     start Opening {
         enter { open := 1; }
         ref Closing: after 3s;
@@ -120,7 +120,7 @@ fn duration_variables_hold_nanoseconds() {
     // Длительность — значение, а не число: хранится в наносекундах (канон языка).
     let source = r#"
 model Probe {
-    out ready: bit := 0;
+    out ready: bit;
     var left: duration := 1m30s;
     start Idle {
         enter { ready := 1; }
@@ -144,13 +144,13 @@ fn composition_branches_share_one_clock() {
     // бы по своим часам, и трасса перестала бы быть воспроизводимой.
     let source = r#"
 model Left {
-    out a: bit := 0;
+    out a: bit;
     start L1 { ref L2: after 2s; }
     state L2 { enter { a := 1; } }
 }
 
 model Right {
-    out b: bit := 0;
+    out b: bit;
     start R1 { ref R2: after 2s; }
     state R2 { enter { b := 1; } }
 }
@@ -181,7 +181,7 @@ fn snapshot_round_trip_keeps_duration_exact() {
     let mut unit = unit_of(
         r#"
 model Probe {
-    out ready: bit := 0;
+    out ready: bit;
     var left: duration := 250ms;
     start Idle { enter { ready := 1; } }
 }
@@ -205,7 +205,7 @@ start Main = Probe;
 /// Цепочка выдержек: каждая отсчитывается от входа в СВОЁ состояние-источник.
 const CHAIN: &str = r#"
 model Chain {
-    out phase: u8 := 0;
+    out phase: u8;
     start A {
         enter { phase := 1; }
         ref B: after 2s;
@@ -266,7 +266,7 @@ fn re_entering_a_state_restarts_its_delay() {
     // входа, а не одноразовый будильник.
     let source = r#"
 model Blink {
-    out on: bit := 0;
+    out on: bit;
     var cycles: u8 := 0;
     start Off {
         enter { on := 0; }
@@ -306,7 +306,7 @@ fn duration_casts_to_milliseconds_and_back() {
     // приведение числа к `duration` трактует число как миллисекунды.
     let source = r#"
 model Casts {
-    out ready: bit := 0;
+    out ready: bit;
     var d: duration := 1s500ms;
     var ms: u32 := 0;
     var back: duration := 0s;
@@ -339,7 +339,7 @@ start Main = Casts;
 fn duration_addition_and_subtraction_stay_duration() {
     let source = r#"
 model Arith {
-    out ready: bit := 0;
+    out ready: bit;
     var a: duration := 1s;
     var b: duration := 250ms;
     var sum: duration := 0s;
@@ -398,7 +398,7 @@ fn tick_delay_needs_no_frequency_and_counts_steps() {
     // часов выдержка не зависит — ровно этим она и отличается от `after 3ms`.
     let source = r#"
 model Steps {
-    out ready: bit := 0;
+    out ready: bit;
     start Waiting {
         ref Ready: after 3t;
     }
@@ -439,7 +439,7 @@ fn duration_literal_inside_body_is_a_value() {
     // операции, слева, в сравнении.
     let source = r#"
 model Literals {
-    out late: bit := 0;
+    out late: bit;
     var pause: duration := 1s;
     var sum: duration := 0s;
     var diff: duration := 0s;
@@ -488,7 +488,7 @@ fn duration_literal_mixed_with_number_still_refused() {
     // вылезет на целях.
     let source = r#"
 model Mixed {
-    out ready: bit := 0;
+    out ready: bit;
     var pause: duration := 1s;
     var bad: duration := 0s;
     start Idle {

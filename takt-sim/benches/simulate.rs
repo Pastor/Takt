@@ -20,7 +20,7 @@ use takt_sim::build_unit;
 
 /// Цепочка из `states` состояний: каждый такт делает ровно один переход.
 fn chain_model(states: usize) -> String {
-    let mut src = String::from("model Big {\n    out flag: bit := 0;\n");
+    let mut src = String::from("model Big {\n    out flag: bit;\n");
     src.push_str("    start S0 { always { flag := 1; } ref S1; }\n");
     for i in 1..states - 1 {
         src.push_str(&format!("    state S{i} {{ ref S{}; }}\n", i + 1));
@@ -36,8 +36,8 @@ fn chain_model(states: usize) -> String {
 /// переход, — ближе к реальным моделям корпуса.
 const BUSY: &str = r#"
 model Busy {
-    in sensor: u8 := 0;
-    out level: u8 := 0;
+    in sensor: u8;
+    out level: u8;
     var acc: u8 := 0;
     var ticks: u8 := 0;
     start Run {

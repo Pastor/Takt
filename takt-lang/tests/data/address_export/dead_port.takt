@@ -1,5 +1,5 @@
 type byte = [bit;8];
-in USED: byte := 0x00100000;
+in USED: byte at 0x00100000;
 out DEAD: bit;
 start Idle {
     ref On: USED;

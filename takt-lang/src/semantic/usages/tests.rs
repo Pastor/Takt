@@ -35,7 +35,7 @@ fn occurrence_ranges(table: &UsageTable, offset: usize) -> Vec<(u32, u32)> {
 
 /// Модель, в которой переменная используется во всех местах сразу.
 const ALL_PLACES: &str = r#"model M {
-    out flag: bit := 0;
+    out flag: bit;
     var speed: u8 := 0;
     var mirror: u8 := speed;
     cond Fast = speed > 3;
@@ -100,7 +100,7 @@ fn usage_inside_enter_block_is_found() {
 fn local_variable_shadows_model_variable() {
     const SRC: &str = r#"model M {
     var x: u8 := 1;
-    out y: u8 := 0;
+    out y: u8;
     start S {
         always {
             var x: u8 := 2;

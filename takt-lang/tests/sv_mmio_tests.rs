@@ -55,7 +55,7 @@ fn compile_err(tag: &str, source: &str) -> takt_lang::diagnostics::Diagnostic {
 fn addressed_ports_form_register_file() {
     let sv = compile(
         "regmap",
-        "out cmd_fork: bit := 0x500:0; in task_valid: bit := 0x100:0; \
+        "out cmd_fork: bit at 0x500:0; in task_valid: bit at 0x100:0; \
          start S { always { cmd_fork := task_valid; } ref S; }",
     );
     // Регистровый интерфейс в заголовке.
@@ -90,7 +90,7 @@ fn port_without_address_stays_module_port() {
     // адреса» — именно порт без инициализатора.)
     let sv = compile(
         "mixport",
-        "in plain_in: bit; out reg_out: bit := 0x200:0; \
+        "in plain_in: bit; out reg_out: bit at 0x200:0; \
          start S { always { reg_out := plain_in; } ref S; }",
     );
     // Неадресованный вход — порт модуля.
@@ -112,7 +112,7 @@ fn port_without_address_stays_module_port() {
 fn mixed_direction_word_reads_all_writes_only_in() {
     let sv = compile(
         "mixedword",
-        "out flag_a: bit := 0x40:1; out flag_b: bit := 0x40:2; in gate: bit := 0x40:33; \
+        "out flag_a: bit at 0x40:1; out flag_b: bit at 0x40:2; in gate: bit at 0x40:33; \
          start S { always { flag_a := gate; flag_b := 1; } ref S; }",
     );
     // Чтение собирает ВСЕ три бита одного слова.
@@ -145,7 +145,7 @@ fn mixed_direction_word_reads_all_writes_only_in() {
 fn bit_out_of_range_is_se060_not_guessed() {
     let err = compile_err(
         "bit64",
-        "out sig: bit := 0x1:64; start S { always { sig := 1; } ref S; }",
+        "out sig: bit at 0x1:64; start S { always { sig := 1; } ref S; }",
     );
     assert_eq!(
         err.code.as_deref(),
@@ -160,7 +160,7 @@ fn slice_over_64_is_sv013() {
     // u8 (8 бит) на бите 60 → биты [60..67], выход за 64.
     let err = compile_err(
         "slice64",
-        "out sig: u8 := 0x1:60; start S { always { sig := 1; } ref S; }",
+        "out sig: u8 at 0x1:60; start S { always { sig := 1; } ref S; }",
     );
     assert_eq!(
         err.code.as_deref(),
@@ -174,7 +174,7 @@ fn slice_over_64_is_sv013() {
 fn reg_interface_name_collision_is_sv014() {
     let err = compile_err(
         "collide",
-        "out reg_addr: bit := 0x1:0; start S { always { reg_addr := 1; } ref S; }",
+        "out reg_addr: bit at 0x1:0; start S { always { reg_addr := 1; } ref S; }",
     );
     assert_eq!(
         err.code.as_deref(),
@@ -193,7 +193,7 @@ fn external_address_map_is_accepted() {
     let external = takt_lang::parse_address_map("sig = 0x2A:0;", 0).expect("карта");
     let warnings = takt_lang::compile_to_sv_mmio(
         "extmap",
-        "out sig: bit := 0x1:0; start S { always { sig := 1; } ref S; }",
+        "out sig: bit at 0x1:0; start S { always { sig := 1; } ref S; }",
         dir.to_str().unwrap(),
         &[],
         &external,

@@ -1,7 +1,7 @@
 model Panel {
-    in start_btn: bit := 0;
-    in stop_btn: bit := 0;
-    out running: bit := 0;
+    in start_btn: bit at 0;
+    in stop_btn: bit at 0;
+    out running: bit at 0;
     start Idle {
         always { if start_btn { running := 1; } }
         ref Done: stop_btn;

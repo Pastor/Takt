@@ -4,8 +4,8 @@
 // Цель st-at: VAR_GLOBAL … AT %IX256.0 внутри CONFIGURATION, блок видит их
 // через VAR_EXTERNAL.
 
-in btn: bit := 0x100:0;
-out lamp: bit := 0x500:0;
+in btn: bit at 0x100:0;
+out lamp: bit at 0x500:0;
 
 start Idle {
     always { lamp := btn; }

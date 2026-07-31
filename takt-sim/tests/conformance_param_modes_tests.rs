@@ -251,7 +251,7 @@ fn both_modes_and_simulator_agree_tick_by_tick() {
 /// 2026-07-30 показала, что model-level `always` у модели, состояние которой —
 /// композиция, симулятор **теряет** (в цели `c` он исполняется). Дефект записан
 /// находкой в `FEATURES.md`; фикстура на него не опирается.
-const SHARED: &str = "out sum: u8 := 0;\n\
+const SHARED: &str = "out sum: u8;\n\
                       var total: u8 := 0;\n\
                       model Tuner {\n\
                       \x20   parameter gain: u8 := 1;\n\

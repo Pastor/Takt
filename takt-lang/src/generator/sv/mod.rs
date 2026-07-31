@@ -349,7 +349,7 @@ mod tests {
     #[test]
     fn ports_are_emitted_as_module_ports() {
         let sv = program_of(
-            "in req: bit := 0; out ack: bit := 0; \
+            "in req: bit; out ack: bit; \
              start S { always { ack := req; } }",
             "Root",
         );
@@ -372,10 +372,7 @@ mod tests {
     /// `_next`.
     #[test]
     fn writes_go_to_next_and_are_latched() {
-        let sv = program_of(
-            "out ack: bit := 0; start S { always { ack := 1; } }",
-            "Root",
-        );
+        let sv = program_of("out ack: bit; start S { always { ack := 1; } }", "Root");
         assert!(
             sv.contains("ack_next = 1;"),
             "запись не в пару _next:\n{sv}"
@@ -412,7 +409,7 @@ mod tests {
     #[test]
     fn transitions_form_if_else_chain() {
         let sv = program_of(
-            "in a: bit := 0; in b: bit := 0; \
+            "in a: bit; in b: bit; \
              start S { ref T: a = 1; ref U: b = 1; } state T; state U;",
             "Root",
         );

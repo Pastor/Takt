@@ -39,7 +39,7 @@ fn overlay_codes(model_src: &str, map_src: &str) -> Vec<String> {
 #[test]
 fn overrides_inline_address_warns_se050() {
     let codes = overlay_codes(
-        "type u8 = [bit;8]; in BTN: u8 := 0x00100000; start Idle;",
+        "type u8 = [bit;8]; in BTN: u8 at 0x00100000; start Idle;",
         "BTN = 0x00200000;",
     );
     assert_eq!(codes, vec!["SE-050"]);
@@ -83,7 +83,7 @@ fn dangling_map_entry_warns_se051() {
 #[test]
 fn mixed_overlay_and_dangling() {
     let mut codes = overlay_codes(
-        "type u8 = [bit;8]; in BTN: u8 := 0x00100000; start Idle;",
+        "type u8 = [bit;8]; in BTN: u8 at 0x00100000; start Idle;",
         "BTN = 0x00200000; GHOST = 0x00200008;",
     );
     codes.sort();
@@ -95,7 +95,7 @@ fn mixed_overlay_and_dangling() {
 /// Только inline-адрес → источник Inline, значение понижено.
 #[test]
 fn resolve_inline_only() {
-    let model = model_of("type u8 = [bit;8]; in BTN: u8 := 0x00200000; start Idle;");
+    let model = model_of("type u8 = [bit;8]; in BTN: u8 at 0x00200000; start Idle;");
     let r = resolve_addresses(model, &[], &takt_lang::AddressEnv::default());
     let a = find_addr(&r, "BTN").expect("BTN должен быть разрешён");
     assert_eq!(a.addr, 0x0020_0000);
@@ -118,7 +118,7 @@ fn resolve_operator_with_bit() {
 /// Внешняя карта перекрывает inline → источник External + предупреждение SE-050.
 #[test]
 fn resolve_external_overrides_inline() {
-    let model = model_of("type u8 = [bit;8]; in BTN: u8 := 0x00100000; start Idle;");
+    let model = model_of("type u8 = [bit;8]; in BTN: u8 at 0x00100000; start Idle;");
     let entries = parse_address_map("BTN = 0x00200000;", 0).unwrap();
     let r = resolve_addresses(model, &entries, &takt_lang::AddressEnv::default());
     let a = find_addr(&r, "BTN").unwrap();
@@ -168,7 +168,7 @@ fn resolve_external_fills_used_port() {
 /// Висячая запись карты → SE-051.
 #[test]
 fn resolve_dangling_external_is_se051() {
-    let model = model_of("type u8 = [bit;8]; in BTN: u8 := 0x1; start Idle;");
+    let model = model_of("type u8 = [bit;8]; in BTN: u8 at 0x1; start Idle;");
     let entries = parse_address_map("GHOST = 0x00200000;", 0).unwrap();
     let r = resolve_addresses(model, &entries, &takt_lang::AddressEnv::default());
     assert_eq!(

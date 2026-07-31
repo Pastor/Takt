@@ -8,7 +8,7 @@ model Dwell {
     clock 1kHz;
 
     var base: duration := 3ms;
-    out done: bit := 0;
+    out done: bit at 0;
 
     start Waiting {
         ref Ready: after (base + 2ms);

@@ -27,7 +27,7 @@ fn error_codes(source: &str) -> Vec<String> {
 #[test]
 fn write_to_input_port_in_block_body_is_rejected() {
     let codes = error_codes(
-        "in A: u8 := 0x100;\nvar t: u8 := 0;\n\
+        "in A: u8 at 0x100;\nvar t: u8 := 0;\n\
          start S { always { A := 5; } ref S: t = 9; }\n",
     );
     assert!(
@@ -39,7 +39,7 @@ fn write_to_input_port_in_block_body_is_rejected() {
 #[test]
 fn read_from_output_port_in_block_body_is_rejected() {
     let codes = error_codes(
-        "out B: u8 := 0x104;\nvar t: u8 := 0;\n\
+        "out B: u8 at 0x104;\nvar t: u8 := 0;\n\
          start S { always { t := B; } ref S: t = 9; }\n",
     );
     assert!(
@@ -54,7 +54,7 @@ fn writing_to_output_port_stays_legal() {
     // обязано покрывать обе формы цели записи — иначе фича сломала бы каждый
     // пример с выходным портом.
     let codes = error_codes(
-        "out B: u8 := 0x104;\nout L: bit := 0x108:0;\nvar t: u8 := 0;\n\
+        "out B: u8 at 0x104;\nout L: bit := 0x108:0;\nvar t: u8 := 0;\n\
          start S { always { B := 1; L := 1; L.0 := 1; } ref S: t = 9; }\n",
     );
     assert!(
@@ -66,7 +66,7 @@ fn writing_to_output_port_stays_legal() {
 #[test]
 fn reading_input_port_stays_legal() {
     let codes = error_codes(
-        "in A: u8 := 0x100;\nvar t: u8 := 0;\n\
+        "in A: u8 at 0x100;\nvar t: u8 := 0;\n\
          start S { always { t := A; } ref S: t = 9; }\n",
     );
     assert!(codes.is_empty(), "чтение входного порта законно: {codes:?}");
@@ -75,7 +75,7 @@ fn reading_input_port_stays_legal() {
 #[test]
 fn inout_port_is_read_and_written_freely() {
     let codes = error_codes(
-        "inout C: u8 := 0x108;\nvar t: u8 := 0;\n\
+        "inout C: u8 at 0x108;\nvar t: u8 := 0;\n\
          start S { always { C := C + 1; t := C; } ref S: t = 9; }\n",
     );
     assert!(
@@ -88,7 +88,7 @@ fn inout_port_is_read_and_written_freely() {
 fn violation_inside_nested_statement_is_caught() {
     // Вложенность — отдельная позиция обхода: `if` внутри `loop` внутри блока.
     let codes = error_codes(
-        "in A: u8 := 0x100;\nvar t: u8 := 0;\n\
+        "in A: u8 at 0x100;\nvar t: u8 := 0;\n\
          start S { always { if t < 3 { loop t < 2 { A := 7; } } } ref S: t = 9; }\n",
     );
     assert!(
@@ -100,7 +100,7 @@ fn violation_inside_nested_statement_is_caught() {
 #[test]
 fn violation_inside_function_body_is_caught() {
     let codes = error_codes(
-        "out B: u8 := 0x104;\nvar t: u8 := 0;\n\
+        "out B: u8 at 0x104;\nvar t: u8 := 0;\n\
          fn peek() -> u8 { return B; }\n\
          start S { always { t := peek(); } ref S: t = 9; }\n",
     );
@@ -114,7 +114,7 @@ fn violation_inside_function_body_is_caught() {
 fn several_violations_are_reported_together() {
     // Накопление: пользователь видит все нарушения, а не первое (правило 0130).
     let codes = error_codes(
-        "in A: u8 := 0x100;\nout B: u8 := 0x104;\nvar t: u8 := 0;\n\
+        "in A: u8 at 0x100;\nout B: u8 := 0x104;\nvar t: u8 := 0;\n\
          start S { always { A := 5; t := B; } ref S: t = 9; }\n",
     );
     assert!(

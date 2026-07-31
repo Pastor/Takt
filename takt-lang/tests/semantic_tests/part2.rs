@@ -408,7 +408,7 @@ fn array_subscript_variable_index_in_cond() {
 /// `inout` порт объявляется без ошибок и виден в семантическом дереве.
 #[test]
 fn inout_port_is_valid() {
-    let node = build("inout sensor: bit := 0x100:0; start S;");
+    let node = build("inout sensor: bit at 0x100:0; start S;");
     assert!(node.search_var("sensor").is_some());
 }
 
@@ -591,8 +591,8 @@ type u8 = [bit;8];
 const MATRIX: u8 := { 0, 0, 0, 0, 0, 0, 0, 0 };
 const NUMB: u8 := 0xFF;
 cond IsEmpty = it = 0;
-out A : u8  := 0x00548835;
-in  B1: bit := 0x00648835:6;
+out A: u8 at 0x00548835;
+in B1: bit at 0x00648835:6;
 var it: [bit;64] := 0;
 model Ping {
     start Start {

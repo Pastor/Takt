@@ -4,7 +4,7 @@
 model Dwell {
     clock 1kHz;
 
-    out done: bit := 0;
+    out done: bit at 0;
 
     start Waiting {
         ref Ready: after 5ms;

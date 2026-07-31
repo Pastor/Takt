@@ -3,7 +3,7 @@
 // модельным временем. Результат — в выходной порт `level` (наблюдается
 // иерархической ссылкой dut.level).
 model Dwell {
-    out level: u8 := 0;
+    out level: u8 at 0;
 
     start Waiting {
         ref Ready: after 5ms;

@@ -1,11 +1,11 @@
 model A {
-    in SIG: bit := 0x00000001:0;
+    in SIG: bit at 0x00000001:0;
     start S {
         ref S: SIG;
     }
 }
 model B {
-    in SIG: bit := 0x00000002:0;
+    in SIG: bit at 0x00000002:0;
     start S {
         ref S: SIG;
     }

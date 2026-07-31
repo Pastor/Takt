@@ -19,8 +19,8 @@ use takt_lang::{compile_to_c, compile_to_rust, compile_to_st, compile_to_sv};
 const NAMED: &str = r#"
 model Fan {
     const OVERRUN := 3m;
-    in light: bit := 0;
-    out motor: bit := 0;
+    in light: bit;
+    out motor: bit;
     start Idle {
         enter { motor := 0; }
         ref Working: light = 1;
@@ -40,8 +40,8 @@ start Entry = Fan;
 /// Тот же вентилятор с **литералом** — эталон сравнения.
 const LITERAL: &str = r#"
 model Fan {
-    in light: bit := 0;
-    out motor: bit := 0;
+    in light: bit;
+    out motor: bit;
     start Idle {
         enter { motor := 0; }
         ref Working: light = 1;
@@ -159,8 +159,8 @@ fn expression_form_output_identical_to_literal() {
 model Fan {
     const BASE := 2m;
     const TRIM := 30s;
-    in light: bit := 0;
-    out motor: bit := 0;
+    in light: bit;
+    out motor: bit;
     start Idle {
         enter { motor := 0; }
         ref Working: light = 1;

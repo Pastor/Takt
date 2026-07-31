@@ -577,7 +577,7 @@ start Idle { always { counter := b; } }
         let src = r#"
 type u8 = [bit;8];
 const LIMIT: u8 := 100;
-in SENSOR: u8 := 0x100000;
+in SENSOR: u8 at 0x100000;
 var v: u8 := 0;
 start Main { always { v := LIMIT; } }
         "#;

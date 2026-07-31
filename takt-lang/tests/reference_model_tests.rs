@@ -27,8 +27,8 @@ use takt_lang::generator::GenerateOptions;
 /// `SRC` (`lib.rs::parse_simple`) и чинятся фичей 0078.
 const SYNTH_SRC: &str = r#"
 cond IsEmpty = it = 0;
-out done: bit := 0x100:0;
-in  B1: bit := 0x200:6;
+out done: bit at 0x100:0;
+in B1: bit at 0x200:6;
 var it: bit := 0;
 
 model Ping {

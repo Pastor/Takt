@@ -115,7 +115,7 @@ fn search_var_finds_const() {
 /// `search_var` находит порт.
 #[test]
 fn search_var_finds_port() {
-    let node = build("type u8 = [bit;8]; in P: u8 := 0x00100000;");
+    let node = build("type u8 = [bit;8]; in P: u8 at 0x00100000;");
     assert!(node.search_var("P").is_some(), "Порт P должен быть найден");
     assert!(
         matches!(node.search_var("P").unwrap(), VariableNode::Port { .. }),

@@ -378,7 +378,7 @@ fn parse_const_variable() {
 /// `port A: bit = 0x00548835:4`.
 #[test]
 fn parse_port_with_address() {
-    let root = must_parse("in A: bit := 0x00548835:4; model M { start S; }");
+    let root = must_parse("in A: bit at 0x00548835:4; model M { start S; }");
     let port = root.elements.iter().find_map(|e| {
         if let ModelElement::Variable(v) = e {
             Some(v.as_ref())

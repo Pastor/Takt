@@ -7,7 +7,7 @@
 // SE-052 не срабатывает — размещать действительно нечего.
 
 in btn: bit;
-out lamp: bit := 0x500:0;
+out lamp: bit at 0x500:0;
 
 start Idle {
     always { lamp := btn; }

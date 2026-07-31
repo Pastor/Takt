@@ -507,7 +507,7 @@ mod tests {
     /// Входные и выходные порты попадают в разные секции.
     #[test]
     fn test_emit_declarations_ports_split_by_direction() {
-        let src = "in btn: bit := 0x100:0;\nout lamp: bit := 0x200:0;\nstart S { always { lamp := btn; } }";
+        let src = "in btn: bit at 0x100:0;\nout lamp: bit := 0x200:0;\nstart S { always { lamp := btn; } }";
         let st = declarations_of(src);
         let inputs = st.find("VAR_INPUT").expect("нет VAR_INPUT");
         let outputs = st.find("VAR_OUTPUT").expect("нет VAR_OUTPUT");
@@ -524,7 +524,7 @@ mod tests {
     /// Каждая открытая секция закрыта `END_VAR`.
     #[test]
     fn test_emit_declarations_every_section_is_closed() {
-        let src = "in btn: bit := 0x100:0;\nout lamp: bit := 0x200:0;\nvar n: u8 := 0;\nstart S { always { lamp := btn; n := n + 1; } }";
+        let src = "in btn: bit at 0x100:0;\nout lamp: bit := 0x200:0;\nvar n: u8 := 0;\nstart S { always { lamp := btn; n := n + 1; } }";
         let st = declarations_of(src);
         assert_eq!(
             st.matches("END_VAR").count(),

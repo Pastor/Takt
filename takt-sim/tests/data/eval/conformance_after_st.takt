@@ -3,7 +3,7 @@
 // __CURRENT_TIME (проба П3 анализа). Результат — в порт `level` (поля структуры
 // FB наблюдаются как регистры ПЛК).
 model Dwell {
-    out level: u8 := 0;
+    out level: u8 at 0;
 
     start Waiting {
         ref Ready: after 5ms;

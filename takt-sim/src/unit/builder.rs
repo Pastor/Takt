@@ -875,8 +875,8 @@ mod tests {
     #[test]
     fn test_enter_writes_output_port_via_context() {
         let src = r#"
-            out cmd_ack: bit := 0;
-            in task_valid: bit := 0;
+            out cmd_ack: bit;
+            in task_valid: bit;
             var busy: bit := 0;
             model CR {
                 start Waiting { ref Accepting: task_valid; }
@@ -919,8 +919,8 @@ mod tests {
     #[test]
     fn test_parallel_address_port_enter_write() {
         let src = r#"
-            out cmd_ack: bit := 0x600:0;
-            in task_valid: bit := 0x100:0;
+            out cmd_ack: bit at 0x600:0;
+            in task_valid: bit at 0x100:0;
             var busy: bit := 0;
             model CR {
                 start Waiting { ref Accepting: task_valid; }
