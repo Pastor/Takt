@@ -822,7 +822,7 @@ model.takt:1:1: Ошибка компиляции [SE-059]: неявное см�
 Номер бита адреса порта вне [0, 63]. (цель `c-hal`)
 
 ```takt
-out o: bit := 0x1000:99; start S { enter { o := 1; } }
+out o: bit at 0x1000:99; start S { enter { o := 1; } }
 ```
 
 ```text
@@ -836,8 +836,8 @@ out o: bit := 0x1000:99; start S { enter { o := 1; } }
 порождённом коде означало бы обращение к чужому регистру либо невалидный модуль.
 
 ```takt
-in  A: u8 := 0x100;
-out B: u8 := 0x104;
+in A: u8 at 0x100;
+out B: u8 at 0x104;
 var t: u8 := 0;
 start S {
     always {
@@ -860,7 +860,7 @@ model.takt:2:1: Ошибка компиляции [SE-027]: Чтение из в
 пишите в обе стороны — она и хранит выданное:
 
 ```takt
-out B: u8 := 0x104;
+out B: u8 at 0x104;
 var last: u8 := 0;
 start S {
     always { last := last + 1; B := last; }   // читаем `last`, а не `B`
@@ -877,7 +877,7 @@ start S {
 Принимается бит 0, о чём и говорит предупреждение.
 
 ```takt
-in P: bit := 0x100;
+in P: bit at 0x100;
 start S { ref S: P = 1; }
 ```
 
@@ -897,7 +897,7 @@ start S { ref S: P = 1; }
 обращаться именно туда.
 
 ```takt
-out ready: bit := 0;
+out ready: bit at 0;
 var n: u8 := 0;
 start S { always { ready := 1; } ref S: n = 9; }
 ```

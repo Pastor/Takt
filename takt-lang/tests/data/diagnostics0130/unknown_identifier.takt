@@ -1,5 +1,5 @@
 model M {
-    out flag: bit := 0;
+    out flag: bit at 0;
     start S {
         always { flag := unknown_name; }
     }

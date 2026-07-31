@@ -17,7 +17,7 @@ mod rename {
 
     /// Модель, где переменная используется всюду, где это возможно.
     const SRC: &str = r#"model Machine {
-    out flag: bit := 0;
+    out flag: bit;
     var speed: u8 := 0;
     var mirror: u8 := speed;
     cond Fast = speed > 3;
@@ -149,7 +149,7 @@ start Root = Machine;
     fn renaming_shadowing_local_leaves_model_variable_intact() {
         const SHADOW: &str = r#"model M {
     var x: u8 := 1;
-    out y: u8 := 0;
+    out y: u8;
     start S {
         always {
             var x: u8 := 2;

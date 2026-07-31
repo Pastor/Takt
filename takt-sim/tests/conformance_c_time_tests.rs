@@ -153,7 +153,7 @@ fn header_with_tick_hz(source: &str, tick_hz: Option<u64>) -> String {
 /// утверждение в заголовке — несовпадение частоты ловится при сборке прошивки.
 #[test]
 fn generated_c_carries_clock_contract_static_assert() {
-    let source = "model Fp {\n    clock 1kHz;\n    out done: bit := 0;\n    \
+    let source = "model Fp {\n    clock 1kHz;\n    out done: bit;\n    \
                   start Waiting { ref Ready: after 5ms; }\n    state Ready { enter { done := 1; } }\n}\n\
                   start Main = Fp;\n";
     let header = header_with_tick_hz(source, Some(1_000));
@@ -171,7 +171,7 @@ fn generated_c_carries_clock_contract_static_assert() {
 /// нет — автор частоту не ограничивал, закреплять контракт нечего.
 #[test]
 fn tick_hz_without_clock_declaration_emits_no_contract() {
-    let source = "model Fp {\n    out done: bit := 0;\n    \
+    let source = "model Fp {\n    out done: bit;\n    \
                   start Waiting { ref Ready: after 5t; }\n    state Ready { enter { done := 1; } }\n}\n\
                   start Main = Fp;\n";
     let header = header_with_tick_hz(source, Some(1_000));
@@ -382,7 +382,7 @@ fn c_hal_clock_profile_default_now_ms_compiles() {
     }
     let dir = tempfile::tempdir().expect("временный каталог");
     // Порт с inline-адресом — иначе c-hal даёт SE-052 (used-порт без адреса).
-    let source = "model HalDwell {\n    out done: bit := 0x40000000:0;\n    \
+    let source = "model HalDwell {\n    out done: bit at 0x40000000:0;\n    \
                   start Waiting { ref Ready: after 5ms; }\n    state Ready { enter { done := 1; } }\n}\n\
                   start Main = HalDwell;\n";
     takt_lang::compile_to_c_hal(

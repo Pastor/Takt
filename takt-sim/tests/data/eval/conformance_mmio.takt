@@ -11,8 +11,8 @@
 /// трассу содержательной — сдвиг на `INIT`-такт (если бы он вернулся) сместил бы
 /// её и был бы пойман. Типы — только `bit`/`u8` (область сверки по типам сужена,
 /// как в `conformance_c_tests`).
-out counter: u8 := 0x10:0;
-out flag: bit := 0x20:0;
+out counter: u8 at 0x10:0;
+out flag: bit at 0x20:0;
 
 start S0 {
     always { counter := 1; }

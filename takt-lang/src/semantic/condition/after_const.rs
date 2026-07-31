@@ -688,12 +688,12 @@ start Main = M;
     ///
     /// # Контрпример (Takt)
     /// ```but
-    /// in DWELL: bit := 0;
+    /// in DWELL: bit;
     /// ref Done: after DWELL;   // бит — не длительность
     /// ```
     #[test]
     fn non_duration_port_is_se072() {
-        let err = ref_cond(&src("in DWELL: bit := 0;", "after DWELL")).unwrap_err();
+        let err = ref_cond(&src("in DWELL: bit;", "after DWELL")).unwrap_err();
         assert_eq!(code(&err), "SE-072", "получено: {err}");
         assert!(err.contains("duration"), "получено: {err}");
     }

@@ -176,7 +176,7 @@ mod diagnostic_location_tests {
     /// `inout` подсвечивается как ключевое слово (TT_KEYWORD = 0).
     #[test]
     fn semantic_tokens_inout_is_keyword() {
-        let src = "inout bus: u8 := 0x1000:0;\nstart S;";
+        let src = "inout bus: u8 at 0x1000:0;\nstart S;";
         let tokens = decode_semantic_tokens(src);
         let tok = tokens.iter().find(|(w, _)| w == "inout");
         assert!(tok.is_some(), "токен 'inout' должен присутствовать");

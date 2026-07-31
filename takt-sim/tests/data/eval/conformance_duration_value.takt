@@ -13,8 +13,8 @@ model Timers {
     var pause: duration := 1s;
     var elapsed: duration := 0s;
 
-    out ms: u32 := 0;
-    out late: bit := 0;
+    out ms: u32 at 0;
+    out late: bit at 0;
 
     start Counting {
         always {

@@ -4,7 +4,7 @@
 import { Pid, ctrl, meas } from "import_pid_lib.takt";
 
 model Plant {
-    out lvl: u8 := 0;
+    out lvl: u8 at 0;
     start Run {
         always {
             meas := meas + ctrl;

@@ -256,7 +256,7 @@ fn plain_constants_keep_their_names() {
 /// Модель с выдержкой по параметру.
 const DWELL: &str = "model Timer {\n\
                      \x20   parameter dwell: duration := 100ms;\n\
-                     \x20   out led: bit := 0;\n\
+                     \x20   out led: bit;\n\
                      \x20   start Wait {\n\
                      \x20       enter { led := 1; }\n\
                      \x20       ref Done: after dwell;\n\
@@ -319,7 +319,7 @@ fn port_address_parameter_follows_the_same_rule() {
     const SRC: &str = "model Board {\n\
                        \x20   parameter base: u32 := 0x40000000;\n\
                        \x20   in btn: bit := base;\n\
-                       \x20   out led: bit := 0x40000004;\n\
+                       \x20   out led: bit at 0x40000004;\n\
                        \x20   start Run {\n\
                        \x20       always { led := btn; }\n\
                        \x20       ref Run;\n\

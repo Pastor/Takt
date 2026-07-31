@@ -34,7 +34,7 @@ const APP: &str = r#"
 import { Pid, ctrl, meas } from "lib.takt";
 
 model Plant {
-    out lvl: u8 := 0;
+    out lvl: u8;
     start Run {
         always {
             meas := meas + ctrl;
@@ -199,7 +199,7 @@ fn model_alias_compiles_in_c() {
 import { Pid as Loop, ctrl, meas } from "lib.takt";
 
 model Plant {
-    out lvl: u8 := 0;
+    out lvl: u8;
     start Run {
         always {
             meas := meas + ctrl;
@@ -228,7 +228,7 @@ fn declaration_alias_is_renamed_in_body() {
 import { Pid, ctrl as u, meas as pv } from "lib.takt";
 
 model Plant {
-    out lvl: u8 := 0;
+    out lvl: u8;
     start Run {
         always {
             pv := pv + u;
@@ -262,7 +262,7 @@ import { Pid as A, ctrl as ca, meas as ma } from "lib.takt";
 import { Pid as B, ctrl as cb, meas as mb } from "lib.takt";
 
 model Plant {
-    out lvl: u8 := 0;
+    out lvl: u8;
     start Run {
         always {
             ma := ma + ca;
@@ -304,7 +304,7 @@ start Top = Inner;
     let app = r#"
 import "lib.takt";
 model Watch {
-    out probe: u8 := 0;
+    out probe: u8;
     start R {
         always {
             probe := 1;

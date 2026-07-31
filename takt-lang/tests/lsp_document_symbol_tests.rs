@@ -40,7 +40,7 @@ type Speed = u8;
 enum Mode { Idle, Run }
 struct Point { x: u8, y: u8 }
 const LIMIT: u8 := 7;
-out flag: bit := 0;
+out flag: bit;
 var speed: Speed := 0;
 cond Fast = speed > 5;
 invariant Safe = speed < 100;

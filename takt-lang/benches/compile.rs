@@ -25,7 +25,7 @@ use takt_lang::semantic::usages::collect_usages;
 /// сложность обходов, поэтому смена класса (линия → квадрат) становится видна
 /// сразу. Именно этот класс дефекта чинили фичи 0052 и 0068.
 fn chain_model(states: usize) -> String {
-    let mut src = String::from("model Big {\n    out flag: bit := 0;\n");
+    let mut src = String::from("model Big {\n    out flag: bit;\n");
     src.push_str("    start S0 { always { flag := 1; } ref S1; }\n");
     for i in 1..states - 1 {
         src.push_str(&format!("    state S{i} {{ ref S{}; }}\n", i + 1));

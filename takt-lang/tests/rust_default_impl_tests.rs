@@ -41,7 +41,7 @@ const NO_PORTS: &str = "var n: u8 := 0; \
                         start Main = Counter;";
 
 /// Та же модель С портом: конструктор принимает `hal`.
-const WITH_PORT: &str = "out ready: bit := 0; var n: u8 := 0; \
+const WITH_PORT: &str = "out ready: bit; var n: u8 := 0; \
                          model Counter { start Tick { always { n := n + 1; ready := 1; } ref Done: n >= 3; } state Done; } \
                          start Main = Counter;";
 

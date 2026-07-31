@@ -8,7 +8,7 @@
 // иначе state без переходов терминален и уходит в END.
 model Blinker {
     var count: u8 := 0;
-    out led: u8 := 0;
+    out led: u8 at 0;
 
     start Running {
         every 3ms {

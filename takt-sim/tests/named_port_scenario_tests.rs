@@ -18,13 +18,13 @@ use takt_sim::{Value, build_unit};
 /// специально — иначе тест проверял бы собственную удачу.
 const AMBIGUOUS: &str = r#"
 model Left {
-    in sensor: bit := 0;
-    out lamp: bit := 0;
+    in sensor: bit;
+    out lamp: bit;
     start S { always { lamp := sensor; } }
 }
 model Right {
-    in sensor: bit := 0;
-    out beep: bit := 0;
+    in sensor: bit;
+    out beep: bit;
     start S { always { beep := sensor; } }
 }
 start Root = Left | Right;
@@ -33,9 +33,9 @@ start Root = Left | Right;
 /// Модель с несколькими различимыми портами — для именованной формы.
 const SIMPLE: &str = r#"
 model Panel {
-    in start_btn: bit := 0;
-    in stop_btn: bit := 0;
-    out running: bit := 0;
+    in start_btn: bit;
+    in stop_btn: bit;
+    out running: bit;
     start Idle {
         always { if start_btn { running := 1; } }
         ref Done: stop_btn;

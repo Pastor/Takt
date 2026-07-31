@@ -12,7 +12,7 @@ mod references {
 
     /// Модель, где переменная используется во всех интересных местах.
     const SRC: &str = r#"model M {
-    out flag: bit := 0;
+    out flag: bit;
     var speed: u8 := 0;
     fn bump(x: u8) -> u8 { return x + speed; }
     start Idle {
@@ -138,7 +138,7 @@ model B {
     fn shadowing_local_is_a_separate_symbol() {
         const SHADOW: &str = r#"model M {
     var x: u8 := 1;
-    out y: u8 := 0;
+    out y: u8;
     start S {
         always {
             var x: u8 := 2;

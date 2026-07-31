@@ -9,7 +9,7 @@ type u8  = [bit; 8];
 type u16 = [bit; 16];
 
 var   counter: u8  := 0;
-in    STATUS:  u8  := 0x40000000;
+in STATUS:  u8 at 0x40000000;
 
 start Idle {
     ref Done: true;

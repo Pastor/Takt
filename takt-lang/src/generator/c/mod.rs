@@ -634,8 +634,8 @@ mod tests {
     const SRC: &str = r#"
 type u8 = [bit;8];
 
-in sensors_1: u8 := 0x100000000;
-in sensors_2: u8 := 0x200000000;
+in sensors_1: u8 at 0x100000000;
+in sensors_2: u8 at 0x200000000;
 cond AtFloor8 = sensors_1.0 & sensors_1.1;
 cond AtFloor9 = sensors_2.0 & sensors_2.1;
 
@@ -722,7 +722,7 @@ start Main = Robot;
 type u8 = [bit;8];
 const MATRIX: u8 := 0;
 const NUMB: u8 := 255;
-in SENSOR: u8 := 0x100000;
+in SENSOR: u8 at 0x100000;
 var v: u8 := 0;
 start Main { always { v := MATRIX; v := NUMB; } }
         "#;

@@ -46,7 +46,7 @@ fn compile_hal(name: &str, source: &str, dir: &Path) -> Result<(), String> {
 
 fn bit_model(bit: &str) -> String {
     format!(
-        "in P: bit := 0x1000:{bit};\nvar s: bit := 0;\nstart S {{\n    always {{ s := P; }}\n}}\n"
+        "in P: bit at 0x1000:{bit};\nvar s: bit := 0;\nstart S {{\n    always {{ s := P; }}\n}}\n"
     )
 }
 

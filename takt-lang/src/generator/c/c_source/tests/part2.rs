@@ -417,7 +417,7 @@ fn test_bit_access_var_read_in_condition() {
 /// Корневая модель: используется `model->` (не `main->`).
 #[test]
 fn test_bit_access_port_read_in_condition() {
-    let src = "type u8 = [bit;8]; in BTN: u8 := 0x200000; start S { ref Done: BTN.0; } state Done;";
+    let src = "type u8 = [bit;8]; in BTN: u8 at 0x200000; start S { ref Done: BTN.0; } state Done;";
     let code = generate_source_str(src);
     assert!(
         code.contains("(((*model->read_numeric)(ROOT_BTN, model->userdata) >> 0) & 1u)"),
@@ -451,7 +451,7 @@ fn test_bit_access_var_write_in_always() {
 /// Корневая модель: tick получает `model`, поэтому используется `model->`.
 #[test]
 fn test_bit_access_port_read_in_always() {
-    let src = "type u8 = [bit;8]; in BTN: u8 := 0x200000; var x: u8 := 0; start S { always { x := BTN.0; } ref Done: true; } state Done;";
+    let src = "type u8 = [bit;8]; in BTN: u8 at 0x200000; var x: u8 := 0; start S { always { x := BTN.0; } ref Done: true; } state Done;";
     let code = generate_source_str(src);
     assert!(
         code.contains("(((*model->read_numeric)(ROOT_BTN, model->userdata) >> 0) & 1u)"),
@@ -463,7 +463,7 @@ fn test_bit_access_port_read_in_always() {
 /// Корневая модель: используется `model->` (не `main->`).
 #[test]
 fn test_bit_access_port_write_in_always() {
-    let src = "type u8 = [bit;8]; out LED: u8 := 0x100000; start S { always { LED.7 := true; } ref Done: true; } state Done;";
+    let src = "type u8 = [bit;8]; out LED: u8 at 0x100000; start S { always { LED.7 := true; } ref Done: true; } state Done;";
     let code = generate_source_str(src);
     assert!(
         code.contains("write_numeric)(ROOT_LED,")
@@ -545,7 +545,7 @@ fn test_port_read_in_local_fn_uses_model_not_main() {
     // В локальной функции (has_model=false) первый параметр — `const Root *model`.
     // Чтение порта должно генерировать `(*model->read_bit)(...)`, а не `(*main->read_bit)(...)`.
     let src = r#"
-in sensor: bit := 0x0:0;
+in sensor: bit at 0x0:0;
 var v: bit := 0;
 fn read_port() -> bit { return sensor; }
 start Main { always { v := read_port(); } }

@@ -209,7 +209,7 @@ fn shift_is_zero_at_depth_1() {
     check(
         "rsdepth1",
         "Rsdepth1",
-        "out n: u8 := 0; \
+        "out n: u8; \
          start S0 { always { n := 1; } ref S1; } \
          state S1 { always { n := 2; } }",
     );
@@ -221,7 +221,7 @@ fn shift_is_zero_at_depth_2() {
     check(
         "rsdepth2",
         "Rsdepth2",
-        "model M { out n: u8 := 0; start S0 { always { n := 1; } ref S1; } \
+        "model M { out n: u8; start S0 { always { n := 1; } ref S1; } \
          state S1 { always { n := 2; } } } \
          start E = M;",
     );
@@ -233,7 +233,7 @@ fn shift_is_zero_at_depth_3() {
     check(
         "rsdepth3",
         "Rsdepth3",
-        "model Inner { out n: u8 := 0; start S0 { always { n := 1; } ref S1; } \
+        "model Inner { out n: u8; start S0 { always { n := 1; } ref S1; } \
          state S1 { always { n := 2; } } } \
          model Mid { start M = Inner; } \
          start E = Mid;",
@@ -247,7 +247,7 @@ fn shift_is_zero_at_depth_3() {
 #[test]
 fn per_tick_trace_matches_generated_rust() {
     let dir = build_dir("rstrace");
-    let source = "model Counter { out n: u8 := 0; \
+    let source = "model Counter { out n: u8; \
                   start S0 { always { n := 1; } ref S1; } \
                   state S1 { always { n := 2; } ref S2; } \
                   state S2 { always { n := 3; } } } \

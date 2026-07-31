@@ -3,7 +3,7 @@
 // выводится в порт `level` — наблюдать поля структуры нельзя (они приватны, как
 // у прошивки), поэтому фикстура спроектирована с выходом.
 model Dwell {
-    out level: u8 := 0;
+    out level: u8 at 0;
 
     start Waiting {
         ref Ready: after 5ms;

@@ -27,9 +27,9 @@ model Timers {
     var pause: duration := 1s;
     var elapsed: duration := 0s;
 
-    out above500: bit := 0;
-    out atleast1750: bit := 0;
-    out atleast1751: bit := 0;
+    out above500: bit;
+    out atleast1750: bit;
+    out atleast1751: bit;
 
     start Counting {
         always {
@@ -187,7 +187,7 @@ fn assert_st_valid(dir: &Path, name: &str) {
 const DYNAMIC: &str = r#"
 model Timer {
     var base: duration := 2s;
-    out done: bit := 0;
+    out done: bit;
     start Waiting { ref Ready: after (base + 500ms); }
     state Ready { enter { done := 1; } }
 }

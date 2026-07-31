@@ -59,7 +59,7 @@ fn emit_err(tag: &str, source: &str) -> String {
 /// Модель-обёртка: тело `always` и условие ребра задаются параметрами.
 fn model(decls: &str, body: &str, guard: &str) -> String {
     format!(
-        "out o: bit := 0; {decls}
+        "out o: bit; {decls}
 model M {{ start S {{ always {{ o := 1; {body} }} ref T: {guard}; }} state T; }}
 start Main = M;"
     )
@@ -177,7 +177,7 @@ fn bit_access_expands_to_mask() {
 fn local_function_call_in_condition() {
     let text = emit(
         "fncall",
-        "out o: bit := 0; var a: u8 := 0;
+        "out o: bit; var a: u8 := 0;
 fn twice(x: u8) -> u8 { return x + x; }
 model M { start S { always { o := 1; } ref T: twice(a) > 3; } state T; }
 start Main = M;",
@@ -194,7 +194,7 @@ start Main = M;",
 fn external_function_call_goes_through_hal() {
     let text = emit(
         "extfn",
-        "out o: bit := 0; extern fn sense() -> u8; var a: u8 := 0;
+        "out o: bit; extern fn sense() -> u8; var a: u8 := 0;
 model M { start S { always { o := 1; a := sense(); } ref T: a > 3; } state T; }
 start Main = M;",
     );
@@ -213,7 +213,7 @@ start Main = M;",
 fn bit_port_compared_with_number_yields_plain_bool() {
     let text = emit(
         "bitnum",
-        "in btn: bit; out o: bit := 0;
+        "in btn: bit; out o: bit;
 model M { start S { always { o := 1; } ref T: btn = 1; } state T; }
 start Main = M;",
     );
@@ -233,7 +233,7 @@ start Main = M;",
 fn bit_compared_with_zero_yields_negation() {
     let text = emit(
         "bitzero",
-        "in btn: bit; out o: bit := 0;
+        "in btn: bit; out o: bit;
 model M { start S { always { o := 1; } ref T: btn = 0; } state T; }
 start Main = M;",
     );
@@ -249,7 +249,7 @@ start Main = M;",
 fn bit_not_equal_flips_the_sign() {
     let text = emit(
         "bitne",
-        "in btn: bit; out o: bit := 0;
+        "in btn: bit; out o: bit;
 model M { start S { always { o := 1; } ref T: btn != 1; } state T; }
 start Main = M;",
     );
@@ -268,7 +268,7 @@ start Main = M;",
 fn bit_compared_with_bool_literal_avoids_bool_comparison_lint() {
     let text = emit(
         "bitbool",
-        "in btn: bit; out o: bit := 0;
+        "in btn: bit; out o: bit;
 model M { start S { always { o := 1; } ref T: btn = true; } state T; }
 start Main = M;",
     );
@@ -288,7 +288,7 @@ start Main = M;",
 fn literal_on_the_left_is_handled_too() {
     let text = emit(
         "bitleft",
-        "in btn: bit; out o: bit := 0;
+        "in btn: bit; out o: bit;
 model M { start S { always { o := 1; } ref T: 1 = btn; } state T; }
 start Main = M;",
     );
@@ -318,7 +318,7 @@ fn integer_compared_with_number_stays_a_comparison() {
 fn bare_bit_condition_needs_no_coercion() {
     let text = emit(
         "bitbare",
-        "in btn: bit; out o: bit := 0;
+        "in btn: bit; out o: bit;
 model M { start S { always { o := 1; } ref T: btn; } state T; }
 start Main = M;",
     );
@@ -508,7 +508,7 @@ fn cast_prints_as_expression() {
 fn ports_are_read_and_written_through_hal() {
     let text = emit(
         "portio",
-        "in btn: bit; out led: bit := 0; var a: u8 := 0;
+        "in btn: bit; out led: bit; var a: u8 := 0;
 model M { start S { always { led := 1; a := a + 1; } ref T: btn; } state T; }
 start Main = M;",
     );
@@ -531,7 +531,7 @@ start Main = M;",
 fn struct_member_access_is_refused_loudly() {
     let code = emit_err(
         "structm",
-        "out o: bit := 0; struct P { x: u8, y: u8 } var p: P := {1, 2};
+        "out o: bit; struct P { x: u8, y: u8 } var p: P := {1, 2};
 model M { start S { always { o := 1; p.x := 5; } ref T: p.y > 0; } state T; }
 start Main = M;",
     );
@@ -547,7 +547,7 @@ start Main = M;",
 fn builtin_function_in_condition_is_refused_loudly() {
     let code = emit_err(
         "builtinc",
-        "out o: bit := 0; var a: u8 := 0;
+        "out o: bit; var a: u8 := 0;
 model M { start S { always { o := 1; } ref T: min(a, 1) > 0; } state T; }
 start Main = M;",
     );

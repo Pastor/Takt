@@ -212,7 +212,7 @@ fn model_with(body: &str) -> String {
     // `start Main = Probe;` обязателен: без него корневая модель файла не имеет
     // стартового состояния и разбор падает раньше проверяемого (SE-011).
     format!(
-        "model Probe {{\n    out ready: bit := 0;\n{body}\n    start Idle {{ }}\n}}\n\nstart Main = Probe;\n"
+        "model Probe {{\n    out ready: bit;\n{body}\n    start Idle {{ }}\n}}\n\nstart Main = Probe;\n"
     )
 }
 
@@ -256,14 +256,14 @@ fn duration_plus_duration_is_allowed() {
 #[test]
 fn conflicting_clock_declarations_are_se067() {
     // Две разные частоты в одной модели — ошибка автора, а не «победит последняя».
-    let src = "model Probe {\n    clock 1kHz;\n    clock 8MHz;\n    out ready: bit := 0;\n    start Idle { }\n}\n\nstart Main = Probe;\n";
+    let src = "model Probe {\n    clock 1kHz;\n    clock 8MHz;\n    out ready: bit;\n    start Idle { }\n}\n\nstart Main = Probe;\n";
     assert!(
         codes(src).iter().any(|c| c == "SE-067"),
         "ожидалась SE-067: {:?}",
         codes(src)
     );
     // Повтор одной и той же частоты безвреден.
-    let same = "model Probe {\n    clock 1kHz;\n    clock 1kHz;\n    out ready: bit := 0;\n    start Idle { }\n}\n\nstart Main = Probe;\n";
+    let same = "model Probe {\n    clock 1kHz;\n    clock 1kHz;\n    out ready: bit;\n    start Idle { }\n}\n\nstart Main = Probe;\n";
     assert!(
         !codes(same).iter().any(|c| c == "SE-067"),
         "повтор одной частоты ошибкой не является: {:?}",
@@ -312,19 +312,19 @@ fn after_is_allowed_only_on_transition_edges() {
     // Отсчёт `after` начинается с перехода в состояние-источник, поэтому вне
     // ребра у выдержки нет момента, от которого считать. Прежде такая запись
     // принималась МОЛЧА.
-    let named = "model P {\n    out r: bit := 0;\n    cond T = after 6s;\n    start A { ref B: T; }\n    state B { }\n}\n\nstart Main = P;\n";
+    let named = "model P {\n    out r: bit;\n    cond T = after 6s;\n    start A { ref B: T; }\n    state B { }\n}\n\nstart Main = P;\n";
     assert!(
         codes(named).iter().any(|c| c == "SE-068"),
         "`cond T = after 6s;` обязан отвергаться: {:?}",
         codes(named)
     );
-    let guard = "model P {\n    out r: bit := 0;\n    start A {\n        : after 6s;\n        ref B: after 6s;\n    }\n    state B { }\n}\n\nstart Main = P;\n";
+    let guard = "model P {\n    out r: bit;\n    start A {\n        : after 6s;\n        ref B: after 6s;\n    }\n    state B { }\n}\n\nstart Main = P;\n";
     assert!(
         codes(guard).iter().any(|c| c == "SE-068"),
         "`after` в Guard-формуле обязан отвергаться: {:?}",
         codes(guard)
     );
-    let invariant = "model P {\n    out r: bit := 0;\n    invariant I = after 6s;\n    start A { ref B: after 6s; }\n    state B { }\n}\n\nstart Main = P;\n";
+    let invariant = "model P {\n    out r: bit;\n    invariant I = after 6s;\n    start A { ref B: after 6s; }\n    state B { }\n}\n\nstart Main = P;\n";
     assert!(
         codes(invariant).iter().any(|c| c == "SE-068"),
         "`after` в инварианте обязан отвергаться: {:?}",
@@ -337,7 +337,7 @@ fn after_on_an_edge_and_in_a_composite_condition_is_accepted() {
     // На ребре — законно, в том числе вместе с другими условиями.
     for edge in ["after 6s", "(after 6s) & (x = 1)", "x = 1 & after 6s"] {
         let src = format!(
-            "model P {{\n    in x: bit := 0;\n    out r: bit := 0;\n    start A {{ ref B: {edge}; }}\n    state B {{ }}\n}}\n\nstart Main = P;\n"
+            "model P {{\n    in x: bit;\n    out r: bit;\n    start A {{ ref B: {edge}; }}\n    state B {{ }}\n}}\n\nstart Main = P;\n"
         );
         assert!(
             !codes(&src).iter().any(|c| c == "SE-068" || c == "SE-066"),

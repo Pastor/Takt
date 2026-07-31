@@ -5,7 +5,7 @@
 //! Функция Takt читает состояние модели, хотя в параметрах его нет:
 //!
 //! ```lam
-//! in pos_stack: u8 := 0x200:0;          // порт
+//! in pos_stack: u8 at 0x200:0;          // порт
 //! var x: u8 := 1;                        // переменная
 //!
 //! fn travel_time(to_stack: u8) -> u8 {
@@ -448,7 +448,7 @@ mod tests {
     #[test]
     fn function_reading_port_needs_hal() {
         let needs = needs_of(
-            "in p: u8 := 0x10:0; fn f(a: u8) -> u8 { return a + p; } start S;",
+            "in p: u8 at 0x10:0; fn f(a: u8) -> u8 { return a + p; } start S;",
             "f",
         );
         assert!(needs.hal, "чтение порта обязано требовать HAL");
@@ -493,7 +493,7 @@ mod tests {
     #[test]
     fn hal_need_is_transitive() {
         let needs = needs_of(
-            "in p: u8 := 0x10:0; \
+            "in p: u8 at 0x10:0; \
              fn g() -> u8 { return p; } \
              fn f() -> u8 { return g(); } \
              start S;",

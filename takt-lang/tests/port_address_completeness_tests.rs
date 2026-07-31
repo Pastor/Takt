@@ -43,7 +43,7 @@ fn dead_port_without_address_is_silent() {
 #[test]
 fn used_port_with_inline_address_is_silent() {
     let codes = completeness_codes(
-        "in BTN: bit := 0x00100000:0; start S { ref T: BTN; } state T;",
+        "in BTN: bit at 0x00100000:0; start S { ref T: BTN; } state T;",
         &[],
     );
     assert!(
