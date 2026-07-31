@@ -32,6 +32,9 @@ pub fn collect_model_warnings(ast: &ast::Model, model: &Rc<RefCell<ModelNode>>) 
     warnings.extend(crate::constant_condition_warnings(model));
     warnings.extend(crate::ltl_warnings(Rc::clone(model)));
     warnings.extend(crate::stray_semicolon_warnings(ast));
+    warnings.extend(
+        crate::semantic::port_address_hint::check_port_address_looks_like_value(Rc::clone(model)),
+    );
     warnings.extend(crate::unknown_named_block_warnings(ast));
     warnings
 }

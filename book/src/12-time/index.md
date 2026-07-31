@@ -222,7 +222,7 @@ ref Stop: after ((BASE + TRIM) - 30s);
 ```takt
 model Dryer {
     in program: duration;         // время сушки задаёт панель оператора
-    out heater: bit := 0;
+    out heater: bit;
 
     state Drying {
         enter { heater := 1; }
