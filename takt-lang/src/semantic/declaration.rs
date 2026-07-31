@@ -7,7 +7,9 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast::{Identifier, VariableDefine};
 use crate::semantic::type_node::{TypeNode, construct_type};
-use crate::semantic::{ExpressionNode, ModelNode, ParameterNode, VariableNode};
+use crate::semantic::{
+    ExpressionNode, ModelNode, ParameterNode, PortDirection, VariableNode, const_eval,
+};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -285,12 +287,63 @@ pub(crate) fn resolve_variable_expressions(
         } => VariableNode::Port {
             upper,
             loc,
+            address: resolve_declaration_expression(address, model)?,
+            init: resolve_port_init(init, &name, direction, loc, model)?,
             name,
             ty,
-            address: resolve_declaration_expression(address, model)?,
-            init: resolve_declaration_expression(init, model)?,
             direction,
         },
         VariableNode::Unresolved => VariableNode::Unresolved,
     })
+}
+
+/// Разрешает **начальное значение** порта, сворачивая его в литерал
+/// (фича 0187, задача 03).
+///
+/// # Почему литерал, а не выражение
+///
+/// Значение выставляется **до первого такта**, и выставляют его шесть разных
+/// потребителей: `_init` цели `c`, `new()`/`init()` цели `rust`, ветвь сброса
+/// `sv`, инициализатор объявления `st`, старт порта в симуляторе. Выражение
+/// печатается **в контексте владельца**, а места эмиссии у целей разные: у
+/// цели `rust` под-модель конструируется без доступа к HAL, поэтому значения
+/// портов всего дерева выставляет корень — и имя, законное в под-модели, там
+/// уже не разрешается. Свёртка снимает вопрос целиком: за границей семантики
+/// выражения не существует, разойтись целям не по чему (тот же приём, что у
+/// константной выдержки `after`, ADR 0143).
+///
+/// # Что принимается
+///
+/// Всё, что вычисляет [`const_eval`]: литералы, константы модели (в том числе
+/// цепочкой) и арифметика над ними. Прочее — **`SE-094`** с названной причиной:
+/// молчаливая потеря значения здесь дороже отказа.
+///
+/// ⚠️ У **входного** порта значение не сворачивается: его там не бывает вовсе
+/// (`SE-092`), и свёртка перехватила бы диагностику, подменив её жалобой на
+/// невычислимость.
+fn resolve_port_init(
+    init: ExpressionNode,
+    name: &str,
+    direction: PortDirection,
+    loc: Location,
+    model: &Rc<RefCell<ModelNode>>,
+) -> Result<ExpressionNode, Diagnostic> {
+    if direction == PortDirection::In {
+        return resolve_declaration_expression(init, model);
+    }
+    let ExpressionNode::Unresolved(raw) = &init else {
+        return Ok(init);
+    };
+    let literal = const_eval::fold_to_literal(raw, model).map_err(|cause| {
+        Diagnostic::error(
+            loc,
+            format!(
+                "начальное значение порта '{name}' выставляется до первого такта, \
+                 поэтому обязано быть известно при компиляции: {}",
+                cause.message
+            ),
+        )
+        .with_code("SE-094")
+    })?;
+    resolve_declaration_expression(ExpressionNode::Unresolved(literal), model)
 }

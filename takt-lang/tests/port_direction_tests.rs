@@ -54,7 +54,7 @@ fn writing_to_output_port_stays_legal() {
     // обязано покрывать обе формы цели записи — иначе фича сломала бы каждый
     // пример с выходным портом.
     let codes = error_codes(
-        "out B: u8 at 0x104;\nout L: bit := 0x108:0;\nvar t: u8 := 0;\n\
+        "out B: u8 at 0x104;\nout L: bit at 0x108:0;\nvar t: u8 := 0;\n\
          start S { always { B := 1; L := 1; L.0 := 1; } ref S: t = 9; }\n",
     );
     assert!(

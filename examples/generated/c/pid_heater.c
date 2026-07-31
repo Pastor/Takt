@@ -16,6 +16,7 @@ void PidHeaterHeater_init(PidHeaterHeater *model, PidHeater *main) {
     model->state = PID_HEATER_HEATER_INIT;
     model->release = 38.0;
     model->setpoint = 40.0;
+    (*main->write_float)(PID_HEATER_HEATER_TEMPERATURE, 0.0, main->userdata);
 }
 
 /// Функция обработки модели Heater (PidHeater:Heater)
