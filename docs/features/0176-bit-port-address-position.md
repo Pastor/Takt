@@ -1,7 +1,7 @@
 # Фича 0176: Позиция бита у `bit`-порта с голым адресом
 
 - **Номер:** 0176
-- **Статус:** СОЗДАНА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** нет
 - **Tier:** 2
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (вынесено закрытием [0070](0070-port-initializer-address-role.md), смежно [0098](0098-port-bit-range-safe-hal.md))
@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | не заведена (стадия 2) |
-| Анализ | не заведён (стадия 3) |
+| Архитектура (ADR) | [`docs/adr/0176-bit-port-address-position.md`](../adr/0176-bit-port-address-position.md) |
+| Анализ | [`docs/analyze/0176-bit-port-address-position.md`](../analyze/0176-bit-port-address-position.md) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0176-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
