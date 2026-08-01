@@ -668,19 +668,6 @@ Precedence1Full: Expression = {
     // литерал в атоме нельзя: `AddressExpr` включает эту же цепочку, и
     // грамматика стала бы неоднозначной.
     //
-    // Анонимное обращение к ячейке `#0xNNNN` / `#0xNNNN:bit` (фича 0189).
-    //
-    // Ширина доступа задаётся тем, что стоит НАД обращением — приведением
-    // (`as u32`) либо битовым доступом (`.4`); в атоме её нет намеренно:
-    // оба оператора в языке уже есть со своими приоритетами, и вторая
-    // грамматика приведения внутри атома разъехалась бы с первой.
-    <l:@L> "#" <a:address> <r:@R> => {
-        let (addr_val, bit_val) = parse_address_literal(a);
-        Expression::AnonAddress(Location::source(file_no, l, r), addr_val as i128, Some(bit_val))
-    },
-    <l:@L> "#" <n:number> <r:@R> => {
-        Expression::AnonAddress(Location::source(file_no, l, r), n, None)
-    },
     <l:@L> <n:number> <r:@R> => {
         Expression::Number(Location::source(file_no, l, r), n)
     },
@@ -698,14 +685,6 @@ Precedence1Full: Expression = {
 
 Precedence1NoBrace: Expression = {
     // Адресного литерала здесь нет — см. `Precedence1Full` (фича 0189).
-    // Анонимное обращение к ячейке (фича 0189) — то же, что в `Precedence1Full`.
-    <l:@L> "#" <a:address> <r:@R> => {
-        let (addr_val, bit_val) = parse_address_literal(a);
-        Expression::AnonAddress(Location::source(file_no, l, r), addr_val as i128, Some(bit_val))
-    },
-    <l:@L> "#" <n:number> <r:@R> => {
-        Expression::AnonAddress(Location::source(file_no, l, r), n, None)
-    },
     <l:@L> <n:number> <r:@R> => {
         Expression::Number(Location::source(file_no, l, r), n)
     },
@@ -738,6 +717,21 @@ Precedence0: Expression = {
       }
 
       Expression::List(Location::source(file_no, l, r), a)
+  },
+  // Анонимное обращение к ячейке `#0xNNNN` / `#0xNNNN:bit` (фича 0189).
+  //
+  // Живёт на уровне `Precedence0`, а не среди литералов: только здесь к нему
+  // применим постфиксный битовый доступ (`#0x100.4` = `BitAccess(#0x100, 4)`).
+  // Ширину доступа задаёт то, что стоит НАД обращением — приведение либо
+  // битовый доступ; в самом атоме её нет намеренно: оба оператора в языке уже
+  // есть со своими приоритетами, и вторая грамматика приведения внутри атома
+  // разъехалась бы с первой.
+  <l:@L> "#" <a:address> <r:@R> => {
+      let (addr_val, bit_val) = parse_address_literal(a);
+      Expression::AnonAddress(Location::source(file_no, l, r), addr_val as i128, Some(bit_val))
+  },
+  <l:@L> "#" <n:number> <r:@R> => {
+      Expression::AnonAddress(Location::source(file_no, l, r), n, None)
   },
   <a:@L> <e:Precedence0> "." <i:Member> <b:@R> => Expression::BitAccess(Location::source(file_no, a, b), Box::new(e), i),
   <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Expression::ArraySubscript(Location::source(file_no, a, b), i, Box::new(Expression::Number(Location::source(file_no, a, b), n))),

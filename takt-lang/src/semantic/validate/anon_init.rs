@@ -25,8 +25,12 @@ pub(super) fn validate_anon_in_initializers(
     for variable in borrowed.variables.values() {
         match variable {
             VariableNode::Unresolved => {}
-            VariableNode::Simple { expr, loc, name, .. }
-            | VariableNode::Const { expr, loc, name, .. } => {
+            VariableNode::Simple {
+                expr, loc, name, ..
+            }
+            | VariableNode::Const {
+                expr, loc, name, ..
+            } => {
                 check(expr, *loc, name)?;
             }
             // У порта два выражения (фича 0187): размещение и начальное

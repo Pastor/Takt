@@ -100,7 +100,9 @@ fn width_of(ty: &TypeNode) -> Option<u16> {
 ///
 /// Возвращает `None`, если выражение анонимным обращением не является, — тогда
 /// вызывающий строит узел как обычно.
-pub(crate) fn fold_expression(expr: &ast::Expression) -> Option<Result<AnonPortAccess, Diagnostic>> {
+pub(crate) fn fold_expression(
+    expr: &ast::Expression,
+) -> Option<Result<AnonPortAccess, Diagnostic>> {
     match strip_parens_expr(expr) {
         // `#A as T` — ширину задаёт приведение.
         ast::Expression::Cast(loc, inner, ty) => {
