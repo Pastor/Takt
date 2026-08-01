@@ -338,3 +338,4 @@
 | 0187-04 | 0187 | начальное значение порта в целях sv, sv-mmio, st и st-at | [0187-04-port-io-redesign.md](0187-04-port-io-redesign.md) |
 | 0187-05 | 0187 | симулятор и потактовая сверка начального значения порта | [0187-05-port-io-redesign.md](0187-05-port-io-redesign.md) |
 | 0187-06 | 0187 | нормированная модель доступа к порту (ось 4) | [0187-06-port-io-redesign.md](0187-06-port-io-redesign.md) |
+| 0187-08 | 0187 | редакторский слой: LSP и плагин IntelliJ (правило 29) | [0187-08-port-io-redesign.md](0187-08-port-io-redesign.md) |
