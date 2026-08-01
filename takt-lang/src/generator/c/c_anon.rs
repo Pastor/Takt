@@ -96,12 +96,13 @@ pub(super) fn read(access: &AnonPortAccess) -> String {
     let shifted = if access.bit == 0 {
         word_deref(access)
     } else {
-        format!("({deref} >> {bit})", deref = word_deref(access), bit = access.bit)
+        format!(
+            "({deref} >> {bit})",
+            deref = word_deref(access),
+            bit = access.bit
+        )
     };
-    format!(
-        "(({value})({shifted} & {mask}))",
-        mask = mask(access)
-    )
+    format!("(({value})({shifted} & {mask}))", mask = mask(access))
 }
 
 /// Запись значения в поле: выражение-присваивание языка C.

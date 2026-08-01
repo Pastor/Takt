@@ -227,11 +227,16 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
             | Token::FatArrow
             | Token::Question
             | Token::Member => TT_OPERATOR,
+            // `#` открывает обращение к ячейке по адресу (фича 0189) — это
+            // оператор, а не знак препинания: автор обязан видеть, где
+            // начинается доступ к памяти. Плагин IntelliJ трактует его так же
+            // (`TaktLexer`: `#` → `OPERATOR`), и расхождения между слоями
+            // редактора здесь быть не должно.
+            | Token::Sharp => TT_OPERATOR,
             // Пунктуация — НЕ подсвечивается намеренно. Ветка явная (правило 1
             // ADR 0178): «не подсвечиваем» — решение, а не умолчание, и новый
             // знак препинания придётся внести сюда руками.
-            Token::Sharp
-            | Token::Semicolon
+            Token::Semicolon
             | Token::Comma
             | Token::Colon
             | Token::OpenParenthesis

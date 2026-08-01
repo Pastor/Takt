@@ -52,13 +52,13 @@ mod st_stmt;
 mod st_time;
 mod st_type;
 
+use crate::address_map::{AddressSource, ResolvedAddress};
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::GenerateOptions;
 use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
-use crate::address_map::{AddressSource, ResolvedAddress};
 use crate::semantic::{ModelNode, PortDirection, VariableNode};
 use st_map::StMap;
 use std::cell::RefCell;
@@ -263,7 +263,10 @@ fn anon_global(cell: &crate::semantic::AnonPortAccess) -> Result<String, Diagnos
     let (location, comment, _warnings) =
         st_at::location_of(&name, &cell.ty, PortDirection::InOut, &resolved)?;
     let ty_name = st_type::get_st_type(&cell.ty, &ModelNode::default())?;
-    Ok(format!("{} AT {} : {}; {}", name, location, ty_name, comment))
+    Ok(format!(
+        "{} AT {} : {}; {}",
+        name, location, ty_name, comment
+    ))
 }
 
 /// Печатает `PROGRAM` и `CONFIGURATION` с размещёнными портами (цель `st-at`).

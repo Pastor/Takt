@@ -16,6 +16,21 @@
 //! | `sv` | имя входного порта модуля | `имя_next = значение;` (защёлкивание — в `always_ff`) |
 //! | `sv-mmio` | имя сигнала бита регистрового файла | `имя_next = значение;` |
 //!
+//! **Анонимное обращение** `#0xАДРЕС as ТИП` (фича 0189) входит в тот же
+//! контракт: чтение — выражение, запись — оператор. Отображают его лишь цели,
+//! знающие адресное пространство:
+//!
+//! | Цель | Чтение | Запись |
+//! |---|---|---|
+//! | `c-hal` | `((ТИП)(*(volatile uintN_t*)(uintptr_t)0xАДРЕСu))` | `*(volatile uintN_t*)… = …;` (поле — чтением-изменением-записью) |
+//! | `st-at` | имя размещённой ячейки (`AT_<адрес>_<бит>_<ширина>`) | `имя := значение;` |
+//! | `sv-mmio` | имя сигнала ячейки | `имя_next = значение;` |
+//! | `c`, `rust`, `st`, `sv` | **отказ** с названной причиной | **отказ** |
+//!
+//! ⚠️ Имя ячейки строит компилятор (`AnonPortAccess::synthetic_name`) — одно и
+//! то же у эталона, `st-at` и `sv-mmio`. Разойдясь на символ, сверка трасс
+//! сравнивала бы разные величины.
+//!
 //! ⚠️ `ptr` у цели `c` — `model` в корневой модели и `main` в под-модели: HAL
 //! живёт у корня, а порт может быть объявлен на любом уровне.
 //!
@@ -165,6 +180,56 @@ fn st_at_access_matches_contract() {
         text.contains("seen := level;") && text.contains("value := seen + 1;"),
         "доступ печатается так же, как у цели st:\n{text}"
     );
+}
+
+/// Анонимное обращение входит в тот же контракт: чтение — выражение, запись —
+/// оператор; отображение задаёт цель, а не печатник по своему усмотрению.
+///
+/// Сторож нужен по той же причине, что и у именованного порта (R11 фичи 0187):
+/// документ без сторожа — договорённость, которую следующая правка нарушит
+/// молча.
+#[test]
+fn anon_access_matches_contract() {
+    const ANON: &str = "var seen: u8 := 0;\n\
+                        start Run {\n\
+                            always { seen := #0x2000 as u8; #0x2004 as u8 := seen + 1; }\n\
+                            ref Run: seen < 10;\n\
+                        }";
+    let dir = out_dir("anonacc");
+    let path = dir.to_str().expect("путь");
+    let env = takt_lang::parse_defines(&[]).expect("среда");
+    let opts = GenerateOptions::default();
+
+    takt_lang::compile_to_c_hal("anonacc", ANON, path, &[], &[], &env, &opts).expect("цель c-hal");
+    let c_hal = std::fs::read_to_string(dir.join("anonacc.c")).expect("вывод c-hal");
+    assert!(
+        c_hal.contains("model->seen = ((uint8_t)(*(volatile uint8_t*)(uintptr_t)0x2000u));"),
+        "чтение ячейки — выражение с разыменованием:\n{c_hal}"
+    );
+    assert!(
+        c_hal.contains("(*(volatile uint8_t*)(uintptr_t)0x2004u) = (uint8_t)(model->seen + 1);"),
+        "запись ячейки — оператор присваивания по адресу:\n{c_hal}"
+    );
+
+    takt_lang::compile_to_st_at("anonacc", ANON, path, &[], &[], &env, &opts).expect("цель st-at");
+    let st_at = std::fs::read_to_string(dir.join("anonacc.st")).expect("вывод st-at");
+    assert!(
+        st_at.contains("seen := AT_2000_0_8;") && st_at.contains("AT_2004_0_8 := seen + 1;"),
+        "у цели st-at доступ идёт по имени размещённой ячейки:\n{st_at}"
+    );
+
+    takt_lang::compile_to_sv_mmio("anonacc", ANON, path, &[], &[], &env, &opts)
+        .expect("цель sv-mmio");
+    let sv = std::fs::read_to_string(dir.join("anonacc.sv")).expect("вывод sv-mmio");
+    assert!(
+        sv.contains("AT_2004_0_8_next = "),
+        "запись ячейки идёт в комбинационную пару `_next`:\n{sv}"
+    );
+
+    // Отказ целей без адресного пространства — тоже часть контракта, но он
+    // проверяется там, где живут его коды: `takt-lang/tests/anon_port_tests.rs`
+    // (`CC-021`, `ST-018`, `SV-017` и отказ цели `rust`). Дублировать проверку
+    // здесь значило бы завести второй источник истины о тех же кодах.
 }
 
 /// Цель `sv`: чтение — имя порта модуля, запись — в комбинационный `_next`.

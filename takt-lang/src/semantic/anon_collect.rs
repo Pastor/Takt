@@ -71,7 +71,11 @@ fn finish(mut cells: Vec<AnonPortAccess>) -> Vec<AnonPortAccess> {
     cells
 }
 
-fn note(access: &AnonPortAccess, found: &mut BTreeSet<(Key, String)>, out: &mut Vec<AnonPortAccess>) {
+fn note(
+    access: &AnonPortAccess,
+    found: &mut BTreeSet<(Key, String)>,
+    out: &mut Vec<AnonPortAccess>,
+) {
     let key = (
         Key(access.addr, access.bit, access.width_bits()),
         access.ty.to_string(),
