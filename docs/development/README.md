@@ -339,3 +339,4 @@
 | 0187-05 | 0187 | симулятор и потактовая сверка начального значения порта | [0187-05-port-io-redesign.md](0187-05-port-io-redesign.md) |
 | 0187-06 | 0187 | нормированная модель доступа к порту (ось 4) | [0187-06-port-io-redesign.md](0187-06-port-io-redesign.md) |
 | 0187-08 | 0187 | редакторский слой: LSP и плагин IntelliJ (правило 29) | [0187-08-port-io-redesign.md](0187-08-port-io-redesign.md) |
+| 0190-01 | 0190 | параллельные тесты: каталог теста уникален по тесту | [0190-01-precheck-selective-gates.md](0190-01-precheck-selective-gates.md) |

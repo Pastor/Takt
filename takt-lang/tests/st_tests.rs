@@ -37,10 +37,24 @@ fn compile_fixture(name: &str) -> String {
         .unwrap_or_else(|e| panic!("нет порождённого .st для {}: {}", name, e))
 }
 
-/// Каталог вывода теста. Имя уникально по фикстуре: тесты гоняются в один поток,
-/// но общий каталог всё равно связал бы их друг с другом.
+/// Каталог вывода теста — уникальный **по тесту**, а не по фикстуре (фича 0190).
+///
+/// ⚠️ Прежде имя строилось только из фикстуры, и это держало весь проект на
+/// `--test-threads=1`: три теста берут `types_all`, два — `enum_struct`, а
+/// [`compile_fixture`] начинает с `remove_dir_all` — параллельно один тест сносит
+/// каталог, пока другой в него пишет (`Os { code: 22, InvalidInput }`). Замер
+/// фичи 0190 показал, что это **единственная** такая связь на ~1400 тестов, то
+/// есть однопоточность была не свойством тестов, а следствием одной строки.
+///
+/// Ключ — имя потока: тестовый харнесс Rust называет поток именем теста. В
+/// однопоточном режиме имени нет (тест идёт в главном потоке), и ключом
+/// остаётся фикстура — там гонок и не бывает.
 fn target_dir(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("st_{}", name))
+    let owner = std::thread::current()
+        .name()
+        .map(|t| t.replace(|c: char| !c.is_ascii_alphanumeric(), "_"))
+        .unwrap_or_else(|| "single".to_string());
+    Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("st_{}_{}", name, owner))
 }
 
 /// **A4.1.** Используемая переменная-массив попадает в ST настоящим `ARRAY`.
@@ -420,7 +434,17 @@ fn compile_st_source(
     filename: &str,
     source: &str,
 ) -> Result<(), takt_lang::diagnostics::Diagnostic> {
-    let out_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("st_src_{}", filename));
+    // Каталог уникален по тесту (фича 0190): `prog.takt` берут несколько тестов,
+    // а ниже идёт `remove_dir_all` — общий каталог связал бы их гонкой ровно так
+    // же, как это делал `target_dir` до починки.
+    let out_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "st_src_{}_{}",
+        filename.replace('.', "_"),
+        std::thread::current()
+            .name()
+            .map(|t| t.replace(|c: char| !c.is_ascii_alphanumeric(), "_"))
+            .unwrap_or_else(|| "single".to_string())
+    ));
     let _ = fs::remove_dir_all(&out_dir);
     fs::create_dir_all(&out_dir).unwrap();
     takt_lang::compile_to_st(
