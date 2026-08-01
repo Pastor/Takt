@@ -209,7 +209,7 @@ LocalVariableDefine: Box<VariableDefine> = {
 }
 
 FunctionCall: Expression = {
-    <a:@L> <i:Identifier> "(" <v:Comma<Expression>> ")" <b:@R> => {
+    <a:@L> <i:Identifier> "(" <v:Comma<CallArg>> ")" <b:@R> => {
         Expression::Function(Location::source(file_no, a, b), i, v)
     },
 }
@@ -495,8 +495,45 @@ AddressExpr: Expression = {
     Chain13<Precedence1Full>
 }
 
+// Выражение — то, что ВЫЧИСЛЯЕТСЯ. Присваивания в нём нет (фикс 0187-01):
+// запись есть действие, а не значение.
 Expression: Expression = {
     Chain14<Precedence1Full>
+}
+
+// Выражение в позиции ОПЕРАТОРА: здесь присваивание законно (фикс 0187-01).
+//
+// Позиций ровно две — выражение-оператор тела (`led := 1;`) и шаг цикла
+// (`for var i: u8 := 0; …; i := i + 1`). Обе перечислены явно: правило языка
+// «присваивание — отдельная операция» держится грамматикой, а не проверкой
+// после разбора, поэтому список позиций обязан быть виден здесь.
+//
+// ⚠️ Правая часть — `Expression`, а не `StatementExpr`: цепочка `a := b := c`
+// есть присваивание внутри значения и потому незаконна.
+StatementExpr: Expression = {
+    <a:@L> <l:Chain13<Precedence1Full>> ":=" <r:Expression> <b:@R> => Expression::Assign(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    Expression,
+}
+
+// Аргумент вызова: обычное выражение либо ИМЕНОВАННЫЙ аргумент `имя := значение`.
+//
+// Именованная форма — третья (и последняя) позиция, где `:=` законен: ею
+// задаются параметры при инстанцировании модели, `Pid(kp := 0.25)` (фича 0185).
+// Это НЕ запись в переменную: слева стоит имя параметра целевой модели, и
+// семантика разбирает форму отдельно (`extend_args::destructure`).
+//
+// ⚠️ Узел АСД остаётся прежним (`Expression::Assign`) намеренно: семантика 0185
+// уже умеет его разбирать, а заведение отдельного узла заставило бы править
+// пять потребителей ради формы, которую они и так понимают.
+//
+// ⚠️ Слева допускается **выражение**, а не только имя. Сузить до `Identifier`
+// заманчиво, но это отобрало бы у автора внятную диагностику: `Tuner(1 := 5)`
+// сегодня даёт `SE-076` («слева обязано стоять имя параметра»), а под сужением
+// давало бы синтаксический отказ о присваивании — сообщение не о том, что автор
+// сделал. Структуру аргумента проверяет семантика, форму — грамматика.
+CallArg: Expression = {
+    <a:@L> <l:Chain13<Precedence1Full>> ":=" <r:Expression> <b:@R> => Expression::Assign(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
+    Expression,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -520,8 +557,11 @@ Expression: Expression = {
 // `=` в условии означает равенство, а в выражении присваивание (ADR 0019).
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ⚠️ Присваивания здесь НЕТ (фикс 0187-01): оно вынесено в `StatementExpr` и
+// `CallArg` — три позиции языка, где запись законна. Прежде `:=` стоял на этом
+// уровне, то есть разбирался везде, где допустимо выражение, и форму
+// `seen := (value := 3) + 1;` отвергала лишь семантика (`SE-095`).
 Chain14<Atom>: Expression = {
-    <a:@L> <l:Chain13<Atom>> ":=" <r:Chain14<Precedence1Full>> <b:@R> => Expression::Assign(Location::source(file_no, a, b), Box::new(l), Box::new(r)),
     // Тернарный оператор: cond ? then : else (правоассоциативный, ниже присваивания)
     <a:@L> <c:Chain13<Atom>> "?" <t:Chain14<Precedence1Full>> ":" <e:Chain14<Precedence1Full>> <b:@R> => Expression::ConditionalOperator(Location::source(file_no, a, b), Box::new(c), Box::new(t), Box::new(e)),
     Chain13<Atom>,
@@ -754,11 +794,11 @@ ClosedStatement: Statement = {
         Statement::Loop(Location::source(file_no, l, r), Some(e), Box::new(b), LoopKeyword::While)
     },
     // С1 (вариант A): for без скобок вокруг заголовка; тело — обязательный блок в {}.
-    <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> <block:BlockStatement> <r:@R> => {
+    <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:StatementExpr?> <block:BlockStatement> <r:@R> => {
         Statement::For(Location::source(file_no, l, r), b.map(Box::new), c.map(Box::new), n.map(Box::new), Some(Box::new(block)))
     },
     // С1 (вариант A): for без тела (пустой цикл с завершающей ';')
-    <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:Expression?> <r:@R> ";" => {
+    <l:@L> "for" <b:SimpleStatement?> ";" <c:Expression?> ";" <n:StatementExpr?> <r:@R> ";" => {
         Statement::For(Location::source(file_no, l, r), b.map(Box::new), c.map(Box::new), n.map(Box::new), None)
     }
 }
@@ -797,7 +837,8 @@ SimpleStatement: Statement = {
     <l:@L> <v:LocalVariableDefine> <r:@R> => {
         Statement::Variable(Location::source(file_no, l, r), v, None)
     },
-    <l:@L> <e:Expression> <r:@R> => {
+    // Позиция оператора: здесь запись законна (`StatementExpr`, фикс 0187-01).
+    <l:@L> <e:StatementExpr> <r:@R> => {
         Statement::Expression(Location::source(file_no, l, r), e)
     }
 }

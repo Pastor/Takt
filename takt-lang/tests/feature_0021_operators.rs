@@ -10,7 +10,9 @@
 //! Легаси-фикстуры (старый синтаксис `=`/`==`) мигрируются отдельно (задача 0021-03).
 
 use takt_lang::parse;
-use takt_lang::parser::ast::{Condition, Expression, ModelElement, VariableDefine};
+use takt_lang::parser::ast::{
+    Condition, Expression, ModelElement, StateElement, Statement, VariableDefine,
+};
 
 /// Разбирает `src` и возвращает корневую модель (паникует при ошибках разбора).
 fn must_parse(src: &str) -> takt_lang::parser::ast::Model {
@@ -66,33 +68,66 @@ fn less_equal_stays_relational() {
     );
 }
 
-/// `:=` как выражение-присваивание даёт `Expression::Assign`.
+/// `:=` даёт `Expression::Assign` — в позиции **оператора**.
+///
+/// ⚠️ Прежде тест брал форму `var y: u8 := (x := 7);`, то есть присваивание
+/// **внутри выражения**: до фикса
+/// [0187-01](../../docs/fixes/0187-01-assignment-is-statement-in-grammar.md)
+/// грамматика её принимала. Теперь правило «присваивание — отдельная операция»
+/// держится синтаксисом (`SY-006`), и узел проверяется там, где запись
+/// законна, — в операторе тела.
 #[test]
 fn colon_assign_expression_is_assign_node() {
-    // Инициализатор — присваивание-выражение в скобках: (x := 7).
-    let src = "var x: u8 := 0; var y: u8 := (x := 7); model M { start S; }";
+    let src = "var x: u8 := 0; start S { always { x := 7; } }";
     let root = must_parse(src);
-    let second = root
+    let assign = root
         .elements
         .into_iter()
-        .filter_map(|e| match e {
-            ModelElement::Variable(v) => match *v {
-                VariableDefine::Variable { initializer, .. } => initializer,
+        .find_map(|e| match e {
+            ModelElement::State(state) => state.elements.into_iter().find_map(|el| match el {
+                StateElement::NamedBlockCode(block) => match block.statement {
+                    Statement::Block { statements, .. } => {
+                        statements.into_iter().find_map(|st| match st {
+                            Statement::Expression(_, expr) => Some(expr),
+                            _ => None,
+                        })
+                    }
+                    _ => None,
+                },
                 _ => None,
-            },
+            }),
             _ => None,
         })
-        .nth(1)
-        .expect("ожидался второй инициализатор");
-    // Скобки оборачивают присваивание.
-    let inner = match second {
-        Expression::Parenthesis(_, e) => *e,
-        other => other,
-    };
+        .expect("ожидался оператор-выражение в теле блока");
     assert!(
-        matches!(inner, Expression::Assign(..)),
-        "`:=` должно давать Expression::Assign, получено: {inner:?}"
+        matches!(assign, Expression::Assign(..)),
+        "`:=` в позиции оператора обязано давать Expression::Assign, получено: {assign:?}"
     );
+}
+
+/// Присваивание **внутри выражения** отвергается разбором (фикс 0187-01).
+///
+/// Три формы, которые прежде принимались: инициализатор, арифметика, условие.
+/// Отказ приходит от парсера с кодом `SY-006` и позицией самого токена `:=` —
+/// а не от семантики с позицией объявления цели записи.
+#[test]
+fn assignment_inside_expression_is_syntax_error() {
+    for src in [
+        "var x: u8 := 0; var y: u8 := (x := 7); model M { start S; }",
+        "var a: u8 := 0; var b: u8 := 0; start S { always { b := (a := 3) + 1; } }",
+        "var a: u8 := 0; start S { always { if (a := 1) = 1 { a := 2; } } }",
+        "var a: u8 := 0; var b: u8 := 0; var c: u8 := 0; start S { always { a := b := c; } }",
+    ] {
+        let codes: Vec<String> = takt_lang::parse(src, 0)
+            .expect_err("форма обязана отвергаться разбором")
+            .into_iter()
+            .filter_map(|d| d.code)
+            .collect();
+        assert!(
+            codes.contains(&"SY-006".to_string()),
+            "ожидался SY-006 для {src:?}, получено {codes:?}"
+        );
+    }
 }
 
 /// `==` выведен из языка — ошибка разбора (подсказка «использовать `=`»).

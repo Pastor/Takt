@@ -200,8 +200,12 @@ fn sv_mmio_access_matches_contract() {
     );
 }
 
-/// Запись внутри выражения отвергается **семантикой** — одинаково для всех
-/// целей, а не каждой по-своему.
+/// Запись внутри выражения отвергается **разбором** — одинаково для всех целей,
+/// а не каждой по-своему.
+///
+/// ⚠️ До фикса [0187-01](../../docs/fixes/0187-01-assignment-is-statement-in-grammar.md)
+/// правило держала семантика (`SE-095`); теперь его держит грамматика, и код
+/// стал синтаксическим (`SY-006`) с позицией самого токена `:=`.
 #[test]
 fn nested_assignment_is_rejected_once_for_all_targets() {
     let codes: Vec<String> =
@@ -210,8 +214,8 @@ fn nested_assignment_is_rejected_once_for_all_targets() {
             .filter_map(|d| d.code)
             .collect();
     assert!(
-        codes.contains(&"SE-095".to_string()),
-        "присваивание внутри выражения обязано отвергаться семантикой: {codes:?}"
+        codes.contains(&"SY-006".to_string()),
+        "присваивание внутри выражения обязано отвергаться разбором: {codes:?}"
     );
 }
 
