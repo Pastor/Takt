@@ -172,6 +172,15 @@ pub(crate) fn print_expression(
         ExpressionNode::Address(_, _) => Err(unsupported(
             "адресный литерал: размещение портов — задача 0041-05 (AT %…)",
         )),
+        // Анонимное обращение (фича 0189): ячейка — размещённая глобальная
+        // переменная (`VAR_GLOBAL … AT %M…`), блок видит её через
+        // `VAR_EXTERNAL`, поэтому здесь печатается **имя**.
+        //
+        // ⚠️ До печатника доходит только цель `st-at`: цель `st` (библиотека
+        // блоков, локаций не знающая) отвергает такую модель целиком в точке
+        // входа генератора (`st::generate`) — одной проверкой вместо флага,
+        // протянутого через все печатники.
+        ExpressionNode::AnonPort(access) => Ok(access.synthetic_name()),
         ExpressionNode::Model(_) => Err(unsupported("модель как выражение")),
         ExpressionNode::Condition(_) => Err(unsupported(
             "именованное условие в выражении: печать — часть 2 задачи 0041-04",
@@ -328,6 +337,8 @@ pub(crate) fn print_condition(
         ConditionNode::State(..) => Err(unsupported(
             "состояние как условие: сравнение с состоянием — задача 0041-03",
         )),
+        // Анонимное обращение (фича 0189) — см. оговорку у печатника выражений.
+        ConditionNode::AnonPort(access) => Ok(access.synthetic_name()),
     }
 }
 

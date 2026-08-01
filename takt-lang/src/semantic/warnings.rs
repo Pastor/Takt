@@ -33,5 +33,8 @@ pub fn collect_model_warnings(ast: &ast::Model, model: &Rc<RefCell<ModelNode>>) 
     warnings.extend(crate::ltl_warnings(Rc::clone(model)));
     warnings.extend(crate::stray_semicolon_warnings(ast));
     warnings.extend(crate::unknown_named_block_warnings(ast));
+    // SE-096 (0189): запись по анонимному адресу. Направление у ячейки не
+    // объявлено, поэтому законность записи компилятор проверить не может.
+    warnings.extend(crate::semantic::anon_collect::anon_write_warnings(model));
     warnings
 }

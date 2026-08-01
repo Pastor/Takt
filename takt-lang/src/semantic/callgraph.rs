@@ -149,6 +149,8 @@ fn callees_in_expression(expr: &ast::Expression, local: &BTreeSet<String>, out: 
         | ast::Expression::String(_)
         | ast::Expression::Type(_, _)
         | ast::Expression::Address(_, _, _)
+        // Анонимное обращение (фича 0189) вызовов не содержит: адрес — литерал.
+        | ast::Expression::AnonAddress(_, _, _)
         | ast::Expression::Bool(_, _)
         | ast::Expression::Variable(_)
         | ast::Expression::List(_, _) => {}

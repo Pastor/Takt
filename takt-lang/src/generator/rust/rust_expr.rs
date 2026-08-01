@@ -557,6 +557,12 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
             "адресный литерал: цель rust карту адресов не потребляет \
              (порты идут через HAL-трейт)",
         )),
+        // Анонимное обращение (фича 0189): у цели `rust` порт — метод
+        // HAL-трейта, адреса она не знает (решение 4A ADR 0189).
+        ExpressionNode::AnonPort(_) => Err(unsupported(
+            "обращение к ячейке по адресу ('#0x…'): цель rust адресов не знает — \
+             доступ по адресу дают цели 'c-hal', 'st-at' и 'sv-mmio'",
+        )),
         ExpressionNode::Model(_) => Err(unsupported("модель в позиции выражения")),
         ExpressionNode::Condition(_) => Err(unsupported("именованное условие в позиции выражения")),
         ExpressionNode::List(_) => Err(unsupported("список параметров в позиции выражения")),

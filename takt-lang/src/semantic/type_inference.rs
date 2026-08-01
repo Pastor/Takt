@@ -327,6 +327,10 @@ pub(crate) fn extract_type(
         ExpressionNode::Duration(_) => Ok(TypeNode::Duration), // фича 0134
         ExpressionNode::Rational(_, _) => Ok(TypeNode::Rational),
         ExpressionNode::String(_) | ExpressionNode::Address(_, _) => Ok(TypeNode::Unsupported),
+        // Тип обращения по адресу — тип доступа, заданный автором (фича 0189).
+        // ⚠️ Не `Unsupported`: иначе проверки типов обошли бы обращение молча,
+        // и `#0x100 as u8` в позиции `q(8, 8)` прошло бы без единого слова.
+        ExpressionNode::AnonPort(access) => Ok(access.ty.clone()),
 
         // ── Идентификаторы ────────────────────────────────────────────────────
         ExpressionNode::Variable(var_rc) => Ok(type_of_var(&var_rc.borrow())),

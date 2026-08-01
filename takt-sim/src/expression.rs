@@ -53,6 +53,11 @@ pub(crate) fn eval_expression(
         ExpressionNode::Rational(text, negative) => parse_rational(text, *negative),
         // Адресный литерал `адрес:бит` — значение самого адреса.
         ExpressionNode::Address(addr, _bit) => Ok(Value::Number(i128::from(*addr))),
+        // Анонимное обращение к ячейке (фича 0189): чтение памяти. Ячейка
+        // моделируется синтетическим портом — её значение видно в трассе, и
+        // потому сверка с целью `c-hal` возможна потактово, а не «по факту
+        // компиляции».
+        ExpressionNode::AnonPort(access) => Ok(crate::anon_cell::read(access, ctx)),
 
         // ── Переменные и доступ ──────────────────────────────────────────────
         ExpressionNode::Variable(var) => {
@@ -328,6 +333,7 @@ fn loc_of(expr: &ExpressionNode) -> Location {
         | ExpressionNode::String(_)
         | ExpressionNode::Type(_)
         | ExpressionNode::Address(_, _)
+        | ExpressionNode::AnonPort(_)
         | ExpressionNode::Bool(_)
         | ExpressionNode::Model(_)
         | ExpressionNode::Condition(_)

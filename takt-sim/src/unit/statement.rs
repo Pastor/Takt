@@ -364,6 +364,16 @@ fn loc_of_assign(lhs: &ExpressionNode) -> Location {
 fn exec_expression(expr: &ExpressionNode, ctx: &mut dyn Context) -> Result<Flow, Diagnostic> {
     match expr {
         ExpressionNode::Assign(lhs, rhs) => {
+            // Запись по анонимному адресу (фича 0189): ячейка моделируется
+            // синтетическим портом, поэтому «место» ей не нужно — значение
+            // кладётся под именем ячейки и видно в трассе.
+            if let ExpressionNode::AnonPort(access) = lhs.as_ref() {
+                let value = eval_expression(rhs, ctx)?;
+                let value = crate::context::coerce_via(ctx, value, &access.ty)
+                    .map_err(|e| e.to_diagnostic(takt_lang::diagnostics::Location::Implicit))?;
+                crate::anon_cell::write(access, value, ctx);
+                return Ok(Flow::Normal);
+            }
             // Левая часть раскладывается в корень + путь сегментов (`p.x` →
             // root `p`, `[Field(x)]`; `data[i]` → `[Index(i)]`). Присваивание
             // всей переменной — path пуст (сюда же копия структуры `q := p`).

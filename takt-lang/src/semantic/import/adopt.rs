@@ -449,6 +449,8 @@ fn adopt_expr(ctx: &mut Adoption, expr: &mut ExpressionNode) {
         | ExpressionNode::String(_)
         | ExpressionNode::Type(_)
         | ExpressionNode::Address(_, _)
+        // Обращение по адресу (фича 0189) объявления не имеет: усыновлять нечего.
+        | ExpressionNode::AnonPort(_)
         | ExpressionNode::Bool(_)
         | ExpressionNode::Model(_)
         | ExpressionNode::Condition(_)
@@ -494,6 +496,7 @@ fn adopt_cond(ctx: &mut Adoption, cond: &mut ConditionNode) {
         | ConditionNode::Rational(_, _)
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)
+        | ConditionNode::AnonPort(_)
         | ConditionNode::Model(_, _)
         | ConditionNode::State(..)
         | ConditionNode::EnumVariant(_, _, _) => {}

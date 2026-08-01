@@ -30,6 +30,7 @@
 #![allow(clippy::needless_borrow)]
 #![allow(clippy::explicit_auto_deref)]
 
+mod c_anon;
 mod c_blocks;
 mod c_decl;
 mod c_every;
@@ -142,7 +143,8 @@ impl AsGenerator for Generator {
             options.guard_enable,
         )?
         .with_float_width(options.float_width)
-        .with_time_profile(profile);
+        .with_time_profile(profile)
+        .with_hal(options.hal);
         let header = generate_header(map.get_filename(), &map, options)?;
         let source = generate_source(map.get_filename(), &map)?;
         let filename = map.get_filename();

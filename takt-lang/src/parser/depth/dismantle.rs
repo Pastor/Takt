@@ -384,6 +384,7 @@ fn take_expression(expression: ast::Expression, out: &mut Vec<Owned>) {
         | E::Rational(..)
         | E::String(_)
         | E::Address(..)
+        | E::AnonAddress(..)
         | E::Bool(..)
         | E::Variable(_) => {}
     }
@@ -426,6 +427,7 @@ fn take_condition(condition: ast::Condition, out: &mut Vec<Owned>) {
         | C::AfterTicks(..)
         | C::Rational(..)
         | C::String(_)
+        | C::AnonAddress(..)
         | C::Bool(..)
         | C::Variable(_) => {}
     }

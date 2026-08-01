@@ -93,6 +93,9 @@ pub(super) fn is_boolean_ast_condition(
         AC::ArraySubscript(_, _, _) => false,
         // Доступ к битовому полю возвращает числовое значение
         AC::BitAccess(_, _, _) => false,
+        // Обращение к ячейке по адресу (фича 0189) возвращает значение поля, а не
+        // булево. ⚠️ Голая форма до сюда не доходит — её отвергает `SE-097`.
+        AC::AnonAddress(_, _, _) => false,
     }
 }
 
@@ -107,6 +110,7 @@ pub(super) fn ast_condition_summary(
     use ast_types::Condition as AC;
     match cond {
         AC::Number(_, n) => format!("числовой литерал {}", n),
+        AC::AnonAddress(_, addr, _) => format!("обращение к ячейке #0x{:X}", *addr as u64),
         AC::Duration(_, _, text) => format!("литерал длительности {}", text),
         AC::Rational(_, r, neg) => {
             format!("вещественный литерал {}{}", if *neg { "-" } else { "" }, r)

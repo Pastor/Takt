@@ -401,6 +401,8 @@ fn reads_expr(name: &str, expr: &ExpressionNode) -> bool {
         | ExpressionNode::String(_)
         | ExpressionNode::Type(_)
         | ExpressionNode::Address(_, _)
+        // Обращение по адресу (фича 0189) переменных не читает: адрес — литерал.
+        | ExpressionNode::AnonPort(_)
         | ExpressionNode::Bool(_)
         | ExpressionNode::Model(_)
         | ExpressionNode::Condition(_)

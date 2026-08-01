@@ -188,6 +188,14 @@ pub(in crate::generator::c) fn generate_condition_expr(
     match cond {
         ConditionNode::None | ConditionNode::Unresolved(_) => Ok(String::new()),
         ConditionNode::Bool(b) => Ok(if *b { "true" } else { "false" }.to_string()),
+        // Анонимное обращение в условии (фича 0189): в условие доходит только
+        // битовая форма — ширину в грамматике условий задать нечем.
+        ConditionNode::AnonPort(access) => {
+            if !map.hal() {
+                return Err(crate::generator::c::c_anon::refuse_plain_c());
+            }
+            Ok(crate::generator::c::c_anon::read(access))
+        }
         // Длительность (фича 0134): эмиссия — задача этой цели; до неё явный
         // отказ, а не печать наносекунд обычным числом.
         // Выдержка `after` (фича 0134): сравнение по РАЗНОСТИ единиц профиля.

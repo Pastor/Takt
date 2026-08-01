@@ -310,6 +310,7 @@ fn walk_expression(
         | ExpressionNode::String(_)
         | ExpressionNode::Type(_)
         | ExpressionNode::Address(_, _)
+        | ExpressionNode::AnonPort(_)
         | ExpressionNode::Bool(_)
         | ExpressionNode::Model(_)
         | ExpressionNode::List(_) => {}
@@ -379,6 +380,7 @@ fn walk_condition(
         | ConditionNode::Rational(_, _)
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)
+        | ConditionNode::AnonPort(_)
         | ConditionNode::Model(_, _)
         | ConditionNode::State(..)
         | ConditionNode::EnumVariant(_, _, _) => {}

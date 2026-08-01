@@ -14,6 +14,12 @@ mod condition_node;
 pub mod time_ast;
 pub use condition_node::ConditionNode;
 
+pub mod anon_collect;
+pub mod anon_port;
+pub use anon_collect::{
+    collect_anon_ports, collect_anon_ports_local, collect_anon_ports_local_node,
+};
+pub use anon_port::AnonPortAccess;
 pub mod bit_vector;
 mod builtin;
 pub(crate) mod callgraph;
@@ -1124,6 +1130,13 @@ pub enum ExpressionNode {
     Type(Type),
     /// Адресный литерал: `адрес:бит`.
     Address(i64, i64),
+    /// Анонимное обращение к ячейке по адресу: `#0x346619:0 as u64` (фича 0189).
+    ///
+    /// Свёрнутая тройка `{адрес, бит, тип}` — та же, которой оперируют
+    /// дефолтный HAL цели `c-hal` и регистровый файл цели `sv-mmio`. Формы
+    /// записи (`as` и `.N`) за этой границей не существует: свёртку делает
+    /// [`anon_port`](crate::semantic::anon_port) в единой воронке.
+    AnonPort(AnonPortAccess),
     /// Булевый литерал.
     Bool(bool),
     /// Ссылка на разрешённую переменную.

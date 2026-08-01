@@ -29,6 +29,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+mod anon_init;
 mod assignment_position;
 mod bodies;
 mod common;
@@ -111,8 +112,11 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let mut found = Vec::new();
 
     // Проверки, устроенные как «первая ошибка»: каждая добавляет не более одной.
-    let single: [Result<(), Diagnostic>; 10] = [
+    let single: [Result<(), Diagnostic>; 11] = [
         model_only_one_start_state(model.clone()),
+        // SE-099 (0189): обращение к ячейке в инициализаторе объявления. Без
+        // запрета эталон дал бы ноль, а `c-hal` — чтение регистра, и молча.
+        anon_init::validate_anon_in_initializers(model.clone()),
         validate_bit_values(model.clone()),
         validate_enum_values(model.clone()),
         validate_enum_type_declarations(model.clone()),

@@ -484,6 +484,9 @@ fn lower_expr(expr: &mut ExpressionNode, m: u8, n: u8) -> Result<(), Diagnostic>
         | ExpressionNode::String(_)
         | ExpressionNode::Type(_)
         | ExpressionNode::Address(_, _)
+        // Тип обращения по адресу (фича 0189) задан автором приведением;
+        // понижение `float` его не касается — `float` там не выразим.
+        | ExpressionNode::AnonPort(_)
         | ExpressionNode::Bool(_)
         | ExpressionNode::Model(_)
         | ExpressionNode::Condition(_)
@@ -535,6 +538,7 @@ fn lower_cond(cond: &mut ConditionNode, m: u8, n: u8) -> Result<(), Diagnostic> 
         | ConditionNode::Rational(_, _)
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)
+        | ConditionNode::AnonPort(_)
         | ConditionNode::Model(_, _)
         | ConditionNode::State(..)
         | ConditionNode::EnumVariant(_, _, _) => {}

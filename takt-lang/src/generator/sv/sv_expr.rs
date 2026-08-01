@@ -510,6 +510,8 @@ pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::String(_) => Err(sv002("строковый литерал")),
         ConditionNode::Model(_, _) => Err(sv002("ссылка на модель в условии")),
         ConditionNode::State(..) => Err(sv002("ссылка на состояние в условии")),
+        // Анонимное обращение (фича 0189) — см. оговорку у печатника выражений.
+        ConditionNode::AnonPort(access) => Ok(scope.read(&access.synthetic_name())),
     }
 }
 
@@ -640,6 +642,14 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
             "адрес порта: для RTL адрес бессмыслен — сигнал приходит на вывод \
              кристалла, а не по адресу",
         )),
+        // Анонимное обращение (фича 0189): в цели `sv-mmio` ячейка — бит
+        // регистрового файла, то есть обычный сигнал модуля. Чтение идёт через
+        // `Scope::read`, поэтому в `always_comb` берётся `_next`, а не регистр
+        // предыдущего такта (главный капкан ADR 0045).
+        //
+        // ⚠️ До печатника доходит только `sv-mmio`: цель `sv` отвергает такую
+        // модель целиком в точке входа (`sv::generate`, `SV-017`).
+        ExpressionNode::AnonPort(access) => Ok(scope.read(&access.synthetic_name())),
         ExpressionNode::Model(_) => Err(sv002("ссылка на модель в выражении")),
         ExpressionNode::Condition(_) => Err(sv002("именованное условие в позиции выражения")),
         ExpressionNode::List(_) => Err(sv002("список параметров в позиции выражения")),

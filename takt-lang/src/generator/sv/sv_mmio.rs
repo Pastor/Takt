@@ -167,6 +167,7 @@ impl Mmio {
     pub(crate) fn build(
         blocks: &[Block],
         address_map: &HashMap<String, ResolvedAddress>,
+        anon_cells: &[crate::semantic::AnonPortAccess],
     ) -> Result<Self, Diagnostic> {
         // Перечисления собираются со всех уровней: ширина enum-порта считается по
         // диапазону его значений (как в `sv_type::enum_width`).
@@ -257,6 +258,34 @@ impl Mmio {
                 direction: resolved.direction,
             });
         }
+        // Анонимные ячейки (фича 0189): у них нет объявления, но в регистровом
+        // файле они — такой же бит по адресу, как порт. Направления автор не
+        // объявлял, поэтому ячейка ведёт себя как **`out`**: регистр внутри
+        // модуля, который пишет и читает автомат, а шина только читает
+        // (правило 5 ADR 0062 — запись шиной в такой бит игнорируется, иначе
+        // получились бы два драйвера одного разряда).
+        //
+        // ⚠️ Отсюда ограничение цели, которое обязано быть в документе: в RTL
+        // ячейка не может измениться «снаружи» между тактами — внешнего
+        // устройства у модуля нет. Эталон (решение 5B) устроен так же, поэтому
+        // сверка трасс осмысленна.
+        for cell in anon_cells {
+            let width = u32::from(cell.width_bits());
+            if cell.bit + i64::from(width) > i64::from(MAX_REG_WIDTH) {
+                return Err(sv013(&cell.synthetic_name(), cell.bit, width));
+            }
+            ports.push(MmioPort {
+                name: cell.synthetic_name(),
+                ty: cell.ty.clone(),
+                init: ExpressionNode::None,
+                loc: Location::Codegen,
+                addr: cell.addr,
+                bit: cell.bit,
+                width,
+                direction: PortDirection::Out,
+            });
+        }
+
         // Детерминизм эмиссии (фича 0048): порядок задаётся именем, а не обходом
         // `HashMap`. Группировка по адресу в эмиттерах — через `BTreeMap`.
         ports.sort_by(|a, b| a.name.cmp(&b.name));

@@ -218,6 +218,9 @@ fn check_expr(expr: &ExpressionNode, model: &Rc<RefCell<ModelNode>>) -> Result<(
         | ExpressionNode::String(_)
         | ExpressionNode::Type(_)
         | ExpressionNode::Address(_, _)
+        // Тип обращения по адресу (фича 0189) задан приведением автора: если это
+        // `q(m, n)`, проверку ведут общие правила fixed-арифметики по типу узла.
+        | ExpressionNode::AnonPort(_)
         | ExpressionNode::Bool(_)
         | ExpressionNode::Variable(_)
         | ExpressionNode::Model(_)

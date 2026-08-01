@@ -137,6 +137,11 @@ pub fn resolve_condition(
 ) -> Result<ConditionNode, Diagnostic> {
     // Сторож глубины — см. `validate::depth` (фича 0129).
     let _depth = crate::semantic::validate::depth::enter(Some(cond.loc()))?;
+    // Анонимное обращение (фича 0189) — та же воронка, что у выражений:
+    // форма собрана из нескольких узлов, и узнать её можно лишь по вершине.
+    if let Some(folded) = crate::semantic::anon_port::fold_condition(cond) {
+        return folded.map(ConditionNode::AnonPort);
+    }
     match cond {
         // ── Время (фича 0134) ────────────────────────────────────────────────
         // Литерал несёт наносекунды; `after` — сахар над отсчётом от входа в
@@ -144,6 +149,10 @@ pub fn resolve_condition(
         // («прошло не меньше указанного») достаточно, чтобы цели не расходились.
         ast::Condition::Duration(_, nanos, _) => Ok(ConditionNode::Duration(*nanos)),
         ast::Condition::After(_, nanos, _) => Ok(ConditionNode::After(*nanos)),
+        // Голое `#0x100` в условии — см. оговорку у ветви выражений (фича 0189).
+        ast::Condition::AnonAddress(loc, addr, bit) => {
+            Err(crate::semantic::anon_port::width_missing(*loc, *addr, *bit))
+        }
         ast::Condition::AfterTicks(_, ticks, _) => Ok(ConditionNode::AfterTicks(*ticks)),
         // Константная выдержка (фича 0143): значение вычисляется из имён констант
         // и литералов и даёт **тот же** узел, что литерал — за этой границей

@@ -348,6 +348,12 @@ fn nanos_of_cond(
             Err((*loc, Cause::NotConstantForm("вещественное число")))
         }
         ast::Condition::Bool(loc, _) => Err((*loc, Cause::NotConstantForm("булев литерал"))),
+        // Значение ячейки известно только во время работы автомата — выдержка,
+        // вычисляемая компилятором, из него сложиться не может (фича 0189).
+        ast::Condition::AnonAddress(loc, _, _) => Err((
+            *loc,
+            Cause::NotConstantForm("обращение к ячейке по адресу"),
+        )),
         ast::Condition::String(parts) => Err((
             parts.first().map(|p| p.loc).unwrap_or(Location::Implicit),
             Cause::NotConstantForm("строка"),
