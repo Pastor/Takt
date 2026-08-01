@@ -29,6 +29,8 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+mod assignment_position;
+mod bodies;
 mod common;
 mod constant_conditions;
 pub mod depth;
@@ -38,7 +40,6 @@ mod implicit_bool;
 mod literal_range;
 mod member_access;
 mod nondeterminism;
-mod port_direction;
 mod port_init;
 mod ports;
 mod states;
@@ -140,10 +141,15 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // одна ошибка на литерал, а не «первая на модель».
     found.extend(literal_range::check_literal_ranges(model.clone()));
 
-    // SE-026/SE-027 (0188): направление порта — во ВСЕХ позициях, а не только в
-    // условиях. Тела блоков и функций прежде не обходились, и нарушение уезжало
-    // в цели, где расходилось вплоть до записи по адресу другого порта.
-    found.extend(port_direction::check_port_directions(model.clone()));
+    // Тела модели — один обход, два судьи (`validate/bodies.rs`):
+    //  * SE-026/SE-027 (0188): направление порта во ВСЕХ позициях. Тела блоков и
+    //    функций прежде не обходились, и нарушение уезжало в цели, где
+    //    расходилось вплоть до записи по адресу другого порта;
+    //  * SE-095 (0187, ось 4): присваивание — оператор, а не выражение. Прежде
+    //    `x := (led := 1) + 1` не отвергал никто: диагностику давали чужие
+    //    инструменты на порождённом файле, а цель `c` для переменных исполняла
+    //    то, чего не исполняет эталон.
+    found.extend(bodies::check_bodies(model.clone()));
 
     // SE-092 (0187): начальное значение у входного порта — ошибка. Временное
     // SE-093 («выставляют не все цели») снято задачей 0187-04: цели умеют все.

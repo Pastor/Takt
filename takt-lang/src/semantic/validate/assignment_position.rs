@@ -1,0 +1,195 @@
+//! Присваивание — **оператор**, а не выражение (фича 0187, задача 06, ось 4).
+//!
+//! ## Что нормируется
+//!
+//! ADR 0187 (ось 4, вариант 4B) постановил: **чтение порта — выражение, запись —
+//! оператор**, а как это отображается, задаёт цель по единой таблице. Правило
+//! записано здесь, потому что в языке порт и переменная в этом смысле
+//! неразличимы: запись — действие, а не вычисляемое значение.
+//!
+//! Позиций оператора ровно две ([`super::bodies::Position::Statement`]):
+//! выражение-оператор тела (`led := 1;`) и шаг цикла
+//! (`for i := 0; i < 3; i := i + 1`). Везде ещё присваивание — **`SE-095`**.
+//!
+//! ## Чем платили за отсутствие правила (пробы 2026-08-01)
+//!
+//! Вход `seen := (value := 3) + 1;` при `out value: u8` — шесть потребителей,
+//! три поведения, и ни одного внятного отказа:
+//!
+//! | Потребитель | Что происходило |
+//! |---|---|
+//! | `c` | `model->seen = ((*main->write_numeric)(…)) + 1;` — `void + int`, **`cc` отвергает** |
+//! | `rust` | `self.seen = hal.write_u8(…) + 1;` — `() + {integer}`, **`rustc` отвергает** (E0369) |
+//! | `st` | `seen := (value := 3) + 1;` — в IEC присваивание не выражение, **`iec2c` отвергает** |
+//! | `sv` | честный отказ `SV-002` при генерации |
+//! | симулятор | отказ `SIM-014` **в такте**, то есть уже на исполнении |
+//!
+//! То есть язык позволял написать то, чего не умеет **ни один** потребитель, а
+//! диагностику давали чужие инструменты — на порождённом файле и с координатами
+//! этого файла, а не исходника.
+//!
+//! ⚠️ **На обычных переменных цена была хуже, чем на портах.** Вход
+//! `seen := (a := 3) + 1;` цель `c` печатает валидным C (`(model->a = 3) + 1`)
+//! и считает `4`, тогда как эталон-симулятор ту же модель **не исполняет
+//! вовсе** (`SIM-014`). Расхождение эталона и цели — ровно то, что правило
+//! снимает.
+//!
+//! ⚠️ Правило живёт в **семантике**, а не в грамматике: `Expression::Assign`
+//! остаётся узлом АСД (форма `(x := 7)` разбирается), иначе пришлось бы делить
+//! грамматику выражений надвое — то самое слияние, которое ADR 0019 отверг.
+
+use crate::diagnostics::{Diagnostic, Location};
+use crate::semantic::validate::bodies::Position;
+use crate::semantic::{ExpressionNode, VariableNode};
+
+/// Проверяет позицию присваиваний в выражении.
+///
+/// Возвращает **все** нарушения (накопительно, как `literal_range`): редактор
+/// подчёркивает каждое, а не первое.
+pub(super) fn check_expression(expr: &ExpressionNode, position: Position) -> Vec<Diagnostic> {
+    let mut found = Vec::new();
+    match position {
+        // Верхний уровень оператора: само присваивание законно, но его части —
+        // уже значения (`led := (x := 1);` — правая часть вычисляется).
+        Position::Statement => match expr {
+            ExpressionNode::Assign(left, right) => {
+                collect(left, &mut found);
+                collect(right, &mut found);
+            }
+            // Скобки прозрачны: `(led := 1);` — то же действие.
+            ExpressionNode::Parenthesis(inner) => {
+                found.extend(check_expression(inner, Position::Statement))
+            }
+            other => collect(other, &mut found),
+        },
+        Position::Value => collect(expr, &mut found),
+    }
+    found
+}
+
+/// `SE-095`: присваивание стоит там, где вычисляется значение.
+fn diagnostic(loc: Location, target: Option<&str>) -> Diagnostic {
+    let what = match target {
+        Some(name) => format!("присваивание '{name}'"),
+        None => "присваивание".to_string(),
+    };
+    Diagnostic::error(
+        loc,
+        format!(
+            "{what} стоит там, где вычисляется значение: в языке присваивание — \
+             оператор, а не выражение. Запись порта или переменной обязана быть \
+             отдельным оператором: сперва `цель := значение;`, затем \
+             использование цели"
+        ),
+    )
+    .with_code("SE-095")
+}
+
+/// Имя и позиция цели записи — для диагностики с координатами исходника.
+fn target_of(expr: &ExpressionNode) -> (Location, Option<String>) {
+    let var = match expr {
+        ExpressionNode::Variable(v) => Some(v),
+        ExpressionNode::BitAccess(inner, _) => match inner.as_ref() {
+            ExpressionNode::Variable(v) => Some(v),
+            _ => None,
+        },
+        ExpressionNode::ArraySubscript(v, _) => Some(v),
+        _ => None,
+    };
+    match var {
+        Some(v) => {
+            let borrowed = v.borrow();
+            match &*borrowed {
+                VariableNode::Simple { name, loc, .. }
+                | VariableNode::Port { name, loc, .. }
+                | VariableNode::Const { name, loc, .. } => (*loc, Some(name.clone())),
+                VariableNode::Unresolved => (Location::Codegen, None),
+            }
+        }
+        None => (Location::Codegen, None),
+    }
+}
+
+/// Ищет присваивания во **всех** подвыражениях: здесь любое из них незаконно.
+///
+/// ⚠️ Разбор исчерпывающий (ветки `_` нет) намеренно: новый узел языка,
+/// способный нести выражение, обязан **завалить сборку** этого модуля, а не
+/// молча вывести своё содержимое из-под правила. Тот же приём, что у
+/// `semantic/usages/walk.rs` и `parser/depth`.
+fn collect(expr: &ExpressionNode, found: &mut Vec<Diagnostic>) {
+    match expr {
+        ExpressionNode::Assign(left, right) => {
+            let (loc, name) = target_of(left);
+            found.push(diagnostic(loc, name.as_deref()));
+            // Внутрь тоже: `a := (b := (c := 1));` — три нарушения, не одно.
+            collect(left, found);
+            collect(right, found);
+        }
+        ExpressionNode::Parenthesis(inner)
+        | ExpressionNode::BitAccess(inner, _)
+        | ExpressionNode::CodeBlock(inner, _)
+        | ExpressionNode::NamedFunctionBox(inner, _)
+        | ExpressionNode::Not(inner)
+        | ExpressionNode::BitwiseNot(inner)
+        | ExpressionNode::UnaryPlus(inner)
+        | ExpressionNode::Negate(inner)
+        | ExpressionNode::Cast(inner, _)
+        | ExpressionNode::ArraySubscript(_, inner) => collect(inner, found),
+        ExpressionNode::Power(left, right)
+        | ExpressionNode::Multiply(left, right)
+        | ExpressionNode::Divide(left, right)
+        | ExpressionNode::Modulo(left, right)
+        | ExpressionNode::Add(left, right)
+        | ExpressionNode::Subtract(left, right)
+        | ExpressionNode::ShiftLeft(left, right)
+        | ExpressionNode::ShiftRight(left, right)
+        | ExpressionNode::BitwiseAnd(left, right)
+        | ExpressionNode::BitwiseXor(left, right)
+        | ExpressionNode::BitwiseOr(left, right)
+        | ExpressionNode::Less(left, right)
+        | ExpressionNode::More(left, right)
+        | ExpressionNode::LessEqual(left, right)
+        | ExpressionNode::MoreEqual(left, right)
+        | ExpressionNode::Equal(left, right)
+        | ExpressionNode::NotEqual(left, right)
+        | ExpressionNode::And(left, right) => {
+            collect(left, found);
+            collect(right, found);
+        }
+        ExpressionNode::Or(left, right) => {
+            collect(left, found);
+            collect(right, found);
+        }
+        ExpressionNode::ConditionalOperator(cond, then_, else_) => {
+            collect(cond, found);
+            collect(then_, found);
+            collect(else_, found);
+        }
+        ExpressionNode::Function(_, args)
+        | ExpressionNode::Array(args)
+        | ExpressionNode::Initializer(args) => {
+            for arg in args {
+                collect(arg, found);
+            }
+        }
+        // Листья: значения, ссылки и формы, выражений внутри не несущие.
+        //
+        // ⚠️ `Unresolved` — «сырой» АСД: до понижения узла присваивания в нём не
+        // видно, и проверять его здесь нечем. Понижение делает стадия 5, после
+        // неё выражение приходит сюда уже разрешённым.
+        ExpressionNode::None
+        | ExpressionNode::Unresolved(_)
+        | ExpressionNode::ArraySlice(_, _, _)
+        | ExpressionNode::Number(_)
+        | ExpressionNode::Duration(_)
+        | ExpressionNode::Rational(_, _)
+        | ExpressionNode::String(_)
+        | ExpressionNode::Type(_)
+        | ExpressionNode::Address(_, _)
+        | ExpressionNode::Bool(_)
+        | ExpressionNode::Variable(_)
+        | ExpressionNode::Model(_)
+        | ExpressionNode::Condition(_)
+        | ExpressionNode::List(_) => {}
+    }
+}
