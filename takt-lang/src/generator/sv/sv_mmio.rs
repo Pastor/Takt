@@ -44,8 +44,8 @@ use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::sv::sv_fsm::Block;
 use crate::generator::sv::sv_type::{SvType, enum_width, sv_type};
-use crate::semantic::PortDirection;
 use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, PortDirection, VariableNode};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// Жёсткий предел ширины регистра (бит).
@@ -122,6 +122,14 @@ pub(crate) struct MmioPort {
     pub(crate) name: String,
     /// Тип порта (для объявления регистра автомата у `out`-битов).
     pub(crate) ty: TypeNode,
+    /// Начальное значение порта (`:=` объявления, фича 0187).
+    ///
+    /// [`ExpressionNode::None`], если не задано. Берётся из **объявления**, а не
+    /// из [`ResolvedAddress`]: начальное значение — свойство порта, а не его
+    /// размещения, и в слое адресов (а значит и в выгрузке карты) ему не место.
+    pub(crate) init: ExpressionNode,
+    /// Позиция объявления — для диагностики о непечатаемом значении сброса.
+    pub(crate) loc: Location,
     /// Адрес регистра.
     addr: i64,
     /// Начальный бит внутри слова (умолчание 0, если `0xADDR` без `:bit`).
@@ -183,6 +191,30 @@ impl Mmio {
             }
         }
 
+        // Начальные значения портов — из объявлений (фича 0187, задача 04).
+        // Ключ голый, как и `resolved.name`: регистровый файл и без того плоский
+        // по имени порта, и одноимённые порты разных под-моделей делят в нём
+        // один бит (ограничение цели, не этого сбора). Побеждает **первое**
+        // объявление с непустым значением — иначе порядок обхода `variables`
+        // (HashMap) решал бы, чем сбрасывается регистр.
+        let mut inits: BTreeMap<String, (ExpressionNode, Location)> = BTreeMap::new();
+        for (_, model_rc) in blocks {
+            for var in model_rc.borrow().variables.values() {
+                let VariableNode::Port {
+                    name, init, loc, ..
+                } = var
+                else {
+                    continue;
+                };
+                if matches!(init, ExpressionNode::None) {
+                    continue;
+                }
+                inits
+                    .entry(name.clone())
+                    .or_insert_with(|| (init.clone(), *loc));
+            }
+        }
+
         let mut ports: Vec<MmioPort> = Vec::new();
         for resolved in address_map.values() {
             // Фича 0084: ключ карты квалифицирован моделью; имя регистра
@@ -210,9 +242,15 @@ impl Mmio {
                 )
                 .with_code("SV-006"));
             }
+            let (init, loc) = inits
+                .get(name)
+                .cloned()
+                .unwrap_or((ExpressionNode::None, Location::Codegen));
             ports.push(MmioPort {
                 name: name.clone(),
                 ty: resolved.ty.clone(),
+                init,
+                loc,
                 addr: resolved.addr,
                 bit,
                 width,
