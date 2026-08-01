@@ -20,6 +20,7 @@ use crate::eval::value::Value;
 use crate::unit::Predicate;
 use takt_lang::diagnostics::{Diagnostic, Location};
 use takt_lang::semantic::ConditionNode;
+use takt_lang::semantic::type_node::TypeNode;
 
 /// Строит предикат перехода из условия.
 ///
@@ -84,6 +85,17 @@ fn condition_label(cond: &ConditionNode) -> String {
         ConditionNode::State(s, _) => s.borrow().name().to_string(),
         ConditionNode::Model(m, _) => m.borrow().name.clone().unwrap_or_else(|| "?".to_string()),
         ConditionNode::EnumVariant(_, name, _) => name.clone(),
+        // Обращение к ячейке (фича 0189): на ребре печатается сама запись —
+        // значение известно лишь в такте.
+        ConditionNode::AnonPort(access) => match access.ty {
+            TypeNode::Bit | TypeNode::Bool => {
+                format!("#0x{:X}.{}", access.addr as u64, access.bit)
+            }
+            _ => format!(
+                "#0x{:X}:{} as {}",
+                access.addr as u64, access.bit, access.ty
+            ),
+        },
         ConditionNode::String(parts) => parts.join(""),
         ConditionNode::Unresolved(_) => "?".to_string(),
     }
@@ -127,6 +139,8 @@ fn loc_of(cond: &ConditionNode) -> Location {
         | ConditionNode::Rational(_, _)
         | ConditionNode::String(_)
         | ConditionNode::Bool(_)
+        // У обращения к ячейке позиции нет, как у прочих литералов (фича 0189).
+        | ConditionNode::AnonPort(_)
         | ConditionNode::Model(_, _)
         | ConditionNode::State(..)
         | ConditionNode::EnumVariant(_, _, _) => Location::Builtin,
@@ -170,6 +184,9 @@ pub(crate) fn eval_condition(
         },
         ConditionNode::Number(n) => Ok(Value::Number(*n)),
         ConditionNode::Bool(b) => Ok(Value::Boolean(*b)),
+        // Чтение ячейки в условии (фича 0189) — то же чтение, что в выражении:
+        // одна воронка на оба адаптера, иначе ребро и тело разошлись бы.
+        ConditionNode::AnonPort(access) => Ok(crate::anon_cell::read(access, ctx)),
         ConditionNode::Rational(text, negative) => {
             // Раньше здесь был `unwrap()` при разборе — ещё одна скрытая паника.
             let parsed: f64 = text.parse().map_err(|_| {

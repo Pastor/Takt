@@ -46,6 +46,13 @@ pub fn construct_expression(
     // Сторож глубины (фича 0129): рекурсия идёт по структуре текста, и на
     // глубине порядка трёхсот кончался стек — без диагностики, SIGABRT.
     let _depth = crate::semantic::validate::depth::enter(Some(expr.loc()))?;
+    // Анонимное обращение к ячейке (фича 0189) сворачивается ДО общего разбора:
+    // его форма собрана из трёх узлов (`#адрес`, `as T`, `.N`), и узнать её
+    // можно только по вершине. Свёртка — единая воронка для выражений и
+    // условий: разъехавшись, они дали бы разный доступ для одного текста.
+    if let Some(folded) = crate::semantic::anon_port::fold_expression(&expr) {
+        return folded.map(ExpressionNode::AnonPort);
+    }
     match expr {
         // ── Литералы ──────────────────────────────────────────────────────────
         ast::Expression::Number(_, n) => Ok(ExpressionNode::Number(n)),
@@ -61,6 +68,11 @@ pub fn construct_expression(
         )),
         ast::Expression::Type(_, t) => Ok(ExpressionNode::Type(t)),
         ast::Expression::Address(_, addr, bit) => Ok(ExpressionNode::Address(addr, bit)),
+        // Голое `#0x100` — сюда доходит, только если воронка свёртки его не
+        // перехватила; ответ тот же, что у неё (фича 0189).
+        ast::Expression::AnonAddress(loc, addr, bit) => {
+            Err(crate::semantic::anon_port::width_missing(loc, addr, bit))
+        }
         ast::Expression::List(_, pl) => Ok(ExpressionNode::List(pl)),
 
         // ── Разрешение идентификатора ──────────────────────────────────────────

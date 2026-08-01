@@ -591,6 +591,14 @@ pub enum Condition {
     String(Vec<StringLiteral>),
     /// Булевый литерал.
     Bool(Location, bool),
+    /// Анонимное обращение к ячейке по адресу: `#адрес` или `#адрес:бит` (фича 0189).
+    ///
+    /// Тот же узел, что [`Expression::AnonAddress`], в грамматике **условий**:
+    /// без него ребро `ref Next: #0x100.0;` не разбиралось бы вовсе. Ширину
+    /// доступа в условии задать нечем (`as` в грамматике условий нет), поэтому
+    /// законна только битовая форма — словную семантика отвергает называющей
+    /// диагностикой.
+    AnonAddress(Location, i128, Option<i64>),
     /// Переменная.
     Variable(Identifier),
 }
@@ -620,6 +628,7 @@ impl Condition {
             | Condition::After(loc, _, _)
             | Condition::AfterTicks(loc, _, _)
             | Condition::AfterExpr(loc, _)
+            | Condition::AnonAddress(loc, _, _)
             | Condition::Bool(loc, _) => *loc,
             Condition::Variable(id) => id.loc,
             Condition::String(parts) => parts.first().map(|s| s.loc).unwrap_or(Location::Implicit),

@@ -753,12 +753,17 @@ mod tests {
     ///
     /// # Пример (Takt)
     /// ```but
-    /// always { const C: bit = true; C; }
+    /// always { const C: bit := true; var seen: bit := C; }
     /// start S;
     /// ```
+    ///
+    /// ⚠️ Прежде вторым оператором стояло голое `C;`. Фича 0189 (решение 6A)
+    /// такую запись отвергает: выражение в позиции оператора обязано иметь
+    /// эффект. Предмет теста не изменился — локальная `const` по-прежнему
+    /// должна разрешаться, — но её использование записано законной формой.
     #[test]
     fn local_const_in_block_resolves() {
-        let node = build("always { const C: bit := true; C; } start S;");
+        let node = build("always { const C: bit := true; var seen: bit := C; } start S;");
         let nb = node.get_named_block("always").expect("always не найден");
         let stmt = nb.statement().expect("оператор должен быть");
         assert!(

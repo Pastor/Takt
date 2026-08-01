@@ -296,6 +296,9 @@ fn print_assign_target(target: &ExpressionNode, scope: &Scope) -> Result<String,
                 crate::parser::ast::Member::Identifier(id) => format!("{}.{}", base, id.name),
             })
         }
+        // Запись в ячейку (фича 0189): та же комбинационная пара `_next`, что у
+        // переменной модели, — защёлкивание делает `always_ff`.
+        ExpressionNode::AnonPort(access) => Ok(scope.write(&access.synthetic_name())),
         _ => Err(sv002("сложная левая часть присваивания")),
     }
 }

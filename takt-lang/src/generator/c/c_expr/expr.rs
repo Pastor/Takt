@@ -272,6 +272,20 @@ pub(in crate::generator::c) fn generate_expr(
         }
 
         ExpressionNode::Assign(l, r) => {
+            // Запись по анонимному адресу (фича 0189): поле уже слова пишется
+            // чтением-изменением-записью, целое слово — прямым присваиванием.
+            if let ExpressionNode::AnonPort(access) = l.as_ref() {
+                if !map.hal() {
+                    return Err(crate::generator::c::c_anon::refuse_plain_c());
+                }
+                let mut rhs_str = String::new();
+                {
+                    let mut tmp = Printer::new(4, &mut rhs_str);
+                    generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
+                }
+                printer.print(&crate::generator::c::c_anon::write(access, &rhs_str));
+                return Ok(());
+            }
             // Запись в порт → write_bit / write_float
             if let ExpressionNode::Variable(var_rc) = l.as_ref() {
                 let var = var_rc.borrow();
@@ -590,6 +604,14 @@ pub(in crate::generator::c) fn generate_expr(
         }
         ExpressionNode::Address(_, _) => {
             return Err("Address не поддерживается как выражение в C генераторе".into());
+        }
+        // Анонимное обращение к ячейке (фича 0189): печатает только `c-hal` —
+        // цель `c` адресов не знает по устройству (ADR 0020).
+        ExpressionNode::AnonPort(access) => {
+            if !map.hal() {
+                return Err(crate::generator::c::c_anon::refuse_plain_c());
+            }
+            printer.print(&crate::generator::c::c_anon::read(access));
         }
         ExpressionNode::Model(_) => {
             return Err("Model не поддерживается как выражение в C генераторе".into());

@@ -148,6 +148,9 @@ fn find_after(cond: &Condition) -> Option<crate::diagnostics::Location> {
         | Condition::Rational(_, _, _)
         | Condition::String(_)
         | Condition::Bool(_, _)
+        // Анонимное обращение к ячейке (фича 0189) выдержки не содержит:
+        // адрес — литерал, вложенных условий у него нет.
+        | Condition::AnonAddress(_, _, _)
         | Condition::Variable(_) => None,
     }
 }
@@ -257,6 +260,7 @@ fn raw_has_after_kind(cond: &Condition, ticks: bool) -> bool {
         | Condition::Rational(_, _, _)
         | Condition::String(_)
         | Condition::Bool(_, _)
+        | Condition::AnonAddress(_, _, _)
         | Condition::Variable(_) => false,
     }
 }

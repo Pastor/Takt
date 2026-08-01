@@ -348,6 +348,7 @@ fn push_expression<'a>(expression: &'a ast::Expression, out: &mut Vec<NodeRef<'a
         | E::Rational(..)
         | E::String(_)
         | E::Address(..)
+        | E::AnonAddress(..)
         | E::Bool(..)
         | E::Variable(_) => {}
     }
@@ -390,6 +391,7 @@ fn push_condition<'a>(condition: &'a ast::Condition, out: &mut Vec<NodeRef<'a>>)
         | C::AfterTicks(..)
         | C::Rational(..)
         | C::String(_)
+        | C::AnonAddress(..)
         | C::Bool(..)
         | C::Variable(_) => {}
     }

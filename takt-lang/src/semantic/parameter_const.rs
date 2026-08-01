@@ -393,6 +393,8 @@ fn scan_expression(expr: &ast::Expression, scan: &mut Scan) {
         | ast::Expression::Rational(_, _, _)
         | ast::Expression::String(_)
         | ast::Expression::Address(_, _, _)
+        // Обращение по адресу (фича 0189) имён не содержит: параметра в нём нет.
+        | ast::Expression::AnonAddress(_, _, _)
         | ast::Expression::Bool(_, _) => {}
     }
 }
@@ -452,6 +454,8 @@ fn assigned_name(target: &ast::Expression) -> Option<String> {
         | ast::Expression::Rational(_, _, _)
         | ast::Expression::String(_)
         | ast::Expression::Address(_, _, _)
+        // Цель записи — ячейка, а не имя: корневого имени у неё нет.
+        | ast::Expression::AnonAddress(_, _, _)
         | ast::Expression::Bool(_, _) => None,
     }
 }

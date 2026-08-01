@@ -28,6 +28,11 @@ pub(crate) fn expression(expr: &ast::Expression) -> Result<String, FormatError> 
         E::Variable(id) => id.name.clone(),
         E::Type(_, t) => ty(t)?,
         E::Address(_, addr, bit) => format!("0x{addr:X}:{bit}"),
+        // Анонимное обращение (фича 0189): позиция бита печатается, только если
+        // автор её записал. `#0x100` и `#0x100:0` означают одно и то же, но
+        // канонизировать одну форму в другую нельзя — форматтер сохраняет выбор
+        // автора (то же правило, что у `while`/`loop`).
+        E::AnonAddress(_, addr, bit) => anon_address(*addr, *bit),
         E::List(_, params) => parameter_list(params)?,
         E::Array(_, items) | E::Initializer(_, items) => {
             let items = items
@@ -118,6 +123,18 @@ pub(crate) fn member(m: &ast::Member) -> String {
     }
 }
 
+/// Печатает анонимное обращение к ячейке: `#0x100` либо `#0x100:3` (фича 0189).
+///
+/// Одна функция на выражения и условия: форма записи у них общая, и разойтись
+/// печать не имеет права — иначе одно и то же обращение печаталось бы в ребре
+/// иначе, чем в теле.
+fn anon_address(addr: i128, bit: Option<i64>) -> String {
+    match bit {
+        Some(bit) => format!("#0x{addr:X}:{bit}"),
+        None => format!("#0x{addr:X}"),
+    }
+}
+
 /// Печатает условие.
 ///
 /// Отдельная функция, а не переиспользование [`expression`]: `Condition` — своя
@@ -143,6 +160,7 @@ pub(crate) fn condition(cond: &ast::Condition) -> Result<String, FormatError> {
         C::Bool(_, b) => b.to_string(),
         C::String(parts) => string_literal(parts),
         C::Variable(id) => id.name.clone(),
+        C::AnonAddress(_, addr, bit) => anon_address(*addr, *bit),
         C::Parenthesis(_, inner) => format!("({})", condition(inner)?),
         C::ArraySubscript(_, id, index) => format!("{}[{}]", id.name, condition(index)?),
         C::BitAccess(_, base, m) => format!("{}.{}", condition(base)?, member(m)),

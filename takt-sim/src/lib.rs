@@ -21,6 +21,7 @@
 //! сборку при обновлении компилятора).
 #![deny(private_interfaces)]
 
+pub(crate) mod anon_cell;
 mod context;
 pub(crate) mod eval;
 pub(crate) mod expression;

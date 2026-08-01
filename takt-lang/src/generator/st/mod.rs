@@ -58,7 +58,8 @@ use crate::generator::Generator as AsGenerator;
 use crate::generator::indent::Printer;
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;
-use crate::semantic::{ModelNode, VariableNode};
+use crate::address_map::{AddressSource, ResolvedAddress};
+use crate::semantic::{ModelNode, PortDirection, VariableNode};
 use st_map::StMap;
 use std::cell::RefCell;
 use std::fmt::Write as _;
@@ -117,6 +118,30 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
         )
         .with_code("ST-012"));
     };
+
+    // Анонимное обращение к ячейке (фича 0189) требует **локации**, а её знает
+    // только цель `st-at`: цель `st` — библиотека блоков, где порт есть
+    // `VAR_INPUT`/`VAR_OUTPUT`, а адресного пространства нет вовсе.
+    //
+    // Проверка стоит здесь, в точке входа, а не в печатнике: так режим цели не
+    // приходится тянуть через все печатники выражений и условий, а отказ
+    // приходит **до** первой строки вывода, то есть невалидного файла не
+    // возникает даже частично.
+    if !map.at_addresses()
+        && let Some(root) = map.root_model_node()
+        && let Some(cell) = crate::semantic::collect_anon_ports(&root).first()
+    {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            format!(
+                "обращение к ячейке по адресу ('#0x{:X}') требует размещения, \
+                 которого цель 'st' не знает: она порождает библиотеку блоков. \
+                 Соберите целью 'st-at'",
+                cell.addr as u64
+            ),
+        )
+        .with_code("ST-018"));
+    }
 
     let mut out = String::new();
     let mut p = Printer::new(INDENT, &mut out);
@@ -197,6 +222,50 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     Ok(st_fixed::insert_helper(out))
 }
 
+/// Строка объявления анонимной ячейки в `VAR_GLOBAL` (фича 0189).
+///
+/// Класс локации — **`%M`** (память): направления у ячейки нет, а `%I`/`%Q`
+/// означали бы вход и выход ПЛК, которых автор не объявлял. Тот же выбор, что у
+/// порта `inout` (`st_at::location_of`).
+///
+/// # Ошибки
+///
+/// `ST-019` — поле **со смещением** (`#0x100:3 as u8`): локация IEC выражает
+/// либо бит (`%MX512.3`), либо целое слово (`%MB512`), а поля с произвольного
+/// разряда — нет. Молча выронить смещение нельзя: получилось бы обращение к
+/// другому месту памяти.
+fn anon_global(cell: &crate::semantic::AnonPortAccess) -> Result<String, Diagnostic> {
+    let is_bit = matches!(
+        cell.ty,
+        crate::semantic::type_node::TypeNode::Bit | crate::semantic::type_node::TypeNode::Bool
+    );
+    if !is_bit && cell.bit != 0 {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            format!(
+                "обращение '#0x{:X}:{} as {}' задаёт поле со смещением, а локация \
+                 IEC 61131-3 такого не выражает: допустимы либо один бит \
+                 ('#0x{:X}.N'), либо целое слово ('#0x{:X} as ТИП')",
+                cell.addr as u64, cell.bit, cell.ty, cell.addr as u64, cell.addr as u64
+            ),
+        )
+        .with_code("ST-019"));
+    }
+    let resolved = ResolvedAddress {
+        addr: cell.addr,
+        bit: if is_bit { Some(cell.bit) } else { None },
+        source: AddressSource::Inline,
+        ty: cell.ty.clone(),
+        direction: PortDirection::InOut,
+        name: cell.synthetic_name(),
+    };
+    let name = cell.synthetic_name();
+    let (location, comment, _warnings) =
+        st_at::location_of(&name, &cell.ty, PortDirection::InOut, &resolved)?;
+    let ty_name = st_type::get_st_type(&cell.ty, &ModelNode::default())?;
+    Ok(format!("{} AT {} : {}; {}", name, location, ty_name, comment))
+}
+
 /// Печатает `PROGRAM` и `CONFIGURATION` с размещёнными портами (цель `st-at`).
 ///
 /// Форма проверена пробами П3 (обёртка) и П8 (`VAR_GLOBAL … AT %…` внутри
@@ -275,6 +344,17 @@ fn emit_configuration(
             ));
         }
     }
+    // Анонимные ячейки (фича 0189): у них нет объявления в исходнике, но
+    // локация в IEC принадлежит **объявлению**, поэтому цель заводит
+    // размещённую глобальную переменную с именем, которое строит компилятор.
+    // Имя — общее с эталоном и с целью `sv-mmio` (`synthetic_name`), иначе
+    // сверка трасс сравнивала бы разные величины.
+    if let Some(root) = map.root_model_node() {
+        for cell in crate::semantic::collect_anon_ports(&root) {
+            placed.push(anon_global(&cell)?);
+        }
+    }
+
     // Порядок объявления глобалов на семантику не влияет, но должен быть
     // воспроизводимым: `variables` — HashMap.
     placed.sort();

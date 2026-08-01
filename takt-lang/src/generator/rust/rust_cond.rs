@@ -175,6 +175,11 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
         ConditionNode::State(..) => Err(unsupported(
             "состояние в позиции условия вне формы 'S(Модель) = Состояние'",
         )),
+        // Анонимное обращение (фича 0189) — см. оговорку у печатника выражений.
+        ConditionNode::AnonPort(_) => Err(unsupported(
+            "обращение к ячейке по адресу ('#0x…'): цель rust адресов не знает — \
+             доступ по адресу дают цели 'c-hal', 'st-at' и 'sv-mmio'",
+        )),
     }
 }
 

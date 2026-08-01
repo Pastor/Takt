@@ -199,6 +199,8 @@ fn collect(expr: &ExpressionNode, found: &mut Vec<Diagnostic>) {
         | ExpressionNode::String(_)
         | ExpressionNode::Type(_)
         | ExpressionNode::Address(_, _)
+        // Обращение к ячейке (фича 0189) выражений внутри не несёт: адрес — литерал.
+        | ExpressionNode::AnonPort(_)
         | ExpressionNode::Bool(_)
         | ExpressionNode::Variable(_)
         | ExpressionNode::Model(_)

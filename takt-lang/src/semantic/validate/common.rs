@@ -120,6 +120,8 @@ fn validate_cond(
         ConditionNode::Rational(_, _) => {}
         ConditionNode::String(_) => {}
         ConditionNode::Bool(_) => {}
+        // Обращение к ячейке в условии (фича 0189) — только чтение, проверять нечего.
+        ConditionNode::AnonPort(_) => {}
         ConditionNode::Variable(var_rc, _) => {
             // Чтение из `out`-порта запрещено в условии (SE-027)
             if let VariableNode::Port {
@@ -261,6 +263,10 @@ pub(super) fn validate_expression(
         ExpressionNode::String(_) => {}
         ExpressionNode::Type(_) => {}
         ExpressionNode::Address(_, _) => {}
+        // Обращение к ячейке по адресу (фича 0189): направления у неё нет —
+        // проверять нечего. Запись даёт **предупреждение** `SE-096`, а
+        // предупреждения вырабатывает слой `semantic::warnings` (0081), не судья.
+        ExpressionNode::AnonPort(_) => {}
         ExpressionNode::Bool(_) => {}
         ExpressionNode::Variable(var_rc) => {
             // Чтение из `out`-порта запрещено (SE-027)

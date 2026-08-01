@@ -159,8 +159,30 @@ fn generate_program(
     // `options.address_map` библиотечной обёрткой `compile_to_sv_mmio` — как для
     // `c-hal`. В режиме `sv` (`mmio == false`) `mmio_map` пуст и всё ниже
     // вырождается в прежний вывод (T3/A3 — побайтовое равенство).
+    // Анонимные ячейки (фича 0189) собираются с корня: в регистровый файл они
+    // входят наравне с адресованными портами.
+    let anon_cells = map
+        .root_model_node()
+        .map(|root| crate::semantic::collect_anon_ports(&root))
+        .unwrap_or_default();
+    // Цель `sv` (без регистрового файла) адресного пространства не имеет:
+    // сигнал приходит на вывод кристалла. Отказ — в точке входа, до первой
+    // строки вывода, а не в печатнике: так режим цели не приходится тянуть
+    // через все печатники (тот же приём, что у цели `st`).
+    if !mmio && let Some(cell) = anon_cells.first() {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            format!(
+                "обращение к ячейке по адресу ('#0x{:X}') требует адресного \
+                 пространства, которого у RTL нет: сигнал приходит на вывод \
+                 кристалла. Соберите целью 'sv-mmio'",
+                cell.addr as u64
+            ),
+        )
+        .with_code("SV-017"));
+    }
     let mmio_map = if mmio {
-        Some(sv_mmio::Mmio::build(&blocks, address_map)?)
+        Some(sv_mmio::Mmio::build(&blocks, address_map, &anon_cells)?)
     } else {
         None
     };

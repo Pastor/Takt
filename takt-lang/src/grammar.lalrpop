@@ -1,8 +1,8 @@
 use super::parser::ast::*;
 use super::diagnostics::Location;
 use super::parser::lexer::{Token, LexicalError};
-use super::parser::parse_address_literal;
-use lalrpop_util::ErrorRecovery;
+use super::parser::{expression_has_effect, parse_address_literal};
+use lalrpop_util::{ErrorRecovery, ParseError};
 grammar<'input, 'err>(input: &'input str, file_no: u64 , parser_errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, LexicalError>> );
 
 pub SourceUnit: Model = {
@@ -145,7 +145,7 @@ InvariantDefine: InvariantDefine = {
 // `0xADDR` или `0xADDR:bit`. Привязка к порту и приоритет источников —
 // семантика (0020-02).
 AddressDefine: AddressDefine = {
-    <l:@L> "address" <name:IdentifierOrError> "=" <e:Expression> <r:@R> ";" => AddressDefine {
+    <l:@L> "address" <name:IdentifierOrError> "=" <e:AddressExpr> <r:@R> ";" => AddressDefine {
         loc: Location::source(file_no, l, r), name, value: e
     },
 }
@@ -441,6 +441,18 @@ Condition0: Condition = {
 ConditionExpression: Condition = {
     <a:@L> "true" <b:@R> => Condition::Bool(Location::source(file_no, a, b), true),
     <a:@L> "false" <b:@R> => Condition::Bool(Location::source(file_no, a, b), false),
+    // Анонимное обращение к ячейке в УСЛОВИИ (фича 0189): без него ребро
+    // `ref Next: #0x100.0;` не разбиралось бы вовсе. Битовый доступ даёт
+    // существующее правило `Condition0 "." Member`; ширину доступа задать
+    // нечем (`as` в грамматике условий нет) — словную форму отвергает
+    // семантика называющей диагностикой, а не парсер списком токенов.
+    <l:@L> "#" <a:address> <r:@R> => {
+        let (addr_val, bit_val) = parse_address_literal(a);
+        Condition::AnonAddress(Location::source(file_no, l, r), addr_val as i128, Some(bit_val))
+    },
+    <l:@L> "#" <n:number> <r:@R> => {
+        Condition::AnonAddress(Location::source(file_no, l, r), n, None)
+    },
     <l:@L> <n:number> <r:@R> => {
         Condition::Number(Location::source(file_no, l, r), n)
     },
@@ -492,6 +504,12 @@ LoopCond: Expression = { Chain14<Precedence1NoBrace> }
 // нечего, а вычислитель адреса (`address_map/eval.rs`) принимает лишь литералы,
 // имена и целочисленную арифметику.
 AddressExpr: Expression = {
+    // Адресный литерал законен ЗДЕСЬ — в позиции размещения (фича 0189).
+    // В общем выражении то же написание отвергается (`SY-008`).
+    <l:@L> <a:address> <r:@R> => {
+        let (addr_val, bit_val) = parse_address_literal(a);
+        Expression::Address(Location::source(file_no, l, r), addr_val, bit_val)
+    },
     Chain13<Precedence1Full>
 }
 
@@ -640,10 +658,28 @@ Chain2<Atom>: Expression = {
 }
 
 Precedence1Full: Expression = {
-    // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта с тернарным `?:`)
-    <l:@L> <a:address> <r:@R> => {
+    // Адресного литерала здесь НЕТ (фича 0189, решение 7A): адрес есть свойство
+    // размещения — он законен после `at`, в операторе `address` и во внешней
+    // карте, а в выражении ячейка адресуется формой `#0xАДРЕС as ТИП`.
+    //
+    // Встретив литерал в позиции значения, LALRPOP отдаёт «нераспознанный
+    // токен», и `parse_entry` заменяет это сообщение правилом языка (`SY-008`)
+    // — тот же приём, что у присваивания (`SY-006`, фикс 0187-01). Оставить
+    // литерал в атоме нельзя: `AddressExpr` включает эту же цепочку, и
+    // грамматика стала бы неоднозначной.
+    //
+    // Анонимное обращение к ячейке `#0xNNNN` / `#0xNNNN:bit` (фича 0189).
+    //
+    // Ширина доступа задаётся тем, что стоит НАД обращением — приведением
+    // (`as u32`) либо битовым доступом (`.4`); в атоме её нет намеренно:
+    // оба оператора в языке уже есть со своими приоритетами, и вторая
+    // грамматика приведения внутри атома разъехалась бы с первой.
+    <l:@L> "#" <a:address> <r:@R> => {
         let (addr_val, bit_val) = parse_address_literal(a);
-        Expression::Address(Location::source(file_no, l, r), addr_val, bit_val)
+        Expression::AnonAddress(Location::source(file_no, l, r), addr_val as i128, Some(bit_val))
+    },
+    <l:@L> "#" <n:number> <r:@R> => {
+        Expression::AnonAddress(Location::source(file_no, l, r), n, None)
     },
     <l:@L> <n:number> <r:@R> => {
         Expression::Number(Location::source(file_no, l, r), n)
@@ -661,10 +697,14 @@ Precedence1Full: Expression = {
 }
 
 Precedence1NoBrace: Expression = {
-    // Адресный литерал `0xNNNN:bit` — единый токен (без LR-конфликта с тернарным `?:`)
-    <l:@L> <a:address> <r:@R> => {
+    // Адресного литерала здесь нет — см. `Precedence1Full` (фича 0189).
+    // Анонимное обращение к ячейке (фича 0189) — то же, что в `Precedence1Full`.
+    <l:@L> "#" <a:address> <r:@R> => {
         let (addr_val, bit_val) = parse_address_literal(a);
-        Expression::Address(Location::source(file_no, l, r), addr_val, bit_val)
+        Expression::AnonAddress(Location::source(file_no, l, r), addr_val as i128, Some(bit_val))
+    },
+    <l:@L> "#" <n:number> <r:@R> => {
+        Expression::AnonAddress(Location::source(file_no, l, r), n, None)
     },
     <l:@L> <n:number> <r:@R> => {
         Expression::Number(Location::source(file_no, l, r), n)
@@ -838,8 +878,24 @@ SimpleStatement: Statement = {
         Statement::Variable(Location::source(file_no, l, r), v, None)
     },
     // Позиция оператора: здесь запись законна (`StatementExpr`, фикс 0187-01).
-    <l:@L> <e:StatementExpr> <r:@R> => {
-        Statement::Expression(Location::source(file_no, l, r), e)
+    //
+    // Фича 0189 (решение 6A): оператором может быть только выражение **с
+    // эффектом** — присваивание либо вызов функции. Прочее (`x + 1;`,
+    // `#0x100.4;`) отвергается парсером (`SY-007`), а не семантикой: этого
+    // требовал заказчик, и тот же приём применён к позиции присваивания.
+    //
+    // Проверка — действием правила, а не отдельной продукцией: LR(1) не
+    // различает «выражение с эффектом» и «без» до конца разбора, поэтому
+    // грамматика принимает выражение, а форму проверяет действие. Отказ
+    // остаётся **синтаксическим**: он приходит из парсера, с позицией, до
+    // построения дерева.
+    <l:@L> <e:StatementExpr> <r:@R> =>? {
+        if !expression_has_effect(&e) {
+            return Err(ParseError::User {
+                error: LexicalError::StatementWithoutEffect(Location::source(file_no, l, r)),
+            });
+        }
+        Ok(Statement::Expression(Location::source(file_no, l, r), e))
     }
 }
 

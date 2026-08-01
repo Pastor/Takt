@@ -446,6 +446,9 @@ fn walk_expression(expr: &ast::Expression, scopes: &mut Scopes, table: &mut Usag
         | ast::Expression::Rational(_, _, _)
         | ast::Expression::String(_)
         | ast::Expression::Address(_, _, _)
+        // Анонимное обращение (фича 0189) имён не содержит: у ячейки их нет —
+        // ни объявления, ни ссылки, поэтому переименовывать в нём нечего.
+        | ast::Expression::AnonAddress(_, _, _)
         | ast::Expression::Bool(_, _) => {}
     }
 }
@@ -530,6 +533,7 @@ fn walk_condition(cond: &ast::Condition, scopes: &mut Scopes, table: &mut UsageT
         | ast::Condition::AfterTicks(_, _, _)
         | ast::Condition::Rational(_, _, _)
         | ast::Condition::String(_)
+        | ast::Condition::AnonAddress(_, _, _)
         | ast::Condition::Bool(_, _) => {}
     }
 }

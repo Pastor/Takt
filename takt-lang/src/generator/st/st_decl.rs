@@ -300,6 +300,19 @@ pub(crate) fn emit_declarations(
         constants.push(declaration(&name, ty, expr, model)?);
     }
 
+    // Анонимные ячейки (фича 0189): в цели `st-at` они объявлены глобально с
+    // локацией, а блок видит их через `VAR_EXTERNAL` — как и порты. Собираются
+    // **только свои**: у под-модели свой блок и свой список.
+    if extras.external_ports {
+        for cell in crate::semantic::collect_anon_ports_local_node(model) {
+            externals.push(Declaration {
+                name: cell.synthetic_name(),
+                ty: get_st_type(&cell.ty, model)?,
+                init: None,
+            });
+        }
+    }
+
     let sections = [
         ("VAR_INPUT", inputs),
         ("VAR_OUTPUT", outputs),
