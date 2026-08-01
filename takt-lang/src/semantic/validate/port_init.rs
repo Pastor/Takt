@@ -1,20 +1,15 @@
-//! Начальное значение порта: где оно законно и что с ним пока происходит
-//! (фича 0187, задача 02).
+//! Начальное значение порта: где оно законно (фича 0187, задачи 02 и 04).
 //!
-//! ## Две проверки
+//! **`SE-092`** — начальное значение у **входного** порта. Значение входа
+//! приходит извне: датчик, регистр, соседнее устройство. Задавать его нечем и
+//! незачем, а запись `in P: u8 := 5;` почти наверняка означает, что автор принял
+//! `:=` за адрес (до фичи 0187 так и было).
 //!
-//! - **`SE-092`** — начальное значение у **входного** порта. Значение входа
-//!   приходит извне: датчик, регистр, соседнее устройство. Задавать его нечем и
-//!   незачем, а запись `in P: u8 := 5;` почти наверняка означает, что автор
-//!   принял `:=` за адрес (до фичи 0187 так и было).
-//! - **`SE-093`** — временное: значение эмитируют **не все** цели. Задача
-//!   0187-03 научила `c`, `c-hal` и `rust` (симулятор стартует порт значением с
-//!   задачи 0187-02 — ему нечего эмитить); `sv`, `sv-mmio`, `st` и `st-at` —
-//!   работа задачи 0187-04. Молчать нельзя: программа собралась бы, а значение
-//!   исчезло — ровно тот молчаливый пропуск, против которого заведена вся фича.
-//!
-//! ⚠️ `SE-093` **снимается** по мере реализации целей; его номер после этого не
-//! переиспользуется (реестр диагностик, правило 0077).
+//! ⚠️ Здесь же жило временное предупреждение **`SE-093`** («значение выставляют
+//! не все цели»). Задача 0187-04 научила последние четыре цели (`sv`, `sv-mmio`,
+//! `st`, `st-at`), и предупреждение **снято**: молчаливого пропуска, о котором
+//! оно говорило, больше нет. Номер не переиспользуется — он помечен `RETIRED` в
+//! реестре диагностик (`docs/diagnostics/README.md`).
 
 use crate::diagnostics::Diagnostic;
 use crate::semantic::{ExpressionNode, ModelNode, PortDirection, VariableNode};
@@ -24,32 +19,11 @@ use std::rc::Rc;
 /// `SE-092`: начальное значение у входного порта — **ошибка**.
 pub(super) fn check_port_initializers(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let mut found = Vec::new();
-    collect(&model, &mut found, Kind::Error);
+    collect(&model, &mut found);
     found
 }
 
-/// `SE-093`: начальное значение выходного порта пока не эмитируется —
-/// **предупреждение**.
-///
-/// ⚠️ Живёт отдельной функцией, потому что `validate_model_all` собирает
-/// **ошибки**: предупреждение, положенное туда, печаталось бы как «Ошибка
-/// компиляции». Единая точка предупреждений — `semantic::warnings`.
-pub(crate) fn port_init_warnings(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
-    let mut found = Vec::new();
-    collect(&model, &mut found, Kind::Warning);
-    found
-}
-
-/// Что именно собирает обход за один проход.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Kind {
-    /// Только `SE-092` (вход с начальным значением).
-    Error,
-    /// Только `SE-093` (значение выхода пока не эмитируется).
-    Warning,
-}
-
-fn collect(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>, kind: Kind) {
+fn collect(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>) {
     let (vars, nested) = {
         let b = model.borrow();
         (
@@ -72,9 +46,6 @@ fn collect(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>, kind: Kind
             continue;
         }
         if *direction == PortDirection::In {
-            if kind != Kind::Error {
-                continue;
-            }
             out.push(
                 Diagnostic::error(
                     *loc,
@@ -86,24 +57,9 @@ fn collect(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagnostic>, kind: Kind
                 )
                 .with_code("SE-092"),
             );
-            continue;
         }
-        if kind != Kind::Warning {
-            continue;
-        }
-        out.push(
-            Diagnostic::warning(
-                *loc,
-                format!(
-                    "начальное значение порта '{name}' выставляют пока не все цели: \
-                     'c', 'c-hal' и 'rust' пишут его до первого такта, \
-                     а 'sv', 'sv-mmio', 'st' и 'st-at' — ещё нет"
-                ),
-            )
-            .with_code("SE-093"),
-        );
     }
     for child in &nested {
-        collect(child, out, kind);
+        collect(child, out);
     }
 }

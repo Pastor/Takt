@@ -42,7 +42,8 @@ use crate::generator::indent::Printer;
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_type::{SvType, sv_type};
 use crate::semantic::minimap::Name;
-use crate::semantic::{ModelNode, PortDirection, VariableNode};
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, ModelNode, PortDirection, VariableNode};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
@@ -423,6 +424,20 @@ pub(crate) struct SvPort {
     pub(crate) name: String,
     /// Тип порта в SystemVerilog.
     pub(crate) ty: SvType,
+    /// Тип порта в языке — для печати литерала сброса (фича 0187, задача 04).
+    ///
+    /// [`SvType`] хранит уже готовые части объявления (`logic signed [15:0]`), а
+    /// значение сброса печатается по **семантическому** типу: перечисление
+    /// восстанавливается по вариантам, широкое число — размерной формой.
+    pub(crate) ty_node: TypeNode,
+    /// Начальное значение порта (`:=` объявления, фича 0187).
+    ///
+    /// [`ExpressionNode::None`], если не задано. К этому моменту — литерал:
+    /// свёртку делает семантика (`declaration::resolve_port_init`), поэтому
+    /// контекст печати роли не играет.
+    pub(crate) init: ExpressionNode,
+    /// Позиция объявления — для диагностики о непечатаемом значении сброса.
+    pub(crate) loc: Location,
 }
 
 /// Порты модуля, разложенные по направлениям.
@@ -465,6 +480,7 @@ pub(crate) fn collect_ports(
                 ty,
                 direction,
                 loc,
+                init,
                 ..
             } = var
             else {
@@ -489,6 +505,9 @@ pub(crate) fn collect_ports(
             let port = SvPort {
                 name: name.clone(),
                 ty: sv_type(ty, &format!("порт '{}'", name))?,
+                ty_node: ty.clone(),
+                init: init.clone(),
+                loc: *loc,
             };
             match direction {
                 PortDirection::In => ports.inputs.push(port),
@@ -559,6 +578,17 @@ mod tests {
 
     fn loc() -> Location {
         Location::Codegen
+    }
+
+    /// Порт без начального значения — форма для проверок заголовка модуля.
+    fn test_port(name: &str, ty: TypeNode) -> SvPort {
+        SvPort {
+            name: name.to_string(),
+            ty: sv_type(&ty, "тест").unwrap(),
+            ty_node: ty,
+            init: ExpressionNode::None,
+            loc: loc(),
+        }
     }
 
     /// Служебные имена цели отвергаются с `SV-007`.
@@ -661,14 +691,8 @@ mod tests {
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
         let ports = SvPorts {
-            inputs: vec![SvPort {
-                name: "lift_request".to_string(),
-                ty: sv_type(&crate::semantic::type_node::TypeNode::Bit, "тест").unwrap(),
-            }],
-            outputs: vec![SvPort {
-                name: "cmd_fork".to_string(),
-                ty: sv_type(&crate::semantic::type_node::TypeNode::Bit, "тест").unwrap(),
-            }],
+            inputs: vec![test_port("lift_request", TypeNode::Bit)],
+            outputs: vec![test_port("cmd_fork", TypeNode::Bit)],
         };
         emit_module_header(&mut p, "stacker", &ports, None, None);
         assert!(
@@ -692,17 +716,13 @@ mod tests {
         let mut out = String::new();
         let mut p = Printer::new(4, &mut out);
         let ports = SvPorts {
-            inputs: vec![SvPort {
-                name: "task_stack_no".to_string(),
-                ty: sv_type(
-                    &crate::semantic::type_node::TypeNode::Integer {
-                        bits: 8,
-                        signed: false,
-                    },
-                    "тест",
-                )
-                .unwrap(),
-            }],
+            inputs: vec![test_port(
+                "task_stack_no",
+                TypeNode::Integer {
+                    bits: 8,
+                    signed: false,
+                },
+            )],
             outputs: Vec::new(),
         };
         emit_module_header(&mut p, "stacker", &ports, None, None);

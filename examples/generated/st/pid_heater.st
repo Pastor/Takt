@@ -6,7 +6,7 @@
 FUNCTION_BLOCK PidHeaterHeater
 VAR_OUTPUT
     is_done : BOOL;
-    temperature : LREAL;
+    temperature : LREAL := 0.0;
 END_VAR
 VAR_IN_OUT
     ambient : LREAL;

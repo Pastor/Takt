@@ -238,6 +238,7 @@ fn emit_configuration(
                 name: pname,
                 ty,
                 direction,
+                init,
                 ..
             } = &root.variables[name]
             else {
@@ -258,9 +259,19 @@ fn emit_configuration(
             let (location, comment, mut w) = st_at::location_of(pname, ty, *direction, resolved)?;
             warnings.append(&mut w);
             let ty_name = st_type::get_st_type(ty, root)?;
+            // Начальное значение порта (фича 0187, задача 04) — на размещённой
+            // глобальной переменной, а не на `VAR_EXTERNAL` блока: инициализатор
+            // внешнего объявления стандарт запрещает. Проба задачи показала, что
+            // `iec2c` принимает `AT %QX0.0 : BOOL := TRUE;` и словные формы тоже
+            // (`AT %QW2 : UINT := 7;`), а порождённый C выставляет значение
+            // макросом `__INIT_GLOBAL` — то есть до первого скана. Запасной путь
+            // «запись первым сканом», заложенный в анализе как риск, не нужен.
+            let init_text = st_decl::literal_init(init, ty)
+                .map(|v| format!(" := {}", v))
+                .unwrap_or_default();
             placed.push(format!(
-                "{} AT {} : {}; {}",
-                pname, location, ty_name, comment
+                "{} AT {} : {}{}; {}",
+                pname, location, ty_name, init_text, comment
             ));
         }
     }

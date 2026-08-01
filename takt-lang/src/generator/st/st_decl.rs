@@ -238,6 +238,7 @@ pub(crate) fn emit_declarations(
                 ty,
                 direction,
                 loc,
+                init,
                 ..
             } => {
                 if !usage.ports.contains(name) {
@@ -247,12 +248,25 @@ pub(crate) fn emit_declarations(
                 if extras.shared.iter().any(|(n, _)| n == name) {
                     continue;
                 }
-                let decl = declaration(name, ty, &ExpressionNode::None, model)?;
+                // Начальное значение порта (фича 0187) — инициализатор
+                // объявления `VAR_OUTPUT`: экземпляр `FUNCTION_BLOCK` получает
+                // его при создании, то есть до первого вызова. Это ровно то
+                // «до первого такта», которого требует R5, и запасного пути
+                // (запись первым сканом) не нужно — проба задачи 0187-04
+                // показала, что `iec2c` принимает инициализатор и на выходе FB,
+                // и на размещённой глобальной переменной.
+                //
+                // ⚠️ Входной порт значения не получает (`SE-092` его отвергает),
+                // а в цели `st-at` порт виден блоку через `VAR_EXTERNAL`, где
+                // инициализатор недопустим по стандарту: значение там ставится
+                // на `VAR_GLOBAL` (`st/mod.rs::emit_configuration`).
+                let mut decl = declaration(name, ty, init, model)?;
                 // Цель `st-at`: порт — размещённая глобальная переменная
                 // (`VAR_GLOBAL … AT %…` внутри `CONFIGURATION`), и блок видит её
                 // через `VAR_EXTERNAL`. Цель `st` адрес не потребляет: порт
                 // остаётся входом/выходом блока.
                 if extras.external_ports {
+                    decl.init = None;
                     externals.push(decl);
                     continue;
                 }

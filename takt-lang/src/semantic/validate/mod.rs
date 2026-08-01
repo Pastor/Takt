@@ -40,7 +40,6 @@ mod member_access;
 mod nondeterminism;
 mod port_direction;
 mod port_init;
-pub(crate) use port_init::port_init_warnings;
 mod ports;
 mod states;
 mod structs;
@@ -146,8 +145,8 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // в цели, где расходилось вплоть до записи по адресу другого порта.
     found.extend(port_direction::check_port_directions(model.clone()));
 
-    // SE-092/SE-093 (0187): начальное значение порта — где законно и что с ним
-    // пока происходит.
+    // SE-092 (0187): начальное значение у входного порта — ошибка. Временное
+    // SE-093 («выставляют не все цели») снято задачей 0187-04: цели умеют все.
     found.extend(port_init::check_port_initializers(model.clone()));
 
     let nested: Vec<Rc<RefCell<ModelNode>>> =
