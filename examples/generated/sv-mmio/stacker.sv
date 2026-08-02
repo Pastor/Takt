@@ -15,15 +15,15 @@ module stacker (
     output logic [7:0] reg_rdata,  // данные чтения (комбинационные)
     output logic is_done
 );
-    localparam logic [7:0] CHARGE_ROW = 0;
-    localparam logic [7:0] CHARGE_SECTION = 0;
-    localparam logic [7:0] CHARGE_STACK = 0;
-    localparam logic [7:0] DROPOFF_ROW = 1;
-    localparam logic [7:0] DROPOFF_SECTION = 1;
-    localparam logic [7:0] DROPOFF_STACK = 11;
-    localparam logic [7:0] PICKUP_ROW = 1;
-    localparam logic [7:0] PICKUP_SECTION = 1;
-    localparam logic [7:0] PICKUP_STACK = 0;
+    localparam logic [7:0] stacker_CHARGE_ROW = 0;
+    localparam logic [7:0] stacker_CHARGE_SECTION = 0;
+    localparam logic [7:0] stacker_CHARGE_STACK = 0;
+    localparam logic [7:0] stacker_DROPOFF_ROW = 1;
+    localparam logic [7:0] stacker_DROPOFF_SECTION = 1;
+    localparam logic [7:0] stacker_DROPOFF_STACK = 11;
+    localparam logic [7:0] stacker_PICKUP_ROW = 1;
+    localparam logic [7:0] stacker_PICKUP_SECTION = 1;
+    localparam logic [7:0] stacker_PICKUP_STACK = 0;
 
     // Состояния модели 'CommandReceiver (Stacker:CommandReceiver)'. Синтетического INIT нет: стартовое
     // состояние живёт в ветви сброса (контракт ADR 0033).
@@ -200,9 +200,9 @@ module stacker (
                 unique case (stacker_movement_controller_state)
                     STACKER_MOVEMENT_CONTROLLER_DISPATCH_MOVE: begin
                         if ((!stacker_tgt_type_next)) begin
-                            cmd_target_stack_next = PICKUP_STACK;
-                            cmd_target_row_next = PICKUP_ROW;
-                            cmd_target_section_next = PICKUP_SECTION;
+                            cmd_target_stack_next = stacker_PICKUP_STACK;
+                            cmd_target_row_next = stacker_PICKUP_ROW;
+                            cmd_target_section_next = stacker_PICKUP_SECTION;
                             stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP;
                         end
                         else if (stacker_tgt_type_next) begin
@@ -216,9 +216,9 @@ module stacker (
                     end
                     STACKER_MOVEMENT_CONTROLLER_EMERGENCY_CHARGE: begin
                         if (sense_at_charge) begin
-                            cmd_target_stack_next = CHARGE_STACK;
-                            cmd_target_row_next = CHARGE_ROW;
-                            cmd_target_section_next = CHARGE_SECTION;
+                            cmd_target_stack_next = stacker_CHARGE_STACK;
+                            cmd_target_row_next = stacker_CHARGE_ROW;
+                            cmd_target_section_next = stacker_CHARGE_SECTION;
                             cmd_done_next = 0;
                             stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE;
                         end
@@ -235,9 +235,9 @@ module stacker (
                             stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_CELL;
                         end
                         else if (sense_battery_low) begin
-                            cmd_target_stack_next = CHARGE_STACK;
-                            cmd_target_row_next = CHARGE_ROW;
-                            cmd_target_section_next = CHARGE_SECTION;
+                            cmd_target_stack_next = stacker_CHARGE_STACK;
+                            cmd_target_row_next = stacker_CHARGE_ROW;
+                            cmd_target_section_next = stacker_CHARGE_SECTION;
                             stacker_lift_request_next = 0;
                             stacker_lift_done_next = 0;
                             cmd_ack_next = 0;
@@ -247,15 +247,15 @@ module stacker (
                         end
                     end
                     STACKER_MOVEMENT_CONTROLLER_MOVING_TO_DROPOFF: begin
-                        if ((((pos_stack == DROPOFF_STACK) && (pos_row == DROPOFF_ROW)) && (pos_section == DROPOFF_SECTION))) begin
+                        if ((((pos_stack == stacker_DROPOFF_STACK) && (pos_row == stacker_DROPOFF_ROW)) && (pos_section == stacker_DROPOFF_SECTION))) begin
                             stacker_lift_request_next = 1;
                             stacker_lift_op_next = 1;
                             stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_DROPOFF;
                         end
                         else if (sense_battery_low) begin
-                            cmd_target_stack_next = CHARGE_STACK;
-                            cmd_target_row_next = CHARGE_ROW;
-                            cmd_target_section_next = CHARGE_SECTION;
+                            cmd_target_stack_next = stacker_CHARGE_STACK;
+                            cmd_target_row_next = stacker_CHARGE_ROW;
+                            cmd_target_section_next = stacker_CHARGE_SECTION;
                             stacker_lift_request_next = 0;
                             stacker_lift_done_next = 0;
                             cmd_ack_next = 0;
@@ -265,15 +265,15 @@ module stacker (
                         end
                     end
                     STACKER_MOVEMENT_CONTROLLER_MOVING_TO_PICKUP: begin
-                        if ((((pos_stack == PICKUP_STACK) && (pos_row == PICKUP_ROW)) && (pos_section == PICKUP_SECTION))) begin
+                        if ((((pos_stack == stacker_PICKUP_STACK) && (pos_row == stacker_PICKUP_ROW)) && (pos_section == stacker_PICKUP_SECTION))) begin
                             stacker_lift_request_next = 1;
                             stacker_lift_op_next = 0;
                             stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_PICKUP;
                         end
                         else if (sense_battery_low) begin
-                            cmd_target_stack_next = CHARGE_STACK;
-                            cmd_target_row_next = CHARGE_ROW;
-                            cmd_target_section_next = CHARGE_SECTION;
+                            cmd_target_stack_next = stacker_CHARGE_STACK;
+                            cmd_target_row_next = stacker_CHARGE_ROW;
+                            cmd_target_section_next = stacker_CHARGE_SECTION;
                             stacker_lift_request_next = 0;
                             stacker_lift_done_next = 0;
                             cmd_ack_next = 0;
@@ -289,9 +289,9 @@ module stacker (
                             stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_STORAGE;
                         end
                         else if (sense_battery_low) begin
-                            cmd_target_stack_next = CHARGE_STACK;
-                            cmd_target_row_next = CHARGE_ROW;
-                            cmd_target_section_next = CHARGE_SECTION;
+                            cmd_target_stack_next = stacker_CHARGE_STACK;
+                            cmd_target_row_next = stacker_CHARGE_ROW;
+                            cmd_target_section_next = stacker_CHARGE_SECTION;
                             stacker_lift_request_next = 0;
                             stacker_lift_done_next = 0;
                             cmd_ack_next = 0;
@@ -303,9 +303,9 @@ module stacker (
                     STACKER_MOVEMENT_CONTROLLER_TASK_COMPLETING: begin
                         cmd_done_next = 0;
                         begin
-                            cmd_target_stack_next = CHARGE_STACK;
-                            cmd_target_row_next = CHARGE_ROW;
-                            cmd_target_section_next = CHARGE_SECTION;
+                            cmd_target_stack_next = stacker_CHARGE_STACK;
+                            cmd_target_row_next = stacker_CHARGE_ROW;
+                            cmd_target_section_next = stacker_CHARGE_SECTION;
                             cmd_done_next = 0;
                             stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE;
                         end
@@ -342,9 +342,9 @@ module stacker (
                         if (stacker_lift_done_next) begin
                             stacker_lift_request_next = 0;
                             stacker_lift_done_next = 0;
-                            cmd_target_stack_next = DROPOFF_STACK;
-                            cmd_target_row_next = DROPOFF_ROW;
-                            cmd_target_section_next = DROPOFF_SECTION;
+                            cmd_target_stack_next = stacker_DROPOFF_STACK;
+                            cmd_target_row_next = stacker_DROPOFF_ROW;
+                            cmd_target_section_next = stacker_DROPOFF_SECTION;
                             stacker_movement_controller_state_next = STACKER_MOVEMENT_CONTROLLER_MOVING_TO_DROPOFF;
                         end
                     end
@@ -416,9 +416,9 @@ module stacker (
             cmd_target_stack <= '0;
             cmd_ack <= 0;
             cmd_fork <= 0;
-            cmd_target_stack <= CHARGE_STACK;
-            cmd_target_row <= CHARGE_ROW;
-            cmd_target_section <= CHARGE_SECTION;
+            cmd_target_stack <= stacker_CHARGE_STACK;
+            cmd_target_row <= stacker_CHARGE_ROW;
+            cmd_target_section <= stacker_CHARGE_SECTION;
             cmd_done <= 0;
         end else if (en) begin
             stacker_command_receiver_state <= stacker_command_receiver_state_next;

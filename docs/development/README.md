@@ -346,3 +346,5 @@
 | 0191-03 | 0191 | Цель st: потактовая сверка с эталоном и устранение расхождений | [0191-03-st-per-tick-conformance.md](0191-03-st-per-tick-conformance.md) |
 | 0192-01 | 0192 | Константное выражение в инициализаторе объявления | [0192-01-const-init-fold.md](0192-01-const-init-fold.md) |
 | 0192-02 | 0192 | Константное выражение в инициализаторе объявления | [0192-02-const-init-fold.md](0192-02-const-init-fold.md) |
+| 0193-01 | 0193 | Цели rust и sv: одноимённые константы разных моделей | [0193-01-shared-const-qualified.md](0193-01-shared-const-qualified.md) |
+| 0193-02 | 0193 | Цели rust и sv: одноимённые константы разных моделей | [0193-02-shared-const-qualified.md](0193-02-shared-const-qualified.md) |

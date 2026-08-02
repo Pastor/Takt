@@ -48,9 +48,21 @@ fn options(specialize: bool) -> GenerateOptions {
     options
 }
 
-/// Каталог вывода для одного прогона.
+/// Каталог вывода для одного прогона — **уникальный по тесту**.
+///
+/// ⚠️ Ключ уникальности — имя потока (харнесс Rust называет поток именем теста),
+/// а не только тег: оба теста файла зовут `try_target` с одними и теми же
+/// тегами (`sv-spec` и т. д.), а каждый вызов начинается с `remove_dir_all` —
+/// то есть при параллельном прогоне (фича 0190) один тест сносил вывод другого
+/// прямо во время компиляции, и цель отвечала `SV-001 (NotFound)`. Гонка
+/// пре-существующая: воспроизведена и до правок фичи 0193 (1 падение из 6
+/// прогонов), поодиночке и под `--test-threads=1` тест зелёный всегда.
 fn out_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("takt-0185-07-{tag}"));
+    let thread = std::thread::current()
+        .name()
+        .unwrap_or("single")
+        .to_string();
+    let dir = std::env::temp_dir().join(format!("takt-0185-07-{thread}-{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог вывода");
     dir

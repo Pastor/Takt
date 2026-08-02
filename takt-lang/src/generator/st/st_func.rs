@@ -210,11 +210,25 @@ fn const_params(def: &FunctionDefinitionNode, model: &ModelNode) -> Vec<String> 
     };
     let mut set = UsageSet::default();
     usage_from_stmt(body, &mut set);
-    let mut names: Vec<String> = set
-        .constants
+    // Множество использованных констант ключуется парой (владелец, имя) —
+    // фича 0193, — поэтому отбор идёт **от объявлений модели**: для каждой её
+    // константы строим тот же ключ и спрашиваем множество. Обратный порядок
+    // (взять ключи множества и искать их среди имён) сравнивал бы ключ с именем.
+    // ⚠️ Заодно правится и старая неточность: по голому имени константа
+    // модели-тёзки, использованная в теле, засчитывалась этой модели.
+    let mut names: Vec<String> = model
+        .variables
         .iter()
-        .filter(|n| model.variables.contains_key(*n))
-        .cloned()
+        .filter_map(|(name, var)| match var {
+            VariableNode::Const { upper, .. }
+                if set
+                    .constants
+                    .contains(&crate::semantic::unused::const_key(upper.as_ref(), name)) =>
+            {
+                Some(name.clone())
+            }
+            _ => None,
+        })
         .collect();
     names.sort();
     names

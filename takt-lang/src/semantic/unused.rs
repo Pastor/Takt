@@ -22,12 +22,64 @@ use std::rc::Rc;
 pub struct UsageSet {
     /// Используемые переменные (var)
     pub variables: HashSet<String>,
-    /// Используемые константы (const)
+    /// Используемые константы (const) — ключом [`const_key`], а не голым именем
+    /// (фича 0193).
     pub constants: HashSet<String>,
     /// Используемые порты (port)
     pub ports: HashSet<String>,
     /// Используемые функции (fn / extern fn)
     pub functions: HashSet<String>,
+}
+
+/// Ключ константы в [`UsageSet::constants`]: **владелец + имя** (фича 0193).
+///
+/// # Почему не голое имя
+///
+/// Голым именем `A::K` и `B::K` делят одну запись, и если используется хотя бы
+/// одна — фильтр пропускает обе. Пока цели печатали константу голым именем, это
+/// было безвредно (объявление всё равно оставалось одно); после квалификации
+/// (0193) печатаются **обе**, и неиспользуемая — это отказ сборки, а не
+/// предупреждение: `error: constant 'K' is never used` под `-D warnings` цели
+/// `rust` (замер 2026-08-03).
+///
+/// # Инвариант
+///
+/// ⚠️ Продюсер (этот модуль) и потребители (`rust_decl`, `sv_const`, `c_decl`)
+/// обязаны строить **одну** строку — урок [`qualified_port_key`] фичи 0084:
+/// разъехавшись на символ, они дают либо потерянное объявление, либо ссылку в
+/// пустоту. Поэтому владелец берётся **из `upper` узла константы**, а не из
+/// «модели, которую печатаем», — как и печатаемое имя.
+///
+/// Разделитель `\u{1}` в идентификаторах языка невозможен, поэтому склейка
+/// однозначна (тот же приём, что у ключа карты адресов).
+///
+/// [`qualified_port_key`]: crate::address_map::resolve::qualified_port_key
+pub fn const_key(upper: Option<&std::rc::Weak<RefCell<ModelNode>>>, name: &str) -> String {
+    let Some(owner) = upper.and_then(|u| u.upgrade()) else {
+        return name.to_string();
+    };
+    let model: crate::semantic::minimap::Name = owner.into();
+    format!("{}\u{1}{name}", model.unique())
+}
+
+/// Отмечает использование переменной/константы/порта в [`UsageSet`].
+///
+/// Вынесено (фича 0193): один и тот же `match` стоял в **четырёх** местах, и
+/// ключ константы обязан строиться везде одинаково — четыре копии правила
+/// разъехались бы при первой же правке.
+fn note_variable_usage(var: &VariableNode, set: &mut UsageSet) {
+    match var {
+        VariableNode::Simple { name, .. } => {
+            set.variables.insert(name.clone());
+        }
+        VariableNode::Port { name, .. } => {
+            set.ports.insert(name.clone());
+        }
+        VariableNode::Const { upper, name, .. } => {
+            set.constants.insert(const_key(upper.as_ref(), name));
+        }
+        VariableNode::Unresolved => {}
+    }
 }
 
 /// Вычисляет множество используемых имён для всех элементов модели.
@@ -118,35 +170,9 @@ fn usage_from_var(var: &VariableNode, set: &mut UsageSet) {
 /// Записывает имена из выражения в соответствующие множества.
 fn usage_from_expr(expr: &ExpressionNode, set: &mut UsageSet) {
     match expr {
-        ExpressionNode::Variable(var_rc) => {
-            let borrowed = var_rc.borrow();
-            match &*borrowed {
-                VariableNode::Simple { name, .. } => {
-                    set.variables.insert(name.clone());
-                }
-                VariableNode::Port { name, .. } => {
-                    set.ports.insert(name.clone());
-                }
-                VariableNode::Const { name, .. } => {
-                    set.constants.insert(name.clone());
-                }
-                VariableNode::Unresolved => {}
-            }
-        }
+        ExpressionNode::Variable(var_rc) => note_variable_usage(&var_rc.borrow(), set),
         ExpressionNode::ArraySubscript(var_rc, _) | ExpressionNode::ArraySlice(var_rc, _, _) => {
-            let borrowed = var_rc.borrow();
-            match &*borrowed {
-                VariableNode::Simple { name, .. } => {
-                    set.variables.insert(name.clone());
-                }
-                VariableNode::Port { name, .. } => {
-                    set.ports.insert(name.clone());
-                }
-                VariableNode::Const { name, .. } => {
-                    set.constants.insert(name.clone());
-                }
-                VariableNode::Unresolved => {}
-            }
+            note_variable_usage(&var_rc.borrow(), set)
         }
         ExpressionNode::Function(func_rc, args) => {
             // Регистрируем использованную функцию
@@ -261,21 +287,7 @@ pub(crate) fn usage_from_stmt(stmt: &StatementNode, set: &mut UsageSet) {
 /// Записывает имена из условия в соответствующие множества.
 fn usage_from_condition(cond: &ConditionNode, set: &mut UsageSet) {
     match cond {
-        ConditionNode::Variable(var_rc, _) => {
-            let borrowed = var_rc.borrow();
-            match &*borrowed {
-                VariableNode::Simple { name, .. } => {
-                    set.variables.insert(name.clone());
-                }
-                VariableNode::Port { name, .. } => {
-                    set.ports.insert(name.clone());
-                }
-                VariableNode::Const { name, .. } => {
-                    set.constants.insert(name.clone());
-                }
-                VariableNode::Unresolved => {}
-            }
-        }
+        ConditionNode::Variable(var_rc, _) => note_variable_usage(&var_rc.borrow(), set),
         ConditionNode::Not(c) | ConditionNode::Parenthesis(c) => usage_from_condition(c, set),
         ConditionNode::And(l, r)
         | ConditionNode::Or(l, r)
@@ -300,21 +312,7 @@ fn usage_from_condition(cond: &ConditionNode, set: &mut UsageSet) {
                 usage_from_condition(arg, set);
             }
         }
-        ConditionNode::ArraySubscript(var_rc, _) => {
-            let borrowed = var_rc.borrow();
-            match &*borrowed {
-                VariableNode::Simple { name, .. } => {
-                    set.variables.insert(name.clone());
-                }
-                VariableNode::Port { name, .. } => {
-                    set.ports.insert(name.clone());
-                }
-                VariableNode::Const { name, .. } => {
-                    set.constants.insert(name.clone());
-                }
-                VariableNode::Unresolved => {}
-            }
-        }
+        ConditionNode::ArraySubscript(var_rc, _) => note_variable_usage(&var_rc.borrow(), set),
         ConditionNode::BitAccess(inner, _) => usage_from_condition(inner, set),
         // Вычисляемая выдержка (фича 0183) читает переменные и порты — это
         // настоящее использование. ⚠️ Без этой ветви `after (base + 500ms)`

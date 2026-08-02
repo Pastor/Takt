@@ -181,12 +181,16 @@ pub(crate) fn emit_constants(
                 continue;
             };
             // Объявление печатается тем именем, которым к нему обращаются
-            // выражения: у константы-параметра оно квалифицировано владельцем
+            // выражения: оно квалифицировано владельцем
             // (`sv_expr::const_signal`). Ключ дедупликации — **это** имя: по
-            // голому две специализации слились бы в одно объявление, и вторая
-            // молча получила бы значение первой.
+            // голому две модели с одноимённой константой слились бы в одно
+            // объявление, и вторая молча получила бы значение первой.
+            // Ключ фильтра «используется» — та же пара (владелец, имя), фича
+            // 0193: голым именем неиспользуемая тёзка проходила бы вслед за
+            // используемой.
             let signal = crate::generator::sv::sv_expr::const_signal(upper.as_ref(), name);
-            if !map.usage().constants.contains(name) || !seen.insert(signal.clone()) {
+            let used = crate::semantic::unused::const_key(upper.as_ref(), name);
+            if !map.usage().constants.contains(&used) || !seen.insert(signal.clone()) {
                 continue;
             }
             check_sv_name(&signal, *loc)?;

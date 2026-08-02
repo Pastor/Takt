@@ -128,3 +128,4 @@
 | 0196 | Подсветка имён типов отдельным цветом в LSP и плагинах | [0196-editor-type-highlighting.md](0196-editor-type-highlighting.md) | СОЗДАНА |
 | 0191 | Цель st: потактовая сверка с эталоном и устранение расхождений | [0191-st-per-tick-conformance.md](0191-st-per-tick-conformance.md) | СОЗДАНА |
 | 0192 | Константное выражение в инициализаторе объявления | [0192-const-init-fold.md](0192-const-init-fold.md) | ✅ ПРОЙДЕН (отчёт: [reports/0192](../reports/0192-const-init-fold.md)) |
+| 0193 | Цели rust и sv: одноимённые константы разных моделей | [0193-shared-const-qualified.md](0193-shared-const-qualified.md) | ✅ ПРОЙДЕН (отчёт: [reports/0193](../reports/0193-shared-const-qualified.md)) |
