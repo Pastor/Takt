@@ -1,0 +1,17 @@
+<!--
+  Значения по умолчанию для СЕМАНТИЧЕСКИХ ключей Takt в тёмных схемах
+  (фикс 0196-01). Обоснование и границы — в comment-шапке TaktDefault.xml.
+
+  Цвет подобран так, чтобы отличаться и от ключевых слов Darcula (оранжевый
+  CC7832), и от обычного идентификатора (A9B7C6): бирюзовый не занят ни одной
+  лексической категорией языка.
+-->
+<scheme name="Darcula" version="142" parent_scheme="Darcula">
+    <attributes>
+        <option name="LAM_TYPE">
+            <value>
+                <option name="FOREGROUND" value="4EC9B0"/>
+            </value>
+        </option>
+    </attributes>
+</scheme>

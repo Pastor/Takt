@@ -18,7 +18,7 @@
 | Разработка | [`0196-01`](../development/0196-01-editor-type-highlighting.md) |
 | Тест-план | [`docs/tests/0196-editor-type-highlighting.md`](../tests/0196-editor-type-highlighting.md) |
 | Отчёт о тестировании | [`docs/reports/0196-editor-type-highlighting.md`](../reports/0196-editor-type-highlighting.md) |
-| Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0196-YY-*`) |
+| Исправления | [`0196-01`](../fixes/0196-01-type-color-defaults.md) — цвет типа по умолчанию и в настройках |
 
 ## Краткое описание
 
@@ -115,7 +115,10 @@ IntelliJ уже отображает токен `type` в отдельный к�
 [задача 0196-01](../development/0196-01-editor-type-highlighting.md),
 [ADR](../adr/0196-editor-type-highlighting.md),
 [анализ](../analyze/0196-editor-type-highlighting.md). Исправлений
-(`docs/fixes/`) не потребовалось.
+(`docs/fixes/`) потребовалось одно — [0196-01](../fixes/0196-01-type-color-defaults.md):
+классификация была верна, но у ключа цвета не было ни значения по умолчанию, ни
+строки в панели настройки, поэтому типы выглядели как обычный текст. Урок: тест
+на «токен помечен типом» не доказывает, что пользователь это увидит.
 
 ⚠️ Найденное **вне** объёма записано кандидатом, а не выдано за сделанное:
 `string` — мёртвое ключевое слово (лексер знает, грамматика не использует), и

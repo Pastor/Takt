@@ -47,6 +47,15 @@ class TaktColorSettingsPage : ColorSettingsPage {
             AttributesDescriptor("Фигурные скобки", TaktHighlighterColors.BRACES),
             AttributesDescriptor("Квадратные скобки", TaktHighlighterColors.BRACKETS),
             AttributesDescriptor("Некорректный символ", TaktHighlighterColors.BAD_CHARACTER),
+            // Семантические ключи (фича 0038; выведены сюда фиксом 0196-01).
+            // ⚠️ Без них пользователь не может ни увидеть, ни настроить цвет
+            // имени типа: ключ есть, цвет наследуется от платформенной
+            // категории без собственного значения, а в панели его нет — то
+            // есть подсветка типов существует только на бумаге.
+            AttributesDescriptor("Имя типа", TaktHighlighterColors.TYPE),
+            AttributesDescriptor("Имя функции", TaktHighlighterColors.FUNCTION),
+            AttributesDescriptor("Имя модели или состояния", TaktHighlighterColors.CLASS),
+            AttributesDescriptor("Вариант перечисления", TaktHighlighterColors.ENUM_MEMBER),
         )
 
         val DEMO_TEXT = """
