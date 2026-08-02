@@ -106,13 +106,38 @@ cd extensions/intellij-takt
 
 Скрипт собирает плагин и ставит/обновляет его во всех найденных инсталляциях
 RustRover (каталоги `…/JetBrains/RustRover*`), после чего IDE нужно перезапустить.
+⚠️ **Только RustRover** — другие IDE JetBrains (IDEA, CLion, GoLand) скрипт не
+обходит по построению; туда плагин ставится вручную через
+«Install Plugin from Disk…» тем же zip.
 
 macOS/Linux — [`../install-rustrover-plugin.sh`](../install-rustrover-plugin.sh):
 
 ```sh
-extensions/install-rustrover-plugin.sh              # собрать и установить/обновить
+extensions/install-rustrover-plugin.sh              # инструменты + плагин
 extensions/install-rustrover-plugin.sh --skip-build # без пересборки (готовый zip)
+extensions/install-rustrover-plugin.sh --skip-tools # не трогать takt-lsp/taktc/takt-sim
+extensions/install-rustrover-plugin.sh --jdk ПУТЬ   # свой пусковой JDK
 ```
+
+**Инструменты ставятся вместе с плагином.** Скрипт делает `cargo install
+--force` для `takt-lsp`, `taktc` и `takt-sim` в `~/.cargo/bin` — туда же смотрят
+настройки плагина. ⚠️ Это не удобство, а лечение реального класса отказов:
+плагин и сервер — **разные** артефакты, разбор языка живёт в **сервере**, и
+свежий плагин со старым сервером отвергает новый синтаксис. Замер 2026-08-02:
+установленный `takt-lsp` отстал на 13 минорных версий крейта и отвечал
+`SY-002: нераспознанный токен 'at'` на `out ready: bit at 0x600:0;` — при том
+что плагин был свежий, а язык эту запись принимает с фичи 0187. Переустановка
+плагина такой отказ не лечит.
+
+**Пусковой JDK скрипт выбирает сам.** Перед сборкой он ищет JDK 17 (macOS —
+`/usr/libexec/java_home -v 17`, Linux — `/usr/lib/jvm/*17*`, SDKMAN,
+`/opt/java/*17*`) и выставляет на него `JAVA_HOME` — иначе на машине, где
+основной JDK новее 21, `compileKotlin` падает по причине, описанной в
+«Требованиях». Уже выставленный `JAVA_HOME` версии 17 не трогается; свой JDK
+задаётся `--jdk ПУТЬ`. Не нашли — предупреждение, а не отказ: сборка идёт на
+текущем JDK. Каталог обязан быть **JDK** (`bin/javac`) и отчитаться версией 17:
+имя каталога не доказательство — `/usr/lib/jvm/java-17-openjdk` бывает
+симлинком на другую версию.
 
 Windows (PowerShell) — [`../install-rustrover-plugin.ps1`](../install-rustrover-plugin.ps1):
 

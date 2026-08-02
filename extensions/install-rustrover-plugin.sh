@@ -3,41 +3,173 @@
 # установка/обновление в найденные инсталляции JetBrains RustRover.
 #
 # Что делает:
-#   1. Собирает плагин `extensions/intellij-takt` (его же gradlew → buildPlugin),
+#   1. Ставит (переустанавливает) инструменты, на которые настроен плагин:
+#      `takt-lsp`, `taktc`, `takt-sim` — через `cargo install --force` в
+#      `~/.cargo/bin`.
+#   2. Собирает плагин `extensions/intellij-takt` (его же gradlew → buildPlugin),
 #      получая build/distributions/intellij-takt-<версия>.zip.
-#   2. Находит каталоги плагинов RustRover в стандартном месте JetBrains
+#   3. Находит каталоги плагинов RustRover в стандартном месте JetBrains
 #      (macOS/Linux; в т.ч. установки через Toolbox — конфиг там стандартный).
-#   3. Ставит плагин, а при наличии прежней версии — обновляет (удаляет старую
+#   4. Ставит плагин, а при наличии прежней версии — обновляет (удаляет старую
 #      папку плагина и распаковывает свежую).
 #
 # Использование:
-#   extensions/install-rustrover-plugin.sh [--skip-build] [-h|--help]
+#   extensions/install-rustrover-plugin.sh [--skip-build] [--skip-tools]
+#                                          [--jdk ПУТЬ] [-h|--help]
 #
-#   --skip-build   не пересобирать — взять готовый zip из build/distributions.
+#   --skip-build   не пересобирать плагин — взять готовый zip из distributions.
+#   --skip-tools   не переустанавливать takt-lsp/taktc/takt-sim.
+#   --jdk ПУТЬ     пусковой JDK для Gradle (иначе ищется JDK 17 автоматически).
+#
+# ЗАЧЕМ ШАГ 1. Плагин и сервер `takt-lsp` — РАЗНЫЕ артефакты из одного репозитория,
+# и устаревает именно сервер: плагин переустанавливают, а бинарник в `~/.cargo/bin`
+# остаётся прежним. Разбор языка живёт в сервере, поэтому свежий плагин со старым
+# сервером даёт ошибку на НОВОМ синтаксисе — например `SY-002: нераспознанный
+# токен 'at'` на разборе `out ready: bit at 0x600:0;` (замер 2026-08-02: сервер
+# отстал на 13 минорных версий крейта). Чинить это переустановкой плагина
+# бесполезно — отсюда шаг.
+#
+# Пусковой JDK (фича 0159). Сборка идёт под тем JDK, на котором работает демон
+# Gradle, и это НЕ тот JDK, которым компилируется код (`jvmToolchain(21)` — его
+# Gradle скачивает сам). Замер 0159: пусковой ≤ 21 работает (17 проверен
+# прогоном), 25 ломает `compileKotlin` с `IllegalArgumentException`, 22–24 не
+# измерены. Поэтому перед сборкой скрипт выставляет `JAVA_HOME` на JDK 17:
+#   * `--jdk ПУТЬ` — берётся как есть (проверяется только наличие bin/javac);
+#   * иначе macOS — `/usr/libexec/java_home -v 17`, Linux — типовые каталоги
+#     (`/usr/lib/jvm/*17*`, SDKMAN, `/opt/java/*17*`);
+#   * уже выставленный `JAVA_HOME` версии 17 не трогается.
+# JDK 17 не найден — предупреждение, а не отказ: сборка идёт на текущем JDK
+# (запрещать неизмеренное — та же догадка, только с другим знаком).
 #
 # После установки RustRover нужно перезапустить (плагины подхватываются при
 # старте). Если IDE запущена, изменения применятся после перезапуска.
 set -eu
 
 SKIP_BUILD=0
+SKIP_TOOLS=0
+JDK_OPT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-build) SKIP_BUILD=1; shift ;;
+    --skip-tools) SKIP_TOOLS=1; shift ;;
+    --jdk)
+      [ $# -ge 2 ] || { echo "--jdk требует путь к каталогу JDK" >&2; exit 2; }
+      JDK_OPT="$2"; shift 2 ;;
     -h|--help)
-      sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
+      # Печатается вся шапка: со второй строки до первой НЕкомментарной.
+      # ⚠️ Диапазон не зашивается числом — он разъезжается при каждой правке
+      # шапки (уже разъезжался дважды, обрезая справку на полуслове).
+      sed -n '2,${/^#/!q;s/^# \{0,1\}//p;}' "$0"
       exit 0 ;;
     *) echo "Неизвестный аргумент: $1" >&2; exit 2 ;;
   esac
 done
 
-# Корень скрипта = extensions/; проект плагина рядом.
+# Корень скрипта = extensions/; проект плагина рядом, репозиторий — уровнем выше.
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PLUGIN_DIR="$SCRIPT_DIR/intellij-takt"
+REPO_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 [ -d "$PLUGIN_DIR" ] || { echo "Не найден проект плагина: $PLUGIN_DIR" >&2; exit 1; }
 [ -x "$PLUGIN_DIR/gradlew" ] || { echo "Не найден $PLUGIN_DIR/gradlew" >&2; exit 1; }
 
-# --- 1. Сборка -------------------------------------------------------------
+# --- 0. Пусковой JDK -------------------------------------------------------
+# Мажорная версия JDK по каталогу установки: "17.0.12" → "17", "1.8.0_402" → "1".
+# `java -version` печатает в stderr — отсюда перенаправление.
+jdk_major() {
+  [ -x "$1/bin/java" ] || return 1
+  "$1/bin/java" -version 2>&1 | sed -n '1s/.*version "\([0-9][0-9]*\).*/\1/p'
+}
+
+# Версия того java, что сейчас в PATH (для сообщения, когда JDK 17 не нашли).
+current_major() {
+  command -v java >/dev/null 2>&1 || return 1
+  java -version 2>&1 | sed -n '1s/.*version "\([0-9][0-9]*\).*/\1/p'
+}
+
+# Первый найденный JDK 17 в типовых местах ОС. Каталог обязан быть JDK, а не
+# JRE (`bin/javac`), и обязан отчитаться версией 17: маска имени лжёт —
+# `/usr/lib/jvm/java-17-openjdk` бывает симлинком на другую версию.
+find_jdk17() {
+  if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/libexec/java_home ]; then
+    _jh=$(/usr/libexec/java_home -v 17 2>/dev/null || true)
+    if [ -n "$_jh" ] && [ -x "$_jh/bin/javac" ]; then
+      echo "$_jh"
+      return 0
+    fi
+  fi
+  for _c in \
+    /usr/lib/jvm/*17* \
+    /usr/lib/jvm/*-17-* \
+    "$HOME"/.sdkman/candidates/java/17* \
+    /opt/java/*17* \
+    /Library/Java/JavaVirtualMachines/*17*/Contents/Home
+  do
+    [ -x "$_c/bin/javac" ] || continue
+    [ "$(jdk_major "$_c" 2>/dev/null || true)" = "17" ] || continue
+    echo "$_c"
+    return 0
+  done
+  return 1
+}
+
+if [ "$SKIP_BUILD" -eq 0 ]; then
+  if [ -n "$JDK_OPT" ]; then
+    [ -x "$JDK_OPT/bin/javac" ] || {
+      echo "В каталоге --jdk '$JDK_OPT' нет bin/javac — это не JDK." >&2
+      exit 2
+    }
+    JAVA_HOME="$JDK_OPT"
+    echo "==> Пусковой JDK: $JAVA_HOME (задан --jdk, версия $(jdk_major "$JAVA_HOME" 2>/dev/null || echo '?'))"
+  elif [ "$(jdk_major "${JAVA_HOME:-/nonexistent}" 2>/dev/null || true)" = "17" ]; then
+    echo "==> Пусковой JDK: $JAVA_HOME (JAVA_HOME уже указывает на 17)"
+  elif JDK17=$(find_jdk17); then
+    JAVA_HOME="$JDK17"
+    echo "==> Пусковой JDK: $JAVA_HOME (найден автоматически, версия 17)"
+  else
+    echo "!!  JDK 17 не найден; сборка пойдёт на текущем JDK (версия $(current_major || echo 'неизвестна'))." >&2
+    echo "    Замер фичи 0159: пусковой ≤ 21 работает, 25 ломает compileKotlin, 22–24 не измерены." >&2
+    echo "    Свой JDK можно указать явно: --jdk /путь/к/jdk" >&2
+  fi
+  if [ -n "${JAVA_HOME:-}" ]; then
+    export JAVA_HOME
+    PATH="$JAVA_HOME/bin:$PATH"
+    export PATH
+  fi
+fi
+
+# --- 1. Инструменты: takt-lsp, taktc, takt-sim -----------------------------
+# Ставятся `cargo install --force` в `~/.cargo/bin` — туда же смотрят настройки
+# плагина (`serverPath`/`compilerPath`/`simulatorPath`). Сервер обязателен с
+# фичей `lsp`: без флага бинарник `takt-lsp` не собирается вовсе.
+if [ "$SKIP_TOOLS" -eq 0 ]; then
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "!!  cargo не найден — инструменты не переустановлены." >&2
+    echo "    Плагин будет работать со старым takt-lsp; ошибки на новом синтаксисе — отсюда." >&2
+    echo "    Пропустить шаг осознанно: --skip-tools" >&2
+  else
+    echo "==> Установка инструментов (takt-lsp, taktc, takt-sim)…"
+    cargo install --path "$REPO_DIR/takt-lang" --bin takt-lsp --features lsp --force
+    cargo install --path "$REPO_DIR/takt-lang" --bin taktc --force
+    cargo install --path "$REPO_DIR/takt-sim" --bin takt-sim --force
+    for T in takt-lsp taktc takt-sim; do
+      BIN=$(command -v "$T" 2>/dev/null || true)
+      echo "    $T → ${BIN:-НЕ НАЙДЕН в PATH}"
+    done
+    # ⚠️ Бинарник может лежать в PATH раньше `~/.cargo/bin` — тогда плагин с
+    # настройкой по умолчанию возьмёт СТАРУЮ копию, и шаг окажется бесполезным.
+    CARGO_BIN="${CARGO_HOME:-$HOME/.cargo}/bin"
+    RESOLVED=$(command -v takt-lsp 2>/dev/null || true)
+    if [ -n "$RESOLVED" ] && [ "$RESOLVED" != "$CARGO_BIN/takt-lsp" ]; then
+      echo "!!  В PATH первым идёт $RESOLVED, а установлено в $CARGO_BIN." >&2
+      echo "    Проверьте, на какой путь настроен плагин (Settings → Takt)." >&2
+    fi
+  fi
+else
+  echo "==> Инструменты не тронуты (--skip-tools)."
+fi
+
+# --- 2. Сборка плагина -----------------------------------------------------
 if [ "$SKIP_BUILD" -eq 0 ]; then
   echo "==> Сборка плагина (buildPlugin)…"
   "$PLUGIN_DIR/gradlew" -p "$PLUGIN_DIR" --console=plain buildPlugin
