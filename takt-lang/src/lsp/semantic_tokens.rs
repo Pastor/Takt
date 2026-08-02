@@ -93,9 +93,15 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
 
     // Строим семантическую модель для обогащения идентификаторов и собираем
     // имена деклараций всего дерева (корень + под-модели, фикс 0038-01).
-    let model_opt = crate::parse(source, 0)
-        .ok()
-        .and_then(|(ast, _)| semantic::tree::construct_model(&ast, None, &[]).ok());
+    // Заодно берём позиции имён, стоящих в позиции типа (фича 0196) — обход
+    // АСД у них общий со слоем использований (0131), второго не заводим.
+    let parsed = crate::parse(source, 0).ok();
+    let type_refs = parsed
+        .as_ref()
+        .map(|(ast, _)| semantic::usages::collect_usages(ast));
+    let model_opt = parsed
+        .as_ref()
+        .and_then(|(ast, _)| semantic::tree::construct_model(ast, None, &[]).ok());
     let decl_names = model_opt.as_ref().map(collect_decl_names);
 
     // Собираем токены и комментарии через лексер
@@ -108,27 +114,48 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
     for (start, token, end) in token_results {
         let tt = match token {
             Token::Identifier(name) => {
-                // Встроенные типы имеют приоритет над пользовательскими именами
-                // Встроенные типы имеют приоритет над пользовательскими именами.
-                // Далее — членство в декларациях всего дерева (фикс 0038-01), в том
-                // же порядке приоритета, что и прежний поиск по корню:
-                // функция → тип → вариант enum → состояние/модель → иначе переменная.
-                if BUT_BUILTIN_TYPES.iter().any(|(t, _)| *t == name) {
-                    TT_TYPE
-                } else if let Some(ref n) = decl_names {
-                    if n.functions.contains(name) {
-                        TT_FUNCTION
-                    } else if n.types.contains(name) {
-                        TT_TYPE
-                    } else if n.variants.contains(name) {
-                        TT_ENUM_MEMBER
-                    } else if n.classes.contains(name) {
-                        TT_CLASS
-                    } else {
-                        TT_VARIABLE
+                // Два пути, и они ВЗАИМОИСКЛЮЧАЮЩИЕ (фича 0196).
+                //
+                // Файл разобран → тип определяется ПОЗИЦИЕЙ. Так подсвечивается
+                // `q(8, 8)` (ключевым словом `q` намеренно не является и в
+                // таблице имён не значится) и так НЕ выдаётся за тип
+                // переменная, названная именем типа: `var bit: u8 := 1;` —
+                // законный вход, и `bit` там имя переменной. Обращаться после
+                // этого к таблице имён нельзя — она вернёт «тип» именно в том
+                // случае, ради которого всё и затевалось.
+                //
+                // Файл не разобран (при наборе текста — почти всегда) → дерева
+                // нет, позиций тоже; работает ЗАПАСНОЙ путь по имени. Он не
+                // точнее прежнего, но теперь это названное ограничение, а не
+                // умолчание.
+                match type_refs {
+                    Some(ref refs) => {
+                        if refs.is_type_position(start as u32, end as u32) {
+                            TT_TYPE
+                        } else if let Some(ref n) = decl_names {
+                            // Имена типов здесь НЕ проверяются: их место знает
+                            // позиция. Остальные категории — по имени, как и
+                            // прежде (фикс 0038-01).
+                            if n.functions.contains(name) {
+                                TT_FUNCTION
+                            } else if n.variants.contains(name) {
+                                TT_ENUM_MEMBER
+                            } else if n.classes.contains(name) {
+                                TT_CLASS
+                            } else {
+                                TT_VARIABLE
+                            }
+                        } else {
+                            TT_VARIABLE
+                        }
                     }
-                } else {
-                    TT_VARIABLE
+                    None => {
+                        if BUT_BUILTIN_TYPES.iter().any(|(t, _)| *t == name) {
+                            TT_TYPE
+                        } else {
+                            TT_VARIABLE
+                        }
+                    }
                 }
             }
             Token::Model

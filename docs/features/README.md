@@ -208,4 +208,4 @@
 | [0193](./0193-shared-const-qualified.md) | Цели rust и sv: одноимённые константы разных моделей | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0194](./0194-sim-composition-model-always.md) | Симулятор теряет model-level always у модели-композиции | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0195](./0195-target-name-collisions.md) | Коллизии имён при отображении в пространство имён цели | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0196](./0196-editor-type-highlighting.md) | Подсветка имён типов отдельным цветом в LSP и плагинах | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0196](./0196-editor-type-highlighting.md) | Подсветка имён типов отдельным цветом в LSP и плагинах | [ADR](../adr/0196-editor-type-highlighting.md) · [анализ](../analyze/0196-editor-type-highlighting.md) · [тест-план](../tests/0196-editor-type-highlighting.md) · [отчёт](../reports/0196-editor-type-highlighting.md) | ГОТОВО |

@@ -99,6 +99,8 @@ pub struct UsageTable {
     usages: Vec<Usage>,
     unresolved: Vec<UnresolvedName>,
     unsupported: Vec<Location>,
+    /// Диапазоны имён в позиции типа (фича 0196) — см. [`UsageTable::type_refs`].
+    type_refs: Vec<(u32, u32)>,
 }
 
 impl UsageTable {
@@ -174,12 +176,33 @@ impl UsageTable {
         &self.unresolved
     }
 
+    /// Диапазоны имён, стоящих **в позиции типа** — `(начало, конец)`, конец
+    /// эксклюзивен (фича 0196).
+    ///
+    /// Отдельный список, а не разновидность [`Usage`], **намеренно**: имя типа
+    /// в позиции типа далеко не всегда разрешается в символ этого файла
+    /// (`u8`, `bit`, `q` объявлений не имеют), а класть их в `unresolved`
+    /// значило бы менять поведение `rename`, который по неразрешённым именам
+    /// принимает решение «полнота или отказ».
+    pub fn type_refs(&self) -> &[(u32, u32)] {
+        &self.type_refs
+    }
+
+    /// Стоит ли имя, занимающее `[start, end)`, в позиции типа.
+    pub fn is_type_position(&self, start: u32, end: u32) -> bool {
+        self.type_refs.iter().any(|&(s, e)| s == start && e == end)
+    }
+
     pub(crate) fn push(&mut self, usage: Usage) {
         self.usages.push(usage);
     }
 
     pub(crate) fn push_unresolved(&mut self, name: UnresolvedName) {
         self.unresolved.push(name);
+    }
+
+    pub(crate) fn push_type_ref(&mut self, start: u32, end: u32) {
+        self.type_refs.push((start, end));
     }
 
     pub(crate) fn push_unsupported(&mut self, loc: Location) {

@@ -199,18 +199,25 @@ fn walk_element(element: &ast::ModelElement, scopes: &mut Scopes, table: &mut Us
         ast::ModelElement::Formula(def) => walk_formula_block(&def.formula, scopes, table),
         ast::ModelElement::InlineFormula(def) => walk_inline_formula(def, scopes, table),
         // Типы и перечисления ссылок на имена не содержат, кроме псевдонима на
-        // другой тип — он разбирается ниже.
-        ast::ModelElement::Type(def) => walk_type(&def.ty, scopes, table),
+        // другой тип — он разбирается ниже. Само ОБЪЯВЛЯЕМОЕ имя тоже стоит в
+        // позиции типа (0196): иначе `type Celsius = u8;` красил бы тип только
+        // справа от `=`.
+        ast::ModelElement::Type(def) => {
+            mark_declared_type_name(Some(&def.name), table);
+            walk_type(&def.ty, scopes, table);
+        }
         ast::ModelElement::Struct(def) => {
+            mark_declared_type_name(def.name.as_ref(), table);
             for field in &def.fields {
                 walk_type(&field.ty, scopes, table);
             }
         }
         ast::ModelElement::Import(def) => note_import_originals(def, table),
+        // Имя перечисления — тоже имя типа (0196); варианты именами типов не
+        // являются и остаются `enumMember`.
+        ast::ModelElement::Enum(def) => mark_declared_type_name(def.name.as_ref(), table),
         // `clock 1kHz;` — литерал частоты, имён не содержит.
-        ast::ModelElement::Enum(_)
-        | ast::ModelElement::Clock(_)
-        | ast::ModelElement::StraySemicolon(_) => {}
+        ast::ModelElement::Clock(_) | ast::ModelElement::StraySemicolon(_) => {}
     }
 }
 
@@ -262,6 +269,11 @@ fn walk_function(def: &ast::FunctionDefine, scopes: &mut Scopes, table: &mut Usa
         if let Some(name) = &param.name {
             declare(name, SymbolKind::Parameter, scopes, table, DeclareIn::Local);
         }
+        // Тип параметра грамматика разбирает как ВЫРАЖЕНИЕ (`ParameterTypeExpr`),
+        // а не как `Type`, поэтому обход типов сюда не доходит. Позицию типа
+        // отмечаем здесь (0196); вхождением имя не делаем — это изменило бы
+        // поведение `rename`/`references`, а предмет фичи только подсветка.
+        mark_type_expression(&param.ty, table);
     }
     if let Some(ty) = &def.return_type {
         walk_type(ty, scopes, table);
@@ -654,9 +666,43 @@ fn walk_formula_expr(expr: &ast::FormulaExpression, scopes: &mut Scopes, table: 
 }
 
 /// Тип: ссылка на псевдоним/структуру/перечисление — тоже использование имени.
+/// Отмечает позицией типа **объявляемое** имя типа (`type X = …`,
+/// `struct X { … }`, `enum X { … }`) — фича 0196.
+fn mark_declared_type_name(name: Option<&ast::Identifier>, table: &mut UsageTable) {
+    if let Some(name) = name
+        && let Some((_, start, end)) = name_range(name.loc)
+    {
+        table.push_type_ref(start, end);
+    }
+}
+
+/// Отмечает позицией типа имя, стоящее в позиции типа, но пришедшее
+/// **выражением** (тип параметра функции — `ParameterTypeExpr` грамматики).
+///
+/// Разбирается только идентификатор: прочие формы выражения в позиции типа
+/// (вызов, скобки) типом не являются либо не несут одного имени, и красить их
+/// нечем. ⚠️ Исчерпаемостью эта ветвь **не** защищена — узел `Expression`
+/// разбирается частично намеренно, поэтому новая форма типа-выражения потребует
+/// правки здесь и покрыта тестом фичи 0196.
+fn mark_type_expression(expr: &ast::Expression, table: &mut UsageTable) {
+    if let ast::Expression::Variable(name) = expr
+        && let Some((_, start, end)) = name_range(name.loc)
+    {
+        table.push_type_ref(start, end);
+    }
+}
+
 fn walk_type(ty: &ast::Type, scopes: &mut Scopes, table: &mut UsageTable) {
     match ty {
-        ast::Type::Alias(name) => reference(name, &[Namespace::Type], scopes, table),
+        ast::Type::Alias(name) => {
+            // Позиция типа (0196) отмечается ДО разрешения: `u8`, `bit`,
+            // `duration` символов этого файла не имеют и в `usages` не попадут,
+            // но типами быть не перестают.
+            if let Some((_, start, end)) = name_range(name.loc) {
+                table.push_type_ref(start, end);
+            }
+            reference(name, &[Namespace::Type], scopes, table);
+        }
         ast::Type::Array { element_type, .. } => walk_type(element_type, scopes, table),
         ast::Type::Function { params, returns } => {
             for (_, param) in params.iter().chain(returns.iter().flatten()) {
@@ -665,8 +711,22 @@ fn walk_type(ty: &ast::Type, scopes: &mut Scopes, table: &mut UsageTable) {
                 }
             }
         }
-        // `Enum`/`Struct` в АСД несут имя строкой без позиции — вхождением их не
-        // сделать; сами объявления обходятся отдельно.
+        // Fixed-point `q(m, n)` (0061): имя конструктора — обычный идентификатор
+        // (ключевым словом `q` намеренно не сделан), позиции отдельной у него
+        // нет. Диапазон имени — начало `Location` плюс длина имени: конструктор
+        // стоит первым в записи `q(m, n)`, что задано грамматикой.
+        ast::Type::Fixed(loc, ctor, _, _) => {
+            if let Some((_, start, end)) = name_range(*loc) {
+                let name_end = start.saturating_add(ctor.chars().count() as u32);
+                if name_end <= end {
+                    table.push_type_ref(start, name_end);
+                }
+            }
+        }
+        // `Enum`/`Struct` в АСД несут имя строкой без позиции — ни вхождением,
+        // ни позицией типа их не сделать; сами объявления обходятся отдельно.
+        // Остальные варианты грамматикой не порождаются (тип приходит
+        // псевдонимом) и позиции не несут.
         ast::Type::Enum(_)
         | ast::Type::Struct(_)
         | ast::Type::Address { .. }
@@ -674,7 +734,6 @@ fn walk_type(ty: &ast::Type, scopes: &mut Scopes, table: &mut UsageTable) {
         | ast::Type::Bool
         | ast::Type::Rational
         | ast::Type::Duration
-        | ast::Type::Fixed(_, _, _, _)
         | ast::Type::Unit => {}
     }
 }
