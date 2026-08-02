@@ -156,3 +156,4 @@
 | 0190 | Разделение предкоммита на компоненты и выборочный запуск | [0190-precheck-selective-gates.md](0190-precheck-selective-gates.md) | — (новая фича) |
 | 0189 | Анонимные порты | [0189-anonymous-ports.md](0189-anonymous-ports.md) | [ADR 0189](../adr/0189-anonymous-ports.md) |
 | 0196 | Подсветка имён типов отдельным цветом в LSP и плагинах | [0196-editor-type-highlighting.md](0196-editor-type-highlighting.md) | — (новая фича) |
+| 0192 | Константное выражение в инициализаторе объявления | [0192-const-init-fold.md](0192-const-init-fold.md) | — (новая фича) |

@@ -702,20 +702,53 @@ mod tests {
         print_condition(&value, &model).expect("условие должно печататься")
     }
 
-    /// Печатает инициализатор переменной `x` как выражение.
+    /// Печатает выражение, записанное **в теле блока**.
+    ///
+    /// ⚠️ Площадка перенесена из инициализатора переменной (фича 0192):
+    /// инициализаторы сворачиваются в литерал на семантике, и выражения там
+    /// больше нет — `var x: u8 := n + m * 2;` печаталось бы как `0`. В теле
+    /// блока выражение живёт как прежде, поэтому печать проверяется здесь.
+    ///
+    /// Вход прежний — объявление вида `var x: <тип> := <выражение>;`: его
+    /// правая часть и становится телом.
     fn expr_of(decl: &str) -> String {
+        let expr = decl
+            .split_once(":=")
+            .map(|(_, rhs)| rhs.trim().trim_end_matches(';').trim())
+            .unwrap_or(decl);
         let src = format!(
-            "var n: u8 := 0;\nvar m: u8 := 0;\nvar b: bit := 0;\n{}\n\
-             start S {{ always {{ n := n; }} }}",
-            decl
+            "var n: u8 := 0;\nvar m: u8 := 0;\nvar b: bit := 0;\nvar x: u8 := 0;\n\
+             start S {{ always {{ x := {expr}; }} }}"
         );
         let rc = model_of(&src);
         let model = rc.borrow();
-        let var = model.variables.get("x").expect("нет переменной x");
-        let VariableNode::Simple { expr, .. } = var else {
-            panic!("x не простая переменная");
+        let state = model.states.values().next().expect("нет состояния");
+        let crate::semantic::StateNode::Simple { named_blocks, .. } = state else {
+            panic!("ожидалось простое состояние");
         };
-        print_expression(expr, &model).expect("выражение должно печататься")
+        let rhs = named_blocks
+            .iter()
+            .find_map(|b| match b {
+                crate::semantic::NamedCodeBlockDefinitionNode::Always { body, .. } => {
+                    assignment_rhs(body)
+                }
+                _ => None,
+            })
+            .expect("в теле нет присваивания");
+        print_expression(&rhs, &model).expect("выражение должно печататься")
+    }
+
+    /// Правая часть первого присваивания в теле блока.
+    fn assignment_rhs(stmt: &crate::semantic::StatementNode) -> Option<ExpressionNode> {
+        use crate::semantic::StatementNode as S;
+        match stmt {
+            S::Block(items) => items.iter().find_map(assignment_rhs),
+            S::Expression(expr) => match &**expr {
+                ExpressionNode::Assign(_, rhs) => Some((**rhs).clone()),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     /// `=` в условии — равенство. Цель `c` печатает здесь `==` (`stacker.c:146`).

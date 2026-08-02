@@ -189,9 +189,25 @@ pub fn fold_to_literal(
     expr: &ast::Expression,
     scope: &Rc<RefCell<ModelNode>>,
 ) -> Result<ast::Expression, Diagnostic> {
+    fold_to_literal_in(expr, scope, &Locals::default())
+}
+
+/// То же, но с заранее известными значениями имён (фича 0192).
+///
+/// Нужна свёртке инициализаторов объявлений: там имя переменной, объявленной
+/// **выше**, означает её начальное значение. Послабление живёт **здесь**, в
+/// содержимом [`Locals`], а не в [`resolve_name`]: тот же вычислитель
+/// обслуживает выдержку `after` (0143), параметры моделей (0185) и порты
+/// (0187), где правило «значение переменной известно только в такте» верно и
+/// менять его нельзя.
+pub fn fold_to_literal_in(
+    expr: &ast::Expression,
+    scope: &Rc<RefCell<ModelNode>>,
+    locals: &Locals,
+) -> Result<ast::Expression, Diagnostic> {
     let mut budget = Budget::new();
     let loc = expr_loc(expr);
-    let value = eval(expr, scope, &mut budget)?;
+    let value = eval_in(expr, scope, locals, &mut budget)?;
     Ok(value.to_literal(loc))
 }
 

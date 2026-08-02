@@ -347,3 +347,175 @@ fn resolve_port_init(
     })?;
     resolve_declaration_expression(ExpressionNode::Unresolved(literal), model)
 }
+
+/// Сворачивает инициализаторы `var`/`const` в литералы — **в порядке текста**
+/// (фича 0192, ADR Option D).
+///
+/// # Зачем
+///
+/// До фичи одно объявление давало **пять разных** результатов: `var a: u8 :=
+/// 1 + 2;` — эталон `0` (вычислитель начальных значений относил арифметику к
+/// «не константа», а семантика свёртку не делала), цели `c`/`rust` — `3`, цель
+/// `st` теряла инициализатор молча, цель `sv` отказывала. После свёртки в
+/// дереве стоит литерал: за границей семантики выражения не существует, и
+/// расходиться потребителям **не по чему** — тот же приём, что у начального
+/// значения порта (0187) и константной выдержки `after` (0143).
+///
+/// # Порядок и ссылки на имена
+///
+/// Имя в позиции инициализатора означает **начальное значение** переменной, а
+/// не значение в такте, и ссылаться можно только **назад по тексту**. Поэтому
+/// объявления сортируются по позиции в исходнике: `variables` — `BTreeMap`, её
+/// обход **алфавитный**, и порядок объявлений в нём не сохранён.
+///
+/// ⚠️ Послабление «имя переменной вычислимо» живёт **здесь**, в наполнении
+/// [`const_eval::Locals`], а не в `resolve_name` общего вычислителя: тот же
+/// вычислитель обслуживает выдержку `after` (0143), параметры моделей (0185) и
+/// порты (0187), где «значение переменной известно только в такте» — верное
+/// правило.
+///
+/// # Ошибки
+///
+/// `SE-083` от вычислителя — с названной причиной (ссылка вперёд, цикл, порт,
+/// невычислимая форма). Молчаливый ноль здесь дороже отказа: именно он и был
+/// дефектом.
+pub(crate) fn fold_variable_initializers(
+    variables: &BTreeMap<String, VariableNode>,
+    raw: &BTreeMap<String, crate::parser::ast::Expression>,
+    model: &Rc<RefCell<ModelNode>>,
+) -> Result<BTreeMap<String, VariableNode>, Diagnostic> {
+    let mut order: Vec<&String> = variables.keys().collect();
+    order.sort_by_key(|name| declaration_position(&variables[*name]));
+
+    let mut known = const_eval::Locals::default();
+    let mut folded = variables.clone();
+    for name in order {
+        let loc = match &variables[name] {
+            VariableNode::Simple { loc, .. } | VariableNode::Const { loc, .. } => *loc,
+            // Порт сворачивается своим путём (0187): у него другое правило и
+            // другая диагностика. Прочее значений не несёт.
+            VariableNode::Port { .. } | VariableNode::Unresolved => continue,
+        };
+        let Some(source) = raw.get(name) else {
+            continue;
+        };
+        let Ok(literal) = const_eval::fold_to_literal_in(source, model, &known) else {
+            // Невычислимое оставляем как есть: диагностику о нём (если она
+            // нужна) поднимает разрешение выражения ниже по конвейеру. Молча
+            // подменять значение нулём — то, ради устранения чего фича и
+            // заведена, а вот отвергать всякую невычислимую форму значило бы
+            // ломать входы, которых нет в корпусе (решение заказчика: Option D
+            // расширяет язык, а не ужесточает).
+            continue;
+        };
+        // Значение запоминается ВСЕГДА — в том числе у литерала: на него могут
+        // сослаться объявления ниже (`var base := 5; var probe := base + 1;`).
+        // ⚠️ Пропустив этот шаг для литералов, ссылку сломаешь молча: проба
+        // давала `probe = 0`.
+        if let Ok(value) = const_eval::eval(&literal, model, &mut const_eval::Budget::new()) {
+            known.declare(name, value);
+        }
+        // А вот ПОДМЕНЯТЬ литерал нечем и вредно: дробный литерал к этому
+        // моменту уже понижен в q-представление (фича 0096), и подстановка
+        // «свёрнутого» `0.0` обратно отменила бы понижение. Проба: сверка
+        // Q-арифметики с целью `c` показала `model->acc = 0.0;` вместо целого
+        // repr — то есть сверка это поймала, а не рассуждение.
+        if is_literal(source) {
+            continue;
+        }
+        // Литерал обязан быть РАЗРЕШЁН здесь: свёртка идёт последней, и
+        // разрешать `Unresolved` после неё уже некому — потребители получили бы
+        // неразрешённый узел, а он для них «не константа» (то есть ноль).
+        let resolved = resolve_declaration_expression(ExpressionNode::Unresolved(literal), model)?;
+        let slot = folded.get_mut(name).expect("имя взято из этой же карты");
+        set_initializer(slot, resolved, loc);
+    }
+    Ok(folded)
+}
+
+/// Литерал ли выражение: сворачивать такое нечего.
+///
+/// ⚠️ Дробный литерал к моменту свёртки уже понижен в q-представление
+/// (фича 0096), поэтому «свёртка» вернула бы его в дробный вид и отменила
+/// понижение — сверка Q-арифметики с целью `c` это ловит.
+fn is_literal(expr: &crate::parser::ast::Expression) -> bool {
+    use crate::parser::ast::Expression as E;
+    matches!(
+        expr,
+        E::Number(..) | E::Bool(..) | E::Rational(..) | E::Duration(..) | E::String(..)
+    )
+}
+
+/// Позиция объявления в исходнике — ключ сортировки «по тексту».
+///
+/// Синтезированные узлы (без позиции) идут последними: ссылаться на них
+/// инициализатору всё равно нечем.
+fn declaration_position(var: &VariableNode) -> (u32, u32) {
+    let loc = match var {
+        VariableNode::Simple { loc, .. }
+        | VariableNode::Const { loc, .. }
+        | VariableNode::Port { loc, .. } => *loc,
+        VariableNode::Unresolved => Location::Codegen,
+    };
+    match loc {
+        Location::Source(file, start, _) => (file, start),
+        _ => (u32::MAX, u32::MAX),
+    }
+}
+
+/// Заменяет инициализатор узла, сохраняя всё остальное.
+fn set_initializer(var: &mut VariableNode, init: ExpressionNode, _loc: Location) {
+    match var {
+        VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } => *expr = init,
+        VariableNode::Port { .. } | VariableNode::Unresolved => {}
+    }
+}
+
+/// Готовит переменные модели: разрешение «сырых» выражений → вывод типов →
+/// свёртка инициализаторов в литералы (фича 0192).
+///
+/// # Порядок обязателен, и он не очевиден
+///
+/// - **свёртка работает с сырым АСД**, поэтому исходные выражения запоминаются
+///   до разрешения (разрешение их заменяет);
+/// - **свёртка идёт последней**, уже после вывода типов. Проба показала почему:
+///   `var b: bit := false; var a := b;` — если свернуть раньше, вывод типов
+///   увидит булев литерал и даст `a` тип `bool` вместо `bit`. Значение при этом
+///   верное, а тип — нет.
+///
+/// Вынесено из `tree.rs` (фича 0192): тот файл стоит в реестре размера
+/// (`scripts/module-size-baseline.txt`) и расти не имеет права, а «подготовить
+/// объявления» — ответственность этого модуля.
+///
+/// # Ошибки
+///
+/// Пробрасывает диагностику построения выражения (имя в инициализаторе не
+/// найдено в области видимости), вывода типов и свёртки начального значения
+/// порта (`SE-094`).
+pub(crate) fn prepare_variables(
+    variables: &BTreeMap<String, VariableNode>,
+    model: &Rc<RefCell<ModelNode>>,
+) -> Result<BTreeMap<String, VariableNode>, Diagnostic> {
+    let raw: BTreeMap<String, crate::parser::ast::Expression> = variables
+        .iter()
+        .filter_map(|(name, var)| match var {
+            VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } => match expr {
+                ExpressionNode::Unresolved(source) => Some((name.clone(), source.clone())),
+                _ => None,
+            },
+            VariableNode::Port { .. } | VariableNode::Unresolved => None,
+        })
+        .collect();
+
+    let mut resolved = BTreeMap::new();
+    for (name, var) in variables {
+        resolved.insert(
+            name.clone(),
+            resolve_variable_expressions(var.clone(), model)?,
+        );
+    }
+
+    let inferred =
+        crate::semantic::type_inference::type_inference(&mut resolved, Rc::clone(model))?;
+    fold_variable_initializers(&inferred, &raw, model)
+}

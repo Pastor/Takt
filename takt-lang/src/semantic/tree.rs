@@ -24,7 +24,6 @@ use crate::semantic::import::select as import_select;
 use crate::semantic::named_block::resolve_named_blocks;
 use crate::semantic::naming::normalize_camelcase_name;
 use crate::semantic::reference::resolve_state_references;
-use crate::semantic::type_inference::type_inference;
 use crate::semantic::type_node::{TypeNode, construct_type};
 use crate::semantic::validate::{
     check_implicit_bool_conditions, check_transition_completeness, check_type_alias_cycles_ast,
@@ -33,7 +32,7 @@ use crate::semantic::validate::{
 use crate::semantic::{
     ConditionDefinitionNode, ConditionNode, ExpressionNode, Formula, FunctionDefinitionNode,
     ModelNode, ModelOrigin, NamedCodeBlockDefinitionNode, ParameterNode, ReferenceNode, StateNode,
-    StateNodeKind, StatementNode, VariableNode, extend,
+    StateNodeKind, StatementNode, extend,
 };
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -770,39 +769,14 @@ pub(super) fn construct_model_stage1(
     Ok(Rc::clone(&model))
 }
 
-/// Разрешает инициализаторы переменных, заменяя [`ExpressionNode::Unresolved`]
-/// полностью разрешёнными семантическими выражениями.
-///
-/// Вызывается до [`type_inference`], чтобы вывод типа работал с разрешёнными,
-/// а не «сырыми» АСД-выражениями.
-///
-/// # Ошибки
-///
-/// Пробрасывает [`Diagnostic`] из построения выражения, если идентификатор
-/// в инициализаторе не найден в области видимости.
-fn resolve_variable_expressions(
-    variables: &BTreeMap<String, VariableNode>,
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<BTreeMap<String, VariableNode>, Diagnostic> {
-    let mut result = BTreeMap::new();
-    for (name, var) in variables {
-        let resolved = declaration::resolve_variable_expressions(var.clone(), &model)?;
-        result.insert(name.clone(), resolved);
-    }
-    Ok(result)
-}
-
 pub(super) fn construct_model_stage2(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    // Шаг 2а: разрешаем инициализаторы переменных (Unresolved → полноценное Expression)
+    // Шаг 2: разрешение инициализаторов, вывод типов и свёртка в литералы
+    // (фича 0192). Порядок этих трёх шагов неочевиден и потому собран в одном
+    // месте — `declaration::prepare_variables`.
     let variables = model.borrow().variables.clone();
-    let variables = resolve_variable_expressions(&variables, model.clone())?;
-    model.borrow_mut().variables = variables;
-
-    // Шаг 2б: выводим типы переменных, у которых тип не задан явно
-    let mut variables = model.borrow().variables.clone();
-    variables = type_inference(&mut variables, model.clone())?;
+    let variables = declaration::prepare_variables(&variables, &model)?;
     model.borrow_mut().variables = variables;
     // Рекурсивно обрабатываем вложенные модели с их собственным контекстом
     let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model

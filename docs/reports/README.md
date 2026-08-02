@@ -115,3 +115,4 @@
 | 0189 | Анонимные порты | [0189-anonymous-ports.md](0189-anonymous-ports.md) | СОЗДАНА |
 | 0196 | Подсветка имён типов отдельным цветом в LSP и плагинах | [0196-editor-type-highlighting.md](0196-editor-type-highlighting.md) | СОЗДАНА |
 | 0191 | Цель st: потактовая сверка с эталоном и устранение расхождений | [0191-st-per-tick-conformance.md](0191-st-per-tick-conformance.md) | СОЗДАНА |
+| 0192 | Константное выражение в инициализаторе объявления | [0192-const-init-fold.md](0192-const-init-fold.md) | ✅ ГОТОВО |
