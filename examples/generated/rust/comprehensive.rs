@@ -21,11 +21,11 @@ pub enum Mode {
     Emergency = 2,
 }
 
-const COOL_STEP: u8 = 3;
-const HEAT_STEP: u8 = 8;
-const MAX_COUNT: u8 = 3;
-const MAX_TEMP: u8 = 100;
-const WARMUP_TEMP: u8 = 10;
+const COMPREHENSIVE_CONTROLLER_COOL_STEP: u8 = 3;
+const COMPREHENSIVE_CONTROLLER_HEAT_STEP: u8 = 8;
+const COMPREHENSIVE_CONTROLLER_MAX_COUNT: u8 = 3;
+const COMPREHENSIVE_CONTROLLER_MAX_TEMP: u8 = 100;
+const COMPREHENSIVE_CONTROLLER_WARMUP_TEMP: u8 = 10;
 
 /// Аппаратный слой модели.
 ///
@@ -41,8 +41,8 @@ pub trait Hal {
 
 /// Функция 'clamp_temp' модели.
 fn clamp_temp(value: u8) -> u8 {
-    if value > MAX_TEMP {
-        return MAX_TEMP;
+    if value > COMPREHENSIVE_CONTROLLER_MAX_TEMP {
+        return COMPREHENSIVE_CONTROLLER_MAX_TEMP;
     }
     value
 }
@@ -56,8 +56,8 @@ fn increment(n: u8) -> u8 {
 fn steps_to_limit(value: u8) -> u8 {
     let mut remaining: u8 = 0;
     let mut v: u8 = value;
-    while v < MAX_TEMP {
-        v = v.wrapping_add(HEAT_STEP);
+    while v < COMPREHENSIVE_CONTROLLER_MAX_TEMP {
+        v = v.wrapping_add(COMPREHENSIVE_CONTROLLER_HEAT_STEP);
         remaining = remaining.wrapping_add(1);
     }
     remaining
@@ -68,8 +68,8 @@ fn steps_to_zero(value: u8) -> u8 {
     let mut remaining: u8 = 0;
     let mut v: u8 = value;
     while v > 0 {
-        if v > COOL_STEP {
-            v = v.wrapping_sub(COOL_STEP);
+        if v > COMPREHENSIVE_CONTROLLER_COOL_STEP {
+            v = v.wrapping_sub(COMPREHENSIVE_CONTROLLER_COOL_STEP);
         } else {
             v = 0;
         }
@@ -130,7 +130,7 @@ impl ComprehensiveController {
             ComprehensiveControllerState::Cooling => {
                 {
                     let mut i: u8 = 0;
-                    while i < COOL_STEP {
+                    while i < COMPREHENSIVE_CONTROLLER_COOL_STEP {
                         if self.temperature > 0 {
                             self.temperature = self.temperature.wrapping_sub(1);
                         }
@@ -138,11 +138,11 @@ impl ComprehensiveController {
                     }
                 }
                 hal.log_count(steps_to_zero(self.temperature));
-                if (self.temperature == 0) & (self.count >= MAX_COUNT) {
+                if (self.temperature == 0) & (self.count >= COMPREHENSIVE_CONTROLLER_MAX_COUNT) {
                     self.temperature = 0;
                     self.count = 0;
                     self.state = ComprehensiveControllerState::Done;
-                } else if (self.temperature == 0) & (!(self.count >= MAX_COUNT)) {
+                } else if (self.temperature == 0) & (!(self.count >= COMPREHENSIVE_CONTROLLER_MAX_COUNT)) {
                     self.temperature = 0;
                     self.state = ComprehensiveControllerState::Idle;
                 }
@@ -151,7 +151,7 @@ impl ComprehensiveController {
                 self.state = ComprehensiveControllerState::End;
             }
             ComprehensiveControllerState::Heating => {
-                self.temperature = clamp_temp(self.temperature.wrapping_add(HEAT_STEP));
+                self.temperature = clamp_temp(self.temperature.wrapping_add(COMPREHENSIVE_CONTROLLER_HEAT_STEP));
                 if self.mode == Mode::Auto {
                     hal.log_count(steps_to_limit(self.temperature));
                 } else if self.mode == Mode::Manual {
@@ -159,7 +159,7 @@ impl ComprehensiveController {
                 } else {
                     self.mode = Mode::Auto;
                 }
-                if self.temperature >= MAX_TEMP {
+                if self.temperature >= COMPREHENSIVE_CONTROLLER_MAX_TEMP {
                     self.state = ComprehensiveControllerState::Cooling;
                 }
             }
@@ -167,7 +167,7 @@ impl ComprehensiveController {
                 let delta: u8 = 1;
                 self.temperature = self.temperature.wrapping_add(delta);
                 hal.log_temp(self.temperature);
-                if self.temperature > WARMUP_TEMP {
+                if self.temperature > COMPREHENSIVE_CONTROLLER_WARMUP_TEMP {
                     self.count = increment(self.count);
                     self.state = ComprehensiveControllerState::Heating;
                 }

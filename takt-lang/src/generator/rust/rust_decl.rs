@@ -338,13 +338,21 @@ pub(crate) fn emit_constants(
             else {
                 continue;
             };
-            if !map.usage().constants.contains(name) {
+            // Ключ фильтра — пара (владелец, имя), а не голое имя (фича 0193):
+            // по голому `A::K` и `B::K` делят запись, и неиспользуемая тёзка
+            // печаталась бы вслед за используемой — а неиспользуемая `const` в
+            // Rust под `-D warnings` это ОТКАЗ сборки, не предупреждение.
+            if !map
+                .usage()
+                .constants
+                .contains(&crate::semantic::unused::const_key(upper.as_ref(), name))
+            {
                 continue;
             }
             // Имя объявления — то же, которым к константе обращаются выражения
-            // (`rust_expr::const_ident`): у константы-параметра оно
-            // квалифицировано владельцем, иначе две специализации слились бы в
-            // одно `const`, и вторая молча получила бы значение первой.
+            // (`rust_expr::const_ident`): оно квалифицировано владельцем, иначе
+            // две модели с одноимённой константой слились бы в одно `const`, и
+            // вторая молча получила бы значение первой (фича 0193).
             let ident = const_ident(upper.as_ref(), name, *loc)?;
             if !seen.insert(ident.clone()) {
                 continue;

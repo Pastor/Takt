@@ -66,13 +66,21 @@ pub(super) fn generate_constants_and_ports_and_enums(
                     // Порты генерируются как enum в заголовочном файле (ModelNamePorts).
                 }
                 VariableNode::Const {
+                    ref upper,
                     name,
                     ref expr,
                     ref ty,
                     ..
                 } => {
-                    // Пропускаем неиспользуемые константы
-                    if !map.usage().constants.contains(&name) {
+                    // Пропускаем неиспользуемые константы. Ключ — пара
+                    // (владелец, имя) (фича 0193): цель `c` квалифицирует имена
+                    // с самого начала, поэтому голый ключ давал ей лишний
+                    // `#define` неиспользуемой тёзки — безвредный, но неверный.
+                    if !map
+                        .usage()
+                        .constants
+                        .contains(&crate::semantic::unused::const_key(upper.as_ref(), &name))
+                    {
                         continue;
                     }
                     let name = model_name.unique_uppercase_snakecase()

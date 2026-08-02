@@ -277,13 +277,18 @@ pub(crate) fn emit_declarations(
                 }
             }
             VariableNode::Const {
+                upper,
                 name,
                 ty,
                 expr,
                 loc,
-                ..
             } => {
-                if !usage.constants.contains(name) {
+                // Ключ — пара (владелец, имя), фича 0193: голым именем
+                // константа модели-тёзки считалась бы использованной здесь.
+                if !usage
+                    .constants
+                    .contains(&crate::semantic::unused::const_key(upper.as_ref(), name))
+                {
                     continue;
                 }
                 check_st_name(name, *loc)?;
@@ -404,10 +409,15 @@ fn inherited_constants(model: &ModelNode, usage: &UsageSet) -> Vec<(String, Vari
         names.sort();
         for name in names {
             let var = &parent.variables[name];
-            if !matches!(var, VariableNode::Const { .. }) {
+            let VariableNode::Const { upper, .. } = var else {
                 continue;
-            }
-            if !usage.constants.contains(name) {
+            };
+            // Ключ — пара (владелец, имя), фича 0193: владельцем здесь выступает
+            // предок, чью константу мы наследуем, а не модель, которую печатаем.
+            if !usage
+                .constants
+                .contains(&crate::semantic::unused::const_key(upper.as_ref(), name))
+            {
                 continue;
             }
             if model.variables.contains_key(name) || out.iter().any(|(n, _)| n == name) {

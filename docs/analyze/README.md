@@ -157,3 +157,4 @@
 | 0189 | Анонимные порты | [0189-anonymous-ports.md](0189-anonymous-ports.md) | [ADR 0189](../adr/0189-anonymous-ports.md) |
 | 0196 | Подсветка имён типов отдельным цветом в LSP и плагинах | [0196-editor-type-highlighting.md](0196-editor-type-highlighting.md) | — (новая фича) |
 | 0192 | Константное выражение в инициализаторе объявления | [0192-const-init-fold.md](0192-const-init-fold.md) | — (новая фича) |
+| 0193 | Цели rust и sv: одноимённые константы разных моделей | [0193-shared-const-qualified.md](0193-shared-const-qualified.md) | меняется вывод целей `rust`/`sv` (имена констант); язык и API крейта — нет |

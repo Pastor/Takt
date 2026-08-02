@@ -29,7 +29,7 @@ pub enum Constant {
     Z = 2,
 }
 
-const ENABLED: bool = true;
+const EXTEND_COMPLEX_ENABLED: bool = true;
 
 /// Порт ввода-вывода модели. Реализация — за трейтом [`Hal`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -271,7 +271,7 @@ impl ExtendComplexCC1 {
             ExtendComplexCC1State::End => {
             }
             ExtendComplexCC1State::Start => {
-                if (is_collected(Constant::Y, shared.y, shared.x) & is_collected(Constant::X, shared.x, shared.x)) & hal.has_flag(ENABLED) {
+                if (is_collected(Constant::Y, shared.y, shared.x) & is_collected(Constant::X, shared.x, shared.x)) & hal.has_flag(EXTEND_COMPLEX_ENABLED) {
                     self.state = ExtendComplexCC1State::End;
                 }
             }
