@@ -14,7 +14,7 @@
 //! - **последовательная** (`M1 + M2`): собственный счётчик шагов и вложенный
 //!   `CASE` — форма снята зондом цели `c`, где у конкатенации свой `enum` шагов.
 
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::st::st_map::StMap;
 use crate::generator::st::st_model::{BodyOutput, StateTable};
@@ -96,15 +96,13 @@ fn instance_initializer(
     Ok(Some(format!("({})", parts.join(", "))))
 }
 
-/// Результат печати тела: побочные эффекты операторов плюс экземпляры под-FB.
-#[derive(Default, Debug)]
 /// Печатает ветвь состояния-композиции: вызовы под-FB и завершение по `is_done`.
 ///
 /// Форма изоморфна цели `c` (Ф6, `stacker.c:414-439`): под-модели вызываются
 /// **последовательно в одном такте** родителя, в порядке объявления, а
 /// композиция завершается по **конъюнкции** их `is_done`. Настоящей
 /// конкурентности нет — чередование детерминировано, что и нужно скан-циклу ПЛК.
-fn emit_composition(
+pub(crate) fn emit_composition(
     p: &mut Printer,
     map: &StMap,
     state_name: &Name,

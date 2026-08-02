@@ -1,6 +1,6 @@
 # ADR 0191: Цель `st` — потактовая сверка с эталоном и устранение расхождений
 
-- **Status:** Draft
+- **Status:** **Accepted** — Option A, 2026-08-02 (реализовано и закрыто той же датой)
 - **Date:** 2026-08-02
 - **Authors:** Архитектор + Аналитик
 - **Related issues:** [Фича 0191](../features/0191-st-per-tick-conformance.md);

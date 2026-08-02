@@ -15,9 +15,10 @@ VAR
     setpoint : LREAL := 10.0;
     value : LREAL := 0.0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Adjust *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Adjust *)
         1: (* Adjust *)
             value := value + ((setpoint - value) * half);
             IF value >= near THEN
@@ -43,9 +44,10 @@ VAR
     state : USINT := 0;
     float_regulator0 : FloatRegulatorFloatRegulator;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Main *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Main *)
         1: (* Main *)
             float_regulator0();
             IF float_regulator0.is_done THEN

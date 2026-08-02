@@ -168,19 +168,33 @@ fn test_st_zero_sized_array_fails_with_st007_and_writes_nothing() {
     );
 }
 
-/// **A2.** Минимальная модель даёт каркас: `CASE` с `INIT`, состоянием и `END`.
+/// **A2.** Минимальная модель даёт каркас: вход в стартовое состояние, `CASE`
+/// с состояниями и `END`.
+///
+/// ⚠️ Вход печатается **до** `CASE` и не расходует скан (фича 0191, контракт
+/// 0033). Прежде он был ветвью `0: (* INIT *)` внутри `CASE`, а `CASE` в IEC не
+/// проваливается — скан заканчивался, ничего не исполнив, и так на каждом
+/// уровне вложенности.
 #[test]
 fn test_minimal_model_emits_case_skeleton() {
     let st = compile_fixture("minimal_fb");
     assert!(st.contains("FUNCTION_BLOCK MinimalFb"), "нет блока:\n{st}");
     assert!(st.contains("CASE state OF"), "нет CASE:\n{st}");
+    let init = st
+        .find("IF state = 0 THEN")
+        .expect("нет входа в стартовое состояние");
+    let case = st.find("CASE state OF").expect("нет CASE");
     assert!(
-        st.contains("0: (* INIT *)"),
-        "INIT обязан быть нулевым:\n{st}"
+        init < case,
+        "вход в стартовое обязан идти ДО CASE — иначе он стоит скана:\n{st}"
+    );
+    assert!(
+        !st.contains("0: (* INIT *)"),
+        "ветвь INIT вернулась в CASE:\n{st}"
     );
     assert!(
         st.contains("state : USINT := 0;"),
-        "нет переменной автомата:\n{st}"
+        "нет переменной автомата: ноль и есть «ещё не входили»\n{st}"
     );
 }
 

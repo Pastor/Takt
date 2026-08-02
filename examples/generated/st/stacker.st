@@ -109,10 +109,11 @@ VAR CONSTANT
     PICKUP_SECTION : USINT := 1;
     PICKUP_STACK : USINT := 0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        cmd_ack := FALSE;
+        state := 3; (* WaitingForTask *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            cmd_ack := FALSE;
-            state := 3; (* WaitingForTask *)
         1: (* AcceptingTask *)
             cmd_ack := FALSE;
             state := 2; (* TaskActive *)
@@ -163,10 +164,11 @@ VAR CONSTANT
     PICKUP_SECTION : USINT := 1;
     PICKUP_STACK : USINT := 0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        cmd_fork := FALSE;
+        state := 2; (* LiftIdle *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            cmd_fork := FALSE;
-            state := 2; (* LiftIdle *)
         1: (* LiftDone *)
             IF NOT lift_request THEN
                 cmd_fork := FALSE;
@@ -234,13 +236,14 @@ VAR CONSTANT
     PICKUP_SECTION : USINT := 1;
     PICKUP_STACK : USINT := 0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        cmd_target_stack := CHARGE_STACK;
+        cmd_target_row := CHARGE_ROW;
+        cmd_target_section := CHARGE_SECTION;
+        cmd_done := FALSE;
+        state := 3; (* MovementIdle *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            cmd_target_stack := CHARGE_STACK;
-            cmd_target_row := CHARGE_ROW;
-            cmd_target_section := CHARGE_SECTION;
-            cmd_done := FALSE;
-            state := 3; (* MovementIdle *)
         1: (* DispatchMove *)
             IF NOT tgt_type THEN
                 cmd_target_stack := PICKUP_STACK;
@@ -427,9 +430,10 @@ VAR CONSTANT
     PICKUP_SECTION : USINT := 1;
     PICKUP_STACK : USINT := 0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Stacker *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Stacker *)
         1: (* Stacker *)
             command_receiver0(busy := busy, cmd_ack := cmd_ack, eta := eta, sense_battery_low := sense_battery_low, task_row_no := task_row_no, task_section_no := task_section_no, task_stack_no := task_stack_no, task_type := task_type, task_valid := task_valid, tgt_row := tgt_row, tgt_section := tgt_section, tgt_stack := tgt_stack, tgt_type := tgt_type);
             movement_controller1(busy := busy, cmd_ack := cmd_ack, cmd_done := cmd_done, cmd_target_row := cmd_target_row, cmd_target_section := cmd_target_section, cmd_target_stack := cmd_target_stack, lift_done := lift_done, lift_op := lift_op, lift_request := lift_request, pos_row := pos_row, pos_section := pos_section, pos_stack := pos_stack, sense_at_charge := sense_at_charge, sense_battery_low := sense_battery_low, tgt_row := tgt_row, tgt_section := tgt_section, tgt_stack := tgt_stack, tgt_type := tgt_type);

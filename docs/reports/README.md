@@ -114,3 +114,4 @@
 | 0188 | Направление порта проверяется во всех позициях | [0188-port-direction-everywhere.md](0188-port-direction-everywhere.md) | СОЗДАНА |
 | 0189 | Анонимные порты | [0189-anonymous-ports.md](0189-anonymous-ports.md) | СОЗДАНА |
 | 0196 | Подсветка имён типов отдельным цветом в LSP и плагинах | [0196-editor-type-highlighting.md](0196-editor-type-highlighting.md) | СОЗДАНА |
+| 0191 | Цель st: потактовая сверка с эталоном и устранение расхождений | [0191-st-per-tick-conformance.md](0191-st-per-tick-conformance.md) | СОЗДАНА |

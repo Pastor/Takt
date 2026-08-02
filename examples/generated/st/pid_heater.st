@@ -21,10 +21,11 @@ VAR
     release : LREAL := 38.0;
     setpoint : LREAL := 40.0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        target := setpoint;
+        state := 2; (* Heating *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            target := setpoint;
-            state := 2; (* Heating *)
         1: (* Done *)
             state := 4; (* END *)
         2: (* Heating *)
@@ -68,10 +69,11 @@ VAR
     kp : LREAL := 0.5;
     neg_imax : LREAL := -32.0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        neg_imax := 0.0 - imax;
+        state := 1; (* Control *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            neg_imax := 0.0 - imax;
-            state := 1; (* Control *)
         1: (* Control *)
             err := target - meas;
             i_acc := i_acc + err;
@@ -117,9 +119,10 @@ VAR
     meas : LREAL := 0.0;
     target : LREAL := 40.0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 2; (* PidHeater *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 2; (* PidHeater *)
         1: (* Finished *)
             state := 3; (* END *)
         2: (* PidHeater *)

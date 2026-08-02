@@ -31,9 +31,10 @@ VAR
     setpoint : INT := 2560;
     value : INT := 0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Adjust *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Adjust *)
         1: (* Adjust *)
             value := LINT_TO_INT(INT_TO_LINT(value) + INT_TO_LINT(LINT_TO_INT(LAM_Q_FLOORDIV(INT_TO_LINT((LINT_TO_INT(INT_TO_LINT(setpoint) - INT_TO_LINT(value)))) * INT_TO_LINT(half), 256))));
             IF value >= near THEN
@@ -59,9 +60,10 @@ VAR
     state : USINT := 0;
     regulator0 : RegulatorRegulator;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Main *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Main *)
         1: (* Main *)
             regulator0();
             IF regulator0.is_done THEN

@@ -87,10 +87,11 @@ VAR CONSTANT
     Floor_Bottom : USINT := 80;
     Floor_Top : USINT := 81;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        _st_discard_usint := door_open(0);
+        state := 3; (* Idle *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            _st_discard_usint := door_open(0);
-            state := 3; (* Idle *)
         1: (* DoorClosing *)
             _st_discard_usint := door_close(0);
             IF ((USINT_TO_BYTE(sensors_cab) AND 16#02) <> 16#00) OR (current_floor = target_floor) THEN
@@ -178,9 +179,10 @@ VAR CONSTANT
     Floor_Bottom : USINT := 80;
     Floor_Top : USINT := 81;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 2; (* Main *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 2; (* Main *)
         1: (* End *)
             state := 4; (* END *)
         2: (* Main *)

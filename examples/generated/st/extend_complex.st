@@ -45,9 +45,10 @@ VAR CONSTANT
     Constant_Z : USINT := 2;
     ENABLED : BOOL := TRUE;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Start *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Start *)
         1: (* Start *)
             state := 2; (* END *)
         2: (* END *)
@@ -74,9 +75,10 @@ VAR CONSTANT
     Constant_Z : USINT := 2;
     ENABLED : BOOL := TRUE;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Start *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Start *)
         1: (* Start *)
             IF WAIT THEN
                 WORK := FALSE;
@@ -111,9 +113,10 @@ VAR CONSTANT
     Point_Local : USINT := 1;
     ENABLED : BOOL := TRUE;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 2; (* Start *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 2; (* Start *)
         1: (* End *)
             state := 3; (* END *)
         2: (* Start *)
@@ -141,9 +144,10 @@ VAR CONSTANT
     Point_Local : USINT := 1;
     ENABLED : BOOL := TRUE;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Start *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Start *)
         1: (* Start *)
             state := 2; (* END *)
         2: (* END *)
@@ -165,9 +169,10 @@ VAR CONSTANT
     Constant_Z : USINT := 2;
     ENABLED : BOOL := TRUE;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Start *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Start *)
         1: (* Start *)
             state := 2; (* END *)
         2: (* END *)
@@ -189,9 +194,10 @@ VAR CONSTANT
     Constant_Z : USINT := 2;
     ENABLED : BOOL := TRUE;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Start *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Start *)
         1: (* Start *)
             state := 2; (* END *)
         2: (* END *)
@@ -221,9 +227,10 @@ VAR CONSTANT
     Point_Local : USINT := 1;
     ENABLED : BOOL := TRUE;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 2; (* Start *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 2; (* Start *)
         1: (* End *)
             state := 3; (* END *)
         2: (* Start *)
@@ -254,9 +261,10 @@ VAR CONSTANT
     Constant_Z : USINT := 2;
     ENABLED : BOOL := TRUE;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 2; (* Start *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 2; (* Start *)
         1: (* End *)
             state := 3; (* END *)
         2: (* Start *)
@@ -307,9 +315,10 @@ VAR CONSTANT
     Constant_Z : USINT := 2;
     ENABLED : BOOL := TRUE;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 2; (* Start *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 2; (* Start *)
         1: (* Next *)
             f0();
             IF f0.is_done THEN
