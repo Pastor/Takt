@@ -212,10 +212,7 @@ fn st_trace_matches_reference_tick_by_tick() {
         return;
     }
 
-    let dir = std::env::temp_dir().join(format!(
-        "takt_st_per_tick_{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("takt_st_per_tick_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("рабочий каталог");
 

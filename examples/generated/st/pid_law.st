@@ -26,10 +26,11 @@ VAR
     kp : LREAL := 0.5;
     neg_imax : LREAL := -32.0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        neg_imax := 0.0 - imax;
+        state := 1; (* Control *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            neg_imax := 0.0 - imax;
-            state := 1; (* Control *)
         1: (* Control *)
             err := target - meas;
             i_acc := i_acc + err;
@@ -68,9 +69,10 @@ VAR
     meas : LREAL := 0.0;
     target : LREAL := 40.0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Main *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Main *)
         1: (* Main *)
             pid0(ctrl := ctrl, meas := meas, target := target);
             IF pid0.is_done THEN

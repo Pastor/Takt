@@ -14,9 +14,10 @@ VAR
     state : USINT := 0;
     dosed : USINT := 0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Fill *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Fill *)
         1: (* Fill *)
             stage := 1;
             dosed := dosed + 1;
@@ -42,9 +43,10 @@ VAR
     state : USINT := 0;
     drained : USINT := 0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 2; (* Empty *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 2; (* Empty *)
         1: (* Dry *)
             state := 3; (* END *)
         2: (* Empty *)
@@ -70,9 +72,10 @@ VAR
     state : USINT := 0;
     stirred : USINT := 0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 2; (* Stir *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 2; (* Stir *)
         1: (* Blended *)
             state := 3; (* END *)
         2: (* Stir *)
@@ -100,9 +103,10 @@ VAR
     cycle_step : USINT;
     stage : USINT := 0;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Cycle *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Cycle *)
         1: (* Cycle *)
             CASE cycle_step OF
                 0:

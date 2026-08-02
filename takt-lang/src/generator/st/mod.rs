@@ -41,6 +41,7 @@
 //! **не** эмитит: она уехала бы в ПЛК под видом логики.
 
 mod st_at;
+mod st_compose;
 mod st_decl;
 mod st_expr;
 mod st_fixed;

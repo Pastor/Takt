@@ -51,10 +51,11 @@ VAR CONSTANT
     Command_Down : USINT := 1;
     Command_Stop : USINT := 2;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        command := Command_Stop;
+        state := 2; (* Idle *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            command := Command_Stop;
-            state := 2; (* Idle *)
         1: (* AtFloor *)
             DoorOpen := TRUE;
             IF CabinButton_DC THEN
@@ -214,10 +215,11 @@ VAR CONSTANT
     Command_Down : USINT := 1;
     Command_Stop : USINT := 2;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        ElevatorMotor_Stop := TRUE;
+        state := 2; (* Idle *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            ElevatorMotor_Stop := TRUE;
-            state := 2; (* Idle *)
         1: (* Down *)
             ElevatorMotor_Down := TRUE;
             IF (command = Command_Stop) OR ElevatorMotor_SensorD THEN
@@ -263,9 +265,10 @@ VAR CONSTANT
     Command_Down : USINT := 1;
     Command_Stop : USINT := 2;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Main *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Main *)
         1: (* Main *)
             cabin0(command := command, current_floor := current_floor, target_floor := target_floor);
             motor1(command := command);

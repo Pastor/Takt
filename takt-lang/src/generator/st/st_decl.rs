@@ -449,7 +449,21 @@ fn declaration(
 /// массив объявляется без инициализатора и обнуляется правилами IEC по
 /// умолчанию, что совпадает с намерением `:= 0`.
 pub(crate) fn literal_init(expr: &ExpressionNode, ty: &TypeNode) -> Option<String> {
-    if matches!(ty, TypeNode::Array(_, _) | TypeNode::Struct(_)) {
+    // `[bit;N≤64]` составным типом НЕ является: по фиче 0078 это упакованный
+    // скаляр, и `get_st_type` печатает его как `USINT`/`UINT`/`UDINT`/`ULINT`.
+    // Признак берётся из того же слоя, что и печать типа, — второе правило
+    // упаковки разъехалось бы с первым и дало значение не той ширины.
+    //
+    // ⚠️ До фичи 0191 гейт ниже глушил и его: `var small: [bit;8] := 255;`
+    // объявлялся `small : USINT;` — без значения. Эталон и цель `c` давали 255,
+    // цель `st` — 0, и расхождение было МОЛЧАЛИВЫМ: `iec2c` вывод принимает.
+    let packed_bits = crate::semantic::bit_vector::is_bit_vector(ty).is_some_and(|nbits| {
+        matches!(
+            crate::semantic::bit_vector::layout(nbits),
+            crate::semantic::bit_vector::BitVectorLayout::Scalar { .. }
+        )
+    });
+    if !packed_bits && matches!(ty, TypeNode::Array(_, _) | TypeNode::Struct(_)) {
         return None;
     }
     match expr {

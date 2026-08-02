@@ -341,3 +341,6 @@
 | 0187-08 | 0187 | редакторский слой: LSP и плагин IntelliJ (правило 29) | [0187-08-port-io-redesign.md](0187-08-port-io-redesign.md) |
 | 0190-01 | 0190 | параллельные тесты: каталог теста уникален по тесту | [0190-01-precheck-selective-gates.md](0190-01-precheck-selective-gates.md) |
 | 0196-01 | 0196 | Подсветка имён типов отдельным цветом в LSP и плагинах | [0196-01-editor-type-highlighting.md](0196-01-editor-type-highlighting.md) |
+| 0191-01 | 0191 | Цель st: потактовая сверка с эталоном и устранение расхождений | [0191-01-st-per-tick-conformance.md](0191-01-st-per-tick-conformance.md) |
+| 0191-02 | 0191 | Цель st: потактовая сверка с эталоном и устранение расхождений | [0191-02-st-per-tick-conformance.md](0191-02-st-per-tick-conformance.md) |
+| 0191-03 | 0191 | Цель st: потактовая сверка с эталоном и устранение расхождений | [0191-03-st-per-tick-conformance.md](0191-03-st-per-tick-conformance.md) |

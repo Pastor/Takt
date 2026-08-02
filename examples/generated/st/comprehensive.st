@@ -112,10 +112,11 @@ VAR CONSTANT
     MAX_TEMP : USINT := 100;
     WARMUP_TEMP : USINT := 10;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        temperature := 0;
+        state := 4; (* Idle *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            temperature := 0;
-            state := 4; (* Idle *)
         1: (* Cooling *)
             i := 0;
             WHILE i < COOL_STEP DO
@@ -174,9 +175,10 @@ VAR CONSTANT
     Mode_Manual : USINT := 1;
     Mode_Emergency : USINT := 2;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        state := 1; (* Entry *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            state := 1; (* Entry *)
         1: (* Entry *)
             controller0();
             IF controller0.is_done THEN
