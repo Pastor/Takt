@@ -352,3 +352,5 @@
 | 0194-02 | 0194 | Симулятор теряет model-level always у модели-композиции | [0194-02-sim-composition-model-always.md](0194-02-sim-composition-model-always.md) |
 | 0195-01 | 0195 | Коллизии имён при отображении в пространство имён цели | [0195-01-target-name-collisions.md](0195-01-target-name-collisions.md) |
 | 0195-02 | 0195 | Коллизии имён при отображении в пространство имён цели | [0195-02-target-name-collisions.md](0195-02-target-name-collisions.md) |
+| 0198-01 | 0198 | Форматтер выносит комментарий из тела блока наружу | [0198-01-formatter-comment-in-block.md](0198-01-formatter-comment-in-block.md) |
+| 0198-02 | 0198 | Форматтер выносит комментарий из тела блока наружу | [0198-02-formatter-comment-in-block.md](0198-02-formatter-comment-in-block.md) |

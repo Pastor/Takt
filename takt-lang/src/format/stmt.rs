@@ -31,9 +31,23 @@ pub(crate) fn block_with_head(
     for s in statements {
         print(out, s)?;
     }
+    // Комментарий последней строкой тела: следующего оператора нет, и без этого
+    // вызова его выдал бы `leading()` следующего ЭЛЕМЕНТА — уже за скобкой,
+    // привязанным к чужому узлу (фича 0198).
+    close_body(out, statement);
     out.down();
     out.line("}");
     Ok(())
+}
+
+/// Печатает комментарии, оставшиеся внутри тела, перед его закрывающей скобкой.
+fn close_body(out: &mut Out, block: &ast::Statement) {
+    let ast::Statement::Block { loc, .. } = block else {
+        return;
+    };
+    if let Some((_, end)) = super::comments::span(loc) {
+        out.comments_before(end);
+    }
 }
 
 /// Печатает оператор.
@@ -51,19 +65,22 @@ pub(crate) fn print(out: &mut Out, statement: &ast::Statement) -> Result<(), For
             for s in statements {
                 print(out, s)?;
             }
+            close_body(out, statement);
             out.down();
             out.line("}");
             Ok(())
         }
-        S::Expression(_, e) => {
-            out.line(&format!("{};", expr::expression(e)?));
+        S::Expression(loc, e) => {
+            out.node_line(loc, &format!("{};", expr::expression(e)?));
             Ok(())
         }
-        S::Variable(_, define, init) => {
+        S::Variable(loc, define, init) => {
             let head = expr::variable_define(define)?;
             match init {
-                Some(init) => out.line(&format!("{head} := {};", expr::expression(init)?)),
-                None => out.line(&format!("{head};")),
+                Some(init) => {
+                    out.node_line(loc, &format!("{head} := {};", expr::expression(init)?))
+                }
+                None => out.node_line(loc, &format!("{head};")),
             }
             Ok(())
         }
@@ -117,23 +134,23 @@ pub(crate) fn print(out: &mut Out, statement: &ast::Statement) -> Result<(), For
                 }
             }
         }
-        S::Continue(_) => {
-            out.line("continue;");
+        S::Continue(loc) => {
+            out.node_line(loc, "continue;");
             Ok(())
         }
-        S::Break(_) => {
-            out.line("break;");
+        S::Break(loc) => {
+            out.node_line(loc, "break;");
             Ok(())
         }
-        S::Return(_, value) => {
+        S::Return(loc, value) => {
             match value {
-                Some(value) => out.line(&format!("return {};", expr::expression(value)?)),
-                None => out.line("return;"),
+                Some(value) => out.node_line(loc, &format!("return {};", expr::expression(value)?)),
+                None => out.node_line(loc, "return;"),
             }
             Ok(())
         }
-        S::Match(_, subject, arms) => {
-            out.line(&format!("match {} {{", expr::expression(subject)?));
+        S::Match(loc, subject, arms) => {
+            out.node_line(loc, &format!("match {} {{", expr::expression(subject)?));
             out.up();
             for arm in arms {
                 let patterns = arm
