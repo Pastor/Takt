@@ -154,3 +154,4 @@
 | [0194](./0194-sim-composition-model-always.md) | Симулятор теряет model-level always у модели-композиции | Accepted | фича 0194 |
 | [0195](./0195-target-name-collisions.md) | Коллизии имён при отображении в пространство имён цели | Accepted | фича 0195 |
 | [0198](./0198-formatter-comment-in-block.md) | Форматтер выносит комментарий из тела блока наружу | Accepted | фича 0198 |
+| [0199](./0199-model-implements-brace-form.md) | Форма model M = A & B { … } не работает ни в одной стороне | Draft | фича 0199 |

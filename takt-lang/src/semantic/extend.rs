@@ -385,6 +385,95 @@ pub fn unroll_extend_expression(
     }
 }
 
+// ── Реализация модели (`model M = A | B { … }`) — фича 0199 ──────────────────
+//
+// # Почему разворот, а не поддержка формы у потребителей
+//
+// Форма есть **синоним** записи `model M { start Имя = A | B; }`, работавшей
+// всегда. Развернув её на построении дерева, мы не заводим для пяти
+// потребителей (эталон и четыре цели) новый вид узла: за границей построения
+// формы не существует — тот же приём, каким свёрнуты выдержка `after` (0143),
+// начальное значение порта (0187) и инициализатор объявления (0192).
+//
+// ⚠️ **Разрешить `implements` в поле было недостаточно** — это первая редакция
+// правки, и от неё заработал ТОЛЬКО эталон. Цели остались красными: карта
+// (`semantic::minimap`) строит состояния из `model.states`, и модель без
+// состояний даёт стартовое состояние с пустым именем.
+//
+// ⚠️ Прежде `ModelNode::implements` не разрешался НИКОГДА (разрешались только
+// реализации состояний): симулятор давал пустую трассу, цели искали состояние с
+// пустым именем (`CC-005`, `RS-013`, `SV-011`, `ST-013`). Хуже была форма
+// `model M = A | B { start S … }`: она работала, МОЛЧА теряя реализацию.
+
+/// Имя синтетического состояния, в которое разворачивается реализация модели.
+///
+/// Коллизии с пользовательским состоянием быть не может **по построению**:
+/// модель с реализацией и собственными состояниями отвергается [`SE-101`].
+///
+/// [`SE-101`]: expand_model_implement
+const MODEL_IMPLEMENT_STATE: &str = "Implement";
+
+/// Разворачивает `model M = A | B { … }` в модель с синтетическим стартовым
+/// состоянием-реализацией.
+///
+/// # Ошибки
+///
+/// **`SE-101`**, если у модели есть и реализация, и собственные состояния:
+/// модель не может быть одновременно композицией и автоматом. ⚠️ Прежде такая
+/// запись **молча теряла** реализацию — исполнялось только собственное
+/// состояние, а `= A | B` не доходил ни до эталона, ни до целей.
+pub(super) fn expand_model_implement(model: &Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+    let Extend::Unresolved(expr) = model.borrow().implements.clone() else {
+        return Ok(());
+    };
+    let loc = model.borrow().loc;
+    if let Some((name, state_loc)) = model
+        .borrow()
+        .states
+        .iter()
+        .map(|(name, state)| (name.clone(), state_location(state)))
+        .next()
+    {
+        return Err(Diagnostic::error(
+            loc,
+            format!(
+                "модель '{}' объявлена с реализацией ('= …') и одновременно \
+                 содержит собственное состояние '{name}': модель не может быть \
+                 и композицией, и автоматом. Уберите реализацию и объявите её \
+                 состоянием ('start Имя = …;') либо уберите собственные состояния",
+                model.borrow().name.clone().unwrap_or_default()
+            ),
+        )
+        .with_code("SE-101")
+        .with_note(state_loc, format!("состояние '{name}' здесь")));
+    }
+    let state = StateNode::Implement {
+        upper: Some(Rc::downgrade(model)),
+        loc,
+        named_blocks: Vec::new(),
+        name: MODEL_IMPLEMENT_STATE.to_string(),
+        references: Vec::new(),
+        implements: Extend::Unresolved(expr),
+        next: None,
+        kind: StateNodeKind::Start,
+        formulas: Vec::new(),
+    };
+    let mut borrowed = model.borrow_mut();
+    borrowed
+        .states
+        .insert(MODEL_IMPLEMENT_STATE.to_string(), state);
+    borrowed.implements = Extend::None;
+    Ok(())
+}
+
+/// Позиция состояния — для примечания диагностики.
+fn state_location(state: &StateNode) -> Location {
+    match state {
+        StateNode::Simple { loc, .. } | StateNode::Implement { loc, .. } => *loc,
+        StateNode::Unresolved => Location::Builtin,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::diagnostics::Location;

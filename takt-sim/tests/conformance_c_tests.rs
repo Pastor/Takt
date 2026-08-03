@@ -719,6 +719,11 @@ mod overflow;
 #[path = "conformance_c_tests/composition_always.rs"]
 mod composition_always;
 
+// Реализация модели `model M = A | B { … }` (фича 0199) — тем же приёмом
+// подмодуля: файл упирается в лимит размера.
+#[path = "conformance_c_tests/model_implement.rs"]
+mod model_implement;
+
 /// Фича 0083: model-level `always` исполняется КАЖДЫЙ такт и потактово совпадает
 /// с C. Прежде блок молча терялся (и в C, и в симуляторе).
 #[test]

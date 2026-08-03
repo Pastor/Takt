@@ -354,3 +354,5 @@
 | 0195-02 | 0195 | Коллизии имён при отображении в пространство имён цели | [0195-02-target-name-collisions.md](0195-02-target-name-collisions.md) |
 | 0198-01 | 0198 | Форматтер выносит комментарий из тела блока наружу | [0198-01-formatter-comment-in-block.md](0198-01-formatter-comment-in-block.md) |
 | 0198-02 | 0198 | Форматтер выносит комментарий из тела блока наружу | [0198-02-formatter-comment-in-block.md](0198-02-formatter-comment-in-block.md) |
+| 0199-01 | 0199 | Форма model M = A & B { … } не работает ни в одной стороне | [0199-01-model-implements-brace-form.md](0199-01-model-implements-brace-form.md) |
+| 0199-02 | 0199 | Форма model M = A & B { … } не работает ни в одной стороне | [0199-02-model-implements-brace-form.md](0199-02-model-implements-brace-form.md) |

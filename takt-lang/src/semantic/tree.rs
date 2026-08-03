@@ -710,7 +710,8 @@ pub(super) fn construct_model_stage0(
 pub(super) fn construct_model_stage1(
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    // Клонируем состояния до мутабельного займа, чтобы construct_implement мог брать заём
+    extend::expand_model_implement(&model)?; // форма `model M = A|B {…}`, 0199
+    // Клонируем состояния до займа: construct_implement берёт заём сам
     let states = model.borrow().states.clone();
 
     let mut prepared_states = BTreeMap::new();
@@ -731,7 +732,6 @@ pub(super) fn construct_model_stage1(
                 ExpressionNode::Unresolved(implement_expression),
                 Rc::clone(&model),
             )?;
-            // let implements = extend::compact_implement(implements, Rc::clone(&model), &name);
             prepared_states.insert(
                 name.clone(),
                 StateNode::Implement {
