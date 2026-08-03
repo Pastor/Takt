@@ -714,6 +714,11 @@ fn per_tick_trace_matches_generated_c() {
 #[path = "conformance_c_tests/overflow.rs"]
 mod overflow;
 
+// Model-level `always` у модели-композиции (фича 0194) — тем же приёмом
+// подмодуля и по той же причине: файл упирается в лимит размера.
+#[path = "conformance_c_tests/composition_always.rs"]
+mod composition_always;
+
 /// Фича 0083: model-level `always` исполняется КАЖДЫЙ такт и потактово совпадает
 /// с C. Прежде блок молча терялся (и в C, и в симуляторе).
 #[test]

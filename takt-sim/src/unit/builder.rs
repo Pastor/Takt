@@ -1,6 +1,7 @@
 use crate::context::Context;
 use crate::eval::value::Value;
 use crate::predicate::create_predicate;
+use crate::unit::blocks::model_level_executions;
 use crate::unit::statement::compile_block_body;
 use crate::unit::{Execution, Predicate, Unit, UnitKind};
 use std::cell::RefCell;
@@ -10,8 +11,7 @@ use takt_lang::diagnostics::{Diagnostic, Location};
 use takt_lang::semantic::extend::{Extend, ParameterArgument};
 use takt_lang::semantic::type_node::TypeNode;
 use takt_lang::semantic::{
-    ConditionNode, ExpressionNode, ModelNode, NamedCodeBlockDefinitionNode, ReferenceNode,
-    StateNode, StateNodeKind, VariableNode,
+    ConditionNode, ExpressionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind, VariableNode,
 };
 
 use crate::unit::initial::eval_expr;
@@ -291,7 +291,7 @@ fn build_impl(
         };
         if let Some(implements) = single_compound {
             reject_unsupported_arguments(&model, args, call_loc)?;
-            build_extend(&implements, shared_parent)
+            build_composition(model, &implements, shared_parent)
         } else {
             build_node(model, shared_parent, args)
         }
@@ -300,8 +300,62 @@ fn build_impl(
         // не возникает — значения записывать некуда. Отказ вместо молчания.
         reject_unsupported_arguments(&model, args, call_loc)?;
         let extends = model.borrow().implements.clone();
-        build_extend(&extends, shared_parent)
+        build_composition(model, &extends, shared_parent)
     }
+}
+
+/// Строит узел-композицию, **не теряя тела модели-владельца** (фича 0194).
+///
+/// # Что было
+///
+/// Обе ветви [`build_impl`] делегировали прямо в [`build_extend`], который
+/// собирает `Parallel`/`Sequential` из ветвей. Поле `executions` у этих видов
+/// объявлено и читается (`Unit::execution`), но наполнялось **только** слиянием
+/// из юнитов-ветвей — блоки владельца туда не попадали, и model-level `always`
+/// у модели-композиции эталон не исполнял вовсе. Все четыре цели (`c`, `rust`,
+/// `sv`, `st`) его исполняют: расходился эталон против всех.
+///
+/// # Почему контекст строится здесь
+///
+/// Тело владельца и ветви обязаны писать в **один** контекст, иначе запись уйдёт
+/// в другой экземпляр `ModelNodeContext` и наблюдаемая не изменится — «починка»,
+/// которая молча не работает. Поэтому контекст создаётся один раз (тем же
+/// способом, что в [`build_node`]) и отдаётся обоим: ветвям — как общий
+/// родитель, телу — как приёмник значений.
+///
+/// ⚠️ Блоки кладутся в **этот** юнит и в дочерние не спускаются: `Unit::execution`
+/// в детей не ходит намеренно, иначе тело исполнилось бы по разу на ветвь
+/// (фикс 0181-01, дефект-близнец с противоположным знаком).
+fn build_composition(
+    model: Rc<RefCell<ModelNode>>,
+    extends: &Extend,
+    shared_parent: Option<Rc<RefCell<dyn Context>>>,
+) -> Result<Unit, Diagnostic> {
+    let ctx: Rc<RefCell<dyn Context>> =
+        Rc::new(RefCell::new(if let Some(shared) = shared_parent {
+            ModelNodeContext::new_with_parent(model.clone(), Some(shared))
+        } else {
+            ModelNodeContext::new(model.clone())
+        }));
+    let mut unit = build_extend(extends, Some(ctx.clone()))?;
+    let owner = model_level_executions(&model, ctx);
+    if owner.is_empty() {
+        return Ok(unit);
+    }
+    match unit.kind_mut() {
+        UnitKind::Parallel { executions, .. } | UnitKind::Sequential { executions, .. } => {
+            for (name, fns) in owner {
+                executions.entry(name).or_default().extend(fns);
+            }
+        }
+        // Композиция из одной ветви сворачивается в `Node` самой ветви; её
+        // `executions` принадлежат ЧУЖОЙ модели, и дописывать туда тело
+        // владельца нельзя — блок исполнился бы в контексте ветви. Такой вход
+        // language-уровня не порождает (`|`/`+` требуют двух операндов), ветвь
+        // существует для полноты разбора.
+        UnitKind::Node { .. } | UnitKind::None => {}
+    }
+    Ok(unit)
 }
 
 /// Отказывает, если аргументы заданы модели, у которой нет своего контекста.
@@ -462,23 +516,9 @@ fn build_node(
 
     // Фича 0083: именованные блоки **уровня модели** (`always` вне состояния).
     // Прежде поле было `HashMap::new()` — model-level `always` молча терялся
-    // (как и в генераторах). `execution("always")` (шаг 2, `unit.rs`) исполняет
-    // их **каждый такт до диспетчеризации состояния**, безусловно по состоянию —
-    // эталон для потактовой сверки с генераторами (`always` = каждый такт).
-    let model_blocks: Vec<NamedCodeBlockDefinitionNode> = model.borrow().named_blocks.clone();
-    let mut executions: Executions = HashMap::new();
-    for block in &model_blocks {
-        let kind = block.name();
-        if kind.is_empty() {
-            continue;
-        }
-        if let Some(body) = block.statement() {
-            let fns = compile_block_body(body, ctx_rc.clone());
-            if !fns.is_empty() {
-                executions.entry(kind.to_string()).or_default().extend(fns);
-            }
-        }
-    }
+    // (как и в генераторах). Компиляция вынесена в `blocks` (фича 0194): тем же
+    // наполнением пользуется узел-композиция, а копия правила разъехалась бы.
+    let executions = model_level_executions(&model, ctx_rc.clone());
 
     Ok(Unit::from_kind(UnitKind::Node {
         time_ns: 0,

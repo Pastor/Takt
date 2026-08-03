@@ -1,6 +1,6 @@
 [package]
 name = "takt-sim"
-version = "0.8.0"
+version = "0.9.0"
 authors = ["Pastor <viruszold@gmail.com>"]
 description = "Takt"
 homepage = "https://but.ru"
