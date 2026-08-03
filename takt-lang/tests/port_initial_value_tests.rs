@@ -114,11 +114,11 @@ fn c_writes_initial_value_in_init() {
     let (_dir, text) = generate_c("cinit", WITH_INIT);
     let init = c_init_body(&text, "Cinit");
     assert!(
-        init.contains("(*model->write_bit)(CINIT_READY, 1, model->userdata);"),
+        init.contains("(*model->write_bit)(CINIT_PORT_READY, 1, model->userdata);"),
         "битовый порт со значением обязан получить его в `_init`:\n{init}"
     );
     assert!(
-        init.contains("(*model->write_numeric)(CINIT_LEVEL, 7, model->userdata);"),
+        init.contains("(*model->write_numeric)(CINIT_PORT_LEVEL, 7, model->userdata);"),
         "числовой порт со значением обязан получить его в `_init` — \
          в том числе порт, к которому тело автомата не обращается:\n{init}"
     );
@@ -145,7 +145,7 @@ fn c_port_without_value_is_not_written() {
 fn c_input_port_is_never_written() {
     let (_dir, text) = generate_c("cin", WITH_INIT);
     assert!(
-        !text.contains("CINIT_BTN, "),
+        !text.contains("CINIT_PORT_BTN, "),
         "входной порт записи не получает:\n{text}"
     );
 }
@@ -156,7 +156,7 @@ fn c_folds_constant_expression_to_literal() {
     let (_dir, text) = generate_c("cfold", FOLDED);
     let init = c_init_body(&text, "Cfold");
     assert!(
-        init.contains("(*model->write_numeric)(CFOLD_LEVEL, 7, model->userdata);"),
+        init.contains("(*model->write_numeric)(CFOLD_PORT_LEVEL, 7, model->userdata);"),
         "`BASE + 2` обязано доехать до цели литералом 7, а не выражением:\n{init}"
     );
 }

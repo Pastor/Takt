@@ -346,11 +346,8 @@ pub(in crate::generator::c) fn generate_condition_expr(
                                     );
                                 };
                             let cls = PortClass::from_type(ty);
-                            let variant = format!(
-                                "{}_{}",
-                                model_name.unique_uppercase_snakecase(),
-                                normalize_lowercase_snakecase(name.clone()).to_uppercase()
-                            );
+                            let variant =
+                                crate::generator::c::c_names::port_enum_variant(&model_name, name);
                             // В условиях всегда has_model=true; ptr зависит от owner
                             let ptr = if owner.name().eq(&map.root_name()) {
                                 "model"

@@ -16,7 +16,6 @@ use crate::generator::c::{
 use crate::generator::indent::Printer;
 use crate::semantic::extend::ParameterArgument;
 use crate::semantic::minimap::{Element, Name, StateExtend};
-use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, PortDirection, VariableNode};
 
@@ -140,11 +139,7 @@ fn generate_port_initial_values(
         if matches!(init, ExpressionNode::None) || *direction == PortDirection::In {
             continue;
         }
-        let variant = format!(
-            "{}_{}",
-            model_name.unique_uppercase_snakecase(),
-            normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
-        );
+        let variant = crate::generator::c::c_names::port_enum_variant(model_name, port_name);
         let write = match PortClass::from_type(ty) {
             PortClass::Bit => FUNCTION_PORT_WRITE_BIT,
             PortClass::Rational => FUNCTION_PORT_WRITE_FLOAT,
@@ -200,7 +195,12 @@ fn generate_start_state_init(
     {
         match extend {
             StateExtend::Model(name, args) => {
-                let access = format!("model->{}", state_name.local().to_lowercase());
+                // Имя поля печатается ТОЙ ЖЕ функцией, что и его объявление
+                // (`c_header.rs`): `local().to_lowercase()` даёт `twowords` там,
+                // где объявлено `two_words`, и вывод не компилируется (фича
+                // 0195, К1). Односложное имя дефект скрывает — обе нормализации
+                // на нём совпадают.
+                let access = format!("model->{}", state_name.local_lowercase_snakecase());
                 printer
                     .ident(&format!("{}_init(&{}", name.unique_camelcase(), access))
                     .print(append)

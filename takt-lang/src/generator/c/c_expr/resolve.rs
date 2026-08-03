@@ -215,11 +215,7 @@ pub(in crate::generator::c) fn resolve_variable_c_expr(
                 return Err("Неразрешённый owner порта".into());
             };
             let cls = PortClass::from_type(ty);
-            let variant = format!(
-                "{}_{}",
-                model_name.unique_uppercase_snakecase(),
-                normalize_lowercase_snakecase(name.clone()).to_uppercase()
-            );
+            let variant = crate::generator::c::c_names::port_enum_variant(&model_name, name);
             // В локальных функциях (has_model=false) первый параметр — `const Root *model`.
             // В tick/init корневой модели — тоже `model`. В tick/init подмодели — `main`.
             let ptr = if has_model && !owner.name().eq(&map.root_name()) {

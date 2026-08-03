@@ -8,7 +8,7 @@ typedef struct PidLawPid PidLawPid;
 typedef struct PidLaw PidLaw;
 
 typedef enum {
-    PID_LAW_PID_READY = 0,
+    PID_LAW_PID_PORT_READY = 0,
 } PidLaw_Out_BitPort;
 
 // NOTICE: Определение констант для модели Pid (PidLaw:Pid)

@@ -40,6 +40,7 @@ mod fixed;
 mod implicit_bool;
 mod literal_range;
 mod member_access;
+mod name_collisions;
 mod nondeterminism;
 mod port_init;
 mod ports;
@@ -154,6 +155,12 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     //    инструменты на порождённом файле, а цель `c` для переменных исполняла
     //    то, чего не исполняет эталон.
     found.extend(bodies::check_bodies(model.clone()));
+
+    // SE-100/SE-101 (0195): столкновения имён, неразрешимые в пространстве имён
+    // цели. Отказ переносится из чужих инструментов (`cc`, `iec2c`) в свой
+    // компилятор: обе формы не работают НИ В ОДНОЙ цели, поэтому запрещается не
+    // работающая запись, а уже существующий отказ получает позицию.
+    found.extend(name_collisions::check_name_collisions(model.clone()));
 
     // SE-092 (0187): начальное значение у входного порта — ошибка. Временное
     // SE-093 («выставляют не все цели») снято задачей 0187-04: цели умеют все.

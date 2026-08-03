@@ -10,32 +10,32 @@ typedef struct StackerMovementController StackerMovementController;
 typedef struct Stacker Stacker;
 
 typedef enum {
-    STACKER_SENSE_AT_CHARGE = 0,
-    STACKER_SENSE_BATTERY_LOW = 1,
-    STACKER_SENSE_LOADED = 2,
-    STACKER_TASK_TYPE = 3,
-    STACKER_TASK_VALID = 4,
+    STACKER_PORT_SENSE_AT_CHARGE = 0,
+    STACKER_PORT_SENSE_BATTERY_LOW = 1,
+    STACKER_PORT_SENSE_LOADED = 2,
+    STACKER_PORT_TASK_TYPE = 3,
+    STACKER_PORT_TASK_VALID = 4,
 } Stacker_In_BitPort;
 
 typedef enum {
-    STACKER_CMD_ACK = 0,
-    STACKER_CMD_DONE = 1,
-    STACKER_CMD_FORK = 2,
+    STACKER_PORT_CMD_ACK = 0,
+    STACKER_PORT_CMD_DONE = 1,
+    STACKER_PORT_CMD_FORK = 2,
 } Stacker_Out_BitPort;
 
 typedef enum {
-    STACKER_POS_ROW = 0,
-    STACKER_POS_SECTION = 1,
-    STACKER_POS_STACK = 2,
-    STACKER_TASK_ROW_NO = 3,
-    STACKER_TASK_SECTION_NO = 4,
-    STACKER_TASK_STACK_NO = 5,
+    STACKER_PORT_POS_ROW = 0,
+    STACKER_PORT_POS_SECTION = 1,
+    STACKER_PORT_POS_STACK = 2,
+    STACKER_PORT_TASK_ROW_NO = 3,
+    STACKER_PORT_TASK_SECTION_NO = 4,
+    STACKER_PORT_TASK_STACK_NO = 5,
 } Stacker_In_NumericPort;
 
 typedef enum {
-    STACKER_CMD_TARGET_ROW = 0,
-    STACKER_CMD_TARGET_SECTION = 1,
-    STACKER_CMD_TARGET_STACK = 2,
+    STACKER_PORT_CMD_TARGET_ROW = 0,
+    STACKER_PORT_CMD_TARGET_SECTION = 1,
+    STACKER_PORT_CMD_TARGET_STACK = 2,
 } Stacker_Out_NumericPort;
 
 // NOTICE: Определение констант для модели CommandReceiver (Stacker:CommandReceiver)

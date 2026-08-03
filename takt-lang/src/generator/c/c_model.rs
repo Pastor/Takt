@@ -538,7 +538,7 @@ fn generate_model_tick(
                             .ident(&format!(
                                 "{}_tick(&model->{}",
                                 name.unique_camelcase(),
-                                state_name.local().to_lowercase()
+                                state_name.local_lowercase_snakecase()
                             ))
                             .print(call_append)
                             .print(");")
@@ -547,7 +547,7 @@ fn generate_model_tick(
                             .ident(&format!(
                                 "if ({}_is_done(&model->{}",
                                 name.unique_camelcase(),
-                                state_name.local().to_lowercase()
+                                state_name.local_lowercase_snakecase()
                             ))
                             .print(call_append)
                             .print(")) {")

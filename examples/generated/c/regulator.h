@@ -8,7 +8,7 @@ typedef struct RegulatorRegulator RegulatorRegulator;
 typedef struct Regulator Regulator;
 
 typedef enum {
-    REGULATOR_REGULATOR_READY = 0,
+    REGULATOR_REGULATOR_PORT_READY = 0,
 } Regulator_Out_BitPort;
 
 // NOTICE: Определение констант для модели Regulator (Regulator:Regulator)

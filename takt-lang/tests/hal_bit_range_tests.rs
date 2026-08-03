@@ -104,11 +104,11 @@ int main(void) {{
     volatile uint64_t *w = (volatile uint64_t*)A;
     Bitprobe m; Bitprobe_init(&m); Bitprobe_bind_default_hal(&m);
     *w = ((uint64_t)1 << 33);
-    int a = m.read_bit(BITPROBE_HI, m.userdata) ? 1 : 0;
-    int b = m.read_bit(BITPROBE_LO, m.userdata) ? 1 : 0;
+    int a = m.read_bit(BITPROBE_PORT_HI, m.userdata) ? 1 : 0;
+    int b = m.read_bit(BITPROBE_PORT_LO, m.userdata) ? 1 : 0;
     *w = ((uint64_t)1 << 2);
-    int c = m.read_bit(BITPROBE_HI, m.userdata) ? 1 : 0;
-    int d = m.read_bit(BITPROBE_LO, m.userdata) ? 1 : 0;
+    int c = m.read_bit(BITPROBE_PORT_HI, m.userdata) ? 1 : 0;
+    int d = m.read_bit(BITPROBE_PORT_LO, m.userdata) ? 1 : 0;
     printf("%d%d%d%d\n", a, b, c, d);
     return 0;
 }}

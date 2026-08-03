@@ -9,11 +9,11 @@ typedef struct PidHeaterPid PidHeaterPid;
 typedef struct PidHeater PidHeater;
 
 typedef enum {
-    PID_HEATER_PID_READY = 0,
+    PID_HEATER_PID_PORT_READY = 0,
 } PidHeater_Out_BitPort;
 
 typedef enum {
-    PID_HEATER_HEATER_TEMPERATURE = 0,
+    PID_HEATER_HEATER_PORT_TEMPERATURE = 0,
 } PidHeater_Out_RationalPort;
 
 // NOTICE: Определение констант для модели Heater (PidHeater:Heater)

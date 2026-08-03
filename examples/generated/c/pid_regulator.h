@@ -8,7 +8,7 @@ typedef struct PidRegulatorPid PidRegulatorPid;
 typedef struct PidRegulator PidRegulator;
 
 typedef enum {
-    PID_REGULATOR_PID_READY = 0,
+    PID_REGULATOR_PID_PORT_READY = 0,
 } PidRegulator_Out_BitPort;
 
 // NOTICE: Определение констант для модели Pid (PidRegulator:Pid)

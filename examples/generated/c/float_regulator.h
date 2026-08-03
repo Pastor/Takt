@@ -8,7 +8,7 @@ typedef struct FloatRegulatorFloatRegulator FloatRegulatorFloatRegulator;
 typedef struct FloatRegulator FloatRegulator;
 
 typedef enum {
-    FLOAT_REGULATOR_FLOAT_REGULATOR_READY = 0,
+    FLOAT_REGULATOR_FLOAT_REGULATOR_PORT_READY = 0,
 } FloatRegulator_Out_BitPort;
 
 // NOTICE: Определение констант для модели FloatRegulator (FloatRegulator:FloatRegulator)
