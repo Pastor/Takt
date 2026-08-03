@@ -1,3 +1,4 @@
+mod blocks;
 pub(crate) mod builder;
 #[path = "clock.rs"]
 mod clock;

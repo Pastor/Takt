@@ -151,3 +151,4 @@
 | [0196](./0196-editor-type-highlighting.md) | Подсветка имён типов отдельным цветом в LSP и плагинах | Accepted | фича 0196 |
 | [0192](./0192-const-init-fold.md) | Константное выражение в инициализаторе объявления | Accepted | фича 0192 |
 | [0193](./0193-shared-const-qualified.md) | Цели rust и sv: одноимённые константы разных моделей | Accepted | фича 0193 |
+| [0194](./0194-sim-composition-model-always.md) | Симулятор теряет model-level always у модели-композиции | Accepted | фича 0194 |

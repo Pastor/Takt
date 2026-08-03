@@ -348,3 +348,5 @@
 | 0192-02 | 0192 | Константное выражение в инициализаторе объявления | [0192-02-const-init-fold.md](0192-02-const-init-fold.md) |
 | 0193-01 | 0193 | Цели rust и sv: одноимённые константы разных моделей | [0193-01-shared-const-qualified.md](0193-01-shared-const-qualified.md) |
 | 0193-02 | 0193 | Цели rust и sv: одноимённые константы разных моделей | [0193-02-shared-const-qualified.md](0193-02-shared-const-qualified.md) |
+| 0194-01 | 0194 | Симулятор теряет model-level always у модели-композиции | [0194-01-sim-composition-model-always.md](0194-01-sim-composition-model-always.md) |
+| 0194-02 | 0194 | Симулятор теряет model-level always у модели-композиции | [0194-02-sim-composition-model-always.md](0194-02-sim-composition-model-always.md) |
