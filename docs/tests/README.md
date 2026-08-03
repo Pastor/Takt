@@ -131,3 +131,4 @@
 | 0193 | Цели rust и sv: одноимённые константы разных моделей | [0193-shared-const-qualified.md](0193-shared-const-qualified.md) | ✅ ПРОЙДЕН (отчёт: [reports/0193](../reports/0193-shared-const-qualified.md)) |
 | 0194 | Симулятор теряет model-level always у модели-композиции | [0194-sim-composition-model-always.md](0194-sim-composition-model-always.md) | ✅ ПРОЙДЕН (отчёт: [reports/0194](../reports/0194-sim-composition-model-always.md)) |
 | 0195 | Коллизии имён при отображении в пространство имён цели | [0195-target-name-collisions.md](0195-target-name-collisions.md) | ✅ ПРОЙДЕН (отчёт: [reports/0195](../reports/0195-target-name-collisions.md)) |
+| 0198 | Форматтер выносит комментарий из тела блока наружу | [0198-formatter-comment-in-block.md](0198-formatter-comment-in-block.md) | ✅ ПРОЙДЕН (отчёт: [reports/0198](../reports/0198-formatter-comment-in-block.md)) |
