@@ -40,7 +40,7 @@ void RegulatorRegulator_tick(RegulatorRegulator *model, Regulator *main) {
             break;
         }
         case REGULATOR_REGULATOR_DONE: {
-            (*main->write_bit)(REGULATOR_REGULATOR_READY, 1, main->userdata);
+            (*main->write_bit)(REGULATOR_REGULATOR_PORT_READY, 1, main->userdata);
             model->state = REGULATOR_REGULATOR_END;
             break;
         }

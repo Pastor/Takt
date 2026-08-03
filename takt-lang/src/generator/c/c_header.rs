@@ -299,11 +299,8 @@ fn generate_port_enums(printer: &mut Printer, map: &CMap) -> Result<(), Diagnost
             printer.print("typedef enum {").nl();
             printer.up();
             for (idx, (model_name, port_name)) in ports.iter().enumerate() {
-                let variant = format!(
-                    "{}_{}",
-                    model_name.unique_uppercase_snakecase(),
-                    normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
-                );
+                let variant =
+                    crate::generator::c::c_names::port_enum_variant(model_name, port_name);
                 printer.ident(&format!("{} = {},", variant, idx)).nl();
             }
             printer.down();

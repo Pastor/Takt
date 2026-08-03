@@ -130,3 +130,4 @@
 | 0192 | Константное выражение в инициализаторе объявления | [0192-const-init-fold.md](0192-const-init-fold.md) | ✅ ПРОЙДЕН (отчёт: [reports/0192](../reports/0192-const-init-fold.md)) |
 | 0193 | Цели rust и sv: одноимённые константы разных моделей | [0193-shared-const-qualified.md](0193-shared-const-qualified.md) | ✅ ПРОЙДЕН (отчёт: [reports/0193](../reports/0193-shared-const-qualified.md)) |
 | 0194 | Симулятор теряет model-level always у модели-композиции | [0194-sim-composition-model-always.md](0194-sim-composition-model-always.md) | ✅ ПРОЙДЕН (отчёт: [reports/0194](../reports/0194-sim-composition-model-always.md)) |
+| 0195 | Коллизии имён при отображении в пространство имён цели | [0195-target-name-collisions.md](0195-target-name-collisions.md) | ✅ ПРОЙДЕН (отчёт: [reports/0195](../reports/0195-target-name-collisions.md)) |

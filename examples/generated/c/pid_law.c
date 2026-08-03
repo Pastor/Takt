@@ -45,7 +45,7 @@ void PidLawPid_tick(PidLawPid *model, PidLaw *main) {
             model->err_prev = model->err;
             if (model->err < model->eps) {
                 main->ctrl = 0.0;
-                (*main->write_bit)(PID_LAW_PID_READY, 1, main->userdata);
+                (*main->write_bit)(PID_LAW_PID_PORT_READY, 1, main->userdata);
                 model->state = PID_LAW_PID_SETTLED;
                 break;
             }

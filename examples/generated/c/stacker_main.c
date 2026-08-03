@@ -78,11 +78,11 @@ typedef struct {
 static bool sim_read_bit(Stacker_In_BitPort port, void *ud) {
     SimState *s = (SimState *)ud;
     switch (port) {
-        case STACKER_SENSE_AT_CHARGE:   return s->sense_at_charge;
-        case STACKER_SENSE_BATTERY_LOW: return s->sense_battery_low;
-        case STACKER_SENSE_LOADED:      return s->sense_loaded;
-        case STACKER_TASK_TYPE:         return s->task_type;
-        case STACKER_TASK_VALID:        return s->task_valid;
+        case STACKER_PORT_SENSE_AT_CHARGE:   return s->sense_at_charge;
+        case STACKER_PORT_SENSE_BATTERY_LOW: return s->sense_battery_low;
+        case STACKER_PORT_SENSE_LOADED:      return s->sense_loaded;
+        case STACKER_PORT_TASK_TYPE:         return s->task_type;
+        case STACKER_PORT_TASK_VALID:        return s->task_valid;
     }
     return false;
 }
@@ -90,15 +90,15 @@ static bool sim_read_bit(Stacker_In_BitPort port, void *ud) {
 static void sim_write_bit(Stacker_Out_BitPort port, bool val, void *ud) {
     SimState *s = (SimState *)ud;
     switch (port) {
-        case STACKER_CMD_ACK:
+        case STACKER_PORT_CMD_ACK:
             s->cmd_ack = val;
             if (val) s->ack_seen = true;
             break;
-        case STACKER_CMD_DONE:
+        case STACKER_PORT_CMD_DONE:
             s->cmd_done = val;
             if (val) s->done_seen = true;
             break;
-        case STACKER_CMD_FORK:
+        case STACKER_PORT_CMD_FORK:
             s->cmd_fork = val;
             break;
     }
@@ -107,12 +107,12 @@ static void sim_write_bit(Stacker_Out_BitPort port, bool val, void *ud) {
 static int64_t sim_read_numeric(Stacker_In_NumericPort port, void *ud) {
     SimState *s = (SimState *)ud;
     switch (port) {
-        case STACKER_POS_STACK:       return s->pos_stack;
-        case STACKER_POS_ROW:         return s->pos_row;
-        case STACKER_POS_SECTION:     return s->pos_section;
-        case STACKER_TASK_STACK_NO:   return s->task_stack_no;
-        case STACKER_TASK_ROW_NO:     return s->task_row_no;
-        case STACKER_TASK_SECTION_NO: return s->task_section_no;
+        case STACKER_PORT_POS_STACK:       return s->pos_stack;
+        case STACKER_PORT_POS_ROW:         return s->pos_row;
+        case STACKER_PORT_POS_SECTION:     return s->pos_section;
+        case STACKER_PORT_TASK_STACK_NO:   return s->task_stack_no;
+        case STACKER_PORT_TASK_ROW_NO:     return s->task_row_no;
+        case STACKER_PORT_TASK_SECTION_NO: return s->task_section_no;
     }
     return 0;
 }
@@ -120,9 +120,9 @@ static int64_t sim_read_numeric(Stacker_In_NumericPort port, void *ud) {
 static void sim_write_numeric(Stacker_Out_NumericPort port, int64_t val, void *ud) {
     SimState *s = (SimState *)ud;
     switch (port) {
-        case STACKER_CMD_TARGET_STACK:   s->cmd_target_stack   = (uint8_t)val; break;
-        case STACKER_CMD_TARGET_ROW:     s->cmd_target_row     = (uint8_t)val; break;
-        case STACKER_CMD_TARGET_SECTION: s->cmd_target_section = (uint8_t)val; break;
+        case STACKER_PORT_CMD_TARGET_STACK:   s->cmd_target_stack   = (uint8_t)val; break;
+        case STACKER_PORT_CMD_TARGET_ROW:     s->cmd_target_row     = (uint8_t)val; break;
+        case STACKER_PORT_CMD_TARGET_SECTION: s->cmd_target_section = (uint8_t)val; break;
     }
 }
 

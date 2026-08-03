@@ -41,6 +41,7 @@ mod c_literal;
 mod c_map;
 mod c_model;
 mod c_model_init;
+mod c_names;
 mod c_source;
 /// Механизм времени цели `c` (фича 0134).
 mod c_time;
@@ -660,7 +661,7 @@ model Robot {
         state End;
     }
 
-    start Idle = Idle {
+    start Rest = Idle {
         next Moving;
     }
 
@@ -670,7 +671,7 @@ model Robot {
             speed := 100;
             debug("Moving");
         }
-        ref Idle: AtFloor8 & heading = West;
+        ref Rest: AtFloor8 & heading = West;
     }
 }
 

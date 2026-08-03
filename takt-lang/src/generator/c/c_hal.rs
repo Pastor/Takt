@@ -25,7 +25,6 @@ use crate::generator::c::{
 };
 use crate::generator::indent::Printer;
 use crate::semantic::minimap::Name;
-use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::{PortDirection, VariableNode};
 
 /// Ширина разыменования (в байтах) по C-типу порта из [`get_c_type`](c::get_c_type).
@@ -123,11 +122,8 @@ pub(super) fn generate_hal(
                 .nl();
             printer.up();
             for (model_name, port_name) in ports {
-                let variant = format!(
-                    "{}_{}",
-                    model_name.unique_uppercase_snakecase(),
-                    normalize_lowercase_snakecase(port_name.clone()).to_uppercase()
-                );
+                let variant =
+                    crate::generator::c::c_names::port_enum_variant(model_name, port_name);
                 // Фича 0084: карта ключуется квалифицированно (модель+порт) —
                 // строим тот же ключ хелвером, что и продюсер `resolve_model`.
                 // `model_name.unique()` == `unique_model_name(ModelNode)` (обе
@@ -453,15 +449,15 @@ start Idle {
     fn test_hal_port_width_follows_c_type() {
         let header = generate_hal_h(HAL_SRC, "Hal", crate::generator::FloatWidth::W64);
         assert!(
-            header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, 0, 1 },"),
+            header.contains("[HAL_PORT_SENSOR] = { (uintptr_t)0x2000u, 0, 1 },"),
             "битовый порт обязан читаться 1 байтом, позиция бита нормирована в 0 (фича 0176):\n{header}"
         );
         assert!(
-            header.contains("[HAL_TEMPERATURE] = { (uintptr_t)0x1000u, -1, 8 },"),
+            header.contains("[HAL_PORT_TEMPERATURE] = { (uintptr_t)0x1000u, -1, 8 },"),
             "вещественный порт при умолчании W64 — 8 байт:\n{header}"
         );
         assert!(
-            header.contains("[HAL_LEVEL] = { (uintptr_t)0x3000u, -1, 2 },"),
+            header.contains("[HAL_PORT_LEVEL] = { (uintptr_t)0x3000u, -1, 2 },"),
             "u16 — 2 байта, без изменений:\n{header}"
         );
     }
@@ -472,19 +468,19 @@ start Idle {
     fn test_hal_float_port_width_is_4_with_float_width_32() {
         let header = generate_hal_h(HAL_SRC, "Hal", crate::generator::FloatWidth::W32);
         assert!(
-            header.contains("[HAL_TEMPERATURE] = { (uintptr_t)0x1000u, -1, 4 },"),
+            header.contains("[HAL_PORT_TEMPERATURE] = { (uintptr_t)0x1000u, -1, 4 },"),
             "при W32 вещественный порт — 4 байта:\n{header}"
         );
         // Прочие ширины от флага не зависят.
         assert!(
-            header.contains("[HAL_SENSOR] = { (uintptr_t)0x2000u, 0, 1 },"),
+            header.contains("[HAL_PORT_SENSOR] = { (uintptr_t)0x2000u, 0, 1 },"),
             "битовый порт от --float-width не зависит:\n{header}"
         );
     }
 
     /// Композиция с **одноимёнными адресованными портами** двух под-моделей.
     /// Сторож фичи 0084: до неё карта ключевалась голым именем `sig`, оба
-    /// варианта `COLL_A_SIG`/`COLL_B_SIG` брали адрес по `sig` и получали ОДИН
+    /// варианта `COLL_A_PORT_SIG`/`COLL_B_PORT_SIG` брали адрес по `sig` и получали ОДИН
     /// (последний, 0x20) — адрес первого порта терялся. С квалифицированным
     /// ключом каждый порт получает **свой** адрес.
     const COLLISION_SRC: &str = r#"
@@ -510,11 +506,11 @@ start Main = A | B;
     fn address_collision_qualified_key_distinct_addresses() {
         let header = generate_hal_h(COLLISION_SRC, "Coll", crate::generator::FloatWidth::W64);
         assert!(
-            header.contains("[COLL_A_SIG] = { (uintptr_t)0x10u,"),
+            header.contains("[COLL_A_PORT_SIG] = { (uintptr_t)0x10u,"),
             "порт sig под-модели A обязан получить СВОЙ адрес 0x10:\n{header}"
         );
         assert!(
-            header.contains("[COLL_B_SIG] = { (uintptr_t)0x20u,"),
+            header.contains("[COLL_B_PORT_SIG] = { (uintptr_t)0x20u,"),
             "порт sig под-модели B обязан получить СВОЙ адрес 0x20:\n{header}"
         );
         // До 0084 адрес 0x10 терялся (оба варианта брали 0x20 по голому `sig`).

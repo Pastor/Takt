@@ -54,7 +54,7 @@ void PidRegulatorPid_tick(PidRegulatorPid *model, PidRegulator *main) {
             break;
         }
         case PID_REGULATOR_PID_DONE: {
-            (*main->write_bit)(PID_REGULATOR_PID_READY, 1, main->userdata);
+            (*main->write_bit)(PID_REGULATOR_PID_PORT_READY, 1, main->userdata);
             model->state = PID_REGULATOR_PID_END;
             break;
         }

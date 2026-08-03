@@ -106,19 +106,27 @@ fn generate(tag: &str, target: &str) -> String {
 }
 
 /// Цель `c`: доступ — колбэки HAL, по одному на класс значения.
+///
+/// ⚠️ Имя перечислителя порта несёт сегмент `PORT_` с фичи 0195: порты и
+/// состояния — перечислители одной области видимости C, и `out settled` рядом с
+/// `state Settled` давали один элемент дважды. Форма имени видна пользователю
+/// (она в сигнатуре колбэка), поэтому смена — ломающее изменение, сделанное
+/// осознанно: запрещать естественное именование (светофор `red`/`Red`) нельзя.
 #[test]
 fn c_access_matches_contract() {
     let text = generate("cacc", "c");
     assert!(
-        text.contains("(*model->read_numeric)(CACC_LEVEL, model->userdata)"),
+        text.contains("(*model->read_numeric)(CACC_PORT_LEVEL, model->userdata)"),
         "чтение числового входа — колбэком `read_numeric`:\n{text}"
     );
     assert!(
-        text.contains("(*model->write_numeric)(CACC_VALUE, model->seen + 1, model->userdata);"),
+        text.contains(
+            "(*model->write_numeric)(CACC_PORT_VALUE, model->seen + 1, model->userdata);"
+        ),
         "запись числового выхода — оператором с колбэком `write_numeric`:\n{text}"
     );
     assert!(
-        text.contains("(*model->write_bit)(CACC_LED, (*model->read_bit)(CACC_BTN, model->userdata), model->userdata);"),
+        text.contains("(*model->write_bit)(CACC_PORT_LED, (*model->read_bit)(CACC_PORT_BTN, model->userdata), model->userdata);"),
         "проводка бита — чтение внутри записи, обе формы контрактные:\n{text}"
     );
 }
@@ -129,8 +137,8 @@ fn c_access_matches_contract() {
 fn c_hal_access_matches_contract() {
     let text = generate("chalacc", "c-hal");
     assert!(
-        text.contains("(*model->read_numeric)(CHALACC_LEVEL, model->userdata)")
-            && text.contains("(*model->write_numeric)(CHALACC_VALUE,"),
+        text.contains("(*model->read_numeric)(CHALACC_PORT_LEVEL, model->userdata)")
+            && text.contains("(*model->write_numeric)(CHALACC_PORT_VALUE,"),
         "цель c-hal обязана печатать тот же доступ, что и c:\n{text}"
     );
 }

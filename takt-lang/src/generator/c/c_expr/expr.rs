@@ -300,11 +300,8 @@ pub(in crate::generator::c) fn generate_expr(
                             return Err("Неразрешённый owner порта при записи".into());
                         };
                     let cls = PortClass::from_type(ty);
-                    let variant = format!(
-                        "{}_{}",
-                        model_name.unique_uppercase_snakecase(),
-                        normalize_lowercase_snakecase(name.clone()).to_uppercase()
-                    );
+                    let variant =
+                        crate::generator::c::c_names::port_enum_variant(&model_name, name);
                     let mut rhs_str = String::new();
                     {
                         let mut tmp = Printer::new(4, &mut rhs_str);
@@ -361,11 +358,8 @@ pub(in crate::generator::c) fn generate_expr(
                             )
                             .with_code("CC-001"));
                         }
-                        let variant = format!(
-                            "{}_{}",
-                            model_name.unique_uppercase_snakecase(),
-                            normalize_lowercase_snakecase(name.clone()).to_uppercase()
-                        );
+                        let variant =
+                            crate::generator::c::c_names::port_enum_variant(&model_name, name);
                         let mut rhs_str = String::new();
                         {
                             let mut tmp = Printer::new(4, &mut rhs_str);
@@ -549,11 +543,8 @@ pub(in crate::generator::c) fn generate_expr(
                                     return Err("Неразрешённый owner порта при BitAccess".into());
                                 };
                             let cls = PortClass::from_type(ty);
-                            let variant = format!(
-                                "{}_{}",
-                                model_name.unique_uppercase_snakecase(),
-                                normalize_lowercase_snakecase(name.clone()).to_uppercase()
-                            );
+                            let variant =
+                                crate::generator::c::c_names::port_enum_variant(&model_name, name);
                             let ptr = if has_model && !owner.name().eq(&map.root_name()) {
                                 "main"
                             } else {

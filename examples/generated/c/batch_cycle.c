@@ -190,7 +190,7 @@ void BatchCycle_tick(BatchCycle *model) {
             break;
         }
         case BATCH_CYCLE_DONE: {
-            (*model->write_bit)(BATCH_CYCLE_READY, 1, model->userdata);
+            (*model->write_bit)(BATCH_CYCLE_PORT_READY, 1, model->userdata);
             model->state = BATCH_CYCLE_END;
             break;
         }

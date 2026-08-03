@@ -33,7 +33,7 @@ void FloatRegulatorFloatRegulator_tick(FloatRegulatorFloatRegulator *model, Floa
             break;
         }
         case FLOAT_REGULATOR_FLOAT_REGULATOR_DONE: {
-            (*main->write_bit)(FLOAT_REGULATOR_FLOAT_REGULATOR_READY, 1, main->userdata);
+            (*main->write_bit)(FLOAT_REGULATOR_FLOAT_REGULATOR_PORT_READY, 1, main->userdata);
             model->state = FLOAT_REGULATOR_FLOAT_REGULATOR_END;
             break;
         }

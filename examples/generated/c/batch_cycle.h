@@ -10,7 +10,7 @@ typedef struct BatchCycleMix BatchCycleMix;
 typedef struct BatchCycle BatchCycle;
 
 typedef enum {
-    BATCH_CYCLE_READY = 0,
+    BATCH_CYCLE_PORT_READY = 0,
 } BatchCycle_Out_BitPort;
 
 // NOTICE: Определение констант для модели Dose (BatchCycle:Dose)

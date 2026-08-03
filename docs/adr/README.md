@@ -152,3 +152,4 @@
 | [0192](./0192-const-init-fold.md) | Константное выражение в инициализаторе объявления | Accepted | фича 0192 |
 | [0193](./0193-shared-const-qualified.md) | Цели rust и sv: одноимённые константы разных моделей | Accepted | фича 0193 |
 | [0194](./0194-sim-composition-model-always.md) | Симулятор теряет model-level always у модели-композиции | Accepted | фича 0194 |
+| [0195](./0195-target-name-collisions.md) | Коллизии имён при отображении в пространство имён цели | Accepted | фича 0195 |
