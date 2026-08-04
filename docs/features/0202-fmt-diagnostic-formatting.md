@@ -14,7 +14,7 @@
 | Разработка | [`0202-01`](../development/0202-01-fmt-diagnostic-formatting.md) |
 | Тест-план | [`docs/tests/0202-fmt-diagnostic-formatting.md`](../tests/0202-fmt-diagnostic-formatting.md) |
 | Отчёт о тестировании | [`docs/reports/0202-fmt-diagnostic-formatting.md`](../reports/0202-fmt-diagnostic-formatting.md) |
-| Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0202-YY-*`) |
+| Исправления | [`0202-01`](../fixes/0202-01-stale-crate-version-in-context.md) — **ИСПРАВЛЕН** |
 
 ## Краткое описание
 
