@@ -162,8 +162,8 @@ fn is_keyword_returns_true_for_keywords() {
 
     let keywords = [
         "break", "const", "continue", "else", "false", "for", "fn", "if", "import", "loop",
-        "return", "string", "true", "type", "as", "assembly", "formula", "in", "out", "model",
-        "state", "start", "ref", "template", "cond", "var", "next", "extern", "inout", "address",
+        "return", "true", "type", "as", "assembly", "formula", "in", "out", "model", "state",
+        "start", "ref", "cond", "var", "next", "extern", "inout", "address",
     ];
     for kw in keywords {
         assert!(is_keyword(kw), "'{}' должно быть ключевым словом", kw);
@@ -173,11 +173,17 @@ fn is_keyword_returns_true_for_keywords() {
 /// `is_keyword` возвращает `false` для обычных идентификаторов и неключевых слов.
 ///
 /// Контр-примеры: `extern` — ключевое слово, не должен быть в этом списке.
+///
+/// `string`, `template` и `pragma` стоят здесь по одной причине (фича 0201):
+/// грамматика их не знает, поэтому ключевыми словами они не являются. Держать
+/// их в таблице лексера значило обещать конструкцию, которой в языке нет.
 #[test]
 fn is_keyword_returns_false_for_identifiers() {
     use takt_lang::parser::lexer::is_keyword;
 
-    let non_keywords = ["MyModel", "", "pragma", "foobar", "_x", "123"];
+    let non_keywords = [
+        "MyModel", "", "pragma", "string", "template", "foobar", "_x", "123",
+    ];
     for word in non_keywords {
         assert!(
             !is_keyword(word),

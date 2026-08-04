@@ -358,3 +358,6 @@
 | 0199-02 | 0199 | Форма model M = A & B { … } не работает ни в одной стороне | [0199-02-model-implements-brace-form.md](0199-02-model-implements-brace-form.md) |
 | 0200-01 | 0200 | Идентификатор с не-ASCII буквами: язык принимает, цели sv и st не выражают | [0200-01-non-ascii-identifier-targets.md](0200-01-non-ascii-identifier-targets.md) |
 | 0200-02 | 0200 | Идентификатор с не-ASCII буквами: язык принимает, цели sv и st не выражают | [0200-02-non-ascii-identifier-targets.md](0200-02-non-ascii-identifier-targets.md) |
+| 0201-01 | 0201 | Изъятие string и template из лексера и редакторского слоя | [0201-01-dead-lexemes.md](0201-01-dead-lexemes.md) |
+| 0201-02 | 0201 | Мёртвый механизм pragma и терминалы extern-блока | [0201-02-dead-lexemes.md](0201-02-dead-lexemes.md) |
+| 0201-03 | 0201 | Сторож согласованности лексера и грамматики; документ | [0201-03-dead-lexemes.md](0201-03-dead-lexemes.md) |

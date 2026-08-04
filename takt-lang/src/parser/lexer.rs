@@ -85,8 +85,6 @@ pub struct Lexer<'input> {
     comments: &'input mut Vec<Comment>,
     /// Номер файла (используется в [`Location`]).
     file_no: u64,
-    /// Последние два токена (для обработки `pragma`).
-    last_tokens: [Option<Token<'input>>; 2],
     /// Вектор лексических ошибок, обнаруженных в ходе анализа.
     pub errors: &'input mut Vec<LexicalError>,
 }
@@ -135,7 +133,6 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "loop"     => Token::Loop,
     "while"    => Token::While,
     "return"   => Token::Return,
-    "string"   => Token::String,
     "true"     => Token::True,
     "type"     => Token::Type,
     "as"       => Token::As,
@@ -153,7 +150,6 @@ static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
     "state"    => Token::State,
     "start"    => Token::Start,
     "ref"      => Token::Reference,
-    "template" => Token::Template,
     "cond"     => Token::Condition,
     "invariant" => Token::Invariant,
     "var"      => Token::Variable,
@@ -202,7 +198,6 @@ impl<'input> Lexer<'input> {
             chars: peek_nth(input.char_indices()),
             comments,
             file_no,
-            last_tokens: [None, None],
             errors,
         }
     }
@@ -506,7 +501,13 @@ impl<'input> Lexer<'input> {
     /// Основной цикл токенизации.
     ///
     /// Возвращает следующий токен или `None` при достижении конца файла.
-    fn next(&mut self) -> Option<Spanned<'input>> {
+    ///
+    /// ⚠️ Имя намеренно **не** `next`: собственный метод с таким именем
+    /// затеняет метод трейта [`Iterator`], и вызов `self.next()` внутри
+    /// `impl Iterator` читается как бесконечная рекурсия, хотя ею не является.
+    /// Так этот код и выглядел, пока обёртка `Iterator::next` обслуживала
+    /// недостижимый механизм `pragma` (фича 0201).
+    fn next_token(&mut self) -> Option<Spanned<'input>> {
         loop {
             match self.chars.next() {
                 // Идентификатор или ключевое слово
@@ -822,46 +823,6 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    /// Читает значение после директивы `pragma` вплоть до `;`.
-    ///
-    /// Возвращает содержимое как строковый литерал, пробелы на концах обрезаются.
-    fn pragma_value(&mut self) -> Option<Spanned<'input>> {
-        // Аналог поведения solc: всё до следующей точки с запятой
-        let mut start = None;
-        let mut end = 0;
-
-        loop {
-            match self.chars.peek() {
-                Some((_, ';')) | None => {
-                    return if let Some(start) = start {
-                        Some((
-                            start,
-                            Token::StringLiteral(false, &self.input[start..end]),
-                            end,
-                        ))
-                    } else {
-                        self.next()
-                    };
-                }
-                Some((_, ch)) if ch.is_whitespace() => {
-                    self.chars.next();
-                }
-                Some((i, _)) => {
-                    if start.is_none() {
-                        start = Some(*i);
-                    }
-                    self.chars.next();
-
-                    // end указывает на байт после текущего символа
-                    end = match self.chars.peek() {
-                        Some((i, _)) => *i,
-                        None => self.input.len(),
-                    }
-                }
-            }
-        }
-    }
-
     /// Читает идентификатор начиная с позиции `start`.
     ///
     /// Возвращает срез строки идентификатора и позицию его конца.
@@ -888,22 +849,6 @@ impl<'input> Iterator for Lexer<'input> {
     type Item = Spanned<'input>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Если предыдущие два токена были `pragma <идентификатор>`,
-        // следующий токен читается как значение pragma-директивы.
-        let token = if let [Some(Token::Pragma), Some(Token::Identifier(_))] = self.last_tokens {
-            self.pragma_value()
-        } else {
-            self.next()
-        };
-
-        self.last_tokens = [
-            self.last_tokens[1],
-            match token {
-                Some((_, n, _)) => Some(n),
-                _ => None,
-            },
-        ];
-
-        token
+        self.next_token()
     }
 }
