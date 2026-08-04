@@ -238,4 +238,4 @@
 | [0223](./0223-examples-port-rationale-stale.md) | Три примера объясняют выходной порт устаревшей нуждой цели rust | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0224](./0224-intellij-kotlin-upgrade.md) | Подъём Kotlin в плагине intellij-takt снимет ограничение на пусковой JDK | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0225](./0225-statement-module-size.md) | Модуль semantic/statement.rs — 999 строк при пределе 1000 | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0226](./0226-naming-convention-warning.md) | Канон именования: предупреждение в fmt и LSP | [ADR](../adr/0226-naming-convention-warning.md) · dev 01 | РАЗРАБОТКА |
+| [0226](./0226-naming-convention-warning.md) | Канон именования: предупреждение в fmt и LSP | [ADR](../adr/0226-naming-convention-warning.md) · [анализ](../analyze/0226-naming-convention-warning.md) · dev 01–04 · [тест-план](../tests/0226-naming-convention-warning.md) · [отчёт](../reports/0226-naming-convention-warning.md) | ГОТОВО |
