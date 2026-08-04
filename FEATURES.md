@@ -31,6 +31,7 @@
 
 | № | Фича | Зависит от | Класс | Tier | Статус |
 |---|------|------------|-------|------|--------|
+| [0226](docs/features/0226-naming-convention-warning.md) | Канон именования: предупреждение в fmt и LSP — по требованию заказчика | 0197 (закрыта) | синтаксис | 2 | СОЗДАНА |
 | [0160](docs/features/0160-takt-ebnf-sync.md) | Синхронизация эталона `Takt.ebnf` с актуальным синтаксисом | — | синтаксис | proc | СОЗДАНА |
 | [0151](docs/features/0151-diagnostics-batch-within-check.md) | Накопление диагностик внутри отдельной проверки `validate` | — | семантика | 2 | СОЗДАНА |
 | [0170](docs/features/0170-fixed-point-saturation.md) | Насыщение (saturation) для fixed-point `q(m, n)` | — | семантика | 2 | СОЗДАНА |
