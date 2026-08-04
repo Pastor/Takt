@@ -238,7 +238,23 @@ impl<'a> Out<'a> {
 /// [`comments`]) и печатаются как ведущие/хвостовые. Ни один не теряется —
 /// требование R2.
 pub fn format_source(source: &str) -> Result<String, FormatError> {
+    format_source_with_warnings(source).map(|(text, _)| text)
+}
+
+/// То же, что [`format_source`], плюс **предупреждения о стиле** (фича 0226).
+///
+/// Сегодня это канон именования (`CS-001`). Проверка идёт по тому же АСД, что
+/// уже разобран для печати, — семантика по-прежнему **не запускается**, и
+/// контракт форматтера (работать на семантически некорректном файле) цел.
+///
+/// ⚠️ Предупреждения **не влияют** на результат форматирования и на код
+/// возврата `fmt --check` (решение заказчика): имя — решение автора,
+/// механическая замена испортила бы замысел.
+pub fn format_source_with_warnings(
+    source: &str,
+) -> Result<(String, Vec<crate::diagnostics::Diagnostic>), FormatError> {
     let (model, items) = crate::parse(source, 0).map_err(FormatError::Parse)?;
+    let warnings = crate::style::naming_warnings(&model);
     let mut out = Out::new(source, &items);
     print_model_body(&mut out, &model)?;
     // Хвост файла: комментарии после последнего узла.
@@ -250,7 +266,7 @@ pub fn format_source(source: &str) -> Result<String, FormatError> {
         out.comments.is_exhausted(),
         "комментарий потерян при печати — нарушено требование R2"
     );
-    Ok(out.finish())
+    Ok((out.finish(), warnings))
 }
 
 /// Позиция элемента модели.

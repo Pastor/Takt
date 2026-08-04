@@ -73,6 +73,22 @@ pub fn format_compile_error(diagnostic: &Diagnostic) -> String {
     text
 }
 
+/// Готовая к печати строка **предупреждения**: позиция, код, текст.
+///
+/// Спутник [`format_compile_error`] и живёт по той же причине (ADR 0053): вид
+/// диагностики — её собственное свойство, а не свойство бинарника. До фичи 0226
+/// этот формат был написан прямо в `compile_cli` литералом, и второй потребитель
+/// (`taktc fmt`) завёл бы копию — ровно так уже расходился формат ошибки
+/// (задача 0028-01).
+pub fn format_warning(diagnostic: &Diagnostic) -> String {
+    format!(
+        "{}Предупреждение [{}]: {}",
+        position_prefix(diagnostic),
+        diagnostic.code.as_deref().unwrap_or("?"),
+        diagnostic.message
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

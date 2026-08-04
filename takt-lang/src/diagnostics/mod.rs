@@ -29,7 +29,7 @@
 // Пачка диагностик (фича 0130): порядок, уникальность, печать. Вынесено
 // подмодулем — `mod.rs` упирается в лимит размера.
 mod batch;
-pub use batch::{format_compile_error, normalize};
+pub use batch::{format_compile_error, format_warning, normalize};
 
 #[cfg(feature = "ast-serde")]
 use serde::{Deserialize, Serialize};
