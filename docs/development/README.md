@@ -366,3 +366,4 @@
 | 0197-01 | 0197 | Раздел документа о стиле кода | [0197-01-language-code-style.md](0197-01-language-code-style.md) |
 | 0226-01 | 0226 | Слой стиля: предупреждение CS-001 в fmt и LSP | [0226-01-naming-convention-warning.md](0226-01-naming-convention-warning.md) |
 | 0226-02 | 0226 | Корпус приведён к канону именования | [0226-02-corpus-naming-canon.md](0226-02-corpus-naming-canon.md) |
+| 0226-03 | 0226 | Тесты проводки CS-001 в fmt и LSP | [0226-03-naming-warning-wiring-tests.md](0226-03-naming-warning-wiring-tests.md) |
