@@ -958,8 +958,7 @@ yosys/bison/flex + сборка `iec2c`) и делает один вызов `./
   ([0085](docs/features/0085-language-version-constant.md)). Гейт
   `scripts/check-language-version.sh` сверяет **три** источника — константа,
   README и живой контекст. ⚠️ Меняя версию языка (правило 22 — накапливается по
-  циклам), правь все три синхронно. Это **не** версия крейта `takt-lang`
-  (`CARGO_PKG_VERSION`, сейчас `0.27.0`).
+  циклам), правь все три синхронно. Это **не** версия крейта `takt-lang` (`CARGO_PKG_VERSION`, сейчас `0.28.0`).
 - **Живой контекст проверяется машиной**
   ([0149](docs/features/0149-claude-md-consistency-gate.md)):
   `scripts/check-claude-md.py` сверяет статусы упомянутых фич с реестром, пути — с
