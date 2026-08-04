@@ -160,4 +160,4 @@
 | [0202](./0202-fmt-diagnostic-formatting.md) | taktc fmt печатает синтаксическую ошибку Debug-дампом | Accepted | фича 0202 |
 | [0152](./0152-semantic-recovery-element-boundary.md) | Восстановление на границе элемента в стадиях построения | Accepted | фича 0152 |
 | [0197](./0197-language-code-style.md) | Стиль кода языка Takt — свод правил оформления и раздел документа | Accepted | фича 0197 |
-| [0226](./0226-naming-convention-warning.md) | Канон именования: предупреждение в fmt и LSP | Draft | фича 0226 |
+| [0226](./0226-naming-convention-warning.md) | Канон именования: предупреждение в fmt и LSP | Accepted | фича 0226 |

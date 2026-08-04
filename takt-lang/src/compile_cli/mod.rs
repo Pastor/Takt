@@ -569,12 +569,7 @@ pub fn run_compile(args: &[String]) -> i32 {
         if !options.quiet {
             // Формат общий с ошибкой (`print_compile_error`): позиция + код + текст.
             for w in &warnings {
-                eprintln!(
-                    "{}Предупреждение [{}]: {}",
-                    crate::diagnostics::position_prefix(w),
-                    w.code.as_deref().unwrap_or("?"),
-                    w.message
-                );
+                eprintln!("{}", crate::diagnostics::format_warning(w));
             }
         }
     }

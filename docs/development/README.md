@@ -364,3 +364,4 @@
 | 0202-01 | 0202 | Диагностика разбора доезжает до вызывающего структурой | [0202-01-fmt-diagnostic-formatting.md](0202-01-fmt-diagnostic-formatting.md) |
 | 0152-01 | 0152 | Накопление диагностик по соседям в стадиях 4-6 | [0152-01-semantic-recovery-element-boundary.md](0152-01-semantic-recovery-element-boundary.md) |
 | 0197-01 | 0197 | Раздел документа о стиле кода | [0197-01-language-code-style.md](0197-01-language-code-style.md) |
+| 0226-01 | 0226 | Слой стиля: предупреждение CS-001 в fmt и LSP | [0226-01-naming-convention-warning.md](0226-01-naming-convention-warning.md) |

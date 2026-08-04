@@ -77,6 +77,12 @@ pub fn collect_diagnostics_at(
     }
 
     // Шаг 3: Дополнительные предупреждения
+    // Стиль (фича 0226): та же проверка, что у `taktc fmt` — одна реализация на
+    // обоих потребителей. Идёт по АСД, поэтому семантика ей не нужна.
+    for w in crate::style::naming_warnings(&ast) {
+        lsp_diags.push(diagnostic_to_lsp(&w, source, &files));
+    }
+
     let unused = crate::unused_variable_warnings(model.clone());
     for w in unused {
         lsp_diags.push(diagnostic_to_lsp(&w, source, &files));

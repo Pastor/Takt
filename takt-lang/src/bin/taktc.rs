@@ -93,6 +93,22 @@ fn collect_lam_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> 
     Ok(())
 }
 
+/// Печатает предупреждения о стиле (фича 0226).
+///
+/// ⚠️ На код возврата они **не влияют** — это решение заказчика: именование
+/// советует, а не запрещает, и `fmt --check` по-прежнему падает только из-за
+/// неканоничного формата. Иначе предупреждение стало бы ошибкой, а корпус
+/// пришлось бы приводить к канону обязательным порядком.
+///
+/// Формат берётся у общего `format_warning`, а не пишется здесь: вид
+/// диагностики — её собственное свойство (ADR 0053).
+fn report_style_warnings(warnings: &[takt_lang::diagnostics::Diagnostic], path: Option<&str>) {
+    for w in warnings {
+        let stamped = w.clone().with_file_if_unset(path);
+        eprintln!("{}", takt_lang::diagnostics::format_warning(&stamped));
+    }
+}
+
 /// Печатает отказ форматирования в **общем** формате диагностики.
 ///
 /// `path` — путь к файлу, если он есть (у `--stdin` его нет). Диагностика
@@ -131,8 +147,9 @@ fn run_fmt(options: &FmtOptions) -> i32 {
             eprintln!("Ошибка чтения stdin: {e}");
             return 1;
         }
-        return match takt_lang::format::format_source(&source) {
-            Ok(formatted) => {
+        return match takt_lang::format::format_source_with_warnings(&source) {
+            Ok((formatted, style)) => {
+                report_style_warnings(&style, None);
                 if options.check {
                     if formatted == source {
                         0
@@ -175,8 +192,12 @@ fn run_fmt(options: &FmtOptions) -> i32 {
                 continue;
             }
         };
-        let formatted = match takt_lang::format::format_source(&source) {
-            Ok(f) => f,
+        let path_text = file.display().to_string();
+        let formatted = match takt_lang::format::format_source_with_warnings(&source) {
+            Ok((f, style)) => {
+                report_style_warnings(&style, Some(&path_text));
+                f
+            }
             Err(e) => {
                 // Отказ форматтера — не «файл канонический». Сообщаем и считаем
                 // ошибкой: молча пропустить значило бы соврать в --check.
