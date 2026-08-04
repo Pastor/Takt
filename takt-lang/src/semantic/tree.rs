@@ -17,13 +17,11 @@ use crate::semantic::condition::{extract_conditions, resolve_condition};
 use crate::semantic::declaration;
 use crate::semantic::extend::Extend;
 use crate::semantic::formula;
-use crate::semantic::function::construct_function;
 use crate::semantic::import::adopt as import_adopt;
 use crate::semantic::import::read_import_file;
 use crate::semantic::import::select as import_select;
 use crate::semantic::named_block::resolve_named_blocks;
 use crate::semantic::naming::normalize_camelcase_name;
-use crate::semantic::reference::resolve_state_references;
 use crate::semantic::type_node::{TypeNode, construct_type};
 use crate::semantic::validate::{
     check_implicit_bool_conditions, check_transition_completeness, check_type_alias_cycles_ast,
@@ -815,134 +813,6 @@ pub(super) fn construct_model_stage3(
     Ok(Rc::clone(&model))
 }
 
-/// Этап 4: разрешение операторов в именованных блоках кода.
-///
-/// Выполняет три задачи:
-/// 1. Разрешает блоки на уровне модели (`model.named_blocks`).
-/// 2. Разрешает блоки в состояниях модели (`state.named_blocks`).
-/// 3. Рекурсивно применяет этот же процесс ко всем вложенным моделям,
-///    передавая контекст вложенной модели (для корректного разрешения
-///    переменных во вложенных областях видимости).
-///
-/// При ошибке разрешения оператор сохраняется в виде [`StatementNode::Unresolved`]
-/// (ошибка не пробрасывается), что позволяет корректно обрабатывать
-/// встроенные функции (`debug`, `S`, …) без их явной регистрации.
-pub(super) fn construct_model_stage4(
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    // Разрешаем формулы на уровне текущей модели
-    let formulas = std::mem::take(&mut model.borrow_mut().formulas);
-    model.borrow_mut().formulas = resolve_formulas(formulas, model.clone())?;
-
-    // Разрешаем блоки на уровне текущей модели
-    let named_blocks = std::mem::take(&mut model.borrow_mut().named_blocks);
-    model.borrow_mut().named_blocks = resolve_named_blocks(named_blocks, model.clone())?;
-
-    // Разрешаем блоки в состояниях текущей модели
-    let states = std::mem::take(&mut model.borrow_mut().states);
-    let mut resolved_states = BTreeMap::new();
-    for (state_name, state) in states {
-        let resolved = resolve_state_named_blocks(state, model.clone())?;
-        resolved_states.insert(state_name, resolved);
-    }
-    model.borrow_mut().states = resolved_states;
-
-    // Рекурсивно обрабатываем вложенные модели с их собственным контекстом
-    let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
-        .borrow()
-        .models
-        .iter()
-        .map(|(k, v)| (k.clone(), Rc::clone(v)))
-        .collect();
-    let mut models = BTreeMap::new();
-    for (name, nested_model) in nested {
-        models.insert(name, construct_model_stage4(nested_model)?);
-    }
-    model.borrow_mut().models = models;
-
-    Ok(Rc::clone(&model))
-}
-
-pub(super) fn construct_model_stage5(
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    // 0031: тела функций разрешаются в ТОПОЛОГИЧЕСКОМ порядке графа вызовов (без
-    // изъятия карты) — при разборе вызывающей `search_func` видит уже разрешённые
-    // функции (композиция `f → g`); цикл (рекурсия) отвергается SE-053.
-    let bodies: BTreeMap<String, Option<ast::Statement>> = {
-        let borrowed = model.borrow();
-        borrowed
-            .functions
-            .iter()
-            .filter_map(|(name, f)| match f {
-                FunctionDefinitionNode::Unresolved(def) => Some((name.clone(), def.body.clone())),
-                // Уже разрешённые (например, встроенные) в граф не входят.
-                _ => None,
-            })
-            .collect()
-    };
-    let loc = model.borrow().loc;
-    let graph = crate::semantic::callgraph::build_call_graph(&bodies);
-    let order = crate::semantic::callgraph::topological_order(&graph, loc)?;
-
-    for name in order {
-        // Изымаем ТОЛЬКО разрешаемую функцию; её вызываемые уже в карте и
-        // разрешены (топологический порядок), поэтому вызовы к ним встроят
-        // разрешённые узлы. Само изъятие даёт `search_func` не найти функцию в
-        // её же теле — но прямой самовызов уже отвергнут как цикл выше.
-        let func = model.borrow_mut().functions.remove(&name);
-        if let Some(func) = func {
-            let resolved = construct_function(func, model.clone())?;
-            model.borrow_mut().functions.insert(name, resolved);
-        }
-    }
-
-    // Рекурсивно обрабатываем вложенные модели с их собственным контекстом.
-    // Карта функций текущей (родительской) модели уже восстановлена — поэтому
-    // вложенные модели видят разрешённые функции родителя (межмодельный `fn→fn`).
-    let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
-        .borrow()
-        .models
-        .iter()
-        .map(|(k, v)| (k.clone(), Rc::clone(v)))
-        .collect();
-    let mut models = BTreeMap::new();
-    for (name, nested_model) in nested {
-        models.insert(name, construct_model_stage5(nested_model)?);
-    }
-    model.borrow_mut().models = models;
-
-    Ok(Rc::clone(&model))
-}
-
-pub(super) fn construct_model_stage6(
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    let states = model.borrow().states.clone();
-
-    let mut prepared_states = BTreeMap::new();
-    for (name, state) in states.iter() {
-        prepared_states.insert(name.clone(), resolve_state_references(state)?);
-    }
-    model.borrow_mut().states = prepared_states;
-
-    // Клонируем список вложенных моделей до рекурсивного вызова
-    let nested: Vec<(String, Rc<RefCell<ModelNode>>)> = model
-        .borrow()
-        .models
-        .iter()
-        .map(|(k, v)| (k.clone(), Rc::clone(v)))
-        .collect();
-
-    let mut models = BTreeMap::new();
-    for (name, nested_model) in nested {
-        models.insert(name, construct_model_stage6(Rc::clone(&nested_model))?);
-    }
-    model.borrow_mut().models = models;
-
-    Ok(Rc::clone(&model))
-}
-
 fn resolve_formula(formula: Formula, model: Rc<RefCell<ModelNode>>) -> Result<Formula, Diagnostic> {
     match formula {
         Formula::None => Ok(Formula::None),
@@ -963,7 +833,7 @@ fn resolve_formula(formula: Formula, model: Rc<RefCell<ModelNode>>) -> Result<Fo
     }
 }
 
-fn resolve_formulas(
+pub(super) fn resolve_formulas(
     formulas: Vec<Formula>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Vec<Formula>, Diagnostic> {
@@ -977,7 +847,7 @@ fn resolve_formulas(
 /// Разрешает именованные блоки кода внутри одного состояния.
 ///
 /// Ошибки разрешения подавляются — оператор сохраняется как `Unresolved`.
-fn resolve_state_named_blocks(
+pub(super) fn resolve_state_named_blocks(
     state: StateNode,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<StateNode, Diagnostic> {
@@ -1041,9 +911,23 @@ fn construct_model_impl(
     let model = construct_model_stage3(model)?;
     // Функции (этап 5) должны разрешаться перед именованными блоками (этап 4),
     // чтобы блоки always/enter/exit могли находить уже разрешённые функции через search_func.
-    let model = construct_model_stage5(model)?;
-    let model = construct_model_stage4(model)?;
-    let model = construct_model_stage6(model)?;
+    //
+    // ⚠️ Это путь **импорта**, и он отдаёт **одну** диагностику (фича 0152):
+    // результат встраивается в стадию 0 импортёра, а она терминальна — списку
+    // здесь некуда доехать. `normalize` перед взятием первой обязателен: иначе
+    // «первой» окажется не самая ранняя по тексту, а первая по порядку обхода.
+    let first = |ds: Vec<Diagnostic>| {
+        crate::diagnostics::normalize(ds)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "построение импортированного дерева не удалось".into())
+    };
+    use crate::semantic::stages::body_stages::{
+        construct_model_stage4, construct_model_stage5, construct_model_stage6,
+    };
+    let model = construct_model_stage5(model).map_err(first)?;
+    let model = construct_model_stage4(model).map_err(first)?;
+    let model = construct_model_stage6(model).map_err(first)?;
     validate_model(model.clone())?;
     Ok(model)
 }
@@ -1087,7 +971,21 @@ pub fn construct_model_with_files(
     files: &mut FileTable,
     specialize: bool,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    let model = super::stages::construct_stages(model, upper, search_paths, files, specialize)?;
+    // ⚠️ Контракт этого входа — **одна** диагностика; он таким и остаётся
+    // (фича 0152). Стадии построения с 0152 накапливают внутри себя, но
+    // потребителям вроде `takt-sim` нужна первая ошибка, а не список, и менять
+    // публичную сигнатуру ради этого незачем. Кому нужны все — зовёт
+    // `stages::construct_stages` напрямую (так делают `pipeline` и LSP).
+    //
+    // `normalize` перед взятием первой — не украшение: без неё «первой»
+    // оказалась бы не самая ранняя по тексту, а первая по порядку обхода.
+    let model = super::stages::construct_stages(model, upper, search_paths, files, specialize)
+        .map_err(|ds| {
+            crate::diagnostics::normalize(ds)
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| "построение дерева не удалось".into())
+        })?;
     validate_model(model.clone())?;
     Ok(model)
 }

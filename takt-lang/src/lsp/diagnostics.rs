@@ -55,8 +55,14 @@ pub fn collect_diagnostics_at(
     let model =
         match semantic::stages::construct_stages(&ast, None, search_paths, &mut files, false) {
             Ok(m) => m,
-            Err(err) => {
-                lsp_diags.push(diagnostic_to_lsp(&err, source, &files));
+            Err(errs) => {
+                // Фича 0152: стадии 4–6 накапливают, поэтому редактор
+                // подчёркивает все ошибки тел сразу. `normalize` — порядок по
+                // позиции и дедупликация: иначе наблюдаемым стал бы порядок
+                // обхода `BTreeMap`.
+                for err in crate::diagnostics::normalize(errs) {
+                    lsp_diags.push(diagnostic_to_lsp(&err, source, &files));
+                }
                 return lsp_diags;
             }
         };

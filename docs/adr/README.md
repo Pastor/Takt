@@ -158,3 +158,4 @@
 | [0200](./0200-non-ascii-identifier-targets.md) | Идентификатор с не-ASCII буквами: язык принимает, цели sv и st не выражают | Accepted | фича 0200 |
 | [0201](./0201-dead-lexemes.md) | Мёртвая лексика: слова и терминалы, которых грамматика не знает | Accepted | фича 0201 |
 | [0202](./0202-fmt-diagnostic-formatting.md) | taktc fmt печатает синтаксическую ошибку Debug-дампом | Accepted | фича 0202 |
+| [0152](./0152-semantic-recovery-element-boundary.md) | Восстановление на границе элемента в стадиях построения | Accepted | фича 0152 |

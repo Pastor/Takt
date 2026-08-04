@@ -97,9 +97,14 @@ pub fn collect_compile_diagnostics(
         }
     };
 
-    // Стадии построения и проверки разделены намеренно: первые терминальны,
-    // вторые накапливаются. Слитно (через `construct_model_with_files`) получить
-    // всё нельзя — тот вход отдаёт первую ошибку по контракту.
+    // Стадии построения и проверки разделены намеренно. Слитно (через
+    // `construct_model_with_files`) получить всё нельзя — тот вход отдаёт первую
+    // ошибку по контракту.
+    //
+    // ⚠️ С фичи 0152 стадии построения тоже отдают **список**: внутри стадий
+    // 4–6 (тела блоков, функций, условия рёбер) диагностики накапливаются, между
+    // стадиями — нет. Неполное дерево при этом наружу не выходит, поэтому здесь
+    // на руках либо готовая модель, либо только диагностики.
     let model = match semantic::stages::construct_stages(
         &model_ast,
         None,
@@ -108,7 +113,10 @@ pub fn collect_compile_diagnostics(
         specialize,
     ) {
         Ok(model) => model,
-        Err(d) => return vec![stamp_file(d, &files)],
+        Err(ds) => {
+            let stamped = ds.into_iter().map(|d| stamp_file(d, &files)).collect();
+            return diagnostics::normalize(stamped);
+        }
     };
 
     let found = semantic::validate::validate_model_all(model)
