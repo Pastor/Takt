@@ -12,11 +12,15 @@
 //!    сверяется **буквально**: две копии правил — класс, который проект закрывал
 //!    в 0084, 0193 и 0195, и здесь он был бы особенно тих (кто сверяет вывод
 //!    форматтера с подсказкой редактора?).
-//! 3. **Асимметрия доставки, зафиксированная как есть.** На файле с
-//!    семантическими ошибками `fmt` предупреждение печатает, а редактор —
-//!    **нет**: политика `collect_diagnostics_at` «сперва ошибки» старше фичи
-//!    0226. Тест это пришпиливает, чтобы поведение было решением, а не
-//!    случайностью; расхождение записано кандидатом в `FEATURES.md`.
+//! 3. **Паритет доставки на файле, который не собирается** (фича 0227).
+//!    Предупреждение о стиле выдаётся во **всех** ветвях возврата
+//!    `collect_diagnostics_at` — рядом с ошибкой построения дерева и рядом с
+//!    ошибкой `validate`, — потому что канон именования от смысла не зависит.
+//!    Прежде редактор здесь молчал, а `fmt` печатал.
+//! 4. **Узость этого исключения.** Предупреждения о **смысле** (`SE-036` и
+//!    прочие) при ошибках по-прежнему не показываются: они смотрят на
+//!    построенную модель, и на отвергнутой их вердикт может быть ложным. Тест
+//!    `lsp_still_hides_semantic_warnings_when_errors_present` держит границу.
 
 #![cfg(feature = "lsp")]
 
@@ -60,6 +64,32 @@ model M {
             BadVar := 1;
         }
     }
+}
+start Main = M;
+";
+
+/// Дерево строится, но `validate` отвергает модель (`SE-026`: запись во входной
+/// порт). Неканоничных имён здесь **два**, и одно из них (`Unused`) заодно даёт
+/// `SE-036` — на нём видно, что политика для предупреждений о смысле не менялась.
+const VALIDATE_BROKEN: &str = "\
+model M {
+    in BadPort: bit;
+    var Unused: u8 := 0;
+    start S {
+        always {
+            BadPort := 1;
+        }
+    }
+}
+start Main = M;
+";
+
+/// Файл, который **не разбирается** (пропущено `:` в объявлении), — граница:
+/// АСД нет, проверять форму имени нечем.
+const PARSE_BROKEN: &str = "\
+model M {
+    var BadVar u8 := 1;
+    start S;
 }
 start Main = M;
 ";
@@ -165,20 +195,17 @@ fn lsp_is_silent_on_canonical_name() {
     );
 }
 
-/// **Асимметрия доставки — пришпилена как есть.**
+/// **Ошибка построения дерева предупреждения о стиле не глушит** (фича 0227).
 ///
-/// На файле с семантической ошибкой редактор `CS-001` **не показывает**:
-/// `collect_diagnostics_at` возвращается сразу после ошибок («сперва ошибки» —
-/// политика старше фичи 0226), а проверка стиля стоит за этим возвратом. `fmt`
-/// на том же файле предупреждение печатает — он семантику не запускает вовсе
-/// (сторож: `style_naming_fmt_tests::semantically_broken_file_is_formatted_and_warned`).
+/// Ветвь `construct_stages`: тип не найден, модели нет. Канон именования от
+/// смысла не зависит, поэтому `CS-001` выдаётся рядом с ошибкой — как его
+/// печатает `fmt` на том же файле (сторож:
+/// `style_naming_fmt_tests::semantically_broken_file_is_formatted_and_warned`).
 ///
-/// ⚠️ То есть автор, правящий имя в файле, который ещё не собирается, видит
-/// замечание в консоли и не видит в редакторе — при том, что проверке
-/// семантика не нужна. Расхождение записано кандидатом в `FEATURES.md`; тест
-/// фиксирует **сегодняшнее** поведение, чтобы его изменение было заметным.
+/// ⚠️ До 0227 редактор здесь молчал, и автор, правящий имя в файле, который ещё
+/// не собирается, замечания не видел.
 #[test]
-fn lsp_hides_style_warning_while_errors_present() {
+fn lsp_shows_style_warning_next_to_construct_error() {
     let all = collect_diagnostics(SEMANTICALLY_BROKEN);
     let errors: Vec<_> = all
         .iter()
@@ -188,17 +215,114 @@ fn lsp_hides_style_warning_while_errors_present() {
         !errors.is_empty(),
         "фикстура обязана быть семантически некорректной: {all:?}"
     );
+
+    let style = style_diagnostics(SEMANTICALLY_BROKEN);
+    assert_eq!(
+        style.len(),
+        1,
+        "предупреждение о стиле обязано быть рядом с ошибкой: {all:?}"
+    );
+    assert_eq!(style[0].severity, Some(DiagnosticSeverity::WARNING));
     assert!(
-        style_diagnostics(SEMANTICALLY_BROKEN).is_empty(),
-        "сегодня редактор при ошибках предупреждения не показывает: {all:?}"
+        style[0].message.contains("переменная 'BadVar'"),
+        "текст предупреждения: {:?}",
+        style[0].message
+    );
+}
+
+/// **Ошибка проверки (`validate`) — та же ветвь возврата, то же поведение.**
+///
+/// Дерево построено, отвергает его `validate` (`SE-026`: запись во входной порт).
+/// Ветвь возврата другая, и правка обязана покрывать её тоже: иначе
+/// предупреждение появлялось бы «через раз» в зависимости от вида ошибки.
+#[test]
+fn lsp_shows_style_warning_next_to_validate_error() {
+    let all = collect_diagnostics(VALIDATE_BROKEN);
+    let has_se026 = all
+        .iter()
+        .any(|d| d.code == Some(NumberOrString::String("SE-026".to_string())));
+    assert!(
+        has_se026,
+        "фикстура обязана отвергаться проверкой validate: {all:?}"
     );
 
-    // А `fmt` на том же входе — показывает: асимметрия наблюдаема здесь же.
-    let (_, fmt_warnings) = takt_lang::format::format_source_with_warnings(SEMANTICALLY_BROKEN)
-        .expect("форматтер семантику не запускает");
+    let names: Vec<&str> = style_diagnostics(VALIDATE_BROKEN)
+        .iter()
+        .map(|d| {
+            if d.message.contains("'BadPort'") {
+                "BadPort"
+            } else if d.message.contains("'Unused'") {
+                "Unused"
+            } else {
+                "?"
+            }
+        })
+        .collect();
     assert_eq!(
-        fmt_warnings.len(),
-        1,
-        "у fmt предупреждение обязано быть: {fmt_warnings:?}"
+        names,
+        vec!["BadPort", "Unused"],
+        "оба неканоничных имени обязаны быть сообщены: {all:?}"
     );
+}
+
+/// **Предупреждения о смысле по-прежнему молчат при ошибках** — объём правки
+/// узкий, политика «сперва ошибки» для них не менялась.
+///
+/// Фикстура несёт неиспользуемую переменную `Unused` (`SE-036`) **и** ошибку
+/// `SE-026`. Стиль показан, `SE-036` — нет: он смотрит на построенную модель, и
+/// на отвергнутой его вердикт может быть ложным.
+#[test]
+fn lsp_still_hides_semantic_warnings_when_errors_present() {
+    let all = collect_diagnostics(VALIDATE_BROKEN);
+    assert!(
+        !style_diagnostics(VALIDATE_BROKEN).is_empty(),
+        "стиль показан: {all:?}"
+    );
+    assert!(
+        !all.iter()
+            .any(|d| d.code == Some(NumberOrString::String("SE-036".to_string()))),
+        "предупреждение о неиспользуемой переменной при ошибках показываться не \
+         должно: {all:?}"
+    );
+}
+
+/// **Граница: разбор не удался — предупреждения о стиле нет.**
+///
+/// Проверка идёт по АСД, а его в этой ветви не существует: имя может быть
+/// недописано, и говорить о его форме нечего. Ровно так же ведёт себя `fmt` —
+/// он отказывает, не предупреждая.
+#[test]
+fn lsp_has_no_style_warning_when_parse_fails() {
+    let all = collect_diagnostics(PARSE_BROKEN);
+    assert!(
+        all.iter()
+            .any(|d| d.severity == Some(DiagnosticSeverity::ERROR)),
+        "фикстура обязана не разбираться: {all:?}"
+    );
+    assert!(
+        style_diagnostics(PARSE_BROKEN).is_empty(),
+        "без АСД проверять форму имени нечем: {all:?}"
+    );
+}
+
+/// **Паритет с `fmt` на файле, который не собирается** (главный критерий 0227).
+///
+/// Сравниваются не факты «оба сработали», а **множества текстов**: именно их
+/// расхождение и было дефектом — у одного потребителя предупреждение было, у
+/// другого нет.
+#[test]
+fn lsp_and_fmt_agree_on_broken_file() {
+    for source in [SEMANTICALLY_BROKEN, VALIDATE_BROKEN] {
+        let (_, fmt_warnings) = takt_lang::format::format_source_with_warnings(source)
+            .expect("форматтер семантику не запускает");
+        let fmt_texts: Vec<String> = fmt_warnings.iter().map(|w| w.message.clone()).collect();
+        let lsp_texts: Vec<String> = style_diagnostics(source)
+            .iter()
+            .map(|d| d.message.clone())
+            .collect();
+        assert_eq!(
+            lsp_texts, fmt_texts,
+            "редактор и fmt обязаны говорить об именах одно и то же"
+        );
+    }
 }

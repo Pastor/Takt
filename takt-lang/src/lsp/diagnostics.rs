@@ -46,6 +46,21 @@ pub fn collect_diagnostics_at(
         }
     };
 
+    // Стиль (фича 0226): та же проверка, что у `taktc fmt` — одна реализация на
+    // обоих потребителей. Считается **сразу после разбора**, потому что ей нужен
+    // только АСД, и отдаётся во ВСЕХ ветвях возврата ниже (фича 0227).
+    //
+    // ⚠️ Это осознанное исключение из политики «при ошибках предупреждений не
+    // показываем»: прочие предупреждения смотрят на построенную модель и на
+    // сломанной могут быть ложными, а канон именования от смысла не зависит —
+    // имя либо в каноне, либо нет. Прежде на файле с ошибкой `taktc fmt`
+    // предупреждение печатал, а редактор молчал, хотя правят имена как раз в
+    // файлах, которые ещё не собираются.
+    let style: Vec<Diagnostic> = crate::style::naming_warnings(&ast)
+        .iter()
+        .map(|w| diagnostic_to_lsp(w, source, &files))
+        .collect();
+
     // Шаг 2: Семантический анализ. Стадии построения терминальны, проверки —
     // накапливаются (фича 0130): редактор подчёркивает **все** нарушения, а не
     // первое. Прежде здесь стоял `construct_model_with_files`, отдающий одну
@@ -63,25 +78,25 @@ pub fn collect_diagnostics_at(
                 for err in crate::diagnostics::normalize(errs) {
                     lsp_diags.push(diagnostic_to_lsp(&err, source, &files));
                 }
+                lsp_diags.extend(style);
                 return lsp_diags;
             }
         };
 
     let errors = semantic::validate::validate_model_all(model.clone());
     if !errors.is_empty() {
-        // Предупреждения при наличии ошибок не показываем: сперва ошибки.
+        // Предупреждения о СМЫСЛЕ при наличии ошибок не показываем: сперва
+        // ошибки. Предупреждение о стиле — исключение (см. выше): оно смотрит на
+        // текст, а не на модель, и от ошибок не портится.
         for err in crate::diagnostics::normalize(errors) {
             lsp_diags.push(diagnostic_to_lsp(&err, source, &files));
         }
+        lsp_diags.extend(style);
         return lsp_diags;
     }
 
     // Шаг 3: Дополнительные предупреждения
-    // Стиль (фича 0226): та же проверка, что у `taktc fmt` — одна реализация на
-    // обоих потребителей. Идёт по АСД, поэтому семантика ей не нужна.
-    for w in crate::style::naming_warnings(&ast) {
-        lsp_diags.push(diagnostic_to_lsp(&w, source, &files));
-    }
+    lsp_diags.extend(style);
 
     let unused = crate::unused_variable_warnings(model.clone());
     for w in unused {
