@@ -34,8 +34,17 @@ pub(crate) const INDENT: &str = "    ";
 /// Ошибка форматирования.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FormatError {
-    /// Исходник не разобран (форматировать нечего).
-    Parse(String),
+    /// Исходник не разобран: диагностика разбора **как есть**.
+    ///
+    /// ⚠️ Именно `Vec<Diagnostic>`, а не строка (фича 0202). Прежде здесь
+    /// стоял `format!("{d:?})")`, и вызывающий получал `Debug`-дамп, из
+    /// которого формат уже не восстановить: структура склеивалась **внутри**
+    /// библиотеки. Формат диагностики — её собственное свойство (ADR 0053), а
+    /// позицию `строка:колонка` умеет проставить только тот, кто знает путь к
+    /// файлу, — то есть вызывающий.
+    ///
+    /// Диагностик может быть несколько: разбор их накапливает (фича 0130).
+    Parse(Vec<crate::diagnostics::Diagnostic>),
     /// Узел АСД пока не поддержан печатью.
     ///
     /// Явный отказ: печатать «что-нибудь» вместо неизвестного узла означало бы
@@ -44,9 +53,25 @@ pub enum FormatError {
 }
 
 impl std::fmt::Display for FormatError {
+    /// ⚠️ Ветвь `Parse` печатает диагностики **без префикса позиции**: пути к
+    /// файлу на этом уровне нет, а выдумывать координаты нельзя (докблок
+    /// [`crate::diagnostics::position_prefix`] — пользователь пошёл бы искать
+    /// ошибку в первой строке).
+    ///
+    /// Вызывающий, который путь знает, обязан идти **структурным** путём:
+    /// проставить файл (`with_file_if_unset`) и напечатать каждую диагностику
+    /// через [`crate::diagnostics::format_compile_error`]. Так делает
+    /// `taktc fmt`. Печать через `Display` теряет позицию — молча.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FormatError::Parse(msg) => write!(f, "не удалось разобрать исходник: {msg}"),
+            FormatError::Parse(diagnostics) => {
+                let text = diagnostics
+                    .iter()
+                    .map(crate::diagnostics::format_compile_error)
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                write!(f, "{text}")
+            }
             FormatError::Unsupported(node) => {
                 write!(f, "печать узла '{node}' пока не поддерживается форматтером")
             }
@@ -213,8 +238,7 @@ impl<'a> Out<'a> {
 /// [`comments`]) и печатаются как ведущие/хвостовые. Ни один не теряется —
 /// требование R2.
 pub fn format_source(source: &str) -> Result<String, FormatError> {
-    let (model, items) =
-        crate::parse(source, 0).map_err(|d| FormatError::Parse(format!("{d:?}")))?;
+    let (model, items) = crate::parse(source, 0).map_err(FormatError::Parse)?;
     let mut out = Out::new(source, &items);
     print_model_body(&mut out, &model)?;
     // Хвост файла: комментарии после последнего узла.
