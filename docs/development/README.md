@@ -363,3 +363,4 @@
 | 0201-03 | 0201 | Сторож согласованности лексера и грамматики; документ | [0201-03-dead-lexemes.md](0201-03-dead-lexemes.md) |
 | 0202-01 | 0202 | Диагностика разбора доезжает до вызывающего структурой | [0202-01-fmt-diagnostic-formatting.md](0202-01-fmt-diagnostic-formatting.md) |
 | 0152-01 | 0152 | Накопление диагностик по соседям в стадиях 4-6 | [0152-01-semantic-recovery-element-boundary.md](0152-01-semantic-recovery-element-boundary.md) |
+| 0197-01 | 0197 | Раздел документа о стиле кода | [0197-01-language-code-style.md](0197-01-language-code-style.md) |
