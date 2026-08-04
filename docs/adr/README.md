@@ -162,3 +162,4 @@
 | [0197](./0197-language-code-style.md) | Стиль кода языка Takt — свод правил оформления и раздел документа | Accepted | фича 0197 |
 | [0226](./0226-naming-convention-warning.md) | Канон именования: предупреждение в fmt и LSP | Accepted | фича 0226 |
 | [0227](./0227-lsp-style-warning-with-errors.md) | Редактор показывает CS-001 и при ошибках в файле | Draft | фича 0227 |
+| [0228](./0228-compile-warning-position.md) | Предупреждение taktc compile несёт позицию | Draft | фича 0228 |

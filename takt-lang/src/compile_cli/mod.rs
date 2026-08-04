@@ -380,6 +380,32 @@ fn print_compile_error(diag: &crate::diagnostics::Diagnostic) {
     eprintln!("{}", crate::diagnostics::format_compile_error(diag));
 }
 
+/// Печатает предупреждения общим форматом, **разрешив номер файла в путь**
+/// (фича 0228).
+///
+/// ⚠️ Путь ставится **реестром файлов**, а не именем входа: у диагностики
+/// импортированного файла смещения принадлежат чужому тексту, и штамп «путь
+/// входа» дал бы верный код с **неверными** координатами. `path_of` отвечает
+/// `None` на незарегистрированный номер, поэтому такая диагностика останется без
+/// префикса — как прежде, но не соврёт.
+///
+/// Прежде предупреждения печатались **без позиции вовсе**: `format_warning`
+/// зовёт `position_prefix`, а тот без пути возвращает пустую строку. Координата в
+/// `loc` при этом была — терялась она на печати.
+fn print_warnings(
+    warnings: &[crate::diagnostics::Diagnostic],
+    files: &crate::diagnostics::FileTable,
+    quiet: bool,
+) {
+    if quiet {
+        return;
+    }
+    for w in warnings {
+        let stamped = w.clone().with_file_if_unset(files.path_of(&w.loc));
+        eprintln!("{}", crate::diagnostics::format_warning(&stamped));
+    }
+}
+
 /// Печатает результат простой цели (`Result<(), Diagnostic>`: `plantuml`/`st`/
 /// `rust`/`sv`) и завершает процесс при ошибке. verbose даёт полный путь входа.
 /// Цель `c` не пользуется этим: её сообщение перечисляет пути поиска.
@@ -422,14 +448,12 @@ fn report_hal_result(
 ) {
     match result {
         Ok(warnings) => {
+            // Реестр здесь — только корневой файл: цель строит своё дерево внутри
+            // и таблицу наружу не отдаёт. Предупреждение своего файла получит
+            // позицию, импортированного — останется без префикса (как прежде).
+            let files = crate::diagnostics::FileTable::new(&options.input_file);
+            print_warnings(&warnings, &files, options.quiet);
             if !options.quiet {
-                for w in warnings {
-                    eprintln!(
-                        "Предупреждение [{}]: {}",
-                        w.code.as_deref().unwrap_or("?"),
-                        w.message
-                    );
-                }
                 eprintln!(
                     "Скомпилировано: {} → {}/ ({})",
                     options.input_file, options.output_path, target
@@ -536,10 +560,20 @@ pub fn run_compile(args: &[String]) -> i32 {
     // целей, адрес НЕ потребляющих: у `c-hal`/`st-at` это ошибки при генерации.
     // Пересчёт длительностей (фича 0134) печатается тем же каналом.
     let consumes_addresses = matches!(options.target.as_str(), "c-hal" | "st-at" | "sv-mmio");
+    // Реестр файлов, а не однодневка `construct_model` (фича 0228): без него
+    // предупреждение не знает своего пути, а `position_prefix` без пути отдаёт
+    // пустую строку — координата в `loc` есть, но до пользователя не доезжает.
+    let mut files = crate::diagnostics::FileTable::new(&options.input_file);
     if let Some((ast, model)) = crate::parse(&source, 0).ok().and_then(|(ast, _)| {
-        crate::semantic::tree::construct_model(&ast, None, &options.include_dirs)
-            .ok()
-            .map(|m| (ast, m))
+        crate::semantic::tree::construct_model_with_files(
+            &ast,
+            None,
+            &options.include_dirs,
+            &mut files,
+            false,
+        )
+        .ok()
+        .map(|m| (ast, m))
     }) {
         let mut warnings = crate::semantic::warnings::collect_model_warnings(&ast, &model);
         if !consumes_addresses {
@@ -566,12 +600,8 @@ pub fn run_compile(args: &[String]) -> i32 {
                 profile,
             ));
         }
-        if !options.quiet {
-            // Формат общий с ошибкой (`print_compile_error`): позиция + код + текст.
-            for w in &warnings {
-                eprintln!("{}", crate::diagnostics::format_warning(w));
-            }
-        }
+        // Формат общий с ошибкой (`print_compile_error`): позиция + код + текст.
+        print_warnings(&warnings, &files, options.quiet);
     }
 
     match options.target.as_str() {
