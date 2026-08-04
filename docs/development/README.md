@@ -368,3 +368,4 @@
 | 0226-02 | 0226 | Корпус приведён к канону именования | [0226-02-corpus-naming-canon.md](0226-02-corpus-naming-canon.md) |
 | 0226-03 | 0226 | Тесты проводки CS-001 в fmt и LSP | [0226-03-naming-warning-wiring-tests.md](0226-03-naming-warning-wiring-tests.md) |
 | 0226-04 | 0226 | Раздел «Стиль кода» и запись CS-001 в приложение | [0226-04-code-style-doc.md](0226-04-code-style-doc.md) |
+| 0227-01 | 0227 | Редактор показывает CS-001 и при ошибках в файле | [0227-01-lsp-style-warning-with-errors.md](0227-01-lsp-style-warning-with-errors.md) |
