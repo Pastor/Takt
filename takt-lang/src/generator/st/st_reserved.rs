@@ -97,7 +97,34 @@ pub(crate) fn check_st_name(name: &str, loc: Location) -> Result<(), Diagnostic>
     if IEC_RESERVED.iter().any(|kw| kw.eq_ignore_ascii_case(name)) {
         return Err(st014(name, loc));
     }
+    if let Some(ch) = non_ascii_char(name) {
+        return Err(st020(name, ch, loc));
+    }
     Ok(())
+}
+
+/// Первый символ имени вне алфавита идентификатора IEC 61131-3 (или `None`).
+///
+/// Алфавит — `[A-Za-z0-9_]`; всё прочее `iec2c` отвергает разбором.
+fn non_ascii_char(name: &str) -> Option<char> {
+    name.chars()
+        .find(|c| !(c.is_ascii_alphanumeric() || *c == '_'))
+}
+
+/// Строит диагностику `ST-020` — символ вне алфавита идентификатора IEC.
+///
+/// ⚠️ Отказ принадлежит **цели**, а не языку: `c` и `rust` такие имена
+/// переводят, и их гейты вывод принимают (замер 2026-08-04). Прежде отказ
+/// приходил от `iec2c` и **на порождённом файле** («unclosed output variable(s)
+/// declaration») — сообщение, по которому исходную причину не опознать.
+fn st020(name: &str, ch: char, loc: Location) -> Diagnostic {
+    Diagnostic::error(
+        loc,
+        format!(
+            "имя '{name}' содержит символ '{ch}', недопустимый в идентификаторе              IEC 61131-3: алфавит цели — латиница, цифры и '_'. Это НЕ              ограничение языка Takt — модель остаётся валидной для целей 'c',              'c-hal', 'rust' и 'plantuml'. Переименуйте элемент, если модель              нужна для ПЛК"
+        ),
+    )
+    .with_code("ST-020")
 }
 
 #[cfg(test)]

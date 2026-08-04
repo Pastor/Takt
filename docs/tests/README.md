@@ -133,3 +133,4 @@
 | 0195 | Коллизии имён при отображении в пространство имён цели | [0195-target-name-collisions.md](0195-target-name-collisions.md) | ✅ ПРОЙДЕН (отчёт: [reports/0195](../reports/0195-target-name-collisions.md)) |
 | 0198 | Форматтер выносит комментарий из тела блока наружу | [0198-formatter-comment-in-block.md](0198-formatter-comment-in-block.md) | ✅ ПРОЙДЕН (отчёт: [reports/0198](../reports/0198-formatter-comment-in-block.md)) |
 | 0199 | Форма model M = A & B { … } не работает ни в одной стороне | [0199-model-implements-brace-form.md](0199-model-implements-brace-form.md) | ✅ ПРОЙДЕН (отчёт: [reports/0199](../reports/0199-model-implements-brace-form.md)) |
+| 0200 | Идентификатор с не-ASCII буквами: язык принимает, цели sv и st не выражают | [0200-non-ascii-identifier-targets.md](0200-non-ascii-identifier-targets.md) | ✅ ПРОЙДЕН (отчёт: [reports/0200](../reports/0200-non-ascii-identifier-targets.md)) |
