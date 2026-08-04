@@ -62,9 +62,9 @@ VAR_OUTPUT
     is_done : BOOL;
 END_VAR
 VAR_IN_OUT
-    IDLE : BOOL;
-    WAIT : BOOL;
-    WORK : BOOL;
+    idle : BOOL;
+    wait : BOOL;
+    work : BOOL;
 END_VAR
 VAR
     state : USINT := 0;
@@ -80,12 +80,12 @@ END_VAR
     END_IF;
     CASE state OF
         1: (* Start *)
-            IF WAIT THEN
-                WORK := FALSE;
-                IDLE := TRUE;
+            IF wait THEN
+                work := FALSE;
+                idle := TRUE;
             ELSE
-                IDLE := FALSE;
-                WORK := TRUE;
+                idle := FALSE;
+                work := TRUE;
             END_IF;
             state := 2; (* END *)
         2: (* END *)
@@ -290,12 +290,12 @@ END_FUNCTION_BLOCK
 
 FUNCTION_BLOCK ExtendComplex
 VAR_INPUT
-    WAIT : BOOL;
+    wait : BOOL;
 END_VAR
 VAR_OUTPUT
     is_done : BOOL;
-    IDLE : BOOL;
-    WORK : BOOL;
+    idle : BOOL;
+    work : BOOL;
 END_VAR
 VAR
     state : USINT := 0;
@@ -332,7 +332,7 @@ END_VAR
                         start_step := 1;
                     END_IF;
                 1:
-                    start_b2(IDLE := IDLE, WAIT := WAIT, WORK := WORK);
+                    start_b2(idle := idle, wait := wait, work := work);
                     IF start_b2.is_done THEN
                         start_step := 2;
                     END_IF;

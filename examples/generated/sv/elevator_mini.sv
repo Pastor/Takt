@@ -9,40 +9,40 @@ module elevator_mini (
     input  logic clk,   // служебный порт цели sv: в .takt его нет
     input  logic rst_n, // служебный порт цели sv: сброс, активный низкий
     input  logic en = 1'b1, // служебный порт цели sv: clock enable; НЕ обязателен (умолчание 1)
-    input  logic CabinButton_DC,
-    input  logic CabinButton_F1,
-    input  logic CabinButton_F2,
-    input  logic CabinButton_F3,
-    input  logic CabinButton_F4,
-    input  logic CabinButton_F5,
-    input  logic CabinButton_F6,
-    input  logic CabinButton_F7,
-    input  logic CabinButton_F8,
-    input  logic CabinButton_F9,
-    input  logic FloorButton_F1,
-    input  logic FloorButton_F2,
-    input  logic FloorButton_F3,
-    input  logic FloorButton_F4,
-    input  logic FloorButton_F5,
-    input  logic FloorButton_F6,
-    input  logic FloorButton_F7,
-    input  logic FloorButton_F8,
-    input  logic FloorButton_F9,
-    input  logic FloorSensor_F1_Bottom,
-    input  logic FloorSensor_F2_Bottom,
-    input  logic FloorSensor_F3_Bottom,
-    input  logic FloorSensor_F4_Bottom,
-    input  logic FloorSensor_F5_Bottom,
-    input  logic FloorSensor_F6_Bottom,
-    input  logic FloorSensor_F7_Bottom,
-    input  logic FloorSensor_F8_Bottom,
-    input  logic FloorSensor_F9_Bottom,
-    input  logic ElevatorMotor_SensorD,
-    input  logic ElevatorMotor_SensorU,
-    output logic DoorOpen,
-    output logic ElevatorMotor_Down,
-    output logic ElevatorMotor_Stop,
-    output logic ElevatorMotor_Up,
+    input  logic cabin_button_dc,
+    input  logic cabin_button_f1,
+    input  logic cabin_button_f2,
+    input  logic cabin_button_f3,
+    input  logic cabin_button_f4,
+    input  logic cabin_button_f5,
+    input  logic cabin_button_f6,
+    input  logic cabin_button_f7,
+    input  logic cabin_button_f8,
+    input  logic cabin_button_f9,
+    input  logic floor_button_f1,
+    input  logic floor_button_f2,
+    input  logic floor_button_f3,
+    input  logic floor_button_f4,
+    input  logic floor_button_f5,
+    input  logic floor_button_f6,
+    input  logic floor_button_f7,
+    input  logic floor_button_f8,
+    input  logic floor_button_f9,
+    input  logic floor_sensor_f1_bottom,
+    input  logic floor_sensor_f2_bottom,
+    input  logic floor_sensor_f3_bottom,
+    input  logic floor_sensor_f4_bottom,
+    input  logic floor_sensor_f5_bottom,
+    input  logic floor_sensor_f6_bottom,
+    input  logic floor_sensor_f7_bottom,
+    input  logic floor_sensor_f8_bottom,
+    input  logic floor_sensor_f9_bottom,
+    input  logic elevator_motor_sensor_d,
+    input  logic elevator_motor_sensor_u,
+    output logic door_open,
+    output logic elevator_motor_down,
+    output logic elevator_motor_stop,
+    output logic elevator_motor_up,
     output logic is_done
 );
     typedef enum logic [1:0] {
@@ -89,10 +89,10 @@ module elevator_mini (
     logic [7:0] elevator_mini_current_floor_next;
     logic [7:0] elevator_mini_target_floor;
     logic [7:0] elevator_mini_target_floor_next;
-    logic DoorOpen_next;
-    logic ElevatorMotor_Down_next;
-    logic ElevatorMotor_Stop_next;
-    logic ElevatorMotor_Up_next;
+    logic door_open_next;
+    logic elevator_motor_down_next;
+    logic elevator_motor_stop_next;
+    logic elevator_motor_up_next;
 
     // Комбинационная часть: БЛОКИРУЮЩИЕ присваивания, поэтому порядок
     // операторов и видимость записей внутри такта — в точности как в C.
@@ -105,135 +105,135 @@ module elevator_mini (
         elevator_mini_command_next = elevator_mini_command;
         elevator_mini_current_floor_next = elevator_mini_current_floor;
         elevator_mini_target_floor_next = elevator_mini_target_floor;
-        DoorOpen_next = DoorOpen;
-        ElevatorMotor_Down_next = ElevatorMotor_Down;
-        ElevatorMotor_Stop_next = ElevatorMotor_Stop;
-        ElevatorMotor_Up_next = ElevatorMotor_Up;
+        door_open_next = door_open;
+        elevator_motor_down_next = elevator_motor_down;
+        elevator_motor_stop_next = elevator_motor_stop;
+        elevator_motor_up_next = elevator_motor_up;
 
         unique case (state)
             ELEVATOR_MINI_MAIN: begin
                 // Под-модель 'Cabin (ElevatorMini:Cabin)' — инлайн её такта.
                 unique case (elevator_mini_cabin_state)
                     ELEVATOR_MINI_CABIN_AT_FLOOR: begin
-                        DoorOpen_next = 1'b1;
-                        if (CabinButton_DC) begin
+                        door_open_next = 1'b1;
+                        if (cabin_button_dc) begin
                             elevator_mini_command_next = COMMAND_STOP;
                             elevator_mini_cabin_state_next = ELEVATOR_MINI_CABIN_IDLE;
                         end
                     end
                     ELEVATOR_MINI_CABIN_IDLE: begin
-                        if (FloorSensor_F1_Bottom) begin
+                        if (floor_sensor_f1_bottom) begin
                             elevator_mini_current_floor_next = 1;
                         end
-                        if (FloorSensor_F2_Bottom) begin
+                        if (floor_sensor_f2_bottom) begin
                             elevator_mini_current_floor_next = 2;
                         end
-                        if (FloorSensor_F3_Bottom) begin
+                        if (floor_sensor_f3_bottom) begin
                             elevator_mini_current_floor_next = 3;
                         end
-                        if (FloorSensor_F4_Bottom) begin
+                        if (floor_sensor_f4_bottom) begin
                             elevator_mini_current_floor_next = 4;
                         end
-                        if (FloorSensor_F5_Bottom) begin
+                        if (floor_sensor_f5_bottom) begin
                             elevator_mini_current_floor_next = 5;
                         end
-                        if (FloorSensor_F6_Bottom) begin
+                        if (floor_sensor_f6_bottom) begin
                             elevator_mini_current_floor_next = 6;
                         end
-                        if (FloorSensor_F7_Bottom) begin
+                        if (floor_sensor_f7_bottom) begin
                             elevator_mini_current_floor_next = 7;
                         end
-                        if (FloorSensor_F8_Bottom) begin
+                        if (floor_sensor_f8_bottom) begin
                             elevator_mini_current_floor_next = 8;
                         end
-                        if (FloorSensor_F9_Bottom) begin
+                        if (floor_sensor_f9_bottom) begin
                             elevator_mini_current_floor_next = 9;
                         end
-                        if (CabinButton_F1) begin
+                        if (cabin_button_f1) begin
                             elevator_mini_target_floor_next = 1;
                         end
-                        if (CabinButton_F2) begin
+                        if (cabin_button_f2) begin
                             elevator_mini_target_floor_next = 2;
                         end
-                        if (CabinButton_F3) begin
+                        if (cabin_button_f3) begin
                             elevator_mini_target_floor_next = 3;
                         end
-                        if (CabinButton_F4) begin
+                        if (cabin_button_f4) begin
                             elevator_mini_target_floor_next = 4;
                         end
-                        if (CabinButton_F5) begin
+                        if (cabin_button_f5) begin
                             elevator_mini_target_floor_next = 5;
                         end
-                        if (CabinButton_F6) begin
+                        if (cabin_button_f6) begin
                             elevator_mini_target_floor_next = 6;
                         end
-                        if (CabinButton_F7) begin
+                        if (cabin_button_f7) begin
                             elevator_mini_target_floor_next = 7;
                         end
-                        if (CabinButton_F8) begin
+                        if (cabin_button_f8) begin
                             elevator_mini_target_floor_next = 8;
                         end
-                        if (CabinButton_F9) begin
+                        if (cabin_button_f9) begin
                             elevator_mini_target_floor_next = 9;
                         end
-                        if (FloorButton_F1) begin
+                        if (floor_button_f1) begin
                             elevator_mini_target_floor_next = 1;
                         end
-                        if (FloorButton_F2) begin
+                        if (floor_button_f2) begin
                             elevator_mini_target_floor_next = 2;
                         end
-                        if (FloorButton_F3) begin
+                        if (floor_button_f3) begin
                             elevator_mini_target_floor_next = 3;
                         end
-                        if (FloorButton_F4) begin
+                        if (floor_button_f4) begin
                             elevator_mini_target_floor_next = 4;
                         end
-                        if (FloorButton_F5) begin
+                        if (floor_button_f5) begin
                             elevator_mini_target_floor_next = 5;
                         end
-                        if (FloorButton_F6) begin
+                        if (floor_button_f6) begin
                             elevator_mini_target_floor_next = 6;
                         end
-                        if (FloorButton_F7) begin
+                        if (floor_button_f7) begin
                             elevator_mini_target_floor_next = 7;
                         end
-                        if (FloorButton_F8) begin
+                        if (floor_button_f8) begin
                             elevator_mini_target_floor_next = 8;
                         end
-                        if (FloorButton_F9) begin
+                        if (floor_button_f9) begin
                             elevator_mini_target_floor_next = 9;
                         end
-                        DoorOpen_next = 1'b1;
+                        door_open_next = 1'b1;
                         if ((elevator_mini_target_floor_next != 0)) begin
                             elevator_mini_cabin_state_next = ELEVATOR_MINI_CABIN_MOVING;
                         end
                     end
                     ELEVATOR_MINI_CABIN_MOVING: begin
-                        if (FloorSensor_F1_Bottom) begin
+                        if (floor_sensor_f1_bottom) begin
                             elevator_mini_current_floor_next = 1;
                         end
-                        if (FloorSensor_F2_Bottom) begin
+                        if (floor_sensor_f2_bottom) begin
                             elevator_mini_current_floor_next = 2;
                         end
-                        if (FloorSensor_F3_Bottom) begin
+                        if (floor_sensor_f3_bottom) begin
                             elevator_mini_current_floor_next = 3;
                         end
-                        if (FloorSensor_F4_Bottom) begin
+                        if (floor_sensor_f4_bottom) begin
                             elevator_mini_current_floor_next = 4;
                         end
-                        if (FloorSensor_F5_Bottom) begin
+                        if (floor_sensor_f5_bottom) begin
                             elevator_mini_current_floor_next = 5;
                         end
-                        if (FloorSensor_F6_Bottom) begin
+                        if (floor_sensor_f6_bottom) begin
                             elevator_mini_current_floor_next = 6;
                         end
-                        if (FloorSensor_F7_Bottom) begin
+                        if (floor_sensor_f7_bottom) begin
                             elevator_mini_current_floor_next = 7;
                         end
-                        if (FloorSensor_F8_Bottom) begin
+                        if (floor_sensor_f8_bottom) begin
                             elevator_mini_current_floor_next = 8;
                         end
-                        if (FloorSensor_F9_Bottom) begin
+                        if (floor_sensor_f9_bottom) begin
                             elevator_mini_current_floor_next = 9;
                         end
                         if ((elevator_mini_target_floor_next > elevator_mini_current_floor_next)) begin
@@ -253,8 +253,8 @@ module elevator_mini (
                 // Под-модель 'Motor (ElevatorMini:Motor)' — инлайн её такта.
                 unique case (elevator_mini_motor_state)
                     ELEVATOR_MINI_MOTOR_DOWN: begin
-                        ElevatorMotor_Down_next = 1'b1;
-                        if (((elevator_mini_command_next == COMMAND_STOP) || ElevatorMotor_SensorD)) begin
+                        elevator_motor_down_next = 1'b1;
+                        if (((elevator_mini_command_next == COMMAND_STOP) || elevator_motor_sensor_d)) begin
                             elevator_mini_motor_state_next = ELEVATOR_MINI_MOTOR_STOP;
                         end
                     end
@@ -270,15 +270,15 @@ module elevator_mini (
                         end
                     end
                     ELEVATOR_MINI_MOTOR_STOP: begin
-                        ElevatorMotor_Stop_next = 1'b1;
+                        elevator_motor_stop_next = 1'b1;
                         begin
-                            ElevatorMotor_Stop_next = 1'b1;
+                            elevator_motor_stop_next = 1'b1;
                             elevator_mini_motor_state_next = ELEVATOR_MINI_MOTOR_IDLE;
                         end
                     end
                     ELEVATOR_MINI_MOTOR_UP: begin
-                        ElevatorMotor_Up_next = 1'b1;
-                        if (((elevator_mini_command_next == COMMAND_STOP) || ElevatorMotor_SensorU)) begin
+                        elevator_motor_up_next = 1'b1;
+                        if (((elevator_mini_command_next == COMMAND_STOP) || elevator_motor_sensor_u)) begin
                             elevator_mini_motor_state_next = ELEVATOR_MINI_MOTOR_STOP;
                         end
                     end
@@ -303,12 +303,12 @@ module elevator_mini (
             elevator_mini_command <= COMMAND_STOP;
             elevator_mini_current_floor <= 1;
             elevator_mini_target_floor <= 0;
-            DoorOpen <= '0;
-            ElevatorMotor_Down <= '0;
-            ElevatorMotor_Stop <= '0;
-            ElevatorMotor_Up <= '0;
+            door_open <= '0;
+            elevator_motor_down <= '0;
+            elevator_motor_stop <= '0;
+            elevator_motor_up <= '0;
             elevator_mini_command <= COMMAND_STOP;
-            ElevatorMotor_Stop <= 1'b1;
+            elevator_motor_stop <= 1'b1;
         end else if (en) begin
             elevator_mini_cabin_state <= elevator_mini_cabin_state_next;
             elevator_mini_motor_state <= elevator_mini_motor_state_next;
@@ -316,10 +316,10 @@ module elevator_mini (
             elevator_mini_command <= elevator_mini_command_next;
             elevator_mini_current_floor <= elevator_mini_current_floor_next;
             elevator_mini_target_floor <= elevator_mini_target_floor_next;
-            DoorOpen <= DoorOpen_next;
-            ElevatorMotor_Down <= ElevatorMotor_Down_next;
-            ElevatorMotor_Stop <= ElevatorMotor_Stop_next;
-            ElevatorMotor_Up <= ElevatorMotor_Up_next;
+            door_open <= door_open_next;
+            elevator_motor_down <= elevator_motor_down_next;
+            elevator_motor_stop <= elevator_motor_stop_next;
+            elevator_motor_up <= elevator_motor_up_next;
         end
     end
 

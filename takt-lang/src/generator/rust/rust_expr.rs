@@ -714,7 +714,7 @@ fn is_wrapping_arith(expr: &ExpressionNode) -> bool {
 /// C есть целое. В Rust `Command` и `2` — разные типы, поэтому вариант нужно
 /// восстановить по значению.
 ///
-/// Тот же приём чинит `bit`-порт: `ElevatorMotor_Up := 1` при `bool`-порте.
+/// Тот же приём чинит `bit`-порт: `elevator_motor_up := 1` при `bool`-порте.
 pub(crate) fn coerce_to(
     value: &ExpressionNode,
     target: &TypeNode,

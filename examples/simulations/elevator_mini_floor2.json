@@ -2,7 +2,7 @@
   {
     "_step": "1 — датчик этажа 2 активен → current_floor := 2 (порт под-модели Cabin драйвится, фича 0079)",
     "in_ports": {
-      "FloorSensor_F2_Bottom": 1
+      "floor_sensor_f2_bottom": 1
     },
     "guard": {
       "vars": {

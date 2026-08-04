@@ -64,7 +64,7 @@ impl PortSet {
 ///
 /// Порты собираются со **всех** моделей, а не только с корня: в
 /// `elevator_mini.takt` они объявлены внутри под-моделей (`out
-/// ElevatorMotor_Up: bit;` в `Motor`). Перечисления портов — общие для файла,
+/// elevator_motor_up: bit;` в `Motor`). Перечисления портов — общие для файла,
 /// как и в цели `c`.
 pub(crate) fn collect_ports(
     map: &RustMap,

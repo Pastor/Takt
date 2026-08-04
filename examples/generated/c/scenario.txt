@@ -2,10 +2,10 @@
 # Сценарий: поездка с этажа 1 → этаж 3 → этаж 1
 #
 # Физическая модель датчиков:
-#   FloorSensor_FN_Bottom = 1, когда кабина входит в зону этажа N снизу.
-#   FloorSensor_FN_Top    = 1, когда кабина достигает верхней границы зоны.
+#   floor_sensor_fN_bottom = 1, когда кабина входит в зону этажа N снизу.
+#   floor_sensor_fN_top    = 1, когда кабина достигает верхней границы зоны.
 #   Кнопки активны ровно один такт (импульс от пассажира).
-#   Концевые датчики (ElevatorMotor_SensorU/D) = защита от перехода, не задействованы.
+#   Концевые датчики (elevator_motor_sensor_u/d) = защита от перехода, не задействованы.
 #
 # Ожидаемое поведение:
 #   Тт 1-2 : Кабина на этаже 1, дверь открыта (Cabin=Idle, Motor=Idle)
@@ -16,7 +16,7 @@
 #   Тт 9   : Кабина в зоне этажа 3, target=current → Cabin=AtFloor, Motor=Stop
 #   Тт10-11: На этаже 3, дверь открыта
 #   Тт 12  : Нажата кнопка «закрыть дверь» (DC) → Cabin переходит в Idle
-#   Тт 13  : Idle на этаже 3, нажата кнопка вызова на этаже 1 (FloorButton_F1)
+#   Тт 13  : Idle на этаже 3, нажата кнопка вызова на этаже 1 (floor_button_f1)
 #   Тт14-15: Движение вниз, проезд зоны 2
 #   Тт16-17: Движение вниз
 #   Тт 18  : Кабина в зоне этажа 1, target=current → AtFloor, Motor=Stop
@@ -26,15 +26,15 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # == Такты 1-2: Кабина стоит на 1-м этаже ==
-FloorSensor_F1_Bottom=1
-FloorSensor_F1_Bottom=1
+floor_sensor_f1_bottom=1
+floor_sensor_f1_bottom=1
 
 # == Такт 3: Пассажир нажимает кнопку «3» в кабине ==
-FloorSensor_F1_Bottom=1 CabinButton_F3=1
+floor_sensor_f1_bottom=1 cabin_button_f3=1
 
 # == Такт 4: Дверь закрывается, кабина начинает движение вверх ==
 # (датчики этажа 1 пока ещё активны, потом кабина уходит)
-FloorSensor_F1_Bottom=1
+floor_sensor_f1_bottom=1
 
 # == Такты 5-6: Движение вверх, между этажами 1 и 2 ==
 # (нет активных датчиков этажей)
@@ -42,44 +42,44 @@ FloorSensor_F1_Bottom=1
 # (пустая строка = такт без активных датчиков)
 
 # == Такт 7: Вход в зону этажа 2 ==
-FloorSensor_F2_Bottom=1
+floor_sensor_f2_bottom=1
 
 # == Такт 8: Проезд зоны 2 (Top-датчик) ==
-FloorSensor_F2_Top=1
+floor_sensor_f2_top=1
 
 # == Такт 9: Вход в зону этажа 3 → совпадение с target (3) → AtFloor ==
-FloorSensor_F3_Bottom=1
+floor_sensor_f3_bottom=1
 
 # == Такты 10-11: Кабина на этаже 3, дверь открыта ==
-FloorSensor_F3_Bottom=1 FloorSensor_F3_Top=1
-FloorSensor_F3_Bottom=1 FloorSensor_F3_Top=1
+floor_sensor_f3_bottom=1 floor_sensor_f3_top=1
+floor_sensor_f3_bottom=1 floor_sensor_f3_top=1
 
 # == Такт 12: Пассажир нажимает кнопку «закрыть дверь» ==
-FloorSensor_F3_Bottom=1 CabinButton_DC=1
+floor_sensor_f3_bottom=1 cabin_button_dc=1
 
 # == Такт 13: Idle на 3-м этаже; пассажир на 1-м этаже нажимает вызов ==
-FloorSensor_F3_Bottom=1 FloorButton_F1=1
+floor_sensor_f3_bottom=1 floor_button_f1=1
 
 # == Такт 14: Кабина уходит вниз, покидает зону 3 ==
-FloorSensor_F3_Bottom=1
+floor_sensor_f3_bottom=1
 
 # == Такт 15: Между 3-м и 2-м ==
 
 # == Такт 16: Вход в зону этажа 2 (снизу, при движении вниз = Top-датчик первый) ==
-FloorSensor_F2_Top=1
+floor_sensor_f2_top=1
 
 # == Такт 17: Проход зоны 2 ==
-FloorSensor_F2_Bottom=1
+floor_sensor_f2_bottom=1
 
 # == Такт 18: Вход в зону этажа 1 → target=1=current → AtFloor ==
-FloorSensor_F1_Bottom=1
+floor_sensor_f1_bottom=1
 
 # == Такты 19-20: На 1-м этаже, дверь открыта ==
-FloorSensor_F1_Bottom=1 FloorSensor_F1_Top=1
-FloorSensor_F1_Bottom=1
+floor_sensor_f1_bottom=1 floor_sensor_f1_top=1
+floor_sensor_f1_bottom=1
 
 # == Такт 21: Пассажир нажимает «закрыть дверь» ==
-FloorSensor_F1_Bottom=1 CabinButton_DC=1
+floor_sensor_f1_bottom=1 cabin_button_dc=1
 
 # == Такт 22: Простой на 1-м этаже ==
-FloorSensor_F1_Bottom=1
+floor_sensor_f1_bottom=1

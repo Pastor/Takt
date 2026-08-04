@@ -6,11 +6,11 @@ struct Coord {
     y: [bit; 32],
     z: [bit; 32]
 }
-const c: Coord := {0, 0, 0};
+const ORIGIN: Coord := {0, 0, 0};
 enum Constant { X, Y, Z }
-out IDLE: bit at 0x44533932:1;
-out WORK: bit at 0x44533932:2;
-in WAIT: bit at 0x44533932:33;
+out idle: bit at 0x44533932:1;
+out work: bit at 0x44533932:2;
+in wait: bit at 0x44533932:33;
 
 fn is_collected(c: Constant, v: u8) -> bool {
     return (c = X && v = 1) || (c = Y && v = 2) || (x.2 = 0);
@@ -24,13 +24,13 @@ model A {
 model B {
     start Start {
         always {
-            if WAIT {
-                WORK := 0;
-                IDLE := 1;
+            if wait {
+                work := 0;
+                idle := 1;
             }
             else {
-                IDLE := 0;
-                WORK := 1;
+                idle := 0;
+                work := 1;
             }
         }
     }

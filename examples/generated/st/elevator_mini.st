@@ -5,38 +5,38 @@
 
 FUNCTION_BLOCK ElevatorMiniCabin
 VAR_INPUT
-    CabinButton_DC : BOOL;
-    CabinButton_F1 : BOOL;
-    CabinButton_F2 : BOOL;
-    CabinButton_F3 : BOOL;
-    CabinButton_F4 : BOOL;
-    CabinButton_F5 : BOOL;
-    CabinButton_F6 : BOOL;
-    CabinButton_F7 : BOOL;
-    CabinButton_F8 : BOOL;
-    CabinButton_F9 : BOOL;
-    FloorButton_F1 : BOOL;
-    FloorButton_F2 : BOOL;
-    FloorButton_F3 : BOOL;
-    FloorButton_F4 : BOOL;
-    FloorButton_F5 : BOOL;
-    FloorButton_F6 : BOOL;
-    FloorButton_F7 : BOOL;
-    FloorButton_F8 : BOOL;
-    FloorButton_F9 : BOOL;
-    FloorSensor_F1_Bottom : BOOL;
-    FloorSensor_F2_Bottom : BOOL;
-    FloorSensor_F3_Bottom : BOOL;
-    FloorSensor_F4_Bottom : BOOL;
-    FloorSensor_F5_Bottom : BOOL;
-    FloorSensor_F6_Bottom : BOOL;
-    FloorSensor_F7_Bottom : BOOL;
-    FloorSensor_F8_Bottom : BOOL;
-    FloorSensor_F9_Bottom : BOOL;
+    cabin_button_dc : BOOL;
+    cabin_button_f1 : BOOL;
+    cabin_button_f2 : BOOL;
+    cabin_button_f3 : BOOL;
+    cabin_button_f4 : BOOL;
+    cabin_button_f5 : BOOL;
+    cabin_button_f6 : BOOL;
+    cabin_button_f7 : BOOL;
+    cabin_button_f8 : BOOL;
+    cabin_button_f9 : BOOL;
+    floor_button_f1 : BOOL;
+    floor_button_f2 : BOOL;
+    floor_button_f3 : BOOL;
+    floor_button_f4 : BOOL;
+    floor_button_f5 : BOOL;
+    floor_button_f6 : BOOL;
+    floor_button_f7 : BOOL;
+    floor_button_f8 : BOOL;
+    floor_button_f9 : BOOL;
+    floor_sensor_f1_bottom : BOOL;
+    floor_sensor_f2_bottom : BOOL;
+    floor_sensor_f3_bottom : BOOL;
+    floor_sensor_f4_bottom : BOOL;
+    floor_sensor_f5_bottom : BOOL;
+    floor_sensor_f6_bottom : BOOL;
+    floor_sensor_f7_bottom : BOOL;
+    floor_sensor_f8_bottom : BOOL;
+    floor_sensor_f9_bottom : BOOL;
 END_VAR
 VAR_OUTPUT
     is_done : BOOL;
-    DoorOpen : BOOL;
+    door_open : BOOL;
 END_VAR
 VAR_IN_OUT
     command : USINT;
@@ -57,123 +57,123 @@ END_VAR
     END_IF;
     CASE state OF
         1: (* AtFloor *)
-            DoorOpen := TRUE;
-            IF CabinButton_DC THEN
+            door_open := TRUE;
+            IF cabin_button_dc THEN
                 command := Command_Stop;
                 state := 2; (* Idle *)
             END_IF;
         2: (* Idle *)
-            IF FloorSensor_F1_Bottom THEN
+            IF floor_sensor_f1_bottom THEN
                 current_floor := 1;
             END_IF;
-            IF FloorSensor_F2_Bottom THEN
+            IF floor_sensor_f2_bottom THEN
                 current_floor := 2;
             END_IF;
-            IF FloorSensor_F3_Bottom THEN
+            IF floor_sensor_f3_bottom THEN
                 current_floor := 3;
             END_IF;
-            IF FloorSensor_F4_Bottom THEN
+            IF floor_sensor_f4_bottom THEN
                 current_floor := 4;
             END_IF;
-            IF FloorSensor_F5_Bottom THEN
+            IF floor_sensor_f5_bottom THEN
                 current_floor := 5;
             END_IF;
-            IF FloorSensor_F6_Bottom THEN
+            IF floor_sensor_f6_bottom THEN
                 current_floor := 6;
             END_IF;
-            IF FloorSensor_F7_Bottom THEN
+            IF floor_sensor_f7_bottom THEN
                 current_floor := 7;
             END_IF;
-            IF FloorSensor_F8_Bottom THEN
+            IF floor_sensor_f8_bottom THEN
                 current_floor := 8;
             END_IF;
-            IF FloorSensor_F9_Bottom THEN
+            IF floor_sensor_f9_bottom THEN
                 current_floor := 9;
             END_IF;
-            IF CabinButton_F1 THEN
+            IF cabin_button_f1 THEN
                 target_floor := 1;
             END_IF;
-            IF CabinButton_F2 THEN
+            IF cabin_button_f2 THEN
                 target_floor := 2;
             END_IF;
-            IF CabinButton_F3 THEN
+            IF cabin_button_f3 THEN
                 target_floor := 3;
             END_IF;
-            IF CabinButton_F4 THEN
+            IF cabin_button_f4 THEN
                 target_floor := 4;
             END_IF;
-            IF CabinButton_F5 THEN
+            IF cabin_button_f5 THEN
                 target_floor := 5;
             END_IF;
-            IF CabinButton_F6 THEN
+            IF cabin_button_f6 THEN
                 target_floor := 6;
             END_IF;
-            IF CabinButton_F7 THEN
+            IF cabin_button_f7 THEN
                 target_floor := 7;
             END_IF;
-            IF CabinButton_F8 THEN
+            IF cabin_button_f8 THEN
                 target_floor := 8;
             END_IF;
-            IF CabinButton_F9 THEN
+            IF cabin_button_f9 THEN
                 target_floor := 9;
             END_IF;
-            IF FloorButton_F1 THEN
+            IF floor_button_f1 THEN
                 target_floor := 1;
             END_IF;
-            IF FloorButton_F2 THEN
+            IF floor_button_f2 THEN
                 target_floor := 2;
             END_IF;
-            IF FloorButton_F3 THEN
+            IF floor_button_f3 THEN
                 target_floor := 3;
             END_IF;
-            IF FloorButton_F4 THEN
+            IF floor_button_f4 THEN
                 target_floor := 4;
             END_IF;
-            IF FloorButton_F5 THEN
+            IF floor_button_f5 THEN
                 target_floor := 5;
             END_IF;
-            IF FloorButton_F6 THEN
+            IF floor_button_f6 THEN
                 target_floor := 6;
             END_IF;
-            IF FloorButton_F7 THEN
+            IF floor_button_f7 THEN
                 target_floor := 7;
             END_IF;
-            IF FloorButton_F8 THEN
+            IF floor_button_f8 THEN
                 target_floor := 8;
             END_IF;
-            IF FloorButton_F9 THEN
+            IF floor_button_f9 THEN
                 target_floor := 9;
             END_IF;
-            DoorOpen := TRUE;
+            door_open := TRUE;
             IF target_floor <> 0 THEN
                 state := 3; (* Moving *)
             END_IF;
         3: (* Moving *)
-            IF FloorSensor_F1_Bottom THEN
+            IF floor_sensor_f1_bottom THEN
                 current_floor := 1;
             END_IF;
-            IF FloorSensor_F2_Bottom THEN
+            IF floor_sensor_f2_bottom THEN
                 current_floor := 2;
             END_IF;
-            IF FloorSensor_F3_Bottom THEN
+            IF floor_sensor_f3_bottom THEN
                 current_floor := 3;
             END_IF;
-            IF FloorSensor_F4_Bottom THEN
+            IF floor_sensor_f4_bottom THEN
                 current_floor := 4;
             END_IF;
-            IF FloorSensor_F5_Bottom THEN
+            IF floor_sensor_f5_bottom THEN
                 current_floor := 5;
             END_IF;
-            IF FloorSensor_F6_Bottom THEN
+            IF floor_sensor_f6_bottom THEN
                 current_floor := 6;
             END_IF;
-            IF FloorSensor_F7_Bottom THEN
+            IF floor_sensor_f7_bottom THEN
                 current_floor := 7;
             END_IF;
-            IF FloorSensor_F8_Bottom THEN
+            IF floor_sensor_f8_bottom THEN
                 current_floor := 8;
             END_IF;
-            IF FloorSensor_F9_Bottom THEN
+            IF floor_sensor_f9_bottom THEN
                 current_floor := 9;
             END_IF;
             IF target_floor > current_floor THEN
@@ -195,14 +195,14 @@ END_FUNCTION_BLOCK
 
 FUNCTION_BLOCK ElevatorMiniMotor
 VAR_INPUT
-    ElevatorMotor_SensorD : BOOL;
-    ElevatorMotor_SensorU : BOOL;
+    elevator_motor_sensor_d : BOOL;
+    elevator_motor_sensor_u : BOOL;
 END_VAR
 VAR_OUTPUT
     is_done : BOOL;
-    ElevatorMotor_Down : BOOL;
-    ElevatorMotor_Stop : BOOL;
-    ElevatorMotor_Up : BOOL;
+    elevator_motor_down : BOOL;
+    elevator_motor_stop : BOOL;
+    elevator_motor_up : BOOL;
 END_VAR
 VAR_IN_OUT
     command : USINT;
@@ -216,13 +216,13 @@ VAR CONSTANT
     Command_Stop : USINT := 2;
 END_VAR
     IF state = 0 THEN (* первый скан *)
-        ElevatorMotor_Stop := TRUE;
+        elevator_motor_stop := TRUE;
         state := 2; (* Idle *)
     END_IF;
     CASE state OF
         1: (* Down *)
-            ElevatorMotor_Down := TRUE;
-            IF (command = Command_Stop) OR ElevatorMotor_SensorD THEN
+            elevator_motor_down := TRUE;
+            IF (command = Command_Stop) OR elevator_motor_sensor_d THEN
                 state := 3; (* Stop *)
             END_IF;
         2: (* Idle *)
@@ -234,12 +234,12 @@ END_VAR
                 state := 3; (* Stop *)
             END_IF;
         3: (* Stop *)
-            ElevatorMotor_Stop := TRUE;
-            ElevatorMotor_Stop := TRUE;
+            elevator_motor_stop := TRUE;
+            elevator_motor_stop := TRUE;
             state := 2; (* Idle *)
         4: (* Up *)
-            ElevatorMotor_Up := TRUE;
-            IF (command = Command_Stop) OR ElevatorMotor_SensorU THEN
+            elevator_motor_up := TRUE;
+            IF (command = Command_Stop) OR elevator_motor_sensor_u THEN
                 state := 3; (* Stop *)
             END_IF;
         5: (* END *)

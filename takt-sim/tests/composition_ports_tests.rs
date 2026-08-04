@@ -61,7 +61,7 @@ fn composition_submodel_ports_are_enumerated() {
 /// Читаемость порта под-модели композиции (страховка): чтение `Sensor`
 /// (значение по умолчанию `0` после 0086) не даёт `SIM-009` — порт в среде.
 /// Сквозная реакция на поданный вход проверяется driven-сценарием
-/// `examples/simulations/elevator_mini_floor2.json` (`FloorSensor_F2_Bottom` →
+/// `examples/simulations/elevator_mini_floor2.json` (`floor_sensor_f2_bottom` →
 /// `current_floor := 2`), прогоняемым `scripts/run_simulations.sh`.
 #[test]
 fn submodel_port_is_readable_in_composition() {

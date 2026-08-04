@@ -34,14 +34,14 @@ const EXTEND_COMPLEX_ENABLED: bool = true;
 /// Порт ввода-вывода модели. Реализация — за трейтом [`Hal`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InBitPort {
-    WAIT,
+    Wait,
 }
 
 /// Порт ввода-вывода модели. Реализация — за трейтом [`Hal`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutBitPort {
-    IDLE,
-    WORK,
+    Idle,
+    Work,
 }
 
 /// Аппаратный слой модели.
@@ -151,12 +151,12 @@ impl ExtendComplexB {
         }
         match self.state {
             ExtendComplexBState::Start => {
-                if hal.read_bit(InBitPort::WAIT) {
-                    hal.write_bit(OutBitPort::WORK, false);
-                    hal.write_bit(OutBitPort::IDLE, true);
+                if hal.read_bit(InBitPort::Wait) {
+                    hal.write_bit(OutBitPort::Work, false);
+                    hal.write_bit(OutBitPort::Idle, true);
                 } else {
-                    hal.write_bit(OutBitPort::IDLE, false);
-                    hal.write_bit(OutBitPort::WORK, true);
+                    hal.write_bit(OutBitPort::Idle, false);
+                    hal.write_bit(OutBitPort::Work, true);
                 }
                 self.state = ExtendComplexBState::End;
             }

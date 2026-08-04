@@ -299,7 +299,7 @@ fn emit_configuration(
     let mut warnings = Vec::new();
     let mut seen: Vec<String> = Vec::new();
     // Порты собираются со ВСЕХ моделей, а не только с корня: в `elevator_mini`
-    // они объявлены внутри под-моделей (`out ElevatorMotor_Up: bit;` в `Motor`).
+    // они объявлены внутри под-моделей (`out elevator_motor_up: bit;` в `Motor`).
     // Пропустить их значило бы оставить `VAR_EXTERNAL` без глобала — «the
     // external variable does not match with any global variable».
     for (model_name, model_rc) in blocks {

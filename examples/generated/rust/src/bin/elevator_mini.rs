@@ -22,7 +22,7 @@ struct Shaft {
     cabin_button: u8,
     /// Нажата кнопка «закрыть двери».
     close_button: bool,
-    /// Двери открыты (последняя запись в порт `DoorOpen`).
+    /// Двери открыты (последняя запись в порт `door_open`).
     door_open: bool,
     /// Команда мотору за такт: `Some(true)` = вверх, `Some(false)` = вниз,
     /// `None` = стоп.
@@ -41,7 +41,7 @@ impl Hal for Probe {
     fn read_bit(&mut self, port: InBitPort) -> bool {
         let s = self.0.borrow();
         match port {
-            InBitPort::CabinButtonDC => s.close_button,
+            InBitPort::CabinButtonDc => s.close_button,
             InBitPort::CabinButtonF1 => s.cabin_button == 1,
             InBitPort::CabinButtonF2 => s.cabin_button == 2,
             InBitPort::CabinButtonF3 => s.cabin_button == 3,
