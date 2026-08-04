@@ -22,8 +22,8 @@ local keywords = {
   ["formula"]=true, ["from"]=true, ["if"]=true, ["import"]=true, ["in"]=true,
   ["inout"]=true, ["invariant"]=true, ["loop"]=true, ["match"]=true,
   ["model"]=true, ["next"]=true, ["out"]=true, ["ref"]=true, ["return"]=true,
-  ["start"]=true, ["state"]=true, ["string"]=true, ["struct"]=true,
-  ["template"]=true, ["true"]=true, ["type"]=true, ["var"]=true,
+  ["start"]=true, ["state"]=true, ["struct"]=true,
+  ["true"]=true, ["type"]=true, ["var"]=true,
   ["while"]=true, ["LTL"]=true, ["Guard"]=true,
 }
 

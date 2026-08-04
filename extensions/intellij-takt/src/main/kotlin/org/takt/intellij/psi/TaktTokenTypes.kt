@@ -55,9 +55,9 @@ object TaktTokenTypes {
     @JvmField
     val KEYWORDS: Set<String> = setOf(
         "break", "const", "continue", "else", "false", "for", "fn", "if", "match",
-        "_", "import", "loop", "while", "return", "string", "true", "type", "as",
+        "_", "import", "loop", "while", "return", "true", "type", "as",
         "assembly", "formula", "in", "out", "inout", "address", "model", "state",
-        "start", "ref", "template", "cond", "var", "next", "extern", "enum",
+        "start", "ref", "cond", "var", "next", "extern", "enum",
         "struct", "from", "X", "F", "G", "U", "R", "LTL", "Guard",
         // `invariant` — сахар над `cond`+Guard (фича 0044); был пропущен в плагине.
         "invariant",

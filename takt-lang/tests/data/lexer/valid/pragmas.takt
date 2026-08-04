@@ -1,8 +1,0 @@
-// Директивы pragma (позитивный тест лексера)
-pragma version 1.0;
-pragma target stm32f4;
-pragma optimization size;
-
-model M {
-    start S;
-}

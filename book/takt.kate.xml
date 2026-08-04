@@ -48,7 +48,6 @@
       <item>struct</item>
       <item>const</item>
       <item>var</item>
-      <item>template</item>
       <item>formula</item>
       <item>assembly</item>
     </list>
@@ -65,7 +64,6 @@
       <item>i64</item>
       <item>float</item>
       <item>rational</item>
-      <item>string</item>
       <item>q</item>
     </list>
     <list name="constants">
