@@ -508,6 +508,18 @@ fn emit_function_block(
     // стандартная функция IEC), поэтому проверять надо именно эту строку.
     let fb_name = name.unique_camelcase();
     st_reserved::check_st_name(&fb_name, model.loc)?;
+    // Алфавит имени состояния (фича 0200): имя попадает в комментарий и в
+    // разбор `CASE`, и без проверки не-ASCII доехало бы до `iec2c`. ⚠️ Дыру
+    // нашёл тест по видам объявлений: у переменных и портов проверка была, у
+    // состояний — нет.
+    for state in model.states.values() {
+        let (state_name, loc) = match state {
+            crate::semantic::StateNode::Simple { name, loc, .. }
+            | crate::semantic::StateNode::Implement { name, loc, .. } => (name, *loc),
+            crate::semantic::StateNode::Unresolved => continue,
+        };
+        st_reserved::check_st_name(state_name, loc)?;
+    }
     let mut header = String::new();
     let _ = write!(header, "FUNCTION_BLOCK {}", fb_name);
     p.ident(&header).nl();

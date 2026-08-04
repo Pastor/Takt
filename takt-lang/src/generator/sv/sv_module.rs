@@ -409,7 +409,35 @@ pub(crate) fn check_sv_name(name: &str, loc: Location) -> Result<(), Diagnostic>
     if SV_KEYWORDS.contains(&name) {
         return Err(sv012(name, loc));
     }
+    if let Some(ch) = non_ascii_char(name) {
+        return Err(sv018(name, ch, loc));
+    }
     Ok(())
+}
+
+/// Первый символ имени вне алфавита идентификатора цели (или `None`).
+///
+/// Алфавит SystemVerilog — `[A-Za-z0-9_$]`; всё прочее `verilator` и `yosys`
+/// отвергают уже разбором.
+pub(crate) fn non_ascii_char(name: &str) -> Option<char> {
+    name.chars()
+        .find(|c| !(c.is_ascii_alphanumeric() || *c == '_' || *c == '$'))
+}
+
+/// Строит диагностику `SV-018` — символ вне алфавита идентификатора SV.
+///
+/// ⚠️ Отказ принадлежит **цели**, а не языку: `c` и `rust` такие имена
+/// переводят, и их гейты (`cc -Wall -Werror`, `clippy -D warnings`) вывод
+/// принимают (замер 2026-08-04). Прежде отказ приходил от `verilator` и **на
+/// порождённом файле** — автор видел `syntax error` в `.sv`, которого не писал.
+fn sv018(name: &str, ch: char, loc: Location) -> Diagnostic {
+    Diagnostic::error(
+        loc,
+        format!(
+            "имя '{name}' содержит символ '{ch}', недопустимый в идентификаторе              SystemVerilog: алфавит цели — латиница, цифры, '_' и '$'. Это НЕ              ограничение языка Takt — модель остаётся валидной для целей 'c',              'c-hal', 'rust' и 'plantuml'. Переименуйте элемент, если модель              нужна в аппаратуре"
+        ),
+    )
+    .with_code("SV-018")
 }
 
 /// Порт модуля, подготовленный к эмиссии.

@@ -47,6 +47,7 @@ use crate::generator::sv::sv_const;
 use crate::generator::sv::sv_expr::{Scope, print_condition, sv_enum_variant_name};
 use crate::generator::sv::sv_map::SvMap;
 use crate::generator::sv::sv_module::{SvPorts, check_sv_name};
+use crate::generator::sv::sv_names;
 use crate::generator::sv::sv_stmt::{
     emit_hoisted_locals, has_early_return, hoist_locals, print_statement,
 };
@@ -650,6 +651,11 @@ pub(crate) fn emit_state_enums(
         let Some(Element::Model { states, .. }) = map.model_element_of(name) else {
             continue;
         };
+        // Алфавит имени состояния (фича 0200): перечислитель печатается здесь,
+        // и без этой проверки не-ASCII имя доехало бы до `verilator`. ⚠️ Дыру
+        // нашёл тест по видам объявлений, а не чтение: у переменных, портов и
+        // функций проверка была, у состояний — нет.
+        sv_names::check_state_names(map, name)?;
         let variants = state_variants(name, &states);
         // Ширина — по диапазону значений (задача 0045-03). Значения назначает
         // генератор (0..n-1), поэтому формула вырождается в ⌈log₂(n)⌉ — то есть

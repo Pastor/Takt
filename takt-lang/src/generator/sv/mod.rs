@@ -43,6 +43,7 @@ mod sv_fsm;
 mod sv_map;
 mod sv_mmio;
 mod sv_module;
+mod sv_names;
 mod sv_stmt;
 mod sv_time;
 mod sv_type;
