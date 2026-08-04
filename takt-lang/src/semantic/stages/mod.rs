@@ -6,10 +6,12 @@
 use crate::diagnostics::{Diagnostic, FileTable};
 use crate::parser::ast::Model;
 use crate::semantic::ModelNode;
+pub(crate) mod body_stages;
+
 use crate::semantic::tree::{
     construct_model_stage0, construct_model_stage1, construct_model_stage2, construct_model_stage3,
-    construct_model_stage4, construct_model_stage5, construct_model_stage6,
 };
+use body_stages::{construct_model_stage4, construct_model_stage5, construct_model_stage6};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -20,9 +22,26 @@ use std::rc::Rc;
 /// уже построенное дерево. Порядок стадий описан здесь **один раз**:
 /// `construct_model_with_files` выражен через эту же функцию.
 ///
-/// ⚠️ Стадии остаются **терминальными** (решение ADR 0130): после ошибки
-/// построения дерево неполно, и продолжение дало бы сообщения о следствиях, а не
-/// о причинах.
+/// ⚠️ **Между стадиями** переход терминален (решение ADR 0130): выход каждой
+/// стадии — предпосылка для следующей, и продолжение через предпосылку дало бы
+/// сообщения о следствиях, а не о причинах.
+///
+/// ⚠️ **Внутри** стадий 4–6 диагностики **накапливаются** (фича 0152): их
+/// элементы — соседи (именованные блоки, тела функций), от разрешённого
+/// элемента не зависит другой, и проба показала, что вторая диагностика там —
+/// самостоятельная причина. Стадии 0–3 строят предпосылки (имена, составные
+/// состояния, переменные, `cond`) и остаются терминальными.
+///
+/// ⚠️ Наблюдаемую пользу дают стадии **4 и 5**. У стадии 6 накопление заведено
+/// ради единообразия, но входа, который отказал бы именно в ней, замер 0152 не
+/// нашёл: цель ребра разрешает стадия 0 (`SE-002`), а неразрешённое условие —
+/// `validate` (`SE-025`).
+///
+/// ⚠️ Неполное дерево **не покидает эту функцию**: при непустом списке ошибок
+/// наружу идёт `Err`, а дерево отбрасывается. Поэтому потребители — семь целей,
+/// симулятор и верификация — частично построенной модели не видят никогда, и
+/// признак неполноты не нужен: гарантия по построению сильнее проверки, которую
+/// каждый потребитель обязан помнить.
 /// `specialize == true` — режим `--parameters=specialize` (фича 0185): между
 /// стадиями 1 и 2 инстанцирования с аргументами заменяются копиями моделей с
 /// подставленными значениями. Точка выбрана не случайно: после стадии 1
@@ -34,18 +53,22 @@ pub(crate) fn construct_stages(
     search_paths: &[String],
     files: &mut FileTable,
     specialize: bool,
-) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
+) -> Result<Rc<RefCell<ModelNode>>, Vec<Diagnostic>> {
     // Стек путей файлов, чьи импорты сейчас обрабатываются.
     // Пустой на входе: текущая (корневая) единица компиляции не имеет пути.
     let mut import_stack: Vec<String> = Vec::new();
     let ast = model;
-    let model = construct_model_stage0(model, upper, search_paths, &mut import_stack, files)?;
+    // Стадии 0–3 терминальны: одна диагностика оборачивается в список, чтобы
+    // тип возврата был един для всех стадий.
+    let one = |d: Diagnostic| vec![d];
+    let model = construct_model_stage0(model, upper, search_paths, &mut import_stack, files)
+        .map_err(one)?;
     // Частота тактирования (фича 0134): собирается по АСД отдельным проходом —
     // она свойство единицы компиляции, а не отдельного элемента модели.
-    crate::semantic::time_ast::collect_clock(ast, &model)?;
-    let model = construct_model_stage1(model)?;
+    crate::semantic::time_ast::collect_clock(ast, &model).map_err(one)?;
+    let model = construct_model_stage1(model).map_err(one)?;
     if specialize {
-        crate::semantic::specialize::specialize_instantiations(&model)?;
+        crate::semantic::specialize::specialize_instantiations(&model).map_err(one)?;
         // Вывод константности (задача 0185-06) — **после** специализации и до
         // стадии 2: специализация подставляет значения в объявления
         // (`VariableNode::Simple`), а этот проход заменяет объявление
@@ -54,10 +77,16 @@ pub(crate) fn construct_stages(
         // (засада 0096) и опоздал бы к `after PARAM`/адресу порта.
         crate::semantic::parameter_const::constify_parameters(&model);
     }
-    let model = construct_model_stage2(model)?;
-    let model = construct_model_stage3(model)?;
+    let model = construct_model_stage2(model).map_err(one)?;
+    let model = construct_model_stage3(model).map_err(one)?;
     // Функции (этап 5) разрешаются перед именованными блоками (этап 4): блоки
     // always/enter/exit находят уже разрешённые функции через `search_func`.
+    //
+    // ⚠️ Переход между стадиями 5 → 4 → 6 остаётся терминальным несмотря на то,
+    // что каждая из них накапливает **внутри** себя: разрешённые функции —
+    // предпосылка для тел блоков, а тела блоков — для условий рёбер. Слить их
+    // накопления значило бы выпустить каскад, ради недопущения которого 0130 и
+    // сделала стадии терминальными.
     let model = construct_model_stage5(model)?;
     let model = construct_model_stage4(model)?;
     construct_model_stage6(model)

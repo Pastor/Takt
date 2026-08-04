@@ -136,3 +136,4 @@
 | 0200 | Идентификатор с не-ASCII буквами: язык принимает, цели sv и st не выражают | [0200-non-ascii-identifier-targets.md](0200-non-ascii-identifier-targets.md) | ✅ ПРОЙДЕН (отчёт: [reports/0200](../reports/0200-non-ascii-identifier-targets.md)) |
 | 0201 | Мёртвая лексика: слова и терминалы, которых грамматика не знает | [0201-dead-lexemes.md](0201-dead-lexemes.md) | ✅ ПРОЙДЕН (отчёт: [reports/0201](../reports/0201-dead-lexemes.md)) |
 | 0202 | taktc fmt печатает синтаксическую ошибку Debug-дампом | [0202-fmt-diagnostic-formatting.md](0202-fmt-diagnostic-formatting.md) | ✅ ПРОЙДЕН (отчёт: [reports/0202](../reports/0202-fmt-diagnostic-formatting.md)) |
+| 0152 | Восстановление на границе элемента в стадиях построения | [0152-semantic-recovery-element-boundary.md](0152-semantic-recovery-element-boundary.md) | ✅ ПРОЙДЕН (отчёт: [reports/0152](../reports/0152-semantic-recovery-element-boundary.md)) |

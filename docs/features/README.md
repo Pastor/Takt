@@ -164,7 +164,7 @@
 | [0149](./0149-claude-md-consistency-gate.md) | Гейт согласованности живого контекста CLAUDE.md | ADR + анализ + разработка 01–02 + тест-план + отчёт | ГОТОВО |
 | [0150](./0150-sim-positional-scenario-deprecation.md) | Признание позиционной формы сценария устаревшей | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0151](./0151-diagnostics-batch-within-check.md) | Накопление диагностик внутри отдельной проверки validate | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0152](./0152-semantic-recovery-element-boundary.md) | Восстановление на границе элемента в стадиях построения | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0152](./0152-semantic-recovery-element-boundary.md) | Восстановление на границе элемента в стадиях построения | [ADR](../adr/0152-semantic-recovery-element-boundary.md) · [анализ](../analyze/0152-semantic-recovery-element-boundary.md) · [тест-план](../tests/0152-semantic-recovery-element-boundary.md) · [отчёт](../reports/0152-semantic-recovery-element-boundary.md) · dev 01 | ГОТОВО |
 | [0153](./0153-lsp-workspace-index.md) | Индексация рабочей области для LSP (references/rename между файлами) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0154](./0154-intellij-server-rename.md) | Перевод плагина IntelliJ на серверный rename | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0155](./0155-semantic-nested-statement-resolution.md) | Семантическое разрешение тел вложенных операторов | ADR + анализ + разработка 01–03 + тест-план + отчёт | ГОТОВО |
