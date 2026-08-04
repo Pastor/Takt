@@ -93,6 +93,32 @@ fn collect_lam_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> 
     Ok(())
 }
 
+/// Печатает отказ форматирования в **общем** формате диагностики.
+///
+/// `path` — путь к файлу, если он есть (у `--stdin` его нет). Диагностика
+/// разбора приходит из библиотеки без файла (`file: None`): его знает только
+/// вызывающий, и он же проставляет — тем самым появляется префикс
+/// `путь:строка:колонка`, который `position_prefix` иначе выдать не может.
+///
+/// ⚠️ Формат берётся у [`takt_lang::diagnostics::format_compile_error`], а не
+/// пишется здесь заново: вид диагностики — её собственное свойство (ADR 0053),
+/// и вторая копия формата в `taktc` уже расходилась однажды (задача 0028-01).
+///
+/// ⚠️ Диагностики печатаются **построчно**: их бывает несколько (фича 0130), и
+/// вывод обязан совпадать с выводом `compile` строка в строку — именно это, а
+/// не отсутствие `Debug`-дампа, есть предмет фичи 0202.
+fn report_format_error(error: &takt_lang::format::FormatError, path: Option<&str>, what: &str) {
+    match error {
+        takt_lang::format::FormatError::Parse(diagnostics) => {
+            for diagnostic in diagnostics {
+                let stamped = diagnostic.clone().with_file_if_unset(path);
+                eprintln!("{}", takt_lang::diagnostics::format_compile_error(&stamped));
+            }
+        }
+        other => eprintln!("Ошибка форматирования {what}: {other}"),
+    }
+}
+
 /// Исполняет подкоманду `fmt`; возвращает код завершения процесса.
 ///
 /// Коды: `0` — всё канонично (или файлы отформатированы); `1` — при `--check`
@@ -120,7 +146,9 @@ fn run_fmt(options: &FmtOptions) -> i32 {
                 }
             }
             Err(e) => {
-                eprintln!("Ошибка форматирования stdin: {e}");
+                // Пути нет — префикс позиции будет пуст, и это верно:
+                // выдумывать координаты файла, которого не существует, нельзя.
+                report_format_error(&e, None, "stdin");
                 1
             }
         };
@@ -152,7 +180,8 @@ fn run_fmt(options: &FmtOptions) -> i32 {
             Err(e) => {
                 // Отказ форматтера — не «файл канонический». Сообщаем и считаем
                 // ошибкой: молча пропустить значило бы соврать в --check.
-                eprintln!("Ошибка форматирования '{}': {e}", file.display());
+                let path = file.display().to_string();
+                report_format_error(&e, Some(&path), &format!("'{path}'"));
                 failed += 1;
                 continue;
             }

@@ -135,3 +135,4 @@
 | 0199 | Форма model M = A & B { … } не работает ни в одной стороне | [0199-model-implements-brace-form.md](0199-model-implements-brace-form.md) | ✅ ПРОЙДЕН (отчёт: [reports/0199](../reports/0199-model-implements-brace-form.md)) |
 | 0200 | Идентификатор с не-ASCII буквами: язык принимает, цели sv и st не выражают | [0200-non-ascii-identifier-targets.md](0200-non-ascii-identifier-targets.md) | ✅ ПРОЙДЕН (отчёт: [reports/0200](../reports/0200-non-ascii-identifier-targets.md)) |
 | 0201 | Мёртвая лексика: слова и терминалы, которых грамматика не знает | [0201-dead-lexemes.md](0201-dead-lexemes.md) | ✅ ПРОЙДЕН (отчёт: [reports/0201](../reports/0201-dead-lexemes.md)) |
+| 0202 | taktc fmt печатает синтаксическую ошибку Debug-дампом | [0202-fmt-diagnostic-formatting.md](0202-fmt-diagnostic-formatting.md) | ✅ ПРОЙДЕН (отчёт: [reports/0202](../reports/0202-fmt-diagnostic-formatting.md)) |

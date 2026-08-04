@@ -361,3 +361,4 @@
 | 0201-01 | 0201 | Изъятие string и template из лексера и редакторского слоя | [0201-01-dead-lexemes.md](0201-01-dead-lexemes.md) |
 | 0201-02 | 0201 | Мёртвый механизм pragma и терминалы extern-блока | [0201-02-dead-lexemes.md](0201-02-dead-lexemes.md) |
 | 0201-03 | 0201 | Сторож согласованности лексера и грамматики; документ | [0201-03-dead-lexemes.md](0201-03-dead-lexemes.md) |
+| 0202-01 | 0202 | Диагностика разбора доезжает до вызывающего структурой | [0202-01-fmt-diagnostic-formatting.md](0202-01-fmt-diagnostic-formatting.md) |

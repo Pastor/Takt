@@ -26,6 +26,12 @@ use super::*;
 /// узел). Вызывающий обязан решить, что с этим делать: LSP-сервер логирует и
 /// отвечает `null`, потому что молча «отформатировать во что-то» хуже, чем не
 /// форматировать вовсе.
+///
+/// ⚠️ Ветвь [`FormatError::Parse`](crate::format::FormatError::Parse) несёт
+/// `Vec<Diagnostic>` **со структурой** (фича 0202), а не строку: при желании
+/// сервер волен превратить их в настоящие LSP-диагностики, а не только
+/// записать в журнал. Прежде здесь приходил `Debug`-дамп, из которого
+/// восстановить было нечего.
 pub fn formatting_edits(source: &str) -> Result<Option<Vec<TextEdit>>, crate::format::FormatError> {
     let formatted = crate::format::format_source(source)?;
     if formatted == source {
