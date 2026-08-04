@@ -2,8 +2,8 @@
 //!
 //! Пример проверяет композицию: последовательность `A → B → (C | D) → E`, где
 //! `C` и `D` идут параллельно, а `E` сама составная (`D → F`). Единственный
-//! наблюдаемый выход — пара портов `IDLE`/`WORK`, которые ставит `B` по входу
-//! `WAIT`; остальное видно только по факту завершения автомата.
+//! наблюдаемый выход — пара портов `idle`/`work`, которые ставит `B` по входу
+//! `wait`; остальное видно только по факту завершения автомата.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,14 +24,14 @@ struct Probe {
 impl Hal for Probe {
     fn read_bit(&mut self, port: InBitPort) -> bool {
         match port {
-            InBitPort::WAIT => self.wait,
+            InBitPort::Wait => self.wait,
         }
     }
 
     fn write_bit(&mut self, port: OutBitPort, value: bool) {
         let name = match port {
-            OutBitPort::IDLE => "IDLE",
-            OutBitPort::WORK => "WORK",
+            OutBitPort::Idle => "idle",
+            OutBitPort::Work => "work",
         };
         self.trace.borrow_mut().writes.push((name, value));
     }
@@ -67,12 +67,12 @@ fn run(wait: bool, limit: usize) -> (Vec<(&'static str, bool)>, Option<usize>) {
 const LIMIT: usize = 40;
 
 fn main() {
-    // WAIT поднят: B объявляет простой.
+    // wait поднят: B объявляет простой.
     let (writes, spent) = run(true, LIMIT);
     assert_eq!(
         writes,
-        [("WORK", false), ("IDLE", true)],
-        "при WAIT = 1 состояние B снимает WORK и поднимает IDLE"
+        [("work", false), ("idle", true)],
+        "при wait = 1 состояние B снимает work и поднимает idle"
     );
     assert_eq!(
         spent,
@@ -80,17 +80,17 @@ fn main() {
         "цепочка A → B → (C | D) → E завершается за 6 тактов"
     );
 
-    // WAIT снят: B объявляет работу.
+    // wait снят: B объявляет работу.
     let (writes, spent) = run(false, LIMIT);
     assert_eq!(
         writes,
-        [("IDLE", false), ("WORK", true)],
-        "при WAIT = 0 состояние B снимает IDLE и поднимает WORK"
+        [("idle", false), ("work", true)],
+        "при wait = 0 состояние B снимает idle и поднимает work"
     );
     assert_eq!(
         spent,
         Some(6),
-        "вход WAIT на длину цепочки не влияет — он меняет только порты"
+        "вход wait на длину цепочки не влияет — он меняет только порты"
     );
 
     println!("extend_complex: OK (композиция A → B → (C | D) → E завершается за 6 тактов)");

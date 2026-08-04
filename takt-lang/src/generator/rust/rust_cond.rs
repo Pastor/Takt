@@ -338,7 +338,7 @@ fn boolean_comparison(
 
 /// Печатает `&`/`|`, приводя операнды к `bool`.
 ///
-/// Операнд-порт (`ElevatorMotor_SensorU`) в Takt используется как условие
+/// Операнд-порт (`elevator_motor_sensor_u`) в Takt используется как условие
 /// напрямую; в Rust `bool & bool` законно, но `u8 & bool` — нет.
 fn cond_bool_binary(
     a: &ConditionNode,

@@ -480,7 +480,7 @@ pub(crate) struct SvPorts {
 /// Собирает порты **всех** моделей файла в единый набор.
 ///
 /// Порты берутся со всех моделей, а не только с корня: в `elevator_mini.takt`
-/// они объявлены внутри под-моделей (`out ElevatorMotor_Up: bit;` в `Motor`), а
+/// они объявлены внутри под-моделей (`out elevator_motor_up: bit;` в `Motor`), а
 /// модуль SV — **один на корневую модель** (композиция уплощается, ADR
 /// Option A′), поэтому его порты суть объединение портов уровней.
 ///
@@ -673,7 +673,7 @@ mod tests {
             "cmd_fork",
             "lift_request",
             "task_valid",
-            "ElevatorMotor_Up",
+            "elevator_motor_up",
             "sense_loaded",
             "current_floor",
         ] {

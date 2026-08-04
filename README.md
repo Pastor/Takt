@@ -347,26 +347,26 @@ model Motor {
     start Idle {
         ref Up:   command = Up;
         ref Down: command = Down;
-        enter { ElevatorMotor_Stop := true; }
+        enter { elevator_motor_stop := true; }
     }
     state Up {
-        ref Stop: command = Stop | ElevatorMotor_SensorU;
-        always   { ElevatorMotor_Up := true; }
+        ref Stop: command = Stop | elevator_motor_sensor_u;
+        always   { elevator_motor_up := true; }
     }
     state Down {
-        ref Stop: command = Stop | ElevatorMotor_SensorD;
-        always   { ElevatorMotor_Down := true; }
+        ref Stop: command = Stop | elevator_motor_sensor_d;
+        always   { elevator_motor_down := true; }
     }
     state Stop {
         next Idle;
-        always { ElevatorMotor_Stop := true; }
+        always { elevator_motor_stop := true; }
     }
 
-    out ElevatorMotor_Up:    bit;
-    out ElevatorMotor_Down:  bit;
-    out ElevatorMotor_Stop:  bit;
-    in  ElevatorMotor_SensorU: bit;
-    in  ElevatorMotor_SensorD: bit;
+    out elevator_motor_up:      bit;
+    out elevator_motor_down:    bit;
+    out elevator_motor_stop:    bit;
+    in  elevator_motor_sensor_u: bit;
+    in  elevator_motor_sensor_d: bit;
 }
 
 start Main = Cabin | Motor;   // параллельный запуск
@@ -819,8 +819,8 @@ start Idle {
 ```json
 [
   {
-    "in_ports": {"FloorSensor_F2_Bottom": 1},
-    "guard": {"out": {"DoorOpen": 1}, "vars": {"current_floor": 2}}
+    "in_ports": {"floor_sensor_f2_bottom": 1},
+    "guard": {"out": {"door_open": 1}, "vars": {"current_floor": 2}}
   },
   { "guard": {"vars": {"current_floor": 2}} }
 ]

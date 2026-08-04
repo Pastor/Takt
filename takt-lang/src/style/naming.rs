@@ -168,7 +168,7 @@ mod tests {
         assert!(Case::UpperCamel.matches("Idle2"));
         assert!(!Case::UpperCamel.matches("heater"));
         // Подчёркивание в UpperCamelCase недопустимо — на этом и попался
-        // `ElevatorMotor_Up` из корпуса.
+        // `ElevatorMotor_Up` корпуса (переименован в задаче 0226-02).
         assert!(!Case::UpperCamel.matches("ElevatorMotor_Up"));
     }
 

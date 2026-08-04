@@ -365,3 +365,4 @@
 | 0152-01 | 0152 | Накопление диагностик по соседям в стадиях 4-6 | [0152-01-semantic-recovery-element-boundary.md](0152-01-semantic-recovery-element-boundary.md) |
 | 0197-01 | 0197 | Раздел документа о стиле кода | [0197-01-language-code-style.md](0197-01-language-code-style.md) |
 | 0226-01 | 0226 | Слой стиля: предупреждение CS-001 в fmt и LSP | [0226-01-naming-convention-warning.md](0226-01-naming-convention-warning.md) |
+| 0226-02 | 0226 | Корпус приведён к канону именования | [0226-02-corpus-naming-canon.md](0226-02-corpus-naming-canon.md) |

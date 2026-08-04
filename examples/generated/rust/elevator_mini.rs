@@ -24,7 +24,7 @@ pub enum Command {
 /// Порт ввода-вывода модели. Реализация — за трейтом [`Hal`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InBitPort {
-    CabinButtonDC,
+    CabinButtonDc,
     CabinButtonF1,
     CabinButtonF2,
     CabinButtonF3,
@@ -118,7 +118,7 @@ impl ElevatorMiniCabin {
         match self.state {
             ElevatorMiniCabinState::AtFloor => {
                 hal.write_bit(OutBitPort::DoorOpen, true);
-                if hal.read_bit(InBitPort::CabinButtonDC) {
+                if hal.read_bit(InBitPort::CabinButtonDc) {
                     shared.command = Command::Stop;
                     self.state = ElevatorMiniCabinState::Idle;
                 }

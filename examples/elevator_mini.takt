@@ -24,35 +24,35 @@ model Motor {
         ref Down: command = Down;
         ref Stop: command = Stop;
         enter {
-            ElevatorMotor_Stop := true;
+            elevator_motor_stop := true;
         }
     }
     state Up {
-        ref Stop: command = Stop | ElevatorMotor_SensorU;
+        ref Stop: command = Stop | elevator_motor_sensor_u;
         always {
-            ElevatorMotor_Up := true;
+            elevator_motor_up := true;
         }
     }
     state Down {
-        ref Stop: command = Stop | ElevatorMotor_SensorD;
+        ref Stop: command = Stop | elevator_motor_sensor_d;
         always {
-            ElevatorMotor_Down := true;
+            elevator_motor_down := true;
         }
     }
     state Stop {
         next Idle;
         always {
-            ElevatorMotor_Stop := true;
+            elevator_motor_stop := true;
         }
     }
 
     // Выходные порты управления двигателем
-    out ElevatorMotor_Up: bit;
-    out ElevatorMotor_Down: bit;
-    out ElevatorMotor_Stop: bit;
+    out elevator_motor_up: bit;
+    out elevator_motor_down: bit;
+    out elevator_motor_stop: bit;
     // Входные порты концевых датчиков (аппаратная защита от перехода)
-    in ElevatorMotor_SensorU: bit;
-    in ElevatorMotor_SensorD: bit;
+    in elevator_motor_sensor_u: bit;
+    in elevator_motor_sensor_d: bit;
 }
 
 // ─── Модель кабины ────────────────────────────────────────────────────────────
@@ -65,94 +65,94 @@ model Cabin {
     start Idle {
         // Обновляем current_floor по нижнему датчику зоны этажа
         always {
-            if FloorSensor_F1_Bottom {
+            if floor_sensor_f1_bottom {
                 current_floor := 1;
             }
-            if FloorSensor_F2_Bottom {
+            if floor_sensor_f2_bottom {
                 current_floor := 2;
             }
-            if FloorSensor_F3_Bottom {
+            if floor_sensor_f3_bottom {
                 current_floor := 3;
             }
-            if FloorSensor_F4_Bottom {
+            if floor_sensor_f4_bottom {
                 current_floor := 4;
             }
-            if FloorSensor_F5_Bottom {
+            if floor_sensor_f5_bottom {
                 current_floor := 5;
             }
-            if FloorSensor_F6_Bottom {
+            if floor_sensor_f6_bottom {
                 current_floor := 6;
             }
-            if FloorSensor_F7_Bottom {
+            if floor_sensor_f7_bottom {
                 current_floor := 7;
             }
-            if FloorSensor_F8_Bottom {
+            if floor_sensor_f8_bottom {
                 current_floor := 8;
             }
-            if FloorSensor_F9_Bottom {
+            if floor_sensor_f9_bottom {
                 current_floor := 9;
             }
         }
         // Принимаем вызовы: кнопки кабины и кнопки вызова на этажах
         always {
-            if CabinButton_F1 {
+            if cabin_button_f1 {
                 target_floor := 1;
             }
-            if CabinButton_F2 {
+            if cabin_button_f2 {
                 target_floor := 2;
             }
-            if CabinButton_F3 {
+            if cabin_button_f3 {
                 target_floor := 3;
             }
-            if CabinButton_F4 {
+            if cabin_button_f4 {
                 target_floor := 4;
             }
-            if CabinButton_F5 {
+            if cabin_button_f5 {
                 target_floor := 5;
             }
-            if CabinButton_F6 {
+            if cabin_button_f6 {
                 target_floor := 6;
             }
-            if CabinButton_F7 {
+            if cabin_button_f7 {
                 target_floor := 7;
             }
-            if CabinButton_F8 {
+            if cabin_button_f8 {
                 target_floor := 8;
             }
-            if CabinButton_F9 {
+            if cabin_button_f9 {
                 target_floor := 9;
             }
-            if FloorButton_F1 {
+            if floor_button_f1 {
                 target_floor := 1;
             }
-            if FloorButton_F2 {
+            if floor_button_f2 {
                 target_floor := 2;
             }
-            if FloorButton_F3 {
+            if floor_button_f3 {
                 target_floor := 3;
             }
-            if FloorButton_F4 {
+            if floor_button_f4 {
                 target_floor := 4;
             }
-            if FloorButton_F5 {
+            if floor_button_f5 {
                 target_floor := 5;
             }
-            if FloorButton_F6 {
+            if floor_button_f6 {
                 target_floor := 6;
             }
-            if FloorButton_F7 {
+            if floor_button_f7 {
                 target_floor := 7;
             }
-            if FloorButton_F8 {
+            if floor_button_f8 {
                 target_floor := 8;
             }
-            if FloorButton_F9 {
+            if floor_button_f9 {
                 target_floor := 9;
             }
         }
         // Дверь открыта пока в Idle
         always {
-            DoorOpen := true;
+            door_open := true;
         }
         // Начать движение при наличии задания
         ref Moving: target_floor != 0;
@@ -165,31 +165,31 @@ model Cabin {
     state Moving {
         // Непрерывно обновляем current_floor по датчикам
         always {
-            if FloorSensor_F1_Bottom {
+            if floor_sensor_f1_bottom {
                 current_floor := 1;
             }
-            if FloorSensor_F2_Bottom {
+            if floor_sensor_f2_bottom {
                 current_floor := 2;
             }
-            if FloorSensor_F3_Bottom {
+            if floor_sensor_f3_bottom {
                 current_floor := 3;
             }
-            if FloorSensor_F4_Bottom {
+            if floor_sensor_f4_bottom {
                 current_floor := 4;
             }
-            if FloorSensor_F5_Bottom {
+            if floor_sensor_f5_bottom {
                 current_floor := 5;
             }
-            if FloorSensor_F6_Bottom {
+            if floor_sensor_f6_bottom {
                 current_floor := 6;
             }
-            if FloorSensor_F7_Bottom {
+            if floor_sensor_f7_bottom {
                 current_floor := 7;
             }
-            if FloorSensor_F8_Bottom {
+            if floor_sensor_f8_bottom {
                 current_floor := 8;
             }
-            if FloorSensor_F9_Bottom {
+            if floor_sensor_f9_bottom {
                 current_floor := 9;
             }
         }
@@ -210,62 +210,62 @@ model Cabin {
     state AtFloor {
         // Дверь открыта всё время пребывания на этаже
         always {
-            DoorOpen := true;
+            door_open := true;
         }
         enter {
             command := Stop;
             target_floor := 0;
         }
         // Ждём нажатия кнопки закрытия двери (DC = Door Close)
-        ref Idle: CabinButton_DC;
+        ref Idle: cabin_button_dc;
     }
 
     // Выходные порты двери
-    out DoorOpen: bit;
+    out door_open: bit;
 
     // Входные порты: кнопки вызова на этажах
-    in FloorButton_F1: bit;
-    in FloorButton_F2: bit;
-    in FloorButton_F3: bit;
-    in FloorButton_F4: bit;
-    in FloorButton_F5: bit;
-    in FloorButton_F6: bit;
-    in FloorButton_F7: bit;
-    in FloorButton_F8: bit;
-    in FloorButton_F9: bit;
+    in floor_button_f1: bit;
+    in floor_button_f2: bit;
+    in floor_button_f3: bit;
+    in floor_button_f4: bit;
+    in floor_button_f5: bit;
+    in floor_button_f6: bit;
+    in floor_button_f7: bit;
+    in floor_button_f8: bit;
+    in floor_button_f9: bit;
 
     // Входные порты: датчики зоны этажа (Top = верхняя граница, Bottom = нижняя)
-    in FloorSensor_F1_Top: bit;
-    in FloorSensor_F1_Bottom: bit;
-    in FloorSensor_F2_Top: bit;
-    in FloorSensor_F2_Bottom: bit;
-    in FloorSensor_F3_Top: bit;
-    in FloorSensor_F3_Bottom: bit;
-    in FloorSensor_F4_Top: bit;
-    in FloorSensor_F4_Bottom: bit;
-    in FloorSensor_F5_Top: bit;
-    in FloorSensor_F5_Bottom: bit;
-    in FloorSensor_F6_Top: bit;
-    in FloorSensor_F6_Bottom: bit;
-    in FloorSensor_F7_Top: bit;
-    in FloorSensor_F7_Bottom: bit;
-    in FloorSensor_F8_Top: bit;
-    in FloorSensor_F8_Bottom: bit;
-    in FloorSensor_F9_Top: bit;
-    in FloorSensor_F9_Bottom: bit;
+    in floor_sensor_f1_top: bit;
+    in floor_sensor_f1_bottom: bit;
+    in floor_sensor_f2_top: bit;
+    in floor_sensor_f2_bottom: bit;
+    in floor_sensor_f3_top: bit;
+    in floor_sensor_f3_bottom: bit;
+    in floor_sensor_f4_top: bit;
+    in floor_sensor_f4_bottom: bit;
+    in floor_sensor_f5_top: bit;
+    in floor_sensor_f5_bottom: bit;
+    in floor_sensor_f6_top: bit;
+    in floor_sensor_f6_bottom: bit;
+    in floor_sensor_f7_top: bit;
+    in floor_sensor_f7_bottom: bit;
+    in floor_sensor_f8_top: bit;
+    in floor_sensor_f8_bottom: bit;
+    in floor_sensor_f9_top: bit;
+    in floor_sensor_f9_bottom: bit;
 
     // Входные порты: кнопки кабины (F1–F9, DO = открыть дверь, DC = закрыть дверь)
-    in CabinButton_F1: bit;
-    in CabinButton_F2: bit;
-    in CabinButton_F3: bit;
-    in CabinButton_F4: bit;
-    in CabinButton_F5: bit;
-    in CabinButton_F6: bit;
-    in CabinButton_F7: bit;
-    in CabinButton_F8: bit;
-    in CabinButton_F9: bit;
-    in CabinButton_DO: bit;
-    in CabinButton_DC: bit;
+    in cabin_button_f1: bit;
+    in cabin_button_f2: bit;
+    in cabin_button_f3: bit;
+    in cabin_button_f4: bit;
+    in cabin_button_f5: bit;
+    in cabin_button_f6: bit;
+    in cabin_button_f7: bit;
+    in cabin_button_f8: bit;
+    in cabin_button_f9: bit;
+    in cabin_button_do: bit;
+    in cabin_button_dc: bit;
 }
 
 start Main = Cabin | Motor;
