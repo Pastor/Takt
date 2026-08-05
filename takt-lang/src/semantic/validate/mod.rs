@@ -18,7 +18,7 @@
 //!   [`check_implicit_bool_conditions`].
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::parser::{ast as ast_types, ast};
+use crate::parser::ast;
 use crate::semantic::condition::resolve_condition;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{

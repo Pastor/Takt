@@ -374,3 +374,4 @@
 | 0230-01 | 0230 | Сторож форматтера: корпус восстановлен, KNOWN_GAPS с ратчетом | [0230-01-format-corpus-sentinel.md](0230-01-format-corpus-sentinel.md) |
 | 0231-01 | 0231 | Текст диагностики без внутреннего представления | [0231-01-diagnostic-text-no-debug.md](0231-01-diagnostic-text-no-debug.md) |
 | 0232-01 | 0232 | Предупреждение о неявной булевости доезжает до пользователя | [0232-01-implicit-bool-warning-delivery.md](0232-01-implicit-bool-warning-delivery.md) |
+| 0233-01 | 0233 | Правило булевости условия — одно | [0233-01-single-boolean-predicate.md](0233-01-single-boolean-predicate.md) |
