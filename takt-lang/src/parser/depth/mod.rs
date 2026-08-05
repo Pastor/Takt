@@ -172,7 +172,7 @@ fn node_loc(node: NodeRef<'_>) -> Option<Location> {
         NodeRef::State(state) => Some(state.loc),
         NodeRef::Function(function) => Some(function.loc),
         NodeRef::Parameter(parameter) => Some(parameter.loc),
-        NodeRef::Statement(statement) => Some(statement_loc(statement)),
+        NodeRef::Statement(statement) => Some(statement.loc()),
         NodeRef::MatchArm(arm) => Some(arm.loc),
         NodeRef::NamedArgument(argument) => Some(argument.loc),
         NodeRef::Expression(expression) => Some(expression.loc()),
@@ -187,31 +187,6 @@ fn node_loc(node: NodeRef<'_>) -> Option<Location> {
         | NodeRef::InlineFormula(_)
         | NodeRef::FormulaStatement(_)
         | NodeRef::FormulaExpression(_) => None,
-    }
-}
-
-/// Позиция оператора.
-fn statement_loc(statement: &ast::Statement) -> Location {
-    match statement {
-        ast::Statement::Block { loc, .. }
-        | ast::Statement::Assembly { loc, .. }
-        | ast::Statement::Formula { loc, .. }
-        | ast::Statement::Args(loc, _)
-        | ast::Statement::If(loc, _, _, _)
-        | ast::Statement::Loop(loc, _, _, _)
-        | ast::Statement::Expression(loc, _)
-        | ast::Statement::Variable(loc, _, _)
-        | ast::Statement::For(loc, _, _, _, _)
-        | ast::Statement::Continue(loc)
-        | ast::Statement::Break(loc)
-        | ast::Statement::Return(loc, _)
-        | ast::Statement::Error(loc)
-        | ast::Statement::StraySemicolon(loc)
-        | ast::Statement::Match(loc, _, _) => *loc,
-        ast::Statement::InlineFormula(formula) => match formula.as_ref() {
-            ast::InlineFormulaDefine::Guard { loc, .. }
-            | ast::InlineFormulaDefine::Ltl { loc, .. } => *loc,
-        },
     }
 }
 

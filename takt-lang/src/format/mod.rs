@@ -45,11 +45,16 @@ pub enum FormatError {
     ///
     /// Диагностик может быть несколько: разбор их накапливает (фича 0130).
     Parse(Vec<crate::diagnostics::Diagnostic>),
-    /// Узел АСД пока не поддержан печатью.
+    /// Узел АСД пока не поддержан печатью — диагностика **`FM-001`**.
     ///
     /// Явный отказ: печатать «что-нибудь» вместо неизвестного узла означало бы
     /// молча портить исходник пользователя.
-    Unsupported(String),
+    ///
+    /// Несёт [`Diagnostic`](crate::diagnostics::Diagnostic) — позицию, код и
+    /// текст (фича 0229). Прежде здесь была голая строка: пользователь узнавал
+    /// **вид** узла, но не место, и в большом файле искал его грепом. Позиция у
+    /// узла есть всегда — терялась она на границе типа ошибки.
+    Unsupported(crate::diagnostics::Diagnostic),
 }
 
 impl std::fmt::Display for FormatError {
@@ -72,14 +77,34 @@ impl std::fmt::Display for FormatError {
                     .join("\n");
                 write!(f, "{text}")
             }
-            FormatError::Unsupported(node) => {
-                write!(f, "печать узла '{node}' пока не поддерживается форматтером")
+            FormatError::Unsupported(diagnostic) => {
+                write!(
+                    f,
+                    "{}",
+                    crate::diagnostics::format_compile_error(diagnostic)
+                )
             }
         }
     }
 }
 
 impl std::error::Error for FormatError {}
+
+/// Строит отказ печати узла — диагностику **`FM-001`** с позицией.
+///
+/// ⚠️ Единственная точка, где рождается [`FormatError::Unsupported`]: код и
+/// текст пишутся **один раз**. Шесть мест отказа, собиравших сообщение порознь,
+/// разошлись бы формулировками — а сообщение о непокрытом узле пользователь
+/// видит вместо своего файла и должен по нему понять, что именно не печатается.
+pub(crate) fn unsupported(loc: crate::diagnostics::Location, node: &str) -> FormatError {
+    FormatError::Unsupported(
+        crate::diagnostics::Diagnostic::error(
+            loc,
+            format!("печать узла '{node}' пока не поддерживается форматтером"),
+        )
+        .with_code("FM-001"),
+    )
+}
 
 /// Накопитель канонического текста с отступами и курсором комментариев.
 pub(crate) struct Out<'a> {
@@ -399,7 +424,7 @@ fn print_element_inner(
         }
         ast::ModelElement::Function(f) => print_function(out, f),
         // Узлы, печать которых относится к последующим задачам фичи.
-        ast::ModelElement::Formula(_) => Err(FormatError::Unsupported("Formula".to_string())),
+        ast::ModelElement::Formula(_) => Err(unsupported(loc, "formula")),
         ast::ModelElement::Condition(c) => {
             // `cond Имя = условие;` — печатается ПЕЧАТЬЮ УСЛОВИЙ, а не выражений:
             // `=` здесь равенство (инвариант ADR 0019).

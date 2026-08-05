@@ -103,7 +103,17 @@ fn a1_a3_corpus_report() {
         }
 
         match format_source(&source) {
-            Err(FormatError::Unsupported(node)) => unsupported.push((name, node)),
+            // Фича 0229: отказ несёт диагностику, а не строку. Вид узла берём из
+            // текста — он там в кавычках, и именно он интересен гейту ниже.
+            Err(FormatError::Unsupported(diagnostic)) => {
+                let kind = diagnostic
+                    .message
+                    .split('\'')
+                    .nth(1)
+                    .unwrap_or(&diagnostic.message)
+                    .to_string();
+                unsupported.push((name, kind));
+            }
             Err(FormatError::Parse(_)) => parse_failures += 1,
             Ok(once) => {
                 formatted += 1;

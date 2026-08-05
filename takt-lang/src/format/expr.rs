@@ -101,9 +101,9 @@ pub(crate) fn expression(expr: &ast::Expression) -> Result<String, FormatError> 
         ),
 
         // ── Пока не поддержаны — отказ, а не порча исходника ─────────────────
-        E::CodeBlock(_, _, _) => return Err(FormatError::Unsupported("CodeBlock".to_string())),
-        E::NamedFunction(_, _, _) => {
-            return Err(FormatError::Unsupported("NamedFunction".to_string()));
+        E::CodeBlock(loc, _, _) => return Err(super::unsupported(*loc, "блок кода")),
+        E::NamedFunction(loc, _, _) => {
+            return Err(super::unsupported(*loc, "именованная функция"));
         }
     })
 }
@@ -218,7 +218,15 @@ pub(crate) fn ty(t: &ast::Type) -> Result<String, FormatError> {
             element_type,
             ..
         } => format!("[{}; {element_count}]", ty(element_type)?),
-        T::Function { .. } => return Err(FormatError::Unsupported("Type::Function".to_string())),
+        // ⚠️ Позиции у `Type::Function` в АСД нет, и взять её неоткуда: узел
+        // грамматикой **не строится** (мёртвый узел, класс фичи 0201). Появится
+        // правило — вместе с ним появится и `loc`, который сюда протянут.
+        T::Function { .. } => {
+            return Err(super::unsupported(
+                crate::diagnostics::Location::Implicit,
+                "тип-функция",
+            ));
+        }
     })
 }
 
