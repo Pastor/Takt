@@ -73,7 +73,15 @@ fn condition_label(cond: &ConditionNode) -> String {
         ConditionNode::NotEqual(l, r) => {
             format!("{} != {}", condition_label(l), condition_label(r))
         }
-        ConditionNode::BitAccess(c, m) => format!("{}.{m:?}", condition_label(c)),
+        // ⚠️ Член печатается как в исходнике (`x.0`, `x.field`), а не
+        // `Debug`-дампом `Number(0)` (фича 0231).
+        ConditionNode::BitAccess(c, m) => {
+            let member = match m {
+                takt_lang::parser::ast::Member::Identifier(id) => id.name.clone(),
+                takt_lang::parser::ast::Member::Number(n) => n.to_string(),
+            };
+            format!("{}.{member}", condition_label(c))
+        }
         ConditionNode::ArraySubscript(v, idx) => {
             format!("{}[{}]", v.borrow().name(), condition_label(idx))
         }

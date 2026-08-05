@@ -33,9 +33,15 @@ fn const_expr_string(expr: &ExpressionNode, name: &str) -> Result<String, Diagno
         }
         format!("{{{}}}", parts.join(", "))
     } else {
-        return Err(format!("Unresolved constant '{}' value: {:?}", name, expr)
-            .as_str()
-            .into());
+        // ⚠️ Без `Debug`-дампа выражения (фича 0231): сообщение читает автор
+        // программы. Ветвь защитная — до неё доходит только значение, не
+        // свёрнутое семантикой, а такое отвергается раньше (`SE-003`).
+        return Err(format!(
+            "значение константы '{name}' не вычислено при компиляции: \
+             в цель C можно эмитить только константу с известным значением"
+        )
+        .as_str()
+        .into());
     })
 }
 

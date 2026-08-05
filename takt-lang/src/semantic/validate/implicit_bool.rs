@@ -124,7 +124,9 @@ pub(super) fn ast_condition_summary(
                 .map(|var| match var {
                     VariableNode::Simple { ty, .. }
                     | VariableNode::Port { ty, .. }
-                    | VariableNode::Const { ty, .. } => format!("{:?}", ty),
+                    // Через `Display`, а не `Debug` (фича 0231): автор читает
+                    // `u8`, а не `Integer { bits: 8, signed: false }`.
+                    | VariableNode::Const { ty, .. } => ty.to_string(),
                     VariableNode::Unresolved => "?".to_string(),
                 })
                 .unwrap_or_else(|| "?".to_string());
