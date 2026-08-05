@@ -4,24 +4,28 @@
 
 use super::*;
 
-pub(super) fn validate_variables(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+pub(super) fn validate_variables(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let borrowed = model.borrow();
+    // Накопление по ОБЪЯВЛЕНИЯМ (фича 0151): внутри одного выражения остаётся
+    // первая ошибка — дальше пошли бы следствия, — но соседнее объявление
+    // высказывается своим сообщением.
+    let mut out = Vec::new();
     for variable in borrowed.variables.values() {
         match variable {
             VariableNode::Unresolved => {}
             VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } => {
-                validate_expression(expr, model.clone())?;
+                out.extend(validate_expression(expr, model.clone()).err());
             }
             // У порта выражений два (фича 0187): размещение и начальное
             // значение. Проверять надо оба — имена в адресе (`at BASE + 4`)
             // такие же настоящие, как в значении.
             VariableNode::Port { address, init, .. } => {
-                validate_expression(address, model.clone())?;
-                validate_expression(init, model.clone())?;
+                out.extend(validate_expression(address, model.clone()).err());
+                out.extend(validate_expression(init, model.clone()).err());
             }
         }
     }
-    Ok(())
+    out
 }
 
 /// Фича 0020 (задача 0020-04): предупреждения о портах без адреса, попадающих
@@ -106,45 +110,56 @@ fn collect_incomplete_addresses(
 /// Приоритет источников (inline < `address` < внешняя карта) и построение
 /// `AddressMap` для потребителей — задачи 0020-03/0020-05. Здесь достаточно
 /// гарантировать однозначность источника адреса внутри модели.
-pub(super) fn check_port_addresses(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+pub(super) fn check_port_addresses(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let borrowed = model.borrow();
     let mut bound_by_address: HashSet<&str> = HashSet::new();
+    // Накопление по ОПЕРАТОРАМ `address` (фича 0151): каждая привязка
+    // самостоятельна, и вторая ошибочная не является следствием первой.
+    let mut out = Vec::new();
     for def in &borrowed.address_defs {
         // R5: адрес должен ссылаться на существующий порт.
         let Some(VariableNode::Port { address, .. }) = borrowed.variables.get(&def.port) else {
-            return Err(Diagnostic::error(
-                def.loc,
-                format!(
-                    "оператор `address` ссылается на несуществующий порт '{}'",
-                    def.port
-                ),
-            )
-            .with_code("SE-048"));
+            out.push(
+                Diagnostic::error(
+                    def.loc,
+                    format!(
+                        "оператор `address` ссылается на несуществующий порт '{}'",
+                        def.port
+                    ),
+                )
+                .with_code("SE-048"),
+            );
+            continue;
         };
         // R4: несколько операторов `address` для одного порта.
         if !bound_by_address.insert(def.port.as_str()) {
-            return Err(Diagnostic::error(
-                def.loc,
-                format!(
-                    "адрес порта '{}' задан оператором `address` более одного раза",
-                    def.port
-                ),
-            )
-            .with_code("SE-049"));
+            out.push(
+                Diagnostic::error(
+                    def.loc,
+                    format!(
+                        "адрес порта '{}' задан оператором `address` более одного раза",
+                        def.port
+                    ),
+                )
+                .with_code("SE-049"),
+            );
+            continue;
         }
         // R4: адрес задан и inline-инициализатором, и оператором `address`.
         if !matches!(address, ExpressionNode::None) {
-            return Err(Diagnostic::error(
-                def.loc,
-                format!(
-                    "адрес порта '{}' задан одновременно inline и оператором `address`",
-                    def.port
-                ),
-            )
-            .with_code("SE-049"));
+            out.push(
+                Diagnostic::error(
+                    def.loc,
+                    format!(
+                        "адрес порта '{}' задан одновременно inline и оператором `address`",
+                        def.port
+                    ),
+                )
+                .with_code("SE-049"),
+            );
         }
     }
-    Ok(())
+    out
 }
 
 /// Возвращает предупреждения о портах, объявленных во вложенных (не корневых) моделях.

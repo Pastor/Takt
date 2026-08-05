@@ -13,12 +13,12 @@ use super::*;
 ///
 /// Возвращает [`Diagnostic`], если модель содержит состояния, но
 /// начальных состояний не ровно одно (0 или ≥ 2).
-pub(super) fn model_only_one_start_state(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+pub(super) fn model_only_one_start_state(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let borrowed = model.borrow();
 
     // Модель без состояний допустима (только переменные/типы/условия)
     if borrowed.states.is_empty() {
-        return Ok(());
+        return Vec::new();
     }
 
     let name = borrowed.name.clone().unwrap_or_default();
@@ -40,31 +40,36 @@ pub(super) fn model_only_one_start_state(model: Rc<RefCell<ModelNode>>) -> Resul
         .count();
 
     if start_count != 1 {
-        return Err(Diagnostic::error(
-            borrowed.loc,
-            format!(
-                "В модели '{}' должно быть только одно начальное состояние (найдено: {})",
-                name, start_count
-            ),
-        )
-        .with_code("SE-011"));
+        return vec![
+            Diagnostic::error(
+                borrowed.loc,
+                format!(
+                    "В модели '{}' должно быть только одно начальное состояние (найдено: {})",
+                    name, start_count
+                ),
+            )
+            .with_code("SE-011"),
+        ];
     }
-    Ok(())
+    Vec::new()
 }
 
-pub(super) fn validate_state_references(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+pub(super) fn validate_state_references(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let borrowed = model.borrow();
+    let mut out = Vec::new();
     for state in borrowed.states.values() {
         match state {
             StateNode::Simple { references, .. } | StateNode::Implement { references, .. } => {
+                // Накопление по РЁБРАМ (фича 0151): каждое ребро — своё
+                // нарушение, и второе не является следствием первого.
                 for reference in references {
-                    validate_reference(reference, model.clone())?;
+                    out.extend(validate_reference(reference, model.clone()).err());
                 }
             }
             StateNode::Unresolved => {}
         }
     }
-    Ok(())
+    out
 }
 
 /// Проверяет полноту и достижимость переходов в модели конечного автомата.

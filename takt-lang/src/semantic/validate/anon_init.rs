@@ -18,10 +18,10 @@
 use super::*;
 
 /// Проверяет инициализаторы объявлений модели на анонимное обращение.
-pub(super) fn validate_anon_in_initializers(
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<(), Diagnostic> {
+pub(super) fn validate_anon_in_initializers(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let borrowed = model.borrow();
+    // Накопление по объявлениям (фича 0151).
+    let mut out = Vec::new();
     for variable in borrowed.variables.values() {
         match variable {
             VariableNode::Unresolved => {}
@@ -31,7 +31,7 @@ pub(super) fn validate_anon_in_initializers(
             | VariableNode::Const {
                 expr, loc, name, ..
             } => {
-                check(expr, *loc, name)?;
+                out.extend(check(expr, *loc, name).err());
             }
             // У порта два выражения (фича 0187): размещение и начальное
             // значение. Обращение к ячейке незаконно в обоих — в адресе оно к
@@ -43,12 +43,12 @@ pub(super) fn validate_anon_in_initializers(
                 name,
                 ..
             } => {
-                check(address, *loc, name)?;
-                check(init, *loc, name)?;
+                out.extend(check(address, *loc, name).err());
+                out.extend(check(init, *loc, name).err());
             }
         }
     }
-    Ok(())
+    out
 }
 
 /// Ищет обращение к ячейке в выражении инициализатора.

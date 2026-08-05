@@ -55,19 +55,21 @@ fn check_bit_variable_value(
 /// # Ошибки
 ///
 /// Пробрасывает [`Diagnostic`] из [`check_bit_variable_value`].
-pub(super) fn validate_bit_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+pub(super) fn validate_bit_values(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let borrowed = model.borrow();
+    // Накопление по объявлениям (фича 0151).
+    let mut out = Vec::new();
     for var in borrowed.variables.values() {
         match var {
             VariableNode::Simple { name, ty, expr, .. }
             | VariableNode::Const { name, ty, expr, .. } => {
-                check_bit_variable_value(name, ty, expr, var.loc())?;
+                out.extend(check_bit_variable_value(name, ty, expr, var.loc()).err());
             }
             // Порт: инициализатор — адрес, не значение (фича 0070); не проверяем.
             VariableNode::Port { .. } | VariableNode::Unresolved => {}
         }
     }
-    Ok(())
+    out
 }
 
 /// Проверяет, что все переменные, тип которых — [`TypeNode::Enum`], ссылаются
@@ -94,9 +96,7 @@ pub(super) fn validate_bit_values(model: Rc<RefCell<ModelNode>>) -> Result<(), D
 /// # Ошибки
 ///
 /// Возвращает [`Diagnostic`]-ошибку при первой переменной с необъявленным типом enum.
-pub(super) fn validate_enum_type_declarations(
-    model: Rc<RefCell<ModelNode>>,
-) -> Result<(), Diagnostic> {
+pub(super) fn validate_enum_type_declarations(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // Собираем (имя переменной, тип, loc) без удержания заимствования
     let vars: Vec<(String, TypeNode, Location)> = model
         .borrow()
@@ -110,22 +110,27 @@ pub(super) fn validate_enum_type_declarations(
         })
         .collect();
 
+    // Накопление по объявлениям (фича 0151): второе объявление с неизвестным
+    // перечислением — самостоятельное нарушение, а не следствие первого.
+    let mut out = Vec::new();
     for (var_name, ty, loc) in vars {
         if let TypeNode::Enum(enum_name) = &ty
             && model.borrow().search_enum(enum_name).is_none()
         {
-            return Err(Diagnostic::declaration_error(
-                loc,
-                format!(
-                    "переменная '{}' объявлена с типом '{}', \
-                     но перечисление '{}' не найдено в области видимости",
-                    var_name, enum_name, enum_name
-                ),
-            )
-            .with_code("SE-035"));
+            out.push(
+                Diagnostic::declaration_error(
+                    loc,
+                    format!(
+                        "переменная '{}' объявлена с типом '{}', \
+                         но перечисление '{}' не найдено в области видимости",
+                        var_name, enum_name, enum_name
+                    ),
+                )
+                .with_code("SE-035"),
+            );
         }
     }
-    Ok(())
+    out
 }
 
 /// Проверяет инициализатор переменной типа enum.
@@ -181,7 +186,7 @@ fn check_enum_variable_value(
 /// # Ошибки
 ///
 /// Пробрасывает [`Diagnostic`] из [`check_enum_variable_value`].
-pub(super) fn validate_enum_values(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+pub(super) fn validate_enum_values(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // Собираем данные без удержания заимствования
     let vars: Vec<(String, TypeNode, ExpressionNode, Location)> = model
         .borrow()
@@ -195,10 +200,12 @@ pub(super) fn validate_enum_values(model: Rc<RefCell<ModelNode>>) -> Result<(), 
             _ => None,
         })
         .collect();
+    // Накопление по объявлениям (фича 0151).
+    let mut out = Vec::new();
     for (name, ty, expr, loc) in &vars {
-        check_enum_variable_value(name, ty, expr, *loc, &model)?;
+        out.extend(check_enum_variable_value(name, ty, expr, *loc, &model).err());
     }
-    Ok(())
+    out
 }
 
 /// Проверяет, является ли числовое значение допустимым для перечисления.

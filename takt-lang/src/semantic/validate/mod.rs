@@ -114,8 +114,14 @@ pub fn validate_model(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
 pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let mut found = Vec::new();
 
-    // Проверки, устроенные как «первая ошибка»: каждая добавляет не более одной.
-    let single: [Result<(), Diagnostic>; 11] = [
+    // ⚠️ Каждая проверка **накапливает** (фича 0151): прежде все одиннадцать
+    // отдавали `Result<(), Diagnostic>` — не более одной ошибки на модель, — и
+    // две неверные переменные давали одно сообщение. Правило накопления:
+    // **одна диагностика на элемент, все элементы высказываются**; внутри
+    // одного выражения ранний выход сохранён, потому что дальше по нему пошли
+    // бы следствия первой ошибки (тот же довод, которым 0152 оставила
+    // терминальными стадии построения дерева).
+    let checks: [Vec<Diagnostic>; 11] = [
         model_only_one_start_state(model.clone()),
         // SE-099 (0189): обращение к ячейке в инициализаторе объявления. Без
         // запрета эталон дал бы ноль, а `c-hal` — чтение регистра, и молча.
@@ -130,7 +136,7 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
         check_port_addresses(model.clone()),
         check_fixed_mixing(model.clone()), // T6 (0061): запрет смешения q(m, n)
     ];
-    found.extend(single.into_iter().filter_map(Result::err));
+    found.extend(checks.into_iter().flatten());
 
     // Ce16: рекурсивные псевдонимы — проверка отдаёт все циклы сразу.
     // ⚠️ Прежде вызывающий брал из них первую: накопление здесь было написано,

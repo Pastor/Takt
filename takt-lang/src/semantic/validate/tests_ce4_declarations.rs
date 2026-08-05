@@ -1,4 +1,8 @@
 //! Тесты модуля `validate` (перенесены из `validate.rs`, фича 0027).
+//!
+//! ⚠️ Проверка отдаёт **вектор** диагностик (фича 0151): прежде она возвращала
+//! `Result<(), Diagnostic>` — не более одной ошибки на модель, — и вторая
+//! переменная с необъявленным перечислением молчала.
 
 use super::*;
 
@@ -38,7 +42,7 @@ fn ce4_declared_enum_type_is_ok() {
     };
     let result = validate_enum_type_declarations(model_rc);
     assert!(
-        result.is_ok(),
+        result.is_empty(),
         "переменная с объявленным enum-типом не должна давать ошибку: {:?}",
         result
     );
@@ -55,7 +59,7 @@ fn ce4_declared_enum_type_is_ok() {
 fn ce4_non_enum_type_not_checked() {
     let model_rc = build_rc("var x: [bit;8] := 0; start S;");
     let result = validate_enum_type_declarations(model_rc);
-    assert!(result.is_ok(), "не-enum тип не должен проверяться Ce4");
+    assert!(result.is_empty(), "не-enum тип не должен проверяться Ce4");
 }
 
 /// Переменная с пустым enum-типом (Inference) не проверяется Ce4.
@@ -72,7 +76,7 @@ fn ce4_inference_type_not_checked() {
     };
     model_rc.borrow_mut().variables.insert("y".to_string(), var);
     let result = validate_enum_type_declarations(model_rc);
-    assert!(result.is_ok(), "Inference-тип не должен вызывать Ce4");
+    assert!(result.is_empty(), "Inference-тип не должен вызывать Ce4");
 }
 
 // ── Контр-примеры: ошибочные enum-типы ───────────────────────────────────
@@ -102,10 +106,10 @@ fn ce4_undeclared_enum_type_is_error() {
     };
     let result = validate_enum_type_declarations(model_rc);
     assert!(
-        result.is_err(),
+        !result.is_empty(),
         "необъявленный enum-тип должен давать ошибку Ce4"
     );
-    let err = result.unwrap_err();
+    let err = &result[0];
     assert!(
         err.message.contains("Size"),
         "сообщение должно содержать имя отсутствующего enum: {}",
@@ -143,7 +147,7 @@ fn ce4_undeclared_enum_in_const_is_error() {
     };
     let result = validate_enum_type_declarations(model_rc);
     assert!(
-        result.is_err(),
+        !result.is_empty(),
         "константа с необъявленным enum-типом должна давать ошибку Ce4"
     );
 }
@@ -168,7 +172,7 @@ fn ce4_undeclared_enum_in_port_is_error() {
     };
     let result = validate_enum_type_declarations(model_rc);
     assert!(
-        result.is_err(),
+        !result.is_empty(),
         "порт с необъявленным enum-типом должен давать ошибку Ce4"
     );
 }
@@ -178,5 +182,8 @@ fn ce4_undeclared_enum_in_port_is_error() {
 fn ce4_empty_model_is_ok() {
     let model_rc = build_rc("start S;");
     let result = validate_enum_type_declarations(model_rc);
-    assert!(result.is_ok(), "пустая модель не должна давать ошибки Ce4");
+    assert!(
+        result.is_empty(),
+        "пустая модель не должна давать ошибки Ce4"
+    );
 }
