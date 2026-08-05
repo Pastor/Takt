@@ -828,6 +828,68 @@ impl Statement {
             _ => false,
         }
     }
+
+    /// Позиция оператора в исходном тексте.
+    ///
+    /// ⚠️ Живёт **у самого узла**, а не у потребителя (фича 0229): копий этой
+    /// функции было **две** — в счётчике глубины разбора и в константном
+    /// вычислителе, — и третий потребитель (отказ форматтера) сделал бы три.
+    /// Расхождение здесь тихое: диагностика указала бы не на тот оператор.
+    ///
+    /// ⚠️ Разбор **исчерпывающий**: новый вариант оператора валит сборку здесь,
+    /// а не молча теряет позицию. `#[non_exhaustive]` этому не мешает — он
+    /// ограничивает внешние крейты, а не свой.
+    pub fn loc(&self) -> Location {
+        match self {
+            Self::Block { loc, .. }
+            | Self::Assembly { loc, .. }
+            | Self::Formula { loc, .. }
+            | Self::Args(loc, _)
+            | Self::If(loc, _, _, _)
+            | Self::Loop(loc, _, _, _)
+            | Self::Expression(loc, _)
+            | Self::Variable(loc, _, _)
+            | Self::For(loc, _, _, _, _)
+            | Self::Continue(loc)
+            | Self::Break(loc)
+            | Self::Return(loc, _)
+            | Self::Error(loc)
+            | Self::StraySemicolon(loc)
+            | Self::Match(loc, _, _) => *loc,
+            Self::InlineFormula(formula) => match formula.as_ref() {
+                InlineFormulaDefine::Guard { loc, .. } | InlineFormulaDefine::Ltl { loc, .. } => {
+                    *loc
+                }
+            },
+        }
+    }
+
+    /// Название вида оператора — для диагностик, адресованных человеку.
+    ///
+    /// ⚠️ Не `Debug`-дамп: до фичи 0229 отказ форматтера печатал
+    /// `Statement::Assembly { loc: Source(0, 53, 71), dialect: … }` — внутреннее
+    /// представление вместо текста (класс, который закрывала 0202 в соседнем
+    /// месте).
+    pub fn kind_name(&self) -> &'static str {
+        match self {
+            Self::Block { .. } => "блок",
+            Self::Assembly { .. } => "assembly",
+            Self::Formula { .. } => "formula",
+            Self::Args(_, _) => "именованные аргументы",
+            Self::If(_, _, _, _) => "if",
+            Self::Loop(_, _, _, _) => "цикл",
+            Self::Expression(_, _) => "выражение-оператор",
+            Self::Variable(_, _, _) => "объявление переменной",
+            Self::For(_, _, _, _, _) => "for",
+            Self::Continue(_) => "continue",
+            Self::Break(_) => "break",
+            Self::Return(_, _) => "return",
+            Self::Error(_) => "ошибочный оператор",
+            Self::StraySemicolon(_) => "лишняя ';'",
+            Self::Match(_, _, _) => "match",
+            Self::InlineFormula(_) => "формула-утверждение",
+        }
+    }
 }
 
 /// Оператор в блоке формулы.

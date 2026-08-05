@@ -265,7 +265,7 @@ fn exec(
             "оператор-выражение без присваивания в константном вычислении бессмыслен",
         )),
         other => Err(not_constant(
-            statement_loc(other),
+            other.loc(),
             "оператор в константном вычислении не поддержан",
         )),
     }
@@ -324,29 +324,6 @@ fn kind_of(value: &ConstValue) -> &'static str {
         ConstValue::Bool(_) => "булево",
         ConstValue::Duration(_) => "длительность",
         ConstValue::Rational(_, _) => "дробное",
-    }
-}
-
-/// Позиция оператора — для диагностики о нём.
-fn statement_loc(stmt: &ast::Statement) -> Location {
-    use ast::Statement as S;
-    match stmt {
-        S::Block { loc, .. }
-        | S::Assembly { loc, .. }
-        | S::Formula { loc, .. }
-        | S::Args(loc, _)
-        | S::If(loc, _, _, _)
-        | S::Loop(loc, _, _, _)
-        | S::Expression(loc, _)
-        | S::Variable(loc, _, _)
-        | S::For(loc, _, _, _, _)
-        | S::Continue(loc)
-        | S::Break(loc)
-        | S::Return(loc, _)
-        | S::Error(loc)
-        | S::StraySemicolon(loc)
-        | S::Match(loc, _, _) => *loc,
-        S::InlineFormula(_) => Location::Implicit,
     }
 }
 

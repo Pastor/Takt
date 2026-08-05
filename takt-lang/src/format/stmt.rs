@@ -175,8 +175,10 @@ pub(crate) fn print(out: &mut Out, statement: &ast::Statement) -> Result<(), For
             Ok(())
         }
         // Вынужденная ветка: перечисление `#[non_exhaustive]`. Отказ, а не
-        // молчаливая потеря оператора.
-        other => Err(FormatError::Unsupported(format!("Statement::{other:?}"))),
+        // молчаливая потеря оператора. Позиция и **название вида** берутся у
+        // самого узла (фича 0229): прежде здесь печатался `Debug`-дамп со всей
+        // внутренней структурой оператора.
+        other => Err(super::unsupported(other.loc(), other.kind_name())),
     }
 }
 
@@ -192,8 +194,9 @@ fn single_line(statement: &ast::Statement) -> Result<String, FormatError> {
             })
         }
         S::Expression(_, e) => Ok(format!("{};", expr::expression(e)?)),
-        other => Err(FormatError::Unsupported(format!(
-            "инициализатор for: {other:?}"
-        ))),
+        other => Err(super::unsupported(
+            other.loc(),
+            &format!("{} в инициализаторе for", other.kind_name()),
+        )),
     }
 }

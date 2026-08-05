@@ -123,7 +123,7 @@ fn report_style_warnings(warnings: &[takt_lang::diagnostics::Diagnostic], path: 
 /// ⚠️ Диагностики печатаются **построчно**: их бывает несколько (фича 0130), и
 /// вывод обязан совпадать с выводом `compile` строка в строку — именно это, а
 /// не отсутствие `Debug`-дампа, есть предмет фичи 0202.
-fn report_format_error(error: &takt_lang::format::FormatError, path: Option<&str>, what: &str) {
+fn report_format_error(error: &takt_lang::format::FormatError, path: Option<&str>) {
     match error {
         takt_lang::format::FormatError::Parse(diagnostics) => {
             for diagnostic in diagnostics {
@@ -131,7 +131,14 @@ fn report_format_error(error: &takt_lang::format::FormatError, path: Option<&str
                 eprintln!("{}", takt_lang::diagnostics::format_compile_error(&stamped));
             }
         }
-        other => eprintln!("Ошибка форматирования {what}: {other}"),
+        // Отказ печати узла — такая же диагностика, и путь ей ставит тот же
+        // вызывающий (фича 0229). Прежде она печаталась своей формой («Ошибка
+        // форматирования 'файл': …») и **без позиции**: в большом файле узел
+        // приходилось искать грепом.
+        takt_lang::format::FormatError::Unsupported(diagnostic) => {
+            let stamped = diagnostic.clone().with_file_if_unset(path);
+            eprintln!("{}", takt_lang::diagnostics::format_compile_error(&stamped));
+        }
     }
 }
 
@@ -165,7 +172,7 @@ fn run_fmt(options: &FmtOptions) -> i32 {
             Err(e) => {
                 // Пути нет — префикс позиции будет пуст, и это верно:
                 // выдумывать координаты файла, которого не существует, нельзя.
-                report_format_error(&e, None, "stdin");
+                report_format_error(&e, None);
                 1
             }
         };
@@ -202,7 +209,7 @@ fn run_fmt(options: &FmtOptions) -> i32 {
                 // Отказ форматтера — не «файл канонический». Сообщаем и считаем
                 // ошибкой: молча пропустить значило бы соврать в --check.
                 let path = file.display().to_string();
-                report_format_error(&e, Some(&path), &format!("'{path}'"));
+                report_format_error(&e, Some(&path));
                 failed += 1;
                 continue;
             }

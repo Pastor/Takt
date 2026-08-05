@@ -370,3 +370,4 @@
 | 0226-04 | 0226 | Раздел «Стиль кода» и запись CS-001 в приложение | [0226-04-code-style-doc.md](0226-04-code-style-doc.md) |
 | 0227-01 | 0227 | Редактор показывает CS-001 и при ошибках в файле | [0227-01-lsp-style-warning-with-errors.md](0227-01-lsp-style-warning-with-errors.md) |
 | 0228-01 | 0228 | Предупреждение taktc compile несёт позицию | [0228-01-compile-warning-position.md](0228-01-compile-warning-position.md) |
+| 0229-01 | 0229 | Отказ форматтера — диагностика с позицией | [0229-01-format-unsupported-position.md](0229-01-format-unsupported-position.md) |
