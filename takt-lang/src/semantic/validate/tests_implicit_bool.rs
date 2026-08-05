@@ -1,11 +1,16 @@
-//! Юнит-тесты проверки неявной булевости условий (`SE-037`, Ce11).
+//! Тесты проверки неявной булевости условий (`SE-037`, Ce11).
 //!
 //! Вынесены из `tests.rs` фичей 0232: файл упёрся в предел размера модуля, а
-//! эти тесты — самостоятельная тема (предикаты булевости, описание условия и
-//! обход переходов), у которой уже есть соседи-прецеденты
+//! это самостоятельная тема, у которой уже есть соседи-прецеденты
 //! (`tests_ce4_declarations.rs`, `tests_ce15_array_size.rs`).
+//!
+//! ⚠️ **Проверяется поведение, а не предикат** (фича 0233). Прежде половину
+//! файла занимали юнит-тесты второго правила булевости — того, что работало по
+//! «сырому» АСД. Правило удалено (замер: 433 проверки, запасной путь не
+//! сработал ни разу), и вместе с ним ушли тесты, стоявшие на нём. Оставшиеся
+//! идут через `check_implicit_bool_conditions` — то есть проверяют вердикт на
+//! исходнике, а не устройство внутренней функции.
 
-use super::implicit_bool::{ast_condition_summary, is_boolean_ast_condition};
 use super::*;
 use crate::parse;
 use crate::semantic::tree::construct_model;
@@ -13,450 +18,6 @@ use crate::semantic::tree::construct_model;
 fn build_rc(src: &str) -> Rc<RefCell<ModelNode>> {
     let (ast, _) = parse(src, 0).expect("ошибка разбора");
     construct_model(&ast, None, &[]).expect("ошибка семантики")
-}
-
-// ── Юнит-тесты is_boolean_ast_condition и ast_condition_summary ────────────
-//
-// Вспомогательные функции для построения моделей и AST-условий.
-
-/// Строит пустую семантическую модель (без переменных и состояний).
-fn empty_model() -> Rc<RefCell<ModelNode>> {
-    build_rc("")
-}
-
-/// Строит модель с переменными: `flag: bool`, `bit1: bit`, `timer: [bit;8]`.
-fn model_with_vars() -> Rc<RefCell<ModelNode>> {
-    build_rc(
-        "var flag: bool := false; \
-         var bit1: bit := 0; \
-         var timer: [bit;8] := 0;",
-    )
-}
-
-/// Строит модель с именованным условием `cond Full = timer = 255;`.
-fn model_with_named_cond() -> Rc<RefCell<ModelNode>> {
-    build_rc("var timer: [bit;8] := 0; cond Full = timer = 255;")
-}
-
-use crate::diagnostics::Location as Loc;
-use crate::parser::ast::Condition as AC;
-use crate::parser::ast::Identifier;
-
-fn loc() -> Loc {
-    Loc::Builtin
-}
-
-fn id(name: &str) -> Identifier {
-    Identifier::new(name)
-}
-
-// ── Явно булевые условия ────────────────────────────────────────────────
-
-/// `Bool(true)` → булево.
-#[test]
-fn ast_cond_bool_literal_is_true() {
-    assert!(is_boolean_ast_condition(
-        &AC::Bool(loc(), true),
-        &empty_model()
-    ));
-}
-
-/// `Bool(false)` → булево.
-#[test]
-fn ast_cond_bool_false_literal_is_true() {
-    assert!(is_boolean_ast_condition(
-        &AC::Bool(loc(), false),
-        &empty_model()
-    ));
-}
-
-/// `Equal` → булево.
-#[test]
-fn ast_cond_equal_is_true() {
-    let cond = AC::Equal(
-        loc(),
-        Box::new(AC::Number(loc(), 0)),
-        Box::new(AC::Number(loc(), 0)),
-    );
-    assert!(is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `NotEqual` → булево.
-#[test]
-fn ast_cond_not_equal_is_true() {
-    let cond = AC::NotEqual(
-        loc(),
-        Box::new(AC::Number(loc(), 0)),
-        Box::new(AC::Number(loc(), 1)),
-    );
-    assert!(is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `Less` → булево.
-#[test]
-fn ast_cond_less_is_true() {
-    let cond = AC::Less(
-        loc(),
-        Box::new(AC::Number(loc(), 0)),
-        Box::new(AC::Number(loc(), 1)),
-    );
-    assert!(is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `More` → булево.
-#[test]
-fn ast_cond_more_is_true() {
-    let cond = AC::More(
-        loc(),
-        Box::new(AC::Number(loc(), 5)),
-        Box::new(AC::Number(loc(), 1)),
-    );
-    assert!(is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `LessEqual` → булево.
-#[test]
-fn ast_cond_less_equal_is_true() {
-    let cond = AC::LessEqual(
-        loc(),
-        Box::new(AC::Number(loc(), 0)),
-        Box::new(AC::Number(loc(), 0)),
-    );
-    assert!(is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `MoreEqual` → булево.
-#[test]
-fn ast_cond_more_equal_is_true() {
-    let cond = AC::MoreEqual(
-        loc(),
-        Box::new(AC::Number(loc(), 5)),
-        Box::new(AC::Number(loc(), 5)),
-    );
-    assert!(is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `Not` — логическое НЕ → всегда булево.
-#[test]
-fn ast_cond_not_is_true() {
-    let cond = AC::Not(loc(), Box::new(AC::Number(loc(), 0)));
-    assert!(is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `Not` вокруг переменной → булево.
-#[test]
-fn ast_cond_not_of_var_is_true() {
-    let model = model_with_vars();
-    let cond = AC::Not(loc(), Box::new(AC::Variable(id("timer"))));
-    assert!(is_boolean_ast_condition(&cond, &model));
-}
-
-/// `Function(…)` — тип возврата неизвестен → булево.
-#[test]
-fn ast_cond_function_is_true() {
-    let cond = AC::Function(loc(), id("f"), vec![]);
-    assert!(is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `Parenthesis(Equal)` → булево.
-#[test]
-fn ast_cond_paren_cmp_is_true() {
-    let inner = AC::Equal(
-        loc(),
-        Box::new(AC::Number(loc(), 0)),
-        Box::new(AC::Number(loc(), 1)),
-    );
-    let cond = AC::Parenthesis(loc(), Box::new(inner));
-    assert!(is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `Variable("flag")` где `flag: bool` → булево.
-#[test]
-fn ast_cond_bool_var_is_true() {
-    let model = model_with_vars();
-    assert!(is_boolean_ast_condition(&AC::Variable(id("flag")), &model));
-}
-
-/// `Variable("bit1")` где `bit1: bit` → булево.
-#[test]
-fn ast_cond_bit_var_is_true() {
-    let model = model_with_vars();
-    assert!(is_boolean_ast_condition(&AC::Variable(id("bit1")), &model));
-}
-
-/// `Variable("Full")` где `Full` — именованное условие → булево.
-#[test]
-fn ast_cond_named_cond_var_is_true() {
-    let model = model_with_named_cond();
-    assert!(is_boolean_ast_condition(&AC::Variable(id("Full")), &model));
-}
-
-/// `Variable("unknown")` — неизвестное имя → не предупреждаем (булево).
-#[test]
-fn ast_cond_unknown_var_is_true() {
-    assert!(is_boolean_ast_condition(
-        &AC::Variable(id("unknown")),
-        &empty_model()
-    ));
-}
-
-// ── Явно числовые условия ───────────────────────────────────────────────
-
-/// `Number(5)` → числовое.
-#[test]
-fn ast_cond_number_is_false() {
-    assert!(!is_boolean_ast_condition(
-        &AC::Number(loc(), 5),
-        &empty_model()
-    ));
-}
-
-/// `Number(0)` → числовое (даже 0).
-#[test]
-fn ast_cond_zero_number_is_false() {
-    assert!(!is_boolean_ast_condition(
-        &AC::Number(loc(), 0),
-        &empty_model()
-    ));
-}
-
-/// `Rational` → числовое.
-#[test]
-fn ast_cond_rational_is_false() {
-    let cond = AC::Rational(loc(), "3.14".to_string(), false);
-    assert!(!is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `String` → числовое.
-#[test]
-fn ast_cond_string_is_false() {
-    let cond = AC::String(vec![]);
-    assert!(!is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `Add` → числовое.
-#[test]
-fn ast_cond_add_is_false() {
-    let cond = AC::Add(
-        loc(),
-        Box::new(AC::Number(loc(), 1)),
-        Box::new(AC::Number(loc(), 2)),
-    );
-    assert!(!is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `Subtract` → числовое.
-#[test]
-fn ast_cond_subtract_is_false() {
-    let cond = AC::Subtract(
-        loc(),
-        Box::new(AC::Number(loc(), 5)),
-        Box::new(AC::Number(loc(), 1)),
-    );
-    assert!(!is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `And` (побитовое И) → числовое.
-#[test]
-fn ast_cond_and_is_false() {
-    let cond = AC::And(
-        loc(),
-        Box::new(AC::Number(loc(), 3)),
-        Box::new(AC::Number(loc(), 1)),
-    );
-    assert!(!is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `Or` (побитовое ИЛИ) → числовое.
-#[test]
-fn ast_cond_or_is_false() {
-    let cond = AC::Or(
-        loc(),
-        Box::new(AC::Number(loc(), 3)),
-        Box::new(AC::Number(loc(), 1)),
-    );
-    assert!(!is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `ArraySubscript` → числовое.
-#[test]
-fn ast_cond_array_subscript_is_false() {
-    let cond = AC::ArraySubscript(loc(), id("arr"), Box::new(AC::Number(loc(), 0)));
-    assert!(!is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `BitAccess` (`x.0`) → **булево**.
-///
-/// ⚠️ Ожидание изменено фичей 0232 (решение заказчика): доступ к **одному** биту
-/// даёт 0 или 1, и требовать от него `!= 0` значит спорить с идиомой языка —
-/// именно так читают дискретный вход. Прежде ветвь считалась числовой, и
-/// проверка горела на законных записях корпуса.
-#[test]
-fn ast_cond_bit_access_is_boolean() {
-    use crate::parser::ast::Member;
-    let cond = AC::BitAccess(loc(), Box::new(AC::Variable(id("x"))), Member::Number(0));
-    assert!(is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-/// `&`/`|` булевы, когда булевы **оба** операнда, и числовые иначе (фича 0232).
-///
-/// Логических `&&`/`||` условная грамматика не принимает — `&`/`|` суть
-/// единственная форма конъюнкции условий; предупреждать о ней значило бы
-/// предупреждать о единственной доступной записи. Числовой операнд при этом
-/// по-прежнему ловится.
-#[test]
-fn ast_cond_bitwise_over_booleans_is_boolean() {
-    let both_bool = AC::And(
-        loc(),
-        Box::new(AC::Bool(loc(), true)),
-        Box::new(AC::Not(loc(), Box::new(AC::Bool(loc(), false)))),
-    );
-    assert!(is_boolean_ast_condition(&both_bool, &empty_model()));
-
-    let numeric_operand = AC::Or(
-        loc(),
-        Box::new(AC::Bool(loc(), true)),
-        Box::new(AC::Number(loc(), 3)),
-    );
-    assert!(
-        !is_boolean_ast_condition(&numeric_operand, &empty_model()),
-        "числовой операнд обязан остаться нарушением"
-    );
-}
-
-/// `Variable("timer")` где `timer: [bit;8]` → числовое.
-#[test]
-fn ast_cond_array_var_is_false() {
-    let model = model_with_vars();
-    assert!(!is_boolean_ast_condition(
-        &AC::Variable(id("timer")),
-        &model
-    ));
-}
-
-/// `Parenthesis(Number)` → числовое.
-#[test]
-fn ast_cond_paren_number_is_false() {
-    let cond = AC::Parenthesis(loc(), Box::new(AC::Number(loc(), 42)));
-    assert!(!is_boolean_ast_condition(&cond, &empty_model()));
-}
-
-// ── Юнит-тесты ast_condition_summary ────────────────────────────────────
-
-/// Summary для числового литерала содержит значение.
-#[test]
-fn ast_summary_number() {
-    let s = ast_condition_summary(&AC::Number(loc(), 42), &empty_model());
-    assert!(s.contains("42"), "summary для 42: '{}'", s);
-}
-
-/// Summary для вещественного числа содержит значение.
-#[test]
-fn ast_summary_rational() {
-    let cond = AC::Rational(loc(), "1.5".to_string(), false);
-    let s = ast_condition_summary(&cond, &empty_model());
-    assert!(s.contains("1.5"), "summary для 1.5: '{}'", s);
-}
-
-/// Summary для отрицательного вещественного числа содержит минус.
-#[test]
-fn ast_summary_rational_negative() {
-    let cond = AC::Rational(loc(), "2.0".to_string(), true);
-    let s = ast_condition_summary(&cond, &empty_model());
-    assert!(s.contains("-2.0"), "summary для -2.0: '{}'", s);
-}
-
-/// Summary для строки содержит слово "строковый".
-#[test]
-fn ast_summary_string() {
-    let s = ast_condition_summary(&AC::String(vec![]), &empty_model());
-    assert!(s.contains("строковый"), "summary для String: '{}'", s);
-}
-
-/// Summary для переменной числового типа содержит имя и тип.
-///
-/// ⚠️ Ожидание **изменено фичей 0231**: прежде тест требовал подстроку `Array` —
-/// то есть пришпиливал `Debug`-форму `TypeNode`. Тип печатается так, как его
-/// написал автор (`[bit;8]`), потому что сообщение читает он, а не компилятор.
-#[test]
-fn ast_summary_array_var() {
-    let model = model_with_vars();
-    let s = ast_condition_summary(&AC::Variable(id("timer")), &model);
-    assert!(s.contains("timer"), "имя в summary: '{}'", s);
-    assert!(s.contains("[bit;8]"), "тип в summary: '{}'", s);
-}
-
-/// Summary для неизвестной переменной содержит имя и `?`.
-#[test]
-fn ast_summary_unknown_var() {
-    let s = ast_condition_summary(&AC::Variable(id("ghost")), &empty_model());
-    assert!(s.contains("ghost"), "имя в summary: '{}'", s);
-}
-
-/// Summary для сложения.
-#[test]
-fn ast_summary_add() {
-    let cond = AC::Add(
-        loc(),
-        Box::new(AC::Number(loc(), 1)),
-        Box::new(AC::Number(loc(), 2)),
-    );
-    let s = ast_condition_summary(&cond, &empty_model());
-    assert!(s.contains("сложение"), "summary для Add: '{}'", s);
-}
-
-/// Summary для вычитания.
-#[test]
-fn ast_summary_subtract() {
-    let cond = AC::Subtract(
-        loc(),
-        Box::new(AC::Number(loc(), 5)),
-        Box::new(AC::Number(loc(), 1)),
-    );
-    let s = ast_condition_summary(&cond, &empty_model());
-    assert!(s.contains("вычитание"), "summary для Subtract: '{}'", s);
-}
-
-/// Summary для побитового И.
-#[test]
-fn ast_summary_and() {
-    let cond = AC::And(
-        loc(),
-        Box::new(AC::Number(loc(), 1)),
-        Box::new(AC::Number(loc(), 1)),
-    );
-    let s = ast_condition_summary(&cond, &empty_model());
-    assert!(s.contains('И'), "summary для And: '{}'", s);
-}
-
-/// Summary для побитового ИЛИ.
-#[test]
-fn ast_summary_or() {
-    let cond = AC::Or(
-        loc(),
-        Box::new(AC::Number(loc(), 1)),
-        Box::new(AC::Number(loc(), 1)),
-    );
-    let s = ast_condition_summary(&cond, &empty_model());
-    assert!(s.contains('И'), "summary для Or: '{}'", s);
-}
-
-/// Summary для элемента массива содержит имя и индекс.
-#[test]
-fn ast_summary_array_subscript() {
-    let cond = AC::ArraySubscript(loc(), id("buf"), Box::new(AC::Number(loc(), 3)));
-    let s = ast_condition_summary(&cond, &empty_model());
-    assert!(s.contains("buf"), "имя массива в summary: '{}'", s);
-    assert!(s.contains('3'), "индекс в summary: '{}'", s);
-}
-
-/// Summary для доступа к биту.
-#[test]
-fn ast_summary_bit_access() {
-    use crate::parser::ast::Member;
-    let cond = AC::BitAccess(loc(), Box::new(AC::Variable(id("x"))), Member::Number(0));
-    let s = ast_condition_summary(&cond, &empty_model());
-    assert!(s.contains("бит"), "summary для BitAccess: '{}'", s);
 }
 
 // ── Юнит-тесты check_implicit_bool_conditions ────────────────────────────
@@ -652,4 +213,122 @@ fn warning_has_correct_level() {
         Level::Warning,
         "уровень должен быть Warning"
     );
+}
+
+// ── Таблица правил булевости (фича 0233) ─────────────────────────────────
+//
+// Правило теперь **одно**, и проверяется оно по вердикту на исходнике, а не по
+// внутренней функции. Таблица покрывает те же случаи, что прежде юнит-тесты
+// удалённого АСД-правила, — но так, как их видит автор программы.
+
+/// Число предупреждений `SE-037` на исходнике.
+fn warnings_for(src: &str) -> usize {
+    check_implicit_bool_conditions(&build_rc(src)).len()
+}
+
+/// Каждое правило булевости — на исходнике: булево молчит, числовое
+/// предупреждает.
+#[test]
+fn boolean_rules_table() {
+    // (исходник условия, ожидается ли предупреждение, чем случай интересен)
+    let cases: &[(&str, bool, &str)] = &[
+        (
+            "var f: bool := false; start S { ref T: f; } state T;",
+            false,
+            "переменная bool",
+        ),
+        (
+            "var b: bit := 0; start S { ref T: b; } state T;",
+            false,
+            "переменная bit",
+        ),
+        (
+            "var t: [bit;8] := 0; start S { ref T: t != 0; } state T;",
+            false,
+            "сравнение",
+        ),
+        (
+            "var t: [bit;8] := 0; start S { ref T: !(t = 0); } state T;",
+            false,
+            "отрицание",
+        ),
+        (
+            "var t: [bit;8] := 0; start S { ref T: (t = 0); } state T;",
+            false,
+            "скобки прозрачны",
+        ),
+        (
+            "var t: [bit;8] := 0; cond Full = t = 255; start S { ref T: Full; } state T;",
+            false,
+            "именованное условие",
+        ),
+        (
+            "in a: bit; in b: bit; start S { ref T: a & b; } state T;",
+            false,
+            "`&` над булевыми",
+        ),
+        (
+            "in a: bit; in b: bit; start S { ref T: a | b; } state T;",
+            false,
+            "`|` над булевыми",
+        ),
+        (
+            "var f: [bit;8] := 0; start S { ref T: f.3; } state T;",
+            false,
+            "доступ к одному биту",
+        ),
+        ("start S { ref T: after 5s; } state T;", false, "выдержка"),
+        // ── числовые: предупреждение обязано быть ─────────────────────────
+        (
+            "var t: [bit;8] := 0; start S { ref T: t; } state T;",
+            true,
+            "многобитная переменная",
+        ),
+        ("start S { ref T: 1; } state T;", true, "числовой литерал"),
+        (
+            "var t: [bit;8] := 0; start S { ref T: t + 1; } state T;",
+            true,
+            "арифметика",
+        ),
+        (
+            "in a: bit; var t: [bit;8] := 0; start S { ref T: a & t; } state T;",
+            true,
+            "числовой операнд `&`",
+        ),
+    ];
+
+    for (src, expect, what) in cases {
+        let got = warnings_for(src) > 0;
+        assert_eq!(
+            got,
+            *expect,
+            "{what}: ожидалось {}, получено {} — исходник: {src}",
+            if *expect {
+                "предупреждение"
+            } else {
+                "молчание"
+            },
+            if got {
+                "предупреждение"
+            } else {
+                "молчание"
+            },
+        );
+    }
+}
+
+/// Неразрешённое условие предупреждения не даёт (фича 0233).
+///
+/// ⚠️ Ветвь недостижима через обоих потребителей: неразрешённое условие — это
+/// ошибка `SE-025`, а предупреждения считаются только при отсутствии ошибок.
+/// Тест держит **решение** молчать: судить о булевости того, чего семантика не
+/// поняла, значит гадать.
+#[test]
+fn unresolved_condition_is_silent() {
+    // `S(Модель) = Состояние` — единственная форма, ради которой держали второе
+    // правило. Замер 0233: она приходит РАЗРЕШЁННОЙ и предупреждения не даёт.
+    let src = "model Ping { start Go { ref End; } state End; } \
+               model Main2 { start Wait { ref Done: S(Ping) = End; } state Done; } \
+               start Root = Ping + Main2;";
+    assert_eq!(warnings_for(src), 0, "сравнение состояний булево");
 }
