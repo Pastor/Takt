@@ -54,6 +54,8 @@ mod tests;
 mod tests_ce15_array_size;
 #[cfg(test)]
 mod tests_ce4_declarations;
+#[cfg(test)]
+mod tests_implicit_bool;
 
 // Внутреннее: помощники, которые зовут `validate_model` и соседние подмодули.
 // `use super::*` в каждом подмодуле подхватывает их отсюда.

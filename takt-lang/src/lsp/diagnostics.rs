@@ -98,13 +98,16 @@ pub fn collect_diagnostics_at(
     // Шаг 3: Дополнительные предупреждения
     lsp_diags.extend(style);
 
-    let unused = crate::unused_variable_warnings(model.clone());
-    for w in unused {
-        lsp_diags.push(diagnostic_to_lsp(&w, source, &files));
-    }
-
-    let nondeterministic = crate::nondeterministic_transition_warnings(model.clone());
-    for w in nondeterministic {
+    // Предупреждения — через **единую точку** `collect_model_warnings` (фича
+    // 0232), ту же, которой пользуется `taktc compile`.
+    //
+    // ⚠️ Прежде здесь стоял свой список из двух проверок (`SE-036` и `SE-037`
+    // о недетерминизме), а в единой точке их **восемь**: редактор молча не
+    // показывал недостижимое состояние, всегда-истинное условие, лишнюю `;`,
+    // неизвестное имя блока, предупреждения LTL и записи по адресу. Два списка
+    // одного набора расходятся — класс 0084/0193/0195; здесь он проявлялся как
+    // «в консоли предупреждение есть, в редакторе нет».
+    for w in crate::semantic::warnings::collect_model_warnings(&ast, &model) {
         lsp_diags.push(diagnostic_to_lsp(&w, source, &files));
     }
 

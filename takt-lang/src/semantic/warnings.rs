@@ -28,6 +28,12 @@ pub fn collect_model_warnings(ast: &ast::Model, model: &Rc<RefCell<ModelNode>>) 
     warnings.extend(crate::nondeterministic_transition_warnings(Rc::clone(
         model,
     )));
+    // SE-037 «неявная булевость» (фича 0232). ⚠️ Проверка существовала с Ce11,
+    // была покрыта юнит-тестами — и НИКУДА не подключена: ни `taktc compile`,
+    // ни редактор её не печатали, то есть она считалась и выбрасывалась (класс
+    // фичи 0081). Включена после того, как замер снял с неё 51 ложное
+    // срабатывание на законных записях корпуса.
+    warnings.extend(crate::semantic::tree::implicit_bool_warnings(model));
     warnings.extend(crate::unreachable_state_warnings(Rc::clone(model)));
     warnings.extend(crate::constant_condition_warnings(model));
     warnings.extend(crate::ltl_warnings(Rc::clone(model)));
