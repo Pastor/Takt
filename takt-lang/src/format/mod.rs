@@ -467,28 +467,36 @@ fn print_element_inner(
     }
 }
 
+/// Печатает вложенную модель — с реализацией (`= выражение`) или без.
+///
+/// ⚠️ **Фикс 0199-01, два симптома одной ветки.** Прежде печать выбирала между
+/// двумя формами, и обе врали:
+///
+/// - `model M = A | B { … }` (реализация **и** тело, форма фичи 0199) печаталась
+///   как `model M { … }` — реализация **терялась**, композиция исчезала, и
+///   форматтер молча менял смысл программы;
+/// - `model M = A { }` (реализация с пустым телом) печаталась как
+///   `model M = A;` — а такой записи **грамматика не принимает**: получившийся
+///   файл переставал разбираться, то есть `taktc fmt` уничтожал исходник на
+///   месте.
+///
+/// Форма одна: `model Имя = выражение {` … `}`; без реализации — `model Имя {`.
+/// Дефект дожил потому, что единственная такая запись корпуса лежит в фикстурах
+/// `takt-sim/tests/data/`, куда обход теста форматтера не доходил (фича 0230).
 fn print_nested_model(out: &mut Out, model: &ast::Model) -> Result<(), FormatError> {
     let name = model.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
-    match &model.implements {
-        // `model M = выражение;` — компоновка без тела.
-        Some(implements) if model.elements.is_empty() => {
-            out.line(&format!(
-                "model {name} = {};",
-                expr::expression(implements)?
-            ));
-            Ok(())
-        }
-        _ => {
-            out.line(&format!("model {name} {{"));
-            out.up();
-            for element in &model.elements {
-                print_element(out, element)?;
-            }
-            out.down();
-            out.line("}");
-            Ok(())
-        }
+    let head = match &model.implements {
+        Some(implements) => format!("model {name} = {} {{", expr::expression(implements)?),
+        None => format!("model {name} {{"),
+    };
+    out.line(&head);
+    out.up();
+    for element in &model.elements {
+        print_element(out, element)?;
     }
+    out.down();
+    out.line("}");
+    Ok(())
 }
 
 fn print_state(out: &mut Out, state: &ast::StateDefine) -> Result<(), FormatError> {

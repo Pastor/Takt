@@ -164,3 +164,4 @@
 | [0227](./0227-lsp-style-warning-with-errors.md) | Редактор показывает CS-001 и при ошибках в файле | Draft | фича 0227 |
 | [0228](./0228-compile-warning-position.md) | Предупреждение taktc compile несёт позицию | Draft | фича 0228 |
 | [0229](./0229-format-unsupported-position.md) | Отказ форматтера — диагностика с позицией | Draft | фича 0229 |
+| [0230](./0230-format-corpus-sentinel.md) | Сторож форматтера: корпус восстановлен, KNOWN_GAPS с ратчетом | Draft | фича 0230 |
