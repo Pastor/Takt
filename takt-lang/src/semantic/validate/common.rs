@@ -44,9 +44,21 @@ fn validate_cond(
             }
 
             if let ConditionNode::Unresolved(_) = resolve_condition(&cond, model.clone())? {
+                // ⚠️ Цитата — текст исходника, а не `Debug`-дамп узла (фича
+                // 0231): прежде сообщение выглядело как «Неразрешённое условие:
+                // Variable(Identifier { loc: Source(0, 51, 54), name: "qqq" })»
+                // — внутреннее представление вместо записи автора. Печатью
+                // занимается форматтер; узел, который он не умеет, оставляет
+                // сообщение без цитаты — но дампа не будет никогда.
+                let quoted = crate::format::condition_text(&cond)
+                    .map(|text| format!(" '{text}'"))
+                    .unwrap_or_default();
                 return Err(Diagnostic::error(
                     cond.loc(),
-                    format!("Неразрешённое условие: {:?}", cond),
+                    format!(
+                        "неразрешённое условие перехода{quoted}: имя не найдено среди \
+                         переменных, портов, условий `cond` и состояний"
+                    ),
                 )
                 .with_code("SE-025"));
             }

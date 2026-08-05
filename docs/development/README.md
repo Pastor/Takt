@@ -372,3 +372,4 @@
 | 0228-01 | 0228 | Предупреждение taktc compile несёт позицию | [0228-01-compile-warning-position.md](0228-01-compile-warning-position.md) |
 | 0229-01 | 0229 | Отказ форматтера — диагностика с позицией | [0229-01-format-unsupported-position.md](0229-01-format-unsupported-position.md) |
 | 0230-01 | 0230 | Сторож форматтера: корпус восстановлен, KNOWN_GAPS с ратчетом | [0230-01-format-corpus-sentinel.md](0230-01-format-corpus-sentinel.md) |
+| 0231-01 | 0231 | Текст диагностики без внутреннего представления | [0231-01-diagnostic-text-no-debug.md](0231-01-diagnostic-text-no-debug.md) |

@@ -98,9 +98,7 @@ impl AsGenerator for Generator {
             Path::new(output_path).join(filename.to_owned() + ".st"),
             program,
         )
-        .map_err(|e| {
-            Diagnostic::error(Location::Codegen, format!("{:?}", e)).with_code("ST-001")
-        })?;
+        .map_err(|e| Diagnostic::error(Location::Codegen, format!("{e}")).with_code("ST-001"))?;
         Ok(())
     }
 }

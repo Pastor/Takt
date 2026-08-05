@@ -517,12 +517,16 @@ fn ast_summary_string() {
 }
 
 /// Summary для переменной числового типа содержит имя и тип.
+///
+/// ⚠️ Ожидание **изменено фичей 0231**: прежде тест требовал подстроку `Array` —
+/// то есть пришпиливал `Debug`-форму `TypeNode`. Тип печатается так, как его
+/// написал автор (`[bit;8]`), потому что сообщение читает он, а не компилятор.
 #[test]
 fn ast_summary_array_var() {
     let model = model_with_vars();
     let s = ast_condition_summary(&AC::Variable(id("timer")), &model);
     assert!(s.contains("timer"), "имя в summary: '{}'", s);
-    assert!(s.contains("Array"), "тип в summary: '{}'", s);
+    assert!(s.contains("[bit;8]"), "тип в summary: '{}'", s);
 }
 
 /// Summary для неизвестной переменной содержит имя и `?`.

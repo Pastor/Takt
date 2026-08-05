@@ -43,9 +43,7 @@ impl AsGenerator for Generator {
             Path::new(output_path).join(filename.to_owned() + ".puml"),
             diagram,
         )
-        .map_err(|e| {
-            Diagnostic::warning(Location::Codegen, format!("{:?}", e)).with_code("PU-001")
-        })?;
+        .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{e}")).with_code("PU-001"))?;
         Ok(())
     }
 }

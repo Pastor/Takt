@@ -218,9 +218,10 @@ pub(crate) fn coerce_to_type_with(
         },
         // Вынужденная ветка: `TypeNode` — `#[non_exhaustive]` (см. комментарий
         // над функцией). Отказ с диагностикой, а не тихий пропуск.
-        _ => Err(EvalError::UnsupportedType {
-            ty: format!("{ty:?}"),
-        }),
+        // ⚠️ Имя типа — через `Display`, а не `Debug` (фича 0231): сообщение
+        // читает автор программы на Takt, и `Integer { bits: 8, signed: false }`
+        // ему ни о чём не говорит.
+        _ => Err(EvalError::UnsupportedType { ty: ty.to_string() }),
     }
 }
 
@@ -237,7 +238,7 @@ fn to_integer(value: &Value, ty: &TypeNode) -> Result<i128, EvalError> {
         Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
             Err(EvalError::NotCoercible {
                 value: value_kind(value),
-                ty: format!("{ty:?}"),
+                ty: ty.to_string(),
             })
         }
     }

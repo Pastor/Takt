@@ -105,9 +105,7 @@ impl AsGenerator for Generator {
             Path::new(output_path).join(filename.to_owned() + ".rs"),
             program,
         )
-        .map_err(|e| {
-            Diagnostic::error(Location::Codegen, format!("{:?}", e)).with_code("RS-001")
-        })?;
+        .map_err(|e| Diagnostic::error(Location::Codegen, format!("{e}")).with_code("RS-001"))?;
         Ok(())
     }
 }
