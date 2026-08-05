@@ -320,12 +320,15 @@ pub(super) fn validate_reference(
     Ok(())
 }
 
-pub(super) fn validate_conditions(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+pub(super) fn validate_conditions(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let borrowed = model.borrow();
+    // Накопление по именованным условиям (фича 0151): каждое `cond` — своё
+    // объявление.
+    let mut out = Vec::new();
     for cond in borrowed.conditions.values() {
-        validate_cond(None, &cond.value, model.clone())?;
+        out.extend(validate_cond(None, &cond.value, model.clone()).err());
     }
-    Ok(())
+    out
 }
 
 pub(super) fn get_state_name(state: &StateNode) -> &str {

@@ -23,7 +23,7 @@ use super::*;
 use crate::semantic::type_inference::extract_type;
 
 /// Проверяет запрет смешения `q(m, n)` во всех выражениях **уровня** модели.
-pub(super) fn check_fixed_mixing(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+pub(super) fn check_fixed_mixing(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // Снимаем владельческие копии до обхода: `extract_type` не берёт
     // `borrow_mut`, но держать borrow через `?`-возвраты незачем.
     let (vars, funcs, blocks, states) = {
@@ -36,25 +36,29 @@ pub(super) fn check_fixed_mixing(model: Rc<RefCell<ModelNode>>) -> Result<(), Di
         )
     };
 
+    // Накопление по элементам (фича 0151): объявление, функция, блок и
+    // состояние — самостоятельные места; внутри каждого остаётся первая
+    // ошибка (дальше по тому же выражению пошли бы следствия).
+    let mut out = Vec::new();
     for var in &vars {
         if let Some(expr) = var_init(var) {
-            check_expr(expr, &model)?;
+            out.extend(check_expr(expr, &model).err());
         }
     }
     for func in &funcs {
         if let FunctionDefinitionNode::Local { body, .. } = func {
-            check_stmt(body, &model)?;
+            out.extend(check_stmt(body, &model).err());
         }
     }
     for block in &blocks {
         if let Some(stmt) = block.statement() {
-            check_stmt(stmt, &model)?;
+            out.extend(check_stmt(stmt, &model).err());
         }
     }
     for state in &states {
-        check_state(state, &model)?;
+        out.extend(check_state(state, &model).err());
     }
-    Ok(())
+    out
 }
 
 /// Инициализатор переменной (или `None` для `Unresolved`).

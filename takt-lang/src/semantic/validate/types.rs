@@ -41,19 +41,21 @@ pub(super) fn check_type_array_size(ty: &TypeNode, loc: Location) -> Result<(), 
 }
 
 /// Ce15: проверяет все переменные модели на допустимый размер массивов.
-pub(super) fn check_array_sizes(model: Rc<RefCell<ModelNode>>) -> Result<(), Diagnostic> {
+pub(super) fn check_array_sizes(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     let borrowed = model.borrow();
+    // Накопление по объявлениям (фича 0151).
+    let mut out = Vec::new();
     for var in borrowed.variables.values() {
         match var {
             VariableNode::Simple { ty, .. }
             | VariableNode::Const { ty, .. }
             | VariableNode::Port { ty, .. } => {
-                check_type_array_size(ty, var.loc())?;
+                out.extend(check_type_array_size(ty, var.loc()).err());
             }
             VariableNode::Unresolved => {}
         }
     }
-    Ok(())
+    out
 }
 
 /// Возвращает имена псевдонимов типов, на которые прямо ссылается данный AST-тип.
