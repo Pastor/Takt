@@ -4,12 +4,16 @@ model Lamp {
     out led: bit;
 
     start Off {
-        enter { led := 0; }
+        enter {
+            led := 0;
+        }
         ref On: btn = 1;
     }
 
     state On {
-        enter { led := 1; }
+        enter {
+            led := 1;
+        }
         ref Off: btn = 0;
     }
 }

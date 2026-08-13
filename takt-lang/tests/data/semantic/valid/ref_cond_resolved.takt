@@ -11,7 +11,7 @@
 
 var flag: bit := false;
 var counter: [bit;8] := 0;
-cond done = counter = 255;
+cond IsDone = counter = 255;
 
 start Idle {
     /// Переход по переменной-флагу (bit).
@@ -20,7 +20,7 @@ start Idle {
 
 state Active {
     /// Переход по именованному условию.
-    ref Done: done;
+    ref Done: IsDone;
 }
 
 /// Конечное состояние (нет исходящих ref).

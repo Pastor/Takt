@@ -28,23 +28,23 @@ fn example_type_aliases_is_valid() {
 fn example_conditions_is_valid() {
     let node = build_file("tests/data/semantic/valid/conditions.takt").unwrap();
     assert!(
-        node.conditions.contains_key("always_true"),
-        "условие always_true должно быть"
+        node.conditions.contains_key("AlwaysTrue"),
+        "условие AlwaysTrue должно быть"
     );
     assert!(
-        node.conditions.contains_key("always_false"),
-        "условие always_false должно быть"
+        node.conditions.contains_key("AlwaysFalse"),
+        "условие AlwaysFalse должно быть"
     );
     assert!(
-        node.conditions.contains_key("is_flag_set"),
-        "условие is_flag_set должно быть"
+        node.conditions.contains_key("IsFlagSet"),
+        "условие IsFlagSet должно быть"
     );
     assert!(
-        node.conditions.contains_key("negated"),
+        node.conditions.contains_key("Negated"),
         "условие negated должно быть"
     );
     assert!(
-        node.conditions.contains_key("grouped"),
+        node.conditions.contains_key("Grouped"),
         "условие grouped должно быть"
     );
 }
@@ -240,16 +240,16 @@ fn rename_import_variable_with_alias() {
     );
 }
 
-/// `import { shared_cond }` — условие импортируется в контекст.
+/// `import { SharedCond }` — условие импортируется в контекст.
 #[test]
 fn rename_import_condition() {
     let node = build_with_includes(
-        r#"import { shared_cond } from "shared.takt"; start S { ref E: shared_cond; } state E;"#,
+        r#"import { SharedCond } from "shared.takt"; start S { ref E: SharedCond; } state E;"#,
     )
     .unwrap();
     assert!(
-        node.conditions.contains_key("shared_cond"),
-        "условие shared_cond должно быть в контексте"
+        node.conditions.contains_key("SharedCond"),
+        "условие SharedCond должно быть в контексте"
     );
 }
 
@@ -401,8 +401,8 @@ fn array_subscript_variable_index() {
 /// ArraySubscript с индексом-переменной в условии cond — строится без ошибок.
 #[test]
 fn array_subscript_variable_index_in_cond() {
-    let node = build("var buf: [bit;8] := 0; var i: bit := 0; cond c = buf[i];");
-    assert!(node.search_cond("c").is_some());
+    let node = build("var buf: [bit;8] := 0; var i: bit := 0; cond C = buf[i];");
+    assert!(node.search_cond("C").is_some());
 }
 
 /// `inout` порт объявляется без ошибок и виден в семантическом дереве.

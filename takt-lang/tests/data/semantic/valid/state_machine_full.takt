@@ -5,11 +5,11 @@
 
 var timer: [bit;8] := 0;
 
-cond timeout = timer = 255;
+cond Timeout = timer = 255;
 
 model TrafficLight {
     start Red {
-        ref Green: timeout;
+        ref Green: Timeout;
         enter {
             timer := 0;
         }
@@ -18,7 +18,7 @@ model TrafficLight {
         }
     }
     state Green {
-        ref Yellow: timeout;
+        ref Yellow: Timeout;
         enter {
             timer := 0;
         }
@@ -27,7 +27,7 @@ model TrafficLight {
         }
     }
     state Yellow {
-        ref Red: timeout;
+        ref Red: Timeout;
         enter {
             timer := 0;
         }

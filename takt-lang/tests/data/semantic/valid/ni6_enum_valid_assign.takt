@@ -1,5 +1,10 @@
 // NI6: корректное использование перечисления — модель без enum-типизированных переменных
 // Перечисления добавляются на семантическом уровне, тест проверяет корректность разбора
-enum Direction { North, South, East, West }
+enum Direction {
+    North,
+    South,
+    East,
+    West
+}
 var counter: [bit;8] := 0;
 start S;

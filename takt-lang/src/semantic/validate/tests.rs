@@ -194,7 +194,10 @@ fn build_rc(src: &str) -> Rc<RefCell<ModelNode>> {
 ///
 /// # Пример (Takt)
 /// ```but
-/// enum Dir { North, South }
+/// enum Dir {
+///     North,
+///     South
+/// }
 /// var d: Dir = 0;  // 0 — значение North
 /// ```
 #[test]
@@ -234,7 +237,10 @@ fn ni6_valid_enum_initializer_no_errors() {
 ///
 /// # Контрпример (Takt)
 /// ```but
-/// enum Dir { North = 0, South = 1 }
+/// enum Dir {
+///     North = 0,
+///     South = 1
+/// }
 /// var d: Dir = 99;  // 99 — не вариант Dir
 /// ```
 #[test]

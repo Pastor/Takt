@@ -352,14 +352,14 @@ fn doc_comment_for_type() {
 /// Условие (`cond`) получает свой doc-комментарий.
 #[test]
 fn doc_comment_for_condition() {
-    let src = "/// Истинно всегда.\ncond always_true = true;";
+    let src = "/// Истинно всегда.\ncond AlwaysTrue = true;";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
     let root =
         construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     assert_eq!(
-        root.borrow().element_doc("always_true"),
+        root.borrow().element_doc("AlwaysTrue"),
         ["Истинно всегда."],
-        "doc-комментарий должен быть привязан к условию always_true"
+        "doc-комментарий должен быть привязан к условию AlwaysTrue"
     );
 }
 
@@ -927,14 +927,14 @@ fn ref_cond_bool_var_is_resolved() {
 /// # Пример (Takt)
 /// ```but
 /// var x: [bit;8] = 0;
-/// cond full = x = 255;
-/// start A { ref B: full; }
+/// cond Full = x = 255;
+/// start A { ref B: Full; }
 /// state B;
 /// ```
 #[test]
 fn ref_cond_named_cond_is_resolved() {
     use takt_lang::semantic::ConditionNode;
-    let src = "var x: [bit;8] := 0; cond full = x = 255; start A { ref B: full; } state B;";
+    let src = "var x: [bit;8] := 0; cond Full = x = 255; start A { ref B: Full; } state B;";
     let node = build(src);
     let state_a = &node.states["A"];
     if let StateNode::Simple { references, .. } = state_a {

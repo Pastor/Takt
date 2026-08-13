@@ -6,7 +6,12 @@
 // Ожидаемое поведение: разбирается без ошибок;
 // тип переменной dir → TypeNode::Enum("Direction").
 
-enum Direction { North = 0, South = 1, East = 2, West = 3 }
+enum Direction {
+    North = 0,
+    South = 1,
+    East = 2,
+    West = 3
+}
 
 /// Текущее направление движения.
 var dir: Direction := 0;

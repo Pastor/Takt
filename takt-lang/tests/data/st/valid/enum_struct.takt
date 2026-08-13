@@ -8,7 +8,10 @@
 // целочисленный тип плюс именованные константы `Floor_Bottom` / `Floor_Top`.
 // Структура порождает `TYPE … STRUCT … END_STRUCT; END_TYPE`.
 
-enum Floor { Bottom = 80, Top }
+enum Floor {
+    Bottom = 80,
+    Top
+}
 
 struct Coord {
     x: u8,

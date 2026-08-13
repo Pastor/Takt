@@ -4,8 +4,7 @@ model Probe {
     always {
         if x > 0 {
             x := 5;
-        }
-        else {
+        } else {
             x := 7;
         }
         for var i: u8 := 0; i < 3; i := i + 1 {

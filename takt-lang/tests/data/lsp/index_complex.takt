@@ -1,9 +1,16 @@
 // Сложный пример для тестирования SemanticIndex:
 // вложенные модели, перечисления, функции, условия
+model DirectionEnum {
+    enum Direction {
+        North,
+        South,
+        East,
+        West
+    }
+    start S;
+}
 
-model DirectionEnum { enum Direction { North, South, East, West } start S; }
-
-type Byte = [bit;8];
+type Byte = [bit; 8];
 var speed: Byte := 0;
 const MAX_SPEED: Byte := 100;
 cond IsStopped = speed = 0;

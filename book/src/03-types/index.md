@@ -121,8 +121,17 @@ samples[0] := 42;
 отрицательными.
 
 ```takt
-enum Mode { Idle = 0, Run = 1, Halt = 2 }
-enum Command { Up, Down, Stop }        // 0, 1, 2 неявно
+enum Mode {
+    Idle = 0,
+    Run = 1,
+    Halt = 2
+}
+
+enum Command { // 0, 1, 2 неявно
+    Up,
+    Down,
+    Stop
+}
 ```
 
 Знаковость и разрядность перечисления определяются диапазоном его значений

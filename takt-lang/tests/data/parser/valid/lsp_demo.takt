@@ -8,10 +8,19 @@
 type u8 = [bit;8];
 
 /// Перечисление направлений движения робота.
-enum Direction { North, South, East, West }
+enum Direction {
+    North,
+    South,
+    East,
+    West
+}
 
 /// Перечисление приоритетов задачи.
-enum Priority { Low = 0, Medium = 5, High = 10 }
+enum Priority {
+    Low = 0,
+    Medium = 5,
+    High = 10
+}
 
 extern fn log(msg: u8);
 

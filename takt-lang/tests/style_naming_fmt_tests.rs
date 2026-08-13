@@ -15,7 +15,7 @@
 //! 2. **Обход АСД слоя стиля.** Юнит-тесты `naming.rs` проверяют предикаты, но
 //!    ни одна ветвь `collect_element`/`collect_variable` тестом не покрыта:
 //!    объявление, выпавшее из обхода, молча перестало бы проверяться. Здесь
-//!    каждый из **двенадцати** видов объявлений канона наблюдается через
+//!    каждый из **четырнадцати** видов объявлений канона наблюдается через
 //!    настоящий вывод инструмента.
 //! 3. **Имя не исправляется** (решение заказчика): `fmt` на месте оставляет имя
 //!    как есть, а не переписывает его под канон.
@@ -72,15 +72,18 @@ model M {
 start Main = M;
 ";
 
-/// Все двенадцать видов объявлений, которых касается канон, — и каждое нарушает.
+/// Все четырнадцать видов объявлений, которых касается канон, — и каждое
+/// нарушает.
 ///
-/// Формат каноничен (проба: единственным отличием была однострочная `struct`,
-/// здесь она развёрнута), поэтому `fmt --check` вернёт 0 и наблюдаемыми
-/// останутся только предупреждения.
+/// Формат каноничен (проба: отличием была однострочная `struct`, здесь она
+/// развёрнута; с фикса 0197-01 то же касается `enum`), поэтому `fmt --check`
+/// вернёт 0 и наблюдаемыми останутся только предупреждения.
 const EVERY_KIND: &str = "\
 model bad_model {
     type badType = u8;
-    enum badEnum { badVariant }
+    enum badEnum {
+        badVariant
+    }
     struct badStruct {
         x: u8
     }
@@ -88,6 +91,8 @@ model bad_model {
     parameter BadParam: u8 := 1;
     in BadPort: bit;
     var BadVar: u8 := 1;
+    cond bad_cond = BadVar > 1;
+    invariant bad_invariant = BadVar < 9;
     fn BadFn(BadArg: u8) -> u8 {
         return BadArg;
     }
@@ -101,7 +106,9 @@ start Main = bad_model;
 const EVERY_KIND_CANONICAL: &str = "\
 model GoodModel {
     type GoodType = u8;
-    enum GoodEnum { GoodVariant }
+    enum GoodEnum {
+        GoodVariant
+    }
     struct GoodStruct {
         x: u8
     }
@@ -109,12 +116,52 @@ model GoodModel {
     parameter good_param: u8 := 1;
     in good_port: bit;
     var good_var: u8 := 1;
+    cond GoodCond = good_var > 1;
+    invariant GoodInvariant = good_var < 9;
     fn good_fn(good_arg: u8) -> u8 {
         return good_arg;
     }
     start GoodState;
 }
 start Main = GoodModel;
+";
+
+/// Инвариант **в теле состояния** — вторая позиция объявления `invariant`
+/// (`StateElement::Invariant`, фича 0044). Прочие имена файла каноничны, чтобы
+/// наблюдаемым осталось ровно одно предупреждение.
+const STATE_BODY_INVARIANT: &str = "\
+model M {
+    var level: u8 := 0;
+    start S {
+        invariant bad_inv = level < 9;
+        always {
+            level := 1;
+        }
+    }
+}
+start Main = M;
+";
+
+/// Тело состояния из элементов, которые имён **не объявляют**: переход,
+/// ссылка с условием, именованный блок, периодическое действие.
+const STATE_BODY_REFERENCES: &str = "\
+model M {
+    var level: u8 := 0;
+    cond Ready = level > 1;
+    start S {
+        ref Done: Ready;
+        every 100ms {
+            level := level + 1;
+        }
+        always {
+            level := 1;
+        }
+    }
+    state Done {
+        next S;
+    }
+}
+start Main = M;
 ";
 
 /// Вложенная модель: обход обязан спускаться в под-модели.
@@ -355,7 +402,7 @@ fn stdin_warns_without_path_prefix_and_prints_formatted_text() {
     assert_eq!(out.status.code(), Some(0));
 }
 
-/// **Обход АСД.** Каждый из двенадцати видов объявлений канона доезжает до
+/// **Обход АСД.** Каждый из четырнадцати видов объявлений канона доезжает до
 /// пользователя — с верным словом о виде и верной ожидаемой формой.
 ///
 /// ⚠️ Это единственный сторож ветвей `collect_element`/`collect_variable`:
@@ -379,6 +426,9 @@ fn every_declaration_kind_of_the_canon_is_reported() {
         ("функция", "BadFn", "snake_case"),
         ("параметр", "BadArg", "snake_case"),
         ("состояние", "bad_state", "UpperCamelCase"),
+        // Фикс 0197-01: прежде оба падали в `_ => {}` и не проверялись вовсе.
+        ("условие", "bad_cond", "UpperCamelCase"),
+        ("инвариант", "bad_invariant", "UpperCamelCase"),
     ];
 
     let found = kind_and_name(&stderr);
@@ -432,6 +482,40 @@ fn nested_model_name_is_reported() {
         kind_and_name(&stderr),
         vec![("модель".to_string(), "inner".to_string())],
         "ожидалось одно предупреждение — о вложенной модели: {stderr}"
+    );
+}
+
+/// Имя объявляется и в **теле состояния** — `invariant` (фича 0044).
+///
+/// ⚠️ Единственный сторож спуска `collect_state_element` (фикс 0197-01). Без
+/// спуска канон действовал бы через раз: `invariant` уровня модели проверялся
+/// бы, а тот же `invariant` внутри состояния — нет. Правило, работающее
+/// наполовину, хуже отсутствующего: его перестают читать.
+#[test]
+fn state_body_invariant_is_reported() {
+    let path = fixture("state_inv", STATE_BODY_INVARIANT);
+    let (stderr, _) = fmt_check(&path);
+
+    assert_eq!(
+        kind_and_name(&stderr),
+        vec![("инвариант".to_string(), "bad_inv".to_string())],
+        "ожидалось одно предупреждение — об инварианте состояния: {stderr}"
+    );
+}
+
+/// Контр-пример к спуску: элементы тела состояния, которые имён **не
+/// объявляют**, а ссылаются на чужие, предупреждений не дают.
+///
+/// Ловит противоположную ошибку — «проверять всё подряд»: переименовывать
+/// `ref`, `next` или период `every` канон не вправе, это не объявления.
+#[test]
+fn state_body_references_are_not_reported() {
+    let path = fixture("state_refs", STATE_BODY_REFERENCES);
+    let (stderr, _) = fmt_check(&path);
+
+    assert!(
+        style_lines(&stderr).is_empty(),
+        "ссылки объявлениями не являются, канон о них молчит: {stderr}"
     );
 }
 

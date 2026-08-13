@@ -86,7 +86,10 @@ pub(super) fn validate_bit_values(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnost
 ///
 /// ```text
 /// // Корректно: Color объявлен выше или ниже переменной
-/// enum Color { Red = 0, Green = 1 }
+/// enum Color {
+///     Red = 0,
+///     Green = 1
+/// }
 /// var c: Color = 0;   // ✓
 ///
 /// // Ошибка: Size не объявлен
@@ -467,7 +470,10 @@ fn collect_enum_type_safety(model: &Rc<RefCell<ModelNode>>, out: &mut Vec<Diagno
 ///
 /// ```text
 /// // Корректно: 0 — значение варианта North
-/// enum Direction { North = 0, South = 1 }
+/// enum Direction {
+///     North = 0,
+///     South = 1
+/// }
 /// var dir: Direction = 0;
 ///
 /// // Ошибка NI6: 99 не является вариантом Direction

@@ -83,7 +83,7 @@ var eta: u8 := 0; // расчётное время прибытия к цели 
 
 // ─── Координационные переменные (внутренний интерфейс между моделями) ─────────
 var lift_request: bit := 0; // запрос операции вилами (MovementController → LiftController)
-var lift_op: bit := 0; // тип операции: 0=захват (ждём loaded), 1=укладка (ждём unloaded)
+var lift_op: bit := 0; // тип операции: 0=захват (ждём Loaded), 1=укладка (ждём Unloaded)
 var lift_done: bit := 0; // подтверждение завершения (LiftController → MovementController)
 
 // ─── Функции поиска кратчайшего пути ─────────────────────────────────────────
@@ -120,20 +120,17 @@ fn travel_time(to_stack: u8, to_row: u8, to_section: u8) -> u8 {
     var t: u8 := 0;
     if pos_stack > to_stack {
         ds := pos_stack - to_stack;
-    }
-    else {
+    } else {
         ds := to_stack - pos_stack;
     }
     if pos_row > to_row {
         dr := pos_row - to_row;
-    }
-    else {
+    } else {
         dr := to_row - pos_row;
     }
     if pos_section > to_section {
         dy := pos_section - to_section;
-    }
-    else {
+    } else {
         dy := to_section - pos_section;
     }
     t := ds;
@@ -147,22 +144,22 @@ fn travel_time(to_stack: u8, to_row: u8, to_section: u8) -> u8 {
 }
 
 // ─── Условия переходов ────────────────────────────────────────────────────────
-cond at_tgt_stack = pos_stack = tgt_stack;
-cond at_tgt_row = pos_row = tgt_row;
-cond at_tgt_section = pos_section = tgt_section;
-cond at_target = at_tgt_stack & at_tgt_row & at_tgt_section;
+cond AtTgtStack = pos_stack = tgt_stack;
+cond AtTgtRow = pos_row = tgt_row;
+cond AtTgtSection = pos_section = tgt_section;
+cond AtTarget = AtTgtStack & AtTgtRow & AtTgtSection;
 
-cond at_pickup = pos_stack = PICKUP_STACK & pos_row = PICKUP_ROW & pos_section = PICKUP_SECTION;
+cond AtPickup = pos_stack = PICKUP_STACK & pos_row = PICKUP_ROW & pos_section = PICKUP_SECTION;
 
-cond at_dropoff = pos_stack = DROPOFF_STACK & pos_row = DROPOFF_ROW & pos_section = DROPOFF_SECTION;
+cond AtDropoff = pos_stack = DROPOFF_STACK & pos_row = DROPOFF_ROW & pos_section = DROPOFF_SECTION;
 
-cond at_charge_zone = sense_at_charge;
+cond AtChargeZone = sense_at_charge;
 
-cond is_inbound = !tgt_type;
-cond is_outbound = tgt_type;
-cond loaded = sense_loaded;
-cond unloaded = !sense_loaded;
-cond charged = !sense_battery_low;
+cond IsInbound = !tgt_type;
+cond IsOutbound = tgt_type;
+cond Loaded = sense_loaded;
+cond Unloaded = !sense_loaded;
+cond Charged = !sense_battery_low;
 
 // ─── Модель 1: Приём команды ──────────────────────────────────────────────────
 //
@@ -216,13 +213,13 @@ model MovementController {
             cmd_target_section := CHARGE_SECTION;
             cmd_done := 0;
         }
-        ref DispatchMove: busy & charged;
+        ref DispatchMove: busy & Charged;
     }
 
     // Диспетчеризация: выбор ветки по типу задания
     state DispatchMove {
-        ref MovingToPickup: is_inbound;
-        ref MovingToStorage: is_outbound;
+        ref MovingToPickup: IsInbound;
+        ref MovingToStorage: IsOutbound;
     }
 
     // ── Ветка ПРИЁМКА (in-bound): получить паллет → уложить в ячейку ──────────
@@ -234,7 +231,7 @@ model MovementController {
             cmd_target_row := PICKUP_ROW;
             cmd_target_section := PICKUP_SECTION;
         }
-        ref WaitingForkAtPickup: at_pickup;
+        ref WaitingForkAtPickup: AtPickup;
         ref EmergencyCharge: sense_battery_low;
     }
 
@@ -256,7 +253,7 @@ model MovementController {
             cmd_target_row := tgt_row;
             cmd_target_section := tgt_section;
         }
-        ref WaitingForkAtCell: at_target;
+        ref WaitingForkAtCell: AtTarget;
         ref EmergencyCharge: sense_battery_low;
     }
 
@@ -280,7 +277,7 @@ model MovementController {
             cmd_target_row := tgt_row;
             cmd_target_section := tgt_section;
         }
-        ref WaitingForkAtStorage: at_target;
+        ref WaitingForkAtStorage: AtTarget;
         ref EmergencyCharge: sense_battery_low;
     }
 
@@ -302,7 +299,7 @@ model MovementController {
             cmd_target_row := DROPOFF_ROW;
             cmd_target_section := DROPOFF_SECTION;
         }
-        ref WaitingForkAtDropoff: at_dropoff;
+        ref WaitingForkAtDropoff: AtDropoff;
         ref EmergencyCharge: sense_battery_low;
     }
 
@@ -366,9 +363,9 @@ model LiftController {
         enter {
             cmd_fork := 1;
         }
-        ref LiftDone: lift_request & !lift_op & loaded;
+        ref LiftDone: lift_request & !lift_op & Loaded;
         // захват: паллет на вилах
-        ref LiftDone: lift_request & lift_op & unloaded;
+        ref LiftDone: lift_request & lift_op & Unloaded;
         // укладка/выдача: вилы свободны
         ref LiftIdle: !lift_request;
     }

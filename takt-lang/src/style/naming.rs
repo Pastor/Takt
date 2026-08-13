@@ -5,6 +5,7 @@
 //! | Что | Форма |
 //! |---|---|
 //! | модели, состояния, типы, перечисления, структуры, варианты | `UpperCamelCase` |
+//! | условия (`cond`), инварианты (`invariant`) | `UpperCamelCase` |
 //! | переменные, порты, функции, параметры | `snake_case` |
 //! | константы | `UPPER_SNAKE_CASE` |
 //!
@@ -125,7 +126,16 @@ fn collect_model(model: &ast::Model, out: &mut Vec<Diagnostic>) {
 fn collect_element(element: &ast::ModelElement, out: &mut Vec<Diagnostic>) {
     match element {
         ast::ModelElement::Model(m) => collect_model(m, out),
-        ast::ModelElement::State(s) => check(&s.name, "состояние", Case::UpperCamel, out),
+        ast::ModelElement::State(s) => {
+            check(&s.name, "состояние", Case::UpperCamel, out);
+            // Тело состояния тоже ОБЪЯВЛЯЕТ имена: `invariant` живёт и здесь
+            // (`StateElement::Invariant`, фича 0044). Без спуска канон
+            // действовал бы через раз — правило, работающее наполовину, хуже
+            // отсутствующего: его перестают читать.
+            for element in &s.elements {
+                collect_state_element(element, out);
+            }
+        }
         ast::ModelElement::Variable(v) => collect_variable(v, out),
         ast::ModelElement::Function(f) => {
             check(&f.name, "функция", Case::Snake, out);
@@ -143,7 +153,35 @@ fn collect_element(element: &ast::ModelElement, out: &mut Vec<Diagnostic>) {
             }
         }
         ast::ModelElement::Struct(s) => check(&s.name, "структура", Case::UpperCamel, out),
+        // `cond Имя = условие;` и `invariant Имя = условие;` — именованные
+        // ОБЪЯВЛЕНИЯ, и канон на них распространяется наравне с типами
+        // (решение заказчика, фикс 0197-01). Прежде оба падали в `_ => {}` и не
+        // проверялись вовсе, отчего корпус успел разойтись: 46 имён
+        // `UpperCamelCase` против 20 `snake_case`.
+        ast::ModelElement::Condition(c) => check(&c.name, "условие", Case::UpperCamel, out),
+        ast::ModelElement::Invariant(i) => check(&i.name, "инвариант", Case::UpperCamel, out),
         _ => {}
+    }
+}
+
+/// Имена, объявляемые в теле состояния.
+///
+/// Сегодня оно ровно одно — `invariant` (фича 0044). Остальные элементы тела
+/// (`next`, `ref`, именованные блоки, `every`, встроенные формулы) имён не
+/// вводят, а ССЫЛАЮТСЯ на чужие — переименовывать их канон не вправе.
+///
+/// ⚠️ `match` исчерпывающий, без `_`: новый вид элемента состояния обязан
+/// заставить принять решение, а не молча выпасть из проверки — так молча
+/// выпадали `always` уровня модели (0083) и реализация модели (0199).
+fn collect_state_element(element: &ast::StateElement, out: &mut Vec<Diagnostic>) {
+    match element {
+        ast::StateElement::Invariant(i) => check(&i.name, "инвариант", Case::UpperCamel, out),
+        ast::StateElement::Next(_)
+        | ast::StateElement::Reference(..)
+        | ast::StateElement::NamedBlockCode(_)
+        | ast::StateElement::StraySemicolon(_)
+        | ast::StateElement::InlineFormula(_)
+        | ast::StateElement::Every(_) => {}
     }
 }
 

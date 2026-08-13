@@ -82,7 +82,7 @@ fn test_stray_semicolon_inside_state_generates_warning() {
 /// Корректный код без лишних `;` не генерирует предупреждений.
 #[test]
 fn test_no_stray_semicolon_no_warning() {
-    let (ast, _) = takt_lang::parse("cond x = true; start S { ref Done: x; } state Done;", 0)
+    let (ast, _) = takt_lang::parse("cond X = true; start S { ref Done: X; } state Done;", 0)
         .expect("ошибка разбора");
     let warnings = takt_lang::stray_semicolon_warnings(&ast);
     assert!(
@@ -98,7 +98,7 @@ fn test_no_stray_semicolon_no_warning() {
 #[test]
 fn test_cond_define_semicolon_consumed_not_stray() {
     use takt_lang::parser::ast::ModelElement;
-    let (ast, errs) = takt_lang::parse("cond x = true; start S;", 0).expect("ошибка разбора");
+    let (ast, errs) = takt_lang::parse("cond X = true; start S;", 0).expect("ошибка разбора");
     assert!(errs.is_empty(), "ошибок разбора быть не должно");
     let cond_count = ast
         .elements

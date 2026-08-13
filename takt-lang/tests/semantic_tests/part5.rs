@@ -158,7 +158,12 @@ fn test_enum_with_values() {
 ///
 /// # Пример (Takt)
 /// ```text
-/// enum Direction { North = 0, South = 1, East = 2, West = 3 }
+/// enum Direction {
+///     North = 0,
+///     South = 1,
+///     East = 2,
+///     West = 3
+/// }
 /// var dir: Direction = 0;
 /// ```
 #[test]
@@ -198,7 +203,11 @@ fn ce4_undeclared_enum_type_gives_error() {
 ///
 /// # Контр-пример (Takt)
 /// ```text
-/// enum Color { Red = 0, Green = 1, Blue = 2 }
+/// enum Color {
+///     Red = 0,
+///     Green = 1,
+///     Blue = 2
+/// }
 /// var c: Color = 99;   // 99 не является вариантом Color → NI6
 /// ```
 #[test]
@@ -235,8 +244,14 @@ fn ce4_enum_variant_used_as_initializer() {
 ///
 /// # Пример (Takt)
 /// ```text
-/// enum Color { Red = 0, Green = 1 }
-/// enum Priority { Low = 0, High = 1 }
+/// enum Color {
+///     Red = 0,
+///     Green = 1
+/// }
+/// enum Priority {
+///     Low = 0,
+///     High = 1
+/// }
 /// var c: Color = 0;
 /// var p: Priority = 1;
 /// start S;
@@ -269,7 +284,10 @@ fn ce4_two_enums_in_model() {
 ///
 /// # Пример (Takt)
 /// ```text
-/// enum Dir { N = 0, S = 1 }
+/// enum Dir {
+///     N = 0,
+///     S = 1
+/// }
 /// model Inner {
 ///     var d: [bit;8] = N;  // N разрешается в 0 через search_enum_variant
 ///     start S;
@@ -818,8 +836,8 @@ fn test_inline_formula_model_resolved() {
 fn test_var_used_in_condition_bitaccess_no_unused_warning() {
     let src = r#"
         var flag: bit := 0;
-        cond bit_set = flag.0;
-        start S { ref Done: bit_set; }
+        cond BitSet = flag.0;
+        start S { ref Done: BitSet; }
         state Done;
     "#;
     let (ast, _) = takt_lang::parse(src, 0).expect("ошибка разбора");
