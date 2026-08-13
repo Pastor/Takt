@@ -226,15 +226,15 @@ fn const_node_has_parent_upper() {
 ///
 /// # Пример (Takt)
 /// ```but
-/// cond done = true;
+/// cond Done = true;
 /// ```
 #[test]
 fn condition_node_has_parent_upper() {
-    let node = build("cond done = true;");
+    let node = build("cond Done = true;");
     let cond = node
         .conditions
-        .get("done")
-        .expect("условие done не найдено");
+        .get("Done")
+        .expect("условие Done не найдено");
     assert!(
         cond.upper.is_some(),
         "именованное условие должно иметь ссылку на родительскую модель"
@@ -363,7 +363,7 @@ fn variable_upper_gives_access_to_sibling_vars() {
 #[test]
 fn no_strong_cycle_with_conditions() {
     use std::rc::Rc;
-    let (ast, _) = parse("var x: bit := false; cond done = x = false; start S;", 0).unwrap();
+    let (ast, _) = parse("var x: bit := false; cond Done = x = false; start S;", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
     assert_eq!(
         Rc::strong_count(&root),

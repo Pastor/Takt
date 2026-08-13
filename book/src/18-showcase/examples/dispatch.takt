@@ -1,24 +1,34 @@
 // Диспетчер секции: выбирает кабину, ближайшую к новому вызову (минимизация хода).
+in call: u8; // этаж нового вызова
+in pos_a: u8; // позиции трёх кабин секции
+in pos_b: u8;
+in pos_c: u8;
+out assigned: u8; // номер выбранной кабины (0..2)
 
-in  call:  u8;        // этаж нового вызова
-in  pos_a: u8;        // позиции трёх кабин секции
-in  pos_b: u8;
-in  pos_c: u8;
-out assigned: u8;     // номер выбранной кабины (0..2)
-
-fn dist(a: u8, b: u8) -> u8 {            // расстояние между этажами
-    if a >= b { return a - b; }
+fn dist(a: u8, b: u8) -> u8 {
+    if a >= b {
+        // расстояние между этажами
+        return a - b;
+    }
     return b - a;
 }
 
-fn pick(c: u8, a: u8, b: u8, d: u8) -> u8 {   // кабина с минимальной дистанцией
+fn pick(c: u8, a: u8, b: u8, d: u8) -> u8 {
+    // кабина с минимальной дистанцией
     var best: u8 := 0;
     var bd: u8 := dist(c, a);
-    if dist(c, b) < bd { bd := dist(c, b); best := 1; }
-    if dist(c, d) < bd { best := 2; }
+    if dist(c, b) < bd {
+        bd := dist(c, b);
+        best := 1;
+    }
+    if dist(c, d) < bd {
+        best := 2;
+    }
     return best;
 }
 
 start Route {
-    always { assigned := pick(call, pos_a, pos_b, pos_c); }
+    always {
+        assigned := pick(call, pos_a, pos_b, pos_c);
+    }
 }

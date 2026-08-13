@@ -619,7 +619,10 @@ mod tests {
     ///
     /// # Пример (Takt)
     /// ```text
-    /// enum Color { Red = 0, Green = 1 }
+    /// enum Color {
+    ///     Red = 0,
+    ///     Green = 1
+    /// }
     /// var c: Color = 0;   // тип аннотации → TypeNode::Enum("Color")
     /// ```
     #[test]

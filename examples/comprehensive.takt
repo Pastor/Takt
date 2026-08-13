@@ -10,7 +10,11 @@
 /// именованные условия (cond), состояния (start/state), оператор match.
 
 /// Перечисление режимов работы
-enum Mode { Auto = 0, Manual = 1, Emergency = 2 }
+enum Mode {
+    Auto = 0,
+    Manual = 1,
+    Emergency = 2
+}
 
 /// Внешние функции платформенного слоя
 extern fn log_temp(value: u8);
@@ -65,8 +69,7 @@ model Controller {
         loop v > 0 {
             if v > COOL_STEP {
                 v := v - COOL_STEP;
-            }
-            else {
+            } else {
                 v := 0;
             }
             remaining := remaining + 1;

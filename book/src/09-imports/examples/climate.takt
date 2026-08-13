@@ -1,34 +1,47 @@
 // Климат-контроль: термостат командует нагревателем, а вентилятор гонит воздух,
 // пока идёт нагрев. Две модели работают параллельно и общаются через флаг.
+var heating: bit := 0; // (3) общий флаг: идёт нагрев
 
-var heating: bit := 0;                   // (3) общий флаг: идёт нагрев
-
-model Thermostat {                       // (1) первая под-модель
-    in  temp: u8;
+model Thermostat {
+    // (1) первая под-модель
+    in temp: u8;
     out heater: bit;
     const SETPOINT: u8 := 22;
 
     start Cold {
-        enter { heater := 1; heating := 1; }   // (3) поднимает флаг
+        enter {
+            heater := 1; // (3) поднимает флаг
+            heating := 1;
+        }
         ref Warm: temp >= SETPOINT;
     }
     state Warm {
-        enter { heater := 0; heating := 0; }
+        enter {
+            heater := 0;
+            heating := 0;
+        }
         ref Cold: temp < SETPOINT;
     }
 }
 
-model Fan {                              // (1) вторая под-модель
+model Fan {
+    // (1) вторая под-модель
     out fan: bit;
 
     start Off {
-        enter { fan := 0; }
-        ref On: heating = 1;             // (3) читает флаг термостата
+        enter {
+            fan := 0;
+        }
+        ref On: heating = 1;
     }
+    // (3) читает флаг термостата
     state On {
-        enter { fan := 1; }
+        enter {
+            fan := 1;
+        }
         ref Off: heating = 0;
     }
 }
 
-start Climate = Thermostat | Fan;        // (2) параллельная композиция
+start Climate = Thermostat | Fan;
+// (2) параллельная композиция

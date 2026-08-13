@@ -746,17 +746,17 @@ fn global_symbol_import_only_alias_registered() {
 /// `search_cond` находит именованное условие по имени.
 #[test]
 fn search_cond_finds_named_condition() {
-    let node = build("cond done = true;");
+    let node = build("cond Done = true;");
     assert!(
-        node.search_cond("done").is_some(),
-        "условие 'done' должно быть найдено"
+        node.search_cond("Done").is_some(),
+        "условие 'Done' должно быть найдено"
     );
 }
 
 /// `search_cond` возвращает `None` для несуществующего условия.
 #[test]
 fn search_cond_returns_none_for_unknown() {
-    let node = build("cond done = true;");
+    let node = build("cond Done = true;");
     assert!(
         node.search_cond("missing").is_none(),
         "несуществующее условие должно давать None"

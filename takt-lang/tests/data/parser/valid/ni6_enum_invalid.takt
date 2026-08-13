@@ -1,6 +1,11 @@
 // NI6: примеры некорректных операций с типом enum (контрпримеры)
 // Эти присваивания должны вызывать ошибки типизации
-enum Direction { North, South, East, West }
+enum Direction {
+    North,
+    South,
+    East,
+    West
+}
 
 // ОШИБКА: значение 99 не является вариантом Direction
 // var heading: Direction = 99;

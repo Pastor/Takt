@@ -11,7 +11,11 @@
 ///
 /// Обёрнута в `model` с корневым `start` — как `conformance_u8.takt`: харнесс
 /// читает поля через `m.entry.<имя>`.
-enum Level { Low = -5, Mid = 0, High = 5 }
+enum Level {
+    Low = -5,
+    Mid = 0,
+    High = 5
+}
 
 model NegEnum {
     var lv: Level := Mid;

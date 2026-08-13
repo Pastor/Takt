@@ -11,13 +11,17 @@ model Fan {
 
     // Свет выключен, вентилятор стоит — ждём включения.
     start Idle {
-        enter { motor := 0; }
+        enter {
+            motor := 0;
+        }
         ref Working: light = 1;
     }
 
     // Свет горит: вентилятор работает, пока его не выключат.
     state Working {
-        enter { motor := 1; }
+        enter {
+            motor := 1;
+        }
         ref Overrun: light = 0;
     }
 
@@ -26,8 +30,8 @@ model Fan {
     // выдержка отменяется переходом обратно в Working (3).
     state Overrun {
         ref Working: light = 1;
-        ref Idle: after OVERRUN; // (4)
+        ref Idle: after OVERRUN;
     }
 }
-
+// (4)
 start Main = Fan;

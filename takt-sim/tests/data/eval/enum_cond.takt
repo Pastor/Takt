@@ -2,7 +2,10 @@
 ///
 /// До фичи 0025 `EnumVariant` давал Err, поэтому `mode = Manual` при
 /// mode=Manual было ложным.
-enum Mode { Auto = 0, Manual = 1 }
+enum Mode {
+    Auto = 0,
+    Manual = 1
+}
 
 var mode: Mode := Manual;
 

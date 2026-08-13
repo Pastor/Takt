@@ -9,7 +9,11 @@
 //   command       : Command  — направление движения, устанавливается Cabin
 //   current_floor : u8       — текущий этаж (обновляется по датчикам нижней зоны этажа)
 //   target_floor  : u8       — целевой этаж (0 = нет задания)
-enum Command { Up, Down, Stop }
+enum Command {
+    Up,
+    Down,
+    Stop
+}
 
 var command: Command := Stop;
 var current_floor: u8 := 1;

@@ -18,7 +18,10 @@ fn build_rc(src: &str) -> Rc<RefCell<ModelNode>> {
 ///
 /// # Пример (Takt)
 /// ```text
-/// enum Color { Red = 0, Green = 1 }
+/// enum Color {
+///     Red = 0,
+///     Green = 1
+/// }
 /// var c: Color = 0;   // ✓ Color объявлен
 /// start S;
 /// ```

@@ -15,7 +15,10 @@
 ///   S9 — усечение при записи:  200+100 → 44
 ///   S7 — вариант enum как целое
 ///   бул. приведение: (bool)2 → true → 1
-enum Mode { Auto = 0, Manual = 1 }
+enum Mode {
+    Auto = 0,
+    Manual = 1
+}
 
 model Conf {
     var wrapped: u8 := 0;

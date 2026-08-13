@@ -134,7 +134,7 @@ struct Point { x: u8, y: u8 }
 model M {
     var p: Point := {1, 2};
     var q: u8 := 0;
-    cond ok = p.y > 0;
+    cond Ok = p.y > 0;
     start S { always { q := p.x; } ref Done: p.y > 3; }
     state Done;
 }

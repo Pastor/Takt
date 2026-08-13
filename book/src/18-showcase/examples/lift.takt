@@ -5,56 +5,92 @@
 // датчик at_floor (шахтная система позиционирования); движение создаёт привод,
 // а фиксирует — датчик. Выдержка дверей — это отрезок ВРЕМЕНИ, поэтому её порог
 // задан в тактах и подстраивается под частоту устройства.
+const DWELL_TICKS: u8 := 3; // (1) выдержка дверей: подстрой под частоту (≈3 с при 1 Гц)
 
-const DWELL_TICKS: u8 := 3;              // (1) выдержка дверей: подстрой под частоту (≈3 с при 1 Гц)
-
-in call:     u8 at 0x50000000;          // (2) запрошенный этаж (0 — нет запроса)
-in at_floor: u8 at 0x50000002;          // (2) датчик положения: текущий этаж кабины
-out motor_up:   bit at 0x50000010:0;
+in call: u8 at 1342177280; // (2) запрошенный этаж (0 — нет запроса)
+in at_floor: u8 at 1342177282; // (2) датчик положения: текущий этаж кабины
+out motor_up: bit at 0x50000010:0;
 out motor_down: bit at 0x50000010:1;
-out brake:      bit at 0x50000010:2;     // 1 — тормоз зажат
+out brake: bit at 0x50000010:2; // 1 — тормоз зажат
 out doors_open: bit at 0x50000010:3;
-out display:    u8 at 0x50000014;       // индикатор текущего этажа
+out display: u8 at 1342177300; // индикатор текущего этажа
 
-var dwell:  u8  := 0;                    // счётчик выдержки (в тактах)
-var doors:  bit := 0;                    // внутреннее состояние дверей
-var moving: bit := 0;                    // внутреннее состояние привода
+var dwell: u8 := 0; // счётчик выдержки (в тактах)
+var doors: bit := 0; // внутреннее состояние дверей
+var moving: bit := 0; // внутреннее состояние привода
 
 // Безопасность: привод не работает, пока двери открыты — на каждом такте.
 invariant SafeMove = moving = 0 | doors = 0;
 
 start Waiting {
-    enter { moving := 0; motor_up := 0; motor_down := 0; brake := 1; doors := 0; doors_open := 0; }
-    always { display := at_floor; }          // (3) индикатор следует за датчиком
-    ref Boarding: call = at_floor;           // (4) вызван текущий этаж → впустить
-    ref GoingUp: call > at_floor;            // (4) вызван этаж выше
+    enter {
+        moving := 0;
+        motor_up := 0;
+        motor_down := 0;
+        brake := 1;
+        doors := 0;
+        doors_open := 0;
+    }
+    always {
+        display := at_floor; // (3) индикатор следует за датчиком
+    }
+    ref Boarding: call = at_floor;
+    // (4) вызван текущий этаж → впустить
+    ref GoingUp: call > at_floor;
+    // (4) вызван этаж выше
     ref GoingDown: call > 0 & call < at_floor;
 }
 
 state GoingUp {
-    enter { moving := 1; brake := 0; motor_up := 1; }
-    always { display := at_floor; }          // (3) едем; положение — с датчика
-    ref Stopping: at_floor >= call;          // (5) датчик дошёл до цели → тормозить
+    enter {
+        moving := 1;
+        brake := 0;
+        motor_up := 1;
+    }
+    always {
+        display := at_floor; // (3) едем; положение — с датчика
+    }
+    ref Stopping: at_floor >= call;
 }
-
+// (5) датчик дошёл до цели → тормозить
 state GoingDown {
-    enter { moving := 1; brake := 0; motor_down := 1; }
-    always { display := at_floor; }
+    enter {
+        moving := 1;
+        brake := 0;
+        motor_down := 1;
+    }
+    always {
+        display := at_floor;
+    }
     ref Stopping: at_floor <= call;
 }
 
 state Stopping {
-    enter { moving := 0; motor_up := 0; motor_down := 0; brake := 1; }
+    enter {
+        moving := 0;
+        motor_up := 0;
+        motor_down := 0;
+        brake := 1;
+    }
     next Boarding;
 }
 
 state Boarding {
-    enter { doors := 1; doors_open := 1; dwell := 0; }
-    always { dwell := dwell + 1; }           // (6) отсчёт ВРЕМЕНИ выдержки (в тактах)
+    enter {
+        doors := 1;
+        doors_open := 1;
+        dwell := 0;
+    }
+    always {
+        dwell := dwell + 1; // (6) отсчёт ВРЕМЕНИ выдержки (в тактах)
+    }
     ref Leaving: dwell >= DWELL_TICKS;
 }
 
 state Leaving {
-    enter { doors := 0; doors_open := 0; }
+    enter {
+        doors := 0;
+        doors_open := 0;
+    }
     next Waiting;
 }

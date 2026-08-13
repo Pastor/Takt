@@ -93,6 +93,21 @@ impl<'a> Comments<'a> {
         Some(text)
     }
 
+    /// Хвостовой комментарий, но **только внутри** границы `limit`.
+    ///
+    /// Нужен там, где узел печатается по частям, а `Location` внешней записи
+    /// покрывает их все: у однострочного `enum E { A, B } // вид` комментарий
+    /// стоит на той же строке, что и КАЖДЫЙ вариант, и без границы его забрал
+    /// бы первый же из них — хотя автор написал его о перечислении целиком.
+    /// `limit` — байт закрывающей скобки: всё, что начинается за ней,
+    /// принадлежит внешней записи, а не её части.
+    pub(crate) fn trailing_within(&mut self, end: usize, limit: usize) -> Option<String> {
+        if self.items.get(self.next)?.start >= limit {
+            return None;
+        }
+        self.trailing(end)
+    }
+
     /// Начало ближайшего непогашенного комментария (без потребления).
     pub(crate) fn peek_start(&self) -> Option<usize> {
         self.items.get(self.next).map(|i| i.start)

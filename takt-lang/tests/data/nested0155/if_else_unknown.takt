@@ -4,8 +4,7 @@ model Probe {
     always {
         if x > 0 {
             x := 1;
-        }
-        else {
+        } else {
             x := unknown_var_zzz;
         }
     }

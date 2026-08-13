@@ -84,20 +84,24 @@ pub(crate) fn print(out: &mut Out, statement: &ast::Statement) -> Result<(), For
             }
             Ok(())
         }
+        // K&R-раскладка канона стиля (фикс 0197-01): `}` и `else` — на ОДНОЙ
+        // строке. Цепочка печатается тем же приёмом: закрывающую скобку ветки
+        // `then` уже поставил `block_with_head`, `join` продолжает ЕЁ строку, а
+        // заголовок следующей ветки печатается без отступа — блоком (`{`) или
+        // рекурсивным `print` (`if cond {`). Отдельной печати для `else if`
+        // больше не нужно: прежде она давала три строки (`}` / `else` / `if …`).
         S::If(_, cond, then_, else_) => {
             block_with_head(out, &format!("if {} ", expr::expression(cond)?), then_)?;
-            if let Some(else_) = else_ {
-                // `else if` печатается цепочкой, а не вложенным блоком.
-                if matches!(**else_, S::If(..)) {
-                    // Заголовок `else ` + рекурсивный `if` дал бы разрыв строки,
-                    // поэтому печатаем `else` отдельной строкой перед `if`.
-                    out.line("else");
-                    print(out, else_)?;
-                } else {
-                    block_with_head(out, "else ", else_)?;
-                }
+            let Some(else_) = else_ else {
+                return Ok(());
+            };
+            out.join(" else ");
+            if matches!(**else_, S::If(..)) {
+                print(out, else_)
+            } else {
+                // Заголовка у простого `else` нет вовсе: `{` даёт сам блок.
+                block_with_head(out, "", else_)
             }
-            Ok(())
         }
         S::Loop(_, cond, body, keyword) => {
             // Печатаем слово АВТОРА: `while` — синоним `loop`, и переписывать

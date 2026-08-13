@@ -7,7 +7,11 @@ struct Coord {
     z: [bit; 32]
 }
 const ORIGIN: Coord := {0, 0, 0};
-enum Constant { X, Y, Z }
+enum Constant {
+    X,
+    Y,
+    Z
+}
 out idle: bit at 0x44533932:1;
 out work: bit at 0x44533932:2;
 in wait: bit at 0x44533932:33;
@@ -27,8 +31,7 @@ model B {
             if wait {
                 work := 0;
                 idle := 1;
-            }
-            else {
+            } else {
                 idle := 0;
                 work := 1;
             }
@@ -36,7 +39,10 @@ model B {
     }
 }
 model C {
-    enum Point { Global, Local }
+    enum Point {
+        Global,
+        Local
+    }
     model C1 {
         start Start {
             ref End: is_collected(Y, y) & is_collected(X, x) & has_flag(ENABLED);

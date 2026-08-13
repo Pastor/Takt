@@ -81,8 +81,8 @@ fn assignment_rhs(stmt: &crate::semantic::StatementNode) -> Option<ExpressionNod
 /// Числовой литерал: `var x = 42;` → `Number(42)`.
 #[test]
 fn number_literal_resolved() {
-    let node = build("var x: bit := false; cond c = 42;").unwrap();
-    assert_eq!(node.conditions["c"].value, ConditionNode::Number(42));
+    let node = build("var x: bit := false; cond C = 42;").unwrap();
+    assert_eq!(node.conditions["C"].value, ConditionNode::Number(42));
 }
 
 /// Булев литерал `true`: инициализатор переменной → `Bool(true)`.
@@ -136,20 +136,20 @@ fn variable_ref_in_initializer_resolves() {
 ///
 /// # Пример (Takt)
 /// ```but
-/// cond done = true;
-/// var flag: bit = done;
+/// cond Done = true;
+/// var flag: bit = Done;
 /// ```
 ///
-/// **Примечание**: Это возможно только если `done` объявлена ПЕРЕД `flag`,
+/// **Примечание**: Это возможно только если `Done` объявлена ПЕРЕД `flag`,
 /// что проверяет данный тест.
 #[test]
 fn named_condition_in_var_initializer_resolves() {
     // Условие разрешается как Condition внутри именованного cond-блока.
     // Проверяем через отдельный cond, а не var-инициализатор (разрешение идёт в extract_conditions).
-    let node = build("cond done = true; cond ref_done = done;").unwrap();
-    // ref_done = done должно разрешиться через переменную (done — это cond, не var)
+    let node = build("cond Done = true; cond RefDone = Done;").unwrap();
+    // RefDone = Done должно разрешиться через переменную (done — это cond, не var)
     // Если не находит как переменную, ищет как условие
-    assert!(node.conditions.contains_key("ref_done"));
+    assert!(node.conditions.contains_key("RefDone"));
 }
 
 /// Контрпример: несуществующий идентификатор → ошибка.

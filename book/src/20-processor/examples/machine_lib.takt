@@ -52,7 +52,15 @@ var data_wdata: [u8; 2] := {0, 0};
 var data_wen: [u8; 2] := {0, 0};
 
 // Система команд учебной машины.
-enum Op { Nop = 0, Lda = 1, Sta = 2, Add = 3, Sub = 4, Jnz = 5, Hlt = 6 }
+enum Op {
+    Nop = 0,
+    Lda = 1,
+    Sta = 2,
+    Add = 3,
+    Sub = 4,
+    Jnz = 5,
+    Hlt = 6
+}
 
 // ─── Память: команды и данные ────────────────────────────────────────────────
 model Memory {
@@ -101,20 +109,17 @@ model Memory {
                 if wait > 0 {
                     wait := wait - 1;
                     bus_ready := 0;
-                }
-                else {
+                } else {
                     if program = 0 {
                         bus_op := loop_op[bus_addr];
                         bus_arg := loop_arg[bus_addr];
-                    }
-                    else {
+                    } else {
                         bus_op := line_op[bus_addr];
                         bus_arg := line_arg[bus_addr];
                     }
                     bus_ready := 1;
                 }
-            }
-            else {
+            } else {
                 wait := latency;
                 bus_ready := 0;
             }
@@ -178,8 +183,7 @@ model Cache {
                 fetch_arg[serves] := args[idx];
                 fetch_ready[serves] := 1;
                 hits := hits + 1;
-            }
-            else {
+            } else {
                 fetch_ready[serves] := 0;
             }
         }
@@ -234,12 +238,10 @@ model Arbiter {
             arb_ready[1] := 0;
             if arb_req[0] = 1 && last = 1 {
                 owner := 0;
-            }
-            else {
+            } else {
                 if arb_req[1] = 1 {
                     owner := 1;
-                }
-                else {
+                } else {
                     owner := 0;
                 }
             }
@@ -295,8 +297,7 @@ model Core {
             data_wen[id] := 0;
             if fetch_ready[id] = 1 {
                 fetch_req[id] := 0;
-            }
-            else {
+            } else {
                 fetch_addr[id] := pc;
                 fetch_req[id] := 1;
             }
@@ -387,8 +388,7 @@ model StageFetch {
                 if_pc := bus_addr;
                 if_valid := 1;
                 bus_req := 0;
-            }
-            else {
+            } else {
                 if_valid := 0;
             }
             bus_addr := pc;
@@ -421,8 +421,7 @@ model StageDecode {
                 id_pc := if_pc;
                 id_valid := 1;
                 data_addr[0] := if_arg;
-            }
-            else {
+            } else {
                 id_valid := 0;
             }
         }

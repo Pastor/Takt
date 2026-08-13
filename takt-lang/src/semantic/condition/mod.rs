@@ -459,48 +459,48 @@ mod tests {
 
     // ─── construct_cond: литералы ─────────────────────────────────────────
 
-    /// Литерал `true`: `cond c = true;` → `Bool(true)`.
+    /// Литерал `true`: `cond C = true;` → `Bool(true)`.
     ///
     /// # Пример (Takt)
     /// ```but
-    /// cond always = true;
+    /// cond Always = true;
     /// ```
     #[test]
     fn bool_true_literal() {
-        let node = build("cond c = true;").unwrap();
-        assert_eq!(cond_val(&node, "c"), ConditionNode::Bool(true));
+        let node = build("cond C = true;").unwrap();
+        assert_eq!(cond_val(&node, "C"), ConditionNode::Bool(true));
     }
 
-    /// Литерал `false`: `cond c = false;` → `Bool(false)`.
+    /// Литерал `false`: `cond C = false;` → `Bool(false)`.
     #[test]
     fn bool_false_literal() {
-        let node = build("cond c = false;").unwrap();
-        assert_eq!(cond_val(&node, "c"), ConditionNode::Bool(false));
+        let node = build("cond C = false;").unwrap();
+        assert_eq!(cond_val(&node, "C"), ConditionNode::Bool(false));
     }
 
-    /// Целочисленный литерал: `cond c = 42;` → `Number(42)`.
+    /// Целочисленный литерал: `cond C = 42;` → `Number(42)`.
     #[test]
     fn number_literal() {
-        let node = build("cond c = 42;").unwrap();
-        assert_eq!(cond_val(&node, "c"), ConditionNode::Number(42));
+        let node = build("cond C = 42;").unwrap();
+        assert_eq!(cond_val(&node, "C"), ConditionNode::Number(42));
     }
 
-    /// Вещественный литерал: `cond c = 3.14;` → `Rational("3.14", false)`.
+    /// Вещественный литерал: `cond C = 3.14;` → `Rational("3.14", false)`.
     ///
     /// **Ранее было сломано**: ветка `Rational` в `construct_cond` была заглушкой,
     /// из-за чего условие молча становилось `Condition::None`.
     ///
     /// # Пример (Takt)
     /// ```but
-    /// cond threshold = 0.5;
+    /// cond Threshold = 0.5;
     /// ```
     #[test]
     fn rational_literal() {
-        let node = build("cond c = 3.14;").unwrap();
+        let node = build("cond C = 3.14;").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), ConditionNode::Rational(ref s, false) if s == "3.14"),
+            matches!(cond_val(&node, "C"), ConditionNode::Rational(ref s, false) if s == "3.14"),
             "ожидалось Rational(\"3.14\", false), получено {:?}",
-            cond_val(&node, "c")
+            cond_val(&node, "C")
         );
     }
 
@@ -511,15 +511,15 @@ mod tests {
     /// # Пример (Takt)
     /// ```but
     /// var flag: bit = false;
-    /// cond c = flag;
+    /// cond C = flag;
     /// ```
     #[test]
     fn variable_in_scope_resolves() {
-        let node = build("var flag: bit := false; cond c = flag;").unwrap();
+        let node = build("var flag: bit := false; cond C = flag;").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), ConditionNode::Variable(_, _)),
+            matches!(cond_val(&node, "C"), ConditionNode::Variable(_, _)),
             "ожидалось Condition::Variable, получено {:?}",
-            cond_val(&node, "c")
+            cond_val(&node, "C")
         );
     }
 
@@ -528,11 +528,11 @@ mod tests {
     ///
     /// # Контрпример (Takt)
     /// ```but
-    /// cond bad = ghost;   // 'ghost' нигде не объявлена
+    /// cond Bad = ghost;   // 'ghost' нигде не объявлена
     /// ```
     #[test]
     fn variable_not_in_scope_is_error() {
-        let result = build("cond bad = ghost;");
+        let result = build("cond Bad = ghost;");
         assert!(
             result.is_err(),
             "ожидалась ошибка для необъявленной переменной"
@@ -541,89 +541,89 @@ mod tests {
 
     // ─── construct_cond: операторы ────────────────────────────────────────
 
-    /// Логическое НЕ: `cond c = !true;` → `Not(Bool(true))`.
+    /// Логическое НЕ: `cond C = !true;` → `Not(Bool(true))`.
     ///
     /// # Пример (Takt)
     /// ```but
-    /// cond inactive = !active;
+    /// cond Inactive = !active;
     /// ```
     #[test]
     fn not_operator() {
-        let node = build("cond c = !true;").unwrap();
+        let node = build("cond C = !true;").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), ConditionNode::Not(_)),
+            matches!(cond_val(&node, "C"), ConditionNode::Not(_)),
             "ожидалось Condition::Not"
         );
     }
 
-    /// Побитовое И: `cond c = true & false;` → `And(Bool(true), Bool(false))`.
+    /// Побитовое И: `cond C = true & false;` → `And(Bool(true), Bool(false))`.
     #[test]
     fn and_operator() {
-        let node = build("cond c = true & false;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), ConditionNode::And(_, _)));
+        let node = build("cond C = true & false;").unwrap();
+        assert!(matches!(cond_val(&node, "C"), ConditionNode::And(_, _)));
     }
 
-    /// Побитовое ИЛИ: `cond c = true | false;` → `Or(Bool(true), Bool(false))`.
+    /// Побитовое ИЛИ: `cond C = true | false;` → `Or(Bool(true), Bool(false))`.
     #[test]
     fn or_operator() {
-        let node = build("cond c = true | false;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), ConditionNode::Or(_, _)));
+        let node = build("cond C = true | false;").unwrap();
+        assert!(matches!(cond_val(&node, "C"), ConditionNode::Or(_, _)));
     }
 
-    /// Сложение: `cond c = 1 + 2;` → `Add(Number(1), Number(2))`.
+    /// Сложение: `cond C = 1 + 2;` → `Add(Number(1), Number(2))`.
     #[test]
     fn add_operator() {
-        let node = build("cond c = 1 + 2;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), ConditionNode::Add(_, _)));
+        let node = build("cond C = 1 + 2;").unwrap();
+        assert!(matches!(cond_val(&node, "C"), ConditionNode::Add(_, _)));
     }
 
-    /// Вычитание: `cond c = 3 - 1;` → `Subtract(Number(3), Number(1))`.
+    /// Вычитание: `cond C = 3 - 1;` → `Subtract(Number(3), Number(1))`.
     #[test]
     fn subtract_operator() {
-        let node = build("cond c = 3 - 1;").unwrap();
+        let node = build("cond C = 3 - 1;").unwrap();
         assert!(matches!(
-            cond_val(&node, "c"),
+            cond_val(&node, "C"),
             ConditionNode::Subtract(_, _)
         ));
     }
 
-    /// Сравнение `<`: `cond c = 1 < 2;` → `Less(Number(1), Number(2))`.
+    /// Сравнение `<`: `cond C = 1 < 2;` → `Less(Number(1), Number(2))`.
     #[test]
     fn less_comparison() {
-        let node = build("cond c = 1 < 2;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), ConditionNode::Less(_, _)));
+        let node = build("cond C = 1 < 2;").unwrap();
+        assert!(matches!(cond_val(&node, "C"), ConditionNode::Less(_, _)));
     }
 
-    /// Сравнение `>`: `cond c = 2 > 1;` → `More(Number(2), Number(1))`.
+    /// Сравнение `>`: `cond C = 2 > 1;` → `More(Number(2), Number(1))`.
     #[test]
     fn more_comparison() {
-        let node = build("cond c = 2 > 1;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), ConditionNode::More(_, _)));
+        let node = build("cond C = 2 > 1;").unwrap();
+        assert!(matches!(cond_val(&node, "C"), ConditionNode::More(_, _)));
     }
 
-    /// Равенство `=`: `cond c = 1 = 1;` → `Equal`.
+    /// Равенство `=`: `cond C = 1 = 1;` → `Equal`.
     #[test]
     fn equal_operator() {
-        let node = build("cond c = 1 = 1;").unwrap();
-        assert!(matches!(cond_val(&node, "c"), ConditionNode::Equal(_, _)));
+        let node = build("cond C = 1 = 1;").unwrap();
+        assert!(matches!(cond_val(&node, "C"), ConditionNode::Equal(_, _)));
     }
 
-    /// Неравенство `!=`: `cond c = 1 != 2;` → `NotEqual`.
+    /// Неравенство `!=`: `cond C = 1 != 2;` → `NotEqual`.
     #[test]
     fn not_equal_operator() {
-        let node = build("cond c = 1 != 2;").unwrap();
+        let node = build("cond C = 1 != 2;").unwrap();
         assert!(matches!(
-            cond_val(&node, "c"),
+            cond_val(&node, "C"),
             ConditionNode::NotEqual(_, _)
         ));
     }
 
-    /// Скобки: `cond c = (true);` → `Parenthesis(Bool(true))`.
+    /// Скобки: `cond C = (true);` → `Parenthesis(Bool(true))`.
     #[test]
     fn parenthesised_condition() {
-        let node = build("cond c = (true);").unwrap();
+        let node = build("cond C = (true);").unwrap();
         assert!(matches!(
-            cond_val(&node, "c"),
+            cond_val(&node, "C"),
             ConditionNode::Parenthesis(_)
         ));
     }
@@ -634,12 +634,12 @@ mod tests {
     ///
     /// # Контрпример (Takt)
     /// ```but
-    /// cond c = 1 <= 2;   // LessEqual, не Less
+    /// cond C = 1 <= 2;   // LessEqual, не Less
     /// ```
     #[test]
     fn less_equal_is_not_less() {
-        let node = build("cond c = 1 <= 2;").unwrap();
-        let c = cond_val(&node, "c");
+        let node = build("cond C = 1 <= 2;").unwrap();
+        let c = cond_val(&node, "C");
         assert!(
             matches!(c, ConditionNode::LessEqual(_, _)),
             "ожидалось LessEqual"
@@ -653,8 +653,8 @@ mod tests {
     /// Контрпример: `>=` должен давать `MoreEqual`, а НЕ `More`.
     #[test]
     fn more_equal_is_not_more() {
-        let node = build("cond c = 2 >= 1;").unwrap();
-        let c = cond_val(&node, "c");
+        let node = build("cond C = 2 >= 1;").unwrap();
+        let c = cond_val(&node, "C");
         assert!(
             matches!(c, ConditionNode::MoreEqual(_, _)),
             "ожидалось MoreEqual"
@@ -672,13 +672,13 @@ mod tests {
     /// # Пример (Takt)
     /// ```but
     /// var buf: [bit; 8];
-    /// cond c = buf[3];
+    /// cond C = buf[3];
     /// ```
     #[test]
     fn array_subscript_on_array_resolves() {
-        let node = build("var buf: [bit; 8]; cond c = buf[3];").unwrap();
+        let node = build("var buf: [bit; 8]; cond C = buf[3];").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), ConditionNode::ArraySubscript(_, ref idx) if matches!(**idx, ConditionNode::Number(3))),
+            matches!(cond_val(&node, "C"), ConditionNode::ArraySubscript(_, ref idx) if matches!(**idx, ConditionNode::Number(3))),
             "ожидалось ArraySubscript(_, 3)"
         );
     }
@@ -688,11 +688,11 @@ mod tests {
     /// # Контрпример (Takt)
     /// ```but
     /// var x: bit = false;
-    /// cond bad = x[0];    // 'x' не массив — ошибка
+    /// cond Bad = x[0];    // 'x' не массив — ошибка
     /// ```
     #[test]
     fn array_subscript_on_non_array_is_error() {
-        let result = build("var x: bit := false; cond bad = x[0];");
+        let result = build("var x: bit := false; cond Bad = x[0];");
         assert!(
             result.is_err(),
             "ожидалась ошибка при индексации не-массива"
@@ -703,11 +703,11 @@ mod tests {
     ///
     /// # Контрпример (Takt)
     /// ```but
-    /// cond bad = arr[0];   // 'arr' нигде не объявлен
+    /// cond Bad = arr[0];   // 'arr' нигде не объявлен
     /// ```
     #[test]
     fn array_subscript_on_unknown_is_error() {
-        let result = build("cond bad = arr[0];");
+        let result = build("cond Bad = arr[0];");
         assert!(
             result.is_err(),
             "ожидалась ошибка для неизвестного идентификатора массива"
@@ -719,42 +719,42 @@ mod tests {
     /// Разрешённое значение именованного булевого условия сохраняется в `model.conditions`.
     #[test]
     fn extract_bool_named_condition() {
-        let node = build("cond done = true;").unwrap();
+        let node = build("cond Done = true;").unwrap();
         assert!(
-            node.conditions.contains_key("done"),
-            "условие 'done' должно присутствовать"
+            node.conditions.contains_key("Done"),
+            "условие 'Done' должно присутствовать"
         );
-        assert_eq!(cond_val(&node, "done"), ConditionNode::Bool(true));
+        assert_eq!(cond_val(&node, "Done"), ConditionNode::Bool(true));
     }
 
     /// Разрешённое значение именованного числового условия сохраняется корректно.
     #[test]
     fn extract_number_named_condition() {
-        let node = build("cond threshold = 7;").unwrap();
-        assert_eq!(cond_val(&node, "threshold"), ConditionNode::Number(7));
+        let node = build("cond Threshold = 7;").unwrap();
+        assert_eq!(cond_val(&node, "Threshold"), ConditionNode::Number(7));
     }
 
     /// Несколько именованных условий разрешаются независимо друг от друга.
     ///
     /// # Пример (Takt)
     /// ```but
-    /// cond a = true;
-    /// cond b = false;
+    /// cond A = true;
+    /// cond B = false;
     /// ```
     #[test]
     fn extract_multiple_named_conditions() {
-        let node = build("cond a = true; cond b = false;").unwrap();
-        assert!(node.conditions.contains_key("a"));
-        assert!(node.conditions.contains_key("b"));
-        assert_eq!(cond_val(&node, "a"), ConditionNode::Bool(true));
-        assert_eq!(cond_val(&node, "b"), ConditionNode::Bool(false));
+        let node = build("cond A = true; cond B = false;").unwrap();
+        assert!(node.conditions.contains_key("A"));
+        assert!(node.conditions.contains_key("B"));
+        assert_eq!(cond_val(&node, "A"), ConditionNode::Bool(true));
+        assert_eq!(cond_val(&node, "B"), ConditionNode::Bool(false));
     }
 
     /// Контрпример: именованное условие, ссылающееся на необъявленный идентификатор,
     /// вызывает ошибку [`Diagnostic`] внутри `construct_model`.
     #[test]
     fn extract_condition_unknown_var_is_error() {
-        let result = build("cond oops = missing_var;");
+        let result = build("cond Oops = missing_var;");
         assert!(result.is_err(), "ожидалась ошибка для необъявленной ссылки");
     }
 
@@ -762,9 +762,9 @@ mod tests {
     /// в `Condition::Variable`.
     #[test]
     fn extract_variable_condition() {
-        let node = build("var x: bit := false; cond c = x;").unwrap();
+        let node = build("var x: bit := false; cond C = x;").unwrap();
         assert!(
-            matches!(cond_val(&node, "c"), ConditionNode::Variable(_, _)),
+            matches!(cond_val(&node, "C"), ConditionNode::Variable(_, _)),
             "ожидалось условие Variable"
         );
     }
@@ -777,10 +777,14 @@ mod tests {
     ///
     /// # Пример (Takt)
     /// ```but
-    /// enum Command { Up, Down, Stop }
+    /// enum Command {
+    ///     Up,
+    ///     Down,
+    ///     Stop
+    /// }
     /// var command: Command = Stop;
     /// model Motor {
-    ///     cond c = command = Stop;
+    ///     cond C = command = Stop;
     ///     start Up {}
     ///     state Stop {}
     /// }
@@ -791,7 +795,7 @@ mod tests {
 enum Command { Up, Down, Stop }
 var command: Command := Stop;
 model Motor {
-    cond c = command = Stop;
+    cond C = command = Stop;
     start Up {}
     state Stop {}
 }
@@ -802,7 +806,7 @@ start Main = Motor;
             .search_model("Motor")
             .expect("модель Motor должна быть найдена");
         let motor_borrowed = motor.borrow();
-        let c = motor_borrowed.conditions["c"].value.clone();
+        let c = motor_borrowed.conditions["C"].value.clone();
         if let ConditionNode::Equal(_, right) = c {
             assert!(
                 matches!(*right, ConditionNode::EnumVariant(_, _, _)),
@@ -821,7 +825,7 @@ start Main = Motor;
 enum Command { Up, Down, Stop }
 var command: Command := Stop;
 model Motor {
-    cond c = command != Stop;
+    cond C = command != Stop;
     start Up {}
     state Stop {}
 }
@@ -832,7 +836,7 @@ start Main = Motor;
             .search_model("Motor")
             .expect("модель Motor должна быть найдена");
         let motor_borrowed = motor.borrow();
-        let c = motor_borrowed.conditions["c"].value.clone();
+        let c = motor_borrowed.conditions["C"].value.clone();
         if let ConditionNode::NotEqual(_, right) = c {
             assert!(
                 matches!(*right, ConditionNode::EnumVariant(_, _, _)),
@@ -920,8 +924,8 @@ start Entry = Ping | Pong;
     #[test]
     fn ordinary_parentheses_are_preserved() {
         // `(flag) = true`: слева переменная, не состояние модели → скобка цела.
-        let node = build("var flag: bit := false; cond c = (flag) = true;").unwrap();
-        let c = cond_val(&node, "c");
+        let node = build("var flag: bit := false; cond C = (flag) = true;").unwrap();
+        let c = cond_val(&node, "C");
         assert!(
             matches!(&c, ConditionNode::Equal(l, _) if matches!(**l, ConditionNode::Parenthesis(_))),
             "скобка вокруг обычного операнда обязана сохраниться, получено {c:?}"
@@ -934,7 +938,7 @@ start Entry = Ping | Pong;
         let src = r#"
 enum Command { Up, Down, Stop }
 var command: Command := Stop;
-cond c = command = Foo;
+cond C = command = Foo;
 "#;
         let result = build(src);
         assert!(

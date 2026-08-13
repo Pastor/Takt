@@ -123,6 +123,14 @@ pub(crate) struct Out<'a> {
     comments: comments::Comments<'a>,
     /// Исходник — нужен для восстановления осмысленных пустых строк.
     source: &'a str,
+    /// Следующая строка ПРОДОЛЖАЕТ текущую — печатается без отступа.
+    ///
+    /// Взводится [`Out::join`] ровно на одну строку; снимает его первая же
+    /// [`Out::line`]. Живёт полем, а не параметром печати блока, потому что
+    /// продолжение приходит от РЕКУРСИВНОГО вызова: заголовок `if cond {` в
+    /// цепочке `} else if cond {` печатает тот же `stmt::print`, который не
+    /// знает, что его позвали из ветки `else`.
+    glued: bool,
 }
 
 impl<'a> Out<'a> {
@@ -132,6 +140,7 @@ impl<'a> Out<'a> {
             depth: 0,
             comments: comments::Comments::new(source, items),
             source,
+            glued: false,
         }
     }
 
@@ -155,6 +164,32 @@ impl<'a> Out<'a> {
         }
     }
 
+    /// То же, что [`Out::node_line`], но хвостовой комментарий берётся лишь
+    /// **внутри** границы `limit` (см. `comments::trailing_within`).
+    ///
+    /// Нужен для частей записи, чей `Location` вложен в чужой: вариант
+    /// перечисления в однострочной записи стоит на той же строке, что и
+    /// комментарий обо всём перечислении, и без границы забрал бы его себе.
+    pub(crate) fn node_line_within(
+        &mut self,
+        loc: &crate::diagnostics::Location,
+        text: &str,
+        limit: usize,
+    ) {
+        let Some((start, end)) = comments::span(loc) else {
+            self.line(text);
+            return;
+        };
+        for (offset, text) in self.comments.leading(start) {
+            self.blank_at(offset);
+            self.line(&text);
+        }
+        match self.comments.trailing_within(end, limit) {
+            Some(trailing) => self.line(&format!("{text} {trailing}")),
+            None => self.line(text),
+        }
+    }
+
     /// Печатает комментарии, начинающиеся **до** `offset`, на текущем отступе.
     ///
     /// Нужен для комментария, стоящего **последней строкой тела**: ведущих
@@ -171,6 +206,11 @@ impl<'a> Out<'a> {
 
     /// Пустая строка — не более одной подряд (правило канона).
     fn blank(&mut self) {
+        // Строка, ждущая продолжения (`} else `), пустой строкой не разрывается:
+        // иначе восстановление зазора из исходника разорвало бы K&R-раскладку.
+        if self.glued {
+            return;
+        }
         if !self.buf.is_empty() && !self.buf.ends_with("\n\n") {
             self.buf.push('\n');
         }
@@ -244,11 +284,45 @@ impl<'a> Out<'a> {
         self.depth = self.depth.saturating_sub(1);
     }
 
+    /// Продолжает **уже напечатанную** строку: снимает её перевод строки и
+    /// дописывает `tail`; следующая [`Out::line`] встанет без отступа.
+    ///
+    /// Нужен ровно для K&R-раскладки канона — `} else {` и `} else if c {`.
+    /// Закрывающую скобку печатает `stmt::block_with_head`, слово `else`
+    /// приходит от печати `if`, а заголовок следующей ветки — от печати блока
+    /// либо от рекурсивного `stmt::print`. Три разных места, одна строка
+    /// вывода: склеить их иначе, чем сняв уже поставленный `'\n'`, значит
+    /// размазать знание о раскладке по всем трём.
+    ///
+    /// ⚠️ Между `join` и следующей `line` печатать нечего: флаг снимает первая
+    /// же строка, а пустая строка при взведённом флаге подавлена ([`Out::blank`]).
+    pub(crate) fn join(&mut self, tail: &str) {
+        debug_assert!(
+            self.buf.ends_with('\n'),
+            "join продолжает строку, а её ещё нет"
+        );
+        debug_assert!(!self.glued, "join поверх join — перевод строки уже снят");
+        if self.buf.ends_with('\n') {
+            self.buf.pop();
+        }
+        self.buf.push_str(tail);
+        self.glued = true;
+    }
+
     /// Печатает строку с текущим отступом и переводом строки.
+    ///
+    /// Отступ **не ставится**, если строка продолжает предыдущую ([`Out::join`]).
     pub(crate) fn line(&mut self, text: &str) {
+        let glued = std::mem::take(&mut self.glued);
+        debug_assert!(
+            !(glued && text.is_empty()),
+            "продолжение строки пустым текстом оставило бы висеть `}} else `"
+        );
         if !text.is_empty() {
-            for _ in 0..self.depth {
-                self.buf.push_str(INDENT);
+            if !glued {
+                for _ in 0..self.depth {
+                    self.buf.push_str(INDENT);
+                }
             }
             self.buf.push_str(text);
         }
@@ -256,6 +330,7 @@ impl<'a> Out<'a> {
     }
 
     fn finish(mut self) -> String {
+        debug_assert!(!self.glued, "склейка строк осталась незакрытой");
         // Канон: ровно один перевод строки в конце файла.
         while self.buf.ends_with("\n\n") {
             self.buf.pop();
@@ -398,20 +473,7 @@ fn print_element_inner(
         ast::ModelElement::State(s) => print_state(out, s),
         ast::ModelElement::Model(m) => print_nested_model(out, m),
         ast::ModelElement::NamedBlockCode(b) => print_named_block(out, b),
-        ast::ModelElement::Enum(e) => {
-            let variants = e
-                .variants
-                .iter()
-                .map(|v| match v.value {
-                    Some(value) => format!("{} = {value}", v.name.name),
-                    None => v.name.name.clone(),
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            let name = e.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
-            out.node_line(&loc, &format!("enum {name} {{ {variants} }}"));
-            Ok(())
-        }
+        ast::ModelElement::Enum(e) => print_enum(out, e, &loc),
         ast::ModelElement::Struct(s) => {
             let name = s.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
             out.line(&format!("struct {name} {{"));
@@ -475,6 +537,77 @@ fn print_element_inner(
             Ok(())
         }
     }
+}
+
+/// Печатает перечисление — **по варианту на строке** (канон стиля, фикс 0197-01).
+///
+/// # Почему заголовок печатается `line`, а закрывающая скобка — `node_line`
+///
+/// `loc` перечисления покрывает запись ЦЕЛИКОМ (`enum E { A, B }`: грамматика
+/// ставит правую границу сразу за `}`), поэтому хвостовой комментарий у него
+/// ровно один — тот, что стоит ЗА закрывающей скобкой. Приклеенный к заголовку,
+/// он уехал бы вверх, а на втором прогоне (когда `}` уже на своей строке) не
+/// нашёлся бы и там: `trailing()` требует, чтобы комментарий начинался ПОСЛЕ
+/// конца узла. Печать перестала бы быть идемпотентной — а это инвариант A1.
+///
+/// Ведущие комментарии узла выданы раньше: `print_element` зовёт `leading_for`
+/// до входа сюда, как для любого элемента.
+///
+/// # Почему у последнего варианта нет запятой
+///
+/// Грамматика перечисления — `CommaOne<EnumVariant>`; висячей запятой она **не
+/// принимает**. Напечатав её, форматтер сделал бы файл неразбираемым — тот же
+/// класс, что фикс 0199-01, где `taktc fmt` уничтожал исходник на месте.
+fn print_enum(
+    out: &mut Out,
+    e: &ast::EnumDefine,
+    loc: &crate::diagnostics::Location,
+) -> Result<(), FormatError> {
+    let name = e.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
+
+    // Перечисление без вариантов сегодня отвергает ПАРСЕР (`enum E {}` уходит в
+    // восстановление после ошибки), поэтому сюда не доезжает; чем такая запись
+    // должна быть — вопрос фичи 0172, он не закрыт. Печатаем одной строкой: это
+    // единственная раскладка, которая переживёт круговой рейс, если запись
+    // однажды станет законной, и она ничего не обещает о семантике.
+    if e.variants.is_empty() {
+        out.node_line(loc, &format!("enum {name} {{}}"));
+        return Ok(());
+    }
+
+    // Граница хвостовых комментариев вариантов — байт закрывающей скобки. В
+    // ОДНОСТРОЧНОЙ записи `enum E { A, B } // вид` комментарий стоит на той же
+    // строке, что и каждый вариант, и без границы его забрал бы первый же — а
+    // написан он о перечислении целиком и обязан остаться при `}`.
+    let brace = comments::span(loc).map_or(usize::MAX, |(_, end)| end.saturating_sub(1));
+    out.line(&format!("enum {name} {{"));
+    out.up();
+    for (i, v) in e.variants.iter().enumerate() {
+        let comma = if i + 1 < e.variants.len() { "," } else { "" };
+        let text = match v.value {
+            Some(value) => format!("{} = {value}{comma}", v.name.name),
+            None => format!("{}{comma}", v.name.name),
+        };
+        // `node_line_within`, а не `line`: у варианта свой `loc`, значит
+        // комментарий к нему сохраняет место. Соседний печатник `struct` кладёт
+        // поля через `line` — и комментарии полей у него уезжают к следующему
+        // элементу.
+        out.node_line_within(&v.loc, &text, brace);
+    }
+    // Комментарий последней строкой тела: следующего варианта нет, и без явной
+    // выдачи его подхватил бы `leading()` СЛЕДУЮЩЕГО элемента — уже за
+    // закрывающей скобкой, привязанным к чужому узлу (тот же случай, что
+    // `close_body` у блоков, фича 0198).
+    //
+    // ⚠️ Граница — байт самой `}` (`end - 1`), а не `end`: `loc` кончается сразу
+    // ЗА скобкой, и по `end` сюда попал бы ХВОСТОВОЙ комментарий, который обязан
+    // остаться на строке `}`.
+    if let Some((_, end)) = comments::span(loc) {
+        out.comments_before(end.saturating_sub(1));
+    }
+    out.down();
+    out.node_line(loc, "}");
+    Ok(())
 }
 
 /// Печатает вложенную модель — с реализацией (`= выражение`) или без.
