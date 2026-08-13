@@ -188,3 +188,84 @@ fn negative_variant_value_survives() {
     assert!(out.contains("    Low = -5,"), "{out}");
     assert!(reparses(&out), "{out}");
 }
+
+// ───────────────────────── структура ─────────────────────────
+//
+// Тот же класс, что у перечисления: печать шла целиком через `line`, минуя
+// привязку комментариев (фикс 0198-01). Сторожа фикстурные по той же причине —
+// хвостовых комментариев у структуры в корпусе из 308 файлов **ноль**.
+
+#[test]
+fn struct_prints_one_field_per_line() {
+    let out = fmt("struct Trip { origin: u8, dest: u8 }\n");
+    assert_eq!(
+        out, "struct Trip {\n    origin: u8,\n    dest: u8\n}\n",
+        "структура обязана печататься по полю на строке"
+    );
+}
+
+#[test]
+fn struct_trailing_comment_stays_with_the_closing_brace() {
+    // Симптом дефекта: комментарий уезжал строкой НИЖЕ `}` и на следующем
+    // прогоне доставался уже следующему элементу.
+    let once = fmt("struct Trip { origin: u8, dest: u8 }   // структура\n");
+    assert!(
+        once.contains("} // структура"),
+        "комментарий обо всей структуре оторвался от `}}`:\n{once}"
+    );
+    assert!(
+        !once.lines().any(|l| l.trim() == "// структура"),
+        "комментарий занял отдельную строку — он привяжется к чужому узлу:\n{once}"
+    );
+    assert_eq!(fmt(&once), once, "печать не идемпотентна:\n{once}");
+}
+
+#[test]
+fn struct_field_comments_keep_their_place() {
+    let once = fmt("struct Trip {\n    // откуда\n    origin: u8,\n    dest: u8 // куда\n}\n");
+    assert!(once.contains("    // откуда\n    origin: u8,"), "{once}");
+    assert!(once.contains("    dest: u8 // куда"), "{once}");
+    assert_eq!(fmt(&once), once, "печать не идемпотентна:\n{once}");
+}
+
+#[test]
+fn struct_comment_on_the_last_body_line_stays_inside() {
+    // Комментарий последней строкой тела: следующего поля нет, выдать его
+    // обязана `comments_before` — иначе он вылезет за `}`.
+    let once = fmt("struct Trip {\n    origin: u8\n    // сюда добавить назначение\n}\n");
+    let inside = once.find("// сюда").expect("комментарий потерян");
+    let brace = once.find("\n}").expect("нет закрывающей скобки");
+    assert!(inside < brace, "комментарий вылез за `}}`:\n{once}");
+    assert_eq!(fmt(&once), once, "печать не идемпотентна:\n{once}");
+}
+
+#[test]
+fn struct_last_field_has_no_trailing_comma() {
+    let out = fmt("struct Trip { origin: u8, dest: u8 }\n");
+    assert!(
+        !out.contains(",\n}"),
+        "висячая запятая: грамматика `Comma<StructField>` её не принимает:\n{out}"
+    );
+    // Главная проверка — разбор: `fmt` пишет файлы на месте (класс 0199-01).
+    assert!(reparses(&out), "напечатанное не разбирается:\n{out}");
+}
+
+#[test]
+fn nested_struct_keeps_indent() {
+    let out = fmt("model P {\n    struct Point { x: u8, y: u8 }\n    start S;\n}\n");
+    assert!(out.contains("\n    struct Point {\n"), "{out}");
+    assert!(out.contains("\n        x: u8,\n"), "{out}");
+    assert!(out.contains("\n        y: u8\n"), "{out}");
+    assert!(out.contains("\n    }\n"), "{out}");
+}
+
+#[test]
+fn empty_struct_keeps_its_comment() {
+    // ⚠️ Пустая запись у структуры ЗАКОННА (`Comma<StructField>`), в отличие от
+    // перечисления, — и печатается прежними двумя строками; сторожим ровно то,
+    // что комментарий при этом остаётся при `}`.
+    let once = fmt("struct Empty {} // задел\n");
+    assert!(once.contains("} // задел"), "{once}");
+    assert!(reparses(&once), "напечатанное не разбирается:\n{once}");
+    assert_eq!(fmt(&once), once, "печать не идемпотентна:\n{once}");
+}

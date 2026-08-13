@@ -474,22 +474,7 @@ fn print_element_inner(
         ast::ModelElement::Model(m) => print_nested_model(out, m),
         ast::ModelElement::NamedBlockCode(b) => print_named_block(out, b),
         ast::ModelElement::Enum(e) => print_enum(out, e, &loc),
-        ast::ModelElement::Struct(s) => {
-            let name = s.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
-            out.line(&format!("struct {name} {{"));
-            out.up();
-            for (i, field) in s.fields.iter().enumerate() {
-                let comma = if i + 1 < s.fields.len() { "," } else { "" };
-                out.line(&format!(
-                    "{}: {}{comma}",
-                    field.name.name,
-                    expr::ty(&field.ty)?
-                ));
-            }
-            out.down();
-            out.line("}");
-            Ok(())
-        }
+        ast::ModelElement::Struct(s) => print_struct(out, s, &loc),
         ast::ModelElement::Import(i) => {
             out.node_line(&loc, &expr::import(i)?);
             Ok(())
@@ -589,9 +574,8 @@ fn print_enum(
             None => format!("{}{comma}", v.name.name),
         };
         // `node_line_within`, а не `line`: у варианта свой `loc`, значит
-        // комментарий к нему сохраняет место. Соседний печатник `struct` кладёт
-        // поля через `line` — и комментарии полей у него уезжают к следующему
-        // элементу.
+        // комментарий к нему сохраняет место (тем же приёмом печатает поля
+        // `print_struct`).
         out.node_line_within(&v.loc, &text, brace);
     }
     // Комментарий последней строкой тела: следующего варианта нет, и без явной
@@ -602,6 +586,64 @@ fn print_enum(
     // ⚠️ Граница — байт самой `}` (`end - 1`), а не `end`: `loc` кончается сразу
     // ЗА скобкой, и по `end` сюда попал бы ХВОСТОВОЙ комментарий, который обязан
     // остаться на строке `}`.
+    if let Some((_, end)) = comments::span(loc) {
+        out.comments_before(end.saturating_sub(1));
+    }
+    out.down();
+    out.node_line(loc, "}");
+    Ok(())
+}
+
+/// Печатает структуру — **по полю на строке**, с привязкой комментариев.
+///
+/// Устройство в точности повторяет [`print_enum`] (фикс 0197-01), и не по
+/// вкусовым соображениям: `struct` печатался полностью через `line`, минуя
+/// привязку комментариев, — и комментарий обо всей записи
+/// (`struct Trip { … }   // структура`) уезжал на свою строку **за** `}`, где
+/// его на следующем прогоне подбирал `leading()` СЛЕДУЮЩЕГО элемента. То есть
+/// комментарий менял хозяина (фича 0198).
+///
+/// # Границы
+///
+/// - Заголовок печатает `line`, закрывающую скобку — `node_line`: `loc`
+///   структуры покрывает запись ЦЕЛИКОМ, значит её единственный хвостовой
+///   комментарий стоит ЗА `}` и обязан остаться при ней. Приклеенный к
+///   заголовку, он уехал бы вверх и на втором прогоне уже не нашёлся бы —
+///   печать перестала бы быть идемпотентной (инвариант A1).
+/// - Поля печатает `node_line_within` с границей по байту самой `}`
+///   (`end - 1`): в однострочной записи комментарий обо всей структуре стоит на
+///   той же строке, что и каждое поле, и без границы его забрало бы первое.
+///
+/// # Чем структура отличается от перечисления
+///
+/// Пустая запись `struct S {}` **законна**: поля — `Comma<StructField>`, а
+/// варианты — `CommaOne<EnumVariant>`. Поэтому отдельной ветки, как у
+/// перечисления, здесь нет: общий путь печатает `struct S {` и `}` двумя
+/// строками — так было и до фикса, и менять раскладку без требования заказчика
+/// незачем; комментарий при этом привязан к `}` наравне с непустой записью.
+///
+/// ⚠️ Висячей запятой нет по той же причине, что у перечисления: `Comma<T>`
+/// её не принимает, и напечатанная запятая сделала бы файл неразбираемым —
+/// класс фикса [0199-01](../../../docs/fixes/0199-01-fmt-drops-model-implement.md),
+/// где `taktc fmt` уничтожал исходник на месте.
+fn print_struct(
+    out: &mut Out,
+    s: &ast::StructDefine,
+    loc: &crate::diagnostics::Location,
+) -> Result<(), FormatError> {
+    let name = s.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
+    let brace = comments::span(loc).map_or(usize::MAX, |(_, end)| end.saturating_sub(1));
+
+    out.line(&format!("struct {name} {{"));
+    out.up();
+    for (i, field) in s.fields.iter().enumerate() {
+        let comma = if i + 1 < s.fields.len() { "," } else { "" };
+        let text = format!("{}: {}{comma}", field.name.name, expr::ty(&field.ty)?);
+        out.node_line_within(&field.loc, &text, brace);
+    }
+    // Комментарий последней строкой тела: следующего поля нет, и без явной
+    // выдачи его подхватил бы `leading()` СЛЕДУЮЩЕГО элемента — уже за
+    // закрывающей скобкой, привязанным к чужому узлу (фича 0198).
     if let Some((_, end)) = comments::span(loc) {
         out.comments_before(end.saturating_sub(1));
     }
