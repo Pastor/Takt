@@ -115,6 +115,15 @@ fn run(args: Args) -> Result<RunResult, String> {
     let model_rc = construct_model_with_files(&ast, None, &search_paths, &mut files, false)
         .map_err(|d| format_diagnostic(&d, &files))?;
 
+    // 3а. Библиотечный файл (без единого состояния) исполнять нечем — `SE-102`
+    // (фикс 0182-02). Проверка та же, что у целей компиляции: правило одно, и
+    // разойтись двум ответам на один вход не по чему. ⚠️ Прежде симулятор такой
+    // файл принимал и рапортовал «Завершено: модель достигла терминального
+    // состояния за 1 шагов» — прогон автомата, которого в файле нет.
+    if let Some(d) = takt_lang::pipeline::validate_entry_model(&model_rc) {
+        return Err(format_diagnostic(&d, &files));
+    }
+
     // 4. Извлекаем имена портов, имя модели и объявленную частоту (фича 0134)
     let port_names = extract_port_names(&model_rc.borrow());
     let model_name = model_rc.borrow().name.clone();

@@ -5,15 +5,15 @@
 static void PidHeaterHeater_init(PidHeaterHeater *model, PidHeater *main);
 static void PidHeaterHeater_tick(PidHeaterHeater *model, PidHeater *main);
 static bool PidHeaterHeater_is_done(const PidHeaterHeater *model, PidHeater *main);
-/// Model functions 'Pid (PidHeater:Pid)'
-static void PidHeaterPid_init(PidHeaterPid *model, PidHeater *main);
-static void PidHeaterPid_tick(PidHeaterPid *model, PidHeater *main);
-static bool PidHeaterPid_is_done(const PidHeaterPid *model, PidHeater *main);
 
 /// Функция инициализации модели Heater (PidHeater:Heater)
 void PidHeaterHeater_init(PidHeaterHeater *model, PidHeater *main) {
     assert(0 != model);
     model->state = PID_HEATER_HEATER_INIT;
+    model->err = 0.0;
+    model->i_new = 0.0;
+    model->loop_pid = (PidState){0.5, 0.0625, 0.25, 1.0, 0.0, 32.0, 0.0, 0.0, 0.0};
+    model->raw = 0.0;
     model->release = 38.0;
     model->setpoint = 40.0;
     (*main->write_float)(PID_HEATER_HEATER_PORT_TEMPERATURE, 0.0, main->userdata);
@@ -33,9 +33,29 @@ void PidHeaterHeater_tick(PidHeaterHeater *model, PidHeater *main) {
             break;
         }
         case PID_HEATER_HEATER_HEATING: {
+            model->err = main->target - main->meas;
+            model->i_new = model->loop_pid.i_acc + model->loop_pid.ki * model->err * model->loop_pid.ts;
+            model->raw = model->loop_pid.kp * model->err + model->i_new + model->loop_pid.kd * (model->err - model->loop_pid.err_prev) / model->loop_pid.ts;
+            if (model->raw > model->loop_pid.out_max) {
+                main->ctrl = model->loop_pid.out_max;
+                if (model->err <= 0.0) {
+                    model->loop_pid.i_acc = model->i_new;
+                }
+            } else if (model->raw < model->loop_pid.out_min) {
+                main->ctrl = model->loop_pid.out_min;
+                if (model->err >= 0.0) {
+                    model->loop_pid.i_acc = model->i_new;
+                }
+            } else {
+                main->ctrl = model->raw;
+                model->loop_pid.i_acc = model->i_new;
+            }
+            model->loop_pid.err_prev = model->err;
+            model->loop_pid.output = main->ctrl;
             main->meas = main->meas + main->gain * main->ctrl - main->loss * (main->meas - main->ambient);
             (*main->write_float)(PID_HEATER_HEATER_PORT_TEMPERATURE, main->meas, main->userdata);
-            if (main->ctrl <= 0.0) {
+            if (model->err <= 0.0) {
+                main->ctrl = 0.0;
                 model->state = PID_HEATER_HEATER_HOLDING;
                 break;
             }
@@ -67,91 +87,18 @@ bool PidHeaterHeater_is_done(const PidHeaterHeater *model, PidHeater *main) {
     return model->state == PID_HEATER_HEATER_END;
 }
 
-/// Функция инициализации модели Pid (PidHeater:Pid)
-void PidHeaterPid_init(PidHeaterPid *model, PidHeater *main) {
-    assert(0 != model);
-    model->state = PID_HEATER_PID_INIT;
-    model->deriv = 0.0;
-    model->eps = 0.5;
-    model->err = 0.0;
-    model->err_prev = 0.0;
-    model->i_acc = 0.0;
-    model->imax = 32.0;
-    model->kd = 0.25;
-    model->ki = 0.0625;
-    model->kp = 0.5;
-    model->neg_imax = -32.0;
-}
-
-/// Функция обработки модели Pid (PidHeater:Pid)
-void PidHeaterPid_tick(PidHeaterPid *model, PidHeater *main) {
-    assert(0 != model);
-    assert(0 != main);
-    if (model->state == PID_HEATER_PID_INIT) {
-        model->neg_imax = 0.0 - model->imax;
-        model->state = PID_HEATER_PID_CONTROL;
-    }
-    switch (model->state) {
-        case PID_HEATER_PID_CONTROL: {
-            model->err = main->target - main->meas;
-            model->i_acc = model->i_acc + model->err;
-            if (model->i_acc > model->imax) {
-                model->i_acc = model->imax;
-            }
-            if (model->i_acc < model->neg_imax) {
-                model->i_acc = model->neg_imax;
-            }
-            model->deriv = model->err - model->err_prev;
-            main->ctrl = model->kp * model->err + model->ki * model->i_acc + model->kd * model->deriv;
-            model->err_prev = model->err;
-            if (model->err < model->eps) {
-                main->ctrl = 0.0;
-                (*main->write_bit)(PID_HEATER_PID_PORT_READY, 1, main->userdata);
-                model->state = PID_HEATER_PID_SETTLED;
-                break;
-            }
-            break;
-        }
-        case PID_HEATER_PID_DONE: {
-            model->state = PID_HEATER_PID_END;
-            break;
-        }
-        case PID_HEATER_PID_SETTLED: {
-            model->state = PID_HEATER_PID_DONE;
-            break;
-            break;
-        }
-        case PID_HEATER_PID_END: {
-            break;
-        }
-        default: break;
-    }
-}
-
-/// Функция сброса модели Pid (PidHeater:Pid)
-void PidHeaterPid_reset(PidHeaterPid *model, PidHeater *main) {
-    PidHeaterPid_init(model, main);
-}
-
-/// Функция проверки терминального состояния модели Pid (PidHeater:Pid)
-bool PidHeaterPid_is_done(const PidHeaterPid *model, PidHeater *main) {
-    return model->state == PID_HEATER_PID_END;
-}
-
 /// Функция инициализации модели pid_heater (PidHeater)
 void PidHeater_init(PidHeater *model) {
     assert(0 != model);
     model->state = PID_HEATER_INIT;
-    PidHeaterPid_init(&model->pid_heater_parallel0.pid0, model);
-    PidHeaterHeater_init(&model->pid_heater_parallel0.heater1, model);
-    model->pid_heater_parallel0.state = PID_HEATER_PID_HEATER_PARALLEL0_INIT;
-    model->pid_heater_state = PID_HEATER_PID_HEATER_PARALLEL0;
+    PidHeaterHeater_init(&model->pid_heater_heater0, model);
+    model->pid_heater_state = PID_HEATER_PID_HEATER_HEATER0;
     model->ambient = 18.0;
     model->ctrl = 0.0;
     model->gain = 0.5;
     model->loss = 0.05;
-    model->meas = 0.0;
-    model->target = 40.0;
+    model->meas = 25.0;
+    model->target = 80.0;
 }
 
 /// Функция обработки модели pid_heater (PidHeater)
@@ -166,24 +113,18 @@ void PidHeater_tick(PidHeater *model) {
             break;
         }
         case PID_HEATER_PID_HEATER: {
-            if (model->pid_heater_state == PID_HEATER_PID_HEATER_PARALLEL0) {
-                PidHeaterPid_tick(&model->pid_heater_parallel0.pid0, model);
-                PidHeaterHeater_tick(&model->pid_heater_parallel0.heater1, model);
-                if (PidHeaterPid_is_done(&model->pid_heater_parallel0.pid0, model) && PidHeaterHeater_is_done(&model->pid_heater_parallel0.heater1, model)) {
-                    PidHeaterPid_init(&model->pid_heater_parallel1.pid0, model);
-                    model->pid_heater_parallel1.pid0.kp = 0.25;
-                    model->pid_heater_parallel1.pid0.ki = 0.125;
-                    PidHeaterHeater_init(&model->pid_heater_parallel1.heater1, model);
-                    model->pid_heater_parallel1.heater1.setpoint = 55.0;
-                    model->pid_heater_parallel1.heater1.release = 52.0;
-                    model->pid_heater_parallel1.state = PID_HEATER_PID_HEATER_PARALLEL1_INIT;
-                    model->pid_heater_state = PID_HEATER_PID_HEATER_PARALLEL1;
+            if (model->pid_heater_state == PID_HEATER_PID_HEATER_HEATER0) {
+                PidHeaterHeater_tick(&model->pid_heater_heater0, model);
+                if (PidHeaterHeater_is_done(&model->pid_heater_heater0, model)) {
+                    PidHeaterHeater_init(&model->pid_heater_heater1, model);
+                    model->pid_heater_heater1.setpoint = 55.0;
+                    model->pid_heater_heater1.release = 52.0;
+                    model->pid_heater_state = PID_HEATER_PID_HEATER_HEATER1;
                     break;
                 }
-            } else if (model->pid_heater_state == PID_HEATER_PID_HEATER_PARALLEL1) {
-                PidHeaterPid_tick(&model->pid_heater_parallel1.pid0, model);
-                PidHeaterHeater_tick(&model->pid_heater_parallel1.heater1, model);
-                if (PidHeaterPid_is_done(&model->pid_heater_parallel1.pid0, model) && PidHeaterHeater_is_done(&model->pid_heater_parallel1.heater1, model)) {
+            } else if (model->pid_heater_state == PID_HEATER_PID_HEATER_HEATER1) {
+                PidHeaterHeater_tick(&model->pid_heater_heater1, model);
+                if (PidHeaterHeater_is_done(&model->pid_heater_heater1, model)) {
                     model->state = PID_HEATER_FINISHED;
                     break;
                 }

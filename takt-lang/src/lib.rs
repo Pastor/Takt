@@ -122,7 +122,7 @@ pub(crate) use parse_entry::parse_without_depth_limit;
 
 // Общий конвейер разбора и построения (фича 0053) плюс сбор всех диагностик
 // (фича 0130) — вынесено модулем: `lib.rs` пришпилен реестром размеров.
-mod pipeline;
+pub mod pipeline; // общий конвейер: разбор → дерево → диагностики
 pub use pipeline::collect_compile_diagnostics;
 pub(crate) use pipeline::parse_and_construct;
 

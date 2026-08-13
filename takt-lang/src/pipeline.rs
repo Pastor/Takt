@@ -6,6 +6,17 @@
 use crate::diagnostics::{self, Diagnostic};
 use crate::{parse, semantic};
 
+/// Проверка «файл в позиции ВХОДА исполнения» — наружу для симулятора.
+///
+/// Правило одно на оба инструмента: цели зовут его ниже, в
+/// [`parse_and_construct`], а `takt-sim` — по этому пути. Два ответа на один
+/// вход разошлись бы (фикс 0182-02).
+///
+/// ⚠️ Реэкспорт живёт здесь, а не в `semantic/mod.rs`: тот файл — узаконенный
+/// долг реестра размеров (`scripts/module-size-baseline.txt`), и расти ему
+/// нельзя даже на строку.
+pub use crate::semantic::validate::validate_entry_model;
+
 /// Разбирает и строит модель, проставляя диагностике **путь её файла** (фича 0053).
 ///
 /// Общий шаг всех целей. Заведён потому, что путь нужно разрешить там, где
@@ -27,14 +38,26 @@ pub(crate) fn parse_and_construct(
         stamp_file(d, &files)
     })?;
 
-    semantic::tree::construct_model_with_files(
+    let model = semantic::tree::construct_model_with_files(
         &model_ast,
         None,
         search_paths,
         &mut files,
         specialize,
     )
-    .map_err(|d| stamp_file(d, &files))
+    .map_err(|d| stamp_file(d, &files))?;
+
+    // Библиотечный файл (без единого состояния) законен, но входом исполнения
+    // быть не может — фикс 0182-02. Проверка стоит ЗДЕСЬ, а не в
+    // `validate_model_all`: позиция «вход» — свойство вызова, а не модели, и
+    // тому же дереву, пришедшему из `import`, она не адресована. Прежде такой
+    // файл доезжал до генератора и получал `SE-011` «Модель должна содержать
+    // начальное состояние» — сообщение о пропущенном `start`, которого автор
+    // библиотеки не писал, и вдобавок без позиции.
+    if let Some(d) = semantic::validate::validate_entry_model(&model) {
+        return Err(stamp_file(d, &files));
+    }
+    Ok(model)
 }
 
 /// Разрешает номер файла диагностики в путь.

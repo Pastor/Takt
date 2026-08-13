@@ -78,7 +78,19 @@ pub(in crate::semantic) fn apply(
                     )
                     .with_code("SE-007"));
                 }
-                model_node.borrow_mut().types.insert(alias, t.clone());
+                model_node
+                    .borrow_mut()
+                    .types
+                    .insert(alias.clone(), t.clone());
+                // Структура и перечисление живут в ДВУХ картах: имя — в `types`,
+                // устройство — в `structs`/`enums`. Перенеся одно имя, импорт
+                // отдавал применению тип, о котором никто не знает, что у него
+                // внутри (фикс 0182-03): цель `c` печатала `Pid p;` без
+                // `typedef` — порождённый файл не компилировался, — а симулятор
+                // строил агрегатный инициализатор массивом и отвечал `SIM-012`.
+                // ⚠️ Отказа при этом не было ни одного: `taktc` рапортовал об
+                // успехе.
+                carry_definition(&src, orig, &alias, model_node);
             } else if let Some(v) = src.variables.get(orig) {
                 if variables.contains_key(&alias) {
                     return Err(Diagnostic::declaration_error(
@@ -113,4 +125,37 @@ pub(in crate::semantic) fn apply(
         adopt::adopt_selected_model(m, imported, model_node, alias, &renames)?;
     }
     Ok(())
+}
+
+/// Переносит УСТРОЙСТВО импортированного типа — поля структуры или варианты
+/// перечисления (фикс 0182-03).
+///
+/// Имя типа лежит в `types`, а его содержимое — в отдельной карте (`structs`,
+/// `enums`), и перенос одного лишь имени давал применению тип-пустышку.
+///
+/// ⚠️ Под псевдонимом (`import { Pid as Loop }`) определение переименовывается
+/// **вместе с ключом карты**: потребители — генераторы и симулятор — ищут
+/// устройство по тому имени, которое видят в объявлении переменной.
+fn carry_definition(
+    src: &std::cell::Ref<'_, ModelNode>,
+    orig: &str,
+    alias: &str,
+    model_node: &Rc<RefCell<ModelNode>>,
+) {
+    if let Some(s) = src.structs.get(orig) {
+        let mut adopted = s.clone();
+        adopted.name = alias.to_string();
+        model_node
+            .borrow_mut()
+            .structs
+            .insert(alias.to_string(), adopted);
+    }
+    if let Some(e) = src.enums.get(orig) {
+        let mut adopted = e.clone();
+        adopted.name = alias.to_string();
+        model_node
+            .borrow_mut()
+            .enums
+            .insert(alias.to_string(), adopted);
+    }
 }
