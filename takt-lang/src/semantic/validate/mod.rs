@@ -35,6 +35,7 @@ mod bodies;
 mod common;
 mod constant_conditions;
 pub mod depth;
+mod entry;
 mod enums;
 mod fixed;
 mod implicit_bool;
@@ -72,6 +73,7 @@ use types::check_array_sizes;
 // (5 имён) и `lib.rs` (6 имён по пути `semantic::validate::…`) — не правятся.
 pub(crate) use common::reachable_targets;
 pub use constant_conditions::check_constant_conditions;
+pub use entry::validate_entry_model;
 pub use enums::check_enum_type_safety;
 pub use implicit_bool::check_implicit_bool_conditions;
 pub use nondeterminism::check_nondeterministic_transitions;

@@ -3,54 +3,34 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* Forward declarations */
-typedef struct PidLawPid PidLawPid;
 typedef struct PidLaw PidLaw;
 
-typedef enum {
-    PID_LAW_PID_PORT_READY = 0,
-} PidLaw_Out_BitPort;
-
-// NOTICE: Определение констант для модели Pid (PidLaw:Pid)
-/* Model Pid (PidLaw:Pid) */
-struct PidLawPid {
-    // NOTICE: Определение переменных модели
-    double deriv;
-    double eps;
-    double err;
-    double err_prev;
-    double i_acc;
-    double imax;
-    double kd;
-    double ki;
+typedef struct PidState {
     double kp;
-    double neg_imax;
-    enum {
-        PID_LAW_PID_INIT,
-        PID_LAW_PID_CONTROL,
-        PID_LAW_PID_DONE,
-        PID_LAW_PID_SETTLED,
-        PID_LAW_PID_END
-    } state;
-};
+    double ki;
+    double kd;
+    double ts;
+    double out_min;
+    double out_max;
+    double i_acc;
+    double err_prev;
+    double output;
+} PidState;
 
 // NOTICE: Определение констант для модели pid_law (PidLaw)
 /* Model pid_law (PidLaw) */
 struct PidLaw {
     // NOTICE: Определение переменных модели
     double ctrl;
+    uint8_t hold;
+    PidState loop_pid;
     double meas;
     double target;
     enum {
         PID_LAW_INIT,
-        PID_LAW_MAIN,
+        PID_LAW_RUN,
         PID_LAW_END
     } state;
-    // NOTICE: Определение extend
-    PidLawPid main;
-    /// NOTICE: Функции портов ввода вывода
-    void  *userdata;
-    void  (*write_bit)(PidLaw_Out_BitPort port, bool val, void *userdata);
 };
 
 void PidLaw_init(PidLaw *main);

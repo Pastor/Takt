@@ -1,105 +1,81 @@
 #include "pid_law.h"
 #include <assert.h>
 #include <math.h>
-/// Model functions 'Pid (PidLaw:Pid)'
-static void PidLawPid_init(PidLawPid *model, PidLaw *main);
-static void PidLawPid_tick(PidLawPid *model, PidLaw *main);
-static bool PidLawPid_is_done(const PidLawPid *model, PidLaw *main);
-
-/// Функция инициализации модели Pid (PidLaw:Pid)
-void PidLawPid_init(PidLawPid *model, PidLaw *main) {
-    assert(0 != model);
-    model->state = PID_LAW_PID_INIT;
-    model->deriv = 0.0;
-    model->eps = 0.5;
-    model->err = 0.0;
-    model->err_prev = 0.0;
-    model->i_acc = 0.0;
-    model->imax = 32.0;
-    model->kd = 0.25;
-    model->ki = 0.0625;
-    model->kp = 0.5;
-    model->neg_imax = -32.0;
-}
-
-/// Функция обработки модели Pid (PidLaw:Pid)
-void PidLawPid_tick(PidLawPid *model, PidLaw *main) {
-    assert(0 != model);
-    assert(0 != main);
-    if (model->state == PID_LAW_PID_INIT) {
-        model->neg_imax = 0.0 - model->imax;
-        model->state = PID_LAW_PID_CONTROL;
+///Функции моделей
+static PidState PidLaw_pid_compute(const PidLaw *model, PidState p, double sp, double pv);
+static PidState PidLaw_pid_init(const PidLaw *model, double kp, double ki, double kd, double ts, double lo, double hi);
+static PidState PidLaw_pid_reset(const PidLaw *model, PidState p);
+static PidState PidLaw_pid_compute(const PidLaw *model, PidState p, double sp, double pv) {
+    PidState r = p;
+    double err = sp - pv;
+    double prop = p.kp * err;
+    double i_new = p.i_acc + p.ki * err * p.ts;
+    double deriv = (err - p.err_prev) / p.ts;
+    double raw = prop + i_new + p.kd * deriv;
+    if (raw > p.out_max) {
+        r.output = p.out_max;
+        if (err <= 0.0) {
+            r.i_acc = i_new;
+        }
+    } else if (raw < p.out_min) {
+        r.output = p.out_min;
+        if (err >= 0.0) {
+            r.i_acc = i_new;
+        }
+    } else {
+        r.output = raw;
+        r.i_acc = i_new;
     }
-    switch (model->state) {
-        case PID_LAW_PID_CONTROL: {
-            model->err = main->target - main->meas;
-            model->i_acc = model->i_acc + model->err;
-            if (model->i_acc > model->imax) {
-                model->i_acc = model->imax;
-            }
-            if (model->i_acc < model->neg_imax) {
-                model->i_acc = model->neg_imax;
-            }
-            model->deriv = model->err - model->err_prev;
-            main->ctrl = model->kp * model->err + model->ki * model->i_acc + model->kd * model->deriv;
-            model->err_prev = model->err;
-            if (model->err < model->eps) {
-                main->ctrl = 0.0;
-                (*main->write_bit)(PID_LAW_PID_PORT_READY, 1, main->userdata);
-                model->state = PID_LAW_PID_SETTLED;
-                break;
-            }
-            break;
-        }
-        case PID_LAW_PID_DONE: {
-            model->state = PID_LAW_PID_END;
-            break;
-        }
-        case PID_LAW_PID_SETTLED: {
-            model->state = PID_LAW_PID_DONE;
-            break;
-            break;
-        }
-        case PID_LAW_PID_END: {
-            break;
-        }
-        default: break;
-    }
+    r.err_prev = err;
+    return r;
 }
 
-/// Функция сброса модели Pid (PidLaw:Pid)
-void PidLawPid_reset(PidLawPid *model, PidLaw *main) {
-    PidLawPid_init(model, main);
+static PidState PidLaw_pid_init(const PidLaw *model, double kp, double ki, double kd, double ts, double lo, double hi) {
+    PidState p = {0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    p.kp = kp;
+    p.ki = ki;
+    p.kd = kd;
+    p.ts = ts;
+    p.out_min = lo;
+    p.out_max = hi;
+    return p;
 }
 
-/// Функция проверки терминального состояния модели Pid (PidLaw:Pid)
-bool PidLawPid_is_done(const PidLawPid *model, PidLaw *main) {
-    return model->state == PID_LAW_PID_END;
+static PidState PidLaw_pid_reset(const PidLaw *model, PidState p) {
+    PidState r = p;
+    r.i_acc = 0.0;
+    r.err_prev = 0.0;
+    r.output = 0.0;
+    return r;
 }
 
 /// Функция инициализации модели pid_law (PidLaw)
 void PidLaw_init(PidLaw *model) {
     assert(0 != model);
     model->state = PID_LAW_INIT;
-    PidLawPid_init(&model->main, model);
     model->ctrl = 0.0;
-    model->meas = 0.0;
-    model->target = 40.0;
+    model->hold = 0;
+    model->loop_pid = (PidState){3.0, 0.75, 1.5, 0.1, 0.0, 100.0, 0.0, 0.0, 0.0};
+    model->meas = 25.0;
+    model->target = 80.0;
 }
 
 /// Функция обработки модели pid_law (PidLaw)
 void PidLaw_tick(PidLaw *model) {
     assert(0 != model);
     if (model->state == PID_LAW_INIT) {
-        model->state = PID_LAW_MAIN;
+        model->loop_pid = PidLaw_pid_init(model, 3.0, 0.75, 1.5, 0.1, 0.0, 100.0);
+        model->state = PID_LAW_RUN;
     }
     switch (model->state) {
-        case PID_LAW_MAIN: {
-            PidLawPid_tick(&model->main, model);
-            if (PidLawPid_is_done(&model->main, model)) {
-                model->state = PID_LAW_END;
-                break;
+        case PID_LAW_RUN: {
+            model->loop_pid = PidLaw_pid_compute(model, model->loop_pid, model->target, model->meas);
+            model->ctrl = model->loop_pid.output;
+            if (model->hold) {
+                model->loop_pid = PidLaw_pid_reset(model, model->loop_pid);
+                model->ctrl = 0.0;
             }
+            model->state = PID_LAW_END;
             break;
         }
         case PID_LAW_END: {

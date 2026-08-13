@@ -3,7 +3,7 @@ title PidHeater
 
 [*] --> PidHeater
 Finished --> [*]
-PidHeater : Pid | Heater + Pid | Heater
+PidHeater : Heater + Heater
 PidHeater --> Finished
 
 state Heater {
@@ -11,13 +11,6 @@ state Heater {
     Done --> [*]
     Heating --> Holding
     Holding --> Done
-}
-
-state Pid {
-    [*] --> Control
-    Control --> Settled
-    Done --> [*]
-    Settled --> Done
 }
 
 @enduml
