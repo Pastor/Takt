@@ -6,14 +6,39 @@ static void PidHeaterHeater_init(PidHeaterHeater *model, PidHeater *main);
 static void PidHeaterHeater_tick(PidHeaterHeater *model, PidHeater *main);
 static bool PidHeaterHeater_is_done(const PidHeaterHeater *model, PidHeater *main);
 
+///Функции моделей
+static PidState PidHeater_pid_compute(const PidHeater *model, PidState p, double sp, double pv);
+static PidState PidHeater_pid_compute(const PidHeater *model, PidState p, double sp, double pv) {
+    PidState r = p;
+    double err = sp - pv;
+    double prop = p.kp * err;
+    double i_new = p.i_acc + p.ki * err * p.ts;
+    double deriv = (err - p.err_prev) / p.ts;
+    double raw = prop + i_new + p.kd * deriv;
+    if (raw > p.out_max) {
+        r.output = p.out_max;
+        if (err <= 0.0) {
+            r.i_acc = i_new;
+        }
+    } else if (raw < p.out_min) {
+        r.output = p.out_min;
+        if (err >= 0.0) {
+            r.i_acc = i_new;
+        }
+    } else {
+        r.output = raw;
+        r.i_acc = i_new;
+    }
+    r.err_prev = err;
+    return r;
+}
+
 /// Функция инициализации модели Heater (PidHeater:Heater)
 void PidHeaterHeater_init(PidHeaterHeater *model, PidHeater *main) {
     assert(0 != model);
     model->state = PID_HEATER_HEATER_INIT;
     model->err = 0.0;
-    model->i_new = 0.0;
     model->loop_pid = (PidState){0.5, 0.0625, 0.25, 1.0, 0.0, 32.0, 0.0, 0.0, 0.0};
-    model->raw = 0.0;
     model->release = 38.0;
     model->setpoint = 40.0;
     (*main->write_float)(PID_HEATER_HEATER_PORT_TEMPERATURE, 0.0, main->userdata);
@@ -33,25 +58,9 @@ void PidHeaterHeater_tick(PidHeaterHeater *model, PidHeater *main) {
             break;
         }
         case PID_HEATER_HEATER_HEATING: {
+            model->loop_pid = PidHeater_pid_compute(main, model->loop_pid, main->target, main->meas);
+            main->ctrl = model->loop_pid.output;
             model->err = main->target - main->meas;
-            model->i_new = model->loop_pid.i_acc + model->loop_pid.ki * model->err * model->loop_pid.ts;
-            model->raw = model->loop_pid.kp * model->err + model->i_new + model->loop_pid.kd * (model->err - model->loop_pid.err_prev) / model->loop_pid.ts;
-            if (model->raw > model->loop_pid.out_max) {
-                main->ctrl = model->loop_pid.out_max;
-                if (model->err <= 0.0) {
-                    model->loop_pid.i_acc = model->i_new;
-                }
-            } else if (model->raw < model->loop_pid.out_min) {
-                main->ctrl = model->loop_pid.out_min;
-                if (model->err >= 0.0) {
-                    model->loop_pid.i_acc = model->i_new;
-                }
-            } else {
-                main->ctrl = model->raw;
-                model->loop_pid.i_acc = model->i_new;
-            }
-            model->loop_pid.err_prev = model->err;
-            model->loop_pid.output = main->ctrl;
             main->meas = main->meas + main->gain * main->ctrl - main->loss * (main->meas - main->ambient);
             (*main->write_float)(PID_HEATER_HEATER_PORT_TEMPERATURE, main->meas, main->userdata);
             if (model->err <= 0.0) {

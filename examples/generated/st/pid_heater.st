@@ -18,6 +18,47 @@ TYPE
     END_STRUCT;
 END_TYPE
 
+FUNCTION PidHeater_pid_compute : PidState
+VAR_INPUT
+    p : PidState;
+    sp : LREAL;
+    pv : LREAL;
+END_VAR
+VAR
+    r : PidState;
+    err : LREAL;
+    prop : LREAL;
+    i_new : LREAL;
+    deriv : LREAL;
+    raw : LREAL;
+END_VAR
+    r := p;
+    err := sp - pv;
+    prop := (p.kp) * err;
+    i_new := (p.i_acc) + (((p.ki) * err) * (p.ts));
+    deriv := (err - (p.err_prev)) / (p.ts);
+    raw := (prop + i_new) + ((p.kd) * deriv);
+    IF raw > (p.out_max) THEN
+        r.output := p.out_max;
+        IF err <= 0.0 THEN
+            r.i_acc := i_new;
+        END_IF;
+    ELSE
+        IF raw < (p.out_min) THEN
+            r.output := p.out_min;
+            IF err >= 0.0 THEN
+                r.i_acc := i_new;
+            END_IF;
+        ELSE
+            r.output := raw;
+            r.i_acc := i_new;
+        END_IF;
+    END_IF;
+    r.err_prev := err;
+    PidHeater_pid_compute := r;
+    RETURN;
+END_FUNCTION
+
 FUNCTION_BLOCK PidHeaterHeater
 VAR_OUTPUT
     is_done : BOOL;
@@ -34,9 +75,7 @@ END_VAR
 VAR
     state : USINT := 0;
     err : LREAL := 0.0;
-    i_new : LREAL := 0.0;
     loop_pid : PidState;
-    raw : LREAL := 0.0;
     release : LREAL := 38.0;
     setpoint : LREAL := 40.0;
 END_VAR
@@ -48,27 +87,9 @@ END_VAR
         1: (* Done *)
             state := 4; (* END *)
         2: (* Heating *)
+            loop_pid := PidHeater_pid_compute(loop_pid, target, meas);
+            ctrl := loop_pid.output;
             err := target - meas;
-            i_new := (loop_pid.i_acc) + (((loop_pid.ki) * err) * (loop_pid.ts));
-            raw := (((loop_pid.kp) * err) + i_new) + (((loop_pid.kd) * (err - (loop_pid.err_prev))) / (loop_pid.ts));
-            IF raw > (loop_pid.out_max) THEN
-                ctrl := loop_pid.out_max;
-                IF err <= 0.0 THEN
-                    loop_pid.i_acc := i_new;
-                END_IF;
-            ELSE
-                IF raw < (loop_pid.out_min) THEN
-                    ctrl := loop_pid.out_min;
-                    IF err >= 0.0 THEN
-                        loop_pid.i_acc := i_new;
-                    END_IF;
-                ELSE
-                    ctrl := raw;
-                    loop_pid.i_acc := i_new;
-                END_IF;
-            END_IF;
-            loop_pid.err_prev := err;
-            loop_pid.output := ctrl;
             meas := (meas + (gain * ctrl)) - (loss * (meas - ambient));
             temperature := meas;
             IF err <= 0.0 THEN

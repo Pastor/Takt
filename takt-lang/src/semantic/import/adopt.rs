@@ -149,6 +149,45 @@ pub(in crate::semantic) fn adopt_whole_file(
     }
     library.borrow_mut().variables.clear();
 
+    // Типы, их устройство и функции переносятся по той же причине, что и
+    // переменные (фикс 0182-04): корень библиотеки стал ПРОМЕЖУТОЧНОЙ моделью, а
+    // обращение к её объявлениям цели генерации не выражают. Прежде переносились
+    // только переменные, и `import "lib.takt";` на библиотеке с типом отвечал
+    // `SE-034` «локальный тип не найден» — на типе, который сам же и подключил.
+    let (types, structs, enums, fns) = {
+        let b = library.borrow();
+        (
+            b.types.clone(),
+            b.structs.clone(),
+            b.enums.clone(),
+            b.functions.clone(),
+        )
+    };
+    {
+        let mut imp = importer.borrow_mut();
+        imp.types.extend(types);
+        imp.structs.extend(structs);
+        imp.enums.extend(enums);
+    }
+    for (fn_name, mut f) in fns {
+        if importer.borrow().functions.contains_key(&fn_name) {
+            return Err(Diagnostic::declaration_error(
+                Location::default(),
+                format!(
+                    "Функция '{fn_name}' уже определена (подключённый файл '{name}' \
+                     определяет её же)"
+                ),
+            )
+            .with_code("SE-009"));
+        }
+        // Владелец — импортёр: цель `c` строит имя функции из него.
+        if let FunctionDefinitionNode::Local { upper, .. } = &mut f {
+            *upper = Some(Rc::downgrade(importer));
+        }
+        importer.borrow_mut().functions.insert(fn_name, f);
+    }
+    library.borrow_mut().functions.clear();
+
     let mut ctx = Adoption {
         library: Rc::clone(library),
         importer: Rc::clone(importer),

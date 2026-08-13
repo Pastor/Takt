@@ -103,6 +103,20 @@ pub(in crate::semantic) fn apply(
                 adopt::adopt_declaration(&mut adopted_var, model_node, &alias);
                 renames.insert(orig.clone(), alias.clone());
                 variables.insert(alias, adopted_var);
+            } else if let Some(f) = src.functions.get(orig) {
+                if model_node.borrow().functions.contains_key(&alias) {
+                    return Err(Diagnostic::declaration_error(
+                        sym_loc,
+                        format!("Функция с именем '{}' уже определена", alias),
+                    )
+                    .with_code("SE-009"));
+                }
+                let adopted = adopt_function(f, model_node, &alias);
+                // ⚠️ Прямо в узел, и это работает лишь потому, что строитель в
+                // конце обхода делает `functions.extend(…)`, а не присваивание
+                // целиком: с присваиванием вклад затирался бы, и вызов отвечал
+                // `SE-004` «неизвестная функция» (первая редакция фикса 0182-04).
+                model_node.borrow_mut().functions.insert(alias, adopted);
             } else if let Some(c) = src.conditions.get(orig) {
                 if conditions.contains_key(&alias) {
                     return Err(Diagnostic::declaration_error(
@@ -125,6 +139,32 @@ pub(in crate::semantic) fn apply(
         adopt::adopt_selected_model(m, imported, model_node, alias, &renames)?;
     }
     Ok(())
+}
+
+/// Усыновляет импортированную функцию: **перепривязывает владельца** и берёт
+/// целевое имя (фикс 0182-04).
+///
+/// ⚠️ `upper` — не украшение: цель `c` строит имя функции **из владельца**
+/// (`c_expr::names::get_function_name` → `<Модель>_<функция>`), а вызов ищет её
+/// там же. Оставив ссылку на корень библиотеки, импорт дал бы вызов функции,
+/// которую этот файл не объявляет, — тот же класс, что фикс 0182-03 для
+/// структуры и фича 0184 для переменной.
+///
+/// ⚠️ Внешняя функция (`extern fn`) владельца не имеет вовсе: её имя — имя
+/// символа компоновки, и переименовывать его псевдонимом импорта нельзя.
+/// Поэтому под alias меняется **ключ карты**, а `name` внешней остаётся своим.
+fn adopt_function(
+    fun: &crate::semantic::FunctionDefinitionNode,
+    model_node: &Rc<RefCell<ModelNode>>,
+    alias: &str,
+) -> crate::semantic::FunctionDefinitionNode {
+    use crate::semantic::FunctionDefinitionNode as F;
+    let mut adopted = fun.clone();
+    if let F::Local { upper, name, .. } = &mut adopted {
+        *upper = Some(Rc::downgrade(model_node));
+        *name = alias.to_string();
+    }
+    adopted
 }
 
 /// Переносит УСТРОЙСТВО импортированного типа — поля структуры или варианты

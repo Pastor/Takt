@@ -28,9 +28,7 @@ typedef enum {
 struct PidHeaterHeater {
     // NOTICE: Определение переменных модели
     double err;
-    double i_new;
     PidState loop_pid;
-    double raw;
     double release;
     double setpoint;
     enum {
