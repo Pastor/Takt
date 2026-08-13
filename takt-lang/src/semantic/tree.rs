@@ -701,7 +701,7 @@ pub(super) fn construct_model_stage0(
     model_node.borrow_mut().parameters = parameters;
     model_node.borrow_mut().conditions = conditions;
     model_node.borrow_mut().named_blocks = named_blocks;
-    model_node.borrow_mut().functions = functions;
+    model_node.borrow_mut().functions.extend(functions); // extend: см. import/select.rs
     Ok(Rc::clone(&model_node))
 }
 

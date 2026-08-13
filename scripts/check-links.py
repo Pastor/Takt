@@ -26,7 +26,12 @@ LINK_RE = re.compile(r"\]\(\s*([^)\s#][^)\s]*?)\s*\)")
 # (так правило 14 цитирует само себя, так же документируются примеры ссылок).
 CODE_SPAN_RE = re.compile(r"(`+)[^`]*?\1")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
-SKIP_DIRS = {".git", "target", "node_modules", "build", ".gradle"}
+# ⚠️ `.claude` — рабочие каталоги инструмента, а не репозиторий: в
+# `.claude/worktrees/` живут ПОЛНЫЕ копии дерева (git worktree), и обход находил
+# в них те же `docs/templates/*.md`, которые в самом репозитории исключены
+# `SKIP_PATHS`. Гейт падал 15 битыми ссылками на шаблоны — на чужой копии, пока
+# рядом идёт фоновая сессия, и предкоммит нельзя было прогнать вовсе.
+SKIP_DIRS = {".git", ".claude", "target", "node_modules", "build", ".gradle"}
 SKIP_PATHS = {os.path.join("docs", "templates")}
 EXTERNAL = ("http://", "https://", "mailto:", "ftp://")
 
