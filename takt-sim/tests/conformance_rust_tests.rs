@@ -456,6 +456,45 @@ fn fixed_wrap_to_width_matches_generated_rust() {
     );
 }
 
+/// A4/A5/A6 (цель rust, фича 0170): насыщение `q(6, 6) sat` прижимает к
+/// границам **формата** на обеих границах.
+///
+/// ⚠️ Наблюдаемое — float-порт, а не поле: поля цели `rust` приватны, а q-порта
+/// у неё нет (RS-016). Значения кратны 2⁻⁶ и точны в f64, поэтому сверка идёт
+/// по битам — то есть по представлению q.
+///
+/// ⚠️ Прижатие идёт к границам формата (`W = 12`), а не хранения (`i16`):
+/// `.clamp(-2048, 2047)` против `as i16`, который вернул бы перенос. Формат
+/// `q(8, 8)` этого различия не показывает (урок фикса 0061-01).
+#[test]
+fn fixed_saturation_matches_generated_rust() {
+    let dir = build_dir("rsfixedsatw12");
+    let fixture = Path::new("tests/data/eval/conformance_fixed_sat_probe_w12.takt");
+    let sim = simulate_f64_trace(fixture, "probe");
+    assert_eq!(
+        sim,
+        vec![
+            (24.0f64).to_bits(),
+            (31.984375f64).to_bits(),
+            (7.984375f64).to_bits(),
+            (-16.015625f64).to_bits(),
+            (-32.0f64).to_bits(),
+        ],
+        "q(6,6) sat: 1536 + 1536 = 3072 → прижато к 2047 (31.984375); перенос дал \
+         бы −1024 (−16.0). Снизу: −2561 → −2048 (−32.0)"
+    );
+
+    if !rustc_available() {
+        eprintln!("[ПРОПУСК] fixed_saturation_matches_generated_rust: rustc не найден");
+        return;
+    }
+    let rs = rust_f64_trace(&dir, fixture, "rsfixedsatw12", "Rsfixedsatw12", sim.len());
+    assert_eq!(
+        sim, rs,
+        "насыщение обязано совпасть с Rust побитово.\nсимулятор={sim:?}\nRust={rs:?}"
+    );
+}
+
 /// T10/A4 (цель rust): побитовая потактовая сверка Q-арифметики с симулятором —
 /// включая отрицательные и floor к −∞ у `*` (S2: repr −2, т.е. −0.0078125).
 #[test]

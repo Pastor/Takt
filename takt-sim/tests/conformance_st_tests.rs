@@ -987,3 +987,8 @@ fn after_ticks_profile_generates_valid_st() {
         String::from_utf8_lossy(&transpile.stderr)
     );
 }
+
+// Насыщение q(m, n) sat (фича 0170) — подмодулем: файл упирается в лимит
+// размера модуля, а правило требует делить по логике.
+#[path = "conformance_st_tests/fixed_sat.rs"]
+mod fixed_sat;

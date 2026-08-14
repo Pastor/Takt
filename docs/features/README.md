@@ -182,7 +182,7 @@
 | [0167](./0167-c-enum-constants-usage.md) | Цель c: использовать объявленные константы перечисления | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0168](./0168-generator-warnings-return.md) | Предупреждения генераторов возвращаются вызывающему, а не печатаются из библиотеки | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0169](./0169-sv-mmio-bus-adapters.md) | Адаптеры шин для цели sv-mmio (APB / AXI-Lite / Wishbone) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0170](./0170-fixed-point-saturation.md) | Насыщение (saturation) для fixed-point q(m, n) | [ADR](../adr/0170-fixed-point-saturation.md) · [анализ](../analyze/0170-fixed-point-saturation.md) | АНАЛИЗ |
+| [0170](./0170-fixed-point-saturation.md) | Насыщение (saturation) для fixed-point q(m, n) | [ADR](../adr/0170-fixed-point-saturation.md) · [анализ](../analyze/0170-fixed-point-saturation.md) · [тест-план](../tests/0170-fixed-point-saturation.md) · [отчёт](../reports/0170-fixed-point-saturation.md) · dev 01–05 | ГОТОВО |
 | [0171](./0171-c-gate-werror.md) | Гейт цели c под -Werror | ADR + анализ + разработка 01 + тест-план + отчёт | ГОТОВО |
 | [0172](./0172-empty-enum-semantics.md) | Семантика перечисления без вариантов | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0173](./0173-rust-generator-arg-count.md) | Снятие allow(too_many_arguments) в генераторе rust | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

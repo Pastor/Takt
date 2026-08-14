@@ -425,9 +425,7 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
             Value::Real(f) => Ok(Value::Real(-f)),
             // q(m, n): унарный минус над представлением — перенос либо
             // насыщение, по признаку формата (фича 0170).
-            Value::Fixed { repr, m, n, sat } => {
-                Ok(crate::eval::fixed::negate(*repr, *m, *n, *sat))
-            }
+            Value::Fixed { repr, m, n, sat } => Ok(crate::eval::fixed::negate(*repr, *m, *n, *sat)),
             Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
                 Err(EvalError::TypeMismatch {
                     op: op.symbol(),

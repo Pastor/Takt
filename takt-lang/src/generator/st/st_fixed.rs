@@ -17,8 +17,8 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::st::st_expr::{inner_expr_type, print_expression};
-use crate::semantic::type_node::type_fixed::fixed_storage_bits;
 use crate::semantic::type_node::TypeNode;
+use crate::semantic::type_node::type_fixed::fixed_storage_bits;
 use crate::semantic::{ExpressionNode, ModelNode};
 
 /// Определение `FUNCTION LAM_Q_FLOORDIV` — floor-деление целых `LINT`.
@@ -321,7 +321,10 @@ fn rescale(li: &str, from_n: u8, to_n: u8, to_m: u8, sat: bool) -> Result<String
     } else {
         format!("LAM_Q_FLOORDIV({li}, {})", 1u64 << (from_n - to_n))
     };
-    Ok(format!("LINT_TO_{s2}({})", wrap_lint(inner, to_m, to_n, sat)?))
+    Ok(format!(
+        "LINT_TO_{s2}({})",
+        wrap_lint(inner, to_m, to_n, sat)?
+    ))
 }
 
 /// Имя целого IEC-типа цели приведения `q → int`.

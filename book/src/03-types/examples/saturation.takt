@@ -1,0 +1,30 @@
+// Две семантики выхода за границы `q(4, 4)`: перенос (умолчание) и насыщение.
+// Обе переменные шагают одинаково — на +1.0 за такт от значения 6.0.
+//
+// Границы q(4, 4): от −8.0 до 7.9375.
+//
+//   такт 1: limited = 7.0    wrapping = 7.0
+//   такт 2: limited = 7.9375 wrapping = −8.0   ← 8.0 не помещается
+//   такт 3: limited = 7.9375 wrapping = −7.0
+//
+// Насыщение прижимает значение к границе, перенос перебрасывает на другой край.
+model Saturation {
+    var limited: q(4, 4) sat := 6.0; // (1) насыщающий формат
+    var wrapping: q(4, 4) := 6.0; // (2) переносящий — умолчание
+    var step_limited: q(4, 4) sat := 1.0; // (3) шаг того же формата
+    var step_wrapping: q(4, 4) := 1.0;
+    var seen: u8 := 0;
+
+    start Stepping {
+        always {
+            limited := limited + step_limited;
+            wrapping := wrapping + step_wrapping;
+            seen := seen + 1;
+        }
+        ref Stepping: seen < 3;
+        ref Settled: seen >= 3;
+    }
+
+    state Settled; // (4) шаги кончились, значения замерли
+}
+start Main = Saturation;
