@@ -376,3 +376,6 @@
 | 0232-01 | 0232 | Предупреждение о неявной булевости доезжает до пользователя | [0232-01-implicit-bool-warning-delivery.md](0232-01-implicit-bool-warning-delivery.md) |
 | 0233-01 | 0233 | Правило булевости условия — одно | [0233-01-single-boolean-predicate.md](0233-01-single-boolean-predicate.md) |
 | 0151-01 | 0151 | Накопление диагностик внутри отдельной проверки validate | [0151-01-diagnostics-batch-within-check.md](0151-01-diagnostics-batch-within-check.md) |
+| 0160-01 | 0160 | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | [0160-01-takt-ebnf-sync.md](0160-01-takt-ebnf-sync.md) |
+| 0160-02 | 0160 | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | [0160-02-takt-ebnf-sync.md](0160-02-takt-ebnf-sync.md) |
+| 0160-03 | 0160 | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | [0160-03-takt-ebnf-sync.md](0160-03-takt-ebnf-sync.md) |

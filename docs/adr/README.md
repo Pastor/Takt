@@ -169,3 +169,4 @@
 | [0232](./0232-implicit-bool-warning-delivery.md) | Предупреждение о неявной булевости доезжает до пользователя | Draft | фича 0232 |
 | [0233](./0233-single-boolean-predicate.md) | Правило булевости условия — одно | Draft | фича 0233 |
 | [0151](./0151-diagnostics-batch-within-check.md) | Накопление диагностик внутри отдельной проверки validate | Draft | фича 0151 |
+| [0160](./0160-takt-ebnf-sync.md) | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | Accepted | фича 0160 |
