@@ -164,7 +164,7 @@ pub(crate) fn sv_type(ty: &TypeNode, what: &str) -> Result<SvType, Diagnostic> {
         // Fixed-point q(m, n) (фича 0061): знаковое целое ширины W = m + n.
         // В отличие от `float`, синтезируется — ради этого фича и делалась.
         // Арифметика (масштабирование при `*`/`/`) — задача 0061-04.
-        TypeNode::Fixed { m, n } => Ok(SvType::scalar(format!("logic signed [{}:0]", (m + n) - 1))),
+        TypeNode::Fixed { m, n, .. } => Ok(SvType::scalar(format!("logic signed [{}:0]", (m + n) - 1))),
         TypeNode::Integer { bits, signed } => {
             if *bits == 0 {
                 return Err(sv004(
@@ -303,7 +303,7 @@ pub(crate) fn scalar_width(ty: &TypeNode) -> Option<u32> {
     match ty {
         TypeNode::Bit | TypeNode::Bool => Some(1),
         TypeNode::Integer { bits, .. } => Some(u32::from(*bits)),
-        TypeNode::Fixed { m, n } => Some(u32::from(*m) + u32::from(*n)),
+        TypeNode::Fixed { m, n, .. } => Some(u32::from(*m) + u32::from(*n)),
         TypeNode::Duration => Some(u32::from(crate::semantic::duration::VALUE_BITS)),
         // Бит-вектор `[bit;N]` — упакованный вектор ширины N (0078); настоящий
         // массив скаляров одной ширины не имеет.

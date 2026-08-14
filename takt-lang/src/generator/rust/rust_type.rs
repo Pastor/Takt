@@ -67,7 +67,7 @@ pub(crate) fn rust_type(ty: &TypeNode, what: &str) -> Result<String, Diagnostic>
         // бит, округлённое вверх до i8/i16/i32/i64 (машинных ширин Rust; `>>`
         // знакового в Rust определён как арифметический). Масштабирование при
         // `*`/`/` — задача 0061-03.
-        TypeNode::Fixed { m, n } => Ok(format!(
+        TypeNode::Fixed { m, n, .. } => Ok(format!(
             "i{}",
             crate::semantic::type_node::fixed_storage_bits(m + n)
         )),

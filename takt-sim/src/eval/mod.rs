@@ -126,7 +126,7 @@ pub(crate) fn coerce_to_type_with(
         // Отличие от каста (`cast_to_type`): там `int` масштабируется — рантайм-
         // целое ещё не в представлении. Оба пути дают один результат, т.к.
         // литерал предмасштабирован грамматикой, а рантайм-целое — нет.
-        TypeNode::Fixed { m, n } => coerce_to_fixed_store(value, *m, *n),
+        TypeNode::Fixed { m, n, .. } => coerce_to_fixed_store(value, *m, *n),
         TypeNode::Bool => match &value {
             Value::Boolean(b) => Ok(Value::Boolean(*b)),
             Value::Number(n) => Ok(Value::Boolean(*n != 0)),
@@ -283,7 +283,7 @@ fn coerce_to_fixed_store(value: Value, m: u8, n: u8) -> Result<Value, EvalError>
 #[allow(clippy::wildcard_enum_match_arm)]
 pub(crate) fn cast_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalError> {
     // Цель — q(m, n): масштабируем значение к представлению.
-    if let TypeNode::Fixed { m, n } = ty {
+    if let TypeNode::Fixed { m, n, .. } = ty {
         return fixed::cast_to_fixed(&value, *m, *n);
     }
     // Источник — q(m, n), цель иная: разворачиваем и приводим обычным путём.

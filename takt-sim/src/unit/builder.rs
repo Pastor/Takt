@@ -214,7 +214,7 @@ fn default_field(ty: &TypeNode, model: &ModelNode) -> Value {
     match ty {
         TypeNode::Bool => Value::Boolean(false),
         TypeNode::Rational => Value::Real(0.0),
-        TypeNode::Fixed { m, n } => Value::Fixed {
+        TypeNode::Fixed { m, n, .. } => Value::Fixed {
             repr: 0,
             m: *m,
             n: *n,

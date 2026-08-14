@@ -35,7 +35,7 @@ pub(crate) enum FixedOp {
 pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8)> {
     match expr {
         ExpressionNode::Variable(var) => var_fixed(&var.borrow()),
-        ExpressionNode::Cast(_, TypeNode::Fixed { m, n }) => Some((*m, *n)),
+        ExpressionNode::Cast(_, TypeNode::Fixed { m, n, .. }) => Some((*m, *n)),
         ExpressionNode::Parenthesis(a) | ExpressionNode::Negate(a) => fixed_format(a),
         ExpressionNode::Add(a, b)
         | ExpressionNode::Subtract(a, b)
@@ -48,7 +48,7 @@ pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8)> {
 /// Формат `q(m, n)` переменной, если её тип — `Fixed`.
 fn var_fixed(var: &VariableNode) -> Option<(u8, u8)> {
     match var.ty() {
-        TypeNode::Fixed { m, n } => Some((*m, *n)),
+        TypeNode::Fixed { m, n, .. } => Some((*m, *n)),
         _ => None,
     }
 }
@@ -116,7 +116,7 @@ pub(crate) fn cast(
     let printed = print_expression(inner, scope)?;
     match (src, target) {
         // q → q: пересчёт дробных разрядов (влево — сдвиг, вправо — floor `>>>`).
-        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn }) => {
+        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn, .. }) => {
             let tw = (tm + tn) as u32;
             if tn >= &from_n {
                 Ok(format!("({tw}'({} <<< {}))", signed(&printed), tn - from_n))
@@ -134,7 +134,7 @@ pub(crate) fn cast(
         // float → q — источника float в синтезируемом RTL нет.
         (None, TypeNode::Fixed { .. }) if is_rational(inner) => Err(sv003_cast()),
         // целое/бит → q: repr = v · 2ⁿ с wraparound к W.
-        (None, TypeNode::Fixed { m: tm, n: tn }) => {
+        (None, TypeNode::Fixed { m: tm, n: tn, .. }) => {
             let w = (tm + tn) as u32;
             Ok(format!("({w}'({} <<< {tn}))", signed(&printed)))
         }

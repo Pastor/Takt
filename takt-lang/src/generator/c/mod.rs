@@ -267,7 +267,7 @@ pub(super) fn map_c_type(
         // Fixed-point q(m, n) (фича 0061): знаковое целое, вмещающее W = m + n
         // бит (`int{8,16,32,64}_t`). Масштабирование при `*`/`/` и ловушка C11
         // 6.5.7p5 (`>>` знакового отрицательного) — задача 0061-03.
-        TypeNode::Fixed { m, n } => Ok(format!(
+        TypeNode::Fixed { m, n, .. } => Ok(format!(
             "int{}_t",
             crate::semantic::type_node::fixed_storage_bits(m + n)
         )),

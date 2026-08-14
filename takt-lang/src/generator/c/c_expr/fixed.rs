@@ -37,7 +37,7 @@ pub(super) enum FixedOp {
 pub(super) fn fixed_of(map: &CMap, owner: &Element, expr: &ExpressionNode) -> Option<(u8, u8)> {
     let model = map.raw_model_at(owner.name()).ok()?;
     match extract_type(expr, model) {
-        Ok(TypeNode::Fixed { m, n }) => Some((m, n)),
+        Ok(TypeNode::Fixed { m, n, .. }) => Some((m, n)),
         _ => None,
     }
 }
@@ -183,7 +183,7 @@ pub(super) fn cast(
     let src = fixed_of(map, owner, inner);
     match (src, target) {
         // q → q: пересчёт дробных разрядов (влево — умножение, вправо — floor).
-        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn }) => {
+        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn, .. }) => {
             open_wrap(printer, *tm, *tn);
             rescale(printer, map, owner, params, inner, from_n, *tn, has_model)?;
             close_wrap(printer, *tm, *tn);
@@ -204,7 +204,7 @@ pub(super) fn cast(
         // ⚠️ Форма печати здесь своя, не через `open_wrap`: при `W = S` вывод
         // обязан остаться прежним байт-в-байт — `(int16_t)floor(…)`, без лишней
         // скобки, иначе поедут снапшоты `examples/generated` (фикс 0061-01).
-        (None, TypeNode::Fixed { m: tm, n: tn }) if source_is_real(map, owner, inner) => {
+        (None, TypeNode::Fixed { m: tm, n: tn, .. }) if source_is_real(map, owner, inner) => {
             let wraps = !width_is_storage(*tm, *tn);
             printer.print(&format!("({})", storage_type(*tm, *tn)));
             if wraps {
@@ -218,7 +218,7 @@ pub(super) fn cast(
             }
         }
         // целое/бит → q: (repr = v * 2^n) с wraparound к W.
-        (None, TypeNode::Fixed { m: tm, n: tn }) => {
+        (None, TypeNode::Fixed { m: tm, n: tn, .. }) => {
             open_wrap(printer, *tm, *tn);
             widened(printer, map, owner, params, inner, has_model)?;
             printer.print(&format!(" * ((int64_t)1 << {})", tn));

@@ -138,7 +138,11 @@ fn lower_model(
 /// `Rational → Fixed{m,n}` (рекурсивно в элемент массива); прочие типы — как есть.
 fn lower_ty(ty: &TypeNode, m: u8, n: u8) -> TypeNode {
     match ty {
-        TypeNode::Rational => TypeNode::Fixed { m, n },
+        // ⚠️ `sat: false` — правило 6 ADR 0170: флаг `--float-as-q` даёт формат
+        // БЕЗ насыщения. Признак есть часть типа, который автор пишет сам, а CLI
+        // логику автомата не меняет (принцип 0042). Насыщающий регулятор
+        // записывается явным `q(m, n) sat`.
+        TypeNode::Rational => TypeNode::Fixed { m, n, sat: false },
         TypeNode::Array(k, elem) => TypeNode::Array(*k, Box::new(lower_ty(elem, m, n))),
         other => other.clone(),
     }

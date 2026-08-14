@@ -97,7 +97,9 @@ pub(crate) fn construct_type(
         // псевдонимом (`Type::Alias`) и связываются по имени ниже. Ветка
         // оставлена для полноты разбора узла.
         Type::Duration => Ok(TypeNode::Duration),
-        Type::Fixed(loc, ctor, m, n) => construct_fixed(loc, &ctor, m, n),
+        Type::Fixed(loc, ctor, m, n, modifier) => {
+            construct_fixed(loc, &ctor, m, n, modifier.as_deref())
+        }
         Type::Alias(def) => {
             // Пользовательский псевдоним в таблице типов модели берёт приоритет
             // над встроенными именами (u8, i32 и пр.), что позволяет переопределять
@@ -140,7 +142,13 @@ pub(crate) fn construct_type(
 ///
 /// - `SE-057` — конструктор типа не `q` (единственный fixed-point-конструктор),
 ///   либо границы `m`/`n`/`W` нарушены.
-fn construct_fixed(loc: Location, ctor: &str, m: i128, n: i128) -> Result<TypeNode, Diagnostic> {
+fn construct_fixed(
+    loc: Location,
+    ctor: &str,
+    m: i128,
+    n: i128,
+    modifier: Option<&str>,
+) -> Result<TypeNode, Diagnostic> {
     if ctor != "q" {
         return Err(Diagnostic::declaration_error(
             loc,
@@ -174,9 +182,29 @@ fn construct_fixed(loc: Location, ctor: &str, m: i128, n: i128) -> Result<TypeNo
     if m + n > 64 {
         return Err(bound("полная ширина m + n > 64"));
     }
+    // Постфиксный модификатор (фича 0170): единственное допустимое слово — `sat`.
+    // ⚠️ Отвергать прочие ОБЯЗАТЕЛЬНО: опечатка (`q(8,8) sta`) иначе дала бы
+    // молчаливый перенос там, где автор просил насыщение, — ровно тот класс
+    // молчаливого расхождения, который фича и закрывает.
+    let sat = match modifier {
+        None => false,
+        Some("sat") => true,
+        Some(other) => {
+            return Err(Diagnostic::declaration_error(
+                loc,
+                format!(
+                    "после формата fixed-point 'q({}, {})' допустим только модификатор \
+                     'sat' (насыщение вместо переноса), получено '{}'",
+                    m, n, other
+                ),
+            )
+            .with_code("SE-104"));
+        }
+    };
     Ok(TypeNode::Fixed {
         m: m as u8,
         n: n as u8,
+        sat,
     })
 }
 
@@ -306,26 +334,36 @@ pub(crate) fn lower_fixed_var(var: &VariableNode) -> Result<Option<VariableNode>
             upper,
             loc,
             name,
-            ty: TypeNode::Fixed { m, n },
+            ty: TypeNode::Fixed { m, n, sat },
             expr,
         } => Ok(lower_fixed_literal(expr, *m, *n, *loc)?.map(|v| V::Simple {
             upper: upper.clone(),
             loc: *loc,
             name: name.clone(),
-            ty: TypeNode::Fixed { m: *m, n: *n },
+            // Признак переносится как есть: понижение литерала меняет ЗАПИСЬ
+            // значения, а не семантику переполнения объявленного типа.
+            ty: TypeNode::Fixed {
+                m: *m,
+                n: *n,
+                sat: *sat,
+            },
             expr: ExpressionNode::Number(v),
         })),
         V::Const {
             upper,
             loc,
             name,
-            ty: TypeNode::Fixed { m, n },
+            ty: TypeNode::Fixed { m, n, sat },
             expr,
         } => Ok(lower_fixed_literal(expr, *m, *n, *loc)?.map(|v| V::Const {
             upper: upper.clone(),
             loc: *loc,
             name: name.clone(),
-            ty: TypeNode::Fixed { m: *m, n: *n },
+            ty: TypeNode::Fixed {
+                m: *m,
+                n: *n,
+                sat: *sat,
+            },
             expr: ExpressionNode::Number(v),
         })),
         _ => Ok(None),
@@ -880,6 +918,17 @@ pub enum TypeNode {
         m: u8,
         /// Дробные биты (`n ≥ 1`).
         n: u8,
+        /// Насыщение вместо переноса при переполнении (фича 0170, `q(m, n) sat`).
+        ///
+        /// ⚠️ Признак — часть **формата**, а не свойство переменной: арифметика
+        /// получает операнды выражениями, и у промежуточного результата взять
+        /// его больше неоткуда. Отсюда же следует, что смешение `sat` и не-`sat`
+        /// в одной операции — ошибка (`SE-103`), как и смешение разных `q`.
+        ///
+        /// ⚠️ Поле участвует в равенстве типов. Места, сравнивающие формат ради
+        /// **ширины** (выбор `int{S}_t`, `logic signed [W-1:0]`), обязаны
+        /// сравнивать `m`/`n`, а не тип целиком.
+        sat: bool,
     },
     /// Массив фиксированного размера: `(количество_элементов, тип_элемента)`.
     Array(u16, Box<TypeNode>),
@@ -925,7 +974,16 @@ impl fmt::Display for TypeNode {
             TypeNode::Bool => write!(f, "bool"),
             TypeNode::Rational => write!(f, "float"),
             TypeNode::Duration => write!(f, "duration"),
-            TypeNode::Fixed { m, n } => write!(f, "q({}, {})", m, n),
+            // ⚠️ Модификатор печатается: имя типа попадает в ТЕКСТ диагностик
+            // (`SE-059`/`SE-103` о смешении), и без него сообщение «нельзя
+            // смешивать q(8, 8) и q(8, 8)» было бы бессмысленным.
+            TypeNode::Fixed { m, n, sat } => {
+                write!(f, "q({}, {})", m, n)?;
+                if *sat {
+                    write!(f, " sat")?;
+                }
+                Ok(())
+            }
             TypeNode::Unit => write!(f, "unit"),
             TypeNode::Integer { bits, signed } => {
                 write!(f, "{}{}", if *signed { "i" } else { "u" }, bits)

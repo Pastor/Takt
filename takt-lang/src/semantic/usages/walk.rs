@@ -715,7 +715,7 @@ fn walk_type(ty: &ast::Type, scopes: &mut Scopes, table: &mut UsageTable) {
         // (ключевым словом `q` намеренно не сделан), позиции отдельной у него
         // нет. Диапазон имени — начало `Location` плюс длина имени: конструктор
         // стоит первым в записи `q(m, n)`, что задано грамматикой.
-        ast::Type::Fixed(loc, ctor, _, _) => {
+        ast::Type::Fixed(loc, ctor, _, _, _) => {
             if let Some((_, start, end)) = name_range(*loc) {
                 let name_end = start.saturating_add(ctor.chars().count() as u32);
                 if name_end <= end {

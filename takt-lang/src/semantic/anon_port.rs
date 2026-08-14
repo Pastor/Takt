@@ -91,7 +91,7 @@ fn width_of(ty: &TypeNode) -> Option<u16> {
     match ty {
         TypeNode::Bit | TypeNode::Bool => Some(1),
         TypeNode::Integer { bits, .. } => Some(u16::from(*bits)),
-        TypeNode::Fixed { m, n } => Some(u16::from(fixed_storage_bits(m + n))),
+        TypeNode::Fixed { m, n, .. } => Some(u16::from(fixed_storage_bits(m + n))),
         _ => None,
     }
 }
