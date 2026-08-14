@@ -724,6 +724,11 @@ mod composition_always;
 #[path = "conformance_c_tests/model_implement.rs"]
 mod model_implement;
 
+// Перенос q к ширине формата (фикс 0061-01) — тем же приёмом подмодуля:
+// файл упирается в лимит размера.
+#[path = "conformance_c_tests/fixed_width.rs"]
+mod fixed_width;
+
 /// Фича 0083: model-level `always` исполняется КАЖДЫЙ такт и потактово совпадает
 /// с C. Прежде блок молча терялся (и в C, и в симуляторе).
 #[test]

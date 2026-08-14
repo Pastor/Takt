@@ -423,6 +423,39 @@ fn main() {{
         .collect()
 }
 
+/// Фикс 0061-01 (цель rust): перенос идёт к **W**, а не к ширине хранения.
+///
+/// ⚠️ Формат `q(6, 6)` выбран намеренно: `W = 12`, хранение — 16 бит. При
+/// `q(8, 8)` обе границы совпадают, и прежняя сверка расхождения не видела —
+/// это была дыра в **покрытии**, а не в проверке.
+#[test]
+fn fixed_wrap_to_width_matches_generated_rust() {
+    let dir = build_dir("rsfixedw12");
+    let fixture = Path::new("tests/data/eval/conformance_fixed_probe_w12.takt");
+    let sim = simulate_f64_trace(fixture, "probe");
+    assert_eq!(
+        sim,
+        vec![
+            (-26.0f64).to_bits(),
+            (-18.0f64).to_bits(),
+            (-10.0f64).to_bits(),
+        ],
+        "q(6,6): 1920 + 512 = 2432 → перенос к 12 битам даёт −26.0; \
+         перенос к 16 битам дал бы 38.0"
+    );
+
+    if !rustc_available() {
+        eprintln!("[ПРОПУСК] fixed_wrap_to_width_matches_generated_rust: rustc не найден");
+        return;
+    }
+    let rs = rust_f64_trace(&dir, fixture, "rsfixedw12", "Rsfixedw12", sim.len());
+    assert_eq!(
+        sim, rs,
+        "перенос к W (не к ширине хранения) обязан совпасть с Rust.\n\
+         симулятор={sim:?}\nRust={rs:?}"
+    );
+}
+
 /// T10/A4 (цель rust): побитовая потактовая сверка Q-арифметики с симулятором —
 /// включая отрицательные и floor к −∞ у `*` (S2: repr −2, т.е. −0.0078125).
 #[test]

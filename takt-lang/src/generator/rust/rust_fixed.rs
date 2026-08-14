@@ -105,6 +105,35 @@ fn storage(m: u8, n: u8) -> String {
     format!("i{}", fixed_storage_bits(m + n))
 }
 
+/// Оборачивает готовое выражение-представление в перенос к **W** и хранение `i{S}`.
+///
+/// ⚠️ Приведение `as i{S}` переносит к ширине **хранения**, а правило 3 ADR 0061
+/// требует переноса к `W = m + n`: при `W = 12` это 16 бит против 12, то есть
+/// другая граница (фикс 0061-01). Совпадают они лишь при `W ∈ {8, 16, 32, 64}` —
+/// таков весь корпус, поэтому расхождение дожило от 0061 незамеченным.
+///
+/// ⚠️ При `W = S` форма печати **прежняя байт-в-байт**: иначе поедут снапшоты
+/// `examples/generated`. Перенос делается парой сдвигов (в Rust `<<` не паникует
+/// на потере старших бит, `>>` знакового — арифметический), а не маской: так
+/// знак восстанавливается тем же выражением.
+/// ⚠️ `wide` говорит, что `inner` посчитан в `i128` (произведение, деление,
+/// пересчёт `q → q`): такому выражению нужен явный `as i64` перед сдвигами, а
+/// уже-`i64` его давать **нельзя** — `clippy::unnecessary_cast` под `-D warnings`.
+fn wrap_to(inner: &str, m: u8, n: u8, wide: bool) -> String {
+    let s = storage(m, n);
+    let w = m + n;
+    if w == fixed_storage_bits(w) {
+        return format!("(({inner}) as {s})");
+    }
+    let shift = 64 - w;
+    let narrowed = if wide {
+        format!("({inner}) as i64")
+    } else {
+        inner.to_string()
+    };
+    format!("((({narrowed}) << {shift} >> {shift}) as {s})")
+}
+
 /// `2^n` как целочисленный литерал.
 fn pow2(n: u8) -> u64 {
     1u64 << n
@@ -119,23 +148,24 @@ pub(crate) fn binary(
     m: u8,
     n: u8,
 ) -> Result<String, Diagnostic> {
-    let s = storage(m, n);
     // Операнды НЕ оборачиваются в скобки: `print_expression` уже скобкует
     // составные узлы, а лишняя пара → clippy::double_parens под `-D warnings`.
     // Приоритет `as` выше `+`/`*`/`>>`, поэтому `la as i64 + lb as i64` группирует
     // верно и без скобок вокруг операндов.
     let (la, lb) = (print_expression(a, scope)?, print_expression(b, scope)?);
-    Ok(match op {
-        FixedOp::Add => format!("(({la} as i64 + {lb} as i64) as {s})"),
-        FixedOp::Subtract => format!("(({la} as i64 - {lb} as i64) as {s})"),
+    let inner = match op {
+        FixedOp::Add => format!("{la} as i64 + {lb} as i64"),
+        FixedOp::Subtract => format!("{la} as i64 - {lb} as i64"),
         // Точное произведение 2W, floor к −∞ через арифметический `>>` (в Rust
         // определён для знакового — правило 4 ADR, C-цель обходит C11 хелпером).
-        FixedOp::Multiply => format!("((({la} as i128 * {lb} as i128) >> {n}) as {s})"),
+        FixedOp::Multiply => format!("({la} as i128 * {lb} as i128) >> {n}"),
         // Делимое ← n влево (в Rust `<<` знакового определён), деление к нулю.
         // Скобка вокруг `(la as i128)` обязательна: `la as i128 << n` Rust парсит
         // как generic `i128<...>`, а не сдвиг (E0747-подобная ошибка).
-        FixedOp::Divide => format!("(((({la} as i128) << {n}) / {lb} as i128) as {s})"),
-    })
+        FixedOp::Divide => format!("(({la} as i128) << {n}) / {lb} as i128"),
+    };
+    let wide = matches!(op, FixedOp::Multiply | FixedOp::Divide);
+    Ok(wrap_to(&inner, m, n, wide))
 }
 
 /// Печатает унарный минус над `q(m, n)`: `−repr` с wraparound к W.
@@ -145,10 +175,11 @@ pub(crate) fn negate(
     m: u8,
     n: u8,
 ) -> Result<String, Diagnostic> {
-    Ok(format!(
-        "((-{} as i64) as {})",
-        print_expression(inner, scope)?,
-        storage(m, n)
+    Ok(wrap_to(
+        &format!("-{} as i64", print_expression(inner, scope)?),
+        m,
+        n,
+        false,
     ))
 }
 
@@ -167,14 +198,14 @@ pub(crate) fn cast(
     match (src, target) {
         // q → q: пересчёт дробных разрядов (влево — сдвиг, вправо — floor `>>`).
         (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn }) => {
-            let s = storage(*tm, *tn);
             // Скобка вокруг `(printed as i128)` обязательна перед `<<`/`>>`
             // (иначе Rust парсит `i128<...>` как generic, не сдвиг).
-            if tn >= &from_n {
-                Ok(format!("((({printed} as i128) << {}) as {s})", tn - from_n))
+            let inner = if tn >= &from_n {
+                format!("({printed} as i128) << {}", tn - from_n)
             } else {
-                Ok(format!("((({printed} as i128) >> {}) as {s})", from_n - tn))
-            }
+                format!("({printed} as i128) >> {}", from_n - tn)
+            };
+            Ok(wrap_to(&inner, *tm, *tn, true))
         }
         // q → float: repr / 2^n (точно представимо в f64).
         (Some((_, from_n)), TypeNode::Rational) => {
@@ -195,9 +226,11 @@ pub(crate) fn cast(
             ))
         }
         // целое/бит → q: repr = v · 2^n с wraparound к W.
-        (None, TypeNode::Fixed { m: tm, n: tn }) => Ok(format!(
-            "((({printed} as i64) << {tn}) as {})",
-            storage(*tm, *tn)
+        (None, TypeNode::Fixed { m: tm, n: tn }) => Ok(wrap_to(
+            &format!("({printed} as i64) << {tn}"),
+            *tm,
+            *tn,
+            false,
         )),
         // Ни источник, ни цель не q — вызывающий не должен был звать сюда.
         (None, _) => {

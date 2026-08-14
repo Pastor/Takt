@@ -47,6 +47,38 @@ fn storage_type(m: u8, n: u8) -> String {
     format!("int{}_t", fixed_storage_bits(m + n))
 }
 
+/// Истина, если ширина формата `W = m + n` **уже** равна ширине хранения.
+///
+/// ⚠️ Различие существенно (фикс 0061-01): правило 3 ADR 0061 требует переноса
+/// к **W**, а приведение к типу хранения
+/// сужает к `S = fixed_storage_bits(W)` — при `W = 12` это 16 бит, то есть
+/// перенос происходит на другой границе, чем у эталона. Совпадают они только
+/// когда `W ∈ {8, 16, 32, 64}` — а весь корпус ровно таков, поэтому расхождение
+/// дожило от 0061 незамеченным.
+fn width_is_storage(m: u8, n: u8) -> bool {
+    m + n == fixed_storage_bits(m + n)
+}
+
+/// Открывает обёртку результата q-операции: приведение к типу хранения и, если
+/// `W` уже ширины хранения, вызов `lam_q_wrap` для переноса к `W`.
+///
+/// ⚠️ Хелпер эмитится **только по нужде**: при `W = S` он был бы тождеством, а
+/// вывод для всего корпуса изменился бы (снапшоты `examples/generated`).
+fn open_wrap(printer: &mut Printer, m: u8, n: u8) {
+    printer.print(&format!("({})(", storage_type(m, n)));
+    if !width_is_storage(m, n) {
+        printer.print("lam_q_wrap(");
+    }
+}
+
+/// Закрывает обёртку, открытую [`open_wrap`].
+fn close_wrap(printer: &mut Printer, m: u8, n: u8) {
+    if !width_is_storage(m, n) {
+        printer.print(&format!(", {})", m + n));
+    }
+    printer.print(")");
+}
+
 /// `2^n` как целочисленный литерал (для сдвигов через умножение/деление).
 fn pow2(n: u8) -> u64 {
     1u64 << n
@@ -81,7 +113,7 @@ pub(super) fn binary(
     n: u8,
     has_model: bool,
 ) -> Result<(), Diagnostic> {
-    printer.print(&format!("({})(", storage_type(m, n)));
+    open_wrap(printer, m, n);
     match op {
         FixedOp::Add | FixedOp::Subtract => {
             let sym = if matches!(op, FixedOp::Add) {
@@ -108,7 +140,7 @@ pub(super) fn binary(
             printer.print(&format!(", {})", n));
         }
     }
-    printer.print(")");
+    close_wrap(printer, m, n);
     Ok(())
 }
 
@@ -124,9 +156,10 @@ pub(super) fn negate(
     n: u8,
     has_model: bool,
 ) -> Result<(), Diagnostic> {
-    printer.print(&format!("({})(-", storage_type(m, n)));
+    open_wrap(printer, m, n);
+    printer.print("-");
     widened(printer, map, owner, params, inner, has_model)?;
-    printer.print(")");
+    close_wrap(printer, m, n);
     Ok(())
 }
 
@@ -151,9 +184,9 @@ pub(super) fn cast(
     match (src, target) {
         // q → q: пересчёт дробных разрядов (влево — умножение, вправо — floor).
         (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn }) => {
-            printer.print(&format!("({})(", storage_type(*tm, *tn)));
+            open_wrap(printer, *tm, *tn);
             rescale(printer, map, owner, params, inner, from_n, *tn, has_model)?;
-            printer.print(")");
+            close_wrap(printer, *tm, *tn);
         }
         // q → float: repr / 2^n (точно представимо в double).
         (Some((_, from_n)), TypeNode::Rational) => {
@@ -168,16 +201,28 @@ pub(super) fn cast(
             printer.print(&format!(", (int64_t)1 << {})", from_n));
         }
         // float → q: floor(f * 2^n).
+        // ⚠️ Форма печати здесь своя, не через `open_wrap`: при `W = S` вывод
+        // обязан остаться прежним байт-в-байт — `(int16_t)floor(…)`, без лишней
+        // скобки, иначе поедут снапшоты `examples/generated` (фикс 0061-01).
         (None, TypeNode::Fixed { m: tm, n: tn }) if source_is_real(map, owner, inner) => {
-            printer.print(&format!("({})floor((", storage_type(*tm, *tn)));
+            let wraps = !width_is_storage(*tm, *tn);
+            printer.print(&format!("({})", storage_type(*tm, *tn)));
+            if wraps {
+                printer.print("lam_q_wrap(");
+            }
+            printer.print("floor((");
             generate_expr(printer, map, owner, params, inner, 0, has_model)?;
             printer.print(&format!(") * {}.0)", pow2(*tn)));
+            if wraps {
+                printer.print(&format!(", {})", tm + tn));
+            }
         }
         // целое/бит → q: (repr = v * 2^n) с wraparound к W.
         (None, TypeNode::Fixed { m: tm, n: tn }) => {
-            printer.print(&format!("({})(", storage_type(*tm, *tn)));
+            open_wrap(printer, *tm, *tn);
             widened(printer, map, owner, params, inner, has_model)?;
-            printer.print(&format!(" * ((int64_t)1 << {}))", tn));
+            printer.print(&format!(" * ((int64_t)1 << {})", tn));
+            close_wrap(printer, *tm, *tn);
         }
         // Ни источник, ни цель не q — сюда не попадаем (страж вызова).
         (None, _) => {
@@ -223,6 +268,14 @@ const LAM_Q_MUL: &str = "static int64_t lam_q_mul(int64_t a, int64_t b, unsigned
 /// `lam_q_div` — делимое ← n влево, целочисленное деление (усечение к нулю).
 const LAM_Q_DIV: &str = "static int64_t lam_q_div(int64_t a, int64_t b, unsigned n) {\n    \
     return (a * ((int64_t)1 << n)) / b;\n}\n";
+/// `lam_q_wrap` — перенос к **W** битам (правило 3 ADR 0061), а не к ширине
+/// хранения. Считается в **беззнаковом**: сужение знакового вне диапазона
+/// implementation-defined, а `uint64_t` определён стандартом при любом значении.
+const LAM_Q_WRAP: &str = "static int64_t lam_q_wrap(int64_t v, unsigned w) {\n    \
+    uint64_t mask = (w >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << w) - 1);\n    \
+    uint64_t bits = (uint64_t)v & mask;\n    \
+    uint64_t sign = (uint64_t)1 << (w - 1);\n    \
+    return (int64_t)((bits & sign) ? (bits | ~mask) : bits);\n}\n";
 
 /// Вставляет определения Q-хелперов (0061), фактически вызванных в `source`,
 /// сразу после `#include`. Эмитятся ровно нужные (без `-Wunused-function`);
@@ -233,10 +286,14 @@ pub(in crate::generator::c) fn insert_fixed_helpers(source: String) -> String {
     let uses_mul = source.contains("lam_q_mul(");
     let uses_div = source.contains("lam_q_div(");
     let uses_floordiv = uses_mul || source.contains("lam_q_floordiv(");
-    if !uses_floordiv && !uses_div {
+    let uses_wrap = source.contains("lam_q_wrap(");
+    if !uses_floordiv && !uses_div && !uses_wrap {
         return source;
     }
     let mut helpers = String::new();
+    if uses_wrap {
+        helpers.push_str(LAM_Q_WRAP);
+    }
     if uses_floordiv {
         helpers.push_str(LAM_Q_FLOORDIV);
     }

@@ -44,6 +44,68 @@ END_FUNCTION
 
 ";
 
+/// Определение `FUNCTION LAM_Q_WRAP` — перенос к **W** битам (правило 3 ADR 0061).
+///
+/// ⚠️ Сужение `LINT_TO_{S}` переносит к ширине **хранения**, а не к `W = m + n`:
+/// при `W = 12` это 16 бит против 12 — другая граница (фикс 0061-01). Совпадают
+/// они лишь при `W ∈ {8, 16, 32, 64}`, каков весь корпус, — поэтому расхождение
+/// с эталоном дожило от 0061 незамеченным.
+///
+/// ⚠️ Модуль `2^W` передаётся **аргументом**, а не считается: сдвигов над числами
+/// в IEC нет вовсе (ловушка A-4 ADR 0061), а `SHL` определён лишь над битовыми
+/// строками. `MOD` в IEC даёт остаток со знаком делимого — отсюда две поправки.
+pub(crate) const LAM_Q_WRAP: &str = "\
+FUNCTION LAM_Q_WRAP : LINT
+VAR_INPUT
+    x : LINT;
+    m : LINT;
+END_VAR
+VAR
+    r : LINT;
+END_VAR
+    r := x MOD m;
+    IF r < 0 THEN
+        r := r + m;
+    END_IF;
+    IF r >= m / 2 THEN
+        r := r - m;
+    END_IF;
+    LAM_Q_WRAP := r;
+END_FUNCTION
+
+";
+
+/// Истина, если `W = m + n` уже равна ширине хранения (перенос не нужен).
+fn width_is_storage(m: u8, n: u8) -> bool {
+    m + n == fixed_storage_bits(m + n)
+}
+
+/// Оборачивает выражение-`LINT` переносом к `W`, если `W` ≠ ширины хранения.
+///
+/// ⚠️ При `W = S` возвращает выражение **как есть**: вывод для корпуса обязан
+/// остаться байт-в-байт прежним.
+fn wrap_lint(expr: String, m: u8, n: u8) -> Result<String, Diagnostic> {
+    if width_is_storage(m, n) {
+        return Ok(expr);
+    }
+    let w = m + n;
+    // 2^W обязан быть представим в LINT (знаковое 64): при W = 63 модуль равен
+    // 2^63 и в LINT не влезает. Отказ называет причину — молча считать по
+    // неверному модулю значило бы дать иной результат, чем у эталона.
+    if w >= 63 {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            format!(
+                "перенос к {w} битам в цели st требует модуля 2^{w}, непредставимого \
+                 в LINT (знаковое 64 бита); выберите q(m, n) с m + n ≤ 62 либо \
+                 ширину, кратную 8"
+            ),
+        )
+        .with_code("ST-021"));
+    }
+    Ok(format!("LAM_Q_WRAP({expr}, {})", 1u64 << w))
+}
+
 /// Арифметическая операция над `q(m, n)`.
 #[derive(Clone, Copy)]
 pub(crate) enum FixedOp {
@@ -112,15 +174,16 @@ pub(crate) fn binary(
     let (la, lb) = (print_expression(a, model)?, print_expression(b, model)?);
     let (la, lb) = (to_lint(&la, s), to_lint(&lb, s));
     let pow = 1u64 << n;
-    match op {
-        FixedOp::Add => Ok(format!("LINT_TO_{s}({la} + {lb})")),
-        FixedOp::Subtract => Ok(format!("LINT_TO_{s}({la} - {lb})")),
-        FixedOp::Multiply | FixedOp::Divide if bits == 64 => Err(too_wide(m, n)),
+    let inner = match op {
+        FixedOp::Add => format!("{la} + {lb}"),
+        FixedOp::Subtract => format!("{la} - {lb}"),
+        FixedOp::Multiply | FixedOp::Divide if bits == 64 => return Err(too_wide(m, n)),
         // Точное произведение 2W → floor к −∞ (LAM_Q_FLOORDIV, правило 4).
-        FixedOp::Multiply => Ok(format!("LINT_TO_{s}(LAM_Q_FLOORDIV({la} * {lb}, {pow}))")),
+        FixedOp::Multiply => format!("LAM_Q_FLOORDIV({la} * {lb}, {pow})"),
         // Делимое ← n влево (умножением), деление IEC усекает к нулю (как сим).
-        FixedOp::Divide => Ok(format!("LINT_TO_{s}(({la} * {pow}) / {lb})")),
-    }
+        FixedOp::Divide => format!("({la} * {pow}) / {lb}"),
+    };
+    Ok(format!("LINT_TO_{s}({})", wrap_lint(inner, m, n)?))
 }
 
 /// Печатает унарный минус над `q(m, n)`: `−repr` с wraparound к W.
@@ -132,7 +195,10 @@ pub(crate) fn negate(
 ) -> Result<String, Diagnostic> {
     let s = iec_signed(fixed_storage_bits(m + n));
     let li = to_lint(&print_expression(inner, model)?, s);
-    Ok(format!("LINT_TO_{s}(-{li})"))
+    Ok(format!(
+        "LINT_TO_{s}({})",
+        wrap_lint(format!("-{li}"), m, n)?
+    ))
 }
 
 /// Печатает приведение `expr as T`, когда источник **или** цель — `q(m, n)`.
@@ -147,7 +213,7 @@ pub(crate) fn cast(
         // q → q: пересчёт дробных разрядов.
         (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn }) => {
             let li = to_lint(&printed, iec_signed(storage_of(inner)));
-            rescale(&li, from_n, *tn, fixed_storage_bits(tm + tn))
+            rescale(&li, from_n, *tn, *tm)
         }
         // q → float: repr / 2^n (точно представимо в LREAL).
         (Some((_, from_n)), TypeNode::Rational) => {
@@ -190,7 +256,10 @@ pub(crate) fn cast(
             } else {
                 format!("{src_name}_TO_LINT({printed})")
             };
-            Ok(format!("LINT_TO_{ts}({li} * {})", 1u64 << tn))
+            Ok(format!(
+                "LINT_TO_{ts}({})",
+                wrap_lint(format!("{li} * {}", 1u64 << tn), *tm, *tn)?
+            ))
         }
         (None, _) => Ok(printed),
     }
@@ -205,16 +274,14 @@ fn storage_of(expr: &ExpressionNode) -> u8 {
 }
 
 /// Пересчёт представления `q` между дробными разрядностями с сужением к `S2`.
-fn rescale(li: &str, from_n: u8, to_n: u8, s2_bits: u8) -> Result<String, Diagnostic> {
-    let s2 = iec_signed(s2_bits);
-    if to_n >= from_n {
-        Ok(format!("LINT_TO_{s2}({li} * {})", 1u64 << (to_n - from_n)))
+fn rescale(li: &str, from_n: u8, to_n: u8, to_m: u8) -> Result<String, Diagnostic> {
+    let s2 = iec_signed(fixed_storage_bits(to_m + to_n));
+    let inner = if to_n >= from_n {
+        format!("{li} * {}", 1u64 << (to_n - from_n))
     } else {
-        Ok(format!(
-            "LINT_TO_{s2}(LAM_Q_FLOORDIV({li}, {}))",
-            1u64 << (from_n - to_n)
-        ))
-    }
+        format!("LAM_Q_FLOORDIV({li}, {})", 1u64 << (from_n - to_n))
+    };
+    Ok(format!("LINT_TO_{s2}({})", wrap_lint(inner, to_m, to_n)?))
 }
 
 /// Имя целого IEC-типа цели приведения `q → int`.
@@ -256,15 +323,25 @@ fn untyped_source() -> Diagnostic {
 /// неизменен (T14). Опережающие ссылки в ST — расширение `iec2c -p`, которым
 /// цель уже пользуется, поэтому позиция «перед первым FUNCTION_BLOCK» безопасна.
 pub(crate) fn insert_helper(program: String) -> String {
-    if !program.contains("LAM_Q_FLOORDIV(") {
+    let mut helpers = String::new();
+    // Порядок значим: `LAM_Q_WRAP` зовёт только себя, `LAM_Q_FLOORDIV` — тоже,
+    // но объявление обязано стоять до использования, а вставляются они разом
+    // перед первым POU.
+    if program.contains("LAM_Q_WRAP(") {
+        helpers.push_str(LAM_Q_WRAP);
+    }
+    if program.contains("LAM_Q_FLOORDIV(") {
+        helpers.push_str(LAM_Q_FLOORDIV);
+    }
+    if helpers.is_empty() {
         return program;
     }
     match program.find("FUNCTION_BLOCK") {
         Some(i) => {
             let mut s = program;
-            s.insert_str(i, LAM_Q_FLOORDIV);
+            s.insert_str(i, &helpers);
             s
         }
-        None => format!("{LAM_Q_FLOORDIV}{program}"),
+        None => format!("{helpers}{program}"),
     }
 }
