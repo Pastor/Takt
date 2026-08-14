@@ -214,10 +214,11 @@ fn default_field(ty: &TypeNode, model: &ModelNode) -> Value {
     match ty {
         TypeNode::Bool => Value::Boolean(false),
         TypeNode::Rational => Value::Real(0.0),
-        TypeNode::Fixed { m, n, .. } => Value::Fixed {
+        TypeNode::Fixed { m, n, sat } => Value::Fixed {
             repr: 0,
             m: *m,
             n: *n,
+            sat: *sat,
         },
         TypeNode::Array(size, elem) => {
             Value::Array((0..*size).map(|_| default_field(elem, model)).collect())

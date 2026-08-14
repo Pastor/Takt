@@ -423,8 +423,11 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
                 .map(Value::Number)
                 .ok_or(EvalError::ArithmeticOverflow { op: op.symbol() }),
             Value::Real(f) => Ok(Value::Real(-f)),
-            // q(m, n): унарный минус над представлением с wraparound.
-            Value::Fixed { repr, m, n } => Ok(crate::eval::fixed::negate(*repr, *m, *n)),
+            // q(m, n): унарный минус над представлением — перенос либо
+            // насыщение, по признаку формата (фича 0170).
+            Value::Fixed { repr, m, n, sat } => {
+                Ok(crate::eval::fixed::negate(*repr, *m, *n, *sat))
+            }
             Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
                 Err(EvalError::TypeMismatch {
                     op: op.symbol(),
@@ -436,10 +439,11 @@ pub(crate) fn apply_unary(op: UnOp, value: &Value) -> Result<Value, EvalError> {
         UnOp::UnaryPlus => match value {
             Value::Number(n) => Ok(Value::Number(*n)),
             Value::Real(f) => Ok(Value::Real(*f)),
-            Value::Fixed { repr, m, n } => Ok(Value::Fixed {
+            Value::Fixed { repr, m, n, sat } => Ok(Value::Fixed {
                 repr: *repr,
                 m: *m,
                 n: *n,
+                sat: *sat,
             }),
             Value::Boolean(_) | Value::Array(_) | Value::Struct { .. } | Value::Duration(_) => {
                 Err(EvalError::TypeMismatch {

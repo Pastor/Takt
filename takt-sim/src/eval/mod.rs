@@ -126,7 +126,7 @@ pub(crate) fn coerce_to_type_with(
         // Отличие от каста (`cast_to_type`): там `int` масштабируется — рантайм-
         // целое ещё не в представлении. Оба пути дают один результат, т.к.
         // литерал предмасштабирован грамматикой, а рантайм-целое — нет.
-        TypeNode::Fixed { m, n, .. } => coerce_to_fixed_store(value, *m, *n),
+        TypeNode::Fixed { m, n, sat } => coerce_to_fixed_store(value, *m, *n, *sat),
         TypeNode::Bool => match &value {
             Value::Boolean(b) => Ok(Value::Boolean(*b)),
             Value::Number(n) => Ok(Value::Boolean(*n != 0)),
@@ -246,7 +246,7 @@ fn to_integer(value: &Value, ty: &TypeNode) -> Result<i128, EvalError> {
 
 /// Запись значения в переменную типа `q(m, n)` (см. арм `TypeNode::Fixed` в
 /// [`coerce_to_type`]).
-fn coerce_to_fixed_store(value: Value, m: u8, n: u8) -> Result<Value, EvalError> {
+fn coerce_to_fixed_store(value: Value, m: u8, n: u8, sat: bool) -> Result<Value, EvalError> {
     let repr: i128 = match &value {
         Value::Number(k) => *k, // сырое представление (грамматика масштабировала)
         Value::Fixed { repr, n: n2, .. } => {
@@ -265,10 +265,17 @@ fn coerce_to_fixed_store(value: Value, m: u8, n: u8) -> Result<Value, EvalError>
             });
         }
     };
+    // ⚠️ Запись в переменную `sat` тоже насыщает: иначе присваивание стало бы
+    // «дырой» в семантике формата — значение легло бы в переменную обёрнутым.
     Ok(Value::Fixed {
-        repr: fixed::wrap(repr, m + n),
+        repr: if sat {
+            fixed::saturate(repr, m + n)
+        } else {
+            fixed::wrap(repr, m + n)
+        },
         m,
         n,
+        sat,
     })
 }
 
@@ -283,8 +290,8 @@ fn coerce_to_fixed_store(value: Value, m: u8, n: u8) -> Result<Value, EvalError>
 #[allow(clippy::wildcard_enum_match_arm)]
 pub(crate) fn cast_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalError> {
     // Цель — q(m, n): масштабируем значение к представлению.
-    if let TypeNode::Fixed { m, n, .. } = ty {
-        return fixed::cast_to_fixed(&value, *m, *n);
+    if let TypeNode::Fixed { m, n, sat } = ty {
+        return fixed::cast_to_fixed(&value, *m, *n, *sat);
     }
     // Источник — q(m, n), цель иная: разворачиваем и приводим обычным путём.
     if let Value::Fixed { repr, n, .. } = value {
