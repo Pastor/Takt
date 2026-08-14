@@ -32,10 +32,11 @@ pub(crate) enum FixedOp {
 
 /// Формат `q(m, n)` выражения, если его тип — `Fixed` (рекурсивно по арифметике;
 /// `SE-059` гарантирует единый формат операндов).
-pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8)> {
+pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8, bool)> {
     match expr {
         ExpressionNode::Variable(var) => var_fixed(&var.borrow()),
-        ExpressionNode::Cast(_, TypeNode::Fixed { m, n, .. }) => Some((*m, *n)),
+        // Признак насыщения (фича 0170) едет вместе с разрядностями.
+        ExpressionNode::Cast(_, TypeNode::Fixed { m, n, sat }) => Some((*m, *n, *sat)),
         ExpressionNode::Parenthesis(a) | ExpressionNode::Negate(a) => fixed_format(a),
         ExpressionNode::Add(a, b)
         | ExpressionNode::Subtract(a, b)
@@ -46,11 +47,29 @@ pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8)> {
 }
 
 /// Формат `q(m, n)` переменной, если её тип — `Fixed`.
-fn var_fixed(var: &VariableNode) -> Option<(u8, u8)> {
+fn var_fixed(var: &VariableNode) -> Option<(u8, u8, bool)> {
     match var.ty() {
-        TypeNode::Fixed { m, n, .. } => Some((*m, *n)),
+        TypeNode::Fixed { m, n, sat } => Some((*m, *n, *sat)),
         _ => None,
     }
+}
+
+/// Прижимает выражение шириной `w2` к границам представления `intW` (фича 0170).
+///
+/// ⚠️ Считается в **удвоенной** ширине: у `logic signed [W-1:0]` места под
+/// промежуток нет, и сравнение с границами шло бы уже по обёрнутому значению.
+///
+/// ⚠️ Подвыражение повторяется трижды (сравнение сверху, снизу, значение). Это
+/// цена отсутствия хелперов у цели `sv`: инфраструктуры эмиссии функций рядом с
+/// арифметикой нет, а вводить её ради одной формы дороже, чем повтор, который
+/// синтезатор схлопывает в общий узел. Синтезируемость доказывают оба гейта
+/// (verilator + yosys).
+fn saturate_sv(inner: &str, w: u32, w2: u32) -> String {
+    let max = (1i64 << (w - 1)) - 1;
+    let min_abs = 1i64 << (w - 1);
+    format!(
+        "({w}'((({inner}) > {w2}'sd{max}) ? {w2}'sd{max}          : ((({inner}) < -{w2}'sd{min_abs}) ? -{w2}'sd{min_abs} : ({inner}))))"
+    )
 }
 
 /// Знаковое W-битное значение операнда: `$signed(<printed>)`.
@@ -66,10 +85,29 @@ pub(crate) fn binary(
     scope: &Scope,
     m: u8,
     n: u8,
+    sat: bool,
 ) -> Result<String, Diagnostic> {
     let w = (m + n) as u32;
     let w2 = 2 * w;
     let (la, lb) = (print_expression(l, scope)?, print_expression(r, scope)?);
+    if sat {
+        // Промежуток — в 2W, прижатие — к границам W (фича 0170).
+        let inner = match op {
+            FixedOp::Add => format!("{w2}'({}) + {w2}'({})", signed(&la), signed(&lb)),
+            FixedOp::Subtract => format!("{w2}'({}) - {w2}'({})", signed(&la), signed(&lb)),
+            FixedOp::Multiply => format!(
+                "({w2}'({}) * {w2}'({})) >>> {n}",
+                signed(&la),
+                signed(&lb)
+            ),
+            FixedOp::Divide => format!(
+                "({w2}'({}) <<< {n}) / {w2}'({})",
+                signed(&la),
+                signed(&lb)
+            ),
+        };
+        return Ok(saturate_sv(&inner, w, w2));
+    }
     match op {
         FixedOp::Add => Ok(format!("({w}'({} + {}))", signed(&la), signed(&lb))),
         FixedOp::Subtract => Ok(format!("({w}'({} - {}))", signed(&la), signed(&lb))),
@@ -94,12 +132,16 @@ pub(crate) fn negate(
     scope: &Scope,
     m: u8,
     n: u8,
+    sat: bool,
 ) -> Result<String, Diagnostic> {
     let w = (m + n) as u32;
-    Ok(format!(
-        "({w}'(-{}))",
-        signed(&print_expression(inner, scope)?)
-    ))
+    let printed = signed(&print_expression(inner, scope)?);
+    if sat {
+        // Край `−(−2^(W−1))`: в 2W он представим, и прижатие даёт максимум.
+        let w2 = 2 * w;
+        return Ok(saturate_sv(&format!("-{w2}'({printed})"), w, w2));
+    }
+    Ok(format!("({w}'(-{printed}))"))
 }
 
 /// Печатает приведение `expr as T`, когда источник **или** цель — `q(m, n)`.
@@ -116,26 +158,39 @@ pub(crate) fn cast(
     let printed = print_expression(inner, scope)?;
     match (src, target) {
         // q → q: пересчёт дробных разрядов (влево — сдвиг, вправо — floor `>>>`).
-        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn, .. }) => {
+        (Some((_, from_n, _)), TypeNode::Fixed { m: tm, n: tn, sat }) => {
             let tw = (tm + tn) as u32;
-            if tn >= &from_n {
-                Ok(format!("({tw}'({} <<< {}))", signed(&printed), tn - from_n))
+            let inner_expr = if tn >= &from_n {
+                format!("{} <<< {}", signed(&printed), tn - from_n)
             } else {
-                Ok(format!("({tw}'({} >>> {}))", signed(&printed), from_n - tn))
+                format!("{} >>> {}", signed(&printed), from_n - tn)
+            };
+            if *sat {
+                let tw2 = 2 * tw;
+                return Ok(saturate_sv(&format!("{tw2}'({inner_expr})"), tw, tw2));
             }
+            Ok(format!("({tw}'({inner_expr}))"))
         }
         // q ↔ float — недопустимо в синтезируемом RTL.
         (Some(_), TypeNode::Rational) => Err(sv003_cast()),
         // q → целое/бит: floor(repr / 2ⁿ) арифметическим сдвигом.
-        (Some((_, from_n)), _) => {
+        (Some((_, from_n, _)), _) => {
             let bits = int_bits(target)?;
             Ok(format!("({bits}'({} >>> {from_n}))", signed(&printed)))
         }
         // float → q — источника float в синтезируемом RTL нет.
         (None, TypeNode::Fixed { .. }) if is_rational(inner) => Err(sv003_cast()),
         // целое/бит → q: repr = v · 2ⁿ с wraparound к W.
-        (None, TypeNode::Fixed { m: tm, n: tn, .. }) => {
+        (None, TypeNode::Fixed { m: tm, n: tn, sat }) => {
             let w = (tm + tn) as u32;
+            if *sat {
+                let w2 = 2 * w;
+                return Ok(saturate_sv(
+                    &format!("{w2}'({}) <<< {tn}", signed(&printed)),
+                    w,
+                    w2,
+                ));
+            }
             Ok(format!("({w}'({} <<< {tn}))", signed(&printed)))
         }
         // Ни источник, ни цель не q — вызывающий не должен был звать сюда.

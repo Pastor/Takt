@@ -90,7 +90,7 @@ pub(crate) fn print_expression(
         ExpressionNode::Power(a, b) => binary(a, "**", b, model),
         ExpressionNode::UnaryPlus(a) => Ok(format!("+{}", wrap_expr(a, model)?)),
         ExpressionNode::Negate(a) => match st_fixed::fixed_format(expr) {
-            Some((m, n)) => st_fixed::negate(a, model, m, n),
+            Some((m, n, sat)) => st_fixed::negate(a, model, m, n, sat),
             None => Ok(format!("-{}", wrap_expr(a, model)?)),
         },
         // Сравнения: `!=` в ST записывается `<>`, остальные совпадают.
@@ -403,7 +403,8 @@ fn fixed_binary(
     b: &ExpressionNode,
     model: &ModelNode,
 ) -> Option<Result<String, Diagnostic>> {
-    st_fixed::fixed_format(expr).map(|(m, n)| st_fixed::binary(op, a, b, model, m, n))
+    st_fixed::fixed_format(expr)
+        .map(|(m, n, sat)| st_fixed::binary(op, a, b, model, m, n, sat))
 }
 
 /// Печатает операнд, заключая составное выражение в скобки.

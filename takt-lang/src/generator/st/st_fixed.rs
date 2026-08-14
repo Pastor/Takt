@@ -76,6 +76,31 @@ END_FUNCTION
 
 ";
 
+/// Определение `FUNCTION LAM_Q_SAT` — прижатие к границам представления
+/// (фича 0170).
+///
+/// ⚠️ Границы передаются **аргументами**, а не считаются: степеней двойки в
+/// арифметике IEC нет (сдвигов над числами тоже — ловушка A-4 ADR 0061), и
+/// вычислять `2^(W−1)` в ST значило бы городить второй способ узнать то, что
+/// компилятор уже знает.
+pub(crate) const LAM_Q_SAT: &str = "\
+FUNCTION LAM_Q_SAT : LINT
+VAR_INPUT
+    x : LINT;
+    lo : LINT;
+    hi : LINT;
+END_VAR
+    IF x > hi THEN
+        LAM_Q_SAT := hi;
+    ELSIF x < lo THEN
+        LAM_Q_SAT := lo;
+    ELSE
+        LAM_Q_SAT := x;
+    END_IF;
+END_FUNCTION
+
+";
+
 /// Истина, если `W = m + n` уже равна ширине хранения (перенос не нужен).
 fn width_is_storage(m: u8, n: u8) -> bool {
     m + n == fixed_storage_bits(m + n)
@@ -85,7 +110,16 @@ fn width_is_storage(m: u8, n: u8) -> bool {
 ///
 /// ⚠️ При `W = S` возвращает выражение **как есть**: вывод для корпуса обязан
 /// остаться байт-в-байт прежним.
-fn wrap_lint(expr: String, m: u8, n: u8) -> Result<String, Diagnostic> {
+fn wrap_lint(expr: String, m: u8, n: u8, sat: bool) -> Result<String, Diagnostic> {
+    // ⚠️ Насыщение (фича 0170) прижимает в LINT — ДО сужения `LINT_TO_{S}`:
+    // сужение сработало бы раньше и вернуло обёрнутое значение (капкан 0061-01).
+    // Границы печатаются литералами: арифметики над ними в IEC не требуется.
+    if sat {
+        let w = m + n;
+        let max = (1i64 << (w - 1)) - 1;
+        let min = -(1i64 << (w - 1));
+        return Ok(format!("LAM_Q_SAT({expr}, {min}, {max})"));
+    }
     if width_is_storage(m, n) {
         return Ok(expr);
     }
@@ -118,9 +152,10 @@ pub(crate) enum FixedOp {
 
 /// Формат `q(m, n)` выражения, если его тип — `Fixed` (рекурсивно по арифметике;
 /// `SE-059` гарантирует единый формат операндов).
-pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8)> {
-    if let Some(TypeNode::Fixed { m, n, .. }) = inner_expr_type(expr) {
-        return Some((m, n));
+pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8, bool)> {
+    // Признак насыщения (фича 0170) едет вместе с разрядностями.
+    if let Some(TypeNode::Fixed { m, n, sat }) = inner_expr_type(expr) {
+        return Some((m, n, sat));
     }
     match expr {
         ExpressionNode::Add(a, b)
@@ -169,6 +204,7 @@ pub(crate) fn binary(
     model: &ModelNode,
     m: u8,
     n: u8,
+    sat: bool,
 ) -> Result<String, Diagnostic> {
     let bits = fixed_storage_bits(m + n);
     let s = iec_signed(bits);
@@ -184,7 +220,7 @@ pub(crate) fn binary(
         // Делимое ← n влево (умножением), деление IEC усекает к нулю (как сим).
         FixedOp::Divide => format!("({la} * {pow}) / {lb}"),
     };
-    Ok(format!("LINT_TO_{s}({})", wrap_lint(inner, m, n)?))
+    Ok(format!("LINT_TO_{s}({})", wrap_lint(inner, m, n, sat)?))
 }
 
 /// Печатает унарный минус над `q(m, n)`: `−repr` с wraparound к W.
@@ -193,12 +229,13 @@ pub(crate) fn negate(
     model: &ModelNode,
     m: u8,
     n: u8,
+    sat: bool,
 ) -> Result<String, Diagnostic> {
     let s = iec_signed(fixed_storage_bits(m + n));
     let li = to_lint(&print_expression(inner, model)?, s);
     Ok(format!(
         "LINT_TO_{s}({})",
-        wrap_lint(format!("-{li}"), m, n)?
+        wrap_lint(format!("-{li}"), m, n, sat)?
     ))
 }
 
@@ -212,17 +249,17 @@ pub(crate) fn cast(
     let printed = print_expression(inner, model)?;
     match (src, target) {
         // q → q: пересчёт дробных разрядов.
-        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn, .. }) => {
+        (Some((_, from_n, _)), TypeNode::Fixed { m: tm, n: tn, sat }) => {
             let li = to_lint(&printed, iec_signed(storage_of(inner)));
-            rescale(&li, from_n, *tn, *tm)
+            rescale(&li, from_n, *tn, *tm, *sat)
         }
         // q → float: repr / 2^n (точно представимо в LREAL).
-        (Some((_, from_n)), TypeNode::Rational) => {
+        (Some((_, from_n, _)), TypeNode::Rational) => {
             let s = iec_signed(storage_of(inner));
             Ok(format!("({s}_TO_LREAL({printed}) / {}.0)", 1u64 << from_n))
         }
         // q → целое/бит: floor(repr / 2^n) = целая часть.
-        (Some((_, from_n)), _) => {
+        (Some((_, from_n, _)), _) => {
             let s = iec_signed(storage_of(inner));
             let tgt = int_name_of_target(target)?;
             let li = to_lint(&printed, s);
@@ -243,8 +280,8 @@ pub(crate) fn cast(
             )
             .with_code("ST-014"))
         }
-        // целое/бит → q: repr = v · 2^n с wraparound к W.
-        (None, TypeNode::Fixed { m: tm, n: tn, .. }) => {
+        // целое/бит → q: repr = v · 2^n с переносом либо насыщением к W.
+        (None, TypeNode::Fixed { m: tm, n: tn, sat }) => {
             let ts = iec_signed(fixed_storage_bits(tm + tn));
             let src_ty = inner_expr_type(inner).ok_or_else(untyped_source)?;
             let src_name = match src_ty {
@@ -259,7 +296,7 @@ pub(crate) fn cast(
             };
             Ok(format!(
                 "LINT_TO_{ts}({})",
-                wrap_lint(format!("{li} * {}", 1u64 << tn), *tm, *tn)?
+                wrap_lint(format!("{li} * {}", 1u64 << tn), *tm, *tn, *sat)?
             ))
         }
         (None, _) => Ok(printed),
@@ -269,20 +306,22 @@ pub(crate) fn cast(
 /// Тип хранения (в битах) выражения-`q` — по его выведенному формату.
 fn storage_of(expr: &ExpressionNode) -> u8 {
     match fixed_format(expr) {
-        Some((m, n)) => fixed_storage_bits(m + n),
+        // ⚠️ Ширина хранения от признака насыщения НЕ зависит: `sat` меняет
+        // поведение при переполнении, а не размер поля.
+        Some((m, n, _)) => fixed_storage_bits(m + n),
         None => 64,
     }
 }
 
 /// Пересчёт представления `q` между дробными разрядностями с сужением к `S2`.
-fn rescale(li: &str, from_n: u8, to_n: u8, to_m: u8) -> Result<String, Diagnostic> {
+fn rescale(li: &str, from_n: u8, to_n: u8, to_m: u8, sat: bool) -> Result<String, Diagnostic> {
     let s2 = iec_signed(fixed_storage_bits(to_m + to_n));
     let inner = if to_n >= from_n {
         format!("{li} * {}", 1u64 << (to_n - from_n))
     } else {
         format!("LAM_Q_FLOORDIV({li}, {})", 1u64 << (from_n - to_n))
     };
-    Ok(format!("LINT_TO_{s2}({})", wrap_lint(inner, to_m, to_n)?))
+    Ok(format!("LINT_TO_{s2}({})", wrap_lint(inner, to_m, to_n, sat)?))
 }
 
 /// Имя целого IEC-типа цели приведения `q → int`.
@@ -328,6 +367,9 @@ pub(crate) fn insert_helper(program: String) -> String {
     // Порядок значим: `LAM_Q_WRAP` зовёт только себя, `LAM_Q_FLOORDIV` — тоже,
     // но объявление обязано стоять до использования, а вставляются они разом
     // перед первым POU.
+    if program.contains("LAM_Q_SAT(") {
+        helpers.push_str(LAM_Q_SAT);
+    }
     if program.contains("LAM_Q_WRAP(") {
         helpers.push_str(LAM_Q_WRAP);
     }
