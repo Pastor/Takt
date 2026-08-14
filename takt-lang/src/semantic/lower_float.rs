@@ -46,7 +46,8 @@
 //! композиции) обходятся один раз (набор посещённых по указателю).
 
 use crate::diagnostics::Diagnostic;
-use crate::semantic::type_node::{self, TypeNode};
+use crate::semantic::type_node::type_fixed;
+use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
     ConditionNode, ExpressionNode, FunctionDefinitionNode, MatchPatternNode, ModelNode,
     NamedCodeBlockDefinitionNode, StateNode, StatementNode, VariableNode,
@@ -65,7 +66,7 @@ use std::rc::Rc;
 /// `float`-переменной не представим точно в `q(m, n)` глобальной точности или
 /// выходит за диапазон типа.
 ///
-/// [`lower_fixed_literal`]: type_node::lower_fixed_literal
+/// [`lower_fixed_literal`]: type_fixed::lower_fixed_literal
 pub fn lower_float_to_fixed(model: Rc<RefCell<ModelNode>>, m: u8, n: u8) -> Result<(), Diagnostic> {
     let mut visited: HashSet<*const RefCell<ModelNode>> = HashSet::new();
     lower_model(&model, m, n, &mut visited)
@@ -150,7 +151,7 @@ fn lower_ty(ty: &TypeNode, m: u8, n: u8) -> TypeNode {
 
 /// Понижает **объявленную** переменную: меняет тип и, если исходный тип был
 /// `float` (`Rational`), понижает литерал-инициализатор в `Number(repr)`
-/// (переиспользуя [`lower_fixed_var`](type_node::lower_fixed_var), путь 0061).
+/// (переиспользуя [`lower_fixed_var`](type_fixed::lower_fixed_var), путь 0061).
 ///
 /// ⚠️ Гейт «исходный тип — `Rational`» держит **идемпотентность**: повторный
 /// проход видит `Fixed` (не `Rational`) и инициализатор **не** трогает. Без него
@@ -162,7 +163,7 @@ fn lower_declared_var(var: &VariableNode, m: u8, n: u8) -> Result<VariableNode, 
     let was_float = matches!(var_ty(var), Some(TypeNode::Rational));
     let retyped = retype_var(var, m, n);
     if was_float {
-        Ok(type_node::lower_fixed_var(&retyped)?.unwrap_or(retyped))
+        Ok(type_fixed::lower_fixed_var(&retyped)?.unwrap_or(retyped))
     } else {
         Ok(retyped)
     }

@@ -93,7 +93,7 @@ pub fn type_inference(
             }
             // q(m,n) (0061): понижение литерала в представление v — см. type_node.
             ref other => {
-                if let Some(nv) = crate::semantic::type_node::lower_fixed_var(other)? {
+                if let Some(nv) = crate::semantic::type_node::type_fixed::lower_fixed_var(other)? {
                     variables.insert(name.clone(), nv);
                 }
             }

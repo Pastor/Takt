@@ -269,7 +269,7 @@ pub(super) fn map_c_type(
         // 6.5.7p5 (`>>` знакового отрицательного) — задача 0061-03.
         TypeNode::Fixed { m, n, .. } => Ok(format!(
             "int{}_t",
-            crate::semantic::type_node::fixed_storage_bits(m + n)
+            crate::semantic::type_node::type_fixed::fixed_storage_bits(m + n)
         )),
         TypeNode::BuiltinModel
         | TypeNode::BuiltinState

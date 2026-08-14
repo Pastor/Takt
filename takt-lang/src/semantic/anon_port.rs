@@ -30,7 +30,8 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast;
 use crate::semantic::type_inference::ast_type_to_node;
-use crate::semantic::type_node::{TypeNode, fixed_storage_bits};
+use crate::semantic::type_node::type_fixed::fixed_storage_bits;
+use crate::semantic::type_node::TypeNode;
 
 /// Наибольшая позиция бита в слове доступа (правило фичи 0098).
 pub const MAX_ANON_BIT: i64 = 63;
