@@ -69,7 +69,7 @@ pub(crate) fn rust_type(ty: &TypeNode, what: &str) -> Result<String, Diagnostic>
         // `*`/`/` — задача 0061-03.
         TypeNode::Fixed { m, n, .. } => Ok(format!(
             "i{}",
-            crate::semantic::type_node::fixed_storage_bits(m + n)
+            crate::semantic::type_node::type_fixed::fixed_storage_bits(m + n)
         )),
         TypeNode::Integer { bits, signed } => {
             let prefix = if *signed { "i" } else { "u" };

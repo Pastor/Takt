@@ -19,7 +19,7 @@
 
 use super::*;
 use crate::semantic::type_inference::extract_type;
-use crate::semantic::type_node::fixed_storage_bits;
+use crate::semantic::type_node::type_fixed::fixed_storage_bits;
 
 /// Арифметическая операция над `q(m, n)`.
 #[derive(Clone, Copy)]

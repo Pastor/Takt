@@ -17,7 +17,8 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::st::st_expr::{inner_expr_type, print_expression};
-use crate::semantic::type_node::{TypeNode, fixed_storage_bits};
+use crate::semantic::type_node::type_fixed::fixed_storage_bits;
+use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, ModelNode};
 
 /// Определение `FUNCTION LAM_Q_FLOORDIV` — floor-деление целых `LINT`.
