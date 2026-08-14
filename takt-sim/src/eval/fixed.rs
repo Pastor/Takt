@@ -43,12 +43,30 @@ fn rescale(repr: i128, from_n: u8, to_n: u8) -> i128 {
     }
 }
 
+/// Прижимает значение к границам представления `intW` (фича 0170, `sat`).
+///
+/// ⚠️ Границы — представления, а не «удобные» числа: `[−2^(W−1), 2^(W−1) − 1]`.
+/// ⚠️ Проверять обязательно **обе**: на положительных прижатие и перенос дают
+/// разные значения, но ошибиться знаком легко, а край `−(−2^(W−1))` вне тестов
+/// не встречается вовсе.
+pub(crate) fn saturate(v: i128, w: u8) -> i64 {
+    let max = (1i128 << (w - 1)) - 1;
+    let min = -(1i128 << (w - 1));
+    v.clamp(min, max) as i64
+}
+
 /// Значение `Value::Fixed` из «сырого» (возможно, переполненного) представления.
-fn make(repr: i128, m: u8, n: u8) -> Value {
+///
+/// ⚠️ Здесь — **единственная** точка, где решается судьба переполнения: перенос
+/// (правило 3 ADR 0061) или насыщение (фича 0170). Все операции идут через неё,
+/// поэтому разойтись между собой они не могут.
+fn make(repr: i128, m: u8, n: u8, sat: bool) -> Value {
+    let w = m + n;
     Value::Fixed {
-        repr: wrap(repr, m + n),
+        repr: if sat { saturate(repr, w) } else { wrap(repr, w) },
         m,
         n,
+        sat,
     }
 }
 
@@ -67,32 +85,42 @@ fn mismatch(op: BinOp, lhs: &Value, rhs: &Value) -> EvalError {
 /// иначе — [`EvalError::TypeMismatch`], а не молчаливо неверный результат.
 pub(crate) fn binary(op: BinOp, lhs: &Value, rhs: &Value) -> Result<Value, EvalError> {
     let (
-        Value::Fixed { repr: ra, m, n },
+        Value::Fixed {
+            repr: ra,
+            m,
+            n,
+            sat,
+        },
         Value::Fixed {
             repr: rb,
             m: m2,
             n: n2,
+            sat: sat2,
         },
     ) = (lhs, rhs)
     else {
         return Err(mismatch(op, lhs, rhs));
     };
-    if m != m2 || n != n2 {
+    // ⚠️ Признак насыщения входит в формат: `q(8,8)` и `q(8,8) sat` — РАЗНЫЕ
+    // типы (фича 0170). Совпадения требует компилятор (`SE-059`), а здесь —
+    // отказ вместо молчаливо неверного результата: иначе выражение унаследовало
+    // бы семантику переполнения случайного операнда.
+    if m != m2 || n != n2 || sat != sat2 {
         return Err(mismatch(op, lhs, rhs));
     }
-    let (m, n) = (*m, *n);
+    let (m, n, sat) = (*m, *n, *sat);
     let (a, b) = (*ra as i128, *rb as i128);
     match op {
-        BinOp::Add => Ok(make(a + b, m, n)),
-        BinOp::Subtract => Ok(make(a - b, m, n)),
+        BinOp::Add => Ok(make(a + b, m, n, sat)),
+        BinOp::Subtract => Ok(make(a - b, m, n, sat)),
         // Точное произведение 2W → сдвиг на n вправо, floor к −∞ (арифм. сдвиг).
-        BinOp::Multiply => Ok(make((a * b) >> n, m, n)),
+        BinOp::Multiply => Ok(make((a * b) >> n, m, n, sat)),
         // Делимое ← n влево, затем целочисленное деление (усечение к нулю).
         BinOp::Divide => {
             if b == 0 {
                 return Err(EvalError::DivisionByZero);
             }
-            Ok(make((a << n) / b, m, n))
+            Ok(make((a << n) / b, m, n, sat))
         }
         BinOp::Less => Ok(Value::Boolean(a < b)),
         BinOp::More => Ok(Value::Boolean(a > b)),
@@ -113,15 +141,19 @@ pub(crate) fn binary(op: BinOp, lhs: &Value, rhs: &Value) -> Result<Value, EvalE
     }
 }
 
-/// Унарный минус: `−(repr)` с wraparound (значение остаётся `q(m, n)`).
-pub(crate) fn negate(repr: i64, m: u8, n: u8) -> Value {
-    make(-(repr as i128), m, n)
+/// Унарный минус: `−(repr)` с переносом либо насыщением (значение остаётся `q`).
+///
+/// ⚠️ Край `−(−2^(W−1))` — единственное место, где перенос и насыщение
+/// расходятся на унарной операции: перенос вернёт **то же** самое отрицательное
+/// значение, насыщение — максимум. На «обычных» числах разницы не видно.
+pub(crate) fn negate(repr: i64, m: u8, n: u8, sat: bool) -> Value {
+    make(-(repr as i128), m, n, sat)
 }
 
 /// `expr as q(m, n)` (узел `Cast`): **масштабирует** значение к представлению
 /// (правило 6). `int`/`bool` умножаются на 2ⁿ (сдвиг влево), `float` — floor от
 /// `f · 2ⁿ`, `q(m₂, n₂)` — пересчитывается на разницу дробных разрядов.
-pub(crate) fn cast_to_fixed(value: &Value, m: u8, n: u8) -> Result<Value, EvalError> {
+pub(crate) fn cast_to_fixed(value: &Value, m: u8, n: u8, sat: bool) -> Result<Value, EvalError> {
     let repr: i128 = match value {
         Value::Number(i) => *i << n,
         Value::Boolean(b) => (i64::from(*b) as i128) << n,
@@ -134,7 +166,7 @@ pub(crate) fn cast_to_fixed(value: &Value, m: u8, n: u8) -> Result<Value, EvalEr
             });
         }
     };
-    Ok(make(repr, m, n))
+    Ok(make(repr, m, n, sat))
 }
 
 /// Целая часть `q(m, n)` (floor): `repr >> n` — для `q as int`/`q as bit`.
@@ -157,7 +189,22 @@ mod tests {
     use super::*;
 
     fn q(repr: i64, m: u8, n: u8) -> Value {
-        Value::Fixed { repr, m, n }
+        Value::Fixed {
+            repr,
+            m,
+            n,
+            sat: false,
+        }
+    }
+
+    /// Насыщающий формат `q(m, n) sat` (фича 0170).
+    fn qs(repr: i64, m: u8, n: u8) -> Value {
+        Value::Fixed {
+            repr,
+            m,
+            n,
+            sat: true,
+        }
     }
 
     /// T4: 1.5 в q(8, 8) — представление 384; сложение представлений.
@@ -240,7 +287,7 @@ mod tests {
     /// Приведение int → q(8, 8) масштабирует: 3 → 3.0 = 768.
     #[test]
     fn cast_int_scales() {
-        assert_eq!(cast_to_fixed(&Value::Number(3), 8, 8), Ok(q(768, 8, 8)));
+        assert_eq!(cast_to_fixed(&Value::Number(3), 8, 8, false), Ok(q(768, 8, 8)));
     }
 
     /// Приведение q → целая часть (floor): 1.5 (384) → 1.
@@ -262,4 +309,96 @@ mod tests {
         assert_eq!(wrap(i64::MAX as i128, 64), i64::MAX);
         assert_eq!(wrap(i64::MIN as i128, 64), i64::MIN);
     }
+
+    // ── Насыщение q(m, n) sat (фича 0170) ─────────────────────────────────────
+    //
+    // ⚠️ Каждая операция проверяется на ОБЕИХ границах: на положительных
+    // прижатие и перенос дают разные значения, но ошибиться знаком легко.
+
+    /// Верхняя граница `+`: перенос переворачивает, насыщение прижимает.
+    #[test]
+    fn saturating_add_clamps_at_upper_bound() {
+        // q(4, 4): W = 8, repr ∈ [−128, 127]. 127 + 16 = 143 > 127.
+        assert_eq!(
+            binary(BinOp::Add, &qs(127, 4, 4), &qs(16, 4, 4)),
+            Ok(qs(127, 4, 4)),
+            "насыщение обязано прижать к максимуму"
+        );
+        assert_eq!(
+            binary(BinOp::Add, &q(127, 4, 4), &q(16, 4, 4)),
+            Ok(q(-113, 4, 4)),
+            "перенос обязан остаться прежним (умолчание не меняется)"
+        );
+    }
+
+    /// Нижняя граница `−`: та же проверка с другого края.
+    #[test]
+    fn saturating_sub_clamps_at_lower_bound() {
+        assert_eq!(
+            binary(BinOp::Subtract, &qs(-128, 4, 4), &qs(16, 4, 4)),
+            Ok(qs(-128, 4, 4))
+        );
+        assert_eq!(
+            binary(BinOp::Subtract, &q(-128, 4, 4), &q(16, 4, 4)),
+            Ok(q(112, 4, 4))
+        );
+    }
+
+    /// `*` насыщается ПОСЛЕ сдвига: округление правила 4 ADR 0061 не меняется.
+    #[test]
+    fn saturating_mul_clamps_after_shift() {
+        // 4.0 · 4.0 = 16.0, вне q(4, 4) (максимум ≈ 7.94) → прижатие.
+        assert_eq!(
+            binary(BinOp::Multiply, &qs(64, 4, 4), &qs(64, 4, 4)),
+            Ok(qs(127, 4, 4))
+        );
+        // Отрицательное произведение прижимается к нижней границе.
+        assert_eq!(
+            binary(BinOp::Multiply, &qs(-64, 4, 4), &qs(64, 4, 4)),
+            Ok(qs(-128, 4, 4))
+        );
+    }
+
+    /// Ключевой край: `−(−2^(W−1))`. Перенос возвращает то же значение,
+    /// насыщение — максимум. На «обычных» числах разницы не видно вовсе.
+    #[test]
+    fn saturating_negate_of_minimum_is_maximum() {
+        assert_eq!(negate(-128, 4, 4, true), qs(127, 4, 4));
+        assert_eq!(negate(-128, 4, 4, false), q(-128, 4, 4));
+    }
+
+    /// Приведение `int → q sat` тоже прижимает: масштабирование выводит из
+    /// диапазона так же легко, как арифметика.
+    #[test]
+    fn saturating_cast_from_int_clamps() {
+        // 100 · 2⁴ = 1600 ≫ 127.
+        assert_eq!(
+            cast_to_fixed(&Value::Number(100), 4, 4, true),
+            Ok(qs(127, 4, 4))
+        );
+        assert_eq!(
+            cast_to_fixed(&Value::Number(-100), 4, 4, true),
+            Ok(qs(-128, 4, 4))
+        );
+    }
+
+    /// Смешение форматов по признаку — отказ, а не молчаливый выбор семантики.
+    #[test]
+    fn mixing_saturating_and_wrapping_is_type_mismatch() {
+        assert!(
+            binary(BinOp::Add, &qs(1, 4, 4), &q(1, 4, 4)).is_err(),
+            "sat и не-sat — разные форматы; их смешение обязано отвергаться"
+        );
+    }
+
+    /// В диапазоне насыщение не меняет ничего: прижатие срабатывает только на
+    /// выходе за границы.
+    #[test]
+    fn saturating_is_transparent_inside_range() {
+        assert_eq!(
+            binary(BinOp::Add, &qs(16, 4, 4), &qs(16, 4, 4)),
+            Ok(qs(32, 4, 4))
+        );
+    }
+
 }
