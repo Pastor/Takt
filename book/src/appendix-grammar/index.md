@@ -68,13 +68,18 @@ identifier_path = identifier { "::" identifier } ;
 type_define = "type" identifier "=" type ";" ;
 
 type = identifier                            (* bit, u8, duration, MyType *)
-     | identifier "(" integer "," integer ")" (* fixed-point: q(8, 8) *)
+     | identifier "(" integer "," integer ")" [ identifier ]
+                                             (* fixed-point: q(8, 8), q(8, 8) sat *)
      | "[" type ";" integer "]" ;            (* массив: [bit;8] *)
 ```
 
 Конструктор `q(m, n)` записан через `identifier`: `q` — **не** ключевое слово, имя
 конструктора проверяет семантика. Иначе `q` перестало бы годиться как имя
 переменной или типа.
+
+Постфиксный модификатор формата записан `identifier` по той же причине: `sat`
+ключевым словом не является, и допустимость слова проверяет семантика
+(единственное допустимое — `sat`, прочее отвергается `SE-104`).
 
 ## Переменные, константы, параметры, порты
 

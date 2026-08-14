@@ -403,8 +403,7 @@ fn fixed_binary(
     b: &ExpressionNode,
     model: &ModelNode,
 ) -> Option<Result<String, Diagnostic>> {
-    st_fixed::fixed_format(expr)
-        .map(|(m, n, sat)| st_fixed::binary(op, a, b, model, m, n, sat))
+    st_fixed::fixed_format(expr).map(|(m, n, sat)| st_fixed::binary(op, a, b, model, m, n, sat))
 }
 
 /// Печатает операнд, заключая составное выражение в скобки.

@@ -63,7 +63,11 @@ pub(crate) fn saturate(v: i128, w: u8) -> i64 {
 fn make(repr: i128, m: u8, n: u8, sat: bool) -> Value {
     let w = m + n;
     Value::Fixed {
-        repr: if sat { saturate(repr, w) } else { wrap(repr, w) },
+        repr: if sat {
+            saturate(repr, w)
+        } else {
+            wrap(repr, w)
+        },
         m,
         n,
         sat,
@@ -287,7 +291,10 @@ mod tests {
     /// Приведение int → q(8, 8) масштабирует: 3 → 3.0 = 768.
     #[test]
     fn cast_int_scales() {
-        assert_eq!(cast_to_fixed(&Value::Number(3), 8, 8, false), Ok(q(768, 8, 8)));
+        assert_eq!(
+            cast_to_fixed(&Value::Number(3), 8, 8, false),
+            Ok(q(768, 8, 8))
+        );
     }
 
     /// Приведение q → целая часть (floor): 1.5 (384) → 1.
@@ -400,5 +407,4 @@ mod tests {
             Ok(qs(32, 4, 4))
         );
     }
-
 }

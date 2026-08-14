@@ -729,6 +729,10 @@ mod model_implement;
 #[path = "conformance_c_tests/fixed_width.rs"]
 mod fixed_width;
 
+// Насыщение q(m, n) sat (фича 0170) — тем же приёмом подмодуля.
+#[path = "conformance_c_tests/fixed_sat.rs"]
+mod fixed_sat;
+
 /// Фича 0083: model-level `always` исполняется КАЖДЫЙ такт и потактово совпадает
 /// с C. Прежде блок молча терялся (и в C, и в симуляторе).
 #[test]

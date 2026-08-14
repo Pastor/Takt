@@ -550,7 +550,15 @@ mod tests {
             Some(8)
         );
         assert_eq!(
-            bit_width(&TypeNode::Fixed { m: 8, n: 8 }, &enums, ""),
+            bit_width(
+                &TypeNode::Fixed {
+                    m: 8,
+                    n: 8,
+                    sat: false
+                },
+                &enums,
+                ""
+            ),
             Some(16)
         );
         // Массив/структура/float — ширина не определена.

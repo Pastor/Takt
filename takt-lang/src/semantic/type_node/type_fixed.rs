@@ -6,8 +6,8 @@
 //! (`SE-057`, `SE-104`), ширина хранения, диапазон представления и понижение
 //! вещественного литерала (`SE-058`).
 
-use crate::diagnostics::{Diagnostic, Location};
 use super::TypeNode;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::{ExpressionNode, VariableNode};
 
 /// Строит [`TypeNode::Fixed`] из `q(m, n)`, проверяя конструктор и границы

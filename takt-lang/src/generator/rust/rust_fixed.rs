@@ -19,8 +19,8 @@
 use crate::diagnostics::Diagnostic;
 use crate::generator::rust::rust_expr::{Scope, print_expression, unsupported};
 use crate::generator::rust::rust_type::rust_type;
-use crate::semantic::type_node::type_fixed::fixed_storage_bits;
 use crate::semantic::type_node::TypeNode;
+use crate::semantic::type_node::type_fixed::fixed_storage_bits;
 use crate::semantic::{ExpressionNode, FunctionDefinitionNode};
 
 /// Возвращает тип выражения, если он выводится статически.

@@ -343,8 +343,7 @@ fn fixed_binary(
     b: &ExpressionNode,
     scope: &Scope,
 ) -> Option<Result<String, Diagnostic>> {
-    rust_fixed::fixed_format(expr)
-        .map(|(m, n, sat)| rust_fixed::binary(op, a, b, scope, m, n, sat))
+    rust_fixed::fixed_format(expr).map(|(m, n, sat)| rust_fixed::binary(op, a, b, scope, m, n, sat))
 }
 
 /// Печатает сравнение, приводя операнды друг к другу по типу.

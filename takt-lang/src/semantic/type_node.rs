@@ -33,12 +33,12 @@
 pub mod type_fixed;
 
 use crate::diagnostics::Diagnostic;
-use type_fixed::construct_fixed;
 use crate::parser::ast::Type;
 use crate::semantic::ModelNode;
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
+use type_fixed::construct_fixed;
 
 /// Встроенный тип по его имени в исходнике (`u8`, `bit`, `duration`, …).
 ///
@@ -141,8 +141,12 @@ pub(crate) fn construct_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Функции fixed-point живут в подмодуле `type_fixed` (рефакторинг 0170):
+    // тесты зовут их оттуда, а не через `super::*`.
+    use super::type_fixed::{fixed_repr_range, fixed_storage_bits, lower_fixed_literal};
     use crate::diagnostics::Location;
     use crate::parser::ast::{Identifier, Type};
+    use crate::semantic::ExpressionNode;
     use crate::semantic::ModelNode;
     use std::cell::RefCell;
     use std::collections::BTreeMap;
@@ -483,22 +487,43 @@ mod tests {
         assert_eq!(TypeNode::Enum("Color".to_string()).to_string(), "Color");
         assert_eq!(TypeNode::Struct("Packet".to_string()).to_string(), "Packet");
         assert_eq!(TypeNode::Inference.to_string(), "_");
-        assert_eq!(TypeNode::Fixed { m: 8, n: 8 }.to_string(), "q(8, 8)");
+        assert_eq!(
+            TypeNode::Fixed {
+                m: 8,
+                n: 8,
+                sat: false,
+            }
+            .to_string(),
+            "q(8, 8)"
+        );
     }
 
     // ── Fixed-point q(m, n) (фича 0061, задача 01) ────────────────────────────
 
     fn fixed(ctor: &str, m: i128, n: i128) -> Result<TypeNode, Diagnostic> {
         construct_type(
-            Some(Type::Fixed(Location::Implicit, ctor.to_string(), m, n)),
+            Some(Type::Fixed(
+                Location::Implicit,
+                ctor.to_string(),
+                m,
+                n,
+                None,
+            )),
             empty_model(),
         )
     }
 
-    /// `q(8, 8)` → `TypeNode::Fixed { m: 8, n: 8 }` (T1).
+    /// `q(8, 8)` → `TypeNode::Fixed { m: 8, n: 8, sat: false }` (T1).
     #[test]
     fn fixed_q_8_8_builds() {
-        assert_eq!(fixed("q", 8, 8).unwrap(), TypeNode::Fixed { m: 8, n: 8 });
+        assert_eq!(
+            fixed("q", 8, 8).unwrap(),
+            TypeNode::Fixed {
+                m: 8,
+                n: 8,
+                sat: false,
+            }
+        );
     }
 
     /// Границы `m ≥ 1`, `n ≥ 1`, `m + n ≤ 64` — ошибка `SE-057` (T2).
@@ -519,7 +544,11 @@ mod tests {
     fn fixed_width_exactly_64_ok() {
         assert_eq!(
             fixed("q", 32, 32).unwrap(),
-            TypeNode::Fixed { m: 32, n: 32 }
+            TypeNode::Fixed {
+                m: 32,
+                n: 32,
+                sat: false,
+            }
         );
     }
 

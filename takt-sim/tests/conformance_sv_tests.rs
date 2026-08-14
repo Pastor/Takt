@@ -993,3 +993,7 @@ endmodule
 // лимит размера модуля, а правило требует делить по логике.
 #[path = "conformance_sv_tests/fixed_width.rs"]
 mod fixed_width;
+
+// Насыщение q(m, n) sat (фича 0170) — тем же приёмом подмодуля.
+#[path = "conformance_sv_tests/fixed_sat.rs"]
+mod fixed_sat;

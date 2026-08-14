@@ -95,16 +95,10 @@ pub(crate) fn binary(
         let inner = match op {
             FixedOp::Add => format!("{w2}'({}) + {w2}'({})", signed(&la), signed(&lb)),
             FixedOp::Subtract => format!("{w2}'({}) - {w2}'({})", signed(&la), signed(&lb)),
-            FixedOp::Multiply => format!(
-                "({w2}'({}) * {w2}'({})) >>> {n}",
-                signed(&la),
-                signed(&lb)
-            ),
-            FixedOp::Divide => format!(
-                "({w2}'({}) <<< {n}) / {w2}'({})",
-                signed(&la),
-                signed(&lb)
-            ),
+            FixedOp::Multiply => {
+                format!("({w2}'({}) * {w2}'({})) >>> {n}", signed(&la), signed(&lb))
+            }
+            FixedOp::Divide => format!("({w2}'({}) <<< {n}) / {w2}'({})", signed(&la), signed(&lb)),
         };
         return Ok(saturate_sv(&inner, w, w2));
     }

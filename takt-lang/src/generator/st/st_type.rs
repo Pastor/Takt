@@ -74,9 +74,10 @@ pub(crate) fn get_st_type(typ: &TypeNode, model: &ModelNode) -> Result<String, D
         // Fixed-point q(m, n) (фича 0061): знаковое целое IEC, вмещающее W = m+n
         // бит (SINT/INT/DINT/LINT). Масштабирование при `*`/`/` — задача 0061-03
         // (сдвиг в ST через преобразования, `<<` над числами нет).
-        TypeNode::Fixed { m, n, .. } => {
-            integer_type(crate::semantic::type_node::type_fixed::fixed_storage_bits(m + n), true)
-        }
+        TypeNode::Fixed { m, n, .. } => integer_type(
+            crate::semantic::type_node::type_fixed::fixed_storage_bits(m + n),
+            true,
+        ),
         // T11. LREAL — 64-битное вещественное, совпадает с f64 симулятора
         // (`simulation/src/eval/`). `REAL` (f32) повторил бы дефект Д3.
         TypeNode::Rational => Ok("LREAL".to_string()),

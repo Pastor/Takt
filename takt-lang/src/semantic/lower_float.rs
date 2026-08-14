@@ -46,8 +46,8 @@
 //! композиции) обходятся один раз (набор посещённых по указателю).
 
 use crate::diagnostics::Diagnostic;
-use crate::semantic::type_node::type_fixed;
 use crate::semantic::type_node::TypeNode;
+use crate::semantic::type_node::type_fixed;
 use crate::semantic::{
     ConditionNode, ExpressionNode, FunctionDefinitionNode, MatchPatternNode, ModelNode,
     NamedCodeBlockDefinitionNode, StateNode, StatementNode, VariableNode,
@@ -592,10 +592,24 @@ mod tests {
         let model = build(SRC);
         lower_float_to_fixed(model.clone(), 8, 8).expect("float → q(8,8)");
         let (ty_a, init_a) = sub_var(&model, "M", "a");
-        assert_eq!(ty_a, TypeNode::Fixed { m: 8, n: 8 });
+        assert_eq!(
+            ty_a,
+            TypeNode::Fixed {
+                m: 8,
+                n: 8,
+                sat: false
+            }
+        );
         assert_eq!(init_a, ExpressionNode::Number(384));
         let (ty_b, init_b) = sub_var(&model, "M", "b");
-        assert_eq!(ty_b, TypeNode::Fixed { m: 8, n: 8 });
+        assert_eq!(
+            ty_b,
+            TypeNode::Fixed {
+                m: 8,
+                n: 8,
+                sat: false
+            }
+        );
         assert_eq!(init_b, ExpressionNode::Number(0));
     }
 
@@ -607,7 +621,14 @@ mod tests {
         lower_float_to_fixed(model.clone(), 8, 8).expect("проход 1");
         lower_float_to_fixed(model.clone(), 8, 8).expect("проход 2");
         let (ty_a, init_a) = sub_var(&model, "M", "a");
-        assert_eq!(ty_a, TypeNode::Fixed { m: 8, n: 8 });
+        assert_eq!(
+            ty_a,
+            TypeNode::Fixed {
+                m: 8,
+                n: 8,
+                sat: false
+            }
+        );
         assert_eq!(
             init_a,
             ExpressionNode::Number(384),
@@ -659,7 +680,14 @@ mod tests {
         };
         // rhs = a + a; его тип обязан быть Fixed{8,8} (Rc-ячейки понижены).
         let ty = extract_type(rhs, sub.clone()).expect("тип rhs");
-        assert_eq!(ty, TypeNode::Fixed { m: 8, n: 8 });
+        assert_eq!(
+            ty,
+            TypeNode::Fixed {
+                m: 8,
+                n: 8,
+                sat: false
+            }
+        );
     }
 
     /// Литерал вне диапазона точности → `SE-058` (проброс из `lower_fixed_literal`),
