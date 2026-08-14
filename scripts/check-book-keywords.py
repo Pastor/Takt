@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""check-book-keywords.py — лексика приложения «Грамматика» против кода (фича 0160).
+
+После фичи 0160 описание грамматики в проекте **одно**:
+`book/src/appendix-grammar/index.md` (корневой `Takt.ebnf` удалён — ADR 0160,
+Option A). Единственность снимает расхождение двух описаний, но не защищает
+оставшееся от отставания: замер ADR показал, что приложение отстало на 16
+ключевых слов, восемь конструкций и позицию присваивания, — при этом ни один
+гейт этого не видел.
+
+Машиной сверяется **лексика**: она размножается механически и потому обязана
+проверяться машиной, а не ревью. Правила EBNF машине недоступны — это проза о
+форме; их держат правило 24 (стадия «Документирование» каждой языковой фичи) и
+правило 4.
+
+Четыре класса проверок:
+
+- **K1** — ключевое слово лексера, которого нет в списке документа;
+- **K2** — слово в списке документа, которого нет в лексере;
+- **P1** — знак в сводке пунктуации документа, которого нет среди терминалов
+  грамматики (так дожил `-->`, изъятый фичей 0201);
+- **P2** — терминал-знак грамматики, которого нет в сводке документа (так
+  отсутствовали `=>` ветви `match` и `#` анонимного порта).
+
+Источники истины — `takt-lang/src/parser/lexer.rs` (таблица `KEYWORDS`) и
+extern-блок `takt-lang/src/grammar.lalrpop` (терминалы).
+
+⚠️ Разбор документа идёт **по абзацу**, а не по строке: список ключевых слов
+занимает четыре строки, и построчный поиск дал бы ноль совпадений, то есть
+зелёный гейт, не проверяющий ничего. Ровно этим оказался слеп `check_crate_versions`
+(фикс 0202-01) — здесь класс не повторяется.
+
+⚠️ Пустое множество — **ошибка**, а не успех: при смене разметки проверки
+«документ ⊆ код» выполнились бы тривиально.
+
+Использование:
+
+    python3 scripts/check-book-keywords.py              # проверка
+    python3 scripts/check-book-keywords.py --self-test  # проверка самих ловушек
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+APPENDIX = os.path.join(ROOT, "book", "src", "appendix-grammar", "index.md")
+LEXER = os.path.join(ROOT, "takt-lang", "src", "parser", "lexer.rs")
+GRAMMAR = os.path.join(ROOT, "takt-lang", "src", "grammar.lalrpop")
+
+# Слова, которые лексер держит в KEYWORDS, но языком они являются только внутри
+# аннотации `: [LTL] … ;`: правило `Identifier` грамматики принимает каждое как
+# обычное имя. Приложение говорит об этом отдельной фразой, и вносить их в
+# список «ключевых слов» значило бы утверждать неверное.
+LTL_CONTEXTUAL = {"X", "F", "G", "U", "R", "LTL", "Guard"}
+
+# Терминалы-знаки грамматики, которых в сводке пунктуации быть не должно.
+# `::` языком не является: путь `A::B` разбирается двумя токенами `":"`, и
+# отдельного терминала под него нет — перечислять его в сводке значило бы
+# обещать лексему, которой нет (класс фичи 0201).
+PUNCT_EXCLUDED: set[str] = set()
+
+MARK_KEYWORDS = "**Ключевые слова:**"
+MARK_PUNCT = "**Операторы и пунктуация:**"
+
+
+def paragraphs(text):
+    """Абзацы текста как одна строка каждый (переносы внутри абзаца сшиты)."""
+    return [" ".join(block.split()) for block in re.split(r"\n\s*\n", text)]
+
+
+def marked_paragraph(text, mark, source):
+    """Абзац, начинающийся с метки; отсутствие — ошибка, а не пустое множество."""
+    for block in paragraphs(text):
+        if block.startswith(mark):
+            return block[len(mark) :]
+    sys.exit(
+        f"ОШИБКА: в {source} нет абзаца «{mark}».\n"
+        "Гейт лексики (фича 0160) держится на этой разметке: без неё он молча\n"
+        "проверял бы пустое множество. Верните абзац либо обновите гейт вместе\n"
+        "с разметкой — но не оставляйте проверку без входа."
+    )
+
+
+def backticked(fragment):
+    """Слова во всех обратных кавычках фрагмента (группа `+ - *` даёт три записи)."""
+    result = set()
+    for item in re.findall(r"`([^`]+)`", fragment):
+        result.update(item.split())
+    return result
+
+
+def doc_keywords(text):
+    return backticked(marked_paragraph(text, MARK_KEYWORDS, "приложении «Грамматика»"))
+
+
+def doc_punctuation(text):
+    return backticked(marked_paragraph(text, MARK_PUNCT, "приложении «Грамматика»"))
+
+
+def lexer_keywords(text):
+    """Ключевые слова из таблицы `KEYWORDS` лексера."""
+    _, _, tail = text.partition("static KEYWORDS")
+    table, _, _ = tail.partition("};")
+    if not table:
+        sys.exit(
+            f"ОШИБКА: в {os.path.relpath(LEXER, ROOT)} не найдена таблица KEYWORDS.\n"
+            "Гейт лексики (фича 0160) читает её как источник истины о ключевых словах."
+        )
+    return set(re.findall(r'"([^"]+)"\s*=>', table))
+
+
+def grammar_terminals(text):
+    """Терминалы-строки extern-блока грамматики."""
+    _, _, tail = text.partition("enum Token<'input>")
+    if not tail:
+        sys.exit(
+            f"ОШИБКА: в {os.path.relpath(GRAMMAR, ROOT)} не найден extern-блок токенов.\n"
+            "Гейт лексики (фича 0160) читает его как источник истины о пунктуации."
+        )
+    return set(re.findall(r'"([^"]+)"\s*=>', tail))
+
+
+def punctuation_terminals(terminals):
+    """Терминалы-знаки: всё, что не является словом языка.
+
+    ⚠️ Фильтр обязателен: extern-блок держит и ключевые слова, и имена токенов
+    (`identifier`, `number`, `duration`) — без него в «пунктуацию» попали бы
+    полсотни слов, и сверка потеряла бы смысл.
+    """
+    return {t for t in terminals if not re.fullmatch(r"[A-Za-z_]+", t)}
+
+
+def check(doc_text, lexer_text, grammar_text):
+    """Возвращает список находок `(класс, элемент, пояснение)`; пустой — гейт пройден."""
+    problems = []
+
+    keywords_doc = doc_keywords(doc_text)
+    keywords_code = lexer_keywords(lexer_text)
+    punct_doc = doc_punctuation(doc_text)
+    punct_code = punctuation_terminals(grammar_terminals(grammar_text)) - PUNCT_EXCLUDED
+
+    for name, group in (
+        ("список ключевых слов документа", keywords_doc),
+        ("таблица KEYWORDS лексера", keywords_code),
+        ("сводка пунктуации документа", punct_doc),
+        ("терминалы-знаки грамматики", punct_code),
+    ):
+        if not group:
+            sys.exit(f"ОШИБКА: {name} пуст — гейт проверял бы пустое множество.")
+
+    for word in sorted(keywords_code - keywords_doc - LTL_CONTEXTUAL):
+        problems.append(("K1", word, "ключевое слово лексера отсутствует в списке документа"))
+    for word in sorted(keywords_doc - keywords_code):
+        problems.append(("K2", word, "слово документа не является ключевым в лексере"))
+    for sign in sorted(punct_doc - punct_code):
+        problems.append(("P1", sign, "знак документа отсутствует среди терминалов грамматики"))
+    for sign in sorted(punct_code - punct_doc):
+        problems.append(("P2", sign, "терминал грамматики отсутствует в сводке документа"))
+
+    return problems
+
+
+def report(problems):
+    print("Лексика приложения «Грамматика» разошлась с языком (фича 0160):", file=sys.stderr)
+    for kind, item, why in problems:
+        print(f"  [{kind}] `{item}` — {why}", file=sys.stderr)
+    print(
+        "\nПосле фичи 0160 описание грамматики в проекте одно —\n"
+        "book/src/appendix-grammar/index.md. Приведите его абзацы «Ключевые слова»\n"
+        "и «Операторы и пунктуация» к языку (правило 24: языковая фича обязана\n"
+        "пройти стадию «Документирование»). Контекстные слова LTL —\n"
+        f"{' '.join(sorted(LTL_CONTEXTUAL))} — в список не вносятся: вне аннотации\n"
+        ": [LTL] … ; они обычные идентификаторы.",
+        file=sys.stderr,
+    )
+
+
+def self_test():
+    """Проверяет, что ловушки взведены: каждый класс обязан быть пойман.
+
+    Без этого зелёный гейт неотличим от гейта, пропускающего всё: сам по себе он
+    говорит «расхождений нет», и на сломанном разборе сказал бы то же.
+    """
+    doc = (
+        "Проза документа.\n\n"
+        f"{MARK_KEYWORDS} `as` `model`\n`state`.\n\n"
+        f"{MARK_PUNCT} присваивание `:=`; прочие `.` `-->`.\n"
+    )
+    lexer = 'static KEYWORDS: phf::Map<&str, Token> = phf_map! {\n'
+    lexer += '    "as" => Token::As,\n    "model" => Token::Model,\n'
+    lexer += '    "while" => Token::While,\n    "X" => Token::LtlNext,\n};\n'
+    grammar = 'extern {\n    enum Token<\'input> {\n'
+    grammar += '        identifier => Token::Identifier(<&\'input str>),\n'
+    grammar += '        ":=" => Token::ColonAssign,\n        "." => Token::Member,\n'
+    grammar += '        "=>" => Token::FatArrow,\n        "as" => Token::As,\n    }\n}\n'
+
+    found = {(kind, item) for kind, item, _ in check(doc, lexer, grammar)}
+    expected = {
+        ("K1", "while"),  # слово лексера мимо списка документа
+        ("K2", "state"),  # слово документа мимо лексера
+        ("P1", "-->"),    # знак документа мимо грамматики (реальный случай 0201)
+        ("P2", "=>"),     # терминал грамматики мимо документа (реальный случай 0189)
+    }
+    if found != expected:
+        sys.exit(
+            "САМОПРОВЕРКА ПРОВАЛЕНА: ловушки дали "
+            f"{sorted(found)} вместо {sorted(expected)} — гейт зеленеет по случайности"
+        )
+    if ("K1", "X") in found:
+        sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: контекстное слово LTL принято за пропуск")
+
+    # Обратная сторона: согласованный вход ложных находок давать не должен —
+    # иначе «ловушки ловят» означало бы лишь «ловят всё подряд».
+    clean_doc = (
+        f"{MARK_KEYWORDS} `as` `model`\n`while`.\n\n"
+        f"{MARK_PUNCT} присваивание `:=`; прочие `.` `=>`.\n"
+    )
+    clean = check(clean_doc, lexer, grammar)
+    if clean:
+        sys.exit(f"САМОПРОВЕРКА ПРОВАЛЕНА: согласованный вход дал находки: {clean}")
+
+    # Третья сторона: разметка без списка обязана быть ОШИБКОЙ, а не пустотой.
+    # Подпроба идёт отдельным процессом (проверка завершает процесс `sys.exit`),
+    # её вывод глушится: ожидаемая ошибка в логе предкоммита читалась бы отказом.
+    probe = subprocess.run(
+        [sys.executable, os.path.abspath(__file__), "--self-test-empty"],
+        capture_output=True,
+        check=False,
+    )
+    if probe.returncode == 0:
+        sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: документ без абзаца списка не дал ошибки")
+
+    print("  самопроверка гейта: ловушка взведена (4 класса ловятся, согласованный вход — нет)")
+
+
+def self_test_empty():
+    """Подпроба: документ без абзацев-списков обязан валить гейт."""
+    check("Проза без списков.\n", 'static KEYWORDS = phf_map! {\n"as" => Token::As,\n};\n', "")
+
+
+def main():
+    if "--self-test-empty" in sys.argv[1:]:
+        self_test_empty()
+        return 0
+    if "--self-test" in sys.argv[1:]:
+        self_test()
+        return 0
+
+    try:
+        doc_text = open(APPENDIX, encoding="utf-8").read()
+        lexer_text = open(LEXER, encoding="utf-8").read()
+        grammar_text = open(GRAMMAR, encoding="utf-8").read()
+    except OSError as error:
+        sys.exit(f"ОШИБКА: не прочитать источник: {error}")
+
+    problems = check(doc_text, lexer_text, grammar_text)
+    if problems:
+        report(problems)
+        return 1
+
+    keywords = doc_keywords(doc_text)
+    punct = doc_punctuation(doc_text)
+    print(
+        f"Лексика приложения «Грамматика»: {len(keywords)} ключевых слов "
+        f"и {len(punct)} знаков сверены с лексером и грамматикой, расхождений нет."
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
