@@ -87,7 +87,7 @@ pub(crate) enum FixedOp {
 /// `SE-059` гарантирует единый формат обоих операндов арифметики, поэтому у
 /// бинарного узла достаточно взять формат любой стороны, у которой он выводится.
 pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8)> {
-    if let Some(TypeNode::Fixed { m, n }) = expression_type(expr) {
+    if let Some(TypeNode::Fixed { m, n, .. }) = expression_type(expr) {
         return Some((m, n));
     }
     match expr {
@@ -197,7 +197,7 @@ pub(crate) fn cast(
     let printed = print_expression(inner, scope)?;
     match (src, target) {
         // q → q: пересчёт дробных разрядов (влево — сдвиг, вправо — floor `>>`).
-        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn }) => {
+        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn, .. }) => {
             // Скобка вокруг `(printed as i128)` обязательна перед `<<`/`>>`
             // (иначе Rust парсит `i128<...>` как generic, не сдвиг).
             let inner = if tn >= &from_n {
@@ -226,7 +226,7 @@ pub(crate) fn cast(
             ))
         }
         // целое/бит → q: repr = v · 2^n с wraparound к W.
-        (None, TypeNode::Fixed { m: tm, n: tn }) => Ok(wrap_to(
+        (None, TypeNode::Fixed { m: tm, n: tn, .. }) => Ok(wrap_to(
             &format!("({printed} as i64) << {tn}"),
             *tm,
             *tn,

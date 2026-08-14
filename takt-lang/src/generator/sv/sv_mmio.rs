@@ -357,7 +357,7 @@ fn bit_width(
     match ty {
         TypeNode::Bit | TypeNode::Bool => Some(1),
         TypeNode::Integer { bits, .. } if *bits > 0 => Some(u32::from(*bits)),
-        TypeNode::Fixed { m, n } => Some(u32::from(*m) + u32::from(*n)),
+        TypeNode::Fixed { m, n, .. } => Some(u32::from(*m) + u32::from(*n)),
         TypeNode::Enum(name) => {
             let variants = enums.get(name)?;
             enum_width(variants, what).ok().map(|(w, _)| w)

@@ -118,7 +118,7 @@ pub(crate) enum FixedOp {
 /// Формат `q(m, n)` выражения, если его тип — `Fixed` (рекурсивно по арифметике;
 /// `SE-059` гарантирует единый формат операндов).
 pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8)> {
-    if let Some(TypeNode::Fixed { m, n }) = inner_expr_type(expr) {
+    if let Some(TypeNode::Fixed { m, n, .. }) = inner_expr_type(expr) {
         return Some((m, n));
     }
     match expr {
@@ -211,7 +211,7 @@ pub(crate) fn cast(
     let printed = print_expression(inner, model)?;
     match (src, target) {
         // q → q: пересчёт дробных разрядов.
-        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn }) => {
+        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn, .. }) => {
             let li = to_lint(&printed, iec_signed(storage_of(inner)));
             rescale(&li, from_n, *tn, *tm)
         }
@@ -243,7 +243,7 @@ pub(crate) fn cast(
             .with_code("ST-014"))
         }
         // целое/бит → q: repr = v · 2^n с wraparound к W.
-        (None, TypeNode::Fixed { m: tm, n: tn }) => {
+        (None, TypeNode::Fixed { m: tm, n: tn, .. }) => {
             let ts = iec_signed(fixed_storage_bits(tm + tn));
             let src_ty = inner_expr_type(inner).ok_or_else(untyped_source)?;
             let src_name = match src_ty {

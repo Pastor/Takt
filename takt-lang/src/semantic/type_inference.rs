@@ -157,11 +157,26 @@ pub(crate) fn wider_type(a: TypeNode, b: TypeNode) -> TypeNode {
         // q(m,n) (0061): два одинаковых fixed-point → тот же тип; смешение с любым
         // другим типом (иное q, целое, float, …) даёт `Unsupported` и ловится
         // стражем T6 (`validate::fixed`) — см. правило 6 ADR 0061.
-        (TypeNode::Fixed { m: ma, n: na }, TypeNode::Fixed { m: mb, n: nb })
-            if ma == mb && na == nb =>
-        {
-            TypeNode::Fixed { m: *ma, n: *na }
-        }
+        // ⚠️ Признак `sat` (фича 0170) входит в формат: `q(8,8)` и `q(8,8) sat` —
+        // РАЗНЫЕ типы, их смешение даёт `Unsupported` и ловится стражем
+        // (`SE-103`). Иначе выражение унаследовало бы семантику переполнения
+        // случайного операнда — молча.
+        (
+            TypeNode::Fixed {
+                m: ma,
+                n: na,
+                sat: sa,
+            },
+            TypeNode::Fixed {
+                m: mb,
+                n: nb,
+                sat: sb,
+            },
+        ) if ma == mb && na == nb && sa == sb => TypeNode::Fixed {
+            m: *ma,
+            n: *na,
+            sat: *sa,
+        },
         _ => TypeNode::Unsupported,
     }
 }
@@ -208,11 +223,19 @@ fn infer_int_type(n: i128) -> TypeNode {
 /// границы вне правила 1 ADR 0061 (`m ≥ 1`, `n ≥ 1`, `m + n ≤ 64`) →
 /// [`TypeNode::Unsupported`]; объявление типа тот же случай ловит `SE-057`
 /// (`construct_fixed`).
-fn fixed_node_or_unsupported(ctor: &str, m: i128, n: i128) -> TypeNode {
-    if ctor == "q" && m >= 1 && n >= 1 && m + n <= 64 {
+fn fixed_node_or_unsupported(ctor: &str, m: i128, n: i128, modifier: Option<&str>) -> TypeNode {
+    // Модификатор допустим только `sat` (фича 0170); прочее — `Unsupported`, а
+    // называющую диагностику `SE-104` даёт объявление (`construct_fixed`).
+    let sat = match modifier {
+        None => Some(false),
+        Some("sat") => Some(true),
+        Some(_) => None,
+    };
+    if let (true, Some(sat)) = (ctor == "q" && m >= 1 && n >= 1 && m + n <= 64, sat) {
         TypeNode::Fixed {
             m: m as u8,
             n: n as u8,
+            sat,
         }
     } else {
         TypeNode::Unsupported
@@ -232,7 +255,9 @@ pub(crate) fn ast_type_to_node(ty: &Type) -> TypeNode {
         } => TypeNode::Array(*element_count, Box::new(ast_type_to_node(element_type))),
         // q(m, n) (0061): цель приведения `x as q(m, n)`. Границы — те же, что у
         // объявления (правило 1 ADR); нарушение даёт `Unsupported` (страж T6/T7).
-        Type::Fixed(_, ctor, m, n) => fixed_node_or_unsupported(ctor, *m, *n),
+        Type::Fixed(_, ctor, m, n, modifier) => {
+            fixed_node_or_unsupported(ctor, *m, *n, modifier.as_deref())
+        }
         // Ce4: перечисление по имени — без проверки существования (нет контекста)
         Type::Enum(name) => TypeNode::Enum(name.clone()),
         // Ce6: встроенные имена — через единый разбор (фикс 0134-01). Прежде
@@ -276,7 +301,9 @@ pub(crate) fn ast_type_to_node_ctx(ty: &Type, model: Rc<RefCell<ModelNode>>) -> 
             Box::new(ast_type_to_node_ctx(element_type, model)),
         ),
         // q(m, n) (0061): цель приведения `x as q(m, n)` (см. `ast_type_to_node`).
-        Type::Fixed(_, ctor, m, n) => fixed_node_or_unsupported(ctor, *m, *n),
+        Type::Fixed(_, ctor, m, n, modifier) => {
+            fixed_node_or_unsupported(ctor, *m, *n, modifier.as_deref())
+        }
         // Ce4: перечисление по имени — проверяем наличие в контексте модели
         Type::Enum(name) => {
             let borrowed = model.borrow();

@@ -376,8 +376,14 @@ Type: Type = {
     // обычный identifier, а имя `q` проверяет семантика (construct_fixed) —
     // иначе `q` перестал бы работать как имя переменной/типа. m, n — сырые
     // литералы; границы проверяет семантика.
-    <l:@L> <ctor:identifier> "(" <m:number> "," <n:number> ")" <r:@R> =>
-        Type::Fixed(Location::source(file_no, l, r), ctor.to_string(), m, n),
+    //
+    // Постфиксный модификатор `q(8, 8) sat` (фича 0170) — тем же приёмом:
+    // обычный identifier, допустимость слова проверяет семантика (`SE-104`).
+    // ⚠️ Конфликта LR(1) он не даёт (проба P7 ADR 0170): после типа в языке
+    // всегда стоит разделитель (`;`, `:=`, `,`, `)`, `]`), поэтому идентификатор
+    // за `)` однозначен.
+    <l:@L> <ctor:identifier> "(" <m:number> "," <n:number> ")" <modifier:identifier?> <r:@R> =>
+        Type::Fixed(Location::source(file_no, l, r), ctor.to_string(), m, n, modifier.map(str::to_string)),
     <l:@L> "[" <ty:Type> ";" <n:number> "]" <r:@R> => {
         Type::Array {
             loc: Location::source(file_no, l, r),
