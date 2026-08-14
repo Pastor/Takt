@@ -384,3 +384,6 @@
 | 0170-03 | 0170 | Насыщение (saturation) для fixed-point q(m, n) | [0170-03-fixed-point-saturation.md](0170-03-fixed-point-saturation.md) |
 | 0170-04 | 0170 | Насыщение (saturation) для fixed-point q(m, n) | [0170-04-fixed-point-saturation.md](0170-04-fixed-point-saturation.md) |
 | 0170-05 | 0170 | Насыщение (saturation) для fixed-point q(m, n) | [0170-05-fixed-point-saturation.md](0170-05-fixed-point-saturation.md) |
+| 0203-01 | 0203 | validate не обходит формулы: неизвестное имя в Guard молчит | [0203-01-validate-formulas-traversal.md](0203-01-validate-formulas-traversal.md) |
+| 0203-02 | 0203 | validate не обходит формулы: неизвестное имя в Guard молчит | [0203-02-validate-formulas-traversal.md](0203-02-validate-formulas-traversal.md) |
+| 0203-03 | 0203 | validate не обходит формулы: неизвестное имя в Guard молчит | [0203-03-validate-formulas-traversal.md](0203-03-validate-formulas-traversal.md) |

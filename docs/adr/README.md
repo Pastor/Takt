@@ -171,3 +171,4 @@
 | [0151](./0151-diagnostics-batch-within-check.md) | Накопление диагностик внутри отдельной проверки validate | Draft | фича 0151 |
 | [0160](./0160-takt-ebnf-sync.md) | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | Accepted | фича 0160 |
 | [0170](./0170-fixed-point-saturation.md) | Насыщение (saturation) для fixed-point q(m, n) | Accepted | фича 0170 |
+| [0203](./0203-validate-formulas-traversal.md) | validate не обходит формулы: неизвестное имя в Guard молчит | Draft | фича 0203 |
