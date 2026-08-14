@@ -1,7 +1,7 @@
 # Фича 0203: validate не обходит формулы: неизвестное имя в Guard молчит
 
 - **Номер:** 0203
-- **Статус:** СОЗДАНА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** не проставлено — проставит аналитик на стадии анализа (правило 17)
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md`, переведён в фичу 2026-08-03 (запрос заказчика)
 
@@ -9,9 +9,9 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | не заведена (стадия 2) |
-| Анализ | не заведён (стадия 3) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0203-YY-*`) |
+| Архитектура (ADR) | [`docs/adr/0203-validate-formulas-traversal.md`](../adr/0203-validate-formulas-traversal.md) — **Draft** (Option A: обход формул в `validate`, судья прежний) |
+| Анализ | [`docs/analyze/0203-validate-formulas-traversal.md`](../analyze/0203-validate-formulas-traversal.md) |
+| Разработка | [`0203-01`](../development/0203-01-validate-formulas-traversal.md) · [`0203-02`](../development/0203-02-validate-formulas-traversal.md) · [`0203-03`](../development/0203-03-validate-formulas-traversal.md) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0203-YY-*`) |
