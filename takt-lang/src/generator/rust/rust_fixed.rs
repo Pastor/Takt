@@ -87,9 +87,11 @@ pub(crate) enum FixedOp {
 ///
 /// `SE-059` гарантирует единый формат обоих операндов арифметики, поэтому у
 /// бинарного узла достаточно взять формат любой стороны, у которой он выводится.
-pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8)> {
-    if let Some(TypeNode::Fixed { m, n, .. }) = expression_type(expr) {
-        return Some((m, n));
+pub(crate) fn fixed_format(expr: &ExpressionNode) -> Option<(u8, u8, bool)> {
+    // Признак насыщения (фича 0170) едет вместе с разрядностями: печатник
+    // обязан знать, чем закрывать операцию — переносом или прижатием.
+    if let Some(TypeNode::Fixed { m, n, sat }) = expression_type(expr) {
+        return Some((m, n, sat));
     }
     match expr {
         ExpressionNode::Add(a, b)
@@ -120,18 +122,27 @@ fn storage(m: u8, n: u8) -> String {
 /// ⚠️ `wide` говорит, что `inner` посчитан в `i128` (произведение, деление,
 /// пересчёт `q → q`): такому выражению нужен явный `as i64` перед сдвигами, а
 /// уже-`i64` его давать **нельзя** — `clippy::unnecessary_cast` под `-D warnings`.
-fn wrap_to(inner: &str, m: u8, n: u8, wide: bool) -> String {
+fn wrap_to(inner: &str, m: u8, n: u8, wide: bool, sat: bool) -> String {
     let s = storage(m, n);
     let w = m + n;
-    if w == fixed_storage_bits(w) {
-        return format!("(({inner}) as {s})");
-    }
-    let shift = 64 - w;
     let narrowed = if wide {
         format!("({inner}) as i64")
     } else {
         inner.to_string()
     };
+    // Насыщение (фича 0170): прижатие к границам ФОРМАТА, а не типа хранения —
+    // поэтому оно нужно всегда, в том числе при `W = S`. Границы печатаются
+    // литералами: выражение вида `i64::MIN >> k` спорно читается и придирчиво
+    // разбирается clippy.
+    if sat {
+        let max = (1i64 << (w - 1)) - 1;
+        let min = -(1i64 << (w - 1));
+        return format!("(({narrowed}).clamp({min}, {max}) as {s})");
+    }
+    if w == fixed_storage_bits(w) {
+        return format!("(({inner}) as {s})");
+    }
+    let shift = 64 - w;
     format!("((({narrowed}) << {shift} >> {shift}) as {s})")
 }
 
@@ -148,6 +159,7 @@ pub(crate) fn binary(
     scope: &Scope,
     m: u8,
     n: u8,
+    sat: bool,
 ) -> Result<String, Diagnostic> {
     // Операнды НЕ оборачиваются в скобки: `print_expression` уже скобкует
     // составные узлы, а лишняя пара → clippy::double_parens под `-D warnings`.
@@ -166,7 +178,7 @@ pub(crate) fn binary(
         FixedOp::Divide => format!("(({la} as i128) << {n}) / {lb} as i128"),
     };
     let wide = matches!(op, FixedOp::Multiply | FixedOp::Divide);
-    Ok(wrap_to(&inner, m, n, wide))
+    Ok(wrap_to(&inner, m, n, wide, sat))
 }
 
 /// Печатает унарный минус над `q(m, n)`: `−repr` с wraparound к W.
@@ -175,12 +187,14 @@ pub(crate) fn negate(
     scope: &Scope,
     m: u8,
     n: u8,
+    sat: bool,
 ) -> Result<String, Diagnostic> {
     Ok(wrap_to(
         &format!("-{} as i64", print_expression(inner, scope)?),
         m,
         n,
         false,
+        sat,
     ))
 }
 
@@ -198,7 +212,7 @@ pub(crate) fn cast(
     let printed = print_expression(inner, scope)?;
     match (src, target) {
         // q → q: пересчёт дробных разрядов (влево — сдвиг, вправо — floor `>>`).
-        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn, .. }) => {
+        (Some((_, from_n, _)), TypeNode::Fixed { m: tm, n: tn, sat }) => {
             // Скобка вокруг `(printed as i128)` обязательна перед `<<`/`>>`
             // (иначе Rust парсит `i128<...>` как generic, не сдвиг).
             let inner = if tn >= &from_n {
@@ -206,14 +220,14 @@ pub(crate) fn cast(
             } else {
                 format!("({printed} as i128) >> {}", from_n - tn)
             };
-            Ok(wrap_to(&inner, *tm, *tn, true))
+            Ok(wrap_to(&inner, *tm, *tn, true, *sat))
         }
         // q → float: repr / 2^n (точно представимо в f64).
-        (Some((_, from_n)), TypeNode::Rational) => {
+        (Some((_, from_n, _)), TypeNode::Rational) => {
             Ok(format!("({printed} as f64 / {}.0)", pow2(from_n)))
         }
         // q → целое/бит: floor(repr / 2^n) = целая часть (арифметический `>>`).
-        (Some((_, from_n)), _) => {
+        (Some((_, from_n, _)), _) => {
             let t = rust_type(target, "приведение q → целое")?;
             Ok(format!("((({printed} as i64) >> {from_n}) as {t})"))
         }
@@ -227,11 +241,12 @@ pub(crate) fn cast(
             ))
         }
         // целое/бит → q: repr = v · 2^n с wraparound к W.
-        (None, TypeNode::Fixed { m: tm, n: tn, .. }) => Ok(wrap_to(
+        (None, TypeNode::Fixed { m: tm, n: tn, sat }) => Ok(wrap_to(
             &format!("({printed} as i64) << {tn}"),
             *tm,
             *tn,
             false,
+            *sat,
         )),
         // Ни источник, ни цель не q — вызывающий не должен был звать сюда.
         (None, _) => {
