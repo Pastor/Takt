@@ -532,7 +532,7 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
                      r: &ExpressionNode|
      -> Option<Result<String, Diagnostic>> {
         super::sv_fixed::fixed_format(node)
-            .map(|(m, n)| super::sv_fixed::binary(op, l, r, scope, m, n))
+            .map(|(m, n, sat)| super::sv_fixed::binary(op, l, r, scope, m, n, sat))
     };
     match node {
         // Длительность (фича 0183) печатается **миллисекундами**; пересчёт зовёт
@@ -549,7 +549,7 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::Not(inner) => Ok(format!("(!{})", print_expression(inner, scope)?)),
         ExpressionNode::BitwiseNot(inner) => Ok(format!("(~{})", print_expression(inner, scope)?)),
         ExpressionNode::Negate(inner) => match super::sv_fixed::fixed_format(node) {
-            Some((m, n)) => super::sv_fixed::negate(inner, scope, m, n),
+            Some((m, n, sat)) => super::sv_fixed::negate(inner, scope, m, n, sat),
             None => Ok(format!("(-{})", print_expression(inner, scope)?)),
         },
         ExpressionNode::UnaryPlus(inner) => Ok(format!("(+{})", print_expression(inner, scope)?)),
