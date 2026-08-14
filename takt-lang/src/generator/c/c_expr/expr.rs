@@ -74,8 +74,8 @@ pub(in crate::generator::c) fn generate_expr(
         }
         ExpressionNode::Negate(e) => {
             // Унарный минус над q(m, n): −repr с wraparound к W (правило 3 ADR).
-            if let Some((m, n)) = super::fixed::fixed_of(map, owner, expr) {
-                super::fixed::negate(printer, map, owner, params, e, m, n, has_model)?;
+            if let Some((m, n, sat)) = super::fixed::fixed_of(map, owner, expr) {
+                super::fixed::negate(printer, map, owner, params, e, m, n, sat, has_model)?;
             } else {
                 printer.print("-");
                 generate_expr(printer, map, owner, params, e, 14, has_model)?;
@@ -95,7 +95,7 @@ pub(in crate::generator::c) fn generate_expr(
         // Левый операнд: допускается тот же приоритет (левоассоциативность).
         // Правый операнд: требует более высокого приоритета (wrap при равном).
         ExpressionNode::Multiply(l, r) => {
-            if let Some((m, n)) = super::fixed::fixed_of(map, owner, expr) {
+            if let Some((m, n, sat)) = super::fixed::fixed_of(map, owner, expr) {
                 super::fixed::binary(
                     printer,
                     map,
@@ -106,6 +106,7 @@ pub(in crate::generator::c) fn generate_expr(
                     r,
                     m,
                     n,
+                    sat,
                     has_model,
                 )?;
             } else {
@@ -115,7 +116,7 @@ pub(in crate::generator::c) fn generate_expr(
             }
         }
         ExpressionNode::Divide(l, r) => {
-            if let Some((m, n)) = super::fixed::fixed_of(map, owner, expr) {
+            if let Some((m, n, sat)) = super::fixed::fixed_of(map, owner, expr) {
                 super::fixed::binary(
                     printer,
                     map,
@@ -126,6 +127,7 @@ pub(in crate::generator::c) fn generate_expr(
                     r,
                     m,
                     n,
+                    sat,
                     has_model,
                 )?;
             } else {
@@ -140,7 +142,7 @@ pub(in crate::generator::c) fn generate_expr(
             generate_expr(printer, map, owner, params, r, 13, has_model)?;
         }
         ExpressionNode::Add(l, r) => {
-            if let Some((m, n)) = super::fixed::fixed_of(map, owner, expr) {
+            if let Some((m, n, sat)) = super::fixed::fixed_of(map, owner, expr) {
                 super::fixed::binary(
                     printer,
                     map,
@@ -151,6 +153,7 @@ pub(in crate::generator::c) fn generate_expr(
                     r,
                     m,
                     n,
+                    sat,
                     has_model,
                 )?;
             } else {
@@ -160,7 +163,7 @@ pub(in crate::generator::c) fn generate_expr(
             }
         }
         ExpressionNode::Subtract(l, r) => {
-            if let Some((m, n)) = super::fixed::fixed_of(map, owner, expr) {
+            if let Some((m, n, sat)) = super::fixed::fixed_of(map, owner, expr) {
                 super::fixed::binary(
                     printer,
                     map,
@@ -171,6 +174,7 @@ pub(in crate::generator::c) fn generate_expr(
                     r,
                     m,
                     n,
+                    sat,
                     has_model,
                 )?;
             } else {

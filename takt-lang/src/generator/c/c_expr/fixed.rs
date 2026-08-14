@@ -34,10 +34,16 @@ pub(super) enum FixedOp {
 ///
 /// Обёртка над [`extract_type`]: возвращает `(m, n)` только для `Fixed`. Модель
 /// берётся у владельца — тот же приём, что в арме `Cast` печатника.
-pub(super) fn fixed_of(map: &CMap, owner: &Element, expr: &ExpressionNode) -> Option<(u8, u8)> {
+pub(super) fn fixed_of(
+    map: &CMap,
+    owner: &Element,
+    expr: &ExpressionNode,
+) -> Option<(u8, u8, bool)> {
     let model = map.raw_model_at(owner.name()).ok()?;
     match extract_type(expr, model) {
-        Ok(TypeNode::Fixed { m, n, .. }) => Some((m, n)),
+        // Признак насыщения (фича 0170) едет вместе с разрядностями: печатник
+        // обязан знать, чем закрывать операцию — переносом или прижатием.
+        Ok(TypeNode::Fixed { m, n, sat }) => Some((m, n, sat)),
         _ => None,
     }
 }
@@ -64,16 +70,20 @@ fn width_is_storage(m: u8, n: u8) -> bool {
 ///
 /// ⚠️ Хелпер эмитится **только по нужде**: при `W = S` он был бы тождеством, а
 /// вывод для всего корпуса изменился бы (снапшоты `examples/generated`).
-fn open_wrap(printer: &mut Printer, m: u8, n: u8) {
+fn open_wrap(printer: &mut Printer, m: u8, n: u8, sat: bool) {
     printer.print(&format!("({})(", storage_type(m, n)));
-    if !width_is_storage(m, n) {
+    if sat {
+        // Насыщение (фича 0170) нужно ВСЕГДА, а не только при `W ≠ S`: прижатие
+        // идёт к границам формата, а тип хранения о них не знает.
+        printer.print("lam_q_sat(");
+    } else if !width_is_storage(m, n) {
         printer.print("lam_q_wrap(");
     }
 }
 
 /// Закрывает обёртку, открытую [`open_wrap`].
-fn close_wrap(printer: &mut Printer, m: u8, n: u8) {
-    if !width_is_storage(m, n) {
+fn close_wrap(printer: &mut Printer, m: u8, n: u8, sat: bool) {
+    if sat || !width_is_storage(m, n) {
         printer.print(&format!(", {})", m + n));
     }
     printer.print(")");
@@ -111,9 +121,10 @@ pub(super) fn binary(
     r: &ExpressionNode,
     m: u8,
     n: u8,
+    sat: bool,
     has_model: bool,
 ) -> Result<(), Diagnostic> {
-    open_wrap(printer, m, n);
+    open_wrap(printer, m, n, sat);
     match op {
         FixedOp::Add | FixedOp::Subtract => {
             let sym = if matches!(op, FixedOp::Add) {
@@ -140,7 +151,7 @@ pub(super) fn binary(
             printer.print(&format!(", {})", n));
         }
     }
-    close_wrap(printer, m, n);
+    close_wrap(printer, m, n, sat);
     Ok(())
 }
 
@@ -154,12 +165,13 @@ pub(super) fn negate(
     inner: &ExpressionNode,
     m: u8,
     n: u8,
+    sat: bool,
     has_model: bool,
 ) -> Result<(), Diagnostic> {
-    open_wrap(printer, m, n);
+    open_wrap(printer, m, n, sat);
     printer.print("-");
     widened(printer, map, owner, params, inner, has_model)?;
-    close_wrap(printer, m, n);
+    close_wrap(printer, m, n, sat);
     Ok(())
 }
 
@@ -183,19 +195,19 @@ pub(super) fn cast(
     let src = fixed_of(map, owner, inner);
     match (src, target) {
         // q → q: пересчёт дробных разрядов (влево — умножение, вправо — floor).
-        (Some((_, from_n)), TypeNode::Fixed { m: tm, n: tn, .. }) => {
-            open_wrap(printer, *tm, *tn);
+        (Some((_, from_n, _)), TypeNode::Fixed { m: tm, n: tn, sat }) => {
+            open_wrap(printer, *tm, *tn, *sat);
             rescale(printer, map, owner, params, inner, from_n, *tn, has_model)?;
-            close_wrap(printer, *tm, *tn);
+            close_wrap(printer, *tm, *tn, *sat);
         }
         // q → float: repr / 2^n (точно представимо в double).
-        (Some((_, from_n)), TypeNode::Rational) => {
+        (Some((_, from_n, _)), TypeNode::Rational) => {
             printer.print("((double)(");
             generate_expr(printer, map, owner, params, inner, 0, has_model)?;
             printer.print(&format!(") / {}.0)", pow2(from_n)));
         }
         // q → целое/бит: floor(repr / 2^n) = целая часть.
-        (Some((_, from_n)), _) => {
+        (Some((_, from_n, _)), _) => {
             printer.print(&format!("({})lam_q_floordiv(", target_c));
             widened(printer, map, owner, params, inner, has_model)?;
             printer.print(&format!(", (int64_t)1 << {})", from_n));
@@ -204,11 +216,11 @@ pub(super) fn cast(
         // ⚠️ Форма печати здесь своя, не через `open_wrap`: при `W = S` вывод
         // обязан остаться прежним байт-в-байт — `(int16_t)floor(…)`, без лишней
         // скобки, иначе поедут снапшоты `examples/generated` (фикс 0061-01).
-        (None, TypeNode::Fixed { m: tm, n: tn, .. }) if source_is_real(map, owner, inner) => {
-            let wraps = !width_is_storage(*tm, *tn);
+        (None, TypeNode::Fixed { m: tm, n: tn, sat }) if source_is_real(map, owner, inner) => {
+            let wraps = *sat || !width_is_storage(*tm, *tn);
             printer.print(&format!("({})", storage_type(*tm, *tn)));
             if wraps {
-                printer.print("lam_q_wrap(");
+                printer.print(if *sat { "lam_q_sat(" } else { "lam_q_wrap(" });
             }
             printer.print("floor((");
             generate_expr(printer, map, owner, params, inner, 0, has_model)?;
@@ -218,11 +230,11 @@ pub(super) fn cast(
             }
         }
         // целое/бит → q: (repr = v * 2^n) с wraparound к W.
-        (None, TypeNode::Fixed { m: tm, n: tn, .. }) => {
-            open_wrap(printer, *tm, *tn);
+        (None, TypeNode::Fixed { m: tm, n: tn, sat }) => {
+            open_wrap(printer, *tm, *tn, *sat);
             widened(printer, map, owner, params, inner, has_model)?;
             printer.print(&format!(" * ((int64_t)1 << {})", tn));
-            close_wrap(printer, *tm, *tn);
+            close_wrap(printer, *tm, *tn, *sat);
         }
         // Ни источник, ни цель не q — сюда не попадаем (страж вызова).
         (None, _) => {
@@ -268,6 +280,15 @@ const LAM_Q_MUL: &str = "static int64_t lam_q_mul(int64_t a, int64_t b, unsigned
 /// `lam_q_div` — делимое ← n влево, целочисленное деление (усечение к нулю).
 const LAM_Q_DIV: &str = "static int64_t lam_q_div(int64_t a, int64_t b, unsigned n) {\n    \
     return (a * ((int64_t)1 << n)) / b;\n}\n";
+/// `lam_q_sat` — прижатие к границам представления `intW` (фича 0170).
+///
+/// ⚠️ Считается в `int64_t` **до** сужения к типу хранения: сужение сработало бы
+/// раньше прижатия и вернуло бы обёрнутое значение (тот же капкан, что в
+/// фиксе 0061-01).
+const LAM_Q_SAT: &str = "static int64_t lam_q_sat(int64_t v, unsigned w) {\n    \
+    int64_t max = ((int64_t)1 << (w - 1)) - 1;\n    \
+    int64_t min = -((int64_t)1 << (w - 1));\n    \
+    return (v > max) ? max : ((v < min) ? min : v);\n}\n";
 /// `lam_q_wrap` — перенос к **W** битам (правило 3 ADR 0061), а не к ширине
 /// хранения. Считается в **беззнаковом**: сужение знакового вне диапазона
 /// implementation-defined, а `uint64_t` определён стандартом при любом значении.
@@ -287,10 +308,14 @@ pub(in crate::generator::c) fn insert_fixed_helpers(source: String) -> String {
     let uses_div = source.contains("lam_q_div(");
     let uses_floordiv = uses_mul || source.contains("lam_q_floordiv(");
     let uses_wrap = source.contains("lam_q_wrap(");
-    if !uses_floordiv && !uses_div && !uses_wrap {
+    let uses_sat = source.contains("lam_q_sat(");
+    if !uses_floordiv && !uses_div && !uses_wrap && !uses_sat {
         return source;
     }
     let mut helpers = String::new();
+    if uses_sat {
+        helpers.push_str(LAM_Q_SAT);
+    }
     if uses_wrap {
         helpers.push_str(LAM_Q_WRAP);
     }

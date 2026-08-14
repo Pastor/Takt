@@ -343,7 +343,8 @@ fn fixed_binary(
     b: &ExpressionNode,
     scope: &Scope,
 ) -> Option<Result<String, Diagnostic>> {
-    rust_fixed::fixed_format(expr).map(|(m, n)| rust_fixed::binary(op, a, b, scope, m, n))
+    rust_fixed::fixed_format(expr)
+        .map(|(m, n, sat)| rust_fixed::binary(op, a, b, scope, m, n, sat))
 }
 
 /// Печатает сравнение, приводя операнды друг к другу по типу.
@@ -455,7 +456,7 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
         ExpressionNode::BitwiseNot(a) => Ok(format!("(!{})", print_expression(a, scope)?)),
         ExpressionNode::UnaryPlus(a) => print_expression(a, scope),
         ExpressionNode::Negate(a) => match rust_fixed::fixed_format(expr) {
-            Some((m, n)) => rust_fixed::negate(a, scope, m, n),
+            Some((m, n, sat)) => rust_fixed::negate(a, scope, m, n, sat),
             None => Ok(format!("(-{})", print_expression(a, scope)?)),
         },
 
