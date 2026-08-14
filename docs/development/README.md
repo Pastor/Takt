@@ -379,3 +379,8 @@
 | 0160-01 | 0160 | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | [0160-01-takt-ebnf-sync.md](0160-01-takt-ebnf-sync.md) |
 | 0160-02 | 0160 | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | [0160-02-takt-ebnf-sync.md](0160-02-takt-ebnf-sync.md) |
 | 0160-03 | 0160 | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | [0160-03-takt-ebnf-sync.md](0160-03-takt-ebnf-sync.md) |
+| 0170-01 | 0170 | Насыщение (saturation) для fixed-point q(m, n) | [0170-01-fixed-point-saturation.md](0170-01-fixed-point-saturation.md) |
+| 0170-02 | 0170 | Насыщение (saturation) для fixed-point q(m, n) | [0170-02-fixed-point-saturation.md](0170-02-fixed-point-saturation.md) |
+| 0170-03 | 0170 | Насыщение (saturation) для fixed-point q(m, n) | [0170-03-fixed-point-saturation.md](0170-03-fixed-point-saturation.md) |
+| 0170-04 | 0170 | Насыщение (saturation) для fixed-point q(m, n) | [0170-04-fixed-point-saturation.md](0170-04-fixed-point-saturation.md) |
+| 0170-05 | 0170 | Насыщение (saturation) для fixed-point q(m, n) | [0170-05-fixed-point-saturation.md](0170-05-fixed-point-saturation.md) |

@@ -1,7 +1,7 @@
 # Фича 0170: Насыщение (saturation) для fixed-point `q(m, n)`
 
 - **Номер:** 0170
-- **Статус:** СОЗДАНА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** нет
 - **Tier:** 2
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (вынесено проработкой [0061](0061-fixed-point-type.md), правило 3 ADR)
@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | не заведена (стадия 2) |
-| Анализ | не заведён (стадия 3) |
+| Архитектура (ADR) | [`docs/adr/0170-fixed-point-saturation.md`](../adr/0170-fixed-point-saturation.md) — **Accepted** (Option A: признак — поле типа) |
+| Анализ | [`docs/analyze/0170-fixed-point-saturation.md`](../analyze/0170-fixed-point-saturation.md) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0170-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
