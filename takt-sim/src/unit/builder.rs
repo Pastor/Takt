@@ -14,7 +14,7 @@ use takt_lang::semantic::{
     ConditionNode, ExpressionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind, VariableNode,
 };
 
-use crate::unit::initial::eval_expr;
+use crate::unit::initial::{eval_expr, eval_expr_in};
 
 type Executions = HashMap<String, Vec<Execution>>;
 
@@ -74,7 +74,7 @@ impl Context for ModelNodeContext {
         let value = {
             let borrowed = self.model.borrow();
             borrowed.variables.get(name).and_then(|var| {
-                match eval_expr(var_expr(var)) {
+                match eval_expr_in(var_expr(var), &borrowed) {
                     Some(v) => Some(coerce_initial(v, var, &borrowed)),
                     // Переменная без инициализатора → нулевое значение по типу
                     // (как default-init в C). Прежде так делалась только структура

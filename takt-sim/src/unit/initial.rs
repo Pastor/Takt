@@ -31,14 +31,76 @@
 #![deny(clippy::wildcard_enum_match_arm)]
 
 use crate::eval::value::Value;
-use takt_lang::semantic::ExpressionNode;
+use takt_lang::semantic::{ExpressionNode, ModelNode, VariableNode};
+
+/// Предел вложенности ссылок на константы (фича 0205).
+///
+/// Цепочка `const A := B; const B := A;` разрешается семантикой, но **значения**
+/// у неё нет, и обход по инициализаторам ушёл бы в бесконечную рекурсию. Предел
+/// той же природы, что `MAX_NESTING_DEPTH` семантики: не «правильное число», а
+/// граница, за которой ответа всё равно нет.
+const MAX_REF_DEPTH: usize = 32;
 
 /// Вычисляет простое константное выражение в [`Value`].
 ///
 /// `None` — «константой не является»: значение будет взято из умолчания по типу
 /// (`default_field` в `builder.rs`) либо вычислено в такте.
 pub(super) fn eval_expr(expr: &ExpressionNode) -> Option<Value> {
+    eval_expr_at(expr, None, 0)
+}
+
+/// То же, но с моделью — областью видимости имён (фича 0205).
+///
+/// ⚠️ Модель нужна ради **ссылки на константу**: спрашивать надо таблицу
+/// объявлений, а не ячейку ссылки. Ячейка — снимок, снятый при разрешении имени
+/// (урок 0204), и лежит в ней ещё не понижённый АСД, тогда как в таблице —
+/// уже свёрнутый литерал (0192).
+pub(super) fn eval_expr_in(expr: &ExpressionNode, model: &ModelNode) -> Option<Value> {
+    eval_expr_at(expr, Some(model), 0)
+}
+
+/// То же с учётом области видимости и глубины разбора ссылок на константы.
+fn eval_expr_at(expr: &ExpressionNode, model: Option<&ModelNode>, depth: usize) -> Option<Value> {
+    let eval_expr = |e: &ExpressionNode| eval_expr_at(e, model, depth);
     match expr {
+        // Приведение `as` (фича 0205): считается **тем же** `cast_to_type`, что
+        // и в такте.
+        //
+        // ⚠️ Своей арифметики приведения здесь быть не должно. Прежде ветви не
+        // было вовсе, и `var v := 5 as u16;` молча получал **ноль**, тогда как
+        // цели печатали `(uint16_t)5` — расхождение эталона с целью, которого
+        // никто не видел (замер фичи: шесть форм из восьми расходились молча, а
+        // `as duration` падал `SIM-006` в такте).
+        ExpressionNode::Cast(inner, ty) => {
+            let value = eval_expr_at(inner, model, depth)?;
+            crate::eval::cast_to_type(value, ty).ok()
+        }
+        // Ссылка на КОНСТАНТУ: её значение известно до такта.
+        //
+        // ⚠️ Ячейка ссылки — снимок объявления (см. 0204), и читается из неё
+        // именно инициализатор: разрешение имени здесь недоступно. Обычная
+        // переменная и порт остаются «не константой» — их значение приходит в
+        // такте.
+        ExpressionNode::Variable(cell) => {
+            if depth >= MAX_REF_DEPTH {
+                return None;
+            }
+            let name = cell.borrow().name().to_string();
+            // Сначала таблица объявлений: там инициализатор уже свёрнут в
+            // литерал (0192). В ячейке лежит снимок с сырым АСД, и по нему
+            // значение не восстановить.
+            if let Some(model) = model
+                && let Some(VariableNode::Const { expr, .. }) = model.search_var(&name)
+            {
+                return eval_expr_at(&expr, Some(model), depth + 1);
+            }
+            match &*cell.borrow() {
+                VariableNode::Const { expr, .. } => eval_expr_at(expr, model, depth + 1),
+                VariableNode::Simple { .. }
+                | VariableNode::Port { .. }
+                | VariableNode::Unresolved => None,
+            }
+        }
         ExpressionNode::Number(n) => Some(Value::Number(*n)),
         // ⚠️ Длительность (фича 0134) обязана быть здесь: её отсутствие молча
         // превращало `var left: duration := 1m30s;` в «значения нет» (тест
@@ -90,7 +152,6 @@ pub(super) fn eval_expr(expr: &ExpressionNode) -> Option<Value> {
         ExpressionNode::AnonPort(..)
         | ExpressionNode::None
         | ExpressionNode::Unresolved(..)
-        | ExpressionNode::Variable(..)
         | ExpressionNode::Model(..)
         | ExpressionNode::Condition(..)
         | ExpressionNode::Type(..)
@@ -102,7 +163,6 @@ pub(super) fn eval_expr(expr: &ExpressionNode) -> Option<Value> {
         | ExpressionNode::ArraySubscript(..)
         | ExpressionNode::ArraySlice(..)
         | ExpressionNode::BitAccess(..)
-        | ExpressionNode::Cast(..)
         | ExpressionNode::Assign(..)
         | ExpressionNode::ConditionalOperator(..)
         // Унарные и бинарные операции: свёртки констант этот вычислитель не
