@@ -795,11 +795,25 @@ fn example_ce6_type_from_func_valid() {
         .expect("ce6_type_from_func.takt должен разбираться без ошибок");
 }
 
-/// Ce6: Файл ce6_type_inference_chain.takt разбирается без ошибок.
+/// Ce6: в `ce6_type_inference_chain.takt` тип ВЫВЕДЕН по цепочке `x → y`.
+///
+/// ⚠️ Прежде тест проверял, что файл **разбирается без ошибок**, — и проходил
+/// всё время, пока обещанный самой фикстурой вывод типа не работал: `y`
+/// оставался с типом `_`, а форму не переводила ни одна цель (фича 0204).
+/// Проверять надо то, ради чего фикстура заведена, — сам тип.
 #[test]
-fn example_ce6_type_inference_chain_valid() {
-    build_file("tests/data/semantic/valid/ce6_type_inference_chain.takt")
+fn example_ce6_type_inference_chain_infers_type_of_second_variable() {
+    let model = build_file("tests/data/semantic/valid/ce6_type_inference_chain.takt")
         .expect("ce6_type_inference_chain.takt должен разбираться без ошибок");
+    let y = model
+        .variables
+        .get("y")
+        .expect("объявление 'y' не найдено в фикстуре");
+    assert_eq!(
+        format!("{:?}", y.ty()),
+        "Array(8, Bit)",
+        "тип 'y' не выведен из переменной 'x'"
+    );
 }
 
 // ─── Тесты FE6: Составные типы в параметрах функций ──────────────────────────

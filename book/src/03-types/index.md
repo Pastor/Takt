@@ -230,6 +230,16 @@ var count := 0;         // тип выведен из литерала
 const READY := true;    // выведен bool
 ```
 
+Выражением может быть и **ссылка на другое объявление** — тип берётся у него,
+в том числе по цепочке:
+
+```takt
+const BASE  := 3ms;
+const DWELL := BASE;        // duration — тип пришёл от BASE
+const LONG  := BASE + 2ms;  // тоже duration
+var limit  := count;        // тип limit — тип count
+```
+
 Явная аннотация всё же полезна, когда нужна конкретная ширина или знаковость
 (`var count: u16 := 0;`).
 
