@@ -178,3 +178,4 @@
 | [0237](./0237-book-state-of-model-section.md) | Раздел «Импорты» не описывает S(Модель) | Draft | фича 0237 |
 | [0238](./0238-claude-md-duplicate-invariants.md) | Живой контекст: раздел критических инвариантов дублирует подводные камни | Accepted (Option B) | фича 0238 |
 | [0204](./0204-const-ref-type-inference.md) | Вывод типов не протягивает тип через ссылку константа-константа | Accepted (Option C) | фича 0204 |
+| [0205](./0205-as-in-declaration-initializer.md) | Приведение as не вычисляется в инициализаторе объявления | Accepted (Option A) | фича 0205 |
