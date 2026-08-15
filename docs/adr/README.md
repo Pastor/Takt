@@ -179,3 +179,4 @@
 | [0238](./0238-claude-md-duplicate-invariants.md) | Живой контекст: раздел критических инвариантов дублирует подводные камни | Accepted (Option B) | фича 0238 |
 | [0204](./0204-const-ref-type-inference.md) | Вывод типов не протягивает тип через ссылку константа-константа | Accepted (Option C) | фича 0204 |
 | [0205](./0205-as-in-declaration-initializer.md) | Приведение as не вычисляется в инициализаторе объявления | Accepted (Option A) | фича 0205 |
+| [0206](./0206-imported-enum-variant-in-match.md) | Вариант импортированного перечисления не разрешается в образце match | Accepted (Option B) | фича 0206 |
