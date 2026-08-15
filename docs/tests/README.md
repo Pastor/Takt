@@ -153,3 +153,4 @@
 | 0234 | Профилирование и ускорение предкоммита | [0234-precheck-time-profile.md](0234-precheck-time-profile.md) | ✅ ПРОЙДЕН (отчёт: [reports/0234](../reports/0234-precheck-time-profile.md)) |
 | 0235 | Цели st и sv теряют охранную формулу | [0235-guard-formula-in-st-sv.md](0235-guard-formula-in-st-sv.md) | ✅ ПРОЙДЕН (отчёт: [reports/0235](../reports/0235-guard-formula-in-st-sv.md)) |
 | 0236 | Печатник цели c печатает пустоту на неразрешённом условии | [0236-c-unresolved-condition-refusal.md](0236-c-unresolved-condition-refusal.md) | ✅ ПРОЙДЕН (отчёт: [reports/0236](../reports/0236-c-unresolved-condition-refusal.md)) |
+| 0238 | Живой контекст: раздел критических инвариантов дублирует подводные камни | [0238-claude-md-duplicate-invariants.md](0238-claude-md-duplicate-invariants.md) | ✅ ПРОЙДЕН (отчёт: [reports/0238](../reports/0238-claude-md-duplicate-invariants.md)) |
