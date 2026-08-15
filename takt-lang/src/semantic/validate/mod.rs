@@ -38,6 +38,7 @@ pub mod depth;
 mod entry;
 mod enums;
 mod fixed;
+mod formulas;
 mod implicit_bool;
 mod literal_range;
 mod member_access;
@@ -61,7 +62,8 @@ mod tests_implicit_bool;
 // Внутреннее: помощники, которые зовут `validate_model` и соседние подмодули.
 // `use super::*` в каждом подмодуле подхватывает их отсюда.
 use common::{
-    get_state_loc, get_state_name, validate_conditions, validate_expression, validate_reference,
+    get_state_loc, get_state_name, validate_cond, validate_conditions, validate_expression,
+    validate_reference,
 };
 use enums::{validate_bit_values, validate_enum_type_declarations, validate_enum_values};
 use fixed::check_fixed_mixing;
@@ -171,6 +173,14 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // компилятор: обе формы не работают НИ В ОДНОЙ цели, поэтому запрещается не
     // работающая запись, а уже существующий отказ получает позицию.
     found.extend(name_collisions::check_name_collisions(model.clone()));
+
+    // SE-025 и прочие проверки условия — на ОХРАННЫХ ФОРМУЛАХ (0203). Прежде
+    // формулы не обходила ни одна проверка, и `: [Guard] опечатка < 3;`
+    // принималось молча: средство безопасности переставало сторожить, а цель
+    // `c` печатала `assert( < 3);` — отказ приходил от `cc`, а не от языка.
+    // Судья здесь тот же, что у `cond` и рёбер: проверка лишь доставляет ему
+    // условия.
+    found.extend(formulas::validate_formulas(model.clone()));
 
     // SE-092 (0187): начальное значение у входного порта — ошибка. Временное
     // SE-093 («выставляют не все цели») снято задачей 0187-04: цели умеют все.

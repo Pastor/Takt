@@ -1,0 +1,12 @@
+// Фикстура 0203: попутная проверка судьи — состояние чужой модели (SE-033).
+// Формула получает ВЕСЬ набор проверок условия, а не одно «нет ли Unresolved».
+model E {
+    start Begin;
+    state End;
+}
+
+start Run = E {
+    : [Guard] S(E) != Nope;
+    next Done;
+}
+state Done;

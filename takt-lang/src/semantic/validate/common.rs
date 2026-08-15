@@ -3,8 +3,9 @@
 //! Часть модуля `validate` (фича 0027: деление по логике).
 
 use super::*;
+use crate::semantic::condition::state_of::state_of_model;
 
-fn validate_cond(
+pub(super) fn validate_cond(
     context: Option<ConditionNode>,
     cond: &ConditionNode,
     model: Rc<RefCell<ModelNode>>,
@@ -17,13 +18,12 @@ fn validate_cond(
             if let Some(context) = context
                 && let ast::Condition::Variable(id) = cond.clone()
             {
-                if let ConditionNode::Function(func, args, _) = context
-                    && let FunctionDefinitionNode::Builtin(name, ..) = *func.borrow()
-                    && name == "S"
-                    && args.len() == 1
-                    && let Some(cond) = args.first()
-                    && let ConditionNode::Model(model, _) = *cond.clone()
-                {
+                // Левый операнд — «текущее состояние модели»? Форму паттерна
+                // разбирает ОДНА функция на проект (фича 0203): прежде судья
+                // знал только `S(Модель)`, тогда как цели `c` и `rust` знают и
+                // краткое `Модель`, — и `ref X: E != End;` отвергался `SE-025`
+                // на записи, которую генератор переводит.
+                if let Some(model) = state_of_model(&context) {
                     let model = model.borrow();
                     let model_name = model
                         .name

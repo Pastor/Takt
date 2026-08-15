@@ -1,6 +1,6 @@
 # ADR 0203: validate не обходит формулы: неизвестное имя в Guard молчит
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Date:** 2026-08-15
 - **Authors:** Архитектор
 - **Related issues:** [Фича 0203](../features/0203-validate-formulas-traversal.md); смежно с [ADR 0155](0155-semantic-nested-statement-resolution.md) (глотание ошибок разрешения), [ADR 0151](0151-diagnostics-batch-within-check.md) (накопление диагностик), [ADR 0044](0044-sim-assert-invariant.md) (`invariant` как сахар над `cond` + `Formula::Guard`)

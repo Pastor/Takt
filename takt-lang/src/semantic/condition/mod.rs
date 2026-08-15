@@ -13,6 +13,11 @@
 /// частный случай разбора условия, то есть его законное место здесь.
 mod after_const;
 
+/// Распознавание паттерна `S(Модель) = Состояние` и его краткой формы
+/// `Модель = Состояние` (фича 0203): один разбор на судью, генераторы и
+/// канонизацию скобок.
+pub(crate) mod state_of;
+
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
 use crate::semantic::builtin::builtin_function;
@@ -40,21 +45,7 @@ fn strip_cond_parens(mut cond: ConditionNode) -> ConditionNode {
     cond
 }
 
-/// Является ли условие паттерном «текущее состояние модели»: встроенная
-/// `S(Модель)` либо её краткая форма `Модель`.
-///
-/// Общий предикат для канонизации скобочных форм в [`resolve_condition`]
-/// (фича 0074) — распознаётся так же, как в генераторе C
-/// (`c_expr::condition::state_of_model`).
-fn is_state_of(cond: &ConditionNode) -> bool {
-    match cond {
-        ConditionNode::Model(..) => true,
-        ConditionNode::Function(fun, ..) => {
-            matches!(&*fun.borrow(), FunctionDefinitionNode::Builtin(name, ..) if *name == "S")
-        }
-        _ => false,
-    }
-}
+use state_of::is_state_of;
 
 /// Канонизирует скобочные формы паттерна `S(Модель) = Состояние` (фича 0074).
 ///

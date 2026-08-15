@@ -25,7 +25,7 @@ pub use anon_port::AnonPortAccess;
 pub mod bit_vector;
 mod builtin;
 pub(crate) mod callgraph;
-mod condition;
+pub(crate) mod condition;
 pub mod const_eval;
 mod declaration;
 pub(crate) mod docs;

@@ -1,0 +1,26 @@
+// Фикстура 0203: формулы во ВСЕХ ШЕСТИ местах с разрешимыми именами —
+// принимаются молча (сторож от чрезмерной строгости проверки).
+var level: u8 := 0;
+
+: [Guard] level < 3;
+
+always {
+    : [Guard] level < 3;
+}
+
+fn step(x: u8) -> u8 {
+    : [Guard] level < 3;
+    return x;
+}
+
+start Run {
+    : [Guard] level < 3;
+    always {
+        : [Guard] level < 3;
+        if level > 0 {
+            : [Guard] level < 3;
+        }
+        level := step(level);
+    }
+    ref Run;
+}

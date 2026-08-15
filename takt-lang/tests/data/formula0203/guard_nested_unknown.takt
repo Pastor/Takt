@@ -1,0 +1,12 @@
+// Фикстура 0203: формула во ВЛОЖЕННОМ ОПЕРАТОРЕ (`if` внутри блока).
+var level: u8 := 0;
+
+start Run {
+    always {
+        if level > 0 {
+            : [Guard] levl < 3;
+        }
+        level := level + 1;
+    }
+    ref Run;
+}

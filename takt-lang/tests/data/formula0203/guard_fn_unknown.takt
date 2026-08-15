@@ -1,0 +1,12 @@
+// Фикстура 0203: формула в ТЕЛЕ ФУНКЦИИ.
+var level: u8 := 0;
+
+fn step(x: u8) -> u8 {
+    : [Guard] levl < 3;
+    return x;
+}
+
+start Run {
+    always { level := step(level); }
+    ref Run;
+}
