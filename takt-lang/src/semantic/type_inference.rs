@@ -51,52 +51,67 @@ pub fn type_inference(
     variables: &mut BTreeMap<String, VariableNode>,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<BTreeMap<String, VariableNode>, Diagnostic> {
-    for (name, var) in variables.clone() {
-        match var {
-            VariableNode::Simple {
-                upper,
-                loc,
-                ty: TypeNode::Inference,
-                ref expr,
-                ..
-            } => {
-                let typ = extract_type(expr, model.clone())?;
-                variables.insert(
-                    name.clone(),
-                    VariableNode::Simple {
-                        upper,
-                        loc,
-                        name: name.clone(),
-                        ty: typ,
-                        expr: expr.clone(),
-                    },
-                );
-            }
-            VariableNode::Const {
-                upper,
-                loc,
-                ty: TypeNode::Inference,
-                ref expr,
-                ..
-            } => {
-                let typ = extract_type(expr, model.clone())?;
-                variables.insert(
-                    name.clone(),
-                    VariableNode::Const {
-                        upper,
-                        loc,
-                        name: name.clone(),
-                        ty: typ,
-                        expr: expr.clone(),
-                    },
-                );
-            }
-            // q(m,n) (0061): понижение литерала в представление v — см. type_node.
-            ref other => {
-                if let Some(nv) = crate::semantic::type_node::type_fixed::lower_fixed_var(other)? {
-                    variables.insert(name.clone(), nv);
+    // Первый проход дополнительно понижает q(m, n); последующие только выводят
+    // типы (см. заголовок функции о неподвижной точке).
+    let mut first_pass = true;
+    loop {
+        let mut progress = false;
+        for (name, var) in variables.clone() {
+            match var {
+                VariableNode::Simple {
+                    upper,
+                    loc,
+                    ty: TypeNode::Inference,
+                    ref expr,
+                    ..
+                } => {
+                    let typ = extract_type_known(expr, model.clone(), Some(variables))?;
+                    progress |= !matches!(typ, TypeNode::Inference);
+                    variables.insert(
+                        name.clone(),
+                        VariableNode::Simple {
+                            upper,
+                            loc,
+                            name: name.clone(),
+                            ty: typ,
+                            expr: expr.clone(),
+                        },
+                    );
+                }
+                VariableNode::Const {
+                    upper,
+                    loc,
+                    ty: TypeNode::Inference,
+                    ref expr,
+                    ..
+                } => {
+                    let typ = extract_type_known(expr, model.clone(), Some(variables))?;
+                    progress |= !matches!(typ, TypeNode::Inference);
+                    variables.insert(
+                        name.clone(),
+                        VariableNode::Const {
+                            upper,
+                            loc,
+                            name: name.clone(),
+                            ty: typ,
+                            expr: expr.clone(),
+                        },
+                    );
+                }
+                // q(m,n) (0061): понижение литерала в представление v — см. type_node.
+                ref other => {
+                    if first_pass
+                        && let Some(nv) =
+                            crate::semantic::type_node::type_fixed::lower_fixed_var(other)?
+                    {
+                        variables.insert(name.clone(), nv);
+                    }
                 }
             }
+        }
+        first_pass = false;
+        if !progress {
+            break;
         }
     }
     Ok(variables.clone())
@@ -151,6 +166,12 @@ pub(crate) fn wider_type(a: TypeNode, b: TypeNode) -> TypeNode {
         }
         (TypeNode::Array(n, t), _) => TypeNode::Array(*n, t.clone()),
         (_, TypeNode::Array(n, t)) => TypeNode::Array(*n, t.clone()),
+        // Длительность сочетается только с длительностью (фича 0204). Правила не
+        // было вовсе, и `const S := 2s + 1s;` давал `Unsupported` — тип, который
+        // не переводит ни одна цель. Смешение с числом сюда не доходит: его
+        // отвергает `SE-065` (проба 2026-08-16), поэтому прочие пары длительности
+        // остаются `Unsupported` осознанно.
+        (TypeNode::Duration, TypeNode::Duration) => TypeNode::Duration,
         (TypeNode::Bit, TypeNode::Bit) => TypeNode::Bit,
         (TypeNode::Bool, TypeNode::Bool) => TypeNode::Bool,
         (TypeNode::Bool, TypeNode::Bit) | (TypeNode::Bit, TypeNode::Bool) => TypeNode::Bit,
@@ -347,6 +368,28 @@ pub(crate) fn extract_type(
     expr: &ExpressionNode,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<TypeNode, Diagnostic> {
+    extract_type_known(expr, model, None)
+}
+
+/// Тип выражения с оглядкой на **уже выведенные** объявления (фича 0204).
+///
+/// `known` — таблица объявлений в том состоянии, в каком её видит вывод типов;
+/// `None` у внешних вызовов (генераторы, `validate`), где вывод давно завершён.
+///
+/// # Зачем таблица, если у ссылки есть ячейка
+///
+/// ⚠️ Ячейка `Rc<RefCell<VariableNode>>` в `ExpressionNode::Variable` — **снимок
+/// на момент разрешения имени** (`expression::construct_expression` кладёт туда
+/// `Rc::new(RefCell::new(var.clone()))`), а разрешение идёт **до** вывода типов
+/// (`declaration::prepare_variables`). Поэтому у ссылки на объявление без явного
+/// типа в ячейке навсегда остаётся `Inference` — и `var y := x;` не получал типа
+/// вовсе. Обновить ячейку нельзя: копий у одной переменной столько, сколько
+/// упоминаний. Значит, спрашивать надо **таблицу**, а не снимок.
+fn extract_type_known(
+    expr: &ExpressionNode,
+    model: Rc<RefCell<ModelNode>>,
+    known: Option<&BTreeMap<String, VariableNode>>,
+) -> Result<TypeNode, Diagnostic> {
     match expr {
         // ── Литералы ──────────────────────────────────────────────────────────
         ExpressionNode::Bool(_) => Ok(TypeNode::Bool),
@@ -357,12 +400,28 @@ pub(crate) fn extract_type(
         ExpressionNode::AnonPort(access) => Ok(access.ty.clone()),
 
         // ── Идентификаторы ────────────────────────────────────────────────────
-        ExpressionNode::Variable(var_rc) => Ok(type_of_var(&var_rc.borrow())),
+        //
+        // ⚠️ Ячейка ссылки — снимок ДО вывода типов (см. заголовок функции),
+        // поэтому `Inference` в ней означает «здесь может быть уже известно»:
+        // спрашиваем таблицу объявлений по имени (фича 0204). Прежде ответом
+        // был сам снимок, и `var y := x;` оставался без типа — а с ним и без
+        // трансляции всеми целями сразу.
+        ExpressionNode::Variable(var_rc) => {
+            let var = var_rc.borrow();
+            let ty = type_of_var(&var);
+            if matches!(ty, TypeNode::Inference)
+                && let Some(table) = known
+                && let Some(declared) = table.get(var.name())
+            {
+                return Ok(type_of_var(declared));
+            }
+            Ok(ty)
+        }
         // Условия всегда вычисляются в булев (1-битный) результат.
         ExpressionNode::Condition(_) => Ok(TypeNode::Bit),
 
         // ── Скобки ────────────────────────────────────────────────────────────
-        ExpressionNode::Parenthesis(inner) => extract_type(inner, model),
+        ExpressionNode::Parenthesis(inner) => extract_type_known(inner, model, known),
 
         // ── Логические операции и сравнения → Bit ─────────────────────────────
         ExpressionNode::Not(_)
@@ -378,7 +437,7 @@ pub(crate) fn extract_type(
         // ── Унарные операции → тип операнда ──────────────────────────────────
         ExpressionNode::BitwiseNot(e)
         | ExpressionNode::UnaryPlus(e)
-        | ExpressionNode::Negate(e) => extract_type(e, model),
+        | ExpressionNode::Negate(e) => extract_type_known(e, model, known),
 
         // ── Арифметические бинарные операции → наиболее широкий тип ──────────
         ExpressionNode::Add(l, r)
@@ -387,8 +446,8 @@ pub(crate) fn extract_type(
         | ExpressionNode::Divide(l, r)
         | ExpressionNode::Modulo(l, r)
         | ExpressionNode::Power(l, r) => {
-            let lt = extract_type(l, model.clone())?;
-            let rt = extract_type(r, model)?;
+            let lt = extract_type_known(l, model.clone(), known)?;
+            let rt = extract_type_known(r, model, known)?;
             Ok(wider_type(lt, rt))
         }
 
@@ -398,20 +457,20 @@ pub(crate) fn extract_type(
         | ExpressionNode::BitwiseOr(l, r)
         | ExpressionNode::ShiftLeft(l, r)
         | ExpressionNode::ShiftRight(l, r) => {
-            let lt = extract_type(l, model.clone())?;
-            let rt = extract_type(r, model)?;
+            let lt = extract_type_known(l, model.clone(), known)?;
+            let rt = extract_type_known(r, model, known)?;
             Ok(wider_type(lt, rt))
         }
 
         // ── Тернарный оператор → тип наиболее широкой ветви ──────────────────
         ExpressionNode::ConditionalOperator(_, then_e, else_e) => {
-            let tt = extract_type(then_e, model.clone())?;
-            let et = extract_type(else_e, model)?;
+            let tt = extract_type_known(then_e, model.clone(), known)?;
+            let et = extract_type_known(else_e, model, known)?;
             Ok(wider_type(tt, et))
         }
 
         // ── Присваивание → тип правой части ──────────────────────────────────
-        ExpressionNode::Assign(_, r) => extract_type(r, model),
+        ExpressionNode::Assign(_, r) => extract_type_known(r, model, known),
 
         // ── Обращение к массиву → тип элемента ───────────────────────────────
         ExpressionNode::ArraySubscript(var_rc, _) => match type_of_var(&var_rc.borrow()) {
@@ -431,7 +490,7 @@ pub(crate) fn extract_type(
             if items.is_empty() {
                 return Ok(TypeNode::Array(0, Box::new(TypeNode::Bit)));
             }
-            let elem_type = extract_type(&items[0], model)?;
+            let elem_type = extract_type_known(&items[0], model, known)?;
             Ok(TypeNode::Array(n, Box::new(elem_type)))
         }
 
@@ -441,7 +500,7 @@ pub(crate) fn extract_type(
                 return Ok(TypeNode::Unsupported);
             }
             let n = items.len() as u16;
-            let elem_type = extract_type(&items[0], model)?;
+            let elem_type = extract_type_known(&items[0], model, known)?;
             Ok(TypeNode::Array(n, Box::new(elem_type)))
         }
 

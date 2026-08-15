@@ -177,3 +177,4 @@
 | [0236](./0236-c-unresolved-condition-refusal.md) | Печатник цели c печатает пустоту на неразрешённом условии | Accepted (Option B) | фича 0236 |
 | [0237](./0237-book-state-of-model-section.md) | Раздел «Импорты» не описывает S(Модель) | Draft | фича 0237 |
 | [0238](./0238-claude-md-duplicate-invariants.md) | Живой контекст: раздел критических инвариантов дублирует подводные камни | Accepted (Option B) | фича 0238 |
+| [0204](./0204-const-ref-type-inference.md) | Вывод типов не протягивает тип через ссылку константа-константа | Accepted (Option C) | фича 0204 |
