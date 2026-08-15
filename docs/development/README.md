@@ -390,3 +390,6 @@
 | 0234-01 | 0234 | Профилирование и ускорение предкоммита | [0234-01-precheck-time-profile.md](0234-01-precheck-time-profile.md) |
 | 0234-02 | 0234 | Профилирование и ускорение предкоммита | [0234-02-precheck-time-profile.md](0234-02-precheck-time-profile.md) |
 | 0234-03 | 0234 | Профилирование и ускорение предкоммита | [0234-03-precheck-time-profile.md](0234-03-precheck-time-profile.md) |
+| 0235-01 | 0235 | Цели st и sv теряют охранную формулу | [0235-01-guard-formula-in-st-sv.md](0235-01-guard-formula-in-st-sv.md) |
+| 0235-02 | 0235 | Цели st и sv теряют охранную формулу | [0235-02-guard-formula-in-st-sv.md](0235-02-guard-formula-in-st-sv.md) |
+| 0235-03 | 0235 | Цели st и sv теряют охранную формулу | [0235-03-guard-formula-in-st-sv.md](0235-03-guard-formula-in-st-sv.md) |

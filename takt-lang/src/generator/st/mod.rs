@@ -200,7 +200,7 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     // в IEC 61131-3 тип обязан быть известен к моменту использования.
     st_decl::emit_struct_types(&mut p, &blocks)?;
     // Функции — тоже раньше: опережающие ссылки в ST нестандартны (`iec2c -p`).
-    let warnings = st_func::emit_functions(&mut p, &blocks)?;
+    let mut warnings = st_func::emit_functions(&mut p, &blocks)?;
 
     let root_name = map.root_name();
     for (name, model) in &blocks {
@@ -214,6 +214,38 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     // асимметричны намеренно.
     if map.at_addresses() {
         emit_configuration(&mut p, map, &root_name, &blocks)?;
+    }
+
+    // ST-022 (фича 0235): охранная формула в IEC 61131-3 невыразима — конструкции
+    // `assert` там НЕТ вовсе, а ближайший аналог (булев флаг нарушения) ввёл бы
+    // в вывод сущность, которой нет в модели, и семантику «нарушено, но работаем
+    // дальше», расходящуюся с эталоном (`SIM-025` прогон останавливает).
+    //
+    // Поэтому цель ПРЕДУПРЕЖДАЕТ и продолжает трансляцию (решение заказчика
+    // 2026-08-15): отказ лишил бы автора рабочей прошивки ПЛК из-за конструкции,
+    // которая для этой цели лишь неприменима. Молчать нельзя: до 0235 охрана
+    // исчезала бесследно, и автор об этом не узнавал (находка фичи 0203).
+    //
+    // ⚠️ Формулы берутся из ОБЩЕГО сбора мест (`semantic/formula/sites.rs`,
+    // фича 0203), а не из собственного обхода: второй список мест разъехался бы
+    // с первым при появлении нового места объявления формулы.
+    for (_, model) in &blocks {
+        for site in crate::semantic::formula::sites::model_formula_sites(&model.borrow()) {
+            if let crate::semantic::formula::sites::FormulaLeaf::Guard(_) = site.formula {
+                warnings.push(
+                    Diagnostic::warning(
+                        site.loc,
+                        "охранная формула не транслируется целью 'st': в IEC 61131-3 \
+                         конструкции assert не существует, а выразить проверку иначе \
+                         значило бы добавить в вывод переменную, которой нет в модели. \
+                         Охрана остаётся действующей в симуляторе (SIM-025) и в целях \
+                         'c', 'rust', 'sv'"
+                            .to_string(),
+                    )
+                    .with_code("ST-022"),
+                );
+            }
+        }
     }
 
     report(&warnings);
