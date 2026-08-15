@@ -42,12 +42,30 @@ fn not_constant(loc: Location, reason: &str) -> Diagnostic {
 /// [`ExpressionNode`] и по сырому АСД). Разъехавшись, они дали бы разный адрес
 /// для одного и того же текста в зависимости от того, каким путём выражение
 /// попало в разрешение (inline против оператора `address`).
+///
+/// ⚠️ **Сами правила арифметики живут выше** — в
+/// [`int_ops`](crate::semantic::const_eval::int_ops), общей таблице
+/// константного вычисления (фича 0208). Здесь остаётся только то, что
+/// принадлежит **адресу**: запрет операнда формы `адрес:бит`, сужение к `i64` и
+/// собственные тексты диагностик (`SE-055`). Прежде таблица операций была
+/// написана здесь заново и уже разошлась с общей формулировкой сообщения о
+/// сдвиге.
+///
+/// ⚠️ Сужение `as i64` **равносильно** прежней обёртке `wrapping_*` по 64 битам
+/// (сторож — тест `narrowing_to_i64_matches_64bit_wrapping` в `int_ops`).
+///
+/// ⚠️ Сравнения и логика в выражении адреса **не поддержаны**, и отсекают их
+/// не здесь, а **матчеры** (`eval_ast_addr`/`eval_node_addr`): они принимают
+/// только арифметику и побитовые операции, а прочее отвергают, называя список
+/// допустимых форм. Ветвь `Bool` ниже — защита в глубину: если матчер когда-то
+/// пропустит сравнение, адресом булево всё равно не станет.
 fn apply_binary(
     op: &str,
     left: AddrValue,
     right: AddrValue,
     loc: Location,
 ) -> Result<AddrValue, Diagnostic> {
+    use crate::semantic::const_eval::int_ops::{IntOpError, IntOutcome, int_binary};
     // Бит — свойство записи адреса (`0x1000:3`), а не число: арифметика над ним
     // бессмысленна, и молча его терять нельзя.
     if left.1.is_some() || right.1.is_some() {
@@ -56,42 +74,19 @@ fn apply_binary(
             "операнд формы `адрес:бит` не участвует в арифметике",
         ));
     }
-    let (a, b) = (left.0, right.0);
-    let value = match op {
-        "+" => a.wrapping_add(b),
-        "-" => a.wrapping_sub(b),
-        "*" => a.wrapping_mul(b),
-        "/" => {
-            if b == 0 {
-                return Err(not_constant(loc, "деление на ноль"));
-            }
-            a.wrapping_div(b)
+    match int_binary(op, i128::from(left.0), i128::from(right.0)) {
+        Ok(IntOutcome::Int(v)) => Ok((v as i64, None)),
+        // Булево значение адресом быть не может.
+        Ok(IntOutcome::Bool(_)) | Err(IntOpError::UnsupportedOperator) => Err(not_constant(
+            loc,
+            "операция не поддержана в выражении адреса",
+        )),
+        Err(IntOpError::DivisionByZero) => Err(not_constant(loc, "деление на ноль")),
+        Err(IntOpError::RemainderByZero) => Err(not_constant(loc, "остаток от деления на ноль")),
+        Err(IntOpError::ShiftOutOfRange) => {
+            Err(not_constant(loc, "сдвиг допустим только на 0..63 бит"))
         }
-        "%" => {
-            if b == 0 {
-                return Err(not_constant(loc, "остаток от деления на ноль"));
-            }
-            a.wrapping_rem(b)
-        }
-        "<<" | ">>" => {
-            // Сдвиг на отрицательное или ≥ 64 в Rust — паника; у адреса это
-            // всегда опечатка, поэтому диагностика, а не молчание.
-            if !(0..64).contains(&b) {
-                return Err(not_constant(loc, "сдвиг допустим только на 0..63 бит"));
-            }
-            if op == "<<" { a << b } else { a >> b }
-        }
-        "&" => a & b,
-        "|" => a | b,
-        "^" => a ^ b,
-        _ => {
-            return Err(not_constant(
-                loc,
-                "операция не поддержана в выражении адреса",
-            ));
-        }
-    };
-    Ok((value, None))
+    }
 }
 
 /// Вычисляет **сырое АСД**-выражение адреса — путь оператора `address`.

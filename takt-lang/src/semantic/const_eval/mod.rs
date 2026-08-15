@@ -48,6 +48,9 @@
 //! Объединение трёх вычислителей — кандидат в фичи, а не работа этой задачи.
 
 mod call;
+// Таблица целочисленных операций — одна на константное вычисление (фича 0208):
+// её зовёт и этот вычислитель, и выражение адреса.
+pub(crate) mod int_ops;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast;
@@ -422,54 +425,21 @@ fn apply_binary(
 
 /// Целочисленная операция.
 fn int_op(op: &str, a: i128, b: i128, loc: Location) -> Result<ConstValue, Diagnostic> {
-    use ConstValue as V;
-    let value = match op {
-        "+" => V::Int(a.wrapping_add(b)),
-        "-" => V::Int(a.wrapping_sub(b)),
-        "*" => V::Int(a.wrapping_mul(b)),
-        "/" => {
-            if b == 0 {
-                return Err(not_constant(loc, "деление на ноль"));
-            }
-            V::Int(a.wrapping_div(b))
+    use int_ops::{IntOpError, IntOutcome};
+    match int_ops::int_binary(op, a, b) {
+        Ok(IntOutcome::Int(v)) => Ok(ConstValue::Int(v)),
+        Ok(IntOutcome::Bool(v)) => Ok(ConstValue::Bool(v)),
+        Err(IntOpError::DivisionByZero) => Err(not_constant(loc, "деление на ноль")),
+        Err(IntOpError::RemainderByZero) => Err(not_constant(loc, "остаток от деления на ноль")),
+        // Та же граница, что у выражения адреса (0042) и у нормы 0127.
+        Err(IntOpError::ShiftOutOfRange) => {
+            Err(not_constant(loc, "сдвиг определён только на 0..63 бит"))
         }
-        "%" => {
-            if b == 0 {
-                return Err(not_constant(loc, "остаток от деления на ноль"));
-            }
-            V::Int(a.wrapping_rem(b))
-        }
-        // Сдвиг на отрицательное или ≥ 64 в Rust — паника; здесь это всегда
-        // ошибка автора, поэтому диагностика (та же граница, что у 0042 и 0127).
-        "<<" | ">>" => {
-            if !(0..64).contains(&b) {
-                return Err(not_constant(loc, "сдвиг определён только на 0..63 бит"));
-            }
-            if op == "<<" {
-                V::Int(a << b)
-            } else {
-                V::Int(a >> b)
-            }
-        }
-        "&" => V::Int(a & b),
-        "|" => V::Int(a | b),
-        "^" => V::Int(a ^ b),
-        "=" => V::Bool(a == b),
-        "!=" => V::Bool(a != b),
-        "<" => V::Bool(a < b),
-        "<=" => V::Bool(a <= b),
-        ">" => V::Bool(a > b),
-        ">=" => V::Bool(a >= b),
-        "&&" => V::Bool(a != 0 && b != 0),
-        "||" => V::Bool(a != 0 || b != 0),
-        _ => {
-            return Err(not_constant(
-                loc,
-                format!("операция '{op}' при компиляции не вычисляется"),
-            ));
-        }
-    };
-    Ok(value)
+        Err(IntOpError::UnsupportedOperator) => Err(not_constant(
+            loc,
+            format!("операция '{op}' при компиляции не вычисляется"),
+        )),
+    }
 }
 
 /// Разрешает имя: только **константа** модели или её объемлющих.

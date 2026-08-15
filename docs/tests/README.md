@@ -158,3 +158,4 @@
 | 0205 | Приведение as не вычисляется в инициализаторе объявления | [0205-as-in-declaration-initializer.md](0205-as-in-declaration-initializer.md) | ✅ ПРОЙДЕН (отчёт: [reports/0205](../reports/0205-as-in-declaration-initializer.md)) |
 | 0206 | Вариант импортированного перечисления не разрешается в образце match | [0206-imported-enum-variant-in-match.md](0206-imported-enum-variant-in-match.md) | ✅ ПРОЙДЕН (отчёт: [reports/0206](../reports/0206-imported-enum-variant-in-match.md)) |
 | 0207 | Отрицание ~0 для беззнакового типа: два правила языка столкнулись | [0207-bitwise-not-unsigned-literal.md](0207-bitwise-not-unsigned-literal.md) | ✅ ПРОЙДЕН (отчёт: [reports/0207](../reports/0207-bitwise-not-unsigned-literal.md)) |
+| 0208 | Три константных вычислителя компилятора живут порознь | [0208-const-evaluators-unification.md](0208-const-evaluators-unification.md) | ✅ ПРОЙДЕН (отчёт: [reports/0208](../reports/0208-const-evaluators-unification.md)) |
