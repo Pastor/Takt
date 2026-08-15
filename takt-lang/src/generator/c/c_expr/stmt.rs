@@ -81,7 +81,16 @@ pub(in crate::generator::c) fn generate_code_block(
 ) -> Result<(), Diagnostic> {
     match body {
         StatementNode::None => {}
-        StatementNode::Unresolved(_) => {}
+        // ⚠️ Неразрешённый оператор — отказ, а не пропуск (фича 0236). Прежде
+        // ветвь была пуста, и оператор исчезал из вывода при рапорте об успехе:
+        // тот же класс, что фикс 0155 (печать `Unresolved` пустотой) и фича 0189
+        // (`Err(_) => {}` глотал любую ошибку печати).
+        StatementNode::Unresolved(raw) => {
+            return Err(crate::generator::c::c_unresolved::refuse(
+                raw.loc(),
+                crate::generator::c::c_unresolved::UnresolvedNode::Statement,
+            ));
+        }
 
         StatementNode::Block(block) => {
             for stmt in block {

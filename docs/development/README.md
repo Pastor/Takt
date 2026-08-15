@@ -393,3 +393,4 @@
 | 0235-01 | 0235 | Цели st и sv теряют охранную формулу | [0235-01-guard-formula-in-st-sv.md](0235-01-guard-formula-in-st-sv.md) |
 | 0235-02 | 0235 | Цели st и sv теряют охранную формулу | [0235-02-guard-formula-in-st-sv.md](0235-02-guard-formula-in-st-sv.md) |
 | 0235-03 | 0235 | Цели st и sv теряют охранную формулу | [0235-03-guard-formula-in-st-sv.md](0235-03-guard-formula-in-st-sv.md) |
+| 0236-01 | 0236 | Печатник цели c печатает пустоту на неразрешённом условии | [0236-01-c-unresolved-condition-refusal.md](0236-01-c-unresolved-condition-refusal.md) |
