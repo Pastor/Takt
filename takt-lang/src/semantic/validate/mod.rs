@@ -40,7 +40,10 @@ mod enums;
 mod fixed;
 mod formulas;
 mod implicit_bool;
-mod literal_range;
+// `pub(crate)`, а не `mod`: границы целочисленного типа (`type_range`) нужны и
+// свёртке инициализатора (фича 0207) — вторая копия границ разошлась бы с
+// проверкой `SE-089`.
+pub(crate) mod literal_range;
 mod member_access;
 mod name_collisions;
 mod nondeterminism;
