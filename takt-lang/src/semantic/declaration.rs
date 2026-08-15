@@ -423,6 +423,10 @@ pub(crate) fn fold_variable_initializers(
         if is_literal(source) {
             continue;
         }
+        // Вычисленное значение НОРМИРУЕТСЯ по типу объявления (фича 0207,
+        // решение заказчика 2026-08-16). Литерал автора сюда не доходит — он
+        // отсечён строкой выше, и его выход за границы по-прежнему `SE-089`.
+        let literal = normalize_computed(literal, declared_type(&variables[name]));
         // Литерал обязан быть РАЗРЕШЁН здесь: свёртка идёт последней, и
         // разрешать `Unresolved` после неё уже некому — потребители получили бы
         // неразрешённый узел, а он для них «не константа» (то есть ноль).
@@ -431,6 +435,53 @@ pub(crate) fn fold_variable_initializers(
         set_initializer(slot, resolved, loc);
     }
     Ok(folded)
+}
+
+/// Тип объявления, если он у него есть.
+fn declared_type(var: &VariableNode) -> Option<&crate::semantic::type_node::TypeNode> {
+    match var {
+        VariableNode::Simple { ty, .. } | VariableNode::Const { ty, .. } => Some(ty),
+        VariableNode::Port { .. } | VariableNode::Unresolved => None,
+    }
+}
+
+/// Нормирует **вычисленное** значение по типу объявления (фича 0207).
+///
+/// # Почему это правило языка, а не удобство свёртки
+///
+/// Одна и та же запись отвечала по-разному в зависимости от места: в теле
+/// `u := ~0;` даёт `255` у эталона и у целей `c`/`rust`, а в объявлении
+/// `var u: u8 := ~0;` отвергалось `SE-089` — свёртка (0192) считала `-1` в
+/// `i128`, а проверка диапазона (0157) отвергала результат. Нормирование
+/// приводит объявление к тому же ответу, что даёт тело: беззнаковое —
+/// **обёртка `mod 2ⁿ`** (правило ADR 0127), знаковое — по-прежнему ошибка, то
+/// есть значение остаётся как есть и его отвергает `SE-089`.
+///
+/// ⚠️ **Литерал автора сюда не попадает** (вызывающий отсекает его раньше):
+/// `var u: u8 := 300;` обязан остаться ошибкой — автор написал число, которое
+/// не помещается, и молча заменить его на `44` значило бы потерять диагностику
+/// 0157.
+///
+/// ⚠️ Границы берутся у **единственного** их носителя —
+/// `validate::literal_range::type_range`: своя копия разошлась бы с проверкой, и
+/// свёртка нормировала бы к одним границам, а `SE-089` судил по другим.
+fn normalize_computed(
+    literal: crate::parser::ast::Expression,
+    ty: Option<&crate::semantic::type_node::TypeNode>,
+) -> crate::parser::ast::Expression {
+    use crate::parser::ast::Expression as E;
+    let (E::Number(loc, value), Some(ty)) = (&literal, ty) else {
+        return literal;
+    };
+    let Some((lo, hi)) = crate::semantic::validate::literal_range::type_range(ty) else {
+        return literal;
+    };
+    // Беззнаковый тип узнаём по нижней границе: маска — сама верхняя граница
+    // (`2ⁿ - 1`), поэтому ширину пересчитывать не нужно.
+    if lo == 0 && (*value < lo || *value > hi) {
+        return E::Number(*loc, *value & hi);
+    }
+    literal
 }
 
 /// Литерал ли выражение: сворачивать такое нечего.
