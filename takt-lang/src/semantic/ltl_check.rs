@@ -24,8 +24,8 @@
 //! не печатает (известный дефект в бэклоге), но они доступны через API и тесты.
 
 use crate::diagnostics::{Diagnostic, Location};
-use crate::semantic::formula::Formula;
-use crate::semantic::{FunctionDefinitionNode, ModelNode, StatementNode};
+use crate::semantic::ModelNode;
+use crate::semantic::formula::sites::{FormulaLeaf, model_formula_sites};
 use crate::verification::ltl::Ltl;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -116,111 +116,28 @@ pub struct LtlSite {
 /// Вложенные модели **не обходятся**: их формулы говорят о состояниях своей
 /// модели и проверяются против её же графа (фича 0049).
 ///
-/// Общий источник истины об «где лежат LTL-формулы»: используется
-/// диагностиками ([`ltl_warnings`]) и верификацией
-/// ([`verify_all`](crate::verify_all)). Паритет уровней — наследие 0035-01: если
-/// добавится новое место объявления формулы, добавлять его нужно здесь, иначе
-/// оно молча выпадет из обоих потребителей.
+/// ⚠️ Обход здесь **не написан**: это фильтр над общим сбором сайтов
+/// ([`model_formula_sites`], фича 0203). Список мест объявления формулы живёт
+/// в одном месте — [`formula::sites`](crate::semantic::formula::sites), — потому
+/// что второй его экземпляр разъехался бы с первым при появлении нового места
+/// (класс 0084/0193/0195). Потребителей у сбора два: эти диагностики вместе с
+/// верификацией ([`verify_all`](crate::verify_all)) и проверка охранных формул
+/// в `validate`.
 pub(crate) fn model_ltl_formulas(model: &ModelNode) -> Vec<LtlSite> {
-    let mut out = Vec::new();
-
-    // Формулы уровня модели.
-    for f in &model.formulas {
-        collect_formula(f, model.loc, None, &mut out);
-    }
-    // Формулы уровня состояний: прямые (`: [LTL]` в теле состояния) и внутри
-    // именованных блоков состояния (`always`/`enter`/`exit`). И те и другие
-    // объявлены в области состояния: `enter`/`exit`/`always` исполняются, лишь
-    // когда автомат в нём, — область у них та же, что у тела.
-    for state in model.states.values() {
-        let scope = Some(state.name().to_string());
-        for f in state.formulas() {
-            collect_formula(f, state.loc(), scope.clone(), &mut out);
-        }
-        for block in state.named_blocks() {
-            if let Some(stmt) = block.statement() {
-                walk_statement(stmt, state.loc(), scope.clone(), &mut out);
-            }
-        }
-    }
-    // Формулы в телах именованных блоков (`enter`/`exit`/`always`).
-    for block in &model.named_blocks {
-        if let Some(stmt) = block.statement() {
-            walk_statement(stmt, model.loc, None, &mut out);
-        }
-    }
-    // Формулы в телах функций: функцию вправе позвать любое состояние, поэтому
-    // область — модель, а не состояние вызова.
-    for func in model.functions.values() {
-        if let FunctionDefinitionNode::Local { body, .. } = func {
-            walk_statement(body, model.loc, None, &mut out);
-        }
-    }
-
-    out
-}
-
-/// Обходит оператор в поисках встроенных формул (`: [LTL] …;` в блоке кода).
-fn walk_statement(
-    stmt: &StatementNode,
-    loc: Location,
-    scope: Option<String>,
-    out: &mut Vec<LtlSite>,
-) {
-    match stmt {
-        StatementNode::InlineFormula(formulas) => {
-            for f in formulas {
-                collect_formula(f, loc, scope.clone(), out);
-            }
-        }
-        StatementNode::Block(stmts) => {
-            for s in stmts {
-                walk_statement(s, loc, scope.clone(), out);
-            }
-        }
-        StatementNode::If { then_, else_, .. } => {
-            walk_statement(then_, loc, scope.clone(), out);
-            if let Some(e) = else_ {
-                walk_statement(e, loc, scope.clone(), out);
-            }
-        }
-        StatementNode::Loop { body, .. } => walk_statement(body, loc, scope.clone(), out),
-        StatementNode::For { init, body, .. } => {
-            if let Some(i) = init {
-                walk_statement(i, loc, scope.clone(), out);
-            }
-            walk_statement(body, loc, scope.clone(), out);
-        }
-        StatementNode::Match { arms, .. } => {
-            for arm in arms {
-                walk_statement(&arm.body, loc, scope.clone(), out);
-            }
-        }
-        // Прочие операторы формул не содержат.
-        _ => {}
-    }
-}
-
-/// Разворачивает [`Formula`] в LTL-формулы (Guard/None их не несут).
-fn collect_formula(
-    formula: &Formula,
-    loc: Location,
-    scope: Option<String>,
-    out: &mut Vec<LtlSite>,
-) {
-    match formula {
-        Formula::LTL(ltl) => out.push(LtlSite {
-            formula: ltl.clone(),
-            loc,
-            state: scope,
-        }),
-        Formula::Formulas(inner) => {
-            for f in inner {
-                collect_formula(f, loc, scope.clone(), out);
-            }
-        }
-        Formula::Guard(_, _) | Formula::None => {}
-    }
+    model_formula_sites(model)
+        .into_iter()
+        .filter_map(|site| match site.formula {
+            FormulaLeaf::Ltl(formula) => Some(LtlSite {
+                formula,
+                loc: site.loc,
+                state: site.state,
+            }),
+            // Охранные формулы — предмет `validate` (SE-025 и прочие проверки
+            // условия, фича 0203), а не этих предупреждений: режим строгости у
+            // них разный, и это решение ADR 0203, а не пропуск.
+            FormulaLeaf::Guard(_) => None,
+        })
+        .collect()
 }
 
 /// Собирает имена атомов LTL-формулы (без `true`/`false`).

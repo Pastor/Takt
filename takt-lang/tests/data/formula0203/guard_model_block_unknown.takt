@@ -1,0 +1,11 @@
+// Фикстура 0203: формула в ИМЕНОВАННОМ БЛОКЕ МОДЕЛИ (`always` уровня модели).
+var level: u8 := 0;
+
+always {
+    : [Guard] levl < 3;
+    level := level + 1;
+}
+
+start Run {
+    ref Run;
+}

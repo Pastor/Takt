@@ -1,0 +1,8 @@
+// Фикстура 0203: КРАТКАЯ форма охранной формулы (`: c;` без `[Guard]`).
+var level: u8 := 0;
+
+start Run {
+    : levl < 3;
+    always { level := level + 1; }
+    ref Run;
+}

@@ -1,0 +1,10 @@
+// Фикстура 0203: формула в ИМЕНОВАННОМ БЛОКЕ СОСТОЯНИЯ (`always` состояния).
+var level: u8 := 0;
+
+start Run {
+    always {
+        : [Guard] levl < 3;
+        level := level + 1;
+    }
+    ref Run;
+}

@@ -1,0 +1,8 @@
+// Фикстура 0203: охранная формула в ТЕЛЕ СОСТОЯНИЯ с опечаткой в имени.
+var level: u8 := 0;
+
+start Run {
+    : [Guard] levl < 3;
+    always { level := level + 1; }
+    ref Run;
+}

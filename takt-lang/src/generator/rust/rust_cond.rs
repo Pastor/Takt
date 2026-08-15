@@ -242,23 +242,13 @@ fn state_comparison(
 }
 
 /// Извлекает модель из левой части: `Модель` либо `S(Модель)`.
+///
+/// Разбор формы — общий на проект (`semantic::condition::state_of`, фича 0203);
+/// здесь лишь клонирование `Rc` под сигнатуру вызывающего.
 fn model_of(
     cond: &ConditionNode,
 ) -> Option<std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>> {
-    match cond {
-        ConditionNode::Model(model, _) => Some(std::rc::Rc::clone(model)),
-        ConditionNode::Function(fun, args, _) => {
-            if !matches!(&*fun.borrow(), FunctionDefinitionNode::Builtin("S", ..)) {
-                return None;
-            }
-            // Арность `S` — ровно один параметр, проверена семантикой.
-            match args.first().map(|a| a.as_ref())? {
-                ConditionNode::Model(model, _) => Some(std::rc::Rc::clone(model)),
-                _ => None,
-            }
-        }
-        _ => None,
-    }
+    crate::semantic::condition::state_of::state_of_model(cond).map(std::rc::Rc::clone)
 }
 
 /// Печатает бинарное условие. Скобки — см. [`binary`](super::rust_expr).
