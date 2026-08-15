@@ -36,8 +36,19 @@ pub(in crate::generator::c) fn generate_expr(
             )?;
             printer.print(&millis.to_string());
         }
-        ExpressionNode::None | ExpressionNode::Unresolved(_) => {
+        // Выражения нет вовсе: полезной нагрузки у ветви тоже нет, позицию
+        // взять негде — отказ остаётся безликим. Это предмет фичи 0212
+        // («диагностика цели `c` без кода»), а не забывчивость.
+        ExpressionNode::None => {
             return Err("Неразрешённое выражение".into());
+        }
+        // ⚠️ Неразрешённое выражение отделено от отсутствующего (фича 0236):
+        // узел несёт АСД, а значит и позицию, и отказ обязан её нести.
+        ExpressionNode::Unresolved(raw) => {
+            return Err(crate::generator::c::c_unresolved::refuse(
+                raw.loc(),
+                crate::generator::c::c_unresolved::UnresolvedNode::Expression,
+            ));
         }
 
         // ── Литералы ──────────────────────────────────────────────────────────

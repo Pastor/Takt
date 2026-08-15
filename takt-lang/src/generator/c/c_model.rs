@@ -134,10 +134,15 @@ fn generate_state_transitions(
         let Some(target) = states.iter().find(|n| n.local() == reference.name).cloned() else {
             continue; // целевое состояние не найдено в достижимых состояниях
         };
-        let has_cond = !matches!(
-            reference.cond,
-            ConditionNode::None | ConditionNode::Unresolved(_)
-        );
+        // Условие есть у всего, кроме `None`.
+        //
+        // ⚠️ `Unresolved` отсюда изъят (фича 0236): прежде неразрешённое условие
+        // считалось ОТСУТСТВИЕМ условия, и ребро печаталось **безусловным**
+        // переходом. Это опаснее пустой строки в печатнике: вывод валиден, `cc`
+        // молчит, а автомат другой — переход срабатывает всегда. Теперь такое
+        // ребро идёт в печатник, получает `CC-023` и доезжает до автора обёрткой
+        // `CC-018` (позиция ребра + причина заметкой, устройство ADR 0028).
+        let has_cond = !matches!(reference.cond, ConditionNode::None);
         if has_cond {
             match generate_condition_expr(&reference.cond, map, model) {
                 Ok(cond_str) => {

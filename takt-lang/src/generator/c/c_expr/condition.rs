@@ -167,7 +167,17 @@ pub(in crate::generator::c) fn generate_condition_expr(
     owner: &Element,
 ) -> Result<String, Diagnostic> {
     match cond {
-        ConditionNode::None | ConditionNode::Unresolved(_) => Ok(String::new()),
+        // Безусловный переход — штатный случай: условия нет, печатать нечего.
+        ConditionNode::None => Ok(String::new()),
+        // ⚠️ Неразрешённое условие — НЕ отсутствие условия (фича 0236). Прежде
+        // обе ветви стояли рядом и отдавали пустую строку: `: [Guard] levl < 3;`
+        // давал `assert( < 3);`, и отказ приходил от `cc`, а не от языка.
+        // Позиция берётся у самого узла: сообщение без координаты в пачке
+        // диагностик бесполезно.
+        ConditionNode::Unresolved(raw) => Err(crate::generator::c::c_unresolved::refuse(
+            raw.loc(),
+            crate::generator::c::c_unresolved::UnresolvedNode::Condition,
+        )),
         ConditionNode::Bool(b) => Ok(if *b { "true" } else { "false" }.to_string()),
         // Анонимное обращение в условии (фича 0189): в условие доходит только
         // битовая форма — ширину в грамматике условий задать нечем.

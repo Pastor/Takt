@@ -1,0 +1,271 @@
+//! Отказ цели `c` на неразрешённом узле — единая воронка (фича 0236).
+//!
+//! # Зачем
+//!
+//! Узел, не прошедший семантическое понижение (`ConditionNode::Unresolved` и
+//! родственные), доходя до печатника, **терялся**: условие печаталось пустой
+//! строкой (`assert( < 3);` — отказ давал `cc`, а не язык), оператор
+//! пропускался целиком, выражение отказывало без кода и без позиции. Хуже
+//! того: ребро с неразрешённым условием считалось **безусловным** переходом —
+//! вывод валиден, автомат другой.
+//!
+//! # Устройство
+//!
+//! Код и текст диагностики собираются здесь **один раз**; печатники воронку
+//! лишь зовут. Второй конструктор разошёлся бы формулировкой с первым — класс
+//! 0084/0193/0195. Образец — `format::unsupported(loc, вид)` → `FM-001`
+//! (фича 0229): **один** код, вид узла назван словом, позиция берётся из
+//! АСД-узла, лежащего в полезной нагрузке `Unresolved`.
+//!
+//! ⚠️ **Не всякий `Unresolved` — дефект.** Правая часть паттерна
+//! `S(Модель) = Состояние` приходит в цель неразрешённой **по инварианту
+//! проекта** (проход `resolve_state_references` запрещён). Её разбирает
+//! `c_expr::condition::generate_state_comparison` — **до** общего печатника, и
+//! до этой воронки она не доходит. Заводя новую форму, проверь порядок: сначала
+//! разбор законной формы, потом отказ.
+
+use crate::diagnostics::{Diagnostic, Location};
+
+/// Вид узла, дошедшего до печатника цели `c` неразрешённым.
+///
+/// Перечисление, а не строка: сторож фичи (`tests` ниже) обязан **перечислить**
+/// виды и упасть списком, если какой-то перестал отвечать `CC-023`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::generator::c) enum UnresolvedNode {
+    /// Условие перехода либо охранной формулы.
+    Condition,
+    /// Выражение в теле блока или функции.
+    Expression,
+    /// Оператор тела блока или функции.
+    Statement,
+}
+
+impl UnresolvedNode {
+    /// Название вида узла для текста диагностики (с согласованным родом).
+    pub(in crate::generator::c) fn phrase(self) -> &'static str {
+        match self {
+            UnresolvedNode::Condition => "неразрешённое условие",
+            UnresolvedNode::Expression => "неразрешённое выражение",
+            UnresolvedNode::Statement => "неразрешённый оператор",
+        }
+    }
+
+    /// Все виды — для сторожа (перечисление обязано быть полным).
+    #[cfg(test)]
+    pub(in crate::generator::c) const ALL: [UnresolvedNode; 3] = [
+        UnresolvedNode::Condition,
+        UnresolvedNode::Expression,
+        UnresolvedNode::Statement,
+    ];
+}
+
+/// Строит отказ печати неразрешённого узла — диагностику **`CC-023`**.
+///
+/// `loc` — позиция **самого узла** (`ast::Condition::loc()`,
+/// `ast::Expression::loc()`, `ast::Statement::loc()`), а не места, где отказ
+/// обнаружен: в пачке диагностик (фича 0130) сообщение без координаты
+/// бесполезно.
+///
+/// ⚠️ Состояние, о котором сообщает `CC-023`, из корректной программы
+/// **недостижимо** — его отсекает семантика (`SE-025`/`SE-003`). Это защита в
+/// глубину: недостижимость держит **другая** фича, и каждая новая конструкция
+/// языка способна открыть путь снова. Молчание в этом месте уже стоило проекту
+/// дефекта (фича 0203: формулы не обходил никто).
+pub(in crate::generator::c) fn refuse(loc: Location, node: UnresolvedNode) -> Diagnostic {
+    Diagnostic::error(
+        loc,
+        format!(
+            "{}: узел не прошёл семантическое понижение и в C не переводится",
+            node.phrase()
+        ),
+    )
+    .with_code("CC-023")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generator::c::c_expr::{
+        generate_code_block, generate_condition_expr, generate_stmt_expression,
+    };
+    use crate::generator::c::c_map::CMap;
+    use crate::generator::indent::Printer;
+    use crate::parser::ast;
+    use crate::semantic::minimap::Element;
+    use crate::semantic::{ConditionNode, ExpressionNode, StateNode, StatementNode};
+    use crate::{parse, semantic};
+
+    /// Позиция, которую несёт подложенный узел: по ней сверяем, что диагностика
+    /// указывает на **узел**, а не на место обнаружения.
+    const PROBE: Location = Location::Source(7, 11, 13);
+
+    /// Минимальные карта и владелец для вызова печатников (образец `c_source`).
+    fn map_and_owner(src: &str) -> (CMap, Element) {
+        let (ast_model, _) = parse(src, 0).expect("разбор");
+        let model_rc = semantic::tree::construct_model(&ast_model, None, &[]).expect("дерево");
+        model_rc.borrow_mut().name = Some("Probe".to_string());
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &model, true).expect("карта");
+        let owner = Element::Model {
+            name: map.root_name().clone(),
+            states: map.states().clone(),
+            start: map.start().clone(),
+        };
+        (map, owner)
+    }
+
+    /// Неразрешённое условие с известной позицией.
+    fn unresolved_condition() -> ConditionNode {
+        ConditionNode::Unresolved(ast::Condition::Number(PROBE, 1))
+    }
+
+    /// Модель-заглушка: сама по себе корректна, узлы подкладываются тестом.
+    const SRC: &str = "var lev: u8 := 0;\nstart Run { always { lev := lev + 1; } }\n";
+
+    /// **T1.** Неразрешённое **условие** даёт `CC-023` с позицией узла.
+    ///
+    /// Прежде здесь стояло `Ok(String::new())` — печатник отдавал пустую
+    /// строку, и `assert( < 3);` уезжал в порождённый C.
+    #[test]
+    fn unresolved_condition_refuses_with_position() {
+        let (map, owner) = map_and_owner(SRC);
+        let diagnostic = generate_condition_expr(&unresolved_condition(), &map, &owner)
+            .expect_err("ожидался отказ на неразрешённом условии");
+        assert_eq!(diagnostic.code.as_deref(), Some("CC-023"));
+        assert_eq!(diagnostic.loc, PROBE);
+        assert!(
+            diagnostic.message.contains("неразрешённое условие"),
+            "текст не называет вид узла: {}",
+            diagnostic.message
+        );
+    }
+
+    /// **T2.** Безусловный переход (`ConditionNode::None`) по-прежнему даёт
+    /// пустую строку: отказ отделён от штатного случая, а не заменил его.
+    #[test]
+    fn absent_condition_still_prints_empty() {
+        let (map, owner) = map_and_owner(SRC);
+        let text = generate_condition_expr(&ConditionNode::None, &map, &owner).expect("не отказ");
+        assert!(text.is_empty(), "ожидалась пустая строка, получено: {text}");
+    }
+
+    /// **T3.** Неразрешённый **оператор** даёт `CC-023`, а не молчаливый пропуск.
+    ///
+    /// Пропуск здесь — потеря оператора при рапорте об успехе (класс фикса 0155
+    /// и фичи 0189).
+    #[test]
+    fn unresolved_statement_refuses_with_position() {
+        let (map, owner) = map_and_owner(SRC);
+        let mut buf = String::new();
+        let mut printer = Printer::new(4, &mut buf);
+        let stmt = StatementNode::Unresolved(ast::Statement::Continue(PROBE));
+        let diagnostic = generate_code_block(&mut printer, &map, &owner, vec![], &stmt, true)
+            .expect_err("ожидался отказ на неразрешённом операторе");
+        assert_eq!(diagnostic.code.as_deref(), Some("CC-023"));
+        assert_eq!(diagnostic.loc, PROBE);
+        assert!(
+            diagnostic.message.contains("неразрешённый оператор"),
+            "текст не называет вид узла: {}",
+            diagnostic.message
+        );
+        assert!(buf.is_empty(), "в вывод попал текст: {buf}");
+    }
+
+    /// **T4.** Неразрешённое **выражение** даёт `CC-023` с позицией.
+    ///
+    /// Прежде отказ был, но безликий: `Err("Неразрешённое выражение")` — без
+    /// кода и без координаты (класс фичи 0212).
+    #[test]
+    fn unresolved_expression_refuses_with_position() {
+        let (map, owner) = map_and_owner(SRC);
+        let mut buf = String::new();
+        let mut printer = Printer::new(4, &mut buf);
+        let expr = ExpressionNode::Unresolved(ast::Expression::Number(PROBE, 1));
+        let diagnostic = generate_stmt_expression(&mut printer, &map, &owner, vec![], &expr, true)
+            .expect_err("ожидался отказ на неразрешённом выражении");
+        assert_eq!(diagnostic.code.as_deref(), Some("CC-023"));
+        assert_eq!(diagnostic.loc, PROBE);
+        assert!(
+            diagnostic.message.contains("неразрешённое выражение"),
+            "текст не называет вид узла: {}",
+            diagnostic.message
+        );
+    }
+
+    /// **T5.** Ребро с неразрешённым условием **не** печатается безусловным
+    /// переходом: ответ — `CC-018` с позицией ребра и причиной `CC-023` заметкой.
+    ///
+    /// Прежде `generate_state_transitions` считал `Unresolved` отсутствием
+    /// условия, и порождённый C содержал безусловный переход: `cc` принимал его
+    /// без замечаний, а автомат менялся — переход срабатывал всегда. Проба
+    /// старого поведения (2026-08-16) давала в `.c` строку
+    /// `model->state = PROBE_DONE;` без единого `if`.
+    #[test]
+    fn unresolved_edge_condition_is_not_an_unconditional_transition() {
+        let (ast_model, _) = parse(
+            "var lev: u8 := 0;\n\
+             start Run { ref Done: lev < 3; }\n\
+             state Done { always { lev := 1; } }\n",
+            0,
+        )
+        .expect("разбор");
+        let model_rc = semantic::tree::construct_model(&ast_model, None, &[]).expect("дерево");
+        model_rc.borrow_mut().name = Some("Probe".to_string());
+        // Подкладываем неразрешённое условие в ребро: из исходника такое дерево
+        // не построить — `construct_model` отвергает вход `SE-025`.
+        {
+            let mut model = model_rc.borrow_mut();
+            let state = model.states.get_mut("Run").expect("состояние Run");
+            let StateNode::Simple { references, .. } = state else {
+                panic!("ожидалось простое состояние");
+            };
+            references[0].cond = unresolved_condition();
+        }
+        let model = model_rc.borrow();
+        let map = CMap::new(model.name(), &model, true).expect("карта");
+        let diagnostic = crate::generator::c::c_source::generate_source(map.get_filename(), &map)
+            .expect_err("ожидался отказ на ребре с неразрешённым условием");
+        assert_eq!(diagnostic.code.as_deref(), Some("CC-018"));
+        assert!(
+            diagnostic
+                .notes
+                .iter()
+                .any(|n| n.message.contains("CC-023")),
+            "причина не приложена заметкой: {:?}",
+            diagnostic.notes
+        );
+    }
+
+    /// **T6. Сторож класса.** Каждый вид узла из [`UnresolvedNode::ALL`] обязан
+    /// иметь **своё** название в тексте и отдавать `CC-023`.
+    ///
+    /// Падает **списком**: новый вид, забытый в `phrase`, называется поимённо.
+    /// Проверять «программа падает» здесь нечем — дерево с неразрешённым узлом
+    /// из исходника не построить (замер: `construct_model` отвергает вход
+    /// `SE-025`/`SE-003`), поэтому мера сторожа — **ветвь**.
+    #[test]
+    fn every_kind_of_unresolved_node_is_named_and_coded() {
+        let mut seen: Vec<&str> = Vec::new();
+        let mut broken: Vec<String> = Vec::new();
+        for node in UnresolvedNode::ALL {
+            let diagnostic = refuse(PROBE, node);
+            if diagnostic.code.as_deref() != Some("CC-023") {
+                broken.push(format!("{node:?}: код {:?}", diagnostic.code));
+            }
+            if diagnostic.loc != PROBE {
+                broken.push(format!("{node:?}: позиция потеряна"));
+            }
+            if !diagnostic.message.contains(node.phrase()) {
+                broken.push(format!("{node:?}: текст не называет вид узла"));
+            }
+            if seen.contains(&node.phrase()) {
+                broken.push(format!("{node:?}: название вида не отличает его от других"));
+            }
+            seen.push(node.phrase());
+        }
+        assert!(
+            broken.is_empty(),
+            "виды узлов без отказа CC-023: {broken:?}"
+        );
+    }
+}
