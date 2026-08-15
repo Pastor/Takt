@@ -150,3 +150,4 @@
 | 0160 | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | [0160-takt-ebnf-sync.md](0160-takt-ebnf-sync.md) | СОЗДАНА |
 | 0170 | Насыщение (saturation) для fixed-point q(m, n) | [0170-fixed-point-saturation.md](0170-fixed-point-saturation.md) | ✅ ПРОЙДЕН (отчёт: [reports/0170](../reports/0170-fixed-point-saturation.md)) |
 | 0203 | validate не обходит формулы: неизвестное имя в Guard молчит | [0203-validate-formulas-traversal.md](0203-validate-formulas-traversal.md) | ✅ ПРОЙДЕН (отчёт: [reports/0203](../reports/0203-validate-formulas-traversal.md)) |
+| 0234 | Профилирование и ускорение предкоммита | [0234-precheck-time-profile.md](0234-precheck-time-profile.md) | ✅ ПРОЙДЕН (отчёт: [reports/0234](../reports/0234-precheck-time-profile.md)) |

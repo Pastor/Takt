@@ -387,3 +387,6 @@
 | 0203-01 | 0203 | validate не обходит формулы: неизвестное имя в Guard молчит | [0203-01-validate-formulas-traversal.md](0203-01-validate-formulas-traversal.md) |
 | 0203-02 | 0203 | validate не обходит формулы: неизвестное имя в Guard молчит | [0203-02-validate-formulas-traversal.md](0203-02-validate-formulas-traversal.md) |
 | 0203-03 | 0203 | validate не обходит формулы: неизвестное имя в Guard молчит | [0203-03-validate-formulas-traversal.md](0203-03-validate-formulas-traversal.md) |
+| 0234-01 | 0234 | Профилирование и ускорение предкоммита | [0234-01-precheck-time-profile.md](0234-01-precheck-time-profile.md) |
+| 0234-02 | 0234 | Профилирование и ускорение предкоммита | [0234-02-precheck-time-profile.md](0234-02-precheck-time-profile.md) |
+| 0234-03 | 0234 | Профилирование и ускорение предкоммита | [0234-03-precheck-time-profile.md](0234-03-precheck-time-profile.md) |

@@ -1,8 +1,8 @@
 # Фича 0234: Профилирование и ускорение предкоммита
 
 - **Номер:** 0234
-- **Статус:** СОЗДАНА
-- **Зависит от:** нет — проставит аналитик на стадии анализа (правило 17); смежные [0190](0190-precheck-selective-gates.md) и [0219](0219-mmap-conformance-cost.md) закрыты либо в работе
+- **Статус:** ГОТОВО
+- **Зависит от:** нет (проставлено анализом); смежные [0190](0190-precheck-selective-gates.md) закрыта, [0219](0219-mmap-conformance-cost.md) — `СОЗДАНА`
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (замер при закрытии [0170](0170-fixed-point-saturation.md)), переведён в фичу 2026-08-15 по запросу заказчика
 
 ## Ссылки на артефакты (жизненный цикл, правило 17)
@@ -11,9 +11,9 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0234-precheck-time-profile.md`](../adr/0234-precheck-time-profile.md) |
 | Анализ | [`docs/analyze/0234-precheck-time-profile.md`](../analyze/0234-precheck-time-profile.md) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0234-YY-*`) |
-| Тест-план | [`docs/tests/0234-precheck-time-profile.md`](../tests/README.md) |
-| Отчёт о тестировании | [`docs/reports/0234-precheck-time-profile.md`](../reports/README.md) |
+| Разработка | [`0234-01`](../development/0234-01-precheck-time-profile.md) · [`0234-02`](../development/0234-02-precheck-time-profile.md) · [`0234-03`](../development/0234-03-precheck-time-profile.md) |
+| Тест-план | [`docs/tests/0234-precheck-time-profile.md`](../tests/0234-precheck-time-profile.md) |
+| Отчёт о тестировании | [`docs/reports/0234-precheck-time-profile.md`](../reports/0234-precheck-time-profile.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0234-YY-*`) |
 
 ## Краткое описание
@@ -83,3 +83,30 @@ cargo build (1 crates compiled) … in 56.74s
      «## Итог (что сделано)» —
      ссылки на отчёт/фиксы (правило 21). Незакрытые фичи «Итога» не имеют. -->
 
+
+## Итог (что сделано)
+
+**Предкоммит идёт 230 секунд с нуля и 101 секунду повторно — вместо более чем суток.** Причина найдена замером и
+оказалась не той, что предполагала запись кандидата: у cargo нет сборки мусора,
+общий `target` вырос до 83 ГБ (599 435 файлов в `debug/deps`), и **один листинг
+такого каталога стоит 66.7 с** против 0.13 с у здорового — а cargo обходит его
+перед каждой единицей компиляции.
+
+- Предкоммит собирает в **собственный** `target/precheck`: состояние каталога
+  стало свойством гейта, а не дисциплиной автора.
+- [`scripts/precheck-hygiene.sh`](../../scripts/precheck-hygiene.sh) чистит его
+  по аварийному порогу, измеряя размер **записи каталога** (`stat`, 0.021 с) —
+  `du`/`find`/`ls` на больном каталоге стоят 67–74 с и сами становятся болезнью.
+- Удаляется **только** каталог гейта (путь обязан оканчиваться на
+  `/target/precheck`); сторож
+  [`scripts/test-precheck-hygiene.sh`](../../scripts/test-precheck-hygiene.sh)
+  проверяет и отказ на чужом пути.
+- **Отвергнуты замером:** `cargo-nextest` и объединение тестовых целей (закрыли
+  бы 56 с из суток), медленный внешний том (18 с против 19 с на локальном SSD),
+  отключение инкрементальности (2 с повторной сборки против 19 с холодной).
+
+Задачи: [`0234-01`](../development/0234-01-precheck-time-profile.md) ·
+[`0234-02`](../development/0234-02-precheck-time-profile.md) ·
+[`0234-03`](../development/0234-03-precheck-time-profile.md).
+Отчёт: [`docs/reports/0234-precheck-time-profile.md`](../reports/0234-precheck-time-profile.md).
+Исправлений не потребовалось.
