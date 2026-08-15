@@ -1,7 +1,7 @@
 # Фича 0235: Цели st и sv теряют охранную формулу
 
 - **Номер:** 0235
-- **Статус:** СОЗДАНА
+- **Статус:** ГОТОВО
 - **Зависит от:** нет — проставит аналитик (правило 17); [0203](0203-validate-formulas-traversal.md) закрыта
 - **Связанные issue (анализ):** находка при закрытии [0203](0203-validate-formulas-traversal.md), 2026-08-15
 
@@ -11,9 +11,9 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0235-guard-formula-in-st-sv.md`](../adr/0235-guard-formula-in-st-sv.md) |
 | Анализ | [`docs/analyze/0235-guard-formula-in-st-sv.md`](../analyze/0235-guard-formula-in-st-sv.md) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0235-YY-*`) |
-| Тест-план | [`docs/tests/0235-guard-formula-in-st-sv.md`](../tests/README.md) |
-| Отчёт о тестировании | [`docs/reports/0235-guard-formula-in-st-sv.md`](../reports/README.md) |
+| Разработка | [`0235-01`](../development/0235-01-guard-formula-in-st-sv.md) · [`0235-02`](../development/0235-02-guard-formula-in-st-sv.md) · [`0235-03`](../development/0235-03-guard-formula-in-st-sv.md) |
+| Тест-план | [`docs/tests/0235-guard-formula-in-st-sv.md`](../tests/0235-guard-formula-in-st-sv.md) |
+| Отчёт о тестировании | [`docs/reports/0235-guard-formula-in-st-sv.md`](../reports/0235-guard-formula-in-st-sv.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0235-YY-*`) |
 
 ## Краткое описание
@@ -59,3 +59,27 @@
      «## Итог (что сделано)» —
      ссылки на отчёт/фиксы (правило 21). Незакрытые фичи «Итога» не имеют. -->
 
+
+## Итог (что сделано)
+
+**Охранная формула больше не исчезает молча ни в одной цели.**
+
+- **Цель `sv` печатает** `assert (условие);` — форма подтверждена пробой: её
+  принимают **оба** инструмента гейта, тогда как вариант с сообщением
+  (`else $error(…)`) verilator принимает, а **yosys отвергает**. Отсюда правило:
+  имя инварианта в эту цель не переносится. Синтез не дорожает (проверка уходит
+  в ячейку `$check`).
+- **Цель `st` предупреждает** `ST-022` и **продолжает** трансляцию (решение
+  заказчика): в IEC 61131-3 конструкции `assert` нет, а придумывать ей замену
+  бэкенд не вправе.
+- **Ожил флаг `--guard-disable`** в цели `sv`: поле `SvMap::guard_enable` было
+  заведено с самого бэкенда, но не читал его никто.
+- ⚠️ **Корпус класс не покрывает** (в `examples/` формул ноль) — доказательства
+  на фикстурах: [`guard_targets_tests.rs`](../../takt-lang/tests/guard_targets_tests.rs),
+  6 тестов, обе мутации краснеют.
+
+Задачи: [`0235-01`](../development/0235-01-guard-formula-in-st-sv.md) ·
+[`0235-02`](../development/0235-02-guard-formula-in-st-sv.md) ·
+[`0235-03`](../development/0235-03-guard-formula-in-st-sv.md).
+Отчёт: [`docs/reports/0235-guard-formula-in-st-sv.md`](../reports/0235-guard-formula-in-st-sv.md).
+Исправлений не потребовалось.

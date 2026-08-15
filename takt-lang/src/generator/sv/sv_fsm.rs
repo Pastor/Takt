@@ -42,7 +42,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
-use crate::generator::sv::sv_blocks::{emit_model_named_blocks, emit_named_blocks};
+use crate::generator::sv::sv_blocks::{emit_model_prelude, emit_named_blocks, emit_state_prelude};
 use crate::generator::sv::sv_const;
 use crate::generator::sv::sv_expr::{Scope, print_condition, sv_enum_variant_name};
 use crate::generator::sv::sv_map::SvMap;
@@ -786,7 +786,7 @@ pub(crate) fn emit_model_body(
     // case`, безусловно по состоянию (эталон — шаг 2 `execution("always")`
     // симулятора). В `always_comb` работает над `_next` (умолчания уже заданы).
     let raw_model = map.raw_model_at(model.clone())?;
-    emit_model_named_blocks(p, &raw_model.borrow(), fsm, "always")?;
+    emit_model_prelude(p, map, &raw_model.borrow(), fsm)?;
 
     p.ident(&format!("unique case ({})", reg)).nl();
     p.up();
@@ -802,7 +802,7 @@ pub(crate) fn emit_model_body(
         ))
         .nl();
         p.up();
-        emit_named_blocks(p, raw, fsm, "always")?;
+        emit_state_prelude(p, map, raw, fsm)?;
         // Периодические блоки `every` (фича 0134-09) — после `always`, как в
         // симуляторе. Гейт читает `_next` метки/счётчика (учёт текущего такта).
         {
