@@ -404,3 +404,5 @@
 | 0209-02 | 0209 | Внешний интерфейс модели: extern fn в симуляторе и агрегат как аргумент | [0209-02-model-external-interface.md](0209-02-model-external-interface.md) |
 | 0172-01 | 0172 | Семантика перечисления без вариантов | [0172-01-empty-enum-semantics.md](0172-01-empty-enum-semantics.md) |
 | 0172-02 | 0172 | Семантика перечисления без вариантов | [0172-02-empty-enum-semantics.md](0172-02-empty-enum-semantics.md) |
+| 0168-01 | 0168 | Предупреждения генераторов возвращаются вызывающему | [0168-01-generator-warnings-return.md](0168-01-generator-warnings-return.md) |
+| 0168-02 | 0168 | Предупреждения генераторов возвращаются вызывающему | [0168-02-generator-warnings-return.md](0168-02-generator-warnings-return.md) |

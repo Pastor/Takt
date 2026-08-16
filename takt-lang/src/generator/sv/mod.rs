@@ -81,7 +81,7 @@ impl AsGenerator for Generator {
         model: &ModelNode,
         output_path: &str,
         options: &GenerateOptions,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<Vec<Diagnostic>, Diagnostic> {
         // Профиль времени (фича 0134): `clock` модели — контракт, флаг обязан
         // подтвердить (0134-05). Единый чекпойнт-энфорсмент `SE-069`/`SE-070`.
         let profile = crate::semantic::duration::resolve_profile(model.clock_hz, options.tick_hz)?;
@@ -91,7 +91,7 @@ impl AsGenerator for Generator {
             options.guard_enable,
         )?
         .with_time_profile(profile);
-        let program = generate_program(&map, self.mmio, &options.address_map)?;
+        let (program, warnings) = generate_program(&map, self.mmio, &options.address_map)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));
         fs::write(
@@ -99,7 +99,7 @@ impl AsGenerator for Generator {
             program,
         )
         .map_err(|e| Diagnostic::error(Location::Codegen, format!("{e}")).with_code("SV-001"))?;
-        Ok(())
+        Ok(warnings)
     }
 }
 
@@ -115,7 +115,7 @@ fn generate_program(
     map: &SvMap,
     mmio: bool,
     address_map: &std::collections::HashMap<String, crate::address_map::ResolvedAddress>,
-) -> Result<String, Diagnostic> {
+) -> Result<(String, Vec<Diagnostic>), Diagnostic> {
     let Element::Model { .. } = map.model() else {
         return Err(Diagnostic::error(
             Location::Codegen,
@@ -240,26 +240,13 @@ fn generate_program(
     p.down();
     p.ident("endmodule").nl();
 
-    // Доставка предупреждений генератора (фича 0064). До неё у цели `sv` канала
-    // не было вовсе (греп по `generator/sv/`): без него `SV-009` была бы немой.
-    report(&fsm.warnings.borrow());
+    // Доставка предупреждений генератора (фича 0064; канал выпрямлен фичей
+    // 0168). До 0064 у цели `sv` его не было вовсе — `SV-009` была немой; до
+    // 0168 он вёл в `eprintln!` прямо из библиотеки, мимо `--quiet` и мимо
+    // общего формата. Теперь предупреждения — часть результата.
+    let warnings = fsm.warnings.borrow().clone();
 
-    Ok(out)
-}
-
-/// Показывает предупреждения генератора цели `sv` (`SV-009`).
-///
-/// ⚠️ Образец `rust`/`st` воспроизведён **вместе с его дефектом** (action A-6
-/// ADR 0064): `report` печатает `eprintln!` **из библиотеки** и диагностику
-/// вызывающему не возвращает (`compile_to_sv` → `Result<(), Diagnostic>`),
-/// поэтому `--quiet` его не глушит, а LSP получит вывод в свой stderr. Чинить
-/// здесь нельзя — фича превратилась бы в рефакторинг доставки; дефект заведён
-/// кандидатом.
-fn report(warnings: &[Diagnostic]) {
-    for w in warnings {
-        let code = w.code.as_deref().unwrap_or("SV");
-        eprintln!("Предупреждение [{}]: {}", code, w.message);
-    }
+    Ok((out, warnings))
 }
 
 #[cfg(test)]
@@ -283,6 +270,7 @@ mod tests {
             &std::collections::HashMap::new(),
         )
         .unwrap()
+        .0
     }
 
     /// Корневая модель порождает `module` с именем в `snake_case`.

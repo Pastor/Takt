@@ -31,7 +31,7 @@ impl AsGenerator for Generator {
         model: &ModelNode,
         output_path: &str,
         _options: &GenerateOptions,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<Vec<Diagnostic>, Diagnostic> {
         let map = PumlMap::new(
             &normalize_lowercase_snakecase(model.name().to_string()),
             model,
@@ -44,7 +44,8 @@ impl AsGenerator for Generator {
             diagram,
         )
         .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{e}")).with_code("PU-001"))?;
-        Ok(())
+        // Предупреждений у цели `plantuml` нет (фича 0168) — канал общий.
+        Ok(Vec::new())
     }
 }
 

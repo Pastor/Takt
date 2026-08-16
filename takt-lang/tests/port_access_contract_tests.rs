@@ -86,16 +86,24 @@ fn generate(tag: &str, target: &str) -> String {
         _ => "sv",
     };
     match target {
-        "c" => takt_lang::compile_to_c(tag, SRC, path, &[], &opts).expect("цель c"),
+        "c" => {
+            takt_lang::compile_to_c(tag, SRC, path, &[], &opts).expect("цель c");
+        }
         "c-hal" => {
             takt_lang::compile_to_c_hal(tag, SRC, path, &[], &[], &env, &opts).expect("цель c-hal");
         }
-        "rust" => takt_lang::compile_to_rust(tag, SRC, path, &[], &opts).expect("цель rust"),
-        "st" => takt_lang::compile_to_st(tag, SRC, path, &[], &opts).expect("цель st"),
+        "rust" => {
+            takt_lang::compile_to_rust(tag, SRC, path, &[], &opts).expect("цель rust");
+        }
+        "st" => {
+            takt_lang::compile_to_st(tag, SRC, path, &[], &opts).expect("цель st");
+        }
         "st-at" => {
             takt_lang::compile_to_st_at(tag, SRC, path, &[], &[], &env, &opts).expect("цель st-at");
         }
-        "sv" => takt_lang::compile_to_sv(tag, SRC, path, &[], &opts).expect("цель sv"),
+        "sv" => {
+            takt_lang::compile_to_sv(tag, SRC, path, &[], &opts).expect("цель sv");
+        }
         "sv-mmio" => {
             takt_lang::compile_to_sv_mmio(tag, SRC, path, &[], &[], &env, &opts)
                 .expect("цель sv-mmio");

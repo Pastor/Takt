@@ -190,7 +190,7 @@ pub fn compile_to_c(
     output_path: &str,
     search_paths: &[String],
     options: &GenerateOptions,
-) -> Result<(), Diagnostic> {
+) -> Result<Vec<Diagnostic>, Diagnostic> {
     // Шаги 1–2: разбор и семантика; диагностика получает путь своего файла.
     let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
@@ -216,15 +216,14 @@ pub fn compile_to_c(
     // `--float-embedded` (иначе `float` остаётся нативным `double`).
     apply_float_lowering(&model, options, true)?;
 
-    // Шаг 3: Генерация C-кода
+    // Шаг 3: Генерация C-кода. Предупреждения цели возвращаются вызывающему
+    // (фича 0168) — печатать их библиотека не вправе.
     generator::generate(
         generator::Language::C,
         &model.borrow(),
         output_path,
         options,
-    )?;
-
-    Ok(())
+    )
 }
 
 /// Компилирует Takt в C в режиме `c-hal` (фича 0020-05): к обычному C добавляются
@@ -271,14 +270,18 @@ pub fn compile_to_c_hal(
     // Фича 0096: embedded-путь `float → q(m, n)` (c-hal — основная embedded-цель).
     apply_float_lowering(&model, options, true)?;
 
-    generator::generate(
+    // Предупреждения цели присоединяются к адресным (фича 0168): у одного
+    // вызова обязана быть одна судьба, иначе часть диагностики глушится
+    // `--quiet`, а часть — нет.
+    let mut warnings = resolution.diagnostics;
+    warnings.extend(generator::generate(
         generator::Language::C,
         &model.borrow(),
         output_path,
         &hal_options,
-    )?;
+    )?);
 
-    Ok(resolution.diagnostics)
+    Ok(warnings)
 }
 
 /// Компилирует исходный код Takt в Structured Text (IEC 61131-3) — язык ПЛК.
@@ -306,7 +309,7 @@ pub fn compile_to_st(
     output_path: &str,
     search_paths: &[String],
     options: &GenerateOptions,
-) -> Result<(), Diagnostic> {
+) -> Result<Vec<Diagnostic>, Diagnostic> {
     let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
     if model.borrow().name.is_none() {
@@ -326,9 +329,7 @@ pub fn compile_to_st(
         &model.borrow(),
         output_path,
         options,
-    )?;
-
-    Ok(())
+    )
 }
 
 /// Компилирует исходный код Takt в `no_std` Rust — прошивку микроконтроллера.
@@ -378,7 +379,7 @@ pub fn compile_to_rust(
     output_path: &str,
     search_paths: &[String],
     options: &GenerateOptions,
-) -> Result<(), Diagnostic> {
+) -> Result<Vec<Diagnostic>, Diagnostic> {
     let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
     if model.borrow().name.is_none() {
@@ -398,9 +399,7 @@ pub fn compile_to_rust(
         &model.borrow(),
         output_path,
         options,
-    )?;
-
-    Ok(())
+    )
 }
 
 /// Компилирует исходный код Takt в синтезируемый SystemVerilog (IEEE 1800) —
@@ -449,7 +448,7 @@ pub fn compile_to_sv(
     output_path: &str,
     search_paths: &[String],
     options: &GenerateOptions,
-) -> Result<(), Diagnostic> {
+) -> Result<Vec<Diagnostic>, Diagnostic> {
     let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
     if model.borrow().name.is_none() {
@@ -470,9 +469,7 @@ pub fn compile_to_sv(
         &model.borrow(),
         output_path,
         options,
-    )?;
-
-    Ok(())
+    )
 }
 
 /// Компилирует Takt в Structured Text в режиме `st-at` (фича 0041): к обычному ST
@@ -520,14 +517,15 @@ pub fn compile_to_st_at(
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
     apply_float_lowering(&model, options, true)?;
 
-    generator::generate(
+    let mut warnings = resolution.diagnostics;
+    warnings.extend(generator::generate(
         generator::Language::ST,
         &model.borrow(),
         output_path,
         &at_options,
-    )?;
+    )?);
 
-    Ok(resolution.diagnostics)
+    Ok(warnings)
 }
 
 /// Компилирует исходный код Takt в диаграмму состояний PlantUML.
@@ -549,7 +547,7 @@ pub fn compile_to_plantuml(
     source: &str,
     output_path: &str,
     search_paths: &[String],
-) -> Result<(), Diagnostic> {
+) -> Result<Vec<Diagnostic>, Diagnostic> {
     let model = parse_and_construct(filename, source, search_paths, false)?;
 
     if model.borrow().name.is_none() {
@@ -566,9 +564,7 @@ pub fn compile_to_plantuml(
         &model.borrow(),
         output_path,
         &GenerateOptions::default(),
-    )?;
-
-    Ok(())
+    )
 }
 
 /// Ce13: возвращает предупреждения о неиспользуемых переменных в модели.

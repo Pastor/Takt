@@ -447,7 +447,7 @@ fn test_st_output_uses_iec_comments_only() {
 fn compile_st_source(
     filename: &str,
     source: &str,
-) -> Result<(), takt_lang::diagnostics::Diagnostic> {
+) -> Result<Vec<takt_lang::diagnostics::Diagnostic>, takt_lang::diagnostics::Diagnostic> {
     // Каталог уникален по тесту (фича 0190): `prog.takt` берут несколько тестов,
     // а ниже идёт `remove_dir_all` — общий каталог связал бы их гонкой ровно так
     // же, как это делал `target_dir` до починки.

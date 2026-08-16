@@ -83,7 +83,7 @@ impl AsGenerator for Generator {
         model: &ModelNode,
         output_path: &str,
         options: &GenerateOptions,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<Vec<Diagnostic>, Diagnostic> {
         // Молчаливое игнорирование флага недопустимо: пользователь решил бы, что
         // получил f32, тогда как `Rational` → f64 — решение ADR.
         rust_type::reject_float_width(options.float_width)?;
@@ -98,7 +98,7 @@ impl AsGenerator for Generator {
             options.guard_enable,
         )?
         .with_time_profile(profile);
-        let program = generate_program(&map)?;
+        let (program, warnings) = generate_program(&map)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));
         fs::write(
@@ -106,12 +106,15 @@ impl AsGenerator for Generator {
             program,
         )
         .map_err(|e| Diagnostic::error(Location::Codegen, format!("{e}")).with_code("RS-001"))?;
-        Ok(())
+        Ok(warnings)
     }
 }
 
 /// Собирает текст модуля Rust из снимка модели.
-fn generate_program(map: &RustMap) -> Result<String, Diagnostic> {
+///
+/// Возвращает текст **и предупреждения цели** (`RS-010`, фича 0168): печатать
+/// их генератор не вправе — доставку ведёт вызывающий.
+fn generate_program(map: &RustMap) -> Result<(String, Vec<Diagnostic>), Diagnostic> {
     let Element::Model { .. } = map.model() else {
         return Err(Diagnostic::error(
             Location::Codegen,
@@ -204,19 +207,7 @@ fn generate_program(map: &RustMap) -> Result<String, Diagnostic> {
         )?;
     }
 
-    report(&warnings);
-    Ok(out)
-}
-
-/// Показывает предупреждения генератора.
-///
-/// Молчание здесь недопустимо: `RS-010` сообщает, что LTL-формула в порождённый
-/// код не попала. Ровно эту тихую потерю закрыла фича 0035.
-fn report(warnings: &[Diagnostic]) {
-    for w in warnings {
-        let code = w.code.as_deref().unwrap_or("RS");
-        eprintln!("Предупреждение [{}]: {}", code, w.message);
-    }
+    Ok((out, warnings))
 }
 
 #[cfg(test)]
@@ -234,7 +225,7 @@ mod tests {
     }
 
     fn program_of(src: &str, name: &str) -> String {
-        generate_program(&make_map(src, name)).unwrap()
+        generate_program(&make_map(src, name)).unwrap().0
     }
 
     /// Вырезает тело функции `fn <name>` из порождённого текста (для точечных

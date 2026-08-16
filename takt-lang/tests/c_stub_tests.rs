@@ -41,7 +41,7 @@ fn compile(
     fixture: &str,
     name: &str,
     out: &Path,
-) -> Result<(), takt_lang::diagnostics::Diagnostic> {
+) -> Result<Vec<takt_lang::diagnostics::Diagnostic>, takt_lang::diagnostics::Diagnostic> {
     let source = std::fs::read_to_string(fixture).expect("фикстура читается");
     compile_to_c(
         name,

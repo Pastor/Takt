@@ -78,23 +78,21 @@ fn try_target(target: &str, src: &str, specialize: bool) -> Result<(), String> {
     let path = dir.to_str().expect("путь").to_string();
     let name = "modes.takt";
     let options = options(specialize);
-    let result: Result<(), takt_lang::diagnostics::Diagnostic> = match target {
+    let result: Result<
+        Vec<takt_lang::diagnostics::Diagnostic>,
+        takt_lang::diagnostics::Diagnostic,
+    > = match target {
         "c" => compile_to_c(name, src, &path, &[], &options),
-        "c-hal" => {
-            compile_to_c_hal(name, src, &path, &[], &[], &Default::default(), &options).map(|_| ())
-        }
+        "c-hal" => compile_to_c_hal(name, src, &path, &[], &[], &Default::default(), &options),
         "st" => compile_to_st(name, src, &path, &[], &options),
-        "st-at" => {
-            compile_to_st_at(name, src, &path, &[], &[], &Default::default(), &options).map(|_| ())
-        }
+        "st-at" => compile_to_st_at(name, src, &path, &[], &[], &Default::default(), &options),
         "rust" => compile_to_rust(name, src, &path, &[], &options),
         "sv" => compile_to_sv(name, src, &path, &[], &options),
-        "sv-mmio" => compile_to_sv_mmio(name, src, &path, &[], &[], &Default::default(), &options)
-            .map(|_| ()),
-        "plantuml" => compile_to_plantuml(name, src, &path, &[]).map(|_| ()),
+        "sv-mmio" => compile_to_sv_mmio(name, src, &path, &[], &[], &Default::default(), &options),
+        "plantuml" => compile_to_plantuml(name, src, &path, &[]),
         other => panic!("неизвестная цель '{other}' в тесте"),
     };
-    result.map_err(|d| {
+    result.map(|_| ()).map_err(|d| {
         format!(
             "{} ({})",
             d.code.unwrap_or_else(|| "?".to_string()),

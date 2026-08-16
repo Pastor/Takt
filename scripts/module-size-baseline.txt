@@ -11,4 +11,4 @@
 # Формат: <строк> <путь от корня репозитория>
 1575 takt-lang/src/semantic/tree.rs
 1287 takt-lang/src/semantic/mod.rs
-1321 takt-lang/src/lib.rs
+1317 takt-lang/src/lib.rs
