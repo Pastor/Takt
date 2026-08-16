@@ -236,7 +236,7 @@ EnumVariant: EnumVariant = {
 }
 
 EnumDefine: Box<EnumDefine> = {
-    <l:@L> "enum" <name:IdentifierOrError> "{" <variants:CommaOne<EnumVariant>> "}" <r:@R> => {
+    <l:@L> "enum" <name:IdentifierOrError> "{" <variants:Comma<EnumVariant>> "}" <r:@R> => {
         Box::new(EnumDefine {
             loc: Location::source(file_no, l, r),
             name,

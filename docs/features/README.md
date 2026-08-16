@@ -184,7 +184,7 @@
 | [0169](./0169-sv-mmio-bus-adapters.md) | Адаптеры шин для цели sv-mmio (APB / AXI-Lite / Wishbone) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0170](./0170-fixed-point-saturation.md) | Насыщение (saturation) для fixed-point q(m, n) | [ADR](../adr/0170-fixed-point-saturation.md) · [анализ](../analyze/0170-fixed-point-saturation.md) · [тест-план](../tests/0170-fixed-point-saturation.md) · [отчёт](../reports/0170-fixed-point-saturation.md) · dev 01–05 | ГОТОВО |
 | [0171](./0171-c-gate-werror.md) | Гейт цели c под -Werror | ADR + анализ + разработка 01 + тест-план + отчёт | ГОТОВО |
-| [0172](./0172-empty-enum-semantics.md) | Семантика перечисления без вариантов | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0172](./0172-empty-enum-semantics.md) | Семантика перечисления без вариантов | [ADR](../adr/0172-empty-enum-semantics.md) · [анализ](../analyze/0172-empty-enum-semantics.md) · разработка 01–02 · [тест-план](../tests/0172-empty-enum-semantics.md) · [отчёт](../reports/0172-empty-enum-semantics.md) | ГОТОВО |
 | [0173](./0173-rust-generator-arg-count.md) | Снятие allow(too_many_arguments) в генераторе rust | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0174](./0174-rust-new-without-default.md) | Цель rust: корневая модель без портов (clippy::new_without_default) | [ADR](../adr/0174-rust-new-without-default.md) · [анализ](../analyze/0174-rust-new-without-default.md) · разработка 01 · [тест-план](../tests/0174-rust-new-without-default.md) · [отчёт](../reports/0174-rust-new-without-default.md) | ГОТОВО |
 | [0175](./0175-ci-verification-followup.md) | Дожатие CI-верификации 0090 после разблокировки Actions | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
