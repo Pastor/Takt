@@ -473,6 +473,9 @@ fn print_usage() {
         "  --float-embedded       Реализовать float целочисленным q в c/rust/st (embedded без FPU)"
     );
     eprintln!(
+        "  --bus=apb              Цель sv-mmio: адаптер шины рядом с ядром (<модель>_apb.sv)"
+    );
+    eprintln!(
         "  --tick-hz=<n>          Частота такта устройства (Гц): профиль «такты» (фича 0134)"
     );
     eprintln!("                         Модель с `clock` требует совпадающий флаг (SE-069/SE-070)");

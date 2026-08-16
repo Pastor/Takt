@@ -186,3 +186,4 @@
 | [0172](./0172-empty-enum-semantics.md) | Семантика перечисления без вариантов | Accepted (Option B) | фича 0172 |
 | [0168](./0168-generator-warnings-return.md) | Предупреждения генераторов возвращаются вызывающему | Accepted (Option C) | фича 0168 |
 | [0167](./0167-c-enum-constants-usage.md) | Цель c использует объявленные константы перечисления | Accepted (Option C) | фича 0167 |
+| [0169](./0169-sv-mmio-bus-adapters.md) | Адаптеры шин для цели sv-mmio (APB) | Accepted (Option C) | фича 0169 |

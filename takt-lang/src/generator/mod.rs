@@ -141,6 +141,25 @@ pub struct GenerateOptions {
     /// `--float-embedded`). Действует только вместе с [`float_as_q`](Self::float_as_q);
     /// на `sv` не влияет (там `float` всегда `q`).
     pub float_embedded: bool,
+    /// Адаптер шины для цели `sv-mmio` (фича 0169, CLI-флаг `--bus`).
+    ///
+    /// `None` — адаптера нет, вывод прежний байт-в-байт. `Some(Bus::Apb)` —
+    /// рядом с ядром порождается обёртка `<name>_apb.sv`, транслирующая APB в
+    /// шинно-агностичный регистровый интерфейс ядра.
+    ///
+    /// ⚠️ Ядро при этом **не меняется**: на нём стоят потактовые сверки
+    /// регистров и гейт двух инструментов SV (ADR 0169, Option C).
+    pub bus: Option<Bus>,
+}
+
+/// Протокол шины для адаптера цели `sv-mmio` (фича 0169).
+///
+/// Зонт: протокол берётся **по требованию заказчика**, а не «на всякий случай»
+/// (карточка фичи). Первым выбран APB — экосистема ARM/AMBA.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bus {
+    /// AMBA APB3, slave: `psel`/`penable`/`pwrite`/`paddr`/`pwdata`/`prdata`.
+    Apb,
 }
 
 impl GenerateOptions {
@@ -155,6 +174,7 @@ impl GenerateOptions {
             float_embedded: false,
             tick_hz: None,
             specialize: false,
+            bus: None,
         }
     }
 }
@@ -171,6 +191,7 @@ impl Default for GenerateOptions {
             float_embedded: false,
             tick_hz: None,
             specialize: false,
+            bus: None,
         }
     }
 }
