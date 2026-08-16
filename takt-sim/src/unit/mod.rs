@@ -2,6 +2,8 @@ mod blocks;
 pub(crate) mod builder;
 #[path = "clock.rs"]
 mod clock;
+/// Контекст модели — вынесен из `builder` (предел размера модуля, фича 0209).
+mod context_model;
 mod every;
 mod initial;
 pub(crate) mod statement;
@@ -232,6 +234,23 @@ impl Unit {
 }
 
 impl Context for Unit {
+    /// Стенд внешних функций — у контекста узла (фича 0209).
+    ///
+    /// ⚠️ Такт исполняется с `Unit` в роли контекста, поэтому без этой ветви
+    /// подмена, поставленная `set_extern_stubs`, до вызова не доезжает и
+    /// прогон отвечает `SIM-019` при заданном стенде.
+    fn extern_result(&self, name: &str, args: &[Value]) -> Option<Value> {
+        match &self.0 {
+            UnitKind::Node { context, .. } => context
+                .as_ref()
+                .and_then(|ctx| ctx.borrow().extern_result(name, args)),
+            UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => units
+                .iter()
+                .find_map(|unit| unit.borrow().extern_result(name, args)),
+            UnitKind::None => None,
+        }
+    }
+
     fn since_state_entry_ns(&self) -> i64 {
         Unit::since_state_entry_ns(self)
     }

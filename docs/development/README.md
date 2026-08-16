@@ -400,3 +400,5 @@
 | 0206-01 | 0206 | Вариант импортированного перечисления не разрешается в образце match | [0206-01-imported-enum-variant-in-match.md](0206-01-imported-enum-variant-in-match.md) |
 | 0207-01 | 0207 | Отрицание ~0 для беззнакового типа: два правила языка столкнулись | [0207-01-bitwise-not-unsigned-literal.md](0207-01-bitwise-not-unsigned-literal.md) |
 | 0208-01 | 0208 | Три константных вычислителя компилятора живут порознь | [0208-01-const-evaluators-unification.md](0208-01-const-evaluators-unification.md) |
+| 0209-01 | 0209 | Внешний интерфейс модели: extern fn в симуляторе и агрегат как аргумент | [0209-01-model-external-interface.md](0209-01-model-external-interface.md) |
+| 0209-02 | 0209 | Внешний интерфейс модели: extern fn в симуляторе и агрегат как аргумент | [0209-02-model-external-interface.md](0209-02-model-external-interface.md) |

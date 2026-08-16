@@ -324,6 +324,7 @@ fn kind_of(value: &ConstValue) -> &'static str {
         ConstValue::Bool(_) => "булево",
         ConstValue::Duration(_) => "длительность",
         ConstValue::Rational(_, _) => "дробное",
+        ConstValue::List(_) => "агрегат",
     }
 }
 

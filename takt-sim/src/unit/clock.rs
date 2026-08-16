@@ -28,6 +28,27 @@ impl Unit {
         }
     }
 
+    /// Ставит стенд внешних функций во **все** узлы дерева (фича 0209).
+    ///
+    /// Рекурсивно, как `set_time_ns`, и по той же причине: ветви композиции
+    /// живут в одном шаге сценария — иначе одна ветвь читала бы стенд, а другая
+    /// отвечала бы `SIM-019`.
+    pub(crate) fn set_extern_stubs(&mut self, stubs: crate::context::ExternStubs) {
+        match &mut self.0 {
+            UnitKind::Node { context, .. } => {
+                if let Some(ctx) = context {
+                    ctx.borrow_mut().set_extern_stubs(stubs);
+                }
+            }
+            UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => {
+                for unit in units {
+                    unit.borrow_mut().set_extern_stubs(stubs.clone());
+                }
+            }
+            UnitKind::None => {}
+        }
+    }
+
     /// Сколько модельного времени прошло с входа в текущее состояние.
     pub(crate) fn since_state_entry_ns(&self) -> i64 {
         match &self.0 {

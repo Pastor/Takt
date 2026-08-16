@@ -167,6 +167,18 @@ fn generate_argument_assignments(
     args: &[ParameterArgument],
 ) -> Result<(), Diagnostic> {
     for arg in args {
+        // Агрегат в C **не присваивается** (фича 0209): `p.prog = {9, 8, 7, 6};`
+        // — не выражение, а инициализатор объявления, и `cc` отвергает такую
+        // строку («expected expression»). Пишем поэлементно — той же формой,
+        // какой `_init` кладёт значения по умолчанию.
+        if let ExpressionNode::Initializer(elems) | ExpressionNode::Array(elems) = &arg.value {
+            for (i, elem) in elems.iter().enumerate() {
+                printer.ident(&format!("{}.{}[{}] = ", access, arg.name, i));
+                generate_expr(printer, map, model, vec![], elem, 0, true)?;
+                printer.print(";").nl();
+            }
+            continue;
+        }
         printer.ident(&format!("{}.{} = ", access, arg.name));
         generate_expr(printer, map, model, vec![], &arg.value, 0, true)?;
         printer.print(";").nl();
