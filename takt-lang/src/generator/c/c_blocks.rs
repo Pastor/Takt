@@ -26,6 +26,7 @@ pub(super) fn generate_scalar_init(
     var_name: &str,
     ty: &TypeNode,
     expr: &ExpressionNode,
+    scope: &std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>,
 ) -> Result<(), Diagnostic> {
     let cast = if let TypeNode::Struct(s) = ty {
         format!("({})", s)
@@ -33,6 +34,16 @@ pub(super) fn generate_scalar_init(
         String::new()
     };
     printer.ident(&format!("model->{} = {}", var_name, cast));
+    // Начальное значение перечислимой переменной — тоже присваивание, и тип
+    // здесь известен (фича 0167). Без этого `_init` печатал `model->c = 0;`
+    // там, где тело уже печатает `ENUM_..._STOP`: вывод противоречил бы сам
+    // себе внутри одного файла.
+    if let ExpressionNode::Number(value) = expr
+        && let Some(name) = crate::generator::c::c_enum::constant_of(ty, *value, scope)
+    {
+        printer.print(&name).print(";").nl();
+        return Ok(());
+    }
     generate_expr(printer, map, owner, vec![], expr, 0, true)?;
     printer.print(";").nl();
     Ok(())

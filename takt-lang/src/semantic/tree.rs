@@ -568,55 +568,10 @@ pub(super) fn construct_model_stage0(
                 FunctionDefinitionNode::Unresolved(*def.clone()),
             );
         } else if let ModelElement::Enum(e) = element {
-            // FE1: Обработка перечислений. Присваиваем последовательные значения
-            // вариантам без явных значений (автоинкремент от 0).
-            let enum_name = e
-                .name
-                .as_ref()
-                .map(|id| id.name.clone())
-                .unwrap_or_default();
-            let mut next_val: i128 = 0;
-            let mut variant_pairs = Vec::new();
-            for variant in &e.variants {
-                let val = variant.value.unwrap_or(next_val);
-                next_val = val + 1;
-                variant_pairs.push((variant.name.name.clone(), val));
-            }
-            let enum_loc = e.name.as_ref().map(|id| id.loc).unwrap_or(e.loc);
-            let mut enum_node = crate::semantic::EnumDefinitionNode::new(
-                &enum_name,
-                &variant_pairs
-                    .iter()
-                    .map(|(n, v)| (n.as_str(), Some(*v)))
-                    .collect::<Vec<_>>(),
-            );
-            enum_node.loc = enum_loc;
-            // Ce4: Регистрируем перечисление в двух местах:
-            //
-            // 1. `model_node.enums` — для поиска через `search_enum` / `search_enum_variant`.
-            //
-            // 2. `types` — для разрешения аннотаций типа `var x: Color = 0;`.
-            //    Парсер создаёт `Type::Alias("Color")` для таких аннотаций; `construct_type`
-            //    ищет псевдоним в таблице `types`. Добавляем `TypeNode::Enum("Color")`,
-            //    чтобы переменная получила корректный тип.
-            //
-            //    Ограничение: enum должен быть объявлен ДО переменных, использующих его как
-            //    тип (аналогично псевдонимам `type`). Если enum объявлен после — тип будет
-            //    `TypeNode::Unsupported`; это считается ошибкой пользователя.
-            model_node
-                .borrow_mut()
-                .enums
-                .insert(enum_name.clone(), enum_node);
-            if !enum_name.is_empty() {
-                model_node
-                    .borrow_mut()
-                    .types
-                    .insert(enum_name.clone(), TypeNode::Enum(enum_name.clone()));
-                model_node
-                    .borrow_mut()
-                    .type_locs
-                    .insert(enum_name.clone(), enum_loc);
-            }
+            // FE1: узел перечисления строит `enum_build` (фича 0167 — вынос из
+            // этого файла: он сверх лимита размера, и правило велит выносить
+            // новое, а не дописывать сюда).
+            crate::semantic::enum_node::build_enum(&model_node, e);
         } else if let ModelElement::Struct(s) = element {
             // NI3: Обработка структурных типов.
             let struct_name = s

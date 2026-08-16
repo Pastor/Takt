@@ -35,3 +35,41 @@ pub(in crate::generator::c) fn port_enum_variant(model_name: &Name, port: &str) 
         normalize_lowercase_snakecase(port.to_string()).to_uppercase()
     )
 }
+
+/// Имя константы перечисления: `ENUM_<МОДЕЛЬ>_<ПЕРЕЧИСЛЕНИЕ>_<ВАРИАНТ>`.
+///
+/// # Зачем сегмент перечисления
+///
+/// До фичи 0167 имя строилось как `ENUM_<МОДЕЛЬ>_<ВАРИАНТ>`, то есть
+/// перечисление в нём **не участвовало**. Два перечисления одной модели с
+/// одноимённым вариантом давали два `#define` с одним именем и разными
+/// значениями:
+///
+/// ```c
+/// #define ENUM_TWO_ENUMS_STOP 0
+/// #define ENUM_TWO_ENUMS_STOP 5
+/// ```
+///
+/// `cc -Wall -Werror` (флаги гейта проекта) такой файл отвергает
+/// (`-Wmacro-redefined`), а держалось это лишь тем, что в корпусе одноимённых
+/// вариантов нет. Прочие цели квалифицируют имя перечислением давно:
+/// `Command_Stop` (`st`), `COMMAND_STOP` (`sv`), `Command::Stop` (`rust`).
+///
+/// ⚠️ **Модель в имени остаётся**: в C одно пространство имён на программу, и
+/// две модели вправе объявить одноимённые перечисления (класс ADR 0193).
+///
+/// ⚠️ Имя строит **одна** функция, и зовут её оба конца: печать `#define`
+/// (`c_decl`) и печать значения (`c_enum`). Разъехавшись, они дадут ссылку на
+/// несуществующий макрос — урок ADR 0195.
+pub(in crate::generator::c) fn enum_constant(
+    model_name: &Name,
+    enum_name: &str,
+    variant: &str,
+) -> String {
+    format!(
+        "ENUM_{}_{}_{}",
+        model_name.unique_uppercase_snakecase(),
+        normalize_lowercase_snakecase(enum_name.to_string()).to_uppercase(),
+        normalize_lowercase_snakecase(variant.to_string()).to_uppercase()
+    )
+}

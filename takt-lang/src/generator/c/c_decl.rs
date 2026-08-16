@@ -120,15 +120,18 @@ pub(super) fn generate_constants_and_ports_and_enums(
             printer.print(lines.join("\n").as_str()).nl();
         }
 
+        // Имя строит `c_names::enum_constant` — ТА ЖЕ функция, которой
+        // печатается значение (`c_enum::constant_of`, фича 0167). Прежде здесь
+        // жила своя формула без сегмента перечисления, и два перечисления одной
+        // модели с одноимённым вариантом давали дубль `#define` с разными
+        // значениями — `cc -Werror` такой файл отвергает.
         let enums = model.enums.clone().into_values();
         let mut lines = Vec::new();
         for en in enums {
-            let prefix = format!("#define ENUM_{}_", model_name.unique_uppercase_snakecase());
-            for (name, value) in en.variants {
+            for (name, value) in &en.variants {
                 lines.push(format!(
-                    "{}{} {}",
-                    prefix,
-                    normalize_lowercase_snakecase(name.clone()).to_uppercase(),
+                    "#define {} {}",
+                    crate::generator::c::c_names::enum_constant(&model_name, &en.name, name),
                     value
                 ));
             }

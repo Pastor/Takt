@@ -435,6 +435,14 @@ pub(in crate::generator::c) fn generate_expr(
             // Обычное присваивание (право-ассоциативно: тот же prec не оборачивается)
             generate_expr(printer, map, owner, params.clone(), l, 1, has_model)?;
             printer.print(" = ");
+            // Значение перечислимого типа печатается ИМЕНЕМ константы (фича
+            // 0167): здесь целевой тип известен — он у переменной слева.
+            // Прежде выводилось голое число, и объявленный `#define` оставался
+            // неиспользованным. Приём тот же, что у `st` (`coerce_to`, ADR 0066).
+            if let Some(name) = enum_constant_for_assignment(l, r) {
+                printer.print(&name);
+                return Ok(());
+            }
             generate_expr(printer, map, owner, params, r, 1, has_model)?;
         }
 
@@ -627,4 +635,31 @@ pub(in crate::generator::c) fn generate_expr(
         printer.print(")");
     }
     Ok(())
+}
+
+/// Имя константы перечисления для присваивания `переменная := литерал`
+/// (фича 0167).
+///
+/// `None` — печатать правую часть обычным путём: слева не переменная
+/// перечислимого типа, справа не число, значение не совпадает ни с одним
+/// вариантом либо владелец перечисления недоступен.
+///
+/// ⚠️ Тип берётся у **переменной слева**, а перечисление ищется от её
+/// модели-владельца: у неё же спрашивают тип и прочие печатники цели.
+fn enum_constant_for_assignment(left: &ExpressionNode, right: &ExpressionNode) -> Option<String> {
+    let ExpressionNode::Variable(var_rc) = left else {
+        return None;
+    };
+    let ExpressionNode::Number(value) = right else {
+        return None;
+    };
+    let var = var_rc.borrow();
+    let (VariableNode::Simple { ty, upper, .. }
+    | VariableNode::Const { ty, upper, .. }
+    | VariableNode::Port { ty, upper, .. }) = &*var
+    else {
+        return None;
+    };
+    let scope = upper.as_ref().and_then(|w| w.upgrade())?;
+    crate::generator::c::c_enum::constant_of(ty, *value, &scope)
 }
