@@ -160,3 +160,4 @@
 | 0207 | Отрицание ~0 для беззнакового типа: два правила языка столкнулись | [0207-bitwise-not-unsigned-literal.md](0207-bitwise-not-unsigned-literal.md) | ✅ ПРОЙДЕН (отчёт: [reports/0207](../reports/0207-bitwise-not-unsigned-literal.md)) |
 | 0208 | Три константных вычислителя компилятора живут порознь | [0208-const-evaluators-unification.md](0208-const-evaluators-unification.md) | ✅ ПРОЙДЕН (отчёт: [reports/0208](../reports/0208-const-evaluators-unification.md)) |
 | 0209 | Внешний интерфейс модели: extern fn в симуляторе и агрегат как аргумент | [0209-model-external-interface.md](0209-model-external-interface.md) | ✅ ПРОЙДЕН (отчёт: [reports/0209](../reports/0209-model-external-interface.md)) |
+| 0172 | Семантика перечисления без вариантов | [0172-empty-enum-semantics.md](0172-empty-enum-semantics.md) | ✅ ПРОЙДЕН (отчёт: [reports/0172](../reports/0172-empty-enum-semantics.md)) |

@@ -68,7 +68,10 @@ use common::{
     get_state_loc, get_state_name, validate_cond, validate_conditions, validate_expression,
     validate_reference,
 };
-use enums::{validate_bit_values, validate_enum_type_declarations, validate_enum_values};
+use enums::{
+    validate_bit_values, validate_empty_enums, validate_enum_type_declarations,
+    validate_enum_values,
+};
 use fixed::check_fixed_mixing;
 use ports::{check_port_addresses, validate_variables};
 use states::{model_only_one_start_state, validate_state_references};
@@ -128,12 +131,19 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // одного выражения ранний выход сохранён, потому что дальше по нему пошли
     // бы следствия первой ошибки (тот же довод, которым 0152 оставила
     // терминальными стадии построения дерева).
-    let checks: [Vec<Diagnostic>; 11] = [
+    let checks: [Vec<Diagnostic>; 12] = [
         model_only_one_start_state(model.clone()),
         // SE-099 (0189): обращение к ячейке в инициализаторе объявления. Без
         // запрета эталон дал бы ноль, а `c-hal` — чтение регистра, и молча.
         anon_init::validate_anon_in_initializers(model.clone()),
         validate_bit_values(model.clone()),
+        // SE-105 (0172): перечисление без вариантов — отказ на ОБЪЯВЛЕНИИ. Без
+        // него использование пустого перечисления давало бессодержательное
+        // `SE-043` «…не является вариантом перечисления (допустимые варианты: )».
+        // ⚠️ Порядок в этом массиве на порядок сообщений НЕ влияет: выдачу
+        // упорядочивает `diagnostics::normalize` по позиции в тексте (замер
+        // 0172 — перестановка проверок местами ничего не меняет).
+        validate_empty_enums(model.clone()),
         validate_enum_values(model.clone()),
         validate_enum_type_declarations(model.clone()),
         validate_state_references(model.clone()),

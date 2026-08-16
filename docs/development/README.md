@@ -402,3 +402,5 @@
 | 0208-01 | 0208 | Три константных вычислителя компилятора живут порознь | [0208-01-const-evaluators-unification.md](0208-01-const-evaluators-unification.md) |
 | 0209-01 | 0209 | Внешний интерфейс модели: extern fn в симуляторе и агрегат как аргумент | [0209-01-model-external-interface.md](0209-01-model-external-interface.md) |
 | 0209-02 | 0209 | Внешний интерфейс модели: extern fn в симуляторе и агрегат как аргумент | [0209-02-model-external-interface.md](0209-02-model-external-interface.md) |
+| 0172-01 | 0172 | Семантика перечисления без вариантов | [0172-01-empty-enum-semantics.md](0172-01-empty-enum-semantics.md) |
+| 0172-02 | 0172 | Семантика перечисления без вариантов | [0172-02-empty-enum-semantics.md](0172-02-empty-enum-semantics.md) |
