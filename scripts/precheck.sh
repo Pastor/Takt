@@ -286,8 +286,11 @@ done
 # Цель sv-mmio (фича 0062): регистровый файл из адресов портов — только stacker
 # (см. $SV_MMIO_TRANSLATABLE). Отказ не валит предкоммит здесь: обязательность
 # проверяется гейтом ниже (как у sv).
+# Адаптер шины APB (фича 0169) порождается ТЕМ ЖЕ прогоном: флаг `--bus=apb`
+# добавляет рядом с ядром обёртку `<name>_apb.sv`, ядро при этом не меняется.
+# Гейты ниже проверяют оба файла — и линтом с синтезом, и тестбенчем.
 for name in $SV_MMIO_TRANSLATABLE; do
-  $LAMC compile "examples/${name}.takt" -t sv-mmio -o "$SV_MMIO_OUTPUT" \
+  $LAMC compile "examples/${name}.takt" -t sv-mmio --bus=apb -o "$SV_MMIO_OUTPUT" \
     || echo "    [предупреждение] цель sv-mmio: examples/${name}.takt не транслируется"
 done
 echo "Готово. Файлы в $C_OUTPUT/"
@@ -637,20 +640,35 @@ done
 for sv_file in "$SV_MMIO_OUTPUT"/*.sv; do
   [ -e "$sv_file" ] || continue
   name="$(basename "$sv_file" .sv)"
+  # Адаптер шины (фича 0169) — законный сосед ядра: <name>_apb.sv.
+  core="${name%_apb}"
   case " $SV_MMIO_TRANSLATABLE " in
-    *" $name "*) ;;
+    *" $core "*) ;;
     *)
       echo "  $name.sv → ЛИШНИЙ .sv sv-mmio: примера нет в SV_MMIO_TRANSLATABLE."
       sv_failed=1
       ;;
   esac
 done
+# Адаптер обязан быть порождён у каждого примера: молчаливая пропажа означала бы,
+# что флаг перестал работать, а гейт этого не заметил (фича 0169).
+for name in $SV_MMIO_TRANSLATABLE; do
+  if [ ! -e "$SV_MMIO_OUTPUT/${name}_apb.sv" ]; then
+    echo "  $name → адаптер APB НЕ ПОРОЖДЁН (--bus=apb, фича 0169)."
+    sv_failed=1
+  fi
+done
 if command -v verilator &>/dev/null; then
   for sv_file in "$SV_MMIO_OUTPUT"/*.sv; do
     [ -e "$sv_file" ] || continue
     name="$(basename "$sv_file" .sv)"
+    # Адаптер шины (фича 0169) инстанцирует ядро, поэтому линтуется ВМЕСТЕ с
+    # ним: в одиночку он даёт `MODMISSING` — и это свойство обёртки, а не дефект.
+    core="${name%_apb}"
+    sv_extra=""
+    [ "$core" != "$name" ] && sv_extra="$SV_MMIO_OUTPUT/${core}.sv"
     sv_err="$(mktemp)"
-    if verilator --lint-only -Wall "$sv_file" >/dev/null 2>"$sv_err"; then
+    if verilator --lint-only -Wall --top-module "$name" "$sv_file" $sv_extra >/dev/null 2>"$sv_err"; then
       echo "  $name → verilator принял (sv-mmio)"
     else
       echo "  $name → verilator ОТВЕРГ (sv-mmio):"
@@ -666,8 +684,11 @@ if command -v yosys &>/dev/null; then
   for sv_file in "$SV_MMIO_OUTPUT"/*.sv; do
     [ -e "$sv_file" ] || continue
     name="$(basename "$sv_file" .sv)"
+    core="${name%_apb}"
+    sv_extra=""
+    [ "$core" != "$name" ] && sv_extra="$SV_MMIO_OUTPUT/${core}.sv"
     sv_err="$(mktemp)"
-    if yosys -q -p "read_verilog -sv $sv_file; synth -top $name" >/dev/null 2>"$sv_err"; then
+    if yosys -q -p "read_verilog -sv $sv_file $sv_extra; synth -top $name" >/dev/null 2>"$sv_err"; then
       echo "  $name → yosys синтезировал (sv-mmio)"
     else
       echo "  $name → yosys НЕ СИНТЕЗИРОВАЛ (sv-mmio):"
@@ -723,6 +744,42 @@ if command -v verilator &>/dev/null; then
       fi
     else
       echo "  $name → verilator НЕ СОБРАЛ тестбенч:"
+      sed 's/^/    /' "$tb_log" | head -12
+      sv_failed=1
+    fi
+    rm -rf "$tb_obj" "$tb_log"
+  done
+fi
+
+# ГЕЙТ ТЕСТБЕНЧА АДАПТЕРА ШИНЫ (фича 0169). Линт и синтез принимают обёртку,
+# которая НЕ РАБОТАЕТ: цикл APB можно перепутать фазами, и оба инструмента
+# промолчат (урок 0045). Тестбенч ведёт настоящие трансферы и сверяет значения.
+SV_MMIO_TB_DIR="$SV_MMIO_OUTPUT/tb"
+if command -v verilator &>/dev/null; then
+  echo "Гейт тестбенчей sv-mmio: verilator (--binary) прогоняет tb/<name>_apb_tb.sv..."
+  for name in $SV_MMIO_TRANSLATABLE; do
+    tb_src="$SV_MMIO_TB_DIR/${name}_apb_tb.sv"
+    if [ ! -e "$tb_src" ]; then
+      echo "  $name → тестбенч $tb_src отсутствует (ожидался парный tb для адаптера)."
+      sv_failed=1
+      continue
+    fi
+    tb_obj="$(mktemp -d)"
+    tb_log="$(mktemp)"
+    if verilator --binary --timing --trace -Wno-fatal --top-module tb \
+        -Mdir "$tb_obj" -o simtb \
+        "$tb_src" "$SV_MMIO_OUTPUT/${name}_apb.sv" "$SV_MMIO_OUTPUT/${name}.sv" \
+        >"$tb_log" 2>&1; then
+      if ( cd "$SV_MMIO_TB_DIR" && "$tb_obj/simtb" ) >"$tb_log" 2>&1; then
+        sed 's/^/    /' "$tb_log" | grep -E 'OK|TICK' | head -4 || true
+        echo "  ${name}_apb → тестбенч ПРОШЁЛ; осциллограмма $SV_MMIO_TB_DIR/${name}_apb.vcd"
+      else
+        echo "  ${name}_apb → тестбенч ПРОВАЛИЛСЯ:"
+        sed 's/^/    /' "$tb_log" | head -12
+        sv_failed=1
+      fi
+    else
+      echo "  ${name}_apb → verilator НЕ СОБРАЛ тестбенч:"
       sed 's/^/    /' "$tb_log" | head -12
       sv_failed=1
     fi

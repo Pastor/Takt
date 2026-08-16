@@ -34,6 +34,8 @@
 //! (модуль и порты, `SV-006`/`SV-007`) · `sv_fsm` (автомат и сброс, `SV-008`) ·
 //! `sv_expr` (выражения и функции, `SV-005`).
 
+// Адаптер шины APB (фича 0169): обёртка над регистровым интерфейсом ядра.
+mod sv_apb;
 mod sv_blocks;
 mod sv_compose;
 mod sv_const;
@@ -91,7 +93,8 @@ impl AsGenerator for Generator {
             options.guard_enable,
         )?
         .with_time_profile(profile);
-        let (program, warnings) = generate_program(&map, self.mmio, &options.address_map)?;
+        let (program, warnings, adapter) =
+            generate_program(&map, self.mmio, &options.address_map, options.bus)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));
         fs::write(
@@ -99,9 +102,30 @@ impl AsGenerator for Generator {
             program,
         )
         .map_err(|e| Diagnostic::error(Location::Codegen, format!("{e}")).with_code("SV-001"))?;
+
+        // Адаптер шины (фича 0169) — ОТДЕЛЬНЫЙ файл рядом с ядром: ядро остаётся
+        // шинно-агностичным, и второй протокол не потребует его трогать.
+        // Без флага не эмитится ничего, поэтому прежний вывод байт-в-байт цел.
+        if let Some((suffix, text)) = adapter {
+            fs::write(
+                Path::new(output_path).join(format!("{filename}{suffix}.sv")),
+                text,
+            )
+            .map_err(|e| {
+                Diagnostic::error(Location::Codegen, format!("{e}")).with_code("SV-001")
+            })?;
+        }
         Ok(warnings)
     }
 }
+
+/// Результат сборки модуля: текст, предупреждения цели и — при `--bus` —
+/// адаптер шины (суффикс имени файла и его текст).
+///
+/// Именованный тип, а не кортеж из трёх: `clippy::type_complexity` прав —
+/// читать `Result<(String, Vec<Diagnostic>, Option<(&str, String)>), _>`
+/// невозможно.
+type ProgramOutput = (String, Vec<Diagnostic>, Option<(&'static str, String)>);
 
 /// Собирает текст модуля SystemVerilog из снимка модели.
 ///
@@ -115,7 +139,8 @@ fn generate_program(
     map: &SvMap,
     mmio: bool,
     address_map: &std::collections::HashMap<String, crate::address_map::ResolvedAddress>,
-) -> Result<(String, Vec<Diagnostic>), Diagnostic> {
+    bus: Option<crate::generator::Bus>,
+) -> Result<ProgramOutput, Diagnostic> {
     let Element::Model { .. } = map.model() else {
         return Err(Diagnostic::error(
             Location::Codegen,
@@ -246,7 +271,23 @@ fn generate_program(
     // общего формата. Теперь предупреждения — часть результата.
     let warnings = fsm.warnings.borrow().clone();
 
-    Ok((out, warnings))
+    // Адаптер шины строится ЗДЕСЬ, где регистровый файл уже собран (фича 0169):
+    // вторая сборка `Mmio` дала бы второй источник ширин, и адаптер разошёлся бы
+    // с ядром при первой же правке (класс 0084/0193/0195).
+    let adapter = match bus {
+        None => None,
+        Some(crate::generator::Bus::Apb) => {
+            let Some(m) = &mmio_map else {
+                // Флаг применим только к цели `sv-mmio`: у `sv` регистрового
+                // файла нет по устройству, и просить у него шину — та же ошибка,
+                // что просить её у модели без адресов.
+                return Err(sv_apb::refuse_wrong_target());
+            };
+            Some(("_apb", sv_apb::generate_apb(map.get_filename(), m)?))
+        }
+    };
+
+    Ok((out, warnings, adapter))
 }
 
 #[cfg(test)]
@@ -268,6 +309,7 @@ mod tests {
             &make_map(src, name),
             false,
             &std::collections::HashMap::new(),
+            None,
         )
         .unwrap()
         .0
@@ -536,6 +578,7 @@ mod tests {
             &make_map(src, "Root"),
             false,
             &std::collections::HashMap::new(),
+            None,
         )
         .unwrap_err();
         assert_eq!(

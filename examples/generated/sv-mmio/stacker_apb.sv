@@ -1,0 +1,47 @@
+// Порождено компилятором Takt (taktc) — адаптер шины APB для 'stacker'.
+// Не редактировать вручную: файл перезаписывается при каждой генерации.
+//
+// AMBA APB3, сторона slave. Трансфер: setup-фаза (psel, !penable) →
+// access-фаза (psel, penable). pready = 1 — состояний ожидания нет,
+// поэтому access длится один такт и запись регистра происходит однажды.
+//
+// Адрес шины равен адресу из 'at': декодирование старших разрядов —
+// обязанность внешнего декодера, который и формирует psel.
+
+module stacker_apb (
+    input  logic        pclk,     // тактовый сигнал шины (= clk ядра)
+    input  logic        presetn,  // сброс шины, активный низкий (= rst_n)
+    input  logic [10:0] paddr,    // адрес APB (равен адресу из 'at')
+    input  logic        psel,     // выбор устройства (от декодера)
+    input  logic        penable,  // access-фаза
+    input  logic        pwrite,   // 1 = запись, 0 = чтение
+    input  logic [7:0]  pwdata,   // данные записи
+    output logic [7:0]  prdata,   // данные чтения
+    output logic        pready,   // готовность: всегда 1
+    output logic        pslverr,  // ошибка: всегда 0
+    input  logic        en,       // clock enable ядра (запись регистров им НЕ гейтится)
+    output logic        is_done
+);
+    logic [10:0] reg_addr;
+    logic [7:0]  reg_wdata;
+    logic        reg_wen;
+    logic [7:0]  reg_rdata;
+
+    assign reg_addr  = paddr;
+    assign reg_wdata = pwdata;
+    assign reg_wen   = psel & penable & pwrite;
+    assign prdata    = reg_rdata;
+    assign pready    = 1'b1;
+    assign pslverr   = 1'b0;
+
+    stacker u_core (
+        .clk(pclk),
+        .rst_n(presetn),
+        .en(en),
+        .reg_addr(reg_addr),
+        .reg_wdata(reg_wdata),
+        .reg_wen(reg_wen),
+        .reg_rdata(reg_rdata),
+        .is_done(is_done)
+    );
+endmodule

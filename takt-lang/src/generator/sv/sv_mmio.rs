@@ -321,8 +321,18 @@ impl Mmio {
     }
 
     /// Есть ли хоть один адресованный порт (иначе интерфейс не эмитится).
-    fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.ports.is_empty()
+    }
+
+    /// Ширина `reg_addr` в битах — нужна адаптеру шины (фича 0169).
+    pub(crate) fn addr_width(&self) -> u32 {
+        self.addr_width
+    }
+
+    /// Ширина `reg_wdata`/`reg_rdata` в битах — нужна адаптеру шины (фича 0169).
+    pub(crate) fn data_width(&self) -> u32 {
+        self.data_width
     }
 
     /// Группировка портов по адресу (адреса — по возрастанию, детерминизм).

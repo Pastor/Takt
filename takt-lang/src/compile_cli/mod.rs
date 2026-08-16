@@ -96,6 +96,12 @@ pub struct CompileOptions {
     /// `SE-069`/`SE-070`); если не объявила — флаг задаёт частоту. `None` без
     /// флага — профиль «часы» (внешний источник времени).
     pub tick_hz: Option<u64>,
+    /// Адаптер шины для цели `sv-mmio` — флаг `--bus=apb` (фича 0169).
+    ///
+    /// `None` без флага — вывод прежний байт-в-байт: адаптер не порождается.
+    /// Протокол берётся **по требованию заказчика**, а не «на всякий случай»
+    /// (карточка фичи), поэтому список значений короткий и растёт подзадачами.
+    pub bus: Option<crate::generator::Bus>,
 }
 
 /// Разбирает аргументы подкоманды `compile` в [`CompileOptions`].
@@ -138,6 +144,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
     let mut parameters = ParametersMode::default();
     let mut float_embedded = false;
     let mut tick_hz: Option<u64> = None;
+    let mut bus: Option<crate::generator::Bus> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -234,6 +241,15 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
                     "--parameters требует значение: --parameters=assign|specialize".to_string(),
                 );
             }
+            // Фича 0169: адаптер шины для цели `sv-mmio`. Только слитная форма
+            // со значением — как у `--parameters=`: флаг без значения есть
+            // ошибка, а не молчаливое умолчание.
+            a if a.starts_with("--bus=") => {
+                bus = Some(parse_bus(&a["--bus=".len()..])?);
+            }
+            "--bus" => {
+                return Err("--bus требует значение: --bus=apb".to_string());
+            }
             // Фича 0134: частота такта устройства. Обе формы, как у соседей.
             "--tick-hz" => {
                 i += 1;
@@ -282,6 +298,7 @@ pub fn parse_compile_args(args: &[String]) -> Result<CompileOptions, String> {
         float_embedded,
         parameters,
         tick_hz,
+        bus,
     })
 }
 
@@ -345,6 +362,20 @@ fn parse_float_as_q(value: &str) -> Result<(u8, u8), String> {
 /// Значение — целое число Гц (`--tick-hz=1000`), совпадающее по форме с текстом
 /// диагностики контракта `SE-069`. Ноль и нечисло — **ошибка CLI**: частота
 /// такта не бывает нулевой, а угадывать нельзя (тот же довод, что у `--float-as-q`).
+/// Разбирает значение `--bus=` (фича 0169).
+///
+/// Неизвестное значение — ошибка **с перечислением** допустимых, а не
+/// молчаливое умолчание: молчание оставило бы пользователя с ожиданием файла,
+/// которого нет (тот же довод, что у `--parameters=`).
+fn parse_bus(value: &str) -> Result<crate::generator::Bus, String> {
+    match value {
+        "apb" => Ok(crate::generator::Bus::Apb),
+        other => Err(format!(
+            "--bus: неизвестный протокол '{other}'. Поддерживается: apb"
+        )),
+    }
+}
+
 fn parse_tick_hz(value: &str) -> Result<u64, String> {
     let hz = value
         .parse::<u64>()
@@ -370,6 +401,9 @@ fn generate_options(options: &CompileOptions) -> crate::GenerateOptions {
     // Режим параметров (фича 0185): `specialize` включает копирование моделей
     // по наборам аргументов между стадиями 1 и 2 семантики.
     generate.specialize = options.parameters == ParametersMode::Specialize;
+    // Адаптер шины (фича 0169): применим только к цели `sv-mmio` — у прочих
+    // регистрового файла нет, и попытка кончается `SV-019`, а не молчанием.
+    generate.bus = options.bus;
     generate
 }
 
