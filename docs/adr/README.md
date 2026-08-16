@@ -185,3 +185,4 @@
 | [0209](./0209-model-external-interface.md) | Внешний интерфейс модели: extern fn в симуляторе и агрегат как аргумент | Accepted | фича 0209 |
 | [0172](./0172-empty-enum-semantics.md) | Семантика перечисления без вариантов | Accepted (Option B) | фича 0172 |
 | [0168](./0168-generator-warnings-return.md) | Предупреждения генераторов возвращаются вызывающему | Accepted (Option C) | фича 0168 |
+| [0167](./0167-c-enum-constants-usage.md) | Цель c использует объявленные константы перечисления | Accepted (Option C) | фича 0167 |

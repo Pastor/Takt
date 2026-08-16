@@ -272,22 +272,14 @@ pub(in crate::generator::c) fn generate_condition_expr(
             if let Some(model) = state_of_model(l) {
                 generate_state_comparison(model, r, "==", map, owner)
             } else {
-                Ok(format!(
-                    "{} == {}",
-                    generate_condition_expr(l, map, owner)?,
-                    generate_condition_expr(r, map, owner)?
-                ))
+                generate_comparison(l, r, "==", map, owner)
             }
         }
         ConditionNode::NotEqual(l, r) => {
             if let Some(model) = state_of_model(l) {
                 generate_state_comparison(model, r, "!=", map, owner)
             } else {
-                Ok(format!(
-                    "{} != {}",
-                    generate_condition_expr(l, map, owner)?,
-                    generate_condition_expr(r, map, owner)?
-                ))
+                generate_comparison(l, r, "!=", map, owner)
             }
         }
         ConditionNode::Variable(var_rc, _) => {
@@ -505,4 +497,53 @@ fn after_dynamic_condition(expr: &str, map: &CMap, owner: &Element) -> Result<St
 /// всегда `model->…` (как у `model->state` для собственного состояния).
 pub(in crate::generator::c) fn dwell_access() -> String {
     format!("model->{DWELL_FIELD}")
+}
+
+/// Печатает сравнение, восстанавливая имя константы перечисления (фича 0167).
+///
+/// Сравнение перечислимой переменной с литералом — второе место, где **известен
+/// тип** значения (первое — присваивание). Прежде печаталось `model->c == 1`
+/// рядом с объявленным и неиспользованным `#define ENUM_…_GO 1`.
+///
+/// Сторона роли не играет: `c = Go` и `Go = c` дают одно и то же, и автор
+/// вправе написать любую.
+fn generate_comparison(
+    left: &ConditionNode,
+    right: &ConditionNode,
+    op: &str,
+    map: &CMap,
+    owner: &Element,
+) -> Result<String, Diagnostic> {
+    let lhs = match enum_constant_for_comparison(right, left) {
+        Some(name) => name,
+        None => generate_condition_expr(left, map, owner)?,
+    };
+    let rhs = match enum_constant_for_comparison(left, right) {
+        Some(name) => name,
+        None => generate_condition_expr(right, map, owner)?,
+    };
+    Ok(format!("{lhs} {op} {rhs}"))
+}
+
+/// Имя константы для `value`, если тип задаёт `typed` — переменная
+/// перечислимого типа (фича 0167).
+///
+/// `None` — печатать обычным путём (правило «не догадываться», ADR 0066:
+/// значение вне набора вариантов остаётся числом).
+fn enum_constant_for_comparison(typed: &ConditionNode, value: &ConditionNode) -> Option<String> {
+    let ConditionNode::Variable(var_rc, _) = typed else {
+        return None;
+    };
+    let ConditionNode::Number(n) = value else {
+        return None;
+    };
+    let var = var_rc.borrow();
+    let (VariableNode::Simple { ty, upper, .. }
+    | VariableNode::Const { ty, upper, .. }
+    | VariableNode::Port { ty, upper, .. }) = &*var
+    else {
+        return None;
+    };
+    let scope = upper.as_ref().and_then(|w| w.upgrade())?;
+    crate::generator::c::c_enum::constant_of(ty, *n, &scope)
 }

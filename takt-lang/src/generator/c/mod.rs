@@ -33,6 +33,8 @@
 mod c_anon;
 mod c_blocks;
 mod c_decl;
+// Значение перечислимого типа печатается именем константы (фича 0167).
+mod c_enum;
 mod c_every;
 mod c_expr;
 mod c_hal;

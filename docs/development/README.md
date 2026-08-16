@@ -406,3 +406,4 @@
 | 0172-02 | 0172 | Семантика перечисления без вариантов | [0172-02-empty-enum-semantics.md](0172-02-empty-enum-semantics.md) |
 | 0168-01 | 0168 | Предупреждения генераторов возвращаются вызывающему | [0168-01-generator-warnings-return.md](0168-01-generator-warnings-return.md) |
 | 0168-02 | 0168 | Предупреждения генераторов возвращаются вызывающему | [0168-02-generator-warnings-return.md](0168-02-generator-warnings-return.md) |
+| 0167-01 | 0167 | Цель c использует объявленные константы перечисления | [0167-01-c-enum-constants-usage.md](0167-01-c-enum-constants-usage.md) |

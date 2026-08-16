@@ -36,8 +36,8 @@ pub(super) fn generate_model_init(
         )
         .with_code("CC-006"));
     };
-    let raw = map.raw_model_at(name.clone())?;
-    let raw = &*raw.borrow();
+    let raw_rc = map.raw_model_at(name.clone())?;
+    let raw = &*raw_rc.borrow();
     printer
         .ident("model->state = ")
         .print(&name.unique_uppercase_snakecase())
@@ -86,7 +86,7 @@ pub(super) fn generate_model_init(
             generate_array_init(printer, map, model, &var.name(), ty, expr)?;
             continue;
         }
-        generate_scalar_init(printer, map, model, &var.name(), ty, expr)?;
+        generate_scalar_init(printer, map, model, &var.name(), ty, expr, &raw_rc)?;
     }
     generate_port_initial_values(printer, map, model, raw, name, hal_ptr)?;
     Ok(())

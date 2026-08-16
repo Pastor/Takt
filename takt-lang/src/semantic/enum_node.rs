@@ -7,8 +7,11 @@
 //! объявлений `enum` в исходном тексте.
 
 use crate::diagnostics::Location;
+use crate::parser::ast;
 use crate::semantic::ModelNode;
+use crate::semantic::type_node::TypeNode;
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::rc::Weak;
 
 /// Семантический узел перечисления (Ce4).
@@ -191,6 +194,73 @@ pub fn enum_facts(variants: &[(String, i128)]) -> Option<EnumFacts> {
         signed,
         min_bits,
     })
+}
+
+/// Построение узла перечисления из АСД (фича 0167).
+///
+/// Живёт рядом с самим узлом, а не в `tree.rs`: тот давно сверх лимита размера
+/// (`docs/CODE.md`), и правило велит выносить новое, а не дописывать туда.
+/// Строит узел перечисления и регистрирует его в модели.
+///
+/// # Регистрация идёт в ДВЕ таблицы (Ce4)
+///
+/// 1. `enums` — для поиска через `search_enum` / `search_enum_variant`;
+/// 2. `types` — для разрешения аннотации `var x: Color := 0;`: парсер создаёт
+///    `Type::Alias("Color")`, а `construct_type` ищет псевдоним именно там.
+///
+/// ⚠️ Ограничение прежнее: перечисление должно быть объявлено **до** переменных,
+/// использующих его как тип (как и псевдонимы `type`); иначе тип переменной
+/// станет `Unsupported`.
+pub(crate) fn build_enum(model_node: &Rc<RefCell<ModelNode>>, e: &ast::EnumDefine) {
+    let enum_name = e
+        .name
+        .as_ref()
+        .map(|id| id.name.clone())
+        .unwrap_or_default();
+
+    // Вариант без явного значения продолжает нумерацию от предыдущего (первый — 0).
+    let mut next_val: i128 = 0;
+    let mut variant_pairs = Vec::new();
+    for variant in &e.variants {
+        let val = variant.value.unwrap_or(next_val);
+        next_val = val + 1;
+        variant_pairs.push((variant.name.name.clone(), val));
+    }
+
+    let enum_loc = e.name.as_ref().map(|id| id.loc).unwrap_or(e.loc);
+    let mut enum_node = EnumDefinitionNode::new(
+        &enum_name,
+        &variant_pairs
+            .iter()
+            .map(|(n, v)| (n.as_str(), Some(*v)))
+            .collect::<Vec<_>>(),
+    );
+    enum_node.loc = enum_loc;
+    // Владелец (фича 0167). Поле существовало с самого начала и док-строкой
+    // обещало «разрешение имён при генерации кода», но НЕ заполнялось:
+    // потребителю оставалось строить имя из «модели, которую печатаем», а не из
+    // места объявления — тот же класс расхождения, что закрывала 0193 для
+    // констант.
+    //
+    // ⚠️ Взять владельца иначе нельзя: `search_enum` идёт по цепочке `upper`
+    // МОДЕЛИ и отдаёт узел, поэтому унаследованное перечисление неотличимо от
+    // собственного.
+    enum_node.upper = Some(Rc::downgrade(model_node));
+
+    model_node
+        .borrow_mut()
+        .enums
+        .insert(enum_name.clone(), enum_node);
+    if !enum_name.is_empty() {
+        model_node
+            .borrow_mut()
+            .types
+            .insert(enum_name.clone(), TypeNode::Enum(enum_name.clone()));
+        model_node
+            .borrow_mut()
+            .type_locs
+            .insert(enum_name.clone(), enum_loc);
+    }
 }
 
 #[cfg(test)]
