@@ -171,9 +171,18 @@ fn usage_from_var(var: &VariableNode, set: &mut UsageSet) {
 fn usage_from_expr(expr: &ExpressionNode, set: &mut UsageSet) {
     match expr {
         ExpressionNode::Variable(var_rc) => note_variable_usage(&var_rc.borrow(), set),
-        ExpressionNode::ArraySubscript(var_rc, _) | ExpressionNode::ArraySlice(var_rc, _, _) => {
-            note_variable_usage(&var_rc.borrow(), set)
+        // ⚠️ Индекс — тоже использование (фича 0210): `got := mem[pc];` читает
+        // `pc`. Прежде второй элемент игнорировался (`_`), и переменная,
+        // стоявшая ТОЛЬКО индексом, получала ложное `SE-036` «объявлена, но
+        // нигде не используется» — компилятор говорил автору неправду о его же
+        // коде. С фичи 0210 индекс — произвольное выражение, и умолчание стало
+        // бы неверным чаще: в нём появляются целые подвыражения.
+        ExpressionNode::ArraySubscript(var_rc, index) => {
+            note_variable_usage(&var_rc.borrow(), set);
+            usage_from_expr(index, set);
         }
+        // Границы среза — числа (грамматика), читать в них нечего.
+        ExpressionNode::ArraySlice(var_rc, _, _) => note_variable_usage(&var_rc.borrow(), set),
         ExpressionNode::Function(func_rc, args) => {
             // Регистрируем использованную функцию
             let func_name = func_rc.borrow().name().to_string();
@@ -312,7 +321,10 @@ fn usage_from_condition(cond: &ConditionNode, set: &mut UsageSet) {
                 usage_from_condition(arg, set);
             }
         }
-        ConditionNode::ArraySubscript(var_rc, _) => note_variable_usage(&var_rc.borrow(), set),
+        ConditionNode::ArraySubscript(var_rc, index) => {
+            note_variable_usage(&var_rc.borrow(), set);
+            usage_from_condition(index, set);
+        }
         ConditionNode::BitAccess(inner, _) => usage_from_condition(inner, set),
         // Вычисляемая выдержка (фича 0183) читает переменные и порты — это
         // настоящее использование. ⚠️ Без этой ветви `after (base + 500ms)`
@@ -476,7 +488,18 @@ fn collect_from_expr(expr: &ExpressionNode, used: &mut HashSet<String>) {
                 used.insert(name.clone());
             }
         }
-        ExpressionNode::ArraySubscript(var_rc, _) | ExpressionNode::ArraySlice(var_rc, _, _) => {
+        ExpressionNode::ArraySubscript(var_rc, index) => {
+            let borrowed = var_rc.borrow();
+            if let VariableNode::Simple { name, .. }
+            | VariableNode::Port { name, .. }
+            | VariableNode::Const { name, .. } = &*borrowed
+            {
+                used.insert(name.clone());
+            }
+            // Индекс — использование (фича 0210); см. `usage_from_expr`.
+            collect_from_expr(index, used);
+        }
+        ExpressionNode::ArraySlice(var_rc, _, _) => {
             let borrowed = var_rc.borrow();
             if let VariableNode::Simple { name, .. }
             | VariableNode::Port { name, .. }
@@ -656,7 +679,7 @@ fn collect_from_condition(cond: &ConditionNode, used: &mut HashSet<String>) {
                 collect_from_condition(arg, used);
             }
         }
-        ConditionNode::ArraySubscript(var_rc, _) => {
+        ConditionNode::ArraySubscript(var_rc, index) => {
             let borrowed = var_rc.borrow();
             if let VariableNode::Simple { name, .. }
             | VariableNode::Port { name, .. }
@@ -664,6 +687,7 @@ fn collect_from_condition(cond: &ConditionNode, used: &mut HashSet<String>) {
             {
                 used.insert(name.clone());
             }
+            collect_from_condition(index, used);
         }
         ConditionNode::BitAccess(inner, _) => collect_from_condition(inner, used),
         // Вычисляемая выдержка (фича 0183) читает переменные и порты.

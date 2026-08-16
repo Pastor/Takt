@@ -22,7 +22,7 @@
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
 use crate::generator::st::st_reserved::check_st_name;
-use crate::generator::st::st_type::get_st_type;
+use crate::generator::st::st_type::{self, get_st_type};
 use crate::semantic::minimap::Name;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::unused::UsageSet;
@@ -61,9 +61,41 @@ impl Declaration {
 ///
 /// # Ошибки
 /// Диагностика от [`get_st_type`], если тип поля не отображается в IEC.
+/// Имена массивов корня, которые **действительно** передаются под-моделям
+/// через `VAR_IN_OUT` (фича 0210).
+///
+/// ⚠️ Считается по объединению `shared` всех под-моделей, а не «все массивы
+/// корня»: иначе локальный массив модели без под-моделей тоже получил бы
+/// именованный тип — лишняя сущность и сдвиг вывода там, где ничего не ломалось
+/// (проба показала это падением теста `st_tests`).
+pub(crate) fn shared_array_names(
+    map: &crate::generator::st::st_map::StMap,
+    models: &[(Name, Rc<RefCell<ModelNode>>)],
+    root_name: &Name,
+) -> Vec<String> {
+    let Some((_, root_rc)) = models.last() else {
+        return Vec::new();
+    };
+    let root = &*root_rc.borrow();
+    let mut out: Vec<String> = Vec::new();
+    for (name, _) in models {
+        if name.unique() == root_name.unique() {
+            continue;
+        }
+        for (var, ty) in map.shared_variables(name) {
+            if st_type::needs_named_array_type(&ty, root) && !out.contains(&var) {
+                out.push(var);
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
 pub(crate) fn emit_struct_types(
     p: &mut Printer,
     models: &[(Name, Rc<RefCell<ModelNode>>)],
+    shared_arrays: &[String],
 ) -> Result<bool, Diagnostic> {
     let mut declared: Vec<(String, Vec<(String, String)>)> = Vec::new();
     for (_, model_rc) in models {
@@ -82,7 +114,13 @@ pub(crate) fn emit_struct_types(
             declared.push((name.clone(), fields));
         }
     }
-    if declared.is_empty() {
+    // Именованные типы массивов, разделяемых через `VAR_IN_OUT` (фича 0210):
+    // MatIEC отвергает анонимный `ARRAY […] OF T` в объявлении параметра.
+    // Собираются здесь же, чтобы `TYPE … END_TYPE` в файле остался ОДИН: вторая
+    // секция типов рядом с первой — лишняя сущность и лишний повод разъехаться.
+    let arrays = shared_array_types(models, shared_arrays)?;
+
+    if declared.is_empty() && arrays.is_empty() {
         return Ok(false);
     }
     declared.sort_by(|a, b| a.0.cmp(&b.0));
@@ -98,9 +136,49 @@ pub(crate) fn emit_struct_types(
         p.down();
         p.ident("END_STRUCT;").nl();
     }
+    for (name, ty) in &arrays {
+        p.ident(&format!("{} : {};", name, ty)).nl();
+    }
     p.down();
     p.ident("END_TYPE").nl().nl();
     Ok(true)
+}
+
+/// Именованные типы массивов, разделяемых корнем через `VAR_IN_OUT` (фича 0210).
+///
+/// Владелец — **корень**: разделяются именно его переменные. Имя строит
+/// `st_type::shared_array_type_name`, та же функция, что зовёт потребитель в
+/// `VAR_IN_OUT`; второй формулы здесь быть не должно (урок ADR 0195).
+///
+/// ⚠️ Тип объявляется по **переменной корня**, а не по под-моделям: под-моделей
+/// может быть несколько, и все они видят один и тот же массив.
+fn shared_array_types(
+    models: &[(Name, Rc<RefCell<ModelNode>>)],
+    shared_arrays: &[String],
+) -> Result<Vec<(String, String)>, Diagnostic> {
+    let Some((root_name, root_rc)) = models.last() else {
+        return Ok(Vec::new());
+    };
+    let root = &*root_rc.borrow();
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut names: Vec<&String> = root.variables.keys().collect();
+    names.sort();
+    for name in names {
+        let VariableNode::Simple { ty, .. } = &root.variables[name] else {
+            continue;
+        };
+        if !shared_arrays.iter().any(|n| n == name) {
+            continue;
+        }
+        if !st_type::needs_named_array_type(ty, root) {
+            continue;
+        }
+        out.push((
+            st_type::shared_array_type_name(root_name.unique(), name),
+            get_st_type(ty, root)?,
+        ));
+    }
+    Ok(out)
 }
 
 /// Дополнения к объявлениям, известные только вызывающему.
@@ -117,6 +195,21 @@ pub(crate) struct Extras {
     pub is_done: bool,
     /// Переменные корня, разделяемые через `VAR_IN_OUT` (О1-в).
     pub shared: Vec<(String, TypeNode)>,
+    /// Имя модели-владельца разделяемых переменных (корня) — им квалифицируется
+    /// имя именованного типа массива (фича 0210). Пусто, когда `shared` пуст.
+    pub shared_owner: String,
+    /// То же имя, когда печатается **сам корень**: его собственные массивы тоже
+    /// объявляются именованным типом, иначе MatIEC сочтёт типы параметра и
+    /// значения несовместимыми (проба фичи 0210).
+    pub root_owner: Option<String>,
+    /// Имена массивов, которым нужен именованный тип, — те, что **фактически**
+    /// передаются под-моделям.
+    ///
+    /// ⚠️ Список общий у продюсера (`TYPE … END_TYPE`) и потребителя (объявление
+    /// переменной): без него они разъезжаются — проба дала объявление
+    /// `data : ArrayVar_data_arr;` при **отсутствующем** типе, то есть ссылку в
+    /// пустоту (урок ADR 0195).
+    pub named_arrays: Vec<String>,
     /// Экземпляры под-FB: `(имя, тип)`.
     /// Экземпляры под-FB: имя, тип, инициализатор экземпляра (фича 0185).
     ///
@@ -161,6 +254,15 @@ pub(crate) fn emit_declarations(
     let mut externals = Vec::new();
     let mut locals = Vec::new();
     let mut constants = enum_constants(model)?;
+    // Владелец именованных типов массивов (фича 0210). У корня это он сам —
+    // разделяются его переменные; у под-модели имя приходит вместе со списком
+    // `shared`. Пусто — типов нет и объявление обычное.
+    let array_owner: Option<&str> = if extras.shared_owner.is_empty() {
+        extras.root_owner.as_deref()
+    } else {
+        Some(extras.shared_owner.as_str())
+    };
+    let named_arrays = extras.named_arrays.as_slice();
 
     // Признак завершения — выход FB: по нему родитель узнаёт об окончании (S11).
     if extras.is_done {
@@ -180,9 +282,18 @@ pub(crate) fn emit_declarations(
         });
     }
     for (name, ty) in &extras.shared {
+        // Массив в параметре объявляется ИМЕНОВАННЫМ типом (фича 0210): MatIEC
+        // отвергает анонимный `ARRAY […] OF T` в `VAR_IN_OUT` («Data type
+        // incompatibility … when invoking FB»), а до фичи цель печатала именно
+        // его и рапортовала об успехе — арбитром был чужой инструмент.
+        let ty_text = if named_arrays.iter().any(|n| n == name) {
+            st_type::shared_array_type_name(&extras.shared_owner, name)
+        } else {
+            get_st_type(ty, model)?
+        };
         in_outs.push(Declaration {
             name: name.clone(),
-            ty: get_st_type(ty, model)?,
+            ty: ty_text,
             init: None,
         });
     }
@@ -231,7 +342,14 @@ pub(crate) fn emit_declarations(
                 if extras.shared.iter().any(|(n, _)| n == name) {
                     continue;
                 }
-                locals.push(declaration(name, ty, expr, model)?);
+                locals.push(declaration(
+                    name,
+                    ty,
+                    expr,
+                    model,
+                    array_owner,
+                    named_arrays,
+                )?);
             }
             VariableNode::Port {
                 name,
@@ -260,7 +378,7 @@ pub(crate) fn emit_declarations(
                 // а в цели `st-at` порт виден блоку через `VAR_EXTERNAL`, где
                 // инициализатор недопустим по стандарту: значение там ставится
                 // на `VAR_GLOBAL` (`st/mod.rs::emit_configuration`).
-                let mut decl = declaration(name, ty, init, model)?;
+                let mut decl = declaration(name, ty, init, model, None, &[])?;
                 // Цель `st-at`: порт — размещённая глобальная переменная
                 // (`VAR_GLOBAL … AT %…` внутри `CONFIGURATION`), и блок видит её
                 // через `VAR_EXTERNAL`. Цель `st` адрес не потребляет: порт
@@ -292,7 +410,7 @@ pub(crate) fn emit_declarations(
                     continue;
                 }
                 check_st_name(name, *loc)?;
-                constants.push(declaration(name, ty, expr, model)?);
+                constants.push(declaration(name, ty, expr, model, None, &[])?);
             }
         }
     }
@@ -302,7 +420,7 @@ pub(crate) fn emit_declarations(
         let VariableNode::Const { ty, expr, .. } = &var else {
             continue;
         };
-        constants.push(declaration(&name, ty, expr, model)?);
+        constants.push(declaration(&name, ty, expr, model, None, &[])?);
     }
 
     // Анонимные ячейки (фича 0189): в цели `st-at` они объявлены глобально с
@@ -436,10 +554,23 @@ fn declaration(
     ty: &TypeNode,
     expr: &ExpressionNode,
     model: &ModelNode,
+    array_owner: Option<&str>,
+    named_arrays: &[String],
 ) -> Result<Declaration, Diagnostic> {
+    // Массив, разделяемый через `VAR_IN_OUT`, объявляется ИМЕНОВАННЫМ типом —
+    // и у владельца тоже (фича 0210). ⚠️ Именованным должен быть **и параметр,
+    // и сама переменная**: MatIEC сверяет типы, и `mem : ARRAY […]` против
+    // `mem : Root_mem_arr` для него по-прежнему несовместимы. Проба, на которой
+    // это вскрылось: тип объявлен, параметр им пользуется, а ошибка та же.
+    let ty_text = match array_owner {
+        Some(owner) if named_arrays.iter().any(|n| n == name) => {
+            st_type::shared_array_type_name(owner, name)
+        }
+        _ => get_st_type(ty, model)?,
+    };
     Ok(Declaration {
         name: name.to_string(),
-        ty: get_st_type(ty, model)?,
+        ty: ty_text,
         init: literal_init(expr, ty),
     })
 }

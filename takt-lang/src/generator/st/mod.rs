@@ -200,9 +200,16 @@ fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic
         .ok_or_else(|| root_missing(map.root_name()))?;
     blocks.push((map.root_name(), root));
 
+    // Массивы, которые ДЕЙСТВИТЕЛЬНО передаются в под-модели (фича 0210): им
+    // нужен именованный тип, потому что MatIEC отвергает анонимный `ARRAY […]`
+    // в объявлении параметра. ⚠️ Считается по объединению `shared` всех
+    // под-моделей, а не «все массивы корня»: иначе локальный массив без единой
+    // под-модели тоже получил бы тип — лишняя сущность и сдвиг вывода корпуса.
+    let shared_arrays = st_decl::shared_array_names(map, &blocks, &map.root_name());
+
     // Объявления структур — общие для файла и печатаются раньше всех блоков:
     // в IEC 61131-3 тип обязан быть известен к моменту использования.
-    st_decl::emit_struct_types(&mut p, &blocks)?;
+    st_decl::emit_struct_types(&mut p, &blocks, &shared_arrays)?;
     // Функции — тоже раньше: опережающие ссылки в ST нестандартны (`iec2c -p`).
     let mut warnings = st_func::emit_functions(&mut p, &blocks)?;
 
@@ -215,6 +222,7 @@ fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic
             name,
             &model.borrow(),
             is_root,
+            &shared_arrays,
         )?);
     }
 
@@ -484,6 +492,7 @@ fn emit_function_block(
     name: &Name,
     model: &ModelNode,
     is_root: bool,
+    named_arrays: &[String],
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
     let element = if is_root {
         map.model()
@@ -503,6 +512,10 @@ fn emit_function_block(
     } else {
         map.shared_variables(name)
     };
+    // Владелец разделяемых переменных — корень: им квалифицируется имя
+    // именованного типа массива (фича 0210), и продюсер типа зовёт ту же
+    // функцию, что потребитель.
+    let shared_owner = map.root_name().unique().to_string();
 
     let mut body = String::new();
     let out = {
@@ -516,6 +529,11 @@ fn emit_function_block(
         is_done: true,
         external_ports: map.at_addresses(),
         shared,
+        shared_owner,
+        // Корень объявляет свои массивы тем же именованным типом, что и
+        // под-модели в параметрах, — иначе типы не совпадут (фича 0210).
+        root_owner: is_root.then(|| map.root_name().unique().to_string()),
+        named_arrays: named_arrays.to_vec(),
         instances: out
             .instances
             .iter()

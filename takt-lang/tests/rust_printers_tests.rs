@@ -144,6 +144,13 @@ fn enum_variant_prints_qualified() {
 }
 
 /// Индексация массива получает `as usize`: в Rust индекс — `usize`.
+///
+/// ⚠️ Ожидание исправлено фичей 0210: было `shared.xs[self.i as usize]`, то есть
+/// **невалидный** Rust — `rustc` отвечал `E0609: no field 'i' on type '&mut …'`.
+/// Причина: переменная, использованная только индексом, не считалась
+/// использованной, поэтому не попадала в общую структуру, а печатник ссылался на
+/// `self`. Тест это закреплял: он сверял текст, а гейт цели гоняет только корпус,
+/// где такой формы нет (класс 0191 — дефект, закреплённый тестами).
 #[test]
 fn array_subscript_casts_index_to_usize() {
     let text = emit(
@@ -156,8 +163,8 @@ fn array_subscript_casts_index_to_usize() {
     );
     assert_has(
         &text,
-        "shared.xs[self.i as usize] > 0",
-        "индекс массива обязан приводиться к `usize`",
+        "shared.xs[shared.i as usize] > 0",
+        "индекс массива обязан приводиться к `usize` и браться из общей структуры",
     );
 }
 
@@ -478,8 +485,8 @@ fn array_element_assignment_indexes_with_usize() {
     );
     assert_has(
         &text,
-        "shared.xs[self.i as usize] = 7",
-        "запись элемента массива",
+        "shared.xs[shared.i as usize] = 7",
+        "запись элемента массива: индекс — из общей структуры (см. соседний тест)",
     );
 }
 

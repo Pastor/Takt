@@ -35,6 +35,7 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::ModelNode;
 use crate::semantic::enum_facts;
+use crate::semantic::naming::normalize_camelcase_name;
 use crate::semantic::type_node::TypeNode;
 
 /// Отображает тип Takt в имя типа IEC 61131-3.
@@ -256,6 +257,50 @@ fn unresolved(kind: &str, name: &str) -> Diagnostic {
         ),
     )
     .with_code("ST-008")
+}
+
+/// Имя именованного типа для массива, разделяемого через `VAR_IN_OUT`
+/// (фича 0210).
+///
+/// # Зачем именованный тип
+///
+/// MatIEC **отвергает** анонимный массив в объявлении параметра:
+///
+/// ```text
+/// VAR_IN_OUT mem : ARRAY [0..3] OF USINT; END_VAR
+/// …
+/// reader0(mem := mem);
+/// → error: Data type incompatibility between parameter 'mem' and value being
+///          passed, when invoking FB 'reader0'
+/// ```
+///
+/// Тот же файл с `TYPE MemArr : ARRAY [0..3] OF USINT; END_TYPE` и
+/// `mem : MemArr;` принимается (проба 2026-08-16). До фичи цель порождала
+/// первую форму и рапортовала об успехе — арбитром оказывался чужой инструмент
+/// (класс ADR 0184).
+///
+/// # Почему имя квалифицировано
+///
+/// Идентификаторы IEC **регистронезависимы** и делят пространство со
+/// стандартной библиотекой (ловушка `Concat`/`PID`, ADR 0041), а тип печатается
+/// один на файл. Имя строится из модели-владельца и имени переменной, поэтому
+/// две модели с массивом `mem` не сталкиваются.
+///
+/// ⚠️ Функция **одна** на продюсера (`TYPE … END_TYPE`) и потребителя
+/// (`VAR_IN_OUT`): разъехавшись, они дали бы ссылку на необъявленный тип
+/// (урок ADR 0195).
+pub(crate) fn shared_array_type_name(owner: &str, var: &str) -> String {
+    format!("{}_{}_arr", normalize_camelcase_name(owner), var)
+}
+
+/// Требует ли тип именованного объявления при передаче через `VAR_IN_OUT`.
+///
+/// Только настоящий массив: `[bit; N ≤ 64]` — упакованный **скаляр**
+/// (`bit_vector`, фича 0078), и его MatIEC принимает как есть.
+pub(crate) fn needs_named_array_type(ty: &TypeNode, model: &ModelNode) -> bool {
+    matches!(ty, TypeNode::Array(_, _))
+        && crate::semantic::bit_vector::is_bit_vector(ty).is_none()
+        && get_st_type(ty, model).is_ok_and(|t| t.starts_with("ARRAY "))
 }
 
 #[cfg(test)]
