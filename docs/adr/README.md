@@ -188,3 +188,4 @@
 | [0167](./0167-c-enum-constants-usage.md) | Цель c использует объявленные константы перечисления | Accepted (Option C) | фича 0167 |
 | [0169](./0169-sv-mmio-bus-adapters.md) | Адаптеры шин для цели sv-mmio (APB) | Accepted (Option C) | фича 0169 |
 | [0210](./0210-st-array-shared-and-index.md) | Массив как общая переменная в цели st; индекс-выражение | Accepted (A1+B1+C1) | фича 0210 |
+| [0211](./0211-c-missing-start-state-diagnostic.md) | Модель без состояний в реализации: отказ семантики `SE-106` | Accepted (Option B) | фича 0211 |

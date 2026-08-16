@@ -1,0 +1,5 @@
+// `import` вносит модель по имени ФАЙЛА: `Wrapper` — это корень wrapper.takt,
+// у которого состояний нет. Сноска SE-106 обязана назвать вложенную модель.
+import "wrapper.takt";
+
+start Main = Wrapper;

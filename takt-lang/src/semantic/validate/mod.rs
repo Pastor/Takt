@@ -39,6 +39,7 @@ mod entry;
 mod enums;
 mod fixed;
 mod formulas;
+mod implemented;
 mod implicit_bool;
 // `pub(crate)`, а не `mod`: границы целочисленного типа (`type_range`) нужны и
 // свёртке инициализатора (фича 0207) — вторая копия границ разошлась бы с
@@ -131,8 +132,13 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // одного выражения ранний выход сохранён, потому что дальше по нему пошли
     // бы следствия первой ошибки (тот же довод, которым 0152 оставила
     // терминальными стадии построения дерева).
-    let checks: [Vec<Diagnostic>; 12] = [
+    let checks: [Vec<Diagnostic>; 13] = [
         model_only_one_start_state(model.clone()),
+        // SE-106 (0211): модель без состояний, поставленная в реализацию. Без
+        // отказа один вход давал ШЕСТЬ разных ответов, и два из них молчаливые:
+        // `plantuml` печатал диаграмму с переходом в никуда, эталон исполнял
+        // пустую трассу.
+        implemented::validate_implemented_models(model.clone()),
         // SE-099 (0189): обращение к ячейке в инициализаторе объявления. Без
         // запрета эталон дал бы ноль, а `c-hal` — чтение регистра, и молча.
         anon_init::validate_anon_in_initializers(model.clone()),

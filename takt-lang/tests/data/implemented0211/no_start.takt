@@ -1,0 +1,12 @@
+// КОНТРПРИМЕР: состояния есть, `start` среди них нет — это SE-011, не SE-106.
+model Engine {
+    var z: u8 := 0;
+
+    state E {
+        always {
+            z := 1;
+        }
+    }
+}
+
+start App = Engine;

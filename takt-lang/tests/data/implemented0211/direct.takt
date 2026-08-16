@@ -1,0 +1,6 @@
+// Прямая ссылка на модель без состояний: `start App = Empty;`.
+model Empty {
+    var z: u8 := 0;
+}
+
+start App = Empty;

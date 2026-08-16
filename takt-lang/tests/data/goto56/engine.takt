@@ -6,3 +6,7 @@ model Engine {
 
     start Stopped { ref Stopped; }
 }
+
+// Корень файла обязан иметь состояние — см. helper.takt (фича 0211). Строка
+// объявления `model Engine` при этом не сдвигается: на неё опирается зонд T8.
+start Root = Engine;

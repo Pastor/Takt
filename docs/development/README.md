@@ -409,3 +409,4 @@
 | 0167-01 | 0167 | Цель c использует объявленные константы перечисления | [0167-01-c-enum-constants-usage.md](0167-01-c-enum-constants-usage.md) |
 | 0169-01 | 0169 | Адаптер шины APB | [0169-01-sv-mmio-bus-adapters.md](0169-01-sv-mmio-bus-adapters.md) |
 | 0210-01 | 0210 | Массив как общая переменная в цели st; индекс-выражение | [0210-01-st-array-shared-and-index.md](0210-01-st-array-shared-and-index.md) |
+| 0211-01 | 0211 | Модель без стартового состояния: цель c отказывает бессодержательно | [0211-01-c-missing-start-state-diagnostic.md](0211-01-c-missing-start-state-diagnostic.md) |

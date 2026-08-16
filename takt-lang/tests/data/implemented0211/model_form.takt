@@ -1,0 +1,10 @@
+// Форма реализации модели (фича 0199): `model App = Empty { … }`.
+model Empty {
+    var z: u8 := 0;
+}
+
+model App = Empty {
+    var k: u8 := 0;
+}
+
+start Top = App;

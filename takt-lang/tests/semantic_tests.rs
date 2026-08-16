@@ -697,7 +697,14 @@ fn import_file_with_parse_error_is_error() {
 /// Импортированная модель видна при разрешении `implements` в основном файле.
 #[test]
 fn imported_model_usable_in_implements() {
-    let (_dir, dir_str) = write_tmp_lam("worker.takt", "model Worker { start S; }");
+    // ⚠️ Корень подключаемого файла обязан иметь состояние: `import` вносит
+    // модель по имени ФАЙЛА, и обёртка без состояний в реализации — `SE-106`
+    // (фича 0211). Прежде проба состояла из одной вложенной модели и до целей
+    // не доезжала вовсе.
+    let (_dir, dir_str) = write_tmp_lam(
+        "worker.takt",
+        "model Worker { start S; }\nstart Root = Worker;",
+    );
 
     let src = r#"
         import "worker.takt";
