@@ -132,7 +132,7 @@ impl AsGenerator for Generator {
         model: &ModelNode,
         output_path: &str,
         options: &GenerateOptions,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<Vec<Diagnostic>, Diagnostic> {
         // Профиль времени (фича 0134): `clock` модели — контракт, флаг обязан
         // подтвердить (задача 0134-05). Сверка живёт в общем слое; здесь —
         // единый чекпойнт-энфорсмент: несовпадение → `SE-069`/`SE-070` из `?`,
@@ -161,7 +161,10 @@ impl AsGenerator for Generator {
             source,
         )
         .map_err(|e| Diagnostic::warning(Location::Codegen, format!("{e}")).with_code("CC-010"))?;
-        Ok(())
+        // Предупреждений цели `c` не заведено (фича 0168): канал есть, говорить
+        // по нему пока нечего — первое же предупреждение поедет без смены
+        // сигнатуры.
+        Ok(Vec::new())
     }
 }
 

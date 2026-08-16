@@ -406,18 +406,30 @@ fn print_warnings(
     }
 }
 
-/// Печатает результат простой цели (`Result<(), Diagnostic>`: `plantuml`/`st`/
-/// `rust`/`sv`) и завершает процесс при ошибке. verbose даёт полный путь входа.
-/// Цель `c` не пользуется этим: её сообщение перечисляет пути поиска.
+/// Печатает результат простой цели (`plantuml`/`st`/`rust`/`sv`) и завершает
+/// процесс при ошибке. verbose даёт полный путь входа. Цель `c` не пользуется
+/// этим: её сообщение перечисляет пути поиска.
+///
+/// ⚠️ Предупреждения **цели** печатаются здесь же и той же точкой, что
+/// предупреждения компилятора (фича 0168). Прежде цели `st`/`rust`/`sv`
+/// печатали их сами — `eprintln!` из библиотеки, мимо `--quiet` и мимо общего
+/// формата (позиция терялась).
 fn report_simple_result(
-    result: Result<(), crate::diagnostics::Diagnostic>,
+    result: Result<Vec<crate::diagnostics::Diagnostic>, crate::diagnostics::Diagnostic>,
     target: &str,
     options: &CompileOptions,
 ) {
-    if let Err(diag) = result {
-        print_compile_error(&diag);
-        process::exit(1);
-    }
+    let warnings = match result {
+        Ok(warnings) => warnings,
+        Err(diag) => {
+            print_compile_error(&diag);
+            process::exit(1);
+        }
+    };
+    // Реестр здесь — только корневой файл: цель строит своё дерево внутри и
+    // таблицу наружу не отдаёт (та же граница, что у `report_hal_result`).
+    let files = crate::diagnostics::FileTable::new(&options.input_file);
+    print_warnings(&warnings, &files, options.quiet);
     if options.quiet {
         return;
     }
@@ -621,15 +633,23 @@ pub fn run_compile(args: &[String]) -> i32 {
             );
         }
         "c" => {
-            if let Err(diag) = crate::compile_to_c(
+            match crate::compile_to_c(
                 &options.input_file,
                 &source,
                 &options.output_path,
                 &options.include_dirs,
                 &generate_options(&options),
             ) {
-                print_compile_error(&diag);
-                return 1;
+                // Предупреждений у цели `c` сегодня нет, но канал общий (фича
+                // 0168): появится первое — поедет отсюда, без правки CLI.
+                Ok(warnings) => {
+                    let files = crate::diagnostics::FileTable::new(&options.input_file);
+                    print_warnings(&warnings, &files, options.quiet);
+                }
+                Err(diag) => {
+                    print_compile_error(&diag);
+                    return 1;
+                }
             }
             // В тихом режиме не выводим информационные сообщения
             if !options.quiet {

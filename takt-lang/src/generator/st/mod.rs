@@ -80,7 +80,7 @@ impl AsGenerator for Generator {
         model: &ModelNode,
         output_path: &str,
         options: &GenerateOptions,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<Vec<Diagnostic>, Diagnostic> {
         // Профиль времени (фича 0134): `clock` модели — контракт, флаг обязан
         // подтвердить (0134-05). Единый чекпойнт-энфорсмент `SE-069`/`SE-070`.
         let profile = crate::semantic::duration::resolve_profile(model.clock_hz, options.tick_hz)?;
@@ -91,7 +91,7 @@ impl AsGenerator for Generator {
             options.address_map.clone(),
         )?
         .with_time_profile(profile);
-        let program = generate_program(&map)?;
+        let (program, warnings) = generate_program(&map)?;
         let filename = map.get_filename();
         let _ = fs::create_dir(Path::new(output_path));
         fs::write(
@@ -99,7 +99,7 @@ impl AsGenerator for Generator {
             program,
         )
         .map_err(|e| Diagnostic::error(Location::Codegen, format!("{e}")).with_code("ST-001"))?;
-        Ok(())
+        Ok(warnings)
     }
 }
 
@@ -109,7 +109,11 @@ impl AsGenerator for Generator {
 /// `FUNCTION_BLOCK … END_FUNCTION_BLOCK` на корневую модель и на каждую
 /// используемую подмодель — с секциями объявлений (0041-02). Тело блоков
 /// наполняют задачи 0041-03…0041-05.
-fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
+/// Возвращает текст программы **и предупреждения цели** (`ST-009`, `ST-010`,
+/// `ST-022`, размещение портов). Приёмников три — функции, тела блоков и
+/// конфигурация, — и все они сходятся здесь: печатать их генератор не вправе
+/// (фича 0168).
+fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic> {
     let Element::Model { .. } = map.model() else {
         return Err(Diagnostic::error(
             Location::Codegen,
@@ -205,7 +209,13 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     let root_name = map.root_name();
     for (name, model) in &blocks {
         let is_root = name.unique() == root_name.unique();
-        emit_function_block(&mut p, map, name, &model.borrow(), is_root)?;
+        warnings.extend(emit_function_block(
+            &mut p,
+            map,
+            name,
+            &model.borrow(),
+            is_root,
+        )?);
     }
 
     // Цель `st-at` порождает программу для ПЛК ЦЕЛИКОМ, а не библиотеку блоков:
@@ -213,7 +223,7 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
     // недопустим (проба П8). Цель `st` обёртки не требует (П2) — цели
     // асимметричны намеренно.
     if map.at_addresses() {
-        emit_configuration(&mut p, map, &root_name, &blocks)?;
+        warnings.extend(emit_configuration(&mut p, map, &root_name, &blocks)?);
     }
 
     // ST-022 (фича 0235): охранная формула в IEC 61131-3 невыразима — конструкции
@@ -248,9 +258,8 @@ fn generate_program(map: &StMap) -> Result<String, Diagnostic> {
         }
     }
 
-    report(&warnings);
     // Q-хелпер LAM_Q_FLOORDIV (0061) вставляется перед первым POU по факту вызова.
-    Ok(st_fixed::insert_helper(out))
+    Ok((st_fixed::insert_helper(out), warnings))
 }
 
 /// Строка объявления анонимной ячейки в `VAR_GLOBAL` (фича 0189).
@@ -309,7 +318,7 @@ fn emit_configuration(
     map: &StMap,
     root_name: &Name,
     blocks: &[(Name, Rc<RefCell<ModelNode>>)],
-) -> Result<(), Diagnostic> {
+) -> Result<Vec<Diagnostic>, Diagnostic> {
     let fb = root_name.unique_camelcase();
     p.ident(&format!("PROGRAM {}Main", fb)).nl();
     p.ident("VAR").nl();
@@ -414,20 +423,7 @@ fn emit_configuration(
     p.ident("END_RESOURCE").nl();
     p.down();
     p.ident("END_CONFIGURATION").nl().nl();
-    report(&warnings);
-    Ok(())
-}
-
-/// Показывает предупреждения генератора (`ST-009`, `ST-010`).
-///
-/// Молчание здесь недопустимо: `ST-009` сообщает, что тело внешней функции
-/// подменено заглушкой, а `ST-010` — что LTL-формула в ПЛК не поедет. И то и
-/// другое пользователь обязан увидеть.
-fn report(warnings: &[Diagnostic]) {
-    for w in warnings {
-        let code = w.code.as_deref().unwrap_or("ST");
-        eprintln!("Предупреждение [{}]: {}", code, w.message);
-    }
+    Ok(warnings)
 }
 
 /// Упорядочивает подмодели так, чтобы каждая шла после тех, кого использует.
@@ -488,7 +484,7 @@ fn emit_function_block(
     name: &Name,
     model: &ModelNode,
     is_root: bool,
-) -> Result<(), Diagnostic> {
+) -> Result<Vec<Diagnostic>, Diagnostic> {
     let element = if is_root {
         map.model()
     } else {
@@ -557,8 +553,7 @@ fn emit_function_block(
     p.print(&body);
     p.ident("END_FUNCTION_BLOCK").nl().nl();
 
-    report(&out.stmt.warnings);
-    Ok(())
+    Ok(out.stmt.warnings)
 }
 
 #[cfg(test)]
@@ -576,7 +571,7 @@ mod tests {
     }
 
     fn program_of(src: &str, name: &str) -> String {
-        generate_program(&make_map(src, name)).unwrap()
+        generate_program(&make_map(src, name)).unwrap().0
     }
 
     /// Корневая модель должна порождать `FUNCTION_BLOCK` — несущую конструкцию ST.

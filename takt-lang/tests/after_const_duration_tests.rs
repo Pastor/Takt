@@ -72,13 +72,14 @@ fn tmp(tag: &str) -> std::path::PathBuf {
 /// файла, поэтому разные имена дали бы разный вывод по причине, к фиче не
 /// относящейся.
 /// Сигнатура порождающей функции цели (`compile_to_c` и родственные).
-type Generate = fn(
-    &str,
-    &str,
-    &str,
-    &[String],
-    &GenerateOptions,
-) -> Result<(), takt_lang::diagnostics::Diagnostic>;
+type Generate =
+    fn(
+        &str,
+        &str,
+        &str,
+        &[String],
+        &GenerateOptions,
+    ) -> Result<Vec<takt_lang::diagnostics::Diagnostic>, takt_lang::diagnostics::Diagnostic>;
 
 fn both(tag: &str, ext: &str, generate: Generate) -> (String, String) {
     let read = |dir: &std::path::Path| {

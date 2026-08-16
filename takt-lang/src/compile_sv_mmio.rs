@@ -77,12 +77,17 @@ pub fn compile_to_sv_mmio(
     // `--float-embedded`, третий аргумент `false`).
     apply_float_lowering(&model, options, false)?;
 
-    generator::generate(
+    // Предупреждения генератора (`SV-009`) присоединяются к адресным (фича
+    // 0168). Прежде у одного вызова было **две** судьбы: адресные возвращались
+    // и глушились `--quiet`, а `SV-009` печаталась `eprintln!` из библиотеки и
+    // не глушилась ничем.
+    let mut warnings = resolution.diagnostics;
+    warnings.extend(generator::generate(
         generator::Language::SvMmio,
         &model.borrow(),
         output_path,
         &mmio_options,
-    )?;
+    )?);
 
-    Ok(resolution.diagnostics)
+    Ok(warnings)
 }

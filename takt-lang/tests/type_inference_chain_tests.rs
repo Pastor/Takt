@@ -121,13 +121,14 @@ fn folding_still_happens_after_inference() {
 }
 
 /// Точка входа цели: сигнатура у всех четырёх одна.
-type Compile = fn(
-    &str,
-    &str,
-    &str,
-    &[String],
-    &GenerateOptions,
-) -> Result<(), takt_lang::diagnostics::Diagnostic>;
+type Compile =
+    fn(
+        &str,
+        &str,
+        &str,
+        &[String],
+        &GenerateOptions,
+    ) -> Result<Vec<takt_lang::diagnostics::Diagnostic>, takt_lang::diagnostics::Diagnostic>;
 
 /// Порождает код всеми целями; возвращает список отказов.
 fn translate_all(tag: &str, src: &str) -> Vec<String> {
