@@ -164,3 +164,4 @@
 | 0168 | Предупреждения генераторов возвращаются вызывающему | [0168-generator-warnings-return.md](0168-generator-warnings-return.md) | ✅ ПРОЙДЕН (отчёт: [reports/0168](../reports/0168-generator-warnings-return.md)) |
 | 0167 | Цель c использует объявленные константы перечисления | [0167-c-enum-constants-usage.md](0167-c-enum-constants-usage.md) | ✅ ПРОЙДЕН (отчёт: [reports/0167](../reports/0167-c-enum-constants-usage.md)) |
 | 0169 | Адаптеры шин для цели sv-mmio (APB) | [0169-sv-mmio-bus-adapters.md](0169-sv-mmio-bus-adapters.md) | ✅ ПРОЙДЕН (отчёт: [reports/0169](../reports/0169-sv-mmio-bus-adapters.md)) |
+| 0210 | Массив как общая переменная в цели st; индекс-выражение | [0210-st-array-shared-and-index.md](0210-st-array-shared-and-index.md) | ✅ ПРОЙДЕН (отчёт: [reports/0210](../reports/0210-st-array-shared-and-index.md)) |

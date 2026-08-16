@@ -439,8 +439,7 @@ Condition0: Condition = {
   },
   <a:@L> "(" <e:Condition> ")" <b:@R> => Condition::Parenthesis(Location::source(file_no, a, b), Box::new(e)),
   <a:@L> <e:Condition0> "." <i:Member> <b:@R> => Condition::BitAccess(Location::source(file_no, a, b), Box::new(e), i),
-  <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Condition::ArraySubscript(Location::source(file_no, a, b), i, Box::new(Condition::Number(Location::source(file_no, a, b), n))),
-  <a:@L> <i:Identifier> "[" <idx:Identifier> "]" <b:@R> => Condition::ArraySubscript(Location::source(file_no, a, b), i, Box::new(Condition::Variable(idx))),
+  <a:@L> <i:Identifier> "[" <idx:Condition> "]" <b:@R> => Condition::ArraySubscript(Location::source(file_no, a, b), i, Box::new(idx)),
   ConditionExpression,
 }
 
@@ -740,8 +739,7 @@ Precedence0: Expression = {
       Expression::AnonAddress(Location::source(file_no, l, r), n, None)
   },
   <a:@L> <e:Precedence0> "." <i:Member> <b:@R> => Expression::BitAccess(Location::source(file_no, a, b), Box::new(e), i),
-  <a:@L> <i:Identifier> "[" <n:number> "]" <b:@R> => Expression::ArraySubscript(Location::source(file_no, a, b), i, Box::new(Expression::Number(Location::source(file_no, a, b), n))),
-  <a:@L> <i:Identifier> "[" <idx:Identifier> "]" <b:@R> => Expression::ArraySubscript(Location::source(file_no, a, b), i, Box::new(Expression::Variable(idx))),
+  <a:@L> <i:Identifier> "[" <idx:Expression> "]" <b:@R> => Expression::ArraySubscript(Location::source(file_no, a, b), i, Box::new(idx)),
   <a:@L> <i:Identifier> "[" <l:number?> ":" <r:number?> "]" <b:@R> => Expression::ArraySlice(Location::source(file_no, a, b), i, l, r),
   LiteralExpression,
 }

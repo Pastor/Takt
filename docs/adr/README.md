@@ -187,3 +187,4 @@
 | [0168](./0168-generator-warnings-return.md) | Предупреждения генераторов возвращаются вызывающему | Accepted (Option C) | фича 0168 |
 | [0167](./0167-c-enum-constants-usage.md) | Цель c использует объявленные константы перечисления | Accepted (Option C) | фича 0167 |
 | [0169](./0169-sv-mmio-bus-adapters.md) | Адаптеры шин для цели sv-mmio (APB) | Accepted (Option C) | фича 0169 |
+| [0210](./0210-st-array-shared-and-index.md) | Массив как общая переменная в цели st; индекс-выражение | Accepted (A1+B1+C1) | фича 0210 |
