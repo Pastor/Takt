@@ -1,0 +1,16 @@
+// Параллельная композиция: пустая модель рядом с рабочей.
+model Empty {
+    var z: u8 := 0;
+}
+
+model Work {
+    var w: u8 := 0;
+
+    start W {
+        always {
+            w := 1;
+        }
+    }
+}
+
+start App = Empty | Work;

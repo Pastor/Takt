@@ -1,0 +1,12 @@
+// Вложенный уровень: пустая модель в реализации под-модели.
+model Inner {
+    var z: u8 := 0;
+}
+
+model Mid {
+    var m: u8 := 0;
+
+    start S = Inner;
+}
+
+start App = Mid;
