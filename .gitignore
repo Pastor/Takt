@@ -27,3 +27,5 @@ obj_dir
 
 # mdBook — каталог сборки документа описания языка (book/)
 /book/book/
+
+takt-lang/target
