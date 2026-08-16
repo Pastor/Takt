@@ -14,138 +14,12 @@ use takt_lang::semantic::{
     ConditionNode, ExpressionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind, VariableNode,
 };
 
-use crate::unit::initial::{eval_expr, eval_expr_in};
+use crate::unit::context_model::ModelNodeContext;
+use crate::unit::initial::eval_expr;
 
 type Executions = HashMap<String, Vec<Execution>>;
 
-// ── ModelNodeContext ──────────────────────────────────────────────────────────
-
-/// Контекст с иерархической структурой, зеркалирующей цепочку ModelNode.upper.
-///
-/// Хранит прямую ссылку на ModelNode (Rc) — переменные не копируются.
-/// При запросе переменной:
-/// 1. Проверяет локальный кэш (Value уже вычислен ранее).
-/// 2. Запрашивает `model.variables` напрямую, вычисляет Value из ExpressionNode.
-/// 3. Копирует результат в кэш (ленивая инициализация).
-/// 4. Если в текущей модели не найдено — поднимается к `parent` (ModelNode.upper).
-///
-/// Для параллельных моделей `parent` является общим (`Rc`) — изменения одной
-/// подмодели сразу видны остальным через общий родительский контекст.
-struct ModelNodeContext {
-    model: Rc<RefCell<ModelNode>>,
-    cache: RefCell<HashMap<String, Value>>,
-    parent: Option<Rc<RefCell<dyn Context>>>,
-}
-
-impl ModelNodeContext {
-    fn new(model: Rc<RefCell<ModelNode>>) -> Self {
-        let parent = model
-            .borrow()
-            .upper
-            .as_ref()
-            .and_then(|w| w.upgrade())
-            .map(|parent_rc| {
-                Rc::new(RefCell::new(ModelNodeContext::new(parent_rc))) as Rc<RefCell<dyn Context>>
-            });
-        Self {
-            model,
-            cache: RefCell::new(HashMap::new()),
-            parent,
-        }
-    }
-
-    fn new_with_parent(
-        model: Rc<RefCell<ModelNode>>,
-        parent: Option<Rc<RefCell<dyn Context>>>,
-    ) -> Self {
-        Self {
-            model,
-            cache: RefCell::new(HashMap::new()),
-            parent,
-        }
-    }
-}
-
-impl Context for ModelNodeContext {
-    fn get_value(&self, name: &str) -> Option<Value> {
-        if let Some(v) = self.cache.borrow().get(name) {
-            return Some(v.clone());
-        }
-        let value = {
-            let borrowed = self.model.borrow();
-            borrowed.variables.get(name).and_then(|var| {
-                match eval_expr_in(var_expr(var), &borrowed) {
-                    Some(v) => Some(coerce_initial(v, var, &borrowed)),
-                    // Переменная без инициализатора → нулевое значение по типу
-                    // (как default-init в C). Прежде так делалась только структура
-                    // (фича 0034), а скаляр (`var q: u8;`) оставался
-                    // незарегистрированным → SIM-009 (гэп 0034-04). Фича 0086
-                    // распространяет политику на все типы: `default_field`
-                    // покрывает bool/rational/fixed/array/struct/целое единообразно.
-                    None => var_type(var).map(|ty| default_field(ty, &borrowed)),
-                }
-            })
-        };
-        if let Some(value) = value {
-            self.cache
-                .borrow_mut()
-                .insert(name.to_string(), value.clone());
-            return Some(value);
-        }
-        self.parent
-            .as_ref()
-            .and_then(|p| p.borrow().get_value(name))
-    }
-
-    fn set_value(&mut self, name: &str, value: Value) {
-        if self.model.borrow().variables.contains_key(name) {
-            self.cache.borrow_mut().insert(name.to_string(), value);
-        } else if let Some(parent) = &self.parent {
-            parent.borrow_mut().set_value(name, value);
-        } else {
-            self.cache.borrow_mut().insert(name.to_string(), value);
-        }
-    }
-
-    /// Определение структуры по имени (фича 0034): `search_struct` учитывает
-    /// родительские модели по слабым ссылкам `upper`.
-    fn find_struct(&self, name: &str) -> Option<takt_lang::semantic::StructDefinitionNode> {
-        self.model.borrow().search_struct(name)
-    }
-
-    /// Перечисляет значения состояния модели для снимка (фича 0032).
-    ///
-    /// Идёт по именам `model.variables`, вычисляя значение через собственный
-    /// `get_value` (что попутно материализует ленивый кэш). **Константы
-    /// исключаются** — их значение задано исходником, восстанавливать из файла
-    /// опасно (исходник мог измениться). Родитель накладывается **первым**, затем
-    /// перекрывается значениями текущей модели — та же приоритетность, что у
-    /// `get_value` (локальное имя выигрывает у родительского).
-    fn dump(&self) -> HashMap<String, Value> {
-        let mut out: HashMap<String, Value> = self
-            .parent
-            .as_ref()
-            .map(|p| p.borrow().dump())
-            .unwrap_or_default();
-        let names: Vec<String> = {
-            let borrowed = self.model.borrow();
-            borrowed
-                .variables
-                .iter()
-                .filter(|(_, var)| !matches!(var, VariableNode::Const { .. }))
-                .map(|(name, _)| name.clone())
-                .collect()
-        };
-        for name in names {
-            if let Some(value) = self.get_value(&name) {
-                out.insert(name, value);
-            }
-        }
-        out
-    }
-}
-
-fn var_expr(var: &VariableNode) -> &ExpressionNode {
+pub(crate) fn var_expr(var: &VariableNode) -> &ExpressionNode {
     match var {
         VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } => expr,
         // У порта берётся **начальное значение** (фича 0187), а не адрес:
@@ -161,7 +35,7 @@ fn var_expr(var: &VariableNode) -> &ExpressionNode {
 }
 
 /// Объявленный тип переменной (или `None` для `Unresolved`).
-fn var_type(var: &VariableNode) -> Option<&TypeNode> {
+pub(crate) fn var_type(var: &VariableNode) -> Option<&TypeNode> {
     match var {
         VariableNode::Simple { ty, .. }
         | VariableNode::Port { ty, .. }
@@ -179,7 +53,7 @@ fn var_type(var: &VariableNode) -> Option<&TypeNode> {
 /// смена поведения вне объёма этой фичи). Литерал `q` уже понижен грамматикой в
 /// представление, поэтому `coerce_to_type(Number, Fixed)` трактует его как сырой
 /// repr — двойного масштабирования нет.
-fn coerce_initial(value: Value, var: &VariableNode, model: &ModelNode) -> Value {
+pub(crate) fn coerce_initial(value: Value, var: &VariableNode, model: &ModelNode) -> Value {
     match var_type(var) {
         Some(ty @ TypeNode::Fixed { .. }) => {
             crate::eval::coerce_to_type(value.clone(), ty).unwrap_or(value)
@@ -210,7 +84,7 @@ fn coerce_initial(value: Value, var: &VariableNode, model: &ModelNode) -> Value 
 
 /// Значение поля по умолчанию (нулевое) по его типу — для структуры без
 /// инициализатора (фича 0034). Совпадает с default-init полей структуры в C.
-fn default_field(ty: &TypeNode, model: &ModelNode) -> Value {
+pub(crate) fn default_field(ty: &TypeNode, model: &ModelNode) -> Value {
     match ty {
         TypeNode::Bool => Value::Boolean(false),
         TypeNode::Rational => Value::Real(0.0),

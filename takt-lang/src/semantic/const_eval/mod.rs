@@ -81,6 +81,12 @@ pub enum ConstValue {
     Bool(bool),
     /// Длительность в наносекундах.
     Duration(i64),
+    /// Агрегат: массивный литерал либо инициализатор структуры (фича 0209).
+    ///
+    /// ⚠️ Элементы — те же `ConstValue`, поэтому вложенность работает сама
+    /// собой. Арифметики над агрегатом **нет**: смешение видов отвергает общая
+    /// ветвь, и заводить для списка отдельные правила незачем.
+    List(Vec<ConstValue>),
     /// Дробный литерал — **как записан** (текст, знак).
     ///
     /// Не `f64`: представление выбирают флаги сборки (0096), и приводить к
@@ -112,6 +118,7 @@ impl ConstValue {
             ConstValue::Bool(_) => "булево",
             ConstValue::Duration(_) => "длительность",
             ConstValue::Rational(_, _) => "дробное",
+            ConstValue::List(_) => "агрегат",
         }
     }
 
@@ -126,6 +133,12 @@ impl ConstValue {
             ConstValue::Rational(text, negative) => {
                 ast::Expression::Rational(loc, text.clone(), *negative)
             }
+            // Агрегат печатается формой `{…}` — той же, какой его пишет автор
+            // (массив и инициализатор структуры в языке записываются одинаково).
+            ConstValue::List(items) => ast::Expression::Initializer(
+                loc,
+                items.iter().map(|item| item.to_literal(loc)).collect(),
+            ),
         }
     }
 }
@@ -276,6 +289,16 @@ pub fn eval_in(
         E::Duration(_, ns, _) => Ok(ConstValue::Duration(*ns)),
         E::Rational(_, text, negative) => Ok(ConstValue::Rational(text.clone(), *negative)),
         E::Parenthesis(_, inner) | E::UnaryPlus(_, inner) => eval_in(inner, scope, locals, budget),
+        // Агрегат (фича 0209): `{9, 8, 7, 6}` — массив либо инициализатор
+        // структуры. Обе формы записываются одинаково и вычисляются поэлементно;
+        // невычислимый элемент отвергает сам себя, называя своё место.
+        E::Array(_, items) | E::Initializer(_, items) => {
+            let values: Result<Vec<ConstValue>, Diagnostic> = items
+                .iter()
+                .map(|item| eval_in(item, scope, locals, budget))
+                .collect();
+            Ok(ConstValue::List(values?))
+        }
         E::Negate(loc, inner) => match eval_in(inner, scope, locals, budget)? {
             ConstValue::Int(v) => Ok(ConstValue::Int(v.wrapping_neg())),
             ConstValue::Duration(ns) => Ok(ConstValue::Duration(ns.wrapping_neg())),

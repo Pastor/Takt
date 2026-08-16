@@ -61,6 +61,16 @@ struct BlockScope<'a> {
 }
 
 impl Context for BlockScope<'_> {
+    /// Стенд внешних функций — у объемлющего контекста (фича 0209).
+    ///
+    /// ⚠️ Без этой передачи стенд не доезжает: тело блока и тело функции
+    /// исполняются в своей области видимости, и вызов `extern fn` спрашивает
+    /// **её**, а не модель. Умолчание трейта (`None`) означало бы «стенда нет»
+    /// — прогон отвечал бы `SIM-019` при заданной подмене.
+    fn extern_result(&self, name: &str, args: &[Value]) -> Option<Value> {
+        self.outer.extern_result(name, args)
+    }
+
     fn since_state_entry_ns(&self) -> i64 {
         self.outer.since_state_entry_ns()
     }
@@ -100,6 +110,16 @@ struct FunctionScope<'a> {
 }
 
 impl Context for FunctionScope<'_> {
+    /// Стенд внешних функций — у объемлющего контекста (фича 0209).
+    ///
+    /// ⚠️ Без этой передачи стенд не доезжает: тело блока и тело функции
+    /// исполняются в своей области видимости, и вызов `extern fn` спрашивает
+    /// **её**, а не модель. Умолчание трейта (`None`) означало бы «стенда нет»
+    /// — прогон отвечал бы `SIM-019` при заданной подмене.
+    fn extern_result(&self, name: &str, args: &[Value]) -> Option<Value> {
+        self.outer.extern_result(name, args)
+    }
+
     fn since_state_entry_ns(&self) -> i64 {
         self.outer.since_state_entry_ns()
     }
@@ -544,6 +564,13 @@ pub(crate) fn call_function(
             // Тела нет: процедура — no-op; функция со значением — отказ, а не
             // тихий ноль (решение ADR).
             FunctionDefinitionNode::External { ret, loc, name, .. } => {
+                // Стенд сценария (фича 0209): значение задаёт шаг — там же, где
+                // задаются входы портов. ⚠️ Умолчания нет: не задали — прежний
+                // отказ. Ноль по умолчанию сделал бы прогон зелёным при
+                // расхождении с прошивкой.
+                if let Some(value) = ctx.extern_result(name, args) {
+                    return Ok(value);
+                }
                 return if matches!(ret, TypeNode::Unit) {
                     Ok(Value::Number(0))
                 } else {

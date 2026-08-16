@@ -182,3 +182,4 @@
 | [0206](./0206-imported-enum-variant-in-match.md) | Вариант импортированного перечисления не разрешается в образце match | Accepted (Option B) | фича 0206 |
 | [0207](./0207-bitwise-not-unsigned-literal.md) | Отрицание ~0 для беззнакового типа: два правила языка столкнулись | Accepted (Option B) | фича 0207 |
 | [0208](./0208-const-evaluators-unification.md) | Три константных вычислителя компилятора живут порознь | Accepted (Option B) | фича 0208 |
+| [0209](./0209-model-external-interface.md) | Внешний интерфейс модели: extern fn в симуляторе и агрегат как аргумент | Accepted | фича 0209 |

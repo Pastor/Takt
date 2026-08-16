@@ -367,9 +367,12 @@ impl SimulationRunner {
             }
             self.unit.set_time_ns(self.now_ns);
 
-            // Применяем входные порты
+            // Применяем входные порты и стенд внешних функций (фича 0209):
+            // и то, и другое — вход шага сценария, и ставится оно перед тактом.
             if let Some(step) = &sim_step {
                 self.apply_step_inputs(step, step_no + 1)?;
+                self.unit
+                    .set_extern_stubs(extern_stubs_of(step, step_no + 1)?);
             }
 
             // Выполняем шаг. В мягком режиме нарушения инвариантов не прерывают
@@ -918,4 +921,50 @@ fn build_legend(unit: &Unit, port_names: &PortNames) -> LegendData {
         inout_ports: to_entries(&port_names.inout_ports),
         vars: to_entries(&port_names.vars),
     }
+}
+
+/// Переводит секцию `extern` шага сценария в стенд эталона (фича 0209).
+///
+/// ⚠️ Значение, которое не переводится в величину симулятора (строка, объект в
+/// позиции значения), — **ошибка сценария**, а не молчаливый пропуск: автор
+/// написал подмену, и она обязана сработать.
+fn extern_stubs_of(
+    step: &crate::json_input::SimStep,
+    step_no: usize,
+) -> Result<crate::context::ExternStubs, String> {
+    use crate::json_input::ExternValue;
+    let mut stubs = crate::context::ExternStubs::default();
+    let Some(declared) = &step.extern_stubs else {
+        return Ok(stubs);
+    };
+    for (name, value) in declared {
+        match value {
+            ExternValue::Any(raw) => {
+                let value = crate::json_input::json_to_value(raw).ok_or_else(|| {
+                    format!("шаг {step_no}: значение extern-функции '{name}' не читается")
+                })?;
+                stubs.declare(name, crate::context::ExternStub::Any(value));
+            }
+            ExternValue::ByArgument(table) => {
+                let mut by_arg = std::collections::HashMap::new();
+                for (key, raw) in table {
+                    let key: i128 = key.parse().map_err(|_| {
+                        format!(
+                            "шаг {step_no}: ключ '{key}' таблицы extern-функции '{name}' \
+                             не число — таблица ищет по значению первого аргумента"
+                        )
+                    })?;
+                    let value = crate::json_input::json_to_value(raw).ok_or_else(|| {
+                        format!(
+                            "шаг {step_no}: значение extern-функции '{name}' при аргументе \
+                             {key} не читается"
+                        )
+                    })?;
+                    by_arg.insert(key, value);
+                }
+                stubs.declare(name, crate::context::ExternStub::ByArgument(by_arg));
+            }
+        }
+    }
+    Ok(stubs)
 }
