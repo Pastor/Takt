@@ -102,6 +102,10 @@ endmodule
         .current_dir(dir)
         .args([
             "--binary",
+            // Сборку порождённого C++ verilator ведёт в один поток; `-j 0`
+            // отдаёт ей все ядра (фича 0241: замер 110.6 с против 316 с).
+            "-j",
+            "0",
             "--timing",
             "-Wno-fatal",
             "--top-module",
@@ -210,6 +214,10 @@ endmodule
         .current_dir(dir)
         .args([
             "--binary",
+            // Сборку порождённого C++ verilator ведёт в один поток; `-j 0`
+            // отдаёт ей все ядра (фича 0241: замер 110.6 с против 316 с).
+            "-j",
+            "0",
             "--timing",
             "-Wno-fatal",
             "--top-module",

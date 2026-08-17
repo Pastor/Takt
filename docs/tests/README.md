@@ -168,3 +168,4 @@
 | 0211 | Модель без стартового состояния: цель c отказывает бессодержательно | [0211-c-missing-start-state-diagnostic.md](0211-c-missing-start-state-diagnostic.md) | ✅ ПРОЙДЕН (отчёт: [reports/0211](../reports/0211-c-missing-start-state-diagnostic.md)) |
 | 0212 | Диагностика цели c без кода | [0212-c-diagnostic-without-code.md](0212-c-diagnostic-without-code.md) | ✅ ПРОЙДЕН (отчёт: [reports/0212](../reports/0212-c-diagnostic-without-code.md)) |
 | 0239 | Скрипт релизной сборки и установки инструментов | [0239-install-script.md](0239-install-script.md) | ✅ ПРОЙДЕН (отчёт: [reports/0239](../reports/0239-install-script.md)) |
+| 0241 | Ускорение предкоммита | [0241-precheck-speedup.md](0241-precheck-speedup.md) | ✅ ПРОЙДЕН (отчёт: [reports/0241](../reports/0241-precheck-speedup.md)) |
