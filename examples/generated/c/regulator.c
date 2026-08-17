@@ -48,7 +48,6 @@ void RegulatorRegulator_tick(RegulatorRegulator *model, Regulator *main) {
             model->value = model->setpoint;
             model->state = REGULATOR_REGULATOR_DONE;
             break;
-            break;
         }
         case REGULATOR_REGULATOR_END: {
             break;

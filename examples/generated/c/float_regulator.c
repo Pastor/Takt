@@ -41,7 +41,6 @@ void FloatRegulatorFloatRegulator_tick(FloatRegulatorFloatRegulator *model, Floa
             model->value = model->setpoint;
             model->state = FLOAT_REGULATOR_FLOAT_REGULATOR_DONE;
             break;
-            break;
         }
         case FLOAT_REGULATOR_FLOAT_REGULATOR_END: {
             break;

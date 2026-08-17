@@ -413,3 +413,4 @@
 | 0212-01 | 0212 | Диагностика цели c без кода | [0212-01-c-diagnostic-without-code.md](0212-01-c-diagnostic-without-code.md) |
 | 0239-01 | 0239 | Скрипт релизной сборки и установки инструментов | [0239-01-install-script.md](0239-01-install-script.md) |
 | 0241-01 | 0241 | Ускорение предкоммита | [0241-01-precheck-speedup.md](0241-01-precheck-speedup.md) |
+| 0213-01 | 0213 | Цель c печатает лишний break после безусловного перехода | [0213-01-c-redundant-break.md](0213-01-c-redundant-break.md) |

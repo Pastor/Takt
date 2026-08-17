@@ -119,8 +119,11 @@ fn generate_parallel_items_tick(
 /// Генерирует переходы между состояниями для простого состояния [`Element::State`].
 ///
 /// Для каждой ссылки (`ref`-перехода) формирует:
-/// - безусловный переход (`ConditionNode::None`): `exit → enter → state → break`
-/// - условный переход: `if (cond) { exit → enter → state → break }`
+/// - безусловный переход (`ConditionNode::None`): `exit → enter → state`, после
+///   чего обход рёбер **прекращается** (фича 0213): ветвь `case` закрывает общий
+///   `break;`, а всё, что стоит за безусловным ребром, недостижимо
+/// - условный переход: `if (cond) { exit → enter → state → break }` — здесь
+///   `break` обязателен, он выходит из `switch` изнутри блока
 fn generate_state_transitions(
     printer: &mut Printer,
     raw_state: &StateNode,
@@ -195,7 +198,21 @@ fn generate_state_transitions(
                 }
             }
         } else {
-            // Безусловный переход: exit → enter → state → break
+            // Безусловный переход: exit → enter → state.
+            //
+            // Фича 0213. Собственного `break;` у него НЕТ, и цикл по рёбрам на
+            // нём заканчивается — ровно как в трёх остальных целях
+            // (`rust_tick.rs`, `st_model.rs`, `sv_fsm.rs`: «всё, что за
+            // безусловным ребром, недостижимо»). Прежде цель `c` печатала и
+            // `break;`, и хвост рёбер: ветвь `case` закрывается общим `break;`
+            // (см. хвост печати `switch` ниже), поэтому в выводе выходила пара
+            // `break; break;` — 7 мест в корпусе, — а рёбра после безусловного
+            // печатались недостижимым кодом. `cc -Wall -Wextra
+            // -Wunreachable-code` об этом молчит, то есть цена — шум в коде,
+            // который читает человек.
+            //
+            // Поведение тождественно: удаляется исключительно то, до чего
+            // исполнение не доходит.
             generate_named_blocks(printer, raw_state, map, model, "exit")?;
             let target_rc = map.raw_state_at(target.clone())?;
             let target_raw = &*target_rc.borrow();
@@ -206,7 +223,7 @@ fn generate_state_transitions(
                     target.unique_uppercase_snakecase()
                 ))
                 .nl();
-            printer.ident("break;").nl();
+            return Ok(());
         }
     }
     Ok(())
