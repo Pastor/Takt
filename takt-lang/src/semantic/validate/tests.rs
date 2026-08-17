@@ -18,7 +18,18 @@ fn empty_model_is_valid() {
 /// Модель только с типами — валидна (нет состояний).
 #[test]
 fn model_with_only_types_is_valid() {
-    assert!(build("type u8 = [bit;8];").is_ok());
+    assert!(build("type Byte = [bit;8];").is_ok());
+}
+
+/// Имя встроенного типа занять нельзя — `SE-107` (фича 0243).
+///
+/// ⚠️ Прежде эта же строка (`type u8 = [bit;8];`) стояла в тесте выше как
+/// пример валидной программы: язык принимал затенение молча, и `u8` в файле
+/// начинал означать не то, что в языке.
+#[test]
+fn builtin_type_name_cannot_be_redeclared() {
+    let err = build("type u8 = [bit;8];").expect_err("ожидался отказ SE-107");
+    assert_eq!(err.code.as_deref(), Some("SE-107"), "{err:?}");
 }
 
 /// Модель с одним начальным состоянием — валидна.

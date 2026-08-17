@@ -638,7 +638,6 @@ mod tests {
     use crate::{parse, semantic};
 
     const SRC: &str = r#"
-type u8 = [bit;8];
 
 in sensors_1: u8 at 0x100000000;
 in sensors_2: u8 at 0x200000000;
@@ -725,7 +724,6 @@ start Main = Robot;
     fn const_port_names_are_not_char_split() {
         // Константы используются в always, чтобы попасть в UsageSet.
         let src = r#"
-type u8 = [bit;8];
 const MATRIX: u8 := 0;
 const NUMB: u8 := 255;
 in SENSOR: u8 at 0x100000;
@@ -776,7 +774,6 @@ start Main { always { v := MATRIX; v := NUMB; } }
     #[test]
     fn test_extern_fn_call_in_always() {
         let src = r#"
-type u8 = [bit;8];
 extern fn log_val(v: u8);
 model Counter {
     var x: u8 := 0;
@@ -807,7 +804,6 @@ start Root = Counter;
     #[test]
     fn test_extern_fn_call_after_local_var_in_always() {
         let src = r#"
-type u8 = [bit;8];
 extern fn log_val(v: u8);
 model Counter {
     var x: u8 := 0;
@@ -841,8 +837,7 @@ start Root = Counter;
     #[test]
     fn test_guard_formula_codegen() {
         let src = r#"
-            type u8 = [bit;8];
-            var x: u8 := 0;
+                        var x: u8 := 0;
             :[Guard] x < 100;
             start Running {
                 :[Guard] x >= 0;

@@ -154,20 +154,49 @@ pub(in crate::semantic) fn adopt_whole_file(
     // обращение к её объявлениям цели генерации не выражают. Прежде переносились
     // только переменные, и `import "lib.takt";` на библиотеке с типом отвечал
     // `SE-034` «локальный тип не найден» — на типе, который сам же и подключил.
-    let (types, structs, enums, fns) = {
+    let (types, structs, enums, fns, type_locs) = {
         let b = library.borrow();
         (
             b.types.clone(),
             b.structs.clone(),
             b.enums.clone(),
             b.functions.clone(),
+            b.type_locs.clone(),
         )
     };
+    // Фича 0243: имя типа занимается ОДИН раз, и граница файла этого не меняет.
+    // Столкновение возможно в обе стороны, поэтому проверяются обе:
+    //
+    // - импорт идёт ПОСЛЕ локального объявления — ловится здесь (иначе
+    //   `extend` молча заменил бы локальный тип библиотечным);
+    // - импорт идёт ДО — ловится воронкой `claim_type_name` на локальном
+    //   объявлении, потому что позиции библиотеки перенесены строкой ниже.
+    //
+    // ⚠️ Позиция заметки принадлежит СВОЕМУ файлу (у `Location` есть `file_no`),
+    // поэтому автор видит обе стороны столкновения, а не только свою.
+    for (type_name, first_loc) in &type_locs {
+        let clash = importer.borrow().type_locs.get(type_name).copied();
+        if let Some(local_loc) = clash {
+            return Err(Diagnostic::error_with_note(
+                local_loc,
+                format!(
+                    "тип с именем '{type_name}' уже объявлен: подключённый файл                      '{name}' объявляет его же"
+                ),
+                *first_loc,
+                format!("объявление типа '{type_name}' в подключённом файле — здесь"),
+            )
+            .with_code("SE-108"));
+        }
+    }
     {
         let mut imp = importer.borrow_mut();
         imp.types.extend(types);
         imp.structs.extend(structs);
         imp.enums.extend(enums);
+        // Позиции переносятся вместе с типами: без них воронка 0243 не сможет
+        // назвать первое объявление, а `SE-108` без второй позиции — половина
+        // сообщения (урок 0195).
+        imp.type_locs.extend(type_locs);
     }
     for (fn_name, mut f) in fns {
         if importer.borrow().functions.contains_key(&fn_name) {

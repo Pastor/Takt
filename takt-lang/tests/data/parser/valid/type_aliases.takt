@@ -1,14 +1,14 @@
 // Псевдонимы типов (позитивный тест парсера)
 type bit1  = bit;
-type u8    = [bit;8];
-type u16   = [bit;16];
-type u32   = [bit;32];
-type u64   = [bit;64];
+type Byte    = [bit;8];
+type Word   = [bit;16];
+type DWord   = [bit;32];
+type QWord   = [bit;64];
 
 // Константы с псевдонимами типов
-const ZERO: u8  := 0;
-const MAX:  u8  := 0xFF;
-const MASK: u16 := 0x0F;
+const ZERO: Byte  := 0;
+const MAX:  Byte  := 0xFF;
+const MASK: Word := 0x0F;
 
 model M {
     start S;

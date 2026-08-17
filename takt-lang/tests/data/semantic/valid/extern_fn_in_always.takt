@@ -1,7 +1,6 @@
 /// Тест: вызов extern функции в блоке always.
 /// Проверяет, что extern fn корректно разрешается семантически.
 
-type u8 = [bit;8];
 
 extern fn log_value(v: u8);
 

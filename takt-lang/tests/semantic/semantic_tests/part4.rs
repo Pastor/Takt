@@ -210,7 +210,7 @@ fn variable_node_has_parent_upper() {
 /// модель оставалась живой и Weak-ссылка могла быть разыменована.
 #[test]
 fn const_node_has_parent_upper() {
-    let (ast, _) = parse("type u8 = [bit;8]; const C: u8 := 0;", 0).unwrap();
+    let (ast, _) = parse("const C: u8 := 0;", 0).unwrap();
     let root = construct_model(&ast, None, &[]).unwrap();
     let var = root
         .borrow()
@@ -838,7 +838,7 @@ fn test_fn_array_param() {
 #[test]
 fn test_fn_alias_param() {
     let node = build(
-        "type u8 = [bit;8]; \
+        "\
          fn process(data: u8) -> bit { return 0; } \
          start S {}",
     );

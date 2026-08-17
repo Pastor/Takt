@@ -36,7 +36,6 @@ fn test_generate_if_no_double_parens() {
     // Генератор добавляет ровно одну пару скобок для C.
     // Функция вызывается в always, чтобы попасть в UsageSet.
     let src = r#"
-type u8 = [bit;8];
 fn check(value: u8) -> bit {
     if value > 100 {
         return 1;
@@ -75,7 +74,6 @@ fn test_submodel_variable_uses_state_field_name() {
     // clamp вызывается в always блоке, чтобы попасть в UsageSet.
     // temperature используется внутри clamp, поэтому поле генерируется в структуре.
     let src = r#"
-type u8 = [bit;8];
 model Controller {
     var temperature: u8 := 0;
     fn clamp(value: u8) -> u8 {
@@ -111,7 +109,6 @@ fn test_generate_loop_no_double_parens() {
     // Генератор добавляет ровно одну пару скобок для C: `while (cond)`.
     // Функция вызывается в always, чтобы попасть в UsageSet.
     let src = r#"
-type u8 = [bit;8];
 fn check(n: u8) -> bit {
     loop n > 0 {
         return 0;
@@ -405,7 +402,7 @@ fn test_submodel_terminal_state_transitions_to_end() {
 /// Чтение бита переменной в условии `ref`: `flags.2` → `((model->flags >> 2) & 1u)`
 #[test]
 fn test_bit_access_var_read_in_condition() {
-    let src = "type u8 = [bit;8]; var flags: u8 := 0; start S { ref Done: flags.2; } state Done;";
+    let src = "var flags: u8 := 0; start S { ref Done: flags.2; } state Done;";
     let code = generate_source_str(src);
     assert!(
         code.contains("((model->flags >> 2) & 1u)"),
@@ -417,7 +414,7 @@ fn test_bit_access_var_read_in_condition() {
 /// Корневая модель: используется `model->` (не `main->`).
 #[test]
 fn test_bit_access_port_read_in_condition() {
-    let src = "type u8 = [bit;8]; in BTN: u8 at 0x200000; start S { ref Done: BTN.0; } state Done;";
+    let src = "in BTN: u8 at 0x200000; start S { ref Done: BTN.0; } state Done;";
     let code = generate_source_str(src);
     assert!(
         code.contains("(((*model->read_numeric)(ROOT_PORT_BTN, model->userdata) >> 0) & 1u)"),
@@ -428,7 +425,7 @@ fn test_bit_access_port_read_in_condition() {
 /// Чтение бита переменной в блоке `always`: `x = flags.3` → `((model->flags >> 3) & 1u)`
 #[test]
 fn test_bit_access_var_read_in_always() {
-    let src = "type u8 = [bit;8]; var flags: u8 := 0; var x: u8 := 0; start S { always { x := flags.3; } ref Done: true; } state Done;";
+    let src = "var flags: u8 := 0; var x: u8 := 0; start S { always { x := flags.3; } ref Done: true; } state Done;";
     let code = generate_source_str(src);
     assert!(
         code.contains("((model->flags >> 3) & 1u)"),
@@ -439,7 +436,8 @@ fn test_bit_access_var_read_in_always() {
 /// Запись бита переменной: `flags.3 = true` → bit-set идиома C
 #[test]
 fn test_bit_access_var_write_in_always() {
-    let src = "type u8 = [bit;8]; var flags: u8 := 0; start S { always { flags.3 := true; } ref Done: true; } state Done;";
+    let src =
+        "var flags: u8 := 0; start S { always { flags.3 := true; } ref Done: true; } state Done;";
     let code = generate_source_str(src);
     assert!(
         code.contains("model->flags = (model->flags & ~(1u << 3)) | ((true & 1u) << 3)"),
@@ -451,7 +449,7 @@ fn test_bit_access_var_write_in_always() {
 /// Корневая модель: tick получает `model`, поэтому используется `model->`.
 #[test]
 fn test_bit_access_port_read_in_always() {
-    let src = "type u8 = [bit;8]; in BTN: u8 at 0x200000; var x: u8 := 0; start S { always { x := BTN.0; } ref Done: true; } state Done;";
+    let src = "in BTN: u8 at 0x200000; var x: u8 := 0; start S { always { x := BTN.0; } ref Done: true; } state Done;";
     let code = generate_source_str(src);
     assert!(
         code.contains("(((*model->read_numeric)(ROOT_PORT_BTN, model->userdata) >> 0) & 1u)"),
@@ -463,7 +461,7 @@ fn test_bit_access_port_read_in_always() {
 /// Корневая модель: используется `model->` (не `main->`).
 #[test]
 fn test_bit_access_port_write_in_always() {
-    let src = "type u8 = [bit;8]; out LED: u8 at 0x100000; start S { always { LED.7 := true; } ref Done: true; } state Done;";
+    let src = "out LED: u8 at 0x100000; start S { always { LED.7 := true; } ref Done: true; } state Done;";
     let code = generate_source_str(src);
     assert!(
         code.contains("write_numeric)(ROOT_PORT_LED,")
@@ -514,7 +512,6 @@ start Main = Sub;
 #[test]
 fn test_local_fn_call_in_root_tick_uses_model_not_main() {
     let src = r#"
-type u8 = [bit;8];
 fn double(x: u8) -> u8 { return x + x; }
 var y: u8 := 0;
 start Main {

@@ -5,7 +5,6 @@
 /// При записи переменной: x = (x & ~(1u << N)) | ((val & 1u) << N)
 /// При чтении порта: (*main->read_bit)(PORT_X, N, main->userdata)
 /// При записи порта: (*main->write_bit)(PORT_X, N, val, main->userdata)
-type u8 = [bit;8];
 
 /// Порт кнопок: 8 кнопок по одному биту каждая.
 in BTN: u8 at 0x00200000;

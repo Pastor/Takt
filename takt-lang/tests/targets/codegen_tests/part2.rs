@@ -263,7 +263,6 @@ start A {
 #[test]
 fn unused_var_excluded() {
     let src = r#"
-type u8 = [bit;8];
 var unused: u8 := 0;
 var used: u8 := 0;
 start S {
@@ -296,7 +295,6 @@ start S {
 #[test]
 fn used_var_stays() {
     let src = r#"
-type u8 = [bit;8];
 var counter: u8 := 0;
 start S {
     always { counter := counter + 1; }
@@ -318,7 +316,6 @@ start S {
 #[test]
 fn unused_const_excluded() {
     let src = r#"
-type u8 = [bit;8];
 const DEAD: u8 := 42;
 const LIVE: u8 := 7;
 var v: u8 := 0;
@@ -346,7 +343,6 @@ start S {
 #[test]
 fn used_const_stays() {
     let src = r#"
-type u8 = [bit;8];
 const MAX: u8 := 255;
 var v: u8 := 0;
 start S {
@@ -409,7 +405,7 @@ fn read_header(out_dir: &str) -> String {
 fn c_hal_emits_address_table_and_hal() {
     let tmp = tempdir().unwrap();
     let out = tmp.path().to_str().unwrap();
-    let src = "type u8 = [bit;8]; in BTN: u8 at 0x00200000; out LED: bit; \
+    let src = "in BTN: u8 at 0x00200000; out LED: bit; \
                address LED = 0x00200004; start Idle { ref On: BTN; } state On { ref Idle: BTN; }";
     let warnings = takt_lang::compile_to_c_hal(
         "demo.takt",
@@ -456,7 +452,7 @@ fn c_hal_emits_address_table_and_hal() {
 fn plain_c_has_no_hal_artifacts() {
     let tmp = tempdir().unwrap();
     let out = tmp.path().to_str().unwrap();
-    let src = "type u8 = [bit;8]; in BTN: u8 at 0x00200000; start Idle { ref On: BTN; } state On;";
+    let src = "in BTN: u8 at 0x00200000; start Idle { ref On: BTN; } state On;";
     takt_lang::compile_to_c(
         "demo.takt",
         src,
@@ -498,7 +494,7 @@ fn c_hal_missing_address_is_error() {
 fn c_hal_external_overrides_and_warns() {
     let tmp = tempdir().unwrap();
     let out = tmp.path().to_str().unwrap();
-    let src = "type u8 = [bit;8]; in BTN: u8 at 0x00100000; start Idle { ref On: BTN; } state On;";
+    let src = "in BTN: u8 at 0x00100000; start Idle { ref On: BTN; } state On;";
     let entries = takt_lang::parse_address_map("BTN = 0x40000000;", 0).unwrap();
     let warnings = takt_lang::compile_to_c_hal(
         "demo.takt",

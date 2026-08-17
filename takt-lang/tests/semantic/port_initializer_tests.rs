@@ -56,7 +56,7 @@ fn port_bit_and_u8_bare_address_symmetric() {
         "bit-порт с голым адресом должен приниматься (как u8)"
     );
     assert!(
-        build("type u8 = [bit;8]; in P: u8 at 0x100; start Idle;")
+        build("in P: u8 at 0x100; start Idle;")
             .search_var("P")
             .is_some(),
         "u8-порт с голым адресом принимался и раньше"

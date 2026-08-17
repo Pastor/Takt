@@ -296,7 +296,7 @@ pub(crate) fn ast_type_to_node(ty: &Type) -> TypeNode {
 /// и перечислений через контекст модели.
 ///
 /// FE2/Ce6/Ce4: В отличие от [`ast_type_to_node`], эта функция ищет:
-/// - псевдонимы типов в `ModelNode::types` (`type u8 = [bit;8]` → `Array(8, Bit)`)
+/// - псевдонимы типов в `ModelNode::types` (`type Byte = [bit;8]` → `Array(8, Bit)`)
 /// - перечисления в `ModelNode::enums` (`Color` → `Enum("Color")` если объявлено)
 ///
 /// Если перечисление не найдено — возвращает `TypeNode::Unsupported`; ошибка

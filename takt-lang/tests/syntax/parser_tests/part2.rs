@@ -46,7 +46,6 @@ fn comment_methods() {
 fn parse_extern_function() {
     let root = must_parse(
         r#"
-        type u8 = [bit;8];
         extern fn debug(msg: u8);
         extern fn reset();
         model M { start S; }
@@ -214,7 +213,6 @@ fn parse_return_without_value() {
 fn parse_return_with_value() {
     must_parse(
         r#"
-        type u8 = [bit;8];
         fn getValue() -> u8 {
             return 42;
         }
@@ -293,7 +291,6 @@ fn parse_import_rename() {
 fn parse_array_slice_expression() {
     must_parse(
         r#"
-        type u8 = [bit;8];
         var arr: u8 := 0;
         model M {
             start S {
@@ -618,7 +615,6 @@ fn parse_ref_with_state_function_condition() {
 fn parse_negative_number_as_initializer() {
     must_parse(
         r#"
-        type u8 = [bit;8];
         const NEG: u8 := -1;
         model M { start S; }
     "#,

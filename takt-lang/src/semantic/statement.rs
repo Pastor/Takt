@@ -921,7 +921,7 @@ mod tests {
         // `result = value` — оператор-выражение (присваивание), где `value` — параметр функции.
         // До исправления это приводило к ошибке LSP «Идентификатор 'value' не найден».
         let node = build(concat!(
-            "type u8 = [bit;8]; ",
+            "",
             "var result: u8 := 0; ",
             "fn clamp(value: u8) -> u8 { result := value; return value; } ",
             "start S;"

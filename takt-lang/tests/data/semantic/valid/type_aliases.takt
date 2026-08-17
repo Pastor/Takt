@@ -1,15 +1,15 @@
 // Пример: псевдонимы типов, переменные и порты.
 //
 // Проверяет:
-// - объявление псевдонимов u8 и u16
-// - переменная counter с типом u8
+// - объявление псевдонимов Byte и Word
+// - переменная counter с типом Byte
 // - порт STATUS с аппаратным адресом
 
-type u8  = [bit; 8];
-type u16 = [bit; 16];
+type Byte  = [bit; 8];
+type Word = [bit; 16];
 
-var   counter: u8  := 0;
-in STATUS:  u8 at 0x40000000;
+var   counter: Byte  := 0;
+in STATUS:  Byte at 0x40000000;
 
 start Idle {
     ref Done: true;

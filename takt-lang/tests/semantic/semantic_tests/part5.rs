@@ -129,7 +129,7 @@ fn test_type_alias_inference() {
     assert_eq!(
         ty,
         TypeNode::Array(8, Box::new(TypeNode::Bit)),
-        "тип x должен быть [bit;8] через псевдоним u8"
+        "тип x должен быть [bit;8] через псевдоним Byte"
     );
 }
 
@@ -787,7 +787,6 @@ fn extern_fn_after_local_var_resolves_ok() {
 fn extern_fn_is_resolvable_via_search_func() {
     use takt_lang::semantic::FunctionDefinitionNode;
     let src = r#"
-type u8 = [bit;8];
 extern fn my_log(v: u8);
 model M {
     var x: u8 := 0;

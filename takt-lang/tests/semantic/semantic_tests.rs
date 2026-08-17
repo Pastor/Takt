@@ -101,7 +101,7 @@ fn search_var_returns_none_for_unknown() {
 /// `search_var` находит константу.
 #[test]
 fn search_var_finds_const() {
-    let node = build("type u8 = [bit;8]; const C: u8 := 0xFF;");
+    let node = build("const C: u8 := 0xFF;");
     assert!(
         node.search_var("C").is_some(),
         "Константа C должна быть найдена"
@@ -115,7 +115,7 @@ fn search_var_finds_const() {
 /// `search_var` находит порт.
 #[test]
 fn search_var_finds_port() {
-    let node = build("type u8 = [bit;8]; in P: u8 at 0x00100000;");
+    let node = build("in P: u8 at 0x00100000;");
     assert!(node.search_var("P").is_some(), "Порт P должен быть найден");
     assert!(
         matches!(node.search_var("P").unwrap(), VariableNode::Port { .. }),
@@ -151,15 +151,18 @@ fn type_array_resolves_correctly() {
     }
 }
 
-/// Псевдоним типа `u8 = [bit;8]` раскрывается в `TypeNode::Array`.
+/// Псевдоним типа `Byte = [bit;8]` раскрывается в `TypeNode::Array`.
+///
+/// ⚠️ Прежде псевдоним звался `u8` и **затенял** встроенный тип; с фичи 0243
+/// это `SE-107`, поэтому проверка идёт на законном имени.
 #[test]
 fn type_alias_resolves_through_map() {
-    let node = build("type u8 = [bit;8]; var x: u8 := 0;");
+    let node = build("type Byte = [bit;8]; var x: Byte := 0;");
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("x") {
         assert_eq!(
             ty,
             TypeNode::Array(8, Box::new(TypeNode::Bit)),
-            "Псевдоним u8 должен раскрыться в Array(8, Bit)"
+            "Псевдоним Byte должен раскрыться в Array(8, Bit)"
         );
     } else {
         panic!("переменная x не найдена");
@@ -358,7 +361,7 @@ fn port_without_type_is_error() {
 /// проба переехала на выход, где значение законно.
 #[test]
 fn output_port_initial_value_is_accepted() {
-    let (ast, _) = parse("type u8 = [bit;8]; out P: u8 := 1; start S;", 0).unwrap();
+    let (ast, _) = parse("out P: u8 := 1; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     assert!(
         result.is_ok(),
@@ -370,7 +373,7 @@ fn output_port_initial_value_is_accepted() {
 /// Начальное значение **входного** порта отвергается (`SE-092`, фича 0187).
 #[test]
 fn input_port_initial_value_is_rejected() {
-    let (ast, _) = parse("type u8 = [bit;8]; in P: u8 := 1; start S;", 0).unwrap();
+    let (ast, _) = parse("in P: u8 := 1; start S;", 0).unwrap();
     let result = construct_model(&ast, None, &[]);
     let code = result.err().and_then(|d| d.code);
     assert_eq!(
@@ -384,9 +387,8 @@ fn input_port_initial_value_is_rejected() {
 /// сохраняется в `address_defs` модели.
 #[test]
 fn address_operator_is_captured_in_address_defs() {
-    let model =
-        build_from_src("type u8 = [bit;8]; in BTN: u8; address BTN = 0x00200000; start Idle;")
-            .expect("модель с оператором address должна строиться");
+    let model = build_from_src("in BTN: u8; address BTN = 0x00200000; start Idle;")
+        .expect("модель с оператором address должна строиться");
     assert_eq!(
         model.address_defs.len(),
         1,

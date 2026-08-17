@@ -171,3 +171,4 @@
 | 0241 | Ускорение предкоммита | [0241-precheck-speedup.md](0241-precheck-speedup.md) | ✅ ПРОЙДЕН (отчёт: [reports/0241](../reports/0241-precheck-speedup.md)) |
 | 0213 | Цель c печатает лишний break после безусловного перехода | [0213-c-redundant-break.md](0213-c-redundant-break.md) | ✅ ПРОЙДЕН (отчёт: [reports/0213](../reports/0213-c-redundant-break.md)) |
 | 0244 | Стоимость тестовых целей | [0244-test-target-build-cost.md](0244-test-target-build-cost.md) | ✅ ПРОЙДЕН (отчёт: [reports/0244](../reports/0244-test-target-build-cost.md)) |
+| 0243 | Переопределение типа | [0243-type-redefinition-diagnostic.md](0243-type-redefinition-diagnostic.md) | ✅ ПРОЙДЕН (отчёт: [reports/0243](../reports/0243-type-redefinition-diagnostic.md)) |
