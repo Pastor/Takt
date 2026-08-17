@@ -194,3 +194,4 @@
 | [0240](./0240-book-typst.md) | Перевод документа book/ в формат Typst | Draft | фича 0240 |
 | [0241](./0241-precheck-speedup.md) | Ускорение предкоммита: конфигурации cargo, параллельный verilator, пути гейта | Accepted (Option B) | фича 0241 |
 | [0242](./0242-grammar-crate-split.md) | Вынос грамматики в отдельный крейт takt-grammar | Accepted (Option B; фича ОТМЕНЕНА) | фича 0242 |
+| [0244](./0244-test-target-build-cost.md) | Стоимость тестовых целей: 147 бинарников в предкоммите | Accepted (B, затем A) | фича 0244 |

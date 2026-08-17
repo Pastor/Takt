@@ -201,3 +201,4 @@
 | 0240 | Перевод документа book/ в формат Typst | [0240-book-typst.md](0240-book-typst.md) | — (новая фича) |
 | 0241 | Ускорение предкоммита | [0241-precheck-speedup.md](0241-precheck-speedup.md) | — (новая фича) |
 | 0213 | Цель c печатает лишний break после безусловного перехода | [0213-c-redundant-break.md](0213-c-redundant-break.md) | — (новая фича) |
+| 0244 | Стоимость тестовых целей: 147 бинарников | [0244-test-target-build-cost.md](0244-test-target-build-cost.md) | — (новая фича) |

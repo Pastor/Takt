@@ -256,4 +256,4 @@
 | [0241](./0241-precheck-speedup.md) | Ускорение предкоммита | [ADR](../adr/0241-precheck-speedup.md) · [анализ](../analyze/0241-precheck-speedup.md) · [разработка 0241-01](../development/0241-01-precheck-speedup.md) · [тест-план](../tests/0241-precheck-speedup.md) · [отчёт](../reports/0241-precheck-speedup.md) | ГОТОВО |
 | [0242](./0242-grammar-crate-split.md) | Вынос грамматики в отдельный крейт takt-grammar | [ADR](../adr/0242-grammar-crate-split.md) | ОТМЕНА |
 | [0243](./0243-type-redefinition-diagnostic.md) | Переопределение типа не проверяется: встроенный тип можно затенить молча | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0244](./0244-test-target-build-cost.md) | Стоимость тестовых целей: 147 бинарников — 65.6 % времени предкоммита | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0244](./0244-test-target-build-cost.md) | Стоимость тестовых целей: 147 бинарников — 65.6 % времени предкоммита | [ADR](../adr/0244-test-target-build-cost.md) | АРХИТЕКТУРА |
