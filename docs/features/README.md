@@ -254,5 +254,6 @@
 | [0239](./0239-install-script.md) | Скрипт релизной сборки и установки инструментов | ADR не заводился (инструментальная) · [анализ](../analyze/0239-install-script.md) · [разработка 0239-01](../development/0239-01-install-script.md) · [тест-план](../tests/0239-install-script.md) · [отчёт](../reports/0239-install-script.md) | ГОТОВО |
 | [0240](./0240-book-typst.md) | Перевод документа book/ в формат Typst | [ADR](../adr/0240-book-typst.md) · [анализ](../analyze/0240-book-typst.md) · [тест-план](../tests/README.md) · [отчёт](../reports/README.md) | СОЗДАНА |
 | [0241](./0241-precheck-speedup.md) | Ускорение предкоммита | [ADR](../adr/0241-precheck-speedup.md) · [анализ](../analyze/0241-precheck-speedup.md) · [разработка 0241-01](../development/0241-01-precheck-speedup.md) · [тест-план](../tests/0241-precheck-speedup.md) · [отчёт](../reports/0241-precheck-speedup.md) | ГОТОВО |
-| [0242](./0242-grammar-crate-split.md) | Вынос грамматики в отдельный крейт takt-grammar | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0242](./0242-grammar-crate-split.md) | Вынос грамматики в отдельный крейт takt-grammar | [ADR](../adr/0242-grammar-crate-split.md) | ОТМЕНА |
 | [0243](./0243-type-redefinition-diagnostic.md) | Переопределение типа не проверяется: встроенный тип можно затенить молча | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0244](./0244-test-target-build-cost.md) | Стоимость тестовых целей: 147 бинарников — 65.6 % времени предкоммита | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
