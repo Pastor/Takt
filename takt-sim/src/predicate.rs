@@ -20,6 +20,7 @@ use crate::eval::value::Value;
 use crate::unit::Predicate;
 use takt_lang::diagnostics::{Diagnostic, Location};
 use takt_lang::semantic::ConditionNode;
+use takt_lang::semantic::condition::state_of::{compared_state_name, state_of_model};
 use takt_lang::semantic::type_node::TypeNode;
 
 /// Строит предикат перехода из условия.
@@ -280,6 +281,16 @@ pub(crate) fn eval_condition(
         ConditionNode::More(l, r) => binary(BinOp::More, l, r, ctx, loc_of(cond)),
         ConditionNode::LessEqual(l, r) => binary(BinOp::LessEqual, l, r, ctx, loc_of(cond)),
         ConditionNode::MoreEqual(l, r) => binary(BinOp::MoreEqual, l, r, ctx, loc_of(cond)),
+        // Проверка состояния под-модели (фича 0245): `S(Модель) = Состояние` и
+        // краткая форма `Модель = Состояние`. Форму паттерна разбирает функция
+        // `takt-lang` — та же, что у судьи условий и печатника цели `c` (0203):
+        // второго разбора в проекте нет.
+        ConditionNode::Equal(l, r) if state_of_model(l).is_some() => {
+            state_matches(l, r, ctx, loc_of(cond)).map(Value::Boolean)
+        }
+        ConditionNode::NotEqual(l, r) if state_of_model(l).is_some() => {
+            state_matches(l, r, ctx, loc_of(cond)).map(|same| Value::Boolean(!same))
+        }
         ConditionNode::Equal(l, r) => binary(BinOp::Equal, l, r, ctx, loc_of(cond)),
         ConditionNode::NotEqual(l, r) => binary(BinOp::NotEqual, l, r, ctx, loc_of(cond)),
 
@@ -337,6 +348,52 @@ pub(crate) fn eval_condition(
         )
         .with_code("SIM-016")),
     }
+}
+
+/// Совпадает ли текущее состояние модели-аргумента с названным (фича 0245).
+///
+/// Левая часть — паттерн «состояние модели» (проверена вызывающим), правая —
+/// имя состояния в трёх законных формах (`compared_state_name` в `takt-lang`).
+///
+/// ⚠️ Отсутствие модели в реестре — **отказ**, а не «условие ложно»: цель `c`
+/// на модели, не запущенной в композиции, тоже отказывает (`CC-012`), и
+/// молчаливое `false` развело бы трассу эталона с поведением прошивки — ровно
+/// тот класс, ради которого заведены потактовые сверки.
+fn state_matches(
+    left: &ConditionNode,
+    right: &ConditionNode,
+    ctx: &mut dyn Context,
+    loc: Location,
+) -> Result<bool, Diagnostic> {
+    let model = state_of_model(left).expect("паттерн проверен вызывающим");
+    let model_name = model.borrow().name.clone().ok_or_else(|| {
+        Diagnostic::error(
+            loc,
+            "проверка состояния безымянной модели невозможна".to_string(),
+        )
+        .with_code("SIM-036")
+    })?;
+    let Some(wanted) = compared_state_name(right) else {
+        return Err(Diagnostic::error(
+            loc,
+            format!(
+                "справа от сравнения с состоянием модели '{model_name}' \
+                 ожидалось имя состояния"
+            ),
+        )
+        .with_code("SIM-036"));
+    };
+    let current = ctx.model_state(&model_name).ok_or_else(|| {
+        Diagnostic::error(
+            loc,
+            format!(
+                "модель '{model_name}' в этом прогоне не запущена: проверить её \
+                 состояние нечем"
+            ),
+        )
+        .with_code("SIM-036")
+    })?;
+    Ok(current == wanted)
 }
 
 fn unary(

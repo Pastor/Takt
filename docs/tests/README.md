@@ -174,3 +174,5 @@
 | 0243 | Переопределение типа | [0243-type-redefinition-diagnostic.md](0243-type-redefinition-diagnostic.md) | ✅ ПРОЙДЕН (отчёт: [reports/0243](../reports/0243-type-redefinition-diagnostic.md)) |
 | 0214 | Регистровый интерфейс sv-mmio | [0214-sv-mmio-unused-write-signals.md](0214-sv-mmio-unused-write-signals.md) | ✅ ПРОЙДЕН (отчёт: [reports/0214](../reports/0214-sv-mmio-unused-write-signals.md)) |
 | 0240 | Перевод документа book/ в формат Typst | [0240-book-typst.md](0240-book-typst.md) | ГОТОВО |
+| 0245 | Симулятор исполняет S(Модель) — проверку состояния под-модели | [0245-sim-state-of-model.md](0245-sim-state-of-model.md) | ГОТОВО |
+| 0237 | Раздел «Импорты» не описывает S(Модель) | [0237-book-state-of-model-section.md](0237-book-state-of-model-section.md) | ГОТОВО |

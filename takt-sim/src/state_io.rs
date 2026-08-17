@@ -94,6 +94,29 @@ pub fn snapshot(unit: &Unit) -> UnitSnapshot {
 ///
 /// Несовпадения структуры (например, снимок Parallel для Node) игнорируются.
 pub fn restore(unit: &mut Unit, snap: &UnitSnapshot) {
+    restore_kind(unit, snap);
+    // Общий реестр состояний (фича 0245) — третья точка публикации после
+    // постройки узла и перехода: возобновлённый прогон обязан отвечать на
+    // `S(Модель) = Состояние` тем состоянием, которое пришло из снимка, а не
+    // стартовым. Публикуется ПОСЛЕ восстановления поддерева: у композита
+    // публикация спускается к детям.
+    publish_tree(unit);
+}
+
+/// Публикует состояния всего поддерева в реестр (фича 0245).
+fn publish_tree(unit: &Unit) {
+    unit.publish_state();
+    match unit.kind() {
+        UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => {
+            for child in units {
+                publish_tree(&child.borrow());
+            }
+        }
+        UnitKind::Node { .. } | UnitKind::None => {}
+    }
+}
+
+fn restore_kind(unit: &mut Unit, snap: &UnitSnapshot) {
     match (unit.kind_mut(), snap) {
         (
             UnitKind::Node {
@@ -124,7 +147,7 @@ pub fn restore(unit: &mut Unit, snap: &UnitSnapshot) {
         }
         (UnitKind::Parallel { units, .. }, UnitSnapshot::Parallel { children }) => {
             for (u, snap_child) in units.iter().zip(children.iter()) {
-                restore(&mut u.borrow_mut(), snap_child);
+                restore_kind(&mut u.borrow_mut(), snap_child);
             }
         }
         (
@@ -136,7 +159,7 @@ pub fn restore(unit: &mut Unit, snap: &UnitSnapshot) {
         ) => {
             *index = *snap_idx;
             for (u, snap_child) in units.iter().zip(children.iter()) {
-                restore(&mut u.borrow_mut(), snap_child);
+                restore_kind(&mut u.borrow_mut(), snap_child);
             }
         }
         _ => {} // структура не совпадает — молча пропускаем

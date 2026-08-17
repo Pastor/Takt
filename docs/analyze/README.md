@@ -204,3 +204,4 @@
 | 0244 | Стоимость тестовых целей: 147 бинарников | [0244-test-target-build-cost.md](0244-test-target-build-cost.md) | — (новая фича) |
 | 0243 | Переопределение типа | [0243-type-redefinition-diagnostic.md](0243-type-redefinition-diagnostic.md) | — (новая фича) |
 | 0214 | Регистровый интерфейс sv-mmio | [0214-sv-mmio-unused-write-signals.md](0214-sv-mmio-unused-write-signals.md) | — (новая фича) |
+| 0245 | Симулятор исполняет S(Модель) — проверку состояния под-модели | [0245-sim-state-of-model.md](0245-sim-state-of-model.md) | — (новая фича) |

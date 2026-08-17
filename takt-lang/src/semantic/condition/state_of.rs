@@ -16,6 +16,7 @@
 //! условие (инвариант рёбер `ref`, `CLAUDE.md`). Разрешает его тот, кто знает
 //! область видимости: судья — проверкой (`SE-033`), генератор — печатью имени.
 
+use crate::parser::ast::Condition;
 use crate::semantic::{ConditionNode, FunctionDefinitionNode, ModelNode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,8 +25,9 @@ use std::rc::Rc;
 /// `Модель`. `None` — это не паттерн «текущее состояние модели».
 ///
 /// Единый источник истины о форме паттерна: зовут судья условий, печатники
-/// целей `c`/`rust` и канонизация скобок ([`is_state_of`]).
-pub(crate) fn state_of_model(cond: &ConditionNode) -> Option<&Rc<RefCell<ModelNode>>> {
+/// целей `c`/`rust`, канонизация скобок ([`is_state_of`]) и адаптер условий
+/// симулятора (фича 0245).
+pub fn state_of_model(cond: &ConditionNode) -> Option<&Rc<RefCell<ModelNode>>> {
     match cond {
         ConditionNode::Model(model, _) => Some(model),
         ConditionNode::Function(fun, args, _) => {
@@ -49,4 +51,31 @@ pub(crate) fn state_of_model(cond: &ConditionNode) -> Option<&Rc<RefCell<ModelNo
 /// они дали бы разный ответ на один текст.
 pub(crate) fn is_state_of(cond: &ConditionNode) -> bool {
     state_of_model(cond).is_some()
+}
+
+/// Имя состояния из ПРАВОЙ части сравнения `S(Модель) = Состояние`.
+///
+/// Формы правой части — три, и все законны:
+///
+/// - `Unresolved(Variable)` — штатный случай: имя принадлежит модели-аргументу,
+///   а не той, где записано условие, и потому не разрешается (инвариант рёбер
+///   `ref`, `CLAUDE.md`);
+/// - `Variable` — имя разрешилось в переменную объемлющей модели (совпадение
+///   имён); берётся только само имя — искать всё равно в модели-аргументе;
+/// - `State` — то же для состояния объемлющей модели.
+///
+/// `None` — правая часть не является именем: сравнение бессмысленно, и
+/// потребитель отвечает своей диагностикой (`CC-013` у цели `c`, `SIM-036` у
+/// симулятора).
+///
+/// ⚠️ Разбор общий у цели `c` и симулятора (фича 0245). Своя копия у каждого
+/// разошлась бы на форме, которую видит только один из них, — тот же класс, что
+/// закрыла 0203 для левой части паттерна.
+pub fn compared_state_name(right: &ConditionNode) -> Option<String> {
+    match right {
+        ConditionNode::Unresolved(Condition::Variable(id)) => Some(id.name.clone()),
+        ConditionNode::Variable(var, ..) => Some(var.borrow().name().to_string()),
+        ConditionNode::State(state, _) => Some(state.borrow().name().to_string()),
+        _ => None,
+    }
 }

@@ -175,7 +175,7 @@
 | [0234](./0234-precheck-time-profile.md) | Профилирование и ускорение предкоммита | Accepted (Option C + D) | фича 0234 |
 | [0235](./0235-guard-formula-in-st-sv.md) | Цели st и sv теряют охранную формулу | Accepted (Option C) | фича 0235 |
 | [0236](./0236-c-unresolved-condition-refusal.md) | Печатник цели c печатает пустоту на неразрешённом условии | Accepted (Option B) | фича 0236 |
-| [0237](./0237-book-state-of-model-section.md) | Раздел «Импорты» не описывает S(Модель) | Draft | фича 0237 |
+| [0237](./0237-book-state-of-model-section.md) | Раздел «Импорты» не описывает S(Модель) | Accepted | фича 0237 |
 | [0238](./0238-claude-md-duplicate-invariants.md) | Живой контекст: раздел критических инвариантов дублирует подводные камни | Accepted (Option B) | фича 0238 |
 | [0204](./0204-const-ref-type-inference.md) | Вывод типов не протягивает тип через ссылку константа-константа | Accepted (Option C) | фича 0204 |
 | [0205](./0205-as-in-declaration-initializer.md) | Приведение as не вычисляется в инициализаторе объявления | Accepted (Option A) | фича 0205 |
@@ -197,3 +197,4 @@
 | [0244](./0244-test-target-build-cost.md) | Стоимость тестовых целей: 147 бинарников в предкоммите | Accepted (B, затем A) | фича 0244 |
 | [0243](./0243-type-redefinition-diagnostic.md) | Переопределение типа: имя занято встроенным либо уже объявлено | Accepted (Option A) | фича 0243 |
 | [0214](./0214-sv-mmio-unused-write-signals.md) | Регистровый интерфейс sv-mmio отражает состав портов | Accepted (Option A) | фича 0214 |
+| [0245](./0245-sim-state-of-model.md) | Симулятор исполняет S(Модель) — проверку состояния под-модели | Accepted | фича 0245 |
