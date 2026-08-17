@@ -6,8 +6,8 @@ import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 // Лексер/highlighter (0022-02) и настройка цветов (0022-03) добавляются поверх.
 plugins {
     id("java")
-    kotlin("jvm") version "2.0.21"
-    id("org.jetbrains.intellij.platform") version "2.1.0"
+    kotlin("jvm") version "2.4.10"
+    id("org.jetbrains.intellij.platform") version "2.18.1"
 }
 
 group = providers.gradleProperty("pluginGroup").get()
@@ -70,66 +70,64 @@ intellijPlatform {
         // (org.takt.intellij): не влияет на совместимость, переименование id
         // сломало бы идентичность плагина.
         freeArgs = listOf("-mute", "TemplateWordInPluginId")
+        // ⚠️ Список задаётся ОДНИМ провайдером, а не тремя вызовами (фича 0224).
+        // В плагине платформы 2.1.0 была строковая форма `ide("IC-2024.3")`; в
+        // 2.18.1 её нет, а ближайшая замена `create(type, version)` заводит
+        // одну конфигурацию на все версии, и обычный резолв Gradle сводит их к
+        // старшей (`idea:ideaIC:2024.3 -> 2025.2` в выводе `dependencies`).
+        // Форма ниже проверена прогоном: `verifyPlugin` выполняет ТРИ
+        // верификации (IC-243, IC-251, IC-252) — покрытие сохранено.
         ides {
-            ide("IC-2024.3")
-            ide("IC-2025.1")
-            ide("IC-2025.2")
+            create(providers.provider { listOf("IC-2024.3", "IC-2025.1", "IC-2025.2") })
         }
     }
 }
 
-// ── Пусковой JDK: преflight-проверка (фича 0159) ──────────────────────────────
+// ── Пусковой JDK: преflight-проверка (фича 0159, перезамер 0224) ─────────────
 //
 // ⚠️ ЗДЕСЬ ДВА РАЗНЫХ JDK, И ПУТАЮТ ИМЕННО ИХ.
 //
 //  * JDK КОМПИЛЯЦИИ задаёт `jvmToolchain(21)` ниже. Gradle скачивает его сам
 //    (foojay-резолвер в settings.gradle.kts) — об этом заботиться не нужно.
-//  * JDK ПУСКОВОЙ — тот, на котором работает демон Gradle и Kotlin-плагин.
-//    Его берут из окружения, и ломается именно он: `jvmToolchain` его НЕ меняет.
+//  * JDK ПУСКОВОЙ — тот, на котором работает демон Gradle. Его берут из
+//    окружения, и ломался именно он: `jvmToolchain` его НЕ меняет.
 //
-// Таблица версий Java внутри `kotlin-gradle-plugin` 2.0.21 обрывается на
-// `JAVA_21` (замер: класс commons-lang3 `JavaVersion` в jar плагина). Пусковой
-// JDK новее приводит к отказу вида `IllegalArgumentException: 25.0.2` на
-// `compileKotlin` — сообщение не называет ни причины, ни лечения, и час на его
-// разгадывание уже был потрачен однажды.
+// ⚠️ ПРИЧИНА ПРЕЖНЕГО ОТКАЗА БЫЛА НАЗВАНА НЕВЕРНО (замер 0224). Комментарий
+// 0159 винил таблицу версий в `kotlin-gradle-plugin`; стектрейс показывает
+// другое — падал ВСТРОЕННЫЙ В GRADLE компилятор Kotlin-скриптов, тот, что
+// компилирует сам этот файл:
+//     org.jetbrains.kotlin.com.intellij.util.lang.JavaVersion.parse
+//     ← org.gradle.kotlin.dsl.support.KotlinCompilerKt.compileKotlinScriptToDirectory
+// то есть версия `kotlin("jvm")` из `plugins {}` к отказу отношения не имела —
+// он приходил ДО её применения. Проверка независимая: таблица commons-lang3
+// даже у Kotlin 2.4.10 обрывается на JAVA_24, значит подъём одного Kotlin JDK 26
+// не покрыл бы. Снял ограничение подъём GRADLE (8.10.2 → 9.7.0) вместе с
+// плагином платформы (2.1.0 → 2.18.1).
 //
-// ГРАНИЦЫ НИЖЕ — ЗАМЕР, А НЕ ДОГАДКА:
-//   ≤ 21  — работает (17 проверен прогоном; 21 им же компилирует toolchain);
-//   25    — ломается (замер при работе над плагином);
-//   22–24 — НЕ ПРОВЕРЕНО: таблица Kotlin даёт основание ожидать отказа, но JDK
-//           этих версий под рукой не было. Поэтому предупреждение, а не отказ:
-//           запрещать неизмеренное — та же догадка, только с другим знаком.
+// ГРАНИЦЫ НИЖЕ — ЗАМЕР, А НЕ ДОГАДКА (прогон `./gradlew test`, фича 0224):
+//   17 — работает (нижняя: её же требует Gradle 9);
+//   26 — работает (openjdk 26.0.2, тот самый JDK, на котором прежняя связка
+//        падала «26.0.2» без объяснений);
+//   27+ — НЕ ПРОВЕРЕНО, потому что такого JDK нет. Отсюда предупреждение, а не
+//        отказ: запрещать неизмеренное — та же догадка, только с другим знаком.
 //
-// ⚠️ Числа привязаны к Kotlin 2.0.21. Подняли Kotlin — ПЕРЕЗАМЕРЬТЕ границы, а
-// не подвиньте их «на глаз».
+// ⚠️ Числа привязаны к связке Gradle 9.7.0 + IPP 2.18.1 + Kotlin 2.4.10. Подняли
+// что-то из неё — ПЕРЕЗАМЕРЬТЕ границы, а не подвиньте их «на глаз».
 run {
     val launcher = JavaVersion.current()
-    val lastKnownGood = JavaVersion.VERSION_21
-    val firstMeasuredBad = JavaVersion.VERSION_25
-    // Номер версии подставляется и в прозу, и в команду из ОДНОГО значения:
-    // зашитое числом «21» в примере разъехалось бы с границей при её правке
-    // (мутация порога это и показала).
-    val howToFix =
-        "Запустите Gradle под JDK $lastKnownGood или ниже, например:\n" +
-            "    JAVA_HOME=\$(/usr/libexec/java_home -v $lastKnownGood) ./gradlew <задача>\n" +
-            "  `jvmToolchain` трогать не нужно: JDK компиляции Gradle скачивает сам."
+    val lastMeasuredGood = JavaVersion.VERSION_26
 
-    if (launcher >= firstMeasuredBad) {
-        error(
-            "Пусковой JDK $launcher не поддерживается сборкой плагина.\n" +
-                "  Причина: таблица версий Java в kotlin-gradle-plugin 2.0.21 обрывается на " +
-                "$lastKnownGood, и на более новом пусковом JDK `compileKotlin` падает с " +
-                "IllegalArgumentException.\n  $howToFix",
-        )
-    }
-    if (launcher > lastKnownGood) {
+    if (launcher > lastMeasuredGood) {
         logger.warn(
-            "ВНИМАНИЕ: пусковой JDK $launcher не проверялся с этой сборкой.\n" +
-                "  Известно: до $lastKnownGood включительно работает, $firstMeasuredBad ломается; " +
-                "диапазон между ними не измерен.\n" +
-                "  Если сборка упадёт с IllegalArgumentException на compileKotlin — причина эта.\n" +
-                "  $howToFix\n" +
-                "  Сработало или нет — стоит записать: тогда границу можно будет сузить фактом.",
+            "ВНИМАНИЕ: пусковой JDK $launcher с этой сборкой не проверялся.\n" +
+                "  Измерено (фича 0224): 17 и $lastMeasuredGood работают; выше — не проверялось.\n" +
+                "  Если сборка упадёт сообщением из одного номера версии " +
+                "(`* What went wrong: $launcher`), причина эта: встроенный в Gradle компилятор\n" +
+                "  Kotlin-скриптов не разбирает такую версию. Лечение — поднять Gradle " +
+                "(`./gradlew wrapper --gradle-version <новее>`)\n" +
+                "  либо запустить сборку под JDK $lastMeasuredGood или ниже:\n" +
+                "    JAVA_HOME=\$(/usr/libexec/java_home -v $lastMeasuredGood) ./gradlew <задача>\n" +
+                "  Сработало или нет — стоит записать: тогда границу можно будет сдвинуть фактом.",
         )
     }
 }

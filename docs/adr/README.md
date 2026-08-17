@@ -201,3 +201,4 @@
 | [0246](./0246-init-forward-reference.md) | Ссылка вперёд в инициализаторе переменной — ошибка компиляции | Accepted | фича 0246 |
 | [0222](./0222-book-variables-const-fold.md) | Раздел документа о свёртке инициализатора | Accepted | фича 0222 |
 | [0223](./0223-examples-port-rationale-stale.md) | Три примера объясняют выходной порт устаревшей нуждой цели rust | Accepted | фича 0223 |
+| [0224](./0224-intellij-kotlin-upgrade.md) | Подъём Kotlin в плагине intellij-takt снимет ограничение на пусковой JDK | Accepted | фича 0224 |
