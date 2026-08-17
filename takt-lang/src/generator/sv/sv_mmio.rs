@@ -325,6 +325,22 @@ impl Mmio {
         self.ports.is_empty()
     }
 
+    /// Есть ли регистр, который **пишет шина** (входной порт с адресом).
+    ///
+    /// Фича 0214: сигналы записи (`reg_wdata`/`reg_wen`) эмитятся только при
+    /// `true`. Иначе они остаются неподключёнными, и `verilator -Wall` отвечает
+    /// `UNUSEDSIGNAL` — замер на `examples/regulator.takt` (все порты `out`)
+    /// давал два таких предупреждения, а с `-Wall` это ненулевой код возврата.
+    ///
+    /// ⚠️ Правило не новое, а достроенное: интерфейс уже отражал модель на
+    /// соседнем случае — при [`is_empty`](Self::is_empty) не эмитится вовсе
+    /// ничего. Не хватало различения по **направлению**.
+    pub(crate) fn has_writable(&self) -> bool {
+        self.ports
+            .iter()
+            .any(|p| matches!(p.direction, PortDirection::In))
+    }
+
     /// Ширина `reg_addr` в битах — нужна адаптеру шины (фича 0169).
     pub(crate) fn addr_width(&self) -> u32 {
         self.addr_width
@@ -403,12 +419,17 @@ pub(crate) fn emit_reg_iface_lines(p: &mut Printer, mmio: &Mmio) {
         aw - 1
     ))
     .nl();
-    p.ident(&format!(
-        "input  logic [{}:0] reg_wdata,  // данные записи (бит out игнорирует запись)",
-        dw - 1
-    ))
-    .nl();
-    p.ident("input  logic reg_wen,        // строб записи").nl();
+    // Фича 0214: сигналы записи — только при наличии записываемого регистра.
+    // Модуль без входных портов доступен шине лишь на чтение, и объявлять ей
+    // вход данных значило бы обещать запись, которой нет.
+    if mmio.has_writable() {
+        p.ident(&format!(
+            "input  logic [{}:0] reg_wdata,  // данные записи (бит out игнорирует запись)",
+            dw - 1
+        ))
+        .nl();
+        p.ident("input  logic reg_wen,        // строб записи").nl();
+    }
     p.ident(&format!(
         "output logic [{}:0] reg_rdata,  // данные чтения (комбинационные)",
         dw - 1

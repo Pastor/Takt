@@ -196,3 +196,4 @@
 | [0242](./0242-grammar-crate-split.md) | Вынос грамматики в отдельный крейт takt-grammar | Accepted (Option B; фича ОТМЕНЕНА) | фича 0242 |
 | [0244](./0244-test-target-build-cost.md) | Стоимость тестовых целей: 147 бинарников в предкоммите | Accepted (B, затем A) | фича 0244 |
 | [0243](./0243-type-redefinition-diagnostic.md) | Переопределение типа: имя занято встроенным либо уже объявлено | Accepted (Option A) | фича 0243 |
+| [0214](./0214-sv-mmio-unused-write-signals.md) | Регистровый интерфейс sv-mmio отражает состав портов | Accepted (Option A) | фича 0214 |
