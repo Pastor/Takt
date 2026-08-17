@@ -1951,8 +1951,8 @@ extern fn hal_gpio_set(pin: u8, val: bit);
 ### LSP-сервер
 
 ```sh
-cargo build --release --features lsp --bin takt-lsp
-cargo install --path grammar --bin takt-lsp --features lsp
+scripts/install.sh                                    # ставит и takt-lsp тоже
+cargo build --release --features lsp --bin takt-lsp   # только сборка
 ```
 
 Поддерживаемые возможности: диагностика, hover, автодополнение, Go to Declaration,
@@ -2134,8 +2134,32 @@ scripts/bench.sh --compare NAME  # сравнить с baseline
 ```sh
 git clone https://github.com/Pastor/Takt.git
 cd Takt
+scripts/install.sh            # релизная сборка + установка в ~/.local/bin
+```
+
+Скрипт собирает **три** инструмента — компилятор `taktc`, симулятор `takt-sim`
+и языковой сервер `takt-lsp` — и кладёт их в `bin` префикса.
+
+| Флаг | Что делает |
+|---|---|
+| `--prefix DIR` | префикс установки (по умолчанию `~/.local`; та же переменная — `TAKT_PREFIX`) |
+| `--no-lsp` | не собирать языковой сервер |
+| `--build-only` | только собрать, не устанавливать |
+| `--check` | проверить, что установлено, и выйти |
+| `--dry-run` | показать, что было бы сделано |
+
+⚠️ Скрипт собирает в **свой** каталог `target/install`, а не в общий `target`:
+накопленный рабочий каталог сборки способен растянуть минутную сборку на часы
+(замер фичи [0234](docs/features/0234-precheck-time-profile.md) — cargo обходит
+его перед каждой единицей компиляции). Переопределяется через
+`CARGO_TARGET_DIR`.
+
+Отдельные инструменты собираются и обычным cargo:
+
+```sh
 cargo build --release --bin taktc
-cargo install --path grammar --bin taktc
+cargo build --release --bin takt-sim
+cargo build --release --features lsp --bin takt-lsp
 ```
 
 #### Необязательные зависимости (проверка порождённого кода)

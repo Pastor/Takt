@@ -132,3 +132,94 @@ pub enum ExpressionNode {
     /// Приведение типа: `выражение as Тип`.
     Cast(Box<ExpressionNode>, TypeNode),
 }
+
+impl ExpressionNode {
+    /// Позиция выражения в исходном тексте.
+    ///
+    /// Узел позиции **не хранит** (её нет в вариантах), поэтому она берётся у
+    /// первого потомка, который её знает: у переменной, функции или вложенного
+    /// выражения. Литералы и ссылки на объявления позиции не имеют — для них
+    /// ответ [`Location::Builtin`].
+    ///
+    /// # Почему метод здесь, а не у потребителя
+    ///
+    /// До фичи 0212 это знание жило **приватной копией в симуляторе**
+    /// (`takt-sim/src/expression.rs::loc_of`) и было недоступно целям, из-за
+    /// чего отказы генератора `c` не несли координаты вовсе. Вторая копия
+    /// разошлась бы с первой при первом же новом варианте узла — класс
+    /// 0084/0193/0195.
+    ///
+    /// ⚠️ У бинарных узлов позиция берётся у **левого** операнда, и только если
+    /// он её не знает — у правого: `x + 1` указывает на `x`, а `1 + x` — на `x`
+    /// же, потому что литерал позиции не несёт.
+    pub fn loc(&self) -> Location {
+        match self {
+            // У литерала длительности позиции нет — как и у прочих литералов.
+            ExpressionNode::Duration(_) => Location::Implicit,
+            ExpressionNode::Variable(var) => var.borrow().loc(),
+            ExpressionNode::ArraySubscript(var, _) | ExpressionNode::ArraySlice(var, _, _) => {
+                var.borrow().loc()
+            }
+            ExpressionNode::Function(func, _) => func.borrow().loc(),
+            ExpressionNode::Parenthesis(inner)
+            | ExpressionNode::BitAccess(inner, _)
+            | ExpressionNode::Not(inner)
+            | ExpressionNode::BitwiseNot(inner)
+            | ExpressionNode::UnaryPlus(inner)
+            | ExpressionNode::Negate(inner)
+            | ExpressionNode::Cast(inner, _)
+            | ExpressionNode::CodeBlock(inner, _)
+            | ExpressionNode::NamedFunctionBox(inner, _) => inner.loc(),
+            ExpressionNode::Power(l, r)
+            | ExpressionNode::Multiply(l, r)
+            | ExpressionNode::Divide(l, r)
+            | ExpressionNode::Modulo(l, r)
+            | ExpressionNode::Add(l, r)
+            | ExpressionNode::Subtract(l, r)
+            | ExpressionNode::ShiftLeft(l, r)
+            | ExpressionNode::ShiftRight(l, r)
+            | ExpressionNode::BitwiseAnd(l, r)
+            | ExpressionNode::BitwiseXor(l, r)
+            | ExpressionNode::BitwiseOr(l, r)
+            | ExpressionNode::Less(l, r)
+            | ExpressionNode::More(l, r)
+            | ExpressionNode::LessEqual(l, r)
+            | ExpressionNode::MoreEqual(l, r)
+            | ExpressionNode::Equal(l, r)
+            | ExpressionNode::NotEqual(l, r)
+            | ExpressionNode::And(l, r)
+            | ExpressionNode::Or(l, r)
+            | ExpressionNode::Assign(l, r) => match l.loc() {
+                Location::Builtin => r.loc(),
+                found => found,
+            },
+            ExpressionNode::ConditionalOperator(c, t, e) => match c.loc() {
+                Location::Builtin => match t.loc() {
+                    Location::Builtin => e.loc(),
+                    found => found,
+                },
+                found => found,
+            },
+            ExpressionNode::Array(items) | ExpressionNode::Initializer(items) => items
+                .iter()
+                .map(ExpressionNode::loc)
+                .find(|l| !matches!(l, Location::Builtin))
+                .unwrap_or(Location::Builtin),
+            // ⚠️ `Unresolved` несёт АСД, и позиция у него ЕСТЬ — но берётся она
+            // не здесь: печатники зовут `raw.loc()` напрямую (фича 0236), чтобы
+            // отказ указывал на сам неразрешённый узел.
+            ExpressionNode::None
+            | ExpressionNode::Unresolved(_)
+            | ExpressionNode::Number(_)
+            | ExpressionNode::Rational(_, _)
+            | ExpressionNode::String(_)
+            | ExpressionNode::Type(_)
+            | ExpressionNode::Address(_, _)
+            | ExpressionNode::AnonPort(_)
+            | ExpressionNode::Bool(_)
+            | ExpressionNode::Model(_)
+            | ExpressionNode::Condition(_)
+            | ExpressionNode::List(_) => Location::Builtin,
+        }
+    }
+}

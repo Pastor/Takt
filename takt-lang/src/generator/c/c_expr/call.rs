@@ -102,22 +102,29 @@ pub(super) fn generate_function_call(
                     ));
                 }
             }
+            // ⚠️ Отказ здесь — часть штатного пути: печатник операторов
+            // (`c_expr::stmt`) ловит его и пропускает вызов молча, потому что
+            // `debug`/`S` кода не порождают (решение фичи 0189). Код и текст
+            // всё равно обязаны быть настоящими: в позиции выражения
+            // (`v := debug(x);`) отказ доходит до автора.
             "debug" | "S" => {
-                return Err(format!(
-                    "Встроенная функция '{}' не поддерживается в C генераторе",
-                    builtin_name
-                )
-                .as_str()
-                .into());
+                return Err(crate::generator::c::c_unsupported::refuse(
+                    crate::generator::c::c_unsupported::UnsupportedNode::Builtin(builtin_name),
+                    crate::diagnostics::Location::Codegen,
+                ));
             }
-            other => {
-                return Err(format!("Неизвестная встроенная функция '{}'", other)
-                    .as_str()
-                    .into());
+            _ => {
+                return Err(crate::generator::c::c_unsupported::refuse(
+                    crate::generator::c::c_unsupported::UnsupportedNode::UnknownBuiltin,
+                    crate::diagnostics::Location::Codegen,
+                ));
             }
         },
         _ => {
-            return Err("Неразрешённое определение функции".into());
+            return Err(crate::generator::c::c_unresolved::refuse(
+                crate::diagnostics::Location::Codegen,
+                crate::generator::c::c_unresolved::UnresolvedNode::Function(None),
+            ));
         }
     }
     Ok(())

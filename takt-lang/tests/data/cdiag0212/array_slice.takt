@@ -1,0 +1,9 @@
+// Срез массива: в C операции среза нет.
+var mem: [bit;8] := 0;
+var res: [bit;8] := 0;
+
+start Main {
+    always {
+        res := mem[1:2];
+    }
+}
