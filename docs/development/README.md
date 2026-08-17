@@ -424,3 +424,5 @@
 | 0240-04 | 0240 | Перевод документа book/ в формат Typst | [0240-04-book-typst.md](0240-04-book-typst.md) |
 | 0245-01 | 0245 | Симулятор исполняет S(Модель) — проверку состояния под-модели | [0245-01-sim-state-of-model.md](0245-01-sim-state-of-model.md) |
 | 0237-01 | 0237 | Раздел «Импорты» не описывает S(Модель) | [0237-01-book-state-of-model-section.md](0237-01-book-state-of-model-section.md) |
+| 0246-01 | 0246 | Ссылка вперёд в инициализаторе переменной — ошибка компиляции | [0246-01-init-forward-reference.md](0246-01-init-forward-reference.md) |
+| 0222-01 | 0222 | Раздел документа о свёртке инициализатора | [0222-01-book-variables-const-fold.md](0222-01-book-variables-const-fold.md) |

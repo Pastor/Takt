@@ -1,0 +1,122 @@
+//! Ссылка вперёд в инициализаторе переменной — `SE-109` (фича 0246).
+//!
+//! Правило 0192 — «имя в инициализаторе значит НАЧАЛЬНОЕ значение и ссылается
+//! только назад по тексту» — до этой фичи не проверялось ничем, и один вход
+//! давал **пять** ответов: эталон `0`, цель `c` `1` (она печатает присваивания
+//! в порядке объявления, поле к этому моменту обнулено), `st` теряла
+//! инициализатор, `rust` и `sv` отказывали своими кодами.
+//!
+//! Здесь — отказ на запрещённой форме и **отсутствие ложных отказов** на
+//! соседних, законных: ссылка назад, ссылка вперёд на константу, чтение порта.
+
+use takt_lang::diagnostics::Diagnostic;
+
+/// Строит семантическое дерево, возвращая диагностику отказа.
+fn construct(src: &str) -> Result<(), Diagnostic> {
+    let (ast, _) = takt_lang::parse(src, 0).expect("разбор");
+    takt_lang::semantic::tree::construct_model(&ast, None, &[]).map(|_| ())
+}
+
+/// **A1: ссылка вперёд на переменную — `SE-109` с позицией имени.**
+#[test]
+fn forward_reference_to_variable_is_rejected() {
+    let error = construct(
+        "var ahead: u8 := future + 1;\n\
+         var future: u8 := 3;\n\
+         start Run { }\n",
+    )
+    .expect_err("ссылка вперёд обязана быть отвергнута");
+    assert_eq!(error.code.as_deref(), Some("SE-109"));
+    assert!(
+        error.message.contains("future"),
+        "сообщение обязано назвать переменную: {}",
+        error.message
+    );
+    // Позиция — у ИМЕНИ в инициализаторе, а не у объявления: сообщение в пачке
+    // без координаты бесполезно (правило 0130).
+    assert!(
+        matches!(error.loc, takt_lang::diagnostics::Location::Source(_, start, _) if start == 17),
+        "позиция обязана указывать на имя в инициализаторе, получено {:?}",
+        error.loc
+    );
+}
+
+/// **A1: простейшая форма без арифметики — тот же отказ.**
+#[test]
+fn bare_forward_reference_is_rejected() {
+    let error = construct(
+        "var ahead: u8 := future;\n\
+         var future: u8 := 3;\n\
+         start Run { }\n",
+    )
+    .expect_err("ссылка вперёд обязана быть отвергнута");
+    assert_eq!(error.code.as_deref(), Some("SE-109"));
+}
+
+/// **A2: ссылка НАЗАД законна — правило 0192 не сломано.**
+#[test]
+fn backward_reference_is_accepted() {
+    construct(
+        "var later: u8 := 7;\n\
+         var early: u8 := later + 1;\n\
+         start Run { }\n",
+    )
+    .expect("ссылка назад — законная форма (фича 0192)");
+}
+
+/// **A3: ссылка вперёд на КОНСТАНТУ законна.**
+///
+/// У констант разрешение идёт проходами до неподвижной точки (фича 0204) и даёт
+/// согласованный результат у эталона и целей — проверено пробой ADR 0246.
+/// Запрет здесь сломал бы работающие входы.
+#[test]
+fn forward_reference_to_constant_is_accepted() {
+    construct(
+        "var value: u8 := LATER + 1;\n\
+         const LATER: u8 := 3;\n\
+         start Run { }\n",
+    )
+    .expect("ссылка вперёд на константу — законная форма");
+}
+
+/// **A4: прочие невычислимые инициализаторы по-прежнему приняты.**
+///
+/// Фича исполняет принятое правило, а не ужесточает язык: чтение порта в
+/// инициализаторе остаётся законным.
+#[test]
+fn port_initializer_is_accepted() {
+    construct(
+        "in sensor: bit;\n\
+         var mirror: u8 := sensor;\n\
+         start Run { }\n",
+    )
+    .expect("чтение порта в инициализаторе — законная форма");
+}
+
+/// **Граница: имя, объявленное ниже, но внутри выражения под скобками и `as`.**
+///
+/// Обход выражения обязан спускаться в унарные формы и приведение, иначе
+/// проверка ловила бы лишь плоские записи.
+#[test]
+fn forward_reference_is_found_under_parens_and_cast() {
+    for init in [
+        "(future) + 1",
+        "~future",
+        "-future",
+        "future as u16",
+        "1 + (2 * future)",
+    ] {
+        let src = format!(
+            "var ahead: u16 := {init};\n\
+             var future: u8 := 3;\n\
+             start Run {{ }}\n"
+        );
+        let error = construct(&src).expect_err(&format!("форма '{init}' обязана отвергаться"));
+        assert_eq!(
+            error.code.as_deref(),
+            Some("SE-109"),
+            "форма '{init}': ожидался SE-109, получено {:?}",
+            error.code
+        );
+    }
+}

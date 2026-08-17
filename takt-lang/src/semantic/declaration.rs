@@ -399,6 +399,15 @@ pub(crate) fn fold_variable_initializers(
         let Some(source) = raw.get(name) else {
             continue;
         };
+        // Ссылка ВПЕРЁД на переменную — ошибка (фича 0246). Проверка стоит до
+        // общего «невычислимое оставляем как есть»: иначе она растворяется в
+        // нём, и запись даёт РАЗНЫЕ значения у эталона (0) и в прошивке (1,
+        // потому что цель `c` печатает присваивания в порядке объявления, а
+        // поле к этому моменту обнулено). Пять потребителей отвечали
+        // по-разному — замер ADR 0246.
+        if let Some(diagnostic) = forward_reference(source, name, variables) {
+            return Err(diagnostic);
+        }
         let Ok(literal) = const_eval::fold_to_literal_in(source, model, &known) else {
             // Невычислимое оставляем как есть: диагностику о нём (если она
             // нужна) поднимает разрешение выражения ниже по конвейеру. Молча
@@ -511,6 +520,92 @@ fn declaration_position(var: &VariableNode) -> (u32, u32) {
     match loc {
         Location::Source(file, start, _) => (file, start),
         _ => (u32::MAX, u32::MAX),
+    }
+}
+
+/// Ссылка вперёд: имя переменной, объявленной НИЖЕ по тексту (фича 0246).
+///
+/// Возвращает диагностику `SE-109`, если инициализатор `source` упоминает
+/// переменную (`var`) той же карты объявлений, чьё объявление стоит после
+/// объявления `owner`.
+///
+/// # Что проверяется точно, а что оставлено законным
+///
+/// Правило 0192 — «имя в инициализаторе значит начальное значение и ссылается
+/// только НАЗАД по тексту» — до этой фичи не проверялось ничем.
+///
+/// ⚠️ **Константы исключены намеренно:** у них ссылка вперёд разрешается
+/// проходами до неподвижной точки (фича 0204) и даёт согласованный результат у
+/// эталона и целей — проверено пробой. Запрет сломал бы работающие входы.
+///
+/// ⚠️ **Прочие невычислимые формы (порт, вызов функции, обращение к полю)
+/// остаются законными:** фича не ужесточает язык, а исполняет уже принятое
+/// правило. Отвергать всё невычислимое значило бы ломать входы, которых нет в
+/// корпусе, — тот же довод, по которому 0192 выбрала расширение, а не запрет.
+fn forward_reference(
+    source: &crate::parser::ast::Expression,
+    owner: &str,
+    variables: &BTreeMap<String, VariableNode>,
+) -> Option<Diagnostic> {
+    let after = declaration_position(&variables[owner]);
+    let mut names = Vec::new();
+    collect_identifiers(source, &mut names);
+    for (name, loc) in names {
+        let Some(other) = variables.get(&name) else {
+            continue;
+        };
+        // Только переменные: константа вперёд законна (см. заголовок функции).
+        if !matches!(other, VariableNode::Simple { .. }) {
+            continue;
+        }
+        if declaration_position(other) <= after {
+            continue;
+        }
+        return Some(
+            Diagnostic::error(
+                loc,
+                format!(
+                    "переменная '{name}' объявлена ниже: в инициализаторе имя значит \
+                     НАЧАЛЬНОЕ значение и ссылается только назад по тексту. \
+                     Переставьте объявления либо возьмите константу"
+                ),
+            )
+            .with_code("SE-109"),
+        );
+    }
+    None
+}
+
+/// Собирает идентификаторы выражения вместе с их позициями (фича 0246).
+///
+/// Разбор намеренно **не** исчерпывающий по `Expression`: интересны только
+/// имена, а формы, их не содержащие, к делу не относятся. Пропущенная форма
+/// даёт прежнее поведение (молчание), а не ложный отказ.
+fn collect_identifiers(expr: &crate::parser::ast::Expression, out: &mut Vec<(String, Location)>) {
+    use crate::parser::ast::Expression;
+    match expr {
+        Expression::Variable(id) => out.push((id.name.clone(), id.loc)),
+        Expression::Parenthesis(_, inner)
+        | Expression::Not(_, inner)
+        | Expression::BitwiseNot(_, inner)
+        | Expression::UnaryPlus(_, inner)
+        | Expression::Negate(_, inner)
+        | Expression::Cast(_, inner, _) => collect_identifiers(inner, out),
+        Expression::Power(_, l, r)
+        | Expression::Multiply(_, l, r)
+        | Expression::Divide(_, l, r)
+        | Expression::Modulo(_, l, r)
+        | Expression::Add(_, l, r)
+        | Expression::Subtract(_, l, r)
+        | Expression::ShiftLeft(_, l, r)
+        | Expression::ShiftRight(_, l, r)
+        | Expression::BitwiseAnd(_, l, r)
+        | Expression::BitwiseXor(_, l, r)
+        | Expression::BitwiseOr(_, l, r) => {
+            collect_identifiers(l, out);
+            collect_identifiers(r, out);
+        }
+        _ => {}
     }
 }
 
