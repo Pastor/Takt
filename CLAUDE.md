@@ -231,7 +231,7 @@ cargo test <имя>                                # один тест по им
 
 - **Ошибка разрешения оператора не зависит от глубины вложенности**
   ([0155](docs/features/0155-semantic-nested-statement-resolution.md)).
-  `semantic/statement.rs` пробрасывает ошибку `?` во **всех** телах (`if`/`else`,
+  `semantic/statement/mod.rs` пробрасывает ошибку `?` во **всех** телах (`if`/`else`,
   `while`/`loop`, `for`, inline-`Guard`). ⚠️ Возвращать
   `.unwrap_or_else(|_| Unresolved(…))` нельзя: цель `c` печатает `Unresolved`
   **пустотой**, симулятор пропускает — терялась не диагностика, а **сам оператор**.

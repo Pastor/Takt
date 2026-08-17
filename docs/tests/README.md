@@ -180,3 +180,4 @@
 | 0222 | Раздел документа о свёртке инициализатора | [0222-book-variables-const-fold.md](0222-book-variables-const-fold.md) | ГОТОВО |
 | 0223 | Три примера объясняют выходной порт устаревшей нуждой цели rust | [0223-examples-port-rationale-stale.md](0223-examples-port-rationale-stale.md) | ГОТОВО |
 | 0224 | Подъём Kotlin в плагине intellij-takt снимет ограничение на пусковой JDK | [0224-intellij-kotlin-upgrade.md](0224-intellij-kotlin-upgrade.md) | ГОТОВО |
+| 0225 | Модуль semantic/statement.rs — 999 строк при пределе 1000 | [0225-statement-module-size.md](0225-statement-module-size.md) | ГОТОВО |
