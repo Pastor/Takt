@@ -18,7 +18,7 @@ use super::*;
 // СЕМАНТИКА до генератора: `resolve_condition` снимает прозрачные скобки
 // паттерна `S(Модель)` в единой воронке разбора (фича 0074). Сюда условие
 // приходит уже каноничным `Function(S, [Model])`.
-use crate::semantic::condition::state_of::state_of_model;
+use crate::semantic::condition::state_of::{compared_state_name, state_of_model};
 
 /// Печатает сравнение текущего состояния модели с её состоянием:
 /// `<путь к модели>.state == {MODEL}_{STATE}`.
@@ -41,23 +41,16 @@ fn generate_state_comparison(
     map: &CMap,
     owner: &Element,
 ) -> Result<String, Diagnostic> {
-    let eq_name = match right {
-        ConditionNode::Variable(v, ..) => v.borrow().name().to_string(),
-        // Неразрешённое имя — штатный случай (см. заголовок функции).
-        ConditionNode::Unresolved(Condition::Variable(id)) => id.name.clone(),
-        // Имя состояния, случайно совпавшее с состоянием объемлющей модели:
-        // семантика разрешила его в ЧУЖОЙ области видимости. Берём только имя —
-        // искать всё равно в модели-аргументе.
-        ConditionNode::State(state, _) => state.borrow().name().to_string(),
-        // ⚠️ Защитная ветвь без `Debug`-дампа (фича 0231): прежде сообщение
-        // печатало внутреннее представление узла целиком.
-        _ => {
-            return Err(Diagnostic::error(
-                Location::Codegen,
-                "аргумент 'S(Модель)' не разрешён в модель: ожидалось имя модели".to_string(),
-            )
-            .with_code("CC-013"));
-        }
+    // Разбор трёх форм правой части — общий с симулятором (фича 0245): своя
+    // копия разошлась бы на форме, которую видит только один из потребителей.
+    // ⚠️ Защитная ветвь без `Debug`-дампа (фича 0231): прежде сообщение
+    // печатало внутреннее представление узла целиком.
+    let Some(eq_name) = compared_state_name(right) else {
+        return Err(Diagnostic::error(
+            Location::Codegen,
+            "аргумент 'S(Модель)' не разрешён в модель: ожидалось имя модели".to_string(),
+        )
+        .with_code("CC-013"));
     };
 
     let model_name = Name::from(model.clone());

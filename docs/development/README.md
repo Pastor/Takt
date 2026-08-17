@@ -422,3 +422,5 @@
 | 0240-02 | 0240 | Перевод документа book/ в формат Typst | [0240-02-book-typst.md](0240-02-book-typst.md) |
 | 0240-03 | 0240 | Перевод документа book/ в формат Typst | [0240-03-book-typst.md](0240-03-book-typst.md) |
 | 0240-04 | 0240 | Перевод документа book/ в формат Typst | [0240-04-book-typst.md](0240-04-book-typst.md) |
+| 0245-01 | 0245 | Симулятор исполняет S(Модель) — проверку состояния под-модели | [0245-01-sim-state-of-model.md](0245-01-sim-state-of-model.md) |
+| 0237-01 | 0237 | Раздел «Импорты» не описывает S(Модель) | [0237-01-book-state-of-model-section.md](0237-01-book-state-of-model-section.md) |

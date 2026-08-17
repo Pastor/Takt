@@ -79,6 +79,19 @@ impl Context for BlockScope<'_> {
         self.outer.ticks_in_state()
     }
 
+    /// Состояние другой модели прогона (фича 0245) — у объемлющего контекста.
+    ///
+    /// ⚠️ Как и стенд `extern`, умолчание трейта здесь означало бы «модель не
+    /// запущена»: условие `S(Модель) = Состояние` внутри `if` тела блока
+    /// отвечало бы `SIM-036` на живой модели.
+    fn model_state(&self, model: &str) -> Option<String> {
+        self.outer.model_state(model)
+    }
+
+    fn set_model_state(&self, model: &str, state: &str) {
+        self.outer.set_model_state(model, state);
+    }
+
     fn get_value(&self, name: &str) -> Option<Value> {
         self.locals
             .get(name)
@@ -126,6 +139,19 @@ impl Context for FunctionScope<'_> {
 
     fn ticks_in_state(&self) -> u64 {
         self.outer.ticks_in_state()
+    }
+
+    /// Состояние другой модели прогона (фича 0245) — у объемлющего контекста.
+    ///
+    /// ⚠️ Как и стенд `extern`, умолчание трейта здесь означало бы «модель не
+    /// запущена»: условие `S(Модель) = Состояние` внутри `if` тела блока
+    /// отвечало бы `SIM-036` на живой модели.
+    fn model_state(&self, model: &str) -> Option<String> {
+        self.outer.model_state(model)
+    }
+
+    fn set_model_state(&self, model: &str, state: &str) {
+        self.outer.set_model_state(model, state);
     }
 
     fn get_value(&self, name: &str) -> Option<Value> {

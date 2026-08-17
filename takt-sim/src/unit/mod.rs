@@ -255,6 +255,39 @@ impl Context for Unit {
         Unit::since_state_entry_ns(self)
     }
 
+    /// Состояние другой модели прогона (фича 0245) — у контекста узла: реестр
+    /// общий и лежит в корне цепочки контекстов.
+    ///
+    /// Композиты спрашивают детей: у самих `Parallel`/`Sequential` контекста
+    /// нет, а условие может вычисляться и в их поддереве.
+    fn model_state(&self, model: &str) -> Option<String> {
+        match &self.0 {
+            UnitKind::Node { context, .. } => context
+                .as_ref()
+                .and_then(|ctx| ctx.borrow().model_state(model)),
+            UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => units
+                .iter()
+                .find_map(|unit| unit.borrow().model_state(model)),
+            UnitKind::None => None,
+        }
+    }
+
+    fn set_model_state(&self, model: &str, state: &str) {
+        match &self.0 {
+            UnitKind::Node { context, .. } => {
+                if let Some(ctx) = context.as_ref() {
+                    ctx.borrow().set_model_state(model, state);
+                }
+            }
+            UnitKind::Parallel { units, .. } | UnitKind::Sequential { units, .. } => {
+                if let Some(unit) = units.first() {
+                    unit.borrow().set_model_state(model, state);
+                }
+            }
+            UnitKind::None => {}
+        }
+    }
+
     fn ticks_in_state(&self) -> u64 {
         Unit::ticks_in_state(self)
     }
@@ -585,6 +618,25 @@ impl Unit {
     }
 
     /// Возвращает имя текущего активного состояния (только для Unit::Node).
+    /// Кладёт текущее состояние узла в общий реестр прогона (фича 0245).
+    ///
+    /// Зовётся из трёх мест: постройка узла (стартовое состояние — там запись
+    /// идёт прямо в контекст), переход (`tick_node`) и восстановление из снимка
+    /// (`state_io::restore`). ⚠️ Новая точка смены состояния обязана звать её
+    /// тоже: реестр и поле `state` — два места одной истины, и расхождение
+    /// проявится трассой сверки sim ≡ c, а не отказом сборки.
+    pub(crate) fn publish_state(&self) {
+        let UnitKind::Node {
+            model_name: Some(model),
+            state: Some(state),
+            ..
+        } = &self.0
+        else {
+            return;
+        };
+        Context::set_model_state(self, model, state);
+    }
+
     pub fn current_state(&self) -> Option<&str> {
         match &self.0 {
             UnitKind::Node { state, .. } => state.as_deref(),

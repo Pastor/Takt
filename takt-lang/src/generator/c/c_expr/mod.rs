@@ -12,7 +12,7 @@ use crate::generator::c::{
     FUNCTION_PORT_WRITE_BIT, FUNCTION_PORT_WRITE_FLOAT, FUNCTION_PORT_WRITE_NUMERIC,
 };
 use crate::generator::indent::Printer;
-use crate::parser::ast::{Condition, Member};
+use crate::parser::ast::Member;
 use crate::semantic::extend::Extend;
 use crate::semantic::minimap::{Element, Name};
 use crate::semantic::naming::normalize_lowercase_snakecase;

@@ -41,6 +41,13 @@ pub(crate) struct ModelNodeContext {
     /// Ставится перед тактом (`Unit::set_extern_stubs`) — как модельное время;
     /// пустой стенд означает прежний отказ `SIM-019`.
     extern_stubs: crate::context::ExternStubs,
+    /// Реестр текущих состояний моделей прогона (фича 0245).
+    ///
+    /// Наполняется только в контексте-КОРНЕ цепочки: и чтение, и запись
+    /// поднимаются к нему через `parent`. Так модели-сёстры, у которых свои
+    /// контексты и общий родитель, видят состояния друг друга — тем же путём,
+    /// каким видят общие переменные корня.
+    states: RefCell<HashMap<String, String>>,
 }
 
 impl ModelNodeContext {
@@ -58,6 +65,7 @@ impl ModelNodeContext {
             cache: RefCell::new(HashMap::new()),
             parent,
             extern_stubs: Default::default(),
+            states: RefCell::new(HashMap::new()),
         }
     }
 
@@ -70,6 +78,7 @@ impl ModelNodeContext {
             cache: RefCell::new(HashMap::new()),
             parent,
             extern_stubs: Default::default(),
+            states: RefCell::new(HashMap::new()),
         }
     }
 }
@@ -129,6 +138,27 @@ impl Context for ModelNodeContext {
             parent.borrow_mut().set_value(name, value);
         } else {
             self.cache.borrow_mut().insert(name.to_string(), value);
+        }
+    }
+
+    /// Состояние модели прогона (фича 0245): вопрос адресуется КОРНЮ цепочки —
+    /// там лежит общий реестр, туда же пишут все узлы.
+    fn model_state(&self, model: &str) -> Option<String> {
+        match &self.parent {
+            Some(parent) => parent.borrow().model_state(model),
+            None => self.states.borrow().get(model).cloned(),
+        }
+    }
+
+    /// Запись состояния — в тот же корневой реестр (фича 0245).
+    fn set_model_state(&self, model: &str, state: &str) {
+        match &self.parent {
+            Some(parent) => parent.borrow().set_model_state(model, state),
+            None => {
+                self.states
+                    .borrow_mut()
+                    .insert(model.to_string(), state.to_string());
+            }
         }
     }
 
