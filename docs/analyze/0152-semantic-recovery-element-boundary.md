@@ -27,7 +27,7 @@ ADR принял **Option A**: накопление **внутри** стади�
 | `takt-lang/src/semantic/stages.rs` | `construct_stages` → `Vec<Diagnostic>`; стадии 0–3 оборачивают одну |
 | `takt-lang/src/pipeline.rs` | печать всех диагностик через `normalize` |
 | `takt-lang/src/lsp/diagnostics.rs` | то же для редактора |
-| `book/src/16-diagnostics/index.md` | сколько ошибок видно за прогон и что порождается |
+| `book/src/16-diagnostics/index.typ` | сколько ошибок видно за прогон и что порождается |
 
 ## Ограничения, определяющие форму
 

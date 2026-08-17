@@ -58,10 +58,10 @@
 
 Фича меняет **язык**, поэтому документ правится:
 
-- [`book/src/05-expressions/`](../../book/src/05-expressions/index.md) («Результат
+- [`book/src/05-expressions/`](../../book/src/05-expressions/index.typ) («Результат
   за границами типа») — правило распространено на инициализатор объявления,
   добавлены примеры `~0` и `200 + 100`;
-- [`book/src/appendix-errors/`](../../book/src/appendix-errors/index.md)
+- [`book/src/appendix-errors/`](../../book/src/appendix-errors/index.typ)
   (`SE-089`) — уточнено, что проверка смотрит на литерал **автора**, а
   вычисленное нормируется.
 

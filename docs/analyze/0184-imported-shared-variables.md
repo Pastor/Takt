@@ -67,7 +67,7 @@
 | `takt-lang/src/semantic/tree.rs`, ветки `ImportDefine::{Plain, GlobalSymbol, Rename}` | вызов усыновления, пока корень библиотеки **жив**; назначение имени импортированному корню (R6) |
 | `takt-lang/src/semantic/mod.rs` | реэкспорт нового модуля |
 | `docs/diagnostics/README.md`, `book/src/appendix-errors/` | регистрация `SE-074` |
-| `book/src/09-imports/index.md` | описание границы видимости (правило 24) |
+| `book/src/09-imports/index.typ` | описание границы видимости (правило 24) |
 
 Образец обхода — `semantic/lower_float.rs` (`lower_model`/`lower_state`/
 `lower_stmt`/`lower_expr`/`lower_cond`): тот же класс задачи — мутация **обоих**

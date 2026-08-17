@@ -36,7 +36,7 @@ ADR принял **Option B**: модель без состояний, пост�
 |---|---|
 | `takt-lang/src/semantic/validate/implemented.rs` (новый) | Обход реализаций состояний, диагностика `SE-106`. Отдельный модуль — правило размера модуля (`docs/CODE.md`); `validate/mod.rs` только объявляет и включает его в массив проверок |
 | `takt-lang/src/semantic/validate/mod.rs` | `mod implemented;` + вызов в массиве `checks` |
-| `book/src/appendix-errors/index.md` | Строка `SE-106` в таблице кодов (правило 25) |
+| `book/src/appendix-errors/index.typ` | Строка `SE-106` в таблице кодов (правило 25) |
 | `book/src/…` (раздел о композиции) | Упоминание в блоке «Частые ошибки» (правило 26) |
 | `takt-lang/tests/…` | Сторож фичи (тест-план, стадия 5) |
 | `takt-lang/src/lib.rs` (`LANGUAGE_VERSION`), `README.md`, `CLAUDE.md` | Подъём версии языка (правило 22, гейт `check-language-version.sh`) |

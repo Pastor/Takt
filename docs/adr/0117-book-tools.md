@@ -72,7 +72,7 @@
 
 ### Acceptance criteria
 
-1. Раздел `book/src/16-tools/index.md` описывает `taktc`/`takt-sim`/`takt-lsp`:
+1. Раздел `book/src/16-tools/index.typ` описывает `taktc`/`takt-sim`/`takt-lsp`:
    назначение, команды, примеры вызова и **реального** вывода.
 2. Правило 24 в `docs/RULE.md` содержит оговорку об исключении.
 3. Сборка PDF (`xelatex`) чистая; `precheck.sh` зелёный.

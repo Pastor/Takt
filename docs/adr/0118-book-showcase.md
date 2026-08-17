@@ -60,5 +60,5 @@
 
 1. `dispenser.takt` компилируется в c/rust/sv/plantuml, симулируется, `F Filling`
    держится, инвариант присутствует.
-2. Раздел `book/src/17-showcase/index.md` собран в PDF с кадрами SVG.
+2. Раздел `book/src/17-showcase/index.typ` собран в PDF с кадрами SVG.
 3. Сборка PDF (`xelatex`) чистая; `precheck.sh` зелёный.

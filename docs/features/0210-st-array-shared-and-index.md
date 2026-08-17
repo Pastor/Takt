@@ -58,8 +58,8 @@ between parameter 'mem' and value being passed, when invoking FB»; скаляр
 ## Документирование (правило 24)
 
 **Требуется.** Индекс-выражение — расширение синтаксиса; затронуты разделы
-[`book/src/03-types/`](../../book/src/03-types/index.md) (массивы) и
-[`book/src/05-expressions/`](../../book/src/05-expressions/index.md) (таблица
+[`book/src/03-types/`](../../book/src/03-types/index.typ) (массивы) и
+[`book/src/05-expressions/`](../../book/src/05-expressions/index.typ) (таблица
 доступов). **Сделано:** в оба добавлено, что индексом может быть любое
 выражение, с примером; у среза оговорено, что границы остаются числами.
 

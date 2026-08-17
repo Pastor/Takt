@@ -17,7 +17,7 @@
 | # | Проверка | Результат | Факт |
 |---|---|---|---|
 | T1 | Текущее дерево | ✅ | «проверено 46 файлов + титульные поля book.toml, символов вне шрифта нет» |
-| T2 | `⚠️` в `.md` | ✅ | `book/src/06-control-flow/index.md:163:3: U+26A0 WARNING SIGN` и `:163:4: U+FE0F VARIATION SELECTOR-16` |
+| T2 | `⚠️` в `.md` | ✅ | `book/src/06-control-flow/index.typ:163:3: U+26A0 WARNING SIGN` и `:163:4: U+FE0F VARIATION SELECTOR-16` |
 | T3 | `★` в примере `.takt` | ✅ | `book/src/06-control-flow/examples/control.takt:60:10: U+2605 BLACK STAR` |
 | T4 | `⌘` (покрыт шрифтом) | ✅ | код `0` — ложного отказа нет |
 | T5 | `book/Makefile` с `⚠` | ✅ | 5 вхождений, гейт молчит |

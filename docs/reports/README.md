@@ -161,3 +161,4 @@
 | 0244 | Стоимость тестовых целей | [0244-test-target-build-cost.md](0244-test-target-build-cost.md) | ✅ ГОТОВО |
 | 0243 | Переопределение типа | [0243-type-redefinition-diagnostic.md](0243-type-redefinition-diagnostic.md) | ✅ ГОТОВО |
 | 0214 | Регистровый интерфейс sv-mmio | [0214-sv-mmio-unused-write-signals.md](0214-sv-mmio-unused-write-signals.md) | ✅ ГОТОВО |
+| 0240 | Перевод документа book/ в формат Typst | [0240-book-typst.md](0240-book-typst.md) | ГОТОВО |

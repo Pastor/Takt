@@ -33,7 +33,7 @@ ADR принял **Option A**: `FormatError::Parse` несёт `Vec<Diagnostic>`
 | `takt-lang/src/bin/taktc.rs` | `run_fmt`: три места обработки `Err` — файлы, `--check`, `--stdin`; проставить путь и печатать построчно |
 | `takt-lang/src/lsp/formatting.rs` | докблок: `Err` теперь несёт структуру, а не строку |
 | `takt-lang/Cargo.toml` | версия крейта `0.27.0` → `0.28.0` |
-| `book/src/17-tools/index.md` | пример отказа `fmt` на синтаксической ошибке |
+| `book/src/17-tools/index.typ` | пример отказа `fmt` на синтаксической ошибке |
 
 ## Ограничения, которые определяют форму решения
 

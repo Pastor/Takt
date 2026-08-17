@@ -44,7 +44,7 @@
 - **Генерация во все цели** — показательные фрагменты в тексте (C `_tick` с
   `assert` инварианта, SV `always_ff`); **полный** порождённый код (c/c-hal/rust/
   st/sv) вынесен в новое приложение
-  [«Порождённый код примера»](../../book/src/appendix-generated/index.md)
+  [«Порождённый код примера»](../../book/src/appendix-generated/index.typ)
   (`{{#include}}` файлов `generated/`), добавленное в `SUMMARY.md`.
 - **Перенос длинных строк кода** в PDF — в `book.toml` добавлен `header-includes`
   с `fvextra` (`breaklines`/`breakanywhere`): дефолтный HAL цели `c-hal` эмитится

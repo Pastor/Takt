@@ -53,7 +53,7 @@
 
 **Требуется.** Меняется наблюдаемое поведение CLI (`--quiet` начинает глушить
 предупреждения целей) — затронут раздел
-[`book/src/16-diagnostics/`](../../book/src/16-diagnostics/index.md).
+[`book/src/16-diagnostics/`](../../book/src/16-diagnostics/index.typ).
 
 **Сделано** (задача [0168-02](../development/0168-02-generator-warnings-return.md)):
 в раздел добавлен подраздел «Тихий режим» — `--quiet` оставляет только ошибки, и

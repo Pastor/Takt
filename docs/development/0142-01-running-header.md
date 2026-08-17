@@ -11,7 +11,7 @@
 
 Колонтитул задаётся **на стороне LaTeX** (класс `report`, движок `xelatex`), а не
 разметкой Markdown — через `header-includes` профиля `pdf` в
-[`book/book.toml`](../../book/book.toml). Пакет `fancyhdr`:
+`book/book.toml` (файл снят фичей [0240](../features/0240-book-typst.md): документ переведён в Typst, колонтитул задаётся `book/src/template.typ`). Пакет `fancyhdr`:
 
 - **`\pagestyle{fancy}`**, колонтитул `\fancyhead[R]{\nouppercase{\leftmark}}` —
   название текущей главы (= раздела mdBook) справа вверху; номер страницы в
