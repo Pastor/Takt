@@ -29,7 +29,7 @@ use takt_lang::parser::lexer::all_keywords;
 
 /// Текст грамматики. `include_str!` привязывает путь на этапе компиляции:
 /// переехавший файл валит сборку, а не молча отключает сторожа.
-const GRAMMAR: &str = include_str!("../src/grammar.lalrpop");
+const GRAMMAR: &str = include_str!("../../src/grammar.lalrpop");
 
 /// Разбирает грамматику на «правила» и «объявления терминалов».
 ///

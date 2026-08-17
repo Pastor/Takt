@@ -44,7 +44,7 @@ A1–A9 — в анализе.
 
 ## Тестовые данные и окружение
 
-- `takt-lang/tests/diagnostics_batch_tests.rs` — T1–T6 (задача 0130-01, готово).
+- `takt-lang/tests/semantic/diagnostics_batch_tests.rs` — T1–T6 (задача 0130-01, готово).
 - `takt-lang/src/diagnostics/batch.rs` (юнит-тесты) — T3–T5 на уровне слоя.
 - Фикстуры — `takt-lang/tests/data/diagnostics0130/`:
   `three_syntax_errors.takt` (три ошибки разбора), `valid.takt` (эталон «без

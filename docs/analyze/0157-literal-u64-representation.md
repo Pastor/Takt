@@ -121,7 +121,7 @@ ADR 0157 принял Option A: значение числа несёт `i128` н
 | # | Критерий | Способ проверки |
 |---|---|---|
 | A1 | `var m: [bit;64] := 0xFFFFFFFFFFFFFFFF;` компилируется целями `c`/`rust`/`st`/`sv`/`plantuml` | новый тест-фикстура + гейты `precheck.sh` (`cc -Wall -Werror`, `rustc -D warnings`, `iec2c`, `verilator -Wall`, `yosys`) |
-| A2 | `u64` пересекает `i64::MAX` с обёрткой | потактовая сверка симулятора и цели `c` (`takt-sim/tests/conformance_c_tests.rs`) |
+| A2 | `u64` пересекает `i64::MAX` с обёрткой | потактовая сверка симулятора и цели `c` (`takt-sim/tests/conformance/conformance_c_tests.rs`) |
 | A3 | `var a: u8 := 300;` → `SE-089` с позицией | тест семантики + фикстура `tests/data/semantic/invalid/` |
 | A4 | цель `sv`: литерал 33…64 бита без `WIDTHEXPAND` | `verilator --lint-only -Wall` по порождённому `.sv` в тесте |
 | A5 | цель `c`: значение `> i64::MAX` печатается с `ULL` | тест печатника + `cc -Wall -Werror` |

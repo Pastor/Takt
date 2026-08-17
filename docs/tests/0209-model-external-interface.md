@@ -41,5 +41,5 @@
 
 ## Тестовые данные и окружение
 
-`takt-sim/tests/extern_stub_tests.rs`, `takt-sim/tests/aggregate_argument_tests.rs`.
+`takt-sim/tests/sim/extern_stub_tests.rs`, `takt-sim/tests/sim/aggregate_argument_tests.rs`.
 Толчейн `1.97.1`, macOS 25.5.0.

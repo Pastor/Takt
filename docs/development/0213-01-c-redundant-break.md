@@ -37,10 +37,10 @@ state` и **возвращает управление** (`return Ok(())`): со�
 
 **Сторожа.**
 
-- `takt-lang/tests/c_redundant_break_tests.rs` — четыре проверки: корпус без пар
+- `takt-lang/tests/targets/c_redundant_break_tests.rs` — четыре проверки: корпус без пар
   `break;` (падает **списком** «файл: строки»), фикстура «хвост после
   безусловного», контр-примеры на условное ребро и терминальное состояние.
-- `takt-sim/tests/conformance_c_unconditional_edge_tests.rs` — **потактовая**
+- `takt-sim/tests/conformance/conformance_c_unconditional_edge_tests.rs` — **потактовая**
   сверка эталона и порождённой прошивки на модели с хвостом; условие хвоста
   истинно на том же такте, поэтому сверка отличает верную правку от
   половинчатой.
@@ -61,8 +61,8 @@ state` и **возвращает управление** (`return Ok(())`): со�
 ## Проверки
 
 ```sh
-cargo test --test c_redundant_break_tests                      # 4 проверки цели c
-cargo test -p takt-sim --test conformance_c_unconditional_edge_tests  # потактовая сверка
+cargo test --test targets c_redundant_break_tests::            # 4 проверки цели c
+cargo test -p takt-sim --test conformance conformance_c_unconditional_edge_tests::  # сверка
 ./scripts/precheck.sh                                          # полный предкоммит
 ```
 

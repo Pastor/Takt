@@ -65,6 +65,6 @@ name ' ()' not found» — по-английски, с пустым именем
 - `cargo build --bin taktc`, `cargo build --bin takt-sim` — зелёные.
 - Пробы (все семь потребителей на одном входе) — единый ответ `SE-106` с
   позицией; см. отчёт [../reports/0211-c-missing-start-state-diagnostic.md](../reports/0211-c-missing-start-state-diagnostic.md).
-- Сторож `takt-lang/tests/implemented_model_tests.rs` — покрывает R1–R7 анализа;
+- Сторож `takt-lang/tests/semantic/implemented_model_tests.rs` — покрывает R1–R7 анализа;
   фикстуры — `takt-lang/tests/data/implemented0211/`.
 - `./scripts/precheck.sh` — зелёный.

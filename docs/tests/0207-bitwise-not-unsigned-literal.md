@@ -41,5 +41,5 @@
 
 ## Тестовые данные и окружение
 
-`takt-sim/tests/computed_initializer_norm_tests.rs`; толчейн `1.97.1`,
+`takt-sim/tests/sim/computed_initializer_norm_tests.rs`; толчейн `1.97.1`,
 macOS 25.5.0.

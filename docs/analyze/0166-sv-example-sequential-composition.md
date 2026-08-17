@@ -26,7 +26,7 @@
 | `scripts/precheck.sh` | `batch_cycle` в `SV_TRANSLATABLE` |
 | `examples/generated/sv/tb/batch_cycle_tb.sv` | тестбенч руками (образец — `regulator_tb.sv`) |
 | `examples/generated/sv/tb/README.md` | строка в таблицу |
-| `takt-sim/tests/examples_scenario_tests.rs` | контракт сценария |
+| `takt-sim/tests/sim/examples_scenario_tests.rs` | контракт сценария |
 | `examples/generated/c/batch_cycle_main.c` | харнесс руками (образец — `regulator_main.c`) |
 | `examples/generated/c/CMakeLists.txt` | `add_executable` |
 | `examples/generated/**` | порождённые артефакты (пишет сам `precheck.sh`) |

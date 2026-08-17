@@ -39,7 +39,7 @@ test`): 16 наборов, 90 тестов, ноль провалов — вкл
 
 ### Сервер: сторож на то, чем машина не защищена
 
-Заведён `takt-lang/tests/lsp_port_io_tests.rs` (5 тестов, `--features lsp`):
+Заведён `takt-lang/tests/lsp/lsp_port_io_tests.rs` (5 тестов, `--features lsp`):
 
 | Проверка | Почему она нужна |
 |---|---|

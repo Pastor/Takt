@@ -89,7 +89,7 @@ identifier, "X", "F", "G", "U", "R", "LTL", "Guard"». Правила языка
   задаёт `diagnostics::normalize` по позиции в тексте; утверждение снято из кода
   и анализа.
 
-Сторож — [`takt-lang/tests/empty_enum_tests.rs`](../../takt-lang/tests/empty_enum_tests.rs)
+Сторож — [`takt-lang/tests/semantic/empty_enum_tests.rs`](../../takt-lang/tests/semantic/empty_enum_tests.rs)
 (9 тестов, включая доставку в LSP и круговой рейс форматтера); обе содержательные
 мутации ловятся. Детали — [отчёт](../reports/0172-empty-enum-semantics.md),
 задачи [0172-01](../development/0172-01-empty-enum-semantics.md) и

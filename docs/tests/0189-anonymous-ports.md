@@ -70,9 +70,9 @@
 
 ## Тестовые данные и окружение
 
-- `takt-lang/tests/anon_port_tests.rs` — T1–T17 (формы, диагностики, цели).
-- `takt-lang/tests/port_access_contract_tests.rs::anon_access_matches_contract` — T20.
-- `takt-sim/tests/conformance_anon_tests.rs` — T18, T19 (сверка через `mmap`
+- `takt-lang/tests/targets/anon_port_tests.rs` — T1–T17 (формы, диагностики, цели).
+- `takt-lang/tests/semantic/port_access_contract_tests.rs::anon_access_matches_contract` — T20.
+- `takt-sim/tests/conformance/conformance_anon_tests.rs` — T18, T19 (сверка через `mmap`
   по адресу `0x1000_0000_0000`; адрес тот же, что у сторожа 0098 — macOS
   отвергает низкие).
 - `takt-lang/src/semantic/anon_port.rs` (модульные тесты) — свёртка форм,

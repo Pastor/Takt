@@ -28,7 +28,7 @@
 | Сверка | Файл |
 |---|---|
 | `fixed_saturation_matches_generated_c` | `takt-sim/tests/conformance_c_tests/fixed_sat.rs` |
-| `fixed_saturation_matches_generated_rust` | `takt-sim/tests/conformance_rust_tests.rs` |
+| `fixed_saturation_matches_generated_rust` | `takt-sim/tests/conformance/conformance_rust_tests.rs` |
 | `fixed_saturation_matches_generated_st` | `takt-sim/tests/conformance_st_tests/fixed_sat.rs` |
 | `fixed_saturation_matches_generated_sv` | `takt-sim/tests/conformance_sv_tests/fixed_sat.rs` |
 

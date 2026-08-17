@@ -51,7 +51,7 @@ multi_syntax.takt:4:19: Ошибка компиляции [SY-002]: нерасп
 multi_syntax.takt:7:1:  Ошибка компиляции [SY-002]: нераспознанный токен '}' …
 ```
 
-Тесты: `takt-lang/tests/diagnostics_batch_tests.rs` (6) + 5 юнит-тестов
+Тесты: `takt-lang/tests/semantic/diagnostics_batch_tests.rs` (6) + 5 юнит-тестов
 `diagnostics::batch`. Покрыты A1 (три из трёх), A2 (составы CLI и сервера
 совпадают), A5 (порядок и воспроизводимость), A6 (дедупликация) и регресс
 «корректный файл → пустой список».

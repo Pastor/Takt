@@ -9,7 +9,7 @@
 возвратом дефекта, ничего не сторожит, поэтому мутация здесь равноправна с
 прогоном.
 
-Файлы: `takt-lang/tests/diagnostic_text_tests.rs`; обновлённый юнит-тест
+Файлы: `takt-lang/tests/semantic/diagnostic_text_tests.rs`; обновлённый юнит-тест
 `semantic::validate::tests::ast_summary_array_var`.
 
 ## Проверки (условие → ожидаемый результат)

@@ -38,7 +38,7 @@
 
 ## Тестовые данные и окружение
 
-Фикстуры — строками в `takt-lang/tests/non_ascii_identifier_tests.rs`. У T6
+Фикстуры — строками в `takt-lang/tests/semantic/non_ascii_identifier_tests.rs`. У T6
 каждая фикстура несёт **ровно одно** не-ASCII имя своего вида: иначе отказ
 сработал бы на соседнем объявлении и дыру бы не показал.
 

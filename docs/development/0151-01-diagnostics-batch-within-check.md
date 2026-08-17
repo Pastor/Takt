@@ -37,7 +37,7 @@ found.extend(single.into_iter().filter_map(Result::err));
 
 ## Проверки
 
-`takt-lang/tests/validate_batch_tests.rs` — 10 тестов: по одному на каждый из
+`takt-lang/tests/semantic/validate_batch_tests.rs` — 10 тестов: по одному на каждый из
 шести измеренных классов, плюс сохранение свойства 0130, граница стадий
 построения, «одна диагностика на элемент» и порядок по позиции.
 

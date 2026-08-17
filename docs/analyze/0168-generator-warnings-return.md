@@ -63,7 +63,7 @@ type Compile = fn(&str, &str, &str, &[String], &GenerateOptions)
 let targets: [(&str, Compile); 4] = [("c", compile_to_c), ("rust", …), …];
 ```
 
-(`takt-lang/tests/type_inference_chain_tests.rs`). При Option B такой массив
+(`takt-lang/tests/semantic/type_inference_chain_tests.rs`). При Option B такой массив
 перестал бы быть гомогенным; при Option C достаточно поправить **одну** строку
 псевдонима.
 

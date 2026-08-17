@@ -65,7 +65,7 @@ fn ty_name(ty: u32) -> &'static str {
         .unwrap_or("<?>")
 }
 
-const FIXTURE: &str = include_str!("data/lsp/semantic_tokens.takt");
+const FIXTURE: &str = include_str!("../data/lsp/semantic_tokens.takt");
 
 /// Зонд: печатает реальную классификацию токенов фикстуры (правило проекта —
 /// «сперва зонд для захвата вывода, затем assertions против захваченного»).

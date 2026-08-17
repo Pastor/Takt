@@ -122,7 +122,7 @@ pub fn new(hal: H) -> Self {
 | `cargo test -p takt-lang -- --test-threads=1` | зелёные |
 | `./scripts/precheck.sh` | зелёный |
 
-Сторож — `takt-lang/tests/port_initial_value_tests.rs` (10 тестов: эмиссия
+Сторож — `takt-lang/tests/semantic/port_initial_value_tests.rs` (10 тестов: эмиссия
 текстом + оба настоящих гейта; нет инструмента → мягкий пропуск с сообщением).
 
 **Условия анализа:** R5 (для `c`, `c-hal`, `rust`), R8, R12; критерии A5

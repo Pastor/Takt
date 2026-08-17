@@ -64,10 +64,10 @@ model M {
 
 ## Проверка
 
-- `takt-sim/tests/duration_tests.rs::duration_literal_inside_body_is_a_value` —
+- `takt-sim/tests/sim/duration_tests.rs::duration_literal_inside_body_is_a_value` —
   литерал в **каждой** позиции: справа от операции, слева, в сравнении и как
   самостоятельное значение;
-- `takt-sim/tests/duration_tests.rs::duration_literal_mixed_with_number_still_refused`
+- `takt-sim/tests/sim/duration_tests.rs::duration_literal_mixed_with_number_still_refused`
   — сторож направления: `SE-065` на месте;
 - пробы, с которых начался разбор: три выражения выше дают значения
   (`left=0ms`, `left=2s`, `ready=1`), а не `SIM-007`.

@@ -56,9 +56,9 @@
 
 ## Тестовые данные и окружение
 
-- Сторож: `takt-lang/tests/c_enum_constants_tests.rs` (7 тестов, один запускает
+- Сторож: `takt-lang/tests/targets/c_enum_constants_tests.rs` (7 тестов, один запускает
   настоящий `cc -Wall -Werror`).
-- Сверки: `takt-sim/tests/conformance_c_tests.rs` — прогоняются **без правок**.
+- Сверки: `takt-sim/tests/conformance/conformance_c_tests.rs` — прогоняются **без правок**.
 - Команды:
 
 ```sh

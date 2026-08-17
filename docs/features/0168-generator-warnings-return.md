@@ -92,7 +92,7 @@
 обещавшая «позицию объявления», исправлена здесь же; причина вынесена
 кандидатом.
 
-Сторож — [`takt-lang/tests/generator_warnings_tests.rs`](../../takt-lang/tests/generator_warnings_tests.rs):
+Сторож — [`takt-lang/tests/targets/generator_warnings_tests.rs`](../../takt-lang/tests/targets/generator_warnings_tests.rs):
 шесть тестов, включая греп-сторож «в `generator/` не осталось печати» (он падает
 списком мест, чтобы четвёртая копия `report` не завелась незамеченной). Детали —
 [отчёт](../reports/0168-generator-warnings-return.md), задачи

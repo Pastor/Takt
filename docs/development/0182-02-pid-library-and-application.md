@@ -30,7 +30,7 @@ import { Pid, target, meas, ctrl } from "pid_law.takt";
 механизма, а не выбор оформления; оно проговорено и в примере, и в разделе
 документа.
 
-**Учёт в корпусном гейте достижимости** (`takt-sim/tests/examples_scenario_tests.rs`):
+**Учёт в корпусном гейте достижимости** (`takt-sim/tests/sim/examples_scenario_tests.rs`):
 применение получило **контракт** (цепочка `Control, Heating` → `Settled, Holding`
 → `Done, Done`, бюджет 100, обязательное завершение), библиотека — **исключение
 с причиной** (без объекта измерение никто не меняет, осмысленного сценария нет).
@@ -38,7 +38,7 @@ import { Pid, target, meas, ctrl } from "pid_law.takt";
 **Две правки инфраструктуры тестов** — обе об одном: пример корпуса теперь
 вправе подключать соседний файл, а тесты строили модель из строки и каталога не
 знали. Каталог самой модели добавлен в пути поиска в
-`examples_scenario_tests.rs` и `takt-lang/tests/c_stub_tests.rs`.
+`examples_scenario_tests.rs` и `takt-lang/tests/targets/c_stub_tests.rs`.
 
 ## Проверки
 

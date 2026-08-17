@@ -87,7 +87,7 @@ between parameter 'mem' and value being passed, when invoking FB»; скаляр
 формы нет, а текстовый тест печатника это ожидание **закреплял** (класс 0191).
 Ожидания исправлены, добавлен сторож, собирающий вывод настоящим `rustc`.
 
-Сторож — [`takt-lang/tests/array_shared_and_index_tests.rs`](../../takt-lang/tests/array_shared_and_index_tests.rs)
+Сторож — [`takt-lang/tests/semantic/array_shared_and_index_tests.rs`](../../takt-lang/tests/semantic/array_shared_and_index_tests.rs)
 (8 тестов, включая прогон настоящих `iec2c` и `rustc`). Детали —
 [отчёт](../reports/0210-st-array-shared-and-index.md), задача
 [0210-01](../development/0210-01-st-array-shared-and-index.md).

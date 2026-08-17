@@ -126,7 +126,7 @@
 ### Сторожа
 
 `takt-lang/tests/{lexer_tests,literal_range_tests,wide_literal_tests}.rs`,
-`takt-sim/tests/state_io_tests.rs::roundtrip_keeps_value_beyond_i64`, фикстура
+`takt-sim/tests/sim/state_io_tests.rs::roundtrip_keeps_value_beyond_i64`, фикстура
 `tests/data/semantic/invalid/literal_out_of_type_range.takt`. Гейты целей
 (`cc -Wall -Werror`, `verilator --lint-only -Wall`, `iec2c`,
 `rustc -D warnings`) прогоняются **из тестов**, а не только по корпусу: корпус

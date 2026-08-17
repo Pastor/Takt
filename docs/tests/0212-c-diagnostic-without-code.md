@@ -61,7 +61,7 @@
 ## Тестовые данные и окружение
 
 - Фикстуры — `takt-lang/tests/data/cdiag0212/` (3 файла).
-- Сторожа — `takt-lang/tests/c_diagnostic_code_tests.rs` (T1–T4, T7, T9) и
+- Сторожа — `takt-lang/tests/targets/c_diagnostic_code_tests.rs` (T1–T4, T7, T9) и
   юнит-тесты воронок в `c_unsupported.rs` / `c_unresolved.rs` (T5, T6).
 - Каталог вывода целей уникален по имени потока: тесты идут параллельно
   (фича 0190).

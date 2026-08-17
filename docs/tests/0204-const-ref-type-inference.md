@@ -48,8 +48,8 @@
 
 ## Тестовые данные и окружение
 
-- `takt-lang/tests/type_inference_chain_tests.rs` (T1–T10),
-  `takt-sim/tests/inference_chain_tests.rs` (T11, T12),
+- `takt-lang/tests/semantic/type_inference_chain_tests.rs` (T1–T10),
+  `takt-sim/tests/sim/inference_chain_tests.rs` (T11, T12),
   `takt-lang/tests/semantic_tests/part4.rs` (T13).
 - Тип сверяется как `Debug`-текст `VariableNode::ty()` — точное представление, а
   не пересказ.

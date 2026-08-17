@@ -19,7 +19,7 @@
 
 ### Наблюдатель — сам порт, трасса начинается с нулевого элемента
 
-Заведена сверка `takt-sim/tests/conformance_port_init_tests.rs` на фикстуре
+Заведена сверка `takt-sim/tests/conformance/conformance_port_init_tests.rs` на фикстуре
 `takt-sim/tests/data/eval/conformance_port_init.takt` (`out led: u8 at 0 := 7;`,
 тело пишет `count + 10`, затем переход в терминальное состояние — запись
 прекращается).

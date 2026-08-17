@@ -4,7 +4,7 @@
 
 ## Что сделано
 
-**Формы и диагностики** — `takt-lang/tests/model_implement_form_tests.rs` (5):
+**Формы и диагностики** — `takt-lang/tests/semantic/model_implement_form_tests.rs` (5):
 
 | Тест | Что доказывает |
 |---|---|

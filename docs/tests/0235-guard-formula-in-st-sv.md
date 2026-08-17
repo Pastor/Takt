@@ -54,7 +54,7 @@
 
 | Что | Где |
 |---|---|
-| Сторож | `takt-lang/tests/guard_targets_tests.rs` (6 тестов) |
+| Сторож | `takt-lang/tests/targets/guard_targets_tests.rs` (6 тестов) |
 | Реализация | `generator/sv/sv_blocks.rs`, `generator/sv/sv_fsm.rs`, `generator/st/mod.rs` |
 | Инструменты | verilator, yosys (мягкий пропуск при отсутствии) |
 

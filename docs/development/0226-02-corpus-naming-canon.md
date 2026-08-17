@@ -57,7 +57,7 @@ u128 = [bit; 128];` есть объявление автора, и канон к
 - сценарии: `c/scenario.txt`, `examples/simulations/elevator_mini_floor2.json`;
 - внешняя карта адресов `examples/elevator_mini.plc.map`;
 - живые документы и док-комментарии, цитировавшие имена корпуса: `README.md`,
-  `takt-sim/src/json_input.rs`, `takt-sim/tests/composition_ports_tests.rs`,
+  `takt-sim/src/json_input.rs`, `takt-sim/tests/sim/composition_ports_tests.rs`,
   док-комментарии печатников `rust`/`st`/`sv`.
 
 **Историю не правил:** `CHANGES.md`, `docs/adr/`, `docs/analyze/`,

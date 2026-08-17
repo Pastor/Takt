@@ -77,7 +77,7 @@ enum Mode { 42 }           // SY-002 от парсера, а НЕ SE-105
 
 ## Тестовые данные и окружение
 
-- Сторож: `takt-lang/tests/empty_enum_tests.rs` (9 тестов, один под
+- Сторож: `takt-lang/tests/semantic/empty_enum_tests.rs` (9 тестов, один под
   `#[cfg(feature = "lsp")]`).
 - Фикстуры: `takt-lang/tests/data/semantic/invalid/empty_enum.takt`,
   `takt-lang/tests/data/semantic/invalid/empty_enum_many.takt`.

@@ -67,7 +67,7 @@ fixed-point запрещено; приведите операнд явно ('…
 
 ## Проверки
 
-`takt-lang/tests/fixed_saturation_tests.rs` — 7 тестов, все зелёные:
+`takt-lang/tests/semantic/fixed_saturation_tests.rs` — 7 тестов, все зелёные:
 
 | Тест | Что доказывает |
 |---|---|

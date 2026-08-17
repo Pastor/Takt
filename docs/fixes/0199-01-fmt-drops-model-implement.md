@@ -62,7 +62,7 @@ _                                              => "model M { … }"          // 
 
 ## Проверки
 
-- `takt-lang/tests/format_tests.rs::model_implement_with_body_keeps_implementation`
+- `takt-lang/tests/syntax/format_tests.rs::model_implement_with_body_keeps_implementation`
   — адресный тест: реализация уцелела; пустое тело печатается со скобками, и
   напечатанное **разбирается** (круговой рейс). ⚠️ Стоит отдельно от корпусной
   проверки: инвариант не должен зависеть от того, лежит ли в корпусе подходящий

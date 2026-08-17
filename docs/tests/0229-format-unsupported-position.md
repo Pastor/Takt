@@ -9,7 +9,7 @@
 прогоном бинаря (`CARGO_BIN_EXE_taktc`) плюс одной проверкой на уровне библиотеки
 — там, где предмет не текст, а тип.
 
-Файлы: `takt-lang/tests/format_unsupported_tests.rs`, обновлённый
+Файлы: `takt-lang/tests/syntax/format_unsupported_tests.rs`, обновлённый
 `fmt_diagnostic_tests.rs` (фича 0202).
 
 ## Проверки (условие → ожидаемый результат)

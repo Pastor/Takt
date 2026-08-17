@@ -30,7 +30,7 @@
 
 ### Тесты
 
-Новый `takt-lang/tests/lsp_document_symbol_tests.rs` — 13 тестов группами:
+Новый `takt-lang/tests/lsp/lsp_document_symbol_tests.rs` — 13 тестов группами:
 
 - **состав**: каждое объявление стало символом **своего вида**; пиннинг длины
   списка; `import` символом не стал;

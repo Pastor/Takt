@@ -4,7 +4,7 @@
 
 ## Что сделано
 
-`takt-lang/tests/non_ascii_identifier_tests.rs` — 6 тестов:
+`takt-lang/tests/semantic/non_ascii_identifier_tests.rs` — 6 тестов:
 
 | Тест | Что доказывает |
 |---|---|

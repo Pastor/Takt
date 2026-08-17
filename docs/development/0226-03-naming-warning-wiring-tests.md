@@ -33,7 +33,7 @@
 Два файла тестов, по потребителю на файл; оба наблюдают то, что видит
 пользователь.
 
-**`takt-lang/tests/style_naming_fmt_tests.rs`** (9 тестов) — прогоном бинаря
+**`takt-lang/tests/syntax/style_naming_fmt_tests.rs`** (9 тестов) — прогоном бинаря
 `taktc` (`CARGO_BIN_EXE_taktc`) с перехватом stderr; образец взят у
 `fmt_diagnostic_tests.rs` (фича 0202):
 
@@ -49,7 +49,7 @@
 | `nested_model_name_is_reported` | обход спускается в под-модели |
 | `corpus_has_no_style_warnings` | критерий 5: сторож корпуса |
 
-**`takt-lang/tests/style_naming_lsp_tests.rs`** (5 тестов, под
+**`takt-lang/tests/lsp/style_naming_lsp_tests.rs`** (5 тестов, под
 `#![cfg(feature = "lsp")]`): уровень `WARNING` и код в поле протокола (критерий
 3); диапазон **на самом имени** (строка, колонка, длина); **буквальное**
 совпадение текста с выводом `fmt`; контр-пример на каноничном имени; и

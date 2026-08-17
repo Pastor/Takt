@@ -75,7 +75,7 @@ ADR, единым для всех целей.
 
 ## 5. Сверка (R9, A6)
 
-`takt-sim/tests/conformance_sv_tests.rs` гоняет модуль `verilator --binary`.
+`takt-sim/tests/conformance/conformance_sv_tests.rs` гоняет модуль `verilator --binary`.
 Тестбенч подаёт `time_ms` тем же модельным временем, что у симулятора (как он уже
 подаёт `en` в четырёх экземплярах — «неподключён / 1 / 0 / сброс при 0»).
 Наблюдение — иерархическая ссылка `dut.<сигнал>`.

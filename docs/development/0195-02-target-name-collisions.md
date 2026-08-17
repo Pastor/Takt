@@ -29,7 +29,7 @@
 
 ## Сторожа
 
-`takt-lang/tests/name_collision_tests.rs` (5 тестов):
+`takt-lang/tests/semantic/name_collision_tests.rs` (5 тестов):
 
 | Тест | Что доказывает |
 |---|---|

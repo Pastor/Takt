@@ -108,10 +108,10 @@ app.takt:3:14: Ошибка компиляции [SE-003]: Идентифика�
 
 Принимается **Option B**: кода фича не меняет, класс закрывается **сторожем**.
 
-- `takt-lang/tests/import_enum_match_tests.rs` — сторона цели: обе формы импорта
+- `takt-lang/tests/semantic/import_enum_match_tests.rs` — сторона цели: обе формы импорта
   (выборочная и целым файлом), номера ветвей в порождённом C, условие ребра на
   том же варианте, контр-пример «несуществующий вариант отвергнут».
-- `takt-sim/tests/import_enum_match_tests.rs` + фикстуры `tests/data/eval/` —
+- `takt-sim/tests/sim/import_enum_match_tests.rs` + фикстуры `tests/data/eval/` —
   сторона эталона: трасса `seen` = `1, 2, 2`, то есть ветвь выбрана **по
   варианту**, а не наугад.
 

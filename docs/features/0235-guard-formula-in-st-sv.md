@@ -75,7 +75,7 @@
 - **Ожил флаг `--guard-disable`** в цели `sv`: поле `SvMap::guard_enable` было
   заведено с самого бэкенда, но не читал его никто.
 - ⚠️ **Корпус класс не покрывает** (в `examples/` формул ноль) — доказательства
-  на фикстурах: [`guard_targets_tests.rs`](../../takt-lang/tests/guard_targets_tests.rs),
+  на фикстурах: [`guard_targets_tests.rs`](../../takt-lang/tests/targets/guard_targets_tests.rs),
   6 тестов, обе мутации краснеют.
 
 Задачи: [`0235-01`](../development/0235-01-guard-formula-in-st-sv.md) ·

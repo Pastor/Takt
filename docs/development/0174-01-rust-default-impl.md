@@ -30,7 +30,7 @@ if !is_root || uses_hal { return; }
 
 ### Сторож
 
-Новый `takt-lang/tests/rust_default_impl_tests.rs`, два слоя:
+Новый `takt-lang/tests/targets/rust_default_impl_tests.rs`, два слоя:
 
 | Тест | Что доказывает |
 |---|---|

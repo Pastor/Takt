@@ -50,7 +50,7 @@
 
 - Юнит-тесты: `semantic/port_address_hint.rs` (T7–T11), `generator/st/st_at.rs`
   (T14), `generator/c/c_hal.rs` (T1, T6).
-- Интеграционные: `takt-lang/tests/address_export_tests.rs` (T2, T3, T16),
+- Интеграционные: `takt-lang/tests/targets/address_export_tests.rs` (T2, T3, T16),
   `takt-lang/tests/codegen_tests/part2.rs` (T4).
 - Прогоны CLI на пробе `bitport.takt` (`in P: bit := 0x100; out Q: bit := 0x104:3;`).
 - Гейты предкоммита: `check-diagnostic-codes.sh` (T13), `check-book-glyphs.py`

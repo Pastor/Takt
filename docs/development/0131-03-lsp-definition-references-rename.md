@@ -49,7 +49,7 @@ cargo clippy --all-features --all-targets       # 0 предупреждений
 ./scripts/precheck.sh                           # EXIT=0
 ```
 
-`takt-lang/tests/lsp_rename_tests.rs` — 12 тестов. Главный —
+`takt-lang/tests/lsp/lsp_rename_tests.rs` — 12 тестов. Главный —
 `rename_is_complete_generated_c_matches_reference`: применённые правки
 сравниваются с эталоном (тот же текст со сплошной заменой имени) **и**
 порождённый целью `c` код обоих вариантов сверяется побайтно.

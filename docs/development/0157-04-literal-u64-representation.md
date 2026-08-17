@@ -56,7 +56,7 @@
 
 ## Проверки
 
-- `takt-lang/tests/wide_literal_tests.rs`:
+- `takt-lang/tests/targets/wide_literal_tests.rs`:
   - `sv_prints_sized_literal_by_target_width` — маска `[bit;64]` даёт
     `64'd18446744073709551615`;
   - `sv_sized_literal_width_follows_receiver_not_value` — 33-битное значение в

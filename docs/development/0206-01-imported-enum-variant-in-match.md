@@ -18,13 +18,13 @@
 
 **Кода не менялось.** Добавлены сторожа с обеих сторон:
 
-1. `takt-lang/tests/import_enum_match_tests.rs` (сторона цели):
+1. `takt-lang/tests/semantic/import_enum_match_tests.rs` (сторона цели):
    - выборочный импорт `import {Op} from "library.takt"` → в порождённом C
      `case 0:` и `case 1:` (номера, а не факт компиляции);
    - импорт целым файлом — второй путь переноса объявлений;
    - условие ребра на том же варианте (`model->v == 1`);
    - **контр-пример**: несуществующий вариант отвергается, имя названо.
-2. `takt-sim/tests/import_enum_match_tests.rs` + фикстуры
+2. `takt-sim/tests/sim/import_enum_match_tests.rs` + фикстуры
    `takt-sim/tests/data/eval/import_enum_{lib,app}.takt` (сторона эталона):
    трасса `seen` = `1, 2, 2` — ветвь выбрана **по варианту**.
 

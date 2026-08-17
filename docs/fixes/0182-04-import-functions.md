@@ -70,7 +70,7 @@
 
 ## Проверки
 
-- `takt-lang/tests/import_function_tests.rs` — пять сторожей: перенос и
+- `takt-lang/tests/semantic/import_function_tests.rs` — пять сторожей: перенос и
   вызываемость, **владелец** (в выводе `App_loop_reset`, а не
   `Library_loop_reset`), сохранность тела, псевдоним, импорт целиком без
   требования локальных имён, и граница — неизвестное имя по-прежнему `SE-017`.

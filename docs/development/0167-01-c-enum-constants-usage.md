@@ -61,7 +61,7 @@ cargo test --all-features --test conformance_c_tests      # 17/17 без пра�
 ./scripts/precheck.sh
 ```
 
-Сторож — `takt-lang/tests/c_enum_constants_tests.rs`:
+Сторож — `takt-lang/tests/targets/c_enum_constants_tests.rs`:
 
 | Тест | Условие анализа |
 |---|---|

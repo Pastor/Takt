@@ -62,8 +62,8 @@ A5 (валидное тело в порождённом C).
 ## Тестовые данные и окружение
 
 - Фикстуры: `takt-lang/tests/data/nested0155/` — 8 контрпримеров + 1 пример.
-- Тесты: `takt-lang/tests/nested_statement_resolution_tests.rs` (12),
-  `takt-lang/tests/deep_nesting_tests.rs` (+2).
+- Тесты: `takt-lang/tests/semantic/nested_statement_resolution_tests.rs` (12),
+  `takt-lang/tests/semantic/deep_nesting_tests.rs` (+2).
 - Команды: `cargo test --all-features -- --test-threads=1`,
   `./scripts/precheck.sh`.
 - Сверка корпуса: прогон `taktc compile -t c` по всем `.takt` двумя сборками

@@ -54,7 +54,7 @@
 
 ## Сверка (R9, A6)
 
-`takt-sim/tests/conformance_c_time_tests.rs` (фикстура `conformance_after_clock.takt`,
+`takt-sim/tests/conformance/conformance_c_time_tests.rs` (фикстура `conformance_after_clock.takt`,
 без объявления `clock`):
 
 1. `after_clock_profile_fires_on_the_same_tick_in_simulator_and_generated_c` —

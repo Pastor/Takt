@@ -63,7 +63,7 @@ cargo test --test model_parameter_args_tests -- --test-threads=1   # 11 тест
 ./scripts/precheck.sh                                              # зелёный
 ```
 
-`takt-lang/tests/model_parameter_args_tests.rs`:
+`takt-lang/tests/semantic/model_parameter_args_tests.rs`:
 
 - по одному контр-примеру на каждый код (`SE-076`…`SE-081`, `SE-001`);
 - **все позиции инстанцирования** (R2): корень, `+`, `|`, реализация состояния,

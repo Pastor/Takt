@@ -11,7 +11,7 @@
 
 ## Что сделано
 
-**Новые сторожа** — `takt-lang/tests/const_init_fold_tests.rs`:
+**Новые сторожа** — `takt-lang/tests/semantic/const_init_fold_tests.rs`:
 
 | Тест | Что доказывает |
 |---|---|

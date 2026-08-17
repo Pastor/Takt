@@ -70,7 +70,7 @@
 
 | Что | Где |
 |---|---|
-| Граница языка | `takt-lang/tests/fixed_saturation_tests.rs` |
+| Граница языка | `takt-lang/tests/semantic/fixed_saturation_tests.rs` |
 | Эталон | тесты модуля `takt-sim/src/eval/fixed.rs` |
 | Фикстура сверок (`c`, `st`, `sv`) | `takt-sim/tests/data/eval/conformance_fixed_sat_w12.takt` |
 | Фикстура сверки `rust` | `takt-sim/tests/data/eval/conformance_fixed_sat_probe_w12.takt` |

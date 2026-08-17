@@ -136,7 +136,7 @@ LALRPOP на `:=` в позиции значения сообщил бы «не�
 | `cargo test --all-features` | зелёные |
 | `./scripts/precheck.sh` | зелёный |
 
-Сторож — `takt-lang/tests/feature_0021_operators.rs::assignment_inside_expression_is_syntax_error`
+Сторож — `takt-lang/tests/syntax/feature_0021_operators.rs::assignment_inside_expression_is_syntax_error`
 (четыре формы) плюс обновлённые ожидания в `port_access_contract_tests.rs` и
 `lsp_port_io_tests.rs`.
 

@@ -71,7 +71,7 @@ model M { var x: u8 := 1; start S { always { var x: u8 := 2; x := x + 1; } } }
 
 Размер модулей держим под 1000 строк (правило `docs/CODE.md`): слой сразу
 заводится каталогом из трёх файлов, тесты — отдельными интеграционными
-(`takt-lang/tests/lsp_references_tests.rs`, `lsp_rename_tests.rs`).
+(`takt-lang/tests/lsp/lsp_references_tests.rs`, `lsp_rename_tests.rs`).
 
 ## Устройство слоя использований
 

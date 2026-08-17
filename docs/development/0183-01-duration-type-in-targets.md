@@ -47,7 +47,7 @@ cargo test --all-features -- --test-threads=1
 ```
 
 - **Потактовая сверка значений** (R8/A2) — новый файл
-  `takt-sim/tests/conformance_c_duration_tests.rs` + фикстура
+  `takt-sim/tests/conformance/conformance_c_duration_tests.rs` + фикстура
   `takt-sim/tests/data/eval/conformance_duration_value.takt`: эталон и
   порождённый C дают `ms=1750`, `late=1` на модели
   `left := pause + 750ms; ms := left as u32; late := left > 500ms;`. Числа

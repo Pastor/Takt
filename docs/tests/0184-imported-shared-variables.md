@@ -52,7 +52,7 @@
 
 ## Тестовые данные и окружение
 
-- `takt-lang/tests/import_adopt_tests.rs` — фикстуры создаются во временном
+- `takt-lang/tests/semantic/import_adopt_tests.rs` — фикстуры создаются во временном
   каталоге парой файлов (библиотека + применение): импорт ищет файл рядом с
   импортирующим, поэтому пара обязана лежать в одном каталоге.
 - `takt-sim/tests/data/eval/import_pid_lib.takt` и `import_pid_app.takt` —

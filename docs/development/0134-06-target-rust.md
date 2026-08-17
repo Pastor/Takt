@@ -55,7 +55,7 @@
 
 ## Сверка (R9, A6)
 
-`takt-sim/tests/conformance_rust_tests.rs::after_clock_profile_matches_generated_rust`
+`takt-sim/tests/conformance/conformance_rust_tests.rs::after_clock_profile_matches_generated_rust`
 (фикстура `conformance_after_rust.takt`, профиль «часы»): драйвер реализует `Hal`
 с фиктивным `now_ms` = модельное время (1 мс/такт), наблюдение — **выходной порт
 `level`** (поля приватны). Выдержка 5 мс срабатывает на такте 6 у симулятора и у

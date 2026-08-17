@@ -77,7 +77,7 @@ ADR 0019 отверг.
 ### Таблица отображения доступа и сторож к ней
 
 Контракт зафиксирован таблицей — в шапке
-`takt-lang/tests/port_access_contract_tests.rs` и в живом контексте:
+`takt-lang/tests/semantic/port_access_contract_tests.rs` и в живом контексте:
 
 | Цель | Чтение | Запись |
 |---|---|---|
@@ -129,7 +129,7 @@ ADR 0019 отверг.
 | `cargo test -p takt-lang -- --test-threads=1` | зелёные |
 | `./scripts/precheck.sh` | зелёный |
 
-Сторожа: `takt-lang/tests/port_access_contract_tests.rs` (9 тестов — 7 целей,
+Сторожа: `takt-lang/tests/semantic/port_access_contract_tests.rs` (9 тестов — 7 целей,
 отказ и контрпример законных позиций).
 
 **Условия анализа:** R9, R10, R11.

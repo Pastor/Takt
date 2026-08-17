@@ -85,9 +85,9 @@
 - **Код:** `takt-lang/src/semantic/validate/implemented.rs` (13-я проверка
   накопительного массива `validate_model_all`); цели, симулятор и LSP правок не
   потребовали.
-- **Сторожа фикстурные:** `takt-lang/tests/implemented_model_tests.rs`
+- **Сторожа фикстурные:** `takt-lang/tests/semantic/implemented_model_tests.rs`
   (перечисляет **семь** входов генерации и падает списком молчащих) и
-  `takt-sim/tests/implemented_model_sim_tests.rs` (эталон). Корпус класс не
+  `takt-sim/tests/sim/implemented_model_sim_tests.rs` (эталон). Корпус класс не
   покрывает — замер на 391 файле дал две записи, обе в фикстурах LSP.
 - **Сторожа проверены мутацией:** при отключённой проверке падают 8 из 12
   тестов; четыре контрпримера остаются зелёными — это их работа.

@@ -70,7 +70,7 @@
 
 - Фикстуры — `takt-lang/tests/data/implemented0211/` (10 файлов: 7 примеров,
   3 контрпримера; `wrapper.takt` — подключаемый файл для T12).
-- Сторож — `takt-lang/tests/implemented_model_tests.rs`; T14 — сторож в
+- Сторож — `takt-lang/tests/semantic/implemented_model_tests.rs`; T14 — сторож в
   `takt-sim`.
 - Окружение — толчейн `rust-toolchain.toml` (стабильный `1.97.1`), тесты идут
   **параллельно** (фича 0190); каталог вывода целей в T13 уникален по имени

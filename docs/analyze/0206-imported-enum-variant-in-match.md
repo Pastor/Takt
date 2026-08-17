@@ -49,8 +49,8 @@
 
 | # | Критерий | Способ проверки |
 |---|---|---|
-| A1 | Обе формы импорта дают разные номера ветвей | `takt-lang/tests/import_enum_match_tests.rs` |
-| A2 | Эталон выбирает ветвь по варианту | `takt-sim/tests/import_enum_match_tests.rs` |
+| A1 | Обе формы импорта дают разные номера ветвей | `takt-lang/tests/semantic/import_enum_match_tests.rs` |
+| A2 | Эталон выбирает ветвь по варианту | `takt-sim/tests/sim/import_enum_match_tests.rs` |
 | A3 | Несуществующий вариант отвергнут | контр-пример там же |
 | A4 | Сторож краснеет до фикса 0182-03 | прогон в `git worktree` |
 | A5 | Предкоммит зелёный | `./scripts/precheck.sh` |

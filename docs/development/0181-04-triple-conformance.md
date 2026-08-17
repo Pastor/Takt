@@ -11,7 +11,7 @@
 
 ## Что сделано
 
-### Тройная сверка (`takt-sim/tests/conformance_sv_tests.rs`)
+### Тройная сверка (`takt-sim/tests/conformance/conformance_sv_tests.rs`)
 
 Комментарий-объяснение «сверка идёт с C, потому что симулятор сломан» заменён
 описанием закрытого дефекта. Оба теста расширены до **тройных**:
@@ -37,7 +37,7 @@
 Проверяется он лишь после завершения реализации — эталон
 `generate_extend_transition`, эмитящий переход в ветви `is_done`.
 
-### Значенческие тесты (`takt-sim/tests/sequential_composition_tests.rs`, новый)
+### Значенческие тесты (`takt-sim/tests/sim/sequential_composition_tests.rs`, новый)
 
 Шесть тестов **на значения**, а не на факт перехода (урок 0025):
 

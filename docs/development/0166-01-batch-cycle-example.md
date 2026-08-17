@@ -37,7 +37,7 @@
 | `scripts/precheck.sh` | `batch_cycle` в `SV_TRANSLATABLE` + **прогон** харнесса C |
 | `examples/generated/sv/tb/batch_cycle_tb.sv` | тестбенч руками: наблюдает `stage` иерархической ссылкой и требует порядка 1 → 2 → 3 |
 | `examples/generated/sv/tb/README.md` | строка в таблицу; заодно дописаны отсутствовавшие `regulator`/`pid_regulator` (таблица отставала — в ней было 2 из 4) |
-| `takt-sim/tests/examples_scenario_tests.rs` | **контракт** сценария: цепочка из семи состояний, `must_terminate: true` |
+| `takt-sim/tests/sim/examples_scenario_tests.rs` | **контракт** сценария: цепочка из семи состояний, `must_terminate: true` |
 | `examples/generated/c/batch_cycle_main.c` | харнесс руками: `assert`-ами проверяет, что номер фазы растёт **ровно на единицу** |
 | `examples/generated/c/CMakeLists.txt` | `add_executable` |
 

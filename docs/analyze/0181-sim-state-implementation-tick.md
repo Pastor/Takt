@@ -65,7 +65,7 @@
 
 | # | Критерий | Способ проверки |
 |---|---|---|
-| A1 | `start P = A + B { next Done; }` даёт `stage` = 1, 1, 2, 2 и завершение | значенческий тест `takt-sim/tests/sequential_composition_tests.rs` + сверка с пришпиленным эталоном C |
+| A1 | `start P = A + B { next Done; }` даёт `stage` = 1, 1, 2, 2 и завершение | значенческий тест `takt-sim/tests/sim/sequential_composition_tests.rs` + сверка с пришпиленным эталоном C |
 | A2 | то же во вложенной модели (`model P { start Q = A + B { next Done; } … } start R = P;`) | тот же файл тестов |
 | A3 | `start P = A + B;` не проваливает значение в 0 и наблюдается после завершения | тот же файл тестов (R4, R5) |
 | A4 | `(B \| C)` внутри `+` совпадает с C | расширение `conformance_sv_tests::parallel_step_inside_concatenation_matches_generated_c` до тройной сверки |
