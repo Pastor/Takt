@@ -48,6 +48,7 @@ mod c_source;
 /// Механизм времени цели `c` (фича 0134).
 mod c_time;
 mod c_unresolved;
+mod c_unsupported;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::Generator as AsGenerator;

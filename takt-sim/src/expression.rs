@@ -19,6 +19,11 @@
 //! использования **не несёт**, поэтому диагностика привязывается к позиции
 //! *объявления* переменной (`VariableNode::loc()`). Это менее точно, чем в
 //! условиях, но существенно лучше `Location::Builtin`.
+//!
+//! ⚠️ Сам поиск позиции живёт **не здесь**: с фичи 0212 это метод
+//! [`ExpressionNode::loc`](takt_lang::semantic::ExpressionNode::loc) в
+//! `takt-lang`. Прежде он был приватной копией симулятора, и целям был
+//! недоступен — отказы генератора `c` не несли координаты вовсе.
 
 use crate::context::Context;
 use crate::eval::error::EvalError;
@@ -146,8 +151,7 @@ pub(crate) fn eval_expression(
         // (адаптеры `expression`/`predicate` его не дублируют).
         ExpressionNode::BitAccess(inner, member) => {
             let value = eval_expression(inner, ctx)?;
-            eval_core::access::read_member(&value, member)
-                .map_err(|e| e.to_diagnostic(loc_of(expr)))
+            eval_core::access::read_member(&value, member).map_err(|e| e.to_diagnostic(expr.loc()))
         }
 
         // ── Унарные ──────────────────────────────────────────────────────────
@@ -184,7 +188,7 @@ pub(crate) fn eval_expression(
         // ── Составные ────────────────────────────────────────────────────────
         ExpressionNode::ConditionalOperator(cond, then_, else_) => {
             let cond_value = eval_expression(cond, ctx)?;
-            let taken = ops::to_bool(&cond_value).map_err(|e| e.to_diagnostic(loc_of(cond)))?;
+            let taken = ops::to_bool(&cond_value).map_err(|e| e.to_diagnostic(cond.loc()))?;
             if taken {
                 eval_expression(then_, ctx)
             } else {
@@ -196,7 +200,7 @@ pub(crate) fn eval_expression(
         // представление — поэтому отдельное ядро `cast_to_type` (фича 0061).
         ExpressionNode::Cast(inner, ty) => {
             let value = eval_expression(inner, ctx)?;
-            eval_core::cast_to_type(value, ty).map_err(|e| e.to_diagnostic(loc_of(inner)))
+            eval_core::cast_to_type(value, ty).map_err(|e| e.to_diagnostic(inner.loc()))
         }
         ExpressionNode::Array(items) | ExpressionNode::Initializer(items) => {
             let values = items
@@ -218,36 +222,32 @@ pub(crate) fn eval_expression(
                 .collect::<Result<Vec<Value>, Diagnostic>>()?;
             crate::unit::statement::call_function(func, &values, ctx)
         }
-        ExpressionNode::NamedFunctionBox(_, _) => Err(unsupported(
-            "вызов с именованными аргументами",
-            loc_of(expr),
-        )),
-        ExpressionNode::CodeBlock(_, _) => {
-            Err(unsupported("блок кода как выражение", loc_of(expr)))
+        ExpressionNode::NamedFunctionBox(_, _) => {
+            Err(unsupported("вызов с именованными аргументами", expr.loc()))
         }
+        ExpressionNode::CodeBlock(_, _) => Err(unsupported("блок кода как выражение", expr.loc())),
         // Присваивание внутри выражения требует доступа на запись, которого у
         // вычислителя нет. Присваивание-оператор обрабатывает `builder.rs`.
         ExpressionNode::Assign(_, _) => {
-            Err(unsupported("присваивание внутри выражения", loc_of(expr)))
+            Err(unsupported("присваивание внутри выражения", expr.loc()))
         }
         // `Value` не представляет строки — пробел зафиксирован анализом.
-        ExpressionNode::String(_) => Err(unsupported("строки", loc_of(expr))),
-        ExpressionNode::Type(_) => Err(unsupported("тип как выражение", loc_of(expr))),
-        ExpressionNode::Model(_) => Err(unsupported("модель как выражение", loc_of(expr))),
-        ExpressionNode::Condition(_) => Err(unsupported(
-            "именованное условие как выражение",
-            loc_of(expr),
-        )),
-        ExpressionNode::List(_) => Err(unsupported("список параметров", loc_of(expr))),
+        ExpressionNode::String(_) => Err(unsupported("строки", expr.loc())),
+        ExpressionNode::Type(_) => Err(unsupported("тип как выражение", expr.loc())),
+        ExpressionNode::Model(_) => Err(unsupported("модель как выражение", expr.loc())),
+        ExpressionNode::Condition(_) => {
+            Err(unsupported("именованное условие как выражение", expr.loc()))
+        }
+        ExpressionNode::List(_) => Err(unsupported("список параметров", expr.loc())),
 
         // ── Невычислимые по определению ──────────────────────────────────────
         ExpressionNode::None => Err(Diagnostic::error(
-            loc_of(expr),
+            expr.loc(),
             "пустое выражение не может быть вычислено".to_string(),
         )
         .with_code("SIM-015")),
         ExpressionNode::Unresolved(_) => Err(Diagnostic::error(
-            loc_of(expr),
+            expr.loc(),
             "неразрешённое выражение не может быть вычислено".to_string(),
         )
         .with_code("SIM-016")),
@@ -269,81 +269,9 @@ fn parse_rational(text: &str, negative: bool) -> Result<Value, Diagnostic> {
     Ok(Value::Real(if negative { -parsed } else { parsed }))
 }
 
-/// Ищет позицию для диагностики.
-///
-/// `ExpressionNode::Variable` несёт позицию **объявления** (не использования) —
-/// см. заголовок модуля.
-fn loc_of(expr: &ExpressionNode) -> Location {
-    match expr {
-        // У литерала длительности позиции нет — как и у прочих литералов.
-        ExpressionNode::Duration(_) => Location::Implicit,
-        ExpressionNode::Variable(var) => var.borrow().loc(),
-        ExpressionNode::ArraySubscript(var, _) | ExpressionNode::ArraySlice(var, _, _) => {
-            var.borrow().loc()
-        }
-        ExpressionNode::Function(func, _) => func.borrow().loc(),
-        ExpressionNode::Parenthesis(inner)
-        | ExpressionNode::BitAccess(inner, _)
-        | ExpressionNode::Not(inner)
-        | ExpressionNode::BitwiseNot(inner)
-        | ExpressionNode::UnaryPlus(inner)
-        | ExpressionNode::Negate(inner)
-        | ExpressionNode::Cast(inner, _)
-        | ExpressionNode::CodeBlock(inner, _)
-        | ExpressionNode::NamedFunctionBox(inner, _) => loc_of(inner),
-        ExpressionNode::Power(l, r)
-        | ExpressionNode::Multiply(l, r)
-        | ExpressionNode::Divide(l, r)
-        | ExpressionNode::Modulo(l, r)
-        | ExpressionNode::Add(l, r)
-        | ExpressionNode::Subtract(l, r)
-        | ExpressionNode::ShiftLeft(l, r)
-        | ExpressionNode::ShiftRight(l, r)
-        | ExpressionNode::BitwiseAnd(l, r)
-        | ExpressionNode::BitwiseXor(l, r)
-        | ExpressionNode::BitwiseOr(l, r)
-        | ExpressionNode::Less(l, r)
-        | ExpressionNode::More(l, r)
-        | ExpressionNode::LessEqual(l, r)
-        | ExpressionNode::MoreEqual(l, r)
-        | ExpressionNode::Equal(l, r)
-        | ExpressionNode::NotEqual(l, r)
-        | ExpressionNode::And(l, r)
-        | ExpressionNode::Or(l, r)
-        | ExpressionNode::Assign(l, r) => match loc_of(l) {
-            Location::Builtin => loc_of(r),
-            found => found,
-        },
-        ExpressionNode::ConditionalOperator(c, t, e) => match loc_of(c) {
-            Location::Builtin => match loc_of(t) {
-                Location::Builtin => loc_of(e),
-                found => found,
-            },
-            found => found,
-        },
-        ExpressionNode::Array(items) | ExpressionNode::Initializer(items) => items
-            .iter()
-            .map(loc_of)
-            .find(|l| !matches!(l, Location::Builtin))
-            .unwrap_or(Location::Builtin),
-        ExpressionNode::None
-        | ExpressionNode::Unresolved(_)
-        | ExpressionNode::Number(_)
-        | ExpressionNode::Rational(_, _)
-        | ExpressionNode::String(_)
-        | ExpressionNode::Type(_)
-        | ExpressionNode::Address(_, _)
-        | ExpressionNode::AnonPort(_)
-        | ExpressionNode::Bool(_)
-        | ExpressionNode::Model(_)
-        | ExpressionNode::Condition(_)
-        | ExpressionNode::List(_) => Location::Builtin,
-    }
-}
-
 fn unary(op: UnOp, inner: &ExpressionNode, ctx: &mut dyn Context) -> Result<Value, Diagnostic> {
     let value = eval_expression(inner, ctx)?;
-    ops::apply_unary(op, &value).map_err(|e: EvalError| e.to_diagnostic(loc_of(inner)))
+    ops::apply_unary(op, &value).map_err(|e: EvalError| e.to_diagnostic(inner.loc()))
 }
 
 fn binary(
@@ -355,8 +283,8 @@ fn binary(
     let lhs = eval_expression(left, ctx)?;
     let rhs = eval_expression(right, ctx)?;
     ops::apply_binary(op, &lhs, &rhs).map_err(|e: EvalError| {
-        let loc = match loc_of(left) {
-            Location::Builtin => loc_of(right),
+        let loc = match left.loc() {
+            Location::Builtin => right.loc(),
             found => found,
         };
         e.to_diagnostic(loc)

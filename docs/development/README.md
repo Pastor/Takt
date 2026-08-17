@@ -410,3 +410,5 @@
 | 0169-01 | 0169 | Адаптер шины APB | [0169-01-sv-mmio-bus-adapters.md](0169-01-sv-mmio-bus-adapters.md) |
 | 0210-01 | 0210 | Массив как общая переменная в цели st; индекс-выражение | [0210-01-st-array-shared-and-index.md](0210-01-st-array-shared-and-index.md) |
 | 0211-01 | 0211 | Модель без стартового состояния: цель c отказывает бессодержательно | [0211-01-c-missing-start-state-diagnostic.md](0211-01-c-missing-start-state-diagnostic.md) |
+| 0212-01 | 0212 | Диагностика цели c без кода | [0212-01-c-diagnostic-without-code.md](0212-01-c-diagnostic-without-code.md) |
+| 0239-01 | 0239 | Скрипт релизной сборки и установки инструментов | [0239-01-install-script.md](0239-01-install-script.md) |

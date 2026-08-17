@@ -30,7 +30,7 @@ use crate::diagnostics::{Diagnostic, Location};
 ///
 /// Перечисление, а не строка: сторож фичи (`tests` ниже) обязан **перечислить**
 /// виды и упасть списком, если какой-то перестал отвечать `CC-023`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(in crate::generator::c) enum UnresolvedNode {
     /// Условие перехода либо охранной формулы.
     Condition,
@@ -38,25 +38,63 @@ pub(in crate::generator::c) enum UnresolvedNode {
     Expression,
     /// Оператор тела блока или функции.
     Statement,
+    /// Выражения нет вовсе (`ExpressionNode::None`) — узел пуст, полезной
+    /// нагрузки, а с нею и позиции, у него нет (фича 0212).
+    EmptyExpression,
+    /// Переменная не разрешена (`VariableNode::Unresolved`).
+    Variable,
+    /// У порта не разрешён владелец: слабая ссылка `upper` не поднимается.
+    ///
+    /// Второе поле — место, где это обнаружено (чтение, запись, доступ к биту):
+    /// у самого узла позиции нет, и без уточнения три разных дефекта дали бы
+    /// одно неразличимое сообщение (фича 0212).
+    PortOwner(&'static str),
+    /// Определение функции не разрешено (`FunctionDefinitionNode::Unresolved`).
+    ///
+    /// Второе поле — имя функции, если оно известно.
+    Function(Option<String>),
+    /// Значение константы не вычислено к моменту генерации.
+    ///
+    /// Второе поле — имя константы.
+    ConstantValue(String),
 }
 
 impl UnresolvedNode {
     /// Название вида узла для текста диагностики (с согласованным родом).
-    pub(in crate::generator::c) fn phrase(self) -> &'static str {
+    pub(in crate::generator::c) fn phrase(&self) -> String {
         match self {
-            UnresolvedNode::Condition => "неразрешённое условие",
-            UnresolvedNode::Expression => "неразрешённое выражение",
-            UnresolvedNode::Statement => "неразрешённый оператор",
+            UnresolvedNode::Condition => "неразрешённое условие".to_string(),
+            UnresolvedNode::Expression => "неразрешённое выражение".to_string(),
+            UnresolvedNode::Statement => "неразрешённый оператор".to_string(),
+            UnresolvedNode::EmptyExpression => "пустое выражение".to_string(),
+            UnresolvedNode::Variable => "неразрешённая переменная".to_string(),
+            UnresolvedNode::PortOwner(where_) => {
+                format!("неразрешённый владелец порта ({where_})")
+            }
+            UnresolvedNode::Function(Some(name)) => {
+                format!("неразрешённое определение функции '{name}'")
+            }
+            UnresolvedNode::Function(None) => "неразрешённое определение функции".to_string(),
+            UnresolvedNode::ConstantValue(name) => {
+                format!("невычисленное значение константы '{name}'")
+            }
         }
     }
 
     /// Все виды — для сторожа (перечисление обязано быть полным).
     #[cfg(test)]
-    pub(in crate::generator::c) const ALL: [UnresolvedNode; 3] = [
-        UnresolvedNode::Condition,
-        UnresolvedNode::Expression,
-        UnresolvedNode::Statement,
-    ];
+    pub(in crate::generator::c) fn all() -> Vec<UnresolvedNode> {
+        vec![
+            UnresolvedNode::Condition,
+            UnresolvedNode::Expression,
+            UnresolvedNode::Statement,
+            UnresolvedNode::EmptyExpression,
+            UnresolvedNode::Variable,
+            UnresolvedNode::PortOwner("чтение"),
+            UnresolvedNode::Function(Some("pid_step".to_string())),
+            UnresolvedNode::ConstantValue("LIMIT".to_string()),
+        ]
+    }
 }
 
 /// Строит отказ печати неразрешённого узла — диагностику **`CC-023`**.
@@ -245,17 +283,17 @@ mod tests {
     /// `SE-025`/`SE-003`), поэтому мера сторожа — **ветвь**.
     #[test]
     fn every_kind_of_unresolved_node_is_named_and_coded() {
-        let mut seen: Vec<&str> = Vec::new();
+        let mut seen: Vec<String> = Vec::new();
         let mut broken: Vec<String> = Vec::new();
-        for node in UnresolvedNode::ALL {
-            let diagnostic = refuse(PROBE, node);
+        for node in UnresolvedNode::all() {
+            let diagnostic = refuse(PROBE, node.clone());
             if diagnostic.code.as_deref() != Some("CC-023") {
                 broken.push(format!("{node:?}: код {:?}", diagnostic.code));
             }
             if diagnostic.loc != PROBE {
                 broken.push(format!("{node:?}: позиция потеряна"));
             }
-            if !diagnostic.message.contains(node.phrase()) {
+            if !diagnostic.message.contains(&node.phrase()) {
                 broken.push(format!("{node:?}: текст не называет вид узла"));
             }
             if seen.contains(&node.phrase()) {

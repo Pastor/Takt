@@ -166,3 +166,5 @@
 | 0169 | Адаптеры шин для цели sv-mmio (APB) | [0169-sv-mmio-bus-adapters.md](0169-sv-mmio-bus-adapters.md) | ✅ ПРОЙДЕН (отчёт: [reports/0169](../reports/0169-sv-mmio-bus-adapters.md)) |
 | 0210 | Массив как общая переменная в цели st; индекс-выражение | [0210-st-array-shared-and-index.md](0210-st-array-shared-and-index.md) | ✅ ПРОЙДЕН (отчёт: [reports/0210](../reports/0210-st-array-shared-and-index.md)) |
 | 0211 | Модель без стартового состояния: цель c отказывает бессодержательно | [0211-c-missing-start-state-diagnostic.md](0211-c-missing-start-state-diagnostic.md) | ✅ ПРОЙДЕН (отчёт: [reports/0211](../reports/0211-c-missing-start-state-diagnostic.md)) |
+| 0212 | Диагностика цели c без кода | [0212-c-diagnostic-without-code.md](0212-c-diagnostic-without-code.md) | ✅ ПРОЙДЕН (отчёт: [reports/0212](../reports/0212-c-diagnostic-without-code.md)) |
+| 0239 | Скрипт релизной сборки и установки инструментов | [0239-install-script.md](0239-install-script.md) | ✅ ПРОЙДЕН (отчёт: [reports/0239](../reports/0239-install-script.md)) |

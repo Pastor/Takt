@@ -3,6 +3,17 @@
 //! Часть модуля `c_expr` (фича 0027: деление по логике).
 
 use super::*;
+use crate::generator::c::c_unsupported::{self, UnsupportedNode};
+
+/// Отказ на конструкции, которую цель `c` не переводит (фича 0212).
+///
+/// Позиция берётся у **самого узла** ([`ExpressionNode::loc`]): в пачке
+/// диагностик (фича 0130) сообщение без координаты бесполезно. Там, где узел
+/// позиции не несёт (ссылка на модель, тип, литерал), ответом будет
+/// `Location::Builtin` — граница названная, а не забытая.
+fn unsupported(node: UnsupportedNode, expr: &ExpressionNode) -> Diagnostic {
+    c_unsupported::refuse(node, expr.loc())
+}
 
 /// Генерирует C-выражение из семантического узла с учётом приоритета операторов.
 ///
@@ -40,7 +51,10 @@ pub(in crate::generator::c) fn generate_expr(
         // взять негде — отказ остаётся безликим. Это предмет фичи 0212
         // («диагностика цели `c` без кода»), а не забывчивость.
         ExpressionNode::None => {
-            return Err("Неразрешённое выражение".into());
+            return Err(crate::generator::c::c_unresolved::refuse(
+                Location::Codegen,
+                crate::generator::c::c_unresolved::UnresolvedNode::EmptyExpression,
+            ));
         }
         // ⚠️ Неразрешённое выражение отделено от отсутствующего (фича 0236):
         // узел несёт АСД, а значит и позицию, и отказ обязан её нести.
@@ -308,12 +322,16 @@ pub(in crate::generator::c) fn generate_expr(
                     name, ty, upper, ..
                 } = &*var
                 {
-                    let model_name =
-                        if let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) {
-                            Name::from(model_rc)
-                        } else {
-                            return Err("Неразрешённый owner порта при записи".into());
-                        };
+                    let model_name = if let Some(model_rc) =
+                        upper.as_ref().and_then(|w| w.upgrade())
+                    {
+                        Name::from(model_rc)
+                    } else {
+                        return Err(crate::generator::c::c_unresolved::refuse(
+                            expr.loc(),
+                            crate::generator::c::c_unresolved::UnresolvedNode::PortOwner("запись"),
+                        ));
+                    };
                     let cls = PortClass::from_type(ty);
                     let variant =
                         crate::generator::c::c_names::port_enum_variant(&model_name, name);
@@ -363,7 +381,12 @@ pub(in crate::generator::c) fn generate_expr(
                         {
                             Name::from(rc)
                         } else {
-                            return Err("Неразрешённый owner порта при BitAccess записи".into());
+                            return Err(crate::generator::c::c_unresolved::refuse(
+                                expr.loc(),
+                                crate::generator::c::c_unresolved::UnresolvedNode::PortOwner(
+                                    "запись бита",
+                                ),
+                            ));
                         };
                         let cls = PortClass::from_type(ty);
                         if cls == PortClass::Rational {
@@ -542,7 +565,7 @@ pub(in crate::generator::c) fn generate_expr(
 
         // ── Неподдерживаемые ──────────────────────────────────────────────────
         ExpressionNode::ArraySlice(_, _, _) => {
-            return Err("ArraySlice не поддерживается в C генераторе".into());
+            return Err(unsupported(UnsupportedNode::ArraySlice, expr));
         }
         ExpressionNode::BitAccess(inner, member) => {
             match member {
@@ -563,7 +586,12 @@ pub(in crate::generator::c) fn generate_expr(
                                 if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade()) {
                                     Name::from(rc)
                                 } else {
-                                    return Err("Неразрешённый owner порта при BitAccess".into());
+                                    return Err(crate::generator::c::c_unresolved::refuse(
+                                    expr.loc(),
+                                    crate::generator::c::c_unresolved::UnresolvedNode::PortOwner(
+                                        "чтение бита",
+                                    ),
+                                ));
                                 };
                             let cls = PortClass::from_type(ty);
                             let variant =
@@ -605,19 +633,19 @@ pub(in crate::generator::c) fn generate_expr(
             }
         }
         ExpressionNode::CodeBlock(_, _) => {
-            return Err("CodeBlock не поддерживается как выражение в C генераторе".into());
+            return Err(unsupported(UnsupportedNode::CodeBlock, expr));
         }
         ExpressionNode::NamedFunctionBox(_, _) => {
-            return Err("NamedFunctionBox не поддерживается в C генераторе".into());
+            return Err(unsupported(UnsupportedNode::NamedFunction, expr));
         }
         ExpressionNode::List(_) => {
-            return Err("List не поддерживается в C генераторе".into());
+            return Err(unsupported(UnsupportedNode::ParameterList, expr));
         }
         ExpressionNode::Type(_) => {
-            return Err("Type не поддерживается как выражение в C генераторе".into());
+            return Err(unsupported(UnsupportedNode::Type, expr));
         }
         ExpressionNode::Address(_, _) => {
-            return Err("Address не поддерживается как выражение в C генераторе".into());
+            return Err(unsupported(UnsupportedNode::Address, expr));
         }
         // Анонимное обращение к ячейке (фича 0189): печатает только `c-hal` —
         // цель `c` адресов не знает по устройству (ADR 0020).
@@ -628,7 +656,7 @@ pub(in crate::generator::c) fn generate_expr(
             printer.print(&crate::generator::c::c_anon::read(access));
         }
         ExpressionNode::Model(_) => {
-            return Err("Model не поддерживается как выражение в C генераторе".into());
+            return Err(unsupported(UnsupportedNode::Model, expr));
         }
     }
     if wrap {

@@ -1,0 +1,19 @@
+// Ссылка на модель в позиции выражения: языком не поддержана ни одним
+// потребителем (эталон отвечает SIM-014).
+model Ctl {
+    var ctrl: u8 := 7;
+
+    start Run {
+        always {
+            ctrl := 7;
+        }
+    }
+}
+
+var lvl: u8 := 0;
+
+start Main {
+    always {
+        lvl := Ctl.ctrl;
+    }
+}

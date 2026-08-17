@@ -212,7 +212,10 @@ pub(in crate::generator::c) fn resolve_variable_c_expr(
             let model_name = if let Some(model_rc) = upper.as_ref().and_then(|w| w.upgrade()) {
                 Name::from(model_rc)
             } else {
-                return Err("Неразрешённый owner порта".into());
+                return Err(crate::generator::c::c_unresolved::refuse(
+                    var.loc(),
+                    crate::generator::c::c_unresolved::UnresolvedNode::PortOwner("чтение"),
+                ));
             };
             let cls = PortClass::from_type(ty);
             let variant = crate::generator::c::c_names::port_enum_variant(&model_name, name);
@@ -238,7 +241,10 @@ pub(in crate::generator::c) fn resolve_variable_c_expr(
                 )),
             }
         }
-        VariableNode::Unresolved => Err("Неразрешённая переменная".into()),
+        VariableNode::Unresolved => Err(crate::generator::c::c_unresolved::refuse(
+            crate::diagnostics::Location::Codegen,
+            crate::generator::c::c_unresolved::UnresolvedNode::Variable,
+        )),
     }
 }
 

@@ -36,12 +36,10 @@ fn const_expr_string(expr: &ExpressionNode, name: &str) -> Result<String, Diagno
         // ⚠️ Без `Debug`-дампа выражения (фича 0231): сообщение читает автор
         // программы. Ветвь защитная — до неё доходит только значение, не
         // свёрнутое семантикой, а такое отвергается раньше (`SE-003`).
-        return Err(format!(
-            "значение константы '{name}' не вычислено при компиляции: \
-             в цель C можно эмитить только константу с известным значением"
-        )
-        .as_str()
-        .into());
+        return Err(crate::generator::c::c_unresolved::refuse(
+            crate::diagnostics::Location::Codegen,
+            crate::generator::c::c_unresolved::UnresolvedNode::ConstantValue(name.to_string()),
+        ));
     })
 }
 
@@ -265,10 +263,14 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
                         params.join(", ").as_str()
                     ));
                 }
+                // ⚠️ Текст был по-английски и без кода — класс фичи 0212.
                 _ => {
-                    return Err(format!("Unresolved function '{}'", fun.name())
-                        .as_str()
-                        .into());
+                    return Err(crate::generator::c::c_unresolved::refuse(
+                        fun.loc(),
+                        crate::generator::c::c_unresolved::UnresolvedNode::Function(Some(
+                            fun.name().to_string(),
+                        )),
+                    ));
                 }
             }
         }

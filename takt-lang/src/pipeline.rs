@@ -24,12 +24,18 @@ pub use crate::semantic::validate::validate_entry_model;
 /// наружу не выходит, а `Location` несёт лишь номер файла. Без этого диагностика
 /// из импортированной библиотеки была неотличима от своей — `taktc` печатал обе
 /// дословно одинаково.
+/// ⚠️ Возвращает **и реестр файлов** (фича 0212): диагностика цели рождается
+/// после этого шага, а путь её файла разрешается только реестром. Прежде он
+/// наружу не выходил, и отказ генератора печатался без координаты — даже когда
+/// нёс `Location::Source` (класс фикса 0228, где то же случилось с
+/// предупреждениями). Штамповать имя входного файла вместо реестра **нельзя**:
+/// смещения принадлежат файлу диагностики, а он может быть импортированным.
 pub(crate) fn parse_and_construct(
     filename: &str,
     source: &str,
     search_paths: &[String],
     specialize: bool,
-) -> Result<std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>, Diagnostic> {
+) -> Result<Compilation, Diagnostic> {
     let mut files = diagnostics::FileTable::new(filename);
 
     // Корневой файл — номер 0 (его зарегистрировал `FileTable::new`).
@@ -57,11 +63,45 @@ pub(crate) fn parse_and_construct(
     if let Some(d) = semantic::validate::validate_entry_model(&model) {
         return Err(stamp_file(d, &files));
     }
-    Ok(model)
+    Ok(Compilation { model, files })
+}
+
+/// Единица компиляции: построенная модель **и** реестр её файлов (фича 0212).
+///
+/// # Зачем тип, а не пара
+///
+/// Диагностика цели рождается **после** построения дерева, а путь её файла
+/// разрешается только реестром. Прежде реестр наружу не выходил, и отказ
+/// генератора печатался без координаты — даже когда нёс `Location::Source`
+/// (класс фикса 0228, где то же случилось с предупреждениями). Пара
+/// `(модель, реестр)` возложила бы штамповку на **дисциплину вызова** в восьми
+/// входах `compile_to_*`; тип возлагает её на [`Compilation::emit`], то есть на
+/// себя.
+///
+/// ⚠️ Штамповать имя входного файла вместо реестра **нельзя**: смещения
+/// принадлежат файлу диагностики, а он может быть импортированным.
+pub(crate) struct Compilation {
+    /// Построенное семантическое дерево.
+    pub(crate) model: std::rc::Rc<std::cell::RefCell<semantic::ModelNode>>,
+    /// Реестр файлов компиляции: по нему разрешается путь диагностики.
+    files: diagnostics::FileTable,
+}
+
+impl Compilation {
+    /// Генерирует цель, проставляя диагностике путь её файла.
+    pub(crate) fn emit(
+        &self,
+        language: crate::generator::Language,
+        output_path: &str,
+        options: &crate::generator::GenerateOptions,
+    ) -> Result<Vec<Diagnostic>, Diagnostic> {
+        crate::generator::generate(language, &self.model.borrow(), output_path, options)
+            .map_err(|d| stamp_file(d, &self.files))
+    }
 }
 
 /// Разрешает номер файла диагностики в путь.
-fn stamp_file(d: Diagnostic, files: &diagnostics::FileTable) -> Diagnostic {
+pub(crate) fn stamp_file(d: Diagnostic, files: &diagnostics::FileTable) -> Diagnostic {
     let path = files.path_of(&d.loc).map(str::to_string);
     d.with_file_if_unset(path.as_deref())
 }

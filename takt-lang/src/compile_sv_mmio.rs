@@ -37,20 +37,21 @@ pub fn compile_to_sv_mmio(
     env: &AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
-    if model.borrow().name.is_none() {
+    if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
             .file_name()
             .and_then(|s| s.to_str())
             .map(|s| s.split('.').next().unwrap_or(s).to_owned())
             .unwrap_or_else(|| "Root".to_owned());
-        model.borrow_mut().name = Some(stem);
+        unit.model.borrow_mut().name = Some(stem);
     }
 
     // Разрешаем адреса (inline < address < внешняя карта) — тот же слой, что у
     // `c-hal`/`st-at`. `SE-060` (бит вне [0, 63]) → отказ.
-    let mut resolution = address_map::resolve_addresses(std::rc::Rc::clone(&model), external, env);
+    let mut resolution =
+        address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
 
     // ⚠️ `SE-052` («used-порт без адреса») для `sv-mmio` — НЕ ошибка: порт без
     // адреса штатно становится портом модуля (правило 2 ADR 0062), в отличие от
@@ -75,19 +76,14 @@ pub fn compile_to_sv_mmio(
 
     // Фича 0096: `float → q(m, n)` при `--float-as-q` — как у `sv` (без
     // `--float-embedded`, третий аргумент `false`).
-    apply_float_lowering(&model, options, false)?;
+    apply_float_lowering(&unit.model, options, false)?;
 
     // Предупреждения генератора (`SV-009`) присоединяются к адресным (фича
     // 0168). Прежде у одного вызова было **две** судьбы: адресные возвращались
     // и глушились `--quiet`, а `SV-009` печаталась `eprintln!` из библиотеки и
     // не глушилась ничем.
     let mut warnings = resolution.diagnostics;
-    warnings.extend(generator::generate(
-        generator::Language::SvMmio,
-        &model.borrow(),
-        output_path,
-        &mmio_options,
-    )?);
+    warnings.extend(unit.emit(generator::Language::SvMmio, output_path, &mmio_options)?);
 
     Ok(warnings)
 }

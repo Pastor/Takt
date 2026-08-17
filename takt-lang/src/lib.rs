@@ -192,11 +192,11 @@ pub fn compile_to_c(
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
     // Шаги 1–2: разбор и семантика; диагностика получает путь своего файла.
-    let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
     // Генератор C требует именованной модели.
     // Корневая (файловая) модель всегда анонимна — задаём имя из имени файла.
-    if model.borrow().name.is_none() {
+    if unit.model.borrow().name.is_none() {
         // V1: `file_name()` возвращает None, если путь оканчивается на `/` или пустой.
         //     `to_str()` возвращает None для не-UTF-8 путей.
         //     В обоих случаях используем запасное имя «Root».
@@ -209,21 +209,16 @@ pub fn compile_to_c(
                 s.split('.').next().unwrap_or(s).to_owned()
             })
             .unwrap_or_else(|| "Root".to_owned());
-        model.borrow_mut().name = Some(stem);
+        unit.model.borrow_mut().name = Some(stem);
     }
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-as-q` +
     // `--float-embedded` (иначе `float` остаётся нативным `double`).
-    apply_float_lowering(&model, options, true)?;
+    apply_float_lowering(&unit.model, options, true)?;
 
     // Шаг 3: Генерация C-кода. Предупреждения цели возвращаются вызывающему
     // (фича 0168) — печатать их библиотека не вправе.
-    generator::generate(
-        generator::Language::C,
-        &model.borrow(),
-        output_path,
-        options,
-    )
+    unit.emit(generator::Language::C, output_path, options)
 }
 
 /// Компилирует Takt в C в режиме `c-hal` (фича 0020-05): к обычному C добавляются
@@ -242,19 +237,19 @@ pub fn compile_to_c_hal(
     env: &address_map::AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
-    if model.borrow().name.is_none() {
+    if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
             .file_name()
             .and_then(|s| s.to_str())
             .map(|s| s.split('.').next().unwrap_or(s).to_owned())
             .unwrap_or_else(|| "Root".to_owned());
-        model.borrow_mut().name = Some(stem);
+        unit.model.borrow_mut().name = Some(stem);
     }
 
     // Разрешаем адреса (inline < address < внешняя карта) и проверяем полноту.
-    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&model), external, env);
+    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
     if let Some(err) = resolution
         .diagnostics
         .iter()
@@ -268,18 +263,13 @@ pub fn compile_to_c_hal(
     hal_options.address_map = resolution.map;
 
     // Фича 0096: embedded-путь `float → q(m, n)` (c-hal — основная embedded-цель).
-    apply_float_lowering(&model, options, true)?;
+    apply_float_lowering(&unit.model, options, true)?;
 
     // Предупреждения цели присоединяются к адресным (фича 0168): у одного
     // вызова обязана быть одна судьба, иначе часть диагностики глушится
     // `--quiet`, а часть — нет.
     let mut warnings = resolution.diagnostics;
-    warnings.extend(generator::generate(
-        generator::Language::C,
-        &model.borrow(),
-        output_path,
-        &hal_options,
-    )?);
+    warnings.extend(unit.emit(generator::Language::C, output_path, &hal_options)?);
 
     Ok(warnings)
 }
@@ -310,26 +300,21 @@ pub fn compile_to_st(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
-    if model.borrow().name.is_none() {
+    if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
             .file_name()
             .and_then(|s| s.to_str())
             .map(|s| s.split('.').next().unwrap_or(s).to_owned())
             .unwrap_or_else(|| "Root".to_owned());
-        model.borrow_mut().name = Some(stem);
+        unit.model.borrow_mut().name = Some(stem);
     }
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
-    apply_float_lowering(&model, options, true)?;
+    apply_float_lowering(&unit.model, options, true)?;
 
-    generator::generate(
-        generator::Language::ST,
-        &model.borrow(),
-        output_path,
-        options,
-    )
+    unit.emit(generator::Language::ST, output_path, options)
 }
 
 /// Компилирует исходный код Takt в `no_std` Rust — прошивку микроконтроллера.
@@ -380,26 +365,21 @@ pub fn compile_to_rust(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
-    if model.borrow().name.is_none() {
+    if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
             .file_name()
             .and_then(|s| s.to_str())
             .map(|s| s.split('.').next().unwrap_or(s).to_owned())
             .unwrap_or_else(|| "Root".to_owned());
-        model.borrow_mut().name = Some(stem);
+        unit.model.borrow_mut().name = Some(stem);
     }
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
-    apply_float_lowering(&model, options, true)?;
+    apply_float_lowering(&unit.model, options, true)?;
 
-    generator::generate(
-        generator::Language::Rust,
-        &model.borrow(),
-        output_path,
-        options,
-    )
+    unit.emit(generator::Language::Rust, output_path, options)
 }
 
 /// Компилирует исходный код Takt в синтезируемый SystemVerilog (IEEE 1800) —
@@ -449,27 +429,22 @@ pub fn compile_to_sv(
     search_paths: &[String],
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
-    if model.borrow().name.is_none() {
+    if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
             .file_name()
             .and_then(|s| s.to_str())
             .map(|s| s.split('.').next().unwrap_or(s).to_owned())
             .unwrap_or_else(|| "Root".to_owned());
-        model.borrow_mut().name = Some(stem);
+        unit.model.borrow_mut().name = Some(stem);
     }
 
     // Фича 0096: при `--float-as-q=m.n` понижаем `float → q(m, n)` (снимая
     // `SV-003`). Для `sv` флаг применяется всегда (без `--float-embedded`).
-    apply_float_lowering(&model, options, false)?;
+    apply_float_lowering(&unit.model, options, false)?;
 
-    generator::generate(
-        generator::Language::SV,
-        &model.borrow(),
-        output_path,
-        options,
-    )
+    unit.emit(generator::Language::SV, output_path, options)
 }
 
 /// Компилирует Takt в Structured Text в режиме `st-at` (фича 0041): к обычному ST
@@ -490,18 +465,18 @@ pub fn compile_to_st_at(
     env: &address_map::AddressEnv,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let model = parse_and_construct(filename, source, search_paths, options.specialize)?;
+    let unit = parse_and_construct(filename, source, search_paths, options.specialize)?;
 
-    if model.borrow().name.is_none() {
+    if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
             .file_name()
             .and_then(|s| s.to_str())
             .map(|s| s.split('.').next().unwrap_or(s).to_owned())
             .unwrap_or_else(|| "Root".to_owned());
-        model.borrow_mut().name = Some(stem);
+        unit.model.borrow_mut().name = Some(stem);
     }
 
-    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&model), external, env);
+    let resolution = address_map::resolve_addresses(std::rc::Rc::clone(&unit.model), external, env);
     if let Some(err) = resolution
         .diagnostics
         .iter()
@@ -515,15 +490,10 @@ pub fn compile_to_st_at(
     at_options.address_map = resolution.map;
 
     // Фича 0096: embedded-путь `float → q(m, n)` при `--float-embedded`.
-    apply_float_lowering(&model, options, true)?;
+    apply_float_lowering(&unit.model, options, true)?;
 
     let mut warnings = resolution.diagnostics;
-    warnings.extend(generator::generate(
-        generator::Language::ST,
-        &model.borrow(),
-        output_path,
-        &at_options,
-    )?);
+    warnings.extend(unit.emit(generator::Language::ST, output_path, &at_options)?);
 
     Ok(warnings)
 }
@@ -548,20 +518,19 @@ pub fn compile_to_plantuml(
     output_path: &str,
     search_paths: &[String],
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
-    let model = parse_and_construct(filename, source, search_paths, false)?;
+    let unit = parse_and_construct(filename, source, search_paths, false)?;
 
-    if model.borrow().name.is_none() {
+    if unit.model.borrow().name.is_none() {
         let stem = Path::new(filename)
             .file_name()
             .and_then(|s| s.to_str())
             .map(|s| s.split('.').next().unwrap_or(s).to_owned())
             .unwrap_or_else(|| "Root".to_owned());
-        model.borrow_mut().name = Some(stem);
+        unit.model.borrow_mut().name = Some(stem);
     }
 
-    generator::generate(
+    unit.emit(
         generator::Language::PlantUML,
-        &model.borrow(),
         output_path,
         &GenerateOptions::default(),
     )
