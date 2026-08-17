@@ -575,7 +575,6 @@ start Idle { always { counter := b; } }
         // LIMIT используется в блоке always (присваивание переменной),
         // чтобы константа попала в UsageSet и не была отфильтрована.
         let src = r#"
-type u8 = [bit;8];
 const LIMIT: u8 := 100;
 in SENSOR: u8 at 0x100000;
 var v: u8 := 0;

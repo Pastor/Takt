@@ -3,7 +3,6 @@
 ///
 /// Модель Controller инстанциируется как состояние Entry.
 /// Поле в C-структуре называется `entry`, а не `controller`.
-type u8 = [bit;8];
 
 model Controller {
     var temperature: u8 := 0;

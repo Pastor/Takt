@@ -414,18 +414,8 @@ pub(super) fn construct_model_stage0(
                 &mut parameters,
             )?;
         } else if let ModelElement::Type(def) = element {
-            let name = def.clone().name.name.clone();
-            let typ = def.ty.clone();
-            // Вычисляем тип ДО borrow_mut, чтобы construct_type мог безопасно вызвать
-            // model_node.borrow() (search_type) без конфликта с borrow_mut.
-            let resolved_type = construct_type(Some(typ.clone()), Rc::clone(&model_node))?;
-            // Сохраняем сырой АСД-тип для последующей проверки циклических псевдонимов (Ce16)
-            {
-                let mut bm = model_node.borrow_mut();
-                bm.raw_type_defs.insert(name.clone(), typ.clone());
-                bm.types.insert(name.clone(), resolved_type);
-                bm.type_locs.insert(name.clone(), def.name.loc);
-            }
+            // Занятие имени и регистрация псевдонима — одно место (фича 0243).
+            crate::semantic::type_registry::declare_alias(&model_node, def)?;
         } else if let ModelElement::Condition(def) = element {
             let def_loc = def
                 .as_ref()
@@ -568,6 +558,10 @@ pub(super) fn construct_model_stage0(
                 FunctionDefinitionNode::Unresolved(*def.clone()),
             );
         } else if let ModelElement::Enum(e) = element {
+            // Фича 0243: имя занимается ДО построения узла (иначе затрёт чужое).
+            if let Some(id) = e.name.as_ref() {
+                crate::semantic::type_registry::claim_type_name(&model_node, &id.name, id.loc)?;
+            }
             // FE1: узел перечисления строит `enum_build` (фича 0167 — вынос из
             // этого файла: он сверх лимита размера, и правило велит выносить
             // новое, а не дописывать сюда).
@@ -580,6 +574,8 @@ pub(super) fn construct_model_stage0(
                 .map(|id| id.name.clone())
                 .unwrap_or_default();
             let struct_loc = s.name.as_ref().map(|id| id.loc).unwrap_or(s.loc);
+            // Фича 0243: имя занимается ДО разбора полей.
+            crate::semantic::type_registry::claim_type_name(&model_node, &struct_name, struct_loc)?;
 
             // Разрешаем типы полей в контексте текущей модели.
             let mut field_pairs: Vec<(String, TypeNode)> = Vec::new();
@@ -1392,7 +1388,7 @@ mod tests {
     /// Программа без состояний, но с типом: `has_states()` → false.
     #[test]
     fn program_with_only_type_has_no_states() {
-        let node = build("type u8 = [bit;8];").unwrap();
+        let node = build("type Byte = [bit;8];").unwrap();
         assert!(!node.has_states());
     }
 

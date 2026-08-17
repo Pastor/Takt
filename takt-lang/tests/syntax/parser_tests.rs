@@ -313,7 +313,7 @@ fn parse_type_alias_bit() {
 /// `type u8 = [bit;8]`.
 #[test]
 fn parse_type_alias_array() {
-    let root = must_parse("type u8 = [bit;8]; model M { start S; }");
+    let root = must_parse("type Byte = [bit;8]; model M { start S; }");
     let alias = root.elements.iter().find_map(|e| {
         if let ModelElement::Type(t) = e {
             Some(t.as_ref())
@@ -322,7 +322,7 @@ fn parse_type_alias_array() {
         }
     });
     assert!(alias.is_some());
-    assert_eq!(alias.unwrap().name.name, "u8");
+    assert_eq!(alias.unwrap().name.name, "Byte");
     assert!(
         matches!(
             alias.unwrap().ty,
@@ -358,7 +358,7 @@ fn parse_mutable_variable() {
 /// `const MAX: u8 = 255`.
 #[test]
 fn parse_const_variable() {
-    let root = must_parse("type u8 = [bit;8]; const MAX: u8 := 255; model M { start S; }");
+    let root = must_parse("const MAX: u8 := 255; model M { start S; }");
     let cst = root.elements.iter().find_map(|e| {
         if let ModelElement::Variable(v) = e {
             Some(v.as_ref())
@@ -692,7 +692,6 @@ fn parse_function_call_in_always() {
 fn parse_initializer_expression() {
     let root = must_parse(
         r#"
-        type u8 = [bit;8];
         const VALS: u8 := { 0, 1, 2, 3 };
         model M { start S; }
     "#,
@@ -705,7 +704,6 @@ fn parse_initializer_expression() {
 fn parse_bit_access() {
     let m = first_named_model(
         r#"
-        type u8 = [bit;8];
         model M {
             var x: u8 := 0;
             start S {
@@ -725,8 +723,6 @@ fn parse_bit_access() {
 fn parse_cast_expression() {
     let m = first_named_model(
         r#"
-        type u8  = [bit;8];
-        type u16 = [bit;16];
         model M {
             var x: u8  := 0;
             var y: u16 := 0;
@@ -783,7 +779,6 @@ fn parse_function_declaration() {
 fn parse_function_with_body_and_return() {
     let root = must_parse(
         r#"
-        type u8 = [bit;8];
         fn double(x: u8) -> u8 {
             return x + x;
         }

@@ -395,7 +395,6 @@ mod lsp_integration {
 // - При наведении на идентификатор отображается его тип
 // - Автодополнение предлагает ключевые слова и имена из модели
 
-type u8 = [bit;8];
 
 /// Перечисление направлений движения робота.
 enum Direction { North, South, East, West }
@@ -431,7 +430,7 @@ model Robot {
 
 start Main = Robot;
         "#;
-        let h = hover_info(SRC, Position::new(421 - 391, 23));
+        let h = hover_info(SRC, Position::new(420 - 391, 23));
         assert!(h.is_some(), "hover должен найти переменную условия active");
         let h = h.unwrap();
         if let lsp_types::HoverContents::Markup(mc) = h.contents {

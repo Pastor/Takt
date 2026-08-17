@@ -522,7 +522,6 @@ fn pragma_is_not_a_keyword_and_lexes_as_identifier() {
 fn complete_but_program_lexes_without_errors() {
     let src = r#"
 /// Пример полной Takt-программы
-type u8 = [bit;8];
 const MAX: u8 = 0xFF;
 out LED: u8 = 00100000;
 var counter: u8 = 0;

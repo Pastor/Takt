@@ -57,6 +57,7 @@ mod test_constants;
 pub mod tree;
 pub(crate) mod type_inference;
 pub mod type_node;
+pub(crate) mod type_registry;
 pub mod unused;
 pub mod usages;
 pub(crate) mod validate;
@@ -82,9 +83,8 @@ use type_node::TypeNode;
 ///
 /// Контекст модели, имя, словарь состояний и реализация (`implements`).
 ///
-/// Поля [`doc`](ModelNode::doc) и [`docs`](ModelNode::docs) заполняются
-/// отдельным вызовом [`construct_model_with_docs`](tree::construct_model_with_docs)
-/// и содержат строки из `///`-комментариев исходного текста.
+/// Поля [`doc`](ModelNode::doc) и [`docs`](ModelNode::docs) заполняет
+/// [`construct_model_with_docs`](tree::construct_model_with_docs) — строками `///`.
 #[derive(Default, Debug)]
 pub struct ModelNode {
     /// Имя модели (`None` для анонимной корневой модели).
@@ -334,7 +334,7 @@ impl ModelNode {
     /// use takt_lang::semantic::tree::construct_model;
     ///
     /// // Модель без состояний
-    /// let (ast, _) = parse("type u8 = [bit;8];", 0).unwrap();
+    /// let (ast, _) = parse("type Byte = [bit;8];", 0).unwrap();
     /// let node = construct_model(&ast, None, &[]).unwrap();
     /// assert!(!node.borrow().has_states());
     ///

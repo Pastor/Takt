@@ -8,10 +8,13 @@ use super::*;
 #[test]
 fn example_type_aliases_is_valid() {
     let node = build_file("tests/data/semantic/valid/type_aliases.takt").unwrap();
-    assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
     assert!(
-        node.types.contains_key("u16"),
-        "тип u16 должен быть объявлен"
+        node.types.contains_key("Byte"),
+        "тип Byte должен быть объявлен"
+    );
+    assert!(
+        node.types.contains_key("Word"),
+        "тип Word должен быть объявлен"
     );
     assert!(
         node.search_var("counter").is_some(),
@@ -432,36 +435,25 @@ fn example_rename_import_missing_is_error() {
     );
 }
 
-/// После импорта `std.takt` типы u8, u16, … доступны внутри импортированной модели.
+/// После импорта `std.takt` объявленные ею типы доступны внутри импортированной модели.
+///
+/// ⚠️ Прежде проверялись `u8` и `u16`: библиотека объявляла их псевдонимами
+/// `[bit; N]` — наследие эпохи до встроенных целых. С фичи 0243 занять имя
+/// встроенного типа нельзя (`SE-107`), объявления сняты, и осталось `u128` —
+/// встроенным он не является, поэтому объявлять его законно.
 #[test]
-fn std_but_contains_u8_u16_types() {
+fn std_takt_contains_declared_types() {
     let src = r#"import "std.takt";"#;
     let (ast, _) = parse(src, 0).unwrap();
     let root = construct_model(&ast, None, &["tests/data/include".to_string()]).unwrap();
     let std_model = root.borrow().search_model("Std").unwrap();
     assert!(
-        std_model.borrow().types.contains_key("u8"),
-        "std.takt должен содержать тип u8"
-    );
-    assert!(
-        std_model.borrow().types.contains_key("u16"),
-        "std.takt должен содержать тип u16"
-    );
-    assert!(
-        std_model.borrow().types.contains_key("u32"),
-        "std.takt должен содержать тип u32"
-    );
-    assert!(
-        std_model.borrow().types.contains_key("u64"),
-        "std.takt должен содержать тип u64"
-    );
-    assert!(
         std_model.borrow().types.contains_key("u128"),
         "std.takt должен содержать тип u128"
     );
     assert!(
-        std_model.borrow().types.contains_key("bool"),
-        "std.takt должен содержать тип bool"
+        !std_model.borrow().types.contains_key("u8"),
+        "u8 — встроенный тип: библиотека объявлять его не вправе (SE-107)"
     );
 }
 
@@ -587,7 +579,6 @@ fn named_block_with_builtin_func_call_does_not_error() {
 fn syntax_simple_does_not_panic() {
     // Копия SRC из lib.rs — проверяем что construct_model успешен
     let src = r#"
-type u8 = [bit;8];
 const MATRIX: u8 := { 0, 0, 0, 0, 0, 0, 0, 0 };
 const NUMB: u8 := 0xFF;
 cond IsEmpty = it = 0;
@@ -889,14 +880,17 @@ fn example_bool_type_is_valid() {
 #[test]
 fn example_integer_types_is_valid() {
     let node = build_file("tests/data/semantic/valid/integer_types.takt").unwrap();
-    assert!(node.types.contains_key("u8"), "тип u8 должен быть объявлен");
     assert!(
-        node.types.contains_key("u16"),
-        "тип u16 должен быть объявлен"
+        node.types.contains_key("Byte"),
+        "тип Byte должен быть объявлен"
     );
     assert!(
-        node.types.contains_key("u32"),
-        "тип u32 должен быть объявлен"
+        node.types.contains_key("Word"),
+        "тип Word должен быть объявлен"
+    );
+    assert!(
+        node.types.contains_key("DWord"),
+        "тип DWord должен быть объявлен"
     );
     // Проверяем вывод типа из числовых литералов
     if let Some(VariableNode::Simple { ty, .. }) = node.search_var("small") {

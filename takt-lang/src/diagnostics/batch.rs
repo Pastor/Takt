@@ -68,7 +68,14 @@ pub fn format_compile_error(diagnostic: &Diagnostic) -> String {
         diagnostic.message
     );
     for note in &diagnostic.notes {
-        text.push_str(&format!("\n  примечание: {}", note.message));
+        // Фича 0243: заметка печатается СО СВОЕЙ позицией. Без неё сообщение
+        // «первое объявление типа — здесь» не отвечает на вопрос «где»; у
+        // заметки без исходной позиции префикс пуст, и строка остаётся прежней.
+        text.push_str(&format!(
+            "\n  примечание: {}{}",
+            super::note_position_prefix(diagnostic, note),
+            note.message
+        ));
     }
     text
 }

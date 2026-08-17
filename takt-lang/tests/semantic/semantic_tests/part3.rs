@@ -338,14 +338,14 @@ fn doc_comment_for_variable() {
 /// Тип (`type`) получает свой doc-комментарий.
 #[test]
 fn doc_comment_for_type() {
-    let src = "/// Байт.\ntype u8 = [bit;8];";
+    let src = "/// Байт.\ntype Byte = [bit;8];\n";
     let (ast, comments) = parse(src, 0).expect("ошибка разбора");
     let root =
         construct_model_with_docs(&ast, None, &[], &comments).expect("ошибка построения семантики");
     assert_eq!(
-        root.borrow().element_doc("u8"),
+        root.borrow().element_doc("Byte"),
         ["Байт."],
-        "doc-комментарий должен быть привязан к типу u8"
+        "doc-комментарий должен быть привязан к типу Byte"
     );
 }
 
@@ -495,7 +495,10 @@ fn example_doc_comments_file_is_valid() {
 
     // Проверяем документацию на верхнем уровне
     let rb = root.borrow();
-    assert!(!rb.element_doc("u8").is_empty(), "тип u8 должен иметь doc");
+    assert!(
+        !rb.element_doc("Byte").is_empty(),
+        "тип Byte должен иметь doc"
+    );
     assert!(
         !rb.element_doc("counter").is_empty(),
         "переменная counter должна иметь doc"

@@ -1044,7 +1044,6 @@ mod tests {
 
     const SRC: &str = r#"
 //Алиас типа
-type u8 = [bit;8];
 //Константа: u8 = [bit;8] — упакованный скаляр (фича 0078), init скалярный
 const MATRIX: u8 := 0xA5;
 const NUMB: u8 := 0xFF;
