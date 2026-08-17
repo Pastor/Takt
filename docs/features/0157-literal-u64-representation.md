@@ -72,8 +72,8 @@
 ## Документирование (правило 24)
 
 **Требуется.** Меняется множество записуемых литералов — затронуты разделы
-[`book/src/02-lexical/`](../../book/src/02-lexical/index.md) (литералы) и
-[`book/src/03-types/`](../../book/src/03-types/index.md) (тип `[bit;N]`).
+[`book/src/02-lexical/`](../../book/src/02-lexical/index.typ) (литералы) и
+[`book/src/03-types/`](../../book/src/03-types/index.typ) (тип `[bit;N]`).
 
 ## Итог (что сделано)
 

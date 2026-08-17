@@ -63,7 +63,7 @@
 
 ### Acceptance criteria
 
-1. Приложение `book/src/appendix-errors/index.md`: префиксы, сводная таблица всех
+1. Приложение `book/src/appendix-errors/index.typ`: префиксы, сводная таблица всех
    кодов, подробный разбор основных ошибок с примерами и выводом.
 2. Правило 25 в `docs/RULE.md` (приложения + ссылки на них).
 3. Сборка PDF (`xelatex`) чистая; `precheck.sh` зелёный.

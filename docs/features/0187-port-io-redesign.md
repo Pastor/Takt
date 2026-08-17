@@ -86,7 +86,7 @@ SystemVerilog, C с MMIO-макросами, Zig, nesC/TinyOS), и предло�
 ## Документирование (правило 24)
 
 **Требуется.** Меняется синтаксис и семантика объявления порта — затронуты
-разделы [`book/src/08-ports-addresses/`](../../book/src/08-ports-addresses/index.md)
+разделы [`book/src/08-ports-addresses/`](../../book/src/08-ports-addresses/index.typ)
 и приложение «Ошибки и предупреждения».
 
 ## Итог (что сделано)

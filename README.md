@@ -44,7 +44,7 @@
 | `a \| b`         | Альтернатива                       |
 
 Полная грамматика в формате ISO EBNF — в приложении документа
-[«Грамматика»](book/src/appendix-grammar/index.md) (правило 15: описание языка живёт
+[«Грамматика»](book/src/appendix-grammar/index.typ) (правило 15: описание языка живёт
 в `book/`).
 
 ### Привет, мир!
@@ -181,10 +181,11 @@ struct Point { x: u8, y: u8 }
 > задваивается и не расходится (решение фичи
 > [0140](docs/features/0140-backlog-revision-doc-split.md)).
 >
-> Документ собирается в PDF (`make -C book build`) шрифтом Fira Code и потому
-> имеет собственный класс дефектов: символ, которого в шрифте нет, сборку **не
-> роняет** — `xelatex` печатает предупреждение, а глиф молча выпадает из вывода.
-> Предкоммит ловит это без TeX и без шрифта: `scripts/check-book-glyphs.py`
+> Документ собирается в PDF шрифтом Fira Code одним внешним инструментом —
+> **Typst** (`make -C book build`), и сама сборка входит в предкоммит. У него
+> собственный класс дефектов: символ, которого в шрифте нет, сборку **не
+> роняет** — движок подставляет запасной шрифт (а на машине без него глиф
+> выпадает). Предкоммит ловит это без шрифта: `scripts/check-book-glyphs.py`
 > сверяет каждый символ документа со снимком таблицы `cmap`
 > (`scripts/book-font-charset.txt`). Примеры документа проверяются вдобавок
 > компиляцией и симуляцией.
@@ -219,18 +220,18 @@ start Root = Watchdog;              // корневая модель едини�
 
 | Тема | Раздел документа |
 |---|---|
-| Комментарии, идентификаторы, литералы, ключевые слова | [«Лексика»](book/src/02-lexical/index.md) |
-| Типы: `bit`, целые, `bool`, `float`, `q(m, n)`, массивы, `enum`, `struct` | [«Типы»](book/src/03-types/index.md) |
-| `model`, `state`, `start`, `ref`, `next`, композиция `+` и `\|`, `parameter` (настройка экземпляра) | [«Модели и состояния»](book/src/04-models-states/index.md) |
-| Выражения, приоритеты, `:=` против `=` | [«Выражения»](book/src/05-expressions/index.md) |
-| `if`, `loop`/`while`, `for`, `match`, `break`/`continue` | [«Управление»](book/src/06-control-flow/index.md) |
-| `fn`, `extern fn`, параметры и возврат | [«Функции»](book/src/07-functions/index.md) |
-| `in`/`out`/`inout`, адреса портов, `address` | [«Порты и адреса»](book/src/08-ports-addresses/index.md) |
-| `import`, пути поиска, псевдонимы | [«Импорты»](book/src/09-imports/index.md) |
-| `enter`/`exit`/`always`, `cond`, `invariant` | [«Именованные блоки»](book/src/10-named/index.md) |
-| Что такое такт, порядок исполнения, первый такт | [«Модель исполнения»](book/src/11-execution/index.md) |
-| LTL-формулы, `Guard`, верификация | [«Верификация»](book/src/13-verification/index.md) |
-| Полная грамматика | [приложение «Грамматика»](book/src/appendix-grammar/index.md) |
+| Комментарии, идентификаторы, литералы, ключевые слова | [«Лексика»](book/src/02-lexical/index.typ) |
+| Типы: `bit`, целые, `bool`, `float`, `q(m, n)`, массивы, `enum`, `struct` | [«Типы»](book/src/03-types/index.typ) |
+| `model`, `state`, `start`, `ref`, `next`, композиция `+` и `\|`, `parameter` (настройка экземпляра) | [«Модели и состояния»](book/src/04-models-states/index.typ) |
+| Выражения, приоритеты, `:=` против `=` | [«Выражения»](book/src/05-expressions/index.typ) |
+| `if`, `loop`/`while`, `for`, `match`, `break`/`continue` | [«Управление»](book/src/06-control-flow/index.typ) |
+| `fn`, `extern fn`, параметры и возврат | [«Функции»](book/src/07-functions/index.typ) |
+| `in`/`out`/`inout`, адреса портов, `address` | [«Порты и адреса»](book/src/08-ports-addresses/index.typ) |
+| `import`, пути поиска, псевдонимы | [«Импорты»](book/src/09-imports/index.typ) |
+| `enter`/`exit`/`always`, `cond`, `invariant` | [«Именованные блоки»](book/src/10-named/index.typ) |
+| Что такое такт, порядок исполнения, первый такт | [«Модель исполнения»](book/src/11-execution/index.typ) |
+| LTL-формулы, `Guard`, верификация | [«Верификация»](book/src/13-verification/index.typ) |
+| Полная грамматика | [приложение «Грамматика»](book/src/appendix-grammar/index.typ) |
 
 ---
 
@@ -241,22 +242,22 @@ start Root = Watchdog;              // корневая модель едини�
 - **Присваивание `:=`, сравнение `=`.** Знаки разведены в стиле ST/IEC 61131-3;
   оператор `==` из языка **выведен**. Знак `=` служит ещё и связкой в
   определениях имён (`type T = …`, `cond C = …`, `start Main = …`).
-  → [«Выражения»](book/src/05-expressions/index.md)
+  → [«Выражения»](book/src/05-expressions/index.typ)
 - **Такт — шаг логики автомата, а не единица времени.** Частота тактирования
   произвольна; физические величины приходят с датчиков, а не считаются тактами.
   Вход в стартовое состояние **не расходует такт**: тело стартового состояния
-  исполняется на такте 1. → [«Модель исполнения»](book/src/11-execution/index.md)
+  исполняется на такте 1. → [«Модель исполнения»](book/src/11-execution/index.typ)
 - **Симулятор — эталон поведения.** Все цели генерации обязаны вести себя так
   же; потактовые сверки прогоняют трассы симулятора против порождённого кода.
-  → [«Цели генерации»](book/src/14-targets/index.md),
-  [«Симуляция»](book/src/15-simulation/index.md)
+  → [«Цели генерации»](book/src/14-targets/index.typ),
+  [«Симуляция»](book/src/15-simulation/index.typ)
 - **Переполнение целых нормировано.** Беззнаковое — обёртка `mod 2ⁿ` одинаково у
   эталона и всех целей; знаковое — **ошибка программы**.
-  → [«Типы»](book/src/03-types/index.md)
+  → [«Типы»](book/src/03-types/index.typ)
 - **Диагностика вместо тишины.** Неопределённый случай даёт код (`SE-…`, `SIM-…`,
   `ST-…`, `SV-…`, `RS-…`), а не молчаливое умолчание.
-  → [«Диагностика»](book/src/16-diagnostics/index.md),
-  [приложение «Ошибки и предупреждения»](book/src/appendix-errors/index.md)
+  → [«Диагностика»](book/src/16-diagnostics/index.typ),
+  [приложение «Ошибки и предупреждения»](book/src/appendix-errors/index.typ)
 
 ---
 
@@ -947,7 +948,7 @@ taktc compile --target c --parameters=specialize input.takt -o output/
 экземпляров, `specialize` порождает копию модели на каждую различную настройку
 (тогда неизменяемый параметр становится константой). Поведение программы от
 выбора не зависит; семантику параметров описывает раздел документа
-[«Модели и состояния»](book/src/04-models-states/index.md).
+[«Модели и состояния»](book/src/04-models-states/index.typ).
 
 #### Отображение типов Takt в типы C
 
@@ -2502,6 +2503,6 @@ Takt/
 5. Добавить тесты в `tests/data/valid/` и `tests/data/invalid/`.
 
 Полная грамматика — в приложении документа
-[«Грамматика»](book/src/appendix-grammar/index.md); языковая фича обязана пройти
+[«Грамматика»](book/src/appendix-grammar/index.typ); языковая фича обязана пройти
 стадию «Документирование» (правило 24), а лексику приложения сверяет с кодом гейт
 `scripts/check-book-keywords.py`.

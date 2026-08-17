@@ -49,7 +49,7 @@
 
 **Требуется.** Уточняется семантика адреса `bit`-порта (возможна новая
 диагностика) — затронут раздел
-[`book/src/08-ports-addresses/`](../../book/src/08-ports-addresses/index.md).
+[`book/src/08-ports-addresses/`](../../book/src/08-ports-addresses/index.typ).
 
 ## Итог (что сделано)
 

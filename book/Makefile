@@ -1,39 +1,48 @@
-# Сборка документа «Язык Takt — описание» (mdBook → PDF).
+# Сборка документа «Язык Takt — описание» (Typst → PDF).
 #
-# Вывод по умолчанию — PDF (профиль mdbook-pandoc `pdf`, шрифт текста Fira Code).
-#
-# Кросс-ссылки (оглавление, ссылки на приложения) формируются корректно: движок
-# сборки — **latexmk** поверх xelatex (профиль `pdf` в `book.toml`). latexmk сам
-# перезапускает xelatex до сходимости перекрёстных ссылок, поэтому одиночный проход
-# с «??»/устаревшими номерами исключён — ручные повторные проходы не нужны.
+# Внешний инструмент один — `typst`. Прежняя связка (mdbook + mdbook-pandoc +
+# pandoc + latexmk + xelatex + rsvg-convert) снята фичей 0240: вёрстка,
+# метаданные, подсветка и вставка примеров живут в самом документе
+# (src/template.typ, src/main.typ, ../takt.sublime-syntax, ../takt.tmTheme).
 #
 # Зависимости:
-#   - mdBook            — cargo install mdbook
-#   - mdbook-pandoc     — cargo install mdbook-pandoc   (бэкенд PDF)
-#   - pandoc            — https://pandoc.org/  (конвертер)
-#   - TeX-движок xelatex — TeX Live / MacTeX (система шрифтов fontspec)
-#   - latexmk           — TeX Live / MacTeX (сходимость кросс-ссылок)
+#   - typst >= 0.13     — https://typst.app/ (brew install typst / cargo install typst-cli)
+#                         проверенная версия — 0.15.1
 #   - шрифт Fira Code   — установить в систему (https://github.com/tonsky/FiraCode)
 #   - для АВТО-РЕГЕНЕРАЦИИ графов верификации (цель `graphs`, зависимость `build`):
 #     cargo (сборка taktc), dot (Graphviz), python3 + fontTools, шрифт ГОСТ 2.304-81
 #     тип А (наклонный, ставит цель `fonts`). Все — best-effort: нет инструмента →
 #     регенерация пропускается, берутся закоммиченные (самодостаточные) SVG.
+#     SVG вставляет сам Typst, поэтому rsvg-convert больше не нужен.
 #
-# Результат: book/book/pdf/takt-language.pdf (mdBook кладёт вывод в
-# <build-dir>/pdf/, build-dir по умолчанию — «book»; каталог сборки игнорируется git).
+# Кросс-ссылки (оглавление, ссылки на разделы и приложения) сходятся за один
+# прогон: Typst разрешает метки сам, а неизвестная метка у него ОШИБКА сборки, а
+# не «??» в готовом PDF. Повторные проходы (latexmk) не нужны.
+#
+# Результат: book/book/pdf/takt-language.pdf (каталог сборки игнорируется git).
 #
 # Цели:
-#   make build   — регенерировать графы + собрать PDF (кросс-ссылки — latexmk)
+#   make build   — регенерировать графы + собрать PDF
+#   make pdf     — собрать PDF БЕЗ регенерации графов (шаг предкоммита: гейт не
+#                  вправе менять файлы репозитория — перегенерация SVG оставляла
+#                  за собой изменённую строку версии graphviz)
 #   make check   — то же «на прочность» (для CI)
 #   make graphs  — регенерировать SVG-графы верификации (taktc → dot → флаттеринг)
 #   make fonts   — установить шрифт ГОСТ тип А, если его нет
 #   make clean   — удалить каталог сборки
 
-MDBOOK ?= mdbook
+TYPST ?= typst
 
 # Корень репозитория (Makefile лежит в book/). Нужен для сборки taktc и запуска
 # скрипта регенерации графов.
 ROOT := $(abspath $(CURDIR)/..)
+
+# Корень проекта Typst — каталог book/: относительно него разрешаются пути,
+# начинающиеся со `/` (например `/takt.sublime-syntax` в шаблоне). Выше корня
+# Typst не читает — это его песочница.
+TYPST_ROOT := $(CURDIR)
+MAIN       := src/main.typ
+OUT        := book/pdf/takt-language.pdf
 
 # Шрифт подписей графов верификации — ГОСТ тип А, НАКЛОННЫЙ (ГОСТ 2.304-81,
 # стандартное чертёжное начертание). Диаграммы Крипке/Бюхи (`taktc verify
@@ -44,12 +53,7 @@ GOST_FONT_FILE := GOST2.304-81TypeA-Slanted.ttf
 # Каталог пользовательских шрифтов по ОС (macOS / прочее).
 FONT_DIR := $(if $(filter Darwin,$(shell uname)),$(HOME)/Library/Fonts,$(HOME)/.local/share/fonts)
 
-# TeX ставится в PATH не всегда (MacTeX кладёт бинарники в /Library/TeX/texbin,
-# который в интерактивном shell есть, а в make — не обязательно). Добавляем
-# типичные каталоги TeX в PATH — безвредно, если их нет.
-export PATH := /Library/TeX/texbin:/usr/local/texlive/2026/bin/universal-darwin:$(PATH)
-
-.PHONY: build check clean deps fonts graphs
+.PHONY: build check clean deps fonts graphs pdf
 
 # Регенерирует SVG-диаграммы верификации ПЕРЕД сборкой — устраняет ручной шаг.
 # Конвейер: taktc verify --emit-graph → dot -Tsvg → svg_flatten_text.py (см.
@@ -95,26 +99,29 @@ fonts:
 	  command -v fc-cache >/dev/null 2>&1 && fc-cache -f "$(FONT_DIR)" >/dev/null 2>&1 || true; \
 	fi
 
+# Проверка окружения. Версия проверяется намеренно: Typst до 1.0 меняет язык
+# между минорными выпусками (на `skew`, которым набирается синтетический курсив
+# отсутствующего в Fira Code начертания, документ опирается с 0.13).
 deps:
-	@ok=1; \
-	for t in $(MDBOOK) pandoc xelatex latexmk; do \
-	  command -v $$t >/dev/null 2>&1 || { echo "ОШИБКА: не найден '$$t' в PATH."; ok=0; }; \
-	done; \
-	if [ "$$ok" != "1" ]; then \
-	  echo "Установите зависимости PDF-сборки (см. шапку Makefile):"; \
-	  echo "  cargo install mdbook mdbook-pandoc"; \
-	  echo "  + pandoc, xelatex, latexmk (TeX Live/MacTeX), шрифт Fira Code"; \
+	@command -v $(TYPST) >/dev/null 2>&1 || { \
+	  echo "ОШИБКА: не найден '$(TYPST)' в PATH."; \
+	  echo "Установите Typst: brew install typst  (или cargo install typst-cli)"; \
+	  exit 1; }
+	@v=$$($(TYPST) --version 2>/dev/null | awk '{print $$2}'); \
+	major=$$(echo "$$v" | cut -d. -f1); minor=$$(echo "$$v" | cut -d. -f2); \
+	if [ "$$major" -eq 0 ] && [ "$$minor" -lt 13 ]; then \
+	  echo "ОШИБКА: typst $$v старше требуемой 0.13 (проверенная версия — 0.15.1)."; \
 	  exit 1; \
 	fi
-	@command -v mdbook-pandoc >/dev/null 2>&1 || { \
-	  echo "ОШИБКА: не найден бэкенд 'mdbook-pandoc'. Установите: cargo install mdbook-pandoc"; \
-	  exit 1; }
 
-build: deps graphs
-	$(MDBOOK) build
+pdf: deps
+	@mkdir -p $(dir $(OUT))
+	$(TYPST) compile --root $(TYPST_ROOT) $(MAIN) $(OUT)
+	@echo "Готово: book/$(OUT)"
 
-check: deps graphs
-	$(MDBOOK) build
+build: graphs pdf
+
+check: build
 
 clean:
-	$(MDBOOK) clean 2>/dev/null || rm -rf book
+	rm -rf book

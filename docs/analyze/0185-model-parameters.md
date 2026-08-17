@@ -84,10 +84,10 @@
   LSP, в списке автодополнения `lsp/keywords.rs::BUT_KEYWORDS` и в
   `TaktTokenTypes.KEYWORDS` плагина IntelliJ.
 - **R10. Документ.** Разделы обновлены; в
-  [`04-models-states`](../../book/src/04-models-states/index.md) заводится
+  [`04-models-states`](../../book/src/04-models-states/index.typ) заводится
   **отдельная секция «Параметризация моделей»** (требование заказчика
   2026-07-29), и она описывает **оба режима и границу между ними**; в
-  [`19-library`](../../book/src/19-library/index.md) снимается оговорка
+  [`19-library`](../../book/src/19-library/index.typ) снимается оговорка
   «настройку задать нельзя».
 - **R11. Режимы совпадают по поведению.** Одна программа, собранная с
   `--parameters=assign` и с `--parameters=specialize`, даёт **одинаковую
@@ -223,11 +223,11 @@
 - **[`examples/pid_heater.takt`](../../examples/pid_heater.takt)** — получает
   возможность задать настройку в месте инстанцирования; кандидат на второй
   контур с другой настройкой в том же файле (покажет смысл фичи нагляднее).
-- **[`book/src/04-models-states/`](../../book/src/04-models-states/index.md)** —
+- **[`book/src/04-models-states/`](../../book/src/04-models-states/index.typ)** —
   **новая секция «Параметризация моделей»** (требование заказчика): объявление,
   инстанцирование, вывод константности, «локальная копия», граница «настройка vs
   величина такта».
-- **[`book/src/19-library/`](../../book/src/19-library/index.md)** — абзац
+- **[`book/src/19-library/`](../../book/src/19-library/index.typ)** — абзац
   «Настройку регулятора нельзя задать снаружи…» заменяется рабочим приёмом.
 - **`examples/pid_regulator.takt` (0097) не трогается** — иной предмет.
 

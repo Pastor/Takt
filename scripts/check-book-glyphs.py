@@ -13,9 +13,10 @@
 
 Область — **то, что попадает в PDF**, не больше и не меньше:
 
-- `book/src/**/*.md`   — текст документа;
-- `book/src/**/*.takt` — примеры, вставляемые `{{#include}}` в блоки кода;
-- поля `title`/`authors`/`description` из `book/book.toml` — титульный лист.
+- `book/src/**/*.typ`  — текст документа (кроме шаблона и оглавления сборки:
+  `template.typ`/`main.typ` несут только код и комментарии, как Makefile);
+- `book/src/**/*.takt` — примеры, вставляемые `#example(read(…))` в блоки кода;
+- поля `doc-title`/`doc-authors`/`doc-description` шаблона — титульный лист.
 
 Прочие файлы `book/` не проверяются: они не рендерятся. Это не придирка —
 `book/Makefile` **уже** содержит `⚠` в комментарии, и проверка каталога целиком
@@ -34,16 +35,21 @@ import unicodedata
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BOOK_SRC = os.path.join(ROOT, "book", "src")
-BOOK_TOML = os.path.join(ROOT, "book", "book.toml")
+BOOK_TEMPLATE = os.path.join(ROOT, "book", "src", "template.typ")
+
+# Файлы сборки документа: код и комментарии, а не текст PDF. Исключены по той же
+# причине, по какой не проверяется `book/Makefile`, — он тоже несёт `⚠` в
+# комментарии, и проверка «всего каталога» дала бы ложный отказ.
+NOT_RENDERED = ("template.typ", "main.typ")
 CHARSET = os.path.join(ROOT, "scripts", "book-font-charset.txt")
 
 # Управляющие символы разметки: в PDF они не глифы, а разбиение текста.
 IGNORED = {"\n", "\r", "\t"}
 
-# Поля `book.toml`, попадающие на титульный лист. Файл берётся НЕ целиком:
-# его комментарии — такой же служебный текст, как в Makefile, и вправе
-# содержать любые символы.
-TOML_FIELDS = ("title", "authors", "description")
+# Поля шаблона, попадающие на титульный лист. Файл берётся НЕ целиком: его
+# комментарии — такой же служебный текст, как в Makefile, и вправе содержать
+# любые символы.
+TITLE_FIELDS = ("doc-title", "doc-authors", "doc-description")
 
 
 def load_charset(path=CHARSET):
@@ -78,10 +84,10 @@ def covered(codepoint, ranges):
 
 
 def book_font_family():
-    """Шрифт текста документа — из `book.toml`."""
-    with open(BOOK_TOML, encoding="utf-8") as handle:
+    """Шрифт текста документа — из шаблона (`set text(font: …)`)."""
+    with open(BOOK_TEMPLATE, encoding="utf-8") as handle:
         for line in handle:
-            match = re.match(r'\s*mainfont\s*=\s*"([^"]+)"', line)
+            match = re.search(r'set text\(font:\s*"([^"]+)"', line)
             if match:
                 return match.group(1)
     return None
@@ -92,20 +98,22 @@ def rendered_files():
     result = []
     for directory, _, names in os.walk(BOOK_SRC):
         for name in sorted(names):
-            if name.endswith((".md", ".takt")):
+            if name in NOT_RENDERED:
+                continue
+            if name.endswith((".typ", ".takt")):
                 result.append(os.path.join(directory, name))
     return sorted(result)
 
 
-def toml_title_lines():
-    """Строки `book.toml`, попадающие на титульный лист, с их номерами."""
+def title_lines():
+    """Строки шаблона, попадающие на титульный лист, с их номерами."""
     lines = []
-    with open(BOOK_TOML, encoding="utf-8") as handle:
+    with open(BOOK_TEMPLATE, encoding="utf-8") as handle:
         for number, line in enumerate(handle, start=1):
-            if line.lstrip().startswith("#"):
+            if line.lstrip().startswith("//"):
                 continue
-            for field in TOML_FIELDS:
-                if re.match(rf'\s*{field}\s*=', line):
+            for field in TITLE_FIELDS:
+                if re.match(rf'\s*#let\s+{field}\s*=', line):
                     lines.append((number, line.rstrip("\n")))
                     break
     return lines
@@ -133,8 +141,8 @@ def check(ranges, family):
     for path in rendered_files():
         with open(path, encoding="utf-8") as handle:
             scan_text(os.path.relpath(path, ROOT), handle.read(), ranges, problems)
-    for number, line in toml_title_lines():
-        scan_line("book/book.toml", number, line, ranges, problems)
+    for number, line in title_lines():
+        scan_line("book/src/template.typ", number, line, ranges, problems)
     return problems
 
 
@@ -189,7 +197,7 @@ def main():
     book_family = book_font_family()
     if book_family and snapshot_family and book_family != snapshot_family:
         sys.exit(
-            f"ОШИБКА: book.toml набирает документ шрифтом '{book_family}', а снимок\n"
+            f"ОШИБКА: шаблон набирает документ шрифтом '{book_family}', а снимок\n"
             f"scripts/book-font-charset.txt снят с '{snapshot_family}'. Пересоберите снимок:\n"
             "  python3 scripts/snapshot-book-font.py > scripts/book-font-charset.txt"
         )
@@ -204,7 +212,7 @@ def main():
         return 1
     print(
         f"Символы документа book/: проверено {len(rendered_files())} файлов "
-        f"+ титульные поля book.toml, символов вне шрифта нет."
+        f"+ титульные поля шаблона, символов вне шрифта нет."
     )
     return 0
 

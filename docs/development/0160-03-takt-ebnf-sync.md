@@ -17,7 +17,7 @@
 
 - `git rm Takt.ebnf`.
 - Три ссылки `README.md` перенаправлены на приложение
-  [`book/src/appendix-grammar/index.md`](../../book/src/appendix-grammar/index.md):
+  [`book/src/appendix-grammar/index.typ`](../../book/src/appendix-grammar/index.typ):
   раздел обзора синтаксиса, дерево репозитория (строка `Takt.ebnf` заменена на
   `book/`), раздел «Расширение языка» — там же названы правило 24 и новый гейт
   лексики, чтобы читатель, добавляющий конструкцию, видел обязанность документа.
@@ -32,7 +32,7 @@
 - `git ls-files Takt.ebnf` — пусто.
 - `grep -rn "Takt\.ebnf" README.md` — пусто.
 - `scripts/check-links.py` (правило 14) в предкоммите — битых ссылок нет:
-  относительный путь `book/src/appendix-grammar/index.md` из корня разрешается.
+  относительный путь `book/src/appendix-grammar/index.typ` из корня разрешается.
 - Полный `./scripts/precheck.sh` — зелёный.
 
 ⚠️ **Внешняя ссылка на файл в корне репозитория теперь даёт 404.** Потребителей

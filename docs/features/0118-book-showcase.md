@@ -11,7 +11,7 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0118-book-showcase.md`](../adr/0118-book-showcase.md) — **Accepted** (модель «дозатор» + кадры SVG для PDF) |
 | Анализ | [`docs/analyze/0118-book-showcase.md`](../analyze/0118-book-showcase.md) — прогоны генерации/симуляции/верификации |
-| Разработка | раздел `book/src/17-showcase/index.md` + `examples/dispenser.takt` + `images/*.svg` |
+| Разработка | раздел `book/src/17-showcase/index.typ` + `examples/dispenser.takt` + `images/*.svg` |
 | Тест-план | компиляция во все цели + verify + симуляция + сборка PDF (`xelatex`) + `precheck.sh` |
 | Отчёт о тестировании | см. «Итог (что сделано)» ниже |
 | Исправления | не потребовались |
@@ -34,7 +34,7 @@
 
 ## Итог (что сделано)
 
-- **Наполнен раздел `book/src/17-showcase/index.md`** (часть «Применение»,
+- **Наполнен раздел `book/src/17-showcase/index.typ`** (часть «Применение»,
   `SUMMARY.md`): модель `dispenser.takt`, генерация целей (+ фрагмент C с
   `assert` от инварианта), симуляция (трасса + два кадра SVG), верификация
   (`F Filling` держится; `F Ready` — нарушено под управляющей абстракцией,

@@ -36,7 +36,7 @@ ADR принял **Option B**: один конструктор на класс �
 | `takt-lang/src/semantic/mod.rs` | Метод `ExpressionNode::loc()` — переносом приватного `loc_of` симулятора |
 | `takt-sim/src/expression.rs` | `loc_of` удаляется, вызовы переводятся на общий метод |
 | `docs/diagnostics/README.md` | Строка `CC-022` (гейт кодов требует её) |
-| `book/src/appendix-errors/index.md` | Разбор `CC-022` (правило 25) + строка в таблице |
+| `book/src/appendix-errors/index.typ` | Разбор `CC-022` (правило 25) + строка в таблице |
 | `takt-lang/tests/targets/c_diagnostic_code_tests.rs` (новый) | Сторожа: коды на пробах + греп-сторож по `generator/` |
 
 ## Требования и проверяемые условия

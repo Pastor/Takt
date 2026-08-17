@@ -72,5 +72,5 @@
 
 ⚠️ **Что осталось непокрытым машиной** (записано в ADR как A2/A3/A4 и
 перенесено в кандидаты): правила EBNF сверяются человеком; списки лексики
-`book/src/02-lexical/index.md`, `book/keywords.lua`, `book/takt.kate.xml`
+`book/src/02-lexical/index.typ`, `book/keywords.lua`, `book/takt.kate.xml`
 остаются без сверки — там тот же класс, но иной формат файлов.

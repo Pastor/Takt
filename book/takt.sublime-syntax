@@ -1,0 +1,79 @@
+%YAML 1.2
+---
+# Подсветка синтаксиса языка Takt для документа book/ (фича 0240).
+#
+# Формат — Sublime Text syntax (его понимает syntect, движок подсветки Typst).
+# Подключается в book/src/template.typ опцией `#set raw(syntaxes: …)`; блоки
+# ```takt в разделах документа подсвечиваются согласно этому файлу.
+#
+# ⚠️ ЭТО ВТОРОЙ СПИСОК КЛЮЧЕВЫХ СЛОВ (первый — `book/takt-keywords.txt`, откуда
+# читает шаблон для инлайн-кода; третий — таблица `KEYWORDS` лексера
+# `takt-lang/src/parser/lexer.rs`). Три списка одного набора расходятся молча —
+# именно так `book/takt.kate.xml`, который этот файл заменил, отстал от лексера
+# на пять слов (`parameter`, `clock`, `at`, `after`, `every`) и никем не
+# проверялся. Сторож — `scripts/check-book-keywords.py`: сверяет оба списка
+# документа с лексером В ОБЕ СТОРОНЫ и падает, называя расхождение.
+name: Takt
+file_extensions: [takt]
+scope: source.takt
+
+contexts:
+  main:
+    # Комментарии: документационные `///`, строчные `//`, блочные `/* */`.
+    - match: //.*$
+      scope: comment.line.double-slash.takt
+    - match: /\*
+      scope: punctuation.definition.comment.begin.takt
+      push: block_comment
+    - match: '"'
+      scope: punctuation.definition.string.begin.takt
+      push: string
+
+    # Ключевые слова языка (набор сверяется с лексером — см. шапку).
+    - match: \b(address|always|as|assembly|at|after|break|clock|cond|const|continue|else|enter|enum|every|exit|extern|fn|for|formula|from|if|import|in|inout|invariant|loop|match|model|next|out|parameter|ref|return|start|state|struct|type|var|while)\b
+      scope: keyword.control.takt
+
+    # Имена встроенных типов. Ключевыми словами они НЕ являются (решение фичи
+    # 0201: `var bit: u8 := 1;` — законная запись), поэтому список отдельный и
+    # с лексером не сверяется.
+    - match: \b(bit|bool|duration|float|i8|i16|i32|i64|q|u8|u16|u32|u64)\b
+      scope: storage.type.takt
+    # Скобки в перечислении обязательны: список слов из правил подсветки
+    # вычитывает гейт `scripts/check-book-keywords.py`, и одиночное слово без
+    # скобок он не увидел бы — то есть проверял бы неполный набор.
+    - match: \b(sat)\b
+      scope: storage.modifier.takt
+
+    - match: \b(true|false)\b
+      scope: constant.language.takt
+
+    # Литералы: шестнадцатеричный, длительность (фича 0134), дробный, целый.
+    - match: \b0x[0-9a-fA-F_]+\b
+      scope: constant.numeric.hex.takt
+    - match: \b[0-9][0-9_]*(ns|us|ms|s|m|h)\b
+      scope: constant.numeric.duration.takt
+    - match: \b[0-9][0-9_]*\.[0-9][0-9_]*\b
+      scope: constant.numeric.float.takt
+    - match: \b[0-9][0-9_]*\b
+      scope: constant.numeric.integer.takt
+
+    # Адрес ячейки без имени (фича 0189): `#0x40020014.5`.
+    - match: '#(?=0x|[0-9])'
+      scope: keyword.operator.address.takt
+
+    - match: ':=|==|<=|>=|->|=>|&&|\|\||[-+*/%<>=!&|^~]'
+      scope: keyword.operator.takt
+
+  block_comment:
+    - meta_scope: comment.block.takt
+    - match: \*/
+      scope: punctuation.definition.comment.end.takt
+      pop: true
+
+  string:
+    - meta_scope: string.quoted.double.takt
+    - match: \\.
+      scope: constant.character.escape.takt
+    - match: '"'
+      scope: punctuation.definition.string.end.takt
+      pop: true

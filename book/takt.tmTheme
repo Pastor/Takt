@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Тема подсветки блоков кода документа book/ (фича 0240).
+
+  Формат — TextMate theme (его понимает syntect, движок подсветки Typst);
+  подключается в book/src/template.typ опцией `#set raw(theme: …)`.
+
+  Палитра повторяет `tango` из skylighting — движка подсветки, которым документ
+  собирался до перевода в Typst (`highlight-style = "tango"` в book.toml).
+  Так вид блоков кода в PDF остаётся прежним: ключевое слово — синее жирное,
+  тип — синее, число — синее насыщенное, строка — зелёная, комментарий —
+  коричневый наклонный.
+-->
+<plist version="1.0">
+<dict>
+  <key>name</key>
+  <string>Takt (tango)</string>
+  <key>settings</key>
+  <array>
+    <dict>
+      <key>settings</key>
+      <dict>
+        <key>background</key>
+        <string>#FFFFFF</string>
+        <key>foreground</key>
+        <string>#000000</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Keyword</string>
+      <key>scope</key>
+      <string>keyword, keyword.control, storage.modifier</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#204A87</string>
+        <key>fontStyle</key>
+        <string>bold</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Operator</string>
+      <key>scope</key>
+      <string>keyword.operator</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#CE5C00</string>
+        <key>fontStyle</key>
+        <string>bold</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Type</string>
+      <key>scope</key>
+      <string>storage.type, entity.name.type, support.type</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#204A87</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Number</string>
+      <key>scope</key>
+      <string>constant.numeric</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#0000CF</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Constant</string>
+      <key>scope</key>
+      <string>constant.language, constant.character</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#75507B</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>String</string>
+      <key>scope</key>
+      <string>string, string.quoted</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#4E9A06</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Comment</string>
+      <key>scope</key>
+      <string>comment</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#8F5902</string>
+        <key>fontStyle</key>
+        <string>italic</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Function</string>
+      <key>scope</key>
+      <string>entity.name.function, support.function</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>#000000</string>
+        <key>fontStyle</key>
+        <string>bold</string>
+      </dict>
+    </dict>
+  </array>
+  <key>uuid</key>
+  <string>8f5902ce-0240-4a87-b00c-7461746b7466</string>
+</dict>
+</plist>

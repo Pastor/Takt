@@ -2,7 +2,7 @@
 """check-book-keywords.py — лексика приложения «Грамматика» против кода (фича 0160).
 
 После фичи 0160 описание грамматики в проекте **одно**:
-`book/src/appendix-grammar/index.md` (корневой `Takt.ebnf` удалён — ADR 0160,
+`book/src/appendix-grammar/index.typ` (корневой `Takt.ebnf` удалён — ADR 0160,
 Option A). Единственность снимает расхождение двух описаний, но не защищает
 оставшееся от отставания: замер ADR показал, что приложение отстало на 16
 ключевых слов, восемь конструкций и позицию присваивания, — при этом ни один
@@ -20,7 +20,12 @@ Option A). Единственность снимает расхождение д
 - **P1** — знак в сводке пунктуации документа, которого нет среди терминалов
   грамматики (так дожил `-->`, изъятый фичей 0201);
 - **P2** — терминал-знак грамматики, которого нет в сводке документа (так
-  отсутствовали `=>` ветви `match` и `#` анонимного порта).
+  отсутствовали `=>` ветви `match` и `#` анонимного порта);
+- **H1…H4** — расхождение **списков подсветки** документа (фича 0240):
+  `book/takt-keywords.txt` (инлайн-код) и `book/takt.sublime-syntax` (блоки кода)
+  против лексера и друг против друга. Повод — замер: их предшественник
+  `book/takt.kate.xml` отстал от лексера на пять слов (`parameter`, `clock`,
+  `at`, `after`, `every`) и не проверялся ничем.
 
 Источники истины — `takt-lang/src/parser/lexer.rs` (таблица `KEYWORDS`) и
 extern-блок `takt-lang/src/grammar.lalrpop` (терминалы).
@@ -45,7 +50,9 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-APPENDIX = os.path.join(ROOT, "book", "src", "appendix-grammar", "index.md")
+APPENDIX = os.path.join(ROOT, "book", "src", "appendix-grammar", "index.typ")
+KEYWORD_LIST = os.path.join(ROOT, "book", "takt-keywords.txt")
+SYNTAX = os.path.join(ROOT, "book", "takt.sublime-syntax")
 LEXER = os.path.join(ROOT, "takt-lang", "src", "parser", "lexer.rs")
 GRAMMAR = os.path.join(ROOT, "takt-lang", "src", "grammar.lalrpop")
 
@@ -61,8 +68,18 @@ LTL_CONTEXTUAL = {"X", "F", "G", "U", "R", "LTL", "Guard"}
 # обещать лексему, которой нет (класс фичи 0201).
 PUNCT_EXCLUDED: set[str] = set()
 
-MARK_KEYWORDS = "**Ключевые слова:**"
-MARK_PUNCT = "**Операторы и пунктуация:**"
+MARK_KEYWORDS = "#strong[Ключевые слова:]"
+MARK_PUNCT = "#strong[Операторы и пунктуация:]"
+
+# Слово, выделяемое в документе намеренно, хотя ключевым словом языка оно не
+# является: имена стандартных блоков состояния и модификатор формата `q`. Список
+# живёт в секции `[extra]` файла подсветки — здесь только его роль в проверке.
+HIGHLIGHT_EXTRA_SECTION = "extra"
+
+# Ключевое слово лексера, которое подсветкой не выделяется намеренно: `_` в прозе
+# значит что угодно, и выделение давало бы ложные срабатывания (то же решение
+# было в прежнем фильтре `keywords.lua`).
+HIGHLIGHT_EXCLUDED = {"_"}
 
 
 def paragraphs(text):
@@ -132,7 +149,40 @@ def punctuation_terminals(terminals):
     return {t for t in terminals if not re.fullmatch(r"[A-Za-z_]+", t)}
 
 
-def check(doc_text, lexer_text, grammar_text):
+def highlight_sections(text):
+    """Секции файла `takt-keywords.txt` как словарь `имя → множество слов`."""
+    sections, name = {}, None
+    for line in text.split("\n"):
+        item = line.strip()
+        if not item or item.startswith("#"):
+            continue
+        if item.startswith("[") and item.endswith("]"):
+            name = item[1:-1]
+            sections[name] = set()
+            continue
+        if name is not None:
+            sections[name].add(item)
+    return sections
+
+
+def syntax_words(text):
+    """Слова из регулярок подсветки `takt.sublime-syntax`.
+
+    Берутся правила ключевых слов, константных литералов и модификатора формата —
+    те, что выделяются в блоках кода как элементы языка. Имена типов идут своим
+    правилом и с лексером не сверяются (ключевыми словами они не являются — фича
+    0201).
+    """
+    words = set()
+    for scope in ("keyword.control.takt", "constant.language.takt", "storage.modifier.takt"):
+        for match in re.finditer(
+            r"- match: \\b\(([^)]*)\)\\b\n\s*scope: " + re.escape(scope), text
+        ):
+            words.update(match.group(1).split("|"))
+    return words
+
+
+def check(doc_text, lexer_text, grammar_text, list_text=None, syntax_text=None):
     """Возвращает список находок `(класс, элемент, пояснение)`; пустой — гейт пройден."""
     problems = []
 
@@ -159,6 +209,40 @@ def check(doc_text, lexer_text, grammar_text):
     for sign in sorted(punct_code - punct_doc):
         problems.append(("P2", sign, "терминал грамматики отсутствует в сводке документа"))
 
+    if list_text is not None and syntax_text is not None:
+        problems += check_highlight(list_text, syntax_text, keywords_code)
+
+    return problems
+
+
+def check_highlight(list_text, syntax_text, keywords_code):
+    """Списки подсветки документа против лексера и друг против друга (фича 0240)."""
+    problems = []
+    sections = highlight_sections(list_text)
+    extra = sections.get(HIGHLIGHT_EXTRA_SECTION, set())
+    listed = sections.get("keywords", set()) | sections.get("constants", set())
+    if not listed:
+        sys.exit(
+            f"ОШИБКА: в {os.path.relpath(KEYWORD_LIST, ROOT)} нет секций "
+            "[keywords]/[constants] — гейт проверял бы пустое множество."
+        )
+    from_syntax = syntax_words(syntax_text)
+    if not from_syntax:
+        sys.exit(
+            f"ОШИБКА: в {os.path.relpath(SYNTAX, ROOT)} не найдены правила подсветки "
+            "ключевых слов — гейт проверял бы пустое множество."
+        )
+
+    expected = keywords_code - LTL_CONTEXTUAL - HIGHLIGHT_EXCLUDED
+    for word in sorted(expected - listed):
+        problems.append(("H1", word, "ключевое слово лексера не выделяется в тексте документа"))
+    for word in sorted(listed - keywords_code - extra):
+        problems.append(("H2", word, "документ выделяет слово, которого в лексере нет"))
+    for word in sorted(listed | extra) :
+        if word not in from_syntax:
+            problems.append(("H3", word, "слово выделяется в тексте, но не в блоках кода"))
+    for word in sorted(from_syntax - listed - extra):
+        problems.append(("H4", word, "блоки кода выделяют слово, которого нет в списке текста"))
     return problems
 
 
@@ -168,11 +252,15 @@ def report(problems):
         print(f"  [{kind}] `{item}` — {why}", file=sys.stderr)
     print(
         "\nПосле фичи 0160 описание грамматики в проекте одно —\n"
-        "book/src/appendix-grammar/index.md. Приведите его абзацы «Ключевые слова»\n"
+        "book/src/appendix-grammar/index.typ. Приведите его абзацы «Ключевые слова»\n"
         "и «Операторы и пунктуация» к языку (правило 24: языковая фича обязана\n"
         "пройти стадию «Документирование»). Контекстные слова LTL —\n"
         f"{' '.join(sorted(LTL_CONTEXTUAL))} — в список не вносятся: вне аннотации\n"
-        ": [LTL] … ; они обычные идентификаторы.",
+        ": [LTL] … ; они обычные идентификаторы.\n"
+        "Классы H1…H4 (фича 0240) говорят о ПОДСВЕТКЕ: списки\n"
+        "book/takt-keywords.txt (инлайн-код) и book/takt.sublime-syntax (блоки кода)\n"
+        "обязаны покрывать лексер и совпадать между собой; слово, выделяемое\n"
+        "намеренно без своего ключевого слова, объявляется в секции [extra].",
         file=sys.stderr,
     )
 
@@ -196,12 +284,26 @@ def self_test():
     grammar += '        ":=" => Token::ColonAssign,\n        "." => Token::Member,\n'
     grammar += '        "=>" => Token::FatArrow,\n        "as" => Token::As,\n    }\n}\n'
 
-    found = {(kind, item) for kind, item, _ in check(doc, lexer, grammar)}
+    # Списки подсветки: по одному расхождению каждого класса H (фича 0240).
+    # `while` есть в лексере и нет в списке (H1), `ref` есть в списке и нет в
+    # лексере пробы (H2), `always` выделяется в тексте и не выделяется в блоках
+    # (H3), `enter` — наоборот (H4).
+    keyword_list = "[keywords]\nas\nmodel\nref\nalways\n\n[types]\nbit\n\n[extra]\nalways\n"
+    syntax = (
+        "  main:\n"
+        "    - match: \\b(as|model|ref|enter)\\b\n      scope: keyword.control.takt\n"
+    )
+
+    found = {(kind, item) for kind, item, _ in check(doc, lexer, grammar, keyword_list, syntax)}
     expected = {
         ("K1", "while"),  # слово лексера мимо списка документа
         ("K2", "state"),  # слово документа мимо лексера
         ("P1", "-->"),    # знак документа мимо грамматики (реальный случай 0201)
         ("P2", "=>"),     # терминал грамматики мимо документа (реальный случай 0189)
+        ("H1", "while"),  # ключевое слово лексера не выделяется в тексте
+        ("H2", "ref"),    # выделяется слово, которого в лексере пробы нет
+        ("H3", "always"), # выделяется в тексте, но не в блоках кода
+        ("H4", "enter"),  # выделяется в блоках кода, но не в тексте
     }
     if found != expected:
         sys.exit(
@@ -217,7 +319,12 @@ def self_test():
         f"{MARK_KEYWORDS} `as` `model`\n`while`.\n\n"
         f"{MARK_PUNCT} присваивание `:=`; прочие `.` `=>`.\n"
     )
-    clean = check(clean_doc, lexer, grammar)
+    clean_list = "[keywords]\nas\nmodel\nwhile\n\n[types]\nbit\n\n[extra]\nenter\n"
+    clean_syntax = (
+        "  main:\n"
+        "    - match: \\b(as|model|while|enter)\\b\n      scope: keyword.control.takt\n"
+    )
+    clean = check(clean_doc, lexer, grammar, clean_list, clean_syntax)
     if clean:
         sys.exit(f"САМОПРОВЕРКА ПРОВАЛЕНА: согласованный вход дал находки: {clean}")
 
@@ -232,7 +339,7 @@ def self_test():
     if probe.returncode == 0:
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: документ без абзаца списка не дал ошибки")
 
-    print("  самопроверка гейта: ловушка взведена (4 класса ловятся, согласованный вход — нет)")
+    print("  самопроверка гейта: ловушка взведена (8 классов ловятся, согласованный вход — нет)")
 
 
 def self_test_empty():
@@ -252,19 +359,27 @@ def main():
         doc_text = open(APPENDIX, encoding="utf-8").read()
         lexer_text = open(LEXER, encoding="utf-8").read()
         grammar_text = open(GRAMMAR, encoding="utf-8").read()
+        list_text = open(KEYWORD_LIST, encoding="utf-8").read()
+        syntax_text = open(SYNTAX, encoding="utf-8").read()
     except OSError as error:
         sys.exit(f"ОШИБКА: не прочитать источник: {error}")
 
-    problems = check(doc_text, lexer_text, grammar_text)
+    problems = check(doc_text, lexer_text, grammar_text, list_text, syntax_text)
     if problems:
         report(problems)
         return 1
 
     keywords = doc_keywords(doc_text)
     punct = doc_punctuation(doc_text)
+    highlighted = highlight_sections(list_text)
     print(
         f"Лексика приложения «Грамматика»: {len(keywords)} ключевых слов "
         f"и {len(punct)} знаков сверены с лексером и грамматикой, расхождений нет."
+    )
+    print(
+        "Списки подсветки документа: "
+        f"{len(highlighted.get('keywords', ()))} ключевых слов и "
+        f"{len(highlighted.get('types', ()))} типов сверены с лексером, расхождений нет."
     )
     return 0
 
