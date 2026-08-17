@@ -2006,7 +2006,7 @@ cargo build --release --features lsp --bin takt-lsp   # только сборк�
 | Среда | Пакет | Подсветка | Статус |
 |-------|-------|-----------|--------|
 | Zed | `extensions/zed-lam` | через `takt-lsp` (semantic tokens) | v0.1.1 |
-| IntelliJ IDEA (и IDE на IntelliJ Platform) | `extensions/intellij-lam` | лексическая (офлайн, Community) + **семантическая** через LSP4IJ + `takt-lsp`; навигация к декларации и по `import`; **Rename** и **ссылка на файл `import`**; **Reformat Code** | фичи [0022](docs/features/0022-intellij-syntax-highlight.md), [0023](docs/features/0023-intellij-navigation-include.md), [0038](docs/features/0038-intellij-semantic-tokens.md), [0039](docs/features/0039-intellij-reformat.md), [0067](docs/features/0067-intellij-rename-psi-import.md) |
+| IntelliJ IDEA (и IDE на IntelliJ Platform) | `extensions/intellij-takt` | лексическая (офлайн, Community) + **семантическая** через LSP4IJ + `takt-lsp`; навигация к декларации и по `import`; **Rename** и **ссылка на файл `import`**; **Reformat Code** | фичи [0022](docs/features/0022-intellij-syntax-highlight.md), [0023](docs/features/0023-intellij-navigation-include.md), [0038](docs/features/0038-intellij-semantic-tokens.md), [0039](docs/features/0039-intellij-reformat.md), [0067](docs/features/0067-intellij-rename-psi-import.md) |
 | Любой LSP-клиент | `takt-lsp` | диагностика, hover, автодополнение, semantic tokens, **переход к декларации и к определению (в т.ч. в импортированный файл)**, **поиск использований**, **переименование** | стабильно |
 
 **F12 работает в любом клиенте** (фича
@@ -2077,7 +2077,7 @@ start Main = Motor;             // переход отсюда откроет en
   при переименовании/перемещении файла. Работают офлайн, без `takt-lsp`.
 
 Сборка/установка — см.
-[`extensions/intellij-lam/README.md`](extensions/intellij-takt/README.md).
+[`extensions/intellij-takt/README.md`](extensions/intellij-takt/README.md).
 
 ---
 

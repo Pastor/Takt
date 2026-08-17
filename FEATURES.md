@@ -49,7 +49,6 @@
 | [0219](docs/features/0219-mmap-conformance-cost.md) | Сверки через mmap стоят около 90 секунд каждая | — | прочее | 4 | СОЗДАНА |
 | [0220](docs/features/0220-c-gate-wextra.md) | Флаг -Wextra для гейта цели c: 38 предупреждений одного класса | — | прочее | 4 | СОЗДАНА |
 | [0221](docs/features/0221-lsp-state-invariant-symbol.md) | Панель структуры: инвариант состояния символом не становится | — | прочее | 4 | СОЗДАНА |
-| [0224](docs/features/0224-intellij-kotlin-upgrade.md) | Подъём Kotlin в плагине intellij-takt снимет ограничение на пусковой JDK | — | прочее | 4 | СОЗДАНА |
 | [0225](docs/features/0225-statement-module-size.md) | Модуль semantic/statement.rs — 999 строк при пределе 1000 | — | прочее | 4 | СОЗДАНА |
 | [0099](docs/features/0099-module-size-core.md) | Вынос оставшихся нарушителей размера модуля — ядро семантики (`tree`/`mod`/`type_inference`) + пришпиленный `lib` | — | прочее | — | ЗАМОРОЖЕНА |
 

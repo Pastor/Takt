@@ -19,7 +19,8 @@
 #
 #   --skip-build   не пересобирать плагин — взять готовый zip из distributions.
 #   --skip-tools   не переустанавливать takt-lsp/taktc/takt-sim.
-#   --jdk ПУТЬ     пусковой JDK для Gradle (иначе ищется JDK 17 автоматически).
+#   --jdk ПУТЬ     пусковой JDK для Gradle (иначе берётся текущий, а при его
+#                  непригодности ищется подходящий автоматически).
 #
 # ЗАЧЕМ ШАГ 1. Плагин и сервер `takt-lsp` — РАЗНЫЕ артефакты из одного репозитория,
 # и устаревает именно сервер: плагин переустанавливают, а бинарник в `~/.cargo/bin`
@@ -29,16 +30,17 @@
 # отстал на 13 минорных версий крейта). Чинить это переустановкой плагина
 # бесполезно — отсюда шаг.
 #
-# Пусковой JDK (фича 0159). Сборка идёт под тем JDK, на котором работает демон
-# Gradle, и это НЕ тот JDK, которым компилируется код (`jvmToolchain(21)` — его
-# Gradle скачивает сам). Замер 0159: пусковой ≤ 21 работает (17 проверен
-# прогоном), 25 ломает `compileKotlin` с `IllegalArgumentException`, 22–24 не
-# измерены. Поэтому перед сборкой скрипт выставляет `JAVA_HOME` на JDK 17:
+# Пусковой JDK (фича 0159, диапазон перезамерен фичей 0224). Сборка идёт под тем
+# JDK, на котором работает демон Gradle, и это НЕ тот JDK, которым компилируется
+# код (`jvmToolchain(21)` — его Gradle скачивает сам). Измерено прогоном
+# `./gradlew test`: работают 17 и 26; 27+ не проверялся (такого JDK нет). Прежняя
+# верхняя граница 21 снята вместе с причиной — подъёмом сборочной связки.
+# Поэтому скрипт больше НЕ ищет именно 17, а лишь следит за диапазоном:
 #   * `--jdk ПУТЬ` — берётся как есть (проверяется только наличие bin/javac);
-#   * иначе macOS — `/usr/libexec/java_home -v 17`, Linux — типовые каталоги
-#     (`/usr/lib/jvm/*17*`, SDKMAN, `/opt/java/*17*`);
-#   * уже выставленный `JAVA_HOME` версии 17 не трогается.
-# JDK 17 не найден — предупреждение, а не отказ: сборка идёт на текущем JDK
+#   * текущий JDK в диапазоне — не трогается вовсе;
+#   * иначе ищется подходящий (macOS — `/usr/libexec/java_home`, Linux —
+#     `/usr/lib/jvm/*`, SDKMAN, `/opt/java/*`).
+# Подходящий не найден — предупреждение, а не отказ: сборка идёт на текущем JDK
 # (запрещать неизмеренное — та же догадка, только с другим знаком).
 #
 # После установки RustRover нужно перезапустить (плагины подхватываются при
@@ -81,32 +83,46 @@ jdk_major() {
   "$1/bin/java" -version 2>&1 | sed -n '1s/.*version "\([0-9][0-9]*\).*/\1/p'
 }
 
-# Версия того java, что сейчас в PATH (для сообщения, когда JDK 17 не нашли).
+# Измеренный диапазон пускового JDK (фича 0224). Границы — в переменных, чтобы
+# проза сообщений и сама проверка брались из ОДНОГО значения: зашитое числом
+# «17» в тексте разъехалось бы с проверкой при следующем перезамере.
+JDK_MIN=17
+JDK_MAX=26
+
+# Версия того java, что сейчас в PATH (для сообщения, когда подходящий не нашли).
 current_major() {
   command -v java >/dev/null 2>&1 || return 1
   java -version 2>&1 | sed -n '1s/.*version "\([0-9][0-9]*\).*/\1/p'
 }
 
-# Первый найденный JDK 17 в типовых местах ОС. Каталог обязан быть JDK, а не
-# JRE (`bin/javac`), и обязан отчитаться версией 17: маска имени лжёт —
+# Годится ли мажорная версия: пусто/нечисло — нет.
+jdk_ok() {
+  case "${1:-}" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "$1" -ge "$JDK_MIN" ] && [ "$1" -le "$JDK_MAX" ]
+}
+
+# Первый JDK измеренного диапазона в типовых местах ОС. Каталог обязан быть JDK,
+# а не JRE (`bin/javac`), и обязан САМ отчитаться версией: маска имени лжёт —
 # `/usr/lib/jvm/java-17-openjdk` бывает симлинком на другую версию.
-find_jdk17() {
+find_jdk_in_range() {
   if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/libexec/java_home ]; then
-    _jh=$(/usr/libexec/java_home -v 17 2>/dev/null || true)
-    if [ -n "$_jh" ] && [ -x "$_jh/bin/javac" ]; then
+    _jh=$(/usr/libexec/java_home -v "$JDK_MIN" 2>/dev/null || true)
+    if [ -n "$_jh" ] && [ -x "$_jh/bin/javac" ] && jdk_ok "$(jdk_major "$_jh" 2>/dev/null || true)"; then
       echo "$_jh"
       return 0
     fi
   fi
   for _c in \
-    /usr/lib/jvm/*17* \
-    /usr/lib/jvm/*-17-* \
-    "$HOME"/.sdkman/candidates/java/17* \
-    /opt/java/*17* \
-    /Library/Java/JavaVirtualMachines/*17*/Contents/Home
+    /usr/lib/jvm/* \
+    "$HOME"/.sdkman/candidates/java/* \
+    /opt/java/* \
+    /Library/Java/JavaVirtualMachines/*/Contents/Home \
+    "$HOME"/Library/Java/JavaVirtualMachines/*/Contents/Home
   do
     [ -x "$_c/bin/javac" ] || continue
-    [ "$(jdk_major "$_c" 2>/dev/null || true)" = "17" ] || continue
+    jdk_ok "$(jdk_major "$_c" 2>/dev/null || true)" || continue
     echo "$_c"
     return 0
   done
@@ -121,14 +137,16 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
     }
     JAVA_HOME="$JDK_OPT"
     echo "==> Пусковой JDK: $JAVA_HOME (задан --jdk, версия $(jdk_major "$JAVA_HOME" 2>/dev/null || echo '?'))"
-  elif [ "$(jdk_major "${JAVA_HOME:-/nonexistent}" 2>/dev/null || true)" = "17" ]; then
-    echo "==> Пусковой JDK: $JAVA_HOME (JAVA_HOME уже указывает на 17)"
-  elif JDK17=$(find_jdk17); then
-    JAVA_HOME="$JDK17"
-    echo "==> Пусковой JDK: $JAVA_HOME (найден автоматически, версия 17)"
+  elif jdk_ok "$(jdk_major "${JAVA_HOME:-/nonexistent}" 2>/dev/null || true)"; then
+    echo "==> Пусковой JDK: $JAVA_HOME (JAVA_HOME годится, версия $(jdk_major "$JAVA_HOME"))"
+  elif jdk_ok "$(current_major 2>/dev/null || true)"; then
+    echo "==> Пусковой JDK: текущий из PATH (версия $(current_major)) — годится, не трогаю"
+  elif JDK_FOUND=$(find_jdk_in_range); then
+    JAVA_HOME="$JDK_FOUND"
+    echo "==> Пусковой JDK: $JAVA_HOME (найден автоматически, версия $(jdk_major "$JAVA_HOME"))"
   else
-    echo "!!  JDK 17 не найден; сборка пойдёт на текущем JDK (версия $(current_major || echo 'неизвестна'))." >&2
-    echo "    Замер фичи 0159: пусковой ≤ 21 работает, 25 ломает compileKotlin, 22–24 не измерены." >&2
+    echo "!!  JDK из диапазона $JDK_MIN…$JDK_MAX не найден; сборка пойдёт на текущем JDK (версия $(current_major || echo 'неизвестна'))." >&2
+    echo "    Измерено фичей 0224: работают $JDK_MIN и $JDK_MAX; выше не проверялось, ниже требует Gradle." >&2
     echo "    Свой JDK можно указать явно: --jdk /путь/к/jdk" >&2
   fi
   if [ -n "${JAVA_HOME:-}" ]; then
