@@ -62,7 +62,6 @@ void PidRegulatorPid_tick(PidRegulatorPid *model, PidRegulator *main) {
             model->meas = model->target;
             model->state = PID_REGULATOR_PID_DONE;
             break;
-            break;
         }
         case PID_REGULATOR_PID_END: {
             break;

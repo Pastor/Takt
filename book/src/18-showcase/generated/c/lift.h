@@ -6,19 +6,19 @@
 typedef struct Lift Lift;
 
 typedef enum {
-    LIFT_BRAKE = 0,
-    LIFT_DOORS_OPEN = 1,
-    LIFT_MOTOR_DOWN = 2,
-    LIFT_MOTOR_UP = 3,
+    LIFT_PORT_BRAKE = 0,
+    LIFT_PORT_DOORS_OPEN = 1,
+    LIFT_PORT_MOTOR_DOWN = 2,
+    LIFT_PORT_MOTOR_UP = 3,
 } Lift_Out_BitPort;
 
 typedef enum {
-    LIFT_AT_FLOOR = 0,
-    LIFT_CALL = 1,
+    LIFT_PORT_AT_FLOOR = 0,
+    LIFT_PORT_CALL = 1,
 } Lift_In_NumericPort;
 
 typedef enum {
-    LIFT_DISPLAY = 0,
+    LIFT_PORT_DISPLAY = 0,
 } Lift_Out_NumericPort;
 
 // NOTICE: Определение констант для модели lift (Lift)

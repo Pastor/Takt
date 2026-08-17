@@ -190,5 +190,6 @@
 | [0210](./0210-st-array-shared-and-index.md) | Массив как общая переменная в цели st; индекс-выражение | Accepted (A1+B1+C1) | фича 0210 |
 | [0211](./0211-c-missing-start-state-diagnostic.md) | Модель без состояний в реализации: отказ семантики `SE-106` | Accepted (Option B) | фича 0211 |
 | [0212](./0212-c-diagnostic-without-code.md) | Отказ цели `c` с кодом: воронки `CC-022` и `CC-023` | Accepted (Option B) | фича 0212 |
+| [0213](./0213-c-redundant-break.md) | Цель c печатает лишний break после безусловного перехода | Accepted (Option B) | фича 0213 |
 | [0240](./0240-book-typst.md) | Перевод документа book/ в формат Typst | Draft | фича 0240 |
 | [0241](./0241-precheck-speedup.md) | Ускорение предкоммита: конфигурации cargo, параллельный verilator, пути гейта | Accepted (Option B) | фича 0241 |

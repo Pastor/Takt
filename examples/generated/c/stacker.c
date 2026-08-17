@@ -75,7 +75,6 @@ void StackerCommandReceiver_tick(StackerCommandReceiver *model, Stacker *main) {
             (*main->write_bit)(STACKER_PORT_CMD_ACK, 0, main->userdata);
             model->state = STACKER_COMMAND_RECEIVER_TASK_ACTIVE;
             break;
-            break;
         }
         case STACKER_COMMAND_RECEIVER_TASK_ACTIVE: {
             if (!(main->busy)) {
@@ -330,7 +329,6 @@ void StackerMovementController_tick(StackerMovementController *model, Stacker *m
             (*main->write_numeric)(STACKER_PORT_CMD_TARGET_SECTION, CONST_STACKER_CHARGE_SECTION, main->userdata);
             (*main->write_bit)(STACKER_PORT_CMD_DONE, 0, main->userdata);
             model->state = STACKER_MOVEMENT_CONTROLLER_MOVEMENT_IDLE;
-            break;
             break;
         }
         case STACKER_MOVEMENT_CONTROLLER_WAITING_FORK_AT_CELL: {

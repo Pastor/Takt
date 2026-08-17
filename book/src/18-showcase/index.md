@@ -98,7 +98,7 @@ taktc compile -t plantuml lift.takt -o out/ # диаграмма состоян�
 Такт модели превращается в шаг целевого кода, а инвариант — в проверку. Фрагмент
 порождённого **C**: тело `_tick` начинается с `assert` инварианта `SafeMove`, а
 дальше идёт `switch` по состоянию. Видно, что положение берётся с **датчика**
-(`read_numeric(LIFT_AT_FLOOR)`), а не считается — движение прекращается по
+(`read_numeric(LIFT_PORT_AT_FLOOR)`), а не считается — движение прекращается по
 показанию датчика:
 
 ```c
@@ -108,12 +108,12 @@ void Lift_tick(Lift *model) {
     ...
     switch (model->state) {
         case LIFT_GOING_UP: {
-            (*model->write_numeric)(LIFT_DISPLAY,
-                (*model->read_numeric)(LIFT_AT_FLOOR, model->userdata), model->userdata);
-            if ((*model->read_numeric)(LIFT_AT_FLOOR, model->userdata)
-                    >= (*model->read_numeric)(LIFT_CALL, model->userdata)) {
+            (*model->write_numeric)(LIFT_PORT_DISPLAY,
+                (*model->read_numeric)(LIFT_PORT_AT_FLOOR, model->userdata), model->userdata);
+            if ((*model->read_numeric)(LIFT_PORT_AT_FLOOR, model->userdata)
+                    >= (*model->read_numeric)(LIFT_PORT_CALL, model->userdata)) {
                 model->moving = 0;
-                (*model->write_bit)(LIFT_BRAKE, 1, model->userdata);
+                (*model->write_bit)(LIFT_PORT_BRAKE, 1, model->userdata);
                 model->state = LIFT_STOPPING;
                 break;
             }
