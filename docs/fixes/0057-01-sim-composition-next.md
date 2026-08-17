@@ -76,7 +76,7 @@
    исправлено там же.
 
 Тройная сверка sim ≡ C ≡ SV закрыта на обеих формах (`A + B` и `A + (B | C)`),
-значенческие тесты — `takt-sim/tests/sequential_composition_tests.rs`.
+значенческие тесты — `takt-sim/tests/sim/sequential_composition_tests.rs`.
 
 ⚠️ Исключение `extend_complex` из `examples_scenario_tests` **не снято**: его
 причина — не этот дефект, а отсутствие заявленного сценария у стенда синтаксиса

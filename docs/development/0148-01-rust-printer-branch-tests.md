@@ -36,7 +36,7 @@
 
 ### Тесты
 
-Новый `takt-lang/tests/rust_printers_tests.rs` — 27 тестов по ветвям:
+Новый `takt-lang/tests/targets/rust_printers_tests.rs` — 27 тестов по ветвям:
 
 | Группа | Что закрыто |
 |---|---|

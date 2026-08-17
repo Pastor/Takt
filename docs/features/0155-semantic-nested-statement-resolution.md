@@ -78,7 +78,7 @@ inline-`Guard`), пробрасывают её через `?`. Устаревш�
 версия языка не поднималась (синтаксис и семантика не менялись — изменилась
 полнота проверки). Крейт `takt-lang` `0.19.0 → 0.20.0`.
 
-**Сторожа:** 12 тестов `takt-lang/tests/nested_statement_resolution_tests.rs`
+**Сторожа:** 12 тестов `takt-lang/tests/semantic/nested_statement_resolution_tests.rs`
 (включая «валидное тело доезжает до порождённого C» и доставку диагностики в
 LSP) + 2 в `deep_nesting_tests.rs`; фикстуры — `tests/data/nested0155/`.
 Взведённость ловушки доказана мутацией. `./scripts/precheck.sh` — зелёный.

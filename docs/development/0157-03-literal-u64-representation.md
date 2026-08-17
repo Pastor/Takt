@@ -47,7 +47,7 @@
 
 - Юнит-тесты в самом модуле: обычные значения печатаются голыми (включая
   `i64::MIN`), выше границы — с `ULL`.
-- `takt-lang/tests/wide_literal_tests.rs`:
+- `takt-lang/tests/targets/wide_literal_tests.rs`:
   - `c_prints_unsigned_suffix_beyond_signed_range` — эмиссия;
   - `c_keeps_narrow_literals_bare` — обратная совместимость (суффикса нет там,
     где он не нужен);

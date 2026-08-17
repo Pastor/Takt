@@ -48,7 +48,7 @@ cargo test --all-features --test empty_enum_tests   # 9 тестов
 ./scripts/precheck.sh
 ```
 
-Сторож — `takt-lang/tests/empty_enum_tests.rs` (фикстуры
+Сторож — `takt-lang/tests/semantic/empty_enum_tests.rs` (фикстуры
 `tests/data/semantic/invalid/empty_enum.takt` и `empty_enum_many.takt`):
 
 | Тест | Условие анализа |

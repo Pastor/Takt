@@ -75,9 +75,9 @@
 
 - Фикстуры: `takt-sim/tests/data/eval/conformance_duration_value.takt`
   (значения), `conformance_dynamic_dwell.takt` (вычисляемая выдержка).
-- Тесты: `takt-sim/tests/conformance_c_duration_tests.rs`,
-  `conformance_rust_duration_tests.rs`, `takt-lang/tests/duration_targets_tests.rs`,
+- Тесты: `takt-sim/tests/conformance/conformance_c_duration_tests.rs`,
+  `conformance_rust_duration_tests.rs`, `takt-lang/tests/targets/duration_targets_tests.rs`,
   `takt-lang/src/semantic/condition/after_const.rs` (модуль `tests`, 24 случая),
-  `takt-lang/tests/time_literal_tests.rs`.
+  `takt-lang/tests/syntax/time_literal_tests.rs`.
 - Окружение: пин толчейна `1.97.1`, macOS (Darwin 25.5.0);
   `cargo test --all-features -- --test-threads=1`, `./scripts/precheck.sh`.

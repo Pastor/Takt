@@ -42,6 +42,6 @@
 Фикстура сверки — `takt-sim/tests/data/eval/conformance_model_implement.takt`
 (тело **накапливающее**: на идемпотентном пропуск и двойное исполнение
 неразличимы). Остальные фикстуры — строками в
-`takt-lang/tests/model_implement_form_tests.rs`.
+`takt-lang/tests/semantic/model_implement_form_tests.rs`.
 
 Окружение: macOS (Darwin 25.5.0), толчейн `1.97.1`, `cc`; `./scripts/precheck.sh`.

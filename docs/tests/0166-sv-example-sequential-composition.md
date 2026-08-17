@@ -61,7 +61,7 @@
 - `examples/batch_cycle.takt` — сам пример.
 - `examples/generated/sv/tb/batch_cycle_tb.sv` — тестбенч (руками).
 - `examples/generated/c/batch_cycle_main.c` — харнесс (руками).
-- `takt-sim/tests/examples_scenario_tests.rs` — контракт сценария.
+- `takt-sim/tests/sim/examples_scenario_tests.rs` — контракт сценария.
 - Инструменты: `verilator`, `yosys`, `cc`, `iec2c`, `rustc`/`clippy`. При
   отсутствии `verilator`/`yosys`/`iec2c` соответствующие гейты **мягко
   пропускаются** локально и обязательны в CI (`PRECHECK_STRICT=1`).

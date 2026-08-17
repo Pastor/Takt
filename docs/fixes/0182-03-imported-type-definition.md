@@ -54,7 +54,7 @@ pub enums:   BTreeMap<String, EnumDefinitionNode>,    // варианты
 
 ## Проверки
 
-- `takt-lang/tests/import_type_definition_tests.rs` — три сторожа: структура,
+- `takt-lang/tests/semantic/import_type_definition_tests.rs` — три сторожа: структура,
   перечисление, псевдоним. ⚠️ Проверяется **вывод**, а не карта семантики:
   наличие `typedef struct Pid` в порождённом заголовке. Юнит-тест на карту
   прошёл бы и в тот день, когда карту наполнили, а генератор научить забыли.

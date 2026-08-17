@@ -83,10 +83,10 @@ two's-complement перенос, как `wrap(_, W)`», тогда как код
 
 | Проверка | Файл |
 |---|---|
-| эталон ≡ цель `c` | `takt-sim/tests/conformance_c_tests.rs::fixed_wrap_to_width_matches_generated_c` |
-| эталон ≡ цель `rust` | `takt-sim/tests/conformance_rust_tests.rs::fixed_wrap_to_width_matches_generated_rust` |
-| эталон ≡ цель `st` (через `iec2c` → C) | `takt-sim/tests/conformance_st_tests.rs::fixed_wrap_to_width_matches_generated_st` |
-| эталон ≡ цель `sv` (через verilator) | `takt-sim/tests/conformance_sv_tests.rs::fixed_wrap_to_width_matches_generated_sv` |
+| эталон ≡ цель `c` | `takt-sim/tests/conformance/conformance_c_tests.rs::fixed_wrap_to_width_matches_generated_c` |
+| эталон ≡ цель `rust` | `takt-sim/tests/conformance/conformance_rust_tests.rs::fixed_wrap_to_width_matches_generated_rust` |
+| эталон ≡ цель `st` (через `iec2c` → C) | `takt-sim/tests/conformance/conformance_st_tests.rs::fixed_wrap_to_width_matches_generated_st` |
+| эталон ≡ цель `sv` (через verilator) | `takt-sim/tests/conformance/conformance_sv_tests.rs::fixed_wrap_to_width_matches_generated_sv` |
 
 Фикстуры: `takt-sim/tests/data/eval/conformance_fixed_wrap_w12.takt` (наблюдение
 поля) и `conformance_fixed_probe_w12.takt` (наблюдение через выходной

@@ -1,0 +1,45 @@
+//! Сверки эталона с целями — ОДНА тестовая цель на все conformance-наборы
+//! (фича 0244, задача 0244-02).
+//!
+//! # Зачем агрегатор
+//!
+//! Замер ADR 0244: первый запуск свежесобранного тестового бинарника стоит
+//! 0.60 с при загрузке ЦП 2 % (проверка кода ядром, чтение с диска, работа
+//! динамического загрузчика), повторный — 0.033 с. Бинарников было 147, и
+//! каждый в гейте запускается впервые: ≈ 88 с из 152.9 с стадии `cargo test`
+//! уходило только на это. Здесь 24 набора сведены в один бинарник.
+//!
+//! ⚠️ **Файлы не слиты** — каждый набор остаётся своим файлом и своим модулем:
+//! правило размера модуля (`docs/CODE.md`) не задевается, а имя теста получает
+//! префикс модуля и остаётся различимым:
+//! `cargo test --test conformance conformance_c_tests::`.
+//!
+//! ⚠️ **Двоеточие из имени потока вычищается** там, где имя идёт в путь
+//! временного каталога (инвариант фичи 0190: каталог уникален по тесту). После
+//! слияния имя потока — `модуль::тест`, и без замены `:` каталог получил бы
+//! двоеточие в пути.
+
+mod conformance_anon_tests;
+mod conformance_c_arrays_tests;
+mod conformance_c_bitvec_tests;
+mod conformance_c_duration_tests;
+mod conformance_c_every_tests;
+mod conformance_c_import_tests;
+mod conformance_c_tests;
+mod conformance_c_time_tests;
+mod conformance_c_unconditional_edge_tests;
+mod conformance_const_param_tests;
+mod conformance_float_modes_tests;
+mod conformance_param_apply_tests;
+mod conformance_param_modes_tests;
+mod conformance_port_init_tests;
+mod conformance_rust_duration_tests;
+mod conformance_rust_tests;
+mod conformance_shared_const_tests;
+mod conformance_st_every_tests;
+mod conformance_st_per_tick_tests;
+mod conformance_st_tests;
+mod conformance_struct_tests;
+mod conformance_sv_mmio_tests;
+mod conformance_sv_tests;
+mod conformance_sv_time_tests;

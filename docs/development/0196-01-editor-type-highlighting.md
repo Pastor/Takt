@@ -58,7 +58,7 @@ cargo test --all-features -- --test-threads=1
 ./scripts/precheck.sh
 ```
 
-`takt-lang/tests/type_highlighting_tests.rs` — 7 тестов, по критериям приёмки
+`takt-lang/tests/lsp/type_highlighting_tests.rs` — 7 тестов, по критериям приёмки
 ADR: `q(8, 8)` тип (A1), псевдоним тип в объявлении и в ссылке (A2), переменная
 с именем типа **не** тип (A3), тип внутри массива (A4), тип параметра функции
 (A5), запасной путь на битом входе (A6). Первым идёт **зонд**

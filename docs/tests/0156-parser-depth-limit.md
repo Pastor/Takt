@@ -65,8 +65,8 @@
   Второй класс — причина, по которой счётчик в лексере был отвергнут (ADR).
 - Окружение: `cargo test -- --test-threads=1`, сборка debug (кадры крупнее,
   потолки ниже — консервативно); отдельные проверки поднимают поток с 2 МиБ.
-- Файлы: `takt-lang/tests/parse_depth_tests.rs` (T1–T6, T9, T10),
-  `takt-lang/tests/deep_nesting_tests.rs` (T7), юнит-тесты
+- Файлы: `takt-lang/tests/syntax/parse_depth_tests.rs` (T1–T6, T9, T10),
+  `takt-lang/tests/semantic/deep_nesting_tests.rs` (T7), юнит-тесты
   `takt-lang/src/parser/depth/mod.rs` (T11), мутации — вручную (T13, T14).
 
 ## Примеры и контрпримеры (правило 16)

@@ -37,9 +37,9 @@
 
 ## Тестовые данные и окружение
 
-- `takt-lang/tests/port_direction_tests.rs` (T1–T8) — через
+- `takt-lang/tests/semantic/port_direction_tests.rs` (T1–T8) — через
   `collect_compile_diagnostics`.
-- `takt-lang/tests/sv_tick_read_tests.rs` (T10) — через `compile_to_sv` во
+- `takt-lang/tests/targets/sv_tick_read_tests.rs` (T10) — через `compile_to_sv` во
   временный каталог.
 - `./scripts/precheck.sh` (T9).
 

@@ -68,7 +68,7 @@ start S {
 
 Входы порождаются в тестах (`"(".repeat(depth)`), файлов-фикстур не требуется.
 Юнит-тесты механизма — в `takt-lang/src/semantic/validate/depth.rs`,
-интеграционные — в `takt-lang/tests/deep_nesting_tests.rs`. Сквозная проба A9 —
+интеграционные — в `takt-lang/tests/semantic/deep_nesting_tests.rs`. Сквозная проба A9 —
 через собранные `taktc` и `takt-sim`. Окружение — пин толчейна `1.97.1`
 (фича 0137).
 

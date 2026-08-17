@@ -75,7 +75,7 @@ cargo test --test conformance_const_param_tests -- --test-threads=1 # 6 (takt-si
 ```
 
 **Сверка с эталоном — главный сторож задачи.**
-`takt-sim/tests/conformance_const_param_tests.rs`: та же функция вычисляется
+`takt-sim/tests/conformance/conformance_const_param_tests.rs`: та же функция вычисляется
 компилятором и исполняется симулятором, значения сравниваются. Проверено
 **мутацией**: `wrapping_div(b) + 1` в вычислителе → «компилятор и симулятор
 разошлись на 'compute(10)': 5 против 4». Покрыты арифметика, деление с остатком,
@@ -86,7 +86,7 @@ cargo test --test conformance_const_param_tests -- --test-threads=1 # 6 (takt-si
 может — зависимость направлена `takt-sim → takt-lang`. Такие пары в проекте
 расходятся молча (уроки 0042 и 0090).
 
-`takt-lang/tests/const_eval_tests.rs` — значения (не «нет ошибки») и **причины
+`takt-lang/tests/semantic/const_eval_tests.rs` — значения (не «нет ошибки») и **причины
 отказов**: переменная, порт, `extern fn`, незавершаемость, цикл определений,
 дробная арифметика, смешение длительности с числом.
 

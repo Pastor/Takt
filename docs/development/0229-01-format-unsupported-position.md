@@ -44,7 +44,7 @@ dialect: Some(StringLiteral { loc: Source(0, 62, 67), unicode: false, string: "x
 
 ## Проверки
 
-`takt-lang/tests/format_unsupported_tests.rs` — 5 тестов:
+`takt-lang/tests/syntax/format_unsupported_tests.rs` — 5 тестов:
 
 | Тест | Что держит |
 |---|---|

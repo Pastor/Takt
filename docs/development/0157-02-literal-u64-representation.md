@@ -65,7 +65,7 @@
 
 ## Проверки
 
-- `takt-lang/tests/literal_range_tests.rs` — 7 тестов через
+- `takt-lang/tests/semantic/literal_range_tests.rs` — 7 тестов через
   `collect_compile_diagnostics` (вход CLI и LSP): инициализатор беззнакового и
   знакового типа, присваивание в теле, содержание сообщения, **крайние значения
   диапазона принимаются** (сторож против «сузили лишнего», включая `u64::MAX`,

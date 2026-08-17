@@ -39,7 +39,7 @@
 Замер после правки: `examples/` — **0**, примеры документа — **0**, фикстуры —
 **6** (настоящие: арифметика и `[bit;8]` в позиции условия).
 
-`takt-lang/tests/implicit_bool_delivery_tests.rs` — 5 тестов:
+`takt-lang/tests/semantic/implicit_bool_delivery_tests.rs` — 5 тестов:
 
 | Тест | Что держит |
 |---|---|

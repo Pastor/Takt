@@ -59,7 +59,7 @@ cargo test --all-features
 ./scripts/precheck.sh
 ```
 
-Сторож — `takt-lang/tests/generator_warnings_tests.rs`:
+Сторож — `takt-lang/tests/targets/generator_warnings_tests.rs`:
 
 | Тест | Условие анализа |
 |---|---|

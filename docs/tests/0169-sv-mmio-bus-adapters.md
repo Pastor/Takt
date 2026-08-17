@@ -57,7 +57,7 @@
 
 ## Тестовые данные и окружение
 
-- Сторож формы: `takt-lang/tests/sv_apb_adapter_tests.rs` (7 тестов).
+- Сторож формы: `takt-lang/tests/targets/sv_apb_adapter_tests.rs` (7 тестов).
 - Сторож поведения: `examples/generated/sv-mmio/tb/stacker_apb_tb.sv`
   (рукописный, решение 0045-07), прогоняется гейтом `precheck.sh`.
 - Команды:

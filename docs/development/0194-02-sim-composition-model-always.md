@@ -13,7 +13,7 @@
 
 ## Что сделано
 
-**Значенческие тесты** — `takt-sim/tests/composition_model_always_tests.rs`
+**Значенческие тесты** — `takt-sim/tests/sim/composition_model_always_tests.rs`
 (4 теста, тело **накапливающее**: `n := n + 1`):
 
 | Тест | Что доказывает |

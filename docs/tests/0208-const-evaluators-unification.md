@@ -42,6 +42,6 @@
 
 ## Тестовые данные и окружение
 
-`takt-lang/tests/const_int_ops_shared_tests.rs`,
+`takt-lang/tests/semantic/const_int_ops_shared_tests.rs`,
 юнит-тесты `takt-lang/src/semantic/const_eval/int_ops.rs`.
 Толчейн `1.97.1`, macOS 25.5.0.

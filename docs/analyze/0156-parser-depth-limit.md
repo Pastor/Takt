@@ -83,10 +83,10 @@
 
 | # | Критерий | Способ проверки |
 |---|---|---|
-| A1 | `taktc fmt` на 3000 вложенных скобок и на сумме 3000 слагаемых даёт `SY-005`, не падает | интеграционный тест `takt-lang/tests/parse_depth_tests.rs` + ручной прогон CLI |
+| A1 | `taktc fmt` на 3000 вложенных скобок и на сумме 3000 слагаемых даёт `SY-005`, не падает | интеграционный тест `takt-lang/tests/syntax/parse_depth_tests.rs` + ручной прогон CLI |
 | A2 | То же для `compile`, `verify`, `takt-sim` и `lsp::formatting_edits` | тест, вызывающий каждый путь; поток с 2 МиБ стека (`thread::Builder::stack_size`) |
 | A3 | Ввод глубины ≈ 200 000 отвергается и не роняет процесс (R3) | тест в потоке 2 МиБ: `parse` → `Err(SY-005)`, процесс жив |
-| A4 | Глубина 33…64 даёт `SE-062`, глубина > 64 — `SY-005` (R4) | `takt-lang/tests/deep_nesting_tests.rs` (правится) + новый тест |
+| A4 | Глубина 33…64 даёт `SE-062`, глубина > 64 — `SY-005` (R4) | `takt-lang/tests/semantic/deep_nesting_tests.rs` (правится) + новый тест |
 | A5 | `MAX_NESTING_DEPTH < MAX_PARSE_DEPTH` | юнит-тест-сторож рядом с константой |
 | A6 | Разбор скобок не квадратичен: 20 000 скобок разбираются и утилизируются (R5) | тест на время/факт прохода в потоке 8 МиБ |
 | A7 | `examples/generated/` не изменился; `precheck.sh` зелёный (R6) | `git diff --stat examples/generated` + прогон предкоммита |
@@ -140,7 +140,7 @@ IntelliJ/Zed правок **не требуют**.
 
 ## Влияние на существующие тесты
 
-`takt-lang/tests/deep_nesting_tests.rs` частично покраснеет **по замыслу**:
+`takt-lang/tests/semantic/deep_nesting_tests.rs` частично покраснеет **по замыслу**:
 сценарии на глубине 300 (`deep_nesting_that_used_to_crash_is_diagnosed`,
 `deep_nesting_in_expression_is_diagnosed_too`, `diagnostic_names_the_limit`) и на
 60 вложенных `if` (`deep_statement_nesting_is_diagnosed`) теперь отвергаются

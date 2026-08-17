@@ -66,7 +66,7 @@
 | Что | Где |
 |---|---|
 | Фикстуры | `takt-lang/tests/data/formula0203/*.takt` (13 файлов) |
-| Сторож | `takt-lang/tests/formula_validation_tests.rs` (14 тестов) |
+| Сторож | `takt-lang/tests/semantic/formula_validation_tests.rs` (14 тестов) |
 | Корпус | `examples/`, `takt-lang/tests/data`, `takt-sim/tests/data` |
 | Гейты | `./scripts/precheck.sh` (сборка целей, детерминизм, размер модулей, документ) |
 

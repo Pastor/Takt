@@ -52,7 +52,7 @@ cargo пересобирает его целиком при изменении �
 | Зависимости `parser/` от остального крейта | **одна**: `const _: () = assert!(semantic::validate::depth::MAX_NESTING_DEPTH < MAX_PARSE_DEPTH)` (инвариант 0156) |
 | Зависимости `parser/` наружу | только `crate::diagnostics` (`Location`, `Diagnostic`) |
 | Зависимости `diagnostics/` от кого-либо в крейте | **нет** (листовой модуль) |
-| Гейты и тесты, знающие пути `src/parser`/`src/grammar.lalrpop` | 3: `scripts/check-exhaustive-nodes.sh`, `scripts/check-book-keywords.py`, `takt-lang/tests/dead_lexeme_tests.rs` |
+| Гейты и тесты, знающие пути `src/parser`/`src/grammar.lalrpop` | 3: `scripts/check-exhaustive-nodes.sh`, `scripts/check-book-keywords.py`, `takt-lang/tests/syntax/dead_lexeme_tests.rs` |
 
 То есть вынос уводит из монолитной единицы компиляции ≈ 72 500 строк из
 ≈ 150 500 — и именно ту половину, что порождена машиной (таблицы LR — тяжёлые

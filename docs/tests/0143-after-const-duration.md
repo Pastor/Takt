@@ -78,7 +78,7 @@
 
 - Юнит-тесты слоя — `takt-lang/src/semantic/condition/after_const.rs` (модуль `tests`,
   22 случая: T1–T22).
-- Интеграционные — `takt-lang/tests/after_const_duration_tests.rs` (T23–T31;
+- Интеграционные — `takt-lang/tests/semantic/after_const_duration_tests.rs` (T23–T31;
   секция `editor` под `#[cfg(feature = "lsp")]`).
 - Пример документа — `book/src/12-time/examples/fan.takt` (T34).
 - Пробы вживую — модели в скратчпаде сессии (T32 и тексты диагностик для

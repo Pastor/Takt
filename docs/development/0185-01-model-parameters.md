@@ -91,7 +91,7 @@ cargo test --test model_parameter_tests -- --test-threads=1   # 11 тестов
 ./scripts/precheck.sh                                          # зелёный, код 0
 ```
 
-`takt-lang/tests/model_parameter_tests.rs` — 11 проверок:
+`takt-lang/tests/semantic/model_parameter_tests.rs` — 11 проверок:
 
 | Что | Проверка |
 |---|---|

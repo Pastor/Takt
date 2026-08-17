@@ -80,7 +80,7 @@ Rust (`a == b | c` — `1` в C, `false` в Rust) **компилируется �
 
 ## Decision
 
-Принимается **Option A**: `takt-lang/tests/rust_printers_tests.rs`, 27 тестов по
+Принимается **Option A**: `takt-lang/tests/targets/rust_printers_tests.rs`, 27 тестов по
 ветвям — сравнения и логика условий, скобки, перечисление, массив, бит, вызовы
 функций, операторы (`if`/`while`/`loop`/`for`), обёртка переполнения,
 fixed-point, порты, а также **границы**: две конструкции, на которых цель

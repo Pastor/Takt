@@ -20,7 +20,7 @@ CLI, LSP-идентичности (`ServerInfo.name`, `source` диагност�
   бинарника ДОСЛОВНО** (дефис **не** заменяется на подчёркивание, вопреки первой
   догадке): `CARGO_BIN_EXE_lamc`→`CARGO_BIN_EXE_taktc` (3 теста `takt-lang/tests`),
   `CARGO_BIN_EXE_simulation`→**`CARGO_BIN_EXE_takt-sim`** (с дефисом!) в
-  `takt-sim/tests/diagnostics_tests.rs`. Первый прогон с `_takt_sim` дал
+  `takt-sim/tests/sim/diagnostics_tests.rs`. Первый прогон с `_takt_sim` дал
   `environment variable not defined at compile time` — Cargo определяет её как
   `CARGO_BIN_EXE_takt-sim`. Без верного имени тест не компилируется (E-101).
 - ⚠️ **Функциональная ссылка на файл:** `tests/lsp_goto_tests.rs:220` читает

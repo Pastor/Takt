@@ -45,7 +45,7 @@ ADR принял **Option A**: изъять пять мёртвых лексем
 | `extensions/intellij-takt/.../psi/TaktTokenTypes.kt` | `"string"`, `"template"` в `KEYWORDS` |
 
 **Тесты с жёсткими списками** (покраснеют — правка есть часть работы):
-`takt-lang/tests/lexer_tests.rs` (`is_keyword_returns_true_for_keywords`
+`takt-lang/tests/syntax/lexer_tests.rs` (`is_keyword_returns_true_for_keywords`
 содержит `string`, `template`; `is_keyword_returns_false_for_identifiers`
 содержит `pragma` — эта запись **теряет смысл**, потому что вариант токена
 исчезает),

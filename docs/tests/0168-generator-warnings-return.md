@@ -60,7 +60,7 @@
 
 ## Тестовые данные и окружение
 
-- Сторож: `takt-lang/tests/generator_warnings_tests.rs`.
+- Сторож: `takt-lang/tests/targets/generator_warnings_tests.rs`.
 - Пробы CLI: прогон `taktc compile` с `--quiet` и без — на входах с `ST-022`,
   `ST-009`, `SV-009` (цели `st`, `sv`, `sv-mmio`).
 - Команды:

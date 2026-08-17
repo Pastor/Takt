@@ -415,3 +415,4 @@
 | 0241-01 | 0241 | Ускорение предкоммита | [0241-01-precheck-speedup.md](0241-01-precheck-speedup.md) |
 | 0213-01 | 0213 | Цель c печатает лишний break после безусловного перехода | [0213-01-c-redundant-break.md](0213-01-c-redundant-break.md) |
 | 0244-01 | 0244 | Отладочная информация тестовых целей — line-tables-only | [0244-01-test-target-build-cost.md](0244-01-test-target-build-cost.md) |
+| 0244-02 | 0244 | Слияние 147 тестовых целей в 12 | [0244-02-test-target-build-cost.md](0244-02-test-target-build-cost.md) |

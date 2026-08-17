@@ -59,12 +59,12 @@
 
 ## Тестовые данные и окружение
 
-- `takt-sim/tests/sequential_composition_tests.rs` — новый файл значенческих
+- `takt-sim/tests/sim/sequential_composition_tests.rs` — новый файл значенческих
   тестов (T1–T4, T8–T10).
-- `takt-sim/tests/conformance_sv_tests.rs` — расширение существующих
+- `takt-sim/tests/conformance/conformance_sv_tests.rs` — расширение существующих
   `sequential_composition_matches_generated_c` и
   `parallel_step_inside_concatenation_matches_generated_c` до тройных (T6, T7).
-- `takt-sim/tests/examples_scenario_tests.rs`, `scripts/run_simulations.sh` —
+- `takt-sim/tests/sim/examples_scenario_tests.rs`, `scripts/run_simulations.sh` —
   регресс корпуса (T11).
 - Инструменты: `cc` (эталон C), `verilator` (RTL). При их отсутствии сверки
   **мягко пропускаются** локально и обязательны в CI (`PRECHECK_STRICT=1`) —

@@ -61,7 +61,7 @@ cargo test --all-features
 ./scripts/precheck.sh
 ```
 
-Сторож — `takt-lang/tests/formula_validation_tests.rs` (фикстуры
+Сторож — `takt-lang/tests/semantic/formula_validation_tests.rs` (фикстуры
 `tests/data/formula0203/`), критерии анализа:
 
 | Критерий | Тест |

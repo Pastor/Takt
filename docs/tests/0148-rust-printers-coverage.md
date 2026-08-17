@@ -75,7 +75,7 @@
 
 ## Тестовые данные и окружение
 
-- `takt-lang/tests/rust_printers_tests.rs` — весь набор; модели заданы
+- `takt-lang/tests/targets/rust_printers_tests.rs` — весь набор; модели заданы
   литералами в самом файле (по 3–5 строк на ветвь).
 - Замер покрытия — `./scripts/coverage.sh --files` (не гейт, справочная
   величина).

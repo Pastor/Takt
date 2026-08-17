@@ -68,7 +68,7 @@
 
 ## Decision
 
-Принимается **Option A**: `takt-lang/tests/lsp_document_symbol_tests.rs`, три
+Принимается **Option A**: `takt-lang/tests/lsp/lsp_document_symbol_tests.rs`, три
 группы проверок (состав, вложенность, диапазоны) плюс границы (неразбираемый
 вход, объявленность возможности).
 

@@ -82,7 +82,7 @@ start P = A | B;
 
 ## Проверки
 
-Регресс — `takt-sim/tests/sequential_composition_tests.rs`, два значенческих
+Регресс — `takt-sim/tests/sim/sequential_composition_tests.rs`, два значенческих
 теста с **накапливающим** телом (`n := n + 1`):
 `parallel_executes_always_once_per_tick` и
 `concatenation_executes_always_once_per_tick`. Именно накопление и ловит дефект:

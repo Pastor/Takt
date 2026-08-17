@@ -51,7 +51,7 @@ crate::parse(source, 0).map_err(|d| FormatError::Parse(format!("{d:?}")))?;
 
 ## Проверки
 
-- `takt-lang/tests/fmt_diagnostic_tests.rs` — 6 тестов, прогон бинаря `taktc`
+- `takt-lang/tests/syntax/fmt_diagnostic_tests.rs` — 6 тестов, прогон бинаря `taktc`
   с перехватом stderr (так это видит пользователь).
 - **Мутационная проверка** (две мутации, обе пойманы):
   1. «печатать только первую диагностику» → краснеет `two_parse_errors_print_two_lines`;

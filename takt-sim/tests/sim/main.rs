@@ -1,0 +1,26 @@
+//! Тесты симулятора — ОДНА тестовая цель на все наборы, кроме сверок
+//! (фича 0244, задача 0244-02; сверки — в цели `conformance`).
+//!
+//! Причина объединения и его устройство описаны в `tests/conformance/main.rs`:
+//! первый запуск свежесобранного бинарника стоит 0.60 с при загрузке ЦП 2 %,
+//! и таких бинарников было 147. Файлы наборов не слиты — каждый остаётся своим
+//! модулем, имена тестов различимы (`cargo test --test sim eval_tests::`).
+
+mod aggregate_argument_tests;
+mod cast_in_initializer_tests;
+mod composition_model_always_tests;
+mod composition_ports_tests;
+mod computed_initializer_norm_tests;
+mod diagnostics_tests;
+mod duration_tests;
+mod eval_tests;
+mod examples_scenario_tests;
+mod extern_stub_tests;
+mod implemented_model_sim_tests;
+mod import_enum_match_tests;
+mod inference_chain_tests;
+mod library_entry_tests;
+mod named_port_scenario_tests;
+mod sequential_composition_tests;
+mod state_io_tests;
+mod struct_types_tests;

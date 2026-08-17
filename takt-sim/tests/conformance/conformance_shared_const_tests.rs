@@ -62,10 +62,12 @@ fn sim_value(unit: &Unit, name: &str) -> i128 {
 /// начинается с `remove_dir_all`. Общий каталог здесь означал бы, что один тест
 /// сносит вывод другого прямо во время сборки.
 fn build_dir(tag: &str) -> PathBuf {
+    // ⚠️ `:` вычищается — см. фичу 0244: имя теста после слияния целей несёт
+    // префикс модуля, и двоеточие попало бы в путь.
     let thread = std::thread::current()
         .name()
         .unwrap_or("single")
-        .to_string();
+        .replace(':', "_");
     let dir = std::env::temp_dir().join(format!("takt_0193_conformance_{thread}_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог сборки");

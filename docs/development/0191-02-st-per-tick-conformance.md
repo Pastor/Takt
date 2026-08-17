@@ -12,7 +12,7 @@
 
 ## Что сделано
 
-Заведена `takt-sim/tests/conformance_st_per_tick_tests.rs`: наблюдаемое —
+Заведена `takt-sim/tests/conformance/conformance_st_per_tick_tests.rs`: наблюдаемое —
 значение **на каждом скане**, сравниваются трассы целиком.
 
 Обвязка та же, что у существующей сверки (`taktc -t st` → `iec2c` → `POUS.c` →

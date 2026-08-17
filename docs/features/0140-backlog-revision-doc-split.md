@@ -31,7 +31,7 @@
 сделанное:
 
 - «Потактовой сверки для цели `st` НЕ СУЩЕСТВУЕТ» — сверка есть,
-  `takt-sim/tests/conformance_st_tests.rs` (задача 0065-03);
+  `takt-sim/tests/conformance/conformance_st_tests.rs` (задача 0065-03);
 - «Цель `c-hal` не компилируется ни одним гейтом» — гейт есть, `precheck.sh`
   (фича [0098](0098-port-bit-range-safe-hal.md)).
 

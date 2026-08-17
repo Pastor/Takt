@@ -69,7 +69,7 @@ R1–R7 анализа и критерии приёмки A1–A11.
 
 ## Тестовые данные и окружение
 
-- `takt-lang/tests/lsp_document_symbol_tests.rs` — весь набор; фикстура задана
+- `takt-lang/tests/lsp/lsp_document_symbol_tests.rs` — весь набор; фикстура задана
   литералом в самом файле.
 - ⚠️ Тесты под `#[cfg(feature = "lsp")]`: обычная `cargo test` их **не видит**.
   Гоняет `cargo test --all-features` в `precheck.sh` (фича 0178).

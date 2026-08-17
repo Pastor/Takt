@@ -51,6 +51,6 @@ cargo clippy --all-features --all-targets    # 0 предупреждений
 | `{"sensor": 1}` при двух под-моделях | `SIM-031` с вариантами `Left::sensor, Right::sensor` |
 | `{"Left::sensor": 1}` | задаёт одну ветвь; `Right::sensor` остаётся `0` |
 
-Тесты — `takt-sim/tests/named_port_scenario_tests.rs`. Фикстура двусмысленности
+Тесты — `takt-sim/tests/sim/named_port_scenario_tests.rs`. Фикстура двусмысленности
 **заведена специально**: одноимённых портов разных под-моделей в корпусе нет, и
 без неё тест проверял бы собственную удачу.

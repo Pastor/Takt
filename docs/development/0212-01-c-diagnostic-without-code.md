@@ -76,7 +76,7 @@
 - `cargo build`, юнит-тесты крейта (1039) — зелёные.
 - Пробы: `lvl := Ctl.ctrl;` → `CC-022` с причиной; `res := mem[1:2];` →
   `CC-022` с позицией и путём файла.
-- Сторож `takt-lang/tests/c_diagnostic_code_tests.rs` (5 тестов), в том числе
+- Сторож `takt-lang/tests/targets/c_diagnostic_code_tests.rs` (5 тестов), в том числе
   греп-сторож по `takt-lang/src/generator/`, **проверенный мутацией**: временное
   безликое место в цели `st` тест назвал поимённо
   (`src/generator/st/st_expr.rs:883`).

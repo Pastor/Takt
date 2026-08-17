@@ -79,7 +79,7 @@
   существовало с самого начала, обещало док-строкой «разрешение имён при
   генерации кода» и **не заполнялось** — заготовка, которая не работала.
 
-Сторож — [`takt-lang/tests/c_enum_constants_tests.rs`](../../takt-lang/tests/c_enum_constants_tests.rs)
+Сторож — [`takt-lang/tests/targets/c_enum_constants_tests.rs`](../../takt-lang/tests/targets/c_enum_constants_tests.rs)
 (7 тестов, включая прогон настоящего `cc -Wall -Werror` и сверку множеств
 «объявлено ↔ использовано»). Обе мутации ловятся, в том числе самая опасная —
 подмена значения. Потактовые сверки `conformance_c_tests` зелены **без единой

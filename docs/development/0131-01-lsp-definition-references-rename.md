@@ -46,7 +46,7 @@ cargo clippy --all-features --all-targets         # 0 предупреждени
 ./scripts/check-module-size.sh                    # 0; новых нарушителей нет
 ```
 
-Новый файл тестов — `takt-lang/tests/lsp_definition_tests.rs` (4 теста):
+Новый файл тестов — `takt-lang/tests/lsp/lsp_definition_tests.rs` (4 теста):
 
 | Тест | Что доказывает | Критерий |
 |---|---|---|

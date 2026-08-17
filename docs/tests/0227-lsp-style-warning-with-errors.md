@@ -9,7 +9,7 @@
 `takt_lang::lsp::collect_diagnostics`, то есть тем же входом, которым пользуется
 сервер.
 
-Файл: `takt-lang/tests/style_naming_lsp_tests.rs`.
+Файл: `takt-lang/tests/lsp/style_naming_lsp_tests.rs`.
 
 ## Проверки (условие → ожидаемый результат)
 

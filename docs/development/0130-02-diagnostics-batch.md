@@ -49,7 +49,7 @@ v1.takt:2:5: Ошибка компиляции [SE-035]: Переменная 'b
 
 Тесты: `all_validation_errors_are_reported` (A3),
 `nested_model_errors_are_collected` (A4) в
-`takt-lang/tests/diagnostics_batch_tests.rs`.
+`takt-lang/tests/semantic/diagnostics_batch_tests.rs`.
 
 ## Границы
 

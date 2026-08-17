@@ -10,7 +10,7 @@
 снова прирастёт к устройству и следующая перестройка сломает его без причины).
 
 Файлы: `takt-lang/src/semantic/validate/tests_implicit_bool.rs`,
-`takt-lang/tests/implicit_bool_delivery_tests.rs` (фича 0232, регресс).
+`takt-lang/tests/semantic/implicit_bool_delivery_tests.rs` (фича 0232, регресс).
 
 ## Проверки (условие → ожидаемый результат)
 

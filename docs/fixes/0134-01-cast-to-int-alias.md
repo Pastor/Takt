@@ -48,10 +48,10 @@ always { n := 5 as u8; }   // ОШИБКА вычисления: SIM-007
 
 ## Проверка
 
-- `takt-lang/tests/time_literal_tests.rs::cast_to_integer_alias_works_at_all` —
+- `takt-lang/tests/syntax/time_literal_tests.rs::cast_to_integer_alias_works_at_all` —
   сторож на `builtin_type_by_name` (включая `duration` и отказ на
   пользовательском имени);
-- `takt-sim/tests/duration_tests.rs::duration_casts_to_milliseconds_and_back` —
+- `takt-sim/tests/sim/duration_tests.rs::duration_casts_to_milliseconds_and_back` —
   значенческая проверка обоих направлений через `as`;
 - проба, с которой всё началось: `5 as u8` в симуляторе даёт `5`, а не `SIM-007`.
 

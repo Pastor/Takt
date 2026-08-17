@@ -48,7 +48,7 @@
 
 ## Тестовые данные и окружение
 
-- `takt-sim/tests/named_port_scenario_tests.rs` — T1–T12 (12 тестов).
+- `takt-sim/tests/sim/named_port_scenario_tests.rs` — T1–T12 (12 тестов).
 - `takt-sim/src/json_input.rs` (юнит-тесты) — T12.
 - Фикстуры: `takt-sim/tests/data/named0132/` (модель `panel.takt`, сценарии
   `named.json` и `short_positional.json`); модели `SIMPLE`/`AMBIGUOUS` — в тексте

@@ -12,7 +12,7 @@
 
 ## Что сделано
 
-**Потактовая сверка режимов** — `takt-sim/tests/conformance_param_modes_tests.rs`.
+**Потактовая сверка режимов** — `takt-sim/tests/conformance/conformance_param_modes_tests.rs`.
 Сверяются **четыре** трассы, а не две: симулятор строит дерево в том же режиме,
 что и цель (`construct_model_with_files(..., specialize)` — вход публичный),
 поэтому режим проверен и в эталоне, и в цели.
@@ -44,7 +44,7 @@
 теперь — исполнением настоящими `rustc` и `verilator`.
 
 **Все цели × два режима × два набора значений** —
-`takt-lang/tests/model_parameter_modes_tests.rs`: восемь целей (`c`, `c-hal`,
+`takt-lang/tests/semantic/model_parameter_modes_tests.rs`: восемь целей (`c`, `c-hal`,
 `st`, `st-at`, `rust`, `sv`, `sv-mmio`, `plantuml`). Исключение **одно** и
 содержательное: цель `sv`/`sv-mmio` уплощает композицию, поэтому **разные**
 настройки в режиме `assign` невыразимы — громкий `SV-016`; в `specialize` они

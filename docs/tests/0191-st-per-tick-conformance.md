@@ -43,10 +43,10 @@
 
 ## Тестовые данные и окружение
 
-- Потактовая сверка — `takt-sim/tests/conformance_st_per_tick_tests.rs`,
+- Потактовая сверка — `takt-sim/tests/conformance/conformance_st_per_tick_tests.rs`,
   фикстура `takt-sim/tests/data/eval/st_per_tick.takt`.
 - Форма вывода — модульные тесты `generator/st/st_model.rs` и интеграционные
-  `takt-lang/tests/st_tests.rs`.
+  `takt-lang/tests/targets/st_tests.rs`.
 - Объявления — модульные тесты `generator/st/st_decl.rs`.
 - ⚠️ `iec2c` пакетом не поставляется: собирается `scripts/ensure-iec2c.sh`. Его
   отсутствие — **пропуск** сверки, а не красный (иначе машина без MatIEC

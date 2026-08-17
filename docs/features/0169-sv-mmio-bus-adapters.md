@@ -75,7 +75,7 @@
 однажды. Появятся состояния ожидания — правило придётся менять вместе с ними.
 
 Три слоя проверки: тесты формы
-([`sv_apb_adapter_tests.rs`](../../takt-lang/tests/sv_apb_adapter_tests.rs), 7
+([`sv_apb_adapter_tests.rs`](../../takt-lang/tests/targets/sv_apb_adapter_tests.rs), 7
 штук), линт и синтез обёртки **вместе с ядром**, и — главное — рукописный
 тестбенч с настоящими циклами APB
 ([`tb/stacker_apb_tb.sv`](../../examples/generated/sv-mmio/tb/stacker_apb_tb.sv)):

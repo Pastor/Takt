@@ -104,7 +104,7 @@ STRUCT` он отвергает: «invalid name defined for data type declaratio
   воспроизводимости (два прогона × цель), `iec2c` на порождённом ST, `cc -Wall
   -Werror` на `c-hal`, `clippy -D warnings` на `rust`, verilator + yosys на
   `sv`, `taktc fmt --check examples/`.
-- `takt-sim/tests/examples_scenario_tests.rs` — контракт сценария примера:
+- `takt-sim/tests/sim/examples_scenario_tests.rs` — контракт сценария примера:
   цепочка состояний, бюджет тактов, завершение.
 - ⚠️ **Сходимость контура проверена прогоном, а не глазами**: `takt-sim` на
   применении показывает выход регулятора и температуру объекта по тактам.

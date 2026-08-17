@@ -57,7 +57,7 @@
 
 ## Устройство сторожа
 
-Новый файл `takt-lang/tests/rust_default_impl_tests.rs`, два слоя:
+Новый файл `takt-lang/tests/targets/rust_default_impl_tests.rs`, два слоя:
 
 1. **эмиссия** (быстро, без внешних инструментов) — текст вывода: `impl Default`
    есть/нет;

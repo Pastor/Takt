@@ -66,7 +66,7 @@
 
 **Язык не изменён** (`0.8.0`).
 
-**Проверка:** 5 тестов `takt-lang/tests/format_unsupported_tests.rs`, обновлённый
+**Проверка:** 5 тестов `takt-lang/tests/syntax/format_unsupported_tests.rs`, обновлённый
 тест 0202, три мутации, `precheck.sh` — код 0. Подробности — в
 [отчёте](../reports/0229-format-unsupported-position.md).
 

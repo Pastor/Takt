@@ -9,7 +9,7 @@
 (решение заказчика, ADR 0226). Наблюдается прогоном бинаря и публичным входом
 языкового сервера.
 
-Файлы: `takt-lang/tests/implicit_bool_delivery_tests.rs`,
+Файлы: `takt-lang/tests/semantic/implicit_bool_delivery_tests.rs`,
 `takt-lang/src/semantic/validate/tests_implicit_bool.rs`.
 
 ## Проверки (условие → ожидаемый результат)

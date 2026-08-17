@@ -9,7 +9,7 @@
 бинаря (`CARGO_BIN_EXE_taktc`) с перехватом stderr — так, как это видит
 пользователь.
 
-Файл: `takt-lang/tests/cli_warning_position_tests.rs`; смежный (не задет) —
+Файл: `takt-lang/tests/targets/cli_warning_position_tests.rs`; смежный (не задет) —
 `cli_warnings_tests.rs` (фича 0081).
 
 ## Проверки (условие → ожидаемый результат)

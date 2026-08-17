@@ -54,5 +54,5 @@
 
 ## Проверки
 
-- `takt-lang/tests/stage_recovery_tests.rs` — 7 тестов, прогон бинаря `taktc`.
+- `takt-lang/tests/semantic/stage_recovery_tests.rs` — 7 тестов, прогон бинаря `taktc`.
 - `./scripts/precheck.sh` — код возврата 0.

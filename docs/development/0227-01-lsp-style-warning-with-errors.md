@@ -38,7 +38,7 @@ validate ──ошибка──> возврат (стиля нет)
 
 ## Проверки
 
-`takt-lang/tests/style_naming_lsp_tests.rs` — 9 тестов (было 5). Тест
+`takt-lang/tests/lsp/style_naming_lsp_tests.rs` — 9 тестов (было 5). Тест
 `lsp_hides_style_warning_while_errors_present`, пришпиливавший прежнее поведение,
 заменён обратными по смыслу:
 

@@ -54,11 +54,11 @@
 
 ## Тестовые данные и окружение
 
-- `takt-lang/tests/lsp_definition_tests.rs` — T1, T3, T4, T5 (задача 0131-01).
+- `takt-lang/tests/lsp/lsp_definition_tests.rs` — T1, T3, T4, T5 (задача 0131-01).
 - `takt-lang/src/lsp/capabilities.rs` (юнит-тесты) — T1, T2.
-- `takt-lang/tests/lsp_references_tests.rs` — T6–T9 (задача 0131-02, готово; плюс
+- `takt-lang/tests/lsp/lsp_references_tests.rs` — T6–T9 (задача 0131-02, готово; плюс
   10 юнит-тестов слоя в `takt-lang/src/semantic/usages/tests.rs`).
-- `takt-lang/tests/lsp_rename_tests.rs` — T10–T15 (задача 0131-03, готово, 12 тестов).
+- `takt-lang/tests/lsp/lsp_rename_tests.rs` — T10–T15 (задача 0131-03, готово, 12 тестов).
 - Фикстуры: модель со всеми видами вхождений; пара одноимённых моделей; модель с
   затенением из F4 анализа; пара файлов с `import` для T11.
 

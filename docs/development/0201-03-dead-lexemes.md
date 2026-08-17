@@ -17,7 +17,7 @@
 
 ## Что сделано
 
-Заведён `takt-lang/tests/dead_lexeme_tests.rs` — четыре теста, читающие
+Заведён `takt-lang/tests/syntax/dead_lexeme_tests.rs` — четыре теста, читающие
 грамматику через `include_str!("../src/grammar.lalrpop")` (привязка на этапе
 компиляции: переехавший файл валит сборку, а не отключает сторожа молча).
 

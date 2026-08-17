@@ -9,8 +9,8 @@
 фичи — не правило само по себе, а то, что оно доезжает до пользователя, поэтому
 проверки наблюдают вывод инструмента, а не внутренние структуры.
 
-Файлы: `takt-lang/tests/style_naming_fmt_tests.rs`,
-`takt-lang/tests/style_naming_lsp_tests.rs`, юнит-тесты
+Файлы: `takt-lang/tests/syntax/style_naming_fmt_tests.rs`,
+`takt-lang/tests/lsp/style_naming_lsp_tests.rs`, юнит-тесты
 `takt-lang/src/style/naming.rs`.
 
 ## Проверки (условие → ожидаемый результат)

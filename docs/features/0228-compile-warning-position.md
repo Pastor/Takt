@@ -65,7 +65,7 @@ HAL-целей реестр содержит только корневой фа�
 **Язык не изменён** (`0.8.0`); порождённый код и снапшоты не задеты —
 предупреждения идут в stderr.
 
-**Проверка:** 5 тестов `takt-lang/tests/cli_warning_position_tests.rs`, три
+**Проверка:** 5 тестов `takt-lang/tests/targets/cli_warning_position_tests.rs`, три
 мутации (в том числе на границу Option A / Option B), `precheck.sh` — код 0.
 Подробности — в [отчёте](../reports/0228-compile-warning-position.md).
 

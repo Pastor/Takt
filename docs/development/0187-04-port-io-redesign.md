@@ -117,7 +117,7 @@ if (!rst_n) begin
 | `SE-093` больше не вырабатывается | да |
 | `./scripts/precheck.sh` | зелёный |
 
-Сторож — `takt-lang/tests/port_initial_value_hdl_tests.rs` (11 тестов: эмиссия
+Сторож — `takt-lang/tests/targets/port_initial_value_hdl_tests.rs` (11 тестов: эмиссия
 текстом + три настоящих гейта; нет инструмента → мягкий пропуск с сообщением).
 Оба гейта SV обязательны и здесь: verilator и yosys ловят разные классы (ADR
 [0045](../features/0045-sv-backend.md)).

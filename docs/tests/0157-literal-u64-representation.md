@@ -58,14 +58,14 @@
 
 ## Тестовые данные и окружение
 
-- `takt-lang/tests/lexer_tests.rs` — T1–T6 (границы приёма, каскад).
-- `takt-lang/tests/literal_range_tests.rs` + фикстура
+- `takt-lang/tests/syntax/lexer_tests.rs` — T1–T6 (границы приёма, каскад).
+- `takt-lang/tests/semantic/literal_range_tests.rs` + фикстура
   `tests/data/semantic/invalid/literal_out_of_type_range.takt` — T9–T12.
-- `takt-lang/tests/wide_literal_tests.rs` — T13–T17 (эмиссия + гейты `cc`,
+- `takt-lang/tests/targets/wide_literal_tests.rs` — T13–T17 (эмиссия + гейты `cc`,
   `verilator`, `iec2c`, `rustc`).
 - `takt-sim/tests/{conformance_c_tests,eval_tests}.rs` и фикстуры
   `tests/data/eval/{conformance_u8,overflow_u8}.takt` — T7–T8.
-- `takt-sim/tests/state_io_tests.rs` — T18.
+- `takt-sim/tests/sim/state_io_tests.rs` — T18.
 - `git diff --exit-code examples/generated` — T19.
 - `scripts/check-language-version.sh`, `./scripts/precheck.sh` — T20–T21.
 

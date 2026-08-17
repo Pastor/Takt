@@ -55,7 +55,7 @@ cargo test -p takt-lang --test time_literal_tests -- --test-threads=1
 ./scripts/precheck.sh
 ```
 
-- **13 интеграционных тестов** ([`time_literal_tests.rs`](../../takt-lang/tests/time_literal_tests.rs)):
+- **13 интеграционных тестов** ([`time_literal_tests.rs`](../../takt-lang/tests/syntax/time_literal_tests.rs)):
   принимаемые формы, отвергаемые формы с **кодом**, аддитивность, разбор всех
   четырёх конструкций, печать форматтером и его идемпотентность.
 - **9 юнит-тестов** модуля единиц (регистр значим, `h` против `Hz`, порядок

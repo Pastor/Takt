@@ -69,7 +69,7 @@ part := bits[l:r];             // границы среза остаются ч�
 
 ## Тестовые данные и окружение
 
-- Сторож: `takt-lang/tests/array_shared_and_index_tests.rs` (7 тестов, один
+- Сторож: `takt-lang/tests/semantic/array_shared_and_index_tests.rs` (7 тестов, один
   запускает настоящий `iec2c`).
 - Команды:
 

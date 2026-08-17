@@ -64,14 +64,14 @@
 
 ## Тестовые данные и окружение
 
-- `takt-lang/tests/port_at_syntax_tests.rs` — T1–T5.
-- `takt-lang/tests/port_init_tests.rs` — T2, T10, T12.
-- `takt-lang/tests/port_initial_value_tests.rs` — T7, T11 (+ гейты `cc`, `clippy`).
-- `takt-lang/tests/port_initial_value_hdl_tests.rs` — T8, T9, T12 (+ гейты
+- `takt-lang/tests/semantic/port_at_syntax_tests.rs` — T1–T5.
+- `takt-lang/tests/semantic/port_init_tests.rs` — T2, T10, T12.
+- `takt-lang/tests/semantic/port_initial_value_tests.rs` — T7, T11 (+ гейты `cc`, `clippy`).
+- `takt-lang/tests/targets/port_initial_value_hdl_tests.rs` — T8, T9, T12 (+ гейты
   `verilator`, `yosys`, `iec2c`).
-- `takt-sim/tests/conformance_port_init_tests.rs` — T13, T14, T15, T16.
-- `takt-lang/tests/port_access_contract_tests.rs` — T17, T18, T19, T20.
-- `takt-lang/tests/lsp_port_io_tests.rs` + `TaktKeywordSyncTest` (Gradle) — T6.
+- `takt-sim/tests/conformance/conformance_port_init_tests.rs` — T13, T14, T15, T16.
+- `takt-lang/tests/semantic/port_access_contract_tests.rs` — T17, T18, T19, T20.
+- `takt-lang/tests/lsp/lsp_port_io_tests.rs` + `TaktKeywordSyncTest` (Gradle) — T6.
 - `./scripts/precheck.sh` — T5, T21.
 
 Окружение: macOS (arm64), толчейн пина `1.97.1`, `cc` (clang), `verilator

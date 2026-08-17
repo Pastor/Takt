@@ -46,7 +46,7 @@ cargo test -p takt-sim --test conformance_c_time_tests -- --test-threads=1
 ./scripts/precheck.sh
 ```
 
-- **Потактовая сверка** [`conformance_c_time_tests.rs`](../../takt-sim/tests/conformance_c_time_tests.rs):
+- **Потактовая сверка** [`conformance_c_time_tests.rs`](../../takt-sim/tests/conformance/conformance_c_time_tests.rs):
   фикстура «выход через 5 мс при 1 кГц»; эталон и порождённый C срабатывают на
   **одном такте** (6-м), порождённый код собирается с `-Wall -Werror`.
 - Пример раздела книги снова компилируется целью `c` — **временная ветка в гейте

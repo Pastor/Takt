@@ -161,9 +161,15 @@ fn anon_cell_trace_matches_c_hal() {
         eprintln!("cc недоступен — сверка с c-hal пропущена");
         return;
     }
+    // ⚠️ `:` из имени потока вычищается: после слияния тестовых целей (фича
+    // 0244) имя теста несёт префикс модуля (`модуль::тест`), и двоеточие
+    // попало бы в путь каталога.
     let dir = std::env::temp_dir().join(format!(
         "takt_0189_conformance_{}",
-        std::thread::current().name().unwrap_or("single")
+        std::thread::current()
+            .name()
+            .unwrap_or("single")
+            .replace(':', "_")
     ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог");

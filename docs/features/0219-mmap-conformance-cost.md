@@ -41,8 +41,8 @@
 
 **Сверки через `mmap` стоят ~90 секунд каждая, и таких сторожей теперь два.**
 Замер при закрытии [0189](0189-anonymous-ports.md) (2026-08-01):
-`takt-sim/tests/conformance_anon_tests.rs` — **86 с**,
-`takt-lang/tests/hal_bit_range_tests.rs` (фича 0098) — **91 с**. Оба ставят
+`takt-sim/tests/conformance/conformance_anon_tests.rs` — **86 с**,
+`takt-lang/tests/targets/hal_bit_range_tests.rs` (фича 0098) — **91 с**. Оба ставят
 настоящую память по фиксированному адресу (`mmap(MAP_FIXED)` на 16 ТиБ:
 macOS отвергает низкие адреса) и потому неизбежно дороги. Цифра существенна:
 весь `cargo test` — 84 % времени предкоммита (замер 0190), и два теста уже

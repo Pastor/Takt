@@ -51,7 +51,7 @@ quiet)`: разрешает `file_no` диагностики в путь чер�
 
 ## Проверки
 
-`takt-lang/tests/cli_warning_position_tests.rs` — 5 тестов прогоном бинаря:
+`takt-lang/tests/targets/cli_warning_position_tests.rs` — 5 тестов прогоном бинаря:
 
 | Тест | Что держит |
 |---|---|

@@ -111,9 +111,9 @@
 недостающие имена; область видимости не расширена — `SE-003` сохранён.
 
 Доказательство — не компиляция, а **значения**: потактовая сверка эталона и
-порождённого C на импортирующем входе (`takt-sim/tests/conformance_c_import_tests.rs`,
+порождённого C на импортирующем входе (`takt-sim/tests/conformance/conformance_c_import_tests.rs`,
 трасса `1, 3, 7, 15, 31`, возможная лишь при одной переменной на обе модели).
-Плюс 7 тестов цели и диагностик (`takt-lang/tests/import_adopt_tests.rs`), каждый
+Плюс 7 тестов цели и диагностик (`takt-lang/tests/semantic/import_adopt_tests.rs`), каждый
 с настоящим `cc -Wall -Werror`. Вывод корпуса `examples/` — байт-в-байт прежний.
 
 Раздел [`book/src/09-imports/`](../../book/src/09-imports/index.md) описал границу
