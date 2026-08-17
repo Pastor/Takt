@@ -193,3 +193,4 @@
 | [0213](./0213-c-redundant-break.md) | Цель c печатает лишний break после безусловного перехода | Accepted (Option B) | фича 0213 |
 | [0240](./0240-book-typst.md) | Перевод документа book/ в формат Typst | Draft | фича 0240 |
 | [0241](./0241-precheck-speedup.md) | Ускорение предкоммита: конфигурации cargo, параллельный verilator, пути гейта | Accepted (Option B) | фича 0241 |
+| [0242](./0242-grammar-crate-split.md) | Вынос грамматики в отдельный крейт takt-grammar | Accepted (Option B; фича ОТМЕНЕНА) | фича 0242 |
