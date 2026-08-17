@@ -56,6 +56,22 @@ const OVERFLOW_FIXTURE: &str = "tests/data/eval/conformance_overflow.takt";
 /// Тактов в трассе — с запасом над её длиной.
 const TRACE_TICKS: usize = 6;
 
+/// Собирает тестбенч через `verilator --binary` в каталоге `dir`.
+///
+/// ⚠️ `-j 0` обязателен: порождённый C++ verilator собирает В ОДИН ПОТОК по
+/// умолчанию, и это главная статья времени сверки — замер 2026-08-17 дал
+/// 110.6 с против 316 с (фича 0241). ⚠️ Помощник один на три вызова: прежде они
+/// повторяли пятнадцать строк флагов дословно, и флаг пришлось бы добавлять
+/// трижды (класс 0084/0193/0195).
+fn verilate(dir: &std::path::Path, design: &str) -> std::process::Output {
+    Command::new("verilator")
+        .current_dir(dir)
+        .args(["--binary", "-j", "0", "--timing", "-Wno-fatal"])
+        .args(["--top-module", "tb", "tb.sv", design, "-o", "simtb"])
+        .output()
+        .expect("запуск verilator")
+}
+
 fn verilator_available() -> bool {
     Command::new("verilator")
         .arg("--version")
@@ -155,21 +171,7 @@ endmodule
     let tb_path = dir.join("tb.sv");
     std::fs::write(&tb_path, tb).expect("запись тестбенча");
 
-    let build = Command::new("verilator")
-        .current_dir(dir)
-        .args([
-            "--binary",
-            "--timing",
-            "-Wno-fatal",
-            "--top-module",
-            "tb",
-            "tb.sv",
-            &format!("{}.sv", basename),
-            "-o",
-            "simtb",
-        ])
-        .output()
-        .expect("запуск verilator");
+    let build = verilate(dir, &format!("{}.sv", basename));
     assert!(
         build.status.success(),
         "verilator не собрал тестбенч:\n{}",
@@ -696,21 +698,7 @@ endmodule
 "#
     );
     std::fs::write(dir.join("tb.sv"), tb).expect("запись тестбенча");
-    let build = Command::new("verilator")
-        .current_dir(dir)
-        .args([
-            "--binary",
-            "--timing",
-            "-Wno-fatal",
-            "--top-module",
-            "tb",
-            "tb.sv",
-            &format!("{}.sv", basename),
-            "-o",
-            "simtb",
-        ])
-        .output()
-        .expect("запуск verilator");
+    let build = verilate(dir, &format!("{}.sv", basename));
     assert!(
         build.status.success(),
         "verilator не собрал Q-тестбенч:\n{}",
@@ -930,21 +918,7 @@ fn clock_enable_gates_step_but_not_reset() {
 endmodule
 "#;
     std::fs::write(dir.join("tb.sv"), tb).expect("запись тестбенча");
-    let build = Command::new("verilator")
-        .current_dir(&dir)
-        .args([
-            "--binary",
-            "--timing",
-            "-Wno-fatal",
-            "--top-module",
-            "tb",
-            "tb.sv",
-            "conformance_ticks.sv",
-            "-o",
-            "simtb",
-        ])
-        .output()
-        .expect("запуск verilator");
+    let build = verilate(&dir, "conformance_ticks.sv");
     assert!(
         build.status.success(),
         "verilator не собрал тестбенч en:\n{}",

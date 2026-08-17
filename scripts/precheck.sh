@@ -28,6 +28,19 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PRECHECK_TARGET_DIR="${PRECHECK_TARGET_DIR:-$REPO_ROOT/target/precheck}"
 export CARGO_TARGET_DIR="$PRECHECK_TARGET_DIR"
 
+# ПАРАЛЛЕЛЬНАЯ СБОРКА ПОРОЖДЁННОГО C++ (фича 0241). `verilator --binary` внутри
+# запускает `make`, и по умолчанию тот идёт В ОДИН ПОТОК — а это главная статья
+# времени сверок SystemVerilog: замер 2026-08-17 дал 85 % тестового времени в
+# шести наборах из 29 тестов (711.9 / 368.2 / 331.7 / 316.2 / 249.2 / 233.2 с),
+# тогда как 1093 юнит-теста укладываются в 49.9 с.
+#
+# ⚠️ Задаётся ПЕРЕМЕННОЙ ОКРУЖЕНИЯ, а не флагом `-j` в девяти местах: вызовы
+# `verilator` живут в шести файлах сверок и двух гейтах ниже, и девять правок
+# разъехались бы (класс 0084/0193/0195). Переменная наследуется всеми потомками
+# разом. ⚠️ Проба с флагом в тестах вдобавок упёрлась в лимит размера модуля:
+# `conformance_sv_tests.rs` — 999 строк из 1000.
+export MAKEFLAGS="${MAKEFLAGS:--j$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}"
+
 # Гигиена: у cargo нет сборки мусора, поэтому каталог гейта деградировал бы так
 # же. Порог аварийный, метрика дешёвая — подробности и замеры в самом скрипте.
 "$(dirname "$0")/precheck-hygiene.sh" "$PRECHECK_TARGET_DIR"
@@ -109,7 +122,12 @@ if [ "$PRECHECK_STRICT" = "1" ]; then
 else
   $CARGO_CMD fmt
 fi
-$CARGO_CMD check
+# ⚠️ Отдельного `cargo check` здесь НЕТ (фича 0241). Он проверял ровно то же,
+# что `clippy` строкой ниже, но с ДРУГИМ набором фич (default против
+# all-features), то есть стоил лишней компиляции 68-тысячестрочного парсера
+# LALRPOP, который `rustc` собирает В ОДИН ПОТОК (замер: 10 мин 19 с при
+# загрузке ЦП 11 %). Убирать `clippy` вместо `check` нельзя: он единственный
+# держит `-D warnings`.
 # Ноль-долг предупреждений закреплён фичей 0046: `-D warnings` на clippy валит
 # сборку на ЛЮБОМ предупреждении (clippy И rustc — clippy гоняет оба набора).
 # Это CLI-уровень (не запрещённый `#![deny(warnings)]` в коде, docs/CODE.md):
@@ -184,10 +202,21 @@ $CARGO_CMD test --all-features
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-$CARGO_CMD build --bin taktc 2>/dev/null
-$CARGO_CMD build --features lsp --bin takt-lsp
+# ⚠️ ОДНА команда и ОДИН набор фич (фича 0241). Прежде здесь стояли два вызова
+# с РАЗНЫМИ наборами — `--bin taktc` без фич и `--bin takt-lsp` с `lsp`, — а
+# выше уже отработал `cargo test --all-features`. Каждая смена набора заставляет
+# cargo компилировать `takt-lang` заново вместе с порождённым парсером; наборы
+# фич проекта аддитивны (`ast-serde`, `lsp`), поэтому единый `--all-features`
+# переиспользует уже собранное.
+$CARGO_CMD build --all-features --bin taktc --bin takt-sim --bin takt-lsp
 
-LAMC="./target/debug/taktc"
+# ⚠️ Путь берётся из КАТАЛОГА ГЕЙТА, а не из рабочего `target` (фича 0241).
+# Прежде здесь стояло `./target/debug/taktc`, тогда как сборка с фичи 0234 идёт
+# в `$PRECHECK_TARGET_DIR`. Работало это лишь потому, что в рабочем каталоге
+# случайно лежал ранее собранный бинарник; после первой его чистки гейт падал —
+# и падал С ЛОЖНОЙ ПРИЧИНОЙ: «Примеры не в каноне» вместо «нет taktc».
+LAMC="$PRECHECK_TARGET_DIR/debug/taktc"
+TAKT_SIM="$PRECHECK_TARGET_DIR/debug/takt-sim"
 
 # Канон форматирования примеров (фича 0024). Проверка НЕразрушающая: только код
 # возврата. Область — `examples/`: они являются документацией по языку
@@ -994,7 +1023,7 @@ if [ -d book/src ]; then
       rm -rf "$out_dir"
       continue
     fi
-    if ! ./target/debug/takt-sim -n "$BOOK_TICKS" "$takt_file" >"$out_dir/sim.log" 2>&1; then
+    if ! "$TAKT_SIM" -n "$BOOK_TICKS" "$takt_file" >"$out_dir/sim.log" 2>&1; then
       echo "  $base → СИМУЛЯЦИЯ ОТКАЗАЛА:"
       sed 's/^/    /' "$out_dir/sim.log" | tail -3
       book_failed=1
