@@ -174,17 +174,21 @@ state Done;
         );
     }
 
-    /// Состояние отдаёт детьми свои именованные блоки.
+    /// Состояние отдаёт детьми свои именованные блоки и инварианты.
+    ///
+    /// Порядок — как в исходнике: панель повторяет текст, а не сортирует его.
+    /// `Sane` здесь появился фичей 0221 (прежде инвариант состояния символом не
+    /// становился); блоки при этом остались событиями.
     #[test]
     fn state_owns_its_named_blocks() {
         let syms = document_symbols(SRC);
         let idle = top(&syms, "Idle");
         assert_eq!(
             names(children(idle)),
-            vec!["enter", "always"],
-            "именованные блоки состояния обязаны быть его детьми"
+            vec!["enter", "always", "Sane"],
+            "именованные блоки и инварианты состояния обязаны быть его детьми"
         );
-        for block in children(idle) {
+        for block in children(idle).iter().filter(|c| c.name != "Sane") {
             assert_eq!(block.kind, SymbolKind::EVENT, "блок — событие");
         }
     }
@@ -340,28 +344,85 @@ state Done;
         assert!(document_symbols("").is_empty());
     }
 
-    /// ⚠️ **Известный пробел, зафиксированный сознательно.**
+    /// Инвариант виден в панели НЕЗАВИСИМО от места объявления (фича 0221).
     ///
-    /// Инвариант **модели** (`Safe`) символом становится, а инвариант
-    /// **состояния** (`Sane`) — нет: дети состояния собираются только из
-    /// именованных блоков. Тест пришпиливает текущее поведение, чтобы его
-    /// изменение было **осознанным**, а не побочным. Разбор — находка в
-    /// `FEATURES.md`.
+    /// До неё `invariant` уровня модели становился символом, а такой же внутри
+    /// состояния — нет: дети состояния собирались только из именованных
+    /// блоков. Одна конструкция языка была видна или невидима в зависимости от
+    /// места. Асимметрию пришпиливал тест-заглушка 0147, прямо требовавший
+    /// снять его при осознанной смене поведения, — это она и есть.
+    ///
+    /// Вид символа у обоих один (`CONSTANT`): разные виды показали бы одну
+    /// конструкцию двумя разными.
     #[test]
-    fn state_level_invariant_is_not_a_symbol_yet() {
+    fn invariant_is_a_symbol_at_both_levels() {
         let syms = document_symbols(SRC);
-        let idle = top(&syms, "Idle");
-        assert!(
-            !names(children(idle)).contains(&"Sane"),
-            "поведение изменилось: инвариант состояния стал символом. Это может \
-             быть улучшением — но тогда снимите этот тест осознанно и обновите \
-             находку в FEATURES.md.\nдети Idle: {:?}",
-            names(children(idle))
-        );
+        let sane = children(top(&syms, "Idle"))
+            .iter()
+            .find(|c| c.name == "Sane")
+            .unwrap_or_else(|| {
+                panic!(
+                    "инвариант состояния обязан быть символом; дети Idle: {:?}",
+                    names(children(top(&syms, "Idle")))
+                )
+            });
+        assert_eq!(sane.kind, SymbolKind::CONSTANT);
         assert_eq!(
             top(&syms, "Safe").kind,
             SymbolKind::CONSTANT,
-            "инвариант МОДЕЛИ символом остаётся — асимметрия и есть пробел"
+            "инвариант МОДЕЛИ остаётся символом того же вида — симметрия, а не перестановка"
+        );
+    }
+
+    /// Диапазоны нового символа подчиняются общему контракту (0147).
+    ///
+    /// Проверяется отдельно от `selection_range_covers_the_name_for_children`:
+    /// тот перечисляет пары «родитель — ребёнок» списком, и запись, забытая в
+    /// списке, промолчала бы.
+    #[test]
+    fn state_invariant_ranges_follow_the_contract() {
+        let syms = document_symbols(SRC);
+        let sane = children(top(&syms, "Idle"))
+            .iter()
+            .find(|c| c.name == "Sane")
+            .expect("нет 'Idle::Sane'");
+        assert_eq!(
+            slice(SRC, sane.selection_range),
+            "Sane",
+            "selection_range обязан покрывать имя — по нему редактор переходит из панели"
+        );
+        assert!(
+            slice(SRC, sane.range).starts_with("invariant"),
+            "range — всё объявление, начиная с ключевого слова: {:?}",
+            slice(SRC, sane.range)
+        );
+        assert!(contains(sane.range, sane.selection_range));
+    }
+
+    /// Состав панели фичей 0221 больше НИЧЕМ не изменился.
+    ///
+    /// `every` и встроенные формулы имени не объявляют, `ref`/`next` —
+    /// **ссылки** на чужое имя; символ здесь врал бы о месте объявления. Это
+    /// решение ADR 0221 (Option C отвергнут), а не забывчивость, — потому оно и
+    /// закреплено тестом.
+    #[test]
+    fn nameless_and_referencing_state_elements_are_not_symbols() {
+        const SRC_STATE: &str = r#"var speed: u8 := 0;
+start Idle {
+    enter { speed := 0; }
+    every 100ms { speed := speed + 1; }
+    invariant Sane = speed < 50;
+    : [Guard] speed < 100;
+    ref Done: speed > 10;
+}
+state Done;
+"#;
+        let syms = document_symbols(SRC_STATE);
+        let kids = names(children(top(&syms, "Idle")));
+        assert_eq!(
+            kids,
+            vec!["enter", "Sane"],
+            "детьми состояния становятся только объявления с именем"
         );
     }
 
