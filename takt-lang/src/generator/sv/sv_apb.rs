@@ -189,12 +189,25 @@ pub(crate) fn generate_apb(core: &str, mmio: &Mmio) -> Result<String, Diagnostic
     p.up();
 
     // Внутренние связи с ядром — с тем же выравниванием, что и шапка.
-    for (range, name) in [
-        (addr_range.as_str(), "reg_addr"),
-        (data_range.as_str(), "reg_wdata"),
-        ("", "reg_wen"),
-        (data_range.as_str(), "reg_rdata"),
-    ] {
+    //
+    // Фича 0214: у ядра без записываемых регистров нет входов `reg_wdata` и
+    // `reg_wen` — заводить провода к несуществующим выводам нельзя
+    // (`PINNOTFOUND`), да и незачем.
+    let writable = mmio.has_writable();
+    let wires: Vec<(&str, &str)> = if writable {
+        vec![
+            (addr_range.as_str(), "reg_addr"),
+            (data_range.as_str(), "reg_wdata"),
+            ("", "reg_wen"),
+            (data_range.as_str(), "reg_rdata"),
+        ]
+    } else {
+        vec![
+            (addr_range.as_str(), "reg_addr"),
+            (data_range.as_str(), "reg_rdata"),
+        ]
+    };
+    for (range, name) in wires {
         p.ident(&format!(
             "logic {range:<range_col$}{name};",
             range = range,
@@ -206,8 +219,20 @@ pub(crate) fn generate_apb(core: &str, mmio: &Mmio) -> Result<String, Diagnostic
     p.nl();
 
     p.ident("assign reg_addr  = paddr;").nl();
-    p.ident("assign reg_wdata = pwdata;").nl();
-    p.ident("assign reg_wen   = psel & penable & pwrite;").nl();
+    if writable {
+        p.ident("assign reg_wdata = pwdata;").nl();
+        p.ident("assign reg_wen   = psel & penable & pwrite;").nl();
+    } else {
+        // Ядро доступно шине только на чтение: цикл записи APB завершается
+        // штатно (`pready` уже 1), но данные никуда не идут. Сигналы шины
+        // остаются в интерфейсе — их состав задан протоколом, а не моделью, —
+        // и здесь честно поглощаются, чтобы `verilator -Wall` не сообщал о
+        // висящем входе (глушить его `lint_off` правило проекта запрещает).
+        p.ident("// Ядро только для чтения: записывать нечего (фича 0214).")
+            .nl();
+        p.ident("wire _unused_write = &{1'b0, pwdata, pwrite, psel, penable};")
+            .nl();
+    }
     p.ident("assign prdata    = reg_rdata;").nl();
     p.ident("assign pready    = 1'b1;").nl();
     p.ident("assign pslverr   = 1'b0;").nl();
@@ -219,8 +244,10 @@ pub(crate) fn generate_apb(core: &str, mmio: &Mmio) -> Result<String, Diagnostic
     p.ident(".rst_n(presetn),").nl();
     p.ident(".en(en),").nl();
     p.ident(".reg_addr(reg_addr),").nl();
-    p.ident(".reg_wdata(reg_wdata),").nl();
-    p.ident(".reg_wen(reg_wen),").nl();
+    if writable {
+        p.ident(".reg_wdata(reg_wdata),").nl();
+        p.ident(".reg_wen(reg_wen),").nl();
+    }
     p.ident(".reg_rdata(reg_rdata),").nl();
     p.ident(".is_done(is_done)").nl();
     p.down();

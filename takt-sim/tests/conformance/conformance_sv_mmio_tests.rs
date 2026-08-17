@@ -130,16 +130,33 @@ fn sv_mmio_trace(
             )
         })
         .collect();
+    // Фича 0214: у ядра без входных регистров сигналов записи НЕТ, и заводить
+    // к ним провода нельзя — verilator отвечает `PINNOTFOUND`. Тестбенч следует
+    // за интерфейсом ядра ровно так же, как адаптер шины: смотрит, что модуль
+    // объявил, а не что он объявлял раньше.
+    let core = std::fs::read_to_string(dir.join(format!("{basename}.sv")))
+        .expect("порождённый .sv читается");
+    let writable = core.contains("reg_wen");
+    let write_decls = if writable {
+        format!(
+            "    logic [{dw_hi}:0] reg_wdata = 0;\n    logic reg_wen = 0;\n",
+            dw_hi = data_width - 1
+        )
+    } else {
+        String::new()
+    };
+    let write_pins = if writable {
+        "\n                    .reg_wdata(reg_wdata), .reg_wen(reg_wen),"
+    } else {
+        ""
+    };
     let tb = format!(
         r#"module tb;
     logic clk = 0, rst_n = 0;
     logic is_done;
     logic [{aw_hi}:0] reg_addr = 0;
-    logic [{dw_hi}:0] reg_wdata = 0;
-    logic reg_wen = 0;
-    logic [{dw_hi}:0] reg_rdata;
-    {basename} dut (.clk(clk), .rst_n(rst_n), .reg_addr(reg_addr),
-                    .reg_wdata(reg_wdata), .reg_wen(reg_wen),
+{write_decls}    logic [{dw_hi}:0] reg_rdata;
+    {basename} dut (.clk(clk), .rst_n(rst_n), .reg_addr(reg_addr),{write_pins}
                     .reg_rdata(reg_rdata), .is_done(is_done));
     always #5 clk = ~clk;
     initial begin

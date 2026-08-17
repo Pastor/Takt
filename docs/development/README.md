@@ -417,3 +417,4 @@
 | 0244-01 | 0244 | Отладочная информация тестовых целей — line-tables-only | [0244-01-test-target-build-cost.md](0244-01-test-target-build-cost.md) |
 | 0244-02 | 0244 | Слияние 147 тестовых целей в 12 | [0244-02-test-target-build-cost.md](0244-02-test-target-build-cost.md) |
 | 0243-01 | 0243 | Воронка занятия имени типа | [0243-01-type-redefinition-diagnostic.md](0243-01-type-redefinition-diagnostic.md) |
+| 0214-01 | 0214 | Сигналы записи по составу портов | [0214-01-sv-mmio-unused-write-signals.md](0214-01-sv-mmio-unused-write-signals.md) |

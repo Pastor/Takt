@@ -160,3 +160,4 @@
 | 0213 | Цель c печатает лишний break после безусловного перехода | [0213-c-redundant-break.md](0213-c-redundant-break.md) | ✅ ГОТОВО |
 | 0244 | Стоимость тестовых целей | [0244-test-target-build-cost.md](0244-test-target-build-cost.md) | ✅ ГОТОВО |
 | 0243 | Переопределение типа | [0243-type-redefinition-diagnostic.md](0243-type-redefinition-diagnostic.md) | ✅ ГОТОВО |
+| 0214 | Регистровый интерфейс sv-mmio | [0214-sv-mmio-unused-write-signals.md](0214-sv-mmio-unused-write-signals.md) | ✅ ГОТОВО |
