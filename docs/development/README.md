@@ -430,3 +430,4 @@
 | 0224-01 | 0224 | Подъём Kotlin в плагине intellij-takt снимет ограничение на пусковой JDK | [0224-01-intellij-kotlin-upgrade.md](0224-01-intellij-kotlin-upgrade.md) |
 | 0225-01 | 0225 | Модуль semantic/statement.rs — 999 строк при пределе 1000 | [0225-01-statement-module-size.md](0225-01-statement-module-size.md) |
 | 0221-01 | 0221 | Панель структуры: инвариант состояния символом не становится | [0221-01-lsp-state-invariant-symbol.md](0221-01-lsp-state-invariant-symbol.md) |
+| 0220-01 | 0220 | Флаг -Wextra для гейта цели c: 38 предупреждений одного класса | [0220-01-c-gate-wextra.md](0220-01-c-gate-wextra.md) |
