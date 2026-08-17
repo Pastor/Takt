@@ -209,3 +209,4 @@
 | 0223 | Три примера объясняют выходной порт устаревшей нуждой цели rust | [0223-examples-port-rationale-stale.md](0223-examples-port-rationale-stale.md) | не затронута (правятся комментарии примеров) |
 | 0224 | Подъём Kotlin в плагине intellij-takt снимет ограничение на пусковой JDK | [0224-intellij-kotlin-upgrade.md](0224-intellij-kotlin-upgrade.md) | расширяется: пусковой JDK 17…26 (было ≤ 21), совместимость плагина с IDE не менялась |
 | 0225 | Модуль semantic/statement.rs — 999 строк при пределе 1000 | [0225-statement-module-size.md](0225-statement-module-size.md) | не затронута (перемещение приватного модуля внутри крейта) |
+| 0221 | Панель структуры: инвариант состояния символом не становится | [0221-lsp-state-invariant-symbol.md](0221-lsp-state-invariant-symbol.md) | наблюдаемо: в панели структуры появляется новый узел; язык не тронут |

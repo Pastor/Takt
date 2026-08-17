@@ -80,6 +80,16 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                     Some(id) => id,
                     None => continue,
                 };
+                // Символом становится элемент состояния, ОБЪЯВЛЯЮЩИЙ имя: по
+                // `selection_range` (диапазону имени) редактор переходит из
+                // панели, и подставить туда нечего, если имени нет (0147).
+                //
+                // ⚠️ Разбор ИСЧЕРПЫВАЮЩИЙ, ветви `_` здесь быть не должно
+                // (фича 0221): пропущенный вид элемента не роняет ничего и не
+                // диагностируется — панель просто беднее файла. Так и жил
+                // `invariant` состояния: у модели он символ, внутри состояния
+                // не был им. Приём тот же, что в `style/naming.rs`, — новый
+                // вариант АСД обязан заставить принять решение.
                 let children: Vec<DocumentSymbol> = s
                     .elements
                     .iter()
@@ -94,7 +104,29 @@ fn symbols_from_model(model: &crate::parser::ast::Model, source: &str) -> Vec<Do
                                 None,
                             ))
                         }
-                        _ => None,
+                        // Вид тот же, что у инварианта МОДЕЛИ, — иначе одна
+                        // конструкция языка выглядела бы в панели двумя
+                        // разными.
+                        StateElement::Invariant(i) => {
+                            let inv_id = i.name.as_ref()?;
+                            Some(make_sym(
+                                inv_id.name.clone(),
+                                SymbolKind::CONSTANT,
+                                loc_to_range(&i.loc, source),
+                                loc_to_range(&inv_id.loc, source),
+                                None,
+                            ))
+                        }
+                        // `every 100ms { … }` — имени не объявляет: период не
+                        // идентификатор, и `selection_range` пришлось бы
+                        // подставлять синтетический.
+                        StateElement::Every(_) => None,
+                        // `: [Guard] …;` / `: [LTL] …;` — тоже без имени.
+                        StateElement::InlineFormula(_) => None,
+                        // `next Имя` и `ref Имя: …` — ССЫЛКИ на чужое имя, а не
+                        // объявления: символ здесь врал бы о месте объявления.
+                        StateElement::Next(_) | StateElement::Reference(..) => None,
+                        StateElement::StraySemicolon(_) => None,
                     })
                     .collect();
                 out.push(make_sym(

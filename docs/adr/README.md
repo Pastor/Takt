@@ -203,3 +203,4 @@
 | [0223](./0223-examples-port-rationale-stale.md) | Три примера объясняют выходной порт устаревшей нуждой цели rust | Accepted | фича 0223 |
 | [0224](./0224-intellij-kotlin-upgrade.md) | Подъём Kotlin в плагине intellij-takt снимет ограничение на пусковой JDK | Accepted | фича 0224 |
 | [0225](./0225-statement-module-size.md) | Модуль semantic/statement.rs — 999 строк при пределе 1000 | Accepted | фича 0225 |
+| [0221](./0221-lsp-state-invariant-symbol.md) | Панель структуры: инвариант состояния символом не становится | Accepted | фича 0221 |
