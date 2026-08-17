@@ -206,3 +206,4 @@
 | 0214 | Регистровый интерфейс sv-mmio | [0214-sv-mmio-unused-write-signals.md](0214-sv-mmio-unused-write-signals.md) | — (новая фича) |
 | 0245 | Симулятор исполняет S(Модель) — проверку состояния под-модели | [0245-sim-state-of-model.md](0245-sim-state-of-model.md) | — (новая фича) |
 | 0246 | Ссылка вперёд в инициализаторе переменной — ошибка компиляции | [0246-init-forward-reference.md](0246-init-forward-reference.md) | — (новая фича) |
+| 0223 | Три примера объясняют выходной порт устаревшей нуждой цели rust | [0223-examples-port-rationale-stale.md](0223-examples-port-rationale-stale.md) | не затронута (правятся комментарии примеров) |

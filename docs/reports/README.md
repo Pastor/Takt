@@ -166,3 +166,4 @@
 | 0237 | Раздел «Импорты» не описывает S(Модель) | [0237-book-state-of-model-section.md](0237-book-state-of-model-section.md) | ГОТОВО |
 | 0246 | Ссылка вперёд в инициализаторе переменной — ошибка компиляции | [0246-init-forward-reference.md](0246-init-forward-reference.md) | ГОТОВО |
 | 0222 | Раздел документа о свёртке инициализатора | [0222-book-variables-const-fold.md](0222-book-variables-const-fold.md) | ГОТОВО |
+| 0223 | Три примера объясняют выходной порт устаревшей нуждой цели rust | [0223-examples-port-rationale-stale.md](0223-examples-port-rationale-stale.md) | ГОТОВО |
