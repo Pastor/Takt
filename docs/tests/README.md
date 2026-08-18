@@ -200,3 +200,4 @@
 | 0162 | Пропущенные метки версий языка и сторож правила 22 | [0162-git-tag-v040.md](0162-git-tag-v040.md) | ГОТОВО |
 | 0266 | Чтение порта в инициализаторе объявления | [0266-port-in-declaration-initializer.md](0266-port-in-declaration-initializer.md) | ГОТОВО |
 | 0291 | Решение «ребро безусловно» — у одного носителя | [0291-rust-sv-unresolved-condition.md](0291-rust-sv-unresolved-condition.md) | ГОТОВО |
+| 0300 | Дробная арифметика в инициализаторе объявления | [0300-fractional-init-arithmetic.md](0300-fractional-init-arithmetic.md) | ГОТОВО |

@@ -453,3 +453,4 @@
 | 0162-01 | 0162 | Метки версий и сторож правила 22 | [0162-01-git-tag-v040.md](0162-01-git-tag-v040.md) |
 | 0266-01 | 0266 | SE-113 в общей воронке с SE-099 | [0266-01-port-in-declaration-initializer.md](0266-01-port-in-declaration-initializer.md) |
 | 0291-01 | 0291 | Предикат is_unconditional и сторож | [0291-01-rust-sv-unresolved-condition.md](0291-01-rust-sv-unresolved-condition.md) |
+| 0300-01 | 0300 | Точная десятичная свёртка и SE-114 | [0300-01-fractional-init-arithmetic.md](0300-01-fractional-init-arithmetic.md) |
