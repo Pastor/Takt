@@ -14,7 +14,14 @@ jobs:
     name: Ubuntu — полный precheck.sh (строгий режим)
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 — полный клон С ТЕГАМИ (фича 0162). По умолчанию
+      # actions/checkout берёт один коммит и тегов не выкачивает, а гейт метки
+      # версии под PRECHECK_STRICT=1 требует их наличия: без тегов пропуск тега
+      # неотличим от невыкачанных тегов. Задание windows правки не требует — оно
+      # гоняет только cargo test, без precheck.sh.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Толчейн НЕ задаётся здесь: он зафиксирован в `rust-toolchain.toml`
       # (фича 0137), и rustup на раннере ставит именно его — вместе с

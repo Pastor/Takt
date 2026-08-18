@@ -220,3 +220,4 @@
 | [0158](./0158-intellij-run-configurations.md) | Запуск компилятора и симулятора из IntelliJ | Draft | фича 0158 |
 | [0165](./0165-taktc-version-subcommand.md) | Подкоманда taktc version | Draft | фича 0165 |
 | [0161](./0161-fixture-comments-rename.md) | Остаточные старые имена языка в данных и комментариях | Accepted | фича 0161 |
+| [0162](./0162-git-tag-v040.md) | Пропущенные метки версий языка и сторож правила 22 | Accepted | фича 0162 |
