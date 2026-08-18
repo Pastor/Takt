@@ -55,9 +55,7 @@ use crate::generator::sv::sv_time;
 use crate::generator::sv::sv_type::{enum_width, sv_enum_type_name, sv_type};
 use crate::semantic::minimap::{Element, Name, StateExtend};
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::{
-    ConditionNode, ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode, VariableNode,
-};
+use crate::semantic::{ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode, VariableNode};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -866,10 +864,10 @@ fn emit_transitions(
         let Some(target) = states.iter().find(|n| n.local() == reference.name).cloned() else {
             continue; // цель вне достижимых состояний
         };
-        let unconditional = matches!(
-            reference.cond,
-            ConditionNode::None | ConditionNode::Unresolved(_)
-        );
+        // Решение «ребро безусловно» — у ОДНОГО носителя (фича 0291); см.
+        // `ConditionNode::is_unconditional`. Прежде здесь стоял `Unresolved`,
+        // и условное ребро становилось безусловным молча.
+        let unconditional = reference.cond.is_unconditional();
         if unconditional {
             // Безусловное ребро: всё, что ниже, недостижимо, — и это верно, так
             // как в C оно тоже завершается `break`.

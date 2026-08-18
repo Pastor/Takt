@@ -174,10 +174,12 @@ fn check_nondeterministic_model(model: Rc<RefCell<ModelNode>>, warnings: &mut Ve
             format!("модель '{}', состояние '{}'", model_name, state_name)
         };
 
-        // Ce14: Подсчёт безусловных переходов (Condition::None)
+        // Ce14: подсчёт безусловных переходов. Что считать безусловным —
+        // решает `ConditionNode::is_unconditional` (фича 0291), а не эта
+        // проверка: правило одно на восемь потребителей.
         let unconditional_count = references
             .iter()
-            .filter(|r| matches!(r.cond, ConditionNode::None))
+            .filter(|r| r.cond.is_unconditional())
             .count();
 
         if unconditional_count > 1 {
@@ -196,7 +198,7 @@ fn check_nondeterministic_model(model: Rc<RefCell<ModelNode>>, warnings: &mut Ve
         // NI4: Анализ структурного и интервального перекрытия условных переходов
         let conditional: Vec<_> = references
             .iter()
-            .filter(|r| !matches!(r.cond, ConditionNode::None))
+            .filter(|r| !r.cond.is_unconditional())
             .collect();
 
         for i in 0..conditional.len() {

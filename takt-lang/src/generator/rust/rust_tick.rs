@@ -282,7 +282,6 @@ fn emit_transitions(
     scope: &mut Scope,
     out: &mut StmtOutput,
 ) -> Result<bool, Diagnostic> {
-    use crate::semantic::ConditionNode;
     // СОСЕДНИЕ рёбра в одно и то же состояние сливаются в одно условие через
     // `||`. Это не косметика: тела у них совпадают дословно (тот же `exit`, тот
     // же `enter`, то же присваивание), и clippy справедливо считает такую
@@ -311,9 +310,11 @@ fn emit_transitions(
     let mut first = true;
     for (target, group) in edges {
         let reference = group[0];
-        let unconditional = group
-            .iter()
-            .any(|r| matches!(r.cond, ConditionNode::None | ConditionNode::Unresolved(_)));
+        // Решение «ребро безусловно» — у ОДНОГО носителя (фича 0291): пять
+        // копий этого правила уже разъехались, и цель `rust` считала
+        // безусловным ещё и `Unresolved`, то есть условное ребро срабатывало
+        // всегда — валидный вывод, другой автомат.
+        let unconditional = group.iter().any(|r| r.cond.is_unconditional());
         if unconditional {
             // Безусловный переход. Всё, что за ним, недостижимо — в C это молча,
             // в Rust валит `-D warnings`. Поэтому эмиссия рёбер прекращается.
