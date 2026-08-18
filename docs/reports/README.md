@@ -181,3 +181,4 @@
 | 0153 | Рабочая область: references и rename между файлами | [0153-lsp-workspace-index.md](0153-lsp-workspace-index.md) | ГОТОВО |
 | 0251 | Единый каталог сборки | [0251-cargo-target-dir.md](0251-cargo-target-dir.md) | ГОТОВО |
 | 0154 | Переименование отдано серверу | [0154-intellij-server-rename.md](0154-intellij-server-rename.md) | ГОТОВО |
+| 0150 | Позиционная форма предупреждает о себе | [0150-sim-positional-scenario-deprecation.md](0150-sim-positional-scenario-deprecation.md) | ГОТОВО |

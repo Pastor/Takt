@@ -222,3 +222,4 @@
 | 0153 | Индексация рабочей области для LSP (references/rename между файлами) | [0153-lsp-workspace-index.md](0153-lsp-workspace-index.md) | — (новая фича) |
 | 0251 | Единый каталог сборки для всех потребителей cargo | [0251-cargo-target-dir.md](0251-cargo-target-dir.md) | — (новая фича) |
 | 0154 | Перевод плагина IntelliJ на серверный rename | [0154-intellij-server-rename.md](0154-intellij-server-rename.md) | — (новая фича) |
+| 0150 | Признание позиционной формы сценария устаревшей | [0150-sim-positional-scenario-deprecation.md](0150-sim-positional-scenario-deprecation.md) | — (новая фича) |

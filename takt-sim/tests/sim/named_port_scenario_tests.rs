@@ -251,3 +251,76 @@ fn named_scenario_runs_through_the_binary() {
         "именованная форма нужной длины не должна давать диагностик: {stderr}"
     );
 }
+
+/// A1 (фича 0150): позиционная форма даёт `SIM-037` — и **ровно один раз**,
+/// сколько бы шагов её ни использовало.
+///
+/// ⚠️ Счёт вхождений здесь существеннее самого факта: предупреждение на каждый
+/// шаг превратило бы длинный сценарий в стену одинаковых строк, и следующее —
+/// настоящее — предупреждение потерялось бы среди повторов.
+#[test]
+fn positional_form_warns_once_per_run() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_takt-sim"))
+        .args([
+            "tests/data/named0132/panel.takt",
+            "-s",
+            "tests/data/named0132/positional_multi_step.json",
+            "--steps",
+            "4",
+        ])
+        .output()
+        .expect("запуск симулятора");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        stderr.matches("SIM-037").count(),
+        1,
+        "предупреждение о форме обязано печататься один раз за прогон: {stderr}"
+    );
+    assert!(
+        out.status.success(),
+        "форма устарела, но принимается: прогон обязан пройти: {stderr}"
+    );
+}
+
+/// A2 (фича 0150): именованная форма молчит — новое предупреждение её не задевает.
+#[test]
+fn named_form_does_not_warn_about_deprecation() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_takt-sim"))
+        .args([
+            "tests/data/named0132/panel.takt",
+            "-s",
+            "tests/data/named0132/named.json",
+            "--steps",
+            "1",
+        ])
+        .output()
+        .expect("запуск симулятора");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("SIM-037"),
+        "именованная форма не должна давать предупреждения об устаревании: {stderr}"
+    );
+}
+
+/// A3 (фича 0150): `SIM-032` не поглощён новым кодом — они о разном.
+///
+/// `SIM-037` — о **форме** (массив вместо имён), `SIM-032` — о **длине**
+/// (значений меньше, чем портов). Вход, где верно и то и другое, обязан дать
+/// **оба**: слив их, мы потеряли бы различие «форма устарела» и «массив не той
+/// длины».
+#[test]
+fn length_and_form_warnings_are_independent() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_takt-sim"))
+        .args([
+            "tests/data/named0132/panel.takt",
+            "-s",
+            "tests/data/named0132/short_positional.json",
+            "--steps",
+            "1",
+        ])
+        .output()
+        .expect("запуск симулятора");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("SIM-032"), "о длине: {stderr}");
+    assert!(stderr.contains("SIM-037"), "о форме: {stderr}");
+}
