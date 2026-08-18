@@ -36,7 +36,7 @@ pub mod extend;
 mod extend_args;
 pub mod formula;
 mod function;
-mod import;
+pub(crate) mod import; // правила поиска файла нужны и области LSP (0153)
 pub mod index;
 pub mod lower_float;
 pub mod ltl_check;

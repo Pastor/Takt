@@ -25,6 +25,7 @@ mod lsp_port_io_tests;
 mod lsp_references_tests;
 mod lsp_rename_tests;
 mod lsp_tests;
+mod lsp_workspace_tests;
 mod semantic_tokens_tests;
 mod style_naming_lsp_tests;
 mod type_highlighting_tests;

@@ -13,6 +13,7 @@
 //! Часть модуля `lsp` (фича 0027: деление по логике).
 
 use super::*;
+use crate::lsp::workspace::{Resolution, Workspace};
 use crate::semantic::usages::{self, SymbolKind, UsageTable};
 
 /// Причина отказа переименовать.
@@ -37,6 +38,15 @@ pub enum RenameRefusal {
     NotAnIdentifier,
     /// Новое имя — ключевое слово.
     Keyword,
+    /// Файл рабочей области, потребляющий этот символ, не разбирается: его
+    /// вхождения остались бы неправленными (фича 0153).
+    UnparsableConsumer,
+    /// Имя объявлено несколькими импортированными файлами — какой из них
+    /// имеется в виду, область не знает (фича 0153).
+    AmbiguousImport,
+    /// Новое имя уже объявлено в файле, которого коснулась бы правка:
+    /// переименование молча завело бы затенение (фича 0153).
+    NameTaken,
 }
 
 impl RenameRefusal {
@@ -56,6 +66,18 @@ impl RenameRefusal {
             }
             Self::NotAnIdentifier => "новое имя не является идентификатором языка",
             Self::Keyword => "новое имя — ключевое слово языка",
+            Self::UnparsableConsumer => {
+                "файл рабочей области, использующий это имя, не компилируется: \
+                 его вхождения остались бы неправленными"
+            }
+            Self::AmbiguousImport => {
+                "имя объявлено сразу в нескольких подключённых файлах: какое из них \
+                 переименовывать, определить нельзя"
+            }
+            Self::NameTaken => {
+                "новое имя уже занято в файле, которого коснулась бы правка: \
+                 переименование изменило бы смысл программы"
+            }
         }
     }
 }
@@ -148,6 +170,129 @@ fn validate_new_name(new_name: &str) -> Result<(), RenameRefusal> {
     }
     if crate::parser::lexer::is_keyword(new_name) {
         return Err(RenameRefusal::Keyword);
+    }
+    Ok(())
+}
+
+/// Диапазон имени под курсором с учётом рабочей области, либо причина отказа.
+///
+/// Отличие от [`prepare_rename_at`] — в охвате: символ, объявленный в другом
+/// файле области, больше не даёт `ForeignDeclaration`, потому что правка
+/// доберётся до всех его вхождений (гарантия 0153: «полнота **в пределах
+/// рабочей области** или отказ»).
+pub fn prepare_rename_in_workspace(
+    path: &str,
+    position: Position,
+    roots: &[String],
+    search_paths: &[String],
+    overlay: &dyn Fn(&str) -> Option<String>,
+) -> Result<Range, RenameRefusal> {
+    let workspace = Workspace::scan(roots, search_paths, overlay);
+    let (resolution, source, offset) = resolve_in(&workspace, path, position)?;
+    check_resolution(&resolution)?;
+    let here = resolution
+        .occurrences
+        .iter()
+        .find(|o| o.path == path && (o.start as usize) <= offset && offset <= o.end as usize)
+        .ok_or(RenameRefusal::NoSymbol)?;
+    Ok(offset_to_range(
+        &source,
+        here.start as usize,
+        here.end as usize,
+    ))
+}
+
+/// Правки переименования **по всей рабочей области**: файл объявления и все
+/// файлы-потребители.
+///
+/// Возвращает пары «путь файла — правки в нём». Диапазоны внутри файла не
+/// пересекаются.
+pub fn rename_in_workspace(
+    path: &str,
+    position: Position,
+    new_name: &str,
+    roots: &[String],
+    search_paths: &[String],
+    overlay: &dyn Fn(&str) -> Option<String>,
+) -> Result<Vec<(String, Vec<TextEdit>)>, RenameRefusal> {
+    validate_new_name(new_name)?;
+    let workspace = Workspace::scan(roots, search_paths, overlay);
+    let (resolution, _source, _offset) = resolve_in(&workspace, path, position)?;
+    check_resolution(&resolution)?;
+
+    // ⚠️ Проверка НОВАЯ (фича 0153): пока правился один файл, столкновение имён
+    // видел автор. Теперь правка уходит в файлы, которых он не открывал, и
+    // занятое имя там означало бы затенение — текст остаётся компилируемым,
+    // а смысл меняется.
+    for file in resolution.touched_files() {
+        if workspace.declares_name(file, new_name) {
+            return Err(RenameRefusal::NameTaken);
+        }
+    }
+
+    let mut per_file: Vec<(String, Vec<TextEdit>)> = Vec::new();
+    for occurrence in &resolution.occurrences {
+        let text = workspace
+            .text_of(&occurrence.path)
+            .ok_or(RenameRefusal::Incomplete)?;
+        let edit = TextEdit {
+            range: offset_to_range(text, occurrence.start as usize, occurrence.end as usize),
+            new_text: new_name.to_string(),
+        };
+        match per_file.iter_mut().find(|(p, _)| *p == occurrence.path) {
+            Some((_, edits)) => edits.push(edit),
+            None => per_file.push((occurrence.path.clone(), vec![edit])),
+        }
+    }
+    Ok(per_file)
+}
+
+/// Разрешает символ под курсором в области; общая часть обоих входов.
+fn resolve_in(
+    workspace: &Workspace,
+    path: &str,
+    position: Position,
+) -> Result<(Resolution, String, usize), RenameRefusal> {
+    let source = workspace
+        .text_of(path)
+        .ok_or(RenameRefusal::Unparsable)?
+        .to_string();
+    // Текст, который не разбирается, областей видимости не даёт (правило 0131).
+    let (ast, _) = crate::parse(&source, 0).map_err(|_| RenameRefusal::Unparsable)?;
+    if !usages::collect_usages(&ast).is_complete() {
+        return Err(RenameRefusal::Incomplete);
+    }
+    let offset = position_to_offset(&source, position).ok_or(RenameRefusal::NoSymbol)?;
+    let resolution = workspace
+        .resolve(path, offset)
+        .ok_or(RenameRefusal::NoSymbol)?;
+    Ok((resolution, source, offset))
+}
+
+/// Причины отказа, зависящие только от найденного символа.
+///
+/// ⚠️ Живут в одном месте, а не в каждом входе: разъехавшись, `prepareRename`
+/// разрешил бы то, на чём `rename` затем откажет.
+fn check_resolution(resolution: &Resolution) -> Result<(), RenameRefusal> {
+    if resolution.ambiguous {
+        return Err(RenameRefusal::AmbiguousImport);
+    }
+    if !resolution.unparsable_consumers.is_empty() {
+        return Err(RenameRefusal::UnparsableConsumer);
+    }
+    // Имя, введённое самим импортом (`import "файл";`, `as M`), за границей
+    // файла ни с чем не связано: переименовать его — значит разойтись с
+    // именем файла либо с алиасом, о котором знает только импортёр.
+    if resolution.import_binding {
+        return Err(RenameRefusal::ModelName);
+    }
+    // ⚠️ Объявления среди вхождений нет — символ не найден ни в одном файле
+    // области. Так выглядит имя, введённое `import "файл";` у импортёра
+    // (`Helper` получен из ИМЕНИ ФАЙЛА) и всякое имя, пришедшее извне области.
+    // Переименовать одно вхождение значит оторвать его от того, на что оно
+    // ссылается, — то есть испортить файл молча.
+    if !resolution.occurrences.iter().any(|o| o.declaration) {
+        return Err(RenameRefusal::ForeignDeclaration);
     }
     Ok(())
 }
