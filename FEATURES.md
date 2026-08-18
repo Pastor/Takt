@@ -31,8 +31,8 @@
 
 | № | Фича | Зависит от | Класс | Tier | Статус |
 |---|------|------------|-------|------|--------|
-| [0150](docs/features/0150-sim-positional-scenario-deprecation.md) | Признание позиционной формы сценария устаревшей (решение заказчика) | — | прочее | 3 | СОЗДАНА |
 | [0154](docs/features/0154-intellij-server-rename.md) | Перевод плагина IntelliJ на серверный `rename` | — | прочее | 3 | СОЗДАНА |
+| [0150](docs/features/0150-sim-positional-scenario-deprecation.md) | Признание позиционной формы сценария устаревшей (решение заказчика) | — | прочее | 3 | СОЗДАНА |
 | [0158](docs/features/0158-intellij-run-configurations.md) | Запуск компилятора и симулятора из IntelliJ (Run Configurations) | — | прочее | 3 | СОЗДАНА |
 | [0165](docs/features/0165-taktc-version-subcommand.md) | Подкоманда `taktc version` | — | прочее | 3 | СОЗДАНА |
 | [0161](docs/features/0161-fixture-comments-rename.md) | Ренейм Lam→Takt в комментариях тест-фикстур | — | прочее | proc | СОЗДАНА |
