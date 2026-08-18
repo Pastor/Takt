@@ -445,3 +445,4 @@
 | 0153-02 | 0153 | references и rename по рабочей области | [0153-02-lsp-workspace-index.md](0153-02-lsp-workspace-index.md) |
 | 0153-03 | 0153 | Бинарник, контекст и документ | [0153-03-lsp-workspace-index.md](0153-03-lsp-workspace-index.md) |
 | 0251-01 | 0251 | Настройка, документация и проверки | [0251-01-cargo-target-dir.md](0251-01-cargo-target-dir.md) |
+| 0154-01 | 0154 | Снятие PSI-переименования и сторожа | [0154-01-intellij-server-rename.md](0154-01-intellij-server-rename.md) |

@@ -11,8 +11,13 @@ import org.takt.intellij.navigation.TaktSymbolScanner
  * Резолв — эвристикой `TaktSymbolScanner` (первая одноимённая декларация файла; без
  * областей видимости — осознанное ограничение 0023). **Мягкая** (`soft = true`):
  * неразрешённое имя (кросс-файловое, имя состояния, встроенное) НЕ подсвечивается
- * ошибкой. Даёт нативный find usages и rename использований; кросс-файловость —
- * за LSP (0038).
+ * ошибкой. Даёт навигацию, когда сервер недоступен (тихая деградация 0038).
+ *
+ * ⚠️ **Переименование эта ссылка не обслуживает** (фича 0154): его делает
+ * сервер через `LSPRenameHandler`, потому что у него есть области видимости и
+ * рабочая область, а здесь — эвристика одного файла. Возвращать сюда
+ * `handleElementRename` нельзя: вместе с ним вернётся и `PsiNamedElement` у
+ * декларации, а он **перекрывает** серверный путь.
  */
 class TaktNameReference(element: TaktNameRef) :
     PsiReferenceBase<TaktNameRef>(element, TextRange(0, element.textLength), /* soft = */ true) {
@@ -26,11 +31,5 @@ class TaktNameReference(element: TaktNameRef) :
             ?: return null
         val leaf = file.findElementAt(declRange.range.startOffset) ?: return null
         return leaf.parent as? TaktNameDecl ?: leaf
-    }
-
-    /** Rename использования — замена текста листа напрямую (без манипулятора). */
-    override fun handleElementRename(newElementName: String): PsiElement {
-        element.setIdentifierText(newElementName)
-        return element
     }
 }

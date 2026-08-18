@@ -14,7 +14,7 @@ import org.takt.intellij.psi.TaktTokenTypes
  * Все токены — листья под корнем, **кроме** одиночных токенов, несущих ссылки/имена:
  * - строка-путь `import` (предыдущий значимый токен — `import`/`from`) → композит
  *   [TaktElementTypes.IMPORT_PATH] (файловая `PsiReference`, R5);
- * - идентификатор-**декларация** → [TaktElementTypes.NAME_DECL] (`PsiNamedElement`, R3);
+ * - идентификатор-**декларация** → [TaktElementTypes.NAME_DECL] (цель навигации; переименование — у сервера, 0154);
  * - идентификатор-**использование** → [TaktElementTypes.NAME_REF] (`PsiReference`, R3).
  *
  * Декларации отличаются от использований **эвристикой `TaktSymbolScanner`** (единый

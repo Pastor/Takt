@@ -80,9 +80,12 @@
                 forClass="org.takt.intellij.psi.TaktImportPath"
                 implementationClass="org.takt.intellij.psi.TaktImportPathManipulator"/>
 
-        <!-- 0067 (R3): валидатор имён для нативного rename (отвергает ключевые
-             слова Takt). Декларации — PsiNamedElement (NAME_DECL), использования —
-             PsiReference (NAME_REF); их строит парсер, регистрация не требуется. -->
+        <!-- 0067 (R3): валидатор имён (отвергает ключевые слова Takt). Точка
+             расширения ЯЗЫКА: её спрашивает инфраструктура рефакторинга при
+             вводе нового имени, поэтому валидатор пережил фичу 0154.
+             ⚠️ 0154: узлы имён (NAME_DECL/NAME_REF) строит парсер и они остаются
+             ради навигации, но декларация БОЛЬШЕ НЕ PsiNamedElement —
+             переименование делает сервер (см. TaktNameElements.kt). -->
         <lang.namesValidator
                 language="Takt"
                 implementationClass="org.takt.intellij.refactoring.TaktNamesValidator"/>
