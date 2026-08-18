@@ -217,3 +217,4 @@
 | [0251](./0251-cargo-target-dir.md) | Единый каталог сборки для всех потребителей cargo | Draft | фича 0251 |
 | [0154](./0154-intellij-server-rename.md) | Перевод плагина IntelliJ на серверный rename | Draft | фича 0154 |
 | [0150](./0150-sim-positional-scenario-deprecation.md) | Признание позиционной формы сценария устаревшей | Draft | фича 0150 |
+| [0158](./0158-intellij-run-configurations.md) | Запуск компилятора и симулятора из IntelliJ | Draft | фича 0158 |

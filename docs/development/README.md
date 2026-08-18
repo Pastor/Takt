@@ -447,3 +447,4 @@
 | 0251-01 | 0251 | Настройка, документация и проверки | [0251-01-cargo-target-dir.md](0251-01-cargo-target-dir.md) |
 | 0154-01 | 0154 | Снятие PSI-переименования и сторожа | [0154-01-intellij-server-rename.md](0154-01-intellij-server-rename.md) |
 | 0150-01 | 0150 | SIM-037, гейт репозитория и перевод примера документа | [0150-01-sim-positional-scenario-deprecation.md](0150-01-sim-positional-scenario-deprecation.md) |
+| 0158-01 | 0158 | Конфигурации запуска, командная строка и фильтр вывода | [0158-01-intellij-run-configurations.md](0158-01-intellij-run-configurations.md) |
