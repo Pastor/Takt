@@ -439,3 +439,5 @@
 | 0250-01 | 0250 | Запись разряда | [0250-01-bit-write-in-targets.md](0250-01-bit-write-in-targets.md) |
 | 0250-02 | 0250 | Запись разряда | [0250-02-bit-write-in-targets.md](0250-02-bit-write-in-targets.md) |
 | 0250-03 | 0250 | Запись разряда | [0250-03-bit-write-in-targets.md](0250-03-bit-write-in-targets.md) |
+| 0145-01 | 0145 | Метрика потолка: рёбра вместо вершин | [0145-01-verify-vertex-budget.md](0145-01-verify-vertex-budget.md) |
+| 0145-02 | 0145 | Бенч роста, документ и контекст | [0145-02-verify-vertex-budget.md](0145-02-verify-vertex-budget.md) |

@@ -29,25 +29,43 @@
 //! в полном объёме — сознательно **не** реализовано (тот же класс риска, что
 //! стоил проекту года: неверный ход данных сломал бы `Holds`).
 //!
-//! # Потолок (правило 4)
+//! # Потолок (правило 4; метрика — фича 0145)
 //!
-//! Размер `|состояний| × Π|домен|` считается **до** построения. Превышение
-//! [`VERTEX_LIMIT`] → `Unsupported`, а не долгий счёт. `float`/`q` и прочие
-//! неперечислимые типы → `Unsupported` (правило 5).
+//! Размер считается **до** построения; превышение [`EDGE_LIMIT`] →
+//! `Unsupported`, а не долгий счёт. `float`/`q` и прочие неперечислимые типы →
+//! `Unsupported` (правило 5).
+//!
+//! Меряются **рёбра**, а не вершины:
+//!
+//! ```text
+//! вершин: V = V_упр × D          — линейно по D
+//! рёбер:  E = E_упр × D²         — КВАДРАТИЧНО по D
+//! ```
+//!
+//! где `D` — произведение доменов отслеживаемых переменных. Квадрат берётся
+//! из правила 3: управляющее ребро скрещивается с **любой** оценкой, то есть
+//! ход данных недетерминирован. Работа (произведение с автоматом Бюхи и
+//! nested DFS) идёт по рёбрам, поэтому потолок по вершинам стоимость не
+//! предсказывал: замер 0145 дал два входа по 12 288 вершин, различающиеся по
+//! времени в 2000 раз, — прежний потолок `1_000_000` **вершин** пропускал
+//! входы, на которых инструмент не завершался за минуты.
 
 use super::kripke::Kripke;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionNode, ExpressionNode, ModelNode, VariableNode};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Потолок числа вершин Крипке с данными (правило 4 ADR).
+/// Потолок числа **рёбер** Крипке с данными (правило 4 ADR 0068, метрика —
+/// ADR 0145).
 ///
-/// Подобран так, чтобы заявленные примеры проходили, а взрыв — отсекался:
-/// `comprehensive` + `u8` → 5 × 256 = 1280 (проходит); `stacker` + `bit` →
-/// 19 × 2 = 38 (проходит); φ над **тремя** `u8` → 5 × 256³ ≈ 8.4 × 10⁷
-/// (`Unsupported`). Значение — инженерное, не физическое: увеличивать можно, но
-/// вместе с замером времени построения.
-pub const VERTEX_LIMIT: u128 = 1_000_000;
+/// Замер 0145 (release, 2026-08-18) даёт 0.35–2.4 мкс на ребро — разброс от
+/// размера автомата Бюхи, — то есть этот порог держит проверку в пределах
+/// 0.2–2 с. Калибровка: `comprehensive`/`Controller` + `u8` → 8 × 256² =
+/// 524 288 (проходит, замер 0.181 с); φ над **двумя** `u8` → ≥ 8.6 × 10⁹
+/// (`Unsupported`; прежний потолок по вершинам его пропускал, и прогон не
+/// завершался). Значение — инженерное, не физическое: увеличивать можно, но
+/// **вместе с замером времени** полной проверки, а не одного построения.
+pub const EDGE_LIMIT: u128 = 1_000_000;
 
 /// Строит Крипке с отслеживанием данных для формулы с атомами `atoms`, взяв
 /// управляющий граф из уже построенной `control` (0049).
@@ -93,18 +111,26 @@ pub fn build_data_kripke(
         }
     }
 
-    // 3. Домены из типов + потолок ДО построения (правила 4, 5).
-    let mut total = control.states.len() as u128;
-    let mut order: Vec<TrackedVar> = Vec::new();
-    for (name, decl) in &tracked {
+    // 3. Домены из типов + потолок ДО построения (правила 4, 5; метрика 0145).
+    let mut domain = 1u128; // D = Π|домен|
+    for decl in tracked.values() {
         let Some(size) = domain_size(&decl.ty, model) else {
             // float/q/массив/структура — домен не перечислим.
             return Err(data_atom_names(&data_atoms));
         };
-        total = match total.checked_mul(size) {
-            Some(t) if t <= VERTEX_LIMIT => t,
-            _ => return Err(data_atom_names(&data_atoms)), // потолок/переполнение
+        // Переполнение равносильно превышению потолка: считать нечего.
+        let Some(d) = domain.checked_mul(size) else {
+            return Err(data_atom_names(&data_atoms));
         };
+        domain = d;
+    }
+    if edges_exceed_limit(control, domain) {
+        return Err(data_atom_names(&data_atoms));
+    }
+
+    // 4. Материализация доменов (только после прохождения потолка).
+    let mut order: Vec<TrackedVar> = Vec::new();
+    for (name, decl) in &tracked {
         let values = domain_values(&decl.ty, model);
         let Some(init) = fold_expr(&decl.init) else {
             return Err(data_atom_names(&data_atoms)); // инициализатор не сворачивается
@@ -119,7 +145,7 @@ pub fn build_data_kripke(
         });
     }
 
-    // 4. Перечисление оценок (одометр) и ТОЧНАЯ разметка предикатов по оценке.
+    // 5. Перечисление оценок (одометр) и ТОЧНАЯ разметка предикатов по оценке.
     // Истинность предиката зависит только от оценки, не от состояния, — считаем
     // один раз на оценку.
     let num_val: usize = order
@@ -144,7 +170,7 @@ pub fn build_data_kripke(
         data_true.push(here);
     }
 
-    // 5. Полное произведение: вершина = состояние k × оценка j → id = k*num_val+j.
+    // 6. Полное произведение: вершина = состояние k × оценка j → id = k*num_val+j.
     let num_states = control.states.len();
     let total_vertices = num_states * num_val;
     let mut states: Vec<String> = Vec::with_capacity(total_vertices);
@@ -216,6 +242,29 @@ struct TrackedVar {
     name: String,
     values: Vec<i128>,
     init_idx: usize,
+}
+
+/// Превысит ли Крипке с данными потолок [`EDGE_LIMIT`]? Считается **до**
+/// построения: `E = max(E_упр, V_упр) × D²`.
+///
+/// ⚠️ `max` — не украшение. Он делает свойством **кода** то, что иначе держится
+/// рассуждением: у каждого состояния валидной модели есть преемник (безусловный
+/// `ref` либо самопетля `may_stutter`, ADR 0049), поэтому `E_упр ≥ V_упр`, и
+/// рёберный потолок мажорирует вершинный. Без `max` вырожденный граф без рёбер
+/// прошёл бы потолок с любым числом вершин — и отдельный потолок по вершинам
+/// пришлось бы держать вторым знанием об одном предмете.
+///
+/// ⚠️ Переполнение `u128` — тоже превышение: величина, не влезающая в 128 бит,
+/// заведомо за порогом.
+fn edges_exceed_limit(control: &Kripke, domain: u128) -> bool {
+    let control_edges = (control.edge_count() as u128).max(control.states.len() as u128);
+    let Some(square) = domain.checked_mul(domain) else {
+        return true;
+    };
+    match control_edges.checked_mul(square) {
+        Some(edges) => edges > EDGE_LIMIT,
+        None => true,
+    }
 }
 
 fn data_atom_names(atoms: &[DataAtom]) -> Vec<String> {
@@ -557,8 +606,8 @@ mod tests {
         );
     }
 
-    /// A2/потолок: φ над тремя `u8` (2 × 256³ ≈ 3.3 × 10⁷ > потолка) → `Unsupported`
-    /// **сразу** (потолок считается до построения).
+    /// A2/потолок: φ над тремя `u8` (рёбер `1 × (256³)² ≈ 2.8 × 10¹⁴`) →
+    /// `Unsupported` **сразу** (потолок считается до построения).
     #[test]
     fn three_u8_exceeds_ceiling_unsupported() {
         let src = "var a: u8 := 0; var b: u8 := 0; var c: u8 := 0; \
@@ -568,6 +617,102 @@ mod tests {
         assert!(
             matches!(v, Verdict::Unsupported(_)),
             "три u8 превышают потолок — ожидался Unsupported, получено {v:?}"
+        );
+    }
+
+    /// A2 (фича 0145, ГЛАВНЫЙ): вход, проходивший **вершинный** потолок и
+    /// вешавший инструмент, отвергается рёберным.
+    ///
+    /// Двенадцать `bit`-переменных при 3 состояниях: вершин `3 × 4096 =
+    /// 12 288` — в 81 раз ниже прежнего `VERTEX_LIMIT = 1_000_000`, то есть
+    /// прежний потолок вход **пропускал**, а рёбер `3 × 4096² ≈ 5 × 10⁷`, и
+    /// замер 0145 показал: прогон не заканчивается за 60 секунд.
+    ///
+    /// ⚠️ Сторож обязан быть именно таким входом. На трёх `u8` (соседний тест)
+    /// отвечают отказом **обе** метрики, и тест, взявший их, доказывал бы
+    /// прежнее поведение.
+    ///
+    /// ⚠️ При регрессе этот тест **не падает быстро — он виснет** (проверено
+    /// мутацией «считать `D` вместо `D²`»: прогон шёл более 10 минут в debug).
+    /// Быстрый сигнал даёт соседний `ceiling_counts_edges_not_vertices`, и
+    /// удалять его как «дублирующий» нельзя: он проверяет ту же формулу, но
+    /// падением, а не терпением.
+    #[test]
+    fn low_vertex_count_but_edge_explosion_is_unsupported() {
+        let mut src = String::new();
+        for i in 0..12 {
+            src.push_str(&format!("var b{i}: bit := 0; cond H{i} = b{i} = 1; "));
+        }
+        src.push_str("start A { ref B; } state B { ref C; } state C { ref A; }");
+        let atoms: Vec<String> = (0..12).map(|i| format!("H{i}")).collect();
+        let phi = format!("G ({})", atoms.join(" & "));
+
+        // Вершин мало — прежняя метрика этот вход принимала.
+        let vertices = 3u128 * 4096;
+        assert!(
+            vertices < 1_000_000,
+            "вход обязан проходить вершинный потолок"
+        );
+
+        let started = std::time::Instant::now();
+        let v = verdict(&src, &phi);
+        assert!(
+            matches!(v, Verdict::Unsupported(_)),
+            "рёбер ≈ 5 × 10⁷ — ожидался Unsupported, получено {v:?}"
+        );
+        // Грубый предохранитель, а не порог: отказ обязан прийти ДО построения,
+        // а построение этого графа занимает минуты.
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "отказ пришёл не до построения: {:?}",
+            started.elapsed()
+        );
+    }
+
+    /// A1 (фича 0145): потолок считает `max(E_упр, V_упр) × D²`.
+    ///
+    /// Формула проверяется на границе — по обе её стороны при одном и том же
+    /// графе управления: домен `2^k` подобран так, что `E × D²` перескакивает
+    /// `EDGE_LIMIT`.
+    #[test]
+    fn ceiling_counts_edges_not_vertices() {
+        let control = super::super::kripke::build_kripke(
+            &construct_model(
+                &parse("start A { ref B; } state B { ref A; }", 0).unwrap().0,
+                None,
+                &[],
+            )
+            .unwrap()
+            .borrow(),
+        )
+        .unwrap();
+        assert_eq!(control.edge_count(), 2, "A → B, B → A");
+
+        // 2 × D² ≤ 10⁶ ⟺ D ≤ 707: домен 512 проходит, 1024 — нет.
+        assert!(!edges_exceed_limit(&control, 512));
+        assert!(edges_exceed_limit(&control, 1024));
+        // Переполнение u128 — тоже превышение, а не паника.
+        assert!(edges_exceed_limit(&control, u128::MAX));
+    }
+
+    /// A3 (фича 0145): корпусной вход остаётся проверяемым — 8 × 256² =
+    /// 524 288 рёбер против порога 10⁶.
+    #[test]
+    fn corpus_controller_still_fits_the_ceiling() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../examples/comprehensive.takt"
+        );
+        let src = std::fs::read_to_string(path).expect("examples/comprehensive.takt");
+        let (ast, _) = parse(&src, 0).unwrap();
+        let root = construct_model(&ast, None, &[]).unwrap();
+        let controller = root.borrow().models.get("Controller").unwrap().clone();
+        let c = controller.borrow();
+        let control = super::super::kripke::build_kripke(&c).unwrap();
+        assert!(
+            !edges_exceed_limit(&control, 256),
+            "рёбер {} × 256² — корпусной вход обязан проходить",
+            control.edge_count()
         );
     }
 

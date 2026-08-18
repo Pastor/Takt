@@ -77,6 +77,24 @@ fn assert_verifiable(
     }
 }
 
+/// Модель с `bits` отслеживаемыми переменными типа `bit`.
+///
+/// Число оценок — `2^bits`, то есть сетка вдвое (а не в 256 раз) мельче, чем у
+/// [`data_model`]. Управляющий граф тот же, что там: два состояния, четыре
+/// ребра (по guard'у и самопетле у каждого), — поэтому рёбер Крипке с данными
+/// ровно `4 × (2^bits)²`, и точка бенча сравнима с потолком фичи 0145 прямым
+/// счётом.
+fn data_model_bits(bits: usize) -> String {
+    let mut src = String::from("out flag: bit;\n");
+    for i in 0..bits {
+        src.push_str(&format!("var v{i}: bit := 0;\n"));
+        src.push_str(&format!("cond Hot{i} = v{i} = 1;\n"));
+    }
+    src.push_str("start Idle {\n    always { flag := 1; }\n    ref Work: v0 = 1;\n}\n");
+    src.push_str("state Work { ref Idle: v0 = 0; }\n");
+    src
+}
+
 fn model_of(src: &str) -> std::rc::Rc<std::cell::RefCell<takt_lang::semantic::ModelNode>> {
     let (ast, _) = takt_lang::parse(src, 0).expect("разбор");
     construct_model(&ast, None, &[]).expect("семантика")
@@ -103,25 +121,45 @@ fn bench_control_properties(c: &mut Criterion) {
 
 fn bench_data_properties(c: &mut Criterion) {
     let mut group = c.benchmark_group("verify_data");
-    // ⚠️ ТОЛЬКО одна переменная — и это находка, а не упрощение. Замер фичи
-    // 0136: при **одной** отслеживаемой `u8` (256 оценок) проверка занимает
-    // 0.09 с и 76 МБ; при **двух** (65 536 оценок) она не заканчивается за
-    // 90 секунд и процесс приходится убивать. При этом вершин там 131 072 —
-    // вшестеро НИЖЕ потолка `VERTEX_LIMIT = 1_000_000` (фича 0068), то есть
-    // потолок пропускает вход, который практически неприменим.
+    // Ось роста — число ОЦЕНОК (произведение доменов отслеживаемых переменных),
+    // и меряется она `bit`-переменными: `k` штук дают `D = 2^k`, то есть сетку
+    // вдвое мельче, чем шаг «ещё один `u8`» (×256).
     //
-    // Ставить `vars = 2` в бенч нельзя: прогон повиснет. Факт вынесен
-    // кандидатом в `FEATURES.md`.
-    {
-        let vars = 1usize;
-        let model = model_of(&data_model(vars));
+    // ⚠️ Точки подобраны под потолок фичи 0145: он считается по РЁБРАМ
+    // (`рёбра управляющего графа × D²`, здесь рёбер 4), поэтому `k = 8` даёт
+    // 262 144 рёбер и проходит, а `k = 9` — 1 048 576 и отвергается
+    // `Unsupported`. Сторож `assert_verifiable` ниже это и ловит: бенч на
+    // отказе мерил бы наносекунды.
+    //
+    // ⚠️ До 0145 здесь стояла ОДНА точка, и в комментарии объяснялось, почему
+    // вторую поставить нельзя: при двух `u8` (65 536 оценок) прогон не
+    // заканчивался за 90 секунд, хотя вершин было 131 072 — вшестеро ниже
+    // тогдашнего потолка по вершинам. Ось, ради которой бенч заведён, не
+    // мерилась вовсе.
+    for bits in [6usize, 7, 8] {
+        let model = model_of(&data_model_bits(bits));
         // Формула упоминает ВСЕ переменные — иначе неупомянутые не отслеживаются.
         // Конъюнкция в LTL пишется `&` (не `&&`): грамматика формул своя.
-        let atoms: Vec<String> = (0..vars).map(|i| format!("Hot{i}")).collect();
+        let atoms: Vec<String> = (0..bits).map(|i| format!("Hot{i}")).collect();
         let phi = parse_ltl_property(&format!("G ({})", atoms.join(" & "))).expect("формула");
-        assert_verifiable(&model, &phi, &format!("data/vars={vars}"));
+        assert_verifiable(&model, &phi, &format!("data/bits={bits}"));
         group.bench_with_input(
-            BenchmarkId::new("globally/vars", vars),
+            BenchmarkId::new("globally/valuations", 1usize << bits),
+            &(model, phi),
+            |b, (model, phi)| {
+                b.iter(|| verify_model(black_box(model.clone()), black_box(phi)));
+            },
+        );
+    }
+
+    // Реалистичный вход того же класса: один `u8` (256 оценок) — так свойство
+    // над данными выглядит в модели, а не в бенче.
+    {
+        let model = model_of(&data_model(1));
+        let phi = parse_ltl_property("G (Hot0)").expect("формула");
+        assert_verifiable(&model, &phi, "data/u8");
+        group.bench_with_input(
+            BenchmarkId::new("globally/u8", 1usize),
             &(model, phi),
             |b, (model, phi)| {
                 b.iter(|| verify_model(black_box(model.clone()), black_box(phi)));

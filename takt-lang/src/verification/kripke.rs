@@ -86,6 +86,16 @@ impl Kripke {
             .unwrap_or_else(|| EMPTY.get_or_init(BTreeSet::new))
     }
 
+    /// Число рёбер графа.
+    ///
+    /// Потолок верификации по данным считается **по рёбрам** (фича 0145):
+    /// стоимость проверки идёт по ним, а не по вершинам, и множитель
+    /// произведения доменов входит в число рёбер квадратично
+    /// ([`data_kripke`](super::data_kripke)).
+    pub fn edge_count(&self) -> usize {
+        self.transitions.values().map(BTreeSet::len).sum()
+    }
+
     /// Имена атомов, не являющихся именами состояний (для честного отказа R7).
     pub fn unknown_atoms<'a, I: IntoIterator<Item = &'a String>>(&self, atoms: I) -> Vec<String> {
         let known: BTreeSet<&str> = self.states.iter().map(String::as_str).collect();
