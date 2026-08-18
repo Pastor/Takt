@@ -29,3 +29,7 @@ obj_dir
 /book/book/
 
 takt-lang/target
+
+# Кэш байткода Python (документные гейты scripts/*.py)
+__pycache__/
+*.pyc
