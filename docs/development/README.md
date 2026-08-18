@@ -451,3 +451,4 @@
 | 0165-01 | 0165 | Подкоманда version и её синонимы | [0165-01-taktc-version-subcommand.md](0165-01-taktc-version-subcommand.md) |
 | 0161-01 | 0161 | Ренейм старых имён и гейт запрета | [0161-01-fixture-comments-rename.md](0161-01-fixture-comments-rename.md) |
 | 0162-01 | 0162 | Метки версий и сторож правила 22 | [0162-01-git-tag-v040.md](0162-01-git-tag-v040.md) |
+| 0266-01 | 0266 | SE-113 в общей воронке с SE-099 | [0266-01-port-in-declaration-initializer.md](0266-01-port-in-declaration-initializer.md) |
