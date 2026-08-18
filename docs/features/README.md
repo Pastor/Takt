@@ -170,7 +170,7 @@
 | [0155](./0155-semantic-nested-statement-resolution.md) | Семантическое разрешение тел вложенных операторов | ADR + анализ + разработка 01–03 + тест-план + отчёт | ГОТОВО |
 | [0156](./0156-parser-depth-limit.md) | Ограничение глубины вложенности на уровне лексера/парсера | [ADR](../adr/0156-parser-depth-limit.md) · [анализ](../analyze/0156-parser-depth-limit.md) · [разработка 0156-01…06](../development/0156-06-parser-depth-limit.md) · [тест-план](../tests/0156-parser-depth-limit.md) · [отчёт](../reports/0156-parser-depth-limit.md) | ГОТОВО |
 | [0157](./0157-literal-u64-representation.md) | Представление числового литерала: полная маска [bit;64] | Носитель i128 на всём тракте; приём по типам языка; SE-089; печать по типу в c/sv; обёртка u64 | ГОТОВО |
-| [0158](./0158-intellij-run-configurations.md) | Запуск компилятора и симулятора из IntelliJ (Run Configurations) | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0158](./0158-intellij-run-configurations.md) | Запуск компилятора и симулятора из IntelliJ (Run Configurations) | Конфигурации Compile/Simulate; настройки 0125 начали исполняться; сборка команды — чистая функция | ГОТОВО |
 | [0159](./0159-intellij-jdk21-build.md) | Фиксация требования JDK 21 для сборки плагина intellij-takt | ADR + анализ + разработка 01 + тест-план + отчёт | ГОТОВО |
 | [0160](./0160-takt-ebnf-sync.md) | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | Корневой эталон удалён; приложение книги приведено к языку; гейт лексики check-book-keywords.py | ГОТОВО |
 | [0161](./0161-fixture-comments-rename.md) | Ренейм Lam-Takt в комментариях тест-фикстур | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

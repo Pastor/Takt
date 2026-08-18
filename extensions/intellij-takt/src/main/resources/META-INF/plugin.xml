@@ -86,6 +86,12 @@
              ⚠️ 0154: узлы имён (NAME_DECL/NAME_REF) строит парсер и они остаются
              ради навигации, но декларация БОЛЬШЕ НЕ PsiNamedElement —
              переименование делает сервер (см. TaktNameElements.kt). -->
+        <!-- 0158: запуск taktc/takt-sim из IDE. Один тип, две фабрики
+             (Compile/Simulate); сборка командной строки — чистая функция
+             TaktCommandLine, проверяемая без окна IDE. -->
+        <configurationType
+                implementation="org.takt.intellij.run.TaktRunConfigurationType"/>
+
         <lang.namesValidator
                 language="Takt"
                 implementationClass="org.takt.intellij.refactoring.TaktNamesValidator"/>
