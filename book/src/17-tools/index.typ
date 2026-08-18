@@ -21,6 +21,7 @@ taktc compile [флаги] <input.takt> [-o <output>]
 taktc fmt [--check] [--stdin] <файлы/каталоги>
 taktc verify [--property "φ"] [--scope file|all] [--trace] <input.takt>
 taktc address-map [--emit map|json] [--address-map <файл>] <input.takt>
+taktc version
 ```
 
 === Генерация кода — `compile`
@@ -139,6 +140,27 @@ taktc verify --property "F Finish" model.takt
 
 Подробнее о языке свойств, абстракции и границах проверки — в разделе
 «Верификация свойств».
+
+=== Версия — `version`
+<версия-version>
+`version` печатает версии инструмента и языка. Их #strong[две, и они
+намеренно разные]: версия компилятора растёт с каждым изменением, версия
+языка — только когда меняется сам язык.
+```bash
+taktc version
+```
+```text
+taktc <версия компилятора>
+язык Takt <версия языка>
+```
+
+#quote(block: true)[
+#strong[Здесь показан формат, а не значения.] Числа зависят от сборки:
+версия компилятора растёт с каждым изменением, и пример с конкретным
+номером устарел бы к следующей же правке.
+]
+
+То же выводят привычные `taktc --version` и `taktc -V`.
 
 === Карта адресов — `address-map`
 <карта-адресов-address-map>

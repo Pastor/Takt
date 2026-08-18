@@ -224,3 +224,4 @@
 | 0154 | Перевод плагина IntelliJ на серверный rename | [0154-intellij-server-rename.md](0154-intellij-server-rename.md) | — (новая фича) |
 | 0150 | Признание позиционной формы сценария устаревшей | [0150-sim-positional-scenario-deprecation.md](0150-sim-positional-scenario-deprecation.md) | — (новая фича) |
 | 0158 | Запуск компилятора и симулятора из IntelliJ | [0158-intellij-run-configurations.md](0158-intellij-run-configurations.md) | — (новая фича) |
+| 0165 | Подкоманда taktc version | [0165-taktc-version-subcommand.md](0165-taktc-version-subcommand.md) | — (новая фича) |

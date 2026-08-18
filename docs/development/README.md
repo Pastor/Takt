@@ -448,3 +448,4 @@
 | 0154-01 | 0154 | Снятие PSI-переименования и сторожа | [0154-01-intellij-server-rename.md](0154-01-intellij-server-rename.md) |
 | 0150-01 | 0150 | SIM-037, гейт репозитория и перевод примера документа | [0150-01-sim-positional-scenario-deprecation.md](0150-01-sim-positional-scenario-deprecation.md) |
 | 0158-01 | 0158 | Конфигурации запуска, командная строка и фильтр вывода | [0158-01-intellij-run-configurations.md](0158-01-intellij-run-configurations.md) |
+| 0165-01 | 0165 | Подкоманда version и её синонимы | [0165-01-taktc-version-subcommand.md](0165-01-taktc-version-subcommand.md) |

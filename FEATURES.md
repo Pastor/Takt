@@ -31,7 +31,6 @@
 
 | № | Фича | Зависит от | Класс | Tier | Статус |
 |---|------|------------|-------|------|--------|
-| [0165](docs/features/0165-taktc-version-subcommand.md) | Подкоманда `taktc version` | — | прочее | 3 | СОЗДАНА |
 | [0161](docs/features/0161-fixture-comments-rename.md) | Ренейм Lam→Takt в комментариях тест-фикстур | — | прочее | proc | СОЗДАНА |
 | [0162](docs/features/0162-git-tag-v040.md) | Ретроспективный git-тег `v0.4.0` (решение заказчика) | — | прочее | proc | СОЗДАНА |
 | [0164](docs/features/0164-registry-rebuild-gate.md) | Согласованность реестров `docs/*/README.md` с файлами на диске | — | прочее | proc | СОЗДАНА |

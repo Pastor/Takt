@@ -462,6 +462,7 @@ fn print_usage() {
     eprintln!(
         "               taktc address-map [--emit map|json] [--address-map <файл>] [-D N=V] [-o <out>] <input.takt>"
     );
+    eprintln!("               taktc version | --version | -V");
     eprintln!("               taktc --help");
     eprintln!();
     eprintln!("Флаги compile:");
@@ -551,6 +552,13 @@ fn main() {
         process::exit(0);
     }
 
+    // Версия — до разбора прочих подкоманд: `--version`/`-V` пользователь
+    // пробует первым, и отвечать на них «неизвестная команда» невежливо.
+    // Синоним разрешается ЗДЕСЬ, а не второй реализацией (фича 0165).
+    if args[1] == "version" || args[1] == "--version" || args[1] == "-V" {
+        process::exit(takt_lang::version::run_version_subcommand());
+    }
+
     if args[1] == "fmt" {
         let options = match parse_fmt_args(&args[2..]) {
             Ok(o) => o,
@@ -582,7 +590,8 @@ fn main() {
 
     if args[1] != "compile" {
         eprintln!(
-            "Ошибка: неизвестная команда '{}'. Используйте 'compile', 'fmt', 'verify' или 'address-map'.",
+            "Ошибка: неизвестная команда '{}'. Используйте 'compile', 'fmt', 'verify', \
+             'address-map' или 'version'.",
             args[1]
         );
         print_usage();
