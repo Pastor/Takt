@@ -220,3 +220,4 @@
 | 0250 | Запись бита x.N := v работает или отказывает по названной причине | [0250-bit-write-in-targets.md](0250-bit-write-in-targets.md) | — (новая фича) |
 | 0145 | Потолок верификации по данным: бюджет вместо VERTEX_LIMIT | [0145-verify-vertex-budget.md](0145-verify-vertex-budget.md) | — (новая фича) |
 | 0153 | Индексация рабочей области для LSP (references/rename между файлами) | [0153-lsp-workspace-index.md](0153-lsp-workspace-index.md) | — (новая фича) |
+| 0251 | Единый каталог сборки для всех потребителей cargo | [0251-cargo-target-dir.md](0251-cargo-target-dir.md) | — (новая фича) |

@@ -179,3 +179,4 @@
 | 0250 | Запись бита x.N := v | [0250-bit-write-in-targets.md](0250-bit-write-in-targets.md) | ГОТОВО |
 | 0145 | Потолок верификации по данным считается по рёбрам | [0145-verify-vertex-budget.md](0145-verify-vertex-budget.md) | ГОТОВО |
 | 0153 | Рабочая область: references и rename между файлами | [0153-lsp-workspace-index.md](0153-lsp-workspace-index.md) | ГОТОВО |
+| 0251 | Единый каталог сборки | [0251-cargo-target-dir.md](0251-cargo-target-dir.md) | ГОТОВО |
