@@ -11,7 +11,7 @@ use takt_lang::diagnostics::{Diagnostic, Location};
 use takt_lang::semantic::extend::{Extend, ParameterArgument};
 use takt_lang::semantic::type_node::TypeNode;
 use takt_lang::semantic::{
-    ConditionNode, ExpressionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind, VariableNode,
+    ExpressionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind, VariableNode,
 };
 
 use crate::unit::context_model::ModelNodeContext;
@@ -443,7 +443,7 @@ fn build_guards(formulas: &[takt_lang::semantic::formula::Formula]) -> Vec<crate
 
 fn build_transitions(state: &StateNode) -> Result<Vec<(String, Predicate)>, Diagnostic> {
     let to_transition = |r: &ReferenceNode<StateNode>| {
-        let pred = if matches!(r.cond, ConditionNode::None) {
+        let pred = if r.cond.is_unconditional() {
             Predicate::new("Always", |_| Ok(true))
         } else {
             create_predicate(&r.cond)

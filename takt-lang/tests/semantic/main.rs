@@ -66,5 +66,6 @@ mod shared_const_qualified_tests;
 mod stage_recovery_tests;
 mod type_inference_chain_tests;
 mod type_redefinition_tests;
+mod unconditional_edge_tests;
 mod unused_formula_tests;
 mod validate_batch_tests;

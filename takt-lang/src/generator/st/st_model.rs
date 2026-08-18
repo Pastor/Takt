@@ -342,7 +342,7 @@ fn emit_state(
         // Безусловный переход (`ref T;` без условия) приходит как
         // `ConditionNode::None`: проверять нечего — переход печатается как есть,
         // и цепочка на нём заканчивается.
-        if matches!(reference.cond, ConditionNode::None) {
+        if reference.cond.is_unconditional() {
             if printed_if {
                 p.ident("ELSE").nl();
                 p.up();

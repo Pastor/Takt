@@ -28,7 +28,7 @@
 //!   месте вечно. Оба прогона реальны, и пропуск второго делал бы Крипке
 //!   **недо**-аппроксимацией — то есть ломал бы надёжность `Holds`.
 
-use crate::semantic::{ConditionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind};
+use crate::semantic::{ModelNode, ReferenceNode, StateNode, StateNodeKind};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Структура Крипке управляющего графа модели.
@@ -213,9 +213,8 @@ fn may_stutter(state: &StateNode) -> bool {
 /// разрешается), считается guard'ом: он **может** не выполниться. Ошибка в эту
 /// сторону безопасна — лишняя самопетля даёт лишние прогоны.
 fn leaves_unconditionally(references: &[ReferenceNode<StateNode>]) -> bool {
-    references
-        .iter()
-        .any(|r| matches!(r.cond, ConditionNode::None))
+    // Решение «ребро безусловно» — у одного носителя (фича 0291).
+    references.iter().any(|r| r.cond.is_unconditional())
 }
 
 #[cfg(test)]
