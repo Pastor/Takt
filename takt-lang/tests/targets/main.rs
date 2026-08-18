@@ -25,6 +25,7 @@ mod c_enum_constants_tests;
 mod c_redundant_break_tests;
 mod c_state_ref_tests;
 mod c_stub_tests;
+mod cli_version_tests;
 mod cli_warning_position_tests;
 mod cli_warnings_tests;
 mod codegen_tests;
