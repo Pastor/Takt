@@ -1,5 +1,5 @@
-(* П9. Внешняя функция без тела — аналог `extern fn` языка Lam
-   (examples/elevator.lam:93-115). Решает РИ5: выразим ли extern в ST.
+(* П9. Внешняя функция без тела — аналог `extern fn` языка Takt
+   (examples/elevator.takt:93-115). Решает РИ5: выразим ли extern в ST.
    В IEC 61131-3 FUNCTION обязана иметь тело; проба выясняет, что скажет iec2c
    на объявление без тела. *)
 FUNCTION ExternalCalc : USINT

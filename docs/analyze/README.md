@@ -225,3 +225,4 @@
 | 0150 | Признание позиционной формы сценария устаревшей | [0150-sim-positional-scenario-deprecation.md](0150-sim-positional-scenario-deprecation.md) | — (новая фича) |
 | 0158 | Запуск компилятора и симулятора из IntelliJ | [0158-intellij-run-configurations.md](0158-intellij-run-configurations.md) | — (новая фича) |
 | 0165 | Подкоманда taktc version | [0165-taktc-version-subcommand.md](0165-taktc-version-subcommand.md) | — (новая фича) |
+| 0161 | Остаточные старые имена языка в данных и комментариях | [0161-fixture-comments-rename.md](0161-fixture-comments-rename.md) | — (новая фича) |

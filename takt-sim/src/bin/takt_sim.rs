@@ -17,10 +17,10 @@ use takt_sim::state_io;
 // ── Аргументы командной строки ────────────────────────────────────────────────
 
 #[derive(Parser)]
-#[command(name = "simulation", about = "Симуляция Takt-моделей", version)]
+#[command(name = "takt-sim", about = "Симуляция Takt-моделей", version)]
 struct Args {
     /// Путь к .takt файлу (обязательный)
-    lam_file: PathBuf,
+    model_file: PathBuf,
 
     /// Директории поиска include (можно указать несколько)
     #[arg(short = 'I', long = "include", value_name = "DIR")]
@@ -92,13 +92,13 @@ fn main() -> ExitCode {
 }
 
 fn run(args: Args) -> Result<RunResult, String> {
-    // 1. Читаем исходный файл LAM
-    let source = std::fs::read_to_string(&args.lam_file)
-        .map_err(|e| format!("Не удалось прочитать {}: {e}", args.lam_file.display()))?;
+    // 1. Читаем исходный файл модели
+    let source = std::fs::read_to_string(&args.model_file)
+        .map_err(|e| format!("Не удалось прочитать {}: {e}", args.model_file.display()))?;
 
     // Реестр файлов: корневой — номер 0, импортируемые получит проход 0.
     // Нужен, чтобы назвать пользователю файл ошибки (фичи 0053, 0054).
-    let mut files = takt_lang::diagnostics::FileTable::new(&args.lam_file.to_string_lossy());
+    let mut files = takt_lang::diagnostics::FileTable::new(&args.model_file.to_string_lossy());
 
     // 2. Парсинг
     let (ast, _comments) =
@@ -152,11 +152,11 @@ fn run(args: Args) -> Result<RunResult, String> {
     };
 
     // 7. Создаём и запускаем runner
-    // Имя выходного файла берётся из файла симуляции; если он не задан — из LAM-файла.
+    // Имя выходного файла берётся из файла симуляции; если он не задан — из файла модели.
     let input_stem = args
         .sim_file
         .as_ref()
-        .or(Some(&args.lam_file))
+        .or(Some(&args.model_file))
         .and_then(|p| p.file_stem())
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "output".to_string());

@@ -196,3 +196,4 @@
 | 0150 | Позиционная форма предупреждает о себе | [0150-sim-positional-scenario-deprecation.md](0150-sim-positional-scenario-deprecation.md) | ГОТОВО |
 | 0158 | Запуск инструментов из IDE | [0158-intellij-run-configurations.md](0158-intellij-run-configurations.md) | ГОТОВО |
 | 0165 | Подкоманда taktc version | [0165-taktc-version-subcommand.md](0165-taktc-version-subcommand.md) | ГОТОВО |
+| 0161 | Остаточные старые имена языка в данных и комментариях | [0161-fixture-comments-rename.md](0161-fixture-comments-rename.md) | ГОТОВО |

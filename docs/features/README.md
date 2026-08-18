@@ -173,7 +173,7 @@
 | [0158](./0158-intellij-run-configurations.md) | Запуск компилятора и симулятора из IntelliJ (Run Configurations) | Конфигурации Compile/Simulate; настройки 0125 начали исполняться; сборка команды — чистая функция | ГОТОВО |
 | [0159](./0159-intellij-jdk21-build.md) | Фиксация требования JDK 21 для сборки плагина intellij-takt | ADR + анализ + разработка 01 + тест-план + отчёт | ГОТОВО |
 | [0160](./0160-takt-ebnf-sync.md) | Синхронизация эталона Takt.ebnf с актуальным синтаксисом | Корневой эталон удалён; приложение книги приведено к языку; гейт лексики check-book-keywords.py | ГОТОВО |
-| [0161](./0161-fixture-comments-rename.md) | Ренейм Lam-Takt в комментариях тест-фикстур | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0161](./0161-fixture-comments-rename.md) | Остаточные старые имена языка в данных и комментариях | Ренейм в 45 рабочих файлах; починена команда графики в README примеров; CLI симулятора не носит старого имени; гейт check-legacy-names.sh со сторожем | ГОТОВО |
 | [0162](./0162-git-tag-v040.md) | Ретроспективный git-тег v0.4.0 | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0163](./0163-builder-eval-exhaustive.md) | Исчерпывающий разбор узлов во втором вычислителе builder.rs::eval_expr | [ADR](../adr/0163-builder-eval-exhaustive.md) · [анализ](../analyze/0163-builder-eval-exhaustive.md) · разработка 01 · [тест-план](../tests/0163-builder-eval-exhaustive.md) · [отчёт](../reports/0163-builder-eval-exhaustive.md) | ГОТОВО |
 | [0164](./0164-registry-rebuild-gate.md) | Согласованность реестров docs/*/README.md с файлами на диске | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

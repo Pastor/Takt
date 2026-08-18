@@ -1,4 +1,4 @@
-//! Проверка порождённого Rust: модель `comprehensive` (`examples/comprehensive.lam`).
+//! Проверка порождённого Rust: модель `comprehensive` (`examples/comprehensive.takt`).
 //!
 //! Модель владеет аппаратным слоем (`Comprehensive::new(hal)`), поле `hal`
 //! приватно и геттера нет — поэтому трасса собирается в общий `Rc<RefCell<_>>`,
@@ -18,7 +18,7 @@
 //! # Сверка целей: `rust` сходится с симулятором такт-в-такт
 //!
 //! Симулятор завершает модель за **172** шага
-//! (`simulation/tests/examples_scenario_tests.rs`), и порождённый Rust завершает
+//! (`takt-sim/tests/sim/examples_scenario_tests.rs`), и порождённый Rust завершает
 //! её за **те же 172** такта. Это независимая сверка двух реализаций одной
 //! семантики: гейт `rustc`/`clippy` доказывает, что вывод компилируется, но не
 //! что он считает то же самое (`CLAUDE.md`, урок фич 0045/0050).
@@ -93,7 +93,7 @@ fn main() {
     // Телеметрия остатка: в `Heating` — ступени до порога (`while` в
     // `steps_to_limit`), в `Cooling` — ступени до нуля (`loop` в `steps_to_zero`).
     // Обратный отсчёт до 0 в обоих — прямое свидетельство, что состояние
-    // доводит работу до конца, а не бросает её (контрпример `hold_break.lam`).
+    // доводит работу до конца, а не бросает её (контрпример `hold_break.takt`).
     let heating: Vec<u8> = (0..=11).rev().collect();
     let cooling: Vec<u8> = (0..=33).rev().collect();
     let cycle: Vec<u8> = heating.iter().chain(cooling.iter()).copied().collect();

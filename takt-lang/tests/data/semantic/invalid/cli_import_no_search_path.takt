@@ -4,10 +4,10 @@
 // выдаст ошибку: «Файл импорта не найден: std.takt. Пути поиска: []»
 //
 // Демонстрация ошибки:
-//   lamc compile cli_import_no_search_path.takt   # → ошибка!
+//   taktc compile cli_import_no_search_path.takt   # → ошибка!
 //
 // Правильный вызов:
-//   lamc compile -I grammar/tests/data/include cli_import_no_search_path.takt
+//   taktc compile -I takt-lang/tests/data/include cli_import_no_search_path.takt
 
 import "std.takt";
 

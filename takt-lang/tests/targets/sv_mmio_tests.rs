@@ -3,7 +3,7 @@
 //! Проверяют карту регистров, направление по биту, порт без адреса, приём
 //! внешней карты и диагностики-«не угадываем» (SE-060, SV-013, SV-014). Гейт
 //! (verilator + yosys) и потактовая сверка — в `precheck.sh` и
-//! `simulation/tests/conformance_sv_mmio_tests.rs`.
+//! `takt-sim/tests/conformance/conformance_sv_mmio_tests.rs`.
 
 use std::path::PathBuf;
 use takt_lang::generator::GenerateOptions;

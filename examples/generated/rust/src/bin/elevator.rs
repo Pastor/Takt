@@ -1,4 +1,4 @@
-//! Проверка порождённого Rust: модель `elevator` (`examples/elevator.lam`).
+//! Проверка порождённого Rust: модель `elevator` (`examples/elevator.takt`).
 //!
 //! Модель узнаёт о вызовах через переменную `has_call`, которую поднимает
 //! внешняя функция (`extern fn scan_floor_buttons`). В цели `rust` внешние

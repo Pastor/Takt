@@ -14,7 +14,7 @@
  *   - Одна строка на такт
  *   - Формат: "Tick N [OUT=1 ...]  state=cabin_state/motor_state"
  *
- * Логика работы лифта (elevator_mini.but):
+ * Логика работы лифта (elevator_mini.takt):
  *   Cabin: Idle -> Moving -> AtFloor -> Idle
  *   Motor: Idle <-> Up | Down -> Stop -> Idle
  *   Разделяемые переменные: command, current_floor, target_floor

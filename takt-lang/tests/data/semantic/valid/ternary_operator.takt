@@ -1,4 +1,4 @@
-// Семантически корректный пример тернарного оператора в BuT.
+// Семантически корректный пример тернарного оператора в Takt.
 //
 // Expression::ConditionalOperator(cond, then, else) представляет
 // тернарный оператор condition ? then_expr : else_expr.
