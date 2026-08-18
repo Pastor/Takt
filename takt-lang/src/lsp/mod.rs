@@ -29,6 +29,8 @@ mod references;
 mod rename;
 mod semantic_tokens;
 mod symbols;
+/// Рабочая область: обход файлов, граф импортов, связывание символов (фича 0153).
+mod workspace;
 
 // ⚠️ ПУБЛИЧНЫЙ API КРЕЙТА (правило 11). `takt_lang::lsp::*` — контракт для
 // `bin/takt_lsp.rs`, `tests/lsp_tests.rs` и плагинов IDE. Реэкспорт держит пути
@@ -43,10 +45,13 @@ pub use hover::{hover_info, word_at_position};
 pub use init_options::search_paths_from_options;
 pub use keywords::SEMANTIC_TOKEN_TYPES;
 pub use position::{node_at_position, offset_to_position, offset_to_range, position_to_offset};
-pub use references::references_at;
-pub use rename::{RenameRefusal, prepare_rename_at, rename_at};
+pub use references::{FileReference, references_at, references_in_workspace};
+pub use rename::{
+    RenameRefusal, prepare_rename_at, prepare_rename_in_workspace, rename_at, rename_in_workspace,
+};
 pub use semantic_tokens::semantic_tokens;
 pub use symbols::document_symbols;
+pub use workspace::{Occurrence, Resolution, Workspace};
 
 // Внутреннее: словари и помощники, которые зовут соседние подмодули.
 use keywords::{

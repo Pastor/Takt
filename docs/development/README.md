@@ -441,3 +441,6 @@
 | 0250-03 | 0250 | Запись разряда | [0250-03-bit-write-in-targets.md](0250-03-bit-write-in-targets.md) |
 | 0145-01 | 0145 | Метрика потолка: рёбра вместо вершин | [0145-01-verify-vertex-budget.md](0145-01-verify-vertex-budget.md) |
 | 0145-02 | 0145 | Бенч роста, документ и контекст | [0145-02-verify-vertex-budget.md](0145-02-verify-vertex-budget.md) |
+| 0153-01 | 0153 | Слой рабочей области: обход, граф импортов, связывание | [0153-01-lsp-workspace-index.md](0153-01-lsp-workspace-index.md) |
+| 0153-02 | 0153 | references и rename по рабочей области | [0153-02-lsp-workspace-index.md](0153-02-lsp-workspace-index.md) |
+| 0153-03 | 0153 | Бинарник, контекст и документ | [0153-03-lsp-workspace-index.md](0153-03-lsp-workspace-index.md) |

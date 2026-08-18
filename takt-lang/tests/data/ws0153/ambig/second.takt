@@ -1,0 +1,3 @@
+var level: u8 := 2;
+
+start Root { ref Root; }

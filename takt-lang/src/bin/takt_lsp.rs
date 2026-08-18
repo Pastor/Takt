@@ -37,6 +37,11 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     // библиотеки вне каталога документа в редакторе не находится.
     let (init_id, init_params) = connection.initialize_start()?;
     let search_paths = search_paths_from_init(&init_params);
+    // Корни рабочей области (фича 0153): по ним идут `references` и `rename`.
+    // Клиент присылает либо `workspaceFolders`, либо устаревший `root_uri`;
+    // если ни того, ни другого — область сводится к каталогу открытого
+    // документа (подставляется при запросе).
+    let workspace_roots = workspace_roots_from_init(&init_params);
     let init_result = InitializeResult {
         capabilities: serde_json::from_value(server_capabilities)?,
         server_info: Some(ServerInfo {
@@ -47,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     connection.initialize_finish(init_id, serde_json::to_value(init_result)?)?;
 
     // Запускаем основной цикл обработки сообщений
-    main_loop(connection, search_paths)?;
+    main_loop(connection, search_paths, workspace_roots)?;
     io_threads.join()?;
 
     Ok(())
@@ -78,6 +83,29 @@ fn search_paths_from_init(init_params: &serde_json::Value) -> Vec<String> {
     )
 }
 
+/// Корни рабочей области из параметров инициализации (фича 0153).
+///
+/// ⚠️ `root_uri` помечен устаревшим, но именно его шлют живые клиенты (Zed),
+/// поэтому берутся **оба** источника: сперва `workspaceFolders`, затем корень.
+fn workspace_roots_from_init(init_params: &serde_json::Value) -> Vec<String> {
+    let Ok(params) = serde_json::from_value::<InitializeParams>(init_params.clone()) else {
+        return Vec::new();
+    };
+    let mut roots: Vec<String> = params
+        .workspace_folders
+        .unwrap_or_default()
+        .iter()
+        .map(|f| uri_to_path(&f.uri))
+        .collect();
+    #[allow(deprecated)]
+    if let Some(root) = params.root_uri.as_ref().map(uri_to_path)
+        && !roots.contains(&root)
+    {
+        roots.push(root);
+    }
+    roots
+}
+
 /// Состояние сервера: открытые документы + пути поиска импортов.
 struct ServerState {
     /// Содержимое открытых документов: URI → текст.
@@ -85,13 +113,16 @@ struct ServerState {
     /// Пути поиска импортов (аналог `-I` у `taktc`), из `initializationOptions`
     /// (фича 0072). Пустой список = прежнее поведение (только каталог документа).
     search_paths: Vec<String>,
+    /// Корни рабочей области (фича 0153).
+    workspace_roots: Vec<String>,
 }
 
 impl ServerState {
-    fn new(search_paths: Vec<String>) -> Self {
+    fn new(search_paths: Vec<String>, workspace_roots: Vec<String>) -> Self {
         ServerState {
             documents: HashMap::new(),
             search_paths,
+            workspace_roots,
         }
     }
 
@@ -99,14 +130,39 @@ impl ServerState {
     fn get_text(&self, uri: &Uri) -> Option<&str> {
         self.documents.get(uri).map(String::as_str)
     }
+
+    /// Корни для запроса по документу: объявленные клиентом, иначе каталог
+    /// самого документа — иначе области не было бы вовсе.
+    fn roots_for(&self, path: &str) -> Vec<String> {
+        if !self.workspace_roots.is_empty() {
+            return self.workspace_roots.clone();
+        }
+        std::path::Path::new(path)
+            .parent()
+            .map(|d| vec![d.to_string_lossy().into_owned()])
+            .unwrap_or_default()
+    }
+
+    /// Тексты открытых документов для рабочей области.
+    ///
+    /// ⚠️ У редактора текст свежее диска: правка, построенная по диску, встала
+    /// бы не туда, а вхождение из несохранённой строки не нашлось бы вовсе.
+    fn overlay(&self) -> impl Fn(&str) -> Option<String> + '_ {
+        move |path: &str| {
+            self.documents
+                .iter()
+                .find_map(|(uri, text)| (uri_to_path(uri) == path).then(|| text.clone()))
+        }
+    }
 }
 
 /// Основной цикл обработки LSP-сообщений.
 fn main_loop(
     connection: Connection,
     search_paths: Vec<String>,
+    workspace_roots: Vec<String>,
 ) -> Result<(), Box<dyn Error + Sync + Send>> {
-    let mut state = ServerState::new(search_paths);
+    let mut state = ServerState::new(search_paths, workspace_roots);
 
     for msg in &connection.receiver {
         match msg {
@@ -221,21 +277,26 @@ fn handle_request(
             let params: ReferenceParams = serde_json::from_value(req.params)?;
             let uri = &params.text_document_position.text_document.uri;
             let position = params.text_document_position.position;
-            let text = state.get_text(uri).unwrap_or("");
-            // Вхождения ищутся в открытом документе: рабочая область сервером не
-            // индексируется (фича 0131). Ответ правдив, но не всеобъемлющ — и
-            // это лучше, чем молчание.
-            let result =
-                takt_lang::lsp::references_at(text, position, params.context.include_declaration)
-                    .map(|ranges| {
-                        ranges
-                            .into_iter()
-                            .map(|range| Location {
-                                uri: uri.clone(),
-                                range,
-                            })
-                            .collect::<Vec<_>>()
-                    });
+            // Вхождения ищутся по всей рабочей области (фича 0153): она
+            // сканируется в момент запроса — 12 мс на 347 файлов, — поэтому
+            // индекса и слежения за файлами сервер не держит.
+            let path = uri_to_path(uri);
+            let result = takt_lang::lsp::references_in_workspace(
+                &path,
+                position,
+                params.context.include_declaration,
+                &state.roots_for(&path),
+                &state.search_paths,
+                &state.overlay(),
+            )
+            .map(|refs| {
+                refs.into_iter()
+                    .map(|r| Location {
+                        uri: path_to_uri(&r.path).unwrap_or_else(|| uri.clone()),
+                        range: r.range,
+                    })
+                    .collect::<Vec<_>>()
+            });
             connection.sender.send(Message::Response(Response::new_ok(
                 req.id,
                 serde_json::to_value(result)?,
@@ -243,10 +304,17 @@ fn handle_request(
         }
         PrepareRenameRequest::METHOD => {
             let params: TextDocumentPositionParams = serde_json::from_value(req.params)?;
-            let text = state.get_text(&params.text_document.uri).unwrap_or("");
             // Отказ приходит ДО ввода нового имени: редактор покажет причину, а
-            // пользователь не потратит время впустую (фича 0131).
-            let response = match takt_lang::lsp::prepare_rename_at(text, params.position) {
+            // пользователь не потратит время впустую (фича 0131). Охват —
+            // рабочая область (фича 0153).
+            let path = uri_to_path(&params.text_document.uri);
+            let response = match takt_lang::lsp::prepare_rename_in_workspace(
+                &path,
+                params.position,
+                &state.roots_for(&path),
+                &state.search_paths,
+                &state.overlay(),
+            ) {
                 Ok(range) => Response::new_ok(
                     req.id,
                     serde_json::to_value(PrepareRenameResponse::Range(range))?,
@@ -263,19 +331,30 @@ fn handle_request(
             let params: RenameParams = serde_json::from_value(req.params)?;
             let uri = params.text_document_position.text_document.uri.clone();
             let position = params.text_document_position.position;
-            let text = state.get_text(&uri).unwrap_or("");
             // ⚠️ Либо все вхождения, либо ни одного: частичное переименование
             // портит исходник молча (затенение оставляет текст компилируемым,
-            // меняя смысл).
-            let response = match takt_lang::lsp::rename_at(text, position, &params.new_name) {
-                Ok(edits) => {
+            // меняя смысл). С фичи 0153 «все» означает «все в рабочей
+            // области» — файл вне её сервер не видит никогда.
+            let path = uri_to_path(&uri);
+            let response = match takt_lang::lsp::rename_in_workspace(
+                &path,
+                position,
+                &params.new_name,
+                &state.roots_for(&path),
+                &state.search_paths,
+                &state.overlay(),
+            ) {
+                Ok(per_file) => {
                     // `Uri` формально обладает интерьерной мутабельностью (кэш
                     // разбора), из-за чего clippy ругается на ключ словаря. Тип
                     // ключа задан протоколом (`WorkspaceEdit.changes`), и та же
                     // пара «Uri → …» уже живёт в состоянии сервера.
                     #[allow(clippy::mutable_key_type)]
                     let mut changes = HashMap::new();
-                    changes.insert(uri, edits);
+                    for (file, edits) in per_file {
+                        let target = path_to_uri(&file).unwrap_or_else(|| uri.clone());
+                        changes.insert(target, edits);
+                    }
                     let workspace_edit = WorkspaceEdit {
                         changes: Some(changes),
                         ..Default::default()
@@ -382,6 +461,17 @@ fn uri_to_path(uri: &Uri) -> String {
     let raw = uri.as_str();
     let path = raw.strip_prefix("file://").unwrap_or(raw);
     percent_decode(path)
+}
+
+/// Путь файла → URI (фича 0153: правки уходят в несколько файлов, и каждому
+/// нужен свой URI).
+///
+/// ⚠️ Кодируются только пробел и `%`: остальное клиенты принимают как есть, а
+/// полное процентное кодирование пути дало бы URI, который не совпадёт с тем,
+/// что прислал сам клиент, — и редактор счёл бы это другим файлом.
+fn path_to_uri(path: &str) -> Option<Uri> {
+    let encoded = path.replace('%', "%25").replace(' ', "%20");
+    format!("file://{encoded}").parse().ok()
 }
 
 /// Раскодирует `%XX` в пути URI: пробелы и кириллица в путях реальны.

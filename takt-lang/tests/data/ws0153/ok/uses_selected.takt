@@ -1,0 +1,10 @@
+// Потребитель формы `import { A } from "файл";`: исходное имя `speed` есть
+// ССЫЛКА на объявление библиотеки, и переименование обязано её задеть.
+import {speed} from "lib.takt";
+
+start Tick {
+    always {
+        speed := 2;
+    }
+    ref Tick;
+}

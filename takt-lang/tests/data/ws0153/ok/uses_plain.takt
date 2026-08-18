@@ -1,0 +1,10 @@
+// Потребитель формы `import "файл";`: имя `speed` приходит усыновлением и
+// пишется голым.
+import "lib.takt";
+
+start Work {
+    always {
+        speed := speed + 1;
+    }
+    ref Work;
+}
