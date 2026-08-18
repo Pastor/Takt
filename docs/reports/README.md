@@ -185,3 +185,4 @@
 | 0158 | Запуск инструментов из IDE | [0158-intellij-run-configurations.md](0158-intellij-run-configurations.md) | ГОТОВО |
 | 0165 | Подкоманда taktc version | [0165-taktc-version-subcommand.md](0165-taktc-version-subcommand.md) | ГОТОВО |
 | 0161 | Остаточные старые имена языка в данных и комментариях | [0161-fixture-comments-rename.md](0161-fixture-comments-rename.md) | ГОТОВО |
+| 0162 | Пропущенные метки версий языка и сторож правила 22 | [0162-git-tag-v040.md](0162-git-tag-v040.md) | ГОТОВО |
