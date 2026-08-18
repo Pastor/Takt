@@ -205,3 +205,4 @@
 | [0225](./0225-statement-module-size.md) | Модуль semantic/statement.rs — 999 строк при пределе 1000 | Accepted | фича 0225 |
 | [0221](./0221-lsp-state-invariant-symbol.md) | Панель структуры: инвариант состояния символом не становится | Accepted | фича 0221 |
 | [0220](./0220-c-gate-wextra.md) | Флаг -Wextra для гейта цели c: 38 предупреждений одного класса | Accepted | фича 0220 |
+| [0219](./0219-mmap-conformance-cost.md) | Сверки через mmap стоят около 90 секунд каждая | Accepted (отмена фичи) | фича 0219 |
