@@ -1,7 +1,7 @@
 # Фича 0145: Потолок верификации по данным: бюджет вместо `VERTEX_LIMIT`
 
 - **Номер:** 0145
-- **Статус:** СОЗДАНА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** нет
 - **Tier:** 2
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (замер бенчей [0136](0136-perf-benchmarks.md), 2026-07-27)
@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | не заведена (стадия 2) |
-| Анализ | не заведён (стадия 3) |
+| Архитектура (ADR) | [`docs/adr/0145-verify-vertex-budget.md`](../adr/0145-verify-vertex-budget.md) (Accepted, Option C) |
+| Анализ | [`docs/analyze/0145-verify-vertex-budget.md`](../analyze/0145-verify-vertex-budget.md) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0145-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
