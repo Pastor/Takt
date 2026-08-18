@@ -431,3 +431,4 @@
 | 0225-01 | 0225 | Модуль semantic/statement.rs — 999 строк при пределе 1000 | [0225-01-statement-module-size.md](0225-01-statement-module-size.md) |
 | 0221-01 | 0221 | Панель структуры: инвариант состояния символом не становится | [0221-01-lsp-state-invariant-symbol.md](0221-01-lsp-state-invariant-symbol.md) |
 | 0220-01 | 0220 | Флаг -Wextra для гейта цели c: 38 предупреждений одного класса | [0220-01-c-gate-wextra.md](0220-01-c-gate-wextra.md) |
+| 0218-01 | 0218 | Реестры стадий 5 и 6 хранят заготовочное СОЗДАНА в колонках вердикта | [0218-01-registry-verdict-placeholder.md](0218-01-registry-verdict-placeholder.md) |
