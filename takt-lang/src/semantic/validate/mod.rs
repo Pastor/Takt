@@ -29,7 +29,6 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
-mod anon_init;
 mod assignment_place;
 mod assignment_position;
 mod bodies;
@@ -42,6 +41,7 @@ mod fixed;
 mod formulas;
 mod implemented;
 mod implicit_bool;
+mod init_undefined_read;
 // `pub(crate)`, а не `mod`: границы целочисленного типа (`type_range`) нужны и
 // свёртке инициализатора (фича 0207) — вторая копия границ разошлась бы с
 // проверкой `SE-089`.
@@ -140,9 +140,11 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
         // `plantuml` печатал диаграмму с переходом в никуда, эталон исполнял
         // пустую трассу.
         implemented::validate_implemented_models(model.clone()),
-        // SE-099 (0189): обращение к ячейке в инициализаторе объявления. Без
-        // запрета эталон дал бы ноль, а `c-hal` — чтение регистра, и молча.
-        anon_init::validate_anon_in_initializers(model.clone()),
+        // SE-099 (0189) и SE-113 (0266): чтение неопределённой памяти в
+        // инициализаторе объявления — ячейки по адресу и порта по имени. Без
+        // запрета эталон дал бы ноль, `c-hal` — чтение регистра, а `st` молча
+        // потеряла бы инициализатор. Правило одно, обход один, кодов два.
+        init_undefined_read::validate_undefined_reads_in_initializers(model.clone()),
         validate_bit_values(model.clone()),
         // SE-105 (0172): перечисление без вариантов — отказ на ОБЪЯВЛЕНИИ. Без
         // него использование пустого перечисления давало бессодержательное
