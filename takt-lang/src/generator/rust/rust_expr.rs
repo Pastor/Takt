@@ -32,6 +32,7 @@ use crate::semantic::{
 // Печатник условий вынесен в `rust_cond` (0088). Реэкспорт держит путь
 // `rust_expr::condition_as_bool` для потребителей (правило 11) — импорт в
 // `rust_model.rs` не меняется.
+pub(crate) use crate::generator::rust::rust_bit::{bit_mask, member_index};
 pub(crate) use crate::generator::rust::rust_cond::condition_as_bool;
 
 /// Строит диагностику `RS-011` — конструкция не транслируется в Rust.
@@ -504,7 +505,9 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
 
         // `x.0` → маска. В MatIEC битового доступа нет вовсе; здесь — обычная
         // арифметика, но она типозависима: у `bool` бита 0 нет.
-        ExpressionNode::BitAccess(inner, member) => bit_access(inner, member, scope),
+        ExpressionNode::BitAccess(inner, member) => {
+            crate::generator::rust::rust_bit::bit_access(inner, member, scope)
+        }
 
         ExpressionNode::ArraySubscript(var, index) => Ok(format!(
             "{}[{} as usize]",
@@ -598,6 +601,13 @@ fn assign(
             )
             .with_code("RS-019"));
         }
+    }
+    // Запись одного разряда (фича 0250). Прежде эта ветви не было, и печатник
+    // левой части выдавал ЧТЕНИЕ бита: `(((self.b >> 2) & 1) != 0) = true;` —
+    // `rustc` отвечал E0070, то есть цель рапортовала об успехе и клала на
+    // диск файл, который не собирается.
+    if let ExpressionNode::BitAccess(inner, Member::Number(bit)) = target {
+        return crate::generator::rust::rust_bit::assign_bit(inner, *bit, value, scope);
     }
     let target_text = print_expression(target, scope)?;
     // `x := x + 1` → `x += 1`. Не косметика: clippy считает `x = x + 1` ручной
@@ -752,57 +762,6 @@ pub(crate) fn coerce_to(
         // Вещественному полю целый литерал не подходит: `1` не является литералом f64.
         (TypeNode::Rational, ExpressionNode::Number(n)) => Ok(format!("{}.0", n)),
         _ => print_expression(value, scope),
-    }
-}
-
-/// Печатает битовый доступ `x.N` как маску.
-///
-/// В MatIEC битового доступа нет вовсе (ни `x.0`, ни `%X0`), и цель `st`
-/// разворачивает его в маску по нужде. Здесь маска — тоже единственная форма,
-/// но по другой причине: у чисел Rust битового синтаксиса просто нет.
-fn bit_access(
-    inner: &ExpressionNode,
-    member: &Member,
-    scope: &Scope,
-) -> Result<String, Diagnostic> {
-    let base = print_expression(inner, scope)?;
-    let bit = member_index(member)?;
-    Ok(bit_mask(&base, bit))
-}
-
-/// Строит маску битового доступа `x.N`.
-///
-/// Узел заключается в скобки ЦЕЛИКОМ — как и любой бинарный (см. [`binary`]).
-/// Без внешних скобок `x.1 | flag` дало бы `(x >> 1) & 1 != 0 | flag`, что в
-/// Rust читается как `… != (0 | flag)`: `|` сильнее `!=`. Поймано гейтом на
-/// `elevator.takt` — тот же класс дефекта, ради которого печатник вообще
-/// расставляет скобки структурно.
-///
-/// Сдвиг на 0 не эмитится: `x >> 0` — операция без эффекта
-/// (`clippy::identity_op`), то есть отказ гейта. Нулевой бит в корпусе обычен
-/// (`SENSORS_CAB.0`), поэтому случай не теоретический.
-pub(crate) fn bit_mask(base: &str, bit: u64) -> String {
-    if bit == 0 {
-        return format!("(({} & 1) != 0)", base);
-    }
-    format!("((({} >> {}) & 1) != 0)", base, bit)
-}
-
-/// Извлекает номер бита из члена `x.N`.
-///
-/// Доступ по имени (`x.field`) битовым не является: это обращение к полю
-/// структуры, и молча выдать за него маску значило бы породить тихо неверный код.
-pub(crate) fn member_index(member: &Member) -> Result<u64, Diagnostic> {
-    match member {
-        Member::Number(index) if *index >= 0 => Ok(*index as u64),
-        Member::Number(index) => Err(unsupported(&format!(
-            "битовый доступ с отрицательным индексом '{}'",
-            index
-        ))),
-        Member::Identifier(name) => Err(unsupported(&format!(
-            "доступ к члену '.{}': поля структур в цели rust пока не транслируются",
-            name.name
-        ))),
     }
 }
 

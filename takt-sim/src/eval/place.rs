@@ -1,11 +1,21 @@
-//! Обновление значения «по месту» (lvalue): запись в поле структуры (фича 0034)
-//! и в элемент массива (фича 0076).
+//! Обновление значения «по месту» (lvalue): запись в поле структуры (фича 0034),
+//! в элемент массива (фича 0076) и в отдельный бит (фича 0250).
 //!
 //! Адаптер ([`crate::unit::statement`]) раскладывает левую часть `p.x := …` /
-//! `data[i] := …` в корень + путь **сегментов** ([`PlaceSegment`]) и зовёт
-//! [`update`]; семантика замены живёт **здесь**, в ядре под
-//! `deny(wildcard_enum_match_arm)`. Точечность обязательна: `p.x := 7` **не**
-//! пересоздаёт структуру и не трогает `p.y`; `data[0] := 7` не трогает `data[1]`.
+//! `data[i] := …` / `flags.3 := …` в корень + путь **сегментов**
+//! ([`PlaceSegment`]) и зовёт [`update`]; семантика замены живёт **здесь**, в
+//! ядре под `deny(wildcard_enum_match_arm)`. Точечность обязательна:
+//! `p.x := 7` **не** пересоздаёт структуру и не трогает `p.y`; `data[0] := 7`
+//! не трогает `data[1]`; `flags.3 := 1` не трогает прочие разряды.
+//!
+//! ## Правило записи бита
+//!
+//! В разряд кладётся **младший бит значения** (`v & 1`), поэтому `flags.3 := 2`
+//! бит **очищает**. Правило не выдумано здесь: его печатают цели `c`
+//! (`(rhs & 1u) << N`) и `sv` (присваивание разряду есть усечение до младшего
+//! бита) — замер фичи 0250. Прежде эталон записи бита не исполнял вовсе
+//! (`SIM-017` посреди прогона), и модель с `flags.3 := 1;` нельзя было сверить
+//! с прошивкой ни на одном такте.
 
 use takt_lang::semantic::type_node::TypeNode;
 
@@ -13,16 +23,24 @@ use super::error::{EvalError, value_kind};
 use super::value::Value;
 use super::{StructRegistry, coerce_to_type_with};
 
-/// Сегмент пути к месту записи: поле структуры или индекс массива (фича 0076).
+/// Сегмент пути к месту записи: поле структуры, индекс массива (фича 0076) или
+/// номер разряда (фича 0250).
 ///
 /// Индекс уже **вычислен** адаптером (у него есть контекст) в `usize` — ядро
-/// АСД не знает. Поле — имя, как в структурах 0034.
+/// АСД не знает. Поле — имя, как в структурах 0034. Номер разряда — литерал
+/// (`Member::Number`), другой формы у него в языке нет.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum PlaceSegment {
     /// `.имя` — поле структуры.
     Field(String),
     /// `[i]` — элемент массива по вычисленному индексу.
     Index(usize),
+    /// `.N` — отдельный разряд целого или упакованного бит-вектора.
+    ///
+    /// ⚠️ Разряд — **лист пути по построению**: у бита нет ни полей, ни
+    /// элементов, ни разрядов. Продолжение за ним отвергается, а не
+    /// игнорируется молча.
+    Bit(i128),
 }
 
 /// Заменяет значение по пути сегментов `path` в `value`, возвращая обновлённое
@@ -49,6 +67,7 @@ pub(crate) fn update(
     match segment {
         PlaceSegment::Field(field) => update_field(value, field, rest, new, structs),
         PlaceSegment::Index(index) => update_index(value, ty, *index, rest, new, structs),
+        PlaceSegment::Bit(bit) => update_bit(value, *bit, rest, new),
     }
 }
 
@@ -127,6 +146,96 @@ fn update_index(
     };
     items[index] = new_elem;
     Ok(Value::Array(items))
+}
+
+/// Запись одного разряда (фича 0250) — **зеркало** чтения
+/// ([`crate::eval::access::read_member`]).
+///
+/// Диспетчеризация та же и по тому же признаку — **виду значения**, а не имени
+/// узла: `Number`/`Boolean` — целое, `Array` — упакованный бит-вектор
+/// `[bit;N > 64]` (фича 0078). Коды ошибок берутся у чтения: один носитель не
+/// вправе отвечать по-разному на чтение и на запись.
+///
+/// Записываемое значение сводится к **младшему биту** (`v & 1`), как у целей
+/// `c` и `sv`; `Boolean` — к `0`/`1`. Прочие виды значения бита не имеют.
+fn update_bit(
+    value: Value,
+    bit: i128,
+    rest: &[PlaceSegment],
+    new: Value,
+) -> Result<Value, EvalError> {
+    // Разряд — лист: `flags.3.x` и `flags.3[0]` смысла не имеют.
+    if !rest.is_empty() {
+        return Err(EvalError::BitOfNonInteger {
+            value: value_kind(&value),
+        });
+    }
+    let one = bit_of_value(&new)?;
+    match value {
+        Value::Number(n) => Ok(Value::Number(set_bit(n, bit, one)?)),
+        // У логического значения есть только нулевой разряд, и он — оно само.
+        Value::Boolean(_) => {
+            if bit == 0 {
+                Ok(Value::Boolean(one == 1))
+            } else {
+                Err(EvalError::BitIndexOutOfRange { bit })
+            }
+        }
+        // Бит-вектор `[bit;N]` при N > 64 (фича 0078): слово `k / 64`,
+        // смещение `k % 64` — та же раскладка, что у чтения.
+        Value::Array(mut words) => {
+            let Ok(k) = u32::try_from(bit) else {
+                return Err(EvalError::BitIndexOutOfRange { bit });
+            };
+            let (w, off) = takt_lang::semantic::bit_vector::bit_slot(k);
+            let slot = words.get_mut(usize::from(w));
+            match slot {
+                Some(Value::Number(word)) => {
+                    *word = set_bit(*word, i128::from(off), one)?;
+                    Ok(Value::Array(words))
+                }
+                _ => Err(EvalError::BitIndexOutOfRange { bit }),
+            }
+        }
+        Value::Struct { name, .. } => Err(EvalError::BitIndexOfStruct { name }),
+        // Разряда у величины нет: те же виды и тот же код, что у чтения
+        // (`read_member`). Ветки `_` здесь нет намеренно — новый вид значения
+        // обязан завалить сборку, а не молча стать «не целым».
+        other @ (Value::Real(_) | Value::Fixed { .. } | Value::Duration(_)) => {
+            Err(EvalError::BitOfNonInteger {
+                value: value_kind(&other),
+            })
+        }
+    }
+}
+
+/// Младший бит записываемого значения: правило целей `c` и `sv`.
+fn bit_of_value(new: &Value) -> Result<i128, EvalError> {
+    match new {
+        Value::Number(n) => Ok(n & 1),
+        Value::Boolean(b) => Ok(i128::from(*b)),
+        other @ (Value::Real(_)
+        | Value::Array(_)
+        | Value::Fixed { .. }
+        | Value::Struct { .. }
+        | Value::Duration(_)) => Err(EvalError::BitOfNonInteger {
+            value: value_kind(other),
+        }),
+    }
+}
+
+/// Заменяет разряд `bit` целого `bits` значением `one` (0 или 1).
+///
+/// Диапазон — тот же `[0, 64)`, что у чтения
+/// ([`crate::eval::access::read_member`]): шире носитель `i128` не обещает, а
+/// расхождение границ чтения и записи дало бы один и тот же разряд то
+/// доступным, то нет.
+fn set_bit(bits: i128, bit: i128, one: i128) -> Result<i128, EvalError> {
+    if !(0..64).contains(&bit) {
+        return Err(EvalError::BitIndexOutOfRange { bit });
+    }
+    let mask = 1i128 << bit;
+    Ok(if one == 1 { bits | mask } else { bits & !mask })
 }
 
 #[cfg(test)]

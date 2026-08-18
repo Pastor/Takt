@@ -19,6 +19,7 @@
 mod address_export_tests;
 mod address_map_tests;
 mod anon_port_tests;
+mod bit_write_targets_tests;
 mod c_diagnostic_code_tests;
 mod c_enum_constants_tests;
 mod c_redundant_break_tests;
