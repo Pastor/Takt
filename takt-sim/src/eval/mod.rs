@@ -35,6 +35,7 @@
 #![deny(clippy::wildcard_enum_match_arm)]
 
 pub(crate) mod access;
+pub(crate) mod builtin;
 pub(crate) mod duration;
 pub(crate) mod error;
 pub(crate) mod fixed;

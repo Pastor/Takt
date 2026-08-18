@@ -216,6 +216,15 @@ pub(crate) fn eval_expression(
         // Д3/Д4: вызов функции. Аргументы вычисляются в контексте вызывающего,
         // тело исполняет общий интерпретатор (`unit::statement`).
         ExpressionNode::Function(func, args) => {
+            // ⚠️ `debug` перехватывается ДО вычисления аргументов (фича 0248):
+            // его аргумент — строковый литерал, а `Value` строк не
+            // представляет, и общий путь упал бы на «строки не
+            // поддерживаются». Печать идёт в stderr: stdout занят трассой
+            // прогона, которую читают сверки.
+            if let Some(text) = debug_argument(func, args) {
+                eprintln!("debug: {text}");
+                return Ok(Value::Number(0));
+            }
             let values = args
                 .iter()
                 .map(|arg| eval_expression(arg, ctx))
@@ -251,6 +260,29 @@ pub(crate) fn eval_expression(
             "неразрешённое выражение не может быть вычислено".to_string(),
         )
         .with_code("SIM-016")),
+    }
+}
+
+/// Текст `debug("…")`, если вызов — именно встроенная `debug` со строковым
+/// литералом.
+///
+/// Форму задаёт цель `rust` (`hal.debug("текст")`): аргумент обязан быть
+/// литералом, потому что форматирования в `no_std` нет. Эталон следует той же
+/// форме — иначе он принимал бы модели, которые прошивка не соберёт.
+fn debug_argument(
+    func: &std::rc::Rc<std::cell::RefCell<takt_lang::semantic::FunctionDefinitionNode>>,
+    args: &[ExpressionNode],
+) -> Option<String> {
+    let borrowed = func.borrow();
+    let takt_lang::semantic::FunctionDefinitionNode::Builtin(name, _, _) = &*borrowed else {
+        return None;
+    };
+    if *name != "debug" {
+        return None;
+    }
+    match args {
+        [ExpressionNode::String(parts)] => Some(parts.join("")),
+        _ => None,
     }
 }
 
