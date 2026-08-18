@@ -38,6 +38,7 @@
 //! условия) · `rust_stmt` (операторы) · `rust_decl` (объявления) ·
 //! `rust_func` (функции) · `rust_model` (автомат) · `rust_map` (снимок карты).
 
+mod rust_bit;
 mod rust_blocks;
 mod rust_cond;
 mod rust_decl;

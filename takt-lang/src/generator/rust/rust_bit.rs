@@ -1,0 +1,185 @@
+//! Битовый доступ цели `rust`: чтение `x.N` и запись `x.N := v`.
+//!
+//! ## Почему отдельный модуль
+//!
+//! Чтение разряда жило в `rust_expr.rs` с самого начала цели (фича 0050), а
+//! запись пришла фичей 0250 — и файл перевалил за предел размера модуля
+//! (правило `docs/CODE.md`). Это не бухгалтерия: чтение и запись разряда суть
+//! **одна тема** — «у чисел Rust битового синтаксиса нет, значит маска», — и
+//! держать их врозь значило бы разводить один предмет по двум местам.
+//!
+//! ## Почему маска, а не что-то ещё
+//!
+//! В Rust нет ни `x.0` как разряда, ни срезов битов: разряд читается сдвигом,
+//! пишется парой «очистить — установить». Цель `c` печатает то же самое
+//! (`(x & ~(1u << N)) | ((v & 1u) << N)`), цель `sv` — присваивание разряду;
+//! правило значения общее и записано в документе: **в разряд попадает младший
+//! бит значения**.
+
+use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::rust::rust_expr::{
+    Scope, coerce_to, print_as_bool, print_expression, unsupported, unwrap_outer, write_port,
+};
+use crate::parser::ast::Member;
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, PortDirection, VariableNode};
+
+/// Печатает битовый доступ `x.N` как маску.
+///
+/// В MatIEC битового доступа нет вовсе (ни `x.0`, ни `%X0`), и цель `st`
+/// разворачивает его в маску по нужде. Здесь маска — тоже единственная форма,
+/// но по другой причине: у чисел Rust битового синтаксиса просто нет.
+pub(crate) fn bit_access(
+    inner: &ExpressionNode,
+    member: &Member,
+    scope: &Scope,
+) -> Result<String, Diagnostic> {
+    let base = print_expression(inner, scope)?;
+    let bit = member_index(member)?;
+    Ok(bit_mask(&base, bit))
+}
+
+/// Строит маску битового доступа `x.N`.
+///
+/// Узел заключается в скобки ЦЕЛИКОМ — как и любой бинарный (см. [`binary`]).
+/// Без внешних скобок `x.1 | flag` дало бы `(x >> 1) & 1 != 0 | flag`, что в
+/// Rust читается как `… != (0 | flag)`: `|` сильнее `!=`. Поймано гейтом на
+/// `elevator.takt` — тот же класс дефекта, ради которого печатник вообще
+/// расставляет скобки структурно.
+///
+/// Сдвиг на 0 не эмитится: `x >> 0` — операция без эффекта
+/// (`clippy::identity_op`), то есть отказ гейта. Нулевой бит в корпусе обычен
+/// (`SENSORS_CAB.0`), поэтому случай не теоретический.
+pub(crate) fn bit_mask(base: &str, bit: u64) -> String {
+    if bit == 0 {
+        return format!("(({} & 1) != 0)", base);
+    }
+    format!("((({} >> {}) & 1) != 0)", base, bit)
+}
+
+/// Извлекает номер бита из члена `x.N`.
+///
+/// Доступ по имени (`x.field`) битовым не является: это обращение к полю
+/// структуры, и молча выдать за него маску значило бы породить тихо неверный код.
+pub(crate) fn member_index(member: &Member) -> Result<u64, Diagnostic> {
+    match member {
+        Member::Number(index) if *index >= 0 => Ok(*index as u64),
+        Member::Number(index) => Err(unsupported(&format!(
+            "битовый доступ с отрицательным индексом '{}'",
+            index
+        ))),
+        Member::Identifier(name) => Err(unsupported(&format!(
+            "доступ к члену '.{}': поля структур в цели rust пока не транслируются",
+            name.name
+        ))),
+    }
+}
+
+/// Печатает запись одного разряда `x.N := v` (фича 0250).
+///
+/// ## Правило
+///
+/// В разряд кладётся **младший бит значения** — то же, что печатают цели `c`
+/// (`(rhs & 1u) << N`) и `sv` (присваивание разряду есть усечение). Литералы
+/// `1` и `0` дают идиоматичные `|=` и `&=`; прочее — развилку по значению,
+/// приведённому к `bool`.
+///
+/// ⚠️ **`1 << 0` не эмитится** — но по другой причине, чем у чтения, и это
+/// **замер, а не перенос довода**. Чтение не печатает `x >> 0`, потому что это
+/// `clippy::identity_op` (проверено: `((self.b >> 0) & 1) != 0` валит
+/// `clippy -D warnings`). Сдвиг **литерала** — `1 << 0` — тот же линт
+/// пропускает (проверено там же), так что гейт здесь ни при чём. Форма всё
+/// равно короткая: маска нулевого разряда есть просто `1`, и печатать вместо
+/// неё сдвиг значило бы засорять вывод ради единообразия с самим собой.
+pub(crate) fn assign_bit(
+    inner: &ExpressionNode,
+    bit: i128,
+    value: &ExpressionNode,
+    scope: &Scope,
+) -> Result<String, Diagnostic> {
+    if let ExpressionNode::Variable(var) = inner {
+        let borrowed = var.borrow();
+        if let VariableNode::Port {
+            name,
+            ty,
+            direction,
+            loc,
+            ..
+        } = &*borrowed
+        {
+            return assign_port_bit(name, ty, *direction, bit, value, scope, *loc);
+        }
+    }
+    let carrier = print_expression(inner, scope)?;
+    let (bare, grouped) = bit_masks(bit);
+    match value {
+        ExpressionNode::Number(1) => Ok(format!("{carrier} |= {bare}")),
+        ExpressionNode::Number(0) => Ok(format!("{carrier} &= !{grouped}")),
+        other => {
+            let cond = print_as_bool(other, scope)?;
+            Ok(format!(
+                "{carrier} = if {} {{ {carrier} | {grouped} }} \
+                 else {{ {carrier} & !{grouped} }}",
+                unwrap_outer(&cond)
+            ))
+        }
+    }
+}
+
+/// Две формы маски разряда: голая и в скобках.
+///
+/// Голая идёт правой частью составного присваивания (`x |= 1 << 2`) — там
+/// скобки лишние, и `rustc` говорит об этом `unused_parens`, то есть под
+/// `-D warnings` это отказ гейта. В скобках — везде, где маска операнд:
+/// `!(1 << 2)` без них разобралось бы как `(!1) << 2`.
+///
+/// При `N = 0` сдвига нет вовсе: маска нулевого разряда есть просто `1`.
+fn bit_masks(bit: i128) -> (String, String) {
+    if bit == 0 {
+        ("1".to_string(), "1".to_string())
+    } else {
+        (format!("1 << {bit}"), format!("(1 << {bit})"))
+    }
+}
+
+/// Запись разряда ПОРТА.
+///
+/// У однобитного порта разряд ровно один, и запись в него есть запись самого
+/// порта — чтения не требуется. У числового выходного порта разряд без чтения
+/// не установить, а HAL-трейт даёт выходу **только** запись (в отличие от цели
+/// `c`, где `read_numeric` есть у любого порта). Отсюда честный отказ
+/// **`RS-025`** с названным обходом.
+fn assign_port_bit(
+    name: &str,
+    ty: &TypeNode,
+    direction: PortDirection,
+    bit: i128,
+    value: &ExpressionNode,
+    scope: &Scope,
+    loc: Location,
+) -> Result<String, Diagnostic> {
+    if matches!(ty, TypeNode::Bit | TypeNode::Bool) {
+        if bit != 0 {
+            return Err(Diagnostic::error(
+                loc,
+                format!(
+                    "разряд {bit} у однобитного порта '{name}': у значения шириной в бит \
+                     иных разрядов нет"
+                ),
+            )
+            .with_code("RS-025"));
+        }
+        let printed = coerce_to(value, ty, scope)?;
+        return write_port(name, ty, direction, unwrap_outer(&printed), scope, loc);
+    }
+    Err(Diagnostic::error(
+        loc,
+        format!(
+            "запись разряда {bit} порта '{name}' не транслируется в Rust: установка \
+             одного разряда требует прочитать остальные, а HAL-трейт даёт выходному \
+             порту только запись. Держите значение в переменной модели и пишите порт \
+             целиком ('var shadow: …; shadow.{bit} := …; {name} := shadow;')"
+        ),
+    )
+    .with_code("RS-025"))
+}

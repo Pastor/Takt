@@ -436,3 +436,6 @@
 | 0248-01 | 0248 | Встроенные функции min/max/abs/clamp/debug не исполняются эталоном | [0248-01-sim-builtin-functions.md](0248-01-sim-builtin-functions.md) |
 | 0247-01 | 0247 | Голое имя состояния и модели в условии не исполняется эталоном | [0247-01-sim-bare-state-condition.md](0247-01-sim-bare-state-condition.md) |
 | 0249-01 | 0249 | Судья места записи: SE-111 и SE-112 | [0249-01-assign-to-call-place.md](0249-01-assign-to-call-place.md) |
+| 0250-01 | 0250 | Запись разряда | [0250-01-bit-write-in-targets.md](0250-01-bit-write-in-targets.md) |
+| 0250-02 | 0250 | Запись разряда | [0250-02-bit-write-in-targets.md](0250-02-bit-write-in-targets.md) |
+| 0250-03 | 0250 | Запись разряда | [0250-03-bit-write-in-targets.md](0250-03-bit-write-in-targets.md) |

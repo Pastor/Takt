@@ -473,19 +473,38 @@ fn is_atom_cond(cond: &ConditionNode) -> bool {
 /// Битовая строка, соответствующая целому типу: имя и функции преобразования.
 ///
 /// Имена проверены пробой на всех восьми целых типах (`USINT`…`LINT`).
-struct BitString {
+pub(crate) struct BitString {
     /// Функция «целое → битовая строка» (например, `USINT_TO_BYTE`).
-    to_fn: String,
+    pub(crate) to_fn: String,
     /// Функция «битовая строка → целое» (например, `BYTE_TO_USINT`).
-    from_fn: String,
+    pub(crate) from_fn: String,
     /// Число шестнадцатеричных цифр в литерале маски (2 для `BYTE`, 4 для `WORD`…).
-    hex_digits: usize,
+    pub(crate) hex_digits: usize,
     /// Разрядность типа.
-    bits: u8,
+    pub(crate) bits: u8,
 }
 
 /// Подбирает битовую строку для целого типа Takt.
-fn bit_string_of_type(ty: &TypeNode) -> Option<BitString> {
+pub(crate) fn bit_string_of_type(ty: &TypeNode) -> Option<BitString> {
+    // Бит-вектор `[bit;N ≤ 64]` — упакованный СКАЛЯР (фича 0078), по
+    // представлению равный `uN`; признак берётся у того же слоя, каким цель
+    // печатает сам тип (урок 0191). Прежде этой нормализации не было, и
+    // `v.2` при `v: [bit;8]` давало `ST-011` — причём и на ЧТЕНИИ тоже,
+    // хотя документ обещает `[bit;8]` эквивалентным `u8`.
+    let normalized;
+    let ty = match crate::semantic::bit_vector::is_bit_vector(ty)
+        .map(crate::semantic::bit_vector::layout)
+    {
+        Some(crate::semantic::bit_vector::BitVectorLayout::Scalar { width }) => {
+            normalized = TypeNode::Integer {
+                bits: u8::try_from(width).unwrap_or(64),
+                signed: false,
+            };
+            &normalized
+        }
+        // N > 64 — массив слов: битовой строкой IEC он не является.
+        _ => ty,
+    };
     let TypeNode::Integer { bits, signed } = ty else {
         return None;
     };
@@ -514,6 +533,20 @@ pub(crate) fn inner_expr_type(expr: &ExpressionNode) -> Option<TypeNode> {
         ExpressionNode::Variable(var) => variable_type(&var.borrow()),
         ExpressionNode::Parenthesis(inner) => inner_expr_type(inner),
         ExpressionNode::Cast(_, ty) => Some(ty.clone()),
+        // Чтение разряда печатается СРАВНЕНИЕМ (`(TO_BYTE(x) AND маска) <> 0`),
+        // то есть его тип в ST — `BOOL` по построению, а не по выводу. Знать
+        // это нужно записи разряда (фича 0250): `b.0 := btn.0;` иначе
+        // отвергалось бы «тип не определяется статически».
+        //
+        // ⚠️ Доступ по ИМЕНИ (`p.x`) сюда не входит: это поле структуры, и его
+        // тип печатнику неизвестен.
+        ExpressionNode::BitAccess(_, Member::Number(_)) => Some(TypeNode::Bool),
+        // Элемент массива: тип берётся у объявления носителя. Нужен записи
+        // разряда (`arr[1].2 := 1`) — цель `c` и эталон её исполняют.
+        ExpressionNode::ArraySubscript(var, _) => match variable_type(&var.borrow()) {
+            Some(TypeNode::Array(_, elem)) => Some((*elem).clone()),
+            _ => None,
+        },
         _ => None,
     }
 }

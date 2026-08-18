@@ -29,8 +29,10 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::st::st_expr::{
-    assign_target_type, coerce_to, print_expression, variable_ident,
+    assign_target_type, bit_string_of_type, coerce_to, inner_expr_type, print_expression,
+    variable_ident,
 };
+use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, MatchPatternNode, ModelNode, StatementNode};
 
@@ -90,6 +92,17 @@ pub(crate) fn print_statement(
                     ty: ret,
                 });
                 p.ident(&format!("{} := {};", sink, call)).nl();
+                return Ok(());
+            }
+            // Запись одного разряда (фича 0250): `flags.3 := v`. Прежде
+            // печатник левой части выдавал ЧТЕНИЕ бита —
+            // `(USINT_TO_BYTE(b) AND 16#04) <> 16#00 := 1;`, — и `iec2c`
+            // отвечал «invalid statement», то есть цель рапортовала об успехе
+            // и клала на диск файл, который не транслируется.
+            if let ExpressionNode::Assign(lhs, rhs) = expr.as_ref()
+                && let ExpressionNode::BitAccess(inner, Member::Number(bit)) = lhs.as_ref()
+            {
+                p.ident(&print_bit_write(inner, *bit, rhs, model)?).nl();
                 return Ok(());
             }
             // Присваивание печатается по ЦЕЛЕВОМУ типу (фича 0066): литерал
@@ -366,6 +379,102 @@ fn unsupported(what: &str) -> Diagnostic {
         format!("Не транслируется в Structured Text: {}", what),
     )
     .with_code("ST-011")
+}
+
+/// Печатает запись одного разряда `x.N := v` (фича 0250).
+///
+/// ## Почему `SEL`, а не `IF`
+///
+/// Битового доступа в MatIEC нет вовсе (ни `x.0`, ни `%X0`), а сдвигов над
+/// числами в IEC нет тем более (урок 0061) — значит установка разряда есть
+/// маска. Маска константна (номер разряда в языке всегда литерал), а выбор
+/// между «установить» и «сбросить» делает стандартная `SEL`: печатник
+/// выражений отдаёт **строку**, и разворот в пару операторов потребовал бы
+/// менять его контракт. Проба 2026-08-18: `iec2c` форму принимает.
+///
+/// ```text
+/// b := BYTE_TO_USINT(SEL(<v>, USINT_TO_BYTE(b) AND 16#FB,
+///                             USINT_TO_BYTE(b) OR 16#04));
+/// ```
+///
+/// Литеральные `1` и `0` печатаются прямой формой без `SEL`: она короче и
+/// читается, а значение разряда известно при трансляции.
+fn print_bit_write(
+    inner: &ExpressionNode,
+    bit: i128,
+    rhs: &ExpressionNode,
+    model: &ModelNode,
+) -> Result<String, Diagnostic> {
+    let base = print_expression(inner, model)?;
+    let ty = inner_expr_type(inner).ok_or_else(|| {
+        unsupported(&format!(
+            "запись разряда {bit}: тип носителя не определяется статически, \
+             а разрядность нужна, чтобы построить маску"
+        ))
+    })?;
+    // У однобитного значения разряд ровно один, и он — само значение.
+    if matches!(ty, TypeNode::Bit | TypeNode::Bool) {
+        if bit != 0 {
+            return Err(unsupported(&format!(
+                "разряд {bit} у однобитного значения: в IEC 61131-3 у BOOL нет \
+                 разрядов, кроме нулевого"
+            )));
+        }
+        return Ok(format!(
+            "{base} := {};",
+            coerce_to(rhs, &TypeNode::Bool, model)?
+        ));
+    }
+    let bs = bit_string_of_type(&ty).ok_or_else(|| {
+        unsupported(&format!(
+            "запись разряда в тип '{ty}': маска строится только для целых типов \
+             IEC (8/16/32/64 бита)"
+        ))
+    })?;
+    if bit < 0 || bit >= i128::from(bs.bits) {
+        return Err(unsupported(&format!(
+            "разряд {bit} вне разрядности типа '{ty}' ({} бит)",
+            bs.bits
+        )));
+    }
+    let width = bs.hex_digits;
+    let set_mask = 1u128 << bit;
+    let clear_mask = mask_all(bs.bits) & !set_mask;
+    let set = format!("{}({base}) OR 16#{set_mask:0width$X}", bs.to_fn);
+    let clear = format!("{}({base}) AND 16#{clear_mask:0width$X}", bs.to_fn);
+    let body = match rhs {
+        ExpressionNode::Number(n) if n & 1 == 1 => set,
+        ExpressionNode::Number(_) => clear,
+        // `SEL(G, IN0, IN1)`: при `G = FALSE` берётся `IN0`. Значит «сбросить»
+        // идёт вторым аргументом, «установить» — третьим.
+        other => format!("SEL({}, {clear}, {set})", low_bit_as_bool(other, model)?),
+    };
+    Ok(format!("{base} := {}({body});", bs.from_fn))
+}
+
+/// Маска «все разряды» для ширины `bits`.
+fn mask_all(bits: u8) -> u128 {
+    if bits >= 128 {
+        u128::MAX
+    } else {
+        (1u128 << bits) - 1
+    }
+}
+
+/// Печатает МЛАДШИЙ бит значения как `BOOL` — правило целей `c` и `sv`.
+///
+/// `MOD 2`, а не `AND 1`: в IEC `AND` определён только на битовых строках, и
+/// смешивать миры чисел и строк в одном выражении нельзя (урок 0041).
+fn low_bit_as_bool(rhs: &ExpressionNode, model: &ModelNode) -> Result<String, Diagnostic> {
+    let printed = print_expression(rhs, model)?;
+    match inner_expr_type(rhs) {
+        Some(TypeNode::Bit | TypeNode::Bool) => Ok(printed),
+        Some(TypeNode::Integer { .. }) => Ok(format!("({printed} MOD 2) <> 0")),
+        _ => Err(unsupported(&format!(
+            "значение '{printed}' в записи разряда: тип не определяется статически, \
+             и привести его к BOOL нечем"
+        ))),
+    }
 }
 
 #[cfg(test)]

@@ -188,3 +188,4 @@
 | 0248 | Встроенные функции min/max/abs/clamp/debug не исполняются эталоном | [0248-sim-builtin-functions.md](0248-sim-builtin-functions.md) | ГОТОВО |
 | 0247 | Голое имя состояния и модели в условии не исполняется эталоном | [0247-sim-bare-state-condition.md](0247-sim-bare-state-condition.md) | ГОТОВО |
 | 0249 | Левая часть присваивания — место записи | [0249-assign-to-call-place.md](0249-assign-to-call-place.md) | ГОТОВО |
+| 0250 | Запись бита x.N := v | [0250-bit-write-in-targets.md](0250-bit-write-in-targets.md) | ГОТОВО |
