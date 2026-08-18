@@ -186,3 +186,4 @@
 | 0218 | Реестры стадий 5 и 6 хранят заготовочное СОЗДАНА в колонках вердикта | [0218-registry-verdict-placeholder.md](0218-registry-verdict-placeholder.md) | ГОТОВО |
 | 0217 | Ветвь-заглушка до будущей задачи переживает саму задачу | [0217-stub-branch-gate.md](0217-stub-branch-gate.md) | ГОТОВО |
 | 0248 | Встроенные функции min/max/abs/clamp/debug не исполняются эталоном | [0248-sim-builtin-functions.md](0248-sim-builtin-functions.md) | ГОТОВО |
+| 0247 | Голое имя состояния и модели в условии не исполняется эталоном | [0247-sim-bare-state-condition.md](0247-sim-bare-state-condition.md) | ГОТОВО |

@@ -111,11 +111,20 @@ pub(super) fn validate_cond(
             validate_cond(None, &right, model.clone())?;
         }
         ConditionNode::Equal(left, right) => {
-            validate_cond(None, &left, model.clone())?;
+            // ⚠️ Левый операнд паттерна `S(Модель) = Состояние` (и краткой формы
+            // `Модель = Состояние`) — это `ConditionNode::Model`, то есть ровно
+            // то, что ветвь ниже отвергает как «не условие» (SE-110). Форму
+            // паттерна разбирает ЕДИНСТВЕННАЯ функция `state_of_model` (0245):
+            // второй разбор здесь разъехался бы с ней при первой же правке.
+            if state_of_model(&left).is_none() {
+                validate_cond(None, &left, model.clone())?;
+            }
             validate_cond(Some(*left.clone()), &right, model.clone())?;
         }
         ConditionNode::NotEqual(left, right) => {
-            validate_cond(None, &left, model.clone())?;
+            if state_of_model(&left).is_none() {
+                validate_cond(None, &left, model.clone())?;
+            }
             // Передаём контекст левого операнда — как в Equal — для проверки
             // паттерна `S(Model) != СостояниеИмя`: имя состояния должно быть
             // валидным в указанной модели.
@@ -150,8 +159,47 @@ pub(super) fn validate_cond(
                 .with_code("SE-027"));
             }
         }
-        ConditionNode::Model(_model, _) => {}
-        ConditionNode::State(_state, _) => {}
+        // Голое имя модели или состояния условием НЕ является (фича 0247).
+        //
+        // Замер до фичи: `ref Done: Idle;` семантика принимала (только
+        // предупреждение `SE-037` о неявной булевости), а дальше один вход
+        // давал ПЯТЬ разных ответов — `CC-018`/`CC-003`, `RS-020`/`RS-011`,
+        // `ST-011`, `SV-002` на компиляции и `SIM-013` у эталона **посреди
+        // прогона**. Не переводит конструкцию никто, поэтому отвергает её
+        // компилятор — один раз и с позицией имени.
+        //
+        // ⚠️ Осмысленное уже выразимо: «состояние под-модели» — это
+        // `S(Модель) = Состояние` или краткая `Модель = Состояние` (0245), и
+        // левый операнд такого паттерна сюда не доходит (см. `Equal`/`NotEqual`
+        // выше).
+        ConditionNode::Model(model_rc, loc) => {
+            let name = model_rc
+                .borrow()
+                .name
+                .clone()
+                .unwrap_or_else(|| "?".to_string());
+            return Err(Diagnostic::error(
+                loc,
+                format!(
+                    "имя модели '{name}' само по себе условием не является: \
+                     напишите 'S({name}) = Состояние' или краткую форму \
+                     '{name} = Состояние'"
+                ),
+            )
+            .with_code("SE-110"));
+        }
+        ConditionNode::State(state_rc, loc) => {
+            let name = state_rc.borrow().name().to_string();
+            return Err(Diagnostic::error(
+                loc,
+                format!(
+                    "имя состояния '{name}' само по себе условием не является: \
+                     проверка состояния записывается как 'S(Модель) = {name}' \
+                     или краткой формой 'Модель = {name}'"
+                ),
+            )
+            .with_code("SE-110"));
+        }
         ConditionNode::EnumVariant(_, _, _) => {}
     }
     Ok(())

@@ -306,25 +306,29 @@ mod goto_state_in_condition {
         );
     }
 
-    // Внутримодельный случай: `Done` — состояние ТОЙ ЖЕ модели, резолвится в
-    // `ConditionNode::State(Rc, use-site)`. Сравнение `x = Done` бессмысленно
-    // семантически, но индексу/навигации это безразлично — проверяется путь узла
-    // `State`, а не типизация.
-    const SRC_SAME: &str = "model M {\n    var x: bit := false;\n    start A { ref B: x = Done; }\n    state B;\n    state Done;\n}\n";
+    // Имя состояния в ПАТТЕРНЕ проверки состояния под-модели.
+    //
+    // ⚠️ Прежде здесь стояла фикстура `ref B: x = Done;` — сравнение переменной
+    // с именем состояния той же модели. Фича 0247 такой вход отвергает
+    // (`SE-110`: имя состояния само по себе условием не является), и вместе с
+    // ним из ВАЛИДНОЙ программы исчезла возможность построить голый узел
+    // `ConditionNode::State`. Навигация от этого не потерялась: имя состояния
+    // законно стоит в правой части паттерна `S(Модель) = Состояние`, и переход
+    // по нему проверяется ниже.
+    const SRC_SAME: &str = "model Feeder {\n    start Run { always { } ref Idle; }\n    state Idle;\n}\nmodel Work {\n    var n: u8 := 0;\n    start Busy { always { n := n + 1; } ref Done: S(Feeder) = Idle; }\n    state Done;\n}\nstart Main = Work | Feeder;\n";
 
-    /// T2b: внутримодельный `x = Done` (узел `ConditionNode::State`), курсор на
-    /// `Done` → декларация `state Done;` в той же модели.
+    /// T2b: курсор на имени состояния в `S(Feeder) = Idle` → его декларация.
     #[test]
-    fn goto_same_model_state_node_resolves_to_declaration() {
-        let range = goto_declaration(SRC_SAME, cursor_on(SRC_SAME, "x = Done", "Done"));
+    fn state_name_in_state_of_pattern_resolves_to_declaration() {
+        let range = goto_declaration(SRC_SAME, cursor_on(SRC_SAME, "= Idle;", "Idle"));
         assert!(
             range.is_some(),
-            "goto на имени состояния той же модели (ConditionNode::State) должен вернуть декларацию"
+            "goto на имени состояния в паттерне S(Модель) = Состояние должен вернуть декларацию"
         );
         assert_eq!(
             range.unwrap().start.line,
-            decl_line(SRC_SAME, "state Done;"),
-            "переход должен открыть декларацию `state Done;`"
+            decl_line(SRC_SAME, "state Idle;"),
+            "переход должен открыть декларацию `state Idle;` в модели Feeder"
         );
     }
 }
