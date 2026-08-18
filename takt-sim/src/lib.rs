@@ -28,6 +28,8 @@ pub(crate) mod expression;
 pub(crate) mod gif;
 pub mod graphics_config;
 pub mod json_input;
+/// Реестр имён портов и переменных модели (фикс 0150-01).
+pub mod port_names;
 mod predicate;
 pub mod runner;
 pub mod state_io;
