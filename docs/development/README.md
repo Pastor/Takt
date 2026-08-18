@@ -433,3 +433,4 @@
 | 0220-01 | 0220 | Флаг -Wextra для гейта цели c: 38 предупреждений одного класса | [0220-01-c-gate-wextra.md](0220-01-c-gate-wextra.md) |
 | 0218-01 | 0218 | Реестры стадий 5 и 6 хранят заготовочное СОЗДАНА в колонках вердикта | [0218-01-registry-verdict-placeholder.md](0218-01-registry-verdict-placeholder.md) |
 | 0217-01 | 0217 | Ветвь-заглушка до будущей задачи переживает саму задачу | [0217-01-stub-branch-gate.md](0217-01-stub-branch-gate.md) |
+| 0248-01 | 0248 | Встроенные функции min/max/abs/clamp/debug не исполняются эталоном | [0248-01-sim-builtin-functions.md](0248-01-sim-builtin-functions.md) |
