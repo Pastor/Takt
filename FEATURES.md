@@ -31,7 +31,7 @@
 
 | № | Фича | Зависит от | Класс | Tier | Статус |
 |---|------|------------|-------|------|--------|
-| [0153](docs/features/0153-lsp-workspace-index.md) | Индексация рабочей области для LSP (`references`/`rename` между файлами) | — | прочее | 2 | СОЗДАНА |
+| [0153](docs/features/0153-lsp-workspace-index.md) | Индексация рабочей области для LSP (`references`/`rename` между файлами) | — | прочее | 2 | АНАЛИЗ |
 | [0150](docs/features/0150-sim-positional-scenario-deprecation.md) | Признание позиционной формы сценария устаревшей (решение заказчика) | — | прочее | 3 | СОЗДАНА |
 | [0154](docs/features/0154-intellij-server-rename.md) | Перевод плагина IntelliJ на серверный `rename` | — | прочее | 3 | СОЗДАНА |
 | [0158](docs/features/0158-intellij-run-configurations.md) | Запуск компилятора и симулятора из IntelliJ (Run Configurations) | — | прочее | 3 | СОЗДАНА |

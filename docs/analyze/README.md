@@ -219,3 +219,4 @@
 | 0249 | Левая часть присваивания — место записи | [0249-assign-to-call-place.md](0249-assign-to-call-place.md) | — (новая фича) |
 | 0250 | Запись бита x.N := v работает или отказывает по названной причине | [0250-bit-write-in-targets.md](0250-bit-write-in-targets.md) | — (новая фича) |
 | 0145 | Потолок верификации по данным: бюджет вместо VERTEX_LIMIT | [0145-verify-vertex-budget.md](0145-verify-vertex-budget.md) | — (новая фича) |
+| 0153 | Индексация рабочей области для LSP (references/rename между файлами) | [0153-lsp-workspace-index.md](0153-lsp-workspace-index.md) | — (новая фича) |

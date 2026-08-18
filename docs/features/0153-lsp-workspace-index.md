@@ -1,7 +1,7 @@
 # Фича 0153: Индексация рабочей области для LSP (`references`/`rename` между файлами)
 
 - **Номер:** 0153
-- **Статус:** СОЗДАНА
+- **Статус:** АНАЛИЗ
 - **Зависит от:** нет
 - **Tier:** 2
 - **Связанные issue (анализ):** кандидат блока 2 `FEATURES.md` (вынесено закрытием [0131](0131-lsp-definition-references-rename.md), сознательная граница ADR)
@@ -10,8 +10,8 @@
 
 | Стадия | Артефакт |
 |---|---|
-| Архитектура (ADR) | не заведена (стадия 2) |
-| Анализ | не заведён (стадия 3) |
+| Архитектура (ADR) | [`docs/adr/0153-lsp-workspace-index.md`](../adr/0153-lsp-workspace-index.md) (Accepted, Option C) |
+| Анализ | [`docs/analyze/0153-lsp-workspace-index.md`](../analyze/0153-lsp-workspace-index.md) |
 | Разработка | [`docs/development/`](../development/README.md) (задачи `0153-YY-*`) |
 | Тест-план | [`docs/tests/README.md`](../tests/README.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
