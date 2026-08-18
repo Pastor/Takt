@@ -17,6 +17,7 @@ mod duration_tests;
 mod eval_tests;
 mod examples_scenario_tests;
 mod extern_stub_tests;
+mod fractional_initializer_tests;
 mod implemented_model_sim_tests;
 mod import_enum_match_tests;
 mod inference_chain_tests;
