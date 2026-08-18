@@ -1,98 +1,101 @@
 package org.takt.intellij
 
+import com.intellij.refactoring.rename.PsiElementRenameHandler
+import com.intellij.refactoring.util.CommonRefactoringUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import org.takt.intellij.psi.TaktNameDecl
 import org.takt.intellij.refactoring.TaktNamesValidator
 
 /**
- * Проверки нативного rename имён Takt (фича 0067, R3).
+ * Переименование отдано серверу (фича 0154).
  *
- * Rename идёт штатным рефакторингом IDEA: декларация — `PsiNamedElement`
- * (`NAME_DECL`), использования — `PsiReference` (`NAME_REF`) к ней в том же файле.
- * Комментарии и строковые литералы не задеваются (в них нет ссылок).
+ * Прежде эти тесты проверяли **свой** rename плагина: декларация была
+ * `PsiNameIdentifierOwner`, использования — ссылками, и IDEA правила текст сама.
+ * Реализация снята: она перекрывала серверный `textDocument/rename`, у которого
+ * есть области видимости и вся рабочая область (0131, 0153), тогда как здесь
+ * работала эвристика «первая одноимённая декларация файла».
+ *
+ * ⚠️ **Что именно тут проверяется.** Живой сервер в тестах не поднимается,
+ * поэтому «сервер переименовал» здесь недоказуемо — это ручная проверка в IDE
+ * (отчёт фичи). Зато проверяется **условие**, при котором LSP4IJ вообще берёт
+ * запрос: его `LSPRenameHandler.isAvailableOnDataContext` требует, чтобы других
+ * доступных обработчиков не было (либо чтобы все они были
+ * `VariableInplaceRenameHandler`). Пока условие выполнено — путь к серверу
+ * свободен; сломается оно — сломается и переименование, молча.
  */
 class TaktRenameTest : BasePlatformTestCase() {
 
-    private fun renameAtCaret(code: String, newName: String): String {
-        myFixture.configureByText("test.takt", code)
-        myFixture.renameElementAtCaret(newName)
-        return myFixture.file.text
-    }
-
-    fun testRenameModelFromDeclaration() {
-        val r = renameAtCaret(
-            "model Produ<caret>cer { }\nstart Main = Producer { }\n", "Maker",
+    /**
+     * ГЛАВНЫЙ сторож: наш символ нативным рефакторингом **не переименовывается**
+     * — значит Shift+F6 на нём достаётся серверу.
+     *
+     * ⚠️ Проверяется именно `canRename` на нашем узле, а НЕ пустота списка
+     * `RenameHandlerRegistry.getRenameHandlers`. Зонд 2026-08-18 показал, почему:
+     * в синтетическом `DataContext` теста `PsiElementRenameHandler` доступен даже
+     * для `probe.txt`, где PSI плагина нет вовсе, — он предлагает переименовать
+     * **файл**. Сторож на пустоту списка проверял бы наличие файла, а не наше
+     * устройство, и был бы красным всегда.
+     *
+     * ⚠️ Мутация, которую тест обязан ловить: вернуть `TaktNameDecl` реализацию
+     * `PsiNameIdentifierOwner`. Тогда `canRename` станет истинным, нативный
+     * рефакторинг перехватит запрос, и переименование снова уйдёт в эвристику
+     * «первая одноимённая декларация файла» — без единого сообщения.
+     */
+    fun testDeclarationIsNotRenamableNatively() {
+        myFixture.configureByText("test.takt", "model Produ<caret>cer { }\nstart Main = Producer { }\n")
+        val at = myFixture.file.findElementAt(myFixture.editor.caretModel.offset)
+        val decl = generateSequence(at) { it.parent }.filterIsInstance<TaktNameDecl>().firstOrNull()
+        assertNotNull("узел-декларация на месте: навигация на нём держится", decl)
+        val renamable = try {
+            PsiElementRenameHandler.canRename(project, myFixture.editor, decl)
+        } catch (_: CommonRefactoringUtil.RefactoringErrorHintException) {
+            false
+        }
+        assertFalse(
+            "нативный рефакторинг не должен браться за символ Takt — иначе он перекроет сервер",
+            renamable,
         )
-        assertTrue("декларация: $r", r.contains("model Maker"))
-        assertTrue("использование: $r", r.contains("= Maker"))
-        assertFalse("старое имя не осталось: $r", r.contains("Producer"))
     }
 
-    fun testRenameModelFromUsage() {
-        val r = renameAtCaret(
-            "model Producer { }\nstart Main = Produ<caret>cer { }\n", "Maker",
+    /**
+     * Декларация перестала быть именованным элементом IDEA — это и есть причина,
+     * по которой нативный обработчик недоступен.
+     */
+    fun testDeclarationIsNotNamedElement() {
+        myFixture.configureByText("test.takt", "model Produ<caret>cer { }\n")
+        val at = myFixture.file.findElementAt(myFixture.editor.caretModel.offset)
+        val decl = generateSequence(at) { it.parent }.filterIsInstance<TaktNameDecl>().firstOrNull()
+        assertNotNull("узел-декларация на месте: навигация на нём держится", decl)
+        // ⚠️ Проверка идёт через `Any`, а не напрямую: на статическом типе
+        // компилятор Kotlin сворачивает её в «always false» и валит сборку
+        // (`-Werror`). Свёртка — тоже доказательство, но только для ЭТОГО типа;
+        // здесь же сторож смотрит на фактический класс узла и переживёт, если
+        // интерфейс добавят предку.
+        val asAny: Any? = decl
+        assertFalse(
+            "декларация не должна быть PsiNamedElement — иначе она перекроет сервер",
+            asAny is com.intellij.psi.PsiNamedElement,
         )
-        assertTrue(r.contains("model Maker"))
-        assertTrue(r.contains("= Maker"))
-        assertFalse(r.contains("Producer"))
     }
 
-    fun testRenameType() {
-        val r = renameAtCaret("type Sp<caret>eed = bit;\nvar v: Speed := 0;\n", "Rate")
-        assertTrue(r.contains("type Rate"))
-        assertTrue(r.contains(": Rate"))
+    /**
+     * Навигация без сервера сохранена: ссылка использования по-прежнему
+     * разрешается в декларацию того же файла (тихая деградация 0038).
+     */
+    fun testReferenceStillResolvesForNavigation() {
+        myFixture.configureByText("test.takt", "model Producer { }\nstart Main = Produ<caret>cer { }\n")
+        val at = myFixture.file.findElementAt(myFixture.editor.caretModel.offset)
+        val ref = generateSequence(at) { it.parent }.mapNotNull { it.reference }.firstOrNull()
+        assertNotNull("ссылка на использовании обязана остаться", ref)
+        assertNotNull("ссылка обязана разрешаться в декларацию", ref!!.resolve())
     }
 
-    fun testRenameVarFromUsage() {
-        val r = renameAtCaret("var flag: bit := 0;\ncond Ready = fl<caret>ag;\n", "active")
-        assertTrue(r.contains("var active"))
-        assertTrue(r.contains("= active"))
-    }
 
-    fun testRenameEnumVariant() {
-        val r = renameAtCaret(
-            "enum Action { Idle = 670, Clo<caret>sing }\nvar a: Action := Closing;\n", "Shut",
-        )
-        assertTrue(r.contains("Shut }") || r.contains(", Shut"))
-        assertTrue(r.contains(":= Shut"))
-        assertFalse(r.contains("Closing"))
-    }
-
-    fun testRenamePort() {
-        val r = renameAtCaret("in sen<caret>sors: u8 := 0x10;\ncond Occupied = sensors.0;\n", "sens")
-        assertTrue(r.contains("in sens"))
-        assertTrue(r.contains("= sens.0"))
-    }
-
-    fun testRenameFunction() {
-        val r = renameAtCaret(
-            "fn help<caret>er() -> bit { return 0; }\nfn caller() -> bit { return helper(); }\n", "util",
-        )
-        assertTrue(r.contains("fn util("))
-        assertTrue(r.contains("return util("))
-    }
-
-    fun testRenameImportAlias() {
-        myFixture.addFileToProject("shared.takt", "model SharedModel { }\n")
-        val r = renameAtCaret(
-            "import { SharedModel as <caret>M } from \"shared.takt\";\nstart Entry = M { }\n", "Sh",
-        )
-        assertTrue(r.contains("as Sh"))
-        assertTrue(r.contains("= Sh"))
-        // Путь import не задет.
-        assertTrue(r.contains("\"shared.takt\""))
-    }
-
-    /** R3.2: одноимённые подстроки в комментарии и строке НЕ задеты. */
-    fun testCommentAndStringNotTouched() {
-        val r = renameAtCaret(
-            "// Producer stays\nmodel Produ<caret>cer { always { formula \"Producer\"; } }\n", "Maker",
-        )
-        assertTrue("комментарий цел: $r", r.contains("// Producer stays"))
-        assertTrue("строка цела: $r", r.contains("\"Producer\""))
-        assertTrue("декларация переименована: $r", r.contains("model Maker"))
-    }
-
-    /** R3.3: валидатор отвергает ключевые слова Takt, принимает идентификаторы. */
+    /**
+     * Валидатор имён остаётся: `lang.namesValidator` — точка расширения **языка**,
+     * её спрашивает инфраструктура рефакторинга при вводе нового имени, а не
+     * конкретный обработчик.
+     */
     fun testNamesValidatorRejectsKeywords() {
         val v = TaktNamesValidator()
         assertTrue(v.isKeyword("model", project))

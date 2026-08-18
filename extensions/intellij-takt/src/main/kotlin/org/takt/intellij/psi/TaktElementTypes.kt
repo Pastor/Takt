@@ -13,7 +13,7 @@ object TaktElementTypes {
     /** Строка-путь директивы `import` (носитель файловой `PsiReference`, R5). */
     @JvmField val IMPORT_PATH = TaktElementType("IMPORT_PATH")
 
-    /** Идентификатор-**декларация** имени Takt (носитель `PsiNamedElement`, R3). */
+    /** Идентификатор-**декларация** имени Takt (цель навигации; с 0154 — не `PsiNamedElement`). */
     @JvmField val NAME_DECL = TaktElementType("NAME_DECL")
 
     /** Идентификатор-**использование** имени Takt (носитель `PsiReference`, R3). */
