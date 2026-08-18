@@ -15,7 +15,7 @@
 | Разработка | [`0150-01`](../development/0150-01-sim-positional-scenario-deprecation.md) |
 | Тест-план | [`docs/tests/0150-sim-positional-scenario-deprecation.md`](../tests/0150-sim-positional-scenario-deprecation.md) |
 | Отчёт о тестировании | [`docs/reports/0150-sim-positional-scenario-deprecation.md`](../reports/0150-sim-positional-scenario-deprecation.md) |
-| Исправления | не потребовались |
+| Исправления | [`0150-01`](../fixes/0150-01-gate-and-module-size.md) |
 
 ## Краткое описание
 
