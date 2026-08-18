@@ -30,6 +30,7 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 mod anon_init;
+mod assignment_place;
 mod assignment_position;
 mod bodies;
 mod common;

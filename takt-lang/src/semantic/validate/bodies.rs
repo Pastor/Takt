@@ -185,4 +185,5 @@ fn check_expr(
         found.push(diagnostic);
     }
     found.extend(super::assignment_position::check_expression(expr, position));
+    found.extend(super::assignment_place::check_expression(expr, position));
 }

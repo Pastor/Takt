@@ -1,7 +1,7 @@
 # Фича 0249: Левая часть присваивания — вызов функции: семантика принимает, цель c печатает невалидный C
 
 - **Номер:** 0249
-- **Статус:** АНАЛИЗ
+- **Статус:** ТЕСТИРОВАНИЕ
 - **Зависит от:** нет (проверено на стадии анализа: обходы `validate/bodies.rs`
   фичи 0188 и позиции присваивания фичи 0187 закрыты)
 - **Связанные issue (анализ):** новая фича (находка гейта заглушек 0217 при
@@ -13,8 +13,8 @@
 |---|---|
 | Архитектура (ADR) | [`docs/adr/0249-assign-to-call-place.md`](../adr/0249-assign-to-call-place.md) |
 | Анализ | [`docs/analyze/0249-assign-to-call-place.md`](../analyze/0249-assign-to-call-place.md) |
-| Разработка | [`docs/development/`](../development/README.md) (задачи `0249-YY-*`) |
-| Тест-план | [`docs/tests/README.md`](../tests/README.md) |
+| Разработка | [`docs/development/0249-01-assign-to-call-place.md`](../development/0249-01-assign-to-call-place.md) |
+| Тест-план | [`docs/tests/0249-assign-to-call-place.md`](../tests/0249-assign-to-call-place.md) |
 | Отчёт о тестировании | [`docs/reports/README.md`](../reports/README.md) |
 | Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0249-YY-*`) |
 
