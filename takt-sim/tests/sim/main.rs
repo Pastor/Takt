@@ -7,6 +7,7 @@
 //! модулем, имена тестов различимы (`cargo test --test sim eval_tests::`).
 
 mod aggregate_argument_tests;
+mod assignment_place_refusal_tests;
 mod cast_in_initializer_tests;
 mod composition_model_always_tests;
 mod composition_ports_tests;

@@ -435,3 +435,4 @@
 | 0217-01 | 0217 | Ветвь-заглушка до будущей задачи переживает саму задачу | [0217-01-stub-branch-gate.md](0217-01-stub-branch-gate.md) |
 | 0248-01 | 0248 | Встроенные функции min/max/abs/clamp/debug не исполняются эталоном | [0248-01-sim-builtin-functions.md](0248-01-sim-builtin-functions.md) |
 | 0247-01 | 0247 | Голое имя состояния и модели в условии не исполняется эталоном | [0247-01-sim-bare-state-condition.md](0247-01-sim-bare-state-condition.md) |
+| 0249-01 | 0249 | Судья места записи: SE-111 и SE-112 | [0249-01-assign-to-call-place.md](0249-01-assign-to-call-place.md) |
