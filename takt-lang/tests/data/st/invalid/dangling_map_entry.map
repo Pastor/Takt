@@ -1,3 +1,3 @@
-// Карта к dangling_map_entry.lam: `nonexistent` в модели нет → SE-051.
+// Карта к dangling_map_entry.takt: `nonexistent` в модели нет → SE-051.
 btn = 0x0:0;
 nonexistent = 0x1:0;

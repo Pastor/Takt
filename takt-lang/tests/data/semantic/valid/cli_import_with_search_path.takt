@@ -1,9 +1,9 @@
 // Пример: использование флага -I для поиска импортов.
 //
-// Этот файл использует `import "std.takt"` — стандартную библиотеку типов BuT.
+// Этот файл использует `import "std.takt"` — стандартную библиотеку типов Takt.
 // Для успешной компиляции необходимо указать путь к директории с std.takt через -I:
 //
-//   lamc compile -I grammar/tests/data/include cli_import_with_search_path.takt -o out/
+//   taktc compile -I takt-lang/tests/data/include cli_import_with_search_path.takt -o out/
 //
 // Без флага -I компиляция завершится ошибкой «файл импорта не найден».
 

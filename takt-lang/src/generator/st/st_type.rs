@@ -80,7 +80,7 @@ pub(crate) fn get_st_type(typ: &TypeNode, model: &ModelNode) -> Result<String, D
             true,
         ),
         // T11. LREAL — 64-битное вещественное, совпадает с f64 симулятора
-        // (`simulation/src/eval/`). `REAL` (f32) повторил бы дефект Д3.
+        // (`takt-sim/src/eval/`). `REAL` (f32) повторил бы дефект Д3.
         TypeNode::Rational => Ok("LREAL".to_string()),
         // T12 / фича 0078. Бит-вектор `[bit;N]` — упакованный скаляр
         // `USINT/UINT/UDINT/ULINT` (round_up, N ≤ 64) либо массив слов

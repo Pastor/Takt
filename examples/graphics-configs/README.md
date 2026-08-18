@@ -1,11 +1,13 @@
 # Настройки генерации GIF-симуляции
 
-Файлы JSON в этом каталоге передаются симулятору через `--gif-config`:
+Файлы JSON в этом каталоге передаются симулятору через `--graphics-config`;
+каталог для кадров задаётся `-o`/`--output`, а вид вывода (GIF или SVG) — полем
+`output_mode` самого файла настроек:
 
 ```sh
-cargo run -p simulation --bin simulation -- model.but \
-    --gif out.gif \
-    --gif-config examples/gif-configs/dark.json
+cargo run --bin takt-sim -- examples/stacker.takt -n 12 \
+    --output out/ \
+    --graphics-config examples/graphics-configs/dark.json
 ```
 
 В файле допустимо указывать только те поля, которые нужно переопределить —

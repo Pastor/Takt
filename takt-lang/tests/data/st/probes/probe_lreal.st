@@ -1,5 +1,5 @@
 (* П6. LREAL (64-битное вещественное) — подтверждает T11.
-   Симулятор Lam считает в f64, поэтому LREAL, а не REAL. *)
+   Симулятор Takt считает в f64, поэтому LREAL, а не REAL. *)
 FUNCTION_BLOCK Demo
 VAR
     x : LREAL := 0.5;

@@ -1,5 +1,5 @@
 // Драйвер проверки порождённого C: ПИД-регулятор на q(8, 8)
-// (examples/pid_regulator.lam). Сходится с anti-windup и завершается, поднимая
+// (examples/pid_regulator.takt). Сходится с anti-windup и завершается, поднимая
 // порт `ready`. Драйвер задаёт колбэк порта и крутит такты до терминала.
 #include "pid_regulator.h"
 #include <stdio.h>
