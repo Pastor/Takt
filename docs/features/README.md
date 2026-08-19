@@ -304,7 +304,7 @@
 | [0289](./0289-claude-md-invariant-checklist-gate.md) | Чек-лист критических инвариантов — вторая точка сопровождения | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0290](./0290-book-diagnostics-codes-gate.md) | Приложение «Ошибки» отстаёт от реестра диагностик на 19 кодов | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0291](./0291-rust-sv-unresolved-condition.md) | Решение «ребро безусловно» — у одного носителя | Предикат ConditionNode::is_unconditional; восемь потребителей вместо восьми копий; Tier исправлен с 1 на 4 по замеру | ГОТОВО |
-| [0292](./0292-cc022-promise-without-emitter.md) | Код CC-022 обещан комментарием, но не эмитируется никем | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0292](./0292-cc022-promise-without-emitter.md) | Код CC-022 обещан комментарием, но не эмитируется никем | [ADR](../adr/0292-cc022-promise-without-emitter.md), [анализ](../analyze/0292-cc022-promise-without-emitter.md), [отчёт](../reports/0292-cc022-promise-without-emitter.md) | ГОТОВО |
 | [0293](./0293-struct-in-st-rust.md) | Структуры не транслируются целями st и rust дальше объявления | [ADR](../adr/0293-struct-in-st-rust.md), [анализ](../analyze/0293-struct-in-st-rust.md), [отчёт](../reports/0293-struct-in-st-rust.md) | ГОТОВО |
 | [0294](./0294-se102-suggest-importer.md) | SE-102 не подсказывает файл, подключающий библиотеку | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0295](./0295-format-element-comment-binding.md) | Печать элемента модели в обход привязки комментариев не запрещена | [ADR](../adr/0295-format-element-comment-binding.md), [анализ](../analyze/0295-format-element-comment-binding.md), [отчёт](../reports/0295-format-element-comment-binding.md) | ГОТОВО |

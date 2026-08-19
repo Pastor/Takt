@@ -254,3 +254,4 @@
 | 0286 | Вычислимое приведение в инициализаторе | [0286-sv-const-initializer-expression.md](0286-sv-const-initializer-expression.md) | зависимостей нет; замер расширил предмет до общего вычислителя |
 | 0293 | Структуры в целях st, rust и sv | [0293-struct-in-st-rust.md](0293-struct-in-st-rust.md) | зависимостей нет; замер поправил поведение st |
 | 0253 | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | [0253-legacy-names-in-generated-code.md](0253-legacy-names-in-generated-code.md) | зависимостей нет; имя для IEC выбрано пробой iec2c |
+| 0292 | Код CC-022 обещан комментарием, но не эмитируется никем | [0292-cc022-promise-without-emitter.md](0292-cc022-promise-without-emitter.md) | зависимостей нет; замер кандидата опровергнут прогоном |
