@@ -267,7 +267,7 @@
 | [0252](./0252-ci-windows-test-threads.md) | Задание windows в CI гонит тесты однопоточно по снятому правилу | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0253](./0253-legacy-names-in-generated-code.md) | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | [ADR](../adr/0253-legacy-names-in-generated-code.md), [анализ](../analyze/0253-legacy-names-in-generated-code.md), [отчёт](../reports/0253-legacy-names-in-generated-code.md) | ГОТОВО |
 | [0254](./0254-legacy-names-internal-identifiers.md) | Старое имя в служебных идентификаторах кода | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0255](./0255-sim-diagnostic-codes-registry.md) | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0255](./0255-sim-diagnostic-codes-registry.md) | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | [ADR](../adr/0255-sim-diagnostic-codes-registry.md), [анализ](../analyze/0255-sim-diagnostic-codes-registry.md), [отчёт](../reports/0255-sim-diagnostic-codes-registry.md) | ГОТОВО |
 | [0256](./0256-lsp-import-binding-kind.md) | Символ формы import { A } объявляется видом Model | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0257](./0257-lsp-workspace-cache.md) | Кэш рабочей области LSP по mtime | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0258](./0258-verify-unsupported-reason.md) | Verdict::Unsupported не различает причину отказа | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

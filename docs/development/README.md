@@ -488,3 +488,5 @@
 | 0253-01 | 0253 | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | [0253-01-legacy-names-in-generated-code.md](0253-01-legacy-names-in-generated-code.md) |
 | 0253-02 | 0253 | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | [0253-02-legacy-names-in-generated-code.md](0253-02-legacy-names-in-generated-code.md) |
 | 0292-01 | 0292 | Код CC-022 обещан комментарием, но не эмитируется никем | [0292-01-cc022-promise-without-emitter.md](0292-01-cc022-promise-without-emitter.md) |
+| 0255-01 | 0255 | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | [0255-01-sim-diagnostic-codes-registry.md](0255-01-sim-diagnostic-codes-registry.md) |
+| 0255-02 | 0255 | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | [0255-02-sim-diagnostic-codes-registry.md](0255-02-sim-diagnostic-codes-registry.md) |
