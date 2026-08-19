@@ -1,5 +1,11 @@
 #[cfg(test)]
 pub mod tests {
+    use crate::diagnostics::Location;
+    use crate::semantic::extend::Extend;
+    use crate::semantic::{ModelNode, ModelOrigin};
+    use std::cell::RefCell;
+    use std::collections::BTreeMap;
+    use std::rc::Rc;
     pub const SRC: &str = r#"
 model A {
     start Start;
@@ -39,4 +45,50 @@ state Next9 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) {
 }
 state Next10 = (A | B) + (A + B) + (A | B) + (A + B) + (A | B) + (A + B) + (A + B);
 "#;
+
+    /// Собирает пустой узел модели с именем и родителем — фабрика **для тестов**.
+    ///
+    /// Прежде она жила методом `ModelNode::new` в рабочем коде, хотя рабочих
+    /// вызовов у неё не было: их завёл проход, упаковывавший `A + B` в
+    /// синтетическую модель, а путь отвергли решением ADR 0057 и реализацию
+    /// сняли (ADR 0278). Место фабрики — в тестовом модуле: там `dead_code`
+    /// говорит правду, а `pub` рабочего кода его глушил.
+    pub fn model_node(
+        name: &str,
+        parent: Option<Rc<RefCell<ModelNode>>>,
+    ) -> Rc<RefCell<ModelNode>> {
+        let model = ModelNode {
+            name: Some(name.to_string()),
+            loc: Location::Codegen,
+            upper: parent.as_ref().map(Rc::downgrade),
+            models: Default::default(),
+            named_blocks: vec![],
+            functions: Default::default(),
+            variables: Default::default(),
+            parameters: Vec::new(),
+            types: Default::default(),
+            type_locs: Default::default(),
+            raw_type_defs: Default::default(),
+            named_block_raw: vec![],
+            conditions: Default::default(),
+            enums: Default::default(),
+            structs: BTreeMap::new(),
+            states: BTreeMap::new(),
+            implements: Extend::None,
+            doc: Vec::new(),
+            docs: BTreeMap::new(),
+            formulas: Vec::new(),
+            address_defs: Vec::new(),
+            origin: ModelOrigin::Local,
+            clock_hz: None,
+        };
+        let model = Rc::new(RefCell::new(model));
+        if let Some(parent) = &parent {
+            parent
+                .borrow_mut()
+                .models
+                .insert(name.to_string(), Rc::clone(&model));
+        }
+        model
+    }
 }

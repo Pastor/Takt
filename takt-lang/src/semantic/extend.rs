@@ -7,9 +7,7 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::parser::ast;
 use crate::semantic::extend_args;
-use crate::semantic::{
-    ConditionNode, ExpressionNode, ModelNode, ReferenceNode, StateNode, StateNodeKind,
-};
+use crate::semantic::{ExpressionNode, ModelNode, StateNode, StateNodeKind};
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
@@ -35,9 +33,6 @@ pub enum Extend {
     /// написано, а не где она объявлена. Разрешение стирало её, из-за чего
     /// переход к декларации на имени модели был невозможен — узла под курсором
     /// просто не существовало (фича 0056).
-    ///
-    /// У синтетической модели, собранной [`compact_implement`] для `M1 + M2`,
-    /// исходной позиции нет: она несёт [`Location::Codegen`].
     ///
     /// Третье поле — **аргументы инстанцирования** `M(Y := 200)` (фича 0185).
     /// Они привязаны к месту использования, а не к модели: одна и та же модель
@@ -120,26 +115,6 @@ impl PartialEq for Extend {
 impl Eq for Extend {}
 
 impl Extend {
-    /// Возвращает `true`, если вариант — конкретная ссылка на модель.
-    #[inline]
-    pub fn is_model(&self) -> bool {
-        matches!(self, Extend::Model(_, _, _))
-    }
-    /// Возвращает `true`, если вариант — скобочная группировка.
-    #[inline]
-    pub fn is_parentless(&self) -> bool {
-        matches!(self, Extend::Parentless(_))
-    }
-    /// Возвращает `true`, если вариант — последовательная компоновка (`+`).
-    #[inline]
-    pub fn is_sequence(&self) -> bool {
-        matches!(self, Extend::Concatenation(_))
-    }
-    /// Возвращает `true`, если вариант — параллельная компоновка (`|`).
-    #[inline]
-    pub fn is_parallel(&self) -> bool {
-        matches!(self, Extend::Parallel(_))
-    }
     /// Возвращает человекочитаемое имя варианта или имя модели.
     pub fn name(&self) -> String {
         match self {
@@ -181,69 +156,6 @@ impl Display for Extend {
                     .join(" | ")
             ),
         }
-    }
-}
-
-/// Упаковывает плоскую [`Extend::Concatenation`] в синтетическую [`Extend::Model`].
-///
-/// Для `M1 + M2` создаёт новую анонимную модель с состояниями `Step0 = M1 { next Step1 }`
-/// и `Step1 = M2`, возвращая `Extend::Model(synthetic, …)`. Одноэлементная
-/// конкатенация сворачивается рекурсивно. `Parentless` прозрачно делегирует внутрь.
-///
-/// Вызывается сразу после [`unroll_extend_expression`] в стадии stage1.
-pub fn compact_implement(
-    extend: Extend,
-    parent: Rc<RefCell<ModelNode>>,
-    state_name: &str,
-) -> Extend {
-    match extend {
-        // Одноэлементная последовательность — прозрачно разворачиваем.
-        Extend::Concatenation(mut items) if items.len() == 1 => {
-            compact_implement(*items.remove(0), parent, state_name)
-        }
-        // Несколько элементов: создаём синтетическую модель со ступенями Step0…StepN-1.
-        Extend::Concatenation(items) => {
-            let seq_name = format!("{}_Sequence", state_name);
-            let seq_model = ModelNode::new(&seq_name, Some(Rc::clone(&parent)));
-            let n = items.len();
-            for (i, item) in items.into_iter().enumerate() {
-                let step_name = format!("Step{}", i);
-                let next: Option<ReferenceNode<StateNode>> = if i + 1 < n {
-                    Some(ReferenceNode {
-                        location: Location::Codegen,
-                        name: format!("Step{}", i + 1),
-                        cond: ConditionNode::None,
-                        object: Box::new(StateNode::Unresolved),
-                    })
-                } else {
-                    None
-                };
-                let kind = if i == 0 {
-                    StateNodeKind::Start
-                } else {
-                    StateNodeKind::Simple
-                };
-                let inner = compact_implement(*item, Rc::clone(&seq_model), &step_name);
-                let state = StateNode::Implement {
-                    upper: Some(Rc::downgrade(&seq_model)),
-                    loc: Location::Codegen,
-                    named_blocks: vec![],
-                    name: step_name.clone(),
-                    references: vec![],
-                    implements: inner,
-                    next,
-                    kind,
-                    formulas: vec![],
-                };
-                seq_model.borrow_mut().states.insert(step_name, state);
-            }
-            // Модель придумал компилятор: исходной позиции у неё нет.
-            Extend::Model(seq_model, Location::Codegen, Vec::new())
-        }
-        // Скобочная группировка — делегируем внутрь.
-        Extend::Parentless(inner) => compact_implement(*inner, parent, state_name),
-        // Остальное не требует обработки.
-        other => other,
     }
 }
 
@@ -400,7 +312,7 @@ fn arg_loc(expr: &ast::Expression) -> Option<Location> {
 
 /// Разворачивает семантическое выражение расширения в плоскую структуру [`Extend`],
 /// объединяя цепочки `+` в [`Extend::Concatenation`] и `|` в [`Extend::Parallel`].
-pub fn unroll_extend_expression(
+pub(crate) fn unroll_extend_expression(
     expression: ExpressionNode,
     model: Rc<RefCell<ModelNode>>,
 ) -> Result<Extend, Diagnostic> {
@@ -532,6 +444,7 @@ mod tests {
     use crate::parser::ast;
     use crate::semantic::extend::{Extend, unroll_extend_expression};
     use crate::semantic::test_constants::tests::SRC;
+    use crate::semantic::test_constants::tests::model_node;
     use crate::semantic::tree::construct_model;
     use crate::semantic::{ExpressionNode, StateNode};
 
@@ -608,8 +521,9 @@ mod tests {
 
     #[test]
     fn test_unroll_implement_expressions() {
-        // compact_implement отключён в tree.rs, поэтому состояния с `+` остаются
-        // как Extend::Concatenation(items) с плоским списком элементов.
+        // Реализация в дереве ПЛОСКАЯ: состояние с `+` остаётся
+        // Extend::Concatenation(items) со списком элементов — упаковки в
+        // синтетическую модель нет (решение ADR 0057, разбор — ADR 0278).
         // unroll_extend_expression раскрывает цепочки + и () в плоский Concatenation:
         // A + (B + C) + D  →  Concatenation([A, B, C, D]) (скобки прозрачны).
         let (ast, _) = parse(SRC, 0).unwrap();
@@ -659,58 +573,8 @@ mod tests {
     }
 
     #[test]
-    fn test_extend_predicates() {
-        use crate::semantic::ModelNode;
-
-        let model = ModelNode::new("A", None);
-
-        assert!(!Extend::None.is_model());
-        assert!(!Extend::None.is_parentless());
-        assert!(!Extend::None.is_sequence());
-        assert!(!Extend::None.is_parallel());
-
-        let extend_model = Extend::Model(model.clone(), Location::Implicit, Vec::new());
-        assert!(extend_model.is_model());
-        assert!(!extend_model.is_parentless());
-        assert!(!extend_model.is_sequence());
-        assert!(!extend_model.is_parallel());
-
-        let parentless = Extend::Parentless(Box::new(Extend::Model(
-            model.clone(),
-            Location::Implicit,
-            Vec::new(),
-        )));
-        assert!(!parentless.is_model());
-        assert!(parentless.is_parentless());
-        assert!(!parentless.is_sequence());
-        assert!(!parentless.is_parallel());
-
-        let seq = Extend::Concatenation(vec![Box::new(Extend::Model(
-            model.clone(),
-            Location::Implicit,
-            Vec::new(),
-        ))]);
-        assert!(!seq.is_model());
-        assert!(!seq.is_parentless());
-        assert!(seq.is_sequence());
-        assert!(!seq.is_parallel());
-
-        let par = Extend::Parallel(vec![Box::new(Extend::Model(
-            model.clone(),
-            Location::Implicit,
-            Vec::new(),
-        ))]);
-        assert!(!par.is_model());
-        assert!(!par.is_parentless());
-        assert!(!par.is_sequence());
-        assert!(par.is_parallel());
-    }
-
-    #[test]
     fn test_extend_name() {
-        use crate::semantic::ModelNode;
-
-        let model = ModelNode::new("MyModel", None);
+        let model = model_node("MyModel", None);
 
         assert_eq!(Extend::None.name(), "None");
         assert_eq!(
@@ -752,10 +616,8 @@ mod tests {
 
     #[test]
     fn test_extend_display() {
-        use crate::semantic::ModelNode;
-
-        let a = ModelNode::new("A", None);
-        let b = ModelNode::new("B", None);
+        let a = model_node("A", None);
+        let b = model_node("B", None);
 
         assert_eq!(format!("{}", Extend::None), "None");
         assert_eq!(
@@ -823,9 +685,7 @@ mod tests {
 
     #[test]
     fn test_unroll_unsupported_expression() {
-        use crate::semantic::ModelNode;
-
-        let model = ModelNode::new("Root", None);
+        let model = model_node("Root", None);
 
         // ExpressionNode::BitwiseAnd не поддерживается — должна вернуть ошибку
         let result = unroll_extend_expression(

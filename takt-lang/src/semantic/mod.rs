@@ -54,7 +54,7 @@ pub(crate) mod specialize;
 pub(crate) mod stages;
 mod statement;
 pub mod struct_node;
-mod test_constants;
+pub(crate) mod test_constants;
 pub mod tree;
 pub(crate) mod type_inference;
 pub mod type_node;
@@ -194,45 +194,6 @@ pub enum ModelOrigin {
 }
 
 impl ModelNode {
-    pub(crate) fn new(
-        name: &str,
-        parent: Option<Rc<RefCell<ModelNode>>>,
-    ) -> Rc<RefCell<ModelNode>> {
-        let model = ModelNode {
-            name: Some(name.to_string()),
-            loc: Location::Codegen,
-            upper: parent.as_ref().map(Rc::downgrade),
-            models: Default::default(),
-            named_blocks: vec![],
-            functions: Default::default(),
-            variables: Default::default(),
-            parameters: Vec::new(),
-            types: Default::default(),
-            type_locs: Default::default(),
-            raw_type_defs: Default::default(),
-            named_block_raw: vec![],
-            conditions: Default::default(),
-            enums: Default::default(),
-            structs: BTreeMap::new(),
-            states: BTreeMap::new(),
-            implements: Extend::None,
-            doc: Vec::new(),
-            docs: BTreeMap::new(),
-            formulas: Vec::new(),
-            address_defs: Vec::new(),
-            origin: ModelOrigin::Local,
-            clock_hz: None,
-        };
-        let model = Rc::new(RefCell::new(model));
-        if let Some(parent) = &parent {
-            parent
-                .borrow_mut()
-                .models
-                .insert(name.to_string(), Rc::clone(&model));
-        }
-        model
-    }
-
     pub(crate) fn name(&self) -> &str {
         if self.name.is_none() {
             return "";

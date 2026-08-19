@@ -247,3 +247,4 @@
 | 0277 | Координата отказа цели — место употребления | [0277-expression-usage-position.md](0277-expression-usage-position.md) | — (новая фича) |
 | 0282 | Собственная позиция формулы | [0282-formula-own-location.md](0282-formula-own-location.md) | — (новая фича) |
 | 0296 | Порядок стадий построения — один носитель | [0296-semantic-stages-single-source.md](0296-semantic-stages-single-source.md) | зависимостей нет; Tier исправлен 3 → 2 по замеру |
+| 0278 | Мёртвая упаковка последовательной композиции | [0278-compact-implement-dead-branch.md](0278-compact-implement-dead-branch.md) | зависимостей нет; путь отвергнут ADR 0057 — код снят |

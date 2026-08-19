@@ -570,23 +570,24 @@ mod tests {
     use super::*;
     use crate::parse;
     use crate::semantic::test_constants::tests::SRC;
+    use crate::semantic::test_constants::tests::model_node;
     use crate::semantic::tree::construct_model;
 
     #[test]
     fn test_unique_model_name() {
-        let model = ModelNode::new("A", None);
+        let model = model_node("A", None);
         assert_eq!(unique_model_name(model.clone()), "A");
 
-        let model = ModelNode::new("B", Some(model.clone()));
+        let model = model_node("B", Some(model.clone()));
         assert_eq!(unique_model_name(model.clone()), "A:B");
     }
 
     /// Тест с однобуквенными именами (базовые случаи).
     #[test]
     fn test_model_by_unique_name() {
-        let global = ModelNode::new("A", None);
-        let model = ModelNode::new("B", Some(global.clone()));
-        let _ = ModelNode::new("C", Some(model.clone()));
+        let global = model_node("A", None);
+        let model = model_node("B", Some(global.clone()));
+        let _ = model_node("C", Some(model.clone()));
         assert_eq!(
             model_by_unique_name("A", global.clone())
                 .unwrap()
@@ -613,9 +614,9 @@ mod tests {
     /// Тест с многосимвольными именами — проверяет корректность отсечения ':'.
     #[test]
     fn test_model_by_unique_name_multichar() {
-        let global = ModelNode::new("Root", None);
-        let child = ModelNode::new("Child", Some(global.clone()));
-        let _ = ModelNode::new("Leaf", Some(child.clone()));
+        let global = model_node("Root", None);
+        let child = model_node("Child", Some(global.clone()));
+        let _ = model_node("Leaf", Some(child.clone()));
         assert_eq!(
             model_by_unique_name("Root", global.clone())
                 .unwrap()
@@ -647,7 +648,7 @@ mod tests {
     fn test_snapshot_create_no_start() {
         // Создаём пустую модель без состояний напрямую,
         // обходя валидацию construct_model
-        let model_rc = ModelNode::new("Root", None);
+        let model_rc = model_node("Root", None);
         let result = Map::create(model_rc);
         assert!(result.is_err());
     }
