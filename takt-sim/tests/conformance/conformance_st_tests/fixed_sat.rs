@@ -91,7 +91,7 @@ fn run_generated_st_sat(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<Vec<i128>> 
         .expect("запуск iec2c");
     assert!(
         transpile.status.success() && work.join("POUS.c").is_file(),
-        "iec2c не оттранслировал ST с LAM_Q_SAT:\n{}",
+        "iec2c не оттранслировал ST с TAKT_Q_SAT:\n{}",
         String::from_utf8_lossy(&transpile.stderr)
     );
 
@@ -135,7 +135,7 @@ int main(void) {{
         .expect("запуск cc");
     assert!(
         compile.status.success(),
-        "ST с LAM_Q_SAT (через iec2c) не собирается:\n{}",
+        "ST с TAKT_Q_SAT (через iec2c) не собирается:\n{}",
         String::from_utf8_lossy(&compile.stderr)
     );
     let run = Command::new(&bin).output().expect("запуск драйвера ST");
@@ -167,9 +167,9 @@ int main(void) {{
 /// A4/A5/A6 (цель st): насыщение прижимает к границам **формата** на обеих
 /// границах и на крае унарного минуса `−(−2^(W−1))`.
 ///
-/// ⚠️ Тест заодно доказывает, что `FUNCTION LAM_Q_SAT` **принимается MatIEC**:
+/// ⚠️ Тест заодно доказывает, что `FUNCTION TAKT_Q_SAT` **принимается MatIEC**:
 /// сравнения над `LINT` и возврат из трёх ветвей — не самоочевидная для IEC
-/// конструкция, а рядом уже стоит `LAM_Q_WRAP`, чей приём тоже проверялся
+/// конструкция, а рядом уже стоит `TAKT_Q_WRAP`, чей приём тоже проверялся
 /// отдельно.
 #[test]
 fn fixed_saturation_matches_generated_st() {

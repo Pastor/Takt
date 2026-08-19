@@ -253,3 +253,4 @@
 | 0303 | Условное ребро состояния-композиции теряется целями | [0303-composition-state-conditional-edge.md](0303-composition-state-conditional-edge.md) | зависимостей нет; взята вне очереди (Tier 1) |
 | 0286 | Вычислимое приведение в инициализаторе | [0286-sv-const-initializer-expression.md](0286-sv-const-initializer-expression.md) | зависимостей нет; замер расширил предмет до общего вычислителя |
 | 0293 | Структуры в целях st, rust и sv | [0293-struct-in-st-rust.md](0293-struct-in-st-rust.md) | зависимостей нет; замер поправил поведение st |
+| 0253 | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | [0253-legacy-names-in-generated-code.md](0253-legacy-names-in-generated-code.md) | зависимостей нет; имя для IEC выбрано пробой iec2c |

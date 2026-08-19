@@ -1,12 +1,12 @@
 #include "regulator.h"
 #include <assert.h>
 #include <math.h>
-static int64_t lam_q_floordiv(int64_t x, int64_t d) {
+static int64_t takt_q_floordiv(int64_t x, int64_t d) {
     int64_t q = x / d;
     return ((x % d != 0) && ((x < 0) != (d < 0))) ? q - 1 : q;
 }
-static int64_t lam_q_mul(int64_t a, int64_t b, unsigned n) {
-    return lam_q_floordiv(a * b, (int64_t)1 << n);
+static int64_t takt_q_mul(int64_t a, int64_t b, unsigned n) {
+    return takt_q_floordiv(a * b, (int64_t)1 << n);
 }
 /// Model functions 'Regulator (Regulator:Regulator)'
 static void RegulatorRegulator_init(RegulatorRegulator *model, Regulator *main);
@@ -33,7 +33,7 @@ void RegulatorRegulator_tick(RegulatorRegulator *model, Regulator *main) {
     }
     switch (model->state) {
         case REGULATOR_REGULATOR_ADJUST: {
-            model->value = (int16_t)((int64_t)(model->value) + (int64_t)((int16_t)(lam_q_mul((int64_t)(((int16_t)((int64_t)(model->setpoint) - (int64_t)(model->value)))), (int64_t)(model->half), 8))));
+            model->value = (int16_t)((int64_t)(model->value) + (int64_t)((int16_t)(takt_q_mul((int64_t)(((int16_t)((int64_t)(model->setpoint) - (int64_t)(model->value)))), (int64_t)(model->half), 8))));
             if (model->value >= model->near) {
                 model->state = REGULATOR_REGULATOR_SETTLED;
                 break;

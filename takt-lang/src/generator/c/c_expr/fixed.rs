@@ -66,7 +66,7 @@ fn width_is_storage(m: u8, n: u8) -> bool {
 }
 
 /// Открывает обёртку результата q-операции: приведение к типу хранения и, если
-/// `W` уже ширины хранения, вызов `lam_q_wrap` для переноса к `W`.
+/// `W` уже ширины хранения, вызов `takt_q_wrap` для переноса к `W`.
 ///
 /// ⚠️ Хелпер эмитится **только по нужде**: при `W = S` он был бы тождеством, а
 /// вывод для всего корпуса изменился бы (снапшоты `examples/generated`).
@@ -75,9 +75,9 @@ fn open_wrap(printer: &mut Printer, m: u8, n: u8, sat: bool) {
     if sat {
         // Насыщение (фича 0170) нужно ВСЕГДА, а не только при `W ≠ S`: прижатие
         // идёт к границам формата, а тип хранения о них не знает.
-        printer.print("lam_q_sat(");
+        printer.print("takt_q_sat(");
     } else if !width_is_storage(m, n) {
-        printer.print("lam_q_wrap(");
+        printer.print("takt_q_wrap(");
     }
 }
 
@@ -137,14 +137,14 @@ pub(super) fn binary(
             widened(printer, map, owner, params, r, has_model)?;
         }
         FixedOp::Multiply => {
-            printer.print("lam_q_mul(");
+            printer.print("takt_q_mul(");
             widened(printer, map, owner, params.clone(), l, has_model)?;
             printer.print(", ");
             widened(printer, map, owner, params, r, has_model)?;
             printer.print(&format!(", {})", n));
         }
         FixedOp::Divide => {
-            printer.print("lam_q_div(");
+            printer.print("takt_q_div(");
             widened(printer, map, owner, params.clone(), l, has_model)?;
             printer.print(", ");
             widened(printer, map, owner, params, r, has_model)?;
@@ -208,7 +208,7 @@ pub(super) fn cast(
         }
         // q → целое/бит: floor(repr / 2^n) = целая часть.
         (Some((_, from_n, _)), _) => {
-            printer.print(&format!("({})lam_q_floordiv(", target_c));
+            printer.print(&format!("({})takt_q_floordiv(", target_c));
             widened(printer, map, owner, params, inner, has_model)?;
             printer.print(&format!(", (int64_t)1 << {})", from_n));
         }
@@ -220,7 +220,7 @@ pub(super) fn cast(
             let wraps = *sat || !width_is_storage(*tm, *tn);
             printer.print(&format!("({})", storage_type(*tm, *tn)));
             if wraps {
-                printer.print(if *sat { "lam_q_sat(" } else { "lam_q_wrap(" });
+                printer.print(if *sat { "takt_q_sat(" } else { "takt_q_wrap(" });
             }
             printer.print("floor((");
             generate_expr(printer, map, owner, params, inner, 0, has_model)?;
@@ -262,37 +262,37 @@ fn rescale(
         widened(printer, map, owner, params, inner, has_model)?;
         printer.print(&format!(" * ((int64_t)1 << {})", to_n - from_n));
     } else {
-        printer.print("lam_q_floordiv(");
+        printer.print("takt_q_floordiv(");
         widened(printer, map, owner, params, inner, has_model)?;
         printer.print(&format!(", (int64_t)1 << {})", from_n - to_n));
     }
     Ok(())
 }
 
-/// Определение `lam_q_floordiv` — floor-деление (`/`/`%` стандартно-определены
+/// Определение `takt_q_floordiv` — floor-деление (`/`/`%` стандартно-определены
 /// при любом знаке), которым и `*`, и приведение `q → int` обходят ловушку C11
 /// 6.5.7p5 (правило 7 ADR): `>>` знакового отрицательного не эмитится.
-const LAM_Q_FLOORDIV: &str = "static int64_t lam_q_floordiv(int64_t x, int64_t d) {\n    \
+const TAKT_Q_FLOORDIV: &str = "static int64_t takt_q_floordiv(int64_t x, int64_t d) {\n    \
     int64_t q = x / d;\n    return ((x % d != 0) && ((x < 0) != (d < 0))) ? q - 1 : q;\n}\n";
-/// `lam_q_mul` — точное произведение, floor к −∞ (зовёт `lam_q_floordiv`).
-const LAM_Q_MUL: &str = "static int64_t lam_q_mul(int64_t a, int64_t b, unsigned n) {\n    \
-    return lam_q_floordiv(a * b, (int64_t)1 << n);\n}\n";
-/// `lam_q_div` — делимое ← n влево, целочисленное деление (усечение к нулю).
-const LAM_Q_DIV: &str = "static int64_t lam_q_div(int64_t a, int64_t b, unsigned n) {\n    \
+/// `takt_q_mul` — точное произведение, floor к −∞ (зовёт `takt_q_floordiv`).
+const TAKT_Q_MUL: &str = "static int64_t takt_q_mul(int64_t a, int64_t b, unsigned n) {\n    \
+    return takt_q_floordiv(a * b, (int64_t)1 << n);\n}\n";
+/// `takt_q_div` — делимое ← n влево, целочисленное деление (усечение к нулю).
+const TAKT_Q_DIV: &str = "static int64_t takt_q_div(int64_t a, int64_t b, unsigned n) {\n    \
     return (a * ((int64_t)1 << n)) / b;\n}\n";
-/// `lam_q_sat` — прижатие к границам представления `intW` (фича 0170).
+/// `takt_q_sat` — прижатие к границам представления `intW` (фича 0170).
 ///
 /// ⚠️ Считается в `int64_t` **до** сужения к типу хранения: сужение сработало бы
 /// раньше прижатия и вернуло бы обёрнутое значение (тот же капкан, что в
 /// фиксе 0061-01).
-const LAM_Q_SAT: &str = "static int64_t lam_q_sat(int64_t v, unsigned w) {\n    \
+const TAKT_Q_SAT: &str = "static int64_t takt_q_sat(int64_t v, unsigned w) {\n    \
     int64_t max = ((int64_t)1 << (w - 1)) - 1;\n    \
     int64_t min = -((int64_t)1 << (w - 1));\n    \
     return (v > max) ? max : ((v < min) ? min : v);\n}\n";
-/// `lam_q_wrap` — перенос к **W** битам (правило 3 ADR 0061), а не к ширине
+/// `takt_q_wrap` — перенос к **W** битам (правило 3 ADR 0061), а не к ширине
 /// хранения. Считается в **беззнаковом**: сужение знакового вне диапазона
 /// implementation-defined, а `uint64_t` определён стандартом при любом значении.
-const LAM_Q_WRAP: &str = "static int64_t lam_q_wrap(int64_t v, unsigned w) {\n    \
+const TAKT_Q_WRAP: &str = "static int64_t takt_q_wrap(int64_t v, unsigned w) {\n    \
     uint64_t mask = (w >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << w) - 1);\n    \
     uint64_t bits = (uint64_t)v & mask;\n    \
     uint64_t sign = (uint64_t)1 << (w - 1);\n    \
@@ -300,33 +300,33 @@ const LAM_Q_WRAP: &str = "static int64_t lam_q_wrap(int64_t v, unsigned w) {\n  
 
 /// Вставляет определения Q-хелперов (0061), фактически вызванных в `source`,
 /// сразу после `#include`. Эмитятся ровно нужные (без `-Wunused-function`);
-/// корпус без `q` остаётся байт-в-байт прежним (T14). `lam_q_mul` тянет
-/// `lam_q_floordiv`; порядок определений — floordiv → mul → div (C требует
+/// корпус без `q` остаётся байт-в-байт прежним (T14). `takt_q_mul` тянет
+/// `takt_q_floordiv`; порядок определений — floordiv → mul → div (C требует
 /// объявления до использования).
 pub(in crate::generator::c) fn insert_fixed_helpers(source: String) -> String {
-    let uses_mul = source.contains("lam_q_mul(");
-    let uses_div = source.contains("lam_q_div(");
-    let uses_floordiv = uses_mul || source.contains("lam_q_floordiv(");
-    let uses_wrap = source.contains("lam_q_wrap(");
-    let uses_sat = source.contains("lam_q_sat(");
+    let uses_mul = source.contains("takt_q_mul(");
+    let uses_div = source.contains("takt_q_div(");
+    let uses_floordiv = uses_mul || source.contains("takt_q_floordiv(");
+    let uses_wrap = source.contains("takt_q_wrap(");
+    let uses_sat = source.contains("takt_q_sat(");
     if !uses_floordiv && !uses_div && !uses_wrap && !uses_sat {
         return source;
     }
     let mut helpers = String::new();
     if uses_sat {
-        helpers.push_str(LAM_Q_SAT);
+        helpers.push_str(TAKT_Q_SAT);
     }
     if uses_wrap {
-        helpers.push_str(LAM_Q_WRAP);
+        helpers.push_str(TAKT_Q_WRAP);
     }
     if uses_floordiv {
-        helpers.push_str(LAM_Q_FLOORDIV);
+        helpers.push_str(TAKT_Q_FLOORDIV);
     }
     if uses_mul {
-        helpers.push_str(LAM_Q_MUL);
+        helpers.push_str(TAKT_Q_MUL);
     }
     if uses_div {
-        helpers.push_str(LAM_Q_DIV);
+        helpers.push_str(TAKT_Q_DIV);
     }
     const ANCHOR: &str = "#include <math.h>\n";
     match source.find(ANCHOR) {
