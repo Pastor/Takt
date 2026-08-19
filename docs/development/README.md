@@ -459,3 +459,5 @@
 | 0302-01 | 0302 | release-check.sh, release-notes.sh и workflow | [0302-01-release-on-language-minor.md](0302-01-release-on-language-minor.md) |
 | 0285-01 | 0285 | Расширение выведенного типа по результату | [0285-01-inferred-width-from-result.md](0285-01-inferred-width-from-result.md) |
 | 0287-01 | 0287 | Расширение типов не знает именованных целых | [0287-01-wider-type-array-literal.md](0287-01-wider-type-array-literal.md) |
+| 0262-01 | 0262 | Широкий бит-вектор в цели c | [0262-01-wide-bit-vector-c-rust.md](0262-01-wide-bit-vector-c-rust.md) |
+| 0262-02 | 0262 | Широкий бит-вектор в цели rust | [0262-02-wide-bit-vector-c-rust.md](0262-02-wide-bit-vector-c-rust.md) |

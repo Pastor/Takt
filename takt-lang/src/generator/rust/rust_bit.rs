@@ -24,6 +24,73 @@ use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, PortDirection, VariableNode};
 
+/// Число слов носителя, если бит-вектор представлен массивом слов (фича 0262).
+///
+/// `None` — либо не бит-вектор, либо `N ≤ 64` (скаляр): печать прежняя.
+pub(crate) fn words_of_type(ty: &TypeNode) -> Option<u16> {
+    use crate::semantic::bit_vector::{self, BitVectorLayout};
+    let n = bit_vector::is_bit_vector(ty)?;
+    match bit_vector::layout(n) {
+        BitVectorLayout::Words { count } => Some(count),
+        BitVectorLayout::Scalar { .. } => None,
+    }
+}
+
+/// Число слов носителя выражения — по объявлению переменной.
+///
+/// ⚠️ Тип берётся из ячейки `ExpressionNode::Variable` — снимка, снятого при
+/// разрешении имени (засада 0204). Для объявленного типа он верен; при
+/// `Inference` печать остаётся прежней, то есть деградирует в поведение до
+/// фичи, а не в отказ.
+pub(crate) fn words_of(expr: &ExpressionNode) -> Option<u16> {
+    let ExpressionNode::Variable(var_rc) = expr else {
+        return None;
+    };
+    let var = var_rc.borrow();
+    let (VariableNode::Simple { ty, .. }
+    | VariableNode::Const { ty, .. }
+    | VariableNode::Port { ty, .. }) = &*var
+    else {
+        return None;
+    };
+    words_of_type(ty)
+}
+
+/// Литерал массива слов: значение достаётся младшему слову, прочие — нули.
+pub(crate) fn word_literal(value: i128, count: u16) -> String {
+    if value == 0 {
+        return format!("[0u64; {count}]");
+    }
+    let mut words: Vec<String> = vec![format!("{value}u64")];
+    words.extend((1..count).map(|_| "0u64".to_string()));
+    format!("[{}]", words.join(", "))
+}
+
+/// Носитель разряда: сам скаляр либо СВОЁ слово массива.
+///
+/// Позиция берётся у `bit_vector::bit_slot` — общего носителя с эталоном
+/// (`eval/access.rs`) и целью `c`. `None` означает разряд за пределом вектора:
+/// печатать доступ за границу массива нельзя, это паника в прошивке.
+fn carrier_word(base: &str, words: Option<u16>, bit: u64) -> Option<String> {
+    let Some(count) = words else {
+        return Some(base.to_string());
+    };
+    let (w, _) = crate::semantic::bit_vector::bit_slot(u32::try_from(bit).unwrap_or(u32::MAX));
+    if w >= count {
+        return None;
+    }
+    Some(format!("{base}[{w}]"))
+}
+
+/// Смещение разряда внутри носителя: сам номер у скаляра, остаток у слова.
+fn carrier_offset(words: Option<u16>, bit: u64) -> u64 {
+    if words.is_none() {
+        return bit;
+    }
+    let (_, off) = crate::semantic::bit_vector::bit_slot(u32::try_from(bit).unwrap_or(u32::MAX));
+    u64::from(off)
+}
+
 /// Печатает битовый доступ `x.N` как маску.
 ///
 /// В MatIEC битового доступа нет вовсе (ни `x.0`, ни `%X0`), и цель `st`
@@ -36,7 +103,15 @@ pub(crate) fn bit_access(
 ) -> Result<String, Diagnostic> {
     let base = print_expression(inner, scope)?;
     let bit = member_index(member)?;
-    Ok(bit_mask(&base, bit))
+    // Носитель может быть массивом слов (`[bit;N > 64]`, фича 0262): сдвигается
+    // СВОЁ слово. Прежде печатался сдвиг всего массива — `E0369` у `rustc`.
+    let words = words_of(inner);
+    let Some(carrier) = carrier_word(&base, words, bit) else {
+        // Разряд за объявленной шириной: читается ноль. Доступ за границу
+        // массива в Rust — паника, а не «случайный бит».
+        return Ok("false".to_string());
+    };
+    Ok(bit_mask(&carrier, carrier_offset(words, bit)))
 }
 
 /// Строит маску битового доступа `x.N`.
@@ -110,8 +185,16 @@ pub(crate) fn assign_bit(
             return assign_port_bit(name, ty, *direction, bit, value, scope, *loc);
         }
     }
-    let carrier = print_expression(inner, scope)?;
-    let (bare, grouped) = bit_masks(bit);
+    let base = print_expression(inner, scope)?;
+    let words = words_of(inner);
+    let bit_u64 = u64::try_from(bit).unwrap_or(u64::MAX);
+    let Some(carrier) = carrier_word(&base, words, bit_u64) else {
+        return Err(unsupported(&format!(
+            "разряд {bit} за пределом бит-вектора: разрядов за объявленной шириной \
+             нет, а доступ за границу массива слов — паника в прошивке"
+        )));
+    };
+    let (bare, grouped) = bit_masks(i128::from(carrier_offset(words, bit_u64)));
     match value {
         ExpressionNode::Number(1) => Ok(format!("{carrier} |= {bare}")),
         ExpressionNode::Number(0) => Ok(format!("{carrier} &= !{grouped}")),

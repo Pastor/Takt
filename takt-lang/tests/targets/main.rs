@@ -42,4 +42,5 @@ mod sv_apb_adapter_tests;
 mod sv_mmio_tests;
 mod sv_mmio_write_signals_tests;
 mod sv_tick_read_tests;
+mod wide_bit_vector_tests;
 mod wide_literal_tests;

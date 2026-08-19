@@ -86,6 +86,13 @@ pub(super) fn generate_model_init(
             generate_array_init(printer, map, model, &var.name(), ty, expr)?;
             continue;
         }
+        // Бит-вектор шире 64 бит — массив слов (0078), а массив в C не
+        // присваивается: `model->w = 0;` отвергает `cc` («array type is not
+        // assignable»). Заполняем по словам (фича 0262).
+        if let Some(count) = crate::generator::c::c_bits::words_of_type(ty) {
+            generate_wide_bits_init(printer, map, model, &var.name(), count, expr)?;
+            continue;
+        }
         generate_scalar_init(printer, map, model, &var.name(), ty, expr, &raw_rc)?;
     }
     generate_port_initial_values(printer, map, model, raw, name, hal_ptr)?;
@@ -339,6 +346,43 @@ fn generate_array_init(
         generate_expr(printer, map, model, vec![], elem, 0, true)?;
         printer.print(";").nl();
     }
+    Ok(())
+}
+
+/// Инициализирует бит-вектор шире 64 бит — по словам (фича 0262).
+///
+/// Литерал шире 64 бит язык не принимает (`LE-009`, правило 0157), поэтому
+/// значение достаётся младшему слову, а прочие обнуляются. Форма, не сводимая к
+/// числу (например копия другого вектора в инициализаторе), отвергается
+/// `CC-022`: печатать вместо неё присваивание массиву значило бы вернуть тот
+/// самый невалидный C, ради которого фича и заведена.
+fn generate_wide_bits_init(
+    printer: &mut Printer,
+    map: &CMap,
+    model: &Element,
+    field: &str,
+    count: u16,
+    expr: &ExpressionNode,
+) -> Result<(), Diagnostic> {
+    let ExpressionNode::Number(_) = expr else {
+        return Err(crate::generator::c::c_unsupported::refuse(
+            crate::generator::c::c_unsupported::UnsupportedNode::WideBitVector("инициализатор"),
+            expr.loc(),
+        ));
+    };
+    let mut value = String::new();
+    {
+        let mut tmp = Printer::new(4, &mut value);
+        generate_expr(&mut tmp, map, model, vec![], expr, 0, true)?;
+    }
+    printer
+        .ident(&crate::generator::c::c_bits::fill_words(
+            &format!("model->{field}"),
+            count,
+            &value,
+        ))
+        .print(";")
+        .nl();
     Ok(())
 }
 

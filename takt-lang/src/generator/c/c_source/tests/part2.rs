@@ -422,14 +422,18 @@ fn test_bit_access_port_read_in_condition() {
     );
 }
 
-/// Чтение бита переменной в блоке `always`: `x = flags.3` → `((model->flags >> 3) & 1u)`
+/// Чтение бита переменной в блоке `always`: `x = flags.3` → `((model->flags >> 3) & 1ull)`
+///
+/// ⚠️ Суффикс маски — `ull` с фичи 0262: литерал `1u` есть 32-битный
+/// `unsigned int`, и та же форма при разряде ≥ 32 давала
+/// `shift count >= width of type` даже у скалярного `u64`.
 #[test]
 fn test_bit_access_var_read_in_always() {
     let src = "var flags: u8 := 0; var x: u8 := 0; start S { always { x := flags.3; } ref Done: true; } state Done;";
     let code = generate_source_str(src);
     assert!(
-        code.contains("((model->flags >> 3) & 1u)"),
-        "ожидается ((model->flags >> 3) & 1u) при чтении в always:\n{code}"
+        code.contains("((model->flags >> 3) & 1ull)"),
+        "ожидается ((model->flags >> 3) & 1ull) при чтении в always:\n{code}"
     );
 }
 
@@ -440,7 +444,7 @@ fn test_bit_access_var_write_in_always() {
         "var flags: u8 := 0; start S { always { flags.3 := true; } ref Done: true; } state Done;";
     let code = generate_source_str(src);
     assert!(
-        code.contains("model->flags = (model->flags & ~(1u << 3)) | ((true & 1u) << 3)"),
+        code.contains("model->flags = (model->flags & ~(1ull << 3)) | ((true & 1ull) << 3)"),
         "ожидается bit-set идиома для flags.3 = true:\n{code}"
     );
 }

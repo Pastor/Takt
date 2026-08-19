@@ -327,6 +327,19 @@ fn binary(
     b: &ExpressionNode,
     scope: &Scope,
 ) -> Result<String, Diagnostic> {
+    // Бит-вектор шире 64 бит хранится массивом слов (0078), и операции над
+    // массивом в Rust не существует: `self.w + 1` давало `E0369` при нулевом
+    // коде возврата `taktc` (фича 0262). Той же операции не поддерживает и
+    // эталон (`SIM-005` в такте), поэтому отказ приходит СВОЙ, с причиной.
+    if crate::generator::rust::rust_bit::words_of(a).is_some()
+        || crate::generator::rust::rust_bit::words_of(b).is_some()
+    {
+        return Err(unsupported(&format!(
+            "операция '{op}' над бит-вектором шире 64 бит: он представлен массивом \
+             слов, и такой операции над словами не существует — её не поддерживает \
+             и эталон (SIM-005); работайте с отдельными разрядами"
+        )));
+    }
     Ok(format!(
         "({} {} {})",
         print_expression(a, scope)?,
@@ -761,6 +774,17 @@ pub(crate) fn coerce_to(
         },
         // Вещественному полю целый литерал не подходит: `1` не является литералом f64.
         (TypeNode::Rational, ExpressionNode::Number(n)) => Ok(format!("{}.0", n)),
+        // Бит-вектор шире 64 бит — массив слов `[u64; K]` (0078), и целый
+        // литерал ему не тип: `w: 0` давало `E0308` (фича 0262). Значение
+        // достаётся младшему слову — литерал шире 64 бит язык не принимает
+        // (`LE-009`).
+        (TypeNode::Array(..), ExpressionNode::Number(n))
+            if crate::generator::rust::rust_bit::words_of_type(target).is_some() =>
+        {
+            let count = crate::generator::rust::rust_bit::words_of_type(target)
+                .expect("проверено охраной ветви");
+            Ok(crate::generator::rust::rust_bit::word_literal(*n, count))
+        }
         _ => print_expression(value, scope),
     }
 }
