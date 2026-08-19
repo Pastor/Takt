@@ -215,3 +215,4 @@
 | 0264 | Координата судей тела — позиция употребления | [0264-body-judge-usage-position.md](0264-body-judge-usage-position.md) | ГОТОВО |
 | 0273 | Недостижимое ребро — предупреждение SE-116 | [0273-unreachable-edge-warning.md](0273-unreachable-edge-warning.md) | ГОТОВО |
 | 0276 | Диагностика семантики без кода и позиции | [0276-semantic-diagnostics-without-code.md](0276-semantic-diagnostics-without-code.md) | ГОТОВО |
+| 0277 | Координата отказа цели — место употребления | [0277-expression-usage-position.md](0277-expression-usage-position.md) | ГОТОВО |

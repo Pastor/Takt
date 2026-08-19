@@ -117,13 +117,14 @@ pub(super) fn generate_function_call(
             "debug" | "S" => {
                 return Err(crate::generator::c::c_unsupported::refuse(
                     crate::generator::c::c_unsupported::UnsupportedNode::Builtin(builtin_name),
-                    crate::diagnostics::Location::Codegen,
+                    // Координата — у оператора (фича 0277): своей у вызова нет.
+                    map.site().at(crate::diagnostics::Location::Codegen),
                 ));
             }
             _ => {
                 return Err(crate::generator::c::c_unsupported::refuse(
                     crate::generator::c::c_unsupported::UnsupportedNode::UnknownBuiltin,
-                    crate::diagnostics::Location::Codegen,
+                    map.site().at(crate::diagnostics::Location::Codegen),
                 ));
             }
         },

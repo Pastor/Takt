@@ -11,8 +11,11 @@ use crate::generator::c::c_unsupported::{self, UnsupportedNode};
 /// диагностик (фича 0130) сообщение без координаты бесполезно. Там, где узел
 /// позиции не несёт (ссылка на модель, тип, литерал), ответом будет
 /// `Location::Builtin` — граница названная, а не забытая.
-fn unsupported(node: UnsupportedNode, expr: &ExpressionNode) -> Diagnostic {
-    c_unsupported::refuse(node, expr.loc())
+fn unsupported(map: &CMap, node: UnsupportedNode, expr: &ExpressionNode) -> Diagnostic {
+    // Координата — у ОПЕРАТОРА (фича 0277): позиции употребления у выражения
+    // нет, `ExpressionNode::loc()` выводит её из объявлений операндов, и
+    // `res := mem[1:2];` в строке 7 указывал на строку 1, где объявлена `mem`.
+    c_unsupported::refuse(node, map.site().at(expr.loc()))
 }
 
 /// Генерирует C-выражение из семантического узла с учётом приоритета операторов.
@@ -35,7 +38,7 @@ pub(in crate::generator::c) fn generate_expr(
     // поддерживает и эталон (`SIM-005` в такте), поэтому отказ приходит СВОЙ, с
     // причиной, а не от `cc` на порождённом файле.
     if let Some(op) = crate::generator::c::c_bits::wide_operand(expr) {
-        return Err(unsupported(UnsupportedNode::WideBitVector(op), expr));
+        return Err(unsupported(map, UnsupportedNode::WideBitVector(op), expr));
     }
     let my_prec = expr_precedence(expr);
     let wrap = my_prec < min_prec;
@@ -466,7 +469,7 @@ pub(in crate::generator::c) fn generate_expr(
                     u64::try_from(*n).unwrap_or(u64::MAX),
                     &rhs_str,
                 ) else {
-                    return Err(unsupported(UnsupportedNode::BitBeyondVector, expr));
+                    return Err(unsupported(map, UnsupportedNode::BitBeyondVector, expr));
                 };
                 printer.print(&text);
                 return Ok(());
@@ -503,7 +506,7 @@ pub(in crate::generator::c) fn generate_expr(
                     ));
                     return Ok(());
                 }
-                return Err(unsupported(UnsupportedNode::WideBitVector(":="), expr));
+                return Err(unsupported(map, UnsupportedNode::WideBitVector(":="), expr));
             }
             // Обычное присваивание (право-ассоциативно: тот же prec не оборачивается)
             generate_expr(printer, map, owner, params.clone(), l, 1, has_model)?;
@@ -615,7 +618,7 @@ pub(in crate::generator::c) fn generate_expr(
 
         // ── Неподдерживаемые ──────────────────────────────────────────────────
         ExpressionNode::ArraySlice(_, _, _) => {
-            return Err(unsupported(UnsupportedNode::ArraySlice, expr));
+            return Err(unsupported(map, UnsupportedNode::ArraySlice, expr));
         }
         ExpressionNode::BitAccess(inner, member) => {
             match member {
@@ -692,19 +695,19 @@ pub(in crate::generator::c) fn generate_expr(
             }
         }
         ExpressionNode::CodeBlock(_, _) => {
-            return Err(unsupported(UnsupportedNode::CodeBlock, expr));
+            return Err(unsupported(map, UnsupportedNode::CodeBlock, expr));
         }
         ExpressionNode::NamedFunctionBox(_, _) => {
-            return Err(unsupported(UnsupportedNode::NamedFunction, expr));
+            return Err(unsupported(map, UnsupportedNode::NamedFunction, expr));
         }
         ExpressionNode::List(_) => {
-            return Err(unsupported(UnsupportedNode::ParameterList, expr));
+            return Err(unsupported(map, UnsupportedNode::ParameterList, expr));
         }
         ExpressionNode::Type(_) => {
-            return Err(unsupported(UnsupportedNode::Type, expr));
+            return Err(unsupported(map, UnsupportedNode::Type, expr));
         }
         ExpressionNode::Address(_, _) => {
-            return Err(unsupported(UnsupportedNode::Address, expr));
+            return Err(unsupported(map, UnsupportedNode::Address, expr));
         }
         // Анонимное обращение к ячейке (фича 0189): печатает только `c-hal` —
         // цель `c` адресов не знает по устройству (ADR 0020).
@@ -715,7 +718,7 @@ pub(in crate::generator::c) fn generate_expr(
             printer.print(&crate::generator::c::c_anon::read(access));
         }
         ExpressionNode::Model(_) => {
-            return Err(unsupported(UnsupportedNode::Model, expr));
+            return Err(unsupported(map, UnsupportedNode::Model, expr));
         }
     }
     if wrap {

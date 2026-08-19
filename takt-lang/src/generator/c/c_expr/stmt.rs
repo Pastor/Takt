@@ -98,7 +98,10 @@ pub(in crate::generator::c) fn generate_code_block(
             }
         }
 
-        StatementNode::Expression(expr, _) => {
+        StatementNode::Expression(expr, loc) => {
+            // Объявляем место оператора: отказы печати выражений своей позиции
+            // не имеют (решение 0056) и берут её отсюда (фича 0277).
+            map.site().enter(*loc);
             // Генерируем во временный буфер, чтобы пропустить встроенные
             // функции отладки (`debug`, `S`) без порчи вывода.
             //
@@ -256,7 +259,8 @@ pub(in crate::generator::c) fn generate_code_block(
                 printer.ident("for (");
                 if let Some(init_stmt) = init {
                     // Инициализация — только выражение (без отступа и точки с запятой)
-                    if let StatementNode::Expression(expr, _) = init_stmt.as_ref() {
+                    if let StatementNode::Expression(expr, loc) = init_stmt.as_ref() {
+                        map.site().enter(*loc);
                         generate_stmt_expression(
                             printer,
                             map,

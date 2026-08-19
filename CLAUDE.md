@@ -1555,7 +1555,7 @@ cargo test <имя>                                # один тест по им
   ([0085](docs/features/0085-language-version-constant.md)). Гейт
   `scripts/check-language-version.sh` сверяет **три** источника — константа,
   README и живой контекст. ⚠️ Меняя версию языка (правило 22 — накапливается по
-  циклам), правь все три синхронно. Это **не** версия крейта `takt-lang` (`CARGO_PKG_VERSION`, сейчас `0.49.0`).
+  циклам), правь все три синхронно. Это **не** версия крейта `takt-lang` (`CARGO_PKG_VERSION`, сейчас `0.49.1`).
 - **Релиз и тег выпускает АВТОМАТИКА при подъёме минорной версии языка**
   ([0302](docs/features/0302-release-on-language-minor.md)). Решение принимает
   `scripts/release-check.sh` (одна строка: `release <версия>` либо `skip

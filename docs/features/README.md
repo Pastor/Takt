@@ -289,7 +289,7 @@
 | [0274](./0274-book-generated-snapshots-gate.md) | Снимки порождённого кода в book/ никем не сверяются | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0275](./0275-readme-commands-gate.md) | Команды в README.md никем не проверяются | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0276](./0276-semantic-diagnostics-without-code.md) | Восемь безликих диагностик остались в семантике | [ADR](../adr/0276-semantic-diagnostics-without-code.md), [анализ](../analyze/0276-semantic-diagnostics-without-code.md), [отчёт](../reports/0276-semantic-diagnostics-without-code.md) | ГОТОВО |
-| [0277](./0277-expression-usage-position.md) | Отказ цели указывает на объявление переменной, а не на использование | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0277](./0277-expression-usage-position.md) | Отказ цели указывает на объявление переменной, а не на использование | [ADR](../adr/0277-expression-usage-position.md), [анализ](../analyze/0277-expression-usage-position.md), [отчёт](../reports/0277-expression-usage-position.md) | ГОТОВО |
 | [0278](./0278-compact-implement-dead-branch.md) | semantic::extend::compact_implement в конвейере не вызывается | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0279](./0279-qualified-import-model-reference.md) | Ссылка на вложенную модель подключённого файла невыразима | [ADR](../adr/0279-qualified-import-model-reference.md), [анализ](../analyze/0279-qualified-import-model-reference.md), [отчёт](../reports/0279-qualified-import-model-reference.md) | ГОТОВО |
 | [0280](./0280-sv-mmio-bus-axi-wishbone.md) | Адаптеры шин AXI-Lite и Wishbone для цели sv-mmio | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

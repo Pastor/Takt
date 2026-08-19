@@ -238,3 +238,4 @@
 | [0264](./0264-body-judge-usage-position.md) | Координата судей тела — позиция употребления | Draft | фича 0264 |
 | [0273](./0273-unreachable-edge-warning.md) | Недостижимое ребро — предупреждение SE-116 | Draft | фича 0273 |
 | [0276](./0276-semantic-diagnostics-without-code.md) | Диагностика семантики без кода и позиции | Draft | фича 0276 |
+| [0277](./0277-expression-usage-position.md) | Координата отказа цели — место употребления | Draft | фича 0277 |
