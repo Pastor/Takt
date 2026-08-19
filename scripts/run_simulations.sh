@@ -8,7 +8,11 @@ set -euo pipefail
 # Корень репозитория = каталог этого скрипта /..
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SIM_DIR="$ROOT/examples/simulations"
-BINARY="$ROOT/target/debug/takt-sim"
+# Каталог бинарников — у одного носителя (фича 0301). Прежде здесь стояло
+# "$ROOT/target/debug", тогда как фича 0251 перенесла сборку в target/precheck
+# через .cargo/config.toml: скрипт сломался в тот же день и не был замечен,
+# потому что его никто не запускает (в precheck.sh его нет).
+BINARY="$("$(dirname "$0")/target-dir.sh")/takt-sim"
 
 if [[ ! -x "$BINARY" ]]; then
   echo "Бинарник не найден: $BINARY"
