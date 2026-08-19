@@ -224,3 +224,4 @@
 | [0266](./0266-port-in-declaration-initializer.md) | Чтение порта в инициализаторе объявления | Accepted | фича 0266 |
 | [0291](./0291-rust-sv-unresolved-condition.md) | Решение «ребро безусловно» — у одного носителя | Accepted | фича 0291 |
 | [0300](./0300-fractional-init-arithmetic.md) | Дробная арифметика в инициализаторе объявления | Accepted | фича 0300 |
+| [0284](./0284-empty-struct-semantics.md) | Структура без полей | Accepted | фича 0284 |

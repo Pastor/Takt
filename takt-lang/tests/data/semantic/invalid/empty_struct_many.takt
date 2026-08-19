@@ -1,0 +1,12 @@
+// Фича 0284: две пустые структуры дают ДВЕ диагностики (правило 0151).
+struct First { }
+struct Second { }
+
+var n: u8 := 0;
+
+start Run {
+    always { n := n + 1; }
+    ref Done: n >= 3;
+}
+
+state Done { }

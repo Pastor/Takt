@@ -189,3 +189,4 @@
 | 0266 | Чтение порта в инициализаторе объявления | [0266-port-in-declaration-initializer.md](0266-port-in-declaration-initializer.md) | ГОТОВО |
 | 0291 | Решение «ребро безусловно» — у одного носителя | [0291-rust-sv-unresolved-condition.md](0291-rust-sv-unresolved-condition.md) | ГОТОВО |
 | 0300 | Дробная арифметика в инициализаторе объявления | [0300-fractional-init-arithmetic.md](0300-fractional-init-arithmetic.md) | ГОТОВО |
+| 0284 | Структура без полей | [0284-empty-struct-semantics.md](0284-empty-struct-semantics.md) | ГОТОВО |
