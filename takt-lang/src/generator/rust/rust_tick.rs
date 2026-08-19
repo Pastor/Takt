@@ -197,7 +197,7 @@ pub(crate) fn emit_tick(
             }
             Element::StateExtend { extend, next, .. } => {
                 emit_extend(
-                    p, map, table, state_name, raw, extend, next, instances, concats, name,
+                    p, map, table, state_name, raw, extend, next, instances, concats, name, states,
                     &mut scope, &mut out, is_root,
                 )?;
             }
@@ -418,6 +418,7 @@ fn emit_extend(
     instances: &[(Name, Vec<Instance>)],
     concats: &[(Name, Vec<ConcatStep>)],
     model_name: &Name,
+    states: &[Name],
     scope: &mut Scope,
     out: &mut StmtOutput,
     is_root: bool,
@@ -447,7 +448,7 @@ fn emit_extend(
             }
             p.ident(&format!("if {} {{", done.join(" && "))).nl();
             p.up();
-            emit_extend_transition(p, map, table, raw, next, scope, out)?;
+            emit_extend_transition(p, map, table, raw, next, states, scope, out)?;
             p.down();
             p.ident("}").nl();
             Ok(())
@@ -494,7 +495,7 @@ fn emit_extend(
                             .nl();
                     }
                     // Последний шаг завершён — уходим из составного состояния.
-                    None => emit_extend_transition(p, map, table, raw, next, scope, out)?,
+                    None => emit_extend_transition(p, map, table, raw, next, states, scope, out)?,
                 }
                 p.down();
                 p.ident("}").nl();
@@ -507,16 +508,31 @@ fn emit_extend(
 }
 
 /// Печатает переход по завершении реализации состояния.
+#[allow(clippy::too_many_arguments)]
 fn emit_extend_transition(
     p: &mut Printer,
     map: &RustMap,
     table: &StateTable,
     raw: &StateNode,
     next: &Name,
+    states: &[Name],
     scope: &mut Scope,
     out: &mut StmtOutput,
 ) -> Result<(), Diagnostic> {
+    // Собственные рёбра состояния-композиции (фича 0303) — ПЕРЕД `next`/`END`,
+    // как у эталона: он проверяет `ref` в порядке объявления, а `next` берёт
+    // последним. Прежде цель печатала только `next`, и вход
+    // `start Entry = A | B { ref Finish: cond; }` давал другой автомат — молча.
+    if emit_transitions(p, raw, map, table, states, scope, out)? {
+        // Безусловное ребро завершает цепочку: дальше недостижимо.
+        return Ok(());
+    }
     emit_named_blocks(p, raw, "exit", scope, out)?;
+    // `END` — только состоянию БЕЗ переходов: у эталона узел завершается при
+    // пустом списке переходов, а при несработавших остаётся в состоянии.
+    if next.local().is_empty() && !raw.references().is_empty() {
+        return Ok(());
+    }
     if next.local().is_empty() {
         p.ident(&format!("self.state = {};", table.end_path())).nl();
         return Ok(());

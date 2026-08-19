@@ -480,3 +480,4 @@
 | 0260-01 | 0260 | Заглушка неиспользуемого параметра | [0260-01-c-unused-struct-parameter.md](0260-01-c-unused-struct-parameter.md) |
 | 0267-01 | 0267 | Перевод формы в целях sv | [0267-01-state-of-model-in-targets.md](0267-01-state-of-model-in-targets.md) |
 | 0267-02 | 0267 | Точные отказы rust и st | [0267-02-state-of-model-in-targets.md](0267-02-state-of-model-in-targets.md) |
+| 0303-01 | 0303 | Рёбра состояния-композиции в целях | [0303-01-composition-state-conditional-edge.md](0303-01-composition-state-conditional-edge.md) |

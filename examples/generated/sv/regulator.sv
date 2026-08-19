@@ -79,6 +79,7 @@ module regulator (
                 endcase
                 if ((regulator_regulator_state_next == REGULATOR_REGULATOR_END)) begin
                     state_next = REGULATOR_END;
+                    state_next = REGULATOR_END;
                 end
             end
             REGULATOR_END: begin end

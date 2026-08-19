@@ -43,6 +43,7 @@
 mod st_at;
 mod st_compose;
 mod st_decl;
+mod st_edges;
 mod st_expr;
 mod st_fixed;
 mod st_func;

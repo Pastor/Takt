@@ -477,6 +477,20 @@ fn visit_state(
                         worklist.push(next_state);
                     }
                 }
+                // Собственные рёбра состояния-реализации — тоже переходы (фича
+                // 0303). Прежде обход клал в задачи только `next`, и состояние,
+                // достижимое из композиции по `ref`, в карту не попадало вовсе:
+                // цель `rust` о нём не знала (его не было ни в перечислении, ни
+                // в таблице), а эталон в него переходил. Правило языка задано
+                // фичей 0181: по завершении реализации проверяются переходы
+                // состояния — сначала `ref`, затем `next`.
+                for reference in state.references().iter().rev() {
+                    let ref_opt = model.borrow().search_state(&reference.name);
+                    if let Some(rc) = ref_opt {
+                        let ref_state = rc.borrow().clone();
+                        worklist.push(ref_state);
+                    }
+                }
             }
             StateNode::Unresolved => {}
         }

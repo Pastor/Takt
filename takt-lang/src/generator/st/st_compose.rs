@@ -20,6 +20,7 @@ use crate::generator::st::st_map::StMap;
 use crate::generator::st::st_model::{BodyOutput, StateTable};
 use crate::semantic::minimap::{Name, StateExtend};
 use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ModelNode, StateNode};
 
 /// Экземпляр под-`FUNCTION_BLOCK` внутри родительского FB.
 ///
@@ -102,6 +103,7 @@ fn instance_initializer(
 /// **последовательно в одном такте** родителя, в порядке объявления, а
 /// композиция завершается по **конъюнкции** их `is_done`. Настоящей
 /// конкурентности нет — чередование детерминировано, что и нужно скан-циклу ПЛК.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_composition(
     p: &mut Printer,
     map: &StMap,
@@ -110,10 +112,12 @@ pub(crate) fn emit_composition(
     next: &Name,
     table: &StateTable,
     out: &mut BodyOutput,
+    state: &StateNode,
+    model: &ModelNode,
 ) -> Result<(), Diagnostic> {
     // Последовательная композиция идёт своим путём: ей нужен счётчик шагов.
     if let StateExtend::Concatenation(steps) = extend {
-        return emit_concatenation(p, map, steps, state_name, next, table, out);
+        return emit_concatenation(p, map, steps, state_name, next, table, out, state, model);
     }
 
     let mut group = Vec::new();
@@ -122,18 +126,63 @@ pub(crate) fn emit_composition(
     // `main->lift_request` цели `c` выразить нечем (О1-в, проба П7).
     let done_terms = [emit_group(p, map, &group, "", out)?];
 
+    p.ident(&format!("IF {} THEN", done_terms.join(" AND ")))
+        .nl();
+    p.up();
+    emit_state_exit(p, map, state_name, state, model, next, table, out)?;
+    p.down();
+    p.ident("END_IF;").nl();
+    Ok(())
+}
+
+/// Печатает выход из состояния-композиции: собственные рёбра, затем `next`/`END`.
+///
+/// Порядок — эталона (фича 0181): `ref` в порядке объявления, `next` последним.
+/// Прежде рёбра терялись, и вход `start Entry = A | B { ref Finish: cond; }`
+/// давал другой автомат (фича 0303).
+///
+/// ⚠️ `END` подставляется только состоянию **без** рёбер: у эталона узел
+/// завершается при пустом списке переходов, а при несработавших остаётся в
+/// состоянии.
+#[allow(clippy::too_many_arguments)]
+fn emit_state_exit(
+    p: &mut Printer,
+    map: &StMap,
+    state_name: &Name,
+    state: &StateNode,
+    model: &ModelNode,
+    next: &Name,
+    table: &StateTable,
+    out: &mut BodyOutput,
+) -> Result<(), Diagnostic> {
+    let references = match state {
+        StateNode::Simple { references, .. } | StateNode::Implement { references, .. } => {
+            references.clone()
+        }
+        StateNode::Unresolved => Vec::new(),
+    };
+    if crate::generator::st::st_edges::emit_edges(
+        p,
+        map,
+        state_name,
+        state,
+        model,
+        table,
+        out,
+        &references,
+    )? {
+        return Ok(());
+    }
+    if next.unique().is_empty() && !references.is_empty() {
+        return Ok(());
+    }
     let target = if next.unique().is_empty() {
         table.end
     } else {
         table.number_of_local(next.local()).unwrap_or(table.end)
     };
-    p.ident(&format!("IF {} THEN", done_terms.join(" AND ")))
-        .nl();
-    p.up();
     p.ident(&format!("state := {}; (* {} *)", target, next.local()))
         .nl();
-    p.down();
-    p.ident("END_IF;").nl();
     Ok(())
 }
 
@@ -184,6 +233,7 @@ fn emit_group(
 ///
 /// Шаг завершается по `is_done` своей группы; параллельная группа внутри
 /// конкатенации (`A + (C | D) + E`) — по конъюнкции, как обычная параллель.
+#[allow(clippy::too_many_arguments)]
 fn emit_concatenation(
     p: &mut Printer,
     map: &StMap,
@@ -192,6 +242,8 @@ fn emit_concatenation(
     next: &Name,
     table: &StateTable,
     out: &mut BodyOutput,
+    state: &StateNode,
+    model: &ModelNode,
 ) -> Result<(), Diagnostic> {
     let counter = format!("{}_step", state_name.local_lowercase_snakecase());
     out.stmt
@@ -220,17 +272,11 @@ fn emit_concatenation(
         p.ident("END_IF;").nl();
         p.down();
     }
-    // Последний шаг: конкатенация пройдена — уходим по `next`.
-    let target = if next.unique().is_empty() {
-        table.end
-    } else {
-        table.number_of_local(next.local()).unwrap_or(table.end)
-    };
+    // Последний шаг: конкатенация пройдена — рёбра состояния, затем `next`.
     p.ident(&format!("{}: (* конкатенация завершена *)", steps.len()))
         .nl();
     p.up();
-    p.ident(&format!("state := {}; (* {} *)", target, next.local()))
-        .nl();
+    emit_state_exit(p, map, state_name, state, model, next, table, out)?;
     p.down();
     p.down();
     p.ident("END_CASE;").nl();
