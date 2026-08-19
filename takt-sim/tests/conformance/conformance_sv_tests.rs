@@ -971,3 +971,6 @@ mod fixed_width;
 // Насыщение q(m, n) sat (фича 0170) — тем же приёмом подмодуля.
 #[path = "conformance_sv_tests/fixed_sat.rs"]
 mod fixed_sat;
+
+/// Наблюдатель-сосед видит состояние соседа (фича 0267).
+mod state_of;

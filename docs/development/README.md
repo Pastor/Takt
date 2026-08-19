@@ -478,3 +478,5 @@
 | 0278-01 | 0278 | Снятие мёртвой упаковки последовательной композиции | [0278-01-compact-implement-dead-branch.md](0278-01-compact-implement-dead-branch.md) |
 | 0278-02 | 0278 | Публичность перестаёт прятать мёртвое | [0278-02-compact-implement-dead-branch.md](0278-02-compact-implement-dead-branch.md) |
 | 0260-01 | 0260 | Заглушка неиспользуемого параметра | [0260-01-c-unused-struct-parameter.md](0260-01-c-unused-struct-parameter.md) |
+| 0267-01 | 0267 | Перевод формы в целях sv | [0267-01-state-of-model-in-targets.md](0267-01-state-of-model-in-targets.md) |
+| 0267-02 | 0267 | Точные отказы rust и st | [0267-02-state-of-model-in-targets.md](0267-02-state-of-model-in-targets.md) |

@@ -46,6 +46,7 @@
 //! типозависимой. Здесь — нет.
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::sv::sv_state_of;
 use crate::generator::sv::sv_type::sv_enum_type_name;
 use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
@@ -426,6 +427,11 @@ fn print_member(base: &str, member: &Member) -> String {
 /// # Ошибки
 /// [`SV-002`](sv002) на непокрытом узле, [`SV-005`](sv005) на `extern fn`.
 pub(crate) fn print_condition(node: &ConditionNode, scope: &Scope) -> Result<String, Diagnostic> {
+    // Форма `S(Модель) = Состояние` (фича 0267): правая часть приходит
+    // неразрешённой (инвариант проекта), и общий разбор отверг бы её.
+    if let Some(text) = sv_state_of::print(node, scope) {
+        return Ok(text);
+    }
     // Каждый бинарный узел — в скобках: печатается дерево, а не текст.
     let bin = |l: &ConditionNode, op: &str, r: &ConditionNode| -> Result<String, Diagnostic> {
         Ok(format!(
