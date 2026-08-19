@@ -515,7 +515,18 @@ impl FileTable {
 /// Колонка считается в **символах**, а не в байтах: в `.takt` встречается
 /// кириллица (комментарии, строки), и байтовая колонка указывала бы мимо.
 pub fn line_column(text: &str, offset: usize) -> (usize, usize) {
-    let clamped = offset.min(text.len());
+    // ⚠️ Смещение приводится к ГРАНИЦЕ СИМВОЛА, а не только к длине текста:
+    // иначе срез паникует, и печать диагностики роняет инструмент. Так и было
+    // (фича 0275): координата записи карты адресов приходила под номером файла
+    // модели, попадала внутрь кириллической буквы, и `taktc compile -t st-at
+    // --address-map …` падал с «byte index … is not a char boundary» — вместо
+    // предупреждения пользователь получал panic. Корень (чужой номер файла)
+    // устранён там же; здесь — страховка: печать сообщения не вправе падать
+    // НИКОГДА, каким бы ни было смещение.
+    let mut clamped = offset.min(text.len());
+    while clamped > 0 && !text.is_char_boundary(clamped) {
+        clamped -= 1;
+    }
     let before = &text[..clamped];
     let line = before.matches('\n').count() + 1;
     let line_start = before.rfind('\n').map_or(0, |i| i + 1);

@@ -495,3 +495,5 @@
 | 0259-01 | 0259 | Встроенные функции языка не описаны в документе book/ | [0259-01-book-builtin-functions.md](0259-01-book-builtin-functions.md) |
 | 0268-01 | 0268 | У SE-033 нет описания в приложении «Ошибки» | [0268-01-se033-appendix-description.md](0268-01-se033-appendix-description.md) |
 | 0274-01 | 0274 | Снимки порождённого кода в book/ никем не сверяются | [0274-01-book-generated-snapshots-gate.md](0274-01-book-generated-snapshots-gate.md) |
+| 0275-01 | 0275 | Команды в README.md никем не проверяются | [0275-01-readme-commands-gate.md](0275-01-readme-commands-gate.md) |
+| 0275-02 | 0275 | Команды в README.md никем не проверяются | [0275-02-readme-commands-gate.md](0275-02-readme-commands-gate.md) |
