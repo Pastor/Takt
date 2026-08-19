@@ -232,3 +232,4 @@
 | 0300 | Дробная арифметика в инициализаторе объявления | [0300-fractional-init-arithmetic.md](0300-fractional-init-arithmetic.md) | — (новая фича) |
 | 0284 | Структура без полей | [0284-empty-struct-semantics.md](0284-empty-struct-semantics.md) | — (новая фича) |
 | 0301 | Снятие замера расхождения: инструмент и чек-лист | [0301-probe-checklist.md](0301-probe-checklist.md) | — (новая фича) |
+| 0302 | Релиз и тег при подъёме минорной версии языка | [0302-release-on-language-minor.md](0302-release-on-language-minor.md) | — (новая фича) |

@@ -1,0 +1,75 @@
+on:
+  push:
+    branches: [ v2, main ]
+
+name: release
+
+# Релиз по подъёму МИНОРНОЙ версии языка (фича 0302, правило 22).
+#
+# Логики здесь НЕТ — тот же принцип, что у ci.yml (фича 0090): workflow решает
+# «надо ли релизить» единственным вызовом `scripts/release-check.sh`. Причина
+# острее обычной: этот workflow в проекте НЕ ИСПОЛНЯЕТСЯ (аккаунт заблокирован
+# по биллингу — замер 2026-08-19, `The job was not started because your account
+# is locked due to a billing issue`), поэтому вся проверяемая часть обязана
+# лежать в скрипте, который гоняется локально сторожем
+# `scripts/test-release-check.sh`.
+#
+# Что делает при подъёме минорной версии языка:
+#   1) ставит АННОТИРОВАННЫЙ тег `v<версия>` на коммит подъёма (правило 22:
+#      «на тот самый коммит, а не на последующие»);
+#   2) выпускает релиз с телом из раздела `[Не выпущено]` CHANGES.md.
+#
+# ⚠️ Идемпотентность: если тег уже стоит (правило 22 требует ставить его
+# вручную при закрытии первой фичи цикла), скрипт отвечает `skip`, и job
+# завершается без действий. Автоматика тут — страховка, а не замена правила.
+
+jobs:
+  release:
+    name: Тег и релиз по подъёму минорной версии языка
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # fetch-depth: 0 — полный клон С ТЕГАМИ. Мелкий клон не даёт ни родителя
+      # (сравнивать не с чем), ни тегов (повтор релиза не отследить).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Решение о релизе
+        id: decide
+        run: |
+          decision="$(./scripts/release-check.sh)"
+          echo "$decision"
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+          case "$decision" in
+            release\ *) echo "version=${decision#release }" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      # Тег ставится ОТДЕЛЬНЫМ шагом и только по решению скрипта: так шаг видно
+      # в логе job, а решение остаётся проверяемым локально.
+      - name: Аннотированный тег на коммите подъёма
+        if: startsWith(steps.decide.outputs.decision, 'release ')
+        env:
+          VERSION: ${{ steps.decide.outputs.version }}
+        run: |
+          git -c user.name='github-actions[bot]' \
+              -c user.email='github-actions[bot]@users.noreply.github.com' \
+              tag -a "v$VERSION" -m "Версия языка $VERSION" "$GITHUB_SHA"
+          git push origin "v$VERSION"
+
+      - name: Релиз
+        if: startsWith(steps.decide.outputs.decision, 'release ')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.decide.outputs.version }}
+        run: |
+          # Тело релиза собирает отдельный скрипт — из ИСТОРИИ, а не из журнала.
+          # ⚠️ Первая редакция брала раздел `## [Не выпущено]` файла CHANGES.md,
+          # и проба дала 9765 строк: заголовок `## ` в журнале один на весь
+          # файл — выпуски там не размечали ни разу. Поймано прогоном.
+          ./scripts/release-notes.sh "$VERSION" "$GITHUB_SHA" > body.md
+          gh release create "v$VERSION" \
+            --title "Takt $VERSION" \
+            --notes-file body.md \
+            --verify-tag
