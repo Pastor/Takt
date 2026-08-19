@@ -487,3 +487,4 @@
 | 0293-03 | 0293 | Структуры в цели rust | [0293-03-struct-in-st-rust.md](0293-03-struct-in-st-rust.md) |
 | 0253-01 | 0253 | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | [0253-01-legacy-names-in-generated-code.md](0253-01-legacy-names-in-generated-code.md) |
 | 0253-02 | 0253 | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | [0253-02-legacy-names-in-generated-code.md](0253-02-legacy-names-in-generated-code.md) |
+| 0292-01 | 0292 | Код CC-022 обещан комментарием, но не эмитируется никем | [0292-01-cc022-promise-without-emitter.md](0292-01-cc022-promise-without-emitter.md) |

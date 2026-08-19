@@ -248,3 +248,4 @@
 | [0286](./0286-sv-const-initializer-expression.md) | Вычислимое приведение в инициализаторе | Accepted | фича 0286 |
 | [0293](./0293-struct-in-st-rust.md) | Структуры в целях st, rust и sv | Accepted | фича 0293 |
 | [0253](./0253-legacy-names-in-generated-code.md) | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | Accepted | фича 0253 |
+| [0292](./0292-cc022-promise-without-emitter.md) | Код CC-022 обещан комментарием, но не эмитируется никем | Accepted | фича 0292 |
