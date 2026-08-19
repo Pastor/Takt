@@ -2,6 +2,7 @@ mod c;
 mod indent;
 mod plantuml;
 mod rust;
+pub(crate) mod site;
 mod st;
 mod sv;
 

@@ -25,6 +25,12 @@ pub struct CMap {
     /// идёт **только** через колбэки HAL, поэтому обращение по адресу она
     /// отвергает (`CC-021`), а `c-hal` печатает `*(volatile uintN_t*)`.
     hal: bool,
+    /// Позиция оператора, который печатается сейчас (фича 0277).
+    ///
+    /// Нужна отказам, у которых своей координаты нет: у `ExpressionNode`
+    /// позиции **употребления** не существует (решение 0056), и `CC-022`
+    /// указывал на строку объявления операнда либо не указывал никуда.
+    site: crate::generator::site::StatementSite,
 }
 
 impl CMap {
@@ -65,6 +71,7 @@ impl CMap {
             float_width: FloatWidth::default(),
             time_profile: crate::semantic::duration::TimeProfile::default(),
             hal: false,
+            site: crate::generator::site::StatementSite::default(),
         })
     }
 
@@ -82,6 +89,11 @@ impl CMap {
     /// Знает ли цель адреса (режим `c-hal`).
     pub(crate) fn hal(&self) -> bool {
         self.hal
+    }
+
+    /// Место печатаемого сейчас оператора (фича 0277).
+    pub(crate) fn site(&self) -> &crate::generator::site::StatementSite {
+        &self.site
     }
 
     /// Задаёт профиль времени (фича 0134): «часы» либо «такты».
