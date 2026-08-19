@@ -378,6 +378,14 @@ pub(crate) fn default_value(ty: &TypeNode, model: &ModelNode) -> Result<String, 
         TypeNode::Bit | TypeNode::Bool => Ok("false".to_string()),
         TypeNode::Rational => Ok("0.0".to_string()),
         TypeNode::Integer { .. } => Ok("0".to_string()),
+        // Бит-вектор шире 64 бит хранится массивом СЛОВ, а не массивом бит
+        // (0078): умолчание обязано совпадать с объявленным типом `[u64; K]`,
+        // иначе конструктор не компилируется (фича 0262).
+        TypeNode::Array(..) if crate::generator::rust::rust_bit::words_of_type(ty).is_some() => {
+            let count = crate::generator::rust::rust_bit::words_of_type(ty)
+                .expect("проверено охраной ветви");
+            Ok(format!("[0u64; {count}]"))
+        }
         TypeNode::Array(n, elem) => Ok(format!("[{}; {}]", default_value(elem, model)?, n)),
         // Умолчание перечисления — его ПЕРВЫЙ вариант. Нуля у перечисления может
         // не быть вовсе (`enum Action { Idle = 670 }`), поэтому `0 as Action`

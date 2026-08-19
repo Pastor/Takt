@@ -31,6 +31,7 @@
 #![allow(clippy::explicit_auto_deref)]
 
 mod c_anon;
+mod c_bits;
 mod c_blocks;
 mod c_decl;
 // Значение перечислимого типа печатается именем константы (фича 0167).

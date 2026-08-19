@@ -30,6 +30,13 @@ pub(in crate::generator::c) fn generate_expr(
     min_prec: u8,
     has_model: bool,
 ) -> Result<(), Diagnostic> {
+    // Операция над бит-вектором шире 64 бит невыразима: носитель — массив слов,
+    // и в C такое выражение означало бы арифметику указателя (фича 0262). Её не
+    // поддерживает и эталон (`SIM-005` в такте), поэтому отказ приходит СВОЙ, с
+    // причиной, а не от `cc` на порождённом файле.
+    if let Some(op) = crate::generator::c::c_bits::wide_operand(expr) {
+        return Err(unsupported(UnsupportedNode::WideBitVector(op), expr));
+    }
     let my_prec = expr_precedence(expr);
     let wrap = my_prec < min_prec;
     if wrap {
@@ -449,11 +456,54 @@ pub(in crate::generator::c) fn generate_expr(
                     let mut tmp = Printer::new(4, &mut rhs_str);
                     generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
                 }
-                printer.print(&format!(
-                    "{0} = ({0} & ~(1u << {1})) | (({2} & 1u) << {1})",
-                    lhs_str, n, rhs_str
-                ));
+                // Носитель может быть массивом слов (`[bit;N > 64]`, фича 0262):
+                // тогда пишется СВОЁ слово, а не весь вектор. Позиция берётся у
+                // `bit_vector::bit_slot` — общего носителя с эталоном.
+                let words = crate::generator::c::c_bits::words_of(inner_expr);
+                let Some(text) = crate::generator::c::c_bits::write_bit(
+                    &lhs_str,
+                    words,
+                    u64::try_from(*n).unwrap_or(u64::MAX),
+                    &rhs_str,
+                ) else {
+                    return Err(unsupported(UnsupportedNode::BitBeyondVector, expr));
+                };
+                printer.print(&text);
                 return Ok(());
+            }
+            // Бит-вектор шире 64 бит — массив слов, а массив в C не является
+            // изменяемым lvalue (фича 0262): копирование и заполнение идут по
+            // словам. Прежде печаталось `model->w = …`, что `cc` отвергает
+            // («array type is not assignable») при нулевом коде возврата `taktc`.
+            if let Some(count) = crate::generator::c::c_bits::words_of(l) {
+                let mut lhs_str = String::new();
+                {
+                    let mut tmp = Printer::new(4, &mut lhs_str);
+                    generate_expr(&mut tmp, map, owner, params.clone(), l, 0, has_model)?;
+                }
+                if crate::generator::c::c_bits::words_of(r) == Some(count) {
+                    let mut rhs_str = String::new();
+                    {
+                        let mut tmp = Printer::new(4, &mut rhs_str);
+                        generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
+                    }
+                    printer.print(&crate::generator::c::c_bits::copy_words(
+                        &lhs_str, &rhs_str, count,
+                    ));
+                    return Ok(());
+                }
+                if matches!(r.as_ref(), ExpressionNode::Number(_)) {
+                    let mut rhs_str = String::new();
+                    {
+                        let mut tmp = Printer::new(4, &mut rhs_str);
+                        generate_expr(&mut tmp, map, owner, params, r, 0, has_model)?;
+                    }
+                    printer.print(&crate::generator::c::c_bits::fill_words(
+                        &lhs_str, count, &rhs_str,
+                    ));
+                    return Ok(());
+                }
+                return Err(unsupported(UnsupportedNode::WideBitVector(":="), expr));
             }
             // Обычное присваивание (право-ассоциативно: тот же prec не оборачивается)
             generate_expr(printer, map, owner, params.clone(), l, 1, has_model)?;
@@ -625,10 +675,19 @@ pub(in crate::generator::c) fn generate_expr(
                             return Ok(());
                         }
                     }
-                    // Обычная переменная/выражение: ((inner >> N) & 1u)
-                    printer.print("((");
-                    generate_expr(printer, map, owner, params, inner, 0, has_model)?;
-                    printer.print(&format!(" >> {}) & 1u)", n));
+                    // Обычная переменная/выражение: `((inner >> N) & 1ull)`, а у
+                    // массива слов (`[bit;N > 64]`, фича 0262) — сдвиг своего слова.
+                    let mut base = String::new();
+                    {
+                        let mut tmp = Printer::new(4, &mut base);
+                        generate_expr(&mut tmp, map, owner, params, inner, 0, has_model)?;
+                    }
+                    let words = crate::generator::c::c_bits::words_of(inner);
+                    printer.print(&crate::generator::c::c_bits::read_bit(
+                        &base,
+                        words,
+                        u64::try_from(*n).unwrap_or(u64::MAX),
+                    ));
                 }
             }
         }

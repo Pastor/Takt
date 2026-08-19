@@ -57,6 +57,10 @@ pub(in crate::generator::c) enum UnsupportedNode {
     Builtin(&'static str),
     /// Неизвестная встроенная функция.
     UnknownBuiltin,
+    /// Разряд за пределом бит-вектора (`[bit;96]` и разряд 200).
+    BitBeyondVector,
+    /// Операция над широким бит-вектором, не выразимая по словам (фича 0262).
+    WideBitVector(&'static str),
 }
 
 impl UnsupportedNode {
@@ -72,6 +76,10 @@ impl UnsupportedNode {
             UnsupportedNode::Address => "адресный литерал в выражении".to_string(),
             UnsupportedNode::Builtin(name) => format!("встроенная функция '{name}'"),
             UnsupportedNode::UnknownBuiltin => "неизвестная встроенная функция".to_string(),
+            UnsupportedNode::BitBeyondVector => "разряд за пределом бит-вектора".to_string(),
+            UnsupportedNode::WideBitVector(op) => {
+                format!("операция '{op}' над бит-вектором шире 64 бит")
+            }
         }
     }
 
@@ -89,13 +97,22 @@ impl UnsupportedNode {
                 "в C нет операции среза, а тип-владелец у среза в Takt отсутствует"
             }
             UnsupportedNode::Builtin(_) => "она служит отладке и кода не порождает",
+            UnsupportedNode::BitBeyondVector => {
+                "разрядов за объявленной шириной у вектора нет, а доступ за границу \
+                 массива слов — неопределённое поведение в порождённой прошивке"
+            }
+            UnsupportedNode::WideBitVector(_) => {
+                "вектор шире 64 бит представлен массивом слов, и такой операции над \
+                 словами не существует; её не поддерживает и эталон (SIM-005) — \
+                 работайте с отдельными разрядами либо разбейте вектор на поля"
+            }
             _ => "",
         }
     }
 
     /// Все виды — для сторожа (перечисление обязано быть полным).
     #[cfg(test)]
-    pub(in crate::generator::c) const ALL: [UnsupportedNode; 9] = [
+    pub(in crate::generator::c) const ALL: [UnsupportedNode; 11] = [
         UnsupportedNode::Model,
         UnsupportedNode::ArraySlice,
         UnsupportedNode::CodeBlock,
@@ -105,6 +122,8 @@ impl UnsupportedNode {
         UnsupportedNode::Address,
         UnsupportedNode::Builtin("debug"),
         UnsupportedNode::UnknownBuiltin,
+        UnsupportedNode::BitBeyondVector,
+        UnsupportedNode::WideBitVector("+"),
     ];
 }
 
