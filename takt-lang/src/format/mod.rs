@@ -470,8 +470,8 @@ fn print_element_inner(
             );
             Ok(())
         }
-        ast::ModelElement::State(s) => print_state(out, s),
-        ast::ModelElement::Model(m) => print_nested_model(out, m),
+        ast::ModelElement::State(s) => print_state(out, s, &loc),
+        ast::ModelElement::Model(m) => print_nested_model(out, m, &loc),
         ast::ModelElement::NamedBlockCode(b) => print_named_block(out, b),
         ast::ModelElement::Enum(e) => print_enum(out, e, &loc),
         ast::ModelElement::Struct(s) => print_struct(out, s, &loc),
@@ -668,7 +668,11 @@ fn print_struct(
 /// Форма одна: `model Имя = выражение {` … `}`; без реализации — `model Имя {`.
 /// Дефект дожил потому, что единственная такая запись корпуса лежит в фикстурах
 /// `takt-sim/tests/data/`, куда обход теста форматтера не доходил (фича 0230).
-fn print_nested_model(out: &mut Out, model: &ast::Model) -> Result<(), FormatError> {
+fn print_nested_model(
+    out: &mut Out,
+    model: &ast::Model,
+    loc: &crate::diagnostics::Location,
+) -> Result<(), FormatError> {
     let name = model.name.as_ref().map(|n| n.name.as_str()).unwrap_or("");
     let head = match &model.implements {
         Some(implements) => format!("model {name} = {} {{", expr::expression(implements)?),
@@ -679,12 +683,15 @@ fn print_nested_model(out: &mut Out, model: &ast::Model) -> Result<(), FormatErr
     for element in &model.elements {
         print_element(out, element)?;
     }
-    out.down();
-    out.line("}");
+    close_body(out, loc);
     Ok(())
 }
 
-fn print_state(out: &mut Out, state: &ast::StateDefine) -> Result<(), FormatError> {
+fn print_state(
+    out: &mut Out,
+    state: &ast::StateDefine,
+    loc: &crate::diagnostics::Location,
+) -> Result<(), FormatError> {
     let kind = match state.kind {
         Some(ast::StateKind::Start) => "start ",
         Some(ast::StateKind::End) => "end ",
@@ -719,9 +726,32 @@ fn print_state(out: &mut Out, state: &ast::StateDefine) -> Result<(), FormatErro
     for element in &state.elements {
         print_state_element(out, element)?;
     }
-    out.down();
-    out.line("}");
+    close_body(out, loc);
     Ok(())
+}
+
+/// Закрывает тело конструкции: хвостовые комментарии — затем `}` (фича 0295).
+///
+/// # Зачем отдельная функция
+///
+/// Комментарий последней строкой тела принадлежит **этому** телу. Без явной
+/// выдачи его подхватывает `leading()` следующего элемента — уже за
+/// закрывающей скобкой, то есть у чужого узла; а если следующего элемента нет,
+/// он всплывает в конец файла. Класс правился трижды: фича 0198 (операторы),
+/// фикс 0197-01 (перечисление), фикс 0198-01 (структура) — и каждый раз
+/// **в своей ветке**.
+///
+/// Замер 2026-08-19 показал, что после трёх правок класс жив ещё в двух
+/// местах: хвостовой комментарий **состояния** и **вложенной модели** уезжал в
+/// конец файла. Отсюда общая функция: закрывающая скобка любой конструкции с
+/// телом печатается **только** через неё, и сторож
+/// `format_comment_binding_tests` требует этого от исходника.
+fn close_body(out: &mut Out, loc: &crate::diagnostics::Location) {
+    if let Some((_, end)) = comments::span(loc) {
+        out.comments_before(end.saturating_sub(1));
+    }
+    out.down();
+    out.node_line(loc, "}");
 }
 
 fn print_state_element(out: &mut Out, element: &ast::StateElement) -> Result<(), FormatError> {

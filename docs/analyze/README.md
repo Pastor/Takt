@@ -239,3 +239,4 @@
 | 0263 | Приведение индекса к usize по нужде | [0263-rust-literal-index-cast.md](0263-rust-literal-index-cast.md) | — (новая фича) |
 | 0281 | Сравнение перечисления с числом в цели rust | [0281-rust-enum-compare-literal.md](0281-rust-enum-compare-literal.md) | — (новая фича) |
 | 0299 | Не-ASCII имя в нижнем регистре у цели rust | [0299-rust-non-ascii-lowercase-name.md](0299-rust-non-ascii-lowercase-name.md) | — (новая фича) |
+| 0295 | Хвостовой комментарий тела и его хозяин | [0295-format-element-comment-binding.md](0295-format-element-comment-binding.md) | — (новая фича) |
