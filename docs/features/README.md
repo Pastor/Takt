@@ -308,7 +308,7 @@
 | [0293](./0293-struct-in-st-rust.md) | Структуры не транслируются целями st и rust дальше объявления | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0294](./0294-se102-suggest-importer.md) | SE-102 не подсказывает файл, подключающий библиотеку | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0295](./0295-format-element-comment-binding.md) | Печать элемента модели в обход привязки комментариев не запрещена | [ADR](../adr/0295-format-element-comment-binding.md), [анализ](../analyze/0295-format-element-comment-binding.md), [отчёт](../reports/0295-format-element-comment-binding.md) | ГОТОВО |
-| [0296](./0296-semantic-stages-single-source.md) | Порядок стадий построения описан в двух местах | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0296](./0296-semantic-stages-single-source.md) | Порядок стадий построения описан в двух местах | [ADR](../adr/0296-semantic-stages-single-source.md), [анализ](../analyze/0296-semantic-stages-single-source.md), [отчёт](../reports/0296-semantic-stages-single-source.md) | ГОТОВО |
 | [0297](./0297-check-claude-md-line-blindness.md) | Гейт живого контекста построчный и потому слеп к переносу | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0298](./0298-book-lexicon-lists-sync.md) | Списки лексики документа отстают от языка | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0299](./0299-rust-non-ascii-lowercase-name.md) | Цель rust: не-ASCII имя в нижнем регистре отвергается clippy | [ADR](../adr/0299-rust-non-ascii-lowercase-name.md), [анализ](../analyze/0299-rust-non-ascii-lowercase-name.md), [отчёт](../reports/0299-rust-non-ascii-lowercase-name.md) | ГОТОВО |

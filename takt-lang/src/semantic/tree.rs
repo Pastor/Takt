@@ -18,6 +18,7 @@ use crate::semantic::declaration;
 use crate::semantic::extend::Extend;
 use crate::semantic::formula;
 use crate::semantic::import::adopt as import_adopt;
+use crate::semantic::import::build as import_build;
 use crate::semantic::import::read_import_file;
 use crate::semantic::import::select as import_select;
 use crate::semantic::named_block::resolve_named_blocks;
@@ -171,12 +172,17 @@ fn mark_imported(model: Rc<RefCell<ModelNode>>) -> Rc<RefCell<ModelNode>> {
     model
 }
 
+/// `specialize` — режим `--parameters=specialize` (фича 0185). Стадия сама им не
+/// пользуется, но **передаёт** подключаемым файлам: они строятся тем же
+/// конвейером (фича 0296), и режим сборки обязан быть у них тот же, иначе
+/// специализация обходит библиотеку стороной.
 pub(super) fn construct_model_stage0(
     model: &Model,
     upper: Option<Rc<RefCell<ModelNode>>>,
     search_paths: &[String],
     import_stack: &mut Vec<String>,
     files: &mut FileTable,
+    specialize: bool,
 ) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
     let name = model.name.clone();
 
@@ -232,6 +238,7 @@ pub(super) fn construct_model_stage0(
                 search_paths,
                 import_stack,
                 files,
+                specialize,
             )?;
             let model_name = model.borrow().name.clone().unwrap();
             if models.contains_key(&model_name) {
@@ -274,12 +281,14 @@ pub(super) fn construct_model_stage0(
                         Ok((model, _)) => {
                             // Добавляем файл в стек, обрабатываем, убираем
                             import_stack.push(filename.clone());
-                            let result = construct_model_impl(
+                            let result = import_build::build_imported_file(
                                 &model,
-                                None,
+                                &model_node,
                                 search_paths,
                                 import_stack,
                                 files,
+                                specialize,
+                                *import_loc,
                             );
                             import_stack.pop();
                             let node = result.map_err(|d| {
@@ -324,12 +333,14 @@ pub(super) fn construct_model_stage0(
                         Ok((model, _)) => {
                             // Добавляем файл в стек, обрабатываем, убираем
                             import_stack.push(filename.clone());
-                            let result = construct_model_impl(
+                            let result = import_build::build_imported_file(
                                 &model,
-                                None,
+                                &model_node,
                                 search_paths,
                                 import_stack,
                                 files,
+                                specialize,
+                                *import_loc,
                             );
                             import_stack.pop();
                             let node = result.map_err(|d| {
@@ -371,12 +382,14 @@ pub(super) fn construct_model_stage0(
                     check_import_cycle(import_stack, &filename, *import_loc)?;
                     import_stack.push(filename.clone());
                     let result = match parse(&content, files.add(&filename)) {
-                        Ok((ast_model, _)) => construct_model_impl(
+                        Ok((ast_model, _)) => import_build::build_imported_file(
                             &ast_model,
-                            None,
+                            &model_node,
                             search_paths,
                             import_stack,
                             files,
+                            specialize,
+                            *import_loc,
                         ),
                         Err(d) => {
                             import_stack.pop();
@@ -846,44 +859,6 @@ pub(super) fn resolve_state_named_blocks(
         }),
         other => Ok(other),
     }
-}
-
-/// Внутренняя реализация построения семантического дерева.
-///
-/// Принимает `import_stack` — стек путей файлов, чьи импорты сейчас обрабатываются.
-/// Используется для обнаружения циклических зависимостей между файлами.
-fn construct_model_impl(
-    model: &Model,
-    upper: Option<Rc<RefCell<ModelNode>>>,
-    search_paths: &[String],
-    import_stack: &mut Vec<String>,
-    files: &mut FileTable,
-) -> Result<Rc<RefCell<ModelNode>>, Diagnostic> {
-    let model = construct_model_stage0(model, upper, search_paths, import_stack, files)?;
-    let model = construct_model_stage1(model)?;
-    let model = construct_model_stage2(model)?;
-    let model = construct_model_stage3(model)?;
-    // Функции (этап 5) должны разрешаться перед именованными блоками (этап 4),
-    // чтобы блоки always/enter/exit могли находить уже разрешённые функции через search_func.
-    //
-    // ⚠️ Это путь **импорта**, и он отдаёт **одну** диагностику (фича 0152):
-    // результат встраивается в стадию 0 импортёра, а она терминальна — списку
-    // здесь некуда доехать. `normalize` перед взятием первой обязателен: иначе
-    // «первой» окажется не самая ранняя по тексту, а первая по порядку обхода.
-    let first = |ds: Vec<Diagnostic>| {
-        crate::diagnostics::normalize(ds)
-            .into_iter()
-            .next()
-            .unwrap_or_else(|| super::internal::no_diagnostic("импорт дерева"))
-    };
-    use crate::semantic::stages::body_stages::{
-        construct_model_stage4, construct_model_stage5, construct_model_stage6,
-    };
-    let model = construct_model_stage5(model).map_err(first)?;
-    let model = construct_model_stage4(model).map_err(first)?;
-    let model = construct_model_stage6(model).map_err(first)?;
-    validate_model(model.clone())?;
-    Ok(model)
 }
 
 /// Строит семантический узел модели из АСД-узла [`Model`].

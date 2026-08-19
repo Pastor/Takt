@@ -57,11 +57,45 @@ pub(crate) fn construct_stages(
     // Стек путей файлов, чьи импорты сейчас обрабатываются.
     // Пустой на входе: текущая (корневая) единица компиляции не имеет пути.
     let mut import_stack: Vec<String> = Vec::new();
+    construct_stages_within(
+        model,
+        upper,
+        search_paths,
+        &mut import_stack,
+        files,
+        specialize,
+    )
+}
+
+/// То же, что [`construct_stages`], но со **стеком импорта вызывающего**
+/// (фича 0296).
+///
+/// Нужна пути импорта: подключённый файл строится этими же стадиями, но обязан
+/// видеть стек, иначе цикл `a.takt → b.takt → a.takt` не обнаружится. Отдельная
+/// функция, а не параметр публичного входа, — чтобы корневой вызов не мог
+/// случайно передать чужой стек.
+///
+/// ⚠️ **Второго перечисления стадий в проекте нет и быть не должно** (фича
+/// 0296). Прежде путь импорта (`tree.rs::construct_model_impl`) нёс свою копию
+/// последовательности, и та отстала на три прохода: `collect_clock`,
+/// `specialize_instantiations`, `constify_parameters` не выполнялись для
+/// подключённого файла вовсе. Цена измерена: `SE-067`, `SE-068` и контракт
+/// `clock` через границу импорта **молчали**, а `--parameters=specialize`
+/// порождал невалидный C при нулевом коде возврата. Сторож — греп-тест
+/// `takt-lang/tests/semantic/stage_order_single_source_tests.rs`.
+pub(crate) fn construct_stages_within(
+    model: &Model,
+    upper: Option<Rc<RefCell<ModelNode>>>,
+    search_paths: &[String],
+    import_stack: &mut Vec<String>,
+    files: &mut FileTable,
+    specialize: bool,
+) -> Result<Rc<RefCell<ModelNode>>, Vec<Diagnostic>> {
     let ast = model;
     // Стадии 0–3 терминальны: одна диагностика оборачивается в список, чтобы
     // тип возврата был един для всех стадий.
     let one = |d: Diagnostic| vec![d];
-    let model = construct_model_stage0(model, upper, search_paths, &mut import_stack, files)
+    let model = construct_model_stage0(model, upper, search_paths, import_stack, files, specialize)
         .map_err(one)?;
     // Частота тактирования (фича 0134): собирается по АСД отдельным проходом —
     // она свойство единицы компиляции, а не отдельного элемента модели.

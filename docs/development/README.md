@@ -472,3 +472,6 @@
 | 0276-01 | 0276 | Диагностика семантики без кода и позиции | [0276-01-semantic-diagnostics-without-code.md](0276-01-semantic-diagnostics-without-code.md) |
 | 0277-01 | 0277 | Координата отказа цели — место употребления | [0277-01-expression-usage-position.md](0277-01-expression-usage-position.md) |
 | 0282-01 | 0282 | Собственная позиция формулы | [0282-01-formula-own-location.md](0282-01-formula-own-location.md) |
+| 0296-01 | 0296 | Одна воронка стадий для пути импорта | [0296-01-semantic-stages-single-source.md](0296-01-semantic-stages-single-source.md) |
+| 0296-02 | 0296 | Подъём частоты подключённого файла | [0296-02-semantic-stages-single-source.md](0296-02-semantic-stages-single-source.md) |
+| 0296-03 | 0296 | SE-120 — специализация модели из другого файла | [0296-03-semantic-stages-single-source.md](0296-03-semantic-stages-single-source.md) |
