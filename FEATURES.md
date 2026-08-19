@@ -76,7 +76,6 @@ to a billing issue`), а разблокировка биллинга — дей�
 | [0282](docs/features/0282-formula-own-location.md) | У формулы нет собственной позиции: два invariant неразличимы | — | семантика | 3 | СОЗДАНА |
 | [0296](docs/features/0296-semantic-stages-single-source.md) | Порядок стадий построения описан в двух местах | — | семантика | 3 | СОЗДАНА |
 | [0278](docs/features/0278-compact-implement-dead-branch.md) | semantic::extend::compact_implement в конвейере не вызывается | — | семантика | 4 | СОЗДАНА |
-| [0281](docs/features/0281-rust-enum-compare-literal.md) | Цель rust даёт невалидный код на сравнении перечисления с числом | — | генерация | 2 | СОЗДАНА |
 | [0299](docs/features/0299-rust-non-ascii-lowercase-name.md) | Цель rust: не-ASCII имя в нижнем регистре отвергается clippy | — | генерация | 2 | СОЗДАНА |
 | [0260](docs/features/0260-c-unused-struct-parameter.md) | Цель c эмитит структурный параметр даже там, где он не нужен | — | генерация | 3 | СОЗДАНА |
 | [0267](docs/features/0267-state-of-model-in-targets.md) | Проверку состояния под-модели переводят не все цели | — | генерация | 3 | СОЗДАНА |

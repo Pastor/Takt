@@ -90,14 +90,20 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
             Some(text) => Ok(text),
             None => match boolean_comparison(a, "==", b, scope)? {
                 Some(text) => Ok(text),
-                None => cond_binary(a, "==", b, scope),
+                None => match enum_comparison(a, "==", b, scope)? {
+                    Some(text) => Ok(text),
+                    None => cond_binary(a, "==", b, scope),
+                },
             },
         },
         ConditionNode::NotEqual(a, b) => match state_comparison(a, b, "!=", scope)? {
             Some(text) => Ok(text),
             None => match boolean_comparison(a, "!=", b, scope)? {
                 Some(text) => Ok(text),
-                None => cond_binary(a, "!=", b, scope),
+                None => match enum_comparison(a, "!=", b, scope)? {
+                    Some(text) => Ok(text),
+                    None => cond_binary(a, "!=", b, scope),
+                },
             },
         },
         ConditionNode::Less(a, b) => cond_binary(a, "<", b, scope),
@@ -326,6 +332,65 @@ fn boolean_comparison(
     } else {
         format!("(!{})", printed)
     }))
+}
+
+/// Печатает сравнение перечислимого операнда с ЧИСЛОМ — фича 0281.
+///
+/// Возвращает `None`, если форма не эта: тогда печатается обычное сравнение.
+///
+/// ## Зачем отдельная ветвь
+///
+/// В Takt вариант перечисления — число, и `ref Done: c = 1;` естественно.
+/// В Rust у `enum` числового представления в выражении нет, поэтому дословный
+/// перевод даёт `self.c == 1` — **`E0308`**, то есть модуль не компилируется
+/// вовсе; при этом `taktc` возвращал ноль. Присваивание ту же величину
+/// печатало верно (`self.c = Command::Go`) — цель восстанавливала вариант
+/// только в **одном** из двух мест.
+///
+/// Имя варианта строит `rust_expr::enum_variant_literal` — тот же носитель,
+/// которым пользуется присваивание: две копии этого правила разъехались бы
+/// (класс 0084/0193/0195), и разъезд был бы **молчаливым** ровно так, как этот.
+///
+/// ⚠️ Литерал ищется с обеих сторон: `c = 1` и `1 = c` одинаково законны.
+/// ⚠️ Сравнение с ИМЕНЕМ варианта (`c = Go`) сюда не попадает — это уже
+/// `ConditionNode::EnumVariant`, и печаталось оно верно всегда.
+fn enum_comparison(
+    a: &ConditionNode,
+    op: &str,
+    b: &ConditionNode,
+    scope: &Scope,
+) -> Result<Option<String>, Diagnostic> {
+    /// Имя перечисления по статическому типу операнда.
+    fn enum_name(cond: &ConditionNode) -> Option<String> {
+        match condition_type(cond) {
+            Some(TypeNode::Enum(name)) => Some(name),
+            _ => None,
+        }
+    }
+    /// Числовой литерал (в том числе в скобках).
+    fn number(cond: &ConditionNode) -> Option<i128> {
+        match cond {
+            ConditionNode::Number(n) => Some(*n),
+            ConditionNode::Parenthesis(inner) => number(inner),
+            _ => None,
+        }
+    }
+
+    let (operand, name, value) = match (number(a), number(b)) {
+        (None, Some(v)) => match enum_name(a) {
+            Some(name) => (a, name, v),
+            None => return Ok(None),
+        },
+        (Some(v), None) => match enum_name(b) {
+            Some(name) => (b, name, v),
+            None => return Ok(None),
+        },
+        _ => return Ok(None),
+    };
+
+    let printed = print_condition(operand, scope)?;
+    let variant = crate::generator::rust::rust_expr::enum_variant_literal(&name, value, scope)?;
+    Ok(Some(format!("({printed} {op} {variant})")))
 }
 
 /// Печатает `&`/`|`, приводя операнды к `bool`.

@@ -745,23 +745,7 @@ pub(crate) fn coerce_to(
 ) -> Result<String, Diagnostic> {
     match (target, value) {
         (TypeNode::Enum(enum_name), ExpressionNode::Number(n)) => {
-            let def = scope
-                .model
-                .search_enum(enum_name)
-                .ok_or_else(|| unsupported(&format!("перечисление '{}' не найдено", enum_name)))?;
-            let variant = def.variants.iter().find(|(_, v)| v == n).ok_or_else(|| {
-                // Значение вне набора вариантов — в C это молча легло бы в
-                // переменную, в Rust представить нечем. Диагностика честнее.
-                unsupported(&format!(
-                    "значение {} не соответствует ни одному варианту перечисления '{}'",
-                    n, enum_name
-                ))
-            })?;
-            Ok(format!(
-                "{}::{}",
-                rust_type_name(enum_name, def.loc)?,
-                rust_type_name(&variant.0, def.loc)?
-            ))
+            enum_variant_literal(enum_name, *n, scope)
         }
         // `bit`/`bool` в Takt принимает 0/1; в Rust это `false`/`true`.
         (TypeNode::Bit | TypeNode::Bool, ExpressionNode::Number(n)) => match n {
@@ -787,6 +771,42 @@ pub(crate) fn coerce_to(
         }
         _ => print_expression(value, scope),
     }
+}
+
+/// Имя варианта перечисления по его значению — ОДИН носитель на цель (0281).
+///
+/// Число, попавшее в позицию перечислимого типа, в Rust непредставимо: у
+/// `enum` нет числового представления в выражении. Восстановление варианта
+/// нужно **и присваиванию, и сравнению**: до фичи 0281 его знало только
+/// присваивание, и `ref Done: c = 1;` давало `self.c == 1` — `E0308`
+/// («expected `Command`, found integer») при нулевом коде возврата `taktc`.
+///
+/// ⚠️ Значение **вне** набора вариантов — честный отказ, а не догадка: в C оно
+/// молча легло бы в переменную, здесь представить его нечем.
+pub(crate) fn enum_variant_literal(
+    enum_name: &str,
+    value: i128,
+    scope: &Scope,
+) -> Result<String, Diagnostic> {
+    let def = scope
+        .model
+        .search_enum(enum_name)
+        .ok_or_else(|| unsupported(&format!("перечисление '{}' не найдено", enum_name)))?;
+    let variant = def
+        .variants
+        .iter()
+        .find(|(_, v)| *v == value)
+        .ok_or_else(|| {
+            unsupported(&format!(
+                "значение {} не соответствует ни одному варианту перечисления '{}'",
+                value, enum_name
+            ))
+        })?;
+    Ok(format!(
+        "{}::{}",
+        rust_type_name(enum_name, def.loc)?,
+        rust_type_name(&variant.0, def.loc)?
+    ))
 }
 
 /// Индексация массива — ОДНА функция на цель (фича 0263).
