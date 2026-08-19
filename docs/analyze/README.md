@@ -243,3 +243,4 @@
 | 0279 | Вложенная модель подключённого файла и подсказка | [0279-qualified-import-model-reference.md](0279-qualified-import-model-reference.md) | — (новая фича) |
 | 0264 | Координата судей тела — позиция употребления | [0264-body-judge-usage-position.md](0264-body-judge-usage-position.md) | — (новая фича) |
 | 0273 | Недостижимое ребро — предупреждение SE-116 | [0273-unreachable-edge-warning.md](0273-unreachable-edge-warning.md) | — (новая фича) |
+| 0276 | Диагностика семантики без кода и позиции | [0276-semantic-diagnostics-without-code.md](0276-semantic-diagnostics-without-code.md) | — (новая фича) |

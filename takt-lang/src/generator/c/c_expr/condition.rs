@@ -317,9 +317,15 @@ pub(in crate::generator::c) fn generate_condition_expr(
                                 if let Some(rc) = upper.as_ref().and_then(|w| w.upgrade()) {
                                     Name::from(rc)
                                 } else {
-                                    return Err(
-                                        "Неразрешённый owner порта при BitAccess в условии".into(),
-                                    );
+                                    // Воронка `CC-023` (0212): код, вид узла и
+                                    // позиция. Место пропущено при закрытии той
+                                    // фичи — найдено замером 0276.
+                                    return Err(crate::generator::c::c_unresolved::refuse(
+                                    crate::diagnostics::Location::Codegen,
+                                    crate::generator::c::c_unresolved::UnresolvedNode::PortOwner(
+                                        "доступ к биту в условии",
+                                    ),
+                                ));
                                 };
                             let cls = PortClass::from_type(ty);
                             let variant =

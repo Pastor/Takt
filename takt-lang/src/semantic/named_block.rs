@@ -29,7 +29,11 @@ pub fn resolve_named_blocks(
     for nb in named_blocks {
         let block = match nb {
             NamedCodeBlockDefinitionNode::None => {
-                return Err("Statement должен быть определен".into());
+                // Внутренний инвариант: неразрешённый блок сюда не доходит —
+                // его форму проверяет разбор именованных блоков (`SE-045`).
+                return Err(crate::semantic::internal::internal(
+                    "именованный блок без тела",
+                ));
             }
             NamedCodeBlockDefinitionNode::Unresolved(name, stmt) => {
                 let stmt =

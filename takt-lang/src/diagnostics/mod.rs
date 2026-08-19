@@ -143,19 +143,14 @@ pub struct Diagnostic {
     pub notes: Vec<Note>,
 }
 
-impl From<&str> for Diagnostic {
-    fn from(s: &str) -> Diagnostic {
-        Diagnostic {
-            file: None,
-            loc: Default::default(),
-            level: Level::Error,
-            ty: ErrorType::SematicError,
-            message: s.to_string(),
-            code: None,
-            notes: vec![],
-        }
-    }
-}
+// ⚠️ Конверсии `From<&str> for Diagnostic` больше НЕТ (фича 0276).
+//
+// Она строила диагностику без кода (`[?]` на печати) и с позицией
+// `Location::Source(0, 0, 0)` — то есть «начало первого файла»: координата
+// ЛОЖНАЯ, а не отсутствующая. Замер 2026-08-19 нашёл восемь таких мест в
+// семантике и два пропущенных в цели `c`; после их перевода на воронки
+// (`SE-117`, `SE-118`, `SE-119`, `CC-023`) конверсия удалена — теперь класс
+// запрещает ТИП, а не греп-сторож: строку в `Err(...)` компилятор не примет.
 
 impl Diagnostic {
     /// Создаёт отладочное сообщение.

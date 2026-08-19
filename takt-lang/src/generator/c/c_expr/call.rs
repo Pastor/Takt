@@ -44,7 +44,14 @@ pub(super) fn generate_function_call(
                     .as_ref()
                     .and_then(|w| w.upgrade())
                     .ok_or_else(|| -> Diagnostic {
-                        "Неразрешённый owner функции".into()
+                        // Воронка `CC-023` (0212); место пропущено при закрытии
+                        // той фичи — найдено замером 0276.
+                        crate::generator::c::c_unresolved::refuse(
+                            crate::diagnostics::Location::Codegen,
+                            crate::generator::c::c_unresolved::UnresolvedNode::Function(Some(
+                                name.to_string(),
+                            )),
+                        )
                     })?;
             let model_name = Name::from(model_rc);
             let func_name = format!("{}_{}", model_name.unique_camelcase(), name);

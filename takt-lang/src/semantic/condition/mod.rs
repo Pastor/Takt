@@ -174,7 +174,18 @@ pub fn resolve_condition(
                     Box::new(resolved_idx),
                 ));
             }
-            Err(format!("Массив '{}' не найден", name).as_str().into())
+            // SE-117 (фича 0276): у диагностики есть код и ПОЗИЦИЯ. Прежде она
+            // строилась конверсией `From<&str>` — код печатался `[?]`, а
+            // позиция вырождалась в `Source(0, 0, 0)`, то есть «начало первого
+            // файла»: сообщение указывало на строку 1 любого входа.
+            Err(Diagnostic::error(
+                id.loc,
+                format!(
+                    "'{name}' не является массивом: индексировать можно только переменную \
+                     массива, объявленную как '[T; N]'"
+                ),
+            )
+            .with_code("SE-117"))
         }
         ast::Condition::Parenthesis(_, cond) => Ok(ConditionNode::Parenthesis(Box::new(
             resolve_condition(cond, model.clone())?,

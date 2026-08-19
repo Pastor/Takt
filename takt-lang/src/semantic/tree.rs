@@ -871,7 +871,7 @@ fn construct_model_impl(
         crate::diagnostics::normalize(ds)
             .into_iter()
             .next()
-            .unwrap_or_else(|| "построение импортированного дерева не удалось".into())
+            .unwrap_or_else(|| super::internal::no_diagnostic("импорт дерева"))
     };
     use crate::semantic::stages::body_stages::{
         construct_model_stage4, construct_model_stage5, construct_model_stage6,
@@ -935,7 +935,7 @@ pub fn construct_model_with_files(
             crate::diagnostics::normalize(ds)
                 .into_iter()
                 .next()
-                .unwrap_or_else(|| "построение дерева не удалось".into())
+                .unwrap_or_else(|| super::internal::no_diagnostic("построение дерева"))
         })?;
     validate_model(model.clone())?;
     Ok(model)

@@ -237,3 +237,4 @@
 | [0279](./0279-qualified-import-model-reference.md) | Вложенная модель подключённого файла и подсказка | Draft | фича 0279 |
 | [0264](./0264-body-judge-usage-position.md) | Координата судей тела — позиция употребления | Draft | фича 0264 |
 | [0273](./0273-unreachable-edge-warning.md) | Недостижимое ребро — предупреждение SE-116 | Draft | фича 0273 |
+| [0276](./0276-semantic-diagnostics-without-code.md) | Диагностика семантики без кода и позиции | Draft | фича 0276 |
