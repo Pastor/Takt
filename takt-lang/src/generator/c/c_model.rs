@@ -714,9 +714,24 @@ fn generate_model_tick(
     Ok(())
 }
 
+/// Печатает `(void)main;`, если тело под-модели указателем на корень не
+/// пользуется (фича 0260).
+///
+/// У корневой модели параметра `main` нет вовсе — там заглушка не нужна.
+fn emit_unused_guard(printer: &mut Printer, body: &str, is_main: bool) {
+    if is_main {
+        return;
+    }
+    if crate::generator::c::c_params::is_unused(body, "main") {
+        printer
+            .ident(&crate::generator::c::c_params::unused_guard("main"))
+            .nl();
+    }
+}
+
 /// Генерирует все C-функции для модели: init, tick, reset, is_done.
 pub(super) fn generate_model_functions(
-    mut printer: &mut Printer,
+    printer: &mut Printer,
     model: &Element,
     map: &CMap,
 ) -> Result<(), Diagnostic> {
@@ -758,8 +773,15 @@ pub(super) fn generate_model_functions(
     //NOTICE: init
     printer.up();
     printer.ident("assert(0 != model);").nl();
-
-    generate_model_init(&mut printer, model, map)?;
+    // Тело печатается в буфер: по нему решается, нужна ли заглушка
+    // неиспользуемого параметра (фича 0260, разбор — `c_params`).
+    let mut init_body = String::new();
+    {
+        let mut buffered = printer.fork(&mut init_body);
+        generate_model_init(&mut &mut buffered, model, map)?;
+    }
+    emit_unused_guard(printer, &init_body, is_main);
+    printer.print(&init_body);
     printer.down();
     printer.print("}").nl().nl();
     printer
@@ -780,7 +802,13 @@ pub(super) fn generate_model_functions(
     if !is_main {
         printer.ident("assert(0 != main);").nl();
     }
-    generate_model_tick(&mut printer, model, map)?;
+    let mut tick_body = String::new();
+    {
+        let mut buffered = printer.fork(&mut tick_body);
+        generate_model_tick(&mut &mut buffered, model, map)?;
+    }
+    emit_unused_guard(printer, &tick_body, is_main);
+    printer.print(&tick_body);
     printer.down();
     printer.print("}").nl().nl();
     printer
@@ -820,8 +848,11 @@ pub(super) fn generate_model_functions(
         .nl();
     // Единственное терминальное состояние модели — всегда END
     let cond = format!("model->state == {}_END", name.unique_uppercase_snakecase());
+    printer.up();
+    // Тело `_is_done` указателем на корень не пользуется никогда — но параметр
+    // требует протокол вызова (фича 0260).
+    emit_unused_guard(printer, &cond, is_main);
     printer
-        .up()
         .ident("return ")
         .print(cond.as_str())
         .print(";")

@@ -6,6 +6,7 @@ static PidState PidLaw_pid_compute(const PidLaw *model, PidState p, double sp, d
 static PidState PidLaw_pid_init(const PidLaw *model, double kp, double ki, double kd, double ts, double lo, double hi);
 static PidState PidLaw_pid_reset(const PidLaw *model, PidState p);
 static PidState PidLaw_pid_compute(const PidLaw *model, PidState p, double sp, double pv) {
+    (void)model;
     PidState r = p;
     double err = sp - pv;
     double prop = p.kp * err;
@@ -31,6 +32,7 @@ static PidState PidLaw_pid_compute(const PidLaw *model, PidState p, double sp, d
 }
 
 static PidState PidLaw_pid_init(const PidLaw *model, double kp, double ki, double kd, double ts, double lo, double hi) {
+    (void)model;
     PidState p = {0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     p.kp = kp;
     p.ki = ki;
@@ -42,6 +44,7 @@ static PidState PidLaw_pid_init(const PidLaw *model, double kp, double ki, doubl
 }
 
 static PidState PidLaw_pid_reset(const PidLaw *model, PidState p) {
+    (void)model;
     PidState r = p;
     r.i_acc = 0.0;
     r.err_prev = 0.0;

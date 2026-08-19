@@ -242,3 +242,4 @@
 | [0282](./0282-formula-own-location.md) | Собственная позиция формулы | Draft | фича 0282 |
 | [0296](./0296-semantic-stages-single-source.md) | Порядок стадий построения — один носитель | Accepted | фича 0296 |
 | [0278](./0278-compact-implement-dead-branch.md) | Мёртвая упаковка последовательной композиции | Accepted | фича 0278 |
+| [0260](./0260-c-unused-struct-parameter.md) | Неиспользуемый параметр в порождённом C | Accepted | фича 0260 |

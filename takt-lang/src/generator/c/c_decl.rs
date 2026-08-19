@@ -233,6 +233,14 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
                         )?;
                         tmp_printer.down();
                     }
+                    // Указатель на состояние требует протокол вызова, но тело
+                    // не всегда им пользуется: без заглушки `cc -Wall -Wextra`
+                    // отвечает `-Wunused-parameter` (фича 0260).
+                    if crate::generator::c::c_params::is_unused(&code_block, "model") {
+                        definition.push_str("    ");
+                        definition.push_str(&crate::generator::c::c_params::unused_guard("model"));
+                        definition.push('\n');
+                    }
                     definition.push_str(&code_block);
                     definition.push_str("}\n");
                     local_funcs.push(definition);

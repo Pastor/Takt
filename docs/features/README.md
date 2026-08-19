@@ -272,7 +272,7 @@
 | [0257](./0257-lsp-workspace-cache.md) | Кэш рабочей области LSP по mtime | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0258](./0258-verify-unsupported-reason.md) | Verdict::Unsupported не различает причину отказа | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0259](./0259-book-builtin-functions.md) | Встроенные функции языка не описаны в документе book/ | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0260](./0260-c-unused-struct-parameter.md) | Цель c эмитит структурный параметр даже там, где он не нужен | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0260](./0260-c-unused-struct-parameter.md) | Цель c эмитит структурный параметр даже там, где он не нужен | [ADR](../adr/0260-c-unused-struct-parameter.md), [анализ](../analyze/0260-c-unused-struct-parameter.md), [отчёт](../reports/0260-c-unused-struct-parameter.md) | ГОТОВО |
 | [0261](./0261-module-size-warning-zone.md) | Гейт размера модуля молчит до отказа: жёлтой зоны нет | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0262](./0262-wide-bit-vector-c-rust.md) | [bit; N > 64] не переводят цели c и rust | [ADR](../adr/0262-wide-bit-vector-c-rust.md), [анализ](../analyze/0262-wide-bit-vector-c-rust.md), [отчёт](../reports/0262-wide-bit-vector-c-rust.md) | ГОТОВО |
 | [0263](./0263-rust-literal-index-cast.md) | Цель rust приводит к usize даже литеральный индекс | [ADR](../adr/0263-rust-literal-index-cast.md), [анализ](../analyze/0263-rust-literal-index-cast.md), [отчёт](../reports/0263-rust-literal-index-cast.md) | ГОТОВО |

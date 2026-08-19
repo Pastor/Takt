@@ -9,6 +9,7 @@ static bool FloatRegulatorFloatRegulator_is_done(const FloatRegulatorFloatRegula
 /// Функция инициализации модели FloatRegulator (FloatRegulator:FloatRegulator)
 void FloatRegulatorFloatRegulator_init(FloatRegulatorFloatRegulator *model, FloatRegulator *main) {
     assert(0 != model);
+    (void)main;
     model->state = FLOAT_REGULATOR_FLOAT_REGULATOR_INIT;
     model->half = 0.5;
     model->near = 9.5;
@@ -56,6 +57,7 @@ void FloatRegulatorFloatRegulator_reset(FloatRegulatorFloatRegulator *model, Flo
 
 /// Функция проверки терминального состояния модели FloatRegulator (FloatRegulator:FloatRegulator)
 bool FloatRegulatorFloatRegulator_is_done(const FloatRegulatorFloatRegulator *model, FloatRegulator *main) {
+    (void)main;
     return model->state == FLOAT_REGULATOR_FLOAT_REGULATOR_END;
 }
 
