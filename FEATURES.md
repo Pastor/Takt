@@ -83,7 +83,6 @@ to a billing issue`), а разблокировка биллинга — дей�
 | [0253](docs/features/0253-legacy-names-in-generated-code.md) | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | — | генерация | 4 | СОЗДАНА |
 | [0280](docs/features/0280-sv-mmio-bus-axi-wishbone.md) | Адаптеры шин AXI-Lite и Wishbone для цели sv-mmio | — | генерация | 4 | СОЗДАНА |
 | [0292](docs/features/0292-cc022-promise-without-emitter.md) | Код CC-022 обещан комментарием, но не эмитируется никем | — | генерация | 4 | СОЗДАНА |
-| [0295](docs/features/0295-format-element-comment-binding.md) | Печать элемента модели в обход привязки комментариев не запрещена | — | прочее | 2 | СОЗДАНА |
 | [0255](docs/features/0255-sim-diagnostic-codes-registry.md) | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | — | прочее | 3 | СОЗДАНА |
 | [0256](docs/features/0256-lsp-import-binding-kind.md) | Символ формы import { A } объявляется видом Model | — | прочее | 3 | СОЗДАНА |
 | [0258](docs/features/0258-verify-unsupported-reason.md) | Verdict::Unsupported не различает причину отказа | — | прочее | 3 | СОЗДАНА |
