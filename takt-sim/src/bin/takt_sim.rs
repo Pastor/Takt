@@ -222,11 +222,16 @@ fn format_diagnostics(
     format!("{prefix}:\n{}", messages.join("\n"))
 }
 
-/// Одна диагностика: `путь:строка:колонка: [КОД] сообщение`.
+/// Одна диагностика: `путь:строка:колонка: [КОД] сообщение` и её заметки.
 ///
 /// Позиция печатается общей для всех бинарников функцией
 /// (`takt_lang::diagnostics::position_prefix`) — формат позиции един у `taktc` и
 /// симулятора физически, а не по договорённости.
+///
+/// ⚠️ **Заметки — тем же общим носителем** (`format_notes`, фича 0279). Прежде
+/// их здесь не было вовсе: на одном входе `taktc` печатал сноску `SE-106` про
+/// вложенную модель подключённого файла — единственный указатель выхода, — а
+/// эталон молчал. Один вход, два разных объёма сведений.
 fn format_diagnostic(
     diag: &takt_lang::diagnostics::Diagnostic,
     files: &takt_lang::diagnostics::FileTable,
@@ -238,9 +243,10 @@ fn format_diagnostic(
         .map(|c| format!("[{c}] "))
         .unwrap_or_default();
     format!(
-        "{}{code}{}",
+        "{}{code}{}{}",
         takt_lang::diagnostics::position_prefix(&stamped),
-        stamped.message
+        stamped.message,
+        takt_lang::diagnostics::format_notes(&stamped)
     )
 }
 

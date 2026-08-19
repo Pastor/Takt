@@ -52,6 +52,7 @@ mod model_parameter_modes_tests;
 mod model_parameter_specialize_tests;
 mod model_parameter_tests;
 mod name_collision_tests;
+mod nested_import_hint_tests;
 mod nested_statement_resolution_tests;
 mod non_ascii_identifier_tests;
 mod port_access_contract_tests;

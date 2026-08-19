@@ -291,7 +291,7 @@
 | [0276](./0276-semantic-diagnostics-without-code.md) | Восемь безликих диагностик остались в семантике | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0277](./0277-expression-usage-position.md) | Отказ цели указывает на объявление переменной, а не на использование | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0278](./0278-compact-implement-dead-branch.md) | semantic::extend::compact_implement в конвейере не вызывается | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
-| [0279](./0279-qualified-import-model-reference.md) | Ссылка на вложенную модель подключённого файла невыразима | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0279](./0279-qualified-import-model-reference.md) | Ссылка на вложенную модель подключённого файла невыразима | [ADR](../adr/0279-qualified-import-model-reference.md), [анализ](../analyze/0279-qualified-import-model-reference.md), [отчёт](../reports/0279-qualified-import-model-reference.md) | ГОТОВО |
 | [0280](./0280-sv-mmio-bus-axi-wishbone.md) | Адаптеры шин AXI-Lite и Wishbone для цели sv-mmio | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0281](./0281-rust-enum-compare-literal.md) | Цель rust даёт невалидный код на сравнении перечисления с числом | [ADR](../adr/0281-rust-enum-compare-literal.md), [анализ](../analyze/0281-rust-enum-compare-literal.md), [отчёт](../reports/0281-rust-enum-compare-literal.md) | ГОТОВО |
 | [0282](./0282-formula-own-location.md) | У формулы нет собственной позиции: два invariant неразличимы | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
