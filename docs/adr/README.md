@@ -230,3 +230,4 @@
 | [0285](./0285-inferred-width-from-result.md) | Ширина выведенного типа берётся у результата | Accepted | фича 0285 |
 | [0287](./0287-wider-type-array-literal.md) | Расширение типов не знает именованных целых | Draft | фича 0287 |
 | [0262](./0262-wide-bit-vector-c-rust.md) | Широкий бит-вектор в целях c и rust | Draft | фича 0262 |
+| [0263](./0263-rust-literal-index-cast.md) | Приведение индекса к usize по нужде | Draft | фича 0263 |

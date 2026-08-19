@@ -461,3 +461,4 @@
 | 0287-01 | 0287 | Расширение типов не знает именованных целых | [0287-01-wider-type-array-literal.md](0287-01-wider-type-array-literal.md) |
 | 0262-01 | 0262 | Широкий бит-вектор в цели c | [0262-01-wide-bit-vector-c-rust.md](0262-01-wide-bit-vector-c-rust.md) |
 | 0262-02 | 0262 | Широкий бит-вектор в цели rust | [0262-02-wide-bit-vector-c-rust.md](0262-02-wide-bit-vector-c-rust.md) |
+| 0263-01 | 0263 | Приведение индекса к usize по нужде | [0263-01-rust-literal-index-cast.md](0263-01-rust-literal-index-cast.md) |

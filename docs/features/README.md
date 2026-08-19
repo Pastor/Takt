@@ -275,7 +275,7 @@
 | [0260](./0260-c-unused-struct-parameter.md) | Цель c эмитит структурный параметр даже там, где он не нужен | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0261](./0261-module-size-warning-zone.md) | Гейт размера модуля молчит до отказа: жёлтой зоны нет | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0262](./0262-wide-bit-vector-c-rust.md) | [bit; N > 64] не переводят цели c и rust | [ADR](../adr/0262-wide-bit-vector-c-rust.md), [анализ](../analyze/0262-wide-bit-vector-c-rust.md), [отчёт](../reports/0262-wide-bit-vector-c-rust.md) | ГОТОВО |
-| [0263](./0263-rust-literal-index-cast.md) | Цель rust приводит к usize даже литеральный индекс | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0263](./0263-rust-literal-index-cast.md) | Цель rust приводит к usize даже литеральный индекс | [ADR](../adr/0263-rust-literal-index-cast.md), [анализ](../analyze/0263-rust-literal-index-cast.md), [отчёт](../reports/0263-rust-literal-index-cast.md) | ГОТОВО |
 | [0264](./0264-body-judge-usage-position.md) | Координата судей тела указывает на объявление, а не на использование | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0265](./0265-book-svg-graphviz-version.md) | Сборка документа переписывает committed SVG при смене graphviz | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0266](./0266-port-in-declaration-initializer.md) | Чтение порта в инициализаторе объявления | SE-113 в общей воронке с SE-099; правило и обход общие: память до первого такта не определена | ГОТОВО |

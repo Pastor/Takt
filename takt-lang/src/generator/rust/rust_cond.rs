@@ -122,11 +122,13 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
             ))
         }
 
-        ConditionNode::ArraySubscript(var, index) => Ok(format!(
-            "{}[{} as usize]",
-            variable(&var.borrow(), scope)?,
-            print_condition(index, scope)?
-        )),
+        ConditionNode::ArraySubscript(var, index) => {
+            Ok(crate::generator::rust::rust_expr::subscript(
+                &variable(&var.borrow(), scope)?,
+                &print_condition(index, scope)?,
+                matches!(index.as_ref(), ConditionNode::Number(_)),
+            ))
+        }
 
         ConditionNode::BitAccess(inner, member) => {
             let base = print_condition(inner, scope)?;

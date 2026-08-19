@@ -522,10 +522,10 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
             crate::generator::rust::rust_bit::bit_access(inner, member, scope)
         }
 
-        ExpressionNode::ArraySubscript(var, index) => Ok(format!(
-            "{}[{} as usize]",
-            variable(&var.borrow(), scope)?,
-            print_expression(index, scope)?
+        ExpressionNode::ArraySubscript(var, index) => Ok(subscript(
+            &variable(&var.borrow(), scope)?,
+            &print_expression(index, scope)?,
+            matches!(index.as_ref(), ExpressionNode::Number(_)),
         )),
 
         ExpressionNode::Function(def, args) => call(def, args, scope),
@@ -786,6 +786,29 @@ pub(crate) fn coerce_to(
             Ok(crate::generator::rust::rust_bit::word_literal(*n, count))
         }
         _ => print_expression(value, scope),
+    }
+}
+
+/// Индексация массива — ОДНА функция на цель (фича 0263).
+///
+/// Приведение к `usize` печатается **по нужде**: индекс-переменная в него
+/// нуждается (типы Takt — `u8`…`i64`), а литерал уже выводится как `usize` по
+/// контексту, и лишнее `1 as usize` даёт `clippy::unnecessary_cast` — то есть
+/// **отказ** под `-D warnings`, теми же флагами, что стоят в гейте предкоммита.
+///
+/// ⚠️ Гейт этого не видел: в корпусе индексируют переменной (`arr[i]`), где
+/// приведение необходимо, а литеральных индексов там нет ни одного.
+///
+/// ⚠️ Отрицательный литерал сюда не доходит — его отсекает `SE-028` в
+/// семантике; иначе `self.arr[-1]` не скомпилировалось бы вовсе.
+///
+/// Носитель один на обоих печатников (выражения и условия): две копии этого
+/// правила разъехались бы — класс 0084/0193/0195.
+pub(crate) fn subscript(base: &str, index: &str, index_is_literal: bool) -> String {
+    if index_is_literal {
+        format!("{base}[{index}]")
+    } else {
+        format!("{base}[{index} as usize]")
     }
 }
 
