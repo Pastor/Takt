@@ -4,6 +4,7 @@
 //! проверяет расширение и возвращает содержимое вместе с полным путём к файлу.
 
 pub(in crate::semantic) mod adopt;
+pub(in crate::semantic) mod build;
 pub(in crate::semantic) mod select;
 
 use crate::diagnostics::Diagnostic;

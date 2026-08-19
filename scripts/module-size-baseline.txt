@@ -9,6 +9,6 @@
 # 1000 строк, обязан быть УДАЛЁН из реестра: иначе храповик провернётся назад.
 #
 # Формат: <строк> <путь от корня репозитория>
-1526 takt-lang/src/semantic/tree.rs
+1501 takt-lang/src/semantic/tree.rs
 1279 takt-lang/src/semantic/mod.rs
 1285 takt-lang/src/lib.rs
