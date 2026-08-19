@@ -25,15 +25,16 @@ END_VAR
 VAR CONSTANT
     DWELL_TICKS : USINT := 3;
 END_VAR
+    IF state = 0 THEN (* первый скан *)
+        moving := FALSE;
+        motor_up := FALSE;
+        motor_down := FALSE;
+        brake := TRUE;
+        doors := FALSE;
+        doors_open := FALSE;
+        state := 6; (* Waiting *)
+    END_IF;
     CASE state OF
-        0: (* INIT *)
-            moving := FALSE;
-            motor_up := FALSE;
-            motor_down := FALSE;
-            brake := TRUE;
-            doors := FALSE;
-            doors_open := FALSE;
-            state := 6; (* Waiting *)
         1: (* Boarding *)
             dwell := dwell + 1;
             IF dwell >= DWELL_TICKS THEN
