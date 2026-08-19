@@ -252,3 +252,4 @@
 | [0255](./0255-sim-diagnostic-codes-registry.md) | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | Accepted | фича 0255 |
 | [0256](./0256-lsp-import-binding-kind.md) | Символ формы import { A } объявляется видом Model | Accepted | фича 0256 |
 | [0258](./0258-verify-unsupported-reason.md) | Verdict::Unsupported не различает причину отказа | Accepted | фича 0258 |
+| [0259](./0259-book-builtin-functions.md) | Встроенные функции языка не описаны в документе book/ | Accepted | фича 0259 |

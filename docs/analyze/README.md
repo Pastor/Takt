@@ -258,3 +258,4 @@
 | 0255 | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | [0255-sim-diagnostic-codes-registry.md](0255-sim-diagnostic-codes-registry.md) | зависимостей нет; смежность с 0290 (документ) |
 | 0256 | Символ формы import { A } объявляется видом Model | [0256-lsp-import-binding-kind.md](0256-lsp-import-binding-kind.md) | зависимостей нет; замер уточнил числа кандидата |
 | 0258 | Verdict::Unsupported не различает причину отказа | [0258-verify-unsupported-reason.md](0258-verify-unsupported-reason.md) | зависимостей нет; замер нашёл недостижимую ветвь причины |
+| 0259 | Встроенные функции языка не описаны в документе book/ | [0259-book-builtin-functions.md](0259-book-builtin-functions.md) | зависимостей нет; прогон нашёл два дефекта поведения (кандидаты) |
