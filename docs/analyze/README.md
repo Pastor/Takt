@@ -257,3 +257,4 @@
 | 0292 | Код CC-022 обещан комментарием, но не эмитируется никем | [0292-cc022-promise-without-emitter.md](0292-cc022-promise-without-emitter.md) | зависимостей нет; замер кандидата опровергнут прогоном |
 | 0255 | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | [0255-sim-diagnostic-codes-registry.md](0255-sim-diagnostic-codes-registry.md) | зависимостей нет; смежность с 0290 (документ) |
 | 0256 | Символ формы import { A } объявляется видом Model | [0256-lsp-import-binding-kind.md](0256-lsp-import-binding-kind.md) | зависимостей нет; замер уточнил числа кандидата |
+| 0258 | Verdict::Unsupported не различает причину отказа | [0258-verify-unsupported-reason.md](0258-verify-unsupported-reason.md) | зависимостей нет; замер нашёл недостижимую ветвь причины |

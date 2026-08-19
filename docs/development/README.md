@@ -491,3 +491,4 @@
 | 0255-01 | 0255 | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | [0255-01-sim-diagnostic-codes-registry.md](0255-01-sim-diagnostic-codes-registry.md) |
 | 0255-02 | 0255 | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | [0255-02-sim-diagnostic-codes-registry.md](0255-02-sim-diagnostic-codes-registry.md) |
 | 0256-01 | 0256 | Символ формы import { A } объявляется видом Model | [0256-01-lsp-import-binding-kind.md](0256-01-lsp-import-binding-kind.md) |
+| 0258-01 | 0258 | Verdict::Unsupported не различает причину отказа | [0258-01-verify-unsupported-reason.md](0258-01-verify-unsupported-reason.md) |

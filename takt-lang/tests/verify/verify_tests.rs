@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use takt_lang::parse;
 use takt_lang::semantic::tree::construct_model;
-use takt_lang::verification::verify::Verdict;
+use takt_lang::verification::verify::{UnsupportedReason, Verdict};
 
 fn model_of(fixture: &str) -> Rc<RefCell<takt_lang::semantic::ModelNode>> {
     let path = format!("tests/data/verify/{fixture}");
@@ -86,7 +86,10 @@ fn reachability_violated_when_state_is_unreachable() {
 fn data_atom_is_reported_as_unsupported() {
     assert_eq!(
         verdict_of("atom_not_state.takt"),
-        Verdict::Unsupported(vec!["temp".to_string()]),
+        Verdict::Unsupported {
+            atoms: vec!["temp".to_string()],
+            reason: UnsupportedReason::UnknownAtom,
+        },
         "`temp` — переменная, а не состояние: в абстракции управления не проверяется"
     );
 }

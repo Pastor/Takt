@@ -17,4 +17,5 @@
 //! обязан вычищать из него `:` — после слияния имя потока несёт префикс модуля.
 
 mod ltl_tests;
+mod unsupported_reason_tests;
 mod verify_tests;

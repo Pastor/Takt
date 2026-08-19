@@ -51,6 +51,7 @@
 //! входы, на которых инструмент не завершался за минуты.
 
 use super::kripke::Kripke;
+use super::verify::UnsupportedReason;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionNode, ExpressionNode, ModelNode, VariableNode};
 use std::collections::{BTreeMap, BTreeSet};
@@ -74,14 +75,14 @@ pub const EDGE_LIMIT: u128 = 1_000_000;
 /// путь управления 0049 без изменений — критерий A7). Возвращает:
 ///
 /// - `Ok(kripke)` — построена Крипке `(состояние × оценка)` с точной разметкой;
-/// - `Err(atoms)` — отслеживание невозможно (атом не `cond`/булев `var`;
-///   предикат вне поддержанного подмножества; порт/`float` в предикате; потолок
-///   превышен; инициализатор не сворачивается). Имена — для `Verdict::Unsupported`.
+/// - `Err((atoms, reason))` — отслеживание невозможно. **Причина названа**
+///   (фича 0258): прежде возвращались одни имена, и CLI печатал все пять
+///   возможных причин разом, предлагая пользователю выбрать свою.
 pub fn build_data_kripke(
     model: &ModelNode,
     control: &Kripke,
     atoms: &BTreeSet<String>,
-) -> Result<Kripke, Vec<String>> {
+) -> Result<Kripke, (Vec<String>, UnsupportedReason)> {
     // 1. Разбор атомов: имя состояния | предикат над данными | неизвестный.
     let mut data_atoms: Vec<DataAtom> = Vec::new();
     let mut unsupported: BTreeSet<String> = BTreeSet::new();
@@ -99,7 +100,10 @@ pub fn build_data_kripke(
     // Атом, который не состояние и не поддержанный предикат, — честный отказ
     // (как чистый путь управления на атоме-переменной).
     if !unsupported.is_empty() {
-        return Err(unsupported.into_iter().collect());
+        return Err((
+            unsupported.into_iter().collect(),
+            UnsupportedReason::UnknownAtom,
+        ));
     }
 
     // 2. Сбор отслеживаемых переменных + валидация подмножества предикатов.
@@ -107,7 +111,10 @@ pub fn build_data_kripke(
     for da in &data_atoms {
         if !collect_tracked(model, &da.expr, &mut tracked) {
             // Предикат вне подмножества (арифметика, функция, порт, битдоступ…).
-            return Err(vec![da.name.clone()]);
+            return Err((
+                vec![da.name.clone()],
+                UnsupportedReason::PredicateOutsideSubset,
+            ));
         }
     }
 
@@ -116,16 +123,25 @@ pub fn build_data_kripke(
     for decl in tracked.values() {
         let Some(size) = domain_size(&decl.ty, model) else {
             // float/q/массив/структура — домен не перечислим.
-            return Err(data_atom_names(&data_atoms));
+            return Err((
+                data_atom_names(&data_atoms),
+                UnsupportedReason::DomainNotEnumerable,
+            ));
         };
         // Переполнение равносильно превышению потолка: считать нечего.
         let Some(d) = domain.checked_mul(size) else {
-            return Err(data_atom_names(&data_atoms));
+            return Err((
+                data_atom_names(&data_atoms),
+                UnsupportedReason::SizeOverLimit,
+            ));
         };
         domain = d;
     }
     if edges_exceed_limit(control, domain) {
-        return Err(data_atom_names(&data_atoms));
+        return Err((
+            data_atom_names(&data_atoms),
+            UnsupportedReason::SizeOverLimit,
+        ));
     }
 
     // 4. Материализация доменов (только после прохождения потолка).
@@ -133,10 +149,18 @@ pub fn build_data_kripke(
     for (name, decl) in &tracked {
         let values = domain_values(&decl.ty, model);
         let Some(init) = fold_expr(&decl.init) else {
-            return Err(data_atom_names(&data_atoms)); // инициализатор не сворачивается
+            // Инициализатор не сворачивается в константу.
+            return Err((
+                data_atom_names(&data_atoms),
+                UnsupportedReason::InitialValueUnknown,
+            ));
         };
         let Some(init_idx) = values.iter().position(|v| *v == init) else {
-            return Err(data_atom_names(&data_atoms)); // нач. значение вне домена
+            // Начальное значение вне домена своего типа.
+            return Err((
+                data_atom_names(&data_atoms),
+                UnsupportedReason::InitialValueUnknown,
+            ));
         };
         order.push(TrackedVar {
             name: name.clone(),
@@ -164,7 +188,12 @@ pub fn build_data_kripke(
                 }
                 Some(false) => {}
                 // Валидация п.2 гарантирует тотальность; None — страховка.
-                None => return Err(vec![da.name.clone()]),
+                None => {
+                    return Err((
+                        vec![da.name.clone()],
+                        UnsupportedReason::PredicateOutsideSubset,
+                    ));
+                }
             }
         }
         data_true.push(here);
@@ -502,7 +531,10 @@ mod tests {
     use crate::{parse, parse_ltl_property};
 
     /// Строит Крипке данных для φ над моделью `src` (или `Err`, если не вышло).
-    fn data_kripke_of(src: &str, phi_src: &str) -> Result<Kripke, Vec<String>> {
+    fn data_kripke_of(
+        src: &str,
+        phi_src: &str,
+    ) -> Result<Kripke, (Vec<String>, UnsupportedReason)> {
         let (ast, _) = parse(src, 0).unwrap();
         let model = construct_model(&ast, None, &[]).unwrap();
         let m = model.borrow();
@@ -540,7 +572,7 @@ mod tests {
                    start A { ref B; } state B { ref A; }";
         let v = verdict(src, "G !Hot");
         assert!(
-            !matches!(v, Verdict::Unsupported(_)),
+            !matches!(v, Verdict::Unsupported { .. }),
             "предикат над данными обязан дать вердикт, получено {v:?}"
         );
     }
@@ -614,9 +646,18 @@ mod tests {
                    cond P = a <= b & b <= c; \
                    start A { ref A; }";
         let v = verdict(src, "G P");
+        // Причина названа вердиктом (фича 0258): без неё «не проверено»
+        // приходило одним сообщением со списком ВСЕХ причин, а на этом самом
+        // входе первая строка утверждала «атом не отслеживаемый» — ложь.
         assert!(
-            matches!(v, Verdict::Unsupported(_)),
-            "три u8 превышают потолок — ожидался Unsupported, получено {v:?}"
+            matches!(
+                v,
+                Verdict::Unsupported {
+                    reason: UnsupportedReason::SizeOverLimit,
+                    ..
+                }
+            ),
+            "три u8 превышают потолок — ожидался SizeOverLimit, получено {v:?}"
         );
     }
 
@@ -657,7 +698,7 @@ mod tests {
         let started = std::time::Instant::now();
         let v = verdict(&src, &phi);
         assert!(
-            matches!(v, Verdict::Unsupported(_)),
+            matches!(v, Verdict::Unsupported { .. }),
             "рёбер ≈ 5 × 10⁷ — ожидался Unsupported, получено {v:?}"
         );
         // Грубый предохранитель, а не порог: отказ обязан прийти ДО построения,
@@ -716,7 +757,13 @@ mod tests {
         );
     }
 
-    /// A3: `float` в предикате → `Unsupported` (домен не перечислим, правило 5).
+    /// A3: `float` в предикате → `Unsupported`.
+    ///
+    /// ⚠️ Причина — **`PredicateOutsideSubset`, а не `DomainNotEnumerable`**
+    /// (замер фичи 0258, 2026-08-19): неперечислимый тип отсекается раньше, на
+    /// шаге 2, — `collect_tracked` не пускает такой предикат в отслеживаемые.
+    /// Тем же путём уходят `q`, массив и структура; ветвь `domain_size == None`
+    /// (шаг 3) сегодня **недостижима** и остаётся защитной.
     #[test]
     fn float_predicate_is_unsupported() {
         let src = "var x: float := 0.0; \
@@ -724,8 +771,15 @@ mod tests {
                    start A { ref A; }";
         let v = verdict(src, "G P");
         assert!(
-            matches!(v, Verdict::Unsupported(_)),
-            "float не перечислим — ожидался Unsupported, получено {v:?}"
+            matches!(
+                v,
+                Verdict::Unsupported {
+                    reason: UnsupportedReason::PredicateOutsideSubset,
+                    ..
+                }
+            ),
+            "float отсекается подмножеством предикатов — ожидался \
+             PredicateOutsideSubset, получено {v:?}"
         );
     }
 
@@ -745,7 +799,14 @@ mod tests {
     fn unknown_atom_is_unsupported() {
         let src = "start A { ref A; }";
         let v = verdict(src, "G nosuch");
-        assert!(matches!(v, Verdict::Unsupported(names) if names == vec!["nosuch".to_string()]));
+        assert!(
+            matches!(
+                v,
+                Verdict::Unsupported { ref atoms, reason: UnsupportedReason::UnknownAtom }
+                    if *atoms == vec!["nosuch".to_string()]
+            ),
+            "опечатка в имени атома — ожидался UnknownAtom, получено {v:?}"
+        );
     }
 
     /// Начальная вершина несёт оценку инициализаторов: `temp := 7` → в стартовой
