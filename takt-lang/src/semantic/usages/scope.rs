@@ -50,8 +50,17 @@ pub enum SymbolKind {
     EnumVariant,
     /// Структурный тип (`struct`).
     Struct,
-    /// Модель (`model`) либо имя, введённое `import`.
+    /// Модель (`model`) либо имя, введённое `import "путь" as Имя;`.
     Model,
+    /// Имя, введённое выборочным импортом (`import { a, b as c } from "…";`).
+    ///
+    /// ⚠️ Вид объявления в ИСТОЧНИКЕ этому слою неизвестен и известен быть не
+    /// может: `collect_usages` работает по одному файлу, а объявление живёт в
+    /// соседнем. Поэтому такой символ отвечает на ссылку в **любом**
+    /// пространстве имён — см. [`SymbolKind::matches`]. Прежде он объявлялся
+    /// видом [`SymbolKind::Model`], и вхождения в теле (`meas := …`) с ним не
+    /// связывались вовсе: пространства `Model` и `Value` разные (фича 0256).
+    Imported,
 }
 
 impl SymbolKind {
@@ -70,7 +79,21 @@ impl SymbolKind {
             Self::TypeAlias | Self::Enum | Self::Struct => Namespace::Type,
             Self::EnumVariant => Namespace::Value,
             Self::Model => Namespace::Model,
+            // Собственного пространства у выборочного импорта нет: он
+            // подставляет объявление чужого файла. Поиск идёт через `matches`.
+            Self::Imported => Namespace::Value,
         }
+    }
+
+    /// Отвечает ли символ на ссылку, ищущую имя в пространстве `ns`?
+    ///
+    /// Для всех видов это равенство пространств; исключение —
+    /// [`SymbolKind::Imported`], чей вид задан **чужим** файлом и здесь
+    /// неизвестен: он подходит любому пространству. Ошибка такого допущения
+    /// односторонняя — лишняя связь внутри одного файла, где имя и так занято
+    /// импортом, а не потерянная связь (фича 0256).
+    pub(super) fn matches(self, ns: Namespace) -> bool {
+        matches!(self, Self::Imported) || self.namespace() == ns
     }
 }
 
@@ -174,7 +197,7 @@ impl Scopes {
                     .get(name)?
                     .iter()
                     .rev()
-                    .find(|s| s.kind.namespace() == ns)
+                    .find(|s| s.kind.matches(ns))
                     .copied()
             })
     }
@@ -201,7 +224,7 @@ impl Scopes {
             .get(name)?
             .iter()
             .rev()
-            .find(|s| s.kind.namespace() == ns)
+            .find(|s| s.kind.matches(ns))
             .copied()
     }
 

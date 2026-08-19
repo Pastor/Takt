@@ -215,3 +215,4 @@
 | 0253 | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | [0253-legacy-names-in-generated-code.md](0253-legacy-names-in-generated-code.md) | ГОТОВО |
 | 0292 | Код CC-022 обещан комментарием, но не эмитируется никем | [0292-cc022-promise-without-emitter.md](0292-cc022-promise-without-emitter.md) | ГОТОВО |
 | 0255 | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | [0255-sim-diagnostic-codes-registry.md](0255-sim-diagnostic-codes-registry.md) | ГОТОВО |
+| 0256 | Символ формы import { A } объявляется видом Model | [0256-lsp-import-binding-kind.md](0256-lsp-import-binding-kind.md) | ГОТОВО |

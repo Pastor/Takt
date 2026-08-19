@@ -16,6 +16,7 @@
 //! ⚠️ Набор, строящий временный каталог по имени потока (инвариант фичи 0190),
 //! обязан вычищать из него `:` — после слияния имя потока несёт префикс модуля.
 
+mod import_binding_kind_tests;
 mod lsp_definition_tests;
 mod lsp_document_symbol_tests;
 mod lsp_formatting_conformance_tests;
