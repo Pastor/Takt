@@ -271,7 +271,7 @@
 | [0256](./0256-lsp-import-binding-kind.md) | Символ формы import { A } объявляется видом Model | [ADR](../adr/0256-lsp-import-binding-kind.md), [анализ](../analyze/0256-lsp-import-binding-kind.md), [отчёт](../reports/0256-lsp-import-binding-kind.md) | ГОТОВО |
 | [0257](./0257-lsp-workspace-cache.md) | Кэш рабочей области LSP по mtime | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0258](./0258-verify-unsupported-reason.md) | Verdict::Unsupported не различает причину отказа | [ADR](../adr/0258-verify-unsupported-reason.md), [анализ](../analyze/0258-verify-unsupported-reason.md), [отчёт](../reports/0258-verify-unsupported-reason.md) | ГОТОВО |
-| [0259](./0259-book-builtin-functions.md) | Встроенные функции языка не описаны в документе book/ | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0259](./0259-book-builtin-functions.md) | Встроенные функции языка не описаны в документе book/ | [ADR](../adr/0259-book-builtin-functions.md), [анализ](../analyze/0259-book-builtin-functions.md), [отчёт](../reports/0259-book-builtin-functions.md) | ГОТОВО |
 | [0260](./0260-c-unused-struct-parameter.md) | Цель c эмитит структурный параметр даже там, где он не нужен | [ADR](../adr/0260-c-unused-struct-parameter.md), [анализ](../analyze/0260-c-unused-struct-parameter.md), [отчёт](../reports/0260-c-unused-struct-parameter.md) | ГОТОВО |
 | [0261](./0261-module-size-warning-zone.md) | Гейт размера модуля молчит до отказа: жёлтой зоны нет | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0262](./0262-wide-bit-vector-c-rust.md) | [bit; N > 64] не переводят цели c и rust | [ADR](../adr/0262-wide-bit-vector-c-rust.md), [анализ](../analyze/0262-wide-bit-vector-c-rust.md), [отчёт](../reports/0262-wide-bit-vector-c-rust.md) | ГОТОВО |
