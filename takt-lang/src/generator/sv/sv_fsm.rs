@@ -54,8 +54,7 @@ use crate::generator::sv::sv_stmt::{
 use crate::generator::sv::sv_time;
 use crate::generator::sv::sv_type::{enum_width, sv_enum_type_name, sv_type};
 use crate::semantic::minimap::{Element, Name, StateExtend};
-use crate::semantic::type_node::TypeNode;
-use crate::semantic::{ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode, VariableNode};
+use crate::semantic::{FunctionDefinitionNode, ModelNode, StateNode, VariableNode};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -241,60 +240,6 @@ fn var_signal_name(model: &Name, var: &str) -> String {
     format!("{}_{}", model.unique_lowercase_snakecase(), var)
 }
 
-/// Значение сигнала в ветви сброса по инициализирующему выражению.
-///
-/// Единая точка для **переменной модели** и для **начального значения выходного
-/// порта** (фича 0187, задача 04): и то и другое ложится в одну и ту же цепь
-/// сброса, поэтому правила печати литерала обязаны совпадать. Разъехавшись, они
-/// дали бы порту и переменной разное значение при одном и том же тексте
-/// инициализатора — расхождение, которое ни verilator, ни yosys не заметят.
-///
-/// `what` — родительный падеж описания места (`переменной 'x'`, `порта 'led'`):
-/// подставляется в диагностику `SV-002`.
-///
-/// # Ошибки
-/// [`SV-002`](sv002) — выражение не является константой: ветвь сброса
-/// синтезируется в цепь сброса триггеров и выражений не вычисляет.
-fn reset_value(
-    expr: &ExpressionNode,
-    ty: &TypeNode,
-    enums: &BTreeMap<String, Vec<(String, i128)>>,
-    what: &str,
-    loc: Location,
-) -> Result<String, Diagnostic> {
-    Ok(match expr {
-        // Значение перечисления приходит ЧИСЛОМ (`command := Up` — это
-        // `Number(2)`), а перечисления SV строго типизированы: без
-        // восстановления варианта ветвь сброса дала бы `%Error-ENUMVALUE`. Та
-        // же ловушка описана для цели `rust`.
-        ExpressionNode::Number(n) => sv_const::enum_literal(ty, *n, enums)
-            // Широкое значение сброса — размерной формой по ширине регистра
-            // (фича 0157): голое десятичное больше `i32::MAX` даёт
-            // `WIDTHEXPAND`.
-            .or_else(|| super::sv_type::sized_literal(*n, ty))
-            .unwrap_or_else(|| n.to_string()),
-        ExpressionNode::Bool(b) => if *b { "1'b1" } else { "1'b0" }.to_string(),
-        // Литерал длительности (фича 0183) — константа в **миллисекундах**: тип
-        // `duration` в целях есть беззнаковый вектор миллисекунд, поэтому и
-        // значение сброса такое же.
-        ExpressionNode::Duration(nanos) => {
-            crate::semantic::duration::value_millis(*nanos, loc, &format!("инициализатор {what}"))?
-                .to_string()
-        }
-        // Умолчание без инициализатора: регистр обязан иметь значение сброса —
-        // «неинициализированного» триггера не бывает.
-        ExpressionNode::None => "'0".to_string(),
-        _ => {
-            return Err(sv002(&format!(
-                "инициализатор {}: ветвь сброса синтезируется в цепь сброса \
-                 триггеров и выражений не вычисляет — допустима только \
-                 константа",
-                what
-            )));
-        }
-    })
-}
-
 /// Варианты перечисления состояний модели: сами состояния плюс `END`.
 ///
 /// `INIT` не добавляется — его в цели `sv` не существует (см. шапку модуля).
@@ -394,12 +339,13 @@ impl Fsm {
                     .and_then(|args| args.iter().find(|a| a.name == *var_name))
                     .map(|a| a.value.clone());
                 let expr = arg_expr.as_ref().unwrap_or(expr);
-                let reset = reset_value(
+                let reset = sv_const::reset_value(
                     expr,
                     ty,
                     &fsm.enums,
                     &format!("переменной '{var_name}'"),
                     *loc,
+                    map.root_model_node().as_ref(),
                 )?;
                 fsm.registered.insert(signal.clone());
                 fsm.regs.push(Reg {
@@ -461,12 +407,13 @@ impl Fsm {
                 name: port.name.clone(),
                 prefix: port.ty.prefix.clone(),
                 suffix: port.ty.suffix.clone(),
-                reset: reset_value(
+                reset: sv_const::reset_value(
                     &port.init,
                     &port.ty_node,
                     &fsm.enums,
                     &format!("порта '{}'", port.name),
                     port.loc,
+                    map.root_model_node().as_ref(),
                 )?,
                 declare_reg: false,
             });
@@ -483,12 +430,13 @@ impl Fsm {
                 let ty = crate::generator::sv::sv_mmio::port_sv_type(port)?;
                 let name = crate::generator::sv::sv_mmio::port_signal_name(port).to_string();
                 fsm.registered.insert(name.clone());
-                let reset = reset_value(
+                let reset = sv_const::reset_value(
                     &port.init,
                     &port.ty,
                     &fsm.enums,
                     &format!("порта '{}'", port.name),
                     port.loc,
+                    map.root_model_node().as_ref(),
                 )?;
                 fsm.regs.push(Reg {
                     name,

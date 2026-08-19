@@ -481,3 +481,4 @@
 | 0267-01 | 0267 | Перевод формы в целях sv | [0267-01-state-of-model-in-targets.md](0267-01-state-of-model-in-targets.md) |
 | 0267-02 | 0267 | Точные отказы rust и st | [0267-02-state-of-model-in-targets.md](0267-02-state-of-model-in-targets.md) |
 | 0303-01 | 0303 | Рёбра состояния-композиции в целях | [0303-01-composition-state-conditional-edge.md](0303-01-composition-state-conditional-edge.md) |
+| 0286-01 | 0286 | Вычислимое приведение в общем слое и цели sv | [0286-01-sv-const-initializer-expression.md](0286-01-sv-const-initializer-expression.md) |
