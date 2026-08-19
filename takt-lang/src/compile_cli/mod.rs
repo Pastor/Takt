@@ -452,6 +452,7 @@ fn report_simple_result(
     result: Result<Vec<crate::diagnostics::Diagnostic>, crate::diagnostics::Diagnostic>,
     target: &str,
     options: &CompileOptions,
+    files: &crate::diagnostics::FileTable,
 ) {
     let warnings = match result {
         Ok(warnings) => warnings,
@@ -460,10 +461,10 @@ fn report_simple_result(
             process::exit(1);
         }
     };
-    // Реестр здесь — только корневой файл: цель строит своё дерево внутри и
-    // таблицу наружу не отдаёт (та же граница, что у `report_hal_result`).
-    let files = crate::diagnostics::FileTable::new(&options.input_file);
-    print_warnings(&warnings, &files, options.quiet);
+    // Реестр приходит снаружи — тот же, что у `report_hal_result` (фича 0275):
+    // в нём есть вход и карта адресов. Предупреждение импортированного файла
+    // остаётся без префикса — граница фичи 0228.
+    print_warnings(&warnings, files, options.quiet);
     if options.quiet {
         return;
     }
@@ -491,14 +492,18 @@ fn report_hal_result(
     result: Result<Vec<crate::diagnostics::Diagnostic>, crate::diagnostics::Diagnostic>,
     target: &str,
     options: &CompileOptions,
+    files: &crate::diagnostics::FileTable,
 ) {
     match result {
         Ok(warnings) => {
-            // Реестр здесь — только корневой файл: цель строит своё дерево внутри
-            // и таблицу наружу не отдаёт. Предупреждение своего файла получит
-            // позицию, импортированного — останется без префикса (как прежде).
-            let files = crate::diagnostics::FileTable::new(&options.input_file);
-            print_warnings(&warnings, &files, options.quiet);
+            // Реестр приходит СНАРУЖИ (фича 0275): в нём зарегистрированы вход и
+            // карта адресов, поэтому предупреждение карты (`SE-050`) печатается
+            // со своим путём. Прежде здесь заводился свой реестр из одного
+            // корневого файла, и координата карты выдавалась за координату
+            // модели. Предупреждение импортированного файла по-прежнему остаётся
+            // без префикса: цель строит своё дерево внутри и таблицу наружу не
+            // отдаёт (граница фичи 0228).
+            print_warnings(&warnings, files, options.quiet);
             if !options.quiet {
                 eprintln!(
                     "Скомпилировано: {} → {}/ ({})",
@@ -539,6 +544,13 @@ pub fn run_compile(args: &[String]) -> i32 {
     // Внешняя карта адресов (фича 0020): разбор один раз. В режиме `c-hal` карта
     // участвует в разрешении адресов (compile_to_c_hal); для остальных целей —
     // только информационные предупреждения об оверлее/висячих записях (0020-03).
+    // Реестр файлов заводится ЗДЕСЬ, до разбора карты: её записи несут свои
+    // координаты, и без собственного номера файла они печатались бы по тексту
+    // модели (фича 0275). Прежде карта разбиралась с `file_no = 0` — тем же
+    // номером, что и корневой `.takt`, — и предупреждение `SE-050` указывало
+    // строку модели, которой не касалось; на кириллице печать вовсе падала
+    // паникой «byte index … is not a char boundary».
+    let mut files = crate::diagnostics::FileTable::new(&options.input_file);
     let external_entries: Vec<crate::AddressMapEntry> = if let Some(map_path) = &options.address_map
     {
         let map_src = match fs::read_to_string(map_path) {
@@ -548,7 +560,8 @@ pub fn run_compile(args: &[String]) -> i32 {
                 return 1;
             }
         };
-        match crate::parse_address_map(&map_src, 0) {
+        let map_file_no = files.add(map_path);
+        match crate::parse_address_map(&map_src, map_file_no) {
             Ok(entries) => entries,
             Err(diags) => {
                 for d in diags {
@@ -609,7 +622,7 @@ pub fn run_compile(args: &[String]) -> i32 {
     // Реестр файлов, а не однодневка `construct_model` (фича 0228): без него
     // предупреждение не знает своего пути, а `position_prefix` без пути отдаёт
     // пустую строку — координата в `loc` есть, но до пользователя не доезжает.
-    let mut files = crate::diagnostics::FileTable::new(&options.input_file);
+    // Создан выше — вместе с регистрацией карты адресов (фича 0275).
     if let Some((ast, model)) = crate::parse(&source, 0).ok().and_then(|(ast, _)| {
         crate::semantic::tree::construct_model_with_files(
             &ast,
@@ -664,6 +677,7 @@ pub fn run_compile(args: &[String]) -> i32 {
                 ),
                 "c-hal",
                 &options,
+                &files,
             );
         }
         "c" => {
@@ -718,6 +732,7 @@ pub fn run_compile(args: &[String]) -> i32 {
                 ),
                 "plantuml",
                 &options,
+                &files,
             );
         }
         "st" => {
@@ -731,6 +746,7 @@ pub fn run_compile(args: &[String]) -> i32 {
                 ),
                 "st",
                 &options,
+                &files,
             );
         }
         "st-at" => {
@@ -746,6 +762,7 @@ pub fn run_compile(args: &[String]) -> i32 {
                 ),
                 "st-at",
                 &options,
+                &files,
             );
         }
         "rust" => {
@@ -759,6 +776,7 @@ pub fn run_compile(args: &[String]) -> i32 {
                 ),
                 "rust",
                 &options,
+                &files,
             );
         }
         "sv" => {
@@ -772,6 +790,7 @@ pub fn run_compile(args: &[String]) -> i32 {
                 ),
                 "sv",
                 &options,
+                &files,
             );
         }
         "sv-mmio" => {
@@ -787,6 +806,7 @@ pub fn run_compile(args: &[String]) -> i32 {
                 ),
                 "sv-mmio",
                 &options,
+                &files,
             );
         }
         t => {
