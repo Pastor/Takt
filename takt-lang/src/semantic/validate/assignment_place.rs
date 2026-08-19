@@ -71,10 +71,14 @@ use crate::semantic::{ExpressionNode, VariableNode};
 ///
 /// Возвращает **все** нарушения (накопительно, как `literal_range`, фича 0157):
 /// редактор подчёркивает каждое, а не первое.
-pub(super) fn check_expression(expr: &ExpressionNode, position: Position) -> Vec<Diagnostic> {
+pub(super) fn check_expression(
+    expr: &ExpressionNode,
+    position: Position,
+    stmt_loc: Location,
+) -> Vec<Diagnostic> {
     let mut found = Vec::new();
     if position == Position::Statement {
-        collect(expr, &mut found);
+        collect(expr, stmt_loc, &mut found);
     }
     found
 }
@@ -88,14 +92,14 @@ pub(super) fn check_expression(expr: &ExpressionNode, position: Position) -> Vec
 /// исчерпаемости стережёт [`classify`] — место, где новый узел обязан получить
 /// решение «это хранилище или нет».
 #[allow(clippy::wildcard_enum_match_arm)]
-fn collect(expr: &ExpressionNode, found: &mut Vec<Diagnostic>) {
+fn collect(expr: &ExpressionNode, stmt_loc: Location, found: &mut Vec<Diagnostic>) {
     match expr {
         ExpressionNode::Assign(left, _) => {
-            if let Some(diagnostic) = judge(left, expr) {
+            if let Some(diagnostic) = judge(left, expr, stmt_loc) {
                 found.push(diagnostic);
             }
         }
-        ExpressionNode::Parenthesis(inner) => collect(inner, found),
+        ExpressionNode::Parenthesis(inner) => collect(inner, stmt_loc, found),
         _ => {}
     }
 }
@@ -113,18 +117,24 @@ enum Place {
     Silent,
 }
 
-/// Позиция диагностики: у левой части, а при её отсутствии — у присваивания
-/// целиком.
+/// Позиция диагностики: **оператор**, а при его отсутствии — что найдётся в
+/// выражении.
 ///
-/// ⚠️ **Координата здесь скудна, и это замер, а не догадка.** У переменной и
-/// функции `ExpressionNode::loc()` отдаёт позицию **объявления**, а не
-/// использования: позиции вхождений живут отдельным слоем `semantic::usages`
-/// (фича 0131) и в понижённом дереве тела отсутствуют. У чистого литерала
-/// (`5 := 2;`) позиции нет вовсе — `Location::Builtin`. Запасной ход через
-/// присваивание целиком подхватывает координату правой части, если она есть;
-/// когда и там литерал, сообщение остаётся без префикса. Соседний судья
-/// `SE-095` живёт с тем же ограничением (`Location::Codegen` в `target_of`).
-fn where_to_point(left: &ExpressionNode, whole: &ExpressionNode) -> Location {
+/// ⚠️ **Координата выражения врёт, и это замер, а не догадка** (фича 0264).
+/// У переменной и функции `ExpressionNode::loc()` отдаёт позицию
+/// **объявления**: позиции вхождений живут отдельным слоем `semantic::usages`
+/// (0131) и в понижённом дереве тела отсутствуют. Поэтому `f(n) := 1;` в
+/// строке 10 указывал на строку 3, где объявлена `f`, — **чужая верная**
+/// координата, которая выглядит достоверной; а у `5 := 2;` координаты не было
+/// вовсе, и сообщение печаталось без префикса пути.
+///
+/// Позиция оператора приходит из АСД (`StatementNode::Expression` несёт её с
+/// фичи 0264) и указывает на строку употребления. Запасной ход через выражение
+/// сохранён для мест, где судью зовут вне оператора-выражения.
+fn where_to_point(left: &ExpressionNode, whole: &ExpressionNode, stmt_loc: Location) -> Location {
+    if !matches!(stmt_loc, Location::Builtin) {
+        return stmt_loc;
+    }
     let found = left.loc();
     if matches!(found, Location::Builtin) {
         whole.loc()
@@ -134,8 +144,8 @@ fn where_to_point(left: &ExpressionNode, whole: &ExpressionNode) -> Location {
 }
 
 /// Выносит вердикт по левой части: `None` — место законно.
-fn judge(left: &ExpressionNode, whole: &ExpressionNode) -> Option<Diagnostic> {
-    let loc = where_to_point(left, whole);
+fn judge(left: &ExpressionNode, whole: &ExpressionNode, stmt_loc: Location) -> Option<Diagnostic> {
+    let loc = where_to_point(left, whole, stmt_loc);
     match classify(left) {
         Err(kind) => Some(
             Diagnostic::error(

@@ -384,7 +384,7 @@ fn check_enum_stmt(
     out: &mut Vec<Diagnostic>,
 ) {
     match stmt {
-        StatementNode::Expression(expr) => check_enum_expr(expr, model, out),
+        StatementNode::Expression(expr, _) => check_enum_expr(expr, model, out),
         StatementNode::Block(stmts) => {
             for s in stmts {
                 check_enum_stmt(s, model, out);

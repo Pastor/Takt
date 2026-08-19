@@ -776,7 +776,7 @@ mod tests {
         use crate::semantic::StatementNode as S;
         match stmt {
             S::Block(items) => items.iter().find_map(assignment_rhs),
-            S::Expression(expr) => match &**expr {
+            S::Expression(expr, _) => match &**expr {
                 ExpressionNode::Assign(_, rhs) => Some((**rhs).clone()),
                 _ => None,
             },

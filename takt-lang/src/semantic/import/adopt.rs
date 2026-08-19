@@ -397,7 +397,7 @@ fn adopt_stmt(ctx: &mut Adoption, stmt: &mut StatementNode) {
                 adopt_stmt(ctx, s);
             }
         }
-        StatementNode::Expression(e) => adopt_expr(ctx, e),
+        StatementNode::Expression(e, _) => adopt_expr(ctx, e),
         StatementNode::If { cond, then_, else_ } => {
             adopt_expr(ctx, cond);
             adopt_stmt(ctx, then_);

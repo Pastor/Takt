@@ -192,7 +192,7 @@ fn collect_locals(stmt: &StatementNode, out: &mut Vec<String>) {
         StatementNode::Match { arms, .. } => arms.iter().for_each(|a| collect_locals(&a.body, out)),
         StatementNode::None
         | StatementNode::Unresolved(_)
-        | StatementNode::Expression(_)
+        | StatementNode::Expression(_, _)
         | StatementNode::Return(_)
         | StatementNode::Continue
         | StatementNode::Break

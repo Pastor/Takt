@@ -38,7 +38,7 @@
 //! Накопление — по выражениям (одна ошибка на выражение), по образцу
 //! `literal_range` (фича 0157): редактор подчёркивает все нарушения, а не первое.
 
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, Location};
 use crate::semantic::{
     ExpressionNode, FunctionDefinitionNode, ModelNode, StateNode, StatementNode, VariableNode,
 };
@@ -84,7 +84,7 @@ fn check_model(model: &Rc<RefCell<ModelNode>>, found: &mut Vec<Diagnostic>) {
     // это вычисление начального значения.
     for var in &vars {
         if let VariableNode::Simple { expr, .. } | VariableNode::Const { expr, .. } = var {
-            check_expr(expr, model, found, Position::Value);
+            check_expr(expr, model, found, Position::Value, Location::Builtin);
         }
     }
     for func in &funcs {
@@ -124,9 +124,11 @@ fn check_stmt(stmt: &StatementNode, model: &Rc<RefCell<ModelNode>>, found: &mut 
             }
         }
         // Первая позиция оператора: `led := 1;` — запись как действие.
-        StatementNode::Expression(expr) => check_expr(expr, model, found, Position::Statement),
+        StatementNode::Expression(expr, loc) => {
+            check_expr(expr, model, found, Position::Statement, *loc)
+        }
         StatementNode::If { cond, then_, else_ } => {
-            check_expr(cond, model, found, Position::Value);
+            check_expr(cond, model, found, Position::Value, Location::Builtin);
             check_stmt(then_, model, found);
             if let Some(other) = else_ {
                 check_stmt(other, model, found);
@@ -134,7 +136,7 @@ fn check_stmt(stmt: &StatementNode, model: &Rc<RefCell<ModelNode>>, found: &mut 
         }
         StatementNode::Loop { cond, body } => {
             if let Some(cond) = cond {
-                check_expr(cond, model, found, Position::Value);
+                check_expr(cond, model, found, Position::Value, Location::Builtin);
             }
             check_stmt(body, model, found);
         }
@@ -148,21 +150,23 @@ fn check_stmt(stmt: &StatementNode, model: &Rc<RefCell<ModelNode>>, found: &mut 
                 check_stmt(init, model, found);
             }
             if let Some(cond) = cond {
-                check_expr(cond, model, found, Position::Value);
+                check_expr(cond, model, found, Position::Value, Location::Builtin);
             }
             // Шаг цикла — вторая позиция оператора: `for var i: u8 := 0; …;
             // i := i + 1` без присваивания в шаге не существует.
             if let Some(step) = step {
-                check_expr(step, model, found, Position::Statement);
+                check_expr(step, model, found, Position::Statement, Location::Builtin);
             }
             check_stmt(body, model, found);
         }
         StatementNode::Variable(_, _, Some(expr)) => {
-            check_expr(expr, model, found, Position::Value)
+            check_expr(expr, model, found, Position::Value, Location::Builtin)
         }
-        StatementNode::Return(Some(expr)) => check_expr(expr, model, found, Position::Value),
+        StatementNode::Return(Some(expr)) => {
+            check_expr(expr, model, found, Position::Value, Location::Builtin)
+        }
         StatementNode::Match { expr, arms } => {
-            check_expr(expr, model, found, Position::Value);
+            check_expr(expr, model, found, Position::Value, Location::Builtin);
             for arm in arms {
                 check_stmt(&arm.body, model, found);
             }
@@ -180,10 +184,15 @@ fn check_expr(
     model: &Rc<RefCell<ModelNode>>,
     found: &mut Vec<Diagnostic>,
     position: Position,
+    stmt_loc: Location,
 ) {
     if let Err(diagnostic) = super::common::validate_expression(expr, Rc::clone(model)) {
         found.push(diagnostic);
     }
-    found.extend(super::assignment_position::check_expression(expr, position));
-    found.extend(super::assignment_place::check_expression(expr, position));
+    found.extend(super::assignment_position::check_expression(
+        expr, position, stmt_loc,
+    ));
+    found.extend(super::assignment_place::check_expression(
+        expr, position, stmt_loc,
+    ));
 }

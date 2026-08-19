@@ -82,7 +82,7 @@ pub(crate) fn print_statement(
         // ST code is not allowed outside an expression». Takt так вызывает
         // (`log_temp(temperature);`, `motor_up();`), поэтому результат уходит в
         // переменную-приёмник, которую вызывающий объявит в шапке POU.
-        StatementNode::Expression(expr) => {
+        StatementNode::Expression(expr, _) => {
             if let ExpressionNode::Function(def, args) = expr.as_ref() {
                 let call = crate::generator::st::st_func::print_call(def, args, model)?;
                 let ret = crate::generator::st::st_func::return_type_of(&def.borrow());
@@ -355,7 +355,7 @@ fn contains_continue(stmt: &StatementNode) -> bool {
         StatementNode::Loop { .. } | StatementNode::For { .. } => false,
         StatementNode::None
         | StatementNode::Unresolved(_)
-        | StatementNode::Expression(_)
+        | StatementNode::Expression(_, _)
         | StatementNode::Variable(_, _, _)
         | StatementNode::Return(_)
         | StatementNode::Break

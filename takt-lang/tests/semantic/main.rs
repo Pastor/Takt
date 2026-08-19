@@ -20,6 +20,7 @@ mod after_const_duration_tests;
 mod array_shared_and_index_tests;
 mod assignment_place_tests;
 mod bare_state_condition_tests;
+mod body_judge_position_tests;
 mod const_eval_tests;
 mod const_init_fold_tests;
 mod const_int_ops_shared_tests;

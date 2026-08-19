@@ -122,9 +122,15 @@ fn resolve_ast_statement(
         }
 
         // ── Оператор-выражение (присваивание, вызов функции и т.п.) ───────────
-        ast::Statement::Expression(_, expr) => {
+        ast::Statement::Expression(loc, expr) => {
             let resolved = construct_expression(expr.clone(), params.clone(), model)?;
-            Ok(StatementNode::Expression(Box::new(resolved)))
+            // Позиция оператора — единственная координата УПОТРЕБЛЕНИЯ, которую
+            // понижение может сохранить (фича 0264). У понижённого выражения
+            // своей позиции нет: `ExpressionNode::loc()` выводит её из
+            // ОБЪЯВЛЕНИЙ операндов, поэтому `f(n) := 1;` указывал на строку,
+            // где объявлена `f`, а `5 := 2;` — никуда. Позиции вхождений живут
+            // отдельным слоем `semantic::usages` (0131) и сюда не доходят.
+            Ok(StatementNode::Expression(Box::new(resolved), *loc))
         }
 
         // ── Условный оператор if ───────────────────────────────────────────────

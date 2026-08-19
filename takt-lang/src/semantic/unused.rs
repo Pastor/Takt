@@ -250,7 +250,7 @@ pub(crate) fn usage_from_stmt(stmt: &StatementNode, set: &mut UsageSet) {
                 usage_from_stmt(s, set);
             }
         }
-        StatementNode::Expression(e) => usage_from_expr(e, set),
+        StatementNode::Expression(e, _) => usage_from_expr(e, set),
         StatementNode::If { cond, then_, else_ } => {
             usage_from_expr(cond, set);
             usage_from_stmt(then_, set);
@@ -564,7 +564,7 @@ fn collect_from_stmt(stmt: &StatementNode, used: &mut HashSet<String>) {
                 collect_from_stmt(s, used);
             }
         }
-        StatementNode::Expression(e) => collect_from_expr(e, used),
+        StatementNode::Expression(e, _) => collect_from_expr(e, used),
         StatementNode::If { cond, then_, else_ } => {
             collect_from_expr(cond, used);
             collect_from_stmt(then_, used);

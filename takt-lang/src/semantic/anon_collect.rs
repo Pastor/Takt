@@ -249,7 +249,7 @@ fn walk_stmt_writes(
                 walk_stmt_writes(item, seen, out);
             }
         }
-        StatementNode::Expression(expr) => walk_expr_writes(expr, seen, out),
+        StatementNode::Expression(expr, _) => walk_expr_writes(expr, seen, out),
         StatementNode::If { cond, then_, else_ } => {
             walk_expr_writes(cond, seen, out);
             walk_stmt_writes(then_, seen, out);
@@ -375,7 +375,7 @@ fn walk_stmt(
                 walk_stmt(item, found, out);
             }
         }
-        StatementNode::Expression(expr) => walk_expr(expr, found, out),
+        StatementNode::Expression(expr, _) => walk_expr(expr, found, out),
         StatementNode::If { cond, then_, else_ } => {
             walk_expr(cond, found, out);
             walk_stmt(then_, found, out);

@@ -179,7 +179,7 @@ fn check_stmt(stmt: &StatementNode, found: &mut Vec<Diagnostic>) {
                 check_stmt(item, found);
             }
         }
-        StatementNode::Expression(expr) => check_expr(expr, found),
+        StatementNode::Expression(expr, _) => check_expr(expr, found),
         StatementNode::If { then_, else_, .. } => {
             check_stmt(then_, found);
             if let Some(other) = else_ {

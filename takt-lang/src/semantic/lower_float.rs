@@ -350,7 +350,7 @@ fn lower_stmt(stmt: &mut StatementNode, m: u8, n: u8) -> Result<(), Diagnostic> 
                 lower_stmt(s, m, n)?;
             }
         }
-        StatementNode::Expression(e) => lower_expr(e, m, n)?,
+        StatementNode::Expression(e, _) => lower_expr(e, m, n)?,
         StatementNode::If { cond, then_, else_ } => {
             lower_expr(cond, m, n)?;
             lower_stmt(then_, m, n)?;
@@ -672,7 +672,7 @@ mod tests {
         let StatementNode::Block(stmts) = body else {
             panic!("тело не блок");
         };
-        let StatementNode::Expression(e) = &stmts[0] else {
+        let StatementNode::Expression(e, _) = &stmts[0] else {
             panic!("не выражение");
         };
         let ExpressionNode::Assign(_, rhs) = e.as_ref() else {
