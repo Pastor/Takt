@@ -35,6 +35,11 @@ pub fn collect_model_warnings(ast: &ast::Model, model: &Rc<RefCell<ModelNode>>) 
     // срабатывание на законных записях корпуса.
     warnings.extend(crate::semantic::tree::implicit_bool_warnings(model));
     warnings.extend(crate::unreachable_state_warnings(Rc::clone(model)));
+    // SE-116 (0273): ребро после безусловного недостижимо. Ce14 этот класс не
+    // видит — она ищет НЕСКОЛЬКО безусловных рёбер, а здесь безусловное одно.
+    warnings.extend(crate::semantic::validate::check_unreachable_edges(
+        Rc::clone(model),
+    ));
     warnings.extend(crate::constant_condition_warnings(model));
     warnings.extend(crate::ltl_warnings(Rc::clone(model)));
     warnings.extend(crate::stray_semicolon_warnings(ast));
