@@ -89,7 +89,9 @@ pub use implicit_bool::check_implicit_bool_conditions;
 pub use nondeterminism::check_nondeterministic_transitions;
 pub use ports::{check_port_address_completeness, warn_nested_model_ports};
 pub use states::{check_transition_completeness, check_unreachable_states};
-pub use structs::{check_duplicate_struct_fields, check_struct_field_types};
+pub use structs::{
+    check_duplicate_struct_fields, check_struct_field_types, validate_empty_structs,
+};
 pub use types::{check_recursive_type_aliases, check_type_alias_cycles_ast};
 
 /// Проверяет модель, останавливаясь на первой ошибке.
@@ -133,7 +135,7 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // одного выражения ранний выход сохранён, потому что дальше по нему пошли
     // бы следствия первой ошибки (тот же довод, которым 0152 оставила
     // терминальными стадии построения дерева).
-    let checks: [Vec<Diagnostic>; 13] = [
+    let checks: [Vec<Diagnostic>; 14] = [
         model_only_one_start_state(model.clone()),
         // SE-106 (0211): модель без состояний, поставленная в реализацию. Без
         // отказа один вход давал ШЕСТЬ разных ответов, и два из них молчаливые:
@@ -153,6 +155,11 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
         // упорядочивает `diagnostics::normalize` по позиции в тексте (замер
         // 0172 — перестановка проверок местами ничего не меняет).
         validate_empty_enums(model.clone()),
+        // SE-115 (0284): структура без полей — отказ на ОБЪЯВЛЕНИИ, симметрично
+        // SE-105. Без него цель `c` печатала расширение GNU, а `iec2c`
+        // отвергал порождённый ST: гейт проекта класс не видел (он гоняет `cc`
+        // без `-pedantic`, а в корпусе пустых структур нет).
+        validate_empty_structs(model.clone()),
         validate_enum_values(model.clone()),
         validate_enum_type_declarations(model.clone()),
         validate_state_references(model.clone()),

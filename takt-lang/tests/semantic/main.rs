@@ -30,6 +30,7 @@ mod diagnostics_batch_tests;
 mod diagnostics_file_tests;
 mod diagnostics_tests;
 mod empty_enum_tests;
+mod empty_struct_tests;
 mod fixed_saturation_tests;
 mod formula_validation_tests;
 mod implemented_model_tests;
