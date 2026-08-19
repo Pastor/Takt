@@ -1,0 +1,124 @@
+//! Причина отказа проверки названа вердиктом (фича 0258).
+//!
+//! Прежде `Verdict::Unsupported` нёс только имена атомов, и CLI печатал **все**
+//! возможные причины разом — подходящую выбирал пользователь. На входе за
+//! потолком первая строка вдобавок утверждала ложное («атом — не отслеживаемый
+//! предикат», хотя атомы там как раз отслеживаемые; фича 0145 сняла ложь,
+//! заменив утверждение нейтральным, но причину не назвала).
+//!
+//! Здесь проверяется **соответствие входа причине**: каждая достижимая причина
+//! приходит на своём входе и не приходит на чужом.
+
+use takt_lang::parse;
+use takt_lang::semantic::tree::construct_model;
+use takt_lang::verification::verify::{UnsupportedReason, Verdict, verify_model};
+
+/// Вердикт свойства `phi` на модели `src`.
+fn verdict(src: &str, phi_src: &str) -> Verdict {
+    let (ast, _) = parse(src, 0).expect("разбор модели");
+    let model = construct_model(&ast, None, &[]).expect("построение дерева");
+    let phi = takt_lang::parse_ltl_property(phi_src).expect("разбор формулы");
+    let m = model.borrow();
+    verify_model(&m, &phi)
+}
+
+/// Причина вердикта либо `None`, если проверка выполнена.
+fn reason_of(src: &str, phi_src: &str) -> Option<UnsupportedReason> {
+    match verdict(src, phi_src) {
+        Verdict::Unsupported { reason, .. } => Some(reason),
+        _ => None,
+    }
+}
+
+/// A1: опечатка в имени атома — `UnknownAtom`.
+#[test]
+fn typo_in_atom_is_unknown_atom() {
+    let r = reason_of("start A { ref A; }", "G nosuch");
+    assert_eq!(r, Some(UnsupportedReason::UnknownAtom));
+}
+
+/// A2: предикат с арифметикой — `PredicateOutsideSubset`.
+///
+/// ⚠️ Тем же путём уходят `float`, `q`, массив и структура: неперечислимый тип
+/// отсекается **подмножеством предикатов**, а не проверкой домена (замер
+/// 2026-08-19). Ветвь `DomainNotEnumerable` сегодня недостижима и защитна —
+/// поэтому её здесь нет, и это названо, а не забыто.
+#[test]
+fn arithmetic_predicate_is_outside_subset() {
+    let src = "var t: u8 := 0; cond P = t + 1 > 2; start A { ref A; }";
+    assert_eq!(
+        reason_of(src, "G P"),
+        Some(UnsupportedReason::PredicateOutsideSubset)
+    );
+}
+
+/// A2: `float` в предикате приходит той же причиной — подмножеством.
+#[test]
+fn float_predicate_is_outside_subset() {
+    let src = "var x: float := 0.0; cond P = x <= 1.0; start A { ref A; }";
+    assert_eq!(
+        reason_of(src, "G P"),
+        Some(UnsupportedReason::PredicateOutsideSubset)
+    );
+}
+
+/// A3: три `u8` — `SizeOverLimit` (потолок считается по рёбрам, фича 0145).
+///
+/// ⚠️ Именно этот вход прежде получал ЛОЖНУЮ первую строку: атомы здесь
+/// отслеживаемые, а сообщение говорило обратное.
+#[test]
+fn three_u8_is_size_over_limit() {
+    let src = "var a: u8 := 0; var b: u8 := 0; var c: u8 := 0; \
+               cond P = a <= b & b <= c; start A { ref A; }";
+    assert_eq!(
+        reason_of(src, "G P"),
+        Some(UnsupportedReason::SizeOverLimit)
+    );
+}
+
+/// A4: инициализатор-вызов — `InitialValueUnknown`.
+#[test]
+fn call_initializer_is_initial_value_unknown() {
+    let src = "extern fn src() -> u8; var x: u8 := src(); \
+               cond P = x = 0; start A { ref A; }";
+    assert_eq!(
+        reason_of(src, "G P"),
+        Some(UnsupportedReason::InitialValueUnknown)
+    );
+}
+
+/// A5 (**контроль**): проверяемое свойство причины не получает вовсе.
+///
+/// Без контроля «причина такая-то» доказывало бы лишь, что вердикт всегда
+/// `Unsupported`.
+#[test]
+fn checkable_property_has_no_reason() {
+    let src = "var f: bit := 0; cond P = f = 0; start A { ref A; }";
+    assert_eq!(reason_of(src, "G P"), None, "свойство над `bit` проверяемо");
+}
+
+/// A6: тексты причин различны и не пусты — иначе называть причину бессмысленно.
+#[test]
+fn reason_texts_are_distinct_and_nonempty() {
+    let all = [
+        UnsupportedReason::UnknownAtom,
+        UnsupportedReason::PredicateOutsideSubset,
+        UnsupportedReason::DomainNotEnumerable,
+        UnsupportedReason::SizeOverLimit,
+        UnsupportedReason::InitialValueUnknown,
+    ];
+    let mut seen: Vec<&str> = Vec::new();
+    for r in all {
+        let text = r.text();
+        assert!(!text.trim().is_empty(), "причина {r:?} без текста");
+        assert!(
+            !text.contains("Unsupported") && !text.contains("Reason"),
+            "текст причины не должен нести имя варианта Rust (класс 0231): {text}"
+        );
+        assert!(
+            !seen.contains(&text),
+            "две причины с одним текстом — различать их нечем: {text}"
+        );
+        seen.push(text);
+    }
+}
