@@ -193,3 +193,4 @@
 | 0301 | Снятие замера расхождения | [0301-probe-checklist.md](0301-probe-checklist.md) | ГОТОВО |
 | 0302 | Релиз и тег при подъёме минорной версии языка | [0302-release-on-language-minor.md](0302-release-on-language-minor.md) | ГОТОВО (проверяемая часть; прогон CI — за 0175) |
 | 0285 | Ширина выведенного типа берётся у результата | [0285-inferred-width-from-result.md](0285-inferred-width-from-result.md) | ГОТОВО |
+| 0287 | Расширение типов не знает именованных целых | [0287-wider-type-array-literal.md](0287-wider-type-array-literal.md) | ГОТОВО |
