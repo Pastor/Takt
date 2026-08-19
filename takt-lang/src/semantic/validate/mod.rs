@@ -54,6 +54,7 @@ mod ports;
 mod states;
 mod structs;
 mod types;
+mod unreachable_edge;
 
 #[cfg(test)]
 mod tests;
@@ -93,6 +94,7 @@ pub use structs::{
     check_duplicate_struct_fields, check_struct_field_types, validate_empty_structs,
 };
 pub use types::{check_recursive_type_aliases, check_type_alias_cycles_ast};
+pub use unreachable_edge::check_unreachable_edges;
 
 /// Проверяет модель, останавливаясь на первой ошибке.
 ///
