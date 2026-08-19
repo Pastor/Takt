@@ -742,3 +742,34 @@ fn every_period_matches_generated_rust() {
          симулятор={sim:?}\nRust={rs:?}"
     );
 }
+
+/// **Структуры в цели `rust` (фича 0293): поля доезжают до прошивки.**
+///
+/// Прежде цель отвечала `RS-011` («поля структур в цели rust пока не
+/// транслируются»), то есть структура не переводилась дальше объявления
+/// переменной. Наблюдаемая — `sum = kp + ki`, выведенная в порт: она различает
+/// **значение**, а не факт компиляции; порядок полей в литерале структуры
+/// `rustc` не проверяет по смыслу — перестановка дала бы собирающийся код с
+/// другими значениями.
+#[test]
+fn struct_fields_match_generated_rust() {
+    let tag = "structinit";
+    let source = include_str!("../data/eval/conformance_struct_init.takt");
+    let dir = build_dir(tag);
+    let path = fixture(&dir, tag, source);
+    let sim = simulate_trace(&path, "probe");
+    assert!(
+        sim.contains(&5),
+        "контроль: эталон обязан дать probe = 5 (2 + 3), трасса={sim:?}"
+    );
+    if !rustc_available() {
+        eprintln!("[ПРОПУСК] {tag}: rustc не найден — сверка с прошивкой не выполнена");
+        return;
+    }
+    let rs = rust_trace(&dir, &path, tag, "Structinit", "Probe", sim.len());
+    assert_eq!(
+        sim, rs,
+        "потактовые трассы эталона и порождённого Rust обязаны совпадать:\n\
+         эталон={sim:?}\nRust={rs:?}"
+    );
+}

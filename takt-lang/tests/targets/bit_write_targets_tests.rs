@@ -329,28 +329,29 @@ fn out_of_scope_forms_keep_their_codes() {
 
     let mut wrong: Vec<String> = Vec::new();
 
-    // Структуры цель `rust` не знает вовсе — и без всякого разряда.
+    // ⚠️ Граница СДВИНУЛАСЬ фичей 0293: структуры цели `rust` и `sv` теперь
+    // переводят, поэтому запись разряда их поля больше не отвергается — она
+    // печатается (`self.p.x |= 1 << 2;` у `rust`). Проверяется именно это:
+    // прежний отказ был свойством непереведённых структур, а не записи разряда.
     match generate_rust("bw_b1", FIELD) {
-        Err(e) if e.code.as_deref() == Some("RS-011") => {}
-        other => wrong.push(format!("rust/поле структуры: {other:?}")),
+        Ok(_) => {}
+        other => wrong.push(format!(
+            "rust/поле структуры (0293: переводится): {other:?}"
+        )),
     }
-    // Цель `sv` не знает ни структур, ни массивов.
-    for (tag, src, what) in [
-        ("bw_b2", FIELD, "sv/поле структуры"),
-        ("bw_b3", ELEM, "sv/элемент массива"),
-    ] {
-        let dir = build_dir(tag);
-        let result = takt_lang::compile_to_sv(
-            tag,
-            src,
-            dir.to_str().expect("путь в UTF-8"),
-            &[],
-            &GenerateOptions::default(),
-        );
-        match result {
-            Err(e) if e.code.as_deref() == Some("SV-002") => {}
-            other => wrong.push(format!("{what}: {other:?}")),
-        }
+    // Массивы цель `sv` по-прежнему не знает — эта граница на месте.
+    let tag = "bw_b3";
+    let dir = build_dir(tag);
+    let result = takt_lang::compile_to_sv(
+        tag,
+        ELEM,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &GenerateOptions::default(),
+    );
+    match result {
+        Err(e) if e.code.as_deref() == Some("SV-002") => {}
+        other => wrong.push(format!("sv/элемент массива: {other:?}")),
     }
 
     assert!(

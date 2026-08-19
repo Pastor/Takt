@@ -138,6 +138,12 @@ pub(crate) fn print_condition(cond: &ConditionNode, scope: &Scope) -> Result<Str
 
         ConditionNode::BitAccess(inner, member) => {
             let base = print_condition(inner, scope)?;
+            // Поле структуры (фича 0293) — не разряд: печатается как есть.
+            if let crate::parser::ast::Member::Identifier(name) = member {
+                return Ok(crate::generator::rust::rust_bit::field_access(
+                    &base, &name.name,
+                ));
+            }
             Ok(bit_mask(&base, member_index(member)?))
         }
 

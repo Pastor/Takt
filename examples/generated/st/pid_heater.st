@@ -75,7 +75,7 @@ END_VAR
 VAR
     state : USINT := 0;
     err : LREAL := 0.0;
-    loop_pid : PidState;
+    loop_pid : PidState := (kp := 0.5, ki := 0.0625, kd := 0.25, ts := 1.0, out_min := 0.0, out_max := 32.0, i_acc := 0.0, err_prev := 0.0, output := 0.0);
     release : LREAL := 38.0;
     setpoint : LREAL := 40.0;
 END_VAR

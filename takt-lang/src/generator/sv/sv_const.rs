@@ -272,6 +272,18 @@ pub(in crate::generator::sv) fn reset_value(
         // Умолчание без инициализатора: регистр обязан иметь значение сброса —
         // «неинициализированного» триггера не бывает.
         ExpressionNode::None => "'0".to_string(),
+        // Агрегат структуры (фича 0293): `var g: Gains := {2, 3};`. В цепи
+        // сброса печатается упакованным литералом `'{поле: значение, …}` —
+        // именованная форма, потому что позиционная у `struct packed` требует
+        // совпадения ширин и молча слипается при ошибке в порядке.
+        //
+        // ⚠️ Порядок берётся у ОБЪЯВЛЕНИЯ структуры (`Vec` полей, не карта):
+        // инициализатор позиционный, и вторая раскладка разошлась бы с эталоном.
+        ExpressionNode::Initializer(items) | ExpressionNode::Array(items)
+            if matches!(ty, TypeNode::Struct(_)) =>
+        {
+            return struct_reset(items, ty, enums, what, loc, scope);
+        }
         // Не литерал — спрашиваем ВЫЧИСЛИМОСТЬ у общего слоя (фича 0286), а не
         // судим по виду узла. Прежде `var v := 5 as u16;` отвергался, тогда как
         // `var v: u16 := 5;` и `var v: u16 := 2 + 3;` принимались: разницу
@@ -289,4 +301,64 @@ pub(in crate::generator::sv) fn reset_value(
                 .unwrap_or_else(|| n.to_string())
         }
     })
+}
+
+/// Значение сброса для агрегата структуры (фича 0293).
+///
+/// `'{kp: 8'd2, ki: 8'd3}` — именованная форма литерала упакованной структуры.
+///
+/// # Ошибки
+/// [`SV-002`](crate::generator::sv::sv_fsm::sv002) — структура не объявлена,
+/// число значений не совпадает с числом полей либо значение поля невычислимо.
+fn struct_reset(
+    items: &[ExpressionNode],
+    ty: &TypeNode,
+    enums: &BTreeMap<String, Vec<(String, i128)>>,
+    what: &str,
+    loc: Location,
+    scope: Option<&std::rc::Rc<std::cell::RefCell<crate::semantic::ModelNode>>>,
+) -> Result<String, Diagnostic> {
+    let TypeNode::Struct(name) = ty else {
+        return Err(unresolvable_reset(what));
+    };
+    let model = scope.ok_or_else(|| unresolvable_reset(what))?;
+    let def = model
+        .borrow()
+        .search_struct(name)
+        .ok_or_else(|| unresolvable_reset(what))?;
+    if def.fields.len() != items.len() {
+        return Err(sv002(&format!(
+            "инициализатор {what}: структура '{name}' объявляет {} полей, а значений {}",
+            def.fields.len(),
+            items.len()
+        )));
+    }
+    let mut parts = Vec::with_capacity(items.len());
+    for ((field, field_ty), value) in def.fields.iter().zip(items) {
+        let printed = reset_value(
+            value,
+            field_ty,
+            enums,
+            &format!("поля '{field}' структуры '{name}'"),
+            loc,
+            scope,
+        )?;
+        // Размерная форма обязательна ВСЕГДА, а не по нужде (в отличие от
+        // печати литерала, 0157): `verilator -Wall` отвечает `WIDTHCONCAT`
+        // «Unsized numbers not allowed in concatenations» на любое безразмерное
+        // число внутри `{…}`.
+        let sized = match (value, crate::generator::sv::sv_type::scalar_width(field_ty)) {
+            (ExpressionNode::Number(n), Some(width)) => format!("{width}'d{n}"),
+            _ => printed,
+        };
+        parts.push(sized);
+    }
+    // ⚠️ Форма ПОЗИЦИОННАЯ, а не именованная (`'{kp: 2}`): именованную
+    // `verilator` принимает, а **yosys отвергает** (`syntax error, unexpected
+    // ':'`) — проба 2026-08-19. Тот же урок, что у `assert … else` (0235): форма
+    // выбирается по тому, что принимают ОБА инструмента.
+    //
+    // Порядок — объявленный: в `struct packed` первое поле занимает старшие
+    // разряды, и перестановка молча изменила бы значение.
+    Ok(format!("{{{}}}", parts.join(", ")))
 }

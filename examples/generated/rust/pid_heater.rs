@@ -12,10 +12,18 @@
 
 #![forbid(unsafe_code)]
 
-/// Порт ввода-вывода модели. Реализация — за трейтом [`Hal`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OutBitPort {
-    Ready,
+/// Структура 'PidState' модели.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct PidState {
+    pub kp: f64,
+    pub ki: f64,
+    pub kd: f64,
+    pub ts: f64,
+    pub out_min: f64,
+    pub out_max: f64,
+    pub i_acc: f64,
+    pub err_prev: f64,
+    pub output: f64,
 }
 
 /// Порт ввода-вывода модели. Реализация — за трейтом [`Hal`].
@@ -31,9 +39,35 @@ pub enum OutF64Port {
 /// его не к тому типу или забыть проставить колбэк невозможно.
 pub trait Hal {
     /// Пишет `value` в выходной порт `port`.
-    fn write_bit(&mut self, port: OutBitPort, value: bool);
-    /// Пишет `value` в выходной порт `port`.
     fn write_f64(&mut self, port: OutF64Port, value: f64);
+}
+
+/// Функция 'pid_compute' модели.
+fn pid_compute(p: PidState, sp: f64, pv: f64) -> PidState {
+    let mut r: PidState = p;
+    let err: f64 = sp - pv;
+    let prop: f64 = p.kp * err;
+    let i_new: f64 = p.i_acc + ((p.ki * err) * p.ts);
+    let deriv: f64 = (err - p.err_prev) / p.ts;
+    let raw: f64 = (prop + i_new) + (p.kd * deriv);
+    if raw > p.out_max {
+        r.output = p.out_max;
+        if err <= 0.0 {
+            r.i_acc = i_new;
+        }
+    } else {
+        if raw < p.out_min {
+            r.output = p.out_min;
+            if err >= 0.0 {
+                r.i_acc = i_new;
+            }
+        } else {
+            r.output = raw;
+            r.i_acc = i_new;
+        }
+    }
+    r.err_prev = err;
+    r
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +83,8 @@ enum PidHeaterHeaterState {
 
 /// Модель 'Heater'.
 pub struct PidHeaterHeater {
+    err: f64,
+    loop_pid: PidState,
     release: f64,
     setpoint: f64,
     state: PidHeaterHeaterState,
@@ -58,6 +94,8 @@ impl PidHeaterHeater {
     /// Создаёт модель в начальном состоянии.
     fn new() -> Self {
         Self {
+            err: 0.0,
+            loop_pid: PidState { kp: 0.5, ki: 0.0625, kd: 0.25, ts: 1.0, out_min: 0.0, out_max: 32.0, i_acc: 0.0, err_prev: 0.0, output: 0.0 },
             release: 38.0,
             setpoint: 40.0,
             state: PidHeaterHeaterState::Init,
@@ -69,6 +107,8 @@ impl PidHeaterHeater {
     /// Блоки `enter` здесь не исполняются: по контракту ADR 0033 вход
     /// в стартовое состояние — это поведение, и оно живёт в `tick`.
     fn init(&mut self) {
+        self.err = 0.0;
+        self.loop_pid = PidState { kp: 0.5, ki: 0.0625, kd: 0.25, ts: 1.0, out_min: 0.0, out_max: 32.0, i_acc: 0.0, err_prev: 0.0, output: 0.0 };
         self.release = 38.0;
         self.setpoint = 40.0;
         self.state = PidHeaterHeaterState::Init;
@@ -85,9 +125,13 @@ impl PidHeaterHeater {
                 self.state = PidHeaterHeaterState::End;
             }
             PidHeaterHeaterState::Heating => {
+                self.loop_pid = pid_compute(self.loop_pid, shared.target, shared.meas);
+                shared.ctrl = self.loop_pid.output;
+                self.err = shared.target - shared.meas;
                 shared.meas = (shared.meas + (shared.gain * shared.ctrl)) - (shared.loss * (shared.meas - shared.ambient));
                 hal.write_f64(OutF64Port::Temperature, shared.meas);
-                if shared.ctrl <= 0.0 {
+                if self.err <= 0.0 {
+                    shared.ctrl = 0.0;
                     self.state = PidHeaterHeaterState::Holding;
                 }
             }
@@ -111,111 +155,6 @@ impl PidHeaterHeater {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PidHeaterPidState {
-    /// Модель создана, но стартовое состояние ещё не занято.
-    Init,
-    Control,
-    Done,
-    Settled,
-    /// Автомат завершён (`is_done`).
-    End,
-}
-
-/// Модель 'Pid'.
-pub struct PidHeaterPid {
-    deriv: f64,
-    eps: f64,
-    err: f64,
-    err_prev: f64,
-    i_acc: f64,
-    imax: f64,
-    kd: f64,
-    ki: f64,
-    kp: f64,
-    neg_imax: f64,
-    state: PidHeaterPidState,
-}
-
-impl PidHeaterPid {
-    /// Создаёт модель в начальном состоянии.
-    fn new() -> Self {
-        Self {
-            deriv: 0.0,
-            eps: 0.5,
-            err: 0.0,
-            err_prev: 0.0,
-            i_acc: 0.0,
-            imax: 32.0,
-            kd: 0.25,
-            ki: 0.0625,
-            kp: 0.5,
-            neg_imax: -32.0,
-            state: PidHeaterPidState::Init,
-        }
-    }
-
-    /// Возвращает модель в начальное состояние.
-    ///
-    /// Блоки `enter` здесь не исполняются: по контракту ADR 0033 вход
-    /// в стартовое состояние — это поведение, и оно живёт в `tick`.
-    fn init(&mut self) {
-        self.deriv = 0.0;
-        self.eps = 0.5;
-        self.err = 0.0;
-        self.err_prev = 0.0;
-        self.i_acc = 0.0;
-        self.imax = 32.0;
-        self.kd = 0.25;
-        self.ki = 0.0625;
-        self.kp = 0.5;
-        self.neg_imax = -32.0;
-        self.state = PidHeaterPidState::Init;
-    }
-
-    /// Один такт автомата.
-    fn tick<H: Hal>(&mut self, shared: &mut PidHeaterShared, hal: &mut H) {
-        if self.state == PidHeaterPidState::Init {
-            self.neg_imax = 0.0 - self.imax;
-            self.state = PidHeaterPidState::Control;
-        }
-        match self.state {
-            PidHeaterPidState::Control => {
-                self.err = shared.target - shared.meas;
-                self.i_acc += self.err;
-                if self.i_acc > self.imax {
-                    self.i_acc = self.imax;
-                }
-                if self.i_acc < self.neg_imax {
-                    self.i_acc = self.neg_imax;
-                }
-                self.deriv = self.err - self.err_prev;
-                shared.ctrl = ((self.kp * self.err) + (self.ki * self.i_acc)) + (self.kd * self.deriv);
-                self.err_prev = self.err;
-                if self.err < self.eps {
-                    shared.ctrl = 0.0;
-                    hal.write_bit(OutBitPort::Ready, true);
-                    self.state = PidHeaterPidState::Settled;
-                }
-            }
-            PidHeaterPidState::Done => {
-                self.state = PidHeaterPidState::End;
-            }
-            PidHeaterPidState::Settled => {
-                self.state = PidHeaterPidState::Done;
-            }
-            PidHeaterPidState::End => {}
-            PidHeaterPidState::Init => {}
-        }
-    }
-
-    /// Завершён ли автомат модели.
-    fn is_done(&self) -> bool {
-        self.state == PidHeaterPidState::End
-    }
-
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PidHeaterState {
     /// Модель создана, но стартовое состояние ещё не занято.
     Init,
@@ -228,8 +167,8 @@ enum PidHeaterState {
 /// Шаг последовательной композиции состояния 'PidHeater'.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PidHeaterPidHeaterSeq {
-    Group0,
-    Group1,
+    Heater0,
+    Heater1,
 }
 
 /// Общие переменные модели 'pid_heater', разделяемые под-моделями.
@@ -249,10 +188,8 @@ pub struct PidHeater<H: Hal> {
     state: PidHeaterState,
     /// Текущий шаг последовательной композиции состояния 'PidHeater'.
     pid_heater_seq: PidHeaterPidHeaterSeq,
-    pid_heater_group0_pid0: PidHeaterPid,
-    pid_heater_group0_heater1: PidHeaterHeater,
-    pid_heater_group1_pid0: PidHeaterPid,
-    pid_heater_group1_heater1: PidHeaterHeater,
+    pid_heater_heater0: PidHeaterHeater,
+    pid_heater_heater1: PidHeaterHeater,
     /// Аппаратный слой. Заменяет `void *userdata` цели `c`.
     hal: H,
 }
@@ -269,20 +206,13 @@ impl<H: Hal> PidHeater<H> {
                 ctrl: 0.0,
                 gain: 0.5,
                 loss: 0.05,
-                meas: 0.0,
-                target: 40.0,
+                meas: 25.0,
+                target: 80.0,
             },
             state: PidHeaterState::Init,
-            pid_heater_seq: PidHeaterPidHeaterSeq::Group0,
-            pid_heater_group0_pid0: PidHeaterPid::new(),
-            pid_heater_group0_heater1: PidHeaterHeater::new(),
-            pid_heater_group1_pid0: {
-                let mut instance = PidHeaterPid::new();
-                instance.kp = 0.25;
-                instance.ki = 0.125;
-                instance
-            },
-            pid_heater_group1_heater1: {
+            pid_heater_seq: PidHeaterPidHeaterSeq::Heater0,
+            pid_heater_heater0: PidHeaterHeater::new(),
+            pid_heater_heater1: {
                 let mut instance = PidHeaterHeater::new();
                 instance.setpoint = 55.0;
                 instance.release = 52.0;
@@ -303,18 +233,14 @@ impl<H: Hal> PidHeater<H> {
         self.shared.ctrl = 0.0;
         self.shared.gain = 0.5;
         self.shared.loss = 0.05;
-        self.shared.meas = 0.0;
-        self.shared.target = 40.0;
+        self.shared.meas = 25.0;
+        self.shared.target = 80.0;
         self.state = PidHeaterState::Init;
-        self.pid_heater_seq = PidHeaterPidHeaterSeq::Group0;
-        self.pid_heater_group0_pid0.init();
-        self.pid_heater_group0_heater1.init();
-        self.pid_heater_group1_pid0.init();
-        self.pid_heater_group1_pid0.kp = 0.25;
-        self.pid_heater_group1_pid0.ki = 0.125;
-        self.pid_heater_group1_heater1.init();
-        self.pid_heater_group1_heater1.setpoint = 55.0;
-        self.pid_heater_group1_heater1.release = 52.0;
+        self.pid_heater_seq = PidHeaterPidHeaterSeq::Heater0;
+        self.pid_heater_heater0.init();
+        self.pid_heater_heater1.init();
+        self.pid_heater_heater1.setpoint = 55.0;
+        self.pid_heater_heater1.release = 52.0;
         self.hal.write_f64(OutF64Port::Temperature, 0.0);
     }
 
@@ -331,18 +257,15 @@ impl<H: Hal> PidHeater<H> {
                 self.state = PidHeaterState::End;
             }
             PidHeaterState::PidHeater => {
-                if self.pid_heater_seq == PidHeaterPidHeaterSeq::Group0 {
-                    self.pid_heater_group0_pid0.tick(&mut self.shared, &mut self.hal);
-                    self.pid_heater_group0_heater1.tick(&mut self.shared, &mut self.hal);
-                    if self.pid_heater_group0_pid0.is_done() && self.pid_heater_group0_heater1.is_done() {
-                        self.pid_heater_group1_pid0.init();
-                        self.pid_heater_group1_heater1.init();
-                        self.pid_heater_seq = PidHeaterPidHeaterSeq::Group1;
+                if self.pid_heater_seq == PidHeaterPidHeaterSeq::Heater0 {
+                    self.pid_heater_heater0.tick(&mut self.shared, &mut self.hal);
+                    if self.pid_heater_heater0.is_done() {
+                        self.pid_heater_heater1.init();
+                        self.pid_heater_seq = PidHeaterPidHeaterSeq::Heater1;
                     }
-                } else if self.pid_heater_seq == PidHeaterPidHeaterSeq::Group1 {
-                    self.pid_heater_group1_pid0.tick(&mut self.shared, &mut self.hal);
-                    self.pid_heater_group1_heater1.tick(&mut self.shared, &mut self.hal);
-                    if self.pid_heater_group1_pid0.is_done() && self.pid_heater_group1_heater1.is_done() {
+                } else if self.pid_heater_seq == PidHeaterPidHeaterSeq::Heater1 {
+                    self.pid_heater_heater1.tick(&mut self.shared, &mut self.hal);
+                    if self.pid_heater_heater1.is_done() {
                         self.state = PidHeaterState::Finished;
                     }
                 }

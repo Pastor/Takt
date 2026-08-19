@@ -387,7 +387,7 @@ fn emit_configuration(
             // (`AT %QW2 : UINT := 7;`), а порождённый C выставляет значение
             // макросом `__INIT_GLOBAL` — то есть до первого скана. Запасной путь
             // «запись первым сканом», заложенный в анализе как риск, не нужен.
-            let init_text = st_decl::literal_init(init, ty)
+            let init_text = st_decl::literal_init(init, ty, None)
                 .map(|v| format!(" := {}", v))
                 .unwrap_or_default();
             placed.push(format!(

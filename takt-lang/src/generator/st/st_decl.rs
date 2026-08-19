@@ -571,8 +571,29 @@ fn declaration(
     Ok(Declaration {
         name: name.to_string(),
         ty: ty_text,
-        init: literal_init(expr, ty),
+        init: literal_init(expr, ty, Some(model)),
     })
+}
+
+/// Инициализатор структуры в форме IEC: `(поле := значение, …)`.
+///
+/// `None`, если структура не объявлена, число значений не совпало с числом полей
+/// либо значение поля не литерал: тогда объявление остаётся без инициализатора —
+/// прежнее поведение.
+///
+/// ⚠️ Порядок берётся у **объявления** структуры (`Vec` полей): инициализатор
+/// языка позиционный, и вторая раскладка разошлась бы с эталоном.
+fn struct_init(items: &[ExpressionNode], name: &str, model: &ModelNode) -> Option<String> {
+    let def = model.search_struct(name)?;
+    if def.fields.len() != items.len() {
+        return None;
+    }
+    let mut parts = Vec::with_capacity(items.len());
+    for ((field, field_ty), value) in def.fields.iter().zip(items) {
+        let printed = literal_init(value, field_ty, Some(model))?;
+        parts.push(format!("{field} := {printed}"));
+    }
+    Some(format!("({})", parts.join(", ")))
 }
 
 /// Возвращает инициализатор, если выражение — литерал, а тип — скалярный.
@@ -589,7 +610,20 @@ fn declaration(
 /// (`:= [0, 0, 0, 0]`) — задача 0041-04 вместе с остальными выражениями; до неё
 /// массив объявляется без инициализатора и обнуляется правилами IEC по
 /// умолчанию, что совпадает с намерением `:= 0`.
-pub(crate) fn literal_init(expr: &ExpressionNode, ty: &TypeNode) -> Option<String> {
+pub(crate) fn literal_init(
+    expr: &ExpressionNode,
+    ty: &TypeNode,
+    model: Option<&ModelNode>,
+) -> Option<String> {
+    // Агрегат структуры (фича 0293): `var g: Gains := {2, 3};` печатается
+    // именованной формой IEC — `(kp := 2, ki := 3)`. Проба 2026-08-19: `iec2c`
+    // её принимает. Прежде инициализатор терялся МОЛЧА: `g : Gains;` без `:=`,
+    // и прошивка считала с нулей, а эталон — с заданных значений.
+    if let (TypeNode::Struct(struct_name), Some(owner)) = (ty, model)
+        && let ExpressionNode::Initializer(items) | ExpressionNode::Array(items) = expr
+    {
+        return struct_init(items, struct_name, owner);
+    }
     // `[bit;N≤64]` составным типом НЕ является: по фиче 0078 это упакованный
     // скаляр, и `get_st_type` печатает его как `USINT`/`UINT`/`UDINT`/`ULINT`.
     // Признак берётся из того же слоя, что и печать типа, — второе правило

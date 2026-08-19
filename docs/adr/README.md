@@ -246,3 +246,4 @@
 | [0267](./0267-state-of-model-in-targets.md) | Проверка состояния соседней модели в целях | Accepted | фича 0267 |
 | [0303](./0303-composition-state-conditional-edge.md) | Условное ребро состояния-композиции | Accepted | фича 0303 |
 | [0286](./0286-sv-const-initializer-expression.md) | Вычислимое приведение в инициализаторе | Accepted | фича 0286 |
+| [0293](./0293-struct-in-st-rust.md) | Структуры в целях st, rust и sv | Accepted | фича 0293 |
