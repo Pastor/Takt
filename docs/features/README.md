@@ -279,7 +279,7 @@
 | [0264](./0264-body-judge-usage-position.md) | Координата судей тела указывает на объявление, а не на использование | [ADR](../adr/0264-body-judge-usage-position.md), [анализ](../analyze/0264-body-judge-usage-position.md), [отчёт](../reports/0264-body-judge-usage-position.md) | ГОТОВО |
 | [0265](./0265-book-svg-graphviz-version.md) | Сборка документа переписывает committed SVG при смене graphviz | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0266](./0266-port-in-declaration-initializer.md) | Чтение порта в инициализаторе объявления | SE-113 в общей воронке с SE-099; правило и обход общие: память до первого такта не определена | ГОТОВО |
-| [0267](./0267-state-of-model-in-targets.md) | Проверку состояния под-модели переводят не все цели | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0267](./0267-state-of-model-in-targets.md) | Проверку состояния под-модели переводят не все цели | [ADR](../adr/0267-state-of-model-in-targets.md), [анализ](../analyze/0267-state-of-model-in-targets.md), [отчёт](../reports/0267-state-of-model-in-targets.md) | ГОТОВО |
 | [0268](./0268-se033-appendix-description.md) | У SE-033 нет описания в приложении «Ошибки» | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0269](./0269-book-st-syntax-highlight.md) | Блоки st и pascal в документе не подсвечиваются | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0270](./0270-book-pdf-size.md) | PDF документа потяжелел впятеро после перехода на Typst | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
