@@ -219,3 +219,4 @@
 | 0282 | Собственная позиция формулы | [0282-formula-own-location.md](0282-formula-own-location.md) | ГОТОВО |
 | 0296 | Порядок стадий построения — один носитель | [0296-semantic-stages-single-source.md](0296-semantic-stages-single-source.md) | ГОТОВО |
 | 0278 | Мёртвая упаковка последовательной композиции | [0278-compact-implement-dead-branch.md](0278-compact-implement-dead-branch.md) | ГОТОВО |
+| 0260 | Неиспользуемый параметр в порождённом C | [0260-c-unused-struct-parameter.md](0260-c-unused-struct-parameter.md) | ГОТОВО |

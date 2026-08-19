@@ -367,21 +367,32 @@ pub(super) fn generate_hal(
             FUNCTION_PORT_WRITE_NUMERIC,
         ),
     ];
-    for (present, field) in bindings {
-        if present {
-            printer
-                .ident(&format!("m->{field} = {root}_default_{field};"))
+    let mut body = String::new();
+    {
+        let mut buffered = printer.fork(&mut body);
+        for (present, field) in bindings {
+            if present {
+                buffered
+                    .ident(&format!("m->{field} = {root}_default_{field};"))
+                    .nl();
+            }
+        }
+        if needs_time {
+            buffered
+                .ident(&format!(
+                    "m->{f} = {root}_default_{f};",
+                    f = c::FUNCTION_TIME_NOW_MS
+                ))
                 .nl();
         }
     }
-    if needs_time {
-        printer
-            .ident(&format!(
-                "m->{f} = {root}_default_{f};",
-                f = c::FUNCTION_TIME_NOW_MS
-            ))
-            .nl();
+    // У модели без адресованных портов и без источника времени связывать нечего:
+    // тело пусто, и параметр остаётся неиспользуемым (фича 0260). Помощник —
+    // `static inline` в заголовке, то есть предупреждение уедет к пользователю.
+    if c::c_params::is_unused(&body, "m") {
+        printer.ident(&c::c_params::unused_guard("m")).nl();
     }
+    printer.print(&body);
     printer.down();
     printer.print("}").nl();
     Ok(())

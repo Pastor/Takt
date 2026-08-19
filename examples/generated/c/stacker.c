@@ -59,6 +59,7 @@ static uint8_t Stacker_travel_time(const Stacker *model, uint8_t to_stack, uint8
 /// Функция инициализации модели CommandReceiver (Stacker:CommandReceiver)
 void StackerCommandReceiver_init(StackerCommandReceiver *model, Stacker *main) {
     assert(0 != model);
+    (void)main;
     model->state = STACKER_COMMAND_RECEIVER_INIT;
 }
 
@@ -112,12 +113,14 @@ void StackerCommandReceiver_reset(StackerCommandReceiver *model, Stacker *main) 
 
 /// Функция проверки терминального состояния модели CommandReceiver (Stacker:CommandReceiver)
 bool StackerCommandReceiver_is_done(const StackerCommandReceiver *model, Stacker *main) {
+    (void)main;
     return model->state == STACKER_COMMAND_RECEIVER_END;
 }
 
 /// Функция инициализации модели LiftController (Stacker:LiftController)
 void StackerLiftController_init(StackerLiftController *model, Stacker *main) {
     assert(0 != model);
+    (void)main;
     model->state = STACKER_LIFT_CONTROLLER_INIT;
 }
 
@@ -180,12 +183,14 @@ void StackerLiftController_reset(StackerLiftController *model, Stacker *main) {
 
 /// Функция проверки терминального состояния модели LiftController (Stacker:LiftController)
 bool StackerLiftController_is_done(const StackerLiftController *model, Stacker *main) {
+    (void)main;
     return model->state == STACKER_LIFT_CONTROLLER_END;
 }
 
 /// Функция инициализации модели MovementController (Stacker:MovementController)
 void StackerMovementController_init(StackerMovementController *model, Stacker *main) {
     assert(0 != model);
+    (void)main;
     model->state = STACKER_MOVEMENT_CONTROLLER_INIT;
 }
 
@@ -391,6 +396,7 @@ void StackerMovementController_reset(StackerMovementController *model, Stacker *
 
 /// Функция проверки терминального состояния модели MovementController (Stacker:MovementController)
 bool StackerMovementController_is_done(const StackerMovementController *model, Stacker *main) {
+    (void)main;
     return model->state == STACKER_MOVEMENT_CONTROLLER_END;
 }
 

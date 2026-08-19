@@ -9,6 +9,7 @@ static bool PidRegulatorPid_is_done(const PidRegulatorPid *model, PidRegulator *
 /// Функция инициализации модели Pid (PidRegulator:Pid)
 void PidRegulatorPid_init(PidRegulatorPid *model, PidRegulator *main) {
     assert(0 != model);
+    (void)main;
     model->state = PID_REGULATOR_PID_INIT;
     model->ctrl = 0.0;
     model->deriv = 0.0;
@@ -77,6 +78,7 @@ void PidRegulatorPid_reset(PidRegulatorPid *model, PidRegulator *main) {
 
 /// Функция проверки терминального состояния модели Pid (PidRegulator:Pid)
 bool PidRegulatorPid_is_done(const PidRegulatorPid *model, PidRegulator *main) {
+    (void)main;
     return model->state == PID_REGULATOR_PID_END;
 }
 

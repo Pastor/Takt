@@ -3,16 +3,24 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/* Контракт частоты Takt (clock): объявленная моделью частота. */
+#define TAKT_REQUIRED_CLOCK_HZ 1000u
+#ifndef TAKT_TICK_HZ
+#define TAKT_TICK_HZ TAKT_REQUIRED_CLOCK_HZ
+#endif
+_Static_assert(TAKT_TICK_HZ == TAKT_REQUIRED_CLOCK_HZ,
+    "частота тактирования не совпадает с объявленной моделью Takt");
+
 /* Forward declarations */
 typedef struct FanFan FanFan;
 typedef struct Fan Fan;
 
 typedef enum {
-    FAN_FAN_LIGHT = 0,
+    FAN_FAN_PORT_LIGHT = 0,
 } Fan_In_BitPort;
 
 typedef enum {
-    FAN_FAN_MOTOR = 0,
+    FAN_FAN_PORT_MOTOR = 0,
 } Fan_Out_BitPort;
 
 // NOTICE: Определение констант для модели Fan (Fan:Fan)

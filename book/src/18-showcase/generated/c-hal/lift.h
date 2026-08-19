@@ -6,19 +6,19 @@
 typedef struct Lift Lift;
 
 typedef enum {
-    LIFT_BRAKE = 0,
-    LIFT_DOORS_OPEN = 1,
-    LIFT_MOTOR_DOWN = 2,
-    LIFT_MOTOR_UP = 3,
+    LIFT_PORT_BRAKE = 0,
+    LIFT_PORT_DOORS_OPEN = 1,
+    LIFT_PORT_MOTOR_DOWN = 2,
+    LIFT_PORT_MOTOR_UP = 3,
 } Lift_Out_BitPort;
 
 typedef enum {
-    LIFT_AT_FLOOR = 0,
-    LIFT_CALL = 1,
+    LIFT_PORT_AT_FLOOR = 0,
+    LIFT_PORT_CALL = 1,
 } Lift_In_NumericPort;
 
 typedef enum {
-    LIFT_DISPLAY = 0,
+    LIFT_PORT_DISPLAY = 0,
 } Lift_Out_NumericPort;
 
 // NOTICE: Определение констант для модели lift (Lift)
@@ -54,23 +54,23 @@ bool Lift_is_done(const Lift *main);
 typedef struct { uintptr_t addr; int8_t bit; uint8_t width; } Lift_PortBinding;
 
 static const Lift_PortBinding Lift_Out_BitPort__ADDR[] = {
-    [LIFT_BRAKE] = { (uintptr_t)0x50000010u, 2, 1 },
-    [LIFT_DOORS_OPEN] = { (uintptr_t)0x50000010u, 3, 1 },
-    [LIFT_MOTOR_DOWN] = { (uintptr_t)0x50000010u, 1, 1 },
-    [LIFT_MOTOR_UP] = { (uintptr_t)0x50000010u, 0, 1 },
+    [LIFT_PORT_BRAKE] = { (uintptr_t)0x50000010u, 2, 1 },
+    [LIFT_PORT_DOORS_OPEN] = { (uintptr_t)0x50000010u, 3, 1 },
+    [LIFT_PORT_MOTOR_DOWN] = { (uintptr_t)0x50000010u, 1, 1 },
+    [LIFT_PORT_MOTOR_UP] = { (uintptr_t)0x50000010u, 0, 1 },
 };
 static const Lift_PortBinding Lift_In_NumericPort__ADDR[] = {
-    [LIFT_AT_FLOOR] = { (uintptr_t)0x50000002u, -1, 1 },
-    [LIFT_CALL] = { (uintptr_t)0x50000000u, -1, 1 },
+    [LIFT_PORT_AT_FLOOR] = { (uintptr_t)0x50000002u, -1, 1 },
+    [LIFT_PORT_CALL] = { (uintptr_t)0x50000000u, -1, 1 },
 };
 static const Lift_PortBinding Lift_Out_NumericPort__ADDR[] = {
-    [LIFT_DISPLAY] = { (uintptr_t)0x50000014u, -1, 1 },
+    [LIFT_PORT_DISPLAY] = { (uintptr_t)0x50000014u, -1, 1 },
 };
 
 static void Lift_default_write_bit(Lift_Out_BitPort p, bool val, void *userdata) {
     (void)userdata;
     Lift_PortBinding b = Lift_Out_BitPort__ADDR[p];
-    int s = b.bit < 0 ? 0 : b.bit;
+    int s = b.bit;
     switch (b.width) {
         case 2: {
             volatile uint16_t *r = (volatile uint16_t*)b.addr;
@@ -115,7 +115,7 @@ static void Lift_default_write_numeric(Lift_Out_NumericPort p, int64_t val, void
     }
 }
 
-static void Lift_bind_default_hal(Lift *m) {
+static inline void Lift_bind_default_hal(Lift *m) {
     m->write_bit = Lift_default_write_bit;
     m->read_numeric = Lift_default_read_numeric;
     m->write_numeric = Lift_default_write_numeric;

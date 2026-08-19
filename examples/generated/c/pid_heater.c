@@ -9,6 +9,7 @@ static bool PidHeaterHeater_is_done(const PidHeaterHeater *model, PidHeater *mai
 ///Функции моделей
 static PidState PidHeater_pid_compute(const PidHeater *model, PidState p, double sp, double pv);
 static PidState PidHeater_pid_compute(const PidHeater *model, PidState p, double sp, double pv) {
+    (void)model;
     PidState r = p;
     double err = sp - pv;
     double prop = p.kp * err;
@@ -93,6 +94,7 @@ void PidHeaterHeater_reset(PidHeaterHeater *model, PidHeater *main) {
 
 /// Функция проверки терминального состояния модели Heater (PidHeater:Heater)
 bool PidHeaterHeater_is_done(const PidHeaterHeater *model, PidHeater *main) {
+    (void)main;
     return model->state == PID_HEATER_HEATER_END;
 }
 

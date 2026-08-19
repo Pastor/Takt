@@ -477,3 +477,4 @@
 | 0296-03 | 0296 | SE-120 — специализация модели из другого файла | [0296-03-semantic-stages-single-source.md](0296-03-semantic-stages-single-source.md) |
 | 0278-01 | 0278 | Снятие мёртвой упаковки последовательной композиции | [0278-01-compact-implement-dead-branch.md](0278-01-compact-implement-dead-branch.md) |
 | 0278-02 | 0278 | Публичность перестаёт прятать мёртвое | [0278-02-compact-implement-dead-branch.md](0278-02-compact-implement-dead-branch.md) |
+| 0260-01 | 0260 | Заглушка неиспользуемого параметра | [0260-01-c-unused-struct-parameter.md](0260-01-c-unused-struct-parameter.md) |

@@ -16,6 +16,7 @@ static bool RegulatorRegulator_is_done(const RegulatorRegulator *model, Regulato
 /// Функция инициализации модели Regulator (Regulator:Regulator)
 void RegulatorRegulator_init(RegulatorRegulator *model, Regulator *main) {
     assert(0 != model);
+    (void)main;
     model->state = REGULATOR_REGULATOR_INIT;
     model->half = 128;
     model->near = 2432;
@@ -63,6 +64,7 @@ void RegulatorRegulator_reset(RegulatorRegulator *model, Regulator *main) {
 
 /// Функция проверки терминального состояния модели Regulator (Regulator:Regulator)
 bool RegulatorRegulator_is_done(const RegulatorRegulator *model, Regulator *main) {
+    (void)main;
     return model->state == REGULATOR_REGULATOR_END;
 }
 

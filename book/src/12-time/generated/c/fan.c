@@ -9,6 +9,7 @@ static bool FanFan_is_done(const FanFan *model, Fan *main);
 /// Функция инициализации модели Fan (Fan:Fan)
 void FanFan_init(FanFan *model, Fan *main) {
     assert(0 != model);
+    (void)main;
     model->state = FAN_FAN_INIT;
     model->takt_dwell = 0;
     model->takt_prev_state = (unsigned)FAN_FAN_INIT;
@@ -19,33 +20,33 @@ void FanFan_tick(FanFan *model, Fan *main) {
     assert(0 != model);
     assert(0 != main);
     if (model->state == FAN_FAN_INIT) {
-        (*main->write_bit)(FAN_FAN_MOTOR, 0, main->userdata);
+        (*main->write_bit)(FAN_FAN_PORT_MOTOR, 0, main->userdata);
         model->state = FAN_FAN_IDLE;
     }
     switch (model->state) {
         case FAN_FAN_IDLE: {
-            if ((*main->read_bit)(FAN_FAN_LIGHT, main->userdata) == 1) {
-                (*main->write_bit)(FAN_FAN_MOTOR, 1, main->userdata);
+            if ((*main->read_bit)(FAN_FAN_PORT_LIGHT, main->userdata) == 1) {
+                (*main->write_bit)(FAN_FAN_PORT_MOTOR, 1, main->userdata);
                 model->state = FAN_FAN_WORKING;
                 break;
             }
             break;
         }
         case FAN_FAN_OVERRUN: {
-            if ((*main->read_bit)(FAN_FAN_LIGHT, main->userdata) == 1) {
-                (*main->write_bit)(FAN_FAN_MOTOR, 1, main->userdata);
+            if ((*main->read_bit)(FAN_FAN_PORT_LIGHT, main->userdata) == 1) {
+                (*main->write_bit)(FAN_FAN_PORT_MOTOR, 1, main->userdata);
                 model->state = FAN_FAN_WORKING;
                 break;
             }
             if (model->takt_dwell >= 180000) {
-                (*main->write_bit)(FAN_FAN_MOTOR, 0, main->userdata);
+                (*main->write_bit)(FAN_FAN_PORT_MOTOR, 0, main->userdata);
                 model->state = FAN_FAN_IDLE;
                 break;
             }
             break;
         }
         case FAN_FAN_WORKING: {
-            if ((*main->read_bit)(FAN_FAN_LIGHT, main->userdata) == 0) {
+            if ((*main->read_bit)(FAN_FAN_PORT_LIGHT, main->userdata) == 0) {
                 model->state = FAN_FAN_OVERRUN;
                 break;
             }
@@ -71,6 +72,7 @@ void FanFan_reset(FanFan *model, Fan *main) {
 
 /// Функция проверки терминального состояния модели Fan (Fan:Fan)
 bool FanFan_is_done(const FanFan *model, Fan *main) {
+    (void)main;
     return model->state == FAN_FAN_END;
 }
 
