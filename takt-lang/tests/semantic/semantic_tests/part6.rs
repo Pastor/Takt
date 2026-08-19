@@ -307,7 +307,7 @@ fn invariant_parses_as_model_element() {
     // И обязательство — Guard-формула в formulas.
     assert!(
         node.formulas.iter().any(
-            |f| matches!(f, takt_lang::semantic::formula::Formula::Guard(_, Some(n)) if n == "Safe")
+            |f| matches!(f, takt_lang::semantic::formula::Formula::Guard(_, Some(n), _) if n == "Safe")
         ),
         "инвариант даёт именованную Guard-формулу: {:?}",
         node.formulas

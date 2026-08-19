@@ -117,7 +117,7 @@ fn emit_model_guards(p: &mut Printer, model: &ModelNode, fsm: &Fsm) -> Result<()
 fn emit_guard(p: &mut Printer, formula: &Formula, fsm: &Fsm) -> Result<(), Diagnostic> {
     match formula {
         // Имя инварианта не печатается — см. оговорку о yosys выше.
-        Formula::Guard(cond, _) => {
+        Formula::Guard(cond, _, _) => {
             let text = print_condition(cond, &fsm.scope())?;
             if !text.is_empty() {
                 p.ident(&format!("assert ({});", text)).nl();

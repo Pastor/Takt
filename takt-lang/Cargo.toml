@@ -1,6 +1,6 @@
 [package]
 name = "takt-lang"
-version = "0.49.1"
+version = "0.50.0"
 authors = ["Pastor <viruszold@gmail.com>"]
 description = "Takt"
 homepage = "https://but.ru"

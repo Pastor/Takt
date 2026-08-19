@@ -486,10 +486,9 @@ pub(super) fn construct_model_stage0(
                     upper: Some(Rc::downgrade(&model_node)),
                 },
             );
-            model_node.borrow_mut().formulas.push(Formula::Guard(
-                ConditionNode::Unresolved(inv.value.clone()),
-                Some(name),
-            ));
+            let guard = ConditionNode::Unresolved(inv.value.clone());
+            let formula = Formula::Guard(guard, Some(name), inv_loc);
+            model_node.borrow_mut().formulas.push(formula);
         } else if let ModelElement::NamedBlockCode(def) = element {
             let name = def
                 .clone()
@@ -623,11 +622,13 @@ pub(super) fn construct_model_stage0(
         } else if let ModelElement::InlineFormula(inline) = element {
             match &**inline {
                 ast::InlineFormulaDefine::Guard { conditions, .. } => {
+                    let at = formula::inline_formula_loc(inline);
                     for cond in conditions {
-                        model_node.borrow_mut().formulas.push(Formula::Guard(
-                            ConditionNode::Unresolved(cond.clone()),
-                            None,
-                        ));
+                        let guard = ConditionNode::Unresolved(cond.clone());
+                        model_node
+                            .borrow_mut()
+                            .formulas
+                            .push(Formula::Guard(guard, None, at));
                     }
                 }
                 ast::InlineFormulaDefine::Ltl { formulas, .. } => {
@@ -774,11 +775,13 @@ fn resolve_formula(formula: Formula, model: Rc<RefCell<ModelNode>>) -> Result<Fo
             }
             Ok(Formula::Formulas(resolved))
         }
-        Formula::Guard(cond, name) => match cond {
-            ConditionNode::Unresolved(ast_cond) => {
-                Ok(Formula::Guard(resolve_condition(&ast_cond, model)?, name))
-            }
-            other => Ok(Formula::Guard(other, name)),
+        Formula::Guard(cond, name, loc) => match cond {
+            ConditionNode::Unresolved(ast_cond) => Ok(Formula::Guard(
+                resolve_condition(&ast_cond, model)?,
+                name,
+                loc,
+            )),
+            other => Ok(Formula::Guard(other, name, loc)),
         },
         Formula::LTL(ltl) => Ok(Formula::LTL(ltl)),
     }
@@ -1103,11 +1106,10 @@ pub fn construct_states(
                 } else if let StateElement::InlineFormula(inline) = element {
                     match &**inline {
                         ast::InlineFormulaDefine::Guard { conditions, .. } => {
+                            let at = formula::inline_formula_loc(inline);
                             for cond in conditions {
-                                state_formulas.push(Formula::Guard(
-                                    ConditionNode::Unresolved(cond.clone()),
-                                    None,
-                                ));
+                                let guard = ConditionNode::Unresolved(cond.clone());
+                                state_formulas.push(Formula::Guard(guard, None, at));
                             }
                         }
                         ast::InlineFormulaDefine::Ltl { formulas, .. } => {
@@ -1121,10 +1123,8 @@ pub fn construct_states(
                     // (десахаризация, ADR 0044). Условие C проверяется каждый такт,
                     // пока автомат в этом состоянии (эталон C: c_model.rs:667).
                     let inv_name = inv.name.as_ref().map(|id| id.name.clone());
-                    state_formulas.push(Formula::Guard(
-                        ConditionNode::Unresolved(inv.value.clone()),
-                        inv_name,
-                    ));
+                    let guard = ConditionNode::Unresolved(inv.value.clone());
+                    state_formulas.push(Formula::Guard(guard, inv_name, inv.loc));
                 }
             }
             // Если состояние не имеет реализации (= Expr), но имеет `next`,

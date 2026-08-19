@@ -294,7 +294,7 @@
 | [0279](./0279-qualified-import-model-reference.md) | Ссылка на вложенную модель подключённого файла невыразима | [ADR](../adr/0279-qualified-import-model-reference.md), [анализ](../analyze/0279-qualified-import-model-reference.md), [отчёт](../reports/0279-qualified-import-model-reference.md) | ГОТОВО |
 | [0280](./0280-sv-mmio-bus-axi-wishbone.md) | Адаптеры шин AXI-Lite и Wishbone для цели sv-mmio | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0281](./0281-rust-enum-compare-literal.md) | Цель rust даёт невалидный код на сравнении перечисления с числом | [ADR](../adr/0281-rust-enum-compare-literal.md), [анализ](../analyze/0281-rust-enum-compare-literal.md), [отчёт](../reports/0281-rust-enum-compare-literal.md) | ГОТОВО |
-| [0282](./0282-formula-own-location.md) | У формулы нет собственной позиции: два invariant неразличимы | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0282](./0282-formula-own-location.md) | У формулы нет собственной позиции: два invariant неразличимы | [ADR](../adr/0282-formula-own-location.md), [анализ](../analyze/0282-formula-own-location.md), [отчёт](../reports/0282-formula-own-location.md) | ГОТОВО |
 | [0283](./0283-cli-report-result-merge.md) | Печать результата компиляции живёт в двух почти одинаковых функциях | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0284](./0284-empty-struct-semantics.md) | Структура без полей | SE-115 на объявлении, симметрично SE-105; грамматика не тронута; контроль сузил объём — отказы rust/sv не про пустоту | ГОТОВО |
 | [0285](./0285-inferred-width-from-result.md) | Ширина выведенного типа берётся у результата | Ширина по результату у объявлений без типа; три границы, каждую поймал чужой сторож; класс шире сдвига | ГОТОВО |

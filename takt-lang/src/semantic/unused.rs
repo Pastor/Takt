@@ -622,7 +622,7 @@ fn collect_from_formula(formula: &Formula, used: &mut HashSet<String>) {
             }
         }
         // Guard несёт `ConditionNode` — тот же обход, что и у условий рёбер.
-        Formula::Guard(cond, _) => collect_from_condition(cond, used),
+        Formula::Guard(cond, _, _) => collect_from_condition(cond, used),
         Formula::LTL(ltl) => collect_from_ltl(ltl, used),
     }
 }
