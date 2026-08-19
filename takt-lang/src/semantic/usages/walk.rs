@@ -822,10 +822,16 @@ fn each_import_binding<'a>(
     f: &mut impl FnMut(&'a ast::Identifier, SymbolKind),
 ) {
     match def {
+        // `import "путь" as Имя;` — имя действительно называет МОДЕЛЬ файла.
         ast::ImportDefine::GlobalSymbol(_, alias, _) => f(alias, SymbolKind::Model),
+        // `import { a, b as c } from "путь";` — переносится ОБЪЯВЛЕНИЕ соседнего
+        // файла, и вид у него тот же, что там: переменная, порт, функция, тип.
+        // Здесь он неизвестен (слой однофайловый), поэтому вид `Imported` —
+        // он отвечает на ссылку в любом пространстве. Прежде ставился `Model`,
+        // и вхождения имени в теле с объявлением не связывались (фича 0256).
         ast::ImportDefine::Rename(_, names, _) => {
             for (original, alias) in names {
-                f(alias.as_ref().unwrap_or(original), SymbolKind::Model);
+                f(alias.as_ref().unwrap_or(original), SymbolKind::Imported);
             }
         }
         // `import "путь";` вводит имя по имени файла — идентификатора в тексте

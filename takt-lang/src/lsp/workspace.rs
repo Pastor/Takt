@@ -211,17 +211,40 @@ impl Workspace {
             if exported && !import_binding {
                 occurrences.extend(self.consumer_occurrences(origin, &name));
             }
-            let unparsable_consumers = if exported && !import_binding {
+            let mut unparsable_consumers = if exported && !import_binding {
                 self.unparsable_consumers(&name)
             } else {
                 Vec::new()
             };
+            // Имя, ВЫБРАННОЕ импортом (`import { a } from "…";`), объявлено в
+            // соседнем файле: к вхождениям импортёра добавляются объявление
+            // источника и вхождения у прочих его потребителей. Иначе ответ
+            // зависел бы от того, куда поставлен курсор, — на директиву
+            // импорта или на имя в теле (фича 0256).
+            let mut ambiguous = false;
+            if usage.symbol_kind == usages::SymbolKind::Imported {
+                let sources = self.sources_of(origin, &name);
+                if let Some(&declaring) = sources.first() {
+                    occurrences.extend(self.declaration_occurrences(declaring, &name));
+                    // Свои вхождения уже собраны выше: у потребителя-импортёра
+                    // они пришли из `local_occurrences`, и дубль сделал бы
+                    // список неверным по счёту.
+                    let own = self.files[origin].path.clone();
+                    occurrences.extend(
+                        self.consumer_occurrences(declaring, &name)
+                            .into_iter()
+                            .filter(|o| o.path != own),
+                    );
+                    unparsable_consumers = self.unparsable_consumers(&name);
+                }
+                ambiguous = sources.len() > 1;
+            }
             return Some(Resolution {
                 name,
                 occurrences,
                 exported,
                 import_binding,
-                ambiguous: false,
+                ambiguous,
                 unparsable_consumers,
             });
         }
@@ -327,6 +350,30 @@ impl Workspace {
                             end: u.end,
                             declaration: false,
                         });
+                    }
+                }
+                // Форма `import { a } from "…";` вводит имя, и с фичи 0256
+                // вхождения в теле связываются с ним (вид `Imported`) — то есть
+                // в `unresolved` их больше нет. Берём их у символа: иначе
+                // потребитель этой формы отдал бы только строку импорта, а
+                // потребитель формы `import "…";` — все свои вхождения.
+                if let Some(decl) = table.usages().iter().find(|u| {
+                    u.kind == UsageKind::Declaration
+                        && u.name == name
+                        && u.symbol_kind == usages::SymbolKind::Imported
+                }) {
+                    for u in table.occurrences_of(decl.symbol) {
+                        if !out
+                            .iter()
+                            .any(|o| o.start == u.start && o.path == file.path)
+                        {
+                            out.push(Occurrence {
+                                path: file.path.clone(),
+                                start: u.start,
+                                end: u.end,
+                                declaration: false,
+                            });
+                        }
                     }
                 }
             }

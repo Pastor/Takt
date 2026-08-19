@@ -490,3 +490,4 @@
 | 0292-01 | 0292 | Код CC-022 обещан комментарием, но не эмитируется никем | [0292-01-cc022-promise-without-emitter.md](0292-01-cc022-promise-without-emitter.md) |
 | 0255-01 | 0255 | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | [0255-01-sim-diagnostic-codes-registry.md](0255-01-sim-diagnostic-codes-registry.md) |
 | 0255-02 | 0255 | Коды симулятора, вплавленные в текст, невидимы гейту и реестру | [0255-02-sim-diagnostic-codes-registry.md](0255-02-sim-diagnostic-codes-registry.md) |
+| 0256-01 | 0256 | Символ формы import { A } объявляется видом Model | [0256-01-lsp-import-binding-kind.md](0256-01-lsp-import-binding-kind.md) |
