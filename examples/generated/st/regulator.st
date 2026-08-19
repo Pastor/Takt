@@ -3,7 +3,7 @@
  * Не редактировать вручную: файл перезаписывается при каждой генерации.
  *)
 
-FUNCTION LAM_Q_FLOORDIV : LINT
+FUNCTION TAKT_Q_FLOORDIV : LINT
 VAR_INPUT
     x : LINT;
     d : LINT;
@@ -13,9 +13,9 @@ VAR
 END_VAR
     q := x / d;
     IF (x MOD d <> 0) AND ((x < 0) <> (d < 0)) THEN
-        LAM_Q_FLOORDIV := q - 1;
+        TAKT_Q_FLOORDIV := q - 1;
     ELSE
-        LAM_Q_FLOORDIV := q;
+        TAKT_Q_FLOORDIV := q;
     END_IF;
 END_FUNCTION
 
@@ -36,7 +36,7 @@ END_VAR
     END_IF;
     CASE state OF
         1: (* Adjust *)
-            value := LINT_TO_INT(INT_TO_LINT(value) + INT_TO_LINT(LINT_TO_INT(LAM_Q_FLOORDIV(INT_TO_LINT((LINT_TO_INT(INT_TO_LINT(setpoint) - INT_TO_LINT(value)))) * INT_TO_LINT(half), 256))));
+            value := LINT_TO_INT(INT_TO_LINT(value) + INT_TO_LINT(LINT_TO_INT(TAKT_Q_FLOORDIV(INT_TO_LINT((LINT_TO_INT(INT_TO_LINT(setpoint) - INT_TO_LINT(value)))) * INT_TO_LINT(half), 256))));
             IF value >= near THEN
                 state := 3; (* Settled *)
             END_IF;

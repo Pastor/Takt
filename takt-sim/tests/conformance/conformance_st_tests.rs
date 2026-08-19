@@ -259,7 +259,7 @@ fn per_tick_trace_matches_generated_st() {
 // Q-арифметика fixed-point (фича 0061, задача 0061-03): T10 для цели st
 //
 // В IEC сдвигов над числами нет → floor у `*` и `q → int` идут через
-// `FUNCTION LAM_Q_FLOORDIV`. Наблюдаемое — INT-поле `FIXED0.ACC` (= repr q(8,8)),
+// `FUNCTION TAKT_Q_FLOORDIV`. Наблюдаемое — INT-поле `FIXED0.ACC` (= repr q(8,8)),
 // сверяется потактово с симулятором.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -420,7 +420,7 @@ fn run_generated_st_fixed_w12(dir: &Path, iec2c: &Path, lib: &Path) -> Vec<i128>
         .expect("запуск iec2c");
     assert!(
         transpile.status.success() && work.join("POUS.c").is_file(),
-        "iec2c не оттранслировал ST с LAM_Q_WRAP:\n{}",
+        "iec2c не оттранслировал ST с TAKT_Q_WRAP:\n{}",
         String::from_utf8_lossy(&transpile.stderr)
     );
 
@@ -459,7 +459,7 @@ int main(void) {{
         .expect("запуск cc");
     assert!(
         compile.status.success(),
-        "ST с LAM_Q_WRAP (через iec2c) не собирается:\n{}",
+        "ST с TAKT_Q_WRAP (через iec2c) не собирается:\n{}",
         String::from_utf8_lossy(&compile.stderr)
     );
     let run = Command::new(&bin).output().expect("запуск драйвера ST");
@@ -481,7 +481,7 @@ int main(void) {{
 ///
 /// ⚠️ Формат `q(6, 6)`: `W = 12`, хранение `INT` (16 бит). Прежняя сверка шла
 /// на `q(8, 8)`, где границы совпадают, — расхождение было ей невидимо.
-/// ⚠️ Тест заодно доказывает, что `FUNCTION LAM_Q_WRAP` **принимается MatIEC**:
+/// ⚠️ Тест заодно доказывает, что `FUNCTION TAKT_Q_WRAP` **принимается MatIEC**:
 /// `MOD` над `LINT` и поправки знака — не самоочевидная для IEC конструкция.
 #[test]
 fn fixed_wrap_to_width_matches_generated_st() {
@@ -510,7 +510,7 @@ fn fixed_wrap_to_width_matches_generated_st() {
 }
 
 /// T10/A4 (цель st): побитовая потактовая сверка Q-арифметики с симулятором —
-/// floor к −∞ у `*` строится `LAM_Q_FLOORDIV` (сдвигов над числами в IEC нет).
+/// floor к −∞ у `*` строится `TAKT_Q_FLOORDIV` (сдвигов над числами в IEC нет).
 #[test]
 fn fixed_point_arithmetic_matches_generated_st() {
     let sim = simulate_fixed_trace();

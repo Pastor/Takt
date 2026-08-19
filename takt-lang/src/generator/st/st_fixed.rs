@@ -3,7 +3,7 @@
 //! ⚠️ **В IEC 61131-3 сдвигов над числами нет** (`SHL`/`SHR` определены только
 //! на битовых строках, арифметика над ними запрещена, `<<` не существует —
 //! `CLAUDE.md`). Поэтому floor к −∞ у `*` и приведения `q → int` выражаются
-//! **floor-делением** через эмитируемую `FUNCTION LAM_Q_FLOORDIV` (её MatIEC
+//! **floor-делением** через эмитируемую `FUNCTION TAKT_Q_FLOORDIV` (её MatIEC
 //! принимает — проба 2026-07-19). Промежуток арифметики — `LINT` (64 бита):
 //! операнды приводятся `{S}_TO_LINT`, результат сужается `LINT_TO_{S}`
 //! (усечение битов = wraparound к W).
@@ -21,13 +21,13 @@ use crate::semantic::type_node::TypeNode;
 use crate::semantic::type_node::type_fixed::fixed_storage_bits;
 use crate::semantic::{ExpressionNode, ModelNode};
 
-/// Определение `FUNCTION LAM_Q_FLOORDIV` — floor-деление целых `LINT`.
+/// Определение `FUNCTION TAKT_Q_FLOORDIV` — floor-деление целых `LINT`.
 ///
 /// `MOD` и сравнение `BOOL <> BOOL` (XOR знаков) MatIEC принимает. Обход ловушки
 /// C11 в ST не нужен (сдвигов нет вовсе), но floor к −∞ у `/` в IEC отсутствует
 /// (деление усекает к нулю), поэтому floor строится явно.
-pub(crate) const LAM_Q_FLOORDIV: &str = "\
-FUNCTION LAM_Q_FLOORDIV : LINT
+pub(crate) const TAKT_Q_FLOORDIV: &str = "\
+FUNCTION TAKT_Q_FLOORDIV : LINT
 VAR_INPUT
     x : LINT;
     d : LINT;
@@ -37,15 +37,15 @@ VAR
 END_VAR
     q := x / d;
     IF (x MOD d <> 0) AND ((x < 0) <> (d < 0)) THEN
-        LAM_Q_FLOORDIV := q - 1;
+        TAKT_Q_FLOORDIV := q - 1;
     ELSE
-        LAM_Q_FLOORDIV := q;
+        TAKT_Q_FLOORDIV := q;
     END_IF;
 END_FUNCTION
 
 ";
 
-/// Определение `FUNCTION LAM_Q_WRAP` — перенос к **W** битам (правило 3 ADR 0061).
+/// Определение `FUNCTION TAKT_Q_WRAP` — перенос к **W** битам (правило 3 ADR 0061).
 ///
 /// ⚠️ Сужение `LINT_TO_{S}` переносит к ширине **хранения**, а не к `W = m + n`:
 /// при `W = 12` это 16 бит против 12 — другая граница (фикс 0061-01). Совпадают
@@ -55,8 +55,8 @@ END_FUNCTION
 /// ⚠️ Модуль `2^W` передаётся **аргументом**, а не считается: сдвигов над числами
 /// в IEC нет вовсе (ловушка A-4 ADR 0061), а `SHL` определён лишь над битовыми
 /// строками. `MOD` в IEC даёт остаток со знаком делимого — отсюда две поправки.
-pub(crate) const LAM_Q_WRAP: &str = "\
-FUNCTION LAM_Q_WRAP : LINT
+pub(crate) const TAKT_Q_WRAP: &str = "\
+FUNCTION TAKT_Q_WRAP : LINT
 VAR_INPUT
     x : LINT;
     m : LINT;
@@ -71,31 +71,31 @@ END_VAR
     IF r >= m / 2 THEN
         r := r - m;
     END_IF;
-    LAM_Q_WRAP := r;
+    TAKT_Q_WRAP := r;
 END_FUNCTION
 
 ";
 
-/// Определение `FUNCTION LAM_Q_SAT` — прижатие к границам представления
+/// Определение `FUNCTION TAKT_Q_SAT` — прижатие к границам представления
 /// (фича 0170).
 ///
 /// ⚠️ Границы передаются **аргументами**, а не считаются: степеней двойки в
 /// арифметике IEC нет (сдвигов над числами тоже — ловушка A-4 ADR 0061), и
 /// вычислять `2^(W−1)` в ST значило бы городить второй способ узнать то, что
 /// компилятор уже знает.
-pub(crate) const LAM_Q_SAT: &str = "\
-FUNCTION LAM_Q_SAT : LINT
+pub(crate) const TAKT_Q_SAT: &str = "\
+FUNCTION TAKT_Q_SAT : LINT
 VAR_INPUT
     x : LINT;
     lo : LINT;
     hi : LINT;
 END_VAR
     IF x > hi THEN
-        LAM_Q_SAT := hi;
+        TAKT_Q_SAT := hi;
     ELSIF x < lo THEN
-        LAM_Q_SAT := lo;
+        TAKT_Q_SAT := lo;
     ELSE
-        LAM_Q_SAT := x;
+        TAKT_Q_SAT := x;
     END_IF;
 END_FUNCTION
 
@@ -118,7 +118,7 @@ fn wrap_lint(expr: String, m: u8, n: u8, sat: bool) -> Result<String, Diagnostic
         let w = m + n;
         let max = (1i64 << (w - 1)) - 1;
         let min = -(1i64 << (w - 1));
-        return Ok(format!("LAM_Q_SAT({expr}, {min}, {max})"));
+        return Ok(format!("TAKT_Q_SAT({expr}, {min}, {max})"));
     }
     if width_is_storage(m, n) {
         return Ok(expr);
@@ -138,7 +138,7 @@ fn wrap_lint(expr: String, m: u8, n: u8, sat: bool) -> Result<String, Diagnostic
         )
         .with_code("ST-021"));
     }
-    Ok(format!("LAM_Q_WRAP({expr}, {})", 1u64 << w))
+    Ok(format!("TAKT_Q_WRAP({expr}, {})", 1u64 << w))
 }
 
 /// Арифметическая операция над `q(m, n)`.
@@ -215,8 +215,8 @@ pub(crate) fn binary(
         FixedOp::Add => format!("{la} + {lb}"),
         FixedOp::Subtract => format!("{la} - {lb}"),
         FixedOp::Multiply | FixedOp::Divide if bits == 64 => return Err(too_wide(m, n)),
-        // Точное произведение 2W → floor к −∞ (LAM_Q_FLOORDIV, правило 4).
-        FixedOp::Multiply => format!("LAM_Q_FLOORDIV({la} * {lb}, {pow})"),
+        // Точное произведение 2W → floor к −∞ (TAKT_Q_FLOORDIV, правило 4).
+        FixedOp::Multiply => format!("TAKT_Q_FLOORDIV({la} * {lb}, {pow})"),
         // Делимое ← n влево (умножением), деление IEC усекает к нулю (как сим).
         FixedOp::Divide => format!("({la} * {pow}) / {lb}"),
     };
@@ -264,7 +264,7 @@ pub(crate) fn cast(
             let tgt = int_name_of_target(target)?;
             let li = to_lint(&printed, s);
             Ok(format!(
-                "LINT_TO_{tgt}(LAM_Q_FLOORDIV({li}, {}))",
+                "LINT_TO_{tgt}(TAKT_Q_FLOORDIV({li}, {}))",
                 1u64 << from_n
             ))
         }
@@ -319,7 +319,7 @@ fn rescale(li: &str, from_n: u8, to_n: u8, to_m: u8, sat: bool) -> Result<String
     let inner = if to_n >= from_n {
         format!("{li} * {}", 1u64 << (to_n - from_n))
     } else {
-        format!("LAM_Q_FLOORDIV({li}, {})", 1u64 << (from_n - to_n))
+        format!("TAKT_Q_FLOORDIV({li}, {})", 1u64 << (from_n - to_n))
     };
     Ok(format!(
         "LINT_TO_{s2}({})",
@@ -361,23 +361,23 @@ fn untyped_source() -> Diagnostic {
     .with_code("ST-011")
 }
 
-/// Вставляет `FUNCTION LAM_Q_FLOORDIV` перед первым POU, если она вызвана в
+/// Вставляет `FUNCTION TAKT_Q_FLOORDIV` перед первым POU, если она вызвана в
 /// `program`. Эмитится по факту вызова (без лишней POU); корпус без `q`
 /// неизменен (T14). Опережающие ссылки в ST — расширение `iec2c -p`, которым
 /// цель уже пользуется, поэтому позиция «перед первым FUNCTION_BLOCK» безопасна.
 pub(crate) fn insert_helper(program: String) -> String {
     let mut helpers = String::new();
-    // Порядок значим: `LAM_Q_WRAP` зовёт только себя, `LAM_Q_FLOORDIV` — тоже,
+    // Порядок значим: `TAKT_Q_WRAP` зовёт только себя, `TAKT_Q_FLOORDIV` — тоже,
     // но объявление обязано стоять до использования, а вставляются они разом
     // перед первым POU.
-    if program.contains("LAM_Q_SAT(") {
-        helpers.push_str(LAM_Q_SAT);
+    if program.contains("TAKT_Q_SAT(") {
+        helpers.push_str(TAKT_Q_SAT);
     }
-    if program.contains("LAM_Q_WRAP(") {
-        helpers.push_str(LAM_Q_WRAP);
+    if program.contains("TAKT_Q_WRAP(") {
+        helpers.push_str(TAKT_Q_WRAP);
     }
-    if program.contains("LAM_Q_FLOORDIV(") {
-        helpers.push_str(LAM_Q_FLOORDIV);
+    if program.contains("TAKT_Q_FLOORDIV(") {
+        helpers.push_str(TAKT_Q_FLOORDIV);
     }
     if helpers.is_empty() {
         return program;

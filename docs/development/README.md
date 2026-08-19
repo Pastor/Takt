@@ -485,3 +485,5 @@
 | 0293-01 | 0293 | Структуры в цели sv | [0293-01-struct-in-st-rust.md](0293-01-struct-in-st-rust.md) |
 | 0293-02 | 0293 | Инициализатор структуры в цели st | [0293-02-struct-in-st-rust.md](0293-02-struct-in-st-rust.md) |
 | 0293-03 | 0293 | Структуры в цели rust | [0293-03-struct-in-st-rust.md](0293-03-struct-in-st-rust.md) |
+| 0253-01 | 0253 | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | [0253-01-legacy-names-in-generated-code.md](0253-01-legacy-names-in-generated-code.md) |
+| 0253-02 | 0253 | Старое имя языка в порождаемом коде (lam_q_*, LAM_Q_*) | [0253-02-legacy-names-in-generated-code.md](0253-02-legacy-names-in-generated-code.md) |

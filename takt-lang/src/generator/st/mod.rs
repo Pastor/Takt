@@ -267,7 +267,7 @@ fn generate_program(map: &StMap) -> Result<(String, Vec<Diagnostic>), Diagnostic
         }
     }
 
-    // Q-хелпер LAM_Q_FLOORDIV (0061) вставляется перед первым POU по факту вызова.
+    // Q-хелпер TAKT_Q_FLOORDIV (0061) вставляется перед первым POU по факту вызова.
     Ok((st_fixed::insert_helper(out), warnings))
 }
 
