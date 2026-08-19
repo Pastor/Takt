@@ -467,3 +467,4 @@
 | 0295-01 | 0295 | Хвостовой комментарий тела и его хозяин | [0295-01-format-element-comment-binding.md](0295-01-format-element-comment-binding.md) |
 | 0279-01 | 0279 | Подсказка о выборочном импорте | [0279-01-qualified-import-model-reference.md](0279-01-qualified-import-model-reference.md) |
 | 0279-02 | 0279 | Печать примечаний в takt-sim | [0279-02-qualified-import-model-reference.md](0279-02-qualified-import-model-reference.md) |
+| 0264-01 | 0264 | Координата судей тела — позиция употребления | [0264-01-body-judge-usage-position.md](0264-01-body-judge-usage-position.md) |

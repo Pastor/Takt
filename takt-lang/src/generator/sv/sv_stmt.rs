@@ -59,7 +59,7 @@ pub(crate) fn print_statement(
             }
             Ok(())
         }
-        StatementNode::Expression(expr) => print_expression_statement(p, expr, scope),
+        StatementNode::Expression(expr, _) => print_expression_statement(p, expr, scope),
         StatementNode::If { cond, then_, else_ } => {
             p.ident(&format!("if ({}) begin", print_expression(cond, scope)?))
                 .nl();

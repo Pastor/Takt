@@ -76,7 +76,7 @@ pub(crate) fn deferred_needs_mut(name: &str, rest: &[StatementNode]) -> bool {
 fn max_path_assigns(name: &str, stmt: &StatementNode) -> usize {
     match stmt {
         StatementNode::Block(items) => items.iter().map(|s| max_path_assigns(name, s)).sum(),
-        StatementNode::Expression(expr) => match &**expr {
+        StatementNode::Expression(expr, _) => match &**expr {
             ExpressionNode::Assign(target, _) => match &**target {
                 ExpressionNode::Variable(var) if var.borrow().name() == name => 1,
                 _ => 0,
@@ -173,7 +173,7 @@ pub(crate) fn fold_assignment<'a>(name: &str, stmt: &'a StatementNode) -> Option
             [single] => fold_assignment(name, single),
             _ => None,
         },
-        StatementNode::Expression(expr) => match &**expr {
+        StatementNode::Expression(expr, _) => match &**expr {
             ExpressionNode::Assign(target, value) => match &**target {
                 ExpressionNode::Variable(var) if var.borrow().name() == name => {
                     // `x := x + 1` свернуть нельзя: значение читает само себя.
@@ -232,7 +232,7 @@ fn scan(name: &str, stmts: &[StatementNode]) -> Verdict {
 fn verdict_of(name: &str, stmt: &StatementNode) -> Verdict {
     match stmt {
         StatementNode::Block(items) => scan(name, items),
-        StatementNode::Expression(expr) => verdict_of_expr(name, expr),
+        StatementNode::Expression(expr, _) => verdict_of_expr(name, expr),
         StatementNode::Variable(decl, _, init) => {
             if init.as_ref().is_some_and(|i| reads_expr(name, i)) {
                 return Verdict::Read;

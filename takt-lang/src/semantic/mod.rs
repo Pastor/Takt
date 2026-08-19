@@ -714,8 +714,8 @@ pub enum StatementNode {
     Unresolved(ast::Statement),
     /// Блок операторов: `{ операторы* }`.
     Block(Vec<StatementNode>),
-    /// Оператор-выражение: присваивание, вызов функции и т.п.
-    Expression(Box<ExpressionNode>),
+    /// Оператор-выражение и его позиция (0264; у выражения своей нет).
+    Expression(Box<ExpressionNode>, crate::diagnostics::Location),
     /// Условный оператор `if`.
     If {
         /// Условие.

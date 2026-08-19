@@ -98,7 +98,7 @@ pub(in crate::generator::c) fn generate_code_block(
             }
         }
 
-        StatementNode::Expression(expr) => {
+        StatementNode::Expression(expr, _) => {
             // Генерируем во временный буфер, чтобы пропустить встроенные
             // функции отладки (`debug`, `S`) без порчи вывода.
             //
@@ -256,7 +256,7 @@ pub(in crate::generator::c) fn generate_code_block(
                 printer.ident("for (");
                 if let Some(init_stmt) = init {
                     // Инициализация — только выражение (без отступа и точки с запятой)
-                    if let StatementNode::Expression(expr) = init_stmt.as_ref() {
+                    if let StatementNode::Expression(expr, _) = init_stmt.as_ref() {
                         generate_stmt_expression(
                             printer,
                             map,

@@ -667,7 +667,7 @@ pub(super) fn collect_statement_entries(
                 collect_statement_entries(s, model, entries);
             }
         }
-        StatementNode::Expression(expr) => {
+        StatementNode::Expression(expr, _) => {
             collect_semantic_expression_entries(expr, model, entries);
         }
         StatementNode::If { then_, else_, .. } => {

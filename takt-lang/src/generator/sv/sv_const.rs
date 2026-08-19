@@ -133,7 +133,7 @@ pub(crate) fn constant_enter_assignments(
         // Формула — свойство для верификации, а не поведение: цель `c` её тоже
         // не эмитит (`taktc verify`, фича 0049).
         StatementNode::InlineFormula(_) => Ok(()),
-        StatementNode::Expression(expr) => match &**expr {
+        StatementNode::Expression(expr, _) => match &**expr {
             ExpressionNode::Assign(target, value) => {
                 let ExpressionNode::Variable(var) = &**target else {
                     return Err(sv008(state, loc));

@@ -59,23 +59,27 @@ use crate::semantic::{ExpressionNode, VariableNode};
 ///
 /// Возвращает **все** нарушения (накопительно, как `literal_range`): редактор
 /// подчёркивает каждое, а не первое.
-pub(super) fn check_expression(expr: &ExpressionNode, position: Position) -> Vec<Diagnostic> {
+pub(super) fn check_expression(
+    expr: &ExpressionNode,
+    position: Position,
+    stmt_loc: Location,
+) -> Vec<Diagnostic> {
     let mut found = Vec::new();
     match position {
         // Верхний уровень оператора: само присваивание законно, но его части —
         // уже значения (`led := (x := 1);` — правая часть вычисляется).
         Position::Statement => match expr {
             ExpressionNode::Assign(left, right) => {
-                collect(left, &mut found);
-                collect(right, &mut found);
+                collect(left, stmt_loc, &mut found);
+                collect(right, stmt_loc, &mut found);
             }
             // Скобки прозрачны: `(led := 1);` — то же действие.
             ExpressionNode::Parenthesis(inner) => {
-                found.extend(check_expression(inner, Position::Statement))
+                found.extend(check_expression(inner, Position::Statement, stmt_loc))
             }
-            other => collect(other, &mut found),
+            other => collect(other, stmt_loc, &mut found),
         },
-        Position::Value => collect(expr, &mut found),
+        Position::Value => collect(expr, stmt_loc, &mut found),
     }
     found
 }
@@ -129,14 +133,21 @@ fn target_of(expr: &ExpressionNode) -> (Location, Option<String>) {
 /// способный нести выражение, обязан **завалить сборку** этого модуля, а не
 /// молча вывести своё содержимое из-под правила. Тот же приём, что у
 /// `semantic/usages/walk.rs` и `parser/depth`.
-fn collect(expr: &ExpressionNode, found: &mut Vec<Diagnostic>) {
+fn collect(expr: &ExpressionNode, stmt_loc: Location, found: &mut Vec<Diagnostic>) {
     match expr {
         ExpressionNode::Assign(left, right) => {
             let (loc, name) = target_of(left);
+            // Позиция оператора точнее: `loc` у цели — координата её ОБЪЯВЛЕНИЯ
+            // (фича 0264), а при неопознанной цели её нет вовсе.
+            let loc = if matches!(stmt_loc, Location::Builtin) {
+                loc
+            } else {
+                stmt_loc
+            };
             found.push(diagnostic(loc, name.as_deref()));
             // Внутрь тоже: `a := (b := (c := 1));` — три нарушения, не одно.
-            collect(left, found);
-            collect(right, found);
+            collect(left, stmt_loc, found);
+            collect(right, stmt_loc, found);
         }
         ExpressionNode::Parenthesis(inner)
         | ExpressionNode::BitAccess(inner, _)
@@ -147,7 +158,7 @@ fn collect(expr: &ExpressionNode, found: &mut Vec<Diagnostic>) {
         | ExpressionNode::UnaryPlus(inner)
         | ExpressionNode::Negate(inner)
         | ExpressionNode::Cast(inner, _)
-        | ExpressionNode::ArraySubscript(_, inner) => collect(inner, found),
+        | ExpressionNode::ArraySubscript(_, inner) => collect(inner, stmt_loc, found),
         ExpressionNode::Power(left, right)
         | ExpressionNode::Multiply(left, right)
         | ExpressionNode::Divide(left, right)
@@ -166,23 +177,23 @@ fn collect(expr: &ExpressionNode, found: &mut Vec<Diagnostic>) {
         | ExpressionNode::Equal(left, right)
         | ExpressionNode::NotEqual(left, right)
         | ExpressionNode::And(left, right) => {
-            collect(left, found);
-            collect(right, found);
+            collect(left, stmt_loc, found);
+            collect(right, stmt_loc, found);
         }
         ExpressionNode::Or(left, right) => {
-            collect(left, found);
-            collect(right, found);
+            collect(left, stmt_loc, found);
+            collect(right, stmt_loc, found);
         }
         ExpressionNode::ConditionalOperator(cond, then_, else_) => {
-            collect(cond, found);
-            collect(then_, found);
-            collect(else_, found);
+            collect(cond, stmt_loc, found);
+            collect(then_, stmt_loc, found);
+            collect(else_, stmt_loc, found);
         }
         ExpressionNode::Function(_, args)
         | ExpressionNode::Array(args)
         | ExpressionNode::Initializer(args) => {
             for arg in args {
-                collect(arg, found);
+                collect(arg, stmt_loc, found);
             }
         }
         // Листья: значения, ссылки и формы, выражений внутри не несущие.

@@ -209,7 +209,7 @@ fn collect_locals(stmt: &StatementNode, out: &mut Vec<(String, Value)>) {
         }
         StatementNode::None
         | StatementNode::Unresolved(_)
-        | StatementNode::Expression(_)
+        | StatementNode::Expression(_, _)
         | StatementNode::Return(_)
         | StatementNode::Break
         | StatementNode::Continue
@@ -264,7 +264,7 @@ pub(crate) fn exec_statement(
             }
             Ok(Flow::Normal)
         }
-        StatementNode::Expression(expr) => exec_expression(expr, ctx),
+        StatementNode::Expression(expr, _) => exec_expression(expr, ctx),
         StatementNode::If { cond, then_, else_ } => {
             if eval_bool(cond, ctx)? {
                 exec_statement(then_, ctx)

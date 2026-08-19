@@ -241,7 +241,7 @@ fn check_stmt(stmt: &StatementNode, model: &ModelNode) -> Result<(), Diagnostic>
                 check_stmt(s, model)?;
             }
         }
-        StatementNode::Expression(e) => check_expr(e, model)?,
+        StatementNode::Expression(e, _) => check_expr(e, model)?,
         StatementNode::If { cond, then_, else_ } => {
             check_expr(cond, model)?;
             check_stmt(then_, model)?;

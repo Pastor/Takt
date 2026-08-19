@@ -47,7 +47,7 @@ pub(crate) struct StmtOutput {
 pub(crate) fn collect_assigned(stmt: &StatementNode, out: &mut BTreeSet<String>) {
     match stmt {
         StatementNode::Block(items) => items.iter().for_each(|i| collect_assigned(i, out)),
-        StatementNode::Expression(expr) => collect_assigned_expr(expr, out),
+        StatementNode::Expression(expr, _) => collect_assigned_expr(expr, out),
         StatementNode::Variable(_, _, Some(init)) => collect_assigned_expr(init, out),
         StatementNode::If { cond, then_, else_ } => {
             collect_assigned_expr(cond, out);
@@ -400,7 +400,7 @@ pub(crate) fn print_statement_ctx(
     match stmt {
         StatementNode::None => Ok(0),
         StatementNode::Block(items) => print_block(items, None, scope, p, out).map(|_| 0),
-        StatementNode::Expression(expr) => {
+        StatementNode::Expression(expr, _) => {
             p.ident(&format!("{};", print_expression(expr, scope)?))
                 .nl();
             Ok(0)
@@ -699,7 +699,10 @@ mod tail_tests {
     #[test]
     fn block_folds_on_last_statement() {
         let block = StatementNode::Block(vec![
-            StatementNode::Expression(Box::new(ExpressionNode::Number(0))),
+            StatementNode::Expression(
+                Box::new(ExpressionNode::Number(0)),
+                crate::diagnostics::Location::default(),
+            ),
             ret(1),
         ]);
         assert!(tail_foldable(&block));
@@ -716,7 +719,10 @@ mod tail_tests {
     /// сворачиваем (правило 2: «всё или ничего»).
     #[test]
     fn mixed_branches_are_not_foldable() {
-        let else_no_return = StatementNode::Expression(Box::new(ExpressionNode::Number(5)));
+        let else_no_return = StatementNode::Expression(
+            Box::new(ExpressionNode::Number(5)),
+            crate::diagnostics::Location::default(),
+        );
         assert!(!tail_foldable(&if_(ret(1), Some(else_no_return))));
     }
 
