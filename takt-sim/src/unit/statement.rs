@@ -317,7 +317,7 @@ pub(crate) fn exec_statement(
         // явно игнорируется.
         StatementNode::InlineFormula(formulas) => {
             for f in formulas {
-                if let Formula::Guard(cond, name) = f {
+                if let Formula::Guard(cond, name, _) = f {
                     let pred = create_predicate(cond);
                     match pred.evaluate(ctx)? {
                         true => {}

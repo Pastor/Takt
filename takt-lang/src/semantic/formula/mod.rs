@@ -12,6 +12,7 @@
 /// законное место рядом с самим типом [`Formula`].
 pub(crate) mod sites;
 
+use crate::diagnostics::Location;
 use crate::parser::ast::LtlExpr;
 use crate::semantic::ConditionNode;
 use crate::verification::ltl::Ltl;
@@ -34,7 +35,13 @@ pub enum Formula {
     /// десахаризацией `invariant Имя = C;`. Для анонимной формы `: [Guard] c;` —
     /// `None`. Имя несёт диагностику симулятора (SIM-025) и на эмиссию C **не
     /// влияет** — генератор его игнорирует (регресс C = 0).
-    Guard(ConditionNode, Option<String>),
+    ///
+    /// Третье поле — **позиция самой формулы** (фича 0282). Прежде её не было,
+    /// и реестр мест (`formula::sites`) клал в диагностику позицию
+    /// **вместилища**: два `invariant` в одном файле давали два предупреждения
+    /// `ST-022` с одинаковой координатой `1:1`, и автор не знал, о какой из
+    /// формул речь.
+    Guard(ConditionNode, Option<String>, Location),
 }
 
 impl PartialEq for Formula {
@@ -42,8 +49,11 @@ impl PartialEq for Formula {
         match (self, other) {
             (Self::LTL(a), Self::LTL(b)) => a == b,
             (Self::Formulas(a), Self::Formulas(b)) => a == b,
-            // Имя — метаданные диагностики; равенство определяется условием.
-            (Self::Guard(a, _), Self::Guard(b, _)) => a == b,
+            // Имя и позиция — метаданные диагностики; равенство определяется
+            // условием (позиция исключена по тому же доводу, что и в
+            // `PartialEq for Extend`, фича 0056: иначе две записи одной формулы
+            // стали бы разными узлами).
+            (Self::Guard(a, _, _), Self::Guard(b, _, _)) => a == b,
             _ => false,
         }
     }
@@ -58,7 +68,7 @@ impl Eq for Formula {}
 pub fn condition_to_formula(cond: &ConditionNode) -> Formula {
     match cond {
         ConditionNode::None => Formula::None,
-        cond => Formula::Guard(cond.clone(), None),
+        cond => Formula::Guard(cond.clone(), None, Location::Builtin),
     }
 }
 
@@ -93,5 +103,17 @@ pub fn ltl_ast_to_semantic(expr: &LtlExpr) -> Ltl {
             Rc::new(ltl_ast_to_semantic(r)),
         ),
         LtlExpr::Parenthesis(_, inner) => ltl_ast_to_semantic(inner),
+    }
+}
+
+/// Позиция встроенной формулы (`: [Guard] c;`, `: [LTL] φ;`) в исходнике.
+///
+/// Живёт здесь, а не в `tree.rs`: разбор варианта прямо в месте построения
+/// стоил бы четырёх строк на каждый из двух вызовов, а `tree.rs` состоит в
+/// реестре узаконенного долга по размеру — расти ему нельзя (фича 0282).
+pub fn inline_formula_loc(inline: &crate::parser::ast::InlineFormulaDefine) -> Location {
+    match inline {
+        crate::parser::ast::InlineFormulaDefine::Guard { loc, .. }
+        | crate::parser::ast::InlineFormulaDefine::Ltl { loc, .. } => *loc,
     }
 }

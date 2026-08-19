@@ -175,9 +175,16 @@ fn collect_formula(
             loc,
             state: scope,
         }),
-        Formula::Guard(cond, _name) => out.push(FormulaSite {
+        // Позиция берётся у САМОЙ формулы (фича 0282), а `loc` вместилища
+        // остаётся запасным ходом: у формулы, построенной вне разбора
+        // (`condition_to_formula`), своей позиции нет.
+        Formula::Guard(cond, _name, own) => out.push(FormulaSite {
             formula: FormulaLeaf::Guard(cond.clone()),
-            loc,
+            loc: if matches!(own, crate::diagnostics::Location::Builtin) {
+                loc
+            } else {
+                *own
+            },
             state: scope,
         }),
         Formula::Formulas(inner) => {

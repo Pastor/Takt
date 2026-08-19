@@ -471,3 +471,4 @@
 | 0273-01 | 0273 | Недостижимое ребро — предупреждение SE-116 | [0273-01-unreachable-edge-warning.md](0273-01-unreachable-edge-warning.md) |
 | 0276-01 | 0276 | Диагностика семантики без кода и позиции | [0276-01-semantic-diagnostics-without-code.md](0276-01-semantic-diagnostics-without-code.md) |
 | 0277-01 | 0277 | Координата отказа цели — место употребления | [0277-01-expression-usage-position.md](0277-01-expression-usage-position.md) |
+| 0282-01 | 0282 | Собственная позиция формулы | [0282-01-formula-own-location.md](0282-01-formula-own-location.md) |

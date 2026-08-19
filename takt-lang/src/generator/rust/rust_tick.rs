@@ -238,7 +238,7 @@ pub(crate) fn emit_tick(
 /// здесь оно бесплатно и полезно.
 fn emit_guard(p: &mut Printer, formula: &Formula, scope: &Scope) -> Result<(), Diagnostic> {
     match formula {
-        Formula::Guard(cond, label) => {
+        Formula::Guard(cond, label, _) => {
             let text = condition_as_bool(cond, scope)?;
             let text = unwrap_outer(&text);
             match label {
