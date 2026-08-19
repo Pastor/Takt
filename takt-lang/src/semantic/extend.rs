@@ -271,6 +271,60 @@ fn parallelize(left: Extend, right: Extend) -> Extend {
     Extend::Parallel(items)
 }
 
+/// Владелец вложенной модели с таким именем — для подсказки к `SE-001`
+/// (фича 0279).
+///
+/// `import "lib.takt";` вносит к импортёру **обёртку** по имени файла, а
+/// объявленная внутри неё модель снаружи не видна. Запись
+/// `start Main = Helper;` естественна и получает «Модель 'Helper' не найдена» —
+/// утверждение, которое автор читает как «такой модели нет» и идёт переносить
+/// состояния на верхний уровень (замер 0211). На деле форма есть: выборочный
+/// импорт `import { Helper } from "lib.takt";` работает — это проверено
+/// прогоном, и именно он снял с фичи её первоначальный объём («ввести
+/// квалифицированную ссылку»).
+///
+/// ⚠️ Обход — **один уровень** вложенности и по `BTreeMap`, то есть
+/// детерминированный (0048). Глубже подсказка молчит: граница названа, а не
+/// забыта.
+fn nested_owner_of(
+    model: &Rc<RefCell<ModelNode>>,
+    name: &str,
+) -> Option<(String, crate::diagnostics::Location)> {
+    let scope = model.borrow();
+    for (owner_name, owner) in &scope.models {
+        if let Some(nested) = owner.borrow().models.get(name) {
+            return Some((owner_name.clone(), nested.borrow().loc));
+        }
+    }
+    // Имя может быть объявлено уровнем выше — ищем там же, где искал
+    // `search_model`, чтобы подсказка не зависела от места записи.
+    let upper = scope.upper.as_ref().and_then(|w| w.upgrade())?;
+    drop(scope);
+    nested_owner_of(&upper, name)
+}
+
+/// Строит `SE-001` — и добавляет подсказку, если модель есть внутри соседней.
+fn model_not_found(model: &Rc<RefCell<ModelNode>>, id: &ast::Identifier) -> Diagnostic {
+    let diagnostic =
+        Diagnostic::error(id.loc, format!("Модель '{}' не найдена", id.name)).with_code("SE-001");
+    match nested_owner_of(model, &id.name) {
+        // Позиция заметки — ОБЪЯВЛЕНИЕ вложенной модели, то есть чужой файл.
+        // Координата там не печатается (правило 0243: чужую строку под своим
+        // путём показывать нельзя), и текст остаётся чистым — а сама позиция
+        // доезжает до редактора, который умеет открыть нужный файл.
+        Some((owner, nested_loc)) => diagnostic.with_note(
+            nested_loc,
+            format!(
+                "модель '{}' объявлена внутри модели '{owner}': подключение файла целиком \
+                 вносит только её, а вложенные модели снаружи не видны. Подключите нужную \
+                 выборочно: import {{ {} }} from \"…\";",
+                id.name, id.name
+            ),
+        ),
+        None => diagnostic,
+    }
+}
+
 /// Разворачивает **АСД**-выражение расширения прямо в [`Extend`].
 ///
 /// # Почему напрямую, без промежуточного `ExpressionNode`
@@ -291,10 +345,7 @@ fn unroll_ast_extend(
                 .as_ref()
                 .borrow()
                 .search_model(&id.name)
-                .ok_or_else(|| {
-                    Diagnostic::error(id.loc, format!("Модель '{}' не найдена", id.name))
-                        .with_code("SE-001")
-                })?;
+                .ok_or_else(|| model_not_found(&model, &id))?;
             // Позиция имени — то, ради чего разворот идёт по АСД.
             Ok(Extend::Model(found, id.loc, Vec::new()))
         }
@@ -306,10 +357,7 @@ fn unroll_ast_extend(
                 .as_ref()
                 .borrow()
                 .search_model(&id.name)
-                .ok_or_else(|| {
-                    Diagnostic::error(id.loc, format!("Модель '{}' не найдена", id.name))
-                        .with_code("SE-001")
-                })?;
+                .ok_or_else(|| model_not_found(&model, &id))?;
             let arguments =
                 extend_args::parse_arguments(&found, &id.name, &args, call_loc, &model)?;
             Ok(Extend::Model(found, id.loc, arguments))

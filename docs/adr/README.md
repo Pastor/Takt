@@ -234,3 +234,4 @@
 | [0281](./0281-rust-enum-compare-literal.md) | Сравнение перечисления с числом в цели rust | Draft | фича 0281 |
 | [0299](./0299-rust-non-ascii-lowercase-name.md) | Не-ASCII имя в нижнем регистре у цели rust | Draft | фича 0299 |
 | [0295](./0295-format-element-comment-binding.md) | Хвостовой комментарий тела и его хозяин | Draft | фича 0295 |
+| [0279](./0279-qualified-import-model-reference.md) | Вложенная модель подключённого файла и подсказка | Draft | фича 0279 |

@@ -30,7 +30,7 @@
 // подмодулем — `mod.rs` упирается в лимит размера.
 mod batch;
 mod position;
-pub use batch::{format_compile_error, format_warning, normalize};
+pub use batch::{format_compile_error, format_notes, format_warning, normalize};
 pub use position::{note_position_prefix, position_prefix};
 
 #[cfg(feature = "ast-serde")]
