@@ -10,6 +10,7 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::parser::ast;
+use crate::semantic::internal::internal;
 use crate::semantic::statement::resolve_statement;
 use crate::semantic::type_node::{TypeNode, construct_type};
 use crate::semantic::{FunctionDefinitionNode, ModelNode, StatementNode};
@@ -39,7 +40,11 @@ pub fn construct_function(
             .clone()
             .name
             .ok_or_else(|| {
-                Diagnostic::from("При определении функция должна иметь имя").with_code("SE-022")
+                Diagnostic::error(
+                    def.loc,
+                    "при определении функция должна иметь имя".to_string(),
+                )
+                .with_code("SE-022")
             })?
             .name
             .clone();
@@ -62,9 +67,10 @@ pub fn construct_function(
                             // Преобразуем идентификатор в псевдоним типа и разрешаем.
                             construct_type(Some(ast::Type::Alias(id)), model.clone())?
                         }
-                        _ => {
-                            return Err("Параметр функции должен иметь тип".into());
-                        }
+                        // Внутренний инвариант: форму параметра проверяет
+                        // `SE-034` раньше (проба 2026-08-19), сюда приходит
+                        // только то, что она пропустила.
+                        _ => return Err(internal("параметр функции без типа")),
                     };
                     let param_name = param
                         .clone()
@@ -94,7 +100,16 @@ pub fn construct_function(
                         model.clone(),
                     )?
                 } else {
-                    return Err("Локальная функция должна иметь тело".into());
+                    // SE-118 (фича 0276): код и позиция объявления. Прежде —
+                    // `[?]` и «начало первого файла».
+                    return Err(Diagnostic::error(
+                        def.loc,
+                        format!(
+                            "локальная функция '{name}' объявлена без тела: тело обязательно \
+                             (внешнюю функцию объявляют как 'extern fn')"
+                        ),
+                    )
+                    .with_code("SE-118"));
                 };
                 Ok(FunctionDefinitionNode::Local {
                     upper: Some(Rc::downgrade(&model)),
@@ -108,7 +123,9 @@ pub fn construct_function(
             }
         }
     } else if let FunctionDefinitionNode::None = func {
-        Err("Функция не определена".into())
+        // Внутренний инвариант: неизвестное имя отсекает `SE-004` раньше
+        // (проба 2026-08-19).
+        Err(internal("узел функции не определён"))
     } else {
         Ok(func)
     }

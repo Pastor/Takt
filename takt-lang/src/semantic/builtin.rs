@@ -47,7 +47,15 @@ const BUILTIN_FUNCTIONS: phf::Map<&'static str, FunctionDefinitionNode> = phf_ma
 /// ```
 pub fn builtin_function(name: &str) -> Result<&FunctionDefinitionNode, Diagnostic> {
     BUILTIN_FUNCTIONS.get(name).ok_or_else(|| {
-        Diagnostic::from(format!("Неизвестная функция '{}'", name).as_str()).with_code("SE-004")
+        // Позиции у имени здесь нет: реестр встроенных функций спрашивают по
+        // строке. Координату ставит вызывающий (`resolve_*` знает узел) —
+        // прежде конверсия подставляла `Source(0, 0, 0)`, то есть «начало
+        // первого файла» (фича 0276).
+        Diagnostic::error(
+            crate::diagnostics::Location::Builtin,
+            format!("Неизвестная функция '{}'", name),
+        )
+        .with_code("SE-004")
     })
 }
 

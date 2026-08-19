@@ -38,6 +38,7 @@ pub mod formula;
 mod function;
 pub(crate) mod import; // правила поиска файла нужны и области LSP (0153)
 pub mod index;
+pub(crate) mod internal;
 pub mod lower_float;
 pub mod ltl_check;
 /// Снимок достижимых состояний и моделей — плоская карта [`Map`](minimap::Map).
@@ -1148,19 +1149,10 @@ mod tests {
 
     // ─── Diagnostic ──────────────────────────────────────────────────────
 
-    /// Конвертация `&str` в `Diagnostic::Error`.
-    #[test]
-    fn diagnostic_from_str() {
-        let d: Diagnostic = "что-то пошло не так".into();
-        let Diagnostic { message: msgs, .. } = d;
-        assert!(!msgs.is_empty());
-        assert_eq!(msgs, "что-то пошло не так");
-    }
-
     /// Debug-вывод Diagnostic не паникует.
     #[test]
     fn diagnostic_debug() {
-        let d: Diagnostic = "ошибка".into();
+        let d = Diagnostic::error(crate::diagnostics::Location::Codegen, "ошибка".to_string());
         let _ = format!("{:?}", d);
     }
 

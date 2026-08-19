@@ -26,6 +26,7 @@ mod const_init_fold_tests;
 mod const_int_ops_shared_tests;
 mod deep_model_tests;
 mod deep_nesting_tests;
+mod diagnostic_code_presence_tests;
 mod diagnostic_text_tests;
 mod diagnostics_batch_tests;
 mod diagnostics_file_tests;
