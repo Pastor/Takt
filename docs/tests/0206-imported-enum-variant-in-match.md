@@ -41,4 +41,4 @@
 `takt-lang/tests/semantic/import_enum_match_tests.rs`,
 `takt-sim/tests/sim/import_enum_match_tests.rs`,
 фикстуры `takt-sim/tests/data/eval/import_enum_{lib,app}.takt`.
-Мутация — `git worktree` на `c5dc70db~1`. Толчейн `1.97.1`, macOS 25.5.0.
+Мутация — `git worktree` на `93e6fe6f~1`. Толчейн `1.97.1`, macOS 25.5.0.

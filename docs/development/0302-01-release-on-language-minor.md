@@ -50,8 +50,8 @@
 
 ```sh
 scripts/release-check.sh                 # skip: минорная не менялась (0.10.0 → 0.10.0)
-scripts/release-check.sh 7d2174e0        # skip: тег v0.10.0 уже существует
-scripts/release-notes.sh 0.10.0 7d2174e0 # 22 строки вместо 9765
+scripts/release-check.sh 47e5a5fb        # skip: тег v0.10.0 уже существует
+scripts/release-notes.sh 0.10.0 47e5a5fb # 22 строки вместо 9765
 scripts/test-release-check.sh            # 11 проверок, все пройдены
 ./scripts/precheck.sh
 ```
