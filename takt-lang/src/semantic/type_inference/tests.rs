@@ -725,3 +725,115 @@ fn infer_number_65536_is_array32() {
         panic!("переменная x не найдена");
     }
 }
+
+// ── Именованные целые в таблице расширения (фича 0287) ────────────────────
+
+/// Пара именованных целых: ширина — наибольшая, знак — от знакового.
+#[test]
+fn wider_type_integer_pair_takes_max_width() {
+    let u16t = TypeNode::Integer {
+        bits: 16,
+        signed: false,
+    };
+    let u8t = TypeNode::Integer {
+        bits: 8,
+        signed: false,
+    };
+    assert_eq!(wider_type(u16t.clone(), u8t.clone()), u16t);
+    // Симметрия: порядок операндов на результат не влияет.
+    assert_eq!(wider_type(u8t, u16t.clone()), u16t);
+}
+
+/// Знак заразителен: `i8 + u8` даёт знаковый тип.
+#[test]
+fn wider_type_integer_pair_keeps_sign() {
+    let i8t = TypeNode::Integer {
+        bits: 8,
+        signed: true,
+    };
+    let u8t = TypeNode::Integer {
+        bits: 8,
+        signed: false,
+    };
+    assert_eq!(
+        wider_type(i8t.clone(), u8t.clone()),
+        TypeNode::Integer {
+            bits: 8,
+            signed: true
+        }
+    );
+    assert_eq!(
+        wider_type(u8t, i8t),
+        TypeNode::Integer {
+            bits: 8,
+            signed: true
+        }
+    );
+}
+
+/// Тип ИСТОЧНИКА побеждает тип литерала: `i16 + [bit;8]` остаётся знаковым.
+///
+/// Прежде побеждал литерал, и `const D := A + 1;` при `A: i16` терял знак:
+/// значение `−299` заворачивалось в `213` (замер 2026-08-19).
+#[test]
+fn wider_type_integer_beats_literal_vector() {
+    let i16t = TypeNode::Integer {
+        bits: 16,
+        signed: true,
+    };
+    let lit = TypeNode::Array(8, Box::new(TypeNode::Bit));
+    assert_eq!(wider_type(i16t.clone(), lit.clone()), i16t);
+    assert_eq!(wider_type(lit, i16t.clone()), i16t);
+}
+
+/// Граница: вектор ШИРЕ именованного целого — решают прежние ветви `Array`.
+#[test]
+fn wider_type_wider_vector_stays_array() {
+    let u8t = TypeNode::Integer {
+        bits: 8,
+        signed: false,
+    };
+    let lit = TypeNode::Array(16, Box::new(TypeNode::Bit));
+    assert_eq!(wider_type(u8t, lit.clone()), lit);
+}
+
+/// Граница: массив НЕ битов с целым не смешивается — прежнее правило.
+#[test]
+fn wider_type_data_array_is_untouched() {
+    let u8t = TypeNode::Integer {
+        bits: 8,
+        signed: false,
+    };
+    let arr = TypeNode::Array(4, Box::new(TypeNode::Rational));
+    assert!(matches!(wider_type(u8t, arr), TypeNode::Array(4, _)));
+}
+
+/// Бит и логическое значение уточняют тип целого, не подменяя его.
+#[test]
+fn wider_type_integer_with_bit_and_bool() {
+    let u8t = TypeNode::Integer {
+        bits: 8,
+        signed: false,
+    };
+    assert_eq!(wider_type(u8t.clone(), TypeNode::Bit), u8t);
+    assert_eq!(wider_type(TypeNode::Bit, u8t.clone()), u8t);
+    assert_eq!(wider_type(u8t.clone(), TypeNode::Bool), u8t);
+    assert_eq!(wider_type(TypeNode::Bool, u8t.clone()), u8t);
+}
+
+/// Граница: соседние правила сильнее — `Rational` и перечисление не задеты.
+#[test]
+fn wider_type_neighbours_win_over_integer() {
+    let u8t = TypeNode::Integer {
+        bits: 8,
+        signed: false,
+    };
+    assert_eq!(
+        wider_type(u8t.clone(), TypeNode::Rational),
+        TypeNode::Rational
+    );
+    assert_eq!(
+        wider_type(u8t, TypeNode::Enum("Color".to_string())),
+        TypeNode::Unsupported
+    );
+}

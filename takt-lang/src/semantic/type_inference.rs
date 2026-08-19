@@ -27,6 +27,9 @@
 //! | `Enum("X")` + `Enum("Y")`       | `Unsupported`          |
 //! | `Enum(_)` + любой не-Enum       | `Unsupported`          |
 //! | `Rational` + любой              | `Rational`             |
+//! | `u16` + `u8` (именованные целые)| `u16` (шире; знак — от знакового) |
+//! | `u16` + `[bit;8]` (литерал)     | `u16` (тип источника, не литерала) |
+//! | `u8` + `bit` / `bool`           | `u8`                   |
 //! | `Array(N)` + `Array(M)`         | `Array(max(N,M), ...)`  |
 //! | `Bool` + `Bit`                  | `Bit`                  |
 
@@ -140,6 +143,9 @@ fn type_of_var(var: &VariableNode) -> TypeNode {
 /// | `Enum("X")` + `Enum("Y")`           | `Unsupported` (разные)     |
 /// | `Enum(_)` + любой не-Enum           | `Unsupported`              |
 /// | `Rational` + любой                  | `Rational`                 |
+/// | `Integer(b1,s1)` + `Integer(b2,s2)` | `Integer(max(b1,b2), s1∨s2)` |
+/// | `Integer(b,s)` + `Array(n, Bit)`, `n ≤ b` | `Integer(b, s)`      |
+/// | `Integer(b,s)` + `Bit` / `Bool`     | `Integer(b, s)`            |
 /// | `Array(N, T)` + `Array(M, T)`       | `Array(max(N,M), T)`       |
 /// | `Array(N, T)` + скаляр              | `Array(N, T)`              |
 /// | `Bool` + `Bit`                      | `Bit`                      |
@@ -156,6 +162,54 @@ pub(crate) fn wider_type(a: TypeNode, b: TypeNode) -> TypeNode {
         // Ce4: разные перечисления или перечисление с не-перечислением → несовместимо
         (TypeNode::Enum(_), _) | (_, TypeNode::Enum(_)) => TypeNode::Unsupported,
         (TypeNode::Rational, _) | (_, TypeNode::Rational) => TypeNode::Rational,
+        // Именованные целые `u8`…`i64` (фича 0287). Правила не было вовсе, и
+        // объявленный тип источника проигрывал типу ЛИТЕРАЛА: `[bit;N]` от
+        // `infer_int_type` перехватывался ветвями `Array` ниже. Замер
+        // 2026-08-19: `i16 + 1` терял ЗНАК и давал `213` вместо `−299` —
+        // одинаково у эталона и всех целей; `u16 + u8` давал `Unsupported`, и
+        // четыре цели отказывали на вычислимой записи.
+        //
+        // Ширина — наибольшая из двух, знак — знаковый, если знаков хотя бы
+        // один. Случай «результат не влезает в наибольшую ширину» (`i8 + u8`
+        // со значением 200) лечит правило 0285 — расширение по результату;
+        // второго знания о границах типа здесь не заводится.
+        (
+            TypeNode::Integer {
+                bits: ba,
+                signed: sa,
+            },
+            TypeNode::Integer {
+                bits: bb,
+                signed: sb,
+            },
+        ) => TypeNode::Integer {
+            bits: *ba.max(bb),
+            signed: *sa || *sb,
+        },
+        // ⚠️ Граница: именованное целое побеждает битовый вектор, только если
+        // вектор в него ВЛЕЗАЕТ (`n <= bits`). Вектор шире — это уже не
+        // «литерал уточняет тип источника», и решение остаётся за ветвями
+        // `Array` ниже: `Integer::bits` шире 64 не бывает по построению.
+        (TypeNode::Integer { bits, signed }, TypeNode::Array(n, t))
+        | (TypeNode::Array(n, t), TypeNode::Integer { bits, signed })
+            if matches!(**t, TypeNode::Bit) && u16::from(*bits) >= *n =>
+        {
+            TypeNode::Integer {
+                bits: *bits,
+                signed: *signed,
+            }
+        }
+        // Бит и логическое значение уточняют тип целого, как `Bool` уточняет
+        // `Bit` ниже: `var g := F + flag;` (`u8` + `bit`) прежде давал
+        // `Unsupported`, то есть `SIM-007` у эталона и `RS-014` у цели `rust`
+        // на записи, вычислимой без затруднений.
+        (TypeNode::Integer { bits, signed }, TypeNode::Bit | TypeNode::Bool)
+        | (TypeNode::Bit | TypeNode::Bool, TypeNode::Integer { bits, signed }) => {
+            TypeNode::Integer {
+                bits: *bits,
+                signed: *signed,
+            }
+        }
         // Из двух массивов выбирается наибольший по размеру
         (TypeNode::Array(n, t), TypeNode::Array(m, s)) => {
             if n >= m {

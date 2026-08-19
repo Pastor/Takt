@@ -458,3 +458,4 @@
 | 0301-01 | 0301 | probe.sh, target-dir.sh и правило 30 | [0301-01-probe-checklist.md](0301-01-probe-checklist.md) |
 | 0302-01 | 0302 | release-check.sh, release-notes.sh и workflow | [0302-01-release-on-language-minor.md](0302-01-release-on-language-minor.md) |
 | 0285-01 | 0285 | Расширение выведенного типа по результату | [0285-01-inferred-width-from-result.md](0285-01-inferred-width-from-result.md) |
+| 0287-01 | 0287 | Расширение типов не знает именованных целых | [0287-01-wider-type-array-literal.md](0287-01-wider-type-array-literal.md) |
