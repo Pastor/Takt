@@ -248,6 +248,7 @@ fn generate_program(
 
     p.up();
     sv_const::emit_constants(&mut p, map, &blocks)?;
+    sv_type::emit_structs(&mut p, &blocks)?;
     sv_fsm::emit_enums(&mut p, &blocks)?;
     sv_fsm::emit_state_enums(&mut p, map, &blocks)?;
     sv_fsm::emit_step_enums(&mut p, &fsm)?;

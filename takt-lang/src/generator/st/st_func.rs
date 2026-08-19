@@ -426,7 +426,7 @@ fn emit_function(
                 continue;
             };
             let ty_name = get_st_type(ty, model)?;
-            let init = crate::generator::st::st_decl::literal_init(expr, ty);
+            let init = crate::generator::st::st_decl::literal_init(expr, ty, None);
             match init {
                 Some(v) => p.ident(&format!("{} : {} := {};", cname, ty_name, v)).nl(),
                 None => {

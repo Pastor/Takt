@@ -81,8 +81,8 @@ fn instance_initializer(
                 )
                 .with_code("ST-017")
             })?;
-        let value =
-            crate::generator::st::st_decl::literal_init(&arg.value, &ty).ok_or_else(|| {
+        let value = crate::generator::st::st_decl::literal_init(&arg.value, &ty, None).ok_or_else(
+            || {
                 Diagnostic::error(
                     arg.loc,
                     format!(
@@ -91,7 +91,8 @@ fn instance_initializer(
                     ),
                 )
                 .with_code("ST-017")
-            })?;
+            },
+        )?;
         parts.push(format!("{} := {}", arg.name, value));
     }
     Ok(Some(format!("({})", parts.join(", "))))

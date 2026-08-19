@@ -992,3 +992,6 @@ fn after_ticks_profile_generates_valid_st() {
 // размера модуля, а правило требует делить по логике.
 #[path = "conformance_st_tests/fixed_sat.rs"]
 mod fixed_sat;
+
+/// Агрегатный инициализатор структуры (фича 0293).
+mod struct_init;

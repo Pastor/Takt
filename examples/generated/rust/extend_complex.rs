@@ -12,6 +12,14 @@
 
 #![forbid(unsafe_code)]
 
+/// Структура 'Coord' модели.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Coord {
+    pub x: u32,
+    pub y: u32,
+    pub z: u32,
+}
+
 /// Перечисление 'Point' модели.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

@@ -306,6 +306,56 @@ pub(crate) fn emit_enums(
     Ok(())
 }
 
+/// Печатает объявления структур модели (фича 0293).
+///
+/// **Зачем.** `rust_type` отображает `TypeNode::Struct` в имя типа, но самого
+/// объявления цель не эмитила, а доступ к полю отвергала `RS-011` — то есть
+/// структуры не переводились дальше объявления переменной.
+///
+/// `Default` обязателен: поля модели инициализируются `Default::default()` в
+/// `new`, и без него порождённый код не собрался бы. `Copy` избавляет от
+/// заимствований при чтении поля.
+pub(crate) fn emit_structs(
+    p: &mut Printer,
+    blocks: &[(Name, std::rc::Rc<std::cell::RefCell<ModelNode>>)],
+) -> Result<(), Diagnostic> {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for (_, model_rc) in blocks {
+        let model = model_rc.borrow();
+        for def in model.structs.values() {
+            let name = rust_type_name(&def.name, def.loc)?;
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            p.ident(&format!("/// Структура '{}' модели.", def.name))
+                .nl();
+            // ⚠️ `Eq` НЕ выводится: у поля `float` (`f64`) его нет, и вывод
+            // корпуса перестал бы компилироваться (`the trait Eq is not
+            // implemented for f64`). Сравнение структур язык и так запрещает
+            // (`SE-059`), поэтому `PartialEq` достаточно.
+            p.ident("#[derive(Debug, Clone, Copy, PartialEq, Default)]")
+                .nl();
+            p.ident(&format!("pub struct {} {{", name)).nl();
+            p.up();
+            for (field, ty) in &def.fields {
+                let rust_ty = crate::generator::rust::rust_type::rust_type(
+                    ty,
+                    &format!("поле '{}' структуры '{}'", field, def.name),
+                )?;
+                p.ident(&format!(
+                    "pub {}: {},",
+                    crate::semantic::naming::normalize_lowercase_snakecase(field.clone()),
+                    rust_ty
+                ))
+                .nl();
+            }
+            p.down();
+            p.ident("}").nl().nl();
+        }
+    }
+    Ok(())
+}
+
 /// Печатает константы уровня модуля.
 pub(crate) fn emit_constants(
     p: &mut Printer,

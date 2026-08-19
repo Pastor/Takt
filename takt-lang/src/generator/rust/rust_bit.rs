@@ -102,6 +102,12 @@ pub(crate) fn bit_access(
     scope: &Scope,
 ) -> Result<String, Diagnostic> {
     let base = print_expression(inner, scope)?;
+    // Доступ к полю структуры (фича 0293): `g.kp` — обычное поле, а не разряд.
+    // Прежде цель отвечала `RS-011`, то есть структуры не переводились дальше
+    // объявления переменной.
+    if let Member::Identifier(name) = member {
+        return Ok(field_access(&base, &name.name));
+    }
     let bit = member_index(member)?;
     // Носитель может быть массивом слов (`[bit;N > 64]`, фича 0262): сдвигается
     // СВОЁ слово. Прежде печатался сдвиг всего массива — `E0369` у `rustc`.
@@ -130,6 +136,17 @@ pub(crate) fn bit_mask(base: &str, bit: u64) -> String {
         return format!("(({} & 1) != 0)", base);
     }
     format!("((({} >> {}) & 1) != 0)", base, bit)
+}
+
+/// Печатает доступ к полю структуры: `<база>.<поле>` (фича 0293).
+///
+/// Имя поля нормируется тем же правилом, что и объявление в `rust_decl`:
+/// разъехавшись, они дали бы обращение к несуществующему полю.
+pub(crate) fn field_access(base: &str, field: &str) -> String {
+    format!(
+        "{base}.{}",
+        crate::semantic::naming::normalize_lowercase_snakecase(field.to_string())
+    )
 }
 
 /// Извлекает номер бита из члена `x.N`.

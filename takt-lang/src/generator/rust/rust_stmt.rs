@@ -100,6 +100,15 @@ fn collect_assigned_expr(expr: &ExpressionNode, out: &mut BTreeSet<String>) {
         if let ExpressionNode::Variable(var) = &**target {
             out.insert(var.borrow().name().to_string());
         }
+        // Запись в ПОЛЕ структуры (фича 0293) делает изменяемой саму переменную:
+        // `r.output := …` требует `let mut r`. Прежде поля структур цель не
+        // переводила вовсе, и этот случай не возникал.
+        if let ExpressionNode::BitAccess(base, crate::parser::ast::Member::Identifier(_)) =
+            &**target
+            && let ExpressionNode::Variable(var) = &**base
+        {
+            out.insert(var.borrow().name().to_string());
+        }
         collect_assigned_expr(target, out);
         collect_assigned_expr(value, out);
         return;

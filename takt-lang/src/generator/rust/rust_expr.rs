@@ -728,6 +728,7 @@ fn is_wrapping_arith(expr: &ExpressionNode) -> bool {
     }
 }
 
+/// Тот же приём чинит `bit`-порт: `elevator_motor_up := 1` при `bool`-порте.
 /// Печатает выражение с оглядкой на **целевой** тип.
 ///
 /// Существует ради перечислений. `command := Up` приходит сюда как
@@ -737,13 +738,20 @@ fn is_wrapping_arith(expr: &ExpressionNode) -> bool {
 /// C есть целое. В Rust `Command` и `2` — разные типы, поэтому вариант нужно
 /// восстановить по значению.
 ///
-/// Тот же приём чинит `bit`-порт: `elevator_motor_up := 1` при `bool`-порте.
 pub(crate) fn coerce_to(
     value: &ExpressionNode,
     target: &TypeNode,
     scope: &Scope,
 ) -> Result<String, Diagnostic> {
     match (target, value) {
+        // Агрегат структуры (фича 0293): `var g: Gains := {2, 3};` печатается
+        // литералом `Gains { kp: 2, ki: 3 }`. Без типа приёмника форма
+        // неизвестна — общий печатник выражений печатал массив `[2, 3]`, то есть
+        // невалидный Rust.
+        (
+            TypeNode::Struct(struct_name),
+            ExpressionNode::Initializer(items) | ExpressionNode::Array(items),
+        ) => crate::generator::rust::rust_struct::struct_literal(struct_name, items, scope),
         (TypeNode::Enum(enum_name), ExpressionNode::Number(n)) => {
             enum_variant_literal(enum_name, *n, scope)
         }

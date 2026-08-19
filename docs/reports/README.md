@@ -211,3 +211,4 @@
 | 0267 | Проверка состояния соседней модели в целях | [0267-state-of-model-in-targets.md](0267-state-of-model-in-targets.md) | ГОТОВО |
 | 0303 | Условное ребро состояния-композиции | [0303-composition-state-conditional-edge.md](0303-composition-state-conditional-edge.md) | ГОТОВО |
 | 0286 | Вычислимое приведение в инициализаторе | [0286-sv-const-initializer-expression.md](0286-sv-const-initializer-expression.md) | ГОТОВО |
+| 0293 | Структуры в целях st, rust и sv | [0293-struct-in-st-rust.md](0293-struct-in-st-rust.md) | ГОТОВО |

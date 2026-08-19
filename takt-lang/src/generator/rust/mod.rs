@@ -55,6 +55,7 @@ mod rust_port;
 mod rust_port_init;
 mod rust_shared;
 mod rust_stmt;
+mod rust_struct;
 mod rust_tick;
 mod rust_time;
 mod rust_type;
@@ -190,6 +191,7 @@ fn generate_program(map: &RustMap) -> Result<(String, Vec<Diagnostic>), Diagnost
     // проверяемым КОМПИЛЯТОРОМ, а не grep'ом (R10, A12).
     p.ident("#![forbid(unsafe_code)]").nl().nl();
 
+    rust_decl::emit_structs(&mut p, &blocks)?;
     rust_decl::emit_enums(&mut p, &blocks)?;
     rust_decl::emit_constants(&mut p, map, &blocks)?;
     rust_decl::emit_hal(&mut p, &ports)?;

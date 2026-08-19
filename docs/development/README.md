@@ -482,3 +482,6 @@
 | 0267-02 | 0267 | Точные отказы rust и st | [0267-02-state-of-model-in-targets.md](0267-02-state-of-model-in-targets.md) |
 | 0303-01 | 0303 | Рёбра состояния-композиции в целях | [0303-01-composition-state-conditional-edge.md](0303-01-composition-state-conditional-edge.md) |
 | 0286-01 | 0286 | Вычислимое приведение в общем слое и цели sv | [0286-01-sv-const-initializer-expression.md](0286-01-sv-const-initializer-expression.md) |
+| 0293-01 | 0293 | Структуры в цели sv | [0293-01-struct-in-st-rust.md](0293-01-struct-in-st-rust.md) |
+| 0293-02 | 0293 | Инициализатор структуры в цели st | [0293-02-struct-in-st-rust.md](0293-02-struct-in-st-rust.md) |
+| 0293-03 | 0293 | Структуры в цели rust | [0293-03-struct-in-st-rust.md](0293-03-struct-in-st-rust.md) |

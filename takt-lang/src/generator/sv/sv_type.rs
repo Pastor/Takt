@@ -137,6 +137,54 @@ pub(crate) fn sv_struct_type_name(raw: &str) -> String {
     format!("{}_t", normalize_lowercase_snakecase(raw.to_string()))
 }
 
+/// Печатает `typedef struct packed` для каждой структуры дерева (фича 0293).
+///
+/// **Зачем.** `sv_type` отображает `TypeNode::Struct` в имя `<имя>_t`, но самого
+/// объявления цель не эмитила — вывод ссылался на несуществующий тип, и
+/// `verilator` отвечал `Can't find typedef/interface: 'gains_t'` при **нулевом**
+/// коде возврата `taktc` (замер 2026-08-19).
+///
+/// ⚠️ **`packed` обязателен, а не украшение:** непакованная структура в SV не
+/// синтезируется (yosys её не примет), не сравнивается как целое и не годится
+/// на роль регистра — а именно регистром становится переменная модели.
+///
+/// ⚠️ Поле печатается тем же `sv_type`, что и переменная: разъехавшись, они
+/// дали бы полю и переменной одного типа разную ширину.
+///
+/// ⚠️ Порядок полей — **объявленный** (`Vec`, не карта): в упакованной структуре
+/// он определяет разряды, и перестановка молча изменила бы значение.
+pub(crate) fn emit_structs(
+    p: &mut crate::generator::indent::Printer,
+    blocks: &[crate::generator::sv::sv_fsm::Block],
+) -> Result<(), Diagnostic> {
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for (_, model_rc) in blocks {
+        let model = model_rc.borrow();
+        for def in model.structs.values() {
+            if !seen.insert(def.name.clone()) {
+                continue;
+            }
+            p.ident("typedef struct packed {").nl();
+            p.up();
+            for (field, ty) in &def.fields {
+                let sv = sv_type(ty, &format!("поле '{}' структуры '{}'", field, def.name))?;
+                let decl = format!(
+                    "{} {}{};",
+                    sv.prefix.trim(),
+                    crate::semantic::naming::normalize_lowercase_snakecase(field.clone()),
+                    sv.suffix
+                );
+                p.ident(decl.trim_start()).nl();
+            }
+            p.down();
+            p.ident(&format!("}} {};", sv_struct_type_name(&def.name)))
+                .nl()
+                .nl();
+        }
+    }
+    Ok(())
+}
+
 /// Отображает тип Takt в объявление SystemVerilog.
 ///
 /// `what` — что именно объявляется (`переменная 'x'`, `порт 'p'`), чтобы
