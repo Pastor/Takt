@@ -209,7 +209,7 @@ pub(crate) fn wider_type(a: TypeNode, b: TypeNode) -> TypeNode {
 /// - `256..=65535`           → `[bit;16]`
 /// - `65536..=4294967295`    → `[bit;32]`
 /// - иначе (или отрицательное) → `[bit;64]`
-fn infer_int_type(n: i128) -> TypeNode {
+pub(crate) fn infer_int_type(n: i128) -> TypeNode {
     let arr = |size| TypeNode::Array(size, Box::new(TypeNode::Bit));
     if n >= 0 && n <= i128::from(u8::MAX) {
         arr(8)

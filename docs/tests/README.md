@@ -204,3 +204,4 @@
 | 0284 | Структура без полей | [0284-empty-struct-semantics.md](0284-empty-struct-semantics.md) | ГОТОВО |
 | 0301 | Снятие замера расхождения | [0301-probe-checklist.md](0301-probe-checklist.md) | ГОТОВО |
 | 0302 | Релиз и тег при подъёме минорной версии языка | [0302-release-on-language-minor.md](0302-release-on-language-minor.md) | ГОТОВО (проверяемая часть; прогон CI — за 0175) |
+| 0285 | Ширина выведенного типа берётся у результата | [0285-inferred-width-from-result.md](0285-inferred-width-from-result.md) | ГОТОВО |

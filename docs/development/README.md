@@ -457,3 +457,4 @@
 | 0284-01 | 0284 | SE-115 на объявлении структуры | [0284-01-empty-struct-semantics.md](0284-01-empty-struct-semantics.md) |
 | 0301-01 | 0301 | probe.sh, target-dir.sh и правило 30 | [0301-01-probe-checklist.md](0301-01-probe-checklist.md) |
 | 0302-01 | 0302 | release-check.sh, release-notes.sh и workflow | [0302-01-release-on-language-minor.md](0302-01-release-on-language-minor.md) |
+| 0285-01 | 0285 | Расширение выведенного типа по результату | [0285-01-inferred-width-from-result.md](0285-01-inferred-width-from-result.md) |
