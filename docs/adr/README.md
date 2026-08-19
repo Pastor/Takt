@@ -232,3 +232,4 @@
 | [0262](./0262-wide-bit-vector-c-rust.md) | Широкий бит-вектор в целях c и rust | Draft | фича 0262 |
 | [0263](./0263-rust-literal-index-cast.md) | Приведение индекса к usize по нужде | Draft | фича 0263 |
 | [0281](./0281-rust-enum-compare-literal.md) | Сравнение перечисления с числом в цели rust | Draft | фича 0281 |
+| [0299](./0299-rust-non-ascii-lowercase-name.md) | Не-ASCII имя в нижнем регистре у цели rust | Draft | фича 0299 |
