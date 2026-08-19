@@ -493,3 +493,4 @@
 | 0256-01 | 0256 | Символ формы import { A } объявляется видом Model | [0256-01-lsp-import-binding-kind.md](0256-01-lsp-import-binding-kind.md) |
 | 0258-01 | 0258 | Verdict::Unsupported не различает причину отказа | [0258-01-verify-unsupported-reason.md](0258-01-verify-unsupported-reason.md) |
 | 0259-01 | 0259 | Встроенные функции языка не описаны в документе book/ | [0259-01-book-builtin-functions.md](0259-01-book-builtin-functions.md) |
+| 0268-01 | 0268 | У SE-033 нет описания в приложении «Ошибки» | [0268-01-se033-appendix-description.md](0268-01-se033-appendix-description.md) |

@@ -215,7 +215,7 @@
 | `SE-028` | Индекс массива вне границ | `takt-lang/src/semantic/expression.rs:129` |
 | `SE-029` | Начало среза … выходит за границы массива '…' (размер …) | `takt-lang/src/semantic/expression.rs:414` |
 | `SE-030` | Переменная '…' не является массивом | `takt-lang/src/semantic/expression.rs:137` |
-| `SE-033` | <анонимная> | `takt-lang/src/semantic/validate/common.rs:40` |
+| `SE-033` | Состояние, названное справа в проверке `S(Модель) = Состояние`, у этой модели не объявлено (фича 0268 — прежде в ячейке стоял фрагмент текста сообщения, а не описание) | `takt-lang/src/semantic/validate/common.rs` |
 | `SE-034` | Локальный тип '…' не найден | `takt-lang/src/semantic/type_node.rs:115` |
 | `SE-035` | Переменная '…' имеет тип bit, но инициализирована значением … \ | `takt-lang/src/semantic/validate/enums.rs:36` |
 | `SE-036` | переменная '…' объявлена, но нигде не используется | `takt-lang/src/semantic/unused.rs:418` |
