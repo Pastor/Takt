@@ -290,6 +290,19 @@ pub fn eval_in(
         E::Duration(_, ns, _) => Ok(ConstValue::Duration(*ns)),
         E::Rational(_, text, negative) => Ok(ConstValue::Rational(text.clone(), *negative)),
         E::Parenthesis(_, inner) | E::UnaryPlus(_, inner) => eval_in(inner, scope, locals, budget),
+        // Приведение (фича 0286) вычисляется, только когда оно **тождественно**:
+        // значение целое, цель — целочисленный тип, и значение в него помещается.
+        //
+        // ⚠️ Правила изменения значения (обёртка беззнакового, `SIM-003` для
+        // знакового, масштаб `q`) принадлежат ЭТАЛОНУ (`takt-sim::eval`), и
+        // копии их здесь быть не должно: две реализации одного правила дали бы
+        // разные значения у эталона и целей. Поэтому вычислитель берётся лишь
+        // за случай, где знать эти правила не нужно, а остальное честно
+        // отвергает — с названной причиной.
+        E::Cast(cast_loc, inner, ty) => {
+            let value = eval_in(inner, scope, locals, budget)?;
+            cast_identity(&value, ty, *cast_loc, scope)
+        }
         // Агрегат (фича 0209): `{9, 8, 7, 6}` — массив либо инициализатор
         // структуры. Обе формы записываются одинаково и вычисляются поэлементно;
         // невычислимый элемент отвергает сам себя, называя своё место.
@@ -560,6 +573,20 @@ fn resolve_name(
 ///
 /// Значение приходит и сырым АСД (`Unresolved`, порядок объявлений), и уже
 /// понижённым узлом — оба пути штатны (та же двойственность, что в 0143).
+/// Вычисляет **понижённый** узел выражения (в отличие от [`eval`], который
+/// принимает сырое АСД).
+///
+/// Нужна потребителям за пределами семантики: цель `sv` спрашивает вычислимость
+/// инициализатора вместо того, чтобы судить по виду узла (фича 0286).
+pub fn eval_node_public(
+    node: &ExpressionNode,
+    loc: Location,
+    scope: &Rc<RefCell<ModelNode>>,
+) -> Result<ConstValue, Diagnostic> {
+    let mut budget = Budget::default();
+    eval_node(node, loc, scope, &mut budget)
+}
+
 fn eval_node(
     node: &ExpressionNode,
     loc: Location,
@@ -592,6 +619,59 @@ fn eval_node(
     };
     budget.shallower();
     result
+}
+
+/// Значение приведения, если оно **ничего не меняет**.
+///
+/// Границы берутся у единственного носителя
+/// [`type_range`](crate::semantic::validate::literal_range::type_range) — того
+/// же, которым судит `SE-089`: второй список границ разъехался бы с первым.
+///
+/// # Ошибки
+///
+/// «Не константа» — с причиной: тип не целочисленный либо значение приведением
+/// изменится (усечение, обёртка, масштаб `q`). Такое приведение исполняет
+/// эталон, и его правила живут там (фича 0286).
+fn cast_identity(
+    value: &ConstValue,
+    ty: &ast::Type,
+    loc: Location,
+    scope: &Rc<RefCell<ModelNode>>,
+) -> Result<ConstValue, Diagnostic> {
+    let ConstValue::Int(n) = value else {
+        return Err(not_constant(
+            loc,
+            "приведение вычисляется только над целым значением",
+        ));
+    };
+    // ⚠️ Имя встроенного типа спрашивается у `builtin_type_by_name` — носителя
+    // списка (0243): `ast_type_to_node_ctx` разрешает лишь `bit`/`bool`/`float`
+    // и пользовательские псевдонимы, а `u8`…`i64` для него — `Unsupported`.
+    let target = match ty {
+        ast::Type::Alias(id) => crate::semantic::type_node::builtin_type_by_name(&id.name)
+            .unwrap_or_else(|| {
+                crate::semantic::type_inference::ast_type_to_node_ctx(ty, Rc::clone(scope))
+            }),
+        other => crate::semantic::type_inference::ast_type_to_node_ctx(other, Rc::clone(scope)),
+    };
+    let Some((min, max)) = crate::semantic::validate::literal_range::type_range(&target) else {
+        return Err(not_constant(
+            loc,
+            "приведение к этому типу при компиляции не вычисляется: правило \
+             изменения значения (усечение, обёртка, масштаб q) задано эталоном",
+        ));
+    };
+    if *n < min || *n > max {
+        return Err(not_constant(
+            loc,
+            format!(
+                "приведение изменит значение {n} (диапазон типа: {min}..={max}), \
+                 а правило изменения задано эталоном — вычислить его при \
+                 компиляции нельзя"
+            ),
+        ));
+    }
+    Ok(ConstValue::Int(*n))
 }
 
 /// Имя типа для диагностики — как его написал бы автор.

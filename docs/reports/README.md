@@ -210,3 +210,4 @@
 | 0260 | Неиспользуемый параметр в порождённом C | [0260-c-unused-struct-parameter.md](0260-c-unused-struct-parameter.md) | ГОТОВО |
 | 0267 | Проверка состояния соседней модели в целях | [0267-state-of-model-in-targets.md](0267-state-of-model-in-targets.md) | ГОТОВО |
 | 0303 | Условное ребро состояния-композиции | [0303-composition-state-conditional-edge.md](0303-composition-state-conditional-edge.md) | ГОТОВО |
+| 0286 | Вычислимое приведение в инициализаторе | [0286-sv-const-initializer-expression.md](0286-sv-const-initializer-expression.md) | ГОТОВО |

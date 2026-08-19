@@ -298,7 +298,7 @@
 | [0283](./0283-cli-report-result-merge.md) | Печать результата компиляции живёт в двух почти одинаковых функциях | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0284](./0284-empty-struct-semantics.md) | Структура без полей | SE-115 на объявлении, симметрично SE-105; грамматика не тронута; контроль сузил объём — отказы rust/sv не про пустоту | ГОТОВО |
 | [0285](./0285-inferred-width-from-result.md) | Ширина выведенного типа берётся у результата | Ширина по результату у объявлений без типа; три границы, каждую поймал чужой сторож; класс шире сдвига | ГОТОВО |
-| [0286](./0286-sv-const-initializer-expression.md) | Цель sv отвергает вычислимое выражение в инициализаторе | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0286](./0286-sv-const-initializer-expression.md) | Цель sv отвергает вычислимое выражение в инициализаторе | [ADR](../adr/0286-sv-const-initializer-expression.md), [анализ](../analyze/0286-sv-const-initializer-expression.md), [отчёт](../reports/0286-sv-const-initializer-expression.md) | ГОТОВО |
 | [0287](./0287-wider-type-array-literal.md) | wider_type(Integer, Array) берёт тип литерала и даёт ложную SE-089 | [ADR](../adr/0287-wider-type-array-literal.md), [анализ](../analyze/0287-wider-type-array-literal.md), [отчёт](../reports/0287-wider-type-array-literal.md) | ГОТОВО |
 | [0288](./0288-fixture-guards-audit.md) | Фикстуры сторожатся проверкой «разбирается без ошибок» | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0289](./0289-claude-md-invariant-checklist-gate.md) | Чек-лист критических инвариантов — вторая точка сопровождения | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
