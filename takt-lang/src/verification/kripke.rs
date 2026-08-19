@@ -221,6 +221,7 @@ fn leaves_unconditionally(references: &[ReferenceNode<StateNode>]) -> bool {
 mod tests {
     use super::*;
     use crate::parse;
+    use crate::semantic::test_constants::tests::model_node;
     use crate::semantic::tree::construct_model;
 
     fn kripke_of(src: &str) -> Kripke {
@@ -344,7 +345,7 @@ mod tests {
         use crate::diagnostics::Location;
         use crate::semantic::StateNode;
 
-        let model = ModelNode::new("M", None);
+        let model = model_node("M", None);
         model.borrow_mut().states.insert(
             "A".to_string(),
             StateNode::Simple {

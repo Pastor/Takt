@@ -252,11 +252,14 @@ fn implement_single_model_resolves() {
     }
 }
 
-/// Реализация с `+` (последовательная компоновка) после compact_implement
-/// разрешается в `Implement::Model` (последовательность упаковывается в модель).
+/// Реализация с `+` (последовательная компоновка) остаётся **плоской**:
+/// `Extend::Concatenation` со списком элементов.
+///
+/// Упаковки в синтетическую модель со ступенями `Step0…StepN` нет: путь
+/// отвергнут решением ADR 0057 (безусловный `next` между ступенями давал бы
+/// неверный тайминг), разбор — ADR 0278.
 #[test]
 fn implement_add_composition_resolves() {
-    // compact_implement отключён: конкатенация остаётся как Extend::Concatenation.
     let node = build("start Entry = M1 + M2; model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["Entry"] {
         assert!(
@@ -808,11 +811,11 @@ fn implement_without_next_no_stack_overflow() {
 
 /// Скобочная компоновка `(M1 + M2)` разрешается корректно.
 ///
-/// Проверяет ветку `ast::Expression::Parenthesis` в `construct_implement_ast`.
-/// После compact_implement последовательность упаковывается в `Implement::Model`.
+/// Проверяет ветку `ast::Expression::Parenthesis` в `construct_implement_ast`:
+/// `(M1 + M2)` раскрывается до плоской `Concatenation([M1, M2])` — скобки
+/// прозрачны, синтетической модели не возникает (ADR 0278).
 #[test]
 fn implement_parenthesized_add_resolves() {
-    // compact_implement отключён: (M1 + M2) раскрывается до Concatenation([M1, M2]).
     let node = build("start E = (M1 + M2) { } model M1 { start S; } model M2 { start T; }");
     if let StateNode::Implement { implements, .. } = &node.states["E"] {
         assert!(

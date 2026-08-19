@@ -241,3 +241,4 @@
 | [0277](./0277-expression-usage-position.md) | Координата отказа цели — место употребления | Draft | фича 0277 |
 | [0282](./0282-formula-own-location.md) | Собственная позиция формулы | Draft | фича 0282 |
 | [0296](./0296-semantic-stages-single-source.md) | Порядок стадий построения — один носитель | Accepted | фича 0296 |
+| [0278](./0278-compact-implement-dead-branch.md) | Мёртвая упаковка последовательной композиции | Accepted | фича 0278 |
