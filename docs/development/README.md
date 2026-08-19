@@ -463,3 +463,4 @@
 | 0262-02 | 0262 | Широкий бит-вектор в цели rust | [0262-02-wide-bit-vector-c-rust.md](0262-02-wide-bit-vector-c-rust.md) |
 | 0263-01 | 0263 | Приведение индекса к usize по нужде | [0263-01-rust-literal-index-cast.md](0263-01-rust-literal-index-cast.md) |
 | 0281-01 | 0281 | Сравнение перечисления с числом в цели rust | [0281-01-rust-enum-compare-literal.md](0281-01-rust-enum-compare-literal.md) |
+| 0299-01 | 0299 | Не-ASCII имя в нижнем регистре у цели rust | [0299-01-rust-non-ascii-lowercase-name.md](0299-01-rust-non-ascii-lowercase-name.md) |

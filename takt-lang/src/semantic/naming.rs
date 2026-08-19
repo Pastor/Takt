@@ -2,12 +2,23 @@
 ///
 /// Преобразует `my_model`, `mein-leib`, `Mein_Leib` → `MyModel`, `MeinLeib`.
 /// Небуквенно-цифровые символы (`_`, `-`, `#` и т.д.) используются как разделители слов.
+///
+/// ⚠️ **Регистр приводится по Unicode, а не по ASCII** (фича 0299). Прежний
+/// `to_ascii_uppercase` не-ASCII букву оставлял как есть, и `out кнопка`
+/// давало цели `rust` вариант перечисления `кнопка`, который
+/// `clippy -D warnings` отвергает: «variant should have an upper camel case
+/// name». Имена языка не-ASCII быть могут (фича 0200), то есть правило
+/// регистра обязано работать на том же алфавите, что и сам язык.
+///
+/// ⚠️ Слипание имён после приведения регистра (`кнопка` и `Кнопка` → одно
+/// `Кнопка`) ловит существующая диагностика `RS-005` — тот же механизм, что
+/// для ASCII (`button`/`Button`); нового класса коллизий правка не заводит.
 pub fn normalize_camelcase_name(name: &str) -> String {
     let mut result = String::new();
     let mut upper = true;
     for ch in name.chars() {
         if ch.is_alphabetic() && upper {
-            result.push(ch.to_ascii_uppercase());
+            result.extend(ch.to_uppercase());
         } else if !ch.is_alphanumeric() {
             upper = true;
             continue;
@@ -84,6 +95,23 @@ mod tests {
     fn normalize_model_name_single_word() {
         use super::normalize_camelcase_name;
         assert_eq!(normalize_camelcase_name("hello"), "Hello");
+    }
+
+    /// Не-ASCII буква тоже поднимается в верхний регистр (фича 0299).
+    ///
+    /// Прежний `to_ascii_uppercase` оставлял её как есть, и цель `rust`
+    /// печатала вариант перечисления `кнопка` — `clippy -D warnings` отвечает
+    /// «variant should have an upper camel case name». Имена языка не-ASCII
+    /// быть могут (0200), значит и правило регистра обязано работать на том же
+    /// алфавите.
+    #[test]
+    fn normalize_model_name_non_ascii() {
+        use super::normalize_camelcase_name;
+        assert_eq!(normalize_camelcase_name("кнопка"), "Кнопка");
+        assert_eq!(normalize_camelcase_name("кнопка_пуска"), "КнопкаПуска");
+        assert_eq!(normalize_camelcase_name("Кнопка"), "Кнопка");
+        // Смешанный алфавит: правило одно на оба.
+        assert_eq!(normalize_camelcase_name("пуск_button"), "ПускButton");
     }
 
     // ── Тесты normalize_lowercase_snakecase ───────────────────────────────────
