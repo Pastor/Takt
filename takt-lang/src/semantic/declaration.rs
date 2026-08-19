@@ -383,6 +383,7 @@ pub(crate) fn fold_variable_initializers(
     variables: &BTreeMap<String, VariableNode>,
     raw: &BTreeMap<String, crate::parser::ast::Expression>,
     model: &Rc<RefCell<ModelNode>>,
+    untyped: &std::collections::BTreeSet<String>,
 ) -> Result<BTreeMap<String, VariableNode>, Diagnostic> {
     let mut order: Vec<&String> = variables.keys().collect();
     order.sort_by_key(|name| declaration_position(&variables[*name]));
@@ -445,7 +446,35 @@ pub(crate) fn fold_variable_initializers(
         // Вычисленное значение НОРМИРУЕТСЯ по типу объявления (фича 0207,
         // решение заказчика 2026-08-16). Литерал автора сюда не доходит — он
         // отсечён строкой выше, и его выход за границы по-прежнему `SE-089`.
-        let literal = normalize_computed(literal, declared_type(&variables[name]));
+        // Ширина ВЫВЕДЕННОГО типа берётся у РЕЗУЛЬТАТА, а не у операндов
+        // (фича 0285). Тип выводится до свёртки, поэтому `const K := 1 + 255;`
+        // получал ширину левого литерала (8 бит), а нормирование 0207
+        // заворачивало вычисленные 256 в ноль — молча и одинаково у всех
+        // девяти потребителей. Автор ширины не выбирал: её выбрал операнд.
+        //
+        // ⚠️ Явно объявленный тип НЕ трогается: `var u: u8 := 200 + 100;`
+        // обязан остаться `44` — там ширину выбрал автор, и обёртка совпадает
+        // с тем, что даёт то же выражение в теле (правило 0207/0127).
+        //
+        // ⚠️ Расширяем ТОЛЬКО когда значение не помещается в выведенный тип, а
+        // не при каждой свёртке. Первая редакция переопределяла тип всегда — и
+        // сломала вывод из сигнатуры функции: `fn get32() -> [bit;32]` с
+        // `var val := get32();` давал `[bit;8]`, потому что вычислитель
+        // сворачивает вызов в `0`. Там ширину выбрал не операнд, а объявленный
+        // возвращаемый тип, и трогать её нельзя. Поймал тест Ce6, а не чтение.
+        //
+        // ⚠️ Расширяется только превышение ВЕРХНЕЙ границы. Значение ниже
+        // нижней — домен правила 0207: `var u := ~0;` даёт `-1`, и беззнаковый
+        // тип обязан завернуть его в `255`, а не «расшириться» до знакового.
+        // Второй перебор, пойманный тестом нормирования, а не чтением.
+        if untyped.contains(name)
+            && let crate::parser::ast::Expression::Number(_, value) = &literal
+            && exceeds_declared_upper(*value, declared_type(&folded[name]))
+        {
+            let widened = crate::semantic::type_inference::infer_int_type(*value);
+            retype_declaration(folded.get_mut(name).expect("имя из этой же карты"), widened);
+        }
+        let literal = normalize_computed(literal, declared_type(&folded[name]));
         // Дробный результат, свёрнутый над `q(m, n)`, обязан быть ПОНИЖЕН в
         // целое q-представление (фича 0300). Понижение литералов (0096/0061)
         // идёт при выводе типов, то есть ДО свёртки, и `1.0 + 2.0` ему не
@@ -454,7 +483,7 @@ pub(crate) fn fold_variable_initializers(
         // значит 0.1875, тогда как эталон давал 3.0. Понижение делает тот же
         // носитель, что и для написанного автором литерала: своя копия
         // разошлась бы с ним в округлении.
-        let literal = lower_folded_fixed(literal, declared_type(&variables[name]))?;
+        let literal = lower_folded_fixed(literal, declared_type(&folded[name]))?;
         // Литерал обязан быть РАЗРЕШЁН здесь: свёртка идёт последней, и
         // разрешать `Unresolved` после неё уже некому — потребители получили бы
         // неразрешённый узел, а он для них «не константа» (то есть ноль).
@@ -463,6 +492,37 @@ pub(crate) fn fold_variable_initializers(
         set_initializer(slot, resolved, loc);
     }
     Ok(folded)
+}
+
+/// Превышает ли вычисленное значение ВЕРХНЮЮ границу выведенного типа (0285).
+///
+/// Границы берутся у **единственного** их носителя
+/// (`validate::literal_range::type_range`): своя копия разошлась бы с
+/// проверкой `SE-089`, и расширение шло бы к одним границам, а отказ судил по
+/// другим. Тип без границ (например `bit`) расширению не подлежит — его
+/// значения судит своя проверка.
+///
+/// ⚠️ Нижняя граница НЕ проверяется намеренно: значение ниже неё — домен
+/// правила 0207 (беззнаковое заворачивается `mod 2ⁿ`, знаковое остаётся
+/// ошибкой), и «расширение» подменило бы там принятое решение.
+fn exceeds_declared_upper(value: i128, ty: Option<&crate::semantic::type_node::TypeNode>) -> bool {
+    match ty.and_then(crate::semantic::validate::literal_range::type_range) {
+        Some((_, hi)) => value > hi,
+        None => false,
+    }
+}
+
+/// Задаёт тип объявления — для переменных, объявленных БЕЗ типа (фича 0285).
+///
+/// ⚠️ Меняются **оба** представления? Нет: здесь правится только запись в карте
+/// объявлений. Ячейка тела (`Rc<RefCell<VariableNode>>`, засада 0096) к этому
+/// моменту ещё не построена — тела разрешаются позже, — поэтому второго
+/// представления не существует и синхронизировать нечего.
+fn retype_declaration(var: &mut VariableNode, ty: crate::semantic::type_node::TypeNode) {
+    match var {
+        VariableNode::Simple { ty: slot, .. } | VariableNode::Const { ty: slot, .. } => *slot = ty,
+        VariableNode::Port { .. } | VariableNode::Unresolved => {}
+    }
 }
 
 /// Несвёрнутая дробная АРИФМЕТИКА в инициализаторе — `SE-114` (фича 0300).
@@ -786,7 +846,21 @@ pub(crate) fn prepare_variables(
         );
     }
 
+    // Имена, у которых тип НЕ объявлен, снимаются ДО вывода типов: после него
+    // `Inference` заменён выведенным, и отличить «автор выбрал ширину» от
+    // «ширину выбрал литерал» уже нечем (фича 0285).
+    let untyped: std::collections::BTreeSet<String> = resolved
+        .iter()
+        .filter(|(_, var)| {
+            matches!(
+                declared_type(var),
+                Some(crate::semantic::type_node::TypeNode::Inference)
+            )
+        })
+        .map(|(name, _)| name.clone())
+        .collect();
+
     let inferred =
         crate::semantic::type_inference::type_inference(&mut resolved, Rc::clone(model))?;
-    fold_variable_initializers(&inferred, &raw, model)
+    fold_variable_initializers(&inferred, &raw, model, &untyped)
 }
