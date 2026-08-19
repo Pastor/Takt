@@ -35,6 +35,7 @@ mod guard_targets_tests;
 mod hal_bit_range_tests;
 mod port_initial_value_hdl_tests;
 mod rust_default_impl_tests;
+mod rust_index_cast_tests;
 mod rust_printers_tests;
 mod st_tests;
 mod struct_codegen_tests;
