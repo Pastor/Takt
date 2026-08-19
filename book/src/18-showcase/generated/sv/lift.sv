@@ -18,7 +18,7 @@ module lift (
     output logic motor_up,
     output logic is_done
 );
-    localparam logic [7:0] DWELL_TICKS = 3;
+    localparam logic [7:0] lift_DWELL_TICKS = 3;
 
     // Состояния модели 'lift (Lift)'. Синтетического INIT нет: стартовое
     // состояние живёт в ветви сброса (контракт ADR 0033).
@@ -61,10 +61,11 @@ module lift (
         motor_down_next = motor_down;
         motor_up_next = motor_up;
 
+        assert (((lift_moving_next == 0) || (lift_doors_next == 0)));
         unique case (state)
             LIFT_BOARDING: begin
                 lift_dwell_next = (lift_dwell_next + 1);
-                if ((lift_dwell_next >= DWELL_TICKS)) begin
+                if ((lift_dwell_next >= lift_DWELL_TICKS)) begin
                     lift_doors_next = 0;
                     doors_open_next = 0;
                     state_next = LIFT_LEAVING;

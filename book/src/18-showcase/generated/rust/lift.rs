@@ -12,7 +12,7 @@
 
 #![forbid(unsafe_code)]
 
-const DWELL_TICKS: u8 = 3;
+const LIFT_DWELL_TICKS: u8 = 3;
 
 /// Порт ввода-вывода модели. Реализация — за трейтом [`Hal`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,7 +105,7 @@ impl<H: Hal> Lift<H> {
     /// Вход в стартовое состояние такта **не расходует** (контракт
     /// ADR 0033): его тело исполняется в этом же вызове.
     pub fn tick(&mut self) {
-        assert!((self.moving == 0) | (self.doors == 0), "нарушен инвариант 'SafeMove'");
+        assert!((!self.moving) | (!self.doors), "нарушен инвариант 'SafeMove'");
         if self.state == LiftState::Init {
             self.moving = false;
             self.hal.write_bit(OutBitPort::MotorUp, false);
@@ -117,8 +117,8 @@ impl<H: Hal> Lift<H> {
         }
         match self.state {
             LiftState::Boarding => {
-                self.dwell += 1;
-                if self.dwell >= DWELL_TICKS {
+                self.dwell = self.dwell.wrapping_add(1);
+                if self.dwell >= LIFT_DWELL_TICKS {
                     self.doors = false;
                     self.hal.write_bit(OutBitPort::DoorsOpen, false);
                     self.state = LiftState::Leaving;

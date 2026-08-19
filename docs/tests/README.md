@@ -231,3 +231,4 @@
 | 0258 | Verdict::Unsupported не различает причину отказа | [0258-verify-unsupported-reason.md](0258-verify-unsupported-reason.md) | ГОТОВО |
 | 0259 | Встроенные функции языка не описаны в документе book/ | [0259-book-builtin-functions.md](0259-book-builtin-functions.md) | ГОТОВО |
 | 0268 | У SE-033 нет описания в приложении «Ошибки» | [0268-se033-appendix-description.md](0268-se033-appendix-description.md) | ГОТОВО |
+| 0274 | Снимки порождённого кода в book/ никем не сверяются | [0274-book-generated-snapshots-gate.md](0274-book-generated-snapshots-gate.md) | ГОТОВО |
