@@ -47,12 +47,13 @@ pub(crate) fn emit_extend(
     model: &Name,
     extend: &StateExtend,
     next: &Name,
+    states: &[Name],
 ) -> Result<(), Diagnostic> {
     match extend {
         StateExtend::None => Ok(()),
         // Последовательная композиция: шаг-регистр + инлайн активного шага.
         StateExtend::Concatenation(items) => {
-            emit_concatenation(p, map, fsm, state_name, state, model, items, next)
+            emit_concatenation(p, map, fsm, state_name, state, model, items, next, states)
         }
         // Параллельная композиция (и вырожденный случай одной модели): под-модели
         // работают одновременно, родитель уходит дальше, когда завершились ВСЕ.
@@ -64,7 +65,7 @@ pub(crate) fn emit_extend(
             p.ident(&format!("if ({}) begin", done_exprs.join(" && ")))
                 .nl();
             p.up();
-            emit_parent_transition(p, map, fsm, state, model, next)?;
+            emit_parent_transition(p, map, fsm, state, model, next, states)?;
             p.down();
             p.ident("end").nl();
             Ok(())
@@ -83,6 +84,7 @@ fn emit_concatenation(
     model: &Name,
     items: &[StateExtend],
     next: &Name,
+    states: &[Name],
 ) -> Result<(), Diagnostic> {
     let step = step_reg_name(state_name);
     // `unique case`: варианты `STEP_0..STEP_{N-1}` покрыты все — ветвь по шагу на
@@ -104,7 +106,7 @@ fn emit_concatenation(
         p.up();
         if i + 1 == items.len() {
             // Последний шаг завершён — переход РОДИТЕЛЬСКОГО состояния.
-            emit_parent_transition(p, map, fsm, state, model, next)?;
+            emit_parent_transition(p, map, fsm, state, model, next, states)?;
         } else {
             // Иначе — продвижение шага; следующий тикается на такте после
             // (регистр защёлкивает `_next`), как `break` в C.
@@ -179,7 +181,18 @@ fn emit_parent_transition(
     state: &StateNode,
     model: &Name,
     next: &Name,
+    states: &[Name],
 ) -> Result<(), Diagnostic> {
+    // Собственные рёбра состояния-композиции (фича 0303) — ПЕРЕД `next`/`END`,
+    // как у эталона: `ref` в порядке объявления, `next` последним (0181).
+    if crate::generator::sv::sv_fsm::emit_transitions(p, map, fsm, state, model, states)? {
+        return Ok(());
+    }
+    // `END` — только состоянию БЕЗ рёбер: у эталона узел завершается при пустом
+    // списке переходов, а при несработавших остаётся в состоянии.
+    if next.local().is_empty() && !state.references().is_empty() {
+        return Ok(());
+    }
     emit_named_blocks(p, state, fsm, "exit")?;
     let reg = fsm
         .state_reg

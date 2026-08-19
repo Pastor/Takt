@@ -827,7 +827,7 @@ pub(crate) fn emit_model_body(
             }
             Element::StateExtend { extend, next, .. } => {
                 super::sv_compose::emit_extend(
-                    p, map, fsm, state_name, raw, model, &extend, &next,
+                    p, map, fsm, state_name, raw, model, &extend, &next, &states,
                 )?;
             }
             Element::Model { .. } => {
@@ -851,14 +851,17 @@ pub(crate) fn emit_model_body(
 /// есть **первый сработавший выигрывает**. Независимые `if` дали бы срабатывание
 /// всех подходящих подряд, и последний затёр бы предыдущие — порядок рёбер
 /// значим.
-fn emit_transitions(
+/// Возвращает `true`, если напечатано **безусловное** ребро: цепочка на нём
+/// заканчивается (правило 0213), и вызывающий не печатает переход по
+/// `next`/`END`.
+pub(crate) fn emit_transitions(
     p: &mut Printer,
     map: &SvMap,
     fsm: &Fsm,
     state: &StateNode,
     model: &Name,
     states: &[Name],
-) -> Result<(), Diagnostic> {
+) -> Result<bool, Diagnostic> {
     let mut printed = 0usize;
     for reference in state.references() {
         let Some(target) = states.iter().find(|n| n.local() == reference.name).cloned() else {
@@ -905,7 +908,7 @@ fn emit_transitions(
         p.ident("end").nl();
         printed += 1;
         if unconditional {
-            break;
+            return Ok(true);
         }
     }
     // Терминальное состояние: переходов нет — уходим в END, как это делает C.
@@ -918,7 +921,7 @@ fn emit_transitions(
         p.ident(&format!("{}_next = {};", reg, end_variant(model)))
             .nl();
     }
-    Ok(())
+    Ok(false)
 }
 
 /// Печатает `always_ff`: ветвь сброса и защёлкивание.

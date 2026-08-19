@@ -250,3 +250,4 @@
 | 0278 | Мёртвая упаковка последовательной композиции | [0278-compact-implement-dead-branch.md](0278-compact-implement-dead-branch.md) | зависимостей нет; путь отвергнут ADR 0057 — код снят |
 | 0260 | Неиспользуемый параметр в порождённом C | [0260-c-unused-struct-parameter.md](0260-c-unused-struct-parameter.md) | зависимостей нет; путь кандидата отвергнут по цене |
 | 0267 | Проверка состояния соседней модели в целях | [0267-state-of-model-in-targets.md](0267-state-of-model-in-targets.md) | зависимостей нет; замер поправил кандидата дважды |
+| 0303 | Условное ребро состояния-композиции теряется целями | [0303-composition-state-conditional-edge.md](0303-composition-state-conditional-edge.md) | зависимостей нет; взята вне очереди (Tier 1) |

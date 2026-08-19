@@ -124,6 +124,9 @@ fn generate_parallel_items_tick(
 ///   `break;`, а всё, что стоит за безусловным ребром, недостижимо
 /// - условный переход: `if (cond) { exit → enter → state → break }` — здесь
 ///   `break` обязателен, он выходит из `switch` изнутри блока
+///
+/// Возвращает `true`, если напечатано **безусловное** ребро: всё, что за ним,
+/// недостижимо (правило 0213), и вызывающий обязан прекратить печать переходов.
 fn generate_state_transitions(
     printer: &mut Printer,
     raw_state: &StateNode,
@@ -131,7 +134,7 @@ fn generate_state_transitions(
     model: &Element,
     _model_name: &Name,
     states: &[Name],
-) -> Result<(), Diagnostic> {
+) -> Result<bool, Diagnostic> {
     for reference in raw_state.references() {
         let Some(target) = states.iter().find(|n| n.local() == reference.name).cloned() else {
             continue; // целевое состояние не найдено в достижимых состояниях
@@ -222,10 +225,10 @@ fn generate_state_transitions(
                     target.unique_uppercase_snakecase()
                 ))
                 .nl();
-            return Ok(());
+            return Ok(true);
         }
     }
-    Ok(())
+    Ok(false)
 }
 
 /// Генерирует переход из расширенного состояния (Parallel / Concatenation).
@@ -240,7 +243,32 @@ fn generate_extend_transition(
     model: &Element,
     model_name: &Name,
     next: &Name,
+    states: &[Name],
 ) -> Result<(), Diagnostic> {
+    // Собственные рёбра состояния-композиции (фича 0303) — ПЕРЕД `next`/`END`.
+    //
+    // Правило языка задано фичей 0181: реализация тикается до проверки
+    // переходов, и переход берётся по её завершении. Эталон проверяет сначала
+    // `ref`-рёбра в порядке объявления, затем `next` (последним — иначе
+    // безусловный `next` затенил бы их все, см. `build_transitions`
+    // симулятора). Цели печатали только `next`, и вход
+    // `start Entry = A | B { ref Finish: cond; }` давал ДРУГОЙ автомат: в
+    // `Finish` никто не шёл, а при ложном условии цель уходила в `END` там, где
+    // эталон ждёт. Вывод при этом валиден, и ни один инструмент целевого языка
+    // об этом не говорит — вердикт дают только потактовые сверки.
+    if generate_state_transitions(printer, raw_state, map, model, model_name, states)? {
+        // Сработало безусловное ребро: всё, что за ним, недостижимо (0213).
+        return Ok(());
+    }
+    // ⚠️ `END` подставляется только состоянию БЕЗ переходов. У эталона
+    // завершение узла (`Terminated`) наступает при **пустом** списке переходов;
+    // если переходы есть, но ни один не сработал, узел **остаётся** в
+    // состоянии. Прежде цель уходила в `END` безусловно — на входе с ложным
+    // условием прошивка завершалась там, где модель ждёт (замер 0303).
+    if next.local().is_empty() && !raw_state.references().is_empty() {
+        printer.ident("break;").nl();
+        return Ok(());
+    }
     if next.local().is_empty() {
         // Переход в терминальное состояние: exit текущего → state = END → break
         generate_named_blocks(printer, raw_state, map, model, "exit")?;
@@ -286,6 +314,7 @@ fn generate_concat_tick(
     model: &Element,
     model_name: &Name,
     next: &Name,
+    states: &[Name],
 ) -> Result<(), Diagnostic> {
     let state_field = format!("model->{}_state", state_local);
     for (idx, item) in items.iter().enumerate() {
@@ -350,7 +379,9 @@ fn generate_concat_tick(
                     .up()
                     .nl();
                 if is_last {
-                    generate_extend_transition(printer, raw_state, map, model, model_name, next)?;
+                    generate_extend_transition(
+                        printer, raw_state, map, model, model_name, next, states,
+                    )?;
                 } else {
                     let next_variant = generate_concat_item_init(
                         printer,
@@ -385,7 +416,7 @@ fn generate_concat_tick(
                         .nl();
                     if is_last {
                         generate_extend_transition(
-                            printer, raw_state, map, model, model_name, next,
+                            printer, raw_state, map, model, model_name, next, states,
                         )?;
                     } else {
                         let next_variant = generate_concat_item_init(
@@ -574,30 +605,18 @@ fn generate_model_tick(
                             .print(")) {")
                             .up()
                             .nl();
-                        if next.local().is_empty() {
-                            // exit текущего → state = END → break
-                            generate_named_blocks(printer, raw_state, map, model, "exit")?;
-                            printer
-                                .ident(&format!(
-                                    "model->state = {}_END;",
-                                    model_name.unique_uppercase_snakecase()
-                                ))
-                                .nl();
-                            printer.ident("break;").nl();
-                        } else {
-                            // exit текущего → enter следующего → state → break
-                            generate_named_blocks(printer, raw_state, map, model, "exit")?;
-                            let next_state = map.raw_state_at(next.clone())?;
-                            let next_state = &*next_state.borrow();
-                            generate_named_blocks(printer, next_state, map, model, "enter")?;
-                            printer
-                                .ident(&format!(
-                                    "model->state = {};",
-                                    next.unique_uppercase_snakecase()
-                                ))
-                                .nl();
-                            printer.ident("break;").nl();
-                        }
+                        // Переход печатает ОБЩАЯ функция (фича 0303): прежде
+                        // эта ветвь несла свою копию «next либо END», и
+                        // собственные рёбра состояния теряла вместе с ней.
+                        generate_extend_transition(
+                            printer,
+                            raw_state,
+                            map,
+                            model,
+                            &model_name,
+                            &next,
+                            states,
+                        )?;
                         printer.down().ident("}").nl();
                     }
                     StateExtend::Parallel(steps) => {
@@ -623,6 +642,7 @@ fn generate_model_tick(
                                 model,
                                 &model_name,
                                 &next,
+                                states,
                             )?;
                             printer.down().ident("}").nl();
                         }
@@ -642,6 +662,7 @@ fn generate_model_tick(
                             model,
                             &model_name,
                             &next,
+                            states,
                         )?;
                     }
                     // 0028-02: ветки для этого варианта НЕ БЫЛО — состояние с
