@@ -55,14 +55,45 @@ fn computable_cast_initializer_matches_generated_sv() {
     );
 }
 
-/// **Контроль границы: приведение, меняющее значение, по-прежнему отвергается.**
+/// **Граница СДВИНУЛАСЬ (фича 0310): приведение, меняющее значение, вычисляется.**
 ///
-/// Правила усечения и обёртки принадлежат эталону (`takt-sim::eval`), и копии их
-/// в `takt-lang` быть не должно — вычислитель берётся лишь за тождественное
-/// приведение (ADR 0286).
+/// Правило целочисленного приведения (обёртка беззнакового, ошибка знакового —
+/// ADR 0127) переехало в общий носитель
+/// `takt_lang::semantic::const_eval::int_cast`, и эталон зовёт **его же**. До
+/// этого копии не было ни у кого, кроме эталона, — и цель `sv` отвергала
+/// `300 as u8`, тогда как остальные семь потребителей давали `44`.
+///
+/// ⚠️ Проверяется **значение** в выводе, а не отсутствие отказа: «цель
+/// научилась» иначе означало бы лишь «перестала отказывать».
 #[test]
-fn value_changing_cast_is_still_refused() {
+fn value_changing_cast_is_folded() {
     let src = SRC.replace("5 as u16", "300 as u8");
+    let dir = build_dir("const_cast_wrap");
+    takt_lang::compile_to_sv(
+        "castinit",
+        &src,
+        dir.to_str().expect("путь в UTF-8"),
+        &[],
+        &takt_lang::generator::GenerateOptions::default(),
+    )
+    .expect("приведение с обёрткой вычисляется при компиляции");
+    let text = std::fs::read_to_string(dir.join("castinit.sv")).expect("чтение модуля");
+    assert!(
+        text.contains("44"),
+        "обёрнутое значение 300 mod 256 = 44 обязано доехать до ветви сброса:\n{text}"
+    );
+}
+
+/// **Контроль:** знаковое переполнение приведения — ошибка, а не молчаливое
+/// значение.
+///
+/// Замер 2026-08-20: прежде `var v: i8 := 300 as i8;` давал `0` у эталона,
+/// `44` у `c` и `rust`, а `st` теряла инициализатор — четыре ответа на один
+/// вход. Знаковое переполнение есть ошибка программы (ADR 0127), и в C это
+/// неопределённое поведение.
+#[test]
+fn signed_overflow_cast_is_refused() {
+    let src = SRC.replace("5 as u16", "300 as i8");
     let err = takt_lang::compile_to_sv(
         "castinit",
         &src,
@@ -70,6 +101,6 @@ fn value_changing_cast_is_still_refused() {
         &[],
         &takt_lang::generator::GenerateOptions::default(),
     )
-    .expect_err("приведение, меняющее значение, обязано отвергаться");
-    assert_eq!(err.code.as_deref(), Some("SV-002"), "{}", err.message);
+    .expect_err("знаковое переполнение обязано отвергаться");
+    assert_eq!(err.code.as_deref(), Some("SE-121"), "{}", err.message);
 }

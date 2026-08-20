@@ -340,21 +340,16 @@ pub(crate) fn cast_to_type(value: Value, ty: &TypeNode) -> Result<Value, EvalErr
 fn coerce_integer(value: Value, bits: u8, signed: bool) -> Result<Value, EvalError> {
     let ty = TypeNode::Integer { bits, signed };
     let n = to_integer(&value, &ty)?;
-    // Шире 64 бит типов в языке нет; `Enum` приходит сюда с `bits = 64`.
-    let bits = bits.min(64);
-    if signed {
-        // S2: выход за диапазон знакового типа — UB в C, не воспроизводим.
-        let min = -(1_i128 << (bits - 1));
-        let max = (1_i128 << (bits - 1)) - 1;
-        if n < min || n > max {
-            return Err(EvalError::SignedOverflow { value: n, bits });
-        }
-        Ok(Value::Number(n))
-    } else {
-        // S1: обёртка mod 2^bits — определённое поведение C.
-        let mask = (1_i128 << bits) - 1;
-        Ok(Value::Number(n & mask))
-    }
+    // ⚠️ Само правило живёт в ОБЩЕМ носителе (фича 0310): компилятор считает
+    // приведение теми же формулами, и вторая реализация разошлась бы с этой
+    // значениями. Здесь остаётся перевод ошибки в диагностику эталона —
+    // `SIM-003` в такте против `SE-121` при сборке: текст у них разный.
+    takt_lang::semantic::const_eval::int_cast::integer(n, bits, signed)
+        .map(Value::Number)
+        .map_err(|overflow| EvalError::SignedOverflow {
+            value: overflow.value,
+            bits: overflow.bits,
+        })
 }
 
 /// Поэлементное приведение массива с проверкой длины. `structs` протаскивается —
