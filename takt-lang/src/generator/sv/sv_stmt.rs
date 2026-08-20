@@ -90,8 +90,11 @@ pub(crate) fn print_statement(
             let name = scope
                 .function
                 .ok_or_else(|| sv002("возврат значения вне тела функции"))?;
-            p.ident(&format!("{} = {};", name, print_expression(expr, scope)?))
-                .nl();
+            let value = match scope.function_ret {
+                Some(ty) => scope.coerce(ty, expr)?,
+                None => print_expression(expr, scope)?,
+            };
+            p.ident(&format!("{name} = {value};")).nl();
             Ok(())
         }
         // Пустой `return` возвращать нечего: у функции Takt всегда есть значение.
@@ -481,6 +484,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -508,6 +512,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };
@@ -533,6 +538,7 @@ mod tests {
         let scope = Scope {
             registered: &set,
             function: None,
+            function_ret: None,
             enums: &enums,
             warnings: &warnings,
         };

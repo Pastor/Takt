@@ -455,6 +455,7 @@ impl Fsm {
         Scope {
             registered: &self.registered,
             function: None,
+            function_ret: None,
             enums: &self.enums,
             warnings: &self.warnings,
         }
@@ -576,6 +577,7 @@ pub(crate) fn emit_functions(
             let scope = Scope {
                 registered: &fsm.registered,
                 function: Some(name),
+                function_ret: Some(ret),
                 enums: &fsm.enums,
                 warnings: &fsm.warnings,
             };

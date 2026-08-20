@@ -364,7 +364,14 @@ pub(crate) fn print_tail(
 ) -> Result<bool, Diagnostic> {
     match stmt {
         StatementNode::Return(Some(expr)) => {
-            let text = print_expression(expr, scope)?;
+            // Хвостовое выражение — тот же приёмник, что и `return` (фича
+            // 0336): путей печати возврата ДВА, и правило обязано стоять в
+            // обоих — иначе оно действует через раз, в зависимости от того,
+            // последний ли это оператор тела.
+            let text = match &scope.return_type {
+                Some(ty) => crate::generator::rust::rust_expr::coerce_to(expr, ty, scope)?,
+                None => print_expression(expr, scope)?,
+            };
             p.ident(unwrap_outer(&text)).nl();
             Ok(true)
         }
@@ -617,11 +624,14 @@ pub(crate) fn print_statement_ctx(
             match value {
                 // `return (x);` — ещё одна позиция, где скобки лишние.
                 Some(expr) => {
-                    p.ident(&format!(
-                        "return {};",
-                        unwrap_outer(&print_expression(expr, scope)?)
-                    ))
-                    .nl();
+                    // `return` — позиция приёмника с известным типом (фича
+                    // 0336): `return 1;` при `-> bit` обязано печататься
+                    // `true`, вариант перечисления — именем, разряд — числом.
+                    let printed = match &scope.return_type {
+                        Some(ty) => crate::generator::rust::rust_expr::coerce_to(expr, ty, scope)?,
+                        None => print_expression(expr, scope)?,
+                    };
+                    p.ident(&format!("return {};", unwrap_outer(&printed))).nl();
                 }
                 None => {
                     p.ident("return;").nl();

@@ -56,6 +56,7 @@ pub(crate) fn port_initial_writes(
         hal_is_ref: false,
         instances: Vec::new(),
         time_profile: map.time_profile(),
+        return_type: None,
     };
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut out = Vec::new();

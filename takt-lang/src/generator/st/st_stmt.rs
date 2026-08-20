@@ -57,6 +57,14 @@ pub(crate) struct StmtOutput {
 
 /// Печатает оператор Takt в текст ST.
 ///
+/// Контекст функции, чьё тело печатается: имя POU и **тип возврата**.
+///
+/// Тип нужен ветви `Return`: возврат в ST — присваивание имени функции, то
+/// есть позиция приёмника с известным типом (фича 0336). Без него разряд `x.N`
+/// печатался булевым выражением, и `iec2c` отвечал «Incompatible data types
+/// for ':=' operation» при нулевом коде возврата `taktc`.
+pub(crate) type FnContext<'a> = Option<(&'a str, &'a TypeNode)>;
+
 /// Объявления переменных **поднимаются** в `out.hoisted` (см. шапку модуля), а
 /// на их месте печатается присваивание инициализатора.
 ///
@@ -67,7 +75,7 @@ pub(crate) fn print_statement(
     model: &ModelNode,
     p: &mut Printer,
     out: &mut StmtOutput,
-    fn_name: Option<&str>,
+    fn_name: FnContext<'_>,
 ) -> Result<(), Diagnostic> {
     match stmt {
         // Пустой оператор ничего не печатает: в ST лишняя `;` — синтаксическая
@@ -209,13 +217,13 @@ pub(crate) fn print_statement(
         // В ST нет `return <значение>`: результат возвращается присваиванием
         // ИМЕНИ функции, а `RETURN;` лишь досрочно выходит.
         StatementNode::Return(Some(value)) => {
-            let name = fn_name.ok_or_else(|| {
+            let (name, ret) = fn_name.ok_or_else(|| {
                 unsupported(
                     "return со значением вне функции: присваивать нечему — имя \
                      функции неизвестно",
                 )
             })?;
-            let text = print_expression(value, model)?;
+            let text = crate::generator::st::st_expr::coerce_to(value, ret, model)?;
             p.ident(&format!("{} := {};", name, text)).nl();
             p.ident("RETURN;").nl();
             Ok(())
@@ -278,7 +286,7 @@ fn print_for(
     model: &ModelNode,
     p: &mut Printer,
     out: &mut StmtOutput,
-    fn_name: Option<&str>,
+    fn_name: FnContext<'_>,
 ) -> Result<(), Diagnostic> {
     if step.is_some() && contains_continue(body) {
         return Err(unsupported(
@@ -312,7 +320,7 @@ fn print_match(
     model: &ModelNode,
     p: &mut Printer,
     out: &mut StmtOutput,
-    fn_name: Option<&str>,
+    fn_name: FnContext<'_>,
 ) -> Result<(), Diagnostic> {
     let subject = print_expression(expr, model)?;
     let mut printed_if = false;
