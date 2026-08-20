@@ -20,6 +20,7 @@
 //! двоеточие в пути.
 
 mod conformance_anon_tests;
+mod conformance_array_assign_tests;
 mod conformance_bit_write_tests;
 mod conformance_builtin_tests;
 mod conformance_c_arrays_tests;

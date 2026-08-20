@@ -110,6 +110,29 @@ pub(crate) fn print_statement(
                 p.ident(&print_bit_write(inner, *bit, rhs, model)?).nl();
                 return Ok(());
             }
+            // Присваивание АГРЕГАТА печатается поэлементно (фича 0330):
+            // агрегатной формы значения массива в IEC 61131-3 нет, и прежде
+            // цель отвечала `ST-011` с текстом, обещавшим «часть 2 задачи
+            // 0041-04», тогда как эталон, `c` и `rust` вход исполняли.
+            if let ExpressionNode::Assign(lhs, rhs) = expr.as_ref()
+                && let ExpressionNode::Variable(var) = lhs.as_ref()
+                && let ExpressionNode::Array(items) | ExpressionNode::Initializer(items) =
+                    rhs.as_ref()
+            {
+                let name = variable_ident(&var.borrow());
+                let elem = match assign_target_type(&var.borrow()) {
+                    Some(TypeNode::Array(_, elem)) => Some(*elem),
+                    _ => None,
+                };
+                for (index, item) in items.iter().enumerate() {
+                    let value = match &elem {
+                        Some(ty) => coerce_to(item, ty, model)?,
+                        None => print_expression(item, model)?,
+                    };
+                    p.ident(&format!("{name}[{index}] := {value};")).nl();
+                }
+                return Ok(());
+            }
             // Присваивание печатается по ЦЕЛЕВОМУ типу (фича 0066): литерал
             // bool/enum восстанавливается в `FALSE`/`TRUE` / имя константы.
             // Покрывает и тела `enter`/`exit`/`always` — они идут сюда же через

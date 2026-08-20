@@ -313,3 +313,4 @@
 | 0327 | Описание SV-002 отражает состав переводимого | [0327-sv002-description.md](0327-sv002-description.md) | — (новая фича) |
 | 0328 | Целая степень считается целочисленно | [0328-integer-power.md](0328-integer-power.md) | — (новая фича) |
 | 0329 | Цели rust и sv переводят целую степень | [0329-power-in-rust-sv.md](0329-power-in-rust-sv.md) | — (новая фича) |
+| 0330 | Присваивание агрегата массива в целях st и sv | [0330-aggregate-assignment.md](0330-aggregate-assignment.md) | — (новая фича) |
