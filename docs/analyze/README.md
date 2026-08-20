@@ -66,6 +66,9 @@
 | 0066 | Литералы по целевому типу в телах цели `st` | [0066-st-bool-literals.md](0066-st-bool-literals.md) | — (новая фича) |
 | 0068 | Верификация свойств над данными | [0068-verify-data-properties.md](0068-verify-data-properties.md) | — (новая фича) |
 | 0069 | Разделение `address_map.rs` | [0069-address-map-eval-split.md](0069-address-map-eval-split.md) | — (новая фича) |
+| 0075 | эталонная модель порождает компилируемый C | [0075-lib-src-reference-model.md](0075-lib-src-reference-model.md) | см. карточку фичи |
+| 0081 | `lamc compile` печатает предупреждения | [0081-lamc-print-warnings.md](0081-lamc-print-warnings.md) | см. карточку фичи |
+| 0082 | `unused.rs` не обходит `formulas` | [0082-unused-formulas.md](0082-unused-formulas.md) | см. карточку фичи |
 | 0096 | Q-арифметика через нативный float и флаг генерации (embedded ↔ float) | [0096-fixed-point-native-float.md](0096-fixed-point-native-float.md) | — (новая фича) |
 | 0097 | Пример ПИД-регулятора на языке Lam (fixed-point) | [0097-pid-regulator-example.md](0097-pid-regulator-example.md) | — (новая фича) |
 | 0090 | CI прогоняет весь `precheck.sh` (живые гейты + check-links) | [0090-ci-precheck.md](0090-ci-precheck.md) | — (новая фича) |
@@ -92,6 +95,7 @@
 | 0088 | Остальные нарушители лимита размера модуля | [0088-module-size-remaining.md](0088-module-size-remaining.md) | — (новая фича) |
 | 0089 | Остаточные проверки плагина IntelliJ (0022/0023) | [0089-intellij-residual-checks.md](0089-intellij-residual-checks.md) | — (новая фича) |
 | 0092 | У фичи 0018 нет ADR | [0092-adr-0018-retrofit.md](0092-adr-0018-retrofit.md) | — (новая фича) |
+| 0098 | диапазон бита адреса порта и безопасный дефолтный HAL | [0098-port-bit-range-safe-hal.md](0098-port-bit-range-safe-hal.md) | см. карточку фичи |
 | 0100 | Переименование языка Lam → Takt | [0100-language-rename-takt.md](0100-language-rename-takt.md) | — (новая фича) |
 | 0101 | Документ описания языка Takt | [0101-language-book.md](0101-language-book.md) | — (новая фича) |
 | 0117 | Раздел документа «Инструментарий» | [0117-book-tools.md](0117-book-tools.md) | — (новая фича) |
@@ -155,6 +159,7 @@
 | 0188 | Направление порта проверяется во всех позициях | [0188-port-direction-everywhere.md](0188-port-direction-everywhere.md) | — (новая фича) |
 | 0190 | Разделение предкоммита на компоненты и выборочный запуск | [0190-precheck-selective-gates.md](0190-precheck-selective-gates.md) | — (новая фича) |
 | 0189 | Анонимные порты | [0189-anonymous-ports.md](0189-anonymous-ports.md) | [ADR 0189](../adr/0189-anonymous-ports.md) |
+| 0191 | Цель `st` — потактовая сверка с эталоном и устранение расхождений | [0191-st-per-tick-conformance.md](0191-st-per-tick-conformance.md) | см. карточку фичи |
 | 0196 | Подсветка имён типов отдельным цветом в LSP и плагинах | [0196-editor-type-highlighting.md](0196-editor-type-highlighting.md) | — (новая фича) |
 | 0192 | Константное выражение в инициализаторе объявления | [0192-const-init-fold.md](0192-const-init-fold.md) | — (новая фича) |
 | 0193 | Цели rust и sv: одноимённые константы разных моделей | [0193-shared-const-qualified.md](0193-shared-const-qualified.md) | меняется вывод целей `rust`/`sv` (имена констант); язык и API крейта — нет |
@@ -167,6 +172,7 @@
 | 0202 | taktc fmt печатает синтаксическую ошибку Debug-дампом | [0202-fmt-diagnostic-formatting.md](0202-fmt-diagnostic-formatting.md) | — (новая фича) |
 | 0152 | Восстановление на границе элемента в стадиях построения | [0152-semantic-recovery-element-boundary.md](0152-semantic-recovery-element-boundary.md) | — (новая фича) |
 | 0197 | Стиль кода языка Takt — свод правил оформления и раздел документа | [0197-language-code-style.md](0197-language-code-style.md) | — (новая фича) |
+| 0222 | Раздел документа не отражает свёртку инициализатора | [0222-book-variables-const-fold.md](0222-book-variables-const-fold.md) | см. карточку фичи |
 | 0226 | Канон именования: предупреждение в fmt и LSP | [0226-naming-convention-warning.md](0226-naming-convention-warning.md) | — (новая фича) |
 | 0227 | Редактор показывает CS-001 и при ошибках в файле | [0227-lsp-style-warning-with-errors.md](0227-lsp-style-warning-with-errors.md) | — (новая фича) |
 | 0228 | Предупреждение taktc compile несёт позицию | [0228-compile-warning-position.md](0228-compile-warning-position.md) | — (новая фича) |
@@ -271,3 +277,4 @@
 | 0270 | Вес PDF документа: причина найдена, теги отключены | [0270-book-pdf-size.md](0270-book-pdf-size.md) | — (новая фича) |
 | 0283 | Печать результата компиляции сведена к одной функции | [0283-cli-report-result-merge.md](0283-cli-report-result-merge.md) | — (новая фича) |
 | 0294 | SE-102 называет файл, подключающий библиотеку | [0294-se102-suggest-importer.md](0294-se102-suggest-importer.md) | — (новая фича) |
+| 0164 | Реестры стадий сверяются с файлами на диске | [0164-registry-rebuild-gate.md](0164-registry-rebuild-gate.md) | — (новая фича) |
