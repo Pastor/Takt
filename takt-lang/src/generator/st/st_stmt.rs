@@ -213,6 +213,30 @@ pub(crate) fn print_statement(
                 ty: ty.clone(),
             });
             if let Some(init) = init {
+                // Агрегат печатается ПОЭЛЕМЕНТНО (фича 0345): агрегатной формы
+                // значения в IEC 61131-3 нет, и `var p: Point := {0, 0};` в
+                // теле функции давал `ST-011` — отказ на записи, которую
+                // эталон, `c` и `rust` исполняют. Место записи выбирает общий
+                // носитель (0340).
+                if let ExpressionNode::Initializer(items) | ExpressionNode::Array(items) = &**init {
+                    let fields = match ty {
+                        TypeNode::Struct(sname) => model.search_struct(sname).map(|d| d.fields),
+                        _ => None,
+                    };
+                    let places = crate::generator::aggregate::places(
+                        fields.as_deref(),
+                        Some(ty),
+                        items.len(),
+                    );
+                    for (item, place) in items.iter().zip(places) {
+                        let value = match &place.ty {
+                            Some(elem) => coerce_to(item, elem, model)?,
+                            None => print_expression(item, model)?,
+                        };
+                        p.ident(&format!("{name}{} := {value};", place.suffix)).nl();
+                    }
+                    return Ok(());
+                }
                 // Инициализатор локального объявления — тоже по целевому типу
                 // (фича 0066, site «сброс/инициализация»).
                 let text = coerce_to(init, ty, model)?;
