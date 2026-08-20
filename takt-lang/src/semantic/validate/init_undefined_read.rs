@@ -83,6 +83,9 @@ enum UndefinedRead {
     Cell,
     /// Чтение порта по имени (фича 0266).
     Port(String),
+    /// Вызов **внешней** функции (фича 0305): её значение при компиляции
+    /// неизвестно по определению — тело живёт вне программы.
+    ExternCall(String),
 }
 
 /// Ищет чтение неопределённой памяти в выражении инициализатора.
@@ -109,6 +112,18 @@ fn check(expr: &ExpressionNode, loc: Location, name: &str) -> Result<(), Diagnos
             ),
         )
         .with_code("SE-113")),
+        Some(UndefinedRead::ExternCall(func)) => Err(Diagnostic::error(
+            loc,
+            format!(
+                "инициализатор '{name}' зовёт внешнюю функцию '{func}': её значение при \
+                 компиляции неизвестно — тело живёт вне программы, а начальное значение \
+                 выставляется до первого такта. Прежде потребители расходились молча: \
+                 эталон давал ноль, 'st' теряла инициализатор без единого слова, а 'c', \
+                 'rust' и 'sv' отказывали. Зовите функцию в теле состояния — например, \
+                 'always {{ {name} := {func}(); }}'"
+            ),
+        )
+        .with_code("SE-084")),
     }
 }
 
@@ -163,9 +178,31 @@ fn find_undefined_read(expr: &ExpressionNode) -> Option<UndefinedRead> {
         ExpressionNode::ConditionalOperator(cond, then_, else_) => find_undefined_read(cond)
             .or_else(|| find_undefined_read(then_))
             .or_else(|| find_undefined_read(else_)),
-        ExpressionNode::Function(_, args)
-        | ExpressionNode::Array(args)
-        | ExpressionNode::Initializer(args) => args.iter().find_map(find_undefined_read),
+        // Вызов функции: сперва спрашиваем САМУ функцию — внешняя запрещена
+        // здесь целиком (фича 0305), — затем обходим аргументы.
+        ExpressionNode::Function(def, args) => {
+            // ⚠️ Форм внешней функции в ячейке ДВЕ. Инициализатор разрешается на
+            // стадии 2, а тела функций строятся на стадии 5 — поэтому в снимке
+            // ячейки лежит `Unresolved(FunctionDefine { external: true, … })`, а
+            // не `External`. Проверять только второй вариант значит не поймать
+            // ничего: первая редакция так и делала, и проба молчала.
+            let external = match &*def.borrow() {
+                FunctionDefinitionNode::External { name, .. } => Some(name.clone()),
+                FunctionDefinitionNode::Unresolved(raw) if raw.external => raw
+                    .name
+                    .as_ref()
+                    .map(|id| id.name.clone())
+                    .or(Some(String::from("внешняя функция"))),
+                _ => None,
+            };
+            if let Some(func) = external {
+                return Some(UndefinedRead::ExternCall(func));
+            }
+            args.iter().find_map(find_undefined_read)
+        }
+        ExpressionNode::Array(args) | ExpressionNode::Initializer(args) => {
+            args.iter().find_map(find_undefined_read)
+        }
         ExpressionNode::ArraySubscript(_, index) => find_undefined_read(index),
         // Прочее вложенных выражений не несёт.
         ExpressionNode::None
