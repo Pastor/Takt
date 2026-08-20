@@ -229,3 +229,4 @@
 | 0269 | Подсветка блоков st и ebnf в документе | [0269-book-st-syntax-highlight.md](0269-book-st-syntax-highlight.md) | Готово: 9 блоков, гейт языков заведён |
 | 0270 | Вес PDF документа: причина найдена, теги отключены | [0270-book-pdf-size.md](0270-book-pdf-size.md) | Готово: 3.08 МБ → 947 КБ |
 | 0283 | Печать результата компиляции сведена к одной функции | [0283-cli-report-result-merge.md](0283-cli-report-result-merge.md) | Готово: --verbose действует у всех целей |
+| 0294 | SE-102 называет файл, подключающий библиотеку | [0294-se102-suggest-importer.md](0294-se102-suggest-importer.md) | Готово: подсказка у taktc и takt-sim |

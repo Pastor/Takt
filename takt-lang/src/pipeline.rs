@@ -16,6 +16,11 @@ use crate::{parse, semantic};
 /// долг реестра размеров (`scripts/module-size-baseline.txt`), и расти ему
 /// нельзя даже на строку.
 pub use crate::semantic::validate::validate_entry_model;
+// Подсказка «кто подключает эту библиотеку» (фича 0294) — спутник
+// `validate_entry_model`: её зовут те же два потребителя, что и проверку,
+// и оба обязаны отвечать одинаково. Слой `semantic::import` наружу крейта
+// закрыт, поэтому доступ к подсказке даётся здесь же, рядом с проверкой.
+pub use crate::semantic::import::importers::{find_importers, importers_note};
 
 /// Разбирает и строит модель, проставляя диагностике **путь её файла** (фича 0053).
 ///
@@ -60,7 +65,22 @@ pub(crate) fn parse_and_construct(
     // файл доезжал до генератора и получал `SE-011` «Модель должна содержать
     // начальное состояние» — сообщение о пропущенном `start`, которого автор
     // библиотеки не писал, и вдобавок без позиции.
-    if let Some(d) = semantic::validate::validate_entry_model(&model) {
+    if let Some(mut d) = semantic::validate::validate_entry_model(&model) {
+        // Подсказка «кто эту библиотеку подключает» (фича 0294): причину
+        // `SE-102` называла и раньше, а следующий шаг автор делал сам — искал
+        // импортёра глазами. Поиск живёт ЗДЕСЬ, а не в проверке: он ходит по
+        // файловой системе, а семантика её не знает (та же граница, по которой
+        // сама проверка стоит в конвейере, а не в `validate_model_all`).
+        if let Some(note) = semantic::import::importers::importers_note(filename, search_paths) {
+            d.notes.push(diagnostics::Note {
+                // Позиции у подсказки нет по существу: она говорит о ДРУГОМ
+                // файле, и координата в своём была бы ложью (правило 0243,
+                // образец `SE-119`). `Location::Codegen` печатается без
+                // префикса — на файл указывает сам текст заметки.
+                loc: diagnostics::Location::Codegen,
+                message: note,
+            });
+        }
         return Err(stamp_file(d, &files));
     }
     Ok(Compilation { model, files })
