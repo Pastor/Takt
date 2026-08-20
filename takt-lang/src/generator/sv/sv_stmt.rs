@@ -349,6 +349,35 @@ fn print_expression_statement(
     scope: &Scope,
 ) -> Result<(), Diagnostic> {
     match expr {
+        // Присваивание АГРЕГАТА (фича 0330) печатается поэлементно: `'{…}` в
+        // `always_comb` пришлось бы согласовывать по ширине с каждым элементом,
+        // а поэлементная форма выразима всегда и совпадает с тем, что печатает
+        // цель `c`.
+        ExpressionNode::Assign(target, value)
+            if matches!(
+                value.as_ref(),
+                ExpressionNode::Array(_) | ExpressionNode::Initializer(_)
+            ) =>
+        {
+            let (ExpressionNode::Array(items) | ExpressionNode::Initializer(items)) =
+                value.as_ref()
+            else {
+                unreachable!("охрана ветви проверила вид узла");
+            };
+            let lhs = print_assign_target(target, scope)?;
+            let elem = target_type(target).and_then(|ty| match ty {
+                TypeNode::Array(_, elem) => Some(*elem),
+                _ => None,
+            });
+            for (index, item) in items.iter().enumerate() {
+                let rhs = match &elem {
+                    Some(ty) => scope.coerce(ty, item)?,
+                    None => print_expression(item, scope)?,
+                };
+                p.ident(&format!("{lhs}[{index}] = {rhs};")).nl();
+            }
+            Ok(())
+        }
         ExpressionNode::Assign(target, value) => {
             let lhs = print_assign_target(target, scope)?;
             // Значение печатается ПО ЦЕЛЕВОМУ ТИПУ, а не само по себе: для
