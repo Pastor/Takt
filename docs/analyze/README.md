@@ -315,3 +315,4 @@
 | 0329 | Цели rust и sv переводят целую степень | [0329-power-in-rust-sv.md](0329-power-in-rust-sv.md) | — (новая фича) |
 | 0330 | Присваивание агрегата массива в целях st и sv | [0330-aggregate-assignment.md](0330-aggregate-assignment.md) | — (новая фича) |
 | 0331 | Именованное условие в теле переводят все цели | [0331-named-condition-in-body.md](0331-named-condition-in-body.md) | — (новая фича) |
+| 0332 | Заглушка, обещающая задачу, ловится гейтом | [0332-stub-task-promise.md](0332-stub-task-promise.md) | — (новая фича) |
