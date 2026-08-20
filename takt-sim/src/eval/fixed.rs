@@ -22,15 +22,13 @@ use crate::eval::ops::BinOp;
 use crate::eval::value::Value;
 
 /// Приводит `v` к знаковому `intW` в дополнительном коде (wraparound, правило 3).
+///
+/// ⚠️ Само правило живёт в **общем носителе**
+/// (`takt_lang::semantic::const_eval::fixed_repr`, фича 0317): компилятор
+/// сворачивает дробное приведение теми же формулами, и вторая реализация
+/// разошлась бы с этой значениями.
 pub(crate) fn wrap(v: i128, w: u8) -> i64 {
-    let modulo = 1i128 << w; // 2^W (W ≤ 64 гарантирован построением типа)
-    let masked = v.rem_euclid(modulo); // 0..2^W
-    let signed = if masked >= (modulo >> 1) {
-        masked - modulo
-    } else {
-        masked
-    };
-    signed as i64
+    takt_lang::semantic::const_eval::fixed_repr::wrap(v, w)
 }
 
 /// Пересчитывает представление между дробными разрядностями: влево — точно,
@@ -50,9 +48,7 @@ fn rescale(repr: i128, from_n: u8, to_n: u8) -> i128 {
 /// разные значения, но ошибиться знаком легко, а край `−(−2^(W−1))` вне тестов
 /// не встречается вовсе.
 pub(crate) fn saturate(v: i128, w: u8) -> i64 {
-    let max = (1i128 << (w - 1)) - 1;
-    let min = -(1i128 << (w - 1));
-    v.clamp(min, max) as i64
+    takt_lang::semantic::const_eval::fixed_repr::saturate(v, w)
 }
 
 /// Значение `Value::Fixed` из «сырого» (возможно, переполненного) представления.
@@ -61,13 +57,8 @@ pub(crate) fn saturate(v: i128, w: u8) -> i64 {
 /// (правило 3 ADR 0061) или насыщение (фича 0170). Все операции идут через неё,
 /// поэтому разойтись между собой они не могут.
 fn make(repr: i128, m: u8, n: u8, sat: bool) -> Value {
-    let w = m + n;
     Value::Fixed {
-        repr: if sat {
-            saturate(repr, w)
-        } else {
-            wrap(repr, w)
-        },
+        repr: takt_lang::semantic::const_eval::fixed_repr::normalize(repr, m, n, sat),
         m,
         n,
         sat,

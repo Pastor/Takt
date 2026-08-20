@@ -51,6 +51,7 @@ mod call;
 mod decimal;
 // Таблица целочисленных операций — одна на константное вычисление (фича 0208):
 // её зовёт и этот вычислитель, и выражение адреса.
+pub mod fixed_repr;
 pub mod int_cast;
 pub(crate) mod int_ops;
 
@@ -662,28 +663,72 @@ fn eval_node(
 /// «Не константа» — с причиной: тип не целочисленный либо значение приведением
 /// изменится (усечение, обёртка, масштаб `q`). Такое приведение исполняет
 /// эталон, и его правила живут там (фича 0286).
+/// Разрешает АСД-тип цели приведения в узел семантики.
+///
+/// ⚠️ Имя встроенного типа спрашивается у `builtin_type_by_name` — носителя
+/// списка (0243): `ast_type_to_node_ctx` разрешает лишь `bit`/`bool`/`float` и
+/// пользовательские псевдонимы, а `u8`…`i64` для него — `Unsupported`.
+fn target_of(ty: &ast::Type, scope: &Rc<RefCell<ModelNode>>) -> TypeNode {
+    match ty {
+        ast::Type::Alias(id) => crate::semantic::type_node::builtin_type_by_name(&id.name)
+            .unwrap_or_else(|| {
+                crate::semantic::type_inference::ast_type_to_node_ctx(ty, Rc::clone(scope))
+            }),
+        other => crate::semantic::type_inference::ast_type_to_node_ctx(other, Rc::clone(scope)),
+    }
+}
+
+/// Значение приведения к `q(m, n)` — точным счётом (фича 0317).
+///
+/// Возвращает **дробный литерал**, а не готовое представление: дальше он идёт
+/// тем же путём, что литерал автора (понижение 0096, свёртка 0192), и второй
+/// ветки для «уже понижённого» значения не заводится.
+///
+/// ⚠️ Текст точен всегда: знаменатель представления — степень двойки, поэтому
+/// `repr · 2⁻ⁿ` конечен в десятичной записи. Именно поэтому `SE-058` («литерал
+/// не представим точно») на результат не срабатывает — он представим по
+/// построению.
+///
+/// `None` — форма, которую носитель не считает (булево, длительность, агрегат,
+/// переполнение промежутка): пусть отвечает прежняя ветвь.
+fn fixed_cast(value: &ConstValue, m: u8, n: u8, sat: bool) -> Option<ConstValue> {
+    let repr = match value {
+        ConstValue::Int(v) => fixed_repr::from_int(*v, n),
+        ConstValue::Rational(text, negative) => {
+            let decimal = decimal::Decimal::parse(text, *negative)?;
+            let (mantissa, scale) = decimal.parts();
+            fixed_repr::from_decimal(mantissa, scale, n)?
+        }
+        ConstValue::Bool(_) | ConstValue::Duration(_) | ConstValue::List(_) => return None,
+    };
+    let normalized = fixed_repr::normalize(repr, m, n, sat);
+    let (text, negative) = fixed_repr::to_decimal_text(normalized, n);
+    Some(ConstValue::Rational(text, negative))
+}
+
 fn cast_identity(
     value: &ConstValue,
     ty: &ast::Type,
     loc: Location,
     scope: &Rc<RefCell<ModelNode>>,
 ) -> Result<ConstValue, Diagnostic> {
+    // Дробная цель считается ОБЩИМ носителем представления (фича 0317):
+    // масштаб на 2ⁿ, округление floor к −∞, перенос либо насыщение по
+    // `W = m + n`. Прежде компилятор такое приведение не вычислял, и цель `sv`
+    // отвергала `1.5 as q(4, 4)`, а цель `c` звала `floor()` в рантайме ради
+    // константы.
+    if let TypeNode::Fixed { m, n, sat } = target_of(ty, scope)
+        && let Some(text) = fixed_cast(value, m, n, sat)
+    {
+        return Ok(text);
+    }
     let ConstValue::Int(n) = value else {
         return Err(not_constant(
             loc,
             "приведение вычисляется только над целым значением",
         ));
     };
-    // ⚠️ Имя встроенного типа спрашивается у `builtin_type_by_name` — носителя
-    // списка (0243): `ast_type_to_node_ctx` разрешает лишь `bit`/`bool`/`float`
-    // и пользовательские псевдонимы, а `u8`…`i64` для него — `Unsupported`.
-    let target = match ty {
-        ast::Type::Alias(id) => crate::semantic::type_node::builtin_type_by_name(&id.name)
-            .unwrap_or_else(|| {
-                crate::semantic::type_inference::ast_type_to_node_ctx(ty, Rc::clone(scope))
-            }),
-        other => crate::semantic::type_inference::ast_type_to_node_ctx(other, Rc::clone(scope)),
-    };
+    let target = target_of(ty, scope);
     // Целочисленная цель считается ОБЩИМ носителем правила (фича 0310):
     // беззнаковое оборачивается `mod 2ⁿ`, знаковое вне диапазона — ошибка.
     // Прежде компилятор такое приведение не вычислял вовсе, и `300 as u8`
@@ -710,8 +755,8 @@ fn cast_identity(
             .with_code("SE-121")),
         };
     }
-    // Прочие цели (`bit`, `bool`, `q`, длительность, массив) вычисляются, лишь
-    // если приведение ничего НЕ меняет: правила их изменения завязаны на
+    // Прочие цели (`bit`, `bool`, длительность, массив) вычисляются, лишь если
+    // приведение ничего НЕ меняет: правила их изменения завязаны на
     // представление значения эталона, и копия здесь разошлась бы значениями
     // (довод ADR 0286 — он в силе).
     let Some((min, max)) = crate::semantic::validate::literal_range::type_range(&target) else {
