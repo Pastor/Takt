@@ -32,7 +32,9 @@
 # POSIX sh, без внешних зависимостей (образец — scripts/check-diagnostic-codes.sh).
 set -eu
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Корень переопределяется переменной (фича 0315): сторож гоняет гейт на
+# КОПИИ дерева, не трогая рабочие файлы.
+ROOT="${EN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 NODES_FILE="$ROOT/takt-lang/src/semantic/mod.rs"
 EVAL_MOD="$ROOT/takt-sim/src/eval/mod.rs"
 INITIAL_MOD="$ROOT/takt-sim/src/unit/initial.rs"

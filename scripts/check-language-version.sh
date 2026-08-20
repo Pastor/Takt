@@ -27,7 +27,8 @@
 # POSIX sh, без внешних зависимостей (образец — scripts/check-diagnostic-codes.sh).
 set -eu
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Корень переопределяется переменной (фича 0315) — для сторожа гейта.
+ROOT="${LV_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 VERSION_RS="$ROOT/takt-lang/src/version.rs"
 README="$ROOT/README.md"
 CLAUDE_MD="$ROOT/CLAUDE.md"

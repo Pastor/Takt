@@ -69,7 +69,36 @@ def check(path):
     return broken
 
 
+def self_test():
+    """Ловушка гейта: битая ссылка ловится, целая и внешняя — нет (фича 0315)."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        good = os.path.join(tmp, "target.md")
+        with open(good, "w", encoding="utf-8") as handle:
+            handle.write("цель\n")
+        page = os.path.join(tmp, "page.md")
+        with open(page, "w", encoding="utf-8") as handle:
+            handle.write(
+                "[целая](target.md)\n"
+                "[внешняя](https://example.org/x)\n"
+                "[в коде `](nope.md)`]\n"
+                "```\n[в блоке](nope.md)\n```\n"
+            )
+        if check(page):
+            sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: годные ссылки объявлены битыми")
+        with open(page, "a", encoding="utf-8") as handle:
+            handle.write("[битая](missing.md)\n")
+        broken = check(page)
+        if len(broken) != 1 or broken[0][1] != "missing.md":
+            sys.exit(f"САМОПРОВЕРКА ПРОВАЛЕНА: битая ссылка не поймана ({broken})")
+    print("  самопроверка гейта: ловушка взведена (битая ловится, код и блок — нет)")
+
+
 def main():
+    if "--self-test" in sys.argv[1:]:
+        self_test()
+        return 0
     quiet = "--quiet" in sys.argv
     total = 0
     for path in sorted(markdown_files()):
