@@ -38,6 +38,7 @@ mod port_initial_value_hdl_tests;
 mod rust_default_impl_tests;
 mod rust_enum_compare_tests;
 mod rust_index_cast_tests;
+mod rust_live_tests;
 mod rust_non_ascii_name_tests;
 mod rust_printers_tests;
 mod st_tests;

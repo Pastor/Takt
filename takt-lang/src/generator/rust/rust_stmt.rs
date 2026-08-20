@@ -143,6 +143,45 @@ fn print_folded(
             expr, ty, scope,
         )?)
         .to_string()),
+        // Цепочка из `match` (фича 0216): образец сравнивается с ТИПОМ
+        // разбираемого выражения — тем же приёмом, что и в печати оператора
+        // `match`. Без обратного отображения `match mode { 0 => … }` при
+        // `mode : Mode` дало бы сравнение перечисления с целым.
+        Folded::Chain {
+            subject,
+            arms,
+            otherwise,
+        } => {
+            let printed_subject = print_expression(subject, scope)?;
+            let subject_type = crate::generator::rust::rust_expr::expression_type(subject);
+            let mut text = String::new();
+            for (patterns, value) in arms {
+                let mut tests = Vec::new();
+                for pattern in patterns {
+                    let printed = match &subject_type {
+                        Some(ty) => {
+                            crate::generator::rust::rust_expr::coerce_to(pattern, ty, scope)?
+                        }
+                        None => print_expression(pattern, scope)?,
+                    };
+                    tests.push(format!("{printed_subject} == {printed}"));
+                }
+                let head = if text.is_empty() { "if" } else { " else if" };
+                text.push_str(&format!(
+                    "{head} {} {{ {} }}",
+                    tests.join(" || "),
+                    print_folded(value, ty, scope)?
+                ));
+            }
+            let tail = print_folded(otherwise, ty, scope)?;
+            // Ветвей с образцами может не быть вовсе (`match x { _ => … }`) —
+            // тогда цепочки нет и печатается одно значение.
+            if text.is_empty() {
+                return Ok(tail);
+            }
+            text.push_str(&format!(" else {{ {tail} }}"));
+            Ok(text)
+        }
         Folded::Branch { cond, then_, else_ } => Ok(format!(
             "if {} {{ {} }} else {{ {} }}",
             unwrap_outer(&print_as_bool(cond, scope)?),

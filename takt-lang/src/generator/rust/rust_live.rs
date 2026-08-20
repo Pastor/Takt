@@ -99,7 +99,16 @@ fn max_path_assigns(name: &str, stmt: &StatementNode) -> usize {
                 0
             }
         }
-        StatementNode::For { body, step, .. } => {
+        StatementNode::For {
+            body, step, init, ..
+        } => {
+            // `init` исполняется один раз, тело и шаг — сколько угодно; счёт
+            // ведётся по наибольшему пути, поэтому присваивание в `init` даёт
+            // единицу, а любое присваивание в теле или шаге — сразу два.
+            let in_init = init
+                .as_ref()
+                .map(|i| max_path_assigns(name, i))
+                .unwrap_or(0);
             let in_step = step
                 .as_ref()
                 .map(|s| {
@@ -110,7 +119,7 @@ fn max_path_assigns(name: &str, stmt: &StatementNode) -> usize {
             if max_path_assigns(name, body) > 0 || in_step {
                 2
             } else {
-                0
+                in_init
             }
         }
         StatementNode::Match { arms, .. } => arms
@@ -140,6 +149,21 @@ pub(crate) enum Folded<'a> {
         then_: Box<Folded<'a>>,
         /// Значение ветки «нет».
         else_: Box<Folded<'a>>,
+    },
+    /// `let x: T = if s == p { … } else if s == q { … } else { … };` — из
+    /// `match` с ветвью `_` (фича 0216).
+    ///
+    /// ⚠️ Именно цепочка сравнений, а не `match` языка Rust: образцы Takt —
+    /// произвольные выражения, и `match s { p => … }` **связал бы** `p` как
+    /// новое имя вместо сравнения с ним (то же решение, что у печати
+    /// оператора `match`, задача 0050).
+    Chain {
+        /// Разбираемое выражение.
+        subject: &'a ExpressionNode,
+        /// Ветви с образцами: каждая — список образцов и её значение.
+        arms: Vec<(Vec<&'a ExpressionNode>, Folded<'a>)>,
+        /// Значение ветви `_`.
+        otherwise: Box<Folded<'a>>,
     },
 }
 
@@ -186,6 +210,52 @@ pub(crate) fn fold_assignment<'a>(name: &str, stmt: &'a StatementNode) -> Option
             },
             _ => None,
         },
+        // `match` с ветвью `_` сворачивается в цепочку сравнений (фича 0216).
+        // Отложенная форма `let t: T;` перед развёрнутым `if/else` не годится:
+        // это `clippy::needless_late_init`, то есть замена одного отказа гейта
+        // другим (проверено пробой).
+        StatementNode::Match { expr, arms } => {
+            if reads_expr(name, expr) {
+                return None;
+            }
+            let mut tested = Vec::new();
+            let mut otherwise = None;
+            for arm in arms {
+                let value = fold_assignment(name, &arm.body)?;
+                if arm
+                    .patterns
+                    .iter()
+                    .any(|p| matches!(p, crate::semantic::MatchPatternNode::Wildcard))
+                {
+                    // Ветвь `_` одна: вторая недостижима, и разбор её значения
+                    // означал бы печать мёртвого кода.
+                    if otherwise.is_some() {
+                        return None;
+                    }
+                    otherwise = Some(Box::new(value));
+                    continue;
+                }
+                let mut patterns = Vec::new();
+                for pattern in &arm.patterns {
+                    let crate::semantic::MatchPatternNode::Value(item) = pattern else {
+                        return None;
+                    };
+                    if reads_expr(name, item) {
+                        return None;
+                    }
+                    patterns.push(&**item);
+                }
+                if patterns.is_empty() {
+                    return None;
+                }
+                tested.push((patterns, value));
+            }
+            Some(Folded::Chain {
+                subject: expr,
+                arms: tested,
+                otherwise: otherwise?,
+            })
+        }
         // `if/else` разворачивается рекурсивно — это покрывает и цепочки
         // `else if`, которые clippy сворачивает точно так же.
         StatementNode::If {
@@ -274,16 +344,25 @@ fn verdict_of(name: &str, stmt: &StatementNode) -> Verdict {
                 _ => Verdict::Unknown,
             }
         }
+        // `init` цикла исполняется ВСЕГДА и раньше условия, шага и тела:
+        // присваивание в нём — заведомая перезапись (фича 0216). Прежде цикл
+        // `for i := 0; …` не давал вердикта вовсе, и объявление `var i := 0;`
+        // выше печаталось с мёртвым значением — `unused_assignments`, то есть
+        // отказ гейта `clippy -D warnings` при нулевом коде возврата `taktc`.
         StatementNode::For {
             init,
             cond,
             step,
             body,
         } => {
-            if init
-                .as_ref()
-                .is_some_and(|i| verdict_of(name, i) == Verdict::Read)
-                || cond.as_ref().is_some_and(|c| reads_expr(name, c))
+            if let Some(init) = init {
+                match verdict_of(name, init) {
+                    Verdict::Read => return Verdict::Read,
+                    Verdict::Overwritten => return Verdict::Overwritten,
+                    Verdict::Unknown => {}
+                }
+            }
+            if cond.as_ref().is_some_and(|c| reads_expr(name, c))
                 || step.as_ref().is_some_and(|s| reads_expr(name, s))
                 || verdict_of(name, body) == Verdict::Read
             {
@@ -291,15 +370,30 @@ fn verdict_of(name: &str, stmt: &StatementNode) -> Verdict {
             }
             Verdict::Unknown
         }
+        // `match` — заведомая перезапись, когда есть ветвь `_` и КАЖДАЯ ветвь
+        // переписывает переменную (фича 0216). Без `_` разбор не исчерпан:
+        // путь мимо всех образцов оставляет инициализатор живым.
+        //
+        // ⚠️ Прежде вердикта не было вовсе, а печатник разворачивает `match` в
+        // цепочку `if/else` — на входе с `_`-ветвью получался
+        // `let mut t: u8 = 0;` с мёртвым значением, то есть отказ
+        // `clippy -D warnings` при нулевом коде возврата `taktc`.
         StatementNode::Match { expr, arms } => {
             if reads_expr(name, expr) {
                 return Verdict::Read;
             }
-            if arms
-                .iter()
-                .any(|a| verdict_of(name, &a.body) == Verdict::Read)
-            {
+            let verdicts: Vec<Verdict> = arms.iter().map(|a| verdict_of(name, &a.body)).collect();
+            if verdicts.contains(&Verdict::Read) {
                 return Verdict::Read;
+            }
+            let exhaustive = arms.iter().any(|a| {
+                a.patterns
+                    .iter()
+                    .any(|p| matches!(p, crate::semantic::MatchPatternNode::Wildcard))
+            });
+            if exhaustive && !arms.is_empty() && verdicts.iter().all(|v| *v == Verdict::Overwritten)
+            {
+                return Verdict::Overwritten;
             }
             Verdict::Unknown
         }
