@@ -337,3 +337,4 @@
 | [0322](./0322-sv-match-case.md) | Цель sv переводит match в case | [ADR](../adr/0322-sv-match-case.md), [анализ](../analyze/0322-sv-match-case.md), [отчёт](../reports/0322-sv-match-case.md) | ГОТОВО |
 | [0323](./0323-sv-integer-cast.md) | Цель sv переводит приведение as между целыми | [ADR](../adr/0323-sv-integer-cast.md), [анализ](../analyze/0323-sv-integer-cast.md), [отчёт](../reports/0323-sv-integer-cast.md) | ГОТОВО |
 | [0324](./0324-arithmetic-shift-right.md) | Сдвиг вправо знакового — арифметический во всех целях | [ADR](../adr/0324-arithmetic-shift-right.md), [анализ](../analyze/0324-arithmetic-shift-right.md), [отчёт](../reports/0324-arithmetic-shift-right.md) | ГОТОВО |
+| [0325](./0325-book-shift-semantics.md) | Документ описывает семантику сдвигов | [ADR](../adr/0325-book-shift-semantics.md), [анализ](../analyze/0325-book-shift-semantics.md), [отчёт](../reports/0325-book-shift-semantics.md) | ГОТОВО |
