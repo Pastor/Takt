@@ -40,6 +40,8 @@ use crate::generator::st::st_map::StMap;
 use crate::generator::st::st_stmt::{Hoisted, StmtOutput, print_statement};
 use crate::generator::st::st_time;
 use crate::semantic::minimap::{Element, Name, StateExtend};
+use crate::semantic::type_node::TypeNode;
+use crate::semantic::{ExpressionNode, VariableNode};
 use crate::semantic::{ModelNode, NamedCodeBlockDefinitionNode, StateNode};
 use std::collections::HashMap;
 
@@ -143,6 +145,12 @@ pub(crate) fn emit_body(
     p.ident(&format!("IF state = {} THEN (* первый скан *)", INIT_STATE))
         .nl();
     p.up();
+    // Инициализатор, не выразимый объявлением IEC, печатается здесь (фича
+    // 0343). Сегодня это массив структур: ни одна из трёх проверенных форм
+    // (`[(1, 2), …]`, `[(v := 1, …), …]`, `((v := 1, …), …)`) `iec2c` не
+    // принимается, а молчаливая потеря значения — расхождение с эталоном
+    // (замер: `o = 0` у ST против `3`).
+    emit_deferred_inits(p, model)?;
     let start_state = raw_state(model, start)?;
     emit_block(p, &start_state, "enter", model, &mut out.stmt)?;
     p.ident(&format!("state := {}; (* {} *)", start_no, start.local()))
@@ -391,6 +399,51 @@ impl StateTable {
 /// Строит диагностику `ST-013` — переход в неизвестное состояние.
 pub(crate) fn unknown_state(what: &str) -> Diagnostic {
     Diagnostic::error(Location::Codegen, format!("Автомат ST: {}", what)).with_code("ST-013")
+}
+
+/// Печатает инициализаторы, которые объявление IEC выразить не может.
+///
+/// Сегодня это **массив структур**: `iec2c` не принимает агрегат такого типа в
+/// `VAR` ни в одной из проверенных форм. Значения кладутся операторами первого
+/// скана — до входа в стартовое состояние, то есть до любого тела, которое их
+/// прочитает.
+///
+/// ⚠️ Место записи выбирает общий носитель (`generator::aggregate`, фича 0340):
+/// поле структуры адресуется **по имени**, а не по индексу.
+fn emit_deferred_inits(p: &mut Printer, model: &ModelNode) -> Result<(), Diagnostic> {
+    for (name, var) in &model.variables {
+        let VariableNode::Simple { ty, expr, .. } = var else {
+            continue;
+        };
+        let TypeNode::Array(_, elem) = ty else {
+            continue;
+        };
+        let TypeNode::Struct(struct_name) = &**elem else {
+            continue;
+        };
+        let (ExpressionNode::Initializer(items) | ExpressionNode::Array(items)) = expr else {
+            continue;
+        };
+        let fields = model.search_struct(struct_name).map(|def| def.fields);
+        for (index, item) in items.iter().enumerate() {
+            let (ExpressionNode::Initializer(inner) | ExpressionNode::Array(inner)) = item else {
+                continue;
+            };
+            let places =
+                crate::generator::aggregate::places(fields.as_deref(), Some(elem), inner.len());
+            for (value, place) in inner.iter().zip(places) {
+                let text = match &place.ty {
+                    Some(field_ty) => {
+                        crate::generator::st::st_expr::coerce_to(value, field_ty, model)?
+                    }
+                    None => crate::generator::st::st_expr::print_expression(value, model)?,
+                };
+                p.ident(&format!("{name}[{index}]{} := {text};", place.suffix))
+                    .nl();
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

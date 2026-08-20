@@ -326,3 +326,4 @@
 | 0340 | Присваивание агрегата: место записи выбирает общий носитель | [0340-aggregate-assign-place.md](0340-aggregate-assign-place.md) | — (новая фича) |
 | 0341 | Вложенная структура: порядок объявления и тип поля | [0341-nested-struct-order.md](0341-nested-struct-order.md) | — (новая фича) |
 | 0342 | Список зарезервированных имён IEC проверяется прогоном | [0342-st-reserved-names.md](0342-st-reserved-names.md) | — (новая фича) |
+| 0343 | Инициализатор массива: st терял молча, c и rust порождали невалидное | [0343-array-initializer.md](0343-array-initializer.md) | — (новая фича) |

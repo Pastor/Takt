@@ -56,6 +56,19 @@ pub(crate) fn coerce_to(
         },
         // Вещественному полю целый литерал не подходит: `1` не является литералом f64.
         (TypeNode::Rational, ExpressionNode::Number(n)) => Ok(format!("{}.0", n)),
+        // Массив СТРУКТУР (фича 0343): элементы печатаются литералом структуры,
+        // а не вложенным массивом. Прежде выходило `[[1, 2], [3, 4]]` — `E0308`
+        // при нулевом коде возврата `taktc`.
+        (
+            TypeNode::Array(_, elem),
+            ExpressionNode::Initializer(items) | ExpressionNode::Array(items),
+        ) if matches!(**elem, TypeNode::Struct(_)) => {
+            let mut parts = Vec::new();
+            for item in items {
+                parts.push(coerce_to(item, elem, scope)?);
+            }
+            Ok(format!("[{}]", parts.join(", ")))
+        }
         // Бит-вектор шире 64 бит — массив слов `[u64; K]` (0078), и целый
         // литерал ему не тип: `w: 0` давало `E0308` (фича 0262). Значение
         // достаётся младшему слову — литерал шире 64 бит язык не принимает

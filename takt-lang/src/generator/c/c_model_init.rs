@@ -341,10 +341,40 @@ fn generate_array_init(
         )
         .with_code("CC-017"));
     }
+    // Элемент-СТРУКТУРА печатается по полям (фича 0343): агрегатной формы
+    // присваивания в C нет вовсе, и `model->cells[0] = {1, 2};` давало `cc`
+    // «expected expression» при нулевом коде возврата `taktc`.
+    let TypeNode::Array(_, elem_ty) = ty else {
+        unreachable!("вид проверен выше");
+    };
+    let fields = match &**elem_ty {
+        TypeNode::Struct(name) => map
+            .root_model_node()
+            .and_then(|root| root.borrow().search_struct(name))
+            .map(|def| def.fields),
+        _ => None,
+    };
     for (i, elem) in elems.iter().enumerate() {
-        printer.ident(&format!("model->{}[{}] = ", field, i));
-        generate_expr(printer, map, model, vec![], elem, 0, true)?;
-        printer.print(";").nl();
+        let base = format!("model->{}[{}]", field, i);
+        match (&fields, elem) {
+            (Some(list), ExpressionNode::Initializer(inner) | ExpressionNode::Array(inner)) => {
+                let places = crate::generator::aggregate::places(
+                    Some(list.as_slice()),
+                    Some(elem_ty),
+                    inner.len(),
+                );
+                for (item, place) in inner.iter().zip(places) {
+                    printer.ident(&format!("{base}{} = ", place.suffix));
+                    generate_expr(printer, map, model, vec![], item, 0, true)?;
+                    printer.print(";").nl();
+                }
+            }
+            _ => {
+                printer.ident(&format!("{base} = "));
+                generate_expr(printer, map, model, vec![], elem, 0, true)?;
+                printer.print(";").nl();
+            }
+        }
     }
     Ok(())
 }

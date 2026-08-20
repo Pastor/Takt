@@ -291,3 +291,4 @@
 | 0340 | Место записи агрегата | [0340-aggregate-assign-place.md](0340-aggregate-assign-place.md) | Готово: три цели, общий носитель |
 | 0341 | Вложенная структура | [0341-nested-struct-order.md](0341-nested-struct-order.md) | Готово: четыре цели переводят |
 | 0342 | Зарезервированные имена IEC | [0342-st-reserved-names.md](0342-st-reserved-names.md) | Готово: список обоснован прогоном |
+| 0343 | Инициализатор массива | [0343-array-initializer.md](0343-array-initializer.md) | Готово: потеря значения устранена |
