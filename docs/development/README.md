@@ -497,3 +497,5 @@
 | 0274-01 | 0274 | Снимки порождённого кода в book/ никем не сверяются | [0274-01-book-generated-snapshots-gate.md](0274-01-book-generated-snapshots-gate.md) |
 | 0275-01 | 0275 | Команды в README.md никем не проверяются | [0275-01-readme-commands-gate.md](0275-01-readme-commands-gate.md) |
 | 0275-02 | 0275 | Команды в README.md никем не проверяются | [0275-02-readme-commands-gate.md](0275-02-readme-commands-gate.md) |
+| 0290-01 | 0290 | Гейт сверки кодов документа с реестром | [0290-01-book-diagnostics-codes-gate.md](0290-01-book-diagnostics-codes-gate.md) |
+| 0290-02 | 0290 | Приложение дополнено недостающими кодами | [0290-02-book-diagnostics-codes-gate.md](0290-02-book-diagnostics-codes-gate.md) |
