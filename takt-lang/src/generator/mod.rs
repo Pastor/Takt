@@ -1,5 +1,6 @@
 pub(crate) mod aggregate;
 mod c;
+mod call_order;
 mod indent;
 mod plantuml;
 mod rust;
