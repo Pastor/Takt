@@ -296,3 +296,4 @@
 | 0310 | Правило целочисленного приведения — общий носитель | [0310-int-cast-shared-layer.md](0310-int-cast-shared-layer.md) | — (новая фича) |
 | 0311 | Запись реестра диагностик называет смысл | [0311-diagnostic-descriptions.md](0311-diagnostic-descriptions.md) | — (новая фича) |
 | 0312 | Гейты цели c проверяют и релизный режим | [0312-c-gate-release-mode.md](0312-c-gate-release-mode.md) | — (новая фича) |
+| 0313 | Число аргументов вызова сверяется с объявлением | [0313-call-arity-check.md](0313-call-arity-check.md) | — (новая фича) |

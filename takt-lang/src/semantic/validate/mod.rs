@@ -29,6 +29,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+mod arity;
 mod assignment_place;
 mod assignment_position;
 mod bodies;

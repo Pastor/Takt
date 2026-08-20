@@ -351,9 +351,16 @@ pub(super) fn validate_expression(
             validate_cond(None, &cond.borrow().value, model.clone())?;
         }
         ExpressionNode::List(_) => {}
-        ExpressionNode::Array(exprs)
-        | ExpressionNode::Initializer(exprs)
-        | ExpressionNode::Function(_, exprs) => {
+        // Вызов функции: сперва **арность** (фича 0313), затем аргументы.
+        ExpressionNode::Function(def, exprs) => {
+            if let Some(diagnostic) = super::arity::check_call(def, exprs) {
+                return Err(diagnostic);
+            }
+            for expr in exprs {
+                validate_expression(expr, model.clone())?;
+            }
+        }
+        ExpressionNode::Array(exprs) | ExpressionNode::Initializer(exprs) => {
             for expr in exprs {
                 validate_expression(expr, model.clone())?;
             }
