@@ -325,3 +325,4 @@
 | [0310](./0310-int-cast-shared-layer.md) | Правило целочисленного приведения — общий носитель | [ADR](../adr/0310-int-cast-shared-layer.md), [анализ](../analyze/0310-int-cast-shared-layer.md), [отчёт](../reports/0310-int-cast-shared-layer.md) | ГОТОВО |
 | [0311](./0311-diagnostic-descriptions.md) | Запись реестра диагностик называет смысл | [ADR](../adr/0311-diagnostic-descriptions.md), [анализ](../analyze/0311-diagnostic-descriptions.md), [отчёт](../reports/0311-diagnostic-descriptions.md) | ГОТОВО |
 | [0312](./0312-c-gate-release-mode.md) | Гейты цели c проверяют и релизный режим | [ADR](../adr/0312-c-gate-release-mode.md), [анализ](../analyze/0312-c-gate-release-mode.md), [отчёт](../reports/0312-c-gate-release-mode.md) | ГОТОВО |
+| [0313](./0313-call-arity-check.md) | Число аргументов вызова сверяется с объявлением | [ADR](../adr/0313-call-arity-check.md), [анализ](../analyze/0313-call-arity-check.md), [отчёт](../reports/0313-call-arity-check.md) | ГОТОВО |
