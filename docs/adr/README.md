@@ -271,3 +271,4 @@
 | [0283](./0283-cli-report-result-merge.md) | Печать результата компиляции сведена к одной функции | Accepted | фича 0283 |
 | [0294](./0294-se102-suggest-importer.md) | SE-102 называет файл, подключающий библиотеку | Accepted | фича 0294 |
 | [0164](./0164-registry-rebuild-gate.md) | Реестры стадий сверяются с файлами на диске | Accepted | фича 0164 |
+| [0173](./0173-rust-generator-arg-count.md) | Заглушка too_many_arguments снята в цели rust | Accepted | фича 0173 |

@@ -8,37 +8,37 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::rust::rust_blocks::{emit_model_named_blocks, emit_named_blocks};
-use crate::generator::rust::rust_decl::PortSet;
+use crate::generator::rust::rust_ctx::{ModelEmit, StateEmit};
 use crate::generator::rust::rust_expr::{Scope, condition_as_bool, unwrap_outer};
 use crate::generator::rust::rust_map::RustMap;
 use crate::generator::rust::rust_model::{
-    ConcatStep, Instance, StateTable, needs_hal, seq_enum_name, seq_field_name, submodel_name,
+    Instance, StateTable, needs_hal, seq_enum_name, seq_field_name, submodel_name,
 };
 use crate::generator::rust::rust_shared::{shared_type_name, shared_variables};
 use crate::generator::rust::rust_stmt::StmtOutput;
 use crate::semantic::minimap::{Element, Name, StateExtend};
-use crate::semantic::type_node::TypeNode;
-use crate::semantic::{Formula, ModelNode, StateNode};
+use crate::semantic::{Formula, StateNode};
 use std::collections::BTreeSet;
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_tick(
     p: &mut Printer,
-    map: &RustMap,
-    name: &Name,
-    model: &ModelNode,
-    element: &Element,
-    table: &StateTable,
-    instances: &[(Name, Vec<Instance>)],
-    concats: &[(Name, Vec<ConcatStep>)],
-    start: &Name,
-    states: &[Name],
-    shared: &[(String, TypeNode)],
-    is_root: bool,
-    uses_hal: bool,
-    ports: &PortSet,
+    ctx: &ModelEmit,
     warnings: &mut Vec<Diagnostic>,
 ) -> Result<(), Diagnostic> {
+    // Снимок распаковывается в те же имена, что были параметрами: тело
+    // печатника не менялось (фича 0173 — правка сигнатур, не поведения).
+    let (map, name, model, element, table, instances, start, states, shared) = (
+        ctx.map,
+        ctx.name,
+        ctx.model,
+        ctx.element,
+        ctx.table,
+        ctx.instances,
+        ctx.start,
+        ctx.states,
+        ctx.shared,
+    );
+    let (is_root, uses_hal, ports) = (ctx.is_root, ctx.uses_hal, ctx.ports);
     // Поле `hal` есть только у корня; под-модель получает HAL параметром.
     // Параметр даётся, только если он ДЕЙСТВИТЕЛЬНО нужен: неиспользуемый
     // параметр — такое же `-D warnings`, как неиспользуемое поле.
@@ -177,8 +177,7 @@ pub(crate) fn emit_tick(
         // симуляторе (`execute_every` следом за `execution("always")`).
         crate::generator::rust::rust_every::emit_state_body(
             p,
-            map,
-            model,
+            ctx,
             state_name.local(),
             hal_access,
             &mut scope,
@@ -197,8 +196,16 @@ pub(crate) fn emit_tick(
             }
             Element::StateExtend { extend, next, .. } => {
                 emit_extend(
-                    p, map, table, state_name, raw, extend, next, instances, concats, name, states,
-                    &mut scope, &mut out, is_root,
+                    p,
+                    ctx,
+                    &StateEmit {
+                        name: state_name,
+                        raw,
+                        extend,
+                        next,
+                    },
+                    &mut scope,
+                    &mut out,
                 )?;
             }
             Element::Model { .. } => {
@@ -406,23 +413,16 @@ fn emit_enter_of(
 }
 
 /// Печатает такт составного состояния (`= Модель`, `A | B`, `A + B`).
-#[allow(clippy::too_many_arguments)]
 fn emit_extend(
     p: &mut Printer,
-    map: &RustMap,
-    table: &StateTable,
-    state_name: &Name,
-    raw: &StateNode,
-    extend: &StateExtend,
-    next: &Name,
-    instances: &[(Name, Vec<Instance>)],
-    concats: &[(Name, Vec<ConcatStep>)],
-    model_name: &Name,
-    states: &[Name],
+    ctx: &ModelEmit,
+    state: &StateEmit,
     scope: &mut Scope,
     out: &mut StmtOutput,
-    is_root: bool,
 ) -> Result<(), Diagnostic> {
+    let (map, instances, concats, model_name, is_root) =
+        (ctx.map, ctx.instances, ctx.concats, ctx.name, ctx.is_root);
+    let (state_name, raw, extend, next) = (state.name, state.raw, state.extend, state.next);
     let Some((_, list)) = instances
         .iter()
         .find(|(n, _)| n.unique() == state_name.unique())
@@ -448,7 +448,7 @@ fn emit_extend(
             }
             p.ident(&format!("if {} {{", done.join(" && "))).nl();
             p.up();
-            emit_extend_transition(p, map, table, raw, next, states, scope, out)?;
+            emit_extend_transition(p, ctx, raw, next, scope, out)?;
             p.down();
             p.ident("}").nl();
             Ok(())
@@ -495,7 +495,7 @@ fn emit_extend(
                             .nl();
                     }
                     // Последний шаг завершён — уходим из составного состояния.
-                    None => emit_extend_transition(p, map, table, raw, next, states, scope, out)?,
+                    None => emit_extend_transition(p, ctx, raw, next, scope, out)?,
                 }
                 p.down();
                 p.ident("}").nl();
@@ -508,17 +508,15 @@ fn emit_extend(
 }
 
 /// Печатает переход по завершении реализации состояния.
-#[allow(clippy::too_many_arguments)]
 fn emit_extend_transition(
     p: &mut Printer,
-    map: &RustMap,
-    table: &StateTable,
+    ctx: &ModelEmit,
     raw: &StateNode,
     next: &Name,
-    states: &[Name],
     scope: &mut Scope,
     out: &mut StmtOutput,
 ) -> Result<(), Diagnostic> {
+    let (map, table, states) = (ctx.map, ctx.table, ctx.states);
     // Собственные рёбра состояния-композиции (фича 0303) — ПЕРЕД `next`/`END`,
     // как у эталона: он проверяет `ref` в порядке объявления, а `next` берёт
     // последним. Прежде цель печатала только `next`, и вход
