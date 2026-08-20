@@ -499,3 +499,5 @@
 | 0275-02 | 0275 | Команды в README.md никем не проверяются | [0275-02-readme-commands-gate.md](0275-02-readme-commands-gate.md) |
 | 0290-01 | 0290 | Гейт сверки кодов документа с реестром | [0290-01-book-diagnostics-codes-gate.md](0290-01-book-diagnostics-codes-gate.md) |
 | 0290-02 | 0290 | Приложение дополнено недостающими кодами | [0290-02-book-diagnostics-codes-gate.md](0290-02-book-diagnostics-codes-gate.md) |
+| 0298-01 | 0298 | Гейт лексики расширен разделом «Лексика» | [0298-01-book-lexicon-lists-sync.md](0298-01-book-lexicon-lists-sync.md) |
+| 0298-02 | 0298 | Таблица ключевых слов дополнена словами времени и at | [0298-02-book-lexicon-lists-sync.md](0298-02-book-lexicon-lists-sync.md) |

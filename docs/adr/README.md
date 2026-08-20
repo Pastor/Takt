@@ -257,3 +257,4 @@
 | [0274](./0274-book-generated-snapshots-gate.md) | Снимки порождённого кода в book/ никем не сверяются | Accepted | фича 0274 |
 | [0275](./0275-readme-commands-gate.md) | Команды в README.md никем не проверяются | Accepted | фича 0275 |
 | [0290](./0290-book-diagnostics-codes-gate.md) | Приложение «Ошибки» сверяется с реестром диагностик | Accepted | фича 0290 |
+| [0298](./0298-book-lexicon-lists-sync.md) | Списки лексики раздела «Лексика» сверяются с языком | Accepted | фича 0298 |

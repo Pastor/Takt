@@ -51,6 +51,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APPENDIX = os.path.join(ROOT, "book", "src", "appendix-grammar", "index.typ")
+LEXICAL = os.path.join(ROOT, "book", "src", "02-lexical", "index.typ")
 KEYWORD_LIST = os.path.join(ROOT, "book", "takt-keywords.txt")
 SYNTAX = os.path.join(ROOT, "book", "takt.sublime-syntax")
 LEXER = os.path.join(ROOT, "takt-lang", "src", "parser", "lexer.rs")
@@ -149,6 +150,55 @@ def punctuation_terminals(terminals):
     return {t for t in terminals if not re.fullmatch(r"[A-Za-z_]+", t)}
 
 
+def lexical_table(text, heading, source):
+    """Тело таблицы раздела «Лексика», начинающейся после заголовка `heading`.
+
+    ⚠️ Читается именно ТАБЛИЦА, а не секция целиком: в прозе раздела ключевые
+    слова и знаки встречаются как примеры (`count = LIMIT`, врезка про `X`, `F`,
+    `G`), и сверка по всему тексту потеряла бы смысл — класс L2 перестал бы
+    ловить лишнее слово.
+    """
+    start = text.find(heading)
+    if start < 0:
+        sys.exit(
+            f"ОШИБКА: в {source} нет раздела «{heading}».\n"
+            "Гейт лексики (фича 0298) сверяет таблицы раздела «Лексика» с языком:\n"
+            "без раздела он молча проверял бы пустое множество."
+        )
+    table = text.find("#table(", start)
+    end = text.find("\n  )", table)
+    if table < 0 or end < 0:
+        sys.exit(
+            f"ОШИБКА: в {source} после «{heading}» не найдена таблица.\n"
+            "Гейт лексики (фича 0298) читает её как список раздела."
+        )
+    return text[table:end]
+
+
+def lexical_keywords(text):
+    """Слова таблицы «Ключевые слова» раздела «Лексика» (фича 0298)."""
+    body = lexical_table(text, "== Ключевые слова", "разделе «Лексика»")
+    return {w for w in backticked(body) if re.fullmatch(r"[A-Za-z_]+", w)}
+
+
+def lexical_signs(text):
+    """Знаки таблиц «Операторы» и «Пунктуация» раздела «Лексика» (фича 0298).
+
+    ⚠️ Таблицы читаются ВМЕСТЕ: деление на операторы и пунктуацию — решение
+    изложения, а не языка, и терминал `->` живёт во второй, а `:=` — в первой.
+    ⚠️ Буквенные записи отбрасываются: во втором столбце стоят пояснения
+    (пояснение «ветвь match»), и без фильтра `match` попал бы в знаки.
+    """
+    signs = set()
+    for heading in ("== Операторы", "== Пунктуация"):
+        body = lexical_table(text, heading, "разделе «Лексика»")
+        for item in backticked(body):
+            item = item.replace("\\", "")
+            if not re.fullmatch(r"[A-Za-z_]+", item):
+                signs.add(item)
+    return signs
+
+
 def highlight_sections(text):
     """Секции файла `takt-keywords.txt` как словарь `имя → множество слов`."""
     sections, name = {}, None
@@ -182,7 +232,8 @@ def syntax_words(text):
     return words
 
 
-def check(doc_text, lexer_text, grammar_text, list_text=None, syntax_text=None):
+def check(doc_text, lexer_text, grammar_text, list_text=None, syntax_text=None,
+          lexical_text=None):
     """Возвращает список находок `(класс, элемент, пояснение)`; пустой — гейт пройден."""
     problems = []
 
@@ -211,7 +262,46 @@ def check(doc_text, lexer_text, grammar_text, list_text=None, syntax_text=None):
 
     if list_text is not None and syntax_text is not None:
         problems += check_highlight(list_text, syntax_text, keywords_code)
+    if lexical_text is not None:
+        problems += check_lexical(lexical_text, keywords_code, punct_code)
 
+    return problems
+
+
+def check_lexical(lexical_text, keywords_code, punct_code):
+    """Таблицы раздела «Лексика» против лексера и грамматики (фича 0298).
+
+    Раздел — первое, что читает изучающий язык, и до 0298 он не сверялся ничем:
+    замер 2026-08-20 нашёл в нём 43 ключевых слова против 47 в лексере (не было
+    `after`, `at`, `clock`, `every` — фичи 0134 и 0187). Знаки при этом совпадали
+    ровно, но держалось это на случайности, а не на проверке.
+    """
+    problems = []
+    words = lexical_keywords(lexical_text)
+    signs = lexical_signs(lexical_text)
+    for name, group in (
+        ("таблица ключевых слов раздела «Лексика»", words),
+        ("таблицы знаков раздела «Лексика»", signs),
+    ):
+        if not group:
+            sys.exit(f"ОШИБКА: {name} пуста — гейт проверял бы пустое множество.")
+
+    for word in sorted(keywords_code - words - LTL_CONTEXTUAL):
+        problems.append(("L1", word, "ключевое слово лексера отсутствует в разделе «Лексика»"))
+    for word in sorted(words - keywords_code):
+        problems.append(("L2", word, "раздел «Лексика» называет слово, которого в лексере нет"))
+    # Контекстные слова LTL в лексере ЕСТЬ, поэтому предыдущая проверка их не
+    # видит, — а называть их ключевыми раздел не вправе: прогон 2026-08-20
+    # показал, что `var X: u8 := 1;` компилируется, и `SY-002` сам перечисляет
+    # их среди допустимых идентификаторов. Прежде раздел утверждал обратное.
+    for word in sorted(words & LTL_CONTEXTUAL):
+        problems.append(
+            ("L2", word, "контекстное слово LTL названо ключевым: вне аннотации это обычное имя")
+        )
+    for sign in sorted(punct_code - signs):
+        problems.append(("L3", sign, "терминал грамматики отсутствует в таблицах раздела «Лексика»"))
+    for sign in sorted(signs - punct_code):
+        problems.append(("L4", sign, "раздел «Лексика» называет знак, которого в грамматике нет"))
     return problems
 
 
@@ -260,7 +350,12 @@ def report(problems):
         "Классы H1…H4 (фича 0240) говорят о ПОДСВЕТКЕ: списки\n"
         "book/takt-keywords.txt (инлайн-код) и book/takt.sublime-syntax (блоки кода)\n"
         "обязаны покрывать лексер и совпадать между собой; слово, выделяемое\n"
-        "намеренно без своего ключевого слова, объявляется в секции [extra].",
+        "намеренно без своего ключевого слова, объявляется в секции [extra].\n"
+        "Классы L1…L4 (фича 0298) говорят о РАЗДЕЛЕ «Лексика»\n"
+        "(book/src/02-lexical/index.typ): его таблицы ключевых слов, операторов и\n"
+        "пунктуации обязаны совпадать с лексером и терминалами грамматики —\n"
+        "раздел читают первым, и слово, которого в нём нет, читатель считает\n"
+        "свободным именем.",
         file=sys.stderr,
     )
 
@@ -294,7 +389,23 @@ def self_test():
         "    - match: \\b(as|model|ref|enter)\\b\n      scope: keyword.control.takt\n"
     )
 
-    found = {(kind, item) for kind, item, _ in check(doc, lexer, grammar, keyword_list, syntax)}
+    # Раздел «Лексика» (фича 0298): `while` есть в лексере и нет в таблице (L1),
+    # `pragma` названо разделом и не является ключевым (L2), терминал `.` мимо
+    # таблиц знаков (L3), знак `-->` назван разделом и в грамматике отсутствует
+    # (L4) — реальный случай 0201, здесь он ловится вторым списком.
+    lexical = (
+        "== Ключевые слова\n#table(\n    table.header([Назначение], [Слова],),\n"
+        "    [Прочие], [`as`, `model`, `pragma`, `X`],\n  )\n\n"
+        "== Операторы\n#table(\n    table.header([Категория], [Операторы],),\n"
+        "    [Присваивание], [`:=` `-->`],\n  )\n\n"
+        "== Пунктуация\n#table(\n    table.header([Знак], [Назначение],),\n"
+        "    [`=>`], [ветвь `match`],\n  )\n\n== Литералы\n"
+    )
+
+    found = {
+        (kind, item)
+        for kind, item, _ in check(doc, lexer, grammar, keyword_list, syntax, lexical)
+    }
     expected = {
         ("K1", "while"),  # слово лексера мимо списка документа
         ("K2", "state"),  # слово документа мимо лексера
@@ -304,6 +415,11 @@ def self_test():
         ("H2", "ref"),    # выделяется слово, которого в лексере пробы нет
         ("H3", "always"), # выделяется в тексте, но не в блоках кода
         ("H4", "enter"),  # выделяется в блоках кода, но не в тексте
+        ("L1", "while"),  # слово лексера мимо таблицы раздела «Лексика»
+        ("L2", "X"),      # контекстное слово LTL названо ключевым
+        ("L2", "pragma"), # раздел называет слово, которого в лексере нет
+        ("L3", "."),      # терминал грамматики мимо таблиц знаков раздела
+        ("L4", "-->"),    # раздел называет знак, которого в грамматике нет
     }
     if found != expected:
         sys.exit(
@@ -324,7 +440,17 @@ def self_test():
         "  main:\n"
         "    - match: \\b(as|model|while|enter)\\b\n      scope: keyword.control.takt\n"
     )
-    clean = check(clean_doc, lexer, grammar, clean_list, clean_syntax)
+    clean_lexical = (
+        "== Ключевые слова\n#table(\n    table.header([Назначение], [Слова],),\n"
+        "    [Прочие], [`as`, `model`, `while`],\n  )\n\n"
+        "== Операторы\n#table(\n    table.header([Категория], [Операторы],),\n"
+        "    [Присваивание], [`:=` `.`],\n  )\n\n"
+        "== Пунктуация\n#table(\n    table.header([Знак], [Назначение],),\n"
+        "    [`=>`], [ветвь `match`],\n  )\n\n== Литералы\n"
+    )
+    clean = check(
+        clean_doc, lexer, grammar, clean_list, clean_syntax, clean_lexical
+    )
     if clean:
         sys.exit(f"САМОПРОВЕРКА ПРОВАЛЕНА: согласованный вход дал находки: {clean}")
 
@@ -339,7 +465,7 @@ def self_test():
     if probe.returncode == 0:
         sys.exit("САМОПРОВЕРКА ПРОВАЛЕНА: документ без абзаца списка не дал ошибки")
 
-    print("  самопроверка гейта: ловушка взведена (8 классов ловятся, согласованный вход — нет)")
+    print("  самопроверка гейта: ловушка взведена (12 классов ловятся, согласованный вход — нет)")
 
 
 def self_test_empty():
@@ -361,10 +487,13 @@ def main():
         grammar_text = open(GRAMMAR, encoding="utf-8").read()
         list_text = open(KEYWORD_LIST, encoding="utf-8").read()
         syntax_text = open(SYNTAX, encoding="utf-8").read()
+        lexical_text = open(LEXICAL, encoding="utf-8").read()
     except OSError as error:
         sys.exit(f"ОШИБКА: не прочитать источник: {error}")
 
-    problems = check(doc_text, lexer_text, grammar_text, list_text, syntax_text)
+    problems = check(
+        doc_text, lexer_text, grammar_text, list_text, syntax_text, lexical_text
+    )
     if problems:
         report(problems)
         return 1
@@ -375,6 +504,10 @@ def main():
     print(
         f"Лексика приложения «Грамматика»: {len(keywords)} ключевых слов "
         f"и {len(punct)} знаков сверены с лексером и грамматикой, расхождений нет."
+    )
+    print(
+        f"Раздел «Лексика»: {len(lexical_keywords(lexical_text))} ключевых слов и "
+        f"{len(lexical_signs(lexical_text))} знаков сверены с языком, расхождений нет."
     )
     print(
         "Списки подсветки документа: "
