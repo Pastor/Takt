@@ -532,3 +532,4 @@
 | 0265-01 | 0265 | Вычистка версии и каталог бинарников | [0265-01-book-svg-graphviz-version.md](0265-01-book-svg-graphviz-version.md) |
 | 0271-01 | 0271 | Гейт тем и объявленных наборов | [0271-01-test-target-gate.md](0271-01-test-target-gate.md) |
 | 0272-01 | 0272 | Обвязка замера и предупреждение о холодном прогоне | [0272-01-build-measurement-harness.md](0272-01-build-measurement-harness.md) |
+| 0288-01 | 0288 | Усиленные сторожа и ратчет констатаций | [0288-01-fixture-guards-audit.md](0288-01-fixture-guards-audit.md) |

@@ -277,3 +277,4 @@
 | [0265](./0265-book-svg-graphviz-version.md) | SVG диаграмм не несут версию graphviz | Accepted | фича 0265 |
 | [0271](./0271-test-target-gate.md) | Устройство интеграционных тестов сторожится машиной | Accepted | фича 0271 |
 | [0272](./0272-build-measurement-harness.md) | Обвязка замера: прогрев, два прогона, вердикт | Accepted | фича 0272 |
+| [0288](./0288-fixture-guards-audit.md) | Сторожа фикстур проверяют обещание, а не разбор | Accepted | фича 0288 |

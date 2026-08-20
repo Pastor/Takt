@@ -34,6 +34,7 @@ mod diagnostics_tests;
 mod empty_enum_tests;
 mod empty_struct_tests;
 mod fixed_saturation_tests;
+mod fixture_promises_tests;
 mod formula_position_tests;
 mod formula_validation_tests;
 mod implemented_model_tests;

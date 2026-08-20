@@ -1,0 +1,43 @@
+# Реестр СЛАБЫХ сторожей фикстур — узаконенный долг (фича 0288).
+#
+# Здесь перечислены тесты на фикстурах `tests/data/**/valid/`, которые
+# констатируют «файл строится без ошибок» и не проверяют ОБЕЩАНИЕ фикстуры.
+# Цена такого сторожа измерена: `example_ce6_type_inference_chain_valid` был
+# зелёным всё время, пока обещанный им вывод типа по ссылке не работал вовсе
+# (фича 0204); тот же класс — фикс 0010-01, где проверяли структуру автомата
+# вместо языка.
+#
+# Реестр не даёт разрешения — он ЗАМОРАЖИВАЕТ: `scripts/check-fixture-guards.py`
+# запрещает появление новых записей (класс F1) и требует убирать протухшие
+# (F2). Единственная допустимая правка — УДАЛЕНИЕ записи вместе с усилением
+# сторожа: пример такого усиления — `tests/semantic/fixture_promises_tests.rs`.
+#
+# Формат: <путь>::<имя теста>
+takt-lang/tests/semantic/semantic_tests.rs::fixed_cast_resolves_mixing
+takt-lang/tests/semantic/semantic_tests/part2.rs::example_array_access_is_valid
+takt-lang/tests/semantic/semantic_tests/part2.rs::example_bit_values_valid_is_valid
+takt-lang/tests/semantic/semantic_tests/part2.rs::example_if_while_for_is_valid
+takt-lang/tests/semantic/semantic_tests/part2.rs::example_nested_model_blocks_is_valid
+takt-lang/tests/semantic/semantic_tests/part3.rs::example_doc_comments_file_is_valid
+takt-lang/tests/semantic/semantic_tests/part3.rs::se11_named_cond_file_no_warnings
+takt-lang/tests/semantic/semantic_tests/part3.rs::se11_valid_file_no_warnings
+takt-lang/tests/semantic/semantic_tests/part4.rs::example_ce4_enum_basic_valid
+takt-lang/tests/semantic/semantic_tests/part4.rs::example_ce5_no_warn_terminal_valid
+takt-lang/tests/semantic/semantic_tests/part4.rs::example_ce5_terminal_states_valid
+takt-lang/tests/semantic/semantic_tests/part4.rs::example_ce6_type_from_func_valid
+takt-lang/tests/semantic/semantic_tests/part4.rs::example_local_var_in_block_is_valid
+takt-lang/tests/semantic/semantic_tests/part4.rs::example_local_var_in_for_is_valid
+takt-lang/tests/semantic/semantic_tests/part4.rs::example_local_var_nested_is_valid
+takt-lang/tests/semantic/semantic_tests/part4.rs::ref_cond_resolved_file_is_valid
+takt-lang/tests/semantic/semantic_tests/part4.rs::test_all_vars_used_no_warning
+takt-lang/tests/semantic/semantic_tests/part5.rs::extern_fn_after_local_var_resolves_ok
+takt-lang/tests/semantic/semantic_tests/part5.rs::extern_fn_in_always_resolves_ok
+takt-lang/tests/semantic/semantic_tests/part5.rs::i5_file_non_recursive_type_alias_ok
+takt-lang/tests/semantic/semantic_tests/part5.rs::struct_as_var_type_file_ok
+takt-lang/tests/semantic/semantic_tests/part5.rs::struct_basic_file_ok
+takt-lang/tests/semantic/semantic_tests/part5.rs::test_deterministic_no_warning
+takt-lang/tests/semantic/semantic_tests/part5.rs::test_ni4_non_overlapping_no_warn
+takt-lang/tests/semantic/semantic_tests/part6.rs::match_switch_fixture_is_valid
+takt-lang/tests/syntax/parser_tests/part2.rs::struct_types_file_parses
+takt-lang/tests/syntax/parser_tests/part2.rs::ternary_operator_file_parses
+takt-lang/tests/targets/codegen_tests.rs::test_compile_example_file_with_include_path
