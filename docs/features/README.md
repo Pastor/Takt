@@ -334,3 +334,4 @@
 | [0319](./0319-array-cast-folding.md) | Приведение агрегата к массиву вычисляется при компиляции | [ADR](../adr/0319-array-cast-folding.md), [анализ](../analyze/0319-array-cast-folding.md), [отчёт](../reports/0319-array-cast-folding.md) | ГОТОВО |
 | [0320](./0320-aggregate-length-check.md) | Длина агрегата сверяется с объявлением | [ADR](../adr/0320-aggregate-length-check.md), [анализ](../analyze/0320-aggregate-length-check.md), [отчёт](../reports/0320-aggregate-length-check.md) | ГОТОВО |
 | [0321](./0321-sv-for-unroll.md) | Цель sv разворачивает for со статическими границами | [ADR](../adr/0321-sv-for-unroll.md), [анализ](../analyze/0321-sv-for-unroll.md), [отчёт](../reports/0321-sv-for-unroll.md) | ГОТОВО |
+| [0322](./0322-sv-match-case.md) | Цель sv переводит match в case | [ADR](../adr/0322-sv-match-case.md), [анализ](../analyze/0322-sv-match-case.md), [отчёт](../reports/0322-sv-match-case.md) | ГОТОВО |

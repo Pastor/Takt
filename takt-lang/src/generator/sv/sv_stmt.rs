@@ -24,7 +24,7 @@ use crate::generator::indent::Printer;
 use crate::generator::sv::sv_expr::{Scope, print_expression, signal_of};
 
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::{ExpressionNode, StatementNode};
+use crate::semantic::{ExpressionNode, MatchPatternNode, StatementNode};
 
 /// Строит диагностику `SV-002` — оператор не транслируется.
 fn sv002(what: &str) -> Diagnostic {
@@ -163,7 +163,55 @@ pub(crate) fn print_statement(
         }
         StatementNode::Continue => Err(sv002("оператор continue (циклов нет)")),
         StatementNode::Break => Err(sv002("оператор break (циклов нет)")),
-        StatementNode::Match { .. } => Err(sv002("оператор match")),
+        // `match` переводится в `case` (фича 0322): в SystemVerilog это прямой
+        // аналог, и отказ здесь был пробелом, а не решением — остальные семь
+        // потребителей вход исполняли.
+        //
+        // ⚠️ Ветвь `default` печатается **всегда**: `case` без неё в
+        // `always_comb` оставляет сигнал без значения на непокрытом входе, и
+        // синтезатор выводит ЗАЩЁЛКУ — то же, чем обернулась необъявленная
+        // переменная цикла в 0321. Молчаливая защёлка хуже отказа.
+        StatementNode::Match { expr, arms } => {
+            p.ident(&format!("case ({})", print_expression(expr, scope)?))
+                .nl();
+            p.up();
+            let mut has_default = false;
+            for arm in arms {
+                let wildcard = arm
+                    .patterns
+                    .iter()
+                    .any(|pattern| matches!(pattern, MatchPatternNode::Wildcard));
+                if wildcard {
+                    has_default = true;
+                    p.ident("default: begin").nl();
+                } else {
+                    let mut labels = Vec::new();
+                    for pattern in &arm.patterns {
+                        let MatchPatternNode::Value(value) = pattern else {
+                            continue;
+                        };
+                        labels.push(print_expression(value, scope)?);
+                    }
+                    if labels.is_empty() {
+                        return Err(sv002("ветка match без образцов"));
+                    }
+                    p.ident(&format!("{}: begin", labels.join(", "))).nl();
+                }
+                p.up();
+                print_statement(p, &arm.body, scope)?;
+                p.down();
+                p.ident("end").nl();
+            }
+            if !has_default {
+                // Пустая ветвь по умолчанию: сигналы уже получили значение
+                // умолчанием `name_next = name` в начале `always_comb`, и
+                // трогать их незачем — нужна только полнота `case`.
+                p.ident("default: begin end").nl();
+            }
+            p.down();
+            p.ident("endcase").nl();
+            Ok(())
+        }
         // LTL-формула — свойство для верификации, а не поведение. Цель `c` её
         // игнорирует; здесь то же, и молчания в этом нет: `taktc verify`
         // (фича 0049) проверяет формулы отдельно.
@@ -206,8 +254,16 @@ pub(crate) fn hoist_locals<'a>(stmt: &'a StatementNode, out: &mut Vec<(&'a str, 
             }
             hoist_locals(body, out);
         }
-        // Прочие узлы объявлений не несут: `loop` и `match` цель отвергает
-        // (`SV-002`), а выражения переменных не заводят.
+        // Тела веток `match` — обычные блоки (фича 0322): их объявления
+        // обязаны быть подняты, иначе развёрнутое тело сошлётся на
+        // необъявленное имя (тот же класс, что у цикла выше).
+        StatementNode::Match { arms, .. } => {
+            for arm in arms {
+                hoist_locals(&arm.body, out);
+            }
+        }
+        // Прочие узлы объявлений не несут: `loop` цель отвергает (`SV-002`), а
+        // выражения переменных не заводят.
         _ => {}
     }
 }

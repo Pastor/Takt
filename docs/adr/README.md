@@ -298,3 +298,4 @@
 | [0319](./0319-array-cast-folding.md) | Приведение агрегата к массиву вычисляет компилятор | Accepted | фича 0319 |
 | [0320](./0320-aggregate-length-check.md) | Длину агрегата сверяет семантика | Accepted | фича 0320 |
 | [0321](./0321-sv-for-unroll.md) | Цель sv разворачивает for со статическими границами | Accepted | фича 0321 |
+| [0322](./0322-sv-match-case.md) | match цели sv — это case | Accepted | фича 0322 |
