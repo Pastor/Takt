@@ -58,5 +58,6 @@ mod conformance_sv_match_tests;
 mod conformance_sv_mmio_tests;
 mod conformance_sv_tests;
 mod conformance_sv_time_tests;
+mod conformance_var_shift_tests;
 mod conformance_wide_bits_tests;
 mod conformance_wider_integer_tests;
