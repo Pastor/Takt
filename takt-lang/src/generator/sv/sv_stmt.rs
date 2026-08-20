@@ -109,10 +109,15 @@ pub(crate) fn print_statement(
         //
         // Регистровой пары у локальной переменной нет: она живёт внутри одного
         // вычисления, а не между тактами.
-        StatementNode::Variable(name, _, init) => {
+        StatementNode::Variable(name, ty, init) => {
             if let Some(expr) = init {
-                p.ident(&format!("{} = {};", name, print_expression(expr, scope)?))
-                    .nl();
+                // Инициализатор — позиция приёмника с известным типом (фича
+                // 0338): `var res: Mode := Idle;` приходит сюда числом (узла
+                // варианта у `ExpressionNode` нет вовсе), и `res = 0;`
+                // verilator отвергает **ошибкой** `ENUMVALUE` — при нулевом
+                // коде возврата `taktc`.
+                let value = scope.coerce(ty, expr)?;
+                p.ident(&format!("{name} = {value};")).nl();
             }
             Ok(())
         }
