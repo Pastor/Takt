@@ -310,3 +310,4 @@
 | 0324 | Сдвиг вправо знакового — арифметический во всех целях | [0324-arithmetic-shift-right.md](0324-arithmetic-shift-right.md) | — (новая фича) |
 | 0325 | Документ описывает семантику сдвигов | [0325-book-shift-semantics.md](0325-book-shift-semantics.md) | — (новая фича) |
 | 0326 | Сдвиг на ширину типа в цели rust | [0326-rust-shift-width.md](0326-rust-shift-width.md) | — (новая фича) |
+| 0327 | Описание SV-002 отражает состав переводимого | [0327-sv002-description.md](0327-sv002-description.md) | — (новая фича) |
