@@ -256,3 +256,4 @@
 | 0271 | Устройство интеграционных тестов сторожится машиной | [0271-test-target-gate.md](0271-test-target-gate.md) | Пройден: 7/7 условий |
 | 0272 | Обвязка замера: прогрев, два прогона, вердикт | [0272-build-measurement-harness.md](0272-build-measurement-harness.md) | Пройден: 6/6 условий |
 | 0288 | Сторожа фикстур проверяют обещание, а не разбор | [0288-fixture-guards-audit.md](0288-fixture-guards-audit.md) | Пройден: 9/9 условий, обе пробы |
+| 0289 | Чек-лист инвариантов сверяется с подробными пунктами | [0289-claude-md-invariant-checklist-gate.md](0289-claude-md-invariant-checklist-gate.md) | Пройден: 7/7 условий |
