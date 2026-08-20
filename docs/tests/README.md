@@ -253,3 +253,4 @@
 | 0252 | CI и замер покрытия приведены к снятому правилу однопоточности | [0252-ci-windows-test-threads.md](0252-ci-windows-test-threads.md) | Пройден: 5/5 условий (прогон CI недоступен — 0175) |
 | 0261 | Жёлтая зона гейта размера модулей и его сторож | [0261-module-size-warning-zone.md](0261-module-size-warning-zone.md) | Пройден: 10/10 условий |
 | 0265 | SVG диаграмм не несут версию graphviz | [0265-book-svg-graphviz-version.md](0265-book-svg-graphviz-version.md) | Пройден: 8/8 условий, обе пробы ловятся |
+| 0271 | Устройство интеграционных тестов сторожится машиной | [0271-test-target-gate.md](0271-test-target-gate.md) | Пройден: 7/7 условий |

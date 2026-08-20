@@ -530,3 +530,4 @@
 | 0252-01 | 0252 | Снятие --test-threads=1 и правка комментариев | [0252-01-ci-windows-test-threads.md](0252-01-ci-windows-test-threads.md) |
 | 0261-01 | 0261 | Жёлтая зона и сторож гейта | [0261-01-module-size-warning-zone.md](0261-01-module-size-warning-zone.md) |
 | 0265-01 | 0265 | Вычистка версии и каталог бинарников | [0265-01-book-svg-graphviz-version.md](0265-01-book-svg-graphviz-version.md) |
+| 0271-01 | 0271 | Гейт тем и объявленных наборов | [0271-01-test-target-gate.md](0271-01-test-target-gate.md) |
