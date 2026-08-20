@@ -570,3 +570,4 @@
 | 0336-01 | 0336 | Приведение к типу приёмника в аргументе и возврате функции | [0336-01-call-return-coercion.md](0336-01-call-return-coercion.md) |
 | 0337-01 | 0337 | Неиспользуемый параметр функции гасится у трёх целей | [0337-01-unused-function-parameter.md](0337-01-unused-function-parameter.md) |
 | 0338-01 | 0338 | Перечисление внутри функции у целей st и sv | [0338-01-enum-in-function.md](0338-01-enum-in-function.md) |
+| 0339-01 | 0339 | Шаблон отказа цели sv: один носитель и читаемый текст | [0339-01-sv-refusal-template.md](0339-01-sv-refusal-template.md) |

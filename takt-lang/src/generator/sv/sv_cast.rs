@@ -5,8 +5,8 @@
 //! смена типа». Поводом был гейт размера модуля, границей — смысл.
 
 use crate::diagnostics::Diagnostic;
+use crate::generator::sv::sv_expr::sv002;
 use crate::generator::sv::sv_expr::{Scope, print_expression};
-use crate::generator::sv::sv_fsm::sv002;
 use crate::semantic::ExpressionNode;
 use crate::semantic::type_node::TypeNode;
 

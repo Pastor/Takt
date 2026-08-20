@@ -57,14 +57,15 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) fn sv002(what: &str) -> Diagnostic {
     Diagnostic::error(
         crate::generator::site::at(Location::Codegen),
-        format!(
-            "{} не транслируется в SystemVerilog целью 'sv'. Молчаливо \
-             пропустить конструкцию нельзя: порождённый модуль вёл бы себя \
-             иначе, чем модель",
-            what
-        ),
+        format!("Не транслируется в SystemVerilog: {what}"),
     )
     .with_code("SV-002")
+    .with_note(
+        Location::Codegen,
+        "молчаливо пропустить конструкцию нельзя: порождённый модуль вёл бы \
+         себя иначе, чем модель"
+            .to_string(),
+    )
 }
 
 /// Строит диагностику `SV-005` — `extern fn` в синтезируемом RTL невыразима.

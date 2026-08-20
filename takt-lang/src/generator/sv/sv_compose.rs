@@ -29,8 +29,9 @@
 use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
 use crate::generator::sv::sv_blocks::emit_named_blocks;
+use crate::generator::sv::sv_expr::sv002;
 use crate::generator::sv::sv_fsm::{
-    Fsm, emit_model_body, end_variant, step_reg_name, step_variant, sv002,
+    Fsm, emit_model_body, end_variant, step_reg_name, step_variant,
 };
 use crate::generator::sv::sv_map::SvMap;
 use crate::semantic::StateNode;

@@ -19,26 +19,13 @@
 //! `always_ff` защёлкнет по фронту. Отображение имени делает
 //! [`Scope`](super::sv_expr::Scope) — здесь только выбор стороны.
 
-use crate::diagnostics::{Diagnostic, Location};
+use crate::diagnostics::Diagnostic;
 use crate::generator::indent::Printer;
+use crate::generator::sv::sv_expr::sv002;
 use crate::generator::sv::sv_expr::{Scope, print_expression, signal_of};
 
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ExpressionNode, MatchPatternNode, StatementNode};
-
-/// Строит диагностику `SV-002` — оператор не транслируется.
-fn sv002(what: &str) -> Diagnostic {
-    Diagnostic::error(
-        crate::generator::site::at(Location::Codegen),
-        format!(
-            "{} не транслируется в SystemVerilog целью 'sv'. Молчаливо \
-             пропустить оператор нельзя: порождённый модуль вёл бы себя иначе, \
-             чем модель",
-            what
-        ),
-    )
-    .with_code("SV-002")
-}
 
 /// Печатает оператор в теле `always_comb` либо `function automatic`.
 ///

@@ -54,17 +54,15 @@ use crate::semantic::enum_facts;
 use crate::semantic::naming::normalize_lowercase_snakecase;
 use crate::semantic::type_node::TypeNode;
 
-/// Строит диагностику `SV-002` — узел не покрыт отображением.
-fn sv002(what: &str, ty: &TypeNode) -> Diagnostic {
-    Diagnostic::error(
-        crate::generator::site::at(Location::Codegen),
-        format!(
-            "{}: тип '{}' не отображается в SystemVerilog. Это внутренний либо \
-             неразрешённый тип — в порождаемом RTL представления не имеет",
-            what, ty
-        ),
-    )
-    .with_code("SV-002")
+/// Строит диагностику `SV-002` о неотображаемом типе.
+///
+/// ⚠️ Шаблон **общий** (`sv_expr::sv002`, фича 0339): своя копия давала бы
+/// одному коду два разных вида сообщения — класс 0084/0193/0195.
+fn sv002_type(what: &str, ty: &TypeNode) -> Diagnostic {
+    crate::generator::sv::sv_expr::sv002(&format!(
+        "{what}: тип '{ty}' — внутренний либо неразрешённый, представления в \
+         порождаемом RTL он не имеет"
+    ))
 }
 
 /// Строит диагностику `SV-003` — вещественного типа в синтезируемом RTL нет.
@@ -287,7 +285,7 @@ pub(crate) fn sv_type(ty: &TypeNode, what: &str) -> Result<SvType, Diagnostic> {
         | TypeNode::BuiltinString
         | TypeNode::BuiltinModel
         | TypeNode::BuiltinState
-        | TypeNode::BuiltinNumeric => Err(sv002(what, ty)),
+        | TypeNode::BuiltinNumeric => Err(sv002_type(what, ty)),
     }
 }
 

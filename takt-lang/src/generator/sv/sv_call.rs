@@ -5,8 +5,8 @@
 //! модуля, границей — смысл.
 
 use crate::diagnostics::{Diagnostic, Location};
+use crate::generator::sv::sv_expr::sv002;
 use crate::generator::sv::sv_expr::sv005;
-use crate::generator::sv::sv_fsm::sv002;
 use crate::semantic::FunctionDefinitionNode;
 
 /// Возвращает имя вызываемой функции, отвергая невыразимые случаи.
