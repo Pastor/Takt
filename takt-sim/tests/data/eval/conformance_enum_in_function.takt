@@ -1,0 +1,42 @@
+// Сверка ПЕРЕЧИСЛЕНИЯ внутри функции (фича 0338).
+//
+// `var res: Mode := Idle;` в теле функции — позиция приёмника: вариант
+// приходит печатнику ЧИСЛОМ (узла варианта у `ExpressionNode` нет вовсе).
+//
+// Прежде цель `sv` печатала `res = 0;`, и verilator отвечал ОШИБКОЙ
+// `ENUMVALUE`, а цель `st` печатала имя константы, невидимое внутри `FUNCTION`
+// («Variable not declared in this scope») — обе при НУЛЕВОМ коде возврата.
+//
+// ⚠️ `plain` — контрольный вход: функция без перечисления. Она работала
+// всегда.
+enum Mode { Idle, Busy }
+
+fn classify(k: u8) -> Mode {
+    var res: Mode := Idle;
+    if k > 0 { res := Busy; }
+    return res;
+}
+
+fn plain(k: u8) -> u8 {
+    var acc: u8 := 1;
+    acc := acc + k;
+    return acc;
+}
+
+var cur: Mode := Idle;
+var code: u8 := 0;
+var ctl: u8 := 0;
+
+out o_code: u8 at 0;
+out o_ctl: u8 at 1;
+
+start Run {
+    always {
+        cur := classify(1);
+        if cur = Busy { code := 9; } else { code := 4; }
+        ctl := plain(2);
+        o_code := code;
+        o_ctl := ctl;
+    }
+    ref Run: ctl = 3;
+}

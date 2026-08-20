@@ -321,3 +321,4 @@
 | 0335 | Разряд в позиции числового значения переводят все цели | [0335-bit-value-in-targets.md](0335-bit-value-in-targets.md) | — (новая фича) |
 | 0336 | Приведение к типу приёмника в аргументе и возврате функции | [0336-call-return-coercion.md](0336-call-return-coercion.md) | — (новая фича) |
 | 0337 | Неиспользуемый параметр функции гасится у трёх целей | [0337-unused-function-parameter.md](0337-unused-function-parameter.md) | — (новая фича) |
+| 0338 | Перечисление внутри функции у целей st и sv | [0338-enum-in-function.md](0338-enum-in-function.md) | — (новая фича) |

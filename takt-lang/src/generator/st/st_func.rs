@@ -412,7 +412,7 @@ fn emit_function(
     // порядок `VAR CONSTANT` → `VAR` невалиден, `VAR` → `VAR CONSTANT` валиден.
     // Дефект вскрыт фичей 0030: до неё ни одна функция корпуса не имела
     // локальных переменных, и порядок ничего не ломал.
-    let hoisted = match def {
+    let (hoisted, body_text) = match def {
         FunctionDefinitionNode::Local { body, ret, .. } => {
             collect_hoisted(body, &name, ret, model)?
         }
@@ -421,7 +421,7 @@ fn emit_function(
         FunctionDefinitionNode::External { .. }
         | FunctionDefinitionNode::Builtin(_, _, _)
         | FunctionDefinitionNode::None
-        | FunctionDefinitionNode::Unresolved(_) => Vec::new(),
+        | FunctionDefinitionNode::Unresolved(_) => (Vec::new(), String::new()),
     };
     // Локальная переменная тела функции — тоже идентификатор IEC. Проба 3 фичи
     // 0065: `var left: u8` внутри функции даёт обманчивое «invalid located
@@ -434,9 +434,15 @@ fn emit_function(
 
     // Константы модели дублируются внутрь функции.
     let consts = const_params(def, model);
-    if !consts.is_empty() {
+    // Константы перечислений — тоже (фича 0338): `FUNCTION` в IEC замкнута, и
+    // `Mode_Idle`, объявленная в `FUNCTION_BLOCK`, внутри неё не видна.
+    let enum_consts = enum_constants_used(&body_text, model)?;
+    if !consts.is_empty() || !enum_consts.is_empty() {
         p.ident("VAR CONSTANT").nl();
         p.up();
+        for (cname, ty_name, value) in &enum_consts {
+            p.ident(&format!("{cname} : {ty_name} := {value};")).nl();
+        }
         for cname in &consts {
             let VariableNode::Const { ty, expr, .. } = &model.variables[cname] else {
                 continue;
@@ -499,14 +505,19 @@ fn collect_hoisted(
     name: &str,
     ret: &TypeNode,
     model: &ModelNode,
-) -> Result<Vec<Hoisted>, Diagnostic> {
+) -> Result<(Vec<Hoisted>, String), Diagnostic> {
     let mut probe = String::new();
     let mut out = StmtOutput::default();
     {
         let mut probe_p = Printer::new(4, &mut probe);
         print_statement(body, model, &mut probe_p, &mut out, Some((name, ret)))?;
     }
-    Ok(out.hoisted)
+    // Текст тела нужен ещё и для отбора КОНСТАНТ ПЕРЕЧИСЛЕНИЙ (фича 0338):
+    // `FUNCTION` в IEC — замкнутая единица, и `Mode_Idle`, объявленная в
+    // `FUNCTION_BLOCK`, внутри неё не видна («Variable not declared in this
+    // scope»). Признак тот же, что у заглушки параметра (0260/0337): вопрос
+    // задаётся напечатанному тексту.
+    Ok((out.hoisted, probe))
 }
 
 /// Печатает секцию `VAR` поднятых объявлений (пустую — не печатает: пустой
@@ -575,6 +586,60 @@ fn neutral_value(ty: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic>
 }
 
 /// Строит диагностику `ST-011`.
+/// Константы перечислений, УПОМЯНУТЫЕ в напечатанном теле функции (фича 0338).
+///
+/// `FUNCTION` в IEC 61131-3 — замкнутая единица: она видит только объявленное в
+/// ней самой. Константа `Mode_Idle` живёт в `VAR CONSTANT` функционального
+/// блока, и обращение к ней из функции `iec2c` отвергает («Ambiguous enumerate
+/// value or Variable not declared in this scope») — при **нулевом** коде
+/// возврата `taktc`. Это тот же довод, по которому фича 0030 дублирует внутрь
+/// функции константы модели.
+///
+/// ⚠️ Отбор идёт по **тексту** тела, а не по обходу дерева: имя константы
+/// строит печатник (`st_expr::coerce_to`), и второй способ узнать, какое имя он
+/// напечатал, разошёлся бы с первым (класс 0084/0193/0195).
+fn enum_constants_used(
+    body: &str,
+    model: &ModelNode,
+) -> Result<Vec<(String, String, String)>, Diagnostic> {
+    let mut out = Vec::new();
+    for (enum_name, node) in crate::generator::st::st_decl::visible_enums(model) {
+        let ty = get_st_type(&TypeNode::Enum(enum_name.clone()), model)?;
+        for (variant, value) in &node.variants {
+            let name = format!("{enum_name}_{variant}");
+            if body.lines().any(|line| mentions_ident(line, &name)) {
+                out.push((name, ty.clone(), value.to_string()));
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// Встречается ли `ident` в строке **как отдельный идентификатор**.
+///
+/// ⚠️ Границы обязательны: `Mode_Idle` — префикс `Mode_IdleLong`.
+fn mentions_ident(line: &str, ident: &str) -> bool {
+    let bytes = line.as_bytes();
+    let mut from = 0;
+    while let Some(pos) = line[from..].find(ident) {
+        let start = from + pos;
+        let end = start + ident.len();
+        let before_ok = start == 0 || !is_ident_byte(bytes[start - 1]);
+        let after_ok = end == bytes.len() || !is_ident_byte(bytes[end]);
+        if before_ok && after_ok {
+            return true;
+        }
+        from = end;
+    }
+    false
+}
+
+/// Байт, который может входить в идентификатор IEC.
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

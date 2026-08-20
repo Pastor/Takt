@@ -494,7 +494,7 @@ fn enum_constants(model: &ModelNode) -> Result<Vec<Declaration>, Diagnostic> {
 }
 
 /// Собирает перечисления, видимые модели: её собственные плюс предков.
-fn visible_enums(
+pub(in crate::generator::st) fn visible_enums(
     model: &ModelNode,
 ) -> std::collections::HashMap<String, crate::semantic::EnumDefinitionNode> {
     let mut out = std::collections::HashMap::new();
