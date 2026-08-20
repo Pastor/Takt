@@ -534,3 +534,4 @@
 | 0272-01 | 0272 | Обвязка замера и предупреждение о холодном прогоне | [0272-01-build-measurement-harness.md](0272-01-build-measurement-harness.md) |
 | 0288-01 | 0288 | Усиленные сторожа и ратчет констатаций | [0288-01-fixture-guards-audit.md](0288-01-fixture-guards-audit.md) |
 | 0289-01 | 0289 | Метки инвариантов и класс 5 гейта | [0289-01-claude-md-invariant-checklist-gate.md](0289-01-claude-md-invariant-checklist-gate.md) |
+| 0297-01 | 0297 | Сшивка абзацев и честная самопроверка | [0297-01-check-claude-md-line-blindness.md](0297-01-check-claude-md-line-blindness.md) |
