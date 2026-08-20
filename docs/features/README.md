@@ -327,3 +327,4 @@
 | [0312](./0312-c-gate-release-mode.md) | Гейты цели c проверяют и релизный режим | [ADR](../adr/0312-c-gate-release-mode.md), [анализ](../analyze/0312-c-gate-release-mode.md), [отчёт](../reports/0312-c-gate-release-mode.md) | ГОТОВО |
 | [0313](./0313-call-arity-check.md) | Число аргументов вызова сверяется с объявлением | [ADR](../adr/0313-call-arity-check.md), [анализ](../analyze/0313-call-arity-check.md), [отчёт](../reports/0313-call-arity-check.md) | ГОТОВО |
 | [0314](./0314-c-dropped-builtin-warning.md) | Цель c говорит о выброшенном вызове встроенной функции | [ADR](../adr/0314-c-dropped-builtin-warning.md), [анализ](../analyze/0314-c-dropped-builtin-warning.md), [отчёт](../reports/0314-c-dropped-builtin-warning.md) | ГОТОВО |
+| [0315](./0315-gate-guards.md) | Гейты без сторожей получают сторожей | [ADR](../adr/0315-gate-guards.md), [анализ](../analyze/0315-gate-guards.md), [отчёт](../reports/0315-gate-guards.md) | ГОТОВО |

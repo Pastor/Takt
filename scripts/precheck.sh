@@ -82,6 +82,7 @@ require_tool() {
 
 if require_tool python3 "проверка ссылок, правило 14; apt install python3"; then
   echo "Проверка ссылок в Markdown (правило 14)..."
+  "$(dirname "$0")/check-links.py" --self-test
   "$(dirname "$0")/check-links.py"
 
   # Символы вне шрифта документа (фича 0146). Проверка идёт ТЕКСТОМ, по снимку
@@ -268,6 +269,9 @@ $CARGO_CMD clippy --all-targets --all-features -- -D warnings
 "$(dirname "$0")/test-diagnostic-codes.sh"
 
 # Версия языка (фича 0085): LANGUAGE_VERSION в коде согласована с README. Быстрая.
+# ⚠️ Самопроверка идёт ПЕРВОЙ (фича 0315): гейт, который никогда не падал,
+# неотличим от гейта, который не смотрит (урок 0255).
+"$(dirname "$0")/test-language-version.sh"
 "$(dirname "$0")/check-language-version.sh"
 
 # Метка версии языка (фича 0162, правило 22): у закоммиченной версии есть
@@ -288,6 +292,7 @@ $CARGO_CMD clippy --all-targets --all-features -- -D warnings
 # `git clone`).
 # ⚠️ Проверяет согласованность, а не правильность: переименование во всех местах
 # разом гейт не заметит — это его граница, см. заголовок скрипта. Быстрая.
+"$(dirname "$0")/test-repo-url.sh"
 "$(dirname "$0")/check-repo-url.sh"
 
 # Трейлеры коммита (правило 31): в истории нет `Co-Authored-By`. Гейт обходит
@@ -345,6 +350,7 @@ echo "Гигиена каталога гейта: сторож (фича 0234)..
 # Исчерпывающий разбор семантических узлов (фича 0093, ADR 0025): узлы-диспетчеры
 # не помечены #[non_exhaustive], eval/ хранит deny(wildcard_enum_match_arm).
 # Защита инварианта от «тихой смерти». Быстрая — до долгих тестов.
+"$(dirname "$0")/test-exhaustive-nodes.sh"
 "$(dirname "$0")/check-exhaustive-nodes.sh"
 
 # Тесты гоняются с --all-features (фича 0178, правило 3 ADR). Прежде здесь стоял

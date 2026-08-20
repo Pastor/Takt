@@ -35,7 +35,8 @@
 # POSIX sh, без внешних зависимостей (образец — scripts/check-language-version.sh).
 set -eu
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Корень переопределяется переменной (фича 0315) — для сторожа гейта.
+ROOT="${RU_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 MANIFEST="$ROOT/takt-lang/Cargo.toml"
 README="$ROOT/README.md"
 
