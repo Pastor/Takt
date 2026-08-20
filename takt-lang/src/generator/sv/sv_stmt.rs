@@ -344,10 +344,13 @@ fn print_expression_statement(
     scope: &Scope,
 ) -> Result<(), Diagnostic> {
     match expr {
-        // Присваивание АГРЕГАТА (фича 0330) печатается поэлементно: `'{…}` в
-        // `always_comb` пришлось бы согласовывать по ширине с каждым элементом,
-        // а поэлементная форма выразима всегда и совпадает с тем, что печатает
-        // цель `c`.
+        // Присваивание АГРЕГАТА (фичи 0330, 0340) печатается поэлементно:
+        // `'{…}` в `always_comb` пришлось бы согласовывать по ширине с каждым
+        // элементом, а поэлементная форма выразима всегда.
+        //
+        // ⚠️ Прежняя редакция этого комментария добавляла «…и совпадает с тем,
+        // что печатает цель `c`» — замер 0340 это опроверг: цель `c` печатала
+        // агрегат как есть, и её вывод не собирался вовсе (класс 0292).
         ExpressionNode::Assign(target, value)
             if matches!(
                 value.as_ref(),
@@ -360,16 +363,25 @@ fn print_expression_statement(
                 unreachable!("охрана ветви проверила вид узла");
             };
             let lhs = print_assign_target(target, scope)?;
-            let elem = target_type(target).and_then(|ty| match ty {
-                TypeNode::Array(_, elem) => Some(*elem),
+            // Место записи выбирает ОБЩИЙ носитель (фича 0340): у массива это
+            // индекс, у структуры — имя поля. Прежде индекс печатался всегда,
+            // и структура адресовалась как массив.
+            let target_ty = target_type(target);
+            let fields = match &target_ty {
+                Some(TypeNode::Struct(sname)) => scope.structs.get(sname),
                 _ => None,
-            });
-            for (index, item) in items.iter().enumerate() {
-                let rhs = match &elem {
+            };
+            let places = crate::generator::aggregate::places(
+                fields.map(Vec::as_slice),
+                target_ty.as_ref(),
+                items.len(),
+            );
+            for (item, place) in items.iter().zip(places) {
+                let rhs = match &place.ty {
                     Some(ty) => scope.coerce(ty, item)?,
                     None => print_expression(item, scope)?,
                 };
-                p.ident(&format!("{lhs}[{index}] = {rhs};")).nl();
+                p.ident(&format!("{lhs}{} = {rhs};", place.suffix)).nl();
             }
             Ok(())
         }
@@ -472,12 +484,14 @@ mod tests {
     fn if_is_printed_with_begin_end() {
         let set = empty_registered();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         let mut out = String::new();
@@ -500,12 +514,14 @@ mod tests {
     fn loop_is_sv002() {
         let set = empty_registered();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         let mut out = String::new();
@@ -526,12 +542,14 @@ mod tests {
     fn inline_formula_is_skipped() {
         let set = empty_registered();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         let mut out = String::new();

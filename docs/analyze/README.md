@@ -323,3 +323,4 @@
 | 0337 | Неиспользуемый параметр функции гасится у трёх целей | [0337-unused-function-parameter.md](0337-unused-function-parameter.md) | — (новая фича) |
 | 0338 | Перечисление внутри функции у целей st и sv | [0338-enum-in-function.md](0338-enum-in-function.md) | — (новая фича) |
 | 0339 | Шаблон отказа цели sv: один носитель и читаемый текст | [0339-sv-refusal-template.md](0339-sv-refusal-template.md) | — (новая фича) |
+| 0340 | Присваивание агрегата: место записи выбирает общий носитель | [0340-aggregate-assign-place.md](0340-aggregate-assign-place.md) | — (новая фича) |

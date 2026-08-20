@@ -131,6 +131,15 @@ pub(in crate::generator::c) fn generate_code_block(
         }
 
         StatementNode::Expression(expr, loc) => {
+            // Присваивание АГРЕГАТА печатается поэлементно (фича 0340): в C
+            // формы `x = {3, 4};` нет вовсе (`cc`: «expected expression»), а
+            // массив не присваивается даже составным литералом. Место записи
+            // выбирает общий носитель: у массива индекс, у структуры — имя
+            // поля.
+            crate::generator::site::enter(*loc);
+            if super::aggregate::emit(printer, map, owner, params.clone(), expr, has_model)? {
+                return Ok(());
+            }
             // Объявляем место оператора: отказы печати выражений своей позиции
             // не имеют (решение 0056) и берут её отсюда (фича 0277).
             crate::generator::site::enter(*loc);

@@ -45,13 +45,16 @@
 //! преобразования — `BYTE_TO_USINT(…)`), и это делает её трансляцию
 //! типозависимой. Здесь — нет.
 
+// Контекст печати живёт своим модулем (0340); имя доступно отсюда — им
+// пользуются семь модулей цели.
+pub(crate) use crate::generator::sv::sv_scope::Scope;
+
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::sv::sv_state_of;
 use crate::generator::sv::sv_type::sv_enum_type_name;
 use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{ConditionNode, ExpressionNode, VariableNode};
-use std::collections::{BTreeMap, BTreeSet};
 
 /// Строит диагностику `SV-002` — узел АСД не покрыт печатью.
 pub(crate) fn sv002(what: &str) -> Diagnostic {
@@ -129,148 +132,6 @@ fn is_constant_divisor(node: &ExpressionNode) -> bool {
 fn warn_variable_divisor(scope: &Scope, divisor: &ExpressionNode) {
     if !is_constant_divisor(divisor) {
         scope.warnings.borrow_mut().push(sv009());
-    }
-}
-
-/// Контекст печати выражения.
-pub(crate) struct Scope<'a> {
-    /// Сигналы, имеющие регистровую пару `<имя>_next`.
-    ///
-    /// Это переменные модели и выходные порты: в `always_comb` **чтение** идёт
-    /// из регистра (`name`), а **запись** — в комбинационную пару (`name_next`),
-    /// которую `always_ff` защёлкивает по фронту. Разделение и делает такт
-    /// тактом. Ключи — **имена сигналов** (уже с префиксом уровня), а не имена
-    /// Takt.
-    pub(crate) registered: &'a BTreeSet<String>,
-    /// Имя объемлющей функции, если печатается её тело.
-    ///
-    /// Нужно для `return`: в SystemVerilog функция возвращает значение
-    /// **присваиванием собственному имени** (`f = t;`). Ключевое слово `return`
-    /// синтаксически существует, но **yosys его не принимает** — проба
-    /// 2026-07-16: `return t;` → `ERROR: syntax error, unexpected TOK_ID`, тогда
-    /// как `verilator --lint-only -Wall` тот же модуль **принял чисто**.
-    ///
-    /// То есть это ещё один случай, где один Verilator пропустил бы
-    /// несинтезируемую конструкцию, — ровно как с `real`. Форма выбрана не по
-    /// вкусу, а по тому, что принимают **оба** инструмента.
-    pub(crate) function: Option<&'a str>,
-    /// Тип возврата функции, чьё тело печатается (фича 0336).
-    ///
-    /// Возврат здесь — присваивание имени функции, то есть позиция приёмника с
-    /// известным типом: разряд `x.N` даёт один бит, и без приведения verilator
-    /// отвечает `WIDTHEXPAND`, а гейт цели считает предупреждение ошибкой.
-    pub(crate) function_ret: Option<&'a crate::semantic::type_node::TypeNode>,
-    /// Варианты перечислений модели: `имя перечисления → [(вариант, значение)]`.
-    ///
-    /// Нужны для **восстановления варианта по значению**. `command := Up` в АСД
-    /// выглядит как `Assign(Variable, Number(2))`: узла варианта перечисления
-    /// `ExpressionNode` не имеет вовсе (та же ловушка описана для цели `rust` в
-    /// `CLAUDE.md`). А перечисления SystemVerilog **строго типизированы** —
-    /// проба 2026-07-16: `command_next = 2;` даёт
-    /// `%Error-ENUMVALUE: Implicit conversion to enum`.
-    ///
-    /// Приведение (`command_e'(2)`) оба инструмента принимают, но читать его
-    /// инженеру хуже, чем `COMMAND_UP`, — а RTL читают. Поэтому значение
-    /// восстанавливается в имя варианта, и приведение остаётся запасным путём
-    /// для значения, которому варианта нет.
-    pub(crate) enums: &'a BTreeMap<String, Vec<(String, i128)>>,
-    /// Приёмник предупреждений генератора (фича 0064).
-    ///
-    /// `print_expression` берётся по `&Scope`, но `SV-009` (переменный делитель)
-    /// рождается именно здесь — в единственной точке трансляции всех выражений
-    /// (тела, условия, функции). Интерьерная мутабельность позволяет дописать
-    /// диагностику, не протаскивая `&mut` сквозь 32 места вызова печатника.
-    /// Владелец ячейки — [`super::sv_fsm::Fsm`], доставку делает `generate_program`.
-    pub(crate) warnings: &'a std::cell::RefCell<Vec<Diagnostic>>,
-}
-
-impl Scope<'_> {
-    /// Имя сигнала для **чтения**: рабочая копия `_next`, если она есть.
-    ///
-    /// ⚠️ **Читается `_next`, а НЕ регистр — это не оптимизация, а семантика.**
-    /// Тело состояния Takt императивно: `v := 1; w := v;` обязано дать `w = 1`
-    /// (так в симуляторе; в C — `write(V,1)` затем `read(V)` возвращает
-    /// только что записанное). В `always_comb` рабочая копия — `v_next`: она
-    /// инициализируется значением регистра умолчанием в начале блока, а затем
-    /// накапливает записи такта. Чтение регистра `v` дало бы значение
-    /// **предыдущего** такта, то есть `w = 0`, — молча иная модель.
-    ///
-    /// Ровно этот дефект был внесён и пойман при разработке (2026-07-16):
-    /// вывод печатал `w_next = v;`. Симптомом послужил clippy
-    /// (`only_used_in_recursion` на `scope`), то есть линтер нашёл семантическую
-    /// ошибку раньше гейта — оба инструмента SV её пропускали: модуль валиден и
-    /// синтезируем, просто считает не то.
-    ///
-    /// Единственное место, где читается сам регистр, — умолчания в начале
-    /// `always_comb` (`v_next = v;`) и ветвь сброса; оба печатаются напрямую,
-    /// минуя этот метод.
-    pub(crate) fn read(&self, signal: &str) -> String {
-        if self.registered.contains(signal) {
-            format!("{}_next", signal)
-        } else {
-            signal.to_string()
-        }
-    }
-
-    /// Печатает значение в позиции присваивания элементу типа `ty`.
-    ///
-    /// Обычные типы печатаются как есть; для перечисления число восстанавливается
-    /// в имя варианта (см. поле [`enums`](Scope::enums)).
-    pub(crate) fn coerce(
-        &self,
-        ty: &crate::semantic::type_node::TypeNode,
-        value: &ExpressionNode,
-    ) -> Result<String, Diagnostic> {
-        let crate::semantic::type_node::TypeNode::Enum(enum_name) = ty else {
-            // Широкий литерал печатается размерной формой по ширине ПРИЁМНИКА
-            // (фича 0157): нетипизированная десятичная константа в SV знаковая и
-            // не уже 32 бит, поэтому значение больше `i32::MAX` даёт verilator
-            // `WIDTHEXPAND`, а гейт цели считает предупреждение ошибкой.
-            if let ExpressionNode::Number(n) = value
-                && let Some(sized) = super::sv_type::sized_literal(*n, ty)
-            {
-                return Ok(sized);
-            }
-            // Разряд `x.N` в позиции значения ШИРЕ одного бита (фича 0335):
-            // `sel` даёт 1 бит, и verilator отвечает `WIDTHEXPAND` — а гейт
-            // цели считает предупреждение ошибкой. Размерная форма `W'(…)` —
-            // та же, какой печатается широкий литерал.
-            if matches!(
-                value,
-                ExpressionNode::BitAccess(_, crate::parser::ast::Member::Number(_))
-            ) && let Some(width) = super::sv_type::scalar_width(ty)
-                && width > 1
-            {
-                return Ok(format!("{width}'({})", print_expression(value, self)?));
-            }
-            return print_expression(value, self);
-        };
-        let printed = print_expression(value, self)?;
-        let ExpressionNode::Number(n) = value else {
-            // Значение уже имеет тип перечисления (переменная, вариант) —
-            // приводить нечего.
-            return Ok(printed);
-        };
-        if let Some(variants) = self.enums.get(enum_name)
-            && let Some((variant, _)) = variants.iter().find(|(_, v)| v == n)
-        {
-            return Ok(sv_enum_variant_name(enum_name, variant));
-        }
-        // Варианта с таким значением нет. Приведение — единственный способ
-        // напечатать это валидно; молча оставить число нельзя (ENUMVALUE).
-        Ok(format!("{}'({})", sv_enum_type_name(enum_name), printed))
-    }
-
-    /// Имя сигнала для **записи**: комбинационная пара, если она есть.
-    ///
-    /// У локальной переменной функции и у константы пары нет: первая живёт
-    /// внутри одного вычисления, вторая вообще не регистр.
-    pub(crate) fn write(&self, signal: &str) -> String {
-        if self.registered.contains(signal) {
-            format!("{}_next", signal)
-        } else {
-            signal.to_string()
-        }
     }
 }
 
@@ -646,6 +507,7 @@ fn param_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     /// Пустой контекст: регистровых пар нет.
     fn empty_scope() -> BTreeSet<String> {
@@ -666,12 +528,14 @@ mod tests {
     fn binary_nodes_are_fully_parenthesized() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         let node = ConditionNode::Or(Box::new(ConditionNode::Equal(num(2), num(2))), num(1));
@@ -686,12 +550,14 @@ mod tests {
     fn condition_and_or_are_logical_like_c() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         let and = ConditionNode::And(num(1), num(0));
@@ -709,12 +575,14 @@ mod tests {
     fn literals_are_printed_unsized() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         assert_eq!(
@@ -732,12 +600,14 @@ mod tests {
     fn bool_literals_are_one_bit() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         assert_eq!(
@@ -756,12 +626,14 @@ mod tests {
         let mut set = BTreeSet::new();
         set.insert("cmd_fork".to_string());
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         assert_eq!(scope.write("cmd_fork"), "cmd_fork_next");
@@ -780,12 +652,14 @@ mod tests {
         let mut set = BTreeSet::new();
         set.insert("cabin_counter".to_string());
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         assert_eq!(scope.write("cabin_counter"), "cabin_counter_next");
@@ -799,12 +673,14 @@ mod tests {
     fn bit_access_is_plain_indexing() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         let node = ConditionNode::BitAccess(num(5), Member::Number(0));
@@ -827,12 +703,14 @@ mod tests {
     fn rational_literal_is_sv002() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         let err = print_condition(&ConditionNode::Rational("1.5".to_string(), false), &scope)
@@ -845,12 +723,14 @@ mod tests {
     fn untranslatable_expression_nodes_are_sv002() {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         for node in [
@@ -886,12 +766,14 @@ mod tests {
     fn print_with_warnings(node: &ExpressionNode) -> (String, Vec<Diagnostic>) {
         let set = empty_scope();
         let enums = std::collections::BTreeMap::new();
+        let structs = std::collections::BTreeMap::new();
         let warnings = std::cell::RefCell::new(Vec::new());
         let scope = Scope {
             registered: &set,
             function: None,
             function_ret: None,
             enums: &enums,
+            structs: &structs,
             warnings: &warnings,
         };
         let out = print_expression(node, &scope).unwrap();

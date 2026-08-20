@@ -48,6 +48,7 @@ mod sv_map;
 mod sv_mmio;
 mod sv_module;
 mod sv_names;
+mod sv_scope;
 mod sv_state_of;
 mod sv_stmt;
 mod sv_time;

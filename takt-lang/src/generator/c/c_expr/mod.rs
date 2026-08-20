@@ -24,6 +24,7 @@ use crate::semantic::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+mod aggregate;
 mod call;
 pub(in crate::generator::c) mod condition;
 mod expr;

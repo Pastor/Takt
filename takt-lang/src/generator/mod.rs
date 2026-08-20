@@ -1,8 +1,9 @@
+pub(crate) mod aggregate;
 mod c;
 mod indent;
 mod plantuml;
 mod rust;
-pub(crate) mod site;
+mod site;
 mod st;
 mod sv;
 
