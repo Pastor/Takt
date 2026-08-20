@@ -557,3 +557,4 @@
 | 0323-01 | 0323 | Цель sv переводит приведение as между целыми | [0323-01-sv-integer-cast.md](0323-01-sv-integer-cast.md) |
 | 0324-01 | 0324 | Сдвиг вправо знакового — арифметический во всех целях | [0324-01-arithmetic-shift-right.md](0324-01-arithmetic-shift-right.md) |
 | 0325-01 | 0325 | Документ описывает семантику сдвигов | [0325-01-book-shift-semantics.md](0325-01-book-shift-semantics.md) |
+| 0326-01 | 0326 | Сдвиг на ширину типа в цели rust | [0326-01-rust-shift-width.md](0326-01-rust-shift-width.md) |

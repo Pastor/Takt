@@ -338,3 +338,4 @@
 | [0323](./0323-sv-integer-cast.md) | Цель sv переводит приведение as между целыми | [ADR](../adr/0323-sv-integer-cast.md), [анализ](../analyze/0323-sv-integer-cast.md), [отчёт](../reports/0323-sv-integer-cast.md) | ГОТОВО |
 | [0324](./0324-arithmetic-shift-right.md) | Сдвиг вправо знакового — арифметический во всех целях | [ADR](../adr/0324-arithmetic-shift-right.md), [анализ](../analyze/0324-arithmetic-shift-right.md), [отчёт](../reports/0324-arithmetic-shift-right.md) | ГОТОВО |
 | [0325](./0325-book-shift-semantics.md) | Документ описывает семантику сдвигов | [ADR](../adr/0325-book-shift-semantics.md), [анализ](../analyze/0325-book-shift-semantics.md), [отчёт](../reports/0325-book-shift-semantics.md) | ГОТОВО |
+| [0326](./0326-rust-shift-width.md) | Сдвиг на ширину типа в цели rust | [ADR](../adr/0326-rust-shift-width.md), [анализ](../analyze/0326-rust-shift-width.md), [отчёт](../reports/0326-rust-shift-width.md) | ГОТОВО |
