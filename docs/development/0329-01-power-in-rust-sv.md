@@ -12,6 +12,7 @@
 | `takt-lang/src/generator/sv/sv_expr.rs` | ветвь `Power` зовёт его |
 | `takt-sim/tests/conformance/conformance_power_tests.rs` | сторож перевода у обеих целей |
 | `takt-lang/tests/targets/statement_site_tests.rs`, `tests/data/site0308/` | сторож 0308 перестроен на срез |
+| `docs/diagnostics/README.md`, `book/src/appendix-errors/index.typ` | описание `RS-011` перестало перечислять `**` |
 
 ## Проверено
 
