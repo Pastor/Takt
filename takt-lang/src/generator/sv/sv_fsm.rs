@@ -581,7 +581,22 @@ pub(crate) fn emit_functions(
                 enums: &fsm.enums,
                 warnings: &fsm.warnings,
             };
-            print_statement(p, body, &scope)?;
+            // Тело печатается в буфер: параметру, которым тело не
+            // пользуется, verilator отвечает `UNUSEDSIGNAL`, а гейт цели
+            // считает предупреждение ошибкой (фича 0337). Признак — тот же,
+            // что у целей `c` (0260) и `rust`: вопрос задаётся напечатанному
+            // тексту.
+            let mut body_text = String::new();
+            {
+                let mut buffer = p.fork(&mut body_text);
+                print_statement(&mut buffer, body, &scope)?;
+            }
+            for (param, _) in params {
+                if crate::generator::sv::sv_unused::is_unused(&body_text, param) {
+                    crate::generator::sv::sv_unused::emit_guard(p, param);
+                }
+            }
+            p.print(&body_text);
             p.down();
             p.ident("endfunction").nl().nl();
         }

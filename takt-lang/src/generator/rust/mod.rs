@@ -62,6 +62,7 @@ mod rust_struct;
 mod rust_tick;
 mod rust_time;
 mod rust_type;
+mod rust_unused;
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::GenerateOptions;

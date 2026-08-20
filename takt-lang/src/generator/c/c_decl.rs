@@ -236,10 +236,19 @@ pub(super) fn generate_functions(printer: &mut Printer, map: &CMap) -> Result<()
                     // Указатель на состояние требует протокол вызова, но тело
                     // не всегда им пользуется: без заглушки `cc -Wall -Wextra`
                     // отвечает `-Wunused-parameter` (фича 0260).
-                    if crate::generator::c::c_params::is_unused(&code_block, "model") {
-                        definition.push_str("    ");
-                        definition.push_str(&crate::generator::c::c_params::unused_guard("model"));
-                        definition.push('\n');
+                    // Тот же вопрос задаётся и ОБЪЯВЛЕННЫМ параметрам (фича
+                    // 0337): `fn constant(v: u8) -> u8 { return 7; }` давало
+                    // `-Wunused-parameter`, то есть отказ гейта под `-Werror`,
+                    // при нулевом коде возврата `taktc`.
+                    let mut guards: Vec<String> = vec!["model".to_string()];
+                    guards.extend(params.iter().map(|(name, _)| name.clone()));
+                    for guard in guards {
+                        if crate::generator::c::c_params::is_unused(&code_block, &guard) {
+                            definition.push_str("    ");
+                            definition
+                                .push_str(&crate::generator::c::c_params::unused_guard(&guard));
+                            definition.push('\n');
+                        }
                     }
                     definition.push_str(&code_block);
                     definition.push_str("}\n");
