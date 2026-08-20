@@ -706,6 +706,33 @@ fn fixed_cast(value: &ConstValue, m: u8, n: u8, sat: bool) -> Option<ConstValue>
     Some(ConstValue::Rational(text, negative))
 }
 
+/// Значение приведения агрегата к массиву (фича 0319).
+///
+/// Длина обязана совпасть с объявленной; элементы приводятся к типу элемента
+/// **тем же** правилом целого (0310) — второго знания о переносе не заводится.
+///
+/// `None` — если тип элемента не целочисленный (структура, вложенный массив,
+/// `q`): их представление завязано на `Value` эталона, и прежняя ветвь отвечает
+/// за них по-прежнему.
+fn array_cast(items: &[ConstValue], size: u16, elem: &TypeNode) -> Option<ConstValue> {
+    if items.len() != usize::from(size) {
+        return None;
+    }
+    let TypeNode::Integer { bits, signed } = elem else {
+        return None;
+    };
+    let mut folded = Vec::with_capacity(items.len());
+    for item in items {
+        let ConstValue::Int(value) = item else {
+            return None;
+        };
+        folded.push(ConstValue::Int(
+            int_cast::integer(*value, *bits, *signed).ok()?,
+        ));
+    }
+    Some(ConstValue::List(folded))
+}
+
 fn cast_identity(
     value: &ConstValue,
     ty: &ast::Type,
@@ -757,6 +784,27 @@ fn cast_identity(
             )
             .with_code("SE-121")),
         };
+    }
+    // Агрегат к массиву (фича 0319): элементы приводятся к типу элемента тем
+    // же правилом целого (0310), длина обязана совпасть с объявленной. Прежде
+    // компилятор такое приведение не считал, и цель `c` видела `Cast` вместо
+    // агрегата — отвечала `CC-017` («скалярный инициализатор массива»), а `sv`
+    // — `SV-002`, тогда как эталон, `st` и `rust` вход исполняли.
+    if let ast::Type::Array {
+        element_count,
+        element_type,
+        ..
+    } = ty
+        && let ConstValue::List(items) = value
+        // ⚠️ Тип элемента разрешается ТЕМ ЖЕ `target_of`, а не общим обходом:
+        // `ast_type_to_node_ctx` не знает имён `u8`…`i64` (для него это
+        // `Unsupported`, урок 0243), и рекурсия внутри него дала бы для
+        // `[u8; 2]` массив неподдержанных элементов. Первая редакция так и
+        // сделала — ветвь не срабатывала ни на одном входе, и проба это
+        // показала.
+        && let Some(folded) = array_cast(items, *element_count, &target_of(element_type, scope))
+    {
+        return Ok(folded);
     }
     let ConstValue::Int(n) = value else {
         return Err(not_constant(

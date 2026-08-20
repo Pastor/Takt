@@ -550,3 +550,4 @@
 | 0316-01 | 0316 | Комментарий шага не пересказывает заголовок гейта | [0316-01-precheck-comment-duplication.md](0316-01-precheck-comment-duplication.md) |
 | 0317-01 | 0317 | Правило представления q — общий носитель | [0317-01-fixed-cast-shared-layer.md](0317-01-fixed-cast-shared-layer.md) |
 | 0318-01 | 0318 | Приведение к duration и обратно вычисляется при компиляции | [0318-01-duration-cast-folding.md](0318-01-duration-cast-folding.md) |
+| 0319-01 | 0319 | Приведение агрегата к массиву вычисляется при компиляции | [0319-01-array-cast-folding.md](0319-01-array-cast-folding.md) |
