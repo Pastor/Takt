@@ -568,3 +568,4 @@
 | 0334-01 | 0334 | Сдвиг на величину не меньше ширины типа в цели rust | [0334-01-rust-variable-shift-width.md](0334-01-rust-variable-shift-width.md) |
 | 0335-01 | 0335 | Разряд в позиции числового значения переводят все цели | [0335-01-bit-value-in-targets.md](0335-01-bit-value-in-targets.md) |
 | 0336-01 | 0336 | Приведение к типу приёмника в аргументе и возврате функции | [0336-01-call-return-coercion.md](0336-01-call-return-coercion.md) |
+| 0337-01 | 0337 | Неиспользуемый параметр функции гасится у трёх целей | [0337-01-unused-function-parameter.md](0337-01-unused-function-parameter.md) |

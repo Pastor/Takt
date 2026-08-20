@@ -285,3 +285,4 @@
 | 0334 | Сдвиг на величину не меньше ширины типа | [0334-rust-variable-shift-width.md](0334-rust-variable-shift-width.md) | Готово: цель `rust` считает как эталон |
 | 0335 | Разряд в позиции числового значения | [0335-bit-value-in-targets.md](0335-bit-value-in-targets.md) | Готово: три цели чинены, значения сверены |
 | 0336 | Приведение в аргументе и возврате | [0336-call-return-coercion.md](0336-call-return-coercion.md) | Готово: три позиции приёмника, значения сверены |
+| 0337 | Неиспользуемый параметр функции | [0337-unused-function-parameter.md](0337-unused-function-parameter.md) | Готово: три цели проходят свои гейты |

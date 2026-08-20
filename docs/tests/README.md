@@ -291,3 +291,4 @@
 | 0334 | Сдвиг на величину не меньше ширины типа | [0334-rust-variable-shift-width.md](0334-rust-variable-shift-width.md) | Пройден: 6/6 условий, мутация ловится |
 | 0335 | Разряд в позиции числового значения | [0335-bit-value-in-targets.md](0335-bit-value-in-targets.md) | Пройден: 7/7 условий, мутация ловится |
 | 0336 | Приведение в аргументе и возврате | [0336-call-return-coercion.md](0336-call-return-coercion.md) | Пройден: 7/7 условий, две мутации ловятся |
+| 0337 | Неиспользуемый параметр функции | [0337-unused-function-parameter.md](0337-unused-function-parameter.md) | Пройден: 7/7 условий |

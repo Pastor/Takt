@@ -11,7 +11,7 @@
 //! коде и уничтожил бы главную дельту фичи к цели `c` (R10).
 
 use crate::diagnostics::Diagnostic;
-use crate::generator::indent::Printer;
+use crate::generator::rust::Printer;
 use crate::generator::rust::rust_expr::Scope;
 use crate::generator::rust::rust_map::RustMap;
 use crate::generator::rust::rust_name::rust_value_name;
@@ -160,7 +160,23 @@ pub(crate) fn emit_functions(
             .nl();
             p.up();
             let mut out = StmtOutput::default();
-            print_body_with_tail(body, &mut scope, p, &mut out)?;
+            // Тело печатается в буфер: параметру, которым тело не пользуется,
+            // нужна заглушка (фича 0337), а узнать это можно только по
+            // напечатанному тексту — тем же признаком, что у цели `c` (0260).
+            let mut body_text = String::new();
+            {
+                // `fork` наследует уровень вложенности — отступы буфера
+                // совпадают с прямой печатью (тот же приём, что у цели `c`).
+                let mut buffer = p.fork(&mut body_text);
+                print_body_with_tail(body, &mut scope, &mut buffer, &mut out)?;
+            }
+            for (param, _) in params {
+                if crate::generator::rust::rust_unused::is_unused(&body_text, param) {
+                    p.ident(&crate::generator::rust::rust_unused::guard(param))
+                        .nl();
+                }
+            }
+            p.print(&body_text);
             warnings.append(&mut out.warnings);
             p.down();
             p.ident("}").nl().nl();
