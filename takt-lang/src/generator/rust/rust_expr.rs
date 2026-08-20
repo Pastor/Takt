@@ -36,9 +36,13 @@ pub(crate) use crate::generator::rust::rust_bit::{bit_mask, member_index};
 pub(crate) use crate::generator::rust::rust_cond::condition_as_bool;
 
 /// Строит диагностику `RS-011` — конструкция не транслируется в Rust.
+///
+/// Координата — у **оператора**, который печатается сейчас (фича 0308): своей
+/// позиции у выражения нет (решение 0056), а `Location::Codegen` печатается
+/// вовсе без префикса — автор искал место сам.
 pub(crate) fn unsupported(what: &str) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!("Не транслируется в Rust: {}", what),
     )
     .with_code("RS-011")

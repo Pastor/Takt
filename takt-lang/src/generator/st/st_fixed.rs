@@ -129,7 +129,7 @@ fn wrap_lint(expr: String, m: u8, n: u8, sat: bool) -> Result<String, Diagnostic
     // неверному модулю значило бы дать иной результат, чем у эталона.
     if w >= 63 {
         return Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             format!(
                 "перенос к {w} битам в цели st требует модуля 2^{w}, непредставимого \
                  в LINT (знаковое 64 бита); выберите q(m, n) с m + n ≤ 62 либо \
@@ -273,7 +273,7 @@ pub(crate) fn cast(
             if matches!(inner_expr_type(inner), Some(TypeNode::Rational)) =>
         {
             Err(Diagnostic::error(
-                Location::Codegen,
+                crate::generator::site::at(Location::Codegen),
                 "приведение float → q в цели st: LREAL_TO_INT округляет к ближайшему, \
                  а q требует floor; литеральный float понижается на этапе компиляции"
                     .to_string(),
@@ -333,7 +333,7 @@ fn int_name_of_target(target: &TypeNode) -> Result<&'static str, Diagnostic> {
         TypeNode::Integer { bits, signed } => Ok(iec_int(*bits, *signed)),
         TypeNode::Bit | TypeNode::Bool => Ok("BOOL"),
         _ => Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "приведение q → нецелого типа не поддержано".to_string(),
         )
         .with_code("ST-011")),
@@ -343,7 +343,7 @@ fn int_name_of_target(target: &TypeNode) -> Result<&'static str, Diagnostic> {
 /// `ST-013` — `q` шире 32 бит: промежуток `2W` не влезает в `LINT`.
 fn too_wide(m: u8, n: u8) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "q({m}, {n}): W = {} > 32 — точное произведение шириной 2W не влезает в LINT",
             m + n
@@ -355,7 +355,7 @@ fn too_wide(m: u8, n: u8) -> Diagnostic {
 /// `ST-011` — тип источника приведения в `q` не выводится.
 fn untyped_source() -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         "приведение в q: тип источника не выводится статически".to_string(),
     )
     .with_code("ST-011")

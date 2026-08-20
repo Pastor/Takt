@@ -38,6 +38,7 @@
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
 use crate::generator::st::st_expr::print_expression;
+use crate::generator::st::st_expr::unsupported;
 use crate::generator::st::st_reserved::check_st_name;
 use crate::generator::st::st_stmt::{Hoisted, StmtOutput, print_statement};
 use crate::generator::st::st_type::get_st_type;
@@ -558,14 +559,6 @@ fn neutral_value(ty: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic>
 }
 
 /// Строит диагностику `ST-011`.
-fn unsupported(what: &str) -> Diagnostic {
-    Diagnostic::error(
-        Location::Codegen,
-        format!("Не транслируется в Structured Text: {}", what),
-    )
-    .with_code("ST-011")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

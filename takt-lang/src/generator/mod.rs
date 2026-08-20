@@ -231,6 +231,10 @@ pub fn generate(
     output_path: &str,
     options: &GenerateOptions,
 ) -> Result<Vec<Diagnostic>, Diagnostic> {
+    // Позиция оператора — потоковое состояние (фича 0308): без сброса
+    // координата последнего оператора пережила бы вызов и досталась бы
+    // следующей генерации в том же потоке.
+    site::reset();
     match l {
         Language::C => {
             let generator = c::Generator {};

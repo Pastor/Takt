@@ -29,7 +29,7 @@ use crate::semantic::{ExpressionNode, StatementNode};
 /// Строит диагностику `SV-002` — оператор не транслируется.
 fn sv002(what: &str) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "{} не транслируется в SystemVerilog целью 'sv'. Молчаливо \
              пропустить оператор нельзя: порождённый модуль вёл бы себя иначе, \
@@ -59,7 +59,13 @@ pub(crate) fn print_statement(
             }
             Ok(())
         }
-        StatementNode::Expression(expr, _) => print_expression_statement(p, expr, scope),
+        StatementNode::Expression(expr, loc) => {
+            // Место оператора — для отказов печати выражений (фича 0308):
+            // своей позиции у них нет (решение 0056), и до этой фичи цель
+            // печатала отказ без координаты вовсе.
+            crate::generator::site::enter(*loc);
+            print_expression_statement(p, expr, scope)
+        }
         StatementNode::If { cond, then_, else_ } => {
             p.ident(&format!("if ({}) begin", print_expression(cond, scope)?))
                 .nl();

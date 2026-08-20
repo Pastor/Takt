@@ -311,7 +311,7 @@ fn collect_models(extend: &StateExtend, out: &mut Vec<ModelRef>) -> Result<(), D
         // вложенности нужен ещё один уровень счётчика: пока — громкий отказ, а не
         // печать шагов как параллельных (это молча изменило бы семантику).
         StateExtend::Concatenation(_) => Err(Diagnostic::error(
-            Location::Codegen,
+            crate::generator::site::at(Location::Codegen),
             "Конкатенация внутри параллельной композиции (`(A + B) | C`) требует \
              вложенного счётчика шагов. Напечатать её шаги как параллельные значило \
              бы молча изменить семантику модели"

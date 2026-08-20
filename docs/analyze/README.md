@@ -291,3 +291,4 @@
 | 0305 | Вызов внешней функции в инициализаторе — SE-084 | [0305-extern-call-in-initializer.md](0305-extern-call-in-initializer.md) | — (новая фича) |
 | 0306 | Невычислимый вызов функции в инициализаторе называет причину | [0306-unfoldable-call-in-initializer.md](0306-unfoldable-call-in-initializer.md) | — (новая фича) |
 | 0307 | Текст SIM-011 называет ширину значения | [0307-sim-bit-range-text.md](0307-sim-bit-range-text.md) | — (новая фича) |
+| 0308 | Отказ целей rust, st и sv несёт координату оператора | [0308-target-refusal-position.md](0308-target-refusal-position.md) | — (новая фича) |

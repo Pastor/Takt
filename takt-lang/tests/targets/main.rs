@@ -43,6 +43,7 @@ mod rust_live_tests;
 mod rust_non_ascii_name_tests;
 mod rust_printers_tests;
 mod st_tests;
+mod statement_site_tests;
 mod struct_codegen_tests;
 mod sv_apb_adapter_tests;
 mod sv_mmio_tests;

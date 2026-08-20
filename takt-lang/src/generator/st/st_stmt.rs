@@ -28,6 +28,7 @@
 
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::indent::Printer;
+use crate::generator::st::st_expr::unsupported;
 use crate::generator::st::st_expr::{
     assign_target_type, bit_string_of_type, coerce_to, inner_expr_type, print_expression,
     variable_ident,
@@ -82,7 +83,11 @@ pub(crate) fn print_statement(
         // ST code is not allowed outside an expression». Takt так вызывает
         // (`log_temp(temperature);`, `motor_up();`), поэтому результат уходит в
         // переменную-приёмник, которую вызывающий объявит в шапке POU.
-        StatementNode::Expression(expr, _) => {
+        StatementNode::Expression(expr, loc) => {
+            // Место оператора — для отказов печати выражений (фича 0308):
+            // своей позиции у них нет (решение 0056), и до этой фичи цель
+            // печатала `ST-011` без координаты вовсе.
+            crate::generator::site::enter(*loc);
             if let ExpressionNode::Function(def, args) = expr.as_ref() {
                 let call = crate::generator::st::st_func::print_call(def, args, model)?;
                 let ret = crate::generator::st::st_func::return_type_of(&def.borrow());
@@ -373,14 +378,6 @@ fn sink_name(ty: &TypeNode, model: &ModelNode) -> Result<String, Diagnostic> {
 }
 
 /// Строит диагностику `ST-011` — узел без представления в ST.
-fn unsupported(what: &str) -> Diagnostic {
-    Diagnostic::error(
-        Location::Codegen,
-        format!("Не транслируется в Structured Text: {}", what),
-    )
-    .with_code("ST-011")
-}
-
 /// Печатает запись одного разряда `x.N := v` (фича 0250).
 ///
 /// ## Почему `SEL`, а не `IF`

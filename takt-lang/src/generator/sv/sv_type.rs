@@ -57,7 +57,7 @@ use crate::semantic::type_node::TypeNode;
 /// Строит диагностику `SV-002` — узел не покрыт отображением.
 fn sv002(what: &str, ty: &TypeNode) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "{}: тип '{}' не отображается в SystemVerilog. Это внутренний либо \
              неразрешённый тип — в порождаемом RTL представления не имеет",
@@ -70,7 +70,7 @@ fn sv002(what: &str, ty: &TypeNode) -> Diagnostic {
 /// Строит диагностику `SV-003` — вещественного типа в синтезируемом RTL нет.
 fn sv003(what: &str) -> Diagnostic {
     Diagnostic::error(
-        Location::Codegen,
+        crate::generator::site::at(Location::Codegen),
         format!(
             "{}: вещественный тип (float) не существует в синтезируемом RTL и \
              целью 'sv' не поддерживается. Тип 'real' языка SystemVerilog \
