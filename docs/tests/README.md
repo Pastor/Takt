@@ -251,3 +251,4 @@
 | 0164 | Реестры стадий сверяются с файлами на диске | [0164-registry-rebuild-gate.md](0164-registry-rebuild-gate.md) | Пройден: 9/9 условий, 2 мутации |
 | 0173 | Заглушка too_many_arguments снята в цели rust | [0173-rust-generator-arg-count.md](0173-rust-generator-arg-count.md) | Пройден: 6/6 условий, вывод побайтово тот же |
 | 0252 | CI и замер покрытия приведены к снятому правилу однопоточности | [0252-ci-windows-test-threads.md](0252-ci-windows-test-threads.md) | Пройден: 5/5 условий (прогон CI недоступен — 0175) |
+| 0261 | Жёлтая зона гейта размера модулей и его сторож | [0261-module-size-warning-zone.md](0261-module-size-warning-zone.md) | Пройден: 10/10 условий |
