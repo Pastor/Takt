@@ -567,10 +567,20 @@ pub(in crate::generator::c) fn generate_expr(
             printer.print(&var_expr);
         }
 
+        // Именованное условие ПОДСТАВЛЯЕТСЯ (фича 0331), как на ребре.
+        //
+        // ⚠️ Прежде печаталось имя макроса `COND_…`, которого цель **нигде не
+        // определяет**: порождённый C не собирался при нулевом коде возврата
+        // `taktc` (класс 0262, 0287). На ребре то же условие подставлялось
+        // выражением — то есть один и тот же `cond` печатался двумя способами.
         ExpressionNode::Condition(cond_rc) => {
             let cond = cond_rc.borrow();
-            let cond_str = condition_macro_name(&*cond);
-            printer.print(&cond_str);
+            let printed = crate::generator::c::c_expr::condition::generate_condition_expr(
+                &cond.value,
+                map,
+                owner,
+            )?;
+            printer.print(&printed);
         }
 
         ExpressionNode::Function(fun_rc, args) => {

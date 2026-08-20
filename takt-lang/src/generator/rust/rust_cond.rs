@@ -12,7 +12,7 @@ use crate::generator::rust::rust_expr::{
 use crate::generator::rust::rust_fixed::function_return;
 use crate::generator::rust::rust_name::{rust_type_name, rust_value_name};
 use crate::semantic::type_node::TypeNode;
-use crate::semantic::{ConditionNode, FunctionDefinitionNode};
+use crate::semantic::{ConditionNode, ExpressionNode, FunctionDefinitionNode};
 
 /// Транслирует условие Takt в выражение `bool` Rust.
 ///
@@ -478,6 +478,22 @@ pub(crate) fn condition_as_bool(cond: &ConditionNode, scope: &Scope) -> Result<S
         Some(TypeNode::Bool) | Some(TypeNode::Bit) => Ok(printed),
         Some(TypeNode::Rational) => Ok(format!("({} != 0.0)", printed)),
         Some(TypeNode::Integer { .. }) => Ok(format!("({} != 0)", printed)),
+        _ => Err(crate::generator::rust::rust_expr::unsupported(&format!(
+            "условие '{}': тип не выводится, приведение к bool построить нельзя",
+            printed
+        ))),
+    }
+}
+
+/// числом.
+pub(crate) fn print_as_bool(expr: &ExpressionNode, scope: &Scope) -> Result<String, Diagnostic> {
+    let printed = crate::generator::rust::rust_expr::print_expression(expr, scope)?;
+    match crate::generator::rust::rust_fixed::expression_type(expr) {
+        Some(TypeNode::Bool) | Some(TypeNode::Bit) => Ok(printed),
+        Some(TypeNode::Rational) => Ok(format!("({} != 0.0)", printed)),
+        Some(TypeNode::Integer { .. }) => Ok(format!("({} != 0)", printed)),
+        // Тип не выведен — угадывать нельзя. Молчаливое `!= 0` при `bool` дало бы
+        // ошибку сборки в порождённом коде, то есть у пользователя, а не здесь.
         _ => Err(unsupported(&format!(
             "условие '{}': тип не выводится, приведение к bool построить нельзя",
             printed

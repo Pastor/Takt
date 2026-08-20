@@ -244,8 +244,17 @@ pub(crate) fn eval_expression(
         ExpressionNode::String(_) => Err(unsupported("строки", expr.loc())),
         ExpressionNode::Type(_) => Err(unsupported("тип как выражение", expr.loc())),
         ExpressionNode::Model(_) => Err(unsupported("модель как выражение", expr.loc())),
-        ExpressionNode::Condition(_) => {
-            Err(unsupported("именованное условие как выражение", expr.loc()))
+        // Именованное условие в позиции выражения (фича 0331): вычисляется
+        // **тем же** адаптером условий, что и на ребре. Прежде эталон
+        // отказывал `SIM-014`, тогда как цель `c` печатала для того же входа
+        // макрос `COND_…`, которого нигде не определяла, — то есть выдавала
+        // невалидный C при нулевом коде возврата.
+        //
+        // ⚠️ Своего разбора здесь нет и быть не должно: условие судит
+        // `predicate.rs`, и второе знание о нём разошлось бы с первым (класс
+        // 0084/0193/0195).
+        ExpressionNode::Condition(cond) => {
+            crate::predicate::eval_condition(&cond.borrow().value, ctx)
         }
         ExpressionNode::List(_) => Err(unsupported("список параметров", expr.loc())),
 

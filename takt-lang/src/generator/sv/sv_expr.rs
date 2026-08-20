@@ -577,7 +577,10 @@ pub(crate) fn print_expression(node: &ExpressionNode, scope: &Scope) -> Result<S
         // отвергает такую модель в точке входа (`SV-017`).
         ExpressionNode::AnonPort(access) => Ok(scope.read(&access.synthetic_name())),
         ExpressionNode::Model(_) => Err(sv002("ссылка на модель в выражении")),
-        ExpressionNode::Condition(_) => Err(sv002("именованное условие в позиции выражения")),
+        // Именованное условие печатается СВОИМ печатником условий (фича
+        // 0331): своего разбора здесь нет — второе знание об условии
+        // разошлось бы с первым.
+        ExpressionNode::Condition(cond) => print_condition(&cond.borrow().value, scope),
         ExpressionNode::List(_) => Err(sv002("список параметров в позиции выражения")),
         ExpressionNode::Array(_) => Err(sv002("литерал массива")),
         ExpressionNode::Initializer(_) => Err(sv002("инициализатор структуры")),

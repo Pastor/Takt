@@ -54,6 +54,10 @@ pub(crate) fn expression_type(expr: &ExpressionNode) -> Option<TypeNode> {
             TypeNode::Array(_, elem) => Some((**elem).clone()),
             _ => None,
         },
+        // Именованное условие — всегда логическое (фича 0331): `cond` есть
+        // условие по построению. Без этой ветви `if ready { … }` отвергался
+        // `RS-011` «тип не выводится», хотя выводить нечего.
+        ExpressionNode::Condition(_) => Some(TypeNode::Bool),
         // Тип вызова — ОБЪЯВЛЕННЫЙ возврат функции. Без этого `if is_ready()`
         // при `fn is_ready() -> bool` не приводится к bool: тип «не выводится»,
         // и честная диагностика RS-011 срабатывает там, где всё известно.
