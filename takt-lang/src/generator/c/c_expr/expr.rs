@@ -117,11 +117,16 @@ pub(in crate::generator::c) fn generate_expr(
             }
         }
 
-        // ── Степень → pow() ────────────────────────────────────────────────────
+        // ── Степень → целочисленный хелпер (фича 0328) ─────────────────────────
+        //
+        // ⚠️ Прежде печаталось `pow((double)a, (double)b)`: у `double` 53
+        // разряда мантиссы, и `3 ** 40` давало 12157665459056928768 вместо
+        // 12157665459056928801 — прошивка расходилась с эталоном МОЛЧА.
+        // Заодно исчезла зависимость от `libm` ради целой арифметики.
         ExpressionNode::Power(l, r) => {
-            printer.print("pow((double)(");
+            printer.print("takt_ipow((int64_t)(");
             generate_expr(printer, map, owner, params.clone(), l, 0, has_model)?;
-            printer.print("), (double)(");
+            printer.print("), (int64_t)(");
             generate_expr(printer, map, owner, params, r, 0, has_model)?;
             printer.print("))");
         }

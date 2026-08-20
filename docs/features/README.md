@@ -340,3 +340,4 @@
 | [0325](./0325-book-shift-semantics.md) | Документ описывает семантику сдвигов | [ADR](../adr/0325-book-shift-semantics.md), [анализ](../analyze/0325-book-shift-semantics.md), [отчёт](../reports/0325-book-shift-semantics.md) | ГОТОВО |
 | [0326](./0326-rust-shift-width.md) | Сдвиг на ширину типа в цели rust | [ADR](../adr/0326-rust-shift-width.md), [анализ](../analyze/0326-rust-shift-width.md), [отчёт](../reports/0326-rust-shift-width.md) | ГОТОВО |
 | [0327](./0327-sv002-description.md) | Описание SV-002 отражает состав переводимого | [ADR](../adr/0327-sv002-description.md), [анализ](../analyze/0327-sv002-description.md), [отчёт](../reports/0327-sv002-description.md) | ГОТОВО |
+| [0328](./0328-integer-power.md) | Целая степень считается целочисленно | [ADR](../adr/0328-integer-power.md), [анализ](../analyze/0328-integer-power.md), [отчёт](../reports/0328-integer-power.md) | ГОТОВО |
