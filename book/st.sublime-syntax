@@ -1,0 +1,103 @@
+%YAML 1.2
+---
+# Подсветка Structured Text (IEC 61131-3) для документа book/ (фича 0269).
+#
+# Повод: у syntect — движка подсветки Typst — есть определения `c`, `rust`,
+# `systemverilog`, `json`, `bash`, но Structured Text среди них нет. Замер
+# 2026-08-20: блок ```st в приложении «Порождённый код примера» печатался
+# **чёрным**, тогда как соседний ```c рядом подсвечен, — то есть документ
+# показывал вывод одной цели хуже, чем вывод другой, без всякой причины.
+#
+# ⚠️ ЭТО ПОДСВЕТКА ЦЕЛЕВОГО ЯЗЫКА, А НЕ ЯЗЫКА ПРОЕКТА. Список слов сверять с
+# лексером Takt нечем и незачем: он задан стандартом IEC 61131-3 и диалектом
+# MatIEC, а не кодом проекта. Полноты по стандарту здесь не требуется —
+# требуется покрыть то, что печатают цели `st` и `st-at` (их вывод и стоит в
+# документе): объявления POU, секции переменных, управляющие конструкции,
+# типы, литералы и комментарии `(* … *)`.
+#
+# ⚠️ Регистр: идентификаторы IEC регистронезависимы, и цель печатает ключевые
+# слова ВЕРХНИМ регистром. Правила ниже приняты нечувствительными к регистру
+# (`(?i:…)`), иначе рукописный пример строчными буквами остался бы без цвета.
+name: Structured Text
+file_extensions: [st]
+scope: source.st
+
+contexts:
+  main:
+    # Комментарий IEC — `(* … *)`; вложенности стандарт не даёт.
+    - match: \(\*
+      scope: punctuation.definition.comment.begin.st
+      push: block_comment
+
+    - match: "'"
+      scope: punctuation.definition.string.begin.st
+      push: single_string
+    - match: '"'
+      scope: punctuation.definition.string.begin.st
+      push: double_string
+
+    # Объявления POU и их секций. Выделены отдельной группой: в порождённом
+    # файле это каркас, по которому читатель ориентируется.
+    - match: (?i:\b(FUNCTION_BLOCK|END_FUNCTION_BLOCK|FUNCTION|END_FUNCTION|PROGRAM|END_PROGRAM|CONFIGURATION|END_CONFIGURATION|RESOURCE|END_RESOURCE|TASK|TYPE|END_TYPE|STRUCT|END_STRUCT|VAR_INPUT|VAR_OUTPUT|VAR_IN_OUT|VAR_GLOBAL|VAR_EXTERNAL|VAR_TEMP|VAR|END_VAR|CONSTANT|RETAIN|AT)\b)
+      scope: storage.type.st
+
+    # Управляющие конструкции.
+    - match: (?i:\b(IF|THEN|ELSIF|ELSE|END_IF|CASE|OF|END_CASE|FOR|TO|BY|DO|END_FOR|WHILE|END_WHILE|REPEAT|UNTIL|END_REPEAT|EXIT|CONTINUE|RETURN)\b)
+      scope: keyword.control.st
+
+    # Операторы-слова: в IEC булева алгебра записывается словами, а не знаками
+    # (урок фичи 0041: `AND`/`OR`/`XOR` определены только на битовых строках).
+    - match: (?i:\b(AND|OR|XOR|NOT|MOD)\b)
+      scope: keyword.operator.word.st
+
+    # Элементарные типы стандарта плюс те, что печатают цели `st`/`st-at`.
+    - match: (?i:\b(BOOL|BYTE|WORD|DWORD|LWORD|SINT|USINT|INT|UINT|DINT|UDINT|LINT|ULINT|REAL|LREAL|TIME|DATE|STRING|WSTRING|ARRAY|POINTER)\b)
+      scope: storage.type.primitive.st
+
+    - match: (?i:\b(TRUE|FALSE)\b)
+      scope: constant.language.st
+
+    # Литералы: типизированный (`USINT#12`), основание (`16#FF`, `2#1010`),
+    # длительность (`T#100ms`), дробный, целый.
+    - match: (?i:\b[A-Z][A-Z0-9_]*#[0-9A-F_]+\b)
+      scope: constant.numeric.typed.st
+    # Литерал с основанием: `16#FF`, `2#1010`, `8#77`. Правило стоит ДО общего
+    # числового, иначе `16` съедается им, а `#FF` остаётся без цвета — ровно так
+    # и вышло в первой редакции (замечено рендером пробы, не чтением).
+    - match: (?i:\b[0-9]+#[0-9A-F_]+\b)
+      scope: constant.numeric.based.st
+    - match: (?i:\bT#[0-9smhd_.]+\b)
+      scope: constant.numeric.duration.st
+    - match: \b[0-9][0-9_]*\.[0-9][0-9_]*\b
+      scope: constant.numeric.float.st
+    - match: \b[0-9][0-9_]*\b
+      scope: constant.numeric.integer.st
+
+    # Локация прямого доступа (`%MB512`, `%MX512.3`) — то, что печатает `st-at`.
+    - match: (?i:%[IQM][XBWDL]?[0-9.]+)
+      scope: variable.other.location.st
+
+    - match: ':=|=>|<=|>=|<>|\*\*|[-+*/<>=&]'
+      scope: keyword.operator.st
+
+  block_comment:
+    - meta_scope: comment.block.st
+    - match: \*\)
+      scope: punctuation.definition.comment.end.st
+      pop: true
+
+  single_string:
+    - meta_scope: string.quoted.single.st
+    - match: \$.
+      scope: constant.character.escape.st
+    - match: "'"
+      scope: punctuation.definition.string.end.st
+      pop: true
+
+  double_string:
+    - meta_scope: string.quoted.double.st
+    - match: \$.
+      scope: constant.character.escape.st
+    - match: '"'
+      scope: punctuation.definition.string.end.st
+      pop: true

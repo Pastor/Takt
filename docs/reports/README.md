@@ -226,3 +226,4 @@
 | 0215 | Потактовые сверки длительностей для целей st и sv | [0215-duration-per-tick-conformance-st-sv.md](0215-duration-per-tick-conformance-st-sv.md) | Готово: дефектов нет, сверки заведены сторожем |
 | 0216 | Печатник живости цели rust получает сторожа поведения | [0216-rust-live-printer-coverage.md](0216-rust-live-printer-coverage.md) | Готово: два дефекта найдены и исправлены |
 | 0254 | Старое имя изъято из служебных идентификаторов | [0254-legacy-names-internal-identifiers.md](0254-legacy-names-internal-identifiers.md) | Готово: 114 вхождений, гейт расширен |
+| 0269 | Подсветка блоков st и ebnf в документе | [0269-book-st-syntax-highlight.md](0269-book-st-syntax-highlight.md) | Готово: 9 блоков, гейт языков заведён |
