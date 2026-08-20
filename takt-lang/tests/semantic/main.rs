@@ -17,6 +17,7 @@
 //! обязан вычищать из него `:` — после слияния имя потока несёт префикс модуля.
 
 mod after_const_duration_tests;
+mod aggregate_length_tests;
 mod array_cast_tests;
 mod array_shared_and_index_tests;
 mod assignment_place_tests;

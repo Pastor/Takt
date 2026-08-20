@@ -274,3 +274,4 @@
 | 0317 | Представление q в общем слое | [0317-fixed-cast-shared-layer.md](0317-fixed-cast-shared-layer.md) | Пройден: 8/8 условий, мутация ловится |
 | 0318 | Мост «число ↔ длительность» | [0318-duration-cast-folding.md](0318-duration-cast-folding.md) | Пройден: 5/5 условий |
 | 0319 | Приведение агрегата к массиву | [0319-array-cast-folding.md](0319-array-cast-folding.md) | Пройден: 5/5 условий, граница названа |
+| 0320 | Длина агрегата | [0320-aggregate-length-check.md](0320-aggregate-length-check.md) | Пройден: 7/7 условий, обе формы |
