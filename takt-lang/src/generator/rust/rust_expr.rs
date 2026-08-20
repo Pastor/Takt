@@ -23,6 +23,7 @@ use crate::generator::rust::rust_fixed::{self, FixedOp};
 use crate::generator::rust::rust_name::{rust_type_name, rust_value_name};
 use crate::generator::rust::rust_needs::function_needs;
 use crate::generator::rust::rust_port::port_class;
+use crate::generator::rust::rust_shift::Direction;
 use crate::parser::ast::Member;
 use crate::semantic::type_node::TypeNode;
 use crate::semantic::{
@@ -325,6 +326,20 @@ pub(crate) fn rational(text: &str, negative: bool) -> String {
 /// Структурная расстановка скобок снимает вопрос приоритетов целиком: печатается
 /// **дерево**, а не текст. Лишние внешние скобки снимает [`unwrap_outer`] в
 /// позиции условия — единственном месте, где `unused_parens` на них ругается.
+/// Печать сдвига: сперва правило насыщения (фичи 0326, 0334), иначе оператор.
+fn shift(
+    direction: Direction,
+    a: &ExpressionNode,
+    b: &ExpressionNode,
+    op: &str,
+    scope: &Scope,
+) -> Result<String, Diagnostic> {
+    match crate::generator::rust::rust_shift::guarded(direction, a, b, scope)? {
+        Some(printed) => Ok(printed),
+        None => binary(a, op, b, scope),
+    }
+}
+
 fn binary(
     a: &ExpressionNode,
     op: &str,
@@ -489,15 +504,12 @@ pub(crate) fn print_expression(expr: &ExpressionNode, scope: &Scope) -> Result<S
             .unwrap_or_else(|| wrapping_or_plain(a, "-", "wrapping_sub", b, scope)),
 
         // Побитовые — нативны (в ST требовали бы BYTE_TO_USINT(...)).
-        ExpressionNode::ShiftLeft(a, b) => binary(a, "<<", b, scope),
-        // Сдвиг на величину, не меньшую ширины типа, в Rust не собирается
-        // (фича 0326) — правило и его повод в заголовке `rust_shift`.
-        ExpressionNode::ShiftRight(a, b) => {
-            match crate::generator::rust::rust_shift::saturating_right(a, b, scope)? {
-                Some(printed) => Ok(printed),
-                None => binary(a, ">>", b, scope),
-            }
-        }
+        //
+        // Сдвиг на величину, не меньшую ширины типа, в Rust либо не
+        // собирается, либо считает не то (фичи 0326, 0334) — правило и его
+        // повод в заголовке `rust_shift`.
+        ExpressionNode::ShiftLeft(a, b) => shift(Direction::Left, a, b, "<<", scope),
+        ExpressionNode::ShiftRight(a, b) => shift(Direction::Right, a, b, ">>", scope),
         ExpressionNode::BitwiseAnd(a, b) => binary(a, "&", b, scope),
         ExpressionNode::BitwiseXor(a, b) => binary(a, "^", b, scope),
         ExpressionNode::BitwiseOr(a, b) => binary(a, "|", b, scope),

@@ -70,18 +70,47 @@ fn ordinary_shift_is_unchanged() {
     assert!(text.contains(">> 1"), "{text}");
 }
 
-/// **Граница:** переменная величина сдвига не трогается.
+/// **Переменная величина насыщается тоже** (фича 0334).
 ///
-/// ⚠️ Её значение известно только в такте; `checked_shr` в каждом выражении
-/// стоил бы дороже пользы. Названная граница, вынесенная кандидатом.
+/// ⚠️ Прежде здесь стояла обратная проверка — «переменная величина печатается
+/// как есть», — и она **закрепляла дефект**: замер 0334 показал, что такой
+/// вывод паникует в отладке и маскирует величину в релизе (`n & 7`), давая
+/// `200` вместо `0`. Класс тот же, что у фичи 0191: поведение было
+/// зафиксировано тестом раньше, чем измерено.
 #[test]
-fn variable_shift_amount_is_left_alone() {
+fn variable_shift_amount_saturates() {
     let src = "var a: i8 := -8;\nvar n: u8 := 1;\nvar v: i8 := 0;\n\
          out probe: i8 at 0;\n\
          start Run { always { v := a >> n; probe := v; } ref Run: v < 100; }\n";
     let text = generate("shiftv", src);
     assert!(
-        text.contains(">> self.n"),
-        "переменная величина обязана печататься как есть:\n{text}"
+        text.contains(">> ((self.n) as u32).min(7)"),
+        "знаковый сдвиг вправо на переменную величину обязан насыщаться:\n{text}"
+    );
+}
+
+/// **Сдвиг влево** насыщается в обе формы величины (фича 0334).
+///
+/// ⚠️ Прежде литеральная форма не собиралась вовсе: `rustc` отвечает «attempt
+/// to shift left by `8_i32`, which would overflow» при **нулевом** коде
+/// возврата `taktc`.
+#[test]
+fn left_shift_saturates_in_both_forms() {
+    let src = "var a: u8 := 3;\nvar n: u8 := 8;\nvar lit: u8 := 0;\nvar vary: u8 := 0;\n\
+         out p1: u8 at 0;\nout p2: u8 at 1;\n\
+         start Run { always { lit := a << 8; vary := a << n; p1 := lit; p2 := vary; } \
+         ref Run: lit = 0; }\n";
+    let text = generate("shiftl", src);
+    assert!(
+        text.contains("self.lit = 0;"),
+        "литеральная величина влево обязана давать 0:\n{text}"
+    );
+    assert!(
+        text.contains("checked_shl((self.n) as u32).unwrap_or(0)"),
+        "переменная величина влево обязана насыщаться:\n{text}"
+    );
+    assert!(
+        !text.contains("<< 8"),
+        "сдвиг на всю ширину rustc отвергает — его в выводе быть не должно:\n{text}"
     );
 }

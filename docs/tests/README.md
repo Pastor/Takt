@@ -288,3 +288,4 @@
 | 0331 | Именованное условие в теле | [0331-named-condition-in-body.md](0331-named-condition-in-body.md) | Пройден: 3/3 условия |
 | 0332 | Обещание задачи в диагностике | [0332-stub-task-promise.md](0332-stub-task-promise.md) | Пройден: 6/6 условий |
 | 0333 | Раздел об ошибках программы | [0333-book-runtime-errors.md](0333-book-runtime-errors.md) | Пройден: 4/4 условия, утверждения прогнаны |
+| 0334 | Сдвиг на величину не меньше ширины типа | [0334-rust-variable-shift-width.md](0334-rust-variable-shift-width.md) | Пройден: 6/6 условий, мутация ловится |
