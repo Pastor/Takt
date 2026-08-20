@@ -16,7 +16,7 @@
 | Разработка | [`0272-01`](../development/0272-01-build-measurement-harness.md) |
 | Тест-план | [`docs/tests/0272-build-measurement-harness.md`](../tests/0272-build-measurement-harness.md) |
 | Отчёт о тестировании | [`docs/reports/0272-build-measurement-harness.md`](../reports/0272-build-measurement-harness.md) |
-| Исправления | [`docs/fixes/`](../fixes/README.md) (при необходимости `0272-YY-*`) |
+| Исправления | [`0272-01`](../fixes/0272-01-measure-guard-flaky.md) — сторож падал под нагрузкой |
 
 ## Краткое описание
 
