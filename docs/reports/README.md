@@ -224,3 +224,4 @@
 | 0290 | Приложение «Ошибки» сверяется с реестром диагностик | [0290-book-diagnostics-codes-gate.md](0290-book-diagnostics-codes-gate.md) | Готово: расхождение 32 кода + 1 обратное устранено |
 | 0298 | Списки лексики раздела «Лексика» сверяются с языком | [0298-book-lexicon-lists-sync.md](0298-book-lexicon-lists-sync.md) | Готово: 4 слова добавлены, ложь о словах LTL снята |
 | 0215 | Потактовые сверки длительностей для целей st и sv | [0215-duration-per-tick-conformance-st-sv.md](0215-duration-per-tick-conformance-st-sv.md) | Готово: дефектов нет, сверки заведены сторожем |
+| 0216 | Печатник живости цели rust получает сторожа поведения | [0216-rust-live-printer-coverage.md](0216-rust-live-printer-coverage.md) | Готово: два дефекта найдены и исправлены |

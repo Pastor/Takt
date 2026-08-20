@@ -503,3 +503,5 @@
 | 0298-02 | 0298 | Таблица ключевых слов дополнена словами времени и at | [0298-02-book-lexicon-lists-sync.md](0298-02-book-lexicon-lists-sync.md) |
 | 0215-01 | 0215 | Сверка значений duration цели st | [0215-01-duration-per-tick-conformance-st-sv.md](0215-01-duration-per-tick-conformance-st-sv.md) |
 | 0215-02 | 0215 | Сверка значений duration цели sv | [0215-02-duration-per-tick-conformance-st-sv.md](0215-02-duration-per-tick-conformance-st-sv.md) |
+| 0216-01 | 0216 | Сторож поведения печатника живости | [0216-01-rust-live-printer-coverage.md](0216-01-rust-live-printer-coverage.md) |
+| 0216-02 | 0216 | match и for-init признаются перезаписью | [0216-02-rust-live-printer-coverage.md](0216-02-rust-live-printer-coverage.md) |
