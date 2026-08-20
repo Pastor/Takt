@@ -255,3 +255,4 @@
 | 0304 | Локальное объявление в теле блока получает тип | [0304-local-declaration-type-inference.md](0304-local-declaration-type-inference.md) | Готово: один вход — один ответ у девяти потребителей |
 | 0305 | Вызов внешней функции в инициализаторе — SE-084 | [0305-extern-call-in-initializer.md](0305-extern-call-in-initializer.md) | Готово: девять потребителей отвечают одинаково |
 | 0306 | Невычислимый вызов функции в инициализаторе | [0306-unfoldable-call-in-initializer.md](0306-unfoldable-call-in-initializer.md) | Готово: девять потребителей отвечают одинаково, причина названа |
+| 0307 | Текст SIM-011 называет ширину значения | [0307-sim-bit-range-text.md](0307-sim-bit-range-text.md) | Готово: сообщение описывает разрядность значения |

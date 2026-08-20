@@ -178,14 +178,17 @@ fn update_bit(
             if bit == 0 {
                 Ok(Value::Boolean(one == 1))
             } else {
-                Err(EvalError::BitIndexOutOfRange { bit })
+                // У логического ровно один разряд — так и говорим.
+                Err(EvalError::BitIndexOutOfRange { bit, width: 1 })
             }
         }
         // Бит-вектор `[bit;N]` при N > 64 (фича 0078): слово `k / 64`,
         // смещение `k % 64` — та же раскладка, что у чтения.
         Value::Array(mut words) => {
+            // Ширина вектора известна точно — по числу слов (фича 0307).
+            let width = words.len() * 64;
             let Ok(k) = u32::try_from(bit) else {
-                return Err(EvalError::BitIndexOutOfRange { bit });
+                return Err(EvalError::BitIndexOutOfRange { bit, width });
             };
             let (w, off) = takt_lang::semantic::bit_vector::bit_slot(k);
             let slot = words.get_mut(usize::from(w));
@@ -194,7 +197,7 @@ fn update_bit(
                     *word = set_bit(*word, i128::from(off), one)?;
                     Ok(Value::Array(words))
                 }
-                _ => Err(EvalError::BitIndexOutOfRange { bit }),
+                _ => Err(EvalError::BitIndexOutOfRange { bit, width }),
             }
         }
         Value::Struct { name, .. } => Err(EvalError::BitIndexOfStruct { name }),
@@ -232,7 +235,9 @@ fn bit_of_value(new: &Value) -> Result<i128, EvalError> {
 /// доступным, то нет.
 fn set_bit(bits: i128, bit: i128, one: i128) -> Result<i128, EvalError> {
     if !(0..64).contains(&bit) {
-        return Err(EvalError::BitIndexOutOfRange { bit });
+        // Ширина носителя — та же, что у чтения (`read_bit`): границы чтения и
+        // записи обязаны совпадать, иначе один разряд то доступен, то нет.
+        return Err(EvalError::BitIndexOutOfRange { bit, width: 64 });
     }
     let mask = 1i128 << bit;
     Ok(if one == 1 { bits | mask } else { bits & !mask })

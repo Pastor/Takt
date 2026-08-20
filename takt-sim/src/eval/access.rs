@@ -68,7 +68,11 @@ pub(crate) fn read_member(value: &Value, member: &Member) -> Result<Value, EvalE
 /// Извлекает бит `bit` целочисленного значения `bits` как логическое.
 fn read_bit(bits: i128, bit: i128) -> Result<Value, EvalError> {
     if !(0..64).contains(&bit) {
-        return Err(EvalError::BitIndexOutOfRange { bit });
+        // Ширина здесь — ширина НОСИТЕЛЯ, а не объявления: у `Value::Number`
+        // объявленного типа нет, и `[bit;8]` от `u64` в этот момент
+        // неотличим. Назвать 64 — правда о значении; назвать 8 было бы
+        // догадкой (граница названа в карточке фичи 0307).
+        return Err(EvalError::BitIndexOutOfRange { bit, width: 64 });
     }
     Ok(Value::Boolean(bits & (1 << bit) != 0))
 }
@@ -77,13 +81,16 @@ fn read_bit(bits: i128, bit: i128) -> Result<Value, EvalError> {
 /// 64-битных слов (фича 0078): слово `bit / 64`, смещение `bit % 64`. Бит вне
 /// набранных слов или слово-не-целое → `BitIndexOutOfRange`.
 fn read_bit_words(words: &[Value], bit: i128) -> Result<Value, EvalError> {
+    // Ширина вектора известна ТОЧНО — по числу набранных слов; именно её и
+    // называет сообщение (фича 0307).
+    let width = words.len() * 64;
     let Ok(k) = u32::try_from(bit) else {
-        return Err(EvalError::BitIndexOutOfRange { bit });
+        return Err(EvalError::BitIndexOutOfRange { bit, width });
     };
     let (w, off) = takt_lang::semantic::bit_vector::bit_slot(k);
     match words.get(usize::from(w)) {
         Some(Value::Number(word)) => Ok(Value::Boolean(word & (1 << off) != 0)),
-        _ => Err(EvalError::BitIndexOutOfRange { bit }),
+        _ => Err(EvalError::BitIndexOutOfRange { bit, width }),
     }
 }
 

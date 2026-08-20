@@ -261,3 +261,4 @@
 | 0304 | Локальное объявление в теле блока получает тип | [0304-local-declaration-type-inference.md](0304-local-declaration-type-inference.md) | Пройден: 10/10 условий, два дефекта закрыты |
 | 0305 | Вызов внешней функции в инициализаторе — SE-084 | [0305-extern-call-in-initializer.md](0305-extern-call-in-initializer.md) | Пройден: 9/9 условий, два контроля |
 | 0306 | Невычислимый вызов функции в инициализаторе | [0306-unfoldable-call-in-initializer.md](0306-unfoldable-call-in-initializer.md) | Пройден: 9/9 условий, два контроля |
+| 0307 | Текст SIM-011 называет ширину значения | [0307-sim-bit-range-text.md](0307-sim-bit-range-text.md) | Пройден: 6/6 условий, контроль включён |
