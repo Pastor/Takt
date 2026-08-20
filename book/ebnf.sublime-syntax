@@ -1,0 +1,68 @@
+%YAML 1.2
+---
+# Подсветка EBNF для документа book/ (фича 0269).
+#
+# Повод — замер 2026-08-20: приложение «Грамматика» несёт **восемь** блоков
+# ```ebnf, и все печатались чёрным (у syntect определения EBNF нет). Кандидат
+# 0269 называл только `st` и `pascal`; блоки EBNF в его перечень не входили, а
+# их вдесятеро больше.
+#
+# ⚠️ Правила описывают ту форму EBNF, которой написано приложение: терминал в
+# кавычках, определение через `::=` либо `=`, альтернатива `|`, повторение
+# `{ … }`, необязательность `[ … ]`, группировка `( … )`, комментарий
+# `(* … *)`. Полноты по ISO/IEC 14977 не требуется — требуется, чтобы читаемо
+# выделялись терминалы и знаки метаязыка.
+name: EBNF
+file_extensions: [ebnf]
+scope: source.ebnf
+
+contexts:
+  main:
+    - match: \(\*
+      scope: punctuation.definition.comment.begin.ebnf
+      push: block_comment
+
+    # Терминалы — то, что читатель набирает буквально; главный носитель смысла.
+    - match: "'"
+      scope: punctuation.definition.string.begin.ebnf
+      push: single_terminal
+    - match: '"'
+      scope: punctuation.definition.string.begin.ebnf
+      push: double_terminal
+
+    # Знак определения: `::=` (форма приложения) и `=` (форма ISO).
+    - match: '::=|='
+      scope: keyword.operator.definition.ebnf
+
+    # Метазнаки: альтернатива, повторение, необязательность, группировка,
+    # конец правила.
+    - match: '[|]'
+      scope: keyword.operator.alternation.ebnf
+    - match: '[{}\[\]()]'
+      scope: punctuation.section.group.ebnf
+    - match: '[*+?]'
+      scope: keyword.operator.repetition.ebnf
+    - match: ';'
+      scope: punctuation.terminator.rule.ebnf
+
+    # Нетерминал — имя правила.
+    - match: \b[A-Za-z][A-Za-z0-9_]*\b
+      scope: variable.other.nonterminal.ebnf
+
+  block_comment:
+    - meta_scope: comment.block.ebnf
+    - match: \*\)
+      scope: punctuation.definition.comment.end.ebnf
+      pop: true
+
+  single_terminal:
+    - meta_scope: string.quoted.single.ebnf
+    - match: "'"
+      scope: punctuation.definition.string.end.ebnf
+      pop: true
+
+  double_terminal:
+    - meta_scope: string.quoted.double.ebnf
+    - match: '"'
+      scope: punctuation.definition.string.end.ebnf
+      pop: true

@@ -281,7 +281,7 @@
 | [0266](./0266-port-in-declaration-initializer.md) | Чтение порта в инициализаторе объявления | SE-113 в общей воронке с SE-099; правило и обход общие: память до первого такта не определена | ГОТОВО |
 | [0267](./0267-state-of-model-in-targets.md) | Проверку состояния под-модели переводят не все цели | [ADR](../adr/0267-state-of-model-in-targets.md), [анализ](../analyze/0267-state-of-model-in-targets.md), [отчёт](../reports/0267-state-of-model-in-targets.md) | ГОТОВО |
 | [0268](./0268-se033-appendix-description.md) | У SE-033 нет описания в приложении «Ошибки» | [ADR](../adr/0268-se033-appendix-description.md), [анализ](../analyze/0268-se033-appendix-description.md), [отчёт](../reports/0268-se033-appendix-description.md) | ГОТОВО |
-| [0269](./0269-book-st-syntax-highlight.md) | Блоки st и pascal в документе не подсвечиваются | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
+| [0269](./0269-book-st-syntax-highlight.md) | Подсветка блоков st и ebnf в документе | [ADR](../adr/0269-book-st-syntax-highlight.md), [анализ](../analyze/0269-book-st-syntax-highlight.md), [отчёт](../reports/0269-book-st-syntax-highlight.md) | ГОТОВО |
 | [0270](./0270-book-pdf-size.md) | PDF документа потяжелел впятеро после перехода на Typst | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0271](./0271-test-target-gate.md) | Файл в tests/ верхнего уровня молча возвращает стоимость цели | ADR/анализ не заведены (стадия 1) | СОЗДАНА |
 | [0272](./0272-build-measurement-harness.md) | Замер сборки верен только на устоявшейся ФС и со второго прогона | ADR/анализ не заведены (стадия 1) | СОЗДАНА |

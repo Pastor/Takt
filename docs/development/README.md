@@ -507,3 +507,5 @@
 | 0216-02 | 0216 | match и for-init признаются перезаписью | [0216-02-rust-live-printer-coverage.md](0216-02-rust-live-printer-coverage.md) |
 | 0254-01 | 0254 | Переименование служебных идентификаторов | [0254-01-legacy-names-internal-identifiers.md](0254-01-legacy-names-internal-identifiers.md) |
 | 0254-02 | 0254 | Гейт ловит служебные имена | [0254-02-legacy-names-internal-identifiers.md](0254-02-legacy-names-internal-identifiers.md) |
+| 0269-01 | 0269 | Определения подсветки ST и EBNF | [0269-01-book-st-syntax-highlight.md](0269-01-book-st-syntax-highlight.md) |
+| 0269-02 | 0269 | Гейт языков блоков кода | [0269-02-book-st-syntax-highlight.md](0269-02-book-st-syntax-highlight.md) |

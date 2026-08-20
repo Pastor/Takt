@@ -199,7 +199,13 @@
 
   // Подсветка блоков кода: определение синтаксиса Takt и палитра tango — те же
   // роли, что играли `takt.kate.xml` и `highlight-style` в прежней сборке.
-  set raw(syntaxes: "/takt.sublime-syntax", theme: "/takt.tmTheme")
+  // Определений три: язык проекта и два целевых/метаязыка, которых нет у
+  // syntect (фича 0269) — Structured Text и EBNF. Без них блоки ```st и
+  // ```ebnf печатались чёрным, тогда как соседний ```c подсвечен.
+  set raw(
+    syntaxes: ("/takt.sublime-syntax", "/st.sublime-syntax", "/ebnf.sublime-syntax"),
+    theme: "/takt.tmTheme",
+  )
   show raw.where(block: true): it => block(
     width: 100%,
     above: 1.1em,
