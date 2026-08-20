@@ -201,7 +201,7 @@ fn a8_simulator_matches_generated_c() {
         return;
     }
 
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_0025_07");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0025_07");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
 
     let unit = simulate();
@@ -327,7 +327,7 @@ fn neg_enum_signedness_matches_generated_c() {
         return;
     }
 
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_0060");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0060");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
 
     let unit = simulate_fixture(NEG_ENUM_FIXTURE);
@@ -468,7 +468,7 @@ fn a9_simulator_matches_generated_c_rational() {
         return;
     }
 
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_0029_float");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0029_float");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
 
     let unit = simulate_fixture(FLOAT_FIXTURE);
@@ -690,7 +690,7 @@ fn per_tick_trace_matches_generated_c() {
         );
         return;
     }
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_0033_trace");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0033_trace");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let c = c_trace(
         &dir,
@@ -746,7 +746,7 @@ fn model_level_always_matches_generated_c() {
         eprintln!("[ПРОПУСК] model_level_always: `cc` не найден");
         return;
     }
-    let dir = std::env::temp_dir().join("lam_conf_0083_ma");
+    let dir = std::env::temp_dir().join("takt_conf_0083_ma");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let c = c_trace(&dir, f, "conf_ma", "ConfMa", "entry", &vars);
     assert_eq!(
@@ -776,7 +776,7 @@ fn per_tick_shift_is_zero_under_wrapping() {
         );
         return;
     }
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_0033_wrapped");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_0033_wrapped");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     // Лишний уровень `Mid` даёт доступ `entry.m` вместо `entry`.
     let c_wrapped = c_trace(
@@ -824,7 +824,7 @@ fn fixed_point_arithmetic_matches_generated_c() {
         );
         return;
     }
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_fixed");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_fixed");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let c = c_trace(
         &dir,
@@ -857,7 +857,7 @@ fn fixed_point_addition_wraps_matches_generated_c() {
         eprintln!("[ПРОПУСК] fixed_point_addition_wraps_matches_generated_c: `cc` не найден");
         return;
     }
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_fixed_wrap");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_fixed_wrap");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let c = c_trace(
         &dir,
@@ -880,7 +880,7 @@ fn fixed_point_addition_wraps_matches_generated_c() {
 /// же результат, и одна сверка дефект не поймала бы.
 #[test]
 fn generated_c_fixed_has_no_right_shift() {
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_fixed_shift");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_fixed_shift");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let source = std::fs::read_to_string(FIXED_FIXTURE).expect("фикстура читается");
     takt_lang::compile_to_c(
@@ -959,7 +959,7 @@ fn float_embedded_q_matches_generated_c() {
         eprintln!("[ПРОПУСК] float_embedded_q_matches_generated_c: `cc` не найден");
         return;
     }
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_float_q");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_float_q");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let c = c_trace_opts(
         &dir,

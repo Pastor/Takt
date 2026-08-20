@@ -61,7 +61,7 @@ fn float_native_and_q_modes_differ() {
 /// `double` (Q-путь только со вторым флагом).
 #[test]
 fn float_as_q_without_embedded_is_native_c() {
-    let dir = std::env::temp_dir().join(format!("lam_float_native_c_{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("takt_float_native_c_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let source = std::fs::read_to_string(FLOAT_Q_FIXTURE).expect("фикстура");
     takt_lang::compile_to_c(

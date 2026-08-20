@@ -40,7 +40,7 @@ fn sim_value(unit: &Unit, name: &str) -> i128 {
 }
 
 fn build_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("lam_conformance_sv_{tag}"));
+    let dir = std::env::temp_dir().join(format!("takt_conformance_sv_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     dir

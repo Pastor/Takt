@@ -11,7 +11,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use lam_generated::elevator_mini::{ElevatorMini, Hal, InBitPort, OutBitPort};
+use takt_generated::elevator_mini::{ElevatorMini, Hal, InBitPort, OutBitPort};
 
 /// Эмулятор шахты.
 #[derive(Default)]

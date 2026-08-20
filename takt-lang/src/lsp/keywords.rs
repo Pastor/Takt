@@ -39,7 +39,7 @@ pub(super) const TT_OPERATOR: u32 = 8;
 pub(super) const TT_CLASS: u32 = 9;
 
 /// Ключевые слова языка Takt для автодополнения.
-pub(super) const BUT_KEYWORDS: &[(&str, &str)] = &[
+pub(super) const TAKT_KEYWORDS: &[(&str, &str)] = &[
     ("model", "объявление модели конечного автомата"),
     ("state", "объявление обычного состояния"),
     ("start", "объявление начального состояния"),
@@ -113,14 +113,14 @@ pub(super) const BUT_KEYWORDS: &[(&str, &str)] = &[
 /// Ключевые слова языка, **намеренно** не предлагаемые автодополнением.
 ///
 /// Правило 2 ADR 0178 (`docs/adr/0178-editor-layer-language-sync.md`): каждое
-/// ключевое слово лексера либо в [`BUT_KEYWORDS`], либо здесь — с
+/// ключевое слово лексера либо в [`TAKT_KEYWORDS`], либо здесь — с
 /// обоснованием. Молча пропустить слово нельзя: сторож
 /// `test_completion_covers_lexer_keywords` покрывает обе стороны.
 ///
 /// ⚠️ Рост этого списка — сигнал ревью: сюда легко «спрятать» пропуск.
 ///
 /// ⚠️ Список **сторожевой, а не рабочий**: путь автодополнения его не читает —
-/// исключённое слово просто отсутствует в [`BUT_KEYWORDS`]. Поэтому он под
+/// исключённое слово просто отсутствует в [`TAKT_KEYWORDS`]. Поэтому он под
 /// `cfg(test)`: в рабочей сборке он был бы мёртвым кодом, а `-D warnings`
 /// (фича 0046) мёртвый код не прощает.
 #[cfg(test)]
@@ -137,7 +137,7 @@ const COMPLETION_EXCLUDED: &[(&str, &str)] = &[
 ///
 /// Используются для подсветки идентификаторов-типов (`TT_TYPE`) в semantic tokens,
 /// для генерации элементов автодополнения с видом `TYPE` и для hover-подсказок.
-pub(super) const BUT_BUILTIN_TYPES: &[(&str, &str)] = &[
+pub(super) const TAKT_BUILTIN_TYPES: &[(&str, &str)] = &[
     ("bit", "встроенный 1-битный примитивный тип (0 или 1)"),
     ("bool", "встроенный булев тип (true или false)"),
     ("float", "встроенный тип числа с плавающей точкой"),
@@ -185,18 +185,18 @@ mod tests {
 
     /// Сторож редакторского слоя (R4, критерий A6 фичи 0178).
     ///
-    /// Каждое ключевое слово лексера обязано быть либо в [`BUT_KEYWORDS`]
+    /// Каждое ключевое слово лексера обязано быть либо в [`TAKT_KEYWORDS`]
     /// (предлагается автодополнением), либо в [`COMPLETION_EXCLUDED`] (решено не
     /// предлагать, с обоснованием). Пропуск — испорченное автодополнение: до
     /// 0178 список отставал от языка на 11 слов, и заметить это было нечем.
     ///
-    /// ⚠️ Проверяется **вложение**, а не равенство: в `BUT_KEYWORDS` законно
+    /// ⚠️ Проверяется **вложение**, а не равенство: в `TAKT_KEYWORDS` законно
     /// живут `enter`/`exit`/`always` — имена блоков, ключевыми словами лексера
     /// не являющиеся (лексер отдаёт их как `Identifier`). Тест на равенство
     /// краснел бы на верном списке.
     #[test]
     fn test_completion_covers_lexer_keywords() {
-        let offered: HashSet<&str> = BUT_KEYWORDS.iter().map(|(k, _)| *k).collect();
+        let offered: HashSet<&str> = TAKT_KEYWORDS.iter().map(|(k, _)| *k).collect();
         let excluded: HashSet<&str> = COMPLETION_EXCLUDED.iter().map(|(k, _)| *k).collect();
 
         let uncovered: Vec<&str> = all_keywords()
@@ -207,7 +207,7 @@ mod tests {
             uncovered.is_empty(),
             "ключевые слова языка не покрыты автодополнением и не внесены в \
              COMPLETION_EXCLUDED: {uncovered:?}\n\
-             Добавьте их в BUT_KEYWORDS с описанием либо в COMPLETION_EXCLUDED \
+             Добавьте их в TAKT_KEYWORDS с описанием либо в COMPLETION_EXCLUDED \
              с обоснованием (правило 2 ADR 0178)."
         );
     }
@@ -234,7 +234,7 @@ mod tests {
     /// У каждой записи обоих списков есть непустое описание/обоснование.
     #[test]
     fn test_every_entry_is_documented() {
-        for (word, text) in BUT_KEYWORDS.iter().chain(COMPLETION_EXCLUDED.iter()) {
+        for (word, text) in TAKT_KEYWORDS.iter().chain(COMPLETION_EXCLUDED.iter()) {
             assert!(!word.is_empty(), "пустое ключевое слово в списке");
             assert!(!text.is_empty(), "нет описания у `{word}`");
         }

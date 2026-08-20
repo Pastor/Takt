@@ -260,3 +260,4 @@
 | [0298](./0298-book-lexicon-lists-sync.md) | Списки лексики раздела «Лексика» сверяются с языком | Accepted | фича 0298 |
 | [0215](./0215-duration-per-tick-conformance-st-sv.md) | Потактовые сверки длительностей для целей st и sv | Accepted | фича 0215 |
 | [0216](./0216-rust-live-printer-coverage.md) | Печатник живости цели rust получает сторожа поведения | Accepted | фича 0216 |
+| [0254](./0254-legacy-names-internal-identifiers.md) | Старое имя изъято из служебных идентификаторов | Accepted | фича 0254 |

@@ -85,7 +85,7 @@ fn probe_semantic_tokens() {
         ));
     }
     print!("{buf}");
-    if let Ok(p) = std::env::var("LAM_PROBE_OUT") {
+    if let Ok(p) = std::env::var("TAKT_PROBE_OUT") {
         let _ = std::fs::write(p, buf);
     }
 }
@@ -139,7 +139,7 @@ fn semantic_tokens_classification() {
     for v in ["count", "LIMIT", "lvl", "x"] {
         assert_kind(&toks, v, "variable");
     }
-    // Встроенный тип имеет приоритет (BUT_BUILTIN_TYPES) → TYPE.
+    // Встроенный тип имеет приоритет (TAKT_BUILTIN_TYPES) → TYPE.
     assert_kind(&toks, "u8", "type");
     assert_kind(&toks, "i16", "type");
 }

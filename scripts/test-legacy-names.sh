@@ -104,5 +104,39 @@ else
     fail "новое имя `takt_q_*`/`TAKT_Q_*` отвергнуто — шаблон слишком широк"
 fi
 
+# --- 7. Служебные идентификаторы ловятся (фича 0254) ------------------------
+# Прежде класс был ИСКЛЮЧЁН как «видит только разработчик инструмента», и в
+# дереве накопилось 114 вхождений: переменные скриптов, префикс временных
+# каталогов сорока тестов, константы LSP, крейт порождённых примеров, ключи
+# цветов плагина. Исключение и было причиной живучести — новое имя заводили по
+# образцу соседа. Формы ниже взяты из тех самых мест.
+for BAD in 'LAMC="$PRECHECK_TARGET_DIR/debug/taktc"' \
+           'for lam_file in examples/*.takt; do' \
+           'let dir = std::env::temp_dir().join("lam_conformance_0033");' \
+           'pub(super) const BUT_KEYWORDS: &[(&str, &str)] = &[' \
+           'use lam_generated::elevator::Elevator;' \
+           '@JvmField val KEYWORD = key("LAM_KEYWORD", Colors.KEYWORD)'; do
+    printf '%s\n' "$BAD" > "$TMP/internal.rs"
+    if ! "$GATE" "$TMP/internal.rs" >/dev/null 2>&1; then
+        ok "ловится служебное имя: $BAD"
+    else
+        fail "«$BAD» НЕ пойман — исключение для служебных имён вернулось"
+    fi
+done
+
+# --- 8. Действующие служебные имена гейт НЕ трогает --------------------------
+# Контроль к проверке 7: без него «ловится» означало бы, что гейт ругается на
+# любое имя с подчёркиванием. Формы — ровно те, что стоят в дереве после 0254.
+printf 'TAKTC="$PRECHECK_TARGET_DIR/debug/taktc"\n' > "$TMP/new_internal.rs"
+printf 'for takt_file in examples/*.takt; do\n' >> "$TMP/new_internal.rs"
+printf 'let dir = std::env::temp_dir().join("takt_conformance_0033");\n' >> "$TMP/new_internal.rs"
+printf 'pub(super) const TAKT_KEYWORDS: &[(&str, &str)] = &[\n' >> "$TMP/new_internal.rs"
+printf 'use takt_generated::elevator::Elevator;\n' >> "$TMP/new_internal.rs"
+if "$GATE" "$TMP/new_internal.rs" >/dev/null 2>&1; then
+    ok "действующие служебные имена принимаются"
+else
+    fail "действующее имя отвергнуто — шаблон служебных имён слишком широк"
+fi
+
 [ "$FAILED" -eq 0 ] || { echo "  Сторож гейта старых имён провален." >&2; exit 1; }
 echo "  Сторож гейта старых имён пройден."

@@ -56,7 +56,7 @@ fn fixed_saturation_matches_generated_c() {
         eprintln!("[ПРОПУСК] fixed_saturation_matches_generated_c: `cc` не найден");
         return;
     }
-    let dir: PathBuf = std::env::temp_dir().join("lam_conformance_fixed_sat_w12");
+    let dir: PathBuf = std::env::temp_dir().join("takt_conformance_fixed_sat_w12");
     std::fs::create_dir_all(&dir).expect("каталог сборки");
     let c = c_trace(
         &dir,

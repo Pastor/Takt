@@ -150,7 +150,7 @@ pub fn semantic_tokens(source: &str) -> SemanticTokens {
                         }
                     }
                     None => {
-                        if BUT_BUILTIN_TYPES.iter().any(|(t, _)| *t == name) {
+                        if TAKT_BUILTIN_TYPES.iter().any(|(t, _)| *t == name) {
                             TT_TYPE
                         } else {
                             TT_VARIABLE

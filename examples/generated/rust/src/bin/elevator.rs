@@ -9,7 +9,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use lam_generated::elevator::{Elevator, Hal, InU8Port};
+use takt_generated::elevator::{Elevator, Hal, InU8Port};
 
 /// Записанные вызовы внешних функций модели.
 #[derive(Default)]

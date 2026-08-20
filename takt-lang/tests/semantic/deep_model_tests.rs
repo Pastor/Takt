@@ -40,7 +40,7 @@ const DEEP: usize = 5000;
 #[test]
 fn codegen_handles_deep_state_chain() {
     let src = chain_source(DEEP);
-    let out = std::env::temp_dir().join("lam_deep_chain.c");
+    let out = std::env::temp_dir().join("takt_deep_chain.c");
     takt_lang::compile_to_c(
         "deep.takt",
         &src,
@@ -56,7 +56,7 @@ fn codegen_handles_deep_state_chain() {
 #[test]
 fn plantuml_handles_deep_state_chain() {
     let src = chain_source(DEEP);
-    let out = std::env::temp_dir().join("lam_deep_chain.puml");
+    let out = std::env::temp_dir().join("takt_deep_chain.puml");
     takt_lang::compile_to_plantuml("deep.takt", &src, out.to_str().expect("путь"), &[])
         .expect("цепочка из 5000 состояний обязана давать диаграмму");
     let _ = std::fs::remove_file(&out);

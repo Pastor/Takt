@@ -26,7 +26,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use lam_generated::comprehensive::{Comprehensive, Hal};
+use takt_generated::comprehensive::{Comprehensive, Hal};
 
 /// Записанные вызовы внешних функций модели.
 #[derive(Default)]

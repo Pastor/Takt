@@ -55,8 +55,8 @@ pub use workspace::{Occurrence, Resolution, Workspace};
 
 // Внутреннее: словари и помощники, которые зовут соседние подмодули.
 use keywords::{
-    BUT_BUILTIN_TYPES, BUT_KEYWORDS, TT_CLASS, TT_COMMENT, TT_ENUM_MEMBER, TT_FUNCTION, TT_KEYWORD,
-    TT_NUMBER, TT_OPERATOR, TT_STRING, TT_TYPE, TT_VARIABLE,
+    TAKT_BUILTIN_TYPES, TAKT_KEYWORDS, TT_CLASS, TT_COMMENT, TT_ENUM_MEMBER, TT_FUNCTION,
+    TT_KEYWORD, TT_NUMBER, TT_OPERATOR, TT_STRING, TT_TYPE, TT_VARIABLE,
 };
 use position::utf16_to_byte_offset;
 
@@ -237,7 +237,7 @@ start S = M;
         let items = completion_items("model {{{ broken");
         // Должны быть хотя бы ключевые слова
         assert!(
-            items.len() >= BUT_KEYWORDS.len(),
+            items.len() >= TAKT_KEYWORDS.len(),
             "при ошибке разбора должны присутствовать минимум ключевые слова"
         );
     }

@@ -18,7 +18,7 @@ fn taktc() -> Command {
 
 /// Каталог для вывода компиляции (файлы `.c`/`.h` нам не важны — важен stderr).
 fn out_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("lam_0081_{tag}"));
+    let dir = std::env::temp_dir().join(format!("takt_0081_{tag}"));
     std::fs::create_dir_all(&dir).expect("каталог вывода");
     dir
 }

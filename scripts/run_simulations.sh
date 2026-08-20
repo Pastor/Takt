@@ -35,12 +35,12 @@ for sim_file in "$SIM_DIR"/*.json; do
   # моделей с подчёркиванием: `elevator_mini_floor2` → `elevator` вместо
   # `elevator_mini` (фича 0079). Отсекаем суффикс справа, пока не найдём .takt.
   candidate="$base"
-  lam_file=""
+  takt_file=""
   model="$candidate"
   while :; do
     if [[ -f "$ROOT/examples/${candidate}.takt" ]]; then
       model="$candidate"
-      lam_file="$ROOT/examples/${candidate}.takt"
+      takt_file="$ROOT/examples/${candidate}.takt"
       break
     fi
     [[ "$candidate" == *_* ]] || break
@@ -49,7 +49,7 @@ for sim_file in "$SIM_DIR"/*.json; do
   output_path="$ROOT/examples/simulations/graphics"
   config_file="$ROOT/examples/graphics-configs/default_svg.json"
 
-  if [[ -z "$lam_file" ]]; then
+  if [[ -z "$takt_file" ]]; then
     echo "[ ПРОПУСК ] $base  (не найден ${model}.takt)"
     ((skip++)) || true
     continue
@@ -62,7 +62,7 @@ for sim_file in "$SIM_DIR"/*.json; do
 
   # Запуск симуляции
   # shellcheck disable=SC2086
-  if output="$("$BINARY" "$lam_file" -s "$sim_file" -o "$output_path" --graphics-config $config_file $step_arg 2>&1)"; then
+  if output="$("$BINARY" "$takt_file" -s "$sim_file" -o "$output_path" --graphics-config $config_file $step_arg 2>&1)"; then
     echo "[  OK  ] $base"
     ((pass++)) || true
   else
