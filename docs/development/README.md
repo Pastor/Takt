@@ -501,3 +501,5 @@
 | 0290-02 | 0290 | Приложение дополнено недостающими кодами | [0290-02-book-diagnostics-codes-gate.md](0290-02-book-diagnostics-codes-gate.md) |
 | 0298-01 | 0298 | Гейт лексики расширен разделом «Лексика» | [0298-01-book-lexicon-lists-sync.md](0298-01-book-lexicon-lists-sync.md) |
 | 0298-02 | 0298 | Таблица ключевых слов дополнена словами времени и at | [0298-02-book-lexicon-lists-sync.md](0298-02-book-lexicon-lists-sync.md) |
+| 0215-01 | 0215 | Сверка значений duration цели st | [0215-01-duration-per-tick-conformance-st-sv.md](0215-01-duration-per-tick-conformance-st-sv.md) |
+| 0215-02 | 0215 | Сверка значений duration цели sv | [0215-02-duration-per-tick-conformance-st-sv.md](0215-02-duration-per-tick-conformance-st-sv.md) |
