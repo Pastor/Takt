@@ -18,6 +18,10 @@
 //! позволил вычислителям симулятора молча разойтись (ADR 0025). Новый вариант
 //! `ExpressionNode` обязан **валить сборку**, а не тихо проходить мимо.
 
+// Приведение к типу приёмника живёт своим модулем (0335); имя остаётся
+// доступным отсюда — потребителей у него семь.
+pub(crate) use crate::generator::rust::rust_coerce::{coerce_to, enum_variant_literal};
+
 use crate::diagnostics::{Diagnostic, Location};
 use crate::generator::rust::rust_fixed::{self, FixedOp};
 use crate::generator::rust::rust_name::{rust_type_name, rust_value_name};
@@ -754,95 +758,6 @@ fn is_wrapping_arith(expr: &ExpressionNode) -> bool {
         | ExpressionNode::Multiply(a, b) => is_unsigned_int(a) || is_unsigned_int(b),
         _ => false,
     }
-}
-
-/// Тот же приём чинит `bit`-порт: `elevator_motor_up := 1` при `bool`-порте.
-/// Печатает выражение с оглядкой на **целевой** тип.
-///
-/// Существует ради перечислений. `command := Up` приходит сюда как
-/// `Assign(Variable(command), Number(2))`: семантика уже свернула вариант в его
-/// числовое значение, и `ExpressionNode` варианта перечисления просто не имеет.
-/// Цель `c` печатает `model->command = 2;`, и это **работает** — перечисление в
-/// C есть целое. В Rust `Command` и `2` — разные типы, поэтому вариант нужно
-/// восстановить по значению.
-///
-pub(crate) fn coerce_to(
-    value: &ExpressionNode,
-    target: &TypeNode,
-    scope: &Scope,
-) -> Result<String, Diagnostic> {
-    match (target, value) {
-        // Агрегат структуры (фича 0293): `var g: Gains := {2, 3};` печатается
-        // литералом `Gains { kp: 2, ki: 3 }`. Без типа приёмника форма
-        // неизвестна — общий печатник выражений печатал массив `[2, 3]`, то есть
-        // невалидный Rust.
-        (
-            TypeNode::Struct(struct_name),
-            ExpressionNode::Initializer(items) | ExpressionNode::Array(items),
-        ) => crate::generator::rust::rust_struct::struct_literal(struct_name, items, scope),
-        (TypeNode::Enum(enum_name), ExpressionNode::Number(n)) => {
-            enum_variant_literal(enum_name, *n, scope)
-        }
-        // `bit`/`bool` в Takt принимает 0/1; в Rust это `false`/`true`.
-        (TypeNode::Bit | TypeNode::Bool, ExpressionNode::Number(n)) => match n {
-            0 => Ok("false".to_string()),
-            1 => Ok("true".to_string()),
-            other => Err(unsupported(&format!(
-                "значение {} не представимо в bool (допустимо 0 или 1)",
-                other
-            ))),
-        },
-        // Вещественному полю целый литерал не подходит: `1` не является литералом f64.
-        (TypeNode::Rational, ExpressionNode::Number(n)) => Ok(format!("{}.0", n)),
-        // Бит-вектор шире 64 бит — массив слов `[u64; K]` (0078), и целый
-        // литерал ему не тип: `w: 0` давало `E0308` (фича 0262). Значение
-        // достаётся младшему слову — литерал шире 64 бит язык не принимает
-        // (`LE-009`).
-        (TypeNode::Array(..), ExpressionNode::Number(n))
-            if crate::generator::rust::rust_bit::words_of_type(target).is_some() =>
-        {
-            let count = crate::generator::rust::rust_bit::words_of_type(target)
-                .expect("проверено охраной ветви");
-            Ok(crate::generator::rust::rust_bit::word_literal(*n, count))
-        }
-        _ => print_expression(value, scope),
-    }
-}
-
-/// Имя варианта перечисления по его значению — ОДИН носитель на цель (0281).
-///
-/// Число, попавшее в позицию перечислимого типа, в Rust непредставимо: у
-/// `enum` нет числового представления в выражении. Восстановление варианта
-/// нужно **и присваиванию, и сравнению**: до фичи 0281 его знало только
-/// присваивание, и `ref Done: c = 1;` давало `self.c == 1` — `E0308`
-/// («expected `Command`, found integer») при нулевом коде возврата `taktc`.
-///
-/// ⚠️ Значение **вне** набора вариантов — честный отказ, а не догадка: в C оно
-/// молча легло бы в переменную, здесь представить его нечем.
-pub(crate) fn enum_variant_literal(
-    enum_name: &str,
-    value: i128,
-    scope: &Scope,
-) -> Result<String, Diagnostic> {
-    let def = scope
-        .model
-        .search_enum(enum_name)
-        .ok_or_else(|| unsupported(&format!("перечисление '{}' не найдено", enum_name)))?;
-    let variant = def
-        .variants
-        .iter()
-        .find(|(_, v)| *v == value)
-        .ok_or_else(|| {
-            unsupported(&format!(
-                "значение {} не соответствует ни одному варианту перечисления '{}'",
-                value, enum_name
-            ))
-        })?;
-    Ok(format!(
-        "{}::{}",
-        rust_type_name(enum_name, def.loc)?,
-        rust_type_name(&variant.0, def.loc)?
-    ))
 }
 
 /// Индексация массива — ОДНА функция на цель (фича 0263).

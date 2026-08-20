@@ -224,6 +224,18 @@ impl Scope<'_> {
             {
                 return Ok(sized);
             }
+            // Разряд `x.N` в позиции значения ШИРЕ одного бита (фича 0335):
+            // `sel` даёт 1 бит, и verilator отвечает `WIDTHEXPAND` — а гейт
+            // цели считает предупреждение ошибкой. Размерная форма `W'(…)` —
+            // та же, какой печатается широкий литерал.
+            if matches!(
+                value,
+                ExpressionNode::BitAccess(_, crate::parser::ast::Member::Number(_))
+            ) && let Some(width) = super::sv_type::scalar_width(ty)
+                && width > 1
+            {
+                return Ok(format!("{width}'({})", print_expression(value, self)?));
+            }
             return print_expression(value, self);
         };
         let printed = print_expression(value, self)?;

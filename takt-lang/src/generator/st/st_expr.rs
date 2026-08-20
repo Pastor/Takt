@@ -249,6 +249,25 @@ pub(crate) fn coerce_to(
             // печатаем как есть, не выдумывая.
             _ => print_expression(value, model),
         },
+        // Разряд `x.N` в позиции ЧИСЛОВОГО значения (фича 0335). Битового
+        // доступа в MatIEC нет вовсе, поэтому печатник строит **булево**
+        // выражение над маской — верное в условии и отвергаемое `iec2c`
+        // («Incompatible data types for ':=' operation») в присваивании числу,
+        // при нулевом коде возврата `taktc` (класс 0262).
+        (_, ExpressionNode::BitAccess(_, Member::Number(_)))
+            if !matches!(target, TypeNode::Bool | TypeNode::Bit) =>
+        {
+            let printed = print_expression(value, model)?;
+            match crate::generator::st::st_type::get_st_type(target, model) {
+                // Форма проверена пробой `iec2c` 2026-08-20: стандартная
+                // функция преобразования принимается для любого целого типа.
+                Ok(name) => Ok(format!("BOOL_TO_{name}({printed})")),
+                // Тип, который цель печатать не умеет, уже отвергнут своим
+                // отказом там, где объявляется приёмник; здесь ничего не
+                // выдумываем.
+                Err(_) => Ok(printed),
+            }
+        }
         _ => print_expression(value, model),
     }
 }
