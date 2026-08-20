@@ -25,6 +25,12 @@ pub(crate) fn emit_named_blocks(
 ) -> Result<(), Diagnostic> {
     for b in state.get_named_blocks(block) {
         if let Some(stmt) = b.statement() {
+            // Объявления локальных переменных — ДО операторов (фича 0304):
+            // прежде они не печатались вовсе, и вывод был невалиден при нулевом
+            // коде возврата.
+            let mut locals = Vec::new();
+            crate::generator::sv::sv_stmt::hoist_locals(stmt, &mut locals);
+            crate::generator::sv::sv_stmt::emit_hoisted_locals_auto(p, &locals)?;
             print_statement(p, stmt, &fsm.scope())?;
         }
     }
@@ -41,6 +47,9 @@ pub(crate) fn emit_model_named_blocks(
 ) -> Result<(), Diagnostic> {
     for b in model.get_named_blocks(block) {
         if let Some(stmt) = b.statement() {
+            let mut locals = Vec::new();
+            crate::generator::sv::sv_stmt::hoist_locals(stmt, &mut locals);
+            crate::generator::sv::sv_stmt::emit_hoisted_locals_auto(p, &locals)?;
             print_statement(p, stmt, &fsm.scope())?;
         }
     }

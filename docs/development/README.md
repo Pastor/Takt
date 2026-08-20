@@ -535,3 +535,4 @@
 | 0288-01 | 0288 | Усиленные сторожа и ратчет констатаций | [0288-01-fixture-guards-audit.md](0288-01-fixture-guards-audit.md) |
 | 0289-01 | 0289 | Метки инвариантов и класс 5 гейта | [0289-01-claude-md-invariant-checklist-gate.md](0289-01-claude-md-invariant-checklist-gate.md) |
 | 0297-01 | 0297 | Сшивка абзацев и честная самопроверка | [0297-01-check-claude-md-line-blindness.md](0297-01-check-claude-md-line-blindness.md) |
+| 0304-01 | 0304 | Локальное объявление в теле блока получает тип | [0304-01-local-declaration-type-inference.md](0304-01-local-declaration-type-inference.md) |

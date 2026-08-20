@@ -252,3 +252,4 @@
 | 0288 | Сторожа фикстур проверяют обещание, а не разбор | [0288-fixture-guards-audit.md](0288-fixture-guards-audit.md) | Готово: 5 усилено, 28 в ратчете |
 | 0289 | Чек-лист инвариантов сверяется с подробными пунктами | [0289-claude-md-invariant-checklist-gate.md](0289-claude-md-invariant-checklist-gate.md) | Готово: класс 5 гейта живого контекста |
 | 0297 | Гейт живого контекста читает абзацы, а не строки | [0297-check-claude-md-line-blindness.md](0297-check-claude-md-line-blindness.md) | Готово: сверка версий заработала, бутафория снята |
+| 0304 | Локальное объявление в теле блока получает тип | [0304-local-declaration-type-inference.md](0304-local-declaration-type-inference.md) | Готово: один вход — один ответ у девяти потребителей |
