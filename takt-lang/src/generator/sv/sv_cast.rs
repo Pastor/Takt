@@ -53,3 +53,39 @@ pub(in crate::generator::sv) fn integer_cast(
         _ => sized,
     })
 }
+
+/// Знаково ли выражение — для выбора арифметического сдвига (фича 0324).
+///
+/// ⚠️ Признак **синтаксический и осторожный**: он смотрит на объявленный тип
+/// операнда и на явное приведение. Не узнав знака, отвечает `false`, то есть
+/// печатается прежний логический сдвиг — ошибка в сторону прежнего поведения,
+/// а не в сторону нового.
+pub(in crate::generator::sv) fn is_signed_expression(expr: &ExpressionNode) -> bool {
+    match expr {
+        ExpressionNode::Variable(var) => matches!(
+            var.borrow().ty(),
+            TypeNode::Integer { signed: true, .. } | TypeNode::Fixed { .. }
+        ),
+        ExpressionNode::Cast(_, ty) => matches!(
+            ty,
+            TypeNode::Integer { signed: true, .. } | TypeNode::Fixed { .. }
+        ),
+        ExpressionNode::Parenthesis(inner) | ExpressionNode::Negate(inner) => {
+            is_signed_expression(inner)
+        }
+        _ => false,
+    }
+}
+
+/// Оператор сдвига вправо: арифметический для знакового (фича 0324).
+///
+/// ⚠️ В SystemVerilog `>>` — **логический** сдвиг даже над `logic signed`:
+/// проба verilator 2026-08-20 дала `-8 >> 1 = 124` против `-8 >>> 1 = -4`.
+/// Эталон, `c` и `rust` дают −4, то есть цель расходилась значением молча.
+pub(in crate::generator::sv) fn shift_right_operator(left: &ExpressionNode) -> &'static str {
+    if is_signed_expression(left) {
+        ">>>"
+    } else {
+        ">>"
+    }
+}

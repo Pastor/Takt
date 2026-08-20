@@ -278,3 +278,4 @@
 | 0321 | Разворот for в цели sv | [0321-sv-for-unroll.md](0321-sv-for-unroll.md) | Пройден: 5/5 условий, оба инструмента SV |
 | 0322 | match в цели sv | [0322-sv-match-case.md](0322-sv-match-case.md) | Пройден: 4/4 условия, защёлок нет |
 | 0323 | Приведение as в цели sv | [0323-sv-integer-cast.md](0323-sv-integer-cast.md) | Пройден: 4/4 условия, оба направления |
+| 0324 | Арифметический сдвиг вправо | [0324-arithmetic-shift-right.md](0324-arithmetic-shift-right.md) | Пройден: 5/5 условий, нечётный вход |
