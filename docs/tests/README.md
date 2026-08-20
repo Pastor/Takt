@@ -296,3 +296,4 @@
 | 0339 | Шаблон отказа цели `sv` | [0339-sv-refusal-template.md](0339-sv-refusal-template.md) | Пройден: 5/5 условий |
 | 0340 | Место записи агрегата | [0340-aggregate-assign-place.md](0340-aggregate-assign-place.md) | Пройден: 6/6 условий, значения сверены |
 | 0341 | Вложенная структура | [0341-nested-struct-order.md](0341-nested-struct-order.md) | Пройден: 7/7 условий |
+| 0342 | Зарезервированные имена IEC | [0342-st-reserved-names.md](0342-st-reserved-names.md) | Пройден: 4/4 условия, сторож нашёл 4 ложные записи |
