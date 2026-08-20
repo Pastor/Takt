@@ -265,3 +265,4 @@
 | 0314 | Предупреждение о выброшенном вызове | [0314-c-dropped-builtin-warning.md](0314-c-dropped-builtin-warning.md) | Готово: вывод прежний, молчание устранено |
 | 0315 | Сторожа гейтов предкоммита | [0315-gate-guards.md](0315-gate-guards.md) | Готово: гейтов без прикрытия не осталось |
 | 0316 | Пересказ правила в комментарии шага | [0316-precheck-comment-duplication.md](0316-precheck-comment-duplication.md) | Готово: четыре пересказа сняты, новый ловится |
+| 0317 | Представление q в общем слое | [0317-fixed-cast-shared-layer.md](0317-fixed-cast-shared-layer.md) | Готово: sv принял приведение, c не зовёт floor |

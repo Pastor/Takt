@@ -35,6 +35,7 @@ mod diagnostics_tests;
 mod empty_enum_tests;
 mod empty_struct_tests;
 mod extern_initializer_tests;
+mod fixed_cast_tests;
 mod fixed_saturation_tests;
 mod fixture_promises_tests;
 mod formula_position_tests;

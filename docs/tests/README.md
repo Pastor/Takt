@@ -271,3 +271,4 @@
 | 0314 | Предупреждение о выброшенном вызове | [0314-c-dropped-builtin-warning.md](0314-c-dropped-builtin-warning.md) | Пройден: 7/7 условий, счёт сторожится |
 | 0315 | Сторожа гейтов предкоммита | [0315-gate-guards.md](0315-gate-guards.md) | Пройден: 10/10 условий |
 | 0316 | Пересказ правила в комментарии шага | [0316-precheck-comment-duplication.md](0316-precheck-comment-duplication.md) | Пройден: 7/7 условий |
+| 0317 | Представление q в общем слое | [0317-fixed-cast-shared-layer.md](0317-fixed-cast-shared-layer.md) | Пройден: 8/8 условий, мутация ловится |
