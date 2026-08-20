@@ -528,3 +528,4 @@
 | 0164-02 | 0164 | Восполнение 42 пропущенных записей | [0164-02-registry-rebuild-gate.md](0164-02-registry-rebuild-gate.md) |
 | 0173-01 | 0173 | Снимок ModelEmit вместо позиционных списков | [0173-01-rust-generator-arg-count.md](0173-01-rust-generator-arg-count.md) |
 | 0252-01 | 0252 | Снятие --test-threads=1 и правка комментариев | [0252-01-ci-windows-test-threads.md](0252-01-ci-windows-test-threads.md) |
+| 0261-01 | 0261 | Жёлтая зона и сторож гейта | [0261-01-module-size-warning-zone.md](0261-01-module-size-warning-zone.md) |
