@@ -286,3 +286,4 @@
 | 0272 | Обвязка замера: прогрев, два прогона, вердикт | [0272-build-measurement-harness.md](0272-build-measurement-harness.md) | — (новая фича) |
 | 0288 | Сторожа фикстур проверяют обещание, а не разбор | [0288-fixture-guards-audit.md](0288-fixture-guards-audit.md) | — (новая фича) |
 | 0289 | Чек-лист инвариантов сверяется с подробными пунктами | [0289-claude-md-invariant-checklist-gate.md](0289-claude-md-invariant-checklist-gate.md) | — (новая фича) |
+| 0297 | Гейт живого контекста читает абзацы, а не строки | [0297-check-claude-md-line-blindness.md](0297-check-claude-md-line-blindness.md) | — (новая фича) |
