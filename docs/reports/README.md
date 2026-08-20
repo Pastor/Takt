@@ -268,3 +268,4 @@
 | 0317 | Представление q в общем слое | [0317-fixed-cast-shared-layer.md](0317-fixed-cast-shared-layer.md) | Готово: sv принял приведение, c не зовёт floor |
 | 0318 | Мост «число ↔ длительность» | [0318-duration-cast-folding.md](0318-duration-cast-folding.md) | Готово: обе стороны считает компилятор |
 | 0319 | Приведение агрегата к массиву | [0319-array-cast-folding.md](0319-array-cast-folding.md) | Готово: девять потребителей согласны |
+| 0320 | Длина агрегата | [0320-aggregate-length-check.md](0320-aggregate-length-check.md) | Готово: девять потребителей отвечают одинаково |

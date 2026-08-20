@@ -29,6 +29,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+mod aggregate_length;
 mod arity;
 mod assignment_place;
 mod assignment_position;
@@ -189,6 +190,7 @@ pub fn validate_model_all(model: Rc<RefCell<ModelNode>>) -> Vec<Diagnostic> {
     // SE-089 (0157): литерал не помещается в тип приёмника. Отдаёт все находки:
     // одна ошибка на литерал, а не «первая на модель».
     found.extend(literal_range::check_literal_ranges(model.clone()));
+    found.extend(aggregate_length::check_aggregate_lengths(model.clone()));
 
     // Тела модели — один обход, два судьи (`validate/bodies.rs`):
     //  * SE-026/SE-027 (0188): направление порта во ВСЕХ позициях. Тела блоков и
