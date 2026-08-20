@@ -263,3 +263,4 @@
 | [0254](./0254-legacy-names-internal-identifiers.md) | Старое имя изъято из служебных идентификаторов | Accepted | фича 0254 |
 | [0269](./0269-book-st-syntax-highlight.md) | Подсветка блоков st и ebnf в документе | Accepted | фича 0269 |
 | [0270](./0270-book-pdf-size.md) | Вес PDF документа: причина найдена, теги отключены | Accepted | фича 0270 |
+| [0283](./0283-cli-report-result-merge.md) | Печать результата компиляции сведена к одной функции | Accepted | фича 0283 |

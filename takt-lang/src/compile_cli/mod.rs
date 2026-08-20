@@ -440,15 +440,28 @@ fn print_warnings(
     }
 }
 
-/// Печатает результат простой цели (`plantuml`/`st`/`rust`/`sv`) и завершает
-/// процесс при ошибке. verbose даёт полный путь входа. Цель `c` не пользуется
-/// этим: её сообщение перечисляет пути поиска.
+/// Печатает результат компиляции и завершает процесс при ошибке.
+///
+/// Одна функция на **все** цели (фича 0283). Прежде их было две —
+/// `report_simple_result` и `report_hal_result`, — и после приведения целей к
+/// одному контракту (фича 0168) они принимали один и тот же тип и делали одно и
+/// то же. Различие было единственным и необъяснимым: первая знала `--verbose`,
+/// вторая нет, то есть `c-hal`/`st-at`/`sv-mmio` флаг молча игнорировали.
 ///
 /// ⚠️ Предупреждения **цели** печатаются здесь же и той же точкой, что
 /// предупреждения компилятора (фича 0168). Прежде цели `st`/`rust`/`sv`
 /// печатали их сами — `eprintln!` из библиотеки, мимо `--quiet` и мимо общего
 /// формата (позиция терялась).
-fn report_simple_result(
+///
+/// ⚠️ Реестр файлов приходит **снаружи** (фича 0275): в нём зарегистрированы и
+/// вход, и карта адресов, поэтому предупреждение карты (`SE-050`) печатается со
+/// своим путём. Предупреждение импортированного файла остаётся без префикса —
+/// названная граница фичи 0228: цель строит своё дерево внутри и таблицу наружу
+/// не отдаёт.
+///
+/// ⚠️ Цель `c` этой функцией не пользуется: её сообщение перечисляет пути
+/// поиска.
+fn report_result(
     result: Result<Vec<crate::diagnostics::Diagnostic>, crate::diagnostics::Diagnostic>,
     target: &str,
     options: &CompileOptions,
@@ -461,61 +474,24 @@ fn report_simple_result(
             process::exit(1);
         }
     };
-    // Реестр приходит снаружи — тот же, что у `report_hal_result` (фича 0275):
-    // в нём есть вход и карта адресов. Предупреждение импортированного файла
-    // остаётся без префикса — граница фичи 0228.
     print_warnings(&warnings, files, options.quiet);
     if options.quiet {
         return;
     }
-    if options.verbose {
-        eprintln!(
-            "Скомпилировано: {} → {} ({})",
-            fs::canonicalize(&options.input_file)
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|_| options.input_file.clone()),
-            options.output_path,
-            target,
-        );
+    // `--verbose` даёт канонический путь входа — теперь у всех целей. Путь
+    // выхода печатается со слэшем в обеих ветвях: это каталог, и прежняя
+    // verbose-ветвь теряла слэш без причины.
+    let input = if options.verbose {
+        fs::canonicalize(&options.input_file)
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| options.input_file.clone())
     } else {
-        eprintln!(
-            "Скомпилировано: {} → {}/ ({})",
-            options.input_file, options.output_path, target
-        );
-    }
-}
-
-/// Печатает результат адрес-потребляющей цели (`c-hal`/`st-at`/`sv-mmio`) и
-/// завершает процесс при ошибке. Тело идентично (возвращают `Ok(warnings)` либо
-/// `Err`), поэтому вынесено сюда.
-fn report_hal_result(
-    result: Result<Vec<crate::diagnostics::Diagnostic>, crate::diagnostics::Diagnostic>,
-    target: &str,
-    options: &CompileOptions,
-    files: &crate::diagnostics::FileTable,
-) {
-    match result {
-        Ok(warnings) => {
-            // Реестр приходит СНАРУЖИ (фича 0275): в нём зарегистрированы вход и
-            // карта адресов, поэтому предупреждение карты (`SE-050`) печатается
-            // со своим путём. Прежде здесь заводился свой реестр из одного
-            // корневого файла, и координата карты выдавалась за координату
-            // модели. Предупреждение импортированного файла по-прежнему остаётся
-            // без префикса: цель строит своё дерево внутри и таблицу наружу не
-            // отдаёт (граница фичи 0228).
-            print_warnings(&warnings, files, options.quiet);
-            if !options.quiet {
-                eprintln!(
-                    "Скомпилировано: {} → {}/ ({})",
-                    options.input_file, options.output_path, target
-                );
-            }
-        }
-        Err(diag) => {
-            print_compile_error(&diag);
-            process::exit(1);
-        }
-    }
+        options.input_file.clone()
+    };
+    eprintln!(
+        "Скомпилировано: {} → {}/ ({})",
+        input, options.output_path, target
+    );
 }
 
 /// Исполняет подкоманду `compile`; возвращает код возврата процесса.
@@ -665,7 +641,7 @@ pub fn run_compile(args: &[String]) -> i32 {
 
     match options.target.as_str() {
         "c-hal" => {
-            report_hal_result(
+            report_result(
                 crate::compile_to_c_hal(
                     &options.input_file,
                     &source,
@@ -723,7 +699,7 @@ pub fn run_compile(args: &[String]) -> i32 {
             }
         }
         "plantuml" => {
-            report_simple_result(
+            report_result(
                 crate::compile_to_plantuml(
                     &options.input_file,
                     &source,
@@ -736,7 +712,7 @@ pub fn run_compile(args: &[String]) -> i32 {
             );
         }
         "st" => {
-            report_simple_result(
+            report_result(
                 crate::compile_to_st(
                     &options.input_file,
                     &source,
@@ -750,7 +726,7 @@ pub fn run_compile(args: &[String]) -> i32 {
             );
         }
         "st-at" => {
-            report_hal_result(
+            report_result(
                 crate::compile_to_st_at(
                     &options.input_file,
                     &source,
@@ -766,7 +742,7 @@ pub fn run_compile(args: &[String]) -> i32 {
             );
         }
         "rust" => {
-            report_simple_result(
+            report_result(
                 crate::compile_to_rust(
                     &options.input_file,
                     &source,
@@ -780,7 +756,7 @@ pub fn run_compile(args: &[String]) -> i32 {
             );
         }
         "sv" => {
-            report_simple_result(
+            report_result(
                 crate::compile_to_sv(
                     &options.input_file,
                     &source,
@@ -794,7 +770,7 @@ pub fn run_compile(args: &[String]) -> i32 {
             );
         }
         "sv-mmio" => {
-            report_hal_result(
+            report_result(
                 crate::compile_to_sv_mmio(
                     &options.input_file,
                     &source,
