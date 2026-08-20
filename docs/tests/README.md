@@ -281,3 +281,4 @@
 | 0324 | Арифметический сдвиг вправо | [0324-arithmetic-shift-right.md](0324-arithmetic-shift-right.md) | Пройден: 5/5 условий, нечётный вход |
 | 0325 | Семантика сдвигов в документе | [0325-book-shift-semantics.md](0325-book-shift-semantics.md) | Пройден: 5/5 условий, пример прогнан |
 | 0326 | Сдвиг на ширину типа в цели rust | [0326-rust-shift-width.md](0326-rust-shift-width.md) | Пройден: 6/6 условий, прогон rustc |
+| 0327 | Описание SV-002 | [0327-sv002-description.md](0327-sv002-description.md) | Пройден: 4/4 условия |
