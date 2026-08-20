@@ -262,3 +262,4 @@
 | [0216](./0216-rust-live-printer-coverage.md) | Печатник живости цели rust получает сторожа поведения | Accepted | фича 0216 |
 | [0254](./0254-legacy-names-internal-identifiers.md) | Старое имя изъято из служебных идентификаторов | Accepted | фича 0254 |
 | [0269](./0269-book-st-syntax-highlight.md) | Подсветка блоков st и ebnf в документе | Accepted | фича 0269 |
+| [0270](./0270-book-pdf-size.md) | Вес PDF документа: причина найдена, теги отключены | Accepted | фича 0270 |

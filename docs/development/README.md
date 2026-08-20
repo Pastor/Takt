@@ -509,3 +509,4 @@
 | 0254-02 | 0254 | Гейт ловит служебные имена | [0254-02-legacy-names-internal-identifiers.md](0254-02-legacy-names-internal-identifiers.md) |
 | 0269-01 | 0269 | Определения подсветки ST и EBNF | [0269-01-book-st-syntax-highlight.md](0269-01-book-st-syntax-highlight.md) |
 | 0269-02 | 0269 | Гейт языков блоков кода | [0269-02-book-st-syntax-highlight.md](0269-02-book-st-syntax-highlight.md) |
+| 0270-01 | 0270 | Сборка PDF без тегов доступности | [0270-01-book-pdf-size.md](0270-01-book-pdf-size.md) |
