@@ -87,7 +87,11 @@ pub(crate) fn print_expression(
         ExpressionNode::Divide(a, b) => fixed_binary(expr, st_fixed::FixedOp::Divide, a, b, model)
             .unwrap_or_else(|| binary(a, "/", b, model)),
         ExpressionNode::Modulo(a, b) => binary(a, "MOD", b, model),
-        ExpressionNode::Power(a, b) => binary(a, "**", b, model),
+        // Степень разворачивается в умножения (фича 0328): оператор `**` в IEC
+        // определён над ВЕЩЕСТВЕННЫМ, и `iec2c` отвергал порождённый код
+        // («Data type mismatch for '**' expression») при нулевом коде возврата
+        // `taktc` — то есть цель молча печатала невалидный ST.
+        ExpressionNode::Power(a, b) => super::st_arith::power(a, b, model),
         ExpressionNode::UnaryPlus(a) => Ok(format!("+{}", wrap_expr(a, model)?)),
         ExpressionNode::Negate(a) => match st_fixed::fixed_format(expr) {
             Some((m, n, sat)) => st_fixed::negate(a, model, m, n, sat),
@@ -640,7 +644,7 @@ fn shift(
     // работает над битовой строкой, то есть логически, и `-8 >> 1` давал
     // **124** вместо −4 — молча, при том что эталон, `c` и `rust` дают −4.
     if func == "SHR" && is_signed_expr(a) {
-        return arithmetic_shift_right(a, b, model);
+        return super::st_arith::arithmetic_shift_right(a, b, model);
     }
     let bs = bit_string_of_expr(a, model)?;
     Ok(format!(
@@ -662,53 +666,6 @@ fn is_signed_expr(expr: &ExpressionNode) -> bool {
         inner_expr_type(expr),
         Some(TypeNode::Integer { signed: true, .. })
     )
-}
-
-/// Арифметический сдвиг вправо знакового: **floor**-деление на `2ⁿ`.
-///
-/// # Почему не деление
-///
-/// Деление в IEC усекает **к нулю**, а арифметический сдвиг округляет **к
-/// −∞**: `-7 >> 1` есть −4, тогда как `-7 / 2` даёт −3. Поэтому у
-/// отрицательного делимое сдвигается вниз на `2ⁿ − 1`, и результат совпадает с
-/// эталоном на обоих знаках.
-///
-/// # Ошибки
-///
-/// `ST-011` — величина сдвига не литерал: `2ⁿ` тогда пришлось бы считать
-/// функцией `EXPT`, которая в IEC возвращает вещественное, и целочисленность
-/// результата держалась бы на приведении. Отказ честнее.
-fn arithmetic_shift_right(
-    a: &ExpressionNode,
-    b: &ExpressionNode,
-    model: &ModelNode,
-) -> Result<String, Diagnostic> {
-    let ExpressionNode::Number(bits) = unwrap_parens(b) else {
-        return Err(unsupported(
-            "арифметический сдвиг вправо знакового на ПЕРЕМЕННУЮ величину: в IEC              61131-3 он выражается делением на 2ⁿ, и степень обязана быть              известна при компиляции",
-        ));
-    };
-    if *bits < 0 || *bits > 62 {
-        return Err(unsupported(
-            "арифметический сдвиг вправо знакового на такую величину: делитель              2ⁿ не представим",
-        ));
-    }
-    let divisor = 1_i128 << bits;
-    let value = print_expression(a, model)?;
-    // `SEL(G, IN0, IN1)` выбирает `IN0` при `G = FALSE`: положительное делится
-    // как есть, отрицательное — со сдвигом делимого вниз (floor).
-    Ok(format!(
-        "SEL({value} < 0, {value} / {divisor}, ({value} - {}) / {divisor})",
-        divisor - 1
-    ))
-}
-
-/// Снимает скобки — величина сдвига могла быть записана `(1)`.
-fn unwrap_parens(expr: &ExpressionNode) -> &ExpressionNode {
-    match expr {
-        ExpressionNode::Parenthesis(inner) => unwrap_parens(inner),
-        other => other,
-    }
 }
 
 /// Печатает доступ к члену: бит числа либо поле структуры.

@@ -298,6 +298,20 @@ const TAKT_Q_WRAP: &str = "static int64_t takt_q_wrap(int64_t v, unsigned w) {\n
     uint64_t sign = (uint64_t)1 << (w - 1);\n    \
     return (int64_t)((bits & sign) ? (bits | ~mask) : bits);\n}\n";
 
+/// `takt_ipow` — целая степень с обёрткой (фича 0328).
+///
+/// ⚠️ Прежде степень печаталась как `pow((double)a, (double)b)`, и на широких
+/// типах это давало **другое число**: у `double` 53 разряда мантиссы, а `3 ** 40`
+/// = 12157665459056928801 требует 64 — прогон дал 12157665459056928768, то есть
+/// прошивка расходилась с эталоном молча.
+///
+/// ⚠️ Считается в **беззнаковом**: обёртка `mod 2ⁿ` определена стандартом при
+/// любом значении (правило ADR 0127), а переполнение знакового — UB.
+const TAKT_IPOW: &str = "static int64_t takt_ipow(int64_t base, int64_t exp) {\n    \
+    uint64_t acc = 1;\n    uint64_t b = (uint64_t)base;\n    \
+    for (int64_t i = 0; i < exp; i++) {\n        acc = acc * b;\n    }\n    \
+    return (int64_t)acc;\n}\n";
+
 /// Вставляет определения Q-хелперов (0061), фактически вызванных в `source`,
 /// сразу после `#include`. Эмитятся ровно нужные (без `-Wunused-function`);
 /// корпус без `q` остаётся байт-в-байт прежним (T14). `takt_q_mul` тянет
@@ -309,10 +323,16 @@ pub(in crate::generator::c) fn insert_fixed_helpers(source: String) -> String {
     let uses_floordiv = uses_mul || source.contains("takt_q_floordiv(");
     let uses_wrap = source.contains("takt_q_wrap(");
     let uses_sat = source.contains("takt_q_sat(");
-    if !uses_floordiv && !uses_div && !uses_wrap && !uses_sat {
+    // Целая степень (фича 0328) едет тем же путём: хелпер эмитится по факту
+    // вызова, и корпус без `**` остаётся байт-в-байт прежним.
+    let uses_ipow = source.contains("takt_ipow(");
+    if !uses_floordiv && !uses_div && !uses_wrap && !uses_sat && !uses_ipow {
         return source;
     }
     let mut helpers = String::new();
+    if uses_ipow {
+        helpers.push_str(TAKT_IPOW);
+    }
     if uses_sat {
         helpers.push_str(TAKT_Q_SAT);
     }

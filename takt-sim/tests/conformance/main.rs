@@ -37,6 +37,7 @@ mod conformance_local_decl_tests;
 mod conformance_param_apply_tests;
 mod conformance_param_modes_tests;
 mod conformance_port_init_tests;
+mod conformance_power_tests;
 mod conformance_rust_duration_tests;
 mod conformance_rust_tests;
 mod conformance_shared_const_tests;
