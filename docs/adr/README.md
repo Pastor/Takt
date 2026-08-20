@@ -280,3 +280,4 @@
 | [0288](./0288-fixture-guards-audit.md) | Сторожа фикстур проверяют обещание, а не разбор | Accepted | фича 0288 |
 | [0289](./0289-claude-md-invariant-checklist-gate.md) | Чек-лист инвариантов сверяется с подробными пунктами | Accepted | фича 0289 |
 | [0297](./0297-check-claude-md-line-blindness.md) | Гейт живого контекста читает абзацы, а не строки | Accepted | фича 0297 |
+| [0304](./0304-local-declaration-type-inference.md) | Локальное объявление в теле блока получает тип | Accepted | фича 0304 |

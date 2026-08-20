@@ -213,6 +213,31 @@ pub(crate) fn emit_hoisted_locals(
     Ok(())
 }
 
+/// То же для тела блока состояния или модели — с `automatic` (фича 0304).
+///
+/// # Почему `automatic`, и почему это вообще понадобилось
+///
+/// Локальные переменные тел состояний **не объявлялись вовсе**: `hoist_locals`
+/// звался только для тел функций. Цель печатала `g = (F + 1);` при нулевом коде
+/// возврата `taktc`, а `verilator` отвечал «Can't find definition of variable:
+/// 'g'». ⚠️ Дефект не зависел от вывода типов: он воспроизводится и на явном
+/// `var g: u8 := …` (контрольная проба).
+///
+/// Тела состояний печатаются внутри ветви `unique case` в `always_comb`, а там
+/// объявление обязано быть `automatic` — иначе это статическая переменная в
+/// процедурном блоке. Форма проверена **обоими** инструментами (урок 0235):
+/// `verilator --lint-only -Wall` и `yosys -p synth` принимают её.
+pub(crate) fn emit_hoisted_locals_auto(
+    p: &mut Printer,
+    locals: &[(&str, &TypeNode)],
+) -> Result<(), Diagnostic> {
+    for (name, ty) in locals {
+        let decl = super::sv_type::sv_type(ty, &format!("переменная '{}'", name))?;
+        p.ident(&format!("automatic {};", decl.declare(name))).nl();
+    }
+    Ok(())
+}
+
 /// Печатает оператор-выражение: присваивание либо вызов.
 fn print_expression_statement(
     p: &mut Printer,

@@ -233,9 +233,29 @@ fn resolve_ast_statement(
             // (там же строятся объявления уровня модели).
             let (name, ty, def_init) = declaration::local_declaration(def, *loc, model.clone())?;
             let init = def_init
-                .map(|e| construct_expression(e, params.clone(), model))
+                .map(|e| construct_expression(e, params.clone(), model.clone()))
                 .transpose()?
                 .map(Box::new);
+            // Тип локального объявления ВЫВОДИТСЯ из инициализатора (фича 0304).
+            //
+            // Прежде вывод типов шёл только по `model.variables` — объявлениям
+            // верхнего уровня, — и `var g := F + 1;` внутри `always { … }`
+            // оставался с `TypeNode::Inference`. Один такой вход давал ТРИ
+            // разных ответа: эталон — `SIM-007` в такте, `c`/`c-hal`/`st`/
+            // `st-at`/`rust` — честный отказ, а `sv`/`sv-mmio` печатали
+            // невалидный модуль при НУЛЕВОМ коде возврата (`Can't find
+            // definition of variable`), потому что объявление без типа они
+            // просто не эмитили.
+            //
+            // ⚠️ Выводить надо ЗДЕСЬ, а не общим проходом: локальное объявление
+            // живёт в теле блока, а не в таблице модели, и к моменту
+            // `type_inference` тела ещё не построены.
+            let ty = match (&ty, &init) {
+                (TypeNode::Inference, Some(expr)) => {
+                    crate::semantic::type_inference::extract_type(expr, model.clone())?
+                }
+                _ => ty,
+            };
             Ok(StatementNode::Variable(name, ty, init))
         }
 
