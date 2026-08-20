@@ -222,3 +222,4 @@
 | 0274 | Снимки порождённого кода в book/ никем не сверяются | [0274-book-generated-snapshots-gate.md](0274-book-generated-snapshots-gate.md) | ГОТОВО |
 | 0275 | Команды в README.md никем не проверяются | [0275-readme-commands-gate.md](0275-readme-commands-gate.md) | ГОТОВО |
 | 0290 | Приложение «Ошибки» сверяется с реестром диагностик | [0290-book-diagnostics-codes-gate.md](0290-book-diagnostics-codes-gate.md) | Готово: расхождение 32 кода + 1 обратное устранено |
+| 0298 | Списки лексики раздела «Лексика» сверяются с языком | [0298-book-lexicon-lists-sync.md](0298-book-lexicon-lists-sync.md) | Готово: 4 слова добавлены, ложь о словах LTL снята |
